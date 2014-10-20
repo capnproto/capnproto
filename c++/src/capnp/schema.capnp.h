@@ -12,6 +12,56 @@
 
 
 namespace capnp {
+namespace schemas {
+
+extern const ::capnp::_::RawSchema s_e682ab4cf923a417;
+extern const ::capnp::_::RawSchema s_b9521bccf10fa3b1;
+extern const ::capnp::_::RawSchema s_debf55bbfa0fc242;
+extern const ::capnp::_::RawSchema s_9ea0b19b37fb4435;
+extern const ::capnp::_::RawSchema s_b54ab3364333f598;
+extern const ::capnp::_::RawSchema s_e82753cff0c2218f;
+extern const ::capnp::_::RawSchema s_b18aa5ac7a0d9420;
+extern const ::capnp::_::RawSchema s_ec1619d4400a0290;
+extern const ::capnp::_::RawSchema s_9aad50a41f4af45f;
+extern const ::capnp::_::RawSchema s_97b14cbe7cfec712;
+extern const ::capnp::_::RawSchema s_c42305476bb4746f;
+extern const ::capnp::_::RawSchema s_cafccddb68db1d11;
+extern const ::capnp::_::RawSchema s_bb90d5c287870be6;
+extern const ::capnp::_::RawSchema s_978a7cebdc549a4d;
+extern const ::capnp::_::RawSchema s_a9962a9ed0a4d7f8;
+extern const ::capnp::_::RawSchema s_9500cce23b334d80;
+extern const ::capnp::_::RawSchema s_d07378ede1f9cc60;
+extern const ::capnp::_::RawSchema s_87e739250a60ea97;
+extern const ::capnp::_::RawSchema s_9e0e78711a7f87a9;
+extern const ::capnp::_::RawSchema s_ac3a6f60ef4cc6d3;
+extern const ::capnp::_::RawSchema s_ed8bca69f7fb0cbf;
+extern const ::capnp::_::RawSchema s_c2573fe8a23e49f1;
+extern const ::capnp::_::RawSchema s_9dd1f724f4614a85;
+extern const ::capnp::_::RawSchema s_903455f06065422b;
+extern const ::capnp::_::RawSchema s_abd73485a9636bc9;
+extern const ::capnp::_::RawSchema s_c863cd16969ee7fc;
+extern const ::capnp::_::RawSchema s_ce23dcd2d7b00c9b;
+extern const ::capnp::_::RawSchema s_f1c8950dab257542;
+extern const ::capnp::_::RawSchema s_d1958f7dba521926;
+enum class ElementSize_d1958f7dba521926: uint16_t {
+  EMPTY,
+  BIT,
+  BYTE,
+  TWO_BYTES,
+  FOUR_BYTES,
+  EIGHT_BYTES,
+  POINTER,
+  INLINE_COMPOSITE,
+};
+CAPNP_DECLARE_ENUM(ElementSize, d1958f7dba521926);
+extern const ::capnp::_::RawSchema s_bfc546f6210ad7ce;
+extern const ::capnp::_::RawSchema s_cfea0eb02e810062;
+extern const ::capnp::_::RawSchema s_ae504193122357e5;
+
+}  // namespace schemas
+}  // namespace capnp
+
+namespace capnp {
 namespace schema {
 
 struct Node {
@@ -35,6 +85,8 @@ struct Node {
   struct Interface;
   struct Const;
   struct Annotation;
+
+  CAPNP_DECLARE_STRUCT(e682ab4cf923a417, 5, 6, INLINE_COMPOSITE);
 };
 
 struct Node::Parameter {
@@ -43,6 +95,8 @@ struct Node::Parameter {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(b9521bccf10fa3b1, 0, 1, POINTER);
 };
 
 struct Node::NestedNode {
@@ -51,6 +105,8 @@ struct Node::NestedNode {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(debf55bbfa0fc242, 1, 1, INLINE_COMPOSITE);
 };
 
 struct Node::Struct {
@@ -59,6 +115,8 @@ struct Node::Struct {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(9ea0b19b37fb4435, 5, 6, INLINE_COMPOSITE);
 };
 
 struct Node::Enum {
@@ -67,6 +125,8 @@ struct Node::Enum {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(b54ab3364333f598, 5, 6, INLINE_COMPOSITE);
 };
 
 struct Node::Interface {
@@ -75,6 +135,8 @@ struct Node::Interface {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(e82753cff0c2218f, 5, 6, INLINE_COMPOSITE);
 };
 
 struct Node::Const {
@@ -83,6 +145,8 @@ struct Node::Const {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(b18aa5ac7a0d9420, 5, 6, INLINE_COMPOSITE);
 };
 
 struct Node::Annotation {
@@ -91,6 +155,8 @@ struct Node::Annotation {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(ec1619d4400a0290, 5, 6, INLINE_COMPOSITE);
 };
 
 struct Field {
@@ -107,6 +173,8 @@ struct Field {
   struct Slot;
   struct Group;
   struct Ordinal;
+
+  CAPNP_DECLARE_STRUCT(9aad50a41f4af45f, 3, 4, INLINE_COMPOSITE);
 };
 
 struct Field::Slot {
@@ -115,6 +183,8 @@ struct Field::Slot {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(c42305476bb4746f, 3, 4, INLINE_COMPOSITE);
 };
 
 struct Field::Group {
@@ -123,6 +193,8 @@ struct Field::Group {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(cafccddb68db1d11, 3, 4, INLINE_COMPOSITE);
 };
 
 struct Field::Ordinal {
@@ -135,6 +207,8 @@ struct Field::Ordinal {
     IMPLICIT,
     EXPLICIT,
   };
+
+  CAPNP_DECLARE_STRUCT(bb90d5c287870be6, 3, 4, INLINE_COMPOSITE);
 };
 
 struct Enumerant {
@@ -143,6 +217,8 @@ struct Enumerant {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(978a7cebdc549a4d, 1, 2, INLINE_COMPOSITE);
 };
 
 struct Superclass {
@@ -151,6 +227,8 @@ struct Superclass {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(a9962a9ed0a4d7f8, 1, 1, INLINE_COMPOSITE);
 };
 
 struct Method {
@@ -159,6 +237,8 @@ struct Method {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(9500cce23b334d80, 3, 4, INLINE_COMPOSITE);
 };
 
 struct Type {
@@ -193,6 +273,8 @@ struct Type {
   struct Struct;
   struct Interface;
   struct AnyPointer;
+
+  CAPNP_DECLARE_STRUCT(d07378ede1f9cc60, 3, 1, INLINE_COMPOSITE);
 };
 
 struct Type::List {
@@ -201,6 +283,8 @@ struct Type::List {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(87e739250a60ea97, 3, 1, INLINE_COMPOSITE);
 };
 
 struct Type::Enum {
@@ -209,6 +293,8 @@ struct Type::Enum {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(9e0e78711a7f87a9, 3, 1, INLINE_COMPOSITE);
 };
 
 struct Type::Struct {
@@ -217,6 +303,8 @@ struct Type::Struct {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(ac3a6f60ef4cc6d3, 3, 1, INLINE_COMPOSITE);
 };
 
 struct Type::Interface {
@@ -225,6 +313,8 @@ struct Type::Interface {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(ed8bca69f7fb0cbf, 3, 1, INLINE_COMPOSITE);
 };
 
 struct Type::AnyPointer {
@@ -238,6 +328,8 @@ struct Type::AnyPointer {
     PARAMETER,
   };
   struct Parameter;
+
+  CAPNP_DECLARE_STRUCT(c2573fe8a23e49f1, 3, 1, INLINE_COMPOSITE);
 };
 
 struct Type::AnyPointer::Parameter {
@@ -246,6 +338,8 @@ struct Type::AnyPointer::Parameter {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(9dd1f724f4614a85, 3, 1, INLINE_COMPOSITE);
 };
 
 struct Brand {
@@ -256,6 +350,8 @@ struct Brand {
   class Pipeline;
   struct Scope;
   struct Binding;
+
+  CAPNP_DECLARE_STRUCT(903455f06065422b, 0, 1, POINTER);
 };
 
 struct Brand::Scope {
@@ -268,6 +364,8 @@ struct Brand::Scope {
     BIND,
     INHERIT,
   };
+
+  CAPNP_DECLARE_STRUCT(abd73485a9636bc9, 2, 1, INLINE_COMPOSITE);
 };
 
 struct Brand::Binding {
@@ -280,6 +378,8 @@ struct Brand::Binding {
     UNBOUND,
     TYPE,
   };
+
+  CAPNP_DECLARE_STRUCT(c863cd16969ee7fc, 1, 1, INLINE_COMPOSITE);
 };
 
 struct Value {
@@ -309,6 +409,8 @@ struct Value {
     INTERFACE,
     ANY_POINTER,
   };
+
+  CAPNP_DECLARE_STRUCT(ce23dcd2d7b00c9b, 2, 1, INLINE_COMPOSITE);
 };
 
 struct Annotation {
@@ -317,18 +419,11 @@ struct Annotation {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(f1c8950dab257542, 1, 2, INLINE_COMPOSITE);
 };
 
-enum class ElementSize: uint16_t {
-  EMPTY,
-  BIT,
-  BYTE,
-  TWO_BYTES,
-  FOUR_BYTES,
-  EIGHT_BYTES,
-  POINTER,
-  INLINE_COMPOSITE,
-};
+typedef ::capnp::schemas::ElementSize_d1958f7dba521926 ElementSize;
 
 struct CodeGeneratorRequest {
   CodeGeneratorRequest() = delete;
@@ -337,6 +432,8 @@ struct CodeGeneratorRequest {
   class Builder;
   class Pipeline;
   struct RequestedFile;
+
+  CAPNP_DECLARE_STRUCT(bfc546f6210ad7ce, 0, 2, INLINE_COMPOSITE);
 };
 
 struct CodeGeneratorRequest::RequestedFile {
@@ -346,6 +443,8 @@ struct CodeGeneratorRequest::RequestedFile {
   class Builder;
   class Pipeline;
   struct Import;
+
+  CAPNP_DECLARE_STRUCT(cfea0eb02e810062, 1, 2, INLINE_COMPOSITE);
 };
 
 struct CodeGeneratorRequest::RequestedFile::Import {
@@ -354,152 +453,11 @@ struct CodeGeneratorRequest::RequestedFile::Import {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(ae504193122357e5, 1, 1, INLINE_COMPOSITE);
 };
 
-}  // namespace
-}  // namespace
-
 // =======================================================================================
-
-namespace capnp {
-namespace schemas {
-
-extern const ::capnp::_::RawSchema s_e682ab4cf923a417;
-extern const ::capnp::_::RawSchema s_b9521bccf10fa3b1;
-extern const ::capnp::_::RawSchema s_debf55bbfa0fc242;
-extern const ::capnp::_::RawSchema s_9ea0b19b37fb4435;
-extern const ::capnp::_::RawSchema s_b54ab3364333f598;
-extern const ::capnp::_::RawSchema s_e82753cff0c2218f;
-extern const ::capnp::_::RawSchema s_b18aa5ac7a0d9420;
-extern const ::capnp::_::RawSchema s_ec1619d4400a0290;
-extern const ::capnp::_::RawSchema s_9aad50a41f4af45f;
-extern const ::capnp::_::RawSchema s_97b14cbe7cfec712;
-extern const ::capnp::_::RawSchema s_c42305476bb4746f;
-extern const ::capnp::_::RawSchema s_cafccddb68db1d11;
-extern const ::capnp::_::RawSchema s_bb90d5c287870be6;
-extern const ::capnp::_::RawSchema s_978a7cebdc549a4d;
-extern const ::capnp::_::RawSchema s_a9962a9ed0a4d7f8;
-extern const ::capnp::_::RawSchema s_9500cce23b334d80;
-extern const ::capnp::_::RawSchema s_d07378ede1f9cc60;
-extern const ::capnp::_::RawSchema s_87e739250a60ea97;
-extern const ::capnp::_::RawSchema s_9e0e78711a7f87a9;
-extern const ::capnp::_::RawSchema s_ac3a6f60ef4cc6d3;
-extern const ::capnp::_::RawSchema s_ed8bca69f7fb0cbf;
-extern const ::capnp::_::RawSchema s_c2573fe8a23e49f1;
-extern const ::capnp::_::RawSchema s_9dd1f724f4614a85;
-extern const ::capnp::_::RawSchema s_903455f06065422b;
-extern const ::capnp::_::RawSchema s_abd73485a9636bc9;
-extern const ::capnp::_::RawSchema s_c863cd16969ee7fc;
-extern const ::capnp::_::RawSchema s_ce23dcd2d7b00c9b;
-extern const ::capnp::_::RawSchema s_f1c8950dab257542;
-extern const ::capnp::_::RawSchema s_d1958f7dba521926;
-extern const ::capnp::_::RawSchema s_bfc546f6210ad7ce;
-extern const ::capnp::_::RawSchema s_cfea0eb02e810062;
-extern const ::capnp::_::RawSchema s_ae504193122357e5;
-
-}  // namespace schemas
-namespace _ {  // private
-
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Node, e682ab4cf923a417,
-    5, 6, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Node::Parameter, b9521bccf10fa3b1,
-    0, 1, POINTER);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Node::NestedNode, debf55bbfa0fc242,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Node::Struct, 9ea0b19b37fb4435,
-    5, 6, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Node::Enum, b54ab3364333f598,
-    5, 6, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Node::Interface, e82753cff0c2218f,
-    5, 6, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Node::Const, b18aa5ac7a0d9420,
-    5, 6, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Node::Annotation, ec1619d4400a0290,
-    5, 6, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Field, 9aad50a41f4af45f,
-    3, 4, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Field::Slot, c42305476bb4746f,
-    3, 4, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Field::Group, cafccddb68db1d11,
-    3, 4, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Field::Ordinal, bb90d5c287870be6,
-    3, 4, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Enumerant, 978a7cebdc549a4d,
-    1, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Superclass, a9962a9ed0a4d7f8,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Method, 9500cce23b334d80,
-    3, 4, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Type, d07378ede1f9cc60,
-    3, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Type::List, 87e739250a60ea97,
-    3, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Type::Enum, 9e0e78711a7f87a9,
-    3, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Type::Struct, ac3a6f60ef4cc6d3,
-    3, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Type::Interface, ed8bca69f7fb0cbf,
-    3, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Type::AnyPointer, c2573fe8a23e49f1,
-    3, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Type::AnyPointer::Parameter, 9dd1f724f4614a85,
-    3, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Brand, 903455f06065422b,
-    0, 1, POINTER);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Brand::Scope, abd73485a9636bc9,
-    2, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Brand::Binding, c863cd16969ee7fc,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Value, ce23dcd2d7b00c9b,
-    2, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Annotation, f1c8950dab257542,
-    1, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_ENUM(
-    ::capnp::schema::ElementSize, d1958f7dba521926);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::CodeGeneratorRequest, bfc546f6210ad7ce,
-    0, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::CodeGeneratorRequest::RequestedFile, cfea0eb02e810062,
-    1, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import, ae504193122357e5,
-    1, 1, INLINE_COMPOSITE);
-
-}  // namespace _ (private)
-}  // namespace capnp
-
-// =======================================================================================
-
-namespace capnp {
-namespace schema {
 
 class Node::Reader {
 public:

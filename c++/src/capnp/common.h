@@ -65,12 +65,22 @@ enum class Kind: uint8_t {
   UNION,
   INTERFACE,
   LIST,
-  UNKNOWN
+
+  OTHER
+  // Some other type which is often a type parameter to Cap'n Proto templates, but which needs
+  // special handling. This includes types like AnyPointer, Dynamic*, etc.
 };
+
+namespace schemas {
+
+template <typename T>
+struct EnumInfo;
+
+}  // namespace schemas
 
 namespace _ {  // private
 
-template <typename T> struct Kind_ { static constexpr Kind kind = Kind::UNKNOWN; };
+template <typename T> struct Kind_;
 
 template <> struct Kind_<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
 template <> struct Kind_<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
@@ -89,9 +99,26 @@ template <> struct Kind_<Data> { static constexpr Kind kind = Kind::BLOB; };
 
 }  // namespace _ (private)
 
-template <typename T>
+template <typename T, Kind k = _::Kind_<T>::kind>
 inline constexpr Kind kind() {
-  return _::Kind_<T>::kind;
+  // This overload of kind() matches types which have a Kind_ specialization.
+
+  return k;
+}
+
+template <typename T, typename CapnpPrivate = typename T::_capnpPrivate, bool = false>
+inline constexpr Kind kind() {
+  // This overload of kind() matches types which have a _capnpPrivate member. This is how
+  // generated-code types identify themselves. This is necessary because in the presence of
+  // generics, a generated type may be an inner type of a template, in which case it is impossible
+  // to specialize _::Kind_<T> over it.
+
+  return CapnpPrivate::kind;
+}
+
+template <typename T, uint64_t id = schemas::EnumInfo<T>::typeId>
+inline constexpr Kind kind() {
+  return Kind::ENUM;
 }
 
 template <typename T, Kind k = kind<T>()>
@@ -103,20 +130,6 @@ template <typename T> using ListElementType = typename ListElementType_<T>::Type
 
 namespace _ {  // private
 template <typename T, Kind k> struct Kind_<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
-}  // namespace _ (private)
-
-struct Capability {
-  // A capability without type-safe methods.  Typed capability clients wrap `Client` and typed
-  // capability servers subclass `Server` to dispatch to the regular, typed methods.
-  //
-  // Contents defined in capability.h.  Declared here just so we can specialize Kind_.
-
-  class Client;
-  class Server;
-};
-
-namespace _ {  // private
-template <> struct Kind_<Capability> { static constexpr Kind kind = Kind::INTERFACE; };
 }  // namespace _ (private)
 
 template <typename T, Kind k = kind<T>()> struct ReaderFor_ { typedef typename T::Reader Type; };

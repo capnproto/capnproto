@@ -194,12 +194,13 @@ struct RawSchema {
   // bound to `AnyPointer`.
 };
 
-template <typename T>
-struct RawSchema_;
-
-template <typename T>
+template <typename T, typename CapnpPrivate = typename T::_capnpPrivate, bool = false>
 inline const RawSchema& rawSchema() {
-  return RawSchema_<T>::get();
+  return *CapnpPrivate::schema;
+}
+template <typename T, uint64_t id = schemas::EnumInfo<T>::typeId>
+inline const RawSchema& rawSchema() {
+  return *schemas::EnumInfo<T>::schema;
 }
 
 template <typename T>
@@ -207,24 +208,6 @@ inline const RawBrandedSchema& rawBrandedSchema() {
   // TODO(now): implement properly
   return rawSchema<T>().defaultBrand;
 }
-
-template <typename T> struct TypeId_;
-
-extern const RawSchema NULL_INTERFACE_SCHEMA;  // defined in schema.c++
-template <> struct TypeId_<Capability> { static constexpr uint64_t typeId = 0x03; };
-template <> struct RawSchema_<Capability> {
-  static inline const RawSchema& get() { return NULL_INTERFACE_SCHEMA; }
-};
-
-template <typename T>
-struct UnionMemberIndex_;
-template <typename T>
-inline uint unionMemberIndex() { return UnionMemberIndex_<T>::value; }
-
-template <typename T>
-struct UnionParentType_;
-template <typename T>
-using UnionParentType = typename UnionParentType_<T>::Type;
 
 kj::StringTree structString(StructReader reader, const RawBrandedSchema& schema);
 // Declared here so that we can declare inline stringify methods on generated types.
@@ -314,8 +297,10 @@ private:
 
 }  // namespace _ (private)
 
-template <typename T>
-inline constexpr uint64_t typeId() { return _::TypeId_<T>::typeId; }
+template <typename T, typename CapnpPrivate = typename T::_capnpPrivate>
+inline constexpr uint64_t typeId() { return CapnpPrivate::typeId; }
+template <typename T, uint64_t id = schemas::EnumInfo<T>::typeId, bool = false>
+inline constexpr uint64_t typeId() { return id; }
 // typeId<MyType>() returns the type ID as defined in the schema.  Works with structs, enums, and
 // interfaces.
 
@@ -331,46 +316,38 @@ inline constexpr uint sizeInWords() {
 }  // namespace capnp
 
 #define CAPNP_DECLARE_ENUM(type, id) \
-    template <> struct Kind_<type> { static constexpr Kind kind = Kind::ENUM; }; \
-    template <> struct TypeId_<type> { static constexpr uint64_t typeId = 0x##id; }; \
-    template <> struct RawSchema_<type> { \
-      static inline const RawSchema& get() { return schemas::s_##id; } \
+    template <> struct EnumInfo<type##_##id> { \
+      static constexpr uint64_t typeId = 0x##id; \
+      static constexpr ::capnp::_::RawSchema const* schema = &s_##id; \
     }
-#define CAPNP_DEFINE_ENUM(type) \
-    constexpr Kind Kind_<type>::kind; \
-    constexpr uint64_t TypeId_<type>::typeId
+#define CAPNP_DEFINE_ENUM(type, ...) \
+    __VA_ARGS__ constexpr uint64_t EnumInfo<type>::typeId; \
+    __VA_ARGS__ constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema;
 
-#define CAPNP_DECLARE_STRUCT(type, id, dataWordSize, pointerCount, preferredElementEncoding) \
-    template <> struct Kind_<type> { static constexpr Kind kind = Kind::STRUCT; }; \
-    template <> struct StructSize_<type> { \
-      static constexpr StructSize value = StructSize( \
-          dataWordSize * WORDS, pointerCount * POINTERS, FieldSize::preferredElementEncoding); \
-    }; \
-    template <> struct TypeId_<type> { static constexpr uint64_t typeId = 0x##id; }; \
-    template <> struct RawSchema_<type> { \
-      static inline const RawSchema& get() { return schemas::s_##id; } \
+#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding) \
+    struct _capnpPrivate { \
+      static constexpr uint64_t typeId = 0x##id; \
+      static constexpr ::capnp::Kind kind = ::capnp::Kind::STRUCT; \
+      static constexpr ::capnp::_::StructSize structSize = ::capnp::_::StructSize( \
+          dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS, \
+          ::capnp::_::FieldSize::preferredElementEncoding); \
+      static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id; \
     }
-#define CAPNP_DEFINE_STRUCT(type) \
-    constexpr Kind Kind_<type>::kind; \
-    constexpr StructSize StructSize_<type>::value; \
-    constexpr uint64_t TypeId_<type>::typeId
+#define CAPNP_DEFINE_STRUCT(type, ...) \
+    __VA_ARGS__ constexpr uint64_t type::_capnpPrivate::typeId; \
+    __VA_ARGS__ constexpr ::capnp::Kind type::_capnpPrivate::kind; \
+    __VA_ARGS__ constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize; \
+    __VA_ARGS__ constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema;
 
-#define CAPNP_DECLARE_UNION(type, parentType, memberIndex) \
-    template <> struct Kind_<type> { static constexpr Kind kind = Kind::UNION; }; \
-    template <> struct UnionMemberIndex_<type> { static constexpr uint value = memberIndex; }; \
-    template <> struct UnionParentType_<type> { typedef parentType Type; }
-#define CAPNP_DEFINE_UNION(type) \
-    constexpr Kind Kind_<type>::kind; \
-    constexpr uint UnionMemberIndex_<type>::value
-
-#define CAPNP_DECLARE_INTERFACE(type, id) \
-    template <> struct Kind_<type> { static constexpr Kind kind = Kind::INTERFACE; }; \
-    template <> struct TypeId_<type> { static constexpr uint64_t typeId = 0x##id; }; \
-    template <> struct RawSchema_<type> { \
-      static inline const RawSchema& get() { return schemas::s_##id; } \
+#define CAPNP_DECLARE_INTERFACE(id) \
+    struct _capnpPrivate { \
+      static constexpr uint64_t typeId = 0x##id; \
+      static constexpr ::capnp::Kind kind = ::capnp::Kind::INTERFACE; \
+      static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id; \
     }
-#define CAPNP_DEFINE_INTERFACE(type) \
-    constexpr Kind Kind_<type>::kind; \
-    constexpr uint64_t TypeId_<type>::typeId
+#define CAPNP_DEFINE_INTERFACE(type, ...) \
+    __VA_ARGS__ constexpr uint64_t type::_capnpPrivate::typeId; \
+    __VA_ARGS__ constexpr ::capnp::Kind type::_capnpPrivate::kind; \
+    __VA_ARGS__ constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema;
 
 #endif  // CAPNP_GENERATED_HEADER_SUPPORT_H_

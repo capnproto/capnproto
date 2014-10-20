@@ -12,72 +12,14 @@
 
 
 namespace capnp {
-namespace rpc {
-namespace twoparty {
-
-enum class Side: uint16_t {
-  SERVER,
-  CLIENT,
-};
-
-struct SturdyRefHostId {
-  SturdyRefHostId() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct ProvisionId {
-  ProvisionId() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct RecipientId {
-  RecipientId() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct ThirdPartyCapId {
-  ThirdPartyCapId() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct JoinKeyPart {
-  JoinKeyPart() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct JoinResult {
-  JoinResult() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-}  // namespace
-}  // namespace
-}  // namespace
-
-// =======================================================================================
-
-namespace capnp {
 namespace schemas {
 
 extern const ::capnp::_::RawSchema s_9fd69ebc87b9719c;
+enum class Side_9fd69ebc87b9719c: uint16_t {
+  SERVER,
+  CLIENT,
+};
+CAPNP_DECLARE_ENUM(Side, 9fd69ebc87b9719c);
 extern const ::capnp::_::RawSchema s_e615e371b1036508;
 extern const ::capnp::_::RawSchema s_b88d09a9c5f39817;
 extern const ::capnp::_::RawSchema s_89f389b6fd4082c1;
@@ -86,37 +28,75 @@ extern const ::capnp::_::RawSchema s_95b29059097fca83;
 extern const ::capnp::_::RawSchema s_9d263a3630b7ebee;
 
 }  // namespace schemas
-namespace _ {  // private
-
-CAPNP_DECLARE_ENUM(
-    ::capnp::rpc::twoparty::Side, 9fd69ebc87b9719c);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::twoparty::SturdyRefHostId, e615e371b1036508,
-    1, 0, TWO_BYTES);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::twoparty::ProvisionId, b88d09a9c5f39817,
-    1, 0, FOUR_BYTES);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::twoparty::RecipientId, 89f389b6fd4082c1,
-    0, 0, VOID);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::twoparty::ThirdPartyCapId, b47f4979672cb59d,
-    0, 0, VOID);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::twoparty::JoinKeyPart, 95b29059097fca83,
-    1, 0, EIGHT_BYTES);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::twoparty::JoinResult, 9d263a3630b7ebee,
-    1, 1, INLINE_COMPOSITE);
-
-}  // namespace _ (private)
 }  // namespace capnp
-
-// =======================================================================================
 
 namespace capnp {
 namespace rpc {
 namespace twoparty {
+
+typedef ::capnp::schemas::Side_9fd69ebc87b9719c Side;
+
+struct SturdyRefHostId {
+  SturdyRefHostId() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(e615e371b1036508, 1, 0, TWO_BYTES);
+};
+
+struct ProvisionId {
+  ProvisionId() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(b88d09a9c5f39817, 1, 0, FOUR_BYTES);
+};
+
+struct RecipientId {
+  RecipientId() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(89f389b6fd4082c1, 0, 0, VOID);
+};
+
+struct ThirdPartyCapId {
+  ThirdPartyCapId() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(b47f4979672cb59d, 0, 0, VOID);
+};
+
+struct JoinKeyPart {
+  JoinKeyPart() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(95b29059097fca83, 1, 0, EIGHT_BYTES);
+};
+
+struct JoinResult {
+  JoinResult() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(9d263a3630b7ebee, 1, 1, INLINE_COMPOSITE);
+};
+
+// =======================================================================================
 
 class SturdyRefHostId::Reader {
 public:

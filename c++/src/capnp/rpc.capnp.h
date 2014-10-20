@@ -12,262 +12,6 @@
 
 
 namespace capnp {
-namespace rpc {
-
-struct Message {
-  Message() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    UNIMPLEMENTED,
-    ABORT,
-    CALL,
-    RETURN,
-    FINISH,
-    RESOLVE,
-    RELEASE,
-    SAVE,
-    RESTORE,
-    DELETE,
-    PROVIDE,
-    ACCEPT,
-    JOIN,
-    DISEMBARGO,
-  };
-};
-
-struct Call {
-  Call() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  struct SendResultsTo;
-};
-
-struct Call::SendResultsTo {
-  SendResultsTo() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    CALLER,
-    YOURSELF,
-    THIRD_PARTY,
-  };
-};
-
-struct Return {
-  Return() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    RESULTS,
-    EXCEPTION,
-    CANCELED,
-    RESULTS_SENT_ELSEWHERE,
-    TAKE_FROM_OTHER_QUESTION,
-    ACCEPT_FROM_THIRD_PARTY,
-  };
-};
-
-struct Finish {
-  Finish() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct Resolve {
-  Resolve() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    CAP,
-    EXCEPTION,
-  };
-};
-
-struct Release {
-  Release() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct Disembargo {
-  Disembargo() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  struct Context;
-};
-
-struct Disembargo::Context {
-  Context() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    SENDER_LOOPBACK,
-    RECEIVER_LOOPBACK,
-    ACCEPT,
-    PROVIDE,
-  };
-};
-
-struct Save {
-  Save() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct Restore {
-  Restore() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct Delete {
-  Delete() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct Provide {
-  Provide() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct Accept {
-  Accept() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct Join {
-  Join() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct MessageTarget {
-  MessageTarget() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    IMPORTED_CAP,
-    PROMISED_ANSWER,
-  };
-};
-
-struct Payload {
-  Payload() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct CapDescriptor {
-  CapDescriptor() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    NONE,
-    SENDER_HOSTED,
-    SENDER_PROMISE,
-    RECEIVER_HOSTED,
-    RECEIVER_ANSWER,
-    THIRD_PARTY_HOSTED,
-  };
-};
-
-struct PromisedAnswer {
-  PromisedAnswer() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  struct Op;
-};
-
-struct PromisedAnswer::Op {
-  Op() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    NOOP,
-    GET_POINTER_FIELD,
-  };
-};
-
-struct SturdyRef {
-  SturdyRef() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct ThirdPartyCapDescriptor {
-  ThirdPartyCapDescriptor() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct Exception {
-  Exception() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum class Durability: uint16_t {
-    PERMANENT,
-    TEMPORARY,
-    OVERLOADED,
-  };
-
-};
-
-}  // namespace
-}  // namespace
-
-// =======================================================================================
-
-namespace capnp {
 namespace schemas {
 
 extern const ::capnp::_::RawSchema s_91b79f1f808db032;
@@ -294,89 +38,310 @@ extern const ::capnp::_::RawSchema s_ce8c7a90684b48ff;
 extern const ::capnp::_::RawSchema s_d37007fde1f0027d;
 extern const ::capnp::_::RawSchema s_d625b7063acf691a;
 extern const ::capnp::_::RawSchema s_bbaeda2607b6f958;
+enum class Durability_bbaeda2607b6f958: uint16_t {
+  PERMANENT,
+  TEMPORARY,
+  OVERLOADED,
+};
+CAPNP_DECLARE_ENUM(Durability, bbaeda2607b6f958);
 
 }  // namespace schemas
-namespace _ {  // private
-
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Message, 91b79f1f808db032,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Call, 836a53ce789d4cd4,
-    3, 3, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Call::SendResultsTo, dae8b0f61aab5f99,
-    3, 3, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Return, 9e19b28d3db3573a,
-    2, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Finish, d37d2eb2c2f80e63,
-    1, 0, EIGHT_BYTES);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Resolve, bbc29655fa89086e,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Release, ad1a6c0d7dd07497,
-    1, 0, EIGHT_BYTES);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Disembargo, f964368b0fbd3711,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Disembargo::Context, d562b4df655bdd4d,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Save, e40ef0b4b02e882c,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Restore, ec0c922151b8b0a8,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Delete, 86267432565dee97,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Provide, 9c6a046bfbc1ac5a,
-    1, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Accept, d4c9b56290554016,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Join, fbe1980490e001af,
-    1, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::MessageTarget, 95bc14545813fbc1,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Payload, 9a0e61223d96743b,
-    0, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::CapDescriptor, 8523ddc40b86b8b0,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::PromisedAnswer, d800b1d6cd6f1ca0,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::PromisedAnswer::Op, f316944415569081,
-    1, 0, FOUR_BYTES);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::SturdyRef, ce8c7a90684b48ff,
-    0, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::ThirdPartyCapDescriptor, d37007fde1f0027d,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Exception, d625b7063acf691a,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_ENUM(
-    ::capnp::rpc::Exception::Durability, bbaeda2607b6f958);
-
-}  // namespace _ (private)
 }  // namespace capnp
-
-// =======================================================================================
 
 namespace capnp {
 namespace rpc {
+
+struct Message {
+  Message() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    UNIMPLEMENTED,
+    ABORT,
+    CALL,
+    RETURN,
+    FINISH,
+    RESOLVE,
+    RELEASE,
+    SAVE,
+    RESTORE,
+    DELETE,
+    PROVIDE,
+    ACCEPT,
+    JOIN,
+    DISEMBARGO,
+  };
+
+  CAPNP_DECLARE_STRUCT(91b79f1f808db032, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Call {
+  Call() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  struct SendResultsTo;
+
+  CAPNP_DECLARE_STRUCT(836a53ce789d4cd4, 3, 3, INLINE_COMPOSITE);
+};
+
+struct Call::SendResultsTo {
+  SendResultsTo() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    CALLER,
+    YOURSELF,
+    THIRD_PARTY,
+  };
+
+  CAPNP_DECLARE_STRUCT(dae8b0f61aab5f99, 3, 3, INLINE_COMPOSITE);
+};
+
+struct Return {
+  Return() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    RESULTS,
+    EXCEPTION,
+    CANCELED,
+    RESULTS_SENT_ELSEWHERE,
+    TAKE_FROM_OTHER_QUESTION,
+    ACCEPT_FROM_THIRD_PARTY,
+  };
+
+  CAPNP_DECLARE_STRUCT(9e19b28d3db3573a, 2, 1, INLINE_COMPOSITE);
+};
+
+struct Finish {
+  Finish() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(d37d2eb2c2f80e63, 1, 0, EIGHT_BYTES);
+};
+
+struct Resolve {
+  Resolve() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    CAP,
+    EXCEPTION,
+  };
+
+  CAPNP_DECLARE_STRUCT(bbc29655fa89086e, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Release {
+  Release() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(ad1a6c0d7dd07497, 1, 0, EIGHT_BYTES);
+};
+
+struct Disembargo {
+  Disembargo() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  struct Context;
+
+  CAPNP_DECLARE_STRUCT(f964368b0fbd3711, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Disembargo::Context {
+  Context() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    SENDER_LOOPBACK,
+    RECEIVER_LOOPBACK,
+    ACCEPT,
+    PROVIDE,
+  };
+
+  CAPNP_DECLARE_STRUCT(d562b4df655bdd4d, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Save {
+  Save() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(e40ef0b4b02e882c, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Restore {
+  Restore() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(ec0c922151b8b0a8, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Delete {
+  Delete() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(86267432565dee97, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Provide {
+  Provide() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(9c6a046bfbc1ac5a, 1, 2, INLINE_COMPOSITE);
+};
+
+struct Accept {
+  Accept() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(d4c9b56290554016, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Join {
+  Join() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(fbe1980490e001af, 1, 2, INLINE_COMPOSITE);
+};
+
+struct MessageTarget {
+  MessageTarget() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    IMPORTED_CAP,
+    PROMISED_ANSWER,
+  };
+
+  CAPNP_DECLARE_STRUCT(95bc14545813fbc1, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Payload {
+  Payload() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(9a0e61223d96743b, 0, 2, INLINE_COMPOSITE);
+};
+
+struct CapDescriptor {
+  CapDescriptor() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    NONE,
+    SENDER_HOSTED,
+    SENDER_PROMISE,
+    RECEIVER_HOSTED,
+    RECEIVER_ANSWER,
+    THIRD_PARTY_HOSTED,
+  };
+
+  CAPNP_DECLARE_STRUCT(8523ddc40b86b8b0, 1, 1, INLINE_COMPOSITE);
+};
+
+struct PromisedAnswer {
+  PromisedAnswer() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  struct Op;
+
+  CAPNP_DECLARE_STRUCT(d800b1d6cd6f1ca0, 1, 1, INLINE_COMPOSITE);
+};
+
+struct PromisedAnswer::Op {
+  Op() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    NOOP,
+    GET_POINTER_FIELD,
+  };
+
+  CAPNP_DECLARE_STRUCT(f316944415569081, 1, 0, FOUR_BYTES);
+};
+
+struct SturdyRef {
+  SturdyRef() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(ce8c7a90684b48ff, 0, 2, INLINE_COMPOSITE);
+};
+
+struct ThirdPartyCapDescriptor {
+  ThirdPartyCapDescriptor() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(d37007fde1f0027d, 1, 1, INLINE_COMPOSITE);
+};
+
+struct Exception {
+  Exception() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  typedef ::capnp::schemas::Durability_bbaeda2607b6f958 Durability;
+
+
+  CAPNP_DECLARE_STRUCT(d625b7063acf691a, 1, 1, INLINE_COMPOSITE);
+};
+
+// =======================================================================================
 
 class Message::Reader {
 public:

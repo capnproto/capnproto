@@ -12,30 +12,18 @@
 
 
 namespace capnp {
-namespace annotations {
-
-}  // namespace
-}  // namespace
-
-// =======================================================================================
-
-namespace capnp {
 namespace schemas {
 
 extern const ::capnp::_::RawSchema s_b9c6f99ebf805f2c;
 extern const ::capnp::_::RawSchema s_f264a779fef191ce;
 
 }  // namespace schemas
-namespace _ {  // private
-
-
-}  // namespace _ (private)
 }  // namespace capnp
-
-// =======================================================================================
 
 namespace capnp {
 namespace annotations {
+
+// =======================================================================================
 
 // =======================================================================================
 

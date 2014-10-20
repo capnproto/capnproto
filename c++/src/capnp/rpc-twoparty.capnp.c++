@@ -38,6 +38,7 @@ const ::capnp::_::RawSchema s_9fd69ebc87b9719c = {
   0x9fd69ebc87b9719c, b_9fd69ebc87b9719c.words, 26, nullptr, m_9fd69ebc87b9719c,
   0, 2, nullptr, nullptr, nullptr, { &s_9fd69ebc87b9719c, nullptr, nullptr, 0, 0, nullptr }
 };
+CAPNP_DEFINE_ENUM(Side_9fd69ebc87b9719c);
 static const ::capnp::_::AlignedData<35> b_e615e371b1036508 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
       8, 101,   3, 177, 113, 227,  21, 230,
@@ -322,20 +323,22 @@ const ::capnp::_::RawSchema s_9d263a3630b7ebee = {
   0, 3, i_9d263a3630b7ebee, nullptr, nullptr, { &s_9d263a3630b7ebee, nullptr, nullptr, 0, 0, nullptr }
 };
 }  // namespace schemas
-namespace _ {  // private
-CAPNP_DEFINE_ENUM(
-    ::capnp::rpc::twoparty::Side);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::twoparty::SturdyRefHostId);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::twoparty::ProvisionId);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::twoparty::RecipientId);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::twoparty::ThirdPartyCapId);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::twoparty::JoinKeyPart);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::twoparty::JoinResult);
-}  // namespace _ (private)
 }  // namespace capnp
+
+// =======================================================================================
+
+namespace capnp {
+namespace rpc {
+namespace twoparty {
+
+CAPNP_DEFINE_STRUCT(SturdyRefHostId);
+CAPNP_DEFINE_STRUCT(ProvisionId);
+CAPNP_DEFINE_STRUCT(RecipientId);
+CAPNP_DEFINE_STRUCT(ThirdPartyCapId);
+CAPNP_DEFINE_STRUCT(JoinKeyPart);
+CAPNP_DEFINE_STRUCT(JoinResult);
+
+}  // namespace
+}  // namespace
+}  // namespace
+

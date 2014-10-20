@@ -1968,55 +1968,39 @@ const ::capnp::_::RawSchema s_bbaeda2607b6f958 = {
   0xbbaeda2607b6f958, b_bbaeda2607b6f958.words, 34, nullptr, m_bbaeda2607b6f958,
   0, 3, nullptr, nullptr, nullptr, { &s_bbaeda2607b6f958, nullptr, nullptr, 0, 0, nullptr }
 };
+CAPNP_DEFINE_ENUM(Durability_bbaeda2607b6f958);
 }  // namespace schemas
-namespace _ {  // private
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Message);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Call);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Call::SendResultsTo);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Return);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Finish);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Resolve);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Release);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Disembargo);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Disembargo::Context);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Save);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Restore);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Delete);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Provide);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Accept);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Join);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::MessageTarget);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Payload);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::CapDescriptor);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::PromisedAnswer);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::PromisedAnswer::Op);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::SturdyRef);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::ThirdPartyCapDescriptor);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::rpc::Exception);
-CAPNP_DEFINE_ENUM(
-    ::capnp::rpc::Exception::Durability);
-}  // namespace _ (private)
 }  // namespace capnp
+
+// =======================================================================================
+
+namespace capnp {
+namespace rpc {
+
+CAPNP_DEFINE_STRUCT(Message);
+CAPNP_DEFINE_STRUCT(Call);
+CAPNP_DEFINE_STRUCT(Call::SendResultsTo);
+CAPNP_DEFINE_STRUCT(Return);
+CAPNP_DEFINE_STRUCT(Finish);
+CAPNP_DEFINE_STRUCT(Resolve);
+CAPNP_DEFINE_STRUCT(Release);
+CAPNP_DEFINE_STRUCT(Disembargo);
+CAPNP_DEFINE_STRUCT(Disembargo::Context);
+CAPNP_DEFINE_STRUCT(Save);
+CAPNP_DEFINE_STRUCT(Restore);
+CAPNP_DEFINE_STRUCT(Delete);
+CAPNP_DEFINE_STRUCT(Provide);
+CAPNP_DEFINE_STRUCT(Accept);
+CAPNP_DEFINE_STRUCT(Join);
+CAPNP_DEFINE_STRUCT(MessageTarget);
+CAPNP_DEFINE_STRUCT(Payload);
+CAPNP_DEFINE_STRUCT(CapDescriptor);
+CAPNP_DEFINE_STRUCT(PromisedAnswer);
+CAPNP_DEFINE_STRUCT(PromisedAnswer::Op);
+CAPNP_DEFINE_STRUCT(SturdyRef);
+CAPNP_DEFINE_STRUCT(ThirdPartyCapDescriptor);
+CAPNP_DEFINE_STRUCT(Exception);
+
+}  // namespace
+}  // namespace
+

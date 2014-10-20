@@ -12,6 +12,17 @@
 
 
 namespace capnp {
+namespace schemas {
+
+extern const ::capnp::_::RawSchema s_91cc55cd57de5419;
+extern const ::capnp::_::RawSchema s_c6725e678d60fa37;
+extern const ::capnp::_::RawSchema s_9e69a92512b19d18;
+extern const ::capnp::_::RawSchema s_a11f97b9d6c73dd4;
+
+}  // namespace schemas
+}  // namespace capnp
+
+namespace capnp {
 namespace compiler {
 
 struct Token {
@@ -30,6 +41,8 @@ struct Token {
     BRACKETED_LIST,
     BINARY_LITERAL,
   };
+
+  CAPNP_DECLARE_STRUCT(91cc55cd57de5419, 3, 1, INLINE_COMPOSITE);
 };
 
 struct Statement {
@@ -42,6 +55,8 @@ struct Statement {
     LINE,
     BLOCK,
   };
+
+  CAPNP_DECLARE_STRUCT(c6725e678d60fa37, 2, 3, INLINE_COMPOSITE);
 };
 
 struct LexedTokens {
@@ -50,6 +65,8 @@ struct LexedTokens {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(9e69a92512b19d18, 0, 1, POINTER);
 };
 
 struct LexedStatements {
@@ -58,44 +75,11 @@ struct LexedStatements {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(a11f97b9d6c73dd4, 0, 1, POINTER);
 };
 
-}  // namespace
-}  // namespace
-
 // =======================================================================================
-
-namespace capnp {
-namespace schemas {
-
-extern const ::capnp::_::RawSchema s_91cc55cd57de5419;
-extern const ::capnp::_::RawSchema s_c6725e678d60fa37;
-extern const ::capnp::_::RawSchema s_9e69a92512b19d18;
-extern const ::capnp::_::RawSchema s_a11f97b9d6c73dd4;
-
-}  // namespace schemas
-namespace _ {  // private
-
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Token, 91cc55cd57de5419,
-    3, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Statement, c6725e678d60fa37,
-    2, 3, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::LexedTokens, 9e69a92512b19d18,
-    0, 1, POINTER);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::LexedStatements, a11f97b9d6c73dd4,
-    0, 1, POINTER);
-
-}  // namespace _ (private)
-}  // namespace capnp
-
-// =======================================================================================
-
-namespace capnp {
-namespace compiler {
 
 class Token::Reader {
 public:

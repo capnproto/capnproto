@@ -53,6 +53,25 @@ public:
   RemotePromise& operator=(RemotePromise&& other) = default;
 };
 
+namespace _ { // private
+struct RawSchema;
+extern const RawSchema NULL_INTERFACE_SCHEMA;  // defined in schema.c++
+}  // namespace _ (private)
+
+struct Capability {
+  // A capability without type-safe methods.  Typed capability clients wrap `Client` and typed
+  // capability servers subclass `Server` to dispatch to the regular, typed methods.
+
+  class Client;
+  class Server;
+
+  struct _capnpPrivate {
+    static constexpr uint64_t typeId = 0x3;
+    static constexpr Kind kind = Kind::INTERFACE;
+    static constexpr _::RawSchema const* schema = &_::NULL_INTERFACE_SCHEMA;
+  };
+};
+
 // =======================================================================================
 
 class RequestHook;

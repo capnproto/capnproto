@@ -2797,6 +2797,7 @@ const ::capnp::_::RawSchema s_d1958f7dba521926 = {
   0xd1958f7dba521926, b_d1958f7dba521926.words, 54, nullptr, m_d1958f7dba521926,
   0, 8, nullptr, nullptr, nullptr, { &s_d1958f7dba521926, nullptr, nullptr, 0, 0, nullptr }
 };
+CAPNP_DEFINE_ENUM(ElementSize_d1958f7dba521926);
 static const ::capnp::_::AlignedData<62> b_bfc546f6210ad7ce = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     206, 215,  10,  33, 246,  70, 197, 191,
@@ -3017,70 +3018,6 @@ const ::capnp::_::RawSchema s_ae504193122357e5 = {
   0, 2, i_ae504193122357e5, nullptr, nullptr, { &s_ae504193122357e5, nullptr, nullptr, 0, 0, nullptr }
 };
 }  // namespace schemas
-namespace _ {  // private
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Node);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Node::Parameter);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Node::NestedNode);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Node::Struct);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Node::Enum);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Node::Interface);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Node::Const);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Node::Annotation);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Field);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Field::Slot);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Field::Group);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Field::Ordinal);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Enumerant);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Superclass);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Method);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Type);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Type::List);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Type::Enum);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Type::Struct);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Type::Interface);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Type::AnyPointer);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Type::AnyPointer::Parameter);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Brand);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Brand::Scope);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Brand::Binding);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Value);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::Annotation);
-CAPNP_DEFINE_ENUM(
-    ::capnp::schema::ElementSize);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::CodeGeneratorRequest);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::CodeGeneratorRequest::RequestedFile);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import);
-}  // namespace _ (private)
 }  // namespace capnp
 
 // =======================================================================================
@@ -3088,7 +3025,37 @@ CAPNP_DEFINE_STRUCT(
 namespace capnp {
 namespace schema {
 
+CAPNP_DEFINE_STRUCT(Node);
+CAPNP_DEFINE_STRUCT(Node::Parameter);
+CAPNP_DEFINE_STRUCT(Node::NestedNode);
+CAPNP_DEFINE_STRUCT(Node::Struct);
+CAPNP_DEFINE_STRUCT(Node::Enum);
+CAPNP_DEFINE_STRUCT(Node::Interface);
+CAPNP_DEFINE_STRUCT(Node::Const);
+CAPNP_DEFINE_STRUCT(Node::Annotation);
+CAPNP_DEFINE_STRUCT(Field);
 constexpr  ::uint16_t Field::NO_DISCRIMINANT;
+CAPNP_DEFINE_STRUCT(Field::Slot);
+CAPNP_DEFINE_STRUCT(Field::Group);
+CAPNP_DEFINE_STRUCT(Field::Ordinal);
+CAPNP_DEFINE_STRUCT(Enumerant);
+CAPNP_DEFINE_STRUCT(Superclass);
+CAPNP_DEFINE_STRUCT(Method);
+CAPNP_DEFINE_STRUCT(Type);
+CAPNP_DEFINE_STRUCT(Type::List);
+CAPNP_DEFINE_STRUCT(Type::Enum);
+CAPNP_DEFINE_STRUCT(Type::Struct);
+CAPNP_DEFINE_STRUCT(Type::Interface);
+CAPNP_DEFINE_STRUCT(Type::AnyPointer);
+CAPNP_DEFINE_STRUCT(Type::AnyPointer::Parameter);
+CAPNP_DEFINE_STRUCT(Brand);
+CAPNP_DEFINE_STRUCT(Brand::Scope);
+CAPNP_DEFINE_STRUCT(Brand::Binding);
+CAPNP_DEFINE_STRUCT(Value);
+CAPNP_DEFINE_STRUCT(Annotation);
+CAPNP_DEFINE_STRUCT(CodeGeneratorRequest);
+CAPNP_DEFINE_STRUCT(CodeGeneratorRequest::RequestedFile);
+CAPNP_DEFINE_STRUCT(CodeGeneratorRequest::RequestedFile::Import);
 
 }  // namespace
 }  // namespace

@@ -59,6 +59,4 @@ const ::capnp::_::RawSchema s_f264a779fef191ce = {
   0, 0, nullptr, nullptr, nullptr, { &s_f264a779fef191ce, nullptr, nullptr, 0, 0, nullptr }
 };
 }  // namespace schemas
-namespace _ {  // private
-}  // namespace _ (private)
 }  // namespace capnp

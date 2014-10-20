@@ -1788,26 +1788,26 @@ Void DynamicValue::Builder::AsImpl<Void>::apply(Builder& builder) {
 
 namespace _ {  // private
 
-DynamicStruct::Reader PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
+DynamicStruct::Reader PointerHelpers<DynamicStruct, Kind::OTHER>::getDynamic(
     PointerReader reader, StructSchema schema) {
   KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
              "Cannot form pointer to group type.");
   return DynamicStruct::Reader(schema, reader.getStruct(nullptr));
 }
-DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
+DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::OTHER>::getDynamic(
     PointerBuilder builder, StructSchema schema) {
   KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
              "Cannot form pointer to group type.");
   return DynamicStruct::Builder(schema, builder.getStruct(
       structSizeFromSchema(schema), nullptr));
 }
-void PointerHelpers<DynamicStruct, Kind::UNKNOWN>::set(
+void PointerHelpers<DynamicStruct, Kind::OTHER>::set(
     PointerBuilder builder, const DynamicStruct::Reader& value) {
   KJ_REQUIRE(!value.schema.getProto().getStruct().getIsGroup(),
              "Cannot form pointer to group type.");
   builder.setStruct(value.reader);
 }
-DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::init(
+DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::OTHER>::init(
     PointerBuilder builder, StructSchema schema) {
   KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
              "Cannot form pointer to group type.");
@@ -1815,12 +1815,12 @@ DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::init(
       builder.initStruct(structSizeFromSchema(schema)));
 }
 
-DynamicList::Reader PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
+DynamicList::Reader PointerHelpers<DynamicList, Kind::OTHER>::getDynamic(
     PointerReader reader, ListSchema schema) {
   return DynamicList::Reader(schema,
       reader.getList(elementSizeFor(schema.whichElementType()), nullptr));
 }
-DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
+DynamicList::Builder PointerHelpers<DynamicList, Kind::OTHER>::getDynamic(
     PointerBuilder builder, ListSchema schema) {
   if (schema.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(schema,
@@ -1832,11 +1832,11 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
         builder.getList(elementSizeFor(schema.whichElementType()), nullptr));
   }
 }
-void PointerHelpers<DynamicList, Kind::UNKNOWN>::set(
+void PointerHelpers<DynamicList, Kind::OTHER>::set(
     PointerBuilder builder, const DynamicList::Reader& value) {
   builder.setList(value.reader);
 }
-DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
+DynamicList::Builder PointerHelpers<DynamicList, Kind::OTHER>::init(
     PointerBuilder builder, ListSchema schema, uint size) {
   if (schema.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(schema,
@@ -1848,19 +1848,19 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
   }
 }
 
-DynamicCapability::Client PointerHelpers<DynamicCapability, Kind::UNKNOWN>::getDynamic(
+DynamicCapability::Client PointerHelpers<DynamicCapability, Kind::OTHER>::getDynamic(
     PointerReader reader, InterfaceSchema schema) {
   return DynamicCapability::Client(schema, reader.getCapability());
 }
-DynamicCapability::Client PointerHelpers<DynamicCapability, Kind::UNKNOWN>::getDynamic(
+DynamicCapability::Client PointerHelpers<DynamicCapability, Kind::OTHER>::getDynamic(
     PointerBuilder builder, InterfaceSchema schema) {
   return DynamicCapability::Client(schema, builder.getCapability());
 }
-void PointerHelpers<DynamicCapability, Kind::UNKNOWN>::set(
+void PointerHelpers<DynamicCapability, Kind::OTHER>::set(
     PointerBuilder builder, DynamicCapability::Client& value) {
   builder.setCapability(value.hook->addRef());
 }
-void PointerHelpers<DynamicCapability, Kind::UNKNOWN>::set(
+void PointerHelpers<DynamicCapability, Kind::OTHER>::set(
     PointerBuilder builder, DynamicCapability::Client&& value) {
   builder.setCapability(kj::mv(value.hook));
 }

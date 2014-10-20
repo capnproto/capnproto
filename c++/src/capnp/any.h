@@ -323,6 +323,10 @@ public:
 // =======================================================================================
 // Inline implementation details
 
+namespace _ {  // private
+template <> struct Kind_<AnyPointer> { static constexpr Kind kind = Kind::OTHER; };
+}  // namespace _ (private)
+
 inline MessageSize AnyPointer::Reader::targetSize() const {
   return reader.targetSize().asPublic();
 }
@@ -388,18 +392,18 @@ inline Orphan<AnyPointer> AnyPointer::Builder::disown() {
   return Orphan<AnyPointer>(builder.disown());
 }
 
-template <> struct ReaderFor_ <AnyPointer, Kind::UNKNOWN> { typedef AnyPointer::Reader Type; };
-template <> struct BuilderFor_<AnyPointer, Kind::UNKNOWN> { typedef AnyPointer::Builder Type; };
+template <> struct ReaderFor_ <AnyPointer, Kind::OTHER> { typedef AnyPointer::Reader Type; };
+template <> struct BuilderFor_<AnyPointer, Kind::OTHER> { typedef AnyPointer::Builder Type; };
 
 template <>
-struct Orphanage::GetInnerReader<AnyPointer, Kind::UNKNOWN> {
+struct Orphanage::GetInnerReader<AnyPointer, Kind::OTHER> {
   static inline _::PointerReader apply(const AnyPointer::Reader& t) {
     return t.reader;
   }
 };
 
 template <>
-struct Orphanage::GetInnerBuilder<AnyPointer, Kind::UNKNOWN> {
+struct Orphanage::GetInnerBuilder<AnyPointer, Kind::OTHER> {
   static inline _::PointerBuilder apply(AnyPointer::Builder& t) {
     return t.builder;
   }

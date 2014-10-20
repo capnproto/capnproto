@@ -443,14 +443,18 @@ const ::capnp::_::RawSchema s_a11f97b9d6c73dd4 = {
   1, 1, i_a11f97b9d6c73dd4, nullptr, nullptr, { &s_a11f97b9d6c73dd4, nullptr, nullptr, 0, 0, nullptr }
 };
 }  // namespace schemas
-namespace _ {  // private
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Token);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Statement);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::LexedTokens);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::LexedStatements);
-}  // namespace _ (private)
 }  // namespace capnp
+
+// =======================================================================================
+
+namespace capnp {
+namespace compiler {
+
+CAPNP_DEFINE_STRUCT(Token);
+CAPNP_DEFINE_STRUCT(Statement);
+CAPNP_DEFINE_STRUCT(LexedTokens);
+CAPNP_DEFINE_STRUCT(LexedStatements);
+
+}  // namespace
+}  // namespace
+

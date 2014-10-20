@@ -2621,54 +2621,38 @@ const ::capnp::_::RawSchema s_84e4f3f5a807605c = {
   1, 1, i_84e4f3f5a807605c, nullptr, nullptr, { &s_84e4f3f5a807605c, nullptr, nullptr, 0, 0, nullptr }
 };
 }  // namespace schemas
-namespace _ {  // private
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::LocatedText);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::LocatedInteger);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::LocatedFloat);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Expression);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Expression::Param);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Expression::Application);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Expression::Member);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::BrandParameter);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::AnnotationApplication);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::AnnotationApplication::Value);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::ParamList);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Param);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Param::DefaultValue);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Id);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Using);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Const);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Field);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Field::DefaultValue);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Interface);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Method);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Method::Results);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::Declaration::Annotation);
-CAPNP_DEFINE_STRUCT(
-    ::capnp::compiler::ParsedFile);
-}  // namespace _ (private)
 }  // namespace capnp
+
+// =======================================================================================
+
+namespace capnp {
+namespace compiler {
+
+CAPNP_DEFINE_STRUCT(LocatedText);
+CAPNP_DEFINE_STRUCT(LocatedInteger);
+CAPNP_DEFINE_STRUCT(LocatedFloat);
+CAPNP_DEFINE_STRUCT(Expression);
+CAPNP_DEFINE_STRUCT(Expression::Param);
+CAPNP_DEFINE_STRUCT(Expression::Application);
+CAPNP_DEFINE_STRUCT(Expression::Member);
+CAPNP_DEFINE_STRUCT(Declaration);
+CAPNP_DEFINE_STRUCT(Declaration::BrandParameter);
+CAPNP_DEFINE_STRUCT(Declaration::AnnotationApplication);
+CAPNP_DEFINE_STRUCT(Declaration::AnnotationApplication::Value);
+CAPNP_DEFINE_STRUCT(Declaration::ParamList);
+CAPNP_DEFINE_STRUCT(Declaration::Param);
+CAPNP_DEFINE_STRUCT(Declaration::Param::DefaultValue);
+CAPNP_DEFINE_STRUCT(Declaration::Id);
+CAPNP_DEFINE_STRUCT(Declaration::Using);
+CAPNP_DEFINE_STRUCT(Declaration::Const);
+CAPNP_DEFINE_STRUCT(Declaration::Field);
+CAPNP_DEFINE_STRUCT(Declaration::Field::DefaultValue);
+CAPNP_DEFINE_STRUCT(Declaration::Interface);
+CAPNP_DEFINE_STRUCT(Declaration::Method);
+CAPNP_DEFINE_STRUCT(Declaration::Method::Results);
+CAPNP_DEFINE_STRUCT(Declaration::Annotation);
+CAPNP_DEFINE_STRUCT(ParsedFile);
+
+}  // namespace
+}  // namespace
+

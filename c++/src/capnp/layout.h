@@ -227,9 +227,13 @@ struct StructSize {
 template <typename T> struct StructSize_;
 // Specialized for every struct type with member:  static constexpr StructSize value"
 
-template <typename T>
+template <typename T, typename = typename StructSize_<T>::Exists>
 inline constexpr StructSize structSize() {
   return StructSize_<T>::value;
+}
+template <typename T, typename CapnpPrivate = typename T::_capnpPrivate, bool = false>
+inline constexpr StructSize structSize() {
+  return CapnpPrivate::structSize;
 }
 
 // -------------------------------------------------------------------
@@ -241,7 +245,7 @@ template <typename T> struct Mask_<T, Kind::ENUM> { typedef uint16_t Type; };
 template <> struct Mask_<float, Kind::PRIMITIVE> { typedef uint32_t Type; };
 template <> struct Mask_<double, Kind::PRIMITIVE> { typedef uint64_t Type; };
 
-template <typename T> struct Mask_<T, Kind::UNKNOWN> {
+template <typename T> struct Mask_<T, Kind::OTHER> {
   // Union discriminants end up here.
   static_assert(sizeof(T) == 2, "Don't know how to mask this type.");
   typedef uint16_t Type;

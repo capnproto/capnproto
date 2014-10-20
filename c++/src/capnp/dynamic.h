@@ -108,6 +108,16 @@ DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value);
 template <typename T>
 typename DynamicTypeFor<FromServer<T>>::Client toDynamic(kj::Own<T>&& value);
 
+namespace _ {  // private
+
+template <> struct Kind_<DynamicValue     > { static constexpr Kind kind = Kind::OTHER; };
+template <> struct Kind_<DynamicEnum      > { static constexpr Kind kind = Kind::OTHER; };
+template <> struct Kind_<DynamicStruct    > { static constexpr Kind kind = Kind::OTHER; };
+template <> struct Kind_<DynamicList      > { static constexpr Kind kind = Kind::OTHER; };
+template <> struct Kind_<DynamicCapability> { static constexpr Kind kind = Kind::OTHER; };
+
+}  // namespace _ (private)
+
 // -------------------------------------------------------------------
 
 class DynamicEnum {
@@ -551,15 +561,15 @@ private:
 // Make sure ReaderFor<T> and BuilderFor<T> work for DynamicEnum, DynamicStruct, and
 // DynamicList, so that we can define DynamicValue::as().
 
-template <> struct ReaderFor_ <DynamicEnum, Kind::UNKNOWN> { typedef DynamicEnum Type; };
-template <> struct BuilderFor_<DynamicEnum, Kind::UNKNOWN> { typedef DynamicEnum Type; };
-template <> struct ReaderFor_ <DynamicStruct, Kind::UNKNOWN> { typedef DynamicStruct::Reader Type; };
-template <> struct BuilderFor_<DynamicStruct, Kind::UNKNOWN> { typedef DynamicStruct::Builder Type; };
-template <> struct ReaderFor_ <DynamicList, Kind::UNKNOWN> { typedef DynamicList::Reader Type; };
-template <> struct BuilderFor_<DynamicList, Kind::UNKNOWN> { typedef DynamicList::Builder Type; };
-template <> struct ReaderFor_ <DynamicCapability, Kind::UNKNOWN> { typedef DynamicCapability::Client Type; };
-template <> struct BuilderFor_<DynamicCapability, Kind::UNKNOWN> { typedef DynamicCapability::Client Type; };
-template <> struct PipelineFor_<DynamicCapability, Kind::UNKNOWN> { typedef DynamicCapability::Client Type; };
+template <> struct ReaderFor_ <DynamicEnum, Kind::OTHER> { typedef DynamicEnum Type; };
+template <> struct BuilderFor_<DynamicEnum, Kind::OTHER> { typedef DynamicEnum Type; };
+template <> struct ReaderFor_ <DynamicStruct, Kind::OTHER> { typedef DynamicStruct::Reader Type; };
+template <> struct BuilderFor_<DynamicStruct, Kind::OTHER> { typedef DynamicStruct::Builder Type; };
+template <> struct ReaderFor_ <DynamicList, Kind::OTHER> { typedef DynamicList::Reader Type; };
+template <> struct BuilderFor_<DynamicList, Kind::OTHER> { typedef DynamicList::Builder Type; };
+template <> struct ReaderFor_ <DynamicCapability, Kind::OTHER> { typedef DynamicCapability::Client Type; };
+template <> struct BuilderFor_<DynamicCapability, Kind::OTHER> { typedef DynamicCapability::Client Type; };
+template <> struct PipelineFor_<DynamicCapability, Kind::OTHER> { typedef DynamicCapability::Client Type; };
 
 class DynamicValue::Reader {
 public:
@@ -1011,14 +1021,14 @@ template <>
 Orphan<DynamicCapability> Orphan<DynamicValue>::releaseAs<DynamicCapability>();
 
 template <>
-struct Orphanage::GetInnerBuilder<DynamicStruct, Kind::UNKNOWN> {
+struct Orphanage::GetInnerBuilder<DynamicStruct, Kind::OTHER> {
   static inline _::StructBuilder apply(DynamicStruct::Builder& t) {
     return t.builder;
   }
 };
 
 template <>
-struct Orphanage::GetInnerBuilder<DynamicList, Kind::UNKNOWN> {
+struct Orphanage::GetInnerBuilder<DynamicList, Kind::OTHER> {
   static inline _::ListBuilder apply(DynamicList::Builder& t) {
     return t.builder;
   }
@@ -1051,7 +1061,7 @@ Orphan<DynamicValue> Orphanage::newOrphanCopy<DynamicValue::Reader>(
 namespace _ {  // private
 
 template <>
-struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
+struct PointerHelpers<DynamicStruct, Kind::OTHER> {
   // getDynamic() is used when an AnyPointer's get() accessor is passed arguments, because for
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
@@ -1068,7 +1078,7 @@ struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
 };
 
 template <>
-struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
+struct PointerHelpers<DynamicList, Kind::OTHER> {
   // getDynamic() is used when an AnyPointer's get() accessor is passed arguments, because for
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
@@ -1085,7 +1095,7 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
 };
 
 template <>
-struct PointerHelpers<DynamicCapability, Kind::UNKNOWN> {
+struct PointerHelpers<DynamicCapability, Kind::OTHER> {
   // getDynamic() is used when an AnyPointer's get() accessor is passed arguments, because for
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
@@ -1404,11 +1414,11 @@ struct DynamicValue::Pipeline::AsImpl<T, Kind::INTERFACE> {
   }
 };
 template <>
-struct DynamicValue::Pipeline::AsImpl<DynamicStruct, Kind::UNKNOWN> {
+struct DynamicValue::Pipeline::AsImpl<DynamicStruct, Kind::OTHER> {
   static PipelineFor<DynamicStruct> apply(Pipeline& pipeline);
 };
 template <>
-struct DynamicValue::Pipeline::AsImpl<DynamicCapability, Kind::UNKNOWN> {
+struct DynamicValue::Pipeline::AsImpl<DynamicCapability, Kind::OTHER> {
   static PipelineFor<DynamicCapability> apply(Pipeline& pipeline);
 };
 

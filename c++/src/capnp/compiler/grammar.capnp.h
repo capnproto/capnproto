@@ -12,6 +12,38 @@
 
 
 namespace capnp {
+namespace schemas {
+
+extern const ::capnp::_::RawSchema s_e75816b56529d464;
+extern const ::capnp::_::RawSchema s_991c7a3693d62cf2;
+extern const ::capnp::_::RawSchema s_90f2a60678fd2367;
+extern const ::capnp::_::RawSchema s_8e207d4dfe54d0de;
+extern const ::capnp::_::RawSchema s_c90246b71adedbaa;
+extern const ::capnp::_::RawSchema s_aee8397040b0df7a;
+extern const ::capnp::_::RawSchema s_aa28e1400d793359;
+extern const ::capnp::_::RawSchema s_96efe787c17e83bb;
+extern const ::capnp::_::RawSchema s_d5e71144af1ce175;
+extern const ::capnp::_::RawSchema s_d00489d473826290;
+extern const ::capnp::_::RawSchema s_fb5aeed95cdf6af9;
+extern const ::capnp::_::RawSchema s_94099c3f9eb32d6b;
+extern const ::capnp::_::RawSchema s_b3f66e7a79d81bcd;
+extern const ::capnp::_::RawSchema s_fffe08a9a697d2a5;
+extern const ::capnp::_::RawSchema s_e5104515fd88ea47;
+extern const ::capnp::_::RawSchema s_89f0c973c103ae96;
+extern const ::capnp::_::RawSchema s_e93164a80bfe2ccf;
+extern const ::capnp::_::RawSchema s_b348322a8dcf0d0c;
+extern const ::capnp::_::RawSchema s_8f2622208fb358c8;
+extern const ::capnp::_::RawSchema s_d0d1a21de617951f;
+extern const ::capnp::_::RawSchema s_992a90eaf30235d3;
+extern const ::capnp::_::RawSchema s_eb971847d617c0b9;
+extern const ::capnp::_::RawSchema s_c6238c7d62d65173;
+extern const ::capnp::_::RawSchema s_9cb9e86e3198037f;
+extern const ::capnp::_::RawSchema s_84e4f3f5a807605c;
+
+}  // namespace schemas
+}  // namespace capnp
+
+namespace capnp {
 namespace compiler {
 
 struct LocatedText {
@@ -20,6 +52,8 @@ struct LocatedText {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(e75816b56529d464, 1, 1, INLINE_COMPOSITE);
 };
 
 struct LocatedInteger {
@@ -28,6 +62,8 @@ struct LocatedInteger {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(991c7a3693d62cf2, 2, 0, INLINE_COMPOSITE);
 };
 
 struct LocatedFloat {
@@ -36,6 +72,8 @@ struct LocatedFloat {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(90f2a60678fd2367, 2, 0, INLINE_COMPOSITE);
 };
 
 struct Expression {
@@ -62,6 +100,8 @@ struct Expression {
   struct Param;
   struct Application;
   struct Member;
+
+  CAPNP_DECLARE_STRUCT(8e207d4dfe54d0de, 3, 2, INLINE_COMPOSITE);
 };
 
 struct Expression::Param {
@@ -74,6 +114,8 @@ struct Expression::Param {
     UNNAMED,
     NAMED,
   };
+
+  CAPNP_DECLARE_STRUCT(c90246b71adedbaa, 1, 2, INLINE_COMPOSITE);
 };
 
 struct Expression::Application {
@@ -82,6 +124,8 @@ struct Expression::Application {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(aee8397040b0df7a, 3, 2, INLINE_COMPOSITE);
 };
 
 struct Expression::Member {
@@ -90,6 +134,8 @@ struct Expression::Member {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(aa28e1400d793359, 3, 2, INLINE_COMPOSITE);
 };
 
 struct Declaration {
@@ -142,6 +188,8 @@ struct Declaration {
   struct Interface;
   struct Method;
   struct Annotation;
+
+  CAPNP_DECLARE_STRUCT(96efe787c17e83bb, 2, 8, INLINE_COMPOSITE);
 };
 
 struct Declaration::BrandParameter {
@@ -150,6 +198,8 @@ struct Declaration::BrandParameter {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(d5e71144af1ce175, 1, 1, INLINE_COMPOSITE);
 };
 
 struct Declaration::AnnotationApplication {
@@ -159,6 +209,8 @@ struct Declaration::AnnotationApplication {
   class Builder;
   class Pipeline;
   struct Value;
+
+  CAPNP_DECLARE_STRUCT(d00489d473826290, 1, 2, INLINE_COMPOSITE);
 };
 
 struct Declaration::AnnotationApplication::Value {
@@ -171,6 +223,8 @@ struct Declaration::AnnotationApplication::Value {
     NONE,
     EXPRESSION,
   };
+
+  CAPNP_DECLARE_STRUCT(fb5aeed95cdf6af9, 1, 2, INLINE_COMPOSITE);
 };
 
 struct Declaration::ParamList {
@@ -183,6 +237,8 @@ struct Declaration::ParamList {
     NAMED_LIST,
     TYPE,
   };
+
+  CAPNP_DECLARE_STRUCT(b3f66e7a79d81bcd, 2, 1, INLINE_COMPOSITE);
 };
 
 struct Declaration::Param {
@@ -192,6 +248,8 @@ struct Declaration::Param {
   class Builder;
   class Pipeline;
   struct DefaultValue;
+
+  CAPNP_DECLARE_STRUCT(fffe08a9a697d2a5, 2, 4, INLINE_COMPOSITE);
 };
 
 struct Declaration::Param::DefaultValue {
@@ -204,6 +262,8 @@ struct Declaration::Param::DefaultValue {
     NONE,
     VALUE,
   };
+
+  CAPNP_DECLARE_STRUCT(e5104515fd88ea47, 2, 4, INLINE_COMPOSITE);
 };
 
 struct Declaration::Id {
@@ -217,6 +277,8 @@ struct Declaration::Id {
     UID,
     ORDINAL,
   };
+
+  CAPNP_DECLARE_STRUCT(89f0c973c103ae96, 2, 8, INLINE_COMPOSITE);
 };
 
 struct Declaration::Using {
@@ -225,6 +287,8 @@ struct Declaration::Using {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(e93164a80bfe2ccf, 2, 8, INLINE_COMPOSITE);
 };
 
 struct Declaration::Const {
@@ -233,6 +297,8 @@ struct Declaration::Const {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(b348322a8dcf0d0c, 2, 8, INLINE_COMPOSITE);
 };
 
 struct Declaration::Field {
@@ -242,6 +308,8 @@ struct Declaration::Field {
   class Builder;
   class Pipeline;
   struct DefaultValue;
+
+  CAPNP_DECLARE_STRUCT(8f2622208fb358c8, 2, 8, INLINE_COMPOSITE);
 };
 
 struct Declaration::Field::DefaultValue {
@@ -254,6 +322,8 @@ struct Declaration::Field::DefaultValue {
     NONE,
     VALUE,
   };
+
+  CAPNP_DECLARE_STRUCT(d0d1a21de617951f, 2, 8, INLINE_COMPOSITE);
 };
 
 struct Declaration::Interface {
@@ -262,6 +332,8 @@ struct Declaration::Interface {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(992a90eaf30235d3, 2, 8, INLINE_COMPOSITE);
 };
 
 struct Declaration::Method {
@@ -271,6 +343,8 @@ struct Declaration::Method {
   class Builder;
   class Pipeline;
   struct Results;
+
+  CAPNP_DECLARE_STRUCT(eb971847d617c0b9, 2, 8, INLINE_COMPOSITE);
 };
 
 struct Declaration::Method::Results {
@@ -283,6 +357,8 @@ struct Declaration::Method::Results {
     NONE,
     EXPLICIT,
   };
+
+  CAPNP_DECLARE_STRUCT(c6238c7d62d65173, 2, 8, INLINE_COMPOSITE);
 };
 
 struct Declaration::Annotation {
@@ -291,6 +367,8 @@ struct Declaration::Annotation {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(9cb9e86e3198037f, 2, 8, INLINE_COMPOSITE);
 };
 
 struct ParsedFile {
@@ -299,125 +377,11 @@ struct ParsedFile {
   class Reader;
   class Builder;
   class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(84e4f3f5a807605c, 0, 1, POINTER);
 };
 
-}  // namespace
-}  // namespace
-
 // =======================================================================================
-
-namespace capnp {
-namespace schemas {
-
-extern const ::capnp::_::RawSchema s_e75816b56529d464;
-extern const ::capnp::_::RawSchema s_991c7a3693d62cf2;
-extern const ::capnp::_::RawSchema s_90f2a60678fd2367;
-extern const ::capnp::_::RawSchema s_8e207d4dfe54d0de;
-extern const ::capnp::_::RawSchema s_c90246b71adedbaa;
-extern const ::capnp::_::RawSchema s_aee8397040b0df7a;
-extern const ::capnp::_::RawSchema s_aa28e1400d793359;
-extern const ::capnp::_::RawSchema s_96efe787c17e83bb;
-extern const ::capnp::_::RawSchema s_d5e71144af1ce175;
-extern const ::capnp::_::RawSchema s_d00489d473826290;
-extern const ::capnp::_::RawSchema s_fb5aeed95cdf6af9;
-extern const ::capnp::_::RawSchema s_94099c3f9eb32d6b;
-extern const ::capnp::_::RawSchema s_b3f66e7a79d81bcd;
-extern const ::capnp::_::RawSchema s_fffe08a9a697d2a5;
-extern const ::capnp::_::RawSchema s_e5104515fd88ea47;
-extern const ::capnp::_::RawSchema s_89f0c973c103ae96;
-extern const ::capnp::_::RawSchema s_e93164a80bfe2ccf;
-extern const ::capnp::_::RawSchema s_b348322a8dcf0d0c;
-extern const ::capnp::_::RawSchema s_8f2622208fb358c8;
-extern const ::capnp::_::RawSchema s_d0d1a21de617951f;
-extern const ::capnp::_::RawSchema s_992a90eaf30235d3;
-extern const ::capnp::_::RawSchema s_eb971847d617c0b9;
-extern const ::capnp::_::RawSchema s_c6238c7d62d65173;
-extern const ::capnp::_::RawSchema s_9cb9e86e3198037f;
-extern const ::capnp::_::RawSchema s_84e4f3f5a807605c;
-
-}  // namespace schemas
-namespace _ {  // private
-
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::LocatedText, e75816b56529d464,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::LocatedInteger, 991c7a3693d62cf2,
-    2, 0, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::LocatedFloat, 90f2a60678fd2367,
-    2, 0, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Expression, 8e207d4dfe54d0de,
-    3, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Expression::Param, c90246b71adedbaa,
-    1, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Expression::Application, aee8397040b0df7a,
-    3, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Expression::Member, aa28e1400d793359,
-    3, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration, 96efe787c17e83bb,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::BrandParameter, d5e71144af1ce175,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::AnnotationApplication, d00489d473826290,
-    1, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::AnnotationApplication::Value, fb5aeed95cdf6af9,
-    1, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::ParamList, b3f66e7a79d81bcd,
-    2, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Param, fffe08a9a697d2a5,
-    2, 4, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Param::DefaultValue, e5104515fd88ea47,
-    2, 4, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Id, 89f0c973c103ae96,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Using, e93164a80bfe2ccf,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Const, b348322a8dcf0d0c,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Field, 8f2622208fb358c8,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Field::DefaultValue, d0d1a21de617951f,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Interface, 992a90eaf30235d3,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Method, eb971847d617c0b9,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Method::Results, c6238c7d62d65173,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Declaration::Annotation, 9cb9e86e3198037f,
-    2, 8, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::ParsedFile, 84e4f3f5a807605c,
-    0, 1, POINTER);
-
-}  // namespace _ (private)
-}  // namespace capnp
-
-// =======================================================================================
-
-namespace capnp {
-namespace compiler {
 
 class LocatedText::Reader {
 public:

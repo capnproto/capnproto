@@ -1088,6 +1088,7 @@ private:
     kj::StringTree outerTypeDef;
     kj::StringTree readerBuilderDefs;
     kj::StringTree inlineMethodDefs;
+    kj::StringTree sourceDefs;
   };
 
   kj::StringTree makeReaderDef(kj::StringPtr fullName, kj::StringPtr unqualifiedParentType,
@@ -1189,6 +1190,7 @@ private:
 
     auto structNode = proto.getStruct();
     uint discrimOffset = structNode.getDiscriminantOffset();
+    auto hexId = kj::hex(proto.getId());
 
     return StructText {
       kj::strTree(
@@ -1212,6 +1214,11 @@ private:
               },
               "  };\n"),
           KJ_MAP(n, nestedTypeDecls) { return kj::mv(n); },
+          "\n"
+          "  CAPNP_DECLARE_STRUCT(", hexId, ", ",
+                structNode.getDataWordCount(), ", ", structNode.getPointerCount(), ", ",
+                FIELD_SIZE_NAMES[static_cast<uint>(structNode.getPreferredListEncoding())],
+                ");\n",
           "};\n"
           "\n"),
 
@@ -1232,7 +1239,9 @@ private:
               "  return _builder.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
               "}\n"
               "\n"),
-          KJ_MAP(f, fieldTexts) { return kj::mv(f.inlineMethodDefs); })
+          KJ_MAP(f, fieldTexts) { return kj::mv(f.inlineMethodDefs); }),
+
+      kj::strTree("CAPNP_DEFINE_STRUCT(", fullName, ");\n")
     };
   }
 
@@ -1326,6 +1335,7 @@ private:
     auto methods = KJ_MAP(m, schema.getMethods()) { return makeMethodText(fullName, m); };
 
     auto proto = schema.getProto();
+    auto hexId = kj::hex(proto.getId());
 
     auto superclasses = KJ_MAP(extend, proto.getInterface().getSuperclasses()) {
       Schema schema = schemaLoader.get(extend.getId());
@@ -1344,6 +1354,8 @@ private:
           "  class Server;\n"
           "\n",
           KJ_MAP(n, nestedTypeDecls) { return kj::mv(n); },
+          "\n"
+          "  CAPNP_DECLARE_INTERFACE(", hexId, ");\n"
           "};\n"
           "\n"),
 
@@ -1446,7 +1458,9 @@ private:
           "          \"", proto.getDisplayName(), "\",\n"
           "          0x", kj::hex(proto.getId()), "ull, methodId);\n"
           "  }\n"
-          "}\n")
+          "}\n"
+          "\n"
+          "CAPNP_DEFINE_INTERFACE(", fullName, ");\n")
     };
   }
 
@@ -1551,18 +1565,6 @@ private:
     kj::StringTree inlineMethodDefs;
     kj::StringTree capnpSchemaDecls;
     kj::StringTree capnpSchemaDefs;
-    kj::StringTree capnpPrivateDecls;
-    kj::StringTree capnpPrivateDefs;
-    kj::StringTree sourceFileDefs;
-  };
-
-  struct NodeTextNoSchema {
-    kj::StringTree outerTypeDecl;
-    kj::StringTree outerTypeDef;
-    kj::StringTree readerBuilderDefs;
-    kj::StringTree inlineMethodDefs;
-    kj::StringTree capnpPrivateDecls;
-    kj::StringTree capnpPrivateDefs;
     kj::StringTree sourceFileDefs;
   };
 
@@ -1682,7 +1684,7 @@ private:
         ", nullptr, nullptr, { &s_", hexId, ", nullptr, nullptr, 0, 0, nullptr }\n"
         "};\n");
 
-    NodeTextNoSchema top = makeNodeTextWithoutNested(
+    NodeText top = makeNodeTextWithoutNested(
         namespace_, scope, name, schema,
         KJ_MAP(n, nestedTexts) { return kj::mv(n.outerTypeDecl); });
 
@@ -1703,19 +1705,13 @@ private:
 
       kj::strTree(
           kj::mv(schemaDecl),
+          kj::mv(top.capnpSchemaDecls),
           KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpSchemaDecls); }),
 
       kj::strTree(
           kj::mv(schemaDef),
+          kj::mv(top.capnpSchemaDefs),
           KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpSchemaDefs); }),
-
-      kj::strTree(
-          kj::mv(top.capnpPrivateDecls),
-          KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpPrivateDecls); }),
-
-      kj::strTree(
-          kj::mv(top.capnpPrivateDefs),
-          KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpPrivateDefs); }),
 
       kj::strTree(
           kj::mv(top.sourceFileDefs),
@@ -1723,9 +1719,9 @@ private:
     };
   }
 
-  NodeTextNoSchema makeNodeTextWithoutNested(kj::StringPtr namespace_, kj::StringPtr scope,
-                                             kj::StringPtr name, Schema schema,
-                                             kj::Array<kj::StringTree> nestedTypeDecls) {
+  NodeText makeNodeTextWithoutNested(kj::StringPtr namespace_, kj::StringPtr scope,
+                                     kj::StringPtr name, Schema schema,
+                                     kj::Array<kj::StringTree> nestedTypeDecls) {
     auto proto = schema.getProto();
     KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
       name = annotatedName->getText();
@@ -1740,58 +1736,46 @@ private:
       case schema::Node::STRUCT: {
         StructText structText =
             makeStructText(scope, name, schema.asStruct(), kj::mv(nestedTypeDecls));
-        auto structNode = proto.getStruct();
 
-        return NodeTextNoSchema {
+        return NodeText {
           kj::mv(structText.outerTypeDecl),
           kj::mv(structText.outerTypeDef),
           kj::mv(structText.readerBuilderDefs),
           kj::mv(structText.inlineMethodDefs),
 
-          kj::strTree(
-              "CAPNP_DECLARE_STRUCT(\n"
-              "    ", namespace_, "::", fullName, ", ", hexId, ",\n"
-              "    ", structNode.getDataWordCount(), ", ",
-                      structNode.getPointerCount(), ", ",
-                      FIELD_SIZE_NAMES[static_cast<uint>(structNode.getPreferredListEncoding())],
-                      ");\n"),
-          kj::strTree(
-              "CAPNP_DEFINE_STRUCT(\n"
-              "    ", namespace_, "::", fullName, ");\n"),
-
           kj::strTree(),
+          kj::strTree(),
+
+          kj::mv(structText.sourceDefs),
         };
       }
 
       case schema::Node::ENUM: {
         auto enumerants = schema.asEnum().getEnumerants();
 
-        return NodeTextNoSchema {
+        return NodeText {
           scope.size() == 0 ? kj::strTree() : kj::strTree(
-              "  enum class ", name, ": uint16_t {\n",
-              KJ_MAP(e, enumerants) {
-                return kj::strTree("    ", toUpperCase(protoName(e.getProto())), ",\n");
-              },
-              "  };\n"
+              "  typedef ::capnp::schemas::", name, "_", hexId, " ", name, ";\n"
               "\n"),
 
           scope.size() > 0 ? kj::strTree() : kj::strTree(
-              "enum class ", name, ": uint16_t {\n",
+              "typedef ::capnp::schemas::", name, "_", hexId, " ", name, ";\n"
+              "\n"),
+
+          kj::strTree(),
+          kj::strTree(),
+
+          kj::strTree(
+              // We declare enums in the capnp::schemas namespace and then typedef them into
+              // place because we don't want them to be parameterized for generics.
+              "enum class ", name, "_", hexId, ": uint16_t {\n",
               KJ_MAP(e, enumerants) {
                 return kj::strTree("  ", toUpperCase(protoName(e.getProto())), ",\n");
               },
               "};\n"
-              "\n"),
-
-          kj::strTree(),
-          kj::strTree(),
-
+              "CAPNP_DECLARE_ENUM(", name, ", ", hexId, ");\n"),
           kj::strTree(
-              "CAPNP_DECLARE_ENUM(\n"
-              "    ", namespace_, "::", fullName, ", ", hexId, ");\n"),
-          kj::strTree(
-              "CAPNP_DEFINE_ENUM(\n"
-              "    ", namespace_, "::", fullName, ");\n"),
+              "CAPNP_DEFINE_ENUM(", name, "_", hexId, ");\n"),
 
           kj::strTree(),
         };
@@ -1803,18 +1787,14 @@ private:
         InterfaceText interfaceText =
             makeInterfaceText(scope, name, schema.asInterface(), kj::mv(nestedTypeDecls));
 
-        return NodeTextNoSchema {
+        return NodeText {
           kj::mv(interfaceText.outerTypeDecl),
           kj::mv(interfaceText.outerTypeDef),
           kj::mv(interfaceText.clientServerDefs),
           kj::mv(interfaceText.inlineMethodDefs),
 
-          kj::strTree(
-              "CAPNP_DECLARE_INTERFACE(\n"
-              "    ", namespace_, "::", fullName, ", ", hexId, ");\n"),
-          kj::strTree(
-              "CAPNP_DEFINE_INTERFACE(\n"
-              "    ", namespace_, "::", fullName, ");\n"),
+          kj::strTree(),
+          kj::strTree(),
 
           kj::mv(interfaceText.sourceDefs),
         };
@@ -1823,7 +1803,7 @@ private:
       case schema::Node::CONST: {
         auto constText = makeConstText(scope, name, schema.asConst());
 
-        return NodeTextNoSchema {
+        return NodeText {
           scope.size() == 0 ? kj::strTree() : kj::strTree("  ", kj::mv(constText.decl)),
           scope.size() > 0 ? kj::strTree() : kj::mv(constText.decl),
           kj::strTree(),
@@ -1837,7 +1817,7 @@ private:
       }
 
       case schema::Node::ANNOTATION: {
-        return NodeTextNoSchema {
+        return NodeText {
           kj::strTree(),
           kj::strTree(),
           kj::strTree(),
@@ -1934,28 +1914,19 @@ private:
               return kj::strTree("#include \"", path, ".h\"\n");
             }
           },
-          "\n",
-
-          KJ_MAP(n, namespaceParts) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
-          KJ_MAP(n, nodeTexts) { return kj::mv(n.outerTypeDef); },
-          KJ_MAP(n, namespaceParts) { return kj::strTree("}  // namespace\n"); }, "\n",
-
-          separator, "\n"
+          "\n"
           "namespace capnp {\n"
           "namespace schemas {\n"
           "\n",
           KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDecls); },
           "\n"
           "}  // namespace schemas\n"
-          "namespace _ {  // private\n"
-          "\n",
-          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpPrivateDecls); },
-          "\n"
-          "}  // namespace _ (private)\n"
           "}  // namespace capnp\n"
+          "\n",
 
-          "\n", separator, "\n",
           KJ_MAP(n, namespaceParts) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
+          KJ_MAP(n, nodeTexts) { return kj::mv(n.outerTypeDef); },
+          separator, "\n",
           KJ_MAP(n, nodeTexts) { return kj::mv(n.readerBuilderDefs); },
           separator, "\n",
           KJ_MAP(n, nodeTexts) { return kj::mv(n.inlineMethodDefs); },
@@ -1972,9 +1943,6 @@ private:
           "namespace schemas {\n",
           KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDefs); },
           "}  // namespace schemas\n"
-          "namespace _ {  // private\n",
-          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpPrivateDefs); },
-          "}  // namespace _ (private)\n"
           "}  // namespace capnp\n",
           sourceDefs.size() == 0 ? kj::strTree() : kj::strTree(
               "\n", separator, "\n",

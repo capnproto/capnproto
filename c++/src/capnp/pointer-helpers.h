@@ -123,6 +123,8 @@ struct UncheckedMessage {
   typedef const word* Reader;
 };
 
+template <> struct Kind_<UncheckedMessage> { static constexpr Kind kind = Kind::OTHER; };
+
 template <>
 struct PointerHelpers<UncheckedMessage> {
   // Reads an AnyPointer field as an unchecked message pointer.  Requires that the containing
