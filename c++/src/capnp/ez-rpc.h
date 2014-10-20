@@ -23,6 +23,7 @@
 #define CAPNP_EZ_RPC_H_
 
 #include "rpc.h"
+#include "message.h"
 
 struct sockaddr;
 
@@ -91,7 +92,8 @@ class EzRpcClient {
   // - `TwoPartyVatNetwork` in `capnp/rpc-twoparty.h`.
 
 public:
-  explicit EzRpcClient(kj::StringPtr serverAddress, uint defaultPort = 0);
+  explicit EzRpcClient(kj::StringPtr serverAddress, uint defaultPort = 0,
+                       ReaderOptions readerOpts = ReaderOptions());
   // Construct a new EzRpcClient and connect to the given address.  The connection is formed in
   // the background -- if it fails, calls to capabilities returned by importCap() will fail with an
   // appropriate exception.
@@ -101,13 +103,23 @@ public:
   //
   // The address is parsed by `kj::Network` in `kj/async-io.h`.  See that interface for more info
   // on the address format, but basically it's what you'd expect.
+  //
+  // `readerOpts` is the ReaderOptions structure used by capnproto to limit the traversal of
+  // messages. If not specified, a default value of 8M max word traversal and a nesting limit of 64
+  // deep.
+  // You should only need to set this if you are receiving errors about messages being too large or
+  // too deep in normal operation, and should consider restructuring your protocol to use simpler
+  // or smaller messages if this is an issue for you.
 
-  EzRpcClient(const struct sockaddr* serverAddress, uint addrSize);
+
+  EzRpcClient(const struct sockaddr* serverAddress, uint addrSize,
+              ReaderOptions readerOpts = ReaderOptions());
   // Like the above constructor, but connects to an already-resolved socket address.  Any address
   // format supported by `kj::Network` in `kj/async-io.h` is accepted.
 
-  explicit EzRpcClient(int socketFd);
+  explicit EzRpcClient(int socketFd, ReaderOptions readerOpts = ReaderOptions());
   // Create a client on top of an already-connected socket.
+  // `readerOpts` acts as in the first constructor.
 
   ~EzRpcClient() noexcept(false);
 
@@ -138,7 +150,8 @@ class EzRpcServer {
   // The server counterpart to `EzRpcClient`.  See `EzRpcClient` for an example.
 
 public:
-  explicit EzRpcServer(kj::StringPtr bindAddress, uint defaultPort = 0);
+  explicit EzRpcServer(kj::StringPtr bindAddress, uint defaultPort = 0,
+                       ReaderOptions readerOpts = ReaderOptions());
   // Construct a new `EzRpcServer` that binds to the given address.  An address of "*" means to
   // bind to all local addresses.
   //
@@ -152,14 +165,23 @@ public:
   // The server might not begin listening immediately, especially if `bindAddress` needs to be
   // resolved.  If you need to wait until the server is definitely up, wait on the promise returned
   // by `getPort()`.
+  // 
+  // `readerOpts` is the ReaderOptions structure used by capnproto to limit the traversal of
+  // messages. If not specified, a default value of 8M max word traversal and a nesting limit of 64
+  // deep.
+  // You should only need to set this if you are receiving errors about messages being too large or
+  // too deep in normal operation, and should consider restructuring your protocol to use simpler
+  // or smaller messages if this is an issue for you.
 
-  EzRpcServer(struct sockaddr* bindAddress, uint addrSize);
+  EzRpcServer(struct sockaddr* bindAddress, uint addrSize,
+              ReaderOptions readerOpts = ReaderOptions());
   // Like the above constructor, but binds to an already-resolved socket address.  Any address
   // format supported by `kj::Network` in `kj/async-io.h` is accepted.
 
-  EzRpcServer(int socketFd, uint port);
+  EzRpcServer(int socketFd, uint port, ReaderOptions readerOpts = ReaderOptions());
   // Create a server on top of an already-listening socket (i.e. one on which accept() may be
   // called).  `port` is returned by `getPort()` -- it serves no other purpose.
+  // `readerOpts` acts as in the other two above constructors.
 
   ~EzRpcServer() noexcept(false);
 
