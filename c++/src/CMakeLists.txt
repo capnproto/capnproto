@@ -1,6 +1,9 @@
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+find_package(CapnProto)
+set(CAPNP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR})
+
 # kj ==============================================================
 
 add_library(kj
@@ -164,12 +167,12 @@ add_executable(capnpc_capnp
 target_link_libraries(capnpc_capnp capnp kj)
 set_target_properties(capnpc_capnp PROPERTIES OUTPUT_NAME capnpc-capnp)
 
+# Install ==============================================================
+
 export(TARGETS capnp capnp-tool capnp-rpc capnpc capnpc_cpp capnpc_capnp kj kj-async
   FILE ${CMAKE_CURRENT_BINARY_DIR}/capnp-config.cmake
 )
 export(PACKAGE capnp)
-
-# Install ==============================================================
 
 install(TARGETS capnp capnp-tool capnp-rpc capnpc capnpc_cpp capnpc_capnp kj kj-async
   EXPORT capnp
@@ -177,8 +180,6 @@ install(TARGETS capnp capnp-tool capnp-rpc capnpc capnpc_cpp capnpc_capnp kj kj-
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
 )
-
-install(EXPORT capnp DESTINATION lib/cmake/capnp)
 
 # Symlink capnpc -> capnp
 install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp ${CMAKE_INSTALL_PREFIX}/bin/capnpc)")
@@ -224,37 +225,14 @@ set(test_capnp_files
   capnp/test-import2.capnp
 )
 
-set(test_capnp_output_dir ${CMAKE_CURRENT_BINARY_DIR}/test_capnp)
-file(MAKE_DIRECTORY ${test_capnp_output_dir})
+set(CAPNP_EXECUTABLE $<TARGET_FILE:capnp-tool>)
+set(CAPNPC_CXX_EXECUTABLE $<TARGET_FILE:capnpc_cpp>)
+set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/test_capnp)
+file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
 
-set(test_capnp_cpp_files)
-set(test_capnp_header_files)
-set(test_capnp_capnp_files)
+capnp_generate_cpp(test_capnp_cpp_files test_capnp_h_files ${test_capnp_files})
 
-foreach(_file ${test_capnp_files})
-  list(APPEND test_capnp_cpp_files ${test_capnp_output_dir}/${_file}.c++)
-  list(APPEND test_capnp_header_files ${test_capnp_output_dir}/${_file}.h)
-  get_filename_component(_capnp_abs ${_file} ABSOLUTE)
-  list(APPEND test_capnp_capnp_files ${_capnp_abs})
-  set_source_files_properties(
-    ${test_capnp_output_dir}/${_file}.capnp.c++
-    PROPERTIES GENERATED TRUE)
-endforeach()
-
-add_custom_command(
-  OUTPUT
-    ${test_capnp_cpp_files}
-    ${test_capnp_header_files}
-  COMMAND capnp-tool compile
-    -o $<TARGET_FILE:capnpc_cpp>:${test_capnp_output_dir}
-    --src-prefix=${CMAKE_CURRENT_SOURCE_DIR}
-    -I${CMAKE_CURRENT_SOURCE_DIR}
-    ${test_capnp_capnp_files}
-  DEPENDS capnp-tool capnpc_cpp ${test_capnp_files}
-)
-
-
-include_directories(${test_capnp_output_dir})
+include_directories(${CAPNPC_OUTPUT_DIR})
 
 add_executable(capnp-tests
   kj/common-test.c++
@@ -304,6 +282,7 @@ add_executable(capnp-tests
   capnp/compiler/lexer-test.c++
   capnp/compiler/md5-test.c++
   ${test_capnp_cpp_files}
+  ${test_capnp_h_files}
 )
 target_link_libraries(capnp-tests
   capnpc
