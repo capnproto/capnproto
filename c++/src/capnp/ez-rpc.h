@@ -104,9 +104,12 @@ public:
   // The address is parsed by `kj::Network` in `kj/async-io.h`.  See that interface for more info
   // on the address format, but basically it's what you'd expect.
   //
-  // `readerOpts` is the ReaderOptions structure used by capnproto to limit the traversal of
-  // messages. If not specified, a default value of 8M max word traversal and a nesting limit of 64
-  // deep.
+  // `readerOpts` is the ReaderOptions structure used to read each incoming message on the
+  // connection. Setting this may be necessary if you need to receive very large individual
+  // messages or messages. However, it is recommended that you instead think about how to change
+  // your protocol to send large data blobs in multiple small chunks -- this is much better for
+  // both security and performance. See `ReaderOptions` in `message.h` for more details.
+
   // You should only need to set this if you are receiving errors about messages being too large or
   // too deep in normal operation, and should consider restructuring your protocol to use simpler
   // or smaller messages if this is an issue for you.
@@ -165,13 +168,12 @@ public:
   // The server might not begin listening immediately, especially if `bindAddress` needs to be
   // resolved.  If you need to wait until the server is definitely up, wait on the promise returned
   // by `getPort()`.
-  // 
-  // `readerOpts` is the ReaderOptions structure used by capnproto to limit the traversal of
-  // messages. If not specified, a default value of 8M max word traversal and a nesting limit of 64
-  // deep.
-  // You should only need to set this if you are receiving errors about messages being too large or
-  // too deep in normal operation, and should consider restructuring your protocol to use simpler
-  // or smaller messages if this is an issue for you.
+  //
+  // `readerOpts` is the ReaderOptions structure used to read each incoming message on the
+  // connection. Setting this may be necessary if you need to receive very large individual
+  // messages or messages. However, it is recommended that you instead think about how to change
+  // your protocol to send large data blobs in multiple small chunks -- this is much better for
+  // both security and performance. See `ReaderOptions` in `message.h` for more details.
 
   EzRpcServer(struct sockaddr* bindAddress, uint addrSize,
               ReaderOptions readerOpts = ReaderOptions());
