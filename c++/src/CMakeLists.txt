@@ -52,6 +52,7 @@ add_library(kj-async
   kj/async-unix.c++
   kj/async-io.c++
 )
+target_link_libraries(kj-async kj)
 set(kj-async_headers
   kj/async-prelude.h
   kj/async.h
@@ -78,6 +79,7 @@ add_library(capnp
   capnp/serialize.c++
   capnp/serialize-packed.c++
 )
+target_link_libraries(capnp kj)
 set(capnp_headers
   capnp/c++.capnp.h
   capnp/common.h
@@ -112,6 +114,7 @@ add_library(capnp-rpc
   capnp/rpc-twoparty.capnp.c++
   capnp/ez-rpc.c++
 )
+target_link_libraries(capnp-rpc kj-async kj)
 set(capnp-rpc_headers
   capnp/rpc-prelude.h
   capnp/rpc.h
@@ -134,6 +137,7 @@ add_library(capnpc
   capnp/compiler/compiler.c++
   capnp/schema-parser.c++
 )
+target_link_libraries(capnpc capnp kj)
 set(capnpc_headers
   capnp/c++.capnp
   capnp/schema.capnp
@@ -249,7 +253,6 @@ add_custom_command(
   DEPENDS capnp-tool capnpc_cpp ${test_capnp_files}
 )
 
-add_library(capnp_test_lib ${test_capnp_cpp_files} ${test_capnp_header_files})
 
 include_directories(${test_capnp_output_dir})
 
@@ -300,9 +303,9 @@ add_executable(capnp-tests
   capnp/test-util.c++
   capnp/compiler/lexer-test.c++
   capnp/compiler/md5-test.c++
+  ${test_capnp_cpp_files}
 )
 target_link_libraries(capnp-tests
-  capnp_test_lib
   capnpc
   capnp-rpc
   capnp
@@ -313,16 +316,7 @@ target_link_libraries(capnp-tests
 )
 
 add_executable(capnp-evolution-tests capnp/compiler/evolution-test.c++)
-target_link_libraries(capnp-evolution-tests
-  capnp_test_lib
-  capnpc
-  capnp-rpc
-  capnp
-  kj-async
-  kj
-  gtest
-  gtest_main
-)
+target_link_libraries(capnp-evolution-tests capnpc capnp kj)
 
 include(CTest)
 add_test(NAME capnp-tests-run COMMAND capnp-tests)
