@@ -192,8 +192,6 @@ struct RawSchema {
   // Specifies the brand to use for this schema if no generic parameters have been bound to
   // anything. Generally, in the default brand, all generic parameters are treated as if they were
   // bound to `AnyPointer`.
-  //
-  // TODO(now): Remove initializer; it's just to assist incremental changes.
 };
 
 template <typename T>
@@ -231,8 +229,6 @@ using UnionParentType = typename UnionParentType_<T>::Type;
 kj::StringTree structString(StructReader reader, const RawBrandedSchema& schema);
 // Declared here so that we can declare inline stringify methods on generated types.
 // Defined in stringify.c++, which depends on dynamic.c++, which is allowed not to be linked in.
-//
-// TODO(now): No default for env.
 
 template <typename T>
 inline kj::StringTree structString(StructReader reader) {

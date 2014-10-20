@@ -336,8 +336,6 @@ struct Brand {
   # For each of the target type and each of its parent scopes, a parameterization may be included
   # in this list. If no parameterization is included for a particular relevant scope, then either
   # that scope has no parameters or all parameters should be considered to be `AnyPointer`.
-  #
-  # TODO(now): improve naming
 
   struct Scope {
     scopeId @0 :Id;
