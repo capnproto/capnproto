@@ -1554,9 +1554,6 @@ SchemaLoader::Impl::makeBrandedDependencies(
 
   schema::Node::Reader node = readMessageUnchecked<schema::Node>(schema->encodedNode);
 
-  using Kind = _::RawBrandedSchema::DepKind;
-  using Entry = _::RawBrandedSchema::Dependency;
-
 #define ADD_ENTRY(kind, index, make) \
     if (const _::RawBrandedSchema* dep = make) { \
       deps.add(_::RawBrandedSchema::Dependency {\
