@@ -1146,6 +1146,8 @@ NodeTranslator::BrandedDecl NodeTranslator::BrandScope::decompileType(
       KJ_UNREACHABLE;
     }
   }
+
+  KJ_UNREACHABLE;
 }
 
 kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclExpression(
@@ -1252,6 +1254,8 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclEx
       }
     }
   }
+
+  KJ_UNREACHABLE;
 }
 
 // =======================================================================================
@@ -1270,7 +1274,7 @@ NodeTranslator::NodeTranslator(
   compileNode(decl, wipNode.get());
 }
 
-NodeTranslator::~NodeTranslator() {}
+NodeTranslator::~NodeTranslator() noexcept(false) {}
 
 NodeTranslator::NodeSet NodeTranslator::getBootstrapNode() {
   auto nodeReader = wipNode.getReader();

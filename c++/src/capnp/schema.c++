@@ -692,6 +692,11 @@ ListSchema ListSchema::of(schema::Type::Which primitiveType) {
 }
 
 ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
+  // This method is deprecated because it can only be implemented in terms of other deprecated
+  // methods. Temporarily disable warnings for those other deprecated methods.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
   switch (elementType.which()) {
     case schema::Type::VOID:
     case schema::Type::BOOL:
@@ -728,6 +733,7 @@ ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
 
   // Unknown type is acceptable.
   return ListSchema(elementType.which());
+#pragma GCC diagnostic pop
 }
 
 StructSchema ListSchema::getStructElementType() const {

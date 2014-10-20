@@ -121,7 +121,7 @@ public:
   // `displayName`, `id`, `scopeId`, and `nestedNodes` already initialized.  The `NodeTranslator`
   // fills in the rest.
 
-  ~NodeTranslator();
+  ~NodeTranslator() noexcept(false);
 
   struct NodeSet {
     schema::Node::Reader node;
