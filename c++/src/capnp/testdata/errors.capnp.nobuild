@@ -117,12 +117,12 @@ struct Foo {
   undefinedAbsolute @47 : .NoSuch;
   undefinedRelative @29 :NoSuch;
   undefinedMember @30 :Foo.NoSuch;
-
-  defaultBadStructSyntax @48 :Foo = (123, bar = 456);
 }
 
 struct Bar {
+  x @3 :Text;
   someGroup :group {
+    defaultMissingFieldName @2 :Bar = (x = "abcd", 456);
     defaultNoSuchField @0 :Bar = (nosuchfield = 123);
     defaultGroupMismatch @1 :Bar = (someGroup = 123);
   }
@@ -139,3 +139,13 @@ enum DupEnumerants {
 }
 
 const recursive: UInt32 = .recursive;
+
+struct Generic(T, U) {
+}
+
+struct UseGeneric {
+  tooFew @0 :Generic(Text);
+  tooMany @1 :Generic(Text, Data, List(Int32));
+  doubleBind @2 :Generic(Text, Data)(Data, Text);
+  primitiveBinding @3 :Generic(Text, Int32);
+}

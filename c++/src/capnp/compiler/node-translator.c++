@@ -563,7 +563,7 @@ public:
   //
   // It is an error to call this when `getKind()` returns null.
 
-  BrandedDecl& getListParam();
+  kj::Maybe<BrandedDecl&> getListParam();
   // Only if the kind is BUILTIN_LIST: Get the list's type parameter.
 
   Resolver::ResolvedParameter asVariable();
@@ -624,10 +624,14 @@ public:
       errorReporter.addErrorOn(source, "Double-application of generic parameters.");
       return nullptr;
     } else if (params.size() > leafParamCount) {
-      errorReporter.addErrorOn(source, "Too many generic arguments.");
+      if (leafParamCount == 0) {
+        errorReporter.addErrorOn(source, "Declaration does not accept generic parameters.");
+      } else {
+        errorReporter.addErrorOn(source, "Too many generic parameters.");
+      }
       return nullptr;
     } else if (params.size() < leafParamCount) {
-      errorReporter.addErrorOn(source, "Not enough generic arguments.");
+      errorReporter.addErrorOn(source, "Not enough generic parameters.");
       return nullptr;
     } else {
       if (genericType != Declaration::BUILTIN_LIST) {
@@ -838,16 +842,18 @@ uint64_t NodeTranslator::BrandedDecl::getIdAndFillBrand(InitBrandFunc&& initBran
   return body.get<Resolver::ResolvedDecl>().id;
 }
 
-NodeTranslator::BrandedDecl& NodeTranslator::BrandedDecl::getListParam() {
+kj::Maybe<NodeTranslator::BrandedDecl&> NodeTranslator::BrandedDecl::getListParam() {
   KJ_REQUIRE(body.is<Resolver::ResolvedDecl>());
 
   auto& decl = body.get<Resolver::ResolvedDecl>();
   KJ_REQUIRE(decl.kind == Declaration::BUILTIN_LIST);
 
   auto params = KJ_ASSERT_NONNULL(brand->getParams(decl.id));
-  KJ_ASSERT(params.size() == 1);
-
-  return params[0];
+  if (params.size() != 1) {
+    return nullptr;
+  } else {
+    return params[0];
+  }
 }
 
 NodeTranslator::Resolver::ResolvedParameter NodeTranslator::BrandedDecl::asVariable() {
@@ -880,7 +886,13 @@ bool NodeTranslator::BrandedDecl::compileAsType(
 
       case Declaration::BUILTIN_LIST: {
         auto elementType = target.initList().initElementType();
-        if (!getListParam().compileAsType(errorReporter, elementType)) {
+
+        KJ_IF_MAYBE(param, getListParam()) {
+          if (!param->compileAsType(errorReporter, elementType)) {
+            return false;
+          }
+        } else {
+          addError(errorReporter, "'List' requires exactly one parameter.");
           return false;
         }
 
@@ -1230,8 +1242,8 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclEx
           return kj::mv(*memberDecl);
         } else {
           errorReporter.addErrorOn(name, kj::str(
-              '"', expressionString(member.getParent()),
-              "\" has no member named \"", name.getValue(), '"'));
+              "'", expressionString(member.getParent()),
+              "' has no member named '", name.getValue(), "'"));
           return nullptr;
         }
       } else {

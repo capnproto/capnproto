@@ -655,7 +655,8 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
             builder.setName(targetReader.getMember().getName());
           } else {
             errorReporter.addErrorOn(targetReader,
-                "'using' declaration without '=' must identify a named declaration.");
+                "'using' declaration without '=' must specify a named declaration from a "
+                "different scope.");
           }
         }
         // no id, no annotations for using decl
