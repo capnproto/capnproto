@@ -37,9 +37,8 @@ Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
 
   KJ_REQUIRE(schema.extends(methodInterface), "Interface does not implement this method.");
 
-  auto proto = method.getProto();
-  auto paramType = methodInterface.getDependency(proto.getParamStructType()).asStruct();
-  auto resultType = methodInterface.getDependency(proto.getResultStructType()).asStruct();
+  auto paramType = method.getParamType();
+  auto resultType = method.getResultType();
 
   auto typeless = hook->newCall(
       methodInterface.getProto().getId(), method.getIndex(), sizeHint);
@@ -60,10 +59,8 @@ kj::Promise<void> DynamicCapability::Server::dispatchCall(
     auto methods = interface->getMethods();
     if (methodId < methods.size()) {
       auto method = methods[methodId];
-      auto proto = method.getProto();
       return call(method, CallContext<DynamicStruct, DynamicStruct>(*context.hook,
-          interface->getDependency(proto.getParamStructType()).asStruct(),
-          interface->getDependency(proto.getResultStructType()).asStruct()));
+          method.getParamType(), method.getResultType()));
     } else {
       return internalUnimplemented(
           interface->getProto().getDisplayName().cStr(), interfaceId, methodId);

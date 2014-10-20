@@ -453,7 +453,7 @@ uint getOrdinal(StructSchema::Field field) {
 
   KJ_ASSERT(proto.isGroup());
 
-  auto group = field.getContainingStruct().getDependency(proto.getGroup().getTypeId()).asStruct();
+  auto group = field.getType().asStruct();
   return getOrdinal(group.getFields()[0]);
 }
 
@@ -462,8 +462,7 @@ Orphan<DynamicStruct> makeExampleStruct(
 void checkExampleStruct(DynamicStruct::Reader reader, uint sharedOrdinalCount);
 
 Orphan<DynamicValue> makeExampleValue(
-    Orphanage orphanage, Schema scope, uint ordinal, schema::Type::Reader type,
-    uint sharedOrdinalCount) {
+    Orphanage orphanage, uint ordinal, Type type, uint sharedOrdinalCount) {
   switch (type.which()) {
     case schema::Type::INT32: return ordinal * 47327;
     case schema::Type::FLOAT64: return ordinal * 313.25;
@@ -472,7 +471,7 @@ Orphan<DynamicValue> makeExampleValue(
     case schema::Type::BOOL: return ordinal % 2 == 0;
     case schema::Type::TEXT: return orphanage.newOrphanCopy(Text::Reader(kj::str(ordinal)));
     case schema::Type::STRUCT: {
-      auto structType = scope.getDependency(type.getStruct().getTypeId()).asStruct();
+      auto structType = type.asStruct();
       auto result = orphanage.newOrphan(structType);
       auto builder = result.get();
 
@@ -482,23 +481,22 @@ Orphan<DynamicValue> makeExampleValue(
       } else {
         // Type is "Int32Struct" or the like.
         auto field = structType.getFieldByName("f0");
-        builder.adopt(field, makeExampleValue(orphanage, structType, ordinal,
-                                              field.getProto().getSlot().getType(),
-                                              sharedOrdinalCount));
+        builder.adopt(field, makeExampleValue(
+            orphanage, ordinal, field.getType(), sharedOrdinalCount));
       }
 
       return kj::mv(result);
     }
     case schema::Type::ENUM: {
-      auto enumerants = scope.getDependency(type.getEnum().getTypeId()).asEnum().getEnumerants();
+      auto enumerants = type.asEnum().getEnumerants();
       return DynamicEnum(enumerants[ordinal %enumerants.size()]);
     }
     case schema::Type::LIST: {
-      auto elementType = type.getList().getElementType();
-      auto listType = ListSchema::of(elementType, scope);
+      auto listType = type.asList();
+      auto elementType = listType.getElementType();
       auto result = orphanage.newOrphan(listType, 1);
       result.get().adopt(0, makeExampleValue(
-          orphanage, scope, ordinal, elementType, sharedOrdinalCount));
+          orphanage, ordinal, elementType, sharedOrdinalCount));
       return kj::mv(result);
     }
     default:
@@ -551,14 +549,13 @@ void setExampleField(DynamicStruct::Builder builder, StructSchema::Field field,
   switch (fieldProto.which()) {
     case schema::Field::SLOT:
       builder.adopt(field, makeExampleValue(
-          Orphanage::getForMessageContaining(builder), field.getContainingStruct(),
-          getOrdinal(field), fieldProto.getSlot().getType(), sharedOrdinalCount));
+          Orphanage::getForMessageContaining(builder),
+          getOrdinal(field), field.getType(), sharedOrdinalCount));
       break;
     case schema::Field::GROUP:
       builder.adopt(field, makeExampleStruct(
           Orphanage::getForMessageContaining(builder),
-          field.getContainingStruct().getDependency(fieldProto.getGroup().getTypeId()).asStruct(),
-          sharedOrdinalCount));
+          field.getType().asStruct(), sharedOrdinalCount));
       break;
   }
 }

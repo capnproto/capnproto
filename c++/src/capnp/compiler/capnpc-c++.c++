@@ -496,7 +496,7 @@ private:
           break;
         }
         case schema::Field::GROUP:
-          getSlots(schema.getDependency(proto.getGroup().getTypeId()).asStruct(), slots);
+          getSlots(field.getType().asStruct(), slots);
           break;
       }
     }

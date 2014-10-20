@@ -635,7 +635,7 @@ StructSchema InterfaceSchema::Method::getResultType() const {
   auto proto = getProto();
   uint location = _::RawBrandedSchema::makeDepLocation(
       _::RawBrandedSchema::DepKind::METHOD_RESULTS, ordinal);
-  return parent.getDependency(proto.getParamStructType(), location).asStruct();
+  return parent.getDependency(proto.getResultStructType(), location).asStruct();
 }
 
 InterfaceSchema InterfaceSchema::SuperclassList::operator[](uint index) const {

@@ -333,7 +333,7 @@ BUILT_SOURCES = $(test_capnpc_outputs)
 check_PROGRAMS = capnp-test capnp-evolution-test
 capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la \
                    libcapnpc.la libcapnp-rpc.la libcapnp.la libkj-async.la libkj.la
-capnp_test_CPPFLAGS = -Igtest/include -I$(srcdir)/gtest/include
+capnp_test_CPPFLAGS = -Wno-deprecated-declarations -Igtest/include -I$(srcdir)/gtest/include
 capnp_test_SOURCES =                                           \
   src/kj/common-test.c++                                       \
   src/kj/memory-test.c++                                       \

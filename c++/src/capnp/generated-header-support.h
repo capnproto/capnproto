@@ -52,7 +52,7 @@ struct RawBrandedSchema {
   // every _instance_ of a generic type -- or, at least, every instance that is actually used. For
   // generated-code types, we use template magic to initialize these.
 
-  const RawSchema* generic = nullptr;
+  const RawSchema* generic;
   // Generic type which we're branding.
 
   struct Binding {
@@ -71,7 +71,7 @@ struct RawBrandedSchema {
     // Bindings for those parameters.
   };
 
-  const Scope* scopes = nullptr;
+  const Scope* scopes;
   // Array of enclosing scopes for which generic variables have been bound, sorted by type ID.
 
   struct Dependency {
@@ -79,12 +79,12 @@ struct RawBrandedSchema {
     const RawBrandedSchema* schema;
   };
 
-  const Dependency* dependencies = nullptr;
+  const Dependency* dependencies;
   // Map of branded schemas for dependencies of this type, given our brand. Only dependencies that
   // are branded are included in this map; if a dependency is missing, use its `defaultBrand`.
 
-  uint32_t scopeCount = 0;
-  uint32_t dependencyCount = 0;
+  uint32_t scopeCount;
+  uint32_t dependencyCount;
 
   enum class DepKind {
     // Component of a Dependency::location. Specifies what sort of dependency this is.
@@ -121,7 +121,7 @@ struct RawBrandedSchema {
     virtual void init(const RawBrandedSchema* generic) const = 0;
   };
 
-  const Initializer* lazyInitializer = nullptr;
+  const Initializer* lazyInitializer;
   // Lazy initializer, invoked by ensureInitialized().
 
   inline void ensureInitialized() const {
