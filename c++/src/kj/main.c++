@@ -73,8 +73,8 @@ static void writeLineToFd(int fd, StringPtr message) {
   }
 
 #if _WIN32
-  char* newlineExpansionBuffer = (char*)_alloca(2 * (message.size() + 1));
-  char* p = newlineExpansionBuffer;
+  KJ_STACK_ARRAY(char, newlineExpansionBuffer, 2 * (message.size() + 1), 128, 512);
+  char* p = newlineExpansionBuffer.begin();
   for(char ch : message) {
     if(ch == '\n') {
       *(p++) = '\r';
@@ -86,9 +86,9 @@ static void writeLineToFd(int fd, StringPtr message) {
     *(p++) = '\n';
   }
 
-  size_t newlineExpandedSize = p - newlineExpansionBuffer;
+  size_t newlineExpandedSize = p - newlineExpansionBuffer.begin();
 
-  KJ_ASSERT(newlineExpandedSize <= 2 * (message.size() + 1));
+  KJ_ASSERT(newlineExpandedSize <= newlineExpansionBuffer.size());
 
   HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
   DWORD consoleMode;
@@ -96,21 +96,21 @@ static void writeLineToFd(int fd, StringPtr message) {
 
   DWORD writtenSize;
   if(redirectedToFile) {
-    WriteFile(handle, newlineExpansionBuffer, newlineExpandedSize, &writtenSize, nullptr);
+    WriteFile(handle, newlineExpansionBuffer.begin(), newlineExpandedSize, &writtenSize, nullptr);
   } else {
-    wchar_t* buffer = (wchar_t*)_alloca(sizeof(wchar_t) * newlineExpandedSize);
+    KJ_STACK_ARRAY(wchar_t, buffer, newlineExpandedSize, 128, 512);
 
     size_t finalSize = MultiByteToWideChar(
       CP_UTF8,
       0,
-      newlineExpansionBuffer,
+      newlineExpansionBuffer.begin(),
       newlineExpandedSize,
-      buffer,
-      newlineExpandedSize);
+      buffer.begin(),
+      buffer.size());
 
-    KJ_ASSERT(finalSize <= newlineExpandedSize);
+    KJ_ASSERT(finalSize <= buffer.size());
 
-    WriteConsoleW(handle, buffer, finalSize, &writtenSize, nullptr);
+    WriteConsoleW(handle, buffer.begin(), finalSize, &writtenSize, nullptr);
   }
 #else
   // Unfortunately the writev interface requires non-const pointers even though it won't modify
