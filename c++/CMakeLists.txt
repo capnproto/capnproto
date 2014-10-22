@@ -1,19 +1,13 @@
-project(Private)
-cmake_minimum_required(VERSION 2.8)
 
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+option(BUILD_TOOLS "Build command-line tools and compiler." ON)
+option(BUILD_TESTING "Build unit tests and enable CTest 'check' target." ON)
+option(EXTERNAL_CAPNP "Use the system capnp binary, or the one specified in $CAPNP, instead of using the compiled one." OFF)
 
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-unused-parameter -std=c++11")
-
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gtest" AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/gtest")
-  add_subdirectory(gtest)
-  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/gtest/include)
-else()
-  message(FATAL_ERROR "Please use setup-cmake.sh to download gtest before running the cmake build")
+if (NOT BUILD_TOOLS AND BUILD_TESTING AND NOT EXTERNAL_CAPNP)
+  message(WARNING "Forcing BUILD_TOOLS to ON; required by BUILD_TESTING without EXTERNAL_CAPNP.")
+  set(BUILD_TOOLS TRUE)
 endif()
 
-include(CTest)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -std=c++11 -pthread")
 
 add_subdirectory(src)
