@@ -168,6 +168,8 @@ struct List<T, Kind::PRIMITIVE> {
     friend struct ToDynamic_;
   };
 
+  class Pipeline {};
+
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
     return builder.initList(_::elementSizeForType<T>(), size * ELEMENTS);
@@ -286,6 +288,8 @@ struct List<T, Kind::STRUCT> {
     friend struct ToDynamic_;
   };
 
+  class Pipeline {};
+
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
     return builder.initStructList(size * ELEMENTS, _::structSize<T>());
@@ -393,6 +397,8 @@ struct List<List<T>, Kind::LIST> {
     friend struct ToDynamic_;
   };
 
+  class Pipeline {};
+
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
     return builder.initList(_::FieldSize::POINTER, size * ELEMENTS);
@@ -486,6 +492,8 @@ struct List<T, Kind::BLOB> {
     template <typename U, Kind K>
     friend struct ToDynamic_;
   };
+
+  class Pipeline {};
 
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {

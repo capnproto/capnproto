@@ -123,7 +123,7 @@ public:
 
   const _::RawBrandedSchema* makeBranded(
       const _::RawSchema* schema, schema::Brand::Reader proto,
-      kj::ArrayPtr<const _::RawBrandedSchema::Scope> clientBrand);
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> clientBrand);
 
   struct TryGetResult {
     _::RawSchema* schema;
@@ -131,6 +131,8 @@ public:
   };
 
   TryGetResult tryGet(uint64_t typeId) const;
+
+  const _::RawBrandedSchema* getUnbound(const _::RawSchema* schema);
 
   kj::Array<Schema> getAllLoaded() const;
 
@@ -151,6 +153,7 @@ private:
 
   std::unordered_map<uint64_t, _::RawSchema*> schemas;
   std::unordered_map<SchemaBindingsPair, _::RawBrandedSchema*, SchemaBindingsPairHash> brands;
+  std::unordered_map<const _::RawSchema*, _::RawBrandedSchema*> unboundBrands;
 
   struct RequiredSize {
     uint16_t dataWordCount;
@@ -188,15 +191,16 @@ private:
       kj::ArrayPtr<const _::RawBrandedSchema::Scope> scopes);
 
   kj::ArrayPtr<const _::RawBrandedSchema::Dependency> makeBrandedDependencies(
-      const _::RawSchema* schema, kj::ArrayPtr<const _::RawBrandedSchema::Scope> bindings);
+      const _::RawSchema* schema,
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> bindings);
 
   _::RawBrandedSchema::Binding makeDep(
       schema::Type::Reader type, kj::StringPtr scopeName,
-      kj::ArrayPtr<const _::RawBrandedSchema::Scope> brandBindings);
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
   _::RawBrandedSchema::Binding makeDep(
       uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
       schema::Brand::Reader brand, kj::StringPtr scopeName,
-      kj::ArrayPtr<const _::RawBrandedSchema::Scope> brandBindings);
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
   // Looks up the schema and brand for a dependency, or creates lazily-evaluated placeholders if
   // they don't already exist. `scopeName` is a human-readable name of the place where the type
   // appeared.
@@ -227,6 +231,13 @@ public:
     dependencies.clear();
 
     KJ_CONTEXT("validating schema node", nodeName, (uint)node.which());
+
+    if (node.getParameters().size() > 0) {
+      KJ_REQUIRE(node.getIsGeneric(), "if parameter list is non-empty, isGeneric must be true") {
+        isValid = false;
+        return false;
+      }
+    }
 
     switch (node.which()) {
       case schema::Node::FILE:
@@ -1332,7 +1343,7 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
 
     // Even though this schema isn't itself branded, it may have dependencies that are. So, we
     // need to set up the "dependencies" map under defaultBrand.
-    auto deps = makeBrandedDependencies(slot, nullptr);
+    auto deps = makeBrandedDependencies(slot, kj::ArrayPtr<const _::RawBrandedSchema::Scope>());
     slot->defaultBrand.dependencies = deps.begin();
     slot->defaultBrand.dependencyCount = deps.size();
   }
@@ -1402,7 +1413,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     result->dependencies = dependencies.begin();
 
     // Also need to re-do the branded dependencies.
-    auto deps = makeBrandedDependencies(slot, nullptr);
+    auto deps = makeBrandedDependencies(slot, kj::ArrayPtr<const _::RawBrandedSchema::Scope>());
     slot->defaultBrand.dependencies = deps.begin();
     slot->defaultBrand.dependencyCount = deps.size();
 
@@ -1460,13 +1471,14 @@ _::RawSchema* SchemaLoader::Impl::loadEmpty(
 
 const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
     const _::RawSchema* schema, schema::Brand::Reader proto,
-    kj::ArrayPtr<const _::RawBrandedSchema::Scope> clientBrand) {
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> clientBrand) {
   kj::StringPtr scopeName =
       readMessageUnchecked<schema::Node>(schema->encodedNode).getDisplayName();
 
   auto srcScopes = proto.getScopes();
 
   KJ_STACK_ARRAY(_::RawBrandedSchema::Scope, dstScopes, srcScopes.size(), 16, 32);
+  memset(dstScopes.begin(), 0, dstScopes.size() * sizeof(dstScopes[0]));
 
   uint dstScopeCount = 0;
   for (auto srcScope: srcScopes) {
@@ -1474,6 +1486,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
       case schema::Brand::Scope::BIND: {
         auto srcBindings = srcScope.getBind();
         KJ_STACK_ARRAY(_::RawBrandedSchema::Binding, dstBindings, srcBindings.size(), 16, 32);
+        memset(dstBindings.begin(), 0, dstBindings.size() * sizeof(dstBindings[0]));
 
         for (auto j: kj::indices(srcBindings)) {
           auto srcBinding = srcBindings[j];
@@ -1499,13 +1512,22 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
         break;
       }
       case schema::Brand::Scope::INHERIT: {
-        // Inherit the whole scope from the client -- or skip this scope entirely if the client
-        // doesn't have it.
-        for (auto& clientScope: clientBrand) {
-          if (clientScope.typeId == srcScope.getScopeId()) {
-            dstScopes[dstScopeCount++] = clientScope;
-            break;
+        // Inherit the whole scope from the client -- or if the client doesn't have it, at least
+        // include an empty dstScope in the list just to show that this scope was specified as
+        // inherited, as opposed to being unspecified (which would be treated as all AnyPointer).
+        auto& dstScope = dstScopes[dstScopeCount++];
+        dstScope.typeId = srcScope.getScopeId();
+
+        KJ_IF_MAYBE(b, clientBrand) {
+          for (auto& clientScope: *b) {
+            if (clientScope.typeId == dstScope.typeId) {
+              // Overwrite the whole thing.
+              dstScope = clientScope;
+              break;
+            }
           }
+        } else {
+          dstScope.isUnbound = true;
         }
         break;
       }
@@ -1524,8 +1546,14 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
 
 const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
     const _::RawSchema* schema, kj::ArrayPtr<const _::RawBrandedSchema::Scope> bindings) {
+  // Note that even if `bindings` is empty, we never want to return defaultBrand here because
+  // defaultBrand has special status. Normally, the lack of bindings means all parameters are
+  // "unspecified", which means their bindings are unknown and should be treated as AnyPointer.
+  // But defaultBrand represents a special case where all parameters are still parameters -- they
+  // haven't been bound in the first place. defaultBrand is used to represent the unbranded generic
+  // type, while a no-binding brand is equivalent to binding all parameters to AnyPointer.
+
   if (bindings.size() == 0) {
-    // No bindings, so this is the default brand.
     return &schema->defaultBrand;
   }
 
@@ -1546,7 +1574,8 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
 
 kj::ArrayPtr<const _::RawBrandedSchema::Dependency>
 SchemaLoader::Impl::makeBrandedDependencies(
-    const _::RawSchema* schema, kj::ArrayPtr<const _::RawBrandedSchema::Scope> bindings) {
+    const _::RawSchema* schema,
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> bindings) {
   kj::StringPtr scopeName =
       readMessageUnchecked<schema::Node>(schema->encodedNode).getDisplayName();
 
@@ -1569,7 +1598,8 @@ SchemaLoader::Impl::makeBrandedDependencies(
       break;
 
     case schema::Node::CONST:
-      ADD_ENTRY(CONST_TYPE, 0, makeDep(node.getConst().getType(), scopeName, bindings).schema);
+      ADD_ENTRY(CONST_TYPE, 0, makeDep(
+          node.getConst().getType(), scopeName, bindings).schema);
       break;
 
     case schema::Node::STRUCT: {
@@ -1578,13 +1608,18 @@ SchemaLoader::Impl::makeBrandedDependencies(
         auto field = fields[i];
         switch (field.which()) {
           case schema::Field::SLOT:
-            ADD_ENTRY(FIELD, i, makeDep(field.getSlot().getType(), scopeName, bindings).schema)
+            ADD_ENTRY(FIELD, i, makeDep(
+                field.getSlot().getType(), scopeName, bindings).schema)
             break;
           case schema::Field::GROUP: {
             const _::RawSchema* group = loadEmpty(
                 field.getGroup().getTypeId(),
                 "(unknown group type)", schema::Node::STRUCT, true);
-            ADD_ENTRY(FIELD, i, makeBranded(group, bindings));
+            KJ_IF_MAYBE(b, bindings) {
+              ADD_ENTRY(FIELD, i, makeBranded(group, *b));
+            } else {
+              ADD_ENTRY(FIELD, i, getUnbound(group));
+            }
             break;
           }
         }
@@ -1631,7 +1666,7 @@ SchemaLoader::Impl::makeBrandedDependencies(
 
 _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
     schema::Type::Reader type, kj::StringPtr scopeName,
-    kj::ArrayPtr<const _::RawBrandedSchema::Scope> brandBindings) {
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
   switch (type.which()) {
     case schema::Type::VOID:
     case schema::Type::BOOL:
@@ -1647,9 +1682,7 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
     case schema::Type::FLOAT64:
     case schema::Type::TEXT:
     case schema::Type::DATA:
-      return _::RawBrandedSchema::Binding {
-        static_cast<uint8_t>(type.which()), 0, nullptr
-      };
+      return { static_cast<uint8_t>(type.which()), 0, nullptr };
 
     case schema::Type::STRUCT: {
       auto structType = type.getStruct();
@@ -1677,31 +1710,37 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
       auto anyPointer = type.getAnyPointer();
       switch (anyPointer.which()) {
         case schema::Type::AnyPointer::UNCONSTRAINED:
-          break;
+          return { static_cast<uint8_t>(type.which()), 0, nullptr };
         case schema::Type::AnyPointer::PARAMETER: {
           auto param = anyPointer.getParameter();
           uint64_t id = param.getScopeId();
-          // TODO(perf): We could binary search here, but... bleh.
-          for (auto& scope: brandBindings) {
-            if (scope.typeId == id) {
-              uint index = param.getParameterIndex();
-              if (index >= scope.bindingCount) {
-                // Binding index out-of-range. Treat as unbound. This is important to allow new
-                // type parameters to be added to existing types without breaking dependent
-                // schemas.
-                break;
+          uint index = param.getParameterIndex();
+
+          KJ_IF_MAYBE(b, brandBindings) {
+            // TODO(perf): We could binary search here, but... bleh.
+            for (auto& scope: *b) {
+              if (scope.typeId == id) {
+                if (scope.isUnbound) {
+                  // Unbound brand parameter.
+                  return { static_cast<uint8_t>(schema::Type::ANY_POINTER), 0, id, index };
+                } else if (index >= scope.bindingCount) {
+                  // Binding index out-of-range. Treat as AnyPointer. This is important to allow
+                  // new type parameters to be added to existing types without breaking dependent
+                  // schemas.
+                  break;
+                } else {
+                  return scope.bindings[index];
+                }
               }
-              return scope.bindings[index];
             }
+            return { static_cast<uint8_t>(schema::Type::ANY_POINTER), 0, 0, 0 };
+          } else {
+            // Unbound brand parameter.
+            return { static_cast<uint8_t>(schema::Type::ANY_POINTER), 0, id, index };
           }
-          break;
         }
       }
-
-      // Default: unconstrained.
-      return _::RawBrandedSchema::Binding {
-        static_cast<uint8_t>(type.which()), 0, nullptr
-      };
+      KJ_UNREACHABLE;
     }
   }
 
@@ -1711,7 +1750,7 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
 _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
     uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
     schema::Brand::Reader brand, kj::StringPtr scopeName,
-    kj::ArrayPtr<const _::RawBrandedSchema::Scope> brandBindings) {
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
   const _::RawSchema* schema = loadEmpty(typeId,
       kj::str("(unknown type; seen as dependency of ", scopeName, ")"),
       expectedKind, true);
@@ -1757,6 +1796,24 @@ SchemaLoader::Impl::TryGetResult SchemaLoader::Impl::tryGet(uint64_t typeId) con
   } else {
     return {iter->second, initializer.getCallback()};
   }
+}
+
+const _::RawBrandedSchema* SchemaLoader::Impl::getUnbound(const _::RawSchema* schema) {
+  if (!readMessageUnchecked<schema::Node>(schema->encodedNode).getIsGeneric()) {
+    // Not a generic type, so just return the default brand.
+    return &schema->defaultBrand;
+  }
+
+  auto& slot = unboundBrands[schema];
+  if (slot == nullptr) {
+    slot = &arena.allocate<_::RawBrandedSchema>();
+    slot->generic = schema;
+    auto deps = makeBrandedDependencies(schema, nullptr);
+    slot->dependencies = deps.begin();
+    slot->dependencyCount = deps.size();
+  }
+
+  return slot;
 }
 
 kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
@@ -1940,8 +1997,7 @@ kj::Maybe<Schema> SchemaLoader::tryGet(
     getResult = impl.lockShared()->get()->tryGet(id);
   }
   if (getResult.schema != nullptr && getResult.schema->lazyInitializer == nullptr) {
-    // Schema successfully loaded. If `brand` is non-empty we'll want to build that too.
-    if (brand.hasScopes()) {
+    if (brand.getScopes().size() > 0) {
       auto brandedSchema = impl.lockExclusive()->get()->makeBranded(
           getResult.schema, brand, kj::arrayPtr(scope.raw->scopes, scope.raw->scopeCount));
       brandedSchema->ensureInitialized();
@@ -1952,6 +2008,11 @@ kj::Maybe<Schema> SchemaLoader::tryGet(
   } else {
     return nullptr;
   }
+}
+
+Schema SchemaLoader::getUnbound(uint64_t id) const {
+  auto schema = get(id);
+  return Schema(impl.lockExclusive()->get()->getUnbound(schema.raw->generic));
 }
 
 Type SchemaLoader::getType(schema::Type::Reader proto, Schema scope) const {

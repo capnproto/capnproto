@@ -2628,30 +2628,30 @@ const ::capnp::_::RawSchema s_84e4f3f5a807605c = {
 namespace capnp {
 namespace compiler {
 
-CAPNP_DEFINE_STRUCT(LocatedText);
-CAPNP_DEFINE_STRUCT(LocatedInteger);
-CAPNP_DEFINE_STRUCT(LocatedFloat);
-CAPNP_DEFINE_STRUCT(Expression);
-CAPNP_DEFINE_STRUCT(Expression::Param);
-CAPNP_DEFINE_STRUCT(Expression::Application);
-CAPNP_DEFINE_STRUCT(Expression::Member);
-CAPNP_DEFINE_STRUCT(Declaration);
-CAPNP_DEFINE_STRUCT(Declaration::BrandParameter);
-CAPNP_DEFINE_STRUCT(Declaration::AnnotationApplication);
-CAPNP_DEFINE_STRUCT(Declaration::AnnotationApplication::Value);
-CAPNP_DEFINE_STRUCT(Declaration::ParamList);
-CAPNP_DEFINE_STRUCT(Declaration::Param);
-CAPNP_DEFINE_STRUCT(Declaration::Param::DefaultValue);
-CAPNP_DEFINE_STRUCT(Declaration::Id);
-CAPNP_DEFINE_STRUCT(Declaration::Using);
-CAPNP_DEFINE_STRUCT(Declaration::Const);
-CAPNP_DEFINE_STRUCT(Declaration::Field);
-CAPNP_DEFINE_STRUCT(Declaration::Field::DefaultValue);
-CAPNP_DEFINE_STRUCT(Declaration::Interface);
-CAPNP_DEFINE_STRUCT(Declaration::Method);
-CAPNP_DEFINE_STRUCT(Declaration::Method::Results);
-CAPNP_DEFINE_STRUCT(Declaration::Annotation);
-CAPNP_DEFINE_STRUCT(ParsedFile);
+CAPNP_DEFINE_STRUCT(LocatedText, );
+CAPNP_DEFINE_STRUCT(LocatedInteger, );
+CAPNP_DEFINE_STRUCT(LocatedFloat, );
+CAPNP_DEFINE_STRUCT(Expression, );
+CAPNP_DEFINE_STRUCT(Expression::Param, );
+CAPNP_DEFINE_STRUCT(Expression::Application, );
+CAPNP_DEFINE_STRUCT(Expression::Member, );
+CAPNP_DEFINE_STRUCT(Declaration, );
+CAPNP_DEFINE_STRUCT(Declaration::BrandParameter, );
+CAPNP_DEFINE_STRUCT(Declaration::AnnotationApplication, );
+CAPNP_DEFINE_STRUCT(Declaration::AnnotationApplication::Value, );
+CAPNP_DEFINE_STRUCT(Declaration::ParamList, );
+CAPNP_DEFINE_STRUCT(Declaration::Param, );
+CAPNP_DEFINE_STRUCT(Declaration::Param::DefaultValue, );
+CAPNP_DEFINE_STRUCT(Declaration::Id, );
+CAPNP_DEFINE_STRUCT(Declaration::Using, );
+CAPNP_DEFINE_STRUCT(Declaration::Const, );
+CAPNP_DEFINE_STRUCT(Declaration::Field, );
+CAPNP_DEFINE_STRUCT(Declaration::Field::DefaultValue, );
+CAPNP_DEFINE_STRUCT(Declaration::Interface, );
+CAPNP_DEFINE_STRUCT(Declaration::Method, );
+CAPNP_DEFINE_STRUCT(Declaration::Method::Results, );
+CAPNP_DEFINE_STRUCT(Declaration::Annotation, );
+CAPNP_DEFINE_STRUCT(ParsedFile, );
 
 }  // namespace
 }  // namespace

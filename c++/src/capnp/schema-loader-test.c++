@@ -333,10 +333,10 @@ TEST(SchemaLoader, Generics) {
 
   StructSchema allTypes = loader.load(Schema::from<TestAllTypes>().getProto()).asStruct();
   StructSchema tap = loader.load(Schema::from<test::TestAnyPointer>().getProto()).asStruct();
-  loader.load(Schema::from<test::TestGenerics::Inner>().getProto());
-  loader.load(Schema::from<test::TestGenerics::Inner2>().getProto());
-  loader.load(Schema::from<test::TestGenerics::Interface>().getProto());
-  loader.load(Schema::from<test::TestGenerics>().getProto());
+  loader.load(Schema::from<test::TestGenerics<>::Inner>().getProto());
+  loader.load(Schema::from<test::TestGenerics<>::Inner2<>>().getProto());
+  loader.load(Schema::from<test::TestGenerics<>::Interface<>>().getProto());
+  loader.load(Schema::from<test::TestGenerics<>>().getProto());
   StructSchema schema = loader.load(Schema::from<test::TestUseGenerics>().getProto()).asStruct();
 
   {

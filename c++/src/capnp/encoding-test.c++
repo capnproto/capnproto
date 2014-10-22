@@ -1714,6 +1714,47 @@ TEST(Encoding, WholeFloatDefault) {
   EXPECT_EQ(4e30f, test::TestWholeFloatDefault::BIG_CONSTANT);
 }
 
+TEST(Encoding, Generics) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::TestUseGenerics>();
+  auto reader = root.asReader();
+
+  initTestMessage(root.initBasic().initFoo());
+  checkTestMessage(reader.getBasic().getFoo());
+
+  initTestMessage(root.initInner().initFoo());
+  checkTestMessage(reader.getInner().getFoo());
+
+  root.initInner2().setBaz("foo");
+  EXPECT_EQ("foo", reader.getInner2().getBaz());
+
+  initTestMessage(root.getInner2().initInnerBound().initFoo());
+  checkTestMessage(reader.getInner2().getInnerBound().getFoo());
+
+  initTestMessage(root.getInner2().initInnerUnbound().getFoo().initAs<TestAllTypes>());
+  checkTestMessage(reader.getInner2().getInnerUnbound().getFoo().getAs<TestAllTypes>());
+
+  initTestMessage(root.initUnspecified().getFoo().initAs<TestAllTypes>());
+  checkTestMessage(reader.getUnspecified().getFoo().getAs<TestAllTypes>());
+
+  initTestMessage(root.initWrapper().initValue().initFoo());
+  checkTestMessage(reader.getWrapper().getValue().getFoo());
+}
+
+TEST(Encoding, GenericDefaults) {
+  test::TestUseGenerics::Reader reader;
+
+  EXPECT_EQ(123, reader.getDefault().getFoo().getInt16Field());
+  EXPECT_EQ(123, reader.getDefaultInner().getFoo().getInt16Field());
+  EXPECT_EQ("text", reader.getDefaultInner().getBar());
+  EXPECT_EQ(123, reader.getDefaultUser().getBasic().getFoo().getInt16Field());
+  EXPECT_EQ("text", reader.getDefaultWrapper().getValue().getFoo());
+  EXPECT_EQ(321, reader.getDefaultWrapper().getValue().getRev().getFoo().getInt16Field());
+  EXPECT_EQ("text", reader.getDefaultWrapper2().getValue().getValue().getFoo());
+  EXPECT_EQ(321, reader.getDefaultWrapper2().getValue()
+      .getValue().getRev().getFoo().getInt16Field());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

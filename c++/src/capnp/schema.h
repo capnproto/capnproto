@@ -98,6 +98,10 @@ public:
   //
   // To obtain schemas for those, you would need a SchemaLoader.
 
+  class BrandArgumentList;
+  BrandArgumentList getBrandArgumentsAtScope(uint64_t scopeId) const;
+  // Gets the values bound to the brand parameters at the given scope.
+
   StructSchema asStruct() const;
   EnumSchema asEnum() const;
   InterfaceSchema asInterface() const;
@@ -158,8 +162,44 @@ private:
   friend class ConstSchema;
   friend class ListSchema;
   friend class SchemaLoader;
+  friend class Type;
   friend kj::StringTree _::structString(
       _::StructReader reader, const _::RawBrandedSchema& schema);
+};
+
+class Schema::BrandArgumentList {
+  // A list of generic parameter bindings for parameters of some particular type. Note that since
+  // parameters on an outer type apply to all inner types as well, a deeply-nested type can have
+  // multiple BrandArgumentLists that apply to it.
+  //
+  // A BrandArgumentList only represents the arguments that the client of the type specified. Since
+  // new parameters can be added over time, this list may not cover all defined parameters for the
+  // type. Missing parameters should be treated as AnyPointer. This class's implementation of
+  // operator[] already does this for you; out-of-bounds access will safely return AnyPointer.
+
+public:
+  inline BrandArgumentList(): scopeId(0), size_(0), bindings(nullptr) {}
+
+  inline uint size() const { return size_; }
+  Type operator[](uint index) const;
+
+  typedef _::IndexingIterator<const BrandArgumentList, Type> Iterator;
+  inline Iterator begin() const { return Iterator(this, 0); }
+  inline Iterator end() const { return Iterator(this, size()); }
+
+private:
+  uint64_t scopeId;
+  uint size_;
+  bool isUnbound;
+  const _::RawBrandedSchema::Binding* bindings;
+
+  inline BrandArgumentList(uint64_t scopeId, bool isUnbound)
+      : scopeId(scopeId), size_(0), isUnbound(isUnbound), bindings(nullptr) {}
+  inline BrandArgumentList(uint64_t scopeId, uint size,
+                           const _::RawBrandedSchema::Binding* bindings)
+      : scopeId(scopeId), size_(size), isUnbound(false), bindings(bindings) {}
+
+  friend class Schema;
 };
 
 // -------------------------------------------------------------------
@@ -206,6 +246,7 @@ private:
     return StructSchema(Schema(&_::rawBrandedSchema<T>()));
   }
   friend class Schema;
+  friend class Type;
 };
 
 class StructSchema::Field {
@@ -325,6 +366,7 @@ private:
     return EnumSchema(Schema(&_::rawBrandedSchema<T>()));
   }
   friend class Schema;
+  friend class Type;
 };
 
 class EnumSchema::Enumerant {
@@ -406,6 +448,7 @@ private:
     return InterfaceSchema(Schema(&_::rawBrandedSchema<T>()));
   }
   friend class Schema;
+  friend class Type;
 
   kj::Maybe<Method> findMethodByName(kj::StringPtr name, uint& counter) const;
   bool extends(InterfaceSchema other, uint& counter) const;
@@ -471,7 +514,7 @@ public:
   inline uint size() const { return list.size(); }
   InterfaceSchema operator[](uint index) const;
 
-  typedef _::IndexingIterator<const SuperclassList, Type> Iterator;
+  typedef _::IndexingIterator<const SuperclassList, InterfaceSchema> Iterator;
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
@@ -515,6 +558,84 @@ private:
 
 // -------------------------------------------------------------------
 
+class Type {
+public:
+  struct BrandParameter {
+    uint64_t scopeId;
+    uint index;
+  };
+
+  inline Type();
+  inline Type(schema::Type::Which primitive);
+  inline Type(StructSchema schema);
+  inline Type(EnumSchema schema);
+  inline Type(InterfaceSchema schema);
+  inline Type(ListSchema schema);
+  inline Type(BrandParameter param);
+
+  template <typename T>
+  inline static Type from();
+
+  inline schema::Type::Which which() const;
+
+  StructSchema asStruct() const;
+  EnumSchema asEnum() const;
+  InterfaceSchema asInterface() const;
+  ListSchema asList() const;
+  // Each of these methods may only be called if which() returns the corresponding type.
+
+  kj::Maybe<BrandParameter> getBrandParameter() const;
+  // Only callable if which() returns ANY_POINTER. Returns null if the type is just a regular
+  // AnyPointer and not a parameter.
+
+  inline bool isVoid() const;
+  inline bool isBool() const;
+  inline bool isInt8() const;
+  inline bool isInt16() const;
+  inline bool isInt32() const;
+  inline bool isInt64() const;
+  inline bool isUInt8() const;
+  inline bool isUInt16() const;
+  inline bool isUInt32() const;
+  inline bool isUInt64() const;
+  inline bool isFloat32() const;
+  inline bool isFloat64() const;
+  inline bool isText() const;
+  inline bool isData() const;
+  inline bool isList() const;
+  inline bool isEnum() const;
+  inline bool isStruct() const;
+  inline bool isInterface() const;
+  inline bool isAnyPointer() const;
+
+  bool operator==(const Type& other) const;
+  inline bool operator!=(const Type& other) const { return !(*this == other); }
+
+private:
+  schema::Type::Which baseType;  // type not including applications of List()
+  uint8_t listDepth;             // 0 for T, 1 for List(T), 2 for List(List(T)), ...
+
+  uint32_t paramIndex;
+  // If baseType is ANY_POINTER but this Type actually refers to a type parameter, this is the
+  // index of the parameter among the parameters at its scope, and `scopeId` below is the type ID
+  // of the scope where the parameter was defined.
+
+  union {
+    const _::RawBrandedSchema* schema;  // if type is struct, enum, interface...
+    uint64_t scopeId;  // if type is AnyPointer but it's actually a type parameter...
+  };
+
+  Type(schema::Type::Which baseType, uint8_t listDepth, const _::RawBrandedSchema* schema)
+      : baseType(baseType), listDepth(listDepth), schema(schema) {}
+
+  void requireUsableAs(Type expected) const;
+
+  friend class Schema;
+  friend class ListSchema;
+};
+
+// -------------------------------------------------------------------
+
 class ListSchema {
   // ListSchema is a little different because list types are not described by schema nodes.  So,
   // ListSchema doesn't subclass Schema.
@@ -554,24 +675,16 @@ public:
   // Get the schema for complex element types.  Each of these throws an exception if the element
   // type is not of the requested kind.
 
-  inline bool operator==(const ListSchema& other) const;
-  inline bool operator!=(const ListSchema& other) const { return !(*this == other); }
+  inline bool operator==(const ListSchema& other) const { return elementType == other.elementType; }
+  inline bool operator!=(const ListSchema& other) const { return elementType != other.elementType; }
 
   template <typename T>
   void requireUsableAs() const;
 
 private:
-  schema::Type::Which elementType;
-  uint8_t nestingDepth;  // 0 for T, 1 for List(T), 2 for List(List(T)), ...
-  Schema elementSchema;  // if elementType is struct, enum, interface...
+  Type elementType;
 
-  inline ListSchema(schema::Type::Which elementType)
-      : elementType(elementType), nestingDepth(0) {}
-  inline ListSchema(schema::Type::Which elementType, Schema elementSchema)
-      : elementType(elementType), nestingDepth(0), elementSchema(elementSchema) {}
-  inline ListSchema(schema::Type::Which elementType, uint8_t nestingDepth,
-                    Schema elementSchema)
-      : elementType(elementType), nestingDepth(nestingDepth), elementSchema(elementSchema) {}
+  inline explicit ListSchema(Type elementType): elementType(elementType) {}
 
   template <typename T>
   struct FromImpl;
@@ -582,60 +695,6 @@ private:
   void requireUsableAs(ListSchema expected) const;
 
   friend class Schema;
-  friend class Type;
-};
-
-// -------------------------------------------------------------------
-
-class Type {
-public:
-  inline Type();
-  inline Type(schema::Type::Which primitive);
-  inline Type(StructSchema schema);
-  inline Type(EnumSchema schema);
-  inline Type(InterfaceSchema schema);
-  inline Type(ListSchema schema);
-
-  template <typename T>
-  inline static Type from();
-
-  inline schema::Type::Which which() const;
-
-  StructSchema asStruct() const;
-  EnumSchema asEnum() const;
-  InterfaceSchema asInterface() const;
-  ListSchema asList() const;
-
-  inline bool isVoid();
-  inline bool isBool();
-  inline bool isInt8();
-  inline bool isInt16();
-  inline bool isInt32();
-  inline bool isInt64();
-  inline bool isUInt8();
-  inline bool isUInt16();
-  inline bool isUInt32();
-  inline bool isUInt64();
-  inline bool isFloat32();
-  inline bool isFloat64();
-  inline bool isText();
-  inline bool isData();
-  inline bool isList();
-  inline bool isEnum();
-  inline bool isStruct();
-  inline bool isInterface();
-  inline bool isAnyPointer();
-
-private:
-  schema::Type::Which baseType;  // type not including applications of List()
-  uint8_t listDepth;             // 0 for T, 1 for List(T), 2 for List(List(T)), ...
-  Schema schema;                 // if type is struct, enum, interface...
-
-  Type(schema::Type::Which baseType, uint8_t listDepth, Schema schema)
-      : baseType(baseType), listDepth(listDepth), schema(schema) {}
-
-  friend class Schema;
-  friend class ListSchema;
 };
 
 // =======================================================================================
@@ -676,33 +735,43 @@ inline bool InterfaceSchema::Method::operator==(const Method& other) const {
 }
 
 inline ListSchema ListSchema::of(StructSchema elementType) {
-  return ListSchema(schema::Type::STRUCT, 0, elementType);
+  return ListSchema(Type(elementType));
 }
 inline ListSchema ListSchema::of(EnumSchema elementType) {
-  return ListSchema(schema::Type::ENUM, 0, elementType);
+  return ListSchema(Type(elementType));
 }
 inline ListSchema ListSchema::of(InterfaceSchema elementType) {
-  return ListSchema(schema::Type::INTERFACE, 0, elementType);
+  return ListSchema(Type(elementType));
 }
 inline ListSchema ListSchema::of(ListSchema elementType) {
-  return ListSchema(elementType.elementType, elementType.nestingDepth + 1,
-                    elementType.elementSchema);
+  return ListSchema(Type(elementType));
 }
 inline ListSchema ListSchema::of(Type elementType) {
-  return ListSchema(elementType.baseType, elementType.listDepth, elementType.schema);
+  return ListSchema(elementType);
 }
 
 inline Type ListSchema::getElementType() const {
-  return Type(elementType, nestingDepth, elementSchema);
+  return elementType;
 }
 
 inline schema::Type::Which ListSchema::whichElementType() const {
-  return nestingDepth == 0 ? elementType : schema::Type::LIST;
+  return elementType.which();
 }
 
-inline bool ListSchema::operator==(const ListSchema& other) const {
-  return elementType == other.elementType && nestingDepth == other.nestingDepth &&
-      elementSchema == other.elementSchema;
+inline StructSchema ListSchema::getStructElementType() const {
+  return elementType.asStruct();
+}
+
+inline EnumSchema ListSchema::getEnumElementType() const {
+  return elementType.asEnum();
+}
+
+inline InterfaceSchema ListSchema::getInterfaceElementType() const {
+  return elementType.asInterface();
+}
+
+inline ListSchema ListSchema::getListElementType() const {
+  return elementType.asList();
 }
 
 template <typename T>
@@ -712,14 +781,18 @@ inline void ListSchema::requireUsableAs() const {
   requireUsableAs(Schema::from<T>());
 }
 
+inline void ListSchema::requireUsableAs(ListSchema expected) const {
+  elementType.requireUsableAs(expected.elementType);
+}
+
 template <typename T>
 struct ListSchema::FromImpl<List<T>> {
   static inline ListSchema get() { return of(Schema::from<T>()); }
 };
 
-inline Type::Type(): baseType(schema::Type::VOID), listDepth(0) {}
+inline Type::Type(): baseType(schema::Type::VOID), listDepth(0), schema(nullptr) {}
 inline Type::Type(schema::Type::Which primitive)
-    : baseType(primitive), listDepth(0) {
+    : baseType(primitive), listDepth(0), schema(nullptr) {
   KJ_IREQUIRE(primitive != schema::Type::STRUCT &&
               primitive != schema::Type::ENUM &&
               primitive != schema::Type::INTERFACE &&
@@ -727,14 +800,17 @@ inline Type::Type(schema::Type::Which primitive)
 }
 
 inline Type::Type(StructSchema schema)
-    : baseType(schema::Type::STRUCT), listDepth(0), schema(schema) {}
+    : baseType(schema::Type::STRUCT), listDepth(0), schema(schema.raw) {}
 inline Type::Type(EnumSchema schema)
-    : baseType(schema::Type::ENUM), listDepth(0), schema(schema) {}
+    : baseType(schema::Type::ENUM), listDepth(0), schema(schema.raw) {}
 inline Type::Type(InterfaceSchema schema)
-    : baseType(schema::Type::INTERFACE), listDepth(0), schema(schema) {}
+    : baseType(schema::Type::INTERFACE), listDepth(0), schema(schema.raw) {}
 inline Type::Type(ListSchema schema)
-    : baseType(schema.elementType), listDepth(schema.nestingDepth + 1),
-      schema(schema.elementSchema) {}
+    : Type(schema.getElementType()) { ++listDepth; }
+inline Type::Type(BrandParameter param)
+    : baseType(schema::Type::ANY_POINTER), listDepth(0), paramIndex(param.index),
+      scopeId(param.scopeId) {}
+
 inline schema::Type::Which Type::which() const {
   return listDepth > 0 ? schema::Type::LIST : baseType;
 }
@@ -742,29 +818,29 @@ inline schema::Type::Which Type::which() const {
 template <typename T>
 inline Type Type::from() { return Type(Schema::from<T>()); }
 
-inline StructSchema Type::asStruct() const { return schema.asStruct(); }
-inline EnumSchema Type::asEnum() const { return schema.asEnum(); }
-inline InterfaceSchema Type::asInterface() const { return schema.asInterface(); }
-
-inline bool Type::isVoid      () { return baseType == schema::Type::VOID        && listDepth == 0; }
-inline bool Type::isBool      () { return baseType == schema::Type::BOOL        && listDepth == 0; }
-inline bool Type::isInt8      () { return baseType == schema::Type::INT8        && listDepth == 0; }
-inline bool Type::isInt16     () { return baseType == schema::Type::INT16       && listDepth == 0; }
-inline bool Type::isInt32     () { return baseType == schema::Type::INT32       && listDepth == 0; }
-inline bool Type::isInt64     () { return baseType == schema::Type::INT64       && listDepth == 0; }
-inline bool Type::isUInt8     () { return baseType == schema::Type::UINT8       && listDepth == 0; }
-inline bool Type::isUInt16    () { return baseType == schema::Type::UINT16      && listDepth == 0; }
-inline bool Type::isUInt32    () { return baseType == schema::Type::UINT32      && listDepth == 0; }
-inline bool Type::isUInt64    () { return baseType == schema::Type::UINT64      && listDepth == 0; }
-inline bool Type::isFloat32   () { return baseType == schema::Type::FLOAT32     && listDepth == 0; }
-inline bool Type::isFloat64   () { return baseType == schema::Type::FLOAT64     && listDepth == 0; }
-inline bool Type::isText      () { return baseType == schema::Type::TEXT        && listDepth == 0; }
-inline bool Type::isData      () { return baseType == schema::Type::DATA        && listDepth == 0; }
-inline bool Type::isList      () { return listDepth > 0; }
-inline bool Type::isEnum      () { return baseType == schema::Type::ENUM        && listDepth == 0; }
-inline bool Type::isStruct    () { return baseType == schema::Type::STRUCT      && listDepth == 0; }
-inline bool Type::isInterface () { return baseType == schema::Type::INTERFACE   && listDepth == 0; }
-inline bool Type::isAnyPointer() { return baseType == schema::Type::ANY_POINTER && listDepth == 0; }
+inline bool Type::isVoid   () const { return baseType == schema::Type::VOID     && listDepth == 0; }
+inline bool Type::isBool   () const { return baseType == schema::Type::BOOL     && listDepth == 0; }
+inline bool Type::isInt8   () const { return baseType == schema::Type::INT8     && listDepth == 0; }
+inline bool Type::isInt16  () const { return baseType == schema::Type::INT16    && listDepth == 0; }
+inline bool Type::isInt32  () const { return baseType == schema::Type::INT32    && listDepth == 0; }
+inline bool Type::isInt64  () const { return baseType == schema::Type::INT64    && listDepth == 0; }
+inline bool Type::isUInt8  () const { return baseType == schema::Type::UINT8    && listDepth == 0; }
+inline bool Type::isUInt16 () const { return baseType == schema::Type::UINT16   && listDepth == 0; }
+inline bool Type::isUInt32 () const { return baseType == schema::Type::UINT32   && listDepth == 0; }
+inline bool Type::isUInt64 () const { return baseType == schema::Type::UINT64   && listDepth == 0; }
+inline bool Type::isFloat32() const { return baseType == schema::Type::FLOAT32  && listDepth == 0; }
+inline bool Type::isFloat64() const { return baseType == schema::Type::FLOAT64  && listDepth == 0; }
+inline bool Type::isText   () const { return baseType == schema::Type::TEXT     && listDepth == 0; }
+inline bool Type::isData   () const { return baseType == schema::Type::DATA     && listDepth == 0; }
+inline bool Type::isList   () const { return listDepth > 0; }
+inline bool Type::isEnum   () const { return baseType == schema::Type::ENUM     && listDepth == 0; }
+inline bool Type::isStruct () const { return baseType == schema::Type::STRUCT   && listDepth == 0; }
+inline bool Type::isInterface() const {
+  return baseType == schema::Type::INTERFACE && listDepth == 0;
+}
+inline bool Type::isAnyPointer() const {
+  return baseType == schema::Type::ANY_POINTER && listDepth == 0;
+}
 
 }  // namespace capnp
 

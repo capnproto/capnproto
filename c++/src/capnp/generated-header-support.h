@@ -59,7 +59,19 @@ struct RawBrandedSchema {
     uint8_t which;       // Numeric value of one of schema::Type::Which.
     uint16_t listDepth;  // Number of times to wrap the base type in List().
 
-    const RawBrandedSchema* schema;  // may be null
+    uint32_t paramIndex;  // for AnyPointer, if it's a type parameter.
+
+    union {
+      const RawBrandedSchema* schema;  // for struct, enum, interface
+      uint64_t scopeId;                // for AnyPointer, if it's a type parameter
+    };
+
+    Binding() = default;
+    inline constexpr Binding(uint8_t which, uint16_t listDepth, const RawBrandedSchema* schema)
+        : which(which), listDepth(listDepth), paramIndex(0), schema(schema) {}
+    inline constexpr Binding(uint8_t which, uint16_t listDepth,
+                             uint64_t scopeId, uint32_t paramIndex)
+        : which(which), listDepth(listDepth), paramIndex(paramIndex), scopeId(scopeId) {}
   };
 
   struct Scope {
@@ -69,6 +81,9 @@ struct RawBrandedSchema {
     const Binding* bindings;
     uint bindingCount;
     // Bindings for those parameters.
+
+    bool isUnbound;
+    // This scope is unbound, in the sense of SchemaLoader::getUnbound().
   };
 
   const Scope* scopes;
@@ -132,6 +147,10 @@ struct RawBrandedSchema {
     const Initializer* i = __atomic_load_n(&lazyInitializer, __ATOMIC_ACQUIRE);
     if (i != nullptr) i->init(this);
   }
+
+  inline bool isUnbound() const;
+  // Checks if this schema is the result of calling SchemaLoader::getUnbound(), in which case
+  // binding lookups need to be handled specially.
 };
 
 struct RawSchema {
@@ -193,6 +212,11 @@ struct RawSchema {
   // anything. Generally, in the default brand, all generic parameters are treated as if they were
   // bound to `AnyPointer`.
 };
+
+inline bool RawBrandedSchema::isUnbound() const {
+  // The unbound schema is the only one that has no scopes but is not the default schema.
+  return scopeCount == 0 && this != &generic->defaultBrand;
+}
 
 template <typename T, typename CapnpPrivate = typename T::_capnpPrivate, bool = false>
 inline const RawSchema& rawSchema() {
@@ -315,14 +339,19 @@ inline constexpr uint sizeInWords() {
 
 }  // namespace capnp
 
+#define CAPNP_COMMA ,
+// Unfortunately needed if the `type` parameter to the macros below contains template parameters --
+// all commas must be replaced with CAPNP_COMMA otherwise they will be interpreted as macro
+// parameter separators! Ugh.
+
 #define CAPNP_DECLARE_ENUM(type, id) \
     template <> struct EnumInfo<type##_##id> { \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::_::RawSchema const* schema = &s_##id; \
     }
-#define CAPNP_DEFINE_ENUM(type, ...) \
-    __VA_ARGS__ constexpr uint64_t EnumInfo<type>::typeId; \
-    __VA_ARGS__ constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema;
+#define CAPNP_DEFINE_ENUM(type) \
+    constexpr uint64_t EnumInfo<type>::typeId; \
+    constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema
 
 #define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding) \
     struct _capnpPrivate { \
@@ -333,11 +362,11 @@ inline constexpr uint sizeInWords() {
           ::capnp::_::FieldSize::preferredElementEncoding); \
       static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id; \
     }
-#define CAPNP_DEFINE_STRUCT(type, ...) \
-    __VA_ARGS__ constexpr uint64_t type::_capnpPrivate::typeId; \
-    __VA_ARGS__ constexpr ::capnp::Kind type::_capnpPrivate::kind; \
-    __VA_ARGS__ constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize; \
-    __VA_ARGS__ constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema;
+#define CAPNP_DEFINE_STRUCT(type, templates) \
+    templates constexpr uint64_t type::_capnpPrivate::typeId; \
+    templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
+    templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize; \
+    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema
 
 #define CAPNP_DECLARE_INTERFACE(id) \
     struct _capnpPrivate { \
@@ -345,9 +374,9 @@ inline constexpr uint sizeInWords() {
       static constexpr ::capnp::Kind kind = ::capnp::Kind::INTERFACE; \
       static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id; \
     }
-#define CAPNP_DEFINE_INTERFACE(type, ...) \
-    __VA_ARGS__ constexpr uint64_t type::_capnpPrivate::typeId; \
-    __VA_ARGS__ constexpr ::capnp::Kind type::_capnpPrivate::kind; \
-    __VA_ARGS__ constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema;
+#define CAPNP_DEFINE_INTERFACE(type, templates) \
+    templates constexpr uint64_t type::_capnpPrivate::typeId; \
+    templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
+    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema
 
 #endif  // CAPNP_GENERATED_HEADER_SUPPORT_H_

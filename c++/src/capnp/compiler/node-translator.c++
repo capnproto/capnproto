@@ -614,6 +614,16 @@ public:
     }
   }
 
+  bool isGeneric() {
+    if (leafParamCount > 0) return true;
+
+    KJ_IF_MAYBE(p, parent) {
+      return p->get()->isGeneric();
+    } else {
+      return false;
+    }
+  }
+
   kj::Own<BrandScope> push(uint64_t typeId, uint paramCount) {
     return kj::refcounted<BrandScope>(kj::addRef(*this), typeId, paramCount);
   }
@@ -1325,6 +1335,8 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
     }
   }
 
+  builder.setIsGeneric(localBrand->isGeneric());
+
   kj::StringPtr targetsFlagName;
 
   switch (decl.which()) {
@@ -1923,6 +1935,7 @@ private:
     // We'll set the ID and scope ID later.
     node.setDisplayName(kj::str(parent.getDisplayName(), '.', name));
     node.setDisplayNamePrefixLength(node.getDisplayName().size() - name.size());
+    node.setIsGeneric(parent.getIsGeneric());
     node.initStruct().setIsGroup(true);
 
     // The remaining contents of node.struct will be filled in later.
@@ -2187,6 +2200,7 @@ uint64_t NodeTranslator::compileParamList(
       builder.setId(generateMethodParamsId(parent.getId(), ordinal, isResults));
       builder.setDisplayName(kj::str(parent.getDisplayName(), '.', typeName));
       builder.setDisplayNamePrefixLength(builder.getDisplayName().size() - typeName.size());
+      builder.setIsGeneric(parent.getIsGeneric());
       builder.setScopeId(0);  // detached struct type
 
       builder.initStruct();

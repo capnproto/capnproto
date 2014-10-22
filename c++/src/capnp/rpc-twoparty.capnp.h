@@ -121,7 +121,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(SturdyRefHostId::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(SturdyRefHostId::Reader reader) {
@@ -149,7 +149,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(SturdyRefHostId::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(SturdyRefHostId::Builder builder) {
@@ -193,7 +193,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(ProvisionId::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(ProvisionId::Reader reader) {
@@ -221,7 +221,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(ProvisionId::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(ProvisionId::Builder builder) {
@@ -263,7 +263,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(RecipientId::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(RecipientId::Reader reader) {
@@ -288,7 +288,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(RecipientId::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(RecipientId::Builder builder) {
@@ -330,7 +330,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(ThirdPartyCapId::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(ThirdPartyCapId::Reader reader) {
@@ -355,7 +355,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(ThirdPartyCapId::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(ThirdPartyCapId::Builder builder) {
@@ -403,7 +403,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(JoinKeyPart::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(JoinKeyPart::Reader reader) {
@@ -437,7 +437,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(JoinKeyPart::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(JoinKeyPart::Builder builder) {
@@ -486,7 +486,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(JoinResult::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(JoinResult::Reader reader) {
@@ -521,7 +521,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(JoinResult::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(JoinResult::Builder builder) {

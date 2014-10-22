@@ -450,10 +450,10 @@ const ::capnp::_::RawSchema s_a11f97b9d6c73dd4 = {
 namespace capnp {
 namespace compiler {
 
-CAPNP_DEFINE_STRUCT(Token);
-CAPNP_DEFINE_STRUCT(Statement);
-CAPNP_DEFINE_STRUCT(LexedTokens);
-CAPNP_DEFINE_STRUCT(LexedStatements);
+CAPNP_DEFINE_STRUCT(Token, );
+CAPNP_DEFINE_STRUCT(Statement, );
+CAPNP_DEFINE_STRUCT(LexedTokens, );
+CAPNP_DEFINE_STRUCT(LexedStatements, );
 
 }  // namespace
 }  // namespace

@@ -33,12 +33,14 @@ struct Data {
   Data() = delete;
   class Reader;
   class Builder;
+  class Pipeline {};
 };
 
 struct Text {
   Text() = delete;
   class Reader;
   class Builder;
+  class Pipeline {};
 };
 
 class Data::Reader: public kj::ArrayPtr<const byte> {

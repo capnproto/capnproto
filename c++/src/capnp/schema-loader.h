@@ -74,13 +74,20 @@ public:
   //
   // `brand` and `scope` are used to determine brand bindings where relevant. `brand` gives
   // parameter bindings for the target type's brand parameters that were specified at the reference
-  // site. `scope` specifies the scope in which the type ID appeared -- if the target type and the
-  // scope share some common super-scope which is parameterized, and bindings for those parameters
-  // weren't specified in `brand`, they will be carried over from the scope.
+  // site. `scope` specifies the scope in which the type ID appeared -- if `brand` itself contains
+  // parameter references or indicates that some parameters will be inherited, these will be
+  // interpreted within / inherited from `scope`.
 
   kj::Maybe<Schema> tryGet(uint64_t id, schema::Brand::Reader bindings = schema::Brand::Reader(),
                            Schema scope = Schema()) const;
   // Like get() but doesn't throw.
+
+  Schema getUnbound(uint64_t id) const;
+  // Gets a special version of the schema in which all brand parameters are "unbound". This means
+  // that if you look up a type via the Schema API, and it resolves to a brand parameter, the
+  // returned Type's getBrandParameter() method will return info about that parameter. Otherwise,
+  // normally, all brand parameters that aren't otherwise bound are assumed to simply be
+  // "AnyPointer".
 
   Type getType(schema::Type::Reader type, Schema scope = Schema()) const;
   // Convenience method which interprets a schema::Type to produce a Type object. Implemented in

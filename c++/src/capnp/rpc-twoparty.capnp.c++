@@ -331,12 +331,12 @@ namespace capnp {
 namespace rpc {
 namespace twoparty {
 
-CAPNP_DEFINE_STRUCT(SturdyRefHostId);
-CAPNP_DEFINE_STRUCT(ProvisionId);
-CAPNP_DEFINE_STRUCT(RecipientId);
-CAPNP_DEFINE_STRUCT(ThirdPartyCapId);
-CAPNP_DEFINE_STRUCT(JoinKeyPart);
-CAPNP_DEFINE_STRUCT(JoinResult);
+CAPNP_DEFINE_STRUCT(SturdyRefHostId, );
+CAPNP_DEFINE_STRUCT(ProvisionId, );
+CAPNP_DEFINE_STRUCT(RecipientId, );
+CAPNP_DEFINE_STRUCT(ThirdPartyCapId, );
+CAPNP_DEFINE_STRUCT(JoinKeyPart, );
+CAPNP_DEFINE_STRUCT(JoinResult, );
 
 }  // namespace
 }  // namespace

@@ -454,6 +454,35 @@ inline Orphan<AnyPointer> Orphan<AnyPointer>::releaseAs() {
   return kj::mv(*this);
 }
 
+namespace _ {  // private
+
+// Specialize PointerHelpers for AnyPointer.
+
+template <>
+struct PointerHelpers<AnyPointer, Kind::OTHER> {
+  static inline AnyPointer::Reader get(PointerReader reader,
+                                       const void* defaultValue = nullptr,
+                                       uint defaultBytes = 0) {
+    return AnyPointer::Reader(reader);
+  }
+  static inline AnyPointer::Builder get(PointerBuilder builder,
+                                        const void* defaultValue = nullptr,
+                                        uint defaultBytes = 0) {
+    return AnyPointer::Builder(builder);
+  }
+  static inline void set(PointerBuilder builder, AnyPointer::Reader value) {
+    AnyPointer::Builder(builder).set(value);
+  }
+  static inline void adopt(PointerBuilder builder, Orphan<AnyPointer>&& value) {
+    builder.adopt(kj::mv(value.builder));
+  }
+  static inline Orphan<AnyPointer> disown(PointerBuilder builder) {
+    return Orphan<AnyPointer>(builder.disown());
+  }
+};
+
+}  // namespace _ (private)
+
 }  // namespace capnp
 
 #endif  // CAPNP_ANY_H_

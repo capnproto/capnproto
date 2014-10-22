@@ -240,6 +240,24 @@ Schema Schema::getDependency(uint64_t id, uint location) const {
   }
 }
 
+Schema::BrandArgumentList Schema::getBrandArgumentsAtScope(uint64_t scopeId) const {
+  KJ_REQUIRE(getProto().getIsGeneric(), "Not a generic type.", getProto().getDisplayName());
+
+  for (auto scope: kj::range(raw->scopes, raw->scopes + raw->scopeCount)) {
+    if (scope->typeId == scopeId) {
+      // OK, this scope matches the scope we're looking for.
+      if (scope->isUnbound) {
+        return BrandArgumentList(scopeId, true);
+      } else {
+        return BrandArgumentList(scopeId, scope->bindingCount, scope->bindings);
+      }
+    }
+  }
+
+  // This scope is not listed in the scopes list.
+  return BrandArgumentList(scopeId, raw->isUnbound());
+}
+
 StructSchema Schema::asStruct() const {
   KJ_REQUIRE(getProto().isStruct(), "Tried to use non-struct schema as a struct.",
              getProto().getDisplayName()) {
@@ -311,31 +329,7 @@ uint32_t Schema::getSchemaOffset(const schema::Value::Reader& value) const {
 }
 
 Type Schema::getBrandBinding(uint64_t scopeId, uint index) const {
-  for (auto scope: kj::range(raw->scopes, raw->scopes + raw->scopeCount)) {
-    if (scope->typeId == scopeId) {
-      // OK, this scope matches the scope we're looking for.
-
-      if (index >= scope->bindingCount) {
-        // Binding index out-of-range. Treat as unbound. This is important to allow new
-        // type parameters to be added to existing types without breaking dependent
-        // schemas.
-        break;
-      }
-
-      auto& binding = scope->bindings[index];
-      if (binding.schema == nullptr) {
-        // Builtin / primitive type.
-        return Type(static_cast<schema::Type::Which>(binding.which), binding.listDepth, Schema());
-      } else {
-        binding.schema->ensureInitialized();
-        return Type(static_cast<schema::Type::Which>(binding.which), binding.listDepth,
-                    Schema(binding.schema));
-      }
-    }
-  }
-
-  // The variable is not bound. Assume AnyPointer.
-  return schema::Type::ANY_POINTER;
+  return getBrandArgumentsAtScope(scopeId)[index];
 }
 
 Type Schema::interpretType(schema::Type::Reader proto, uint location) const {
@@ -390,6 +384,34 @@ Type Schema::interpretType(schema::Type::Reader proto, uint location) const {
   }
 
   KJ_UNREACHABLE;
+}
+
+Type Schema::BrandArgumentList::operator[](uint index) const {
+  if (isUnbound) {
+    return Type::BrandParameter { scopeId, index };
+  }
+
+  if (index >= size_) {
+    // Binding index out-of-range. Treat as AnyPointer. This is important to allow new
+    // type parameters to be added to existing types without breaking dependent
+    // schemas.
+    return schema::Type::ANY_POINTER;
+  }
+
+  auto& binding = bindings[index];
+  if (binding.which == (uint)schema::Type::ANY_POINTER) {
+    if (binding.scopeId == 0) {
+      return Type(schema::Type::ANY_POINTER, binding.listDepth, nullptr);
+    } else {
+      return Type::BrandParameter { binding.scopeId, binding.paramIndex };
+    }
+  } else if (binding.schema == nullptr) {
+    // Builtin / primitive type.
+    return Type(static_cast<schema::Type::Which>(binding.which), binding.listDepth, nullptr);
+  } else {
+    binding.schema->ensureInitialized();
+    return Type(static_cast<schema::Type::Which>(binding.which), binding.listDepth, binding.schema);
+  }
 }
 
 // =======================================================================================
@@ -736,41 +758,114 @@ ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
 #pragma GCC diagnostic pop
 }
 
-StructSchema ListSchema::getStructElementType() const {
-  KJ_REQUIRE(nestingDepth == 0 && elementType == schema::Type::STRUCT,
-          "ListSchema::getStructElementType(): The elements are not structs.");
-  return elementSchema.asStruct();
-}
-
-EnumSchema ListSchema::getEnumElementType() const {
-  KJ_REQUIRE(nestingDepth == 0 && elementType == schema::Type::ENUM,
-          "ListSchema::getEnumElementType(): The elements are not enums.");
-  return elementSchema.asEnum();
-}
-
-InterfaceSchema ListSchema::getInterfaceElementType() const {
-  KJ_REQUIRE(nestingDepth == 0 && elementType == schema::Type::INTERFACE,
-          "ListSchema::getInterfaceElementType(): The elements are not interfaces.");
-  return elementSchema.asInterface();
-}
-
-ListSchema ListSchema::getListElementType() const {
-  KJ_REQUIRE(nestingDepth > 0,
-          "ListSchema::getListElementType(): The elements are not lists.");
-  return ListSchema(elementType, nestingDepth - 1, elementSchema);
-}
-
-void ListSchema::requireUsableAs(ListSchema expected) const {
-  KJ_REQUIRE(elementType == expected.elementType && nestingDepth == expected.nestingDepth,
-          "This schema is not compatible with the requested native type.");
-  elementSchema.requireUsableAs(expected.elementSchema.raw->generic);
-}
-
 // =======================================================================================
 
+StructSchema Type::asStruct() const {
+  KJ_REQUIRE(isStruct(), "Tried to interpret a non-struct type as a struct.") {
+    return StructSchema();
+  }
+  KJ_ASSERT(schema != nullptr);
+  return StructSchema(Schema(schema));
+}
+EnumSchema Type::asEnum() const {
+  KJ_REQUIRE(isEnum(), "Tried to interpret a non-enum type as an enum.") {
+    return EnumSchema();
+  }
+  KJ_ASSERT(schema != nullptr);
+  return EnumSchema(Schema(schema));
+}
+InterfaceSchema Type::asInterface() const {
+  KJ_REQUIRE(isInterface(), "Tried to interpret a non-interface type as an interface.") {
+    return InterfaceSchema();
+  }
+  KJ_ASSERT(schema != nullptr);
+  return InterfaceSchema(Schema(schema));
+}
 ListSchema Type::asList() const {
-  KJ_REQUIRE(listDepth > 0, "Type::asList(): Not a list.");
-  return ListSchema(baseType, listDepth - 1, schema);
+  KJ_REQUIRE(isList(), "Type::asList(): Not a list.");
+  Type elementType = *this;
+  --elementType.listDepth;
+  return ListSchema::of(elementType);
+}
+
+kj::Maybe<Type::BrandParameter> Type::getBrandParameter() const {
+  KJ_REQUIRE(isAnyPointer(), "Type::getBrandParameter() can only be called on AnyPointer types.");
+
+  if (scopeId == 0) {
+    return nullptr;
+  } else {
+    return BrandParameter { scopeId, paramIndex };
+  }
+}
+
+bool Type::operator==(const Type& other) const {
+  if (baseType != other.baseType || listDepth != other.listDepth) {
+    return false;
+  }
+
+  switch (baseType) {
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::TEXT:
+    case schema::Type::DATA:
+      return true;
+
+    case schema::Type::STRUCT:
+    case schema::Type::ENUM:
+    case schema::Type::INTERFACE:
+      return schema == other.schema;
+
+    case schema::Type::LIST:
+      KJ_UNREACHABLE;
+
+    case schema::Type::ANY_POINTER:
+      return scopeId == other.scopeId && (scopeId == 0 || paramIndex == other.paramIndex);
+  }
+
+  KJ_UNREACHABLE;
+}
+
+void Type::requireUsableAs(Type expected) const {
+  KJ_REQUIRE(baseType == expected.baseType && listDepth == expected.listDepth,
+             "This type is not compatible with the requested native type.");
+
+  switch (baseType) {
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::TEXT:
+    case schema::Type::DATA:
+    case schema::Type::ANY_POINTER:
+      break;
+
+    case schema::Type::STRUCT:
+    case schema::Type::ENUM:
+    case schema::Type::INTERFACE:
+      Schema(schema).requireUsableAs(expected.schema->generic);
+      break;
+
+    case schema::Type::LIST:
+      KJ_UNREACHABLE;
+  }
 }
 
 }  // namespace capnp

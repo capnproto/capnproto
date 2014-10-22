@@ -50,6 +50,10 @@ struct Node {
   parameters @32 :List(Parameter);
   # If this node is parameterized (generic), the list of parameters. Empty for non-generic types.
 
+  isGeneric @33 :Bool;
+  # True if this node is generic, meaning that it or one of its parent scopes has a non-empty
+  # `parameters`.
+
   struct Parameter {
     # Information about one of the node's parameters.
 

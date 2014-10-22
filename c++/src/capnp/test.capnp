@@ -517,6 +517,13 @@ struct TestGenerics(Foo, Bar) {
     baz @1 :Baz;
     innerBound @2 :Inner;
     innerUnbound @3 :TestGenerics.Inner;
+
+    struct DeepNest(Qux) {
+      foo @0 :Foo;
+      bar @1 :Bar;
+      baz @2 :Baz;
+      qux @3 :Qux;
+    }
   }
 
   interface Interface(Qux) {
@@ -556,6 +563,7 @@ struct TestUseGenerics $TestGenerics(Text, Data).ann("foo") {
   unspecified @3 :TestGenerics;
   unspecifiedInner @4 :TestGenerics.Inner2(Text);
   wrapper @8 :TestGenericsWrapper(TestAllTypes, TestAnyPointer);
+  cap @18 :TestGenerics(TestInterface, Text);
 
   default @5 :TestGenerics(TestAllTypes, Text) =
       (foo = (int16Field = 123), rev = (foo = "text", rev = (foo = (int16Field = 321))));
