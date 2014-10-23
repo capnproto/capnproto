@@ -119,7 +119,7 @@ schema from standard input and then generate the necessary code.  The descriptio
 Cap’n Proto message, defined by
 <a href="https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp">schema.capnp</a>.
 Specifically, the plugin receives a <code>CodeGeneratorRequest</code>, using
-<a href="http://kentonv.github.io/capnproto/encoding.html#serialization_over_a_stream">standard serialization</a>
+<a href="http://kentonv.github.io/capnproto/encoding.html#serialization-over-a-stream">standard serialization</a>
 (not packed).  (Note that installing the C++ runtime causes schema.capnp to be placed in
 <code>$PREFIX/include/capnp</code> – <code>/usr/local/include/capnp</code> by default).</p>
 
@@ -157,7 +157,7 @@ not support pointer arithmetic or any reasonably-performant alternative.</p>
 
 <p>Fortunately, dynamic languages usually have facilities for calling native code.  The best way to
 support Cap’n Proto in a dynamic language, then, is to wrap the C++ library, in particular the
-<a href="cxx.html#dynamic_reflection">C++ dynamic API</a>.  This way you get reasonable performance while
+<a href="cxx.html#dynamic-reflection">C++ dynamic API</a>.  This way you get reasonable performance while
 still avoiding the need to generate any code specific to each schema.</p>
 
 <p>To parse the schema files, use the <code>capnp::SchemaParser</code> class (defined in <code>capnp/schema-parser.h</code>).
@@ -169,8 +169,8 @@ compiled source files as <code>.pyc</code> bytecode, but that’s up to you.</p>
 <h3 id="testing-your-implementation">Testing Your Implementation</h3>
 
 <p>The easiest way to test that you’ve implemented the spec correctly is to use the <code>capnp</code> tool
-to <a href="capnp-tool.html#encoding_messages">encode</a> test inputs and
-<a href="capnp-tool.html#decoding_messages">decode</a> outputs.</p>
+to <a href="capnp-tool.html#encoding-messages">encode</a> test inputs and
+<a href="capnp-tool.html#decoding-messages">decode</a> outputs.</p>
 
 <script type="text/javascript">setupSidebar()</script>
         <div style="clear: both;"></div>
