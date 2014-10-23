@@ -10,7 +10,7 @@ the [RPC protocol](rpc.html).
 
 ## Current Status
 
-As of version 0.4, Cap'n Proto's C++ RPC implementation is a [Level 1](rpc.html#protocol_features)
+As of version 0.4, Cap'n Proto's C++ RPC implementation is a [Level 1](rpc.html#protocol-features)
 implementation.  Persistent capabilities, three-way introductions, and distributed equality are
 not yet implemented.
 
@@ -24,7 +24,7 @@ a fully-functional Cap'n Proto client and server.
 RPC naturally requires a notion of concurrency.  Unfortunately,
 [all concurrency models suck](https://plus.google.com/u/0/+KentonVarda/posts/D95XKtB5DhK).
 
-Cap'n Proto's RPC is based on the [KJ library](cxx.html#kj_library)'s event-driven concurrency
+Cap'n Proto's RPC is based on the [KJ library](cxx.html#kj-library)'s event-driven concurrency
 framework.  The core of the KJ asynchronous framework (events, promises, callbacks) is defined in
 `kj/async.h`, with I/O interfaces (streams, sockets, networks) defined in `kj/async-io.h`.
 

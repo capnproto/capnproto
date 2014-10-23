@@ -311,7 +311,7 @@ Unnamed unions differ from named unions only in that the accessor methods from t
 are added directly to the containing type's reader and builder, rather than generating a nested
 type.
 
-See the [example](#example_usage) at the top of the page for an example of unions.
+See the [example](#example-usage) at the top of the page for an example of unions.
 
 ### Lists
 
@@ -398,7 +398,7 @@ will need to set up a multi-use buffered stream.  Buffered I/O may also be a goo
 `StreamFdMessageReader` and also when writing, for performance reasons.  See `capnp/io.h` for
 details.
 
-There is an [example](#example_usage) of all this at the beginning of this page.
+There is an [example](#example-usage) of all this at the beginning of this page.
 
 ### Using mmap
 
