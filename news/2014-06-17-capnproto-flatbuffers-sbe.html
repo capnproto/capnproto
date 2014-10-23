@@ -75,34 +75,36 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>The goal of this blog post is to highlight some of the main <em>qualitative</em> differences between these libraries as I see them. Obviously, I am biased, and you should consider that as you read. Hopefully, though, this provides a good starting point for your own investigation of the alternatives.</p>
 
-<h3 id="feature_matrix">Feature Matrix</h3>
+<h3 id="feature-matrix">Feature Matrix</h3>
 
-<p>The following are a set of considerations I think are important. See something I missed? Please <a href="mailto:kenton@sandstorm.io">let me know</a> and I’ll add it. I’d like in particular to invite the SBE and FlatBuffers authors to suggest advantages of their libraries that I may have missed.</p>
+<p>The following are a set of considerations I think are important. See something I missed? Please <a href="&#109;&#097;&#105;&#108;&#116;&#111;:&#107;&#101;&#110;&#116;&#111;&#110;&#064;&#115;&#097;&#110;&#100;&#115;&#116;&#111;&#114;&#109;&#046;&#105;&#111;">let me know</a> and I’ll add it. I’d like in particular to invite the SBE and FlatBuffers authors to suggest advantages of their libraries that I may have missed.</p>
 
 <p>I will go into more detail on each item below.</p>
 
 <p>Note: For features which are properties of the implementation rather than the protocol or project, unless otherwise stated, I am judging the C++ implementations.</p>
-<table class='pass-fail'>
+
+<table class="pass-fail">
 <tr><td>Feature</td><td>Protobuf</td><td>Cap'n Proto</td><td>SBE</td><td>FlatBuffers</td></tr>
-<tr><td>Schema evolution</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='warn'>caveats</td><td class='pass'>yes</td></tr>
-<tr><td>Zero-copy</td><td class='fail'>no</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
-<tr><td>Random-access reads</td><td class='fail'>no</td><td class='pass'>yes</td><td class='fail'>no</td><td class='pass'>yes</td></tr>
-<tr><td>Safe against malicious input</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='warn'>opt-in upfront</td></tr>
-<tr><td>Reflection / generic algorithms</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
-<tr><td>Initialization order</td><td class='pass'>any</td><td class='pass'>any</td><td class='fail'>preorder</td><td class='warn'>bottom-up</td></tr>
-<tr><td>Unknown field retention</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td></tr>
-<tr><td>Object-capability RPC system</td><td class='fail'>no</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td></tr>
-<tr><td>Schema language</td><td class='pass'>custom</td><td class='pass'>custom</td><td class='warn'>XML</td><td class='pass'>custom</td></tr>
-<tr><td>Usable as mutable state</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td><td class='fail'>no</td></tr>
-<tr><td>Padding takes space on wire?</td><td class='pass'>no</td><td class='warn'>optional</td><td class='fail'>yes</td><td class='fail'>yes</td></tr>
-<tr><td>Unset fields take space on wire?</td><td class='pass'>no</td><td class='fail'>yes</td><td class='fail'>yes</td><td class='pass'>no</td></tr>
-<tr><td>Pointers take space on wire?</td><td class='pass'>no</td><td class='fail'>yes</td><td class='pass'>no</td><td class='fail'>yes</td></tr>
-<tr><td>C++</td><td class='pass'>yes</td><td class='warn'>GCC/Clang<br />(no MSVC)</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
-<tr><td>Java</td><td class='pass'>yes</td><td class='warn'>in progress</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
-<tr><td>Python</td><td class='pass'>yes</td><td class='warn'>yes (C ext)</td><td class='fail'>no</td><td class='fail'>no</td></tr>
-<tr><td>Other languages</td><td class='pass'>lots!</td><td class='warn'>6+ others</td><td class='warn'>C#</td><td class='fail'>no</td></tr>
-<tr><td>Authors' preferred use case</td><td>distributed<br />computing</td><td><a href='https://sandstorm.io'>platforms /<br />sandboxing</a></td><td>financial<br />trading</td><td>games</td></tr>
+<tr><td>Schema evolution</td><td class="pass">yes</td><td class="pass">yes</td><td class="warn">caveats</td><td class="pass">yes</td></tr>
+<tr><td>Zero-copy</td><td class="fail">no</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Random-access reads</td><td class="fail">no</td><td class="pass">yes</td><td class="fail">no</td><td class="pass">yes</td></tr>
+<tr><td>Safe against malicious input</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="warn">opt-in upfront</td></tr>
+<tr><td>Reflection / generic algorithms</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Initialization order</td><td class="pass">any</td><td class="pass">any</td><td class="fail">preorder</td><td class="warn">bottom-up</td></tr>
+<tr><td>Unknown field retention</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Object-capability RPC system</td><td class="fail">no</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Schema language</td><td class="pass">custom</td><td class="pass">custom</td><td class="warn">XML</td><td class="pass">custom</td></tr>
+<tr><td>Usable as mutable state</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Padding takes space on wire?</td><td class="pass">no</td><td class="warn">optional</td><td class="fail">yes</td><td class="fail">yes</td></tr>
+<tr><td>Unset fields take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="fail">yes</td><td class="pass">no</td></tr>
+<tr><td>Pointers take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="pass">no</td><td class="fail">yes</td></tr>
+<tr><td>C++</td><td class="pass">yes</td><td class="warn">GCC/Clang<br />(no MSVC)</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Java</td><td class="pass">yes</td><td class="warn">in progress</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Python</td><td class="pass">yes</td><td class="warn">yes (C ext)</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Other languages</td><td class="pass">lots!</td><td class="warn">6+ others</td><td class="warn">C#</td><td class="fail">no</td></tr>
+<tr><td>Authors' preferred use case</td><td>distributed<br />computing</td><td><a href="https://sandstorm.io">platforms /<br />sandboxing</a></td><td>financial<br />trading</td><td>games</td></tr>
 </table>
+
 <p><strong>Schema Evolution</strong></p>
 
 <p>All four protocols allow you to add new fields to a schema over time, without breaking backwards-compatibility. New fields will be ignored by old binaries, and new binaries will fill in a default value when reading old data.</p>
@@ -246,6 +248,8 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <p>With that said, my intuition is that SBE will probably edge Cap’n Proto and FlatBuffers on performance in the average case, due to its decision to forgo support for random access. Between Cap’n Proto and FlatBuffers, it’s harder to say. FlatBuffers’ vtable approach seems like it would make access more expensive, though its simpler pointer format may be cheaper to follow. FlatBuffers also appears to do a lot of bookkeeping at encoding time which could get costly (such as de-duping vtables), but I don’t know how costly.</p>
 
 <p>For most people, the performance difference is probably small enough that qualitative (feature) differences in the libraries matter more.</p>
+
+
 <script type="text/javascript">setupNewsSidebar([
     
       { title: "Cap'n Proto, FlatBuffers, and SBE", url: "/capnproto/./news/2014-06-17-capnproto-flatbuffers-sbe.html" },
