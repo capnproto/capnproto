@@ -110,6 +110,11 @@
 #include "string.h"
 #include "exception.h"
 
+#ifdef ERROR
+// This is problematic because windows.h #defines ERROR, which we use in an enum here.
+#error "Make sure to to undefine ERROR (or just #include <kj/windows-sanity.h>) before this file"
+#endif
+
 namespace kj {
 
 #define KJ_LOG(severity, ...) \

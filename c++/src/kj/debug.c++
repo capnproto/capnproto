@@ -25,6 +25,10 @@
 #include <string.h>
 #include <errno.h>
 
+#if _WIN32
+#define strerror_r(errno,buf,len) strerror_s(buf,len,errno)
+#endif
+
 namespace kj {
 namespace _ {  // private
 

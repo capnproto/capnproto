@@ -83,7 +83,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 #elif __APPLE__
   // The Mac OS X equivalent of addr2line is atos.
   // (Internally, it uses the private CoreSymbolication.framework library.)
-  p = popen(str("atos -d -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
+  p = popen(str("xcrun atos -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
 #endif
 
   if (p == nullptr) {
