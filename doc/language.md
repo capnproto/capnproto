@@ -356,7 +356,7 @@ reference to an object inherently represents a "capability" to access it.
 
 You can define constants in Cap'n Proto.  These don't affect what is sent on the wire, but they
 will be included in the generated code, and can be [evaluated using the `capnp`
-tool](capnp-tool.html#evaluating_constants).
+tool](capnp-tool.html#evaluating-constants).
 
 {% highlight capnp %}
 const pi :Float32 = 3.14159;

@@ -65,7 +65,7 @@ schema from standard input and then generate the necessary code.  The descriptio
 Cap'n Proto message, defined by
 [schema.capnp](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp).
 Specifically, the plugin receives a `CodeGeneratorRequest`, using
-[standard serialization](http://kentonv.github.io/capnproto/encoding.html#serialization_over_a_stream)
+[standard serialization](http://kentonv.github.io/capnproto/encoding.html#serialization-over-a-stream)
 (not packed).  (Note that installing the C++ runtime causes schema.capnp to be placed in
 `$PREFIX/include/capnp` -- `/usr/local/include/capnp` by default).
 
@@ -102,7 +102,7 @@ not support pointer arithmetic or any reasonably-performant alternative.
 
 Fortunately, dynamic languages usually have facilities for calling native code.  The best way to
 support Cap'n Proto in a dynamic language, then, is to wrap the C++ library, in particular the
-[C++ dynamic API](cxx.html#dynamic_reflection).  This way you get reasonable performance while
+[C++ dynamic API](cxx.html#dynamic-reflection).  This way you get reasonable performance while
 still avoiding the need to generate any code specific to each schema.
 
 To parse the schema files, use the `capnp::SchemaParser` class (defined in `capnp/schema-parser.h`).
@@ -114,5 +114,5 @@ compiled source files as `.pyc` bytecode, but that's up to you.
 ### Testing Your Implementation
 
 The easiest way to test that you've implemented the spec correctly is to use the `capnp` tool
-to [encode](capnp-tool.html#encoding_messages) test inputs and
-[decode](capnp-tool.html#decoding_messages) outputs.
+to [encode](capnp-tool.html#encoding-messages) test inputs and
+[decode](capnp-tool.html#decoding-messages) outputs.

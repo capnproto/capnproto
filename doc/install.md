@@ -58,7 +58,7 @@ under Xcode menu > Preferences > Downloads.  Alternatively, compiler builds from
 [Homebrew](http://brew.sh/) are reported to work.
 
 Sorry, but Microsoft Visual Studio 2013
-[does not implement enough of C++11](faq.html#can_i_use_capn_proto_with_visual_studio_pleeeeeaaaaassssseeeee)
+[does not implement enough of C++11](faq.html#can-i-use-capn-proto-with-visual-studio-pleeeeeaaaaassssseeeee)
 to compile Cap'n Proto.  We hope that the Internet Explorer of compilers will catch up in one of
 the upcoming CTPs (the November 2013 CTP is almost there).
 
@@ -80,7 +80,7 @@ This will install `capnp`, the Cap'n Proto command-line tool.  It will also inst
 ### Building from Git with Autotools
 
 If you download directly from Git, and you don't want to
-[build with Ekam](install.html#building_with_ekam), you will need to have the GNU autotools --
+[build with Ekam](install.html#building-with-ekam), you will need to have the GNU autotools --
 [autoconf](http://www.gnu.org/software/autoconf/),
 [automake](http://www.gnu.org/software/automake/), and
 [libtool](http://www.gnu.org/software/libtool/) -- installed.  You will also need Subversion
@@ -104,7 +104,7 @@ productivity, so I really like using Ekam.
 
 Unfortunately it's very much unfinished.  It works (for me), but it is quirky and rough around the
 edges.  It only works on Linux, and is best used together with Eclipse.  If you find it
-unacceptable, scroll up to the [Automake instructions](#building_from_git_with_autotools).
+unacceptable, scroll up to the [Automake instructions](#building-from-git-with-autotools).
 
 The Cap'n Proto repo includes a script which will attempt to set up Ekam for you.
 

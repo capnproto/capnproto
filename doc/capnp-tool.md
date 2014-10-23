@@ -30,7 +30,7 @@ and import paths.
 The above example generates C++ code, but the tool is able to generate output in any language
 for which a plugin is available.  Compiler plugins are just regular programs named
 `capnpc-language`.  For example, the above command runs `capnpc-c++`.  [More on how to write
-compiler plugins](otherlang.html#how_to_write_compiler_plugins).
+compiler plugins](otherlang.html#how-to-write-compiler-plugins).
 
 Note that some Cap'n Proto implementations (especially for interpreted languages) do not require
 generating source code.
