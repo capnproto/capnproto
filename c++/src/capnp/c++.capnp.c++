@@ -28,9 +28,11 @@ static const ::capnp::_::AlignedData<21> b_b9c6f99ebf805f2c = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+const ::capnp::_::RawBrandedSchema::Dependency bd_b9c6f99ebf805f2c[] = {
+};
 const ::capnp::_::RawSchema s_b9c6f99ebf805f2c = {
   0xb9c6f99ebf805f2c, b_b9c6f99ebf805f2c.words, 21, nullptr, nullptr,
-  0, 0, nullptr, nullptr, nullptr, { &s_b9c6f99ebf805f2c, nullptr, nullptr, 0, 0, nullptr }
+  0, 0, nullptr, nullptr, nullptr, { &s_b9c6f99ebf805f2c, nullptr, bd_b9c6f99ebf805f2c, 0, sizeof(bd_b9c6f99ebf805f2c) / sizeof(bd_b9c6f99ebf805f2c[0]), nullptr }
 };
 static const ::capnp::_::AlignedData<20> b_f264a779fef191ce = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
@@ -54,9 +56,11 @@ static const ::capnp::_::AlignedData<20> b_f264a779fef191ce = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+const ::capnp::_::RawBrandedSchema::Dependency bd_f264a779fef191ce[] = {
+};
 const ::capnp::_::RawSchema s_f264a779fef191ce = {
   0xf264a779fef191ce, b_f264a779fef191ce.words, 20, nullptr, nullptr,
-  0, 0, nullptr, nullptr, nullptr, { &s_f264a779fef191ce, nullptr, nullptr, 0, 0, nullptr }
+  0, 0, nullptr, nullptr, nullptr, { &s_f264a779fef191ce, nullptr, bd_f264a779fef191ce, 0, sizeof(bd_f264a779fef191ce) / sizeof(bd_f264a779fef191ce[0]), nullptr }
 };
 }  // namespace schemas
 }  // namespace capnp

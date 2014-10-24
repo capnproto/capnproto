@@ -290,6 +290,11 @@ struct Stringifier {
   String operator*(ArrayPtr<T> arr) const;
   template <typename T>
   String operator*(const Array<T>& arr) const;
+
+#if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP  // supports expression SFINAE?
+  template <typename T, typename Result = decltype(instance<T>().toString())>
+  inline Result operator*(T&& value) const { return kj::fwd<T>(value).toString(); }
+#endif
 };
 static constexpr Stringifier STR = Stringifier();
 

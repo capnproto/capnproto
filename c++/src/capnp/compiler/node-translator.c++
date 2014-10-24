@@ -2208,6 +2208,8 @@ uint64_t NodeTranslator::compileParamList(
       StructTranslator(*this).translate(paramList.getNamedList(), builder);
       uint64_t id = builder.getId();
       paramStructs.add(kj::mv(newStruct));
+
+      localBrand->compile(initBrand);
       return id;
     }
     case Declaration::ParamList::TYPE:

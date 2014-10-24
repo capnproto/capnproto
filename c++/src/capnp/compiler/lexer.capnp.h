@@ -92,6 +92,10 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
   inline Which which() const;
   inline bool isIdentifier() const;
   inline bool hasIdentifier() const;
@@ -137,12 +141,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(Token::Reader reader) {
-  return ::capnp::_::structString<Token>(reader._reader);
-}
 
 class Token::Builder {
 public:
@@ -156,6 +155,7 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
   inline Which which();
   inline bool isIdentifier();
@@ -227,12 +227,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(Token::Builder builder) {
-  return ::capnp::_::structString<Token>(builder._builder.asReader());
-}
 
 class Token::Pipeline {
 public:
@@ -257,6 +252,10 @@ public:
 
   inline ::capnp::MessageSize totalSize() const {
     return _reader.totalSize().asPublic();
+  }
+
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
   }
 
   inline Which which() const;
@@ -287,12 +286,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(Statement::Reader reader) {
-  return ::capnp::_::structString<Statement>(reader._reader);
-}
 
 class Statement::Builder {
 public:
@@ -306,6 +300,7 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
   inline Which which();
   inline bool hasTokens();
@@ -345,12 +340,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(Statement::Builder builder) {
-  return ::capnp::_::structString<Statement>(builder._builder.asReader());
-}
 
 class Statement::Pipeline {
 public:
@@ -377,6 +367,10 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
   inline bool hasTokens() const;
   inline  ::capnp::List< ::capnp::compiler::Token>::Reader getTokens() const;
 
@@ -390,12 +384,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(LexedTokens::Reader reader) {
-  return ::capnp::_::structString<LexedTokens>(reader._reader);
-}
 
 class LexedTokens::Builder {
 public:
@@ -409,6 +398,7 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
   inline bool hasTokens();
   inline  ::capnp::List< ::capnp::compiler::Token>::Builder getTokens();
@@ -422,12 +412,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(LexedTokens::Builder builder) {
-  return ::capnp::_::structString<LexedTokens>(builder._builder.asReader());
-}
 
 class LexedTokens::Pipeline {
 public:
@@ -454,6 +439,10 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
   inline bool hasStatements() const;
   inline  ::capnp::List< ::capnp::compiler::Statement>::Reader getStatements() const;
 
@@ -467,12 +456,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(LexedStatements::Reader reader) {
-  return ::capnp::_::structString<LexedStatements>(reader._reader);
-}
 
 class LexedStatements::Builder {
 public:
@@ -486,6 +470,7 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
   inline bool hasStatements();
   inline  ::capnp::List< ::capnp::compiler::Statement>::Builder getStatements();
@@ -499,12 +484,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(LexedStatements::Builder builder) {
-  return ::capnp::_::structString<LexedStatements>(builder._builder.asReader());
-}
 
 class LexedStatements::Pipeline {
 public:

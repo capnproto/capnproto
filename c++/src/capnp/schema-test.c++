@@ -307,6 +307,58 @@ TEST(Schema, Interfaces) {
   EXPECT_TRUE(params.getFieldByName("c").getProto().getSlot().getHadExplicitDefault());
 }
 
+TEST(Schema, Generics) {
+  StructSchema allTypes = Schema::from<TestAllTypes>();
+  StructSchema tap = Schema::from<test::TestAnyPointer>();
+  StructSchema schema = Schema::from<test::TestUseGenerics>();
+
+  StructSchema branded;
+
+  {
+    StructSchema::Field basic = schema.getFieldByName("basic");
+    branded = basic.getType().asStruct();
+
+    StructSchema::Field foo = branded.getFieldByName("foo");
+    EXPECT_TRUE(foo.getType().asStruct() == allTypes);
+    EXPECT_TRUE(foo.getType().asStruct() != tap);
+
+    StructSchema instance2 = branded.getFieldByName("rev").getType().asStruct();
+    StructSchema::Field foo2 = instance2.getFieldByName("foo");
+    EXPECT_TRUE(foo2.getType().asStruct() == tap);
+    EXPECT_TRUE(foo2.getType().asStruct() != allTypes);
+  }
+
+  {
+    StructSchema inner2 = schema.getFieldByName("inner2").getType().asStruct();
+
+    StructSchema bound = inner2.getFieldByName("innerBound").getType().asStruct();
+    Type boundFoo = bound.getFieldByName("foo").getType();
+    EXPECT_FALSE(boundFoo.isAnyPointer());
+    EXPECT_TRUE(boundFoo.asStruct() == allTypes);
+
+    StructSchema unbound = inner2.getFieldByName("innerUnbound").getType().asStruct();
+    Type unboundFoo = unbound.getFieldByName("foo").getType();
+    EXPECT_TRUE(unboundFoo.isAnyPointer());
+  }
+
+  {
+    InterfaceSchema cap = schema.getFieldByName("genericCap").getType().asInterface();
+    InterfaceSchema::Method method = cap.getMethodByName("call");
+
+    StructSchema inner2 = method.getParamType();
+    StructSchema bound = inner2.getFieldByName("innerBound").getType().asStruct();
+    Type boundFoo = bound.getFieldByName("foo").getType();
+    EXPECT_FALSE(boundFoo.isAnyPointer());
+    EXPECT_TRUE(boundFoo.asStruct() == allTypes);
+    EXPECT_TRUE(inner2.getFieldByName("baz").getType().isText());
+
+    StructSchema results = method.getResultType();
+    EXPECT_TRUE(results.getFieldByName("qux").getType().isData());
+
+    EXPECT_TRUE(results.getFieldByName("gen").getType().asStruct() == branded);
+  }
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

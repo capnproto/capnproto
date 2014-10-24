@@ -98,6 +98,12 @@ public:
   //
   // To obtain schemas for those, you would need a SchemaLoader.
 
+  bool isBranded() const;
+  // Returns true if this schema represents a non-default parameterization of this type.
+
+  Schema getGeneric() const;
+  // Get the version of this schema with any brands removed.
+
   class BrandArgumentList;
   BrandArgumentList getBrandArgumentsAtScope(uint64_t scopeId) const;
   // Gets the values bound to the brand parameters at the given scope.
@@ -717,6 +723,14 @@ template <> inline schema::Type::Which Schema::from<Data>() { return schema::Typ
 
 inline Schema Schema::getDependency(uint64_t id) const {
   return getDependency(id, 0);
+}
+
+inline bool Schema::isBranded() const {
+  return raw != &raw->generic->defaultBrand;
+}
+
+inline Schema Schema::getGeneric() const {
+  return Schema(&raw->generic->defaultBrand);
 }
 
 template <typename T>

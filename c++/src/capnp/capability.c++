@@ -28,8 +28,12 @@
 #include <kj/debug.h>
 #include <kj/vector.h>
 #include <map>
+#include "generated-header-support.h"
 
 namespace capnp {
+
+const _::RawBrandedSchema* const Capability::_capnpPrivate::brand =
+    &_::NULL_INTERFACE_SCHEMA.defaultBrand;
 
 namespace _ {
 

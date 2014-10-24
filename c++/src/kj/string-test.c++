@@ -61,6 +61,14 @@ TEST(String, StlInterop) {
   EXPECT_EQ("foo", kj::str(foo));
   EXPECT_EQ("foo", kj::heapString(foo));
 }
+
+struct Stringable {
+  kj::StringPtr toString() { return "foo"; }
+};
+
+TEST(String, ToString) {
+  EXPECT_EQ("foo", kj::str(Stringable()));
+}
 #endif
 
 }  // namespace

@@ -55,6 +55,7 @@ public:
 
 namespace _ { // private
 struct RawSchema;
+struct RawBrandedSchema;
 extern const RawSchema NULL_INTERFACE_SCHEMA;  // defined in schema.c++
 }  // namespace _ (private)
 
@@ -69,6 +70,12 @@ struct Capability {
     static constexpr uint64_t typeId = 0x3;
     static constexpr Kind kind = Kind::INTERFACE;
     static constexpr _::RawSchema const* schema = &_::NULL_INTERFACE_SCHEMA;
+
+    static const _::RawBrandedSchema* const brand;
+    // Can't quite declare this one inline without including generated-header-support.h. Avoiding
+    // for now by declaring out-of-line.
+    // TODO(cleanup): Split RawSchema stuff into its own header that can be included here, or
+    //   something.
   };
 };
 

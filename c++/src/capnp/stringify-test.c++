@@ -696,6 +696,17 @@ TEST(Stringify, MoreValues) {
   EXPECT_EQ("(123)", kj::str(DynamicValue::Reader(static_cast<TestEnum>(123))));
 }
 
+TEST(Stringify, Generics) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestGenerics<Text, List<uint32_t>>::Inner>();
+  root.setFoo("abcd");
+  auto l = root.initBar(2);
+  l.set(0, 123);
+  l.set(1, 456);
+
+  EXPECT_EQ("(foo = \"abcd\", bar = [123, 456])", kj::str(root));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

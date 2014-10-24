@@ -527,7 +527,7 @@ struct TestGenerics(Foo, Bar) {
   }
 
   interface Interface(Qux) {
-    call @0 Inner2(Text) -> (qux :Qux, gen :TestGenerics(TestAllTypes, TestDefaults));
+    call @0 Inner2(Text) -> (qux :Qux, gen :TestGenerics(TestAllTypes, TestAnyPointer));
   }
 
   annotation ann(struct) :Foo;
@@ -564,6 +564,7 @@ struct TestUseGenerics $TestGenerics(Text, Data).ann("foo") {
   unspecifiedInner @4 :TestGenerics.Inner2(Text);
   wrapper @8 :TestGenericsWrapper(TestAllTypes, TestAnyPointer);
   cap @18 :TestGenerics(TestInterface, Text);
+  genericCap @19 :TestGenerics(TestAllTypes, List(UInt32)).Interface(Data);
 
   default @5 :TestGenerics(TestAllTypes, Text) =
       (foo = (int16Field = 123), rev = (foo = "text", rev = (foo = (int16Field = 321))));

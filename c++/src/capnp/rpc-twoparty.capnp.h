@@ -109,6 +109,10 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
   inline  ::capnp::rpc::twoparty::Side getSide() const;
 
 private:
@@ -121,12 +125,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(SturdyRefHostId::Reader reader) {
-  return ::capnp::_::structString<SturdyRefHostId>(reader._reader);
-}
 
 class SturdyRefHostId::Builder {
 public:
@@ -140,6 +139,7 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
   inline  ::capnp::rpc::twoparty::Side getSide();
   inline void setSide( ::capnp::rpc::twoparty::Side value);
@@ -149,12 +149,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(SturdyRefHostId::Builder builder) {
-  return ::capnp::_::structString<SturdyRefHostId>(builder._builder.asReader());
-}
 
 class SturdyRefHostId::Pipeline {
 public:
@@ -181,6 +176,10 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
   inline  ::uint32_t getJoinId() const;
 
 private:
@@ -193,12 +192,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(ProvisionId::Reader reader) {
-  return ::capnp::_::structString<ProvisionId>(reader._reader);
-}
 
 class ProvisionId::Builder {
 public:
@@ -212,6 +206,7 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
@@ -221,12 +216,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(ProvisionId::Builder builder) {
-  return ::capnp::_::structString<ProvisionId>(builder._builder.asReader());
-}
 
 class ProvisionId::Pipeline {
 public:
@@ -253,6 +243,10 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -263,12 +257,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(RecipientId::Reader reader) {
-  return ::capnp::_::structString<RecipientId>(reader._reader);
-}
 
 class RecipientId::Builder {
 public:
@@ -282,18 +271,14 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(RecipientId::Builder builder) {
-  return ::capnp::_::structString<RecipientId>(builder._builder.asReader());
-}
 
 class RecipientId::Pipeline {
 public:
@@ -320,6 +305,10 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -330,12 +319,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(ThirdPartyCapId::Reader reader) {
-  return ::capnp::_::structString<ThirdPartyCapId>(reader._reader);
-}
 
 class ThirdPartyCapId::Builder {
 public:
@@ -349,18 +333,14 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(ThirdPartyCapId::Builder builder) {
-  return ::capnp::_::structString<ThirdPartyCapId>(builder._builder.asReader());
-}
 
 class ThirdPartyCapId::Pipeline {
 public:
@@ -387,6 +367,10 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
   inline  ::uint32_t getJoinId() const;
 
   inline  ::uint16_t getPartCount() const;
@@ -403,12 +387,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(JoinKeyPart::Reader reader) {
-  return ::capnp::_::structString<JoinKeyPart>(reader._reader);
-}
 
 class JoinKeyPart::Builder {
 public:
@@ -422,6 +401,7 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
@@ -437,12 +417,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(JoinKeyPart::Builder builder) {
-  return ::capnp::_::structString<JoinKeyPart>(builder._builder.asReader());
-}
 
 class JoinKeyPart::Pipeline {
 public:
@@ -469,6 +444,10 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
   inline  ::uint32_t getJoinId() const;
 
   inline bool getSucceeded() const;
@@ -486,12 +465,7 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(JoinResult::Reader reader) {
-  return ::capnp::_::structString<JoinResult>(reader._reader);
-}
 
 class JoinResult::Builder {
 public:
@@ -505,6 +479,7 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
 
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
@@ -521,12 +496,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Builder builder);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(JoinResult::Builder builder) {
-  return ::capnp::_::structString<JoinResult>(builder._builder.asReader());
-}
 
 class JoinResult::Pipeline {
 public:

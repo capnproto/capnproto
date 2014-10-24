@@ -227,10 +227,112 @@ inline const RawSchema& rawSchema() {
   return *schemas::EnumInfo<T>::schema;
 }
 
-template <typename T>
+template <typename T, typename CapnpPrivate = typename T::_capnpPrivate>
 inline const RawBrandedSchema& rawBrandedSchema() {
-  // TODO(now): implement properly
-  return rawSchema<T>().defaultBrand;
+  return *CapnpPrivate::brand;
+}
+template <typename T, uint64_t id = schemas::EnumInfo<T>::typeId>
+inline const RawBrandedSchema& rawBrandedSchema() {
+  return schemas::EnumInfo<T>::schema->defaultBrand;
+}
+
+template <typename TypeTag, typename... Params>
+struct ChooseBrand;
+// If all of `Params` are `AnyPointer`, return the type's default brand. Otherwise, return a
+// specific brand instance. TypeTag is the _capnpPrivate struct for the type in question.
+
+template <typename TypeTag>
+struct ChooseBrand<TypeTag> {
+  // All params were AnyPointer. No specific brand needed.
+  static constexpr _::RawBrandedSchema const* brand = &TypeTag::schema->defaultBrand;
+};
+
+template <typename TypeTag, typename... Rest>
+struct ChooseBrand<TypeTag, AnyPointer, Rest...>: public ChooseBrand<TypeTag, Rest...> {};
+// The first parameter is AnyPointer, so recurse to check the rest.
+
+template <typename TypeTag, typename First, typename... Rest>
+struct ChooseBrand<TypeTag, First, Rest...> {
+  // At least one parameter is not AnyPointer, so use the specificBrand constant.
+  static constexpr _::RawBrandedSchema const* brand = &TypeTag::specificBrand;
+};
+
+template <typename T, Kind k = kind<T>()>
+struct BrandBindingFor_;
+
+#define HANDLE_TYPE(Type, which) \
+  template <> \
+  struct BrandBindingFor_<Type, Kind::PRIMITIVE> { \
+    static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) { \
+      return { which, listDepth, 0 }; \
+    } \
+  }
+HANDLE_TYPE(Void, 0);
+HANDLE_TYPE(bool, 1);
+HANDLE_TYPE(int8_t, 2);
+HANDLE_TYPE(int16_t, 3);
+HANDLE_TYPE(int32_t, 4);
+HANDLE_TYPE(int64_t, 5);
+HANDLE_TYPE(uint8_t, 6);
+HANDLE_TYPE(uint16_t, 7);
+HANDLE_TYPE(uint32_t, 8);
+HANDLE_TYPE(uint64_t, 9);
+HANDLE_TYPE(float, 10);
+HANDLE_TYPE(double, 11);
+#undef HANDLE_TYPE
+
+template <>
+struct BrandBindingFor_<Text, Kind::BLOB> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return { 12, listDepth, nullptr };
+  }
+};
+
+template <>
+struct BrandBindingFor_<Data, Kind::BLOB> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return { 13, listDepth, nullptr };
+  }
+};
+
+template <typename T>
+struct BrandBindingFor_<List<T>, Kind::LIST> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return BrandBindingFor_<T>::get(listDepth + 1);
+  }
+};
+
+template <typename T>
+struct BrandBindingFor_<T, Kind::ENUM> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return { 15, listDepth, nullptr };
+  }
+};
+
+template <typename T>
+struct BrandBindingFor_<T, Kind::STRUCT> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return { 16, listDepth, T::_capnpPrivate::brand };
+  }
+};
+
+template <typename T>
+struct BrandBindingFor_<T, Kind::INTERFACE> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return { 17, listDepth, T::_capnpPrivate::brand };
+  }
+};
+
+template <>
+struct BrandBindingFor_<AnyPointer, Kind::OTHER> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return { 18, listDepth, 0, 0 };
+  }
+};
+
+template <typename T>
+constexpr RawBrandedSchema::Binding brandBindingFor() {
+  return BrandBindingFor_<T>::get(0);
 }
 
 kj::StringTree structString(StructReader reader, const RawBrandedSchema& schema);
@@ -353,30 +455,94 @@ inline constexpr uint sizeInWords() {
     constexpr uint64_t EnumInfo<type>::typeId; \
     constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema
 
-#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding) \
+#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
     struct _capnpPrivate { \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::Kind kind = ::capnp::Kind::STRUCT; \
       static constexpr ::capnp::_::StructSize structSize = ::capnp::_::StructSize( \
           dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS, \
           ::capnp::_::FieldSize::preferredElementEncoding); \
-      static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id; \
+      static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id;
+#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding) \
+    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+      static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand; \
+    }
+#define CAPNP_DECLARE_TEMPLATE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding, \
+                                      ...) \
+    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+      static const ::capnp::_::RawBrandedSchema::Scope brandScopes[]; \
+      static const ::capnp::_::RawBrandedSchema::Binding brandBindings[]; \
+      static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[]; \
+      static const ::capnp::_::RawBrandedSchema specificBrand; \
+      static constexpr ::capnp::_::RawBrandedSchema const* brand = \
+          ::capnp::_::ChooseBrand<_capnpPrivate, __VA_ARGS__>::brand; \
     }
 #define CAPNP_DEFINE_STRUCT(type, templates) \
     templates constexpr uint64_t type::_capnpPrivate::typeId; \
     templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
     templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize; \
-    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema
+    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema; \
+    templates constexpr ::capnp::_::RawBrandedSchema const* type::_capnpPrivate::brand
+#define CAPNP_DEFINE_TEMPLATE_STRUCT(type, templates, id, brandScopesInitializer, \
+                                     brandBindingsInitializer, brandDependenciesInitializer) \
+    templates constexpr uint64_t type::_capnpPrivate::typeId; \
+    templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
+    templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize; \
+    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema; \
+    templates constexpr ::capnp::_::RawBrandedSchema const* type::_capnpPrivate::brand; \
+    templates const ::capnp::_::RawBrandedSchema::Scope type::_capnpPrivate::brandScopes[] = \
+        brandScopesInitializer; \
+    templates const ::capnp::_::RawBrandedSchema::Binding type::_capnpPrivate::brandBindings[] = \
+        brandBindingsInitializer; \
+    templates const ::capnp::_::RawBrandedSchema::Dependency type::_capnpPrivate::brandDependencies[] = \
+        brandDependenciesInitializer; \
+    templates const ::capnp::_::RawBrandedSchema type::_capnpPrivate::specificBrand = { \
+      &::capnp::schemas::s_##id, brandScopes, brandDependencies, \
+      sizeof(brandScopes) / sizeof(brandScopes[0]), \
+      sizeof(brandDependencies) / sizeof(brandDependencies[0]), \
+      nullptr \
+    }
 
-#define CAPNP_DECLARE_INTERFACE(id) \
+#define CAPNP_DECLARE_INTERFACE_HEADER(id) \
     struct _capnpPrivate { \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::Kind kind = ::capnp::Kind::INTERFACE; \
-      static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id; \
+      static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id;
+#define CAPNP_DECLARE_INTERFACE(id) \
+    CAPNP_DECLARE_INTERFACE_HEADER(id) \
+      static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand; \
+    }
+#define CAPNP_DECLARE_TEMPLATE_INTERFACE(id, ...) \
+    CAPNP_DECLARE_INTERFACE_HEADER(id) \
+      static const ::capnp::_::RawBrandedSchema::Scope brandScopes[]; \
+      static const ::capnp::_::RawBrandedSchema::Binding brandBindings[]; \
+      static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[]; \
+      static const ::capnp::_::RawBrandedSchema specificBrand; \
+      static constexpr ::capnp::_::RawBrandedSchema const* brand = \
+          ::capnp::_::ChooseBrand<_capnpPrivate, __VA_ARGS__>::brand; \
     }
 #define CAPNP_DEFINE_INTERFACE(type, templates) \
     templates constexpr uint64_t type::_capnpPrivate::typeId; \
     templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
-    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema
+    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema; \
+    templates constexpr ::capnp::_::RawBrandedSchema const* type::_capnpPrivate::brand
+#define CAPNP_DEFINE_TEMPLATE_INTERFACE(type, templates, id, brandScopesInitializer, \
+                                        brandBindingsInitializer, brandDependenciesInitializer) \
+    templates constexpr uint64_t type::_capnpPrivate::typeId; \
+    templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
+    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema; \
+    templates constexpr ::capnp::_::RawBrandedSchema const* type::_capnpPrivate::brand; \
+    templates const ::capnp::_::RawBrandedSchema::Scope type::_capnpPrivate::brandScopes[] = \
+        brandScopesInitializer; \
+    templates const ::capnp::_::RawBrandedSchema::Binding type::_capnpPrivate::brandBindings[] = \
+        brandBindingsInitializer; \
+    templates const ::capnp::_::RawBrandedSchema::Dependency type::_capnpPrivate::brandDependencies[] = \
+        brandDependenciesInitializer; \
+    templates const ::capnp::_::RawBrandedSchema type::_capnpPrivate::specificBrand = { \
+      &::capnp::schemas::s_##id, brandScopes, brandDependencies, \
+      sizeof(brandScopes) / sizeof(brandScopes[0]), \
+      sizeof(brandDependencies) / sizeof(brandDependencies[0]), \
+      nullptr \
+    }
 
 #endif  // CAPNP_GENERATED_HEADER_SUPPORT_H_
