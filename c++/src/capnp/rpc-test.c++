@@ -607,7 +607,7 @@ TEST(Rpc, TailCall) {
 
   auto response = promise.wait(context.waitScope);
   EXPECT_EQ(456, response.getI());
-  EXPECT_EQ(456, response.getI());
+  EXPECT_EQ("from TestTailCaller", response.getT());
 
   auto dependentCall1 = promise.getC().getCallSequenceRequest().send();
 
