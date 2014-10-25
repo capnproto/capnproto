@@ -752,9 +752,15 @@ private:
     VALIDATE_SCHEMA(node.which() == replacement.which(),
                     "kind of declaration changed");
 
-    // No need to check compatibility of the non-body parts of the node:
+    // No need to check compatibility of most of the non-body parts of the node:
     // - Arbitrary renaming and moving between scopes is allowed.
     // - Annotations are ignored for compatibility purposes.
+
+    if (replacement.getParameters().size() > node.getParameters().size()) {
+      replacementIsNewer();
+    } else if (replacement.getParameters().size() < node.getParameters().size()) {
+      replacementIsOlder();
+    }
 
     switch (node.which()) {
       case schema::Node::FILE:
