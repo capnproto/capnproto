@@ -1714,7 +1714,7 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
         case schema::Type::AnyPointer::PARAMETER: {
           auto param = anyPointer.getParameter();
           uint64_t id = param.getScopeId();
-          uint index = param.getParameterIndex();
+          uint16_t index = param.getParameterIndex();
 
           KJ_IF_MAYBE(b, brandBindings) {
             // TODO(perf): We could binary search here, but... bleh.
@@ -1739,6 +1739,9 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
             return { static_cast<uint8_t>(schema::Type::ANY_POINTER), 0, id, index };
           }
         }
+        case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
+          return { static_cast<uint8_t>(schema::Type::ANY_POINTER), 0,
+                   anyPointer.getImplicitMethodParameter().getParameterIndex() };
       }
       KJ_UNREACHABLE;
     }
@@ -2061,6 +2064,9 @@ Type SchemaLoader::getType(schema::Type::Reader proto, Schema scope) const {
           auto param = anyPointer.getParameter();
           return scope.getBrandBinding(param.getScopeId(), param.getParameterIndex());
         }
+        case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
+          // We don't support binding implicit method params here.
+          return schema::Type::ANY_POINTER;
       }
 
       KJ_UNREACHABLE;

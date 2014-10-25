@@ -344,16 +344,8 @@ Orphan<List<T>> arrayToList(Orphanage& orphanage, kj::Array<Orphan<T>>&& element
   return kj::mv(result);
 }
 
-inline Declaration::Builder initDecl(
-    Declaration::Builder builder, Located<Text::Reader>&& name,
-    kj::Maybe<Orphan<LocatedInteger>>&& id,
-    kj::Maybe<Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>>&& genericParameters,
-    kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations) {
-  name.copyTo(builder.initName());
-  KJ_IF_MAYBE(i, id) {
-    builder.getId().adoptUid(kj::mv(*i));
-  }
-
+static void initGenericParams(Declaration::Builder builder,
+    kj::Maybe<Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>>&& genericParameters) {
   KJ_IF_MAYBE(p, genericParameters) {
     auto params = builder.initParameters(p->value.size());
     for (uint i: kj::indices(p->value)) {
@@ -364,6 +356,19 @@ inline Declaration::Builder initDecl(
       }
     }
   }
+}
+
+static Declaration::Builder initDecl(
+    Declaration::Builder builder, Located<Text::Reader>&& name,
+    kj::Maybe<Orphan<LocatedInteger>>&& id,
+    kj::Maybe<Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>>&& genericParameters,
+    kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations) {
+  name.copyTo(builder.initName());
+  KJ_IF_MAYBE(i, id) {
+    builder.getId().adoptUid(kj::mv(*i));
+  }
+
+  initGenericParams(builder, kj::mv(genericParameters));
 
   auto list = builder.initAnnotations(annotations.size());
   for (uint i = 0; i < annotations.size(); i++) {
@@ -372,7 +377,7 @@ inline Declaration::Builder initDecl(
   return builder;
 }
 
-inline Declaration::Builder initMemberDecl(
+static Declaration::Builder initMemberDecl(
     Declaration::Builder builder, Located<Text::Reader>&& name,
     Orphan<LocatedInteger>&& ordinal,
     kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations) {
@@ -902,18 +907,24 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
           })));
 
   parsers.methodDecl = arena.copy(p::transform(
-      p::sequence(identifier, parsers.ordinal, paramList,
+      p::sequence(identifier, parsers.ordinal,
+                  p::optional(bracketedList(identifier, errorReporter)),
+                  paramList,
                   p::optional(p::sequence(op("->"), paramList)),
                   p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name, Orphan<LocatedInteger>&& ordinal,
+             kj::Maybe<Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>>&& genericParams,
              Orphan<Declaration::ParamList>&& params,
              kj::Maybe<Orphan<Declaration::ParamList>>&& results,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
-        auto builder =
-            initMemberDecl(decl.get(), kj::mv(name), kj::mv(ordinal), kj::mv(annotations))
-                .initMethod();
+        auto nodeBuilder = initMemberDecl(
+            decl.get(), kj::mv(name), kj::mv(ordinal), kj::mv(annotations));
+
+        initGenericParams(nodeBuilder, kj::mv(genericParams));
+
+        auto builder = nodeBuilder.initMethod();
 
         builder.adoptParams(kj::mv(params));
 

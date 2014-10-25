@@ -377,6 +377,9 @@ Type Schema::interpretType(schema::Type::Reader proto, uint location) const {
           auto param = anyPointer.getParameter();
           return getBrandBinding(param.getScopeId(), param.getParameterIndex());
         }
+        case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
+          return Type(Type::ImplicitParameter {
+              anyPointer.getImplicitMethodParameter().getParameterIndex() });
       }
 
       KJ_UNREACHABLE;
@@ -400,10 +403,12 @@ Type Schema::BrandArgumentList::operator[](uint index) const {
 
   auto& binding = bindings[index];
   if (binding.which == (uint)schema::Type::ANY_POINTER) {
-    if (binding.scopeId == 0) {
-      return Type(schema::Type::ANY_POINTER, binding.listDepth, nullptr);
-    } else {
+    if (binding.scopeId != 0) {
       return Type::BrandParameter { binding.scopeId, binding.paramIndex };
+    } else if (binding.isImplicitParameter) {
+      return Type::ImplicitParameter { binding.paramIndex };
+    } else {
+      return Type(schema::Type::ANY_POINTER, binding.listDepth, nullptr);
     }
   } else if (binding.schema == nullptr) {
     // Builtin / primitive type.
@@ -795,6 +800,17 @@ kj::Maybe<Type::BrandParameter> Type::getBrandParameter() const {
     return nullptr;
   } else {
     return BrandParameter { scopeId, paramIndex };
+  }
+}
+
+kj::Maybe<Type::ImplicitParameter> Type::getImplicitParameter() const {
+  KJ_REQUIRE(isAnyPointer(),
+      "Type::getImplicitParameter() can only be called on AnyPointer types.");
+
+  if (isImplicitParam) {
+    return ImplicitParameter { paramIndex };
+  } else {
+    return nullptr;
   }
 }
 

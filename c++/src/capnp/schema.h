@@ -570,6 +570,9 @@ public:
     uint64_t scopeId;
     uint index;
   };
+  struct ImplicitParameter {
+    uint index;
+  };
 
   inline Type();
   inline Type(schema::Type::Which primitive);
@@ -578,6 +581,7 @@ public:
   inline Type(InterfaceSchema schema);
   inline Type(ListSchema schema);
   inline Type(BrandParameter param);
+  inline Type(ImplicitParameter param);
 
   template <typename T>
   inline static Type from();
@@ -593,6 +597,10 @@ public:
   kj::Maybe<BrandParameter> getBrandParameter() const;
   // Only callable if which() returns ANY_POINTER. Returns null if the type is just a regular
   // AnyPointer and not a parameter.
+
+  kj::Maybe<ImplicitParameter> getImplicitParameter() const;
+  // Only callable if which() returns ANY_POINTER. Returns null if the type is just a regular
+  // AnyPointer and not a parameter. "Implicit parameters" refer to type parameters on methods.
 
   inline bool isVoid() const;
   inline bool isBool() const;
@@ -621,7 +629,11 @@ private:
   schema::Type::Which baseType;  // type not including applications of List()
   uint8_t listDepth;             // 0 for T, 1 for List(T), 2 for List(List(T)), ...
 
-  uint32_t paramIndex;
+  bool isImplicitParam;
+  // If true, this refers to an implicit method parameter. baseType must be ANY_POINTER, scopeId
+  // must be zero, and paramIndex indicates the parameter index.
+
+  uint16_t paramIndex;
   // If baseType is ANY_POINTER but this Type actually refers to a type parameter, this is the
   // index of the parameter among the parameters at its scope, and `scopeId` below is the type ID
   // of the scope where the parameter was defined.
@@ -806,7 +818,7 @@ struct ListSchema::FromImpl<List<T>> {
 
 inline Type::Type(): baseType(schema::Type::VOID), listDepth(0), schema(nullptr) {}
 inline Type::Type(schema::Type::Which primitive)
-    : baseType(primitive), listDepth(0), schema(nullptr) {
+    : baseType(primitive), listDepth(0), isImplicitParam(false), scopeId(0) {
   KJ_IREQUIRE(primitive != schema::Type::STRUCT &&
               primitive != schema::Type::ENUM &&
               primitive != schema::Type::INTERFACE &&
@@ -822,8 +834,11 @@ inline Type::Type(InterfaceSchema schema)
 inline Type::Type(ListSchema schema)
     : Type(schema.getElementType()) { ++listDepth; }
 inline Type::Type(BrandParameter param)
-    : baseType(schema::Type::ANY_POINTER), listDepth(0), paramIndex(param.index),
-      scopeId(param.scopeId) {}
+    : baseType(schema::Type::ANY_POINTER), listDepth(0), isImplicitParam(false),
+      paramIndex(param.index), scopeId(param.scopeId) {}
+inline Type::Type(ImplicitParameter param)
+    : baseType(schema::Type::ANY_POINTER), listDepth(0), isImplicitParam(true),
+      paramIndex(param.index), scopeId(0) {}
 
 inline schema::Type::Which Type::which() const {
   return listDepth > 0 ? schema::Type::LIST : baseType;

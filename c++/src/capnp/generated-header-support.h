@@ -57,9 +57,13 @@ struct RawBrandedSchema {
 
   struct Binding {
     uint8_t which;       // Numeric value of one of schema::Type::Which.
+
+    bool isImplicitParameter;
+    // For AnyPointer, true if it's an implicit method parameter.
+
     uint16_t listDepth;  // Number of times to wrap the base type in List().
 
-    uint32_t paramIndex;  // for AnyPointer, if it's a type parameter.
+    uint16_t paramIndex;  // for AnyPointer, if it's a type parameter.
 
     union {
       const RawBrandedSchema* schema;  // for struct, enum, interface
@@ -68,10 +72,15 @@ struct RawBrandedSchema {
 
     Binding() = default;
     inline constexpr Binding(uint8_t which, uint16_t listDepth, const RawBrandedSchema* schema)
-        : which(which), listDepth(listDepth), paramIndex(0), schema(schema) {}
+        : which(which), isImplicitParameter(false), listDepth(listDepth), paramIndex(0),
+          schema(schema) {}
     inline constexpr Binding(uint8_t which, uint16_t listDepth,
-                             uint64_t scopeId, uint32_t paramIndex)
-        : which(which), listDepth(listDepth), paramIndex(paramIndex), scopeId(scopeId) {}
+                             uint64_t scopeId, uint16_t paramIndex)
+        : which(which), isImplicitParameter(false), listDepth(listDepth), paramIndex(paramIndex),
+          scopeId(scopeId) {}
+    inline constexpr Binding(uint8_t which, uint16_t listDepth, uint16_t implicitParamIndex)
+        : which(which), isImplicitParameter(true), listDepth(listDepth),
+          paramIndex(implicitParamIndex), scopeId(0) {}
   };
 
   struct Scope {
@@ -264,7 +273,7 @@ struct BrandBindingFor_;
   template <> \
   struct BrandBindingFor_<Type, Kind::PRIMITIVE> { \
     static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) { \
-      return { which, listDepth, 0 }; \
+      return { which, listDepth, nullptr }; \
     } \
   }
 HANDLE_TYPE(Void, 0);

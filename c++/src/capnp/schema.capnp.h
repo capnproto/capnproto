@@ -37,6 +37,7 @@ extern const ::capnp::_::RawSchema s_ac3a6f60ef4cc6d3;
 extern const ::capnp::_::RawSchema s_ed8bca69f7fb0cbf;
 extern const ::capnp::_::RawSchema s_c2573fe8a23e49f1;
 extern const ::capnp::_::RawSchema s_9dd1f724f4614a85;
+extern const ::capnp::_::RawSchema s_baefc9120c56e274;
 extern const ::capnp::_::RawSchema s_903455f06065422b;
 extern const ::capnp::_::RawSchema s_abd73485a9636bc9;
 extern const ::capnp::_::RawSchema s_c863cd16969ee7fc;
@@ -238,7 +239,7 @@ struct Method {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9500cce23b334d80, 3, 4, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(9500cce23b334d80, 3, 5, INLINE_COMPOSITE);
 };
 
 struct Type {
@@ -326,8 +327,10 @@ struct Type::AnyPointer {
   enum Which: uint16_t {
     UNCONSTRAINED,
     PARAMETER,
+    IMPLICIT_METHOD_PARAMETER,
   };
   struct Parameter;
+  struct ImplicitMethodParameter;
 
   CAPNP_DECLARE_STRUCT(c2573fe8a23e49f1, 3, 1, INLINE_COMPOSITE);
 };
@@ -340,6 +343,16 @@ struct Type::AnyPointer::Parameter {
   class Pipeline;
 
   CAPNP_DECLARE_STRUCT(9dd1f724f4614a85, 3, 1, INLINE_COMPOSITE);
+};
+
+struct Type::AnyPointer::ImplicitMethodParameter {
+  ImplicitMethodParameter() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  CAPNP_DECLARE_STRUCT(baefc9120c56e274, 3, 1, INLINE_COMPOSITE);
 };
 
 struct Brand {
@@ -515,11 +528,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -606,7 +619,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -621,7 +634,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -645,11 +658,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -678,7 +691,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -693,7 +706,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -719,11 +732,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -755,7 +768,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -770,7 +783,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -806,11 +819,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -857,7 +870,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -872,7 +885,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -896,11 +909,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -929,7 +942,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -944,7 +957,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -971,11 +984,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1011,7 +1024,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1026,7 +1039,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1053,11 +1066,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1093,7 +1106,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1110,7 +1123,7 @@ public:
   inline  ::capnp::schema::Value::Pipeline getValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1158,11 +1171,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1227,7 +1240,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1243,7 +1256,7 @@ public:
   inline  ::capnp::schema::Type::Pipeline getType();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1283,11 +1296,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1341,7 +1354,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1357,7 +1370,7 @@ public:
   inline Ordinal::Pipeline getOrdinal();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1388,11 +1401,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1434,7 +1447,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1451,7 +1464,7 @@ public:
   inline  ::capnp::schema::Value::Pipeline getDefaultValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1474,11 +1487,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1503,7 +1516,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1518,7 +1531,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1546,11 +1559,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1581,7 +1594,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1596,7 +1609,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1625,11 +1638,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1668,7 +1681,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1683,7 +1696,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1709,11 +1722,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1745,7 +1758,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1761,7 +1774,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1798,13 +1811,16 @@ public:
   inline bool hasResultBrand() const;
   inline  ::capnp::schema::Brand::Reader getResultBrand() const;
 
+  inline bool hasImplicitParameters() const;
+  inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Reader getImplicitParameters() const;
+
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -1861,9 +1877,16 @@ public:
   inline void adoptResultBrand(::capnp::Orphan< ::capnp::schema::Brand>&& value);
   inline ::capnp::Orphan< ::capnp::schema::Brand> disownResultBrand();
 
+  inline bool hasImplicitParameters();
+  inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Builder getImplicitParameters();
+  inline void setImplicitParameters( ::capnp::List< ::capnp::schema::Node::Parameter>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Builder initImplicitParameters(unsigned int size);
+  inline void adoptImplicitParameters(::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Parameter>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Parameter>> disownImplicitParameters();
+
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -1880,7 +1903,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getResultBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -1959,11 +1982,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2062,7 +2085,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2077,7 +2100,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2101,11 +2124,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2134,7 +2157,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2150,7 +2173,7 @@ public:
   inline  ::capnp::schema::Type::Pipeline getElementType();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2176,11 +2199,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2212,7 +2235,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2228,7 +2251,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2254,11 +2277,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2290,7 +2313,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2306,7 +2329,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2332,11 +2355,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2368,7 +2391,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2384,7 +2407,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2410,13 +2433,16 @@ public:
   inline bool isParameter() const;
   inline Parameter::Reader getParameter() const;
 
+  inline bool isImplicitMethodParameter() const;
+  inline ImplicitMethodParameter::Reader getImplicitMethodParameter() const;
+
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2445,9 +2471,13 @@ public:
   inline Parameter::Builder getParameter();
   inline Parameter::Builder initParameter();
 
+  inline bool isImplicitMethodParameter();
+  inline ImplicitMethodParameter::Builder getImplicitMethodParameter();
+  inline ImplicitMethodParameter::Builder initImplicitMethodParameter();
+
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2462,7 +2492,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2487,11 +2517,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2519,7 +2549,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2534,7 +2564,74 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class Type::AnyPointer::ImplicitMethodParameter::Reader {
+public:
+  typedef ImplicitMethodParameter Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+
+  inline  ::uint16_t getParameterIndex() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class Type::AnyPointer::ImplicitMethodParameter::Builder {
+public:
+  typedef ImplicitMethodParameter Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+
+  inline  ::uint16_t getParameterIndex();
+  inline void setParameterIndex( ::uint16_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+};
+
+class Type::AnyPointer::ImplicitMethodParameter::Pipeline {
+public:
+  typedef ImplicitMethodParameter Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2558,11 +2655,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2591,7 +2688,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2606,7 +2703,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2637,11 +2734,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2679,7 +2776,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2694,7 +2791,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2723,11 +2820,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2762,7 +2859,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2777,7 +2874,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -2861,11 +2958,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -2975,7 +3072,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -2990,7 +3087,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -3019,11 +3116,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -3062,7 +3159,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -3079,7 +3176,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -3106,11 +3203,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -3146,7 +3243,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -3161,7 +3258,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -3190,11 +3287,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -3233,7 +3330,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -3248,7 +3345,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -3274,11 +3371,11 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
@@ -3310,7 +3407,7 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
 };
@@ -3325,7 +3422,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
 
@@ -4875,6 +4972,38 @@ inline ::capnp::Orphan< ::capnp::schema::Brand> Method::Builder::disownResultBra
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
+inline bool Method::Reader::hasImplicitParameters() const {
+  return !_reader.getPointerField(4 * ::capnp::POINTERS).isNull();
+}
+inline bool Method::Builder::hasImplicitParameters() {
+  return !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Reader Method::Reader::getImplicitParameters() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::get(
+      _reader.getPointerField(4 * ::capnp::POINTERS));
+}
+inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Builder Method::Builder::getImplicitParameters() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::get(
+      _builder.getPointerField(4 * ::capnp::POINTERS));
+}
+inline void Method::Builder::setImplicitParameters( ::capnp::List< ::capnp::schema::Node::Parameter>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::set(
+      _builder.getPointerField(4 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Builder Method::Builder::initImplicitParameters(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::init(
+      _builder.getPointerField(4 * ::capnp::POINTERS), size);
+}
+inline void Method::Builder::adoptImplicitParameters(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Parameter>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::adopt(
+      _builder.getPointerField(4 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Parameter>> Method::Builder::disownImplicitParameters() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::disown(
+      _builder.getPointerField(4 * ::capnp::POINTERS));
+}
+
 inline Type::Which Type::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
@@ -5599,6 +5728,28 @@ inline Type::AnyPointer::Parameter::Builder Type::AnyPointer::Builder::initParam
   _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
   return Type::AnyPointer::Parameter::Builder(_builder);
 }
+inline bool Type::AnyPointer::Reader::isImplicitMethodParameter() const {
+  return which() == Type::AnyPointer::IMPLICIT_METHOD_PARAMETER;
+}
+inline bool Type::AnyPointer::Builder::isImplicitMethodParameter() {
+  return which() == Type::AnyPointer::IMPLICIT_METHOD_PARAMETER;
+}
+inline Type::AnyPointer::ImplicitMethodParameter::Reader Type::AnyPointer::Reader::getImplicitMethodParameter() const {
+  KJ_IREQUIRE(which() == Type::AnyPointer::IMPLICIT_METHOD_PARAMETER,
+              "Must check which() before get()ing a union member.");
+  return Type::AnyPointer::ImplicitMethodParameter::Reader(_reader);
+}
+inline Type::AnyPointer::ImplicitMethodParameter::Builder Type::AnyPointer::Builder::getImplicitMethodParameter() {
+  KJ_IREQUIRE(which() == Type::AnyPointer::IMPLICIT_METHOD_PARAMETER,
+              "Must check which() before get()ing a union member.");
+  return Type::AnyPointer::ImplicitMethodParameter::Builder(_builder);
+}
+inline Type::AnyPointer::ImplicitMethodParameter::Builder Type::AnyPointer::Builder::initImplicitMethodParameter() {
+  _builder.setDataField<Type::AnyPointer::Which>(
+      4 * ::capnp::ELEMENTS, Type::AnyPointer::IMPLICIT_METHOD_PARAMETER);
+  _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
+  return Type::AnyPointer::ImplicitMethodParameter::Builder(_builder);
+}
 inline  ::uint64_t Type::AnyPointer::Parameter::Reader::getScopeId() const {
   return _reader.getDataField< ::uint64_t>(
       2 * ::capnp::ELEMENTS);
@@ -5623,6 +5774,20 @@ inline  ::uint16_t Type::AnyPointer::Parameter::Builder::getParameterIndex() {
       5 * ::capnp::ELEMENTS);
 }
 inline void Type::AnyPointer::Parameter::Builder::setParameterIndex( ::uint16_t value) {
+  _builder.setDataField< ::uint16_t>(
+      5 * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint16_t Type::AnyPointer::ImplicitMethodParameter::Reader::getParameterIndex() const {
+  return _reader.getDataField< ::uint16_t>(
+      5 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint16_t Type::AnyPointer::ImplicitMethodParameter::Builder::getParameterIndex() {
+  return _builder.getDataField< ::uint16_t>(
+      5 * ::capnp::ELEMENTS);
+}
+inline void Type::AnyPointer::ImplicitMethodParameter::Builder::setParameterIndex( ::uint16_t value) {
   _builder.setDataField< ::uint16_t>(
       5 * ::capnp::ELEMENTS, value);
 }

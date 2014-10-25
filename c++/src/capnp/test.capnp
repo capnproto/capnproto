@@ -556,6 +556,10 @@ struct TestGenericsWrapper2 {
   value @0 :TestGenericsWrapper(Text, TestAllTypes);
 }
 
+interface TestImplicitMethodParams {
+  call @0 [T, U] (foo :T, bar :U) -> TestGenerics(T, U);
+}
+
 struct TestUseGenerics $TestGenerics(Text, Data).ann("foo") {
   basic @0 :TestGenerics(TestAllTypes, TestAnyPointer);
   inner @1 :TestGenerics(TestAllTypes, TestAnyPointer).Inner;

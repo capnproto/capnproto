@@ -796,6 +796,30 @@ TEST(Capability, Generics2) {
   root.initCap().setFoo(test::TestInterface::Client(nullptr));
 }
 
+TEST(Capability, ImplicitParams) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  typedef test::TestImplicitMethodParams Interface;
+  Interface::Client client = nullptr;
+
+  capnp::Request<Interface::CallParams<Text, TestAllTypes>,
+                 test::TestGenerics<Text, TestAllTypes>> request =
+      client.callRequest<Text, TestAllTypes>();
+  request.setFoo("hello");
+  initTestMessage(request.initBar());
+
+  auto promise = request.send()
+      .then([](capnp::Response<test::TestGenerics<Text, TestAllTypes>>&& response) {
+    // This doesn't actually execute; we're just checking that it compiles.
+    Text::Reader text = response.getFoo();
+    text.size();
+    checkTestMessage(response.getRev().getFoo());
+  }, [](kj::Exception&& e) {});
+
+  promise.wait(waitScope);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

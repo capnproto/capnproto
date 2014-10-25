@@ -286,11 +286,11 @@ private:
   std::unordered_set<uint64_t> usedImports;
   bool hasInterfaces = false;
 
-  CppTypeName cppFullName(Schema schema) {
-    return cppFullName(schema, schema);
+  CppTypeName cppFullName(Schema schema, kj::Maybe<InterfaceSchema::Method> method) {
+    return cppFullName(schema, schema, method);
   }
 
-  CppTypeName cppFullName(Schema schema, Schema brand) {
+  CppTypeName cppFullName(Schema schema, Schema brand, kj::Maybe<InterfaceSchema::Method> method) {
     auto node = schema.getProto();
 
     if (node.getScopeId() == 0) {
@@ -338,7 +338,7 @@ private:
             "A schema Node's supposed scope did not contain the node as a NestedNode.");
       }
 
-      auto result = cppFullName(parent, brand);
+      auto result = cppFullName(parent, brand, method);
 
       // Construct the generic arguments.
       auto params = node.getParameters();
@@ -349,14 +349,15 @@ private:
         uint paramCount = 0;
         for (uint i: kj::indices(params)) {
           auto arg = args[i];
-          if (arg.which() != schema::Type::ANY_POINTER || arg.getBrandParameter() != nullptr) {
+          if (arg.which() != schema::Type::ANY_POINTER || arg.getBrandParameter() != nullptr ||
+              (arg.getImplicitParameter() != nullptr && method != nullptr)) {
             paramCount = i + 1;
           }
         }
 
         result.addMemberTemplate(unqualifiedName,
             KJ_MAP(i, kj::range(0u, paramCount)) {
-              return typeName(args[i]);
+              return typeName(args[i], method);
             });
       } else {
         result.addMemberType(unqualifiedName);
@@ -409,7 +410,7 @@ private:
     return kj::mv(result);
   }
 
-  CppTypeName typeName(Type type) {
+  CppTypeName typeName(Type type, kj::Maybe<InterfaceSchema::Method> method) {
     switch (type.which()) {
       case schema::Type::VOID: return CppTypeName::makePrimitive(" ::capnp::Void");
 
@@ -429,16 +430,16 @@ private:
       case schema::Type::DATA: return CppTypeName::makePrimitive(" ::capnp::Data");
 
       case schema::Type::ENUM:
-        return cppFullName(type.asEnum());
+        return cppFullName(type.asEnum(), method);
       case schema::Type::STRUCT:
-        return cppFullName(type.asStruct());
+        return cppFullName(type.asStruct(), method);
       case schema::Type::INTERFACE:
-        return cppFullName(type.asInterface());
+        return cppFullName(type.asInterface(), method);
 
       case schema::Type::LIST: {
         CppTypeName result = CppTypeName::makeNamespace("capnp");
         auto params = kj::heapArrayBuilder<CppTypeName>(1);
-        params.add(typeName(type.asList().getElementType()));
+        params.add(typeName(type.asList().getElementType(), method));
         result.addMemberTemplate("List", params.finish());
         return result;
       }
@@ -447,6 +448,14 @@ private:
         KJ_IF_MAYBE(param, type.getBrandParameter()) {
           return CppTypeName::makeTemplateParam(schemaLoader.get(param->scopeId).getProto()
               .getParameters()[param->index].getName());
+        } else KJ_IF_MAYBE(param, type.getImplicitParameter()) {
+          KJ_IF_MAYBE(m, method) {
+            auto params = m->getProto().getImplicitParameters();
+            KJ_REQUIRE(param->index < params.size());
+            return CppTypeName::makeTemplateParam(params[param->index].getName());
+          } else {
+            return CppTypeName::makePrimitive(" ::capnp::AnyPointer");
+          }
         } else {
           return CppTypeName::makePrimitive(" ::capnp::AnyPointer");
         }
@@ -499,10 +508,11 @@ private:
         EnumSchema schema = type.asEnum();
         if (value.getEnum() < schema.getEnumerants().size()) {
           return kj::strTree(
-              cppFullName(schema), "::",
+              cppFullName(schema, nullptr), "::",
               toUpperCase(protoName(schema.getEnumerants()[value.getEnum()].getProto())));
         } else {
-          return kj::strTree("static_cast<", cppFullName(schema), ">(", value.getEnum(), ")");
+          return kj::strTree("static_cast<", cppFullName(schema, nullptr),
+                             ">(", value.getEnum(), ")");
         }
       }
 
@@ -701,14 +711,14 @@ private:
   }
 
   kj::Maybe<kj::StringTree> makeBrandDepInitializer(Schema type) {
-    return makeBrandDepInitializer(type, cppFullName(type));
+    return makeBrandDepInitializer(type, cppFullName(type, nullptr));
   }
 
   kj::Maybe<kj::StringTree> makeBrandDepInitializer(
       InterfaceSchema::Method method, StructSchema type, kj::StringPtr suffix) {
     if (type.getProto().getScopeId() == 0) {
       // This is an auto-generated params or results type.
-      auto name = cppFullName(method.getContainingInterface());
+      auto name = cppFullName(method.getContainingInterface(), nullptr);
       name.addMemberType(kj::str(toTitleCase(protoName(method.getProto())), suffix));
       return makeBrandDepInitializer(type, kj::mv(name));
     } else {
@@ -1104,7 +1114,7 @@ private:
 
     FieldKind kind = FieldKind::PRIMITIVE;
     kj::String ownedType;
-    CppTypeName type = typeName(typeSchema);
+    CppTypeName type = typeName(typeSchema, nullptr);
     kj::StringPtr setterDefault;  // only for void
     kj::String defaultMask;    // primitives only
     size_t defaultOffset = 0;    // pointers only: offset of the default value within the schema.
@@ -1447,7 +1457,7 @@ private:
             primitiveElement = false;
             break;
         }
-        elementReaderType = typeName(elementType);
+        elementReaderType = typeName(elementType, nullptr);
         if (!primitiveElement) {
           if (interface) {
             elementReaderType.addMemberType("Client");
@@ -1614,11 +1624,11 @@ private:
         kj::mv(methodDecls),
         "private:\n"
         "  ::capnp::_::StructReader _reader;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::_::PointerHelpers;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::List;\n"
         "  friend class ::capnp::MessageBuilder;\n"
         "  friend class ::capnp::Orphanage;\n"
@@ -1649,7 +1659,7 @@ private:
         kj::mv(methodDecls),
         "private:\n"
         "  ::capnp::_::StructBuilder _builder;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
         "  friend class ::capnp::Orphanage;\n",
         "};\n"
@@ -1672,7 +1682,7 @@ private:
         kj::mv(methodDecls),
         "private:\n"
         "  ::capnp::AnyPointer::Pipeline _typeless;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
         "};\n"
         "\n");
@@ -1788,55 +1798,96 @@ private:
     auto paramProto = paramSchema.getProto();
     auto resultProto = resultSchema.getProto();
 
-    CppTypeName interfaceTypeName = cppFullName(method.getContainingInterface());
+    auto implicitParamsReader = proto.getImplicitParameters();
+    auto implicitParamsBuilder = kj::heapArrayBuilder<CppTypeName>(implicitParamsReader.size());
+    for (auto param: implicitParamsReader) {
+      implicitParamsBuilder.add(CppTypeName::makeTemplateParam(param.getName()));
+    }
+    auto implicitParams = implicitParamsBuilder.finish();
+
+    kj::String implicitParamsTemplateDecl;
+    if (implicitParams.size() > 0) {
+      implicitParamsTemplateDecl = kj::str(
+          "template <", kj::StringTree(KJ_MAP(p, implicitParams) {
+            return kj::strTree("typename ", p);
+          }, ", "), ">\n");
+    }
+
+
+    CppTypeName interfaceTypeName = cppFullName(method.getContainingInterface(), nullptr);
     CppTypeName paramType;
+    CppTypeName genericParamType;
     if (paramProto.getScopeId() == 0) {
       paramType = interfaceTypeName;
-      paramType.addMemberType(kj::str(titleCase, "Params"));
+      if (implicitParams.size() == 0) {
+        paramType.addMemberType(kj::str(titleCase, "Params"));
+        genericParamType = paramType;
+      } else {
+        genericParamType = paramType;
+        genericParamType.addMemberTemplate(kj::str(titleCase, "Params"), nullptr);
+        paramType.addMemberTemplate(kj::str(titleCase, "Params"),
+                                    kj::heapArray(implicitParams.asPtr()));
+      }
     } else {
-      paramType = cppFullName(paramSchema);
+      paramType = cppFullName(paramSchema, method);
+      genericParamType = cppFullName(paramSchema, nullptr);
     }
     CppTypeName resultType;
+    CppTypeName genericResultType;
     if (resultProto.getScopeId() == 0) {
       resultType = interfaceTypeName;
-      resultType.addMemberType(kj::str(titleCase, "Results"));
+      if (implicitParams.size() == 0) {
+        resultType.addMemberType(kj::str(titleCase, "Results"));
+        genericResultType = resultType;
+      } else {
+        genericResultType = resultType;
+        genericResultType.addMemberTemplate(kj::str(titleCase, "Result"), nullptr);
+        resultType.addMemberTemplate(kj::str(titleCase, "Results"),
+                                     kj::heapArray(implicitParams.asPtr()));
+      }
     } else {
-      resultType = cppFullName(resultSchema);
+      resultType = cppFullName(resultSchema, method);
+      genericResultType = cppFullName(resultSchema, nullptr);
     }
 
     kj::String shortParamType = paramProto.getScopeId() == 0 ?
-        kj::str(titleCase, "Params") : kj::str(paramType);
+        kj::str(titleCase, "Params") : kj::str(genericParamType);
     kj::String shortResultType = resultProto.getScopeId() == 0 ?
-        kj::str(titleCase, "Results") : kj::str(resultType);
+        kj::str(titleCase, "Results") : kj::str(genericResultType);
 
     auto interfaceProto = method.getContainingInterface().getProto();
     uint64_t interfaceId = interfaceProto.getId();
     auto interfaceIdHex = kj::hex(interfaceId);
     uint16_t methodId = method.getIndex();
 
+    auto requestMethodImpl = kj::strTree(
+        templateContext.allDecls(),
+        implicitParamsTemplateDecl,
+        "::capnp::Request<", paramType, ", ", resultType, ">\n",
+        interfaceName, "::Client::", name, "Request(::kj::Maybe< ::capnp::MessageSize> sizeHint) {\n"
+        "  return newCall<", paramType, ", ", resultType, ">(\n"
+        "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
+        "}\n");
+
     return MethodText {
       kj::strTree(
+          implicitParamsTemplateDecl.size() == 0 ? "" : "  ", implicitParamsTemplateDecl,
           "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request(\n"
           "      ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);\n"),
 
       kj::strTree(
           paramProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
-              "  typedef ", paramType, " ", titleCase, "Params;\n"),
+              "  typedef ", genericParamType, " ", titleCase, "Params;\n"),
           resultProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
-              "  typedef ", resultType, " ", titleCase, "Results;\n"),
+              "  typedef ", genericResultType, " ", titleCase, "Results;\n"),
           "  typedef ::capnp::CallContext<", shortParamType, ", ", shortResultType, "> ",
                 titleCase, "Context;\n"
           "  virtual ::kj::Promise<void> ", identifierName, "(", titleCase, "Context context);\n"),
 
-      kj::strTree(),
+      implicitParams.size() == 0 ? kj::strTree() : kj::mv(requestMethodImpl),
 
       kj::strTree(
-          templateContext.allDecls(),
-          "::capnp::Request<", paramType, ", ", resultType, ">\n",
-          interfaceName, "::Client::", name, "Request(::kj::Maybe< ::capnp::MessageSize> sizeHint) {\n"
-          "  return newCall<", paramType, ", ", resultType, ">(\n"
-          "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
-          "}\n",
+          implicitParams.size() == 0 ? kj::mv(requestMethodImpl) : kj::strTree(),
           templateContext.allDecls(),
           "::kj::Promise<void> ", interfaceName, "::Server::", identifierName, "(", titleCase, "Context) {\n"
           "  return ::capnp::Capability::Server::internalUnimplemented(\n"
@@ -1847,7 +1898,7 @@ private:
       kj::strTree(
           "    case ", methodId, ":\n"
           "      return ", identifierName, "(::capnp::Capability::Server::internalGetTypedContext<\n"
-          "          ", paramType, ", ", resultType, ">(context));\n")
+          "          ", genericParamType, ", ", genericResultType, ">(context));\n")
     };
   }
 
@@ -1876,10 +1927,10 @@ private:
     auto hexId = kj::hex(proto.getId());
 
     auto superclasses = KJ_MAP(superclass, schema.getSuperclasses()) {
-      return ExtendInfo { cppFullName(superclass), superclass.getProto().getId() };
+      return ExtendInfo { cppFullName(superclass, nullptr), superclass.getProto().getId() };
     };
 
-    CppTypeName clientName = cppFullName(schema);
+    CppTypeName clientName = cppFullName(schema, nullptr);
     clientName.addMemberType("Client");
 
     kj::StringTree declareText;
@@ -1930,10 +1981,10 @@ private:
           "\n"
           "  Client(decltype(nullptr));\n"
           "  explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);\n"
-          "  template <typename T, typename = ::kj::EnableIf< ::kj::canConvert<T*, Server*>()>>\n"
-          "  Client(::kj::Own<T>&& server);\n"
-          "  template <typename T, typename = ::kj::EnableIf< ::kj::canConvert<T*, Client*>()>>\n"
-          "  Client(::kj::Promise<T>&& promise);\n"
+          "  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Server*>()>>\n"
+          "  Client(::kj::Own<_t>&& server);\n"
+          "  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Client*>()>>\n"
+          "  Client(::kj::Promise<_t>&& promise);\n"
           "  Client(::kj::Exception&& exception);\n"
           "  Client(Client&) = default;\n"
           "  Client(Client&&) = default;\n"
@@ -1976,12 +2027,12 @@ private:
           "    ::kj::Own< ::capnp::ClientHook>&& hook)\n"
           "    : ::capnp::Capability::Client(::kj::mv(hook)) {}\n",
           templateContext.allDecls(),
-          "template <typename T, typename>\n"
-          "inline ", fullName, "::Client::Client(::kj::Own<T>&& server)\n"
+          "template <typename _t, typename>\n"
+          "inline ", fullName, "::Client::Client(::kj::Own<_t>&& server)\n"
           "    : ::capnp::Capability::Client(::kj::mv(server)) {}\n",
           templateContext.allDecls(),
-          "template <typename T, typename>\n"
-          "inline ", fullName, "::Client::Client(::kj::Promise<T>&& promise)\n"
+          "template <typename _t, typename>\n"
+          "inline ", fullName, "::Client::Client(::kj::Promise<_t>&& promise)\n"
           "    : ::capnp::Capability::Client(::kj::mv(promise)) {}\n",
           templateContext.allDecls(),
           "inline ", fullName, "::Client::Client(::kj::Exception&& exception)\n"
@@ -1996,7 +2047,8 @@ private:
           "  ::capnp::Capability::Client::operator=(kj::mv(other));\n"
           "  return *this;\n"
           "}\n"
-          "\n"),
+          "\n",
+          KJ_MAP(m, methods) { return kj::mv(m.inlineDefs); }),
 
       kj::strTree(
           KJ_MAP(m, methods) { return kj::mv(m.sourceDefs); },
@@ -2046,7 +2098,7 @@ private:
     auto proto = schema.getProto();
     auto constProto = proto.getConst();
     auto type = schema.getType();
-    auto typeName_ = typeName(type);
+    auto typeName_ = typeName(type, nullptr);
     auto upperCase = toUpperCase(name);
 
     // Linkage qualifier for non-primitive types.
@@ -2109,7 +2161,8 @@ private:
 
       case schema::Value::LIST: {
         kj::String constType = kj::strTree(
-            "::capnp::_::ConstList<", typeName(type.asList().getElementType()), ">").flatten();
+            "::capnp::_::ConstList<", typeName(type.asList().getElementType(), nullptr), ">")
+            .flatten();
         return ConstText {
           true,
           kj::strTree(linkage, "const ", constType, ' ', upperCase, ";\n"),

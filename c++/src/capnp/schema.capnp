@@ -255,6 +255,10 @@ struct Method {
   # Specifies order in which the methods were declared in the code.
   # Like Struct.Field.codeOrder.
 
+  implicitParameters @7 :List(Node.Parameter);
+  # The parameters listed in [] (typically, type / generic parameters), whose bindings are intended
+  # to be inferred rather than specified explicitly, although not all languages support this.
+
   paramStructType @2 :Id;
   # ID of the parameter struct type.  If a named parameter list was specified in the method
   # declaration (rather than a single struct parameter type) then a corresponding struct type is
@@ -327,6 +331,13 @@ struct Type {
 
         parameterIndex @20 :UInt16;
         # Index of the parameter within the generic type's parameter list.
+      }
+
+      implicitMethodParameter :group {
+        # This is actually a reference to an implicit (generic) parameter of a method. The only
+        # legal context for this type to appear is inside Method.paramBrand or Method.resultBrand.
+
+        parameterIndex @24 :UInt16;
       }
     }
   }

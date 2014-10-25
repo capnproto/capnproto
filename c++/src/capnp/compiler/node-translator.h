@@ -207,16 +207,34 @@ private:
   // The `members` arrays contain only members with ordinal numbers, in code order.  Other members
   // are handled elsewhere.
 
+  struct ImplicitParams {
+    // Represents a set of implicit parameters visible in the current context.
+
+    uint64_t scopeId;
+    // If zero, then any reference to an implciit param in this context should be compiled to a
+    // `implicitMethodParam` AnyPointer. If non-zero, it should be complied to a `parameter`
+    // AnyPointer.
+
+    List<Declaration::BrandParameter>::Reader params;
+  };
+
+  static inline ImplicitParams noImplicitParams() {
+    return { 0, List<Declaration::BrandParameter>::Reader() };
+  }
+
   template <typename InitBrandFunc>
   uint64_t compileParamList(kj::StringPtr methodName, uint16_t ordinal, bool isResults,
                             Declaration::ParamList::Reader paramList,
+                            List<Declaration::BrandParameter>::Reader implicitParams,
                             InitBrandFunc&& initBrand);
   // Compile a param (or result) list and return the type ID of the struct type.
 
-  kj::Maybe<BrandedDecl> compileDeclExpression(Expression::Reader source);
+  kj::Maybe<BrandedDecl> compileDeclExpression(
+      Expression::Reader source, ImplicitParams implicitMethodParams);
   // Compile an expression which is expected to resolve to a declaration or type expression.
 
-  bool compileType(Expression::Reader source, schema::Type::Builder target);
+  bool compileType(Expression::Reader source, schema::Type::Builder target,
+                   ImplicitParams implicitMethodParams);
   // Returns false if there was a problem, in which case value expressions of this type should
   // not be parsed.
 

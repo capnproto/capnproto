@@ -540,11 +540,21 @@ public:
   }
   inline BrandedDecl(decltype(nullptr)) {}
 
+  static BrandedDecl implicitMethodParam(uint index) {
+    // Get a BrandedDecl referring to an implicit method parameter.
+    // (As a hack, we internally represent this as a ResolvedParameter. Sorry.)
+    return BrandedDecl(Resolver::ResolvedParameter { 0, index }, Expression::Reader());
+  }
+
   BrandedDecl(BrandedDecl& other);
   BrandedDecl(BrandedDecl&& other) = default;
 
   BrandedDecl& operator=(BrandedDecl& other);
   BrandedDecl& operator=(BrandedDecl&& other) = default;
+
+  // TODO(cleanup): A lot of the methods below are actually only called within compileAsType(),
+  //   which was originally a method on NodeTranslator, but now is a method here and thus doesn't
+  //   need these to be public. We should privatize most of these.
 
   kj::Maybe<BrandedDecl> applyParams(kj::Array<BrandedDecl> params, Expression::Reader subSource);
   // Treat the declaration as a generic and apply it to the given parameter list.
@@ -753,7 +763,8 @@ public:
   }
 
   kj::Maybe<NodeTranslator::BrandedDecl> compileDeclExpression(
-      Expression::Reader source, Resolver& resolver);
+      Expression::Reader source, Resolver& resolver,
+      ImplicitParams implicitMethodParams);
 
   NodeTranslator::BrandedDecl interpretResolve(
       Resolver& resolver, Resolver::ResolveResult& result, Expression::Reader source);
@@ -959,10 +970,17 @@ bool NodeTranslator::BrandedDecl::compileAsType(
   } else {
     // Oh, this is a type variable.
     auto var = asVariable();
-    auto builder = target.initAnyPointer().initParameter();
-    builder.setScopeId(var.id);
-    builder.setParameterIndex(var.index);
-    return true;
+    if (var.id == 0) {
+      // This is actually a method implicit parameter.
+      auto builder = target.initAnyPointer().initImplicitMethodParameter();
+      builder.setParameterIndex(var.index);
+      return true;
+    } else {
+      auto builder = target.initAnyPointer().initParameter();
+      builder.setScopeId(var.id);
+      builder.setParameterIndex(var.index);
+      return true;
+    }
   }
 }
 
@@ -1151,6 +1169,9 @@ NodeTranslator::BrandedDecl NodeTranslator::BrandScope::decompileType(
             return BrandedDecl(Resolver::ResolvedParameter {id, index}, Expression::Reader());
           }
         }
+
+        case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
+          KJ_FAIL_ASSERT("Alias pointed to implicit method type parameter?");
       }
 
       KJ_UNREACHABLE;
@@ -1161,7 +1182,8 @@ NodeTranslator::BrandedDecl NodeTranslator::BrandScope::decompileType(
 }
 
 kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclExpression(
-    Expression::Reader source, Resolver& resolver) {
+    Expression::Reader source, Resolver& resolver,
+    ImplicitParams implicitMethodParams) {
   switch (source.which()) {
     case Expression::UNKNOWN:
       // Error reported earlier.
@@ -1179,10 +1201,25 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclEx
 
     case Expression::RELATIVE_NAME: {
       auto name = source.getRelativeName();
-      KJ_IF_MAYBE(r, resolver.resolve(name.getValue())) {
+      auto nameValue = name.getValue();
+
+      // Check implicit method params first.
+      for (auto i: kj::indices(implicitMethodParams.params)) {
+        if (implicitMethodParams.params[i].getName() == nameValue) {
+          if (implicitMethodParams.scopeId == 0) {
+            return BrandedDecl::implicitMethodParam(i);
+          } else {
+            return BrandedDecl(Resolver::ResolvedParameter {
+                implicitMethodParams.scopeId, static_cast<uint16_t>(i) },
+                Expression::Reader());
+          }
+        }
+      }
+
+      KJ_IF_MAYBE(r, resolver.resolve(nameValue)) {
         return interpretResolve(resolver, *r, source);
       } else {
-        errorReporter.addErrorOn(name, kj::str("Not defined: ", name.getValue()));
+        errorReporter.addErrorOn(name, kj::str("Not defined: ", nameValue));
         return nullptr;
       }
     }
@@ -1211,7 +1248,7 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclEx
 
     case Expression::APPLICATION: {
       auto app = source.getApplication();
-      KJ_IF_MAYBE(decl, compileDeclExpression(app.getFunction(), resolver)) {
+      KJ_IF_MAYBE(decl, compileDeclExpression(app.getFunction(), resolver, implicitMethodParams)) {
         // Compile all params.
         auto params = app.getParams();
         auto compiledParams = kj::heapArrayBuilder<BrandedDecl>(params.size());
@@ -1221,7 +1258,7 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclEx
             errorReporter.addErrorOn(param.getNamed(), "Named parameter not allowed here.");
           }
 
-          KJ_IF_MAYBE(d, compileDeclExpression(param.getValue(), resolver)) {
+          KJ_IF_MAYBE(d, compileDeclExpression(param.getValue(), resolver, implicitMethodParams)) {
             compiledParams.add(kj::mv(*d));
           } else {
             // Param failed to compile. Error was already reported.
@@ -1248,7 +1285,7 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclEx
 
     case Expression::MEMBER: {
       auto member = source.getMember();
-      KJ_IF_MAYBE(decl, compileDeclExpression(member.getParent(), resolver)) {
+      KJ_IF_MAYBE(decl, compileDeclExpression(member.getParent(), resolver, implicitMethodParams)) {
         auto name = member.getName();
         KJ_IF_MAYBE(memberDecl, decl->getMember(name.getValue(), source)) {
           return kj::mv(*memberDecl);
@@ -1497,14 +1534,14 @@ void NodeTranslator::DuplicateNameDetector::check(
 void NodeTranslator::compileConst(Declaration::Const::Reader decl,
                                   schema::Node::Const::Builder builder) {
   auto typeBuilder = builder.initType();
-  if (compileType(decl.getType(), typeBuilder)) {
+  if (compileType(decl.getType(), typeBuilder, noImplicitParams())) {
     compileBootstrapValue(decl.getValue(), typeBuilder.asReader(), builder.initValue());
   }
 }
 
 void NodeTranslator::compileAnnotation(Declaration::Annotation::Reader decl,
                                        schema::Node::Annotation::Builder builder) {
-  compileType(decl.getType(), builder.initType());
+  compileType(decl.getType(), builder.initType(), noImplicitParams());
 
   // Dynamically copy over the values of all of the "targets" members.
   DynamicStruct::Reader src = decl;
@@ -1585,8 +1622,9 @@ void NodeTranslator::compileEnum(Void decl,
 
 class NodeTranslator::StructTranslator {
 public:
-  explicit StructTranslator(NodeTranslator& translator)
-      : translator(translator), errorReporter(translator.errorReporter) {}
+  explicit StructTranslator(NodeTranslator& translator, ImplicitParams implicitMethodParams)
+      : translator(translator), errorReporter(translator.errorReporter),
+        implicitMethodParams(implicitMethodParams) {}
   KJ_DISALLOW_COPY(StructTranslator);
 
   void translate(Void decl, List<Declaration>::Reader members, schema::Node::Builder builder) {
@@ -1606,6 +1644,7 @@ public:
 private:
   NodeTranslator& translator;
   ErrorReporter& errorReporter;
+  ImplicitParams implicitMethodParams;
   StructLayout layout;
   kj::Arena arena;
 
@@ -1963,7 +2002,7 @@ private:
         case Declaration::FIELD: {
           auto slot = fieldBuilder.initSlot();
           auto typeBuilder = slot.initType();
-          if (translator.compileType(member.fieldType, typeBuilder)) {
+          if (translator.compileType(member.fieldType, typeBuilder, implicitMethodParams)) {
             if (member.hasDefaultValue) {
               translator.compileBootstrapValue(member.fieldDefaultValue,
                                                typeBuilder, slot.initDefaultValue());
@@ -2099,7 +2138,7 @@ private:
 
 void NodeTranslator::compileStruct(Void decl, List<Declaration>::Reader members,
                                    schema::Node::Builder builder) {
-  StructTranslator(*this).translate(decl, members, builder);
+  StructTranslator(*this, noImplicitParams()).translate(decl, members, builder);
 }
 
 // -------------------------------------------------------------------
@@ -2116,7 +2155,7 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
   for (uint i: kj::indices(superclassesDecl)) {
     auto superclass = superclassesDecl[i];
 
-    KJ_IF_MAYBE(decl, compileDeclExpression(superclass)) {
+    KJ_IF_MAYBE(decl, compileDeclExpression(superclass, noImplicitParams())) {
       KJ_IF_MAYBE(kind, decl->getKind()) {
         if (*kind == Declaration::INTERFACE) {
           auto s = superclassesBuilder[i];
@@ -2163,8 +2202,15 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
     methodBuilder.setName(methodDecl.getName().getValue());
     methodBuilder.setCodeOrder(codeOrder);
 
+    auto implicits = methodDecl.getParameters();
+    auto implicitsBuilder = methodBuilder.initImplicitParameters(implicits.size());
+    for (auto i: kj::indices(implicits)) {
+      implicitsBuilder[i].setName(implicits[i].getName());
+    }
+
     methodBuilder.setParamStructType(compileParamList(
-        methodDecl.getName().getValue(), ordinal, false, methodReader.getParams(),
+        methodDecl.getName().getValue(), ordinal, false,
+        methodReader.getParams(), implicits,
         [&]() { return methodBuilder.initParamBrand(); }));
 
     auto results = methodReader.getResults();
@@ -2177,7 +2223,8 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
       // default to an empty list.
     }
     methodBuilder.setResultStructType(compileParamList(
-        methodDecl.getName().getValue(), ordinal, true, resultList,
+        methodDecl.getName().getValue(), ordinal, true,
+        resultList, implicits,
         [&]() { return methodBuilder.initResultBrand(); }));
 
     methodBuilder.adoptAnnotations(compileAnnotationApplications(
@@ -2188,7 +2235,9 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
 template <typename InitBrandFunc>
 uint64_t NodeTranslator::compileParamList(
     kj::StringPtr methodName, uint16_t ordinal, bool isResults,
-    Declaration::ParamList::Reader paramList, InitBrandFunc&& initBrand) {
+    Declaration::ParamList::Reader paramList,
+    List<Declaration::BrandParameter>::Reader implicitParams,
+    InitBrandFunc&& initBrand) {
   switch (paramList.which()) {
     case Declaration::ParamList::NAMED_LIST: {
       auto newStruct = orphanage.newOrphan<schema::Node>();
@@ -2200,20 +2249,41 @@ uint64_t NodeTranslator::compileParamList(
       builder.setId(generateMethodParamsId(parent.getId(), ordinal, isResults));
       builder.setDisplayName(kj::str(parent.getDisplayName(), '.', typeName));
       builder.setDisplayNamePrefixLength(builder.getDisplayName().size() - typeName.size());
-      builder.setIsGeneric(parent.getIsGeneric());
+      builder.setIsGeneric(parent.getIsGeneric() || implicitParams.size() > 0);
       builder.setScopeId(0);  // detached struct type
 
       builder.initStruct();
 
-      StructTranslator(*this).translate(paramList.getNamedList(), builder);
+      // Note that the struct we create here has a brand parameter list mirrioring the method's
+      // implicit parameter list. Of course, fields inside the struct using the method's implicit
+      // params as types actually need to refer to them as regular params, so we create an
+      // ImplicitParams with a scopeId here.
+      StructTranslator(*this, ImplicitParams { builder.getId(), implicitParams })
+          .translate(paramList.getNamedList(), builder);
       uint64_t id = builder.getId();
       paramStructs.add(kj::mv(newStruct));
 
-      localBrand->compile(initBrand);
+      auto brand = localBrand->push(builder.getId(), implicitParams.size());
+
+      if (implicitParams.size() > 0) {
+        auto implicitDecls = kj::heapArrayBuilder<BrandedDecl>(implicitParams.size());
+        auto implicitBuilder = builder.initParameters(implicitParams.size());
+
+        for (auto i: kj::indices(implicitParams)) {
+          auto param = implicitParams[i];
+          implicitDecls.add(BrandedDecl::implicitMethodParam(i));
+          implicitBuilder[i].setName(param.getName());
+        }
+
+        brand->setParams(implicitDecls.finish(), Declaration::STRUCT, Expression::Reader());
+      }
+
+      brand->compile(initBrand);
       return id;
     }
     case Declaration::ParamList::TYPE:
-      KJ_IF_MAYBE(target, compileDeclExpression(paramList.getType())) {
+      KJ_IF_MAYBE(target, compileDeclExpression(
+          paramList.getType(), ImplicitParams { 0, implicitParams })) {
         KJ_IF_MAYBE(kind, target->getKind()) {
           if (*kind == Declaration::STRUCT) {
             return target->getIdAndFillBrand(kj::fwd<InitBrandFunc>(initBrand));
@@ -2355,23 +2425,25 @@ static kj::String expressionString(Expression::Reader name) {
 // -------------------------------------------------------------------
 
 kj::Maybe<NodeTranslator::BrandedDecl>
-NodeTranslator::compileDeclExpression(Expression::Reader source) {
-  return localBrand->compileDeclExpression(source, resolver);
+NodeTranslator::compileDeclExpression(
+    Expression::Reader source, ImplicitParams implicitMethodParams) {
+  return localBrand->compileDeclExpression(source, resolver, implicitMethodParams);
 }
 
 /* static */ kj::Maybe<NodeTranslator::Resolver::ResolveResult> NodeTranslator::compileDecl(
     uint64_t scopeId, uint scopeParameterCount, Resolver& resolver, ErrorReporter& errorReporter,
     Expression::Reader expression, schema::Brand::Builder brandBuilder) {
   auto scope = kj::refcounted<BrandScope>(errorReporter, scopeId, scopeParameterCount, resolver);
-  KJ_IF_MAYBE(decl, scope->compileDeclExpression(expression, resolver)) {
+  KJ_IF_MAYBE(decl, scope->compileDeclExpression(expression, resolver, noImplicitParams())) {
     return decl->asResolveResult(scope->getScopeId(), brandBuilder);
   } else {
     return nullptr;
   }
 }
 
-bool NodeTranslator::compileType(Expression::Reader source, schema::Type::Builder target) {
-  KJ_IF_MAYBE(decl, compileDeclExpression(source)) {
+bool NodeTranslator::compileType(Expression::Reader source, schema::Type::Builder target,
+                                 ImplicitParams implicitMethodParams) {
+  KJ_IF_MAYBE(decl, compileDeclExpression(source, implicitMethodParams)) {
     return decl->compileAsType(errorReporter, target);
   } else {
     return false;
@@ -2785,7 +2857,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     Expression::Reader source, bool isBootstrap) {
   // Look up the constant decl.
   NodeTranslator::BrandedDecl constDecl = nullptr;
-  KJ_IF_MAYBE(decl, compileDeclExpression(source)) {
+  KJ_IF_MAYBE(decl, compileDeclExpression(source, noImplicitParams())) {
     constDecl = *decl;
   } else {
     // Lookup will have reported an error.
@@ -2896,7 +2968,7 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
     annotationBuilder.initValue().setVoid();
 
     auto name = annotation.getName();
-    KJ_IF_MAYBE(decl, compileDeclExpression(name)) {
+    KJ_IF_MAYBE(decl, compileDeclExpression(name, noImplicitParams())) {
       KJ_IF_MAYBE(kind, decl->getKind()) {
         if (*kind != Declaration::ANNOTATION) {
           errorReporter.addErrorOn(name, kj::str(
