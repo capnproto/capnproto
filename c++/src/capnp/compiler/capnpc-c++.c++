@@ -1841,7 +1841,7 @@ private:
         genericResultType = resultType;
       } else {
         genericResultType = resultType;
-        genericResultType.addMemberTemplate(kj::str(titleCase, "Result"), nullptr);
+        genericResultType.addMemberTemplate(kj::str(titleCase, "Results"), nullptr);
         resultType.addMemberTemplate(kj::str(titleCase, "Results"),
                                      kj::heapArray(implicitParams.asPtr()));
       }
