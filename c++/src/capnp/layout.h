@@ -213,17 +213,11 @@ struct StructSize {
   WordCount16 data;
   WirePointerCount16 pointers;
 
-  FieldSize preferredListEncoding;
-  // Preferred size to use when encoding a list of this struct.  This is INLINE_COMPOSITE if and
-  // only if the struct is larger than one word; otherwise the struct list can be encoded more
-  // efficiently by encoding it as if it were some primitive type.
-
   inline constexpr WordCount total() const { return data + pointers * WORDS_PER_POINTER; }
 
   StructSize() = default;
-  inline constexpr StructSize(WordCount data, WirePointerCount pointers,
-                              FieldSize preferredListEncoding)
-      : data(data), pointers(pointers), preferredListEncoding(preferredListEncoding) {}
+  inline constexpr StructSize(WordCount data, WirePointerCount pointers)
+      : data(data), pointers(pointers) {}
 };
 
 template <typename T> struct StructSize_;
@@ -619,13 +613,12 @@ public:
         step(0 * BITS / ELEMENTS) {}
 
   inline word* getLocation() {
-    // Get the object's location.  Only valid for independently-allocated objects (i.e. not list
-    // elements).
+    // Get the object's location.
 
-    if (step * ELEMENTS <= BITS_PER_WORD * WORDS) {
-      return reinterpret_cast<word*>(ptr);
-    } else {
+    if (elementSize == FieldSize::INLINE_COMPOSITE) {
       return reinterpret_cast<word*>(ptr) - POINTER_SIZE_IN_WORDS;
+    } else {
+      return reinterpret_cast<word*>(ptr);
     }
   }
 
@@ -670,12 +663,17 @@ private:
   // The struct properties to use when interpreting the elements as structs.  All lists can be
   // interpreted as struct lists, so these are always filled in.
 
+  FieldSize elementSize;
+  // The element size as a FieldSize. This is only really needed to disambiguate INLINE_COMPOSITE
+  // from other types when the overall size is exactly zero or one words.
+
   inline ListBuilder(SegmentBuilder* segment, void* ptr,
                      decltype(BITS / ELEMENTS) step, ElementCount size,
-                     BitCount structDataSize, WirePointerCount structPointerCount)
+                     BitCount structDataSize, WirePointerCount structPointerCount,
+                     FieldSize elementSize)
       : segment(segment), ptr(reinterpret_cast<byte*>(ptr)),
         elementCount(size), step(step), structDataSize(structDataSize),
-        structPointerCount(structPointerCount) {}
+        structPointerCount(structPointerCount), elementSize(elementSize) {}
 
   friend class StructBuilder;
   friend struct WireHelpers;
@@ -718,6 +716,10 @@ private:
   // The struct properties to use when interpreting the elements as structs.  All lists can be
   // interpreted as struct lists, so these are always filled in.
 
+  FieldSize elementSize;
+  // The element size as a FieldSize. This is only really needed to disambiguate INLINE_COMPOSITE
+  // from other types when the overall size is exactly zero or one words.
+
   int nestingLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
@@ -725,10 +727,11 @@ private:
   inline ListReader(SegmentReader* segment, const void* ptr,
                     ElementCount elementCount, decltype(BITS / ELEMENTS) step,
                     BitCount structDataSize, WirePointerCount structPointerCount,
-                    int nestingLimit)
+                    FieldSize elementSize, int nestingLimit)
       : segment(segment), ptr(reinterpret_cast<const byte*>(ptr)), elementCount(elementCount),
         step(step), structDataSize(structDataSize),
-        structPointerCount(structPointerCount), nestingLimit(nestingLimit) {}
+        structPointerCount(structPointerCount), elementSize(elementSize),
+        nestingLimit(nestingLimit) {}
 
   friend class StructReader;
   friend class ListBuilder;

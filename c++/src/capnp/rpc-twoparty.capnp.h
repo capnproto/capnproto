@@ -43,7 +43,7 @@ struct SturdyRefHostId {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(e615e371b1036508, 1, 0, TWO_BYTES);
+  CAPNP_DECLARE_STRUCT(e615e371b1036508, 1, 0);
 };
 
 struct ProvisionId {
@@ -53,7 +53,7 @@ struct ProvisionId {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b88d09a9c5f39817, 1, 0, FOUR_BYTES);
+  CAPNP_DECLARE_STRUCT(b88d09a9c5f39817, 1, 0);
 };
 
 struct RecipientId {
@@ -63,7 +63,7 @@ struct RecipientId {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(89f389b6fd4082c1, 0, 0, VOID);
+  CAPNP_DECLARE_STRUCT(89f389b6fd4082c1, 0, 0);
 };
 
 struct ThirdPartyCapId {
@@ -73,7 +73,7 @@ struct ThirdPartyCapId {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b47f4979672cb59d, 0, 0, VOID);
+  CAPNP_DECLARE_STRUCT(b47f4979672cb59d, 0, 0);
 };
 
 struct JoinKeyPart {
@@ -83,7 +83,7 @@ struct JoinKeyPart {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(95b29059097fca83, 1, 0, EIGHT_BYTES);
+  CAPNP_DECLARE_STRUCT(95b29059097fca83, 1, 0);
 };
 
 struct JoinResult {
@@ -93,7 +93,7 @@ struct JoinResult {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9d263a3630b7ebee, 1, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(9d263a3630b7ebee, 1, 1);
 };
 
 // =======================================================================================

@@ -258,8 +258,7 @@ struct List<T, Kind::STRUCT> {
       // expanded under any circumstances.  We're just going to throw it away anyway, and
       // transferContentFrom() already carefully compares the struct sizes before transferring.
       builder.getStructElement(index * ELEMENTS).transferContentFrom(
-          orphan.builder.asStruct(_::StructSize(
-              0 * WORDS, 0 * POINTERS, _::FieldSize::VOID)));
+          orphan.builder.asStruct(_::StructSize(0 * WORDS, 0 * POINTERS)));
     }
     inline void setWithCaveats(uint index, const typename T::Reader& reader) {
       // Mostly behaves like you'd expect `set` to behave, but with a caveat originating from

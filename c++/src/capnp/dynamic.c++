@@ -99,8 +99,7 @@ inline _::StructSize structSizeFromSchema(StructSchema schema) {
   auto node = schema.getProto().getStruct();
   return _::StructSize(
       node.getDataWordCount() * WORDS,
-      node.getPointerCount() * POINTERS,
-      static_cast<_::FieldSize>(node.getPreferredListEncoding()));
+      node.getPointerCount() * POINTERS);
 }
 
 }  // namespace

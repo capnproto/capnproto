@@ -42,7 +42,7 @@ struct Token {
     BINARY_LITERAL,
   };
 
-  CAPNP_DECLARE_STRUCT(91cc55cd57de5419, 3, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(91cc55cd57de5419, 3, 1);
 };
 
 struct Statement {
@@ -56,7 +56,7 @@ struct Statement {
     BLOCK,
   };
 
-  CAPNP_DECLARE_STRUCT(c6725e678d60fa37, 2, 3, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(c6725e678d60fa37, 2, 3);
 };
 
 struct LexedTokens {
@@ -66,7 +66,7 @@ struct LexedTokens {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9e69a92512b19d18, 0, 1, POINTER);
+  CAPNP_DECLARE_STRUCT(9e69a92512b19d18, 0, 1);
 };
 
 struct LexedStatements {
@@ -76,7 +76,7 @@ struct LexedStatements {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(a11f97b9d6c73dd4, 0, 1, POINTER);
+  CAPNP_DECLARE_STRUCT(a11f97b9d6c73dd4, 0, 1);
 };
 
 // =======================================================================================

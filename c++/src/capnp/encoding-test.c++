@@ -579,6 +579,8 @@ TEST(Encoding, ListUpgrade) {
     EXPECT_EQ(56u, l[2].getF());
   }
 
+  root.getAnyPointerField().setAs<List<uint16_t>>({12, 34, 56});
+
   {
     kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
       reader.getAnyPointerField().getAs<List<uint32_t>>();
@@ -678,25 +680,16 @@ TEST(Encoding, BitListDowngradeFromStruct) {
 }
 
 TEST(Encoding, BitListUpgrade) {
+  // No longer supported!
+
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestAnyPointer>();
 
   root.getAnyPointerField().setAs<List<bool>>({true, false, true, true});
 
   {
-    auto l = root.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
-    ASSERT_EQ(4u, l.size());
-    EXPECT_TRUE(l[0].getF());
-    EXPECT_FALSE(l[1].getF());
-    EXPECT_TRUE(l[2].getF());
-    EXPECT_TRUE(l[3].getF());
-  }
-
-  auto reader = root.asReader();
-
-  {
     kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
-      reader.getAnyPointerField().getAs<List<uint8_t>>();
+      root.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
 #if !KJ_NO_EXCEPTIONS
       ADD_FAILURE() << "Should have thrown an exception.";
 #endif
@@ -705,26 +698,18 @@ TEST(Encoding, BitListUpgrade) {
     EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
   }
 
+  auto reader = root.asReader();
+
   {
-    auto l = reader.getAnyPointerField().getAs<List<test::TestFieldZeroIsBit>>();
-    ASSERT_EQ(4u, l.size());
-    EXPECT_TRUE(l[0].getBit());
-    EXPECT_FALSE(l[1].getBit());
-    EXPECT_TRUE(l[2].getBit());
-    EXPECT_TRUE(l[3].getBit());
+    kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
+      reader.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
+#if !KJ_NO_EXCEPTIONS
+      ADD_FAILURE() << "Should have thrown an exception.";
+#endif
+    });
 
-    // Other fields are defaulted.
-    EXPECT_TRUE(l[0].getSecondBit());
-    EXPECT_TRUE(l[1].getSecondBit());
-    EXPECT_TRUE(l[2].getSecondBit());
-    EXPECT_TRUE(l[3].getSecondBit());
-    EXPECT_EQ(123u, l[0].getThirdField());
-    EXPECT_EQ(123u, l[1].getThirdField());
-    EXPECT_EQ(123u, l[2].getThirdField());
-    EXPECT_EQ(123u, l[3].getThirdField());
+    EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
   }
-
-  checkList(reader.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
 }
 
 TEST(Encoding, UpgradeStructInBuilder) {
@@ -1078,8 +1063,9 @@ TEST(Encoding, UpgradeListInBuilder) {
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 
     checkList(orig, {true, false, true, true});
-    checkUpgradedList(root, {1, 0, 1, 1}, {"", "", "", ""});
-    checkList(orig, {false, false, false, false});  // old location zero'd during upgrade
+
+    // Can't upgrade bit lists. (This used to be supported.)
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<test::TestNewVersion>>());
   }
 
   // -----------------------------------------------------------------
@@ -1207,29 +1193,6 @@ TEST(Encoding, UpgradeListInBuilder) {
   // list to a multi-word struct, and a multi-word struct to every primitive list.  But we haven't
   // tried upgrading primitive lists to sub-word structs.
 
-  // Upgrade from bool.
-  root.getAnyPointerField().setAs<List<bool>>({true, false, true, true});
-  {
-    auto orig = root.asReader().getAnyPointerField().getAs<List<bool>>();
-    checkList(orig, {true, false, true, true});
-    auto l = root.getAnyPointerField().getAs<List<test::TestLists::Struct16>>();
-    checkList(orig, {false, false, false, false});  // old location zero'd during upgrade
-    ASSERT_EQ(4u, l.size());
-    EXPECT_EQ(1u, l[0].getF());
-    EXPECT_EQ(0u, l[1].getF());
-    EXPECT_EQ(1u, l[2].getF());
-    EXPECT_EQ(1u, l[3].getF());
-    l[0].setF(12573);
-    l[1].setF(3251);
-    l[2].setF(9238);
-    l[3].setF(5832);
-  }
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, true, false, false});
-  checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {12573u, 3251u, 9238u, 5832u});
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint64_t>>());
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
-
   // Upgrade from multi-byte, sub-word data.
   root.getAnyPointerField().setAs<List<uint16_t>>({12u, 34u, 56u, 78u});
   {
@@ -1252,7 +1215,8 @@ TEST(Encoding, UpgradeListInBuilder) {
   checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0x1235u, 0x2879u, 0x3082u, 0x8948u});
   checkList(root.getAnyPointerField().getAs<List<uint32_t>>(),
             {0x65ac1235u, 0x13f12879u, 0x33423082u, 0x12988948u});
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint64_t>>());
+  checkList(root.getAnyPointerField().getAs<List<uint64_t>>(),
+            {0x65ac1235u, 0x13f12879u, 0x33423082u, 0x12988948u});
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 
   // Upgrade from void -> data struct
@@ -1271,8 +1235,8 @@ TEST(Encoding, UpgradeListInBuilder) {
   }
   checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, true, false, false});
   checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {12573u, 3251u, 9238u, 5832u});
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint64_t>>());
+  checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {12573u, 3251u, 9238u, 5832u});
+  checkList(root.getAnyPointerField().getAs<List<uint64_t>>(), {12573u, 3251u, 9238u, 5832u});
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 
   // Upgrade from void -> pointer struct
@@ -1295,10 +1259,10 @@ TEST(Encoding, UpgradeListInBuilder) {
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint64_t>>());
   checkList(root.getAnyPointerField().getAs<List<Text>>(), {"foo", "bar", "baz", "qux"});
 
-  // Verify that we cannot "side-grade" a pointer list to a data struct list, or a data list to
+  // Verify that we cannot "side-grade" a pointer list to a data list, or a data list to
   // a pointer struct list.
   root.getAnyPointerField().setAs<List<Text>>({"foo", "bar", "baz", "qux"});
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<test::TestLists::Struct32>>());
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
   root.getAnyPointerField().setAs<List<uint32_t>>({12, 34, 56, 78});
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 }

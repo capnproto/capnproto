@@ -520,23 +520,21 @@ inline constexpr uint sizeInWords() {
     constexpr uint64_t EnumInfo<type>::typeId; \
     constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema
 
-#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
     struct _capnpPrivate { \
       struct IsStruct; \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::Kind kind = ::capnp::Kind::STRUCT; \
       static constexpr ::capnp::_::StructSize structSize = ::capnp::_::StructSize( \
-          dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS, \
-          ::capnp::_::FieldSize::preferredElementEncoding); \
+          dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS); \
       static inline ::capnp::word const* const encodedSchema() { return ::capnp::schemas::bp_##id; } \
       static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id;
-#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding) \
-    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount) \
+    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
       static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand; \
     }
-#define CAPNP_DECLARE_TEMPLATE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding, \
-                                      ...) \
-    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+#define CAPNP_DECLARE_TEMPLATE_STRUCT(id, dataWordSize, pointerCount, ...) \
+    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
       static const ::capnp::_::RawBrandedSchema::Scope brandScopes[]; \
       static const ::capnp::_::RawBrandedSchema::Binding brandBindings[]; \
       static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[]; \

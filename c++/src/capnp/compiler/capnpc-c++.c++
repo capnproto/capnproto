@@ -1746,8 +1746,7 @@ private:
     auto hexId = kj::hex(proto.getId());
 
     kj::StringTree declareText = kj::strTree(hexId, ", ",
-        structNode.getDataWordCount(), ", ", structNode.getPointerCount(), ", ",
-        FIELD_SIZE_NAMES[static_cast<uint>(structNode.getPreferredListEncoding())]);
+        structNode.getDataWordCount(), ", ", structNode.getPointerCount());
     kj::StringTree defineText = kj::strTree(
         macroParam(fullName), ", ", macroParam(templateContext.allDecls().flatten()), ", ", hexId);
 

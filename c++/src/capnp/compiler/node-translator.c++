@@ -2107,26 +2107,6 @@ private:
     structBuilder.setPointerCount(layout.getTop().pointerCount);
     structBuilder.setPreferredListEncoding(schema::ElementSize::INLINE_COMPOSITE);
 
-    if (layout.getTop().pointerCount == 0) {
-      if (layout.getTop().dataWordCount == 0) {
-        structBuilder.setPreferredListEncoding(schema::ElementSize::EMPTY);
-      } else if (layout.getTop().dataWordCount == 1) {
-        switch (layout.getTop().holes.getFirstWordUsed()) {
-          case 0: structBuilder.setPreferredListEncoding(schema::ElementSize::BIT); break;
-          case 1:
-          case 2:
-          case 3: structBuilder.setPreferredListEncoding(schema::ElementSize::BYTE); break;
-          case 4: structBuilder.setPreferredListEncoding(schema::ElementSize::TWO_BYTES); break;
-          case 5: structBuilder.setPreferredListEncoding(schema::ElementSize::FOUR_BYTES); break;
-          case 6: structBuilder.setPreferredListEncoding(schema::ElementSize::EIGHT_BYTES); break;
-          default: KJ_FAIL_ASSERT("Expected 0, 1, 2, 3, 4, 5, or 6."); break;
-        }
-      }
-    } else if (layout.getTop().pointerCount == 1 &&
-               layout.getTop().dataWordCount == 0) {
-      structBuilder.setPreferredListEncoding(schema::ElementSize::POINTER);
-    }
-
     for (auto& group: translator.groups) {
       auto groupBuilder = group.get().getStruct();
       groupBuilder.setDataWordCount(structBuilder.getDataWordCount());

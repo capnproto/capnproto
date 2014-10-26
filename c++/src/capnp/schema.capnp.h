@@ -87,7 +87,7 @@ struct Node {
   struct Const;
   struct Annotation;
 
-  CAPNP_DECLARE_STRUCT(e682ab4cf923a417, 5, 6, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(e682ab4cf923a417, 5, 6);
 };
 
 struct Node::Parameter {
@@ -97,7 +97,7 @@ struct Node::Parameter {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b9521bccf10fa3b1, 0, 1, POINTER);
+  CAPNP_DECLARE_STRUCT(b9521bccf10fa3b1, 0, 1);
 };
 
 struct Node::NestedNode {
@@ -107,7 +107,7 @@ struct Node::NestedNode {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(debf55bbfa0fc242, 1, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(debf55bbfa0fc242, 1, 1);
 };
 
 struct Node::Struct {
@@ -117,7 +117,7 @@ struct Node::Struct {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9ea0b19b37fb4435, 5, 6, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(9ea0b19b37fb4435, 5, 6);
 };
 
 struct Node::Enum {
@@ -127,7 +127,7 @@ struct Node::Enum {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b54ab3364333f598, 5, 6, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(b54ab3364333f598, 5, 6);
 };
 
 struct Node::Interface {
@@ -137,7 +137,7 @@ struct Node::Interface {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(e82753cff0c2218f, 5, 6, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(e82753cff0c2218f, 5, 6);
 };
 
 struct Node::Const {
@@ -147,7 +147,7 @@ struct Node::Const {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b18aa5ac7a0d9420, 5, 6, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(b18aa5ac7a0d9420, 5, 6);
 };
 
 struct Node::Annotation {
@@ -157,7 +157,7 @@ struct Node::Annotation {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(ec1619d4400a0290, 5, 6, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(ec1619d4400a0290, 5, 6);
 };
 
 struct Field {
@@ -175,7 +175,7 @@ struct Field {
   struct Group;
   struct Ordinal;
 
-  CAPNP_DECLARE_STRUCT(9aad50a41f4af45f, 3, 4, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(9aad50a41f4af45f, 3, 4);
 };
 
 struct Field::Slot {
@@ -185,7 +185,7 @@ struct Field::Slot {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(c42305476bb4746f, 3, 4, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(c42305476bb4746f, 3, 4);
 };
 
 struct Field::Group {
@@ -195,7 +195,7 @@ struct Field::Group {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(cafccddb68db1d11, 3, 4, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(cafccddb68db1d11, 3, 4);
 };
 
 struct Field::Ordinal {
@@ -209,7 +209,7 @@ struct Field::Ordinal {
     EXPLICIT,
   };
 
-  CAPNP_DECLARE_STRUCT(bb90d5c287870be6, 3, 4, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(bb90d5c287870be6, 3, 4);
 };
 
 struct Enumerant {
@@ -219,7 +219,7 @@ struct Enumerant {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(978a7cebdc549a4d, 1, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(978a7cebdc549a4d, 1, 2);
 };
 
 struct Superclass {
@@ -229,7 +229,7 @@ struct Superclass {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(a9962a9ed0a4d7f8, 1, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(a9962a9ed0a4d7f8, 1, 1);
 };
 
 struct Method {
@@ -239,7 +239,7 @@ struct Method {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9500cce23b334d80, 3, 5, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(9500cce23b334d80, 3, 5);
 };
 
 struct Type {
@@ -275,7 +275,7 @@ struct Type {
   struct Interface;
   struct AnyPointer;
 
-  CAPNP_DECLARE_STRUCT(d07378ede1f9cc60, 3, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(d07378ede1f9cc60, 3, 1);
 };
 
 struct Type::List {
@@ -285,7 +285,7 @@ struct Type::List {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(87e739250a60ea97, 3, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(87e739250a60ea97, 3, 1);
 };
 
 struct Type::Enum {
@@ -295,7 +295,7 @@ struct Type::Enum {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9e0e78711a7f87a9, 3, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(9e0e78711a7f87a9, 3, 1);
 };
 
 struct Type::Struct {
@@ -305,7 +305,7 @@ struct Type::Struct {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(ac3a6f60ef4cc6d3, 3, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(ac3a6f60ef4cc6d3, 3, 1);
 };
 
 struct Type::Interface {
@@ -315,7 +315,7 @@ struct Type::Interface {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(ed8bca69f7fb0cbf, 3, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(ed8bca69f7fb0cbf, 3, 1);
 };
 
 struct Type::AnyPointer {
@@ -332,7 +332,7 @@ struct Type::AnyPointer {
   struct Parameter;
   struct ImplicitMethodParameter;
 
-  CAPNP_DECLARE_STRUCT(c2573fe8a23e49f1, 3, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(c2573fe8a23e49f1, 3, 1);
 };
 
 struct Type::AnyPointer::Parameter {
@@ -342,7 +342,7 @@ struct Type::AnyPointer::Parameter {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9dd1f724f4614a85, 3, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(9dd1f724f4614a85, 3, 1);
 };
 
 struct Type::AnyPointer::ImplicitMethodParameter {
@@ -352,7 +352,7 @@ struct Type::AnyPointer::ImplicitMethodParameter {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(baefc9120c56e274, 3, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(baefc9120c56e274, 3, 1);
 };
 
 struct Brand {
@@ -364,7 +364,7 @@ struct Brand {
   struct Scope;
   struct Binding;
 
-  CAPNP_DECLARE_STRUCT(903455f06065422b, 0, 1, POINTER);
+  CAPNP_DECLARE_STRUCT(903455f06065422b, 0, 1);
 };
 
 struct Brand::Scope {
@@ -378,7 +378,7 @@ struct Brand::Scope {
     INHERIT,
   };
 
-  CAPNP_DECLARE_STRUCT(abd73485a9636bc9, 2, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(abd73485a9636bc9, 2, 1);
 };
 
 struct Brand::Binding {
@@ -392,7 +392,7 @@ struct Brand::Binding {
     TYPE,
   };
 
-  CAPNP_DECLARE_STRUCT(c863cd16969ee7fc, 1, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(c863cd16969ee7fc, 1, 1);
 };
 
 struct Value {
@@ -423,7 +423,7 @@ struct Value {
     ANY_POINTER,
   };
 
-  CAPNP_DECLARE_STRUCT(ce23dcd2d7b00c9b, 2, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(ce23dcd2d7b00c9b, 2, 1);
 };
 
 struct Annotation {
@@ -433,7 +433,7 @@ struct Annotation {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(f1c8950dab257542, 1, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(f1c8950dab257542, 1, 2);
 };
 
 typedef ::capnp::schemas::ElementSize_d1958f7dba521926 ElementSize;
@@ -446,7 +446,7 @@ struct CodeGeneratorRequest {
   class Pipeline;
   struct RequestedFile;
 
-  CAPNP_DECLARE_STRUCT(bfc546f6210ad7ce, 0, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(bfc546f6210ad7ce, 0, 2);
 };
 
 struct CodeGeneratorRequest::RequestedFile {
@@ -457,7 +457,7 @@ struct CodeGeneratorRequest::RequestedFile {
   class Pipeline;
   struct Import;
 
-  CAPNP_DECLARE_STRUCT(cfea0eb02e810062, 1, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(cfea0eb02e810062, 1, 2);
 };
 
 struct CodeGeneratorRequest::RequestedFile::Import {
@@ -467,7 +467,7 @@ struct CodeGeneratorRequest::RequestedFile::Import {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(ae504193122357e5, 1, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(ae504193122357e5, 1, 1);
 };
 
 // =======================================================================================

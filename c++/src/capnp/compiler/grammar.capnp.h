@@ -53,7 +53,7 @@ struct LocatedText {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(e75816b56529d464, 1, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(e75816b56529d464, 1, 1);
 };
 
 struct LocatedInteger {
@@ -63,7 +63,7 @@ struct LocatedInteger {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(991c7a3693d62cf2, 2, 0, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(991c7a3693d62cf2, 2, 0);
 };
 
 struct LocatedFloat {
@@ -73,7 +73,7 @@ struct LocatedFloat {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(90f2a60678fd2367, 2, 0, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(90f2a60678fd2367, 2, 0);
 };
 
 struct Expression {
@@ -101,7 +101,7 @@ struct Expression {
   struct Application;
   struct Member;
 
-  CAPNP_DECLARE_STRUCT(8e207d4dfe54d0de, 3, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(8e207d4dfe54d0de, 3, 2);
 };
 
 struct Expression::Param {
@@ -115,7 +115,7 @@ struct Expression::Param {
     NAMED,
   };
 
-  CAPNP_DECLARE_STRUCT(c90246b71adedbaa, 1, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(c90246b71adedbaa, 1, 2);
 };
 
 struct Expression::Application {
@@ -125,7 +125,7 @@ struct Expression::Application {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(aee8397040b0df7a, 3, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(aee8397040b0df7a, 3, 2);
 };
 
 struct Expression::Member {
@@ -135,7 +135,7 @@ struct Expression::Member {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(aa28e1400d793359, 3, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(aa28e1400d793359, 3, 2);
 };
 
 struct Declaration {
@@ -189,7 +189,7 @@ struct Declaration {
   struct Method;
   struct Annotation;
 
-  CAPNP_DECLARE_STRUCT(96efe787c17e83bb, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(96efe787c17e83bb, 2, 8);
 };
 
 struct Declaration::BrandParameter {
@@ -199,7 +199,7 @@ struct Declaration::BrandParameter {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(d5e71144af1ce175, 1, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(d5e71144af1ce175, 1, 1);
 };
 
 struct Declaration::AnnotationApplication {
@@ -210,7 +210,7 @@ struct Declaration::AnnotationApplication {
   class Pipeline;
   struct Value;
 
-  CAPNP_DECLARE_STRUCT(d00489d473826290, 1, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(d00489d473826290, 1, 2);
 };
 
 struct Declaration::AnnotationApplication::Value {
@@ -224,7 +224,7 @@ struct Declaration::AnnotationApplication::Value {
     EXPRESSION,
   };
 
-  CAPNP_DECLARE_STRUCT(fb5aeed95cdf6af9, 1, 2, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(fb5aeed95cdf6af9, 1, 2);
 };
 
 struct Declaration::ParamList {
@@ -238,7 +238,7 @@ struct Declaration::ParamList {
     TYPE,
   };
 
-  CAPNP_DECLARE_STRUCT(b3f66e7a79d81bcd, 2, 1, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(b3f66e7a79d81bcd, 2, 1);
 };
 
 struct Declaration::Param {
@@ -249,7 +249,7 @@ struct Declaration::Param {
   class Pipeline;
   struct DefaultValue;
 
-  CAPNP_DECLARE_STRUCT(fffe08a9a697d2a5, 2, 4, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(fffe08a9a697d2a5, 2, 4);
 };
 
 struct Declaration::Param::DefaultValue {
@@ -263,7 +263,7 @@ struct Declaration::Param::DefaultValue {
     VALUE,
   };
 
-  CAPNP_DECLARE_STRUCT(e5104515fd88ea47, 2, 4, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(e5104515fd88ea47, 2, 4);
 };
 
 struct Declaration::Id {
@@ -278,7 +278,7 @@ struct Declaration::Id {
     ORDINAL,
   };
 
-  CAPNP_DECLARE_STRUCT(89f0c973c103ae96, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(89f0c973c103ae96, 2, 8);
 };
 
 struct Declaration::Using {
@@ -288,7 +288,7 @@ struct Declaration::Using {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(e93164a80bfe2ccf, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(e93164a80bfe2ccf, 2, 8);
 };
 
 struct Declaration::Const {
@@ -298,7 +298,7 @@ struct Declaration::Const {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b348322a8dcf0d0c, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(b348322a8dcf0d0c, 2, 8);
 };
 
 struct Declaration::Field {
@@ -309,7 +309,7 @@ struct Declaration::Field {
   class Pipeline;
   struct DefaultValue;
 
-  CAPNP_DECLARE_STRUCT(8f2622208fb358c8, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(8f2622208fb358c8, 2, 8);
 };
 
 struct Declaration::Field::DefaultValue {
@@ -323,7 +323,7 @@ struct Declaration::Field::DefaultValue {
     VALUE,
   };
 
-  CAPNP_DECLARE_STRUCT(d0d1a21de617951f, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(d0d1a21de617951f, 2, 8);
 };
 
 struct Declaration::Interface {
@@ -333,7 +333,7 @@ struct Declaration::Interface {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(992a90eaf30235d3, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(992a90eaf30235d3, 2, 8);
 };
 
 struct Declaration::Method {
@@ -344,7 +344,7 @@ struct Declaration::Method {
   class Pipeline;
   struct Results;
 
-  CAPNP_DECLARE_STRUCT(eb971847d617c0b9, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(eb971847d617c0b9, 2, 8);
 };
 
 struct Declaration::Method::Results {
@@ -358,7 +358,7 @@ struct Declaration::Method::Results {
     EXPLICIT,
   };
 
-  CAPNP_DECLARE_STRUCT(c6238c7d62d65173, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(c6238c7d62d65173, 2, 8);
 };
 
 struct Declaration::Annotation {
@@ -368,7 +368,7 @@ struct Declaration::Annotation {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9cb9e86e3198037f, 2, 8, INLINE_COMPOSITE);
+  CAPNP_DECLARE_STRUCT(9cb9e86e3198037f, 2, 8);
 };
 
 struct ParsedFile {
@@ -378,7 +378,7 @@ struct ParsedFile {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(84e4f3f5a807605c, 0, 1, POINTER);
+  CAPNP_DECLARE_STRUCT(84e4f3f5a807605c, 0, 1);
 };
 
 // =======================================================================================

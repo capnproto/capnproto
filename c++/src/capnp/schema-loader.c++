@@ -136,8 +136,7 @@ public:
 
   kj::Array<Schema> getAllLoaded() const;
 
-  void requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount,
-                         schema::ElementSize preferredListEncoding);
+  void requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount);
   // Require any struct nodes loaded with this ID -- in the past and in the future -- to have at
   // least the given sizes.  Struct nodes that don't comply will simply be rewritten to comply.
   // This is used to ensure that parents of group nodes have at least the size of the group node,
@@ -158,7 +157,6 @@ private:
   struct RequiredSize {
     uint16_t dataWordCount;
     uint16_t pointerCount;
-    schema::ElementSize preferredListEncoding;
   };
   std::unordered_map<uint64_t, RequiredSize> structSizeRequirements;
 
@@ -177,15 +175,13 @@ private:
   // (but at least can't cause memory corruption).
 
   kj::ArrayPtr<word> rewriteStructNodeWithSizes(
-      schema::Node::Reader node, uint dataWordCount, uint pointerCount,
-      schema::ElementSize preferredListEncoding);
+      schema::Node::Reader node, uint dataWordCount, uint pointerCount);
   // Make a copy of the given node (which must be a struct node) and set its sizes to be the max
   // of what it said already and the given sizes.
 
   // If the encoded node does not meet the given struct size requirements, make a new copy that
   // does.
-  void applyStructSizeRequirement(_::RawSchema* raw, uint dataWordCount, uint pointerCount,
-                                  schema::ElementSize preferredListEncoding);
+  void applyStructSizeRequirement(_::RawSchema* raw, uint dataWordCount, uint pointerCount);
 
   const _::RawBrandedSchema* makeBranded(const _::RawSchema* schema,
       kj::ArrayPtr<const _::RawBrandedSchema::Scope> scopes);
@@ -313,52 +309,8 @@ private:
   }
 
   void validate(const schema::Node::Struct::Reader& structNode, uint64_t scopeId) {
-    uint dataSizeInBits;
-    uint pointerCount;
-
-    switch (structNode.getPreferredListEncoding()) {
-      case schema::ElementSize::EMPTY:
-        dataSizeInBits = 0;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::BIT:
-        dataSizeInBits = 1;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::BYTE:
-        dataSizeInBits = 8;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::TWO_BYTES:
-        dataSizeInBits = 16;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::FOUR_BYTES:
-        dataSizeInBits = 32;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::EIGHT_BYTES:
-        dataSizeInBits = 64;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::POINTER:
-        dataSizeInBits = 0;
-        pointerCount = 1;
-        break;
-      case schema::ElementSize::INLINE_COMPOSITE:
-        dataSizeInBits = structNode.getDataWordCount() * 64;
-        pointerCount = structNode.getPointerCount();
-        break;
-      default:
-        FAIL_VALIDATE_SCHEMA("invalid preferredListEncoding");
-        dataSizeInBits = 0;
-        pointerCount = 0;
-        break;
-    }
-
-    VALIDATE_SCHEMA(structNode.getDataWordCount() == (dataSizeInBits + 63) / 64 &&
-                    structNode.getPointerCount() == pointerCount,
-                    "struct size does not match preferredListEncoding");
+    uint dataSizeInBits = structNode.getDataWordCount() * 64;
+    uint pointerCount = structNode.getPointerCount();
 
     auto fields = structNode.getFields();
 
@@ -448,8 +400,7 @@ private:
       // Require that the group's scope has at least the same size as the group, so that anyone
       // constructing an instance of the outer scope can safely read/write the group.
       loader.requireStructSize(scopeId, structNode.getDataWordCount(),
-                               structNode.getPointerCount(),
-                               structNode.getPreferredListEncoding());
+                               structNode.getPointerCount());
 
       // Require that the parent type is a struct.
       validateTypeId(scopeId, schema::Node::STRUCT);
@@ -798,17 +749,6 @@ private:
     } else if (replacement.getPointerCount() < structNode.getPointerCount()) {
       replacementIsOlder();
     }
-
-    // We can do a simple comparison of preferredListEncoding here because the only case where it
-    // isn't correct to compare this way is when one side is BIT/BYTE/*_BYTES while the other side
-    // is POINTER, and if that were the case then the above comparisons would already have failed
-    // or one of the nodes would have failed validation.
-    if (replacement.getPreferredListEncoding() > structNode.getPreferredListEncoding()) {
-      replacementIsNewer();
-    } else if (replacement.getPreferredListEncoding() < structNode.getPreferredListEncoding()) {
-      replacementIsOlder();
-    }
-
     if (replacement.getDiscriminantCount() > structNode.getDiscriminantCount()) {
       replacementIsNewer();
     } else if (replacement.getDiscriminantCount() < structNode.getDiscriminantCount()) {
@@ -1100,20 +1040,17 @@ private:
       case schema::Type::VOID:
         structNode.setDataWordCount(0);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::EMPTY);
         break;
 
       case schema::Type::BOOL:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::BIT);
         break;
 
       case schema::Type::INT8:
       case schema::Type::UINT8:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::BYTE);
         break;
 
       case schema::Type::INT16:
@@ -1121,7 +1058,6 @@ private:
       case schema::Type::ENUM:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::TWO_BYTES);
         break;
 
       case schema::Type::INT32:
@@ -1129,7 +1065,6 @@ private:
       case schema::Type::FLOAT32:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::FOUR_BYTES);
         break;
 
       case schema::Type::INT64:
@@ -1137,7 +1072,6 @@ private:
       case schema::Type::FLOAT64:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::EIGHT_BYTES);
         break;
 
       case schema::Type::TEXT:
@@ -1148,7 +1082,6 @@ private:
       case schema::Type::ANY_POINTER:
         structNode.setDataWordCount(0);
         structNode.setPointerCount(1);
-        structNode.setPreferredListEncoding(schema::ElementSize::POINTER);
         break;
     }
 
@@ -1156,7 +1089,6 @@ private:
       auto match = s->getStruct();
       structNode.setDataWordCount(match.getDataWordCount());
       structNode.setPointerCount(match.getPointerCount());
-      structNode.setPreferredListEncoding(match.getPreferredListEncoding());
     }
 
     auto field = structNode.initFields(1)[0];
@@ -1427,8 +1359,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     auto reqIter = structSizeRequirements.find(nativeSchema->id);
     if (reqIter != structSizeRequirements.end()) {
       applyStructSizeRequirement(result, reqIter->second.dataWordCount,
-                                 reqIter->second.pointerCount,
-                                 reqIter->second.preferredListEncoding);
+                                 reqIter->second.pointerCount);
     }
   } else {
     // The existing schema is newer.
@@ -1841,21 +1772,14 @@ kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
   return result;
 }
 
-void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount,
-                                           schema::ElementSize preferredListEncoding) {
+void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount) {
   auto& slot = structSizeRequirements[id];
   slot.dataWordCount = kj::max(slot.dataWordCount, dataWordCount);
   slot.pointerCount = kj::max(slot.pointerCount, pointerCount);
 
-  if (slot.dataWordCount + slot.pointerCount >= 2) {
-    slot.preferredListEncoding = schema::ElementSize::INLINE_COMPOSITE;
-  } else {
-    slot.preferredListEncoding = kj::max(slot.preferredListEncoding, preferredListEncoding);
-  }
-
   auto iter = schemas.find(id);
   if (iter != schemas.end()) {
-    applyStructSizeRequirement(iter->second, dataWordCount, pointerCount, preferredListEncoding);
+    applyStructSizeRequirement(iter->second, dataWordCount, pointerCount);
   }
 }
 
@@ -1875,11 +1799,9 @@ kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNodeEnforcingSizeRequirement
       auto requirement = iter->second;
       auto structNode = node.getStruct();
       if (structNode.getDataWordCount() < requirement.dataWordCount ||
-          structNode.getPointerCount() < requirement.pointerCount ||
-          structNode.getPreferredListEncoding() < requirement.preferredListEncoding) {
+          structNode.getPointerCount() < requirement.pointerCount) {
         return rewriteStructNodeWithSizes(node, requirement.dataWordCount,
-                                          requirement.pointerCount,
-                                          requirement.preferredListEncoding);
+                                          requirement.pointerCount);
       }
     }
   }
@@ -1888,8 +1810,7 @@ kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNodeEnforcingSizeRequirement
 }
 
 kj::ArrayPtr<word> SchemaLoader::Impl::rewriteStructNodeWithSizes(
-    schema::Node::Reader node, uint dataWordCount, uint pointerCount,
-    schema::ElementSize preferredListEncoding) {
+    schema::Node::Reader node, uint dataWordCount, uint pointerCount) {
   MallocMessageBuilder builder;
   builder.setRoot(node);
 
@@ -1898,28 +1819,18 @@ kj::ArrayPtr<word> SchemaLoader::Impl::rewriteStructNodeWithSizes(
   newStruct.setDataWordCount(kj::max(newStruct.getDataWordCount(), dataWordCount));
   newStruct.setPointerCount(kj::max(newStruct.getPointerCount(), pointerCount));
 
-  if (newStruct.getDataWordCount() + newStruct.getPointerCount() >= 2) {
-    newStruct.setPreferredListEncoding(schema::ElementSize::INLINE_COMPOSITE);
-  } else {
-    newStruct.setPreferredListEncoding(
-        kj::max(newStruct.getPreferredListEncoding(), preferredListEncoding));
-  }
-
   return makeUncheckedNode(root);
 }
 
 void SchemaLoader::Impl::applyStructSizeRequirement(
-    _::RawSchema* raw, uint dataWordCount, uint pointerCount,
-    schema::ElementSize preferredListEncoding) {
+    _::RawSchema* raw, uint dataWordCount, uint pointerCount) {
   auto node = readMessageUnchecked<schema::Node>(raw->encodedNode);
 
   auto structNode = node.getStruct();
   if (structNode.getDataWordCount() < dataWordCount ||
-      structNode.getPointerCount() < pointerCount ||
-      structNode.getPreferredListEncoding() < preferredListEncoding) {
+      structNode.getPointerCount() < pointerCount) {
     // Sizes need to be increased.  Must rewrite.
-    kj::ArrayPtr<word> words = rewriteStructNodeWithSizes(
-        node, dataWordCount, pointerCount, preferredListEncoding);
+    kj::ArrayPtr<word> words = rewriteStructNodeWithSizes(node, dataWordCount, pointerCount);
 
     // We don't need to re-validate the node because we know this change could not possibly have
     // invalidated it.  Just remake the unchecked message.
