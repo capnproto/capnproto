@@ -443,7 +443,7 @@ private:
 
 class StructBuilder: public kj::DisallowConstCopy {
 public:
-  inline StructBuilder(): segment(nullptr), data(nullptr), pointers(nullptr), bit0Offset(0) {}
+  inline StructBuilder(): segment(nullptr), data(nullptr), pointers(nullptr) {}
 
   inline word* getLocation() { return reinterpret_cast<word*>(data); }
   // Get the object's location.  Only valid for independently-allocated objects (i.e. not list
@@ -511,15 +511,10 @@ private:
 
   WirePointerCount16 pointerCount;  // Size of the pointer section.
 
-  BitCount8 bit0Offset;
-  // A special hack:  If dataSize == 1 bit, then bit0Offset is the offset of that bit within the
-  // byte pointed to by `data`.  In all other cases, this is zero.  This is needed to implement
-  // struct lists where each struct is one bit.
-
   inline StructBuilder(SegmentBuilder* segment, void* data, WirePointer* pointers,
-                       BitCount dataSize, WirePointerCount pointerCount, BitCount8 bit0Offset)
+                       BitCount dataSize, WirePointerCount pointerCount)
       : segment(segment), data(data), pointers(pointers),
-        dataSize(dataSize), pointerCount(pointerCount), bit0Offset(bit0Offset) {}
+        dataSize(dataSize), pointerCount(pointerCount) {}
 
   friend class ListBuilder;
   friend struct WireHelpers;
@@ -530,7 +525,7 @@ class StructReader {
 public:
   inline StructReader()
       : segment(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
-        pointerCount(0), bit0Offset(0), nestingLimit(0x7fffffff) {}
+        pointerCount(0), nestingLimit(0x7fffffff) {}
 
   const void* getLocation() const { return data; }
 
@@ -577,26 +572,15 @@ private:
 
   WirePointerCount16 pointerCount;  // Size of the pointer section.
 
-  BitCount8 bit0Offset;
-  // A special hack:  If dataSize == 1 bit, then bit0Offset is the offset of that bit within the
-  // byte pointed to by `data`.  In all other cases, this is zero.  This is needed to implement
-  // struct lists where each struct is one bit.
-  //
-  // TODO(someday):  Consider packing this together with dataSize, since we have 10 extra bits
-  //   there doing nothing -- or arguably 12 bits, if you consider that 2-bit and 4-bit sizes
-  //   aren't allowed.  Consider that we could have a method like getDataSizeIn<T>() which is
-  //   specialized to perform the correct shifts for each size.
-
   int nestingLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
-  // TODO(perf):  Limit to 8 bits for better alignment?
+  // TODO(perf):  Limit to 16 bits for better packing?
 
   inline StructReader(SegmentReader* segment, const void* data, const WirePointer* pointers,
-                      BitCount dataSize, WirePointerCount pointerCount, BitCount8 bit0Offset,
-                      int nestingLimit)
+                      BitCount dataSize, WirePointerCount pointerCount, int nestingLimit)
       : segment(segment), data(data), pointers(pointers),
-        dataSize(dataSize), pointerCount(pointerCount), bit0Offset(bit0Offset),
+        dataSize(dataSize), pointerCount(pointerCount),
         nestingLimit(nestingLimit) {}
 
   friend class ListReader;
@@ -879,9 +863,7 @@ inline T StructBuilder::getDataField(ElementCount offset) {
 
 template <>
 inline bool StructBuilder::getDataField<bool>(ElementCount offset) {
-  // This branch should be compiled out whenever this is inlined with a constant offset.
-  BitCount boffset = (offset == 0 * ELEMENTS) ?
-      BitCount(bit0Offset) : offset * (1 * BITS / ELEMENTS);
+  BitCount boffset = offset * (1 * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
 }
@@ -915,9 +897,7 @@ inline void StructBuilder::setDataField<double>(ElementCount offset, double valu
 
 template <>
 inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) {
-  // This branch should be compiled out whenever this is inlined with a constant offset.
-  BitCount boffset = (offset == 0 * ELEMENTS) ?
-      BitCount(bit0Offset) : offset * (1 * BITS / ELEMENTS);
+  BitCount boffset = offset * (1 * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   uint bitnum = boffset % BITS_PER_BYTE / BITS;
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
@@ -967,10 +947,6 @@ template <>
 inline bool StructReader::getDataField<bool>(ElementCount offset) const {
   BitCount boffset = offset * (1 * BITS / ELEMENTS);
   if (boffset < dataSize) {
-    // This branch should be compiled out whenever this is inlined with a constant offset.
-    if (offset == 0 * ELEMENTS) {
-      boffset = bit0Offset;
-    }
     const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
     return (*reinterpret_cast<const uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
   } else {
@@ -1016,8 +992,8 @@ inline T ListBuilder::getDataElement(ElementCount index) {
 
 template <>
 inline bool ListBuilder::getDataElement<bool>(ElementCount index) {
-  // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
-  BitCount bindex = index * step;
+  // Ignore step for bit lists because bit lists cannot be upgraded to struct lists.
+  BitCount bindex = index * (1 * BITS / ELEMENTS);
   byte* b = ptr + bindex / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
@@ -1073,8 +1049,8 @@ inline T ListReader::getDataElement(ElementCount index) const {
 
 template <>
 inline bool ListReader::getDataElement<bool>(ElementCount index) const {
-  // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
-  BitCount bindex = index * step;
+  // Ignore step for bit lists because bit lists cannot be upgraded to struct lists.
+  BitCount bindex = index * (1 * BITS / ELEMENTS);
   const byte* b = ptr + bindex / BITS_PER_BYTE;
   return (*reinterpret_cast<const uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }

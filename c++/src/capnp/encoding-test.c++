@@ -606,12 +606,14 @@ TEST(Encoding, ListUpgrade) {
 }
 
 TEST(Encoding, BitListDowngrade) {
+  // NO LONGER SUPPORTED -- We check for exceptions thrown.
+
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestAnyPointer>();
 
   root.getAnyPointerField().setAs<List<uint16_t>>({0x1201u, 0x3400u, 0x5601u, 0x7801u});
 
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
 
   {
     auto l = root.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
@@ -627,7 +629,7 @@ TEST(Encoding, BitListDowngrade) {
 
   auto reader = root.asReader();
 
-  checkList(reader.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
 
   {
     auto l = reader.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
@@ -654,7 +656,7 @@ TEST(Encoding, BitListDowngradeFromStruct) {
     list[3].setF(true);
   }
 
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
 
   {
     auto l = root.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
@@ -667,7 +669,7 @@ TEST(Encoding, BitListDowngradeFromStruct) {
 
   auto reader = root.asReader();
 
-  checkList(reader.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
 
   {
     auto l = reader.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
@@ -1054,7 +1056,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   {
     root.getAnyPointerField().setAs<List<bool>>({true, false, true, true});
     auto orig = root.asReader().getAnyPointerField().getAs<List<bool>>();
-    checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID, VOID});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Void>>());
     checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint8_t>>());
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint16_t>>());
@@ -1074,7 +1076,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     root.getAnyPointerField().setAs<List<uint8_t>>({0x12, 0x23, 0x33, 0x44});
     auto orig = root.asReader().getAnyPointerField().getAs<List<uint8_t>>();
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {false, true, true, false});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint16_t>>());
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
@@ -1092,7 +1094,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     root.getAnyPointerField().setAs<List<uint16_t>>({0x5612, 0x7823, 0xab33, 0xcd44});
     auto orig = root.asReader().getAnyPointerField().getAs<List<uint16_t>>();
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {false, true, true, false});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
     checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0x5612, 0x7823, 0xab33, 0xcd44});
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
@@ -1110,7 +1112,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     root.getAnyPointerField().setAs<List<uint32_t>>({0x17595612, 0x29347823, 0x5923ab32, 0x1a39cd45});
     auto orig = root.asReader().getAnyPointerField().getAs<List<uint32_t>>();
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {false, true, false, true});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x12, 0x23, 0x32, 0x45});
     checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0x5612, 0x7823, 0xab32, 0xcd45});
     checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {0x17595612u, 0x29347823u, 0x5923ab32u, 0x1a39cd45u});
@@ -1128,7 +1130,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     root.getAnyPointerField().setAs<List<uint64_t>>({0x1234abcd8735fe21, 0x7173bc0e1923af36});
     auto orig = root.asReader().getAnyPointerField().getAs<List<uint64_t>>();
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, false});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x21, 0x36});
     checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0xfe21, 0xaf36});
     checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {0x8735fe21u, 0x1923af36u});
@@ -1173,7 +1175,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     auto orig = root.asReader().getAnyPointerField().getAs<List<test::TestOldVersion>>();
 
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, true, false});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0xefu, 0xf1u, 0x12u});
     checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0xcdefu, 0xdef1u, 0xef12u});
     checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {0x90abcdefu, 0x0abcdef1u, 0xabcdef12u});
@@ -1210,7 +1212,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     l[2].setF(0x33423082u);
     l[3].setF(0x12988948u);
   }
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, true, false, false});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
   checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x35u, 0x79u, 0x82u, 0x48u});
   checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0x1235u, 0x2879u, 0x3082u, 0x8948u});
   checkList(root.getAnyPointerField().getAs<List<uint32_t>>(),
@@ -1233,7 +1235,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     l[2].setF(9238);
     l[3].setF(5832);
   }
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, true, false, false});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
   checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {12573u, 3251u, 9238u, 5832u});
   checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {12573u, 3251u, 9238u, 5832u});
   checkList(root.getAnyPointerField().getAs<List<uint64_t>>(), {12573u, 3251u, 9238u, 5832u});
