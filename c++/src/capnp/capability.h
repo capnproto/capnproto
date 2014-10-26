@@ -22,6 +22,10 @@
 #ifndef CAPNP_CAPABILITY_H_
 #define CAPNP_CAPABILITY_H_
 
+#if CAPNP_LITE
+#error "RPC APIs, including this header, are not available in lite mode."
+#endif
+
 #include <kj/async.h>
 #include "any.h"
 #include "pointer-helpers.h"
@@ -67,6 +71,7 @@ struct Capability {
   class Server;
 
   struct _capnpPrivate {
+    struct IsInterface;
     static constexpr uint64_t typeId = 0x3;
     static constexpr Kind kind = Kind::INTERFACE;
     static constexpr _::RawSchema const* schema = &_::NULL_INTERFACE_SCHEMA;

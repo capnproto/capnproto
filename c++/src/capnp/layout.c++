@@ -23,13 +23,17 @@
 #include "layout.h"
 #include <kj/debug.h>
 #include "arena.h"
-#include "capability.h"
 #include <string.h>
 #include <stdlib.h>
+
+#if !CAPNP_LITE
+#include "capability.h"
+#endif  // !CAPNP_LITE
 
 namespace capnp {
 namespace _ {  // private
 
+#if !CAPNP_LITE
 static BrokenCapFactory* brokenCapFactory = nullptr;
 // Horrible hack:  We need to be able to construct broken caps without any capability context,
 // but we can't have a link-time dependency on libcapnp-rpc.
@@ -39,6 +43,7 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
   // is ready for it.  May be called multiple times but always with the same value.
   __atomic_store_n(&brokenCapFactory, &factory, __ATOMIC_RELAXED);
 }
+#endif  // !CAPNP_LITE
 
 // =======================================================================================
 
@@ -490,7 +495,11 @@ struct WireHelpers {
       }
       case WirePointer::OTHER:
         if (ref->isCapability()) {
+#if CAPNP_LITE
+          KJ_FAIL_ASSERT("Capability encountered in builder in lite mode?") { break; }
+#else  // CAPNP_LINE
           segment->getArena()->dropCap(ref->capRef.index.get());
+#endif  // CAPNP_LITE, else
         } else {
           KJ_FAIL_REQUIRE("Unknown pointer type.") { break; }
         }
@@ -1547,6 +1556,7 @@ struct WireHelpers {
     return { segment, ptr };
   }
 
+#if !CAPNP_LITE
   static void setCapabilityPointer(
       SegmentBuilder* segment, WirePointer* ref, kj::Own<ClientHook>&& cap,
       BuilderArena* orphanArena = nullptr) {
@@ -1556,6 +1566,7 @@ struct WireHelpers {
       ref->setCap(orphanArena->injectCap(kj::mv(cap)));
     }
   }
+#endif  // !CAPNP_LITE
 
   static SegmentAnd<word*> setListPointer(
       SegmentBuilder* segment, WirePointer* ref, ListReader value,
@@ -1737,14 +1748,18 @@ struct WireHelpers {
           goto useDefault;
         }
 
+#if !CAPNP_LITE
         KJ_IF_MAYBE(cap, srcSegment->getArena()->extractCap(src->capRef.index.get())) {
           setCapabilityPointer(dstSegment, dst, kj::mv(*cap), orphanArena);
           return { dstSegment, nullptr };
         } else {
+#endif  // !CAPNP_LITE
           KJ_FAIL_REQUIRE("Message contained invalid capability pointer.") {
             goto useDefault;
           }
+#if !CAPNP_LITE
         }
+#endif  // !CAPNP_LITE
       }
     }
 
@@ -1851,6 +1866,7 @@ struct WireHelpers {
         0 * BITS, nestingLimit - 1);
   }
 
+#if !CAPNP_LITE
   static KJ_ALWAYS_INLINE(kj::Own<ClientHook> readCapabilityPointer(
       SegmentReader* segment, const WirePointer* ref, int nestingLimit)) {
     kj::Maybe<kj::Own<ClientHook>> maybeCap;
@@ -1878,6 +1894,7 @@ struct WireHelpers {
       return brokenCapFactory->newBrokenCap("Calling invalid capability pointer.");
     }
   }
+#endif  // !CAPNP_LITE
 
   static KJ_ALWAYS_INLINE(ListReader readListPointer(
       SegmentReader* segment, const WirePointer* ref, const word* defaultValue,
@@ -2182,6 +2199,7 @@ void PointerBuilder::setList(const ListReader& value) {
   WireHelpers::setListPointer(segment, pointer, value);
 }
 
+#if !CAPNP_LITE
 kj::Own<ClientHook> PointerBuilder::getCapability() {
   return WireHelpers::readCapabilityPointer(
       segment, pointer, kj::maxValue);
@@ -2190,6 +2208,7 @@ kj::Own<ClientHook> PointerBuilder::getCapability() {
 void PointerBuilder::setCapability(kj::Own<ClientHook>&& cap) {
   WireHelpers::setCapabilityPointer(segment, pointer, kj::mv(cap));
 }
+#endif  // !CAPNP_LITE
 
 void PointerBuilder::adopt(OrphanBuilder&& value) {
   WireHelpers::adopt(segment, pointer, kj::mv(value));
@@ -2260,10 +2279,12 @@ Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount de
   return WireHelpers::readDataPointer(segment, ref, defaultValue, defaultSize);
 }
 
+#if !CAPNP_LITE
 kj::Own<ClientHook> PointerReader::getCapability() const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readCapabilityPointer(segment, ref, nestingLimit);
 }
+#endif  // !CAPNP_LITE
 
 const word* PointerReader::getUnchecked() const {
   KJ_REQUIRE(segment == nullptr, "getUncheckedPointer() only allowed on unchecked messages.");
@@ -2600,6 +2621,7 @@ OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, Data::Reader copyFrom) {
   return result;
 }
 
+#if !CAPNP_LITE
 OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, kj::Own<ClientHook> copyFrom) {
   OrphanBuilder result;
   WireHelpers::setCapabilityPointer(nullptr, result.tagAsPtr(), kj::mv(copyFrom), arena);
@@ -2607,6 +2629,7 @@ OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, kj::Own<ClientHook> copyF
   result.location = &result.tag;  // dummy to make location non-null
   return result;
 }
+#endif  // !CAPNP_LITE
 
 OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Reader data) {
   KJ_REQUIRE(reinterpret_cast<uintptr_t>(data.begin()) % sizeof(void*) == 0,
@@ -2691,9 +2714,11 @@ ListReader OrphanBuilder::asListReader(FieldSize elementSize) const {
       segment, tagAsPtr(), location, nullptr, elementSize, kj::maxValue);
 }
 
+#if !CAPNP_LITE
 kj::Own<ClientHook> OrphanBuilder::asCapability() const {
   return WireHelpers::readCapabilityPointer(segment, tagAsPtr(), kj::maxValue);
 }
+#endif  // !CAPNP_LITE
 
 Text::Reader OrphanBuilder::asTextReader() const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));

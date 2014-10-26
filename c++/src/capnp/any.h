@@ -71,9 +71,11 @@ struct AnyPointer {
     inline ReaderFor<T> getAs(InterfaceSchema schema) const;
     // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
 
+#if !CAPNP_LITE
     kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
     // Used by RPC system to implement pipelining.  Applications generally shouldn't use this
     // directly.
+#endif  // !CAPNP_LITE
 
   private:
     _::PointerReader reader;
@@ -181,6 +183,7 @@ struct AnyPointer {
     friend class CapBuilderContext;
   };
 
+#if !CAPNP_LITE
   class Pipeline {
   public:
     inline Pipeline(decltype(nullptr)) {}
@@ -212,6 +215,7 @@ struct AnyPointer {
     friend class LocalClient;
     friend class PipelineHook;
   };
+#endif  // !CAPNP_LITE
 };
 
 template <>
@@ -284,6 +288,8 @@ private:
 // These relate to capabilities, but we don't declare them in capability.h because generated code
 // for structs needs to know about these, even in files that contain no interfaces.
 
+#if !CAPNP_LITE
+
 struct PipelineOp {
   // Corresponds to rpc.capnp's PromisedAnswer.Op.
 
@@ -319,6 +325,8 @@ public:
     return kj::mv(pipeline.hook);
   }
 };
+
+#endif  // !CAPNP_LITE
 
 // =======================================================================================
 // Inline implementation details

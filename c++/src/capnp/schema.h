@@ -22,6 +22,10 @@
 #ifndef CAPNP_SCHEMA_H_
 #define CAPNP_SCHEMA_H_
 
+#if CAPNP_LITE
+#error "Reflection APIs, including this header, are not available in lite mode."
+#endif
+
 #include <capnp/schema.capnp.h>
 
 namespace capnp {

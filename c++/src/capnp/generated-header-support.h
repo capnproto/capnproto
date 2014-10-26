@@ -36,12 +36,14 @@ namespace capnp {
 
 class MessageBuilder;  // So that it can be declared a friend.
 
-template <typename T, Kind k = kind<T>()>
+template <typename T, Kind k = CAPNP_KIND(T)>
 struct ToDynamic_;   // Defined in dynamic.h, needs to be declared as everyone's friend.
 
 struct DynamicStruct;  // So that it can be declared a friend.
 
 namespace _ {  // private
+
+#if !CAPNP_LITE
 
 struct RawSchema;
 
@@ -353,6 +355,8 @@ inline kj::StringTree structString(StructReader reader) {
   return structString(reader, rawBrandedSchema<T>());
 }
 
+#endif  // !CAPNP_LITE
+
 // TODO(cleanup):  Unify ConstStruct and ConstList.
 template <typename T>
 class ConstStruct {
@@ -434,7 +438,7 @@ private:
 
 template <typename T, typename CapnpPrivate = typename T::_capnpPrivate>
 inline constexpr uint64_t typeId() { return CapnpPrivate::typeId; }
-template <typename T, uint64_t id = schemas::EnumInfo<T>::typeId, bool = false>
+template <typename T, uint64_t id = schemas::EnumInfo<T>::typeId>
 inline constexpr uint64_t typeId() { return id; }
 // typeId<MyType>() returns the type ID as defined in the schema.  Works with structs, enums, and
 // interfaces.
@@ -455,22 +459,76 @@ inline constexpr uint sizeInWords() {
 // all commas must be replaced with CAPNP_COMMA otherwise they will be interpreted as macro
 // parameter separators! Ugh.
 
+#if CAPNP_LITE
+
+#define CAPNP_DECLARE_SCHEMA(id) \
+    extern ::capnp::word const* const bp_##id
+
 #define CAPNP_DECLARE_ENUM(type, id) \
     template <> struct EnumInfo<type##_##id> { \
+      struct IsEnum; \
       static constexpr uint64_t typeId = 0x##id; \
+      static inline ::capnp::word const* const encodedSchema() { return bp_##id; } \
+    }
+#define CAPNP_DEFINE_ENUM(type, id) \
+    constexpr uint64_t EnumInfo<type>::typeId
+
+#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+    struct _capnpPrivate { \
+      struct IsStruct; \
+      static constexpr uint64_t typeId = 0x##id; \
+      static constexpr ::capnp::_::StructSize structSize = ::capnp::_::StructSize( \
+          dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS, \
+          ::capnp::_::FieldSize::preferredElementEncoding); \
+      static inline ::capnp::word const* const encodedSchema() { return ::capnp::schemas::bp_##id; }
+#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding) \
+    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+    }
+#define CAPNP_DECLARE_TEMPLATE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding, \
+                                      ...) \
+    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+    }
+#define CAPNP_DEFINE_STRUCT(type, templates, id) \
+    templates constexpr uint64_t type::_capnpPrivate::typeId; \
+    templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize
+#define CAPNP_DEFINE_TEMPLATE_STRUCT(type, templates, id, brandScopesInitializer, \
+                                     brandBindingsInitializer, brandDependenciesInitializer) \
+    templates constexpr uint64_t type::_capnpPrivate::typeId; \
+    templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize
+
+#define CAPNP_DECLARE_INTERFACE(id) static_assert(true, "")
+#define CAPNP_DECLARE_TEMPLATE_INTERFACE(id, ...) static_assert(true, "")
+#define CAPNP_DEFINE_INTERFACE(type, templates, id) static_assert(true, "")
+#define CAPNP_DEFINE_TEMPLATE_INTERFACE(type, templates, id, brandScopesInitializer, \
+                                        brandBindingsInitializer, brandDependenciesInitializer) \
+    static_assert(true, "")
+
+#else  // CAPNP_LITE
+
+#define CAPNP_DECLARE_SCHEMA(id) \
+    extern ::capnp::word const* const bp_##id; \
+    extern const ::capnp::_::RawSchema s_##id
+
+#define CAPNP_DECLARE_ENUM(type, id) \
+    template <> struct EnumInfo<type##_##id> { \
+      struct IsEnum; \
+      static constexpr uint64_t typeId = 0x##id; \
+      static inline ::capnp::word const* const encodedSchema() { return bp_##id; } \
       static constexpr ::capnp::_::RawSchema const* schema = &s_##id; \
     }
-#define CAPNP_DEFINE_ENUM(type) \
+#define CAPNP_DEFINE_ENUM(type, id) \
     constexpr uint64_t EnumInfo<type>::typeId; \
     constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema
 
 #define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
     struct _capnpPrivate { \
+      struct IsStruct; \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::Kind kind = ::capnp::Kind::STRUCT; \
       static constexpr ::capnp::_::StructSize structSize = ::capnp::_::StructSize( \
           dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS, \
           ::capnp::_::FieldSize::preferredElementEncoding); \
+      static inline ::capnp::word const* const encodedSchema() { return ::capnp::schemas::bp_##id; } \
       static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id;
 #define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding) \
     CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
@@ -486,7 +544,7 @@ inline constexpr uint sizeInWords() {
       static constexpr ::capnp::_::RawBrandedSchema const* brand = \
           ::capnp::_::ChooseBrand<_capnpPrivate, __VA_ARGS__>::brand; \
     }
-#define CAPNP_DEFINE_STRUCT(type, templates) \
+#define CAPNP_DEFINE_STRUCT(type, templates, id) \
     templates constexpr uint64_t type::_capnpPrivate::typeId; \
     templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
     templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize; \
@@ -514,8 +572,10 @@ inline constexpr uint sizeInWords() {
 
 #define CAPNP_DECLARE_INTERFACE_HEADER(id) \
     struct _capnpPrivate { \
+      struct IsInterface; \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::Kind kind = ::capnp::Kind::INTERFACE; \
+      static inline ::capnp::word const* const encodedSchema() { return ::capnp::schemas::bp_##id; } \
       static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id;
 #define CAPNP_DECLARE_INTERFACE(id) \
     CAPNP_DECLARE_INTERFACE_HEADER(id) \
@@ -530,7 +590,7 @@ inline constexpr uint sizeInWords() {
       static constexpr ::capnp::_::RawBrandedSchema const* brand = \
           ::capnp::_::ChooseBrand<_capnpPrivate, __VA_ARGS__>::brand; \
     }
-#define CAPNP_DEFINE_INTERFACE(type, templates) \
+#define CAPNP_DEFINE_INTERFACE(type, templates, id) \
     templates constexpr uint64_t type::_capnpPrivate::typeId; \
     templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
     templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema; \
@@ -553,5 +613,7 @@ inline constexpr uint sizeInWords() {
       sizeof(brandDependencies) / sizeof(brandDependencies[0]), \
       nullptr \
     }
+
+#endif  // CAPNP_LITE, else
 
 #endif  // CAPNP_GENERATED_HEADER_SUPPORT_H_

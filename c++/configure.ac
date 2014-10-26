@@ -22,6 +22,30 @@ AC_ARG_WITH([external-capnp],
      one (useful for cross-compiling)])],
   [external_capnp=yes],[external_capnp=no])
 
+AC_ARG_ENABLE([reflection], [
+  AS_HELP_STRING([--disable-reflection], [
+    compile Cap'n Proto in "lite mode", in which all reflection APIs (schema.h, dynamic.h, etc.)
+    are not included. Produces a smaller library at the cost of features. All programs built
+    against the library MUST be compiled with -DCAPNP_LITE=1. Note that because the compiler
+    itself uses reflection in its implementation, you must also use --with-external-capnp when
+    using this option.])
+  ], [
+    case "${enableval}" in
+      yes)
+        lite_mode=no
+        ;;
+      no)
+        lite_mode=yes
+        AS_IF([test "$external_capnp" != "yes"], [
+          AC_MSG_ERROR([you must specify --with-external-capnp when using --disable-reflection])
+        ])
+        ;;
+      *)
+        AC_MSG_ERROR([bad value ${enableval} for --enable-reflection])
+        ;;
+    esac
+  ], [lite_mode=no])
+
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_CXX
@@ -47,6 +71,14 @@ AS_IF([test "$external_capnp" != "no"], [
 	AC_SUBST([CAPNPC_CXX])
 ])
 AM_CONDITIONAL([USE_EXTERNAL_CAPNP], [test "$external_capnp" != "no"])
+
+AM_CONDITIONAL([LITE_MODE], [test "$lite_mode" = "yes"])
+
+AS_IF([test "$lite_mode" = "yes"], [
+  CXXFLAGS="-DCAPNP_LITE $CXXFLAGS"
+  CAPNP_LITE_FLAG=-DCAPNP_LITE
+])
+AC_SUBST([CAPNP_LITE_FLAG])
 
 AC_SEARCH_LIBS(sched_yield, rt)
 

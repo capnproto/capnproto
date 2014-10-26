@@ -22,12 +22,15 @@
 #define CAPNP_PRIVATE
 #include "arena.h"
 #include "message.h"
-#include "capability.h"
 #include <kj/debug.h>
 #include <kj/refcount.h>
 #include <vector>
 #include <string.h>
 #include <stdio.h>
+
+#if !CAPNP_LITE
+#include "capability.h"
+#endif  // !CAPNP_LITE
 
 namespace capnp {
 namespace _ {  // private
@@ -105,6 +108,7 @@ void ReaderArena::reportReadLimitReached() {
   }
 }
 
+#if !CAPNP_LITE
 kj::Maybe<kj::Own<ClientHook>> ReaderArena::extractCap(uint index) {
   if (index < capTable.size()) {
     return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
@@ -112,6 +116,7 @@ kj::Maybe<kj::Own<ClientHook>> ReaderArena::extractCap(uint index) {
     return nullptr;
   }
 }
+#endif  // !CAPNP_LITE
 
 // =======================================================================================
 
@@ -261,6 +266,7 @@ void BuilderArena::reportReadLimitReached() {
   }
 }
 
+#if !CAPNP_LITE
 kj::Maybe<kj::Own<ClientHook>> BuilderArena::extractCap(uint index) {
   if (index < capTable.size()) {
     return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
@@ -283,6 +289,7 @@ void BuilderArena::dropCap(uint index) {
   }
   capTable[index] = nullptr;
 }
+#endif  // !CAPNP_LITE
 
 }  // namespace _ (private)
 }  // namespace capnp

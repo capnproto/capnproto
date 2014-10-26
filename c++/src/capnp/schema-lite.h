@@ -19,45 +19,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include "common.h"
-#include <gtest/gtest.h>
-#include <kj/string.h>
-#include <kj/debug.h>
+#ifndef CAPNP_SCHEMA_LITE_H_
+#define CAPNP_SCHEMA_LITE_H_
 
-#if HAVE_CONFIG_H
-#include "config.h"
-#endif
+#include <capnp/schema.capnp.h>
+#include "message.h"
 
 namespace capnp {
-namespace {
 
-TEST(Common, Version) {
-#ifdef VERSION
-  auto expectedVersion =
-      kj::str(CAPNP_VERSION_MAJOR, '.', CAPNP_VERSION_MINOR, '.', CAPNP_VERSION_MICRO);
-  auto devVersion =
-      kj::str(CAPNP_VERSION_MAJOR, '.', CAPNP_VERSION_MINOR, "-dev");
-  kj::StringPtr actualVersion = VERSION;
-  KJ_ASSERT(actualVersion == expectedVersion ||
-            actualVersion.startsWith(kj::str(expectedVersion, '-')) ||
-            (actualVersion == devVersion && CAPNP_VERSION_MICRO == 0),
-            expectedVersion, actualVersion);
-#endif
+template <typename T, typename CapnpPrivate = typename T::_capnpPrivate>
+inline schema::Node::Reader schemaProto() {
+  // Get the schema::Node for this type's schema. This function works even in lite mode.
+  return readMessageUnchecked<schema::Node>(CapnpPrivate::encodedSchema());
 }
 
-struct ExampleStruct {
-  struct _capnpPrivate {
-    struct IsStruct;
-  };
-};
-struct ExampleInterface {
-  struct _capnpPrivate {
-    struct IsInterface;
-  };
-};
+template <typename T, uint64_t id = schemas::EnumInfo<T>::typeId>
+inline schema::Node::Reader schemaProto() {
+  // Get the schema::Node for this type's schema. This function works even in lite mode.
+  return readMessageUnchecked<schema::Node>(schemas::EnumInfo<T>::encodedSchema());
+}
 
-static_assert(_::Kind_<ExampleStruct>::kind == Kind::STRUCT, "Kind SFINAE failed.");
-static_assert(_::Kind_<ExampleInterface>::kind == Kind::INTERFACE, "Kind SFINAE failed.");
-
-}  // namespace
 }  // namespace capnp
+
+#endif  // CAPNP_SCHEMA_LITE_H_

@@ -20,9 +20,14 @@
 // THE SOFTWARE.
 
 #include "any.h"
+
+#if !CAPNP_LITE
 #include "capability.h"
+#endif  // !CAPNP_LITE
 
 namespace capnp {
+
+#if !CAPNP_LITE
 
 kj::Own<ClientHook> PipelineHook::getPipelinedCap(kj::Array<PipelineOp>&& ops) {
   return getPipelinedCap(ops.asPtr());
@@ -69,5 +74,7 @@ AnyPointer::Pipeline AnyPointer::Pipeline::getPointerField(uint16_t pointerIndex
 kj::Own<ClientHook> AnyPointer::Pipeline::asCap() {
   return hook->getPipelinedCap(ops);
 }
+
+#endif  // !CAPNP_LITE
 
 }  // namespace capnp

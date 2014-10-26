@@ -25,6 +25,7 @@
 #include <kj/debug.h>
 #include <gtest/gtest.h>
 #include "test-util.h"
+#include "schema-lite.h"
 
 namespace capnp {
 namespace _ {  // private
@@ -297,12 +298,14 @@ TEST(Encoding, UnnamedUnion) {
   EXPECT_DEBUG_ANY_THROW(root.getBar());
   EXPECT_DEBUG_ANY_THROW(root.asReader().getBar());
 
+#if !CAPNP_LITE
   StructSchema schema = Schema::from<test::TestUnnamedUnion>();
 
   // The discriminant is allocated just before allocating "bar".
   EXPECT_EQ(2u, schema.getProto().getStruct().getDiscriminantOffset());
   EXPECT_EQ(0u, schema.getFieldByName("foo").getProto().getSlot().getOffset());
   EXPECT_EQ(2u, schema.getFieldByName("bar").getProto().getSlot().getOffset());
+#endif  // !CAPNP_LITE
 }
 
 TEST(Encoding, Groups) {
@@ -1333,7 +1336,7 @@ TEST(Encoding, Imports) {
     TestImport2::Builder root = builder.getRoot<TestImport2>();
     initTestMessage(root.initFoo());
     checkTestMessage(root.asReader().getFoo());
-    root.setBar(Schema::from<TestAllTypes>().getProto());
+    root.setBar(schemaProto<TestAllTypes>());
     initTestMessage(root.initBaz().initField());
     checkTestMessage(root.asReader().getBaz().getField());
   }

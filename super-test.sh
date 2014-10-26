@@ -294,6 +294,15 @@ doit make distclean
 doit ./configure --prefix="$STAGING" --disable-shared \
     --with-external-capnp CAPNP=$STAGING/bin/capnp
 doit make -j6 check
+
+echo "========================================================================="
+echo "Testing --disable-reflection"
+echo "========================================================================="
+
+doit make distclean
+doit ./configure --prefix="$STAGING" --disable-shared --disable-reflection \
+    --with-external-capnp CAPNP=$STAGING/bin/capnp
+doit make -j6 check
 doit make distclean
 
 # Test 32-bit build now while we have $STAGING available for cross-compiling.

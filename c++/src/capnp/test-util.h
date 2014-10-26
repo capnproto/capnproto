@@ -25,8 +25,11 @@
 #include <capnp/test.capnp.h>
 #include <iostream>
 #include "blob.h"
-#include "dynamic.h"
 #include <gtest/gtest.h>
+
+#if !CAPNP_LITE
+#include "dynamic.h"
+#endif  // !CAPNP_LITE
 
 #if KJ_NO_EXCEPTIONS
 #undef EXPECT_ANY_THROW
@@ -94,6 +97,7 @@ void checkTestMessage(TestListDefaults::Reader reader);
 void checkTestMessageAllZero(TestAllTypes::Builder builder);
 void checkTestMessageAllZero(TestAllTypes::Reader reader);
 
+#if !CAPNP_LITE
 void initDynamicTestMessage(DynamicStruct::Builder builder);
 void initDynamicTestLists(DynamicStruct::Builder builder);
 void checkDynamicTestMessage(DynamicStruct::Builder builder);
@@ -102,6 +106,7 @@ void checkDynamicTestMessage(DynamicStruct::Reader reader);
 void checkDynamicTestLists(DynamicStruct::Reader reader);
 void checkDynamicTestMessageAllZero(DynamicStruct::Builder builder);
 void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader);
+#endif  // !CAPNP_LITE
 
 template <typename T, typename U>
 void checkList(T reader, std::initializer_list<U> expected) {
@@ -136,6 +141,7 @@ inline void expectPrimitiveEq(double a, double b) { EXPECT_DOUBLE_EQ(a, b); }
 inline void expectPrimitiveEq(Text::Reader a, Text::Builder b) { EXPECT_EQ(a, b); }
 inline void expectPrimitiveEq(Data::Reader a, Data::Builder b) { EXPECT_EQ(a, b); }
 
+#if !CAPNP_LITE
 template <typename Element, typename T>
 void checkList(T reader, std::initializer_list<ReaderFor<Element>> expected) {
   auto list = reader.as<DynamicList>();
@@ -150,11 +156,14 @@ void checkList(T reader, std::initializer_list<ReaderFor<Element>> expected) {
     expectPrimitiveEq(expected.begin()[i], typed[i]);
   }
 }
+#endif  // !CAPNP_LITE
 
 #undef as
 
 // =======================================================================================
 // Interface implementations.
+
+#if !CAPNP_LITE
 
 class TestInterfaceImpl final: public test::TestInterface::Server {
 public:
@@ -270,6 +279,8 @@ private:
   int dummy = 0;
   TestInterfaceImpl impl;
 };
+
+#endif  // !CAPNP_LITE
 
 }  // namespace _ (private)
 }  // namespace capnp

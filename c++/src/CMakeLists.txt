@@ -95,6 +95,7 @@ set(capnp_headers
   capnp/message.h
   capnp/capability.h
   capnp/schema.capnp.h
+  capnp/schema-lite.h
   capnp/schema.h
   capnp/schema-loader.h
   capnp/schema-parser.h

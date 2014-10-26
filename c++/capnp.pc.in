@@ -8,4 +8,4 @@ Description: Insanely fast serialization system
 Version: @VERSION@
 Libs: -L${libdir} -lcapnp -lkj @PTHREAD_CFLAGS@ @PTHREAD_LIBS@ @STDLIB_FLAG@
 Libs.private: @LIBS@
-Cflags: -I${includedir} @PTHREAD_CFLAGS@ @STDLIB_FLAG@
+Cflags: -I${includedir} @PTHREAD_CFLAGS@ @STDLIB_FLAG@ @CAPNP_LITE_FLAG@

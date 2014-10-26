@@ -116,6 +116,7 @@ public:
   // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
+#if !CAPNP_LITE
   void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable);
   // Sets the table of capabilities embedded in this message.  Capability pointers found in the
   // message content contain indexes into this table.  You must call this before attempting to
@@ -125,6 +126,7 @@ public:
   //
   // You must link against libcapnp-rpc to call this method (the rest of MessageBuilder is in
   // regular libcapnp).
+#endif  // !CAPNP_LITE
 
 private:
   ReaderOptions options;
@@ -197,11 +199,13 @@ public:
   kj::ArrayPtr<const kj::ArrayPtr<const word>> getSegmentsForOutput();
   // Get the raw data that makes up the message.
 
+#if !CAPNP_LITE
   kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable();
   // Get the table of capabilities (interface pointers) that have been added to this message.
   // When you later parse this message, you must call `initCapTable()` on the `MessageReader` and
   // give it an equivalent set of capabilities, otherwise cap pointers in the message will be
   // unusable.
+#endif  // !CAPNP_LITE
 
   Orphanage getOrphanage();
 

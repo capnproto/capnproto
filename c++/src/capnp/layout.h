@@ -56,7 +56,9 @@
 
 namespace capnp {
 
+#if !CAPNP_LITE
 class ClientHook;
+#endif  // !CAPNP_LITE
 
 namespace _ {  // private
 
@@ -153,9 +155,9 @@ template <> struct ElementSizeForByteSize<8> { static constexpr FieldSize value 
 template <typename T> struct ElementSizeForType {
   static constexpr FieldSize value =
       // Primitive types that aren't special-cased below can be determined from sizeof().
-      kind<T>() == Kind::PRIMITIVE ? ElementSizeForByteSize<sizeof(T)>::value :
-      kind<T>() == Kind::ENUM ? FieldSize::TWO_BYTES :
-      kind<T>() == Kind::STRUCT ? FieldSize::INLINE_COMPOSITE :
+      CAPNP_KIND(T) == Kind::PRIMITIVE ? ElementSizeForByteSize<sizeof(T)>::value :
+      CAPNP_KIND(T) == Kind::ENUM ? FieldSize::TWO_BYTES :
+      CAPNP_KIND(T) == Kind::STRUCT ? FieldSize::INLINE_COMPOSITE :
 
       // Everything else is a pointer.
       FieldSize::POINTER;
@@ -239,7 +241,7 @@ inline constexpr StructSize structSize() {
 // -------------------------------------------------------------------
 // Masking of default values
 
-template <typename T, Kind kind = kind<T>()> struct Mask_;
+template <typename T, Kind kind = CAPNP_KIND(T)> struct Mask_;
 template <typename T> struct Mask_<T, Kind::PRIMITIVE> { typedef T Type; };
 template <typename T> struct Mask_<T, Kind::ENUM> { typedef uint16_t Type; };
 template <> struct Mask_<float, Kind::PRIMITIVE> { typedef uint32_t Type; };
@@ -333,7 +335,9 @@ public:
   ListBuilder getList(FieldSize elementSize, const word* defaultValue);
   ListBuilder getStructList(StructSize elementSize, const word* defaultValue);
   template <typename T> typename T::Builder getBlob(const void* defaultValue,ByteCount defaultSize);
+#if !CAPNP_LITE
   kj::Own<ClientHook> getCapability();
+#endif  // !CAPNP_LITE
   // Get methods:  Get the value.  If it is null, initialize it to a copy of the default value.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -348,7 +352,9 @@ public:
   void setStruct(const StructReader& value);
   void setList(const ListReader& value);
   template <typename T> void setBlob(typename T::Reader value);
+#if !CAPNP_LITE
   void setCapability(kj::Own<ClientHook>&& cap);
+#endif  // !CAPNP_LITE
   // Set methods:  Initialize the pointer to a newly-allocated copy of the given value, discarding
   // the existing object.
 
@@ -407,7 +413,9 @@ public:
   ListReader getList(FieldSize expectedElementSize, const word* defaultValue) const;
   template <typename T>
   typename T::Reader getBlob(const void* defaultValue, ByteCount defaultSize) const;
+#if !CAPNP_LITE
   kj::Own<ClientHook> getCapability() const;
+#endif  // !CAPNP_LITE
   // Get methods:  Get the value.  If it is null, return the default value instead.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -750,7 +758,9 @@ public:
   static OrphanBuilder copy(BuilderArena* arena, PointerReader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, Text::Reader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, Data::Reader copyFrom);
+#if !CAPNP_LITE
   static OrphanBuilder copy(BuilderArena* arena, kj::Own<ClientHook> copyFrom);
+#endif  // !CAPNP_LITE
 
   static OrphanBuilder referenceExternalData(BuilderArena* arena, Data::Reader data);
 
@@ -776,7 +786,9 @@ public:
 
   StructReader asStructReader(StructSize size) const;
   ListReader asListReader(FieldSize elementSize) const;
+#if !CAPNP_LITE
   kj::Own<ClientHook> asCapability() const;
+#endif  // !CAPNP_LITE
   Text::Reader asTextReader() const;
   Data::Reader asDataReader() const;
 

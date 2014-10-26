@@ -38,6 +38,11 @@ namespace capnp {
 #define CAPNP_VERSION \
   (CAPNP_VERSION_MAJOR * 1000000 + CAPNP_VERSION_MINOR * 1000 + CAPNP_VERSION_MICRO)
 
+#ifdef _MSC_VER
+#define CAPNP_LITE 1
+// MSVC only supports "lite" mode for now, due to missing C++11 features.
+#endif
+
 typedef unsigned int uint;
 
 struct Void {
@@ -80,7 +85,12 @@ struct EnumInfo;
 
 namespace _ {  // private
 
-template <typename T> struct Kind_;
+template <typename T, typename = typename T::_capnpPrivate::IsStruct> uint8_t kindSfinae(int);
+template <typename T, typename = typename T::_capnpPrivate::IsInterface> uint16_t kindSfinae(int);
+template <typename T, typename = typename schemas::EnumInfo<T>::IsEnum> uint32_t kindSfinae(int);
+template <typename T> uint64_t kindSfinae(...);
+
+template <typename T, size_t s = sizeof(kindSfinae<T>(0))> struct Kind_;
 
 template <> struct Kind_<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
 template <> struct Kind_<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
@@ -97,7 +107,18 @@ template <> struct Kind_<double> { static constexpr Kind kind = Kind::PRIMITIVE;
 template <> struct Kind_<Text> { static constexpr Kind kind = Kind::BLOB; };
 template <> struct Kind_<Data> { static constexpr Kind kind = Kind::BLOB; };
 
+template <typename T> struct Kind_<T, sizeof(uint8_t)> { static constexpr Kind kind = Kind::STRUCT; };
+template <typename T> struct Kind_<T, sizeof(uint16_t)> { static constexpr Kind kind = Kind::INTERFACE; };
+template <typename T> struct Kind_<T, sizeof(uint32_t)> { static constexpr Kind kind = Kind::ENUM; };
+
 }  // namespace _ (private)
+
+#if CAPNP_LITE
+
+#define CAPNP_KIND(T) ::capnp::_::Kind_<T>::kind
+// Avoid constexpr methods in lite mode (MSVC is bad at constexpr).
+
+#else  // CAPNP_LITE
 
 template <typename T, Kind k = _::Kind_<T>::kind>
 inline constexpr Kind kind() {
@@ -106,22 +127,12 @@ inline constexpr Kind kind() {
   return k;
 }
 
-template <typename T, typename CapnpPrivate = typename T::_capnpPrivate, bool = false>
-inline constexpr Kind kind() {
-  // This overload of kind() matches types which have a _capnpPrivate member. This is how
-  // generated-code types identify themselves. This is necessary because in the presence of
-  // generics, a generated type may be an inner type of a template, in which case it is impossible
-  // to specialize _::Kind_<T> over it.
+#define CAPNP_KIND(T) ::capnp::kind<T>()
+// Use this macro rather than kind<T>() in any code which must work in lite mode.
 
-  return CapnpPrivate::kind;
-}
+#endif  // CAPNP_LITE, else
 
-template <typename T, uint64_t id = schemas::EnumInfo<T>::typeId>
-inline constexpr Kind kind() {
-  return Kind::ENUM;
-}
-
-template <typename T, Kind k = kind<T>()>
+template <typename T, Kind k = CAPNP_KIND(T)>
 struct List;
 
 template <typename T> struct ListElementType_;
@@ -129,28 +140,30 @@ template <typename T> struct ListElementType_<List<T>> { typedef T Type; };
 template <typename T> using ListElementType = typename ListElementType_<T>::Type;
 
 namespace _ {  // private
-template <typename T, Kind k> struct Kind_<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
+template <typename T, Kind k> struct Kind_<List<T, k>, sizeof(uint64_t)> {
+  static constexpr Kind kind = Kind::LIST;
+};
 }  // namespace _ (private)
 
-template <typename T, Kind k = kind<T>()> struct ReaderFor_ { typedef typename T::Reader Type; };
+template <typename T, Kind k = CAPNP_KIND(T)> struct ReaderFor_ { typedef typename T::Reader Type; };
 template <typename T> struct ReaderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
 template <typename T> struct ReaderFor_<T, Kind::ENUM> { typedef T Type; };
 template <typename T> struct ReaderFor_<T, Kind::INTERFACE> { typedef typename T::Client Type; };
 template <typename T> using ReaderFor = typename ReaderFor_<T>::Type;
 // The type returned by List<T>::Reader::operator[].
 
-template <typename T, Kind k = kind<T>()> struct BuilderFor_ { typedef typename T::Builder Type; };
+template <typename T, Kind k = CAPNP_KIND(T)> struct BuilderFor_ { typedef typename T::Builder Type; };
 template <typename T> struct BuilderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
 template <typename T> struct BuilderFor_<T, Kind::ENUM> { typedef T Type; };
 template <typename T> struct BuilderFor_<T, Kind::INTERFACE> { typedef typename T::Client Type; };
 template <typename T> using BuilderFor = typename BuilderFor_<T>::Type;
 // The type returned by List<T>::Builder::operator[].
 
-template <typename T, Kind k = kind<T>()> struct PipelineFor_ { typedef typename T::Pipeline Type;};
+template <typename T, Kind k = CAPNP_KIND(T)> struct PipelineFor_ { typedef typename T::Pipeline Type;};
 template <typename T> struct PipelineFor_<T, Kind::INTERFACE> { typedef typename T::Client Type; };
 template <typename T> using PipelineFor = typename PipelineFor_<T>::Type;
 
-template <typename T, Kind k = kind<T>()> struct TypeIfEnum_;
+template <typename T, Kind k = CAPNP_KIND(T)> struct TypeIfEnum_;
 template <typename T> struct TypeIfEnum_<T, Kind::ENUM> { typedef T Type; };
 
 template <typename T>
@@ -173,7 +186,7 @@ using FromServer = typename kj::Decay<T>::Serves;
 // FromBuilder<MyType::Server> = MyType (for any Cap'n Proto interface type).
 
 namespace _ {  // private
-template <typename T, Kind k = kind<T>()>
+template <typename T, Kind k = CAPNP_KIND(T)>
 struct PointerHelpers;
 }  // namespace _ (private)
 

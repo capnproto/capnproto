@@ -163,6 +163,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/message.h                                          \
   src/capnp/capability.h                                       \
   src/capnp/schema.capnp.h                                     \
+  src/capnp/schema-lite.h                                      \
   src/capnp/schema.h                                           \
   src/capnp/schema-loader.h                                    \
   src/capnp/schema-parser.h                                    \
@@ -180,7 +181,11 @@ includecapnp_HEADERS =                                         \
   src/capnp/rpc-twoparty.capnp.h                               \
   src/capnp/ez-rpc.h
 
+if LITE_MODE
+lib_LTLIBRARIES = libkj.la libcapnp.la
+else
 lib_LTLIBRARIES = libkj.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnpc.la
+endif
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libkj_la_LIBADD = $(PTHREAD_LIBS) -lpthread
@@ -202,6 +207,7 @@ libkj_la_SOURCES=                                              \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
 
+if !LITE_MODE
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
 libkj_async_la_LDFLAGS = -release $(VERSION) -no-undefined
@@ -209,6 +215,15 @@ libkj_async_la_SOURCES=                                        \
   src/kj/async.c++                                             \
   src/kj/async-unix.c++                                        \
   src/kj/async-io.c++
+endif !LITE_MODE
+
+if !LITE_MODE
+heavy_sources =                                                \
+  src/capnp/schema.c++                                         \
+  src/capnp/schema-loader.c++                                  \
+  src/capnp/dynamic.c++                                        \
+  src/capnp/stringify.c++
+endif !LITE_MODE
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnp_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
@@ -223,12 +238,11 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/any.c++                                            \
   src/capnp/message.c++                                        \
   src/capnp/schema.capnp.c++                                   \
-  src/capnp/schema.c++                                         \
-  src/capnp/schema-loader.c++                                  \
-  src/capnp/dynamic.c++                                        \
-  src/capnp/stringify.c++                                      \
   src/capnp/serialize.c++                                      \
-  src/capnp/serialize-packed.c++
+  src/capnp/serialize-packed.c++                               \
+  $(heavy_sources)
+
+if !LITE_MODE
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnp_rpc_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(PTHREAD_LIBS) -lpthread
@@ -278,6 +292,8 @@ capnpc_capnp_SOURCES = src/capnp/compiler/capnpc-capnp.c++
 
 capnpc_c___LDADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 capnpc_c___SOURCES = src/capnp/compiler/capnpc-c++.c++
+
+endif !LITE_MODE
 
 # Symlink capnpc -> capnp.  The capnp binary will behave like the old capnpc
 # binary (i.e. like "capnp compile") when invoked via this symlink.
@@ -330,9 +346,38 @@ $(test_capnpc_outputs): test_capnpc_middleman
 
 BUILT_SOURCES = $(test_capnpc_outputs)
 
+if LITE_MODE
+
+check_PROGRAMS = capnp-test
+compiler_tests =
+capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la \
+                   libcapnp.la libkj.la
+
+else !LITE_MODE
+
 check_PROGRAMS = capnp-test capnp-evolution-test
+heavy_tests =                                                  \
+  src/kj/async-test.c++                                        \
+  src/kj/async-unix-test.c++                                   \
+  src/kj/async-io-test.c++                                     \
+  src/kj/parse/common-test.c++                                 \
+  src/kj/parse/char-test.c++                                   \
+  src/capnp/capability-test.c++                                \
+  src/capnp/schema-test.c++                                    \
+  src/capnp/schema-loader-test.c++                             \
+  src/capnp/dynamic-test.c++                                   \
+  src/capnp/stringify-test.c++                                 \
+  src/capnp/serialize-async-test.c++                           \
+  src/capnp/rpc-test.c++                                       \
+  src/capnp/rpc-twoparty-test.c++                              \
+  src/capnp/ez-rpc-test.c++                                    \
+  src/capnp/compiler/lexer-test.c++                            \
+  src/capnp/compiler/md5-test.c++
 capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la \
                    libcapnpc.la libcapnp-rpc.la libcapnp.la libkj-async.la libkj.la
+
+endif !LITE_MODE
+
 capnp_test_CPPFLAGS = -Wno-deprecated-declarations -Igtest/include -I$(srcdir)/gtest/include
 capnp_test_SOURCES =                                           \
   src/kj/common-test.c++                                       \
@@ -352,11 +397,6 @@ capnp_test_SOURCES =                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/threadlocal-test.c++                                  \
   src/kj/threadlocal-pthread-test.c++                          \
-  src/kj/async-test.c++                                        \
-  src/kj/async-unix-test.c++                                   \
-  src/kj/async-io-test.c++                                     \
-  src/kj/parse/common-test.c++                                 \
-  src/kj/parse/char-test.c++                                   \
   src/capnp/common-test.c++                                    \
   src/capnp/blob-test.c++                                      \
   src/capnp/endian-test.c++                                    \
@@ -365,26 +405,22 @@ capnp_test_SOURCES =                                           \
   src/capnp/layout-test.c++                                    \
   src/capnp/any-test.c++                                       \
   src/capnp/message-test.c++                                   \
-  src/capnp/capability-test.c++                                \
-  src/capnp/schema-test.c++                                    \
-  src/capnp/schema-loader-test.c++                             \
-  src/capnp/dynamic-test.c++                                   \
-  src/capnp/stringify-test.c++                                 \
   src/capnp/encoding-test.c++                                  \
   src/capnp/orphan-test.c++                                    \
   src/capnp/serialize-test.c++                                 \
-  src/capnp/serialize-async-test.c++                           \
   src/capnp/serialize-packed-test.c++                          \
-  src/capnp/rpc-test.c++                                       \
-  src/capnp/rpc-twoparty-test.c++                              \
-  src/capnp/ez-rpc-test.c++                                    \
   src/capnp/test-util.c++                                      \
   src/capnp/test-util.h                                        \
-  src/capnp/compiler/lexer-test.c++                            \
-  src/capnp/compiler/md5-test.c++
+  $(heavy_tests)
 nodist_capnp_test_SOURCES = $(test_capnpc_outputs)
 
+if !LITE_MODE
 capnp_evolution_test_LDADD = libcapnpc.la libcapnp.la libkj.la
 capnp_evolution_test_SOURCES = src/capnp/compiler/evolution-test.c++
+endif !LITE_MODE
 
+if LITE_MODE
+TESTS = capnp-test
+else !LITE_MODE
 TESTS = capnp-test capnp-evolution-test src/capnp/compiler/capnp-test.sh
+endif !LITE_MODE

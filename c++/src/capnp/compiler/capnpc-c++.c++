@@ -229,9 +229,18 @@ public:
         innerName, '<',
         kj::StringTree(KJ_MAP(p, params) {
           if (p.isArgDependent) isArgDependent = true;
+          if (p.hasInterfaces_) hasInterfaces_ = true;
           return kj::strTree(kj::mv(p));
         }, ", "),
         '>');
+  }
+
+  void setHasInterfaces() {
+    hasInterfaces_ = true;
+  }
+
+  bool hasInterfaces() {
+    return hasInterfaces_;
   }
 
 private:
@@ -243,8 +252,13 @@ private:
   bool needsTypename;
   // Does the name require a prefix of "typename"?
 
+  bool hasInterfaces_;
+  // Does this type name refer to any interface types? If so it may need to be #ifdefed out in
+  // lite mode.
+
   inline CppTypeName(kj::StringTree&& name, bool isArgDependent)
-      : name(kj::mv(name)), isArgDependent(isArgDependent), needsTypename(false) {}
+      : name(kj::mv(name)), isArgDependent(isArgDependent), needsTypename(false),
+        hasInterfaces_(false) {}
 
   friend kj::StringTree KJ_STRINGIFY(CppTypeName&& typeName);
   friend kj::String KJ_STRINGIFY(const CppTypeName& typeName);
@@ -433,8 +447,11 @@ private:
         return cppFullName(type.asEnum(), method);
       case schema::Type::STRUCT:
         return cppFullName(type.asStruct(), method);
-      case schema::Type::INTERFACE:
-        return cppFullName(type.asInterface(), method);
+      case schema::Type::INTERFACE: {
+        auto result = cppFullName(type.asInterface(), method);
+        result.setHasInterfaces();
+        return result;
+      }
 
       case schema::Type::LIST: {
         CppTypeName result = CppTypeName::makeNamespace("capnp");
@@ -1082,10 +1099,12 @@ private:
                 "  return ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n",
                 hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
+                  "#if !CAPNP_LITE\n",
                   templateContext.allDecls(),
                   "inline ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
                   "  return ", scope, titleCase, "::Pipeline(_typeless.noop());\n"
-                  "}\n"),
+                  "}\n"
+                  "#endif  // !CAPNP_LITE\n"),
                 templateContext.allDecls(),
                 "inline ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
@@ -1271,17 +1290,21 @@ private:
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
             "  inline bool has", titleCase, "() const;\n"
+            "#if !CAPNP_LITE\n"
             "  inline ", clientType, " get", titleCase, "() const;\n"
+            "#endif  // !CAPNP_LITE\n"
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
             "  inline bool has", titleCase, "();\n"
+            "#if !CAPNP_LITE\n"
             "  inline ", clientType, " get", titleCase, "();\n"
             "  inline void set", titleCase, "(", clientType, "&& value);\n",
             "  inline void set", titleCase, "(", clientType, "& value);\n",
             "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
             "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n"
+            "#endif  // !CAPNP_LITE\n"
             "\n"),
 
         kj::strTree(
@@ -1299,7 +1322,8 @@ private:
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
             unionDiscrim.has,
             "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
-            "}\n",
+            "}\n"
+            "#if !CAPNP_LITE\n",
             templateContext.allDecls(),
             "inline ", clientType, " ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
@@ -1342,6 +1366,7 @@ private:
             "  return ::capnp::_::PointerHelpers<", type, ">::disown(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n"
+            "#endif  // !CAPNP_LITE\n"
             "\n")
       };
 
@@ -1402,7 +1427,7 @@ private:
 
       uint64_t typeId = field.getContainingStruct().getProto().getId();
       kj::String defaultParam = defaultOffset == 0 ? kj::str() : kj::str(
-          ",\n        ::capnp::schemas::s_", kj::hex(typeId), ".encodedNode + ", defaultOffset,
+          ",\n        ::capnp::schemas::bp_", kj::hex(typeId), " + ", defaultOffset,
           defaultSize == 0 ? kj::strTree() : kj::strTree(", ", defaultSize));
 
       bool shouldIncludeStructInit =
@@ -1412,6 +1437,7 @@ private:
       bool shouldIncludePipelineGetter = !hasDiscriminantValue(proto) &&
           (kind == FieldKind::STRUCT || kind == FieldKind::BRAND_PARAMETER);
       bool shouldIncludeArrayInitializer = false;
+      bool shouldExcludeInLiteMode = type.hasInterfaces();
 
       CppTypeName elementReaderType;
       if (typeSchema.isList()) {
@@ -1491,13 +1517,16 @@ private:
       return FieldText {
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
-            "  inline bool has", titleCase, "() const;\n"
-            "  inline ", readerType, " get", titleCase, "() const;\n"
+            "  inline bool has", titleCase, "() const;\n",
+            COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
+            "  inline ", readerType, " get", titleCase, "() const;\n",
+            COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
-            "  inline bool has", titleCase, "();\n"
+            "  inline bool has", titleCase, "();\n",
+            COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
             "  inline ", builderType, " get", titleCase, "();\n"
             "  inline void set", titleCase, "(", readerType, " value);\n",
             COND(shouldIncludeArrayInitializer,
@@ -1507,7 +1536,8 @@ private:
             COND(shouldIncludeSizedInit,
               "  inline ", builderType, " init", titleCase, "(unsigned int size);\n"),
             "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
-            "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n"
+            "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n",
+            COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n"),
 
         kj::strTree(
@@ -1526,6 +1556,7 @@ private:
             unionDiscrim.has,
             "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
             "}\n",
+            COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
             templateContext.allDecls(),
             "inline ", readerType, " ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
@@ -1539,10 +1570,12 @@ private:
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS)", defaultParam, ");\n"
             "}\n",
             COND(shouldIncludePipelineGetter,
+              "#if !CAPNP_LITE\n",
               templateContext.allDecls(),
               "inline ", pipelineType, " ", scope, "Pipeline::get", titleCase, "() {\n",
               "  return ", pipelineType, "(_typeless.getPointerField(", offset, "));\n"
-              "}\n"),
+              "}\n"
+              "#endif  // !CAPNP_LITE\n"),
             templateContext.allDecls(),
             "inline void ", scope, "Builder::set", titleCase, "(", readerType, " value) {\n",
             unionDiscrim.set,
@@ -1582,7 +1615,8 @@ private:
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::disown(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
-            "}\n"
+            "}\n",
+            COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n")
       };
 
@@ -1616,9 +1650,11 @@ private:
         "    return _reader.totalSize().asPublic();\n"
         "  }\n"
         "\n"
+        "#if !CAPNP_LITE\n"
         "  inline ::kj::StringTree toString() const {\n"
         "    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);\n"
         "  }\n"
+        "#endif  // !CAPNP_LITE\n"
         "\n",
         isUnion ? kj::strTree("  inline Which which() const;\n") : kj::strTree(),
         kj::mv(methodDecls),
@@ -1653,7 +1689,9 @@ private:
         "  inline Reader asReader() const { return *this; }\n"
         "\n"
         "  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }\n"
+        "#if !CAPNP_LITE\n"
         "  inline ::kj::StringTree toString() const { return asReader().toString(); }\n"
+        "#endif  // !CAPNP_LITE\n"
         "\n",
         isUnion ? kj::strTree("  inline Which which();\n") : kj::strTree(),
         kj::mv(methodDecls),
@@ -1670,6 +1708,7 @@ private:
                                  const TemplateContext& templateContext, bool isUnion,
                                  kj::Array<kj::StringTree>&& methodDecls) {
     return kj::strTree(
+        "#if !CAPNP_LITE\n",
         templateContext.allDecls(),
         "class ", fullName, "::Pipeline {\n"
         "public:\n"
@@ -1685,6 +1724,7 @@ private:
         "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
         "};\n"
+        "#endif  // !CAPNP_LITE\n"
         "\n");
   }
 
@@ -1709,14 +1749,14 @@ private:
         structNode.getDataWordCount(), ", ", structNode.getPointerCount(), ", ",
         FIELD_SIZE_NAMES[static_cast<uint>(structNode.getPreferredListEncoding())]);
     kj::StringTree defineText = kj::strTree(
-        macroParam(fullName), ", ", macroParam(templateContext.allDecls().flatten()));
+        macroParam(fullName), ", ", macroParam(templateContext.allDecls().flatten()), ", ", hexId);
 
     if (templateContext.isGeneric()) {
       declareText = kj::strTree(
           "CAPNP_DECLARE_TEMPLATE_STRUCT(", kj::mv(declareText), ", ",
               templateContext.allArgs(), ")");
       defineText = kj::strTree(
-          "CAPNP_DEFINE_TEMPLATE_STRUCT(", kj::mv(defineText), ", ", hexId, ", ",
+          "CAPNP_DEFINE_TEMPLATE_STRUCT(", kj::mv(defineText), ", ",
           makeBrandInitializers(templateContext, schema), ");\n");
     } else {
       declareText = kj::strTree("CAPNP_DECLARE_STRUCT(", kj::mv(declareText), ")");
@@ -1935,13 +1975,13 @@ private:
 
     kj::StringTree declareText;
     kj::StringTree defineText = kj::strTree(
-        macroParam(fullName), ", ", macroParam(templateContext.allDecls().flatten()));
+        macroParam(fullName), ", ", macroParam(templateContext.allDecls().flatten()), ", ", hexId);
 
     if (templateContext.isGeneric()) {
       declareText = kj::strTree(
           "CAPNP_DECLARE_TEMPLATE_INTERFACE(", hexId, ", ", templateContext.allArgs(), ")");
       defineText = kj::strTree(
-          "CAPNP_DEFINE_TEMPLATE_INTERFACE(", kj::mv(defineText), ", ", hexId, ", ",
+          "CAPNP_DEFINE_TEMPLATE_INTERFACE(", kj::mv(defineText), ", ",
           makeBrandInitializers(templateContext, schema), ");\n");
     } else {
       declareText = kj::strTree("CAPNP_DECLARE_INTERFACE(", hexId, ")");
@@ -1959,8 +1999,10 @@ private:
           "struct ", scope, name, " {\n",
           "  ", name, "() = delete;\n"
           "\n"
+          "#if !CAPNP_LITE\n"
           "  class Client;\n"
           "  class Server;\n"
+          "#endif  // !CAPNP_LITE\n"
           "\n",
           KJ_MAP(n, nestedTypeDecls) { return kj::mv(n); },
           "\n"
@@ -1969,6 +2011,7 @@ private:
           "\n"),
 
       kj::strTree(
+          "#if !CAPNP_LITE\n",
           templateContext.allDecls(),
           "class ", fullName, "::Client\n"
           "    : public virtual ::capnp::Capability::Client",
@@ -2016,9 +2059,11 @@ private:
           "  ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,\n"
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);\n"
           "};\n"
+          "#endif  // !CAPNP_LITE\n"
           "\n"),
 
       kj::strTree(
+          "#if !CAPNP_LITE\n",
           templateContext.allDecls(),
           "inline ", fullName, "::Client::Client(decltype(nullptr))\n"
           "    : ::capnp::Capability::Client(nullptr) {}\n",
@@ -2048,9 +2093,11 @@ private:
           "  return *this;\n"
           "}\n"
           "\n",
-          KJ_MAP(m, methods) { return kj::mv(m.inlineDefs); }),
+          KJ_MAP(m, methods) { return kj::mv(m.inlineDefs); },
+          "#endif  // !CAPNP_LITE\n"),
 
       kj::strTree(
+          "#if !CAPNP_LITE\n",
           KJ_MAP(m, methods) { return kj::mv(m.sourceDefs); },
           templateContext.allDecls(),
           "::kj::Promise<void> ", fullName, "::Server::dispatchCall(\n"
@@ -2080,6 +2127,7 @@ private:
           "          0x", kj::hex(proto.getId()), "ull, methodId);\n"
           "  }\n"
           "}\n"
+          "#endif  // !CAPNP_LITE\n"
           "\n",
           kj::mv(defineText))
     };
@@ -2257,7 +2305,7 @@ private:
     }, "\n   ");
 
     auto schemaDecl = kj::strTree(
-        "extern const ::capnp::_::RawSchema s_", hexId, ";\n");
+        "CAPNP_DECLARE_SCHEMA(", hexId, ");\n");
 
     std::set<uint64_t> deps;
     enumerateDeps(proto, deps);
@@ -2291,7 +2339,9 @@ private:
     auto schemaDef = kj::strTree(
         "static const ::capnp::_::AlignedData<", rawSchema.size(), "> b_", hexId, " = {\n"
         "  {", kj::mv(schemaLiteral), " }\n"
-        "};\n",
+        "};\n"
+        "::capnp::word const* const bp_", hexId, " = b_", hexId, ".words;\n"
+        "#if !CAPNP_LITE\n",
         deps.size() == 0 ? kj::strTree() : kj::strTree(
             "static const ::capnp::_::RawSchema* const d_", hexId, "[] = {\n",
             KJ_MAP(depId, deps) {
@@ -2316,7 +2366,8 @@ private:
         membersByDiscrim.size() == 0 ? kj::strTree("nullptr") : kj::strTree("i_", hexId),
         ", nullptr, nullptr, { &s_", hexId, ", nullptr, bd_", hexId, ", 0, "
         "sizeof(bd_", hexId, ") / sizeof(bd_", hexId, "[0]), nullptr }\n"
-        "};\n");
+        "};\n"
+        "#endif  // !CAPNP_LITE\n");
 
     NodeText top = makeNodeTextWithoutNested(
         namespace_, scope, name, schema,
@@ -2420,7 +2471,7 @@ private:
               "};\n"
               "CAPNP_DECLARE_ENUM(", name, ", ", hexId, ");\n"),
           kj::strTree(
-              "CAPNP_DEFINE_ENUM(", name, "_", hexId, ");\n"),
+              "CAPNP_DEFINE_ENUM(", name, "_", hexId, ", ", hexId, ");\n"),
 
           kj::strTree(),
         };
@@ -2547,7 +2598,11 @@ private:
           "#define CAPNP_INCLUDED_", kj::hex(node.getId()), "_\n"
           "\n"
           "#include <capnp/generated-header-support.h>\n",
-          hasInterfaces ? kj::strTree("#include <capnp/capability.h>\n") : kj::strTree(),
+          hasInterfaces ? kj::strTree(
+            "#if !CAPNP_LITE\n"
+            "#include <capnp/capability.h>\n"
+            "#endif  // !CAPNP_LITE\n"
+          ) : kj::strTree(),
           "\n"
           "#if CAPNP_VERSION != ", CAPNP_VERSION, "\n"
           "#error \"Version mismatch between generated code and library headers.  You must "

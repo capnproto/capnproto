@@ -102,6 +102,7 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutpu
   }
 }
 
+#if !CAPNP_LITE
 kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> MessageBuilder::getCapTable() {
   if (allocatedArena) {
     return arena()->getCapTable();
@@ -109,6 +110,7 @@ kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> MessageBuilder::getCapTable() {
     return nullptr;
   }
 }
+#endif  // !CAPNP_LITE
 
 Orphanage MessageBuilder::getOrphanage() {
   // We must ensure that the arena and root pointer have been allocated before the Orphanage

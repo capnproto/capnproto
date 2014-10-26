@@ -236,6 +236,8 @@ static const ::capnp::_::AlignedData<229> b_91b79f1f808db032 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_91b79f1f808db032 = b_91b79f1f808db032.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_91b79f1f808db032[] = {
   &s_836a53ce789d4cd4,
   &s_86267432565dee97,
@@ -260,6 +262,7 @@ const ::capnp::_::RawSchema s_91b79f1f808db032 = {
   0x91b79f1f808db032, b_91b79f1f808db032.words, 229, d_91b79f1f808db032, m_91b79f1f808db032,
   14, 14, i_91b79f1f808db032, nullptr, nullptr, { &s_91b79f1f808db032, nullptr, bd_91b79f1f808db032, 0, sizeof(bd_91b79f1f808db032) / sizeof(bd_91b79f1f808db032[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<121> b_836a53ce789d4cd4 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     212,  76, 157, 120, 206,  83, 106, 131,
@@ -383,6 +386,8 @@ static const ::capnp::_::AlignedData<121> b_836a53ce789d4cd4 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_836a53ce789d4cd4 = b_836a53ce789d4cd4.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_836a53ce789d4cd4[] = {
   &s_95bc14545813fbc1,
   &s_9a0e61223d96743b,
@@ -396,6 +401,7 @@ const ::capnp::_::RawSchema s_836a53ce789d4cd4 = {
   0x836a53ce789d4cd4, b_836a53ce789d4cd4.words, 121, d_836a53ce789d4cd4, m_836a53ce789d4cd4,
   3, 7, i_836a53ce789d4cd4, nullptr, nullptr, { &s_836a53ce789d4cd4, nullptr, bd_836a53ce789d4cd4, 0, sizeof(bd_836a53ce789d4cd4) / sizeof(bd_836a53ce789d4cd4[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<65> b_dae8b0f61aab5f99 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     153,  95, 171,  26, 246, 176, 232, 218,
@@ -463,6 +469,8 @@ static const ::capnp::_::AlignedData<65> b_dae8b0f61aab5f99 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_dae8b0f61aab5f99 = b_dae8b0f61aab5f99.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_dae8b0f61aab5f99[] = {
   &s_836a53ce789d4cd4,
 };
@@ -474,6 +482,7 @@ const ::capnp::_::RawSchema s_dae8b0f61aab5f99 = {
   0xdae8b0f61aab5f99, b_dae8b0f61aab5f99.words, 65, d_dae8b0f61aab5f99, m_dae8b0f61aab5f99,
   1, 3, i_dae8b0f61aab5f99, nullptr, nullptr, { &s_dae8b0f61aab5f99, nullptr, bd_dae8b0f61aab5f99, 0, sizeof(bd_dae8b0f61aab5f99) / sizeof(bd_dae8b0f61aab5f99[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<148> b_9e19b28d3db3573a = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      58,  87, 179,  61, 141, 178,  25, 158,
@@ -624,6 +633,8 @@ static const ::capnp::_::AlignedData<148> b_9e19b28d3db3573a = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_9e19b28d3db3573a = b_9e19b28d3db3573a.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_9e19b28d3db3573a[] = {
   &s_9a0e61223d96743b,
   &s_d625b7063acf691a,
@@ -636,6 +647,7 @@ const ::capnp::_::RawSchema s_9e19b28d3db3573a = {
   0x9e19b28d3db3573a, b_9e19b28d3db3573a.words, 148, d_9e19b28d3db3573a, m_9e19b28d3db3573a,
   2, 8, i_9e19b28d3db3573a, nullptr, nullptr, { &s_9e19b28d3db3573a, nullptr, bd_9e19b28d3db3573a, 0, sizeof(bd_9e19b28d3db3573a) / sizeof(bd_9e19b28d3db3573a[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<50> b_d37d2eb2c2f80e63 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      99,  14, 248, 194, 178,  46, 125, 211,
@@ -688,6 +700,8 @@ static const ::capnp::_::AlignedData<50> b_d37d2eb2c2f80e63 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_d37d2eb2c2f80e63 = b_d37d2eb2c2f80e63.words;
+#if !CAPNP_LITE
 static const uint16_t m_d37d2eb2c2f80e63[] = {0, 1};
 static const uint16_t i_d37d2eb2c2f80e63[] = {0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_d37d2eb2c2f80e63[] = {
@@ -696,6 +710,7 @@ const ::capnp::_::RawSchema s_d37d2eb2c2f80e63 = {
   0xd37d2eb2c2f80e63, b_d37d2eb2c2f80e63.words, 50, nullptr, m_d37d2eb2c2f80e63,
   0, 2, i_d37d2eb2c2f80e63, nullptr, nullptr, { &s_d37d2eb2c2f80e63, nullptr, bd_d37d2eb2c2f80e63, 0, sizeof(bd_d37d2eb2c2f80e63) / sizeof(bd_d37d2eb2c2f80e63[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<64> b_bbc29655fa89086e = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     110,   8, 137, 250,  85, 150, 194, 187,
@@ -762,6 +777,8 @@ static const ::capnp::_::AlignedData<64> b_bbc29655fa89086e = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_bbc29655fa89086e = b_bbc29655fa89086e.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_bbc29655fa89086e[] = {
   &s_8523ddc40b86b8b0,
   &s_d625b7063acf691a,
@@ -774,6 +791,7 @@ const ::capnp::_::RawSchema s_bbc29655fa89086e = {
   0xbbc29655fa89086e, b_bbc29655fa89086e.words, 64, d_bbc29655fa89086e, m_bbc29655fa89086e,
   2, 3, i_bbc29655fa89086e, nullptr, nullptr, { &s_bbc29655fa89086e, nullptr, bd_bbc29655fa89086e, 0, sizeof(bd_bbc29655fa89086e) / sizeof(bd_bbc29655fa89086e[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<48> b_ad1a6c0d7dd07497 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     151, 116, 208, 125,  13, 108,  26, 173,
@@ -824,6 +842,8 @@ static const ::capnp::_::AlignedData<48> b_ad1a6c0d7dd07497 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_ad1a6c0d7dd07497 = b_ad1a6c0d7dd07497.words;
+#if !CAPNP_LITE
 static const uint16_t m_ad1a6c0d7dd07497[] = {0, 1};
 static const uint16_t i_ad1a6c0d7dd07497[] = {0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_ad1a6c0d7dd07497[] = {
@@ -832,6 +852,7 @@ const ::capnp::_::RawSchema s_ad1a6c0d7dd07497 = {
   0xad1a6c0d7dd07497, b_ad1a6c0d7dd07497.words, 48, nullptr, m_ad1a6c0d7dd07497,
   0, 2, i_ad1a6c0d7dd07497, nullptr, nullptr, { &s_ad1a6c0d7dd07497, nullptr, bd_ad1a6c0d7dd07497, 0, sizeof(bd_ad1a6c0d7dd07497) / sizeof(bd_ad1a6c0d7dd07497[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<41> b_f964368b0fbd3711 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      17,  55, 189,  15, 139,  54, 100, 249,
@@ -875,6 +896,8 @@ static const ::capnp::_::AlignedData<41> b_f964368b0fbd3711 = {
       0,   0,   0,   0,   0,   0,   0,   0,
      99, 111, 110, 116, 101, 120, 116,   0, }
 };
+::capnp::word const* const bp_f964368b0fbd3711 = b_f964368b0fbd3711.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_f964368b0fbd3711[] = {
   &s_95bc14545813fbc1,
   &s_d562b4df655bdd4d,
@@ -887,6 +910,7 @@ const ::capnp::_::RawSchema s_f964368b0fbd3711 = {
   0xf964368b0fbd3711, b_f964368b0fbd3711.words, 41, d_f964368b0fbd3711, m_f964368b0fbd3711,
   2, 2, i_f964368b0fbd3711, nullptr, nullptr, { &s_f964368b0fbd3711, nullptr, bd_f964368b0fbd3711, 0, sizeof(bd_f964368b0fbd3711) / sizeof(bd_f964368b0fbd3711[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<81> b_d562b4df655bdd4d = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      77, 221,  91, 101, 223, 180,  98, 213,
@@ -970,6 +994,8 @@ static const ::capnp::_::AlignedData<81> b_d562b4df655bdd4d = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_d562b4df655bdd4d = b_d562b4df655bdd4d.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_d562b4df655bdd4d[] = {
   &s_f964368b0fbd3711,
 };
@@ -981,6 +1007,7 @@ const ::capnp::_::RawSchema s_d562b4df655bdd4d = {
   0xd562b4df655bdd4d, b_d562b4df655bdd4d.words, 81, d_d562b4df655bdd4d, m_d562b4df655bdd4d,
   1, 4, i_d562b4df655bdd4d, nullptr, nullptr, { &s_d562b4df655bdd4d, nullptr, bd_d562b4df655bdd4d, 0, sizeof(bd_d562b4df655bdd4d) / sizeof(bd_d562b4df655bdd4d[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<48> b_e40ef0b4b02e882c = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      44, 136,  46, 176, 180, 240,  14, 228,
@@ -1031,6 +1058,8 @@ static const ::capnp::_::AlignedData<48> b_e40ef0b4b02e882c = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_e40ef0b4b02e882c = b_e40ef0b4b02e882c.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_e40ef0b4b02e882c[] = {
   &s_95bc14545813fbc1,
 };
@@ -1042,6 +1071,7 @@ const ::capnp::_::RawSchema s_e40ef0b4b02e882c = {
   0xe40ef0b4b02e882c, b_e40ef0b4b02e882c.words, 48, d_e40ef0b4b02e882c, m_e40ef0b4b02e882c,
   1, 2, i_e40ef0b4b02e882c, nullptr, nullptr, { &s_e40ef0b4b02e882c, nullptr, bd_e40ef0b4b02e882c, 0, sizeof(bd_e40ef0b4b02e882c) / sizeof(bd_e40ef0b4b02e882c[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<49> b_ec0c922151b8b0a8 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     168, 176, 184,  81,  33, 146,  12, 236,
@@ -1093,6 +1123,8 @@ static const ::capnp::_::AlignedData<49> b_ec0c922151b8b0a8 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_ec0c922151b8b0a8 = b_ec0c922151b8b0a8.words;
+#if !CAPNP_LITE
 static const uint16_t m_ec0c922151b8b0a8[] = {1, 0};
 static const uint16_t i_ec0c922151b8b0a8[] = {0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_ec0c922151b8b0a8[] = {
@@ -1101,6 +1133,7 @@ const ::capnp::_::RawSchema s_ec0c922151b8b0a8 = {
   0xec0c922151b8b0a8, b_ec0c922151b8b0a8.words, 49, nullptr, m_ec0c922151b8b0a8,
   0, 2, i_ec0c922151b8b0a8, nullptr, nullptr, { &s_ec0c922151b8b0a8, nullptr, bd_ec0c922151b8b0a8, 0, sizeof(bd_ec0c922151b8b0a8) / sizeof(bd_ec0c922151b8b0a8[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<49> b_86267432565dee97 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     151, 238,  93,  86,  50, 116,  38, 134,
@@ -1152,6 +1185,8 @@ static const ::capnp::_::AlignedData<49> b_86267432565dee97 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_86267432565dee97 = b_86267432565dee97.words;
+#if !CAPNP_LITE
 static const uint16_t m_86267432565dee97[] = {1, 0};
 static const uint16_t i_86267432565dee97[] = {0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_86267432565dee97[] = {
@@ -1160,6 +1195,7 @@ const ::capnp::_::RawSchema s_86267432565dee97 = {
   0x86267432565dee97, b_86267432565dee97.words, 49, nullptr, m_86267432565dee97,
   0, 2, i_86267432565dee97, nullptr, nullptr, { &s_86267432565dee97, nullptr, bd_86267432565dee97, 0, sizeof(bd_86267432565dee97) / sizeof(bd_86267432565dee97[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<64> b_9c6a046bfbc1ac5a = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      90, 172, 193, 251, 107,   4, 106, 156,
@@ -1226,6 +1262,8 @@ static const ::capnp::_::AlignedData<64> b_9c6a046bfbc1ac5a = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_9c6a046bfbc1ac5a = b_9c6a046bfbc1ac5a.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_9c6a046bfbc1ac5a[] = {
   &s_95bc14545813fbc1,
 };
@@ -1237,6 +1275,7 @@ const ::capnp::_::RawSchema s_9c6a046bfbc1ac5a = {
   0x9c6a046bfbc1ac5a, b_9c6a046bfbc1ac5a.words, 64, d_9c6a046bfbc1ac5a, m_9c6a046bfbc1ac5a,
   1, 3, i_9c6a046bfbc1ac5a, nullptr, nullptr, { &s_9c6a046bfbc1ac5a, nullptr, bd_9c6a046bfbc1ac5a, 0, sizeof(bd_9c6a046bfbc1ac5a) / sizeof(bd_9c6a046bfbc1ac5a[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<64> b_d4c9b56290554016 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      22,  64,  85, 144,  98, 181, 201, 212,
@@ -1303,6 +1342,8 @@ static const ::capnp::_::AlignedData<64> b_d4c9b56290554016 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_d4c9b56290554016 = b_d4c9b56290554016.words;
+#if !CAPNP_LITE
 static const uint16_t m_d4c9b56290554016[] = {2, 1, 0};
 static const uint16_t i_d4c9b56290554016[] = {0, 1, 2};
 const ::capnp::_::RawBrandedSchema::Dependency bd_d4c9b56290554016[] = {
@@ -1311,6 +1352,7 @@ const ::capnp::_::RawSchema s_d4c9b56290554016 = {
   0xd4c9b56290554016, b_d4c9b56290554016.words, 64, nullptr, m_d4c9b56290554016,
   0, 3, i_d4c9b56290554016, nullptr, nullptr, { &s_d4c9b56290554016, nullptr, bd_d4c9b56290554016, 0, sizeof(bd_d4c9b56290554016) / sizeof(bd_d4c9b56290554016[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<63> b_fbe1980490e001af = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     175,   1, 224, 144,   4, 152, 225, 251,
@@ -1376,6 +1418,8 @@ static const ::capnp::_::AlignedData<63> b_fbe1980490e001af = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_fbe1980490e001af = b_fbe1980490e001af.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_fbe1980490e001af[] = {
   &s_95bc14545813fbc1,
 };
@@ -1387,6 +1431,7 @@ const ::capnp::_::RawSchema s_fbe1980490e001af = {
   0xfbe1980490e001af, b_fbe1980490e001af.words, 63, d_fbe1980490e001af, m_fbe1980490e001af,
   1, 3, i_fbe1980490e001af, nullptr, nullptr, { &s_fbe1980490e001af, nullptr, bd_fbe1980490e001af, 0, sizeof(bd_fbe1980490e001af) / sizeof(bd_fbe1980490e001af[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<50> b_95bc14545813fbc1 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     193, 251,  19,  88,  84,  20, 188, 149,
@@ -1439,6 +1484,8 @@ static const ::capnp::_::AlignedData<50> b_95bc14545813fbc1 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_95bc14545813fbc1 = b_95bc14545813fbc1.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_95bc14545813fbc1[] = {
   &s_d800b1d6cd6f1ca0,
 };
@@ -1450,6 +1497,7 @@ const ::capnp::_::RawSchema s_95bc14545813fbc1 = {
   0x95bc14545813fbc1, b_95bc14545813fbc1.words, 50, d_95bc14545813fbc1, m_95bc14545813fbc1,
   1, 2, i_95bc14545813fbc1, nullptr, nullptr, { &s_95bc14545813fbc1, nullptr, bd_95bc14545813fbc1, 0, sizeof(bd_95bc14545813fbc1) / sizeof(bd_95bc14545813fbc1[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<52> b_9a0e61223d96743b = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      59, 116, 150,  61,  34,  97,  14, 154,
@@ -1504,6 +1552,8 @@ static const ::capnp::_::AlignedData<52> b_9a0e61223d96743b = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_9a0e61223d96743b = b_9a0e61223d96743b.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_9a0e61223d96743b[] = {
   &s_8523ddc40b86b8b0,
 };
@@ -1515,6 +1565,7 @@ const ::capnp::_::RawSchema s_9a0e61223d96743b = {
   0x9a0e61223d96743b, b_9a0e61223d96743b.words, 52, d_9a0e61223d96743b, m_9a0e61223d96743b,
   1, 2, i_9a0e61223d96743b, nullptr, nullptr, { &s_9a0e61223d96743b, nullptr, bd_9a0e61223d96743b, 0, sizeof(bd_9a0e61223d96743b) / sizeof(bd_9a0e61223d96743b[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<114> b_8523ddc40b86b8b0 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     176, 184, 134,  11, 196, 221,  35, 133,
@@ -1631,6 +1682,8 @@ static const ::capnp::_::AlignedData<114> b_8523ddc40b86b8b0 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_8523ddc40b86b8b0 = b_8523ddc40b86b8b0.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_8523ddc40b86b8b0[] = {
   &s_d37007fde1f0027d,
   &s_d800b1d6cd6f1ca0,
@@ -1643,6 +1696,7 @@ const ::capnp::_::RawSchema s_8523ddc40b86b8b0 = {
   0x8523ddc40b86b8b0, b_8523ddc40b86b8b0.words, 114, d_8523ddc40b86b8b0, m_8523ddc40b86b8b0,
   2, 6, i_8523ddc40b86b8b0, nullptr, nullptr, { &s_8523ddc40b86b8b0, nullptr, bd_8523ddc40b86b8b0, 0, sizeof(bd_8523ddc40b86b8b0) / sizeof(bd_8523ddc40b86b8b0[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<57> b_d800b1d6cd6f1ca0 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     160,  28, 111, 205, 214, 177,   0, 216,
@@ -1702,6 +1756,8 @@ static const ::capnp::_::AlignedData<57> b_d800b1d6cd6f1ca0 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_d800b1d6cd6f1ca0 = b_d800b1d6cd6f1ca0.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_d800b1d6cd6f1ca0[] = {
   &s_f316944415569081,
 };
@@ -1713,6 +1769,7 @@ const ::capnp::_::RawSchema s_d800b1d6cd6f1ca0 = {
   0xd800b1d6cd6f1ca0, b_d800b1d6cd6f1ca0.words, 57, d_d800b1d6cd6f1ca0, m_d800b1d6cd6f1ca0,
   1, 2, i_d800b1d6cd6f1ca0, nullptr, nullptr, { &s_d800b1d6cd6f1ca0, nullptr, bd_d800b1d6cd6f1ca0, 0, sizeof(bd_d800b1d6cd6f1ca0) / sizeof(bd_d800b1d6cd6f1ca0[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<50> b_f316944415569081 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     129, 144,  86,  21,  68, 148,  22, 243,
@@ -1765,6 +1822,8 @@ static const ::capnp::_::AlignedData<50> b_f316944415569081 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_f316944415569081 = b_f316944415569081.words;
+#if !CAPNP_LITE
 static const uint16_t m_f316944415569081[] = {1, 0};
 static const uint16_t i_f316944415569081[] = {0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_f316944415569081[] = {
@@ -1773,6 +1832,7 @@ const ::capnp::_::RawSchema s_f316944415569081 = {
   0xf316944415569081, b_f316944415569081.words, 50, nullptr, m_f316944415569081,
   0, 2, i_f316944415569081, nullptr, nullptr, { &s_f316944415569081, nullptr, bd_f316944415569081, 0, sizeof(bd_f316944415569081) / sizeof(bd_f316944415569081[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<49> b_ce8c7a90684b48ff = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     255,  72,  75, 104, 144, 122, 140, 206,
@@ -1824,6 +1884,8 @@ static const ::capnp::_::AlignedData<49> b_ce8c7a90684b48ff = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_ce8c7a90684b48ff = b_ce8c7a90684b48ff.words;
+#if !CAPNP_LITE
 static const uint16_t m_ce8c7a90684b48ff[] = {0, 1};
 static const uint16_t i_ce8c7a90684b48ff[] = {0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_ce8c7a90684b48ff[] = {
@@ -1832,6 +1894,7 @@ const ::capnp::_::RawSchema s_ce8c7a90684b48ff = {
   0xce8c7a90684b48ff, b_ce8c7a90684b48ff.words, 49, nullptr, m_ce8c7a90684b48ff,
   0, 2, i_ce8c7a90684b48ff, nullptr, nullptr, { &s_ce8c7a90684b48ff, nullptr, bd_ce8c7a90684b48ff, 0, sizeof(bd_ce8c7a90684b48ff) / sizeof(bd_ce8c7a90684b48ff[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<49> b_d37007fde1f0027d = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     125,   2, 240, 225, 253,   7, 112, 211,
@@ -1883,6 +1946,8 @@ static const ::capnp::_::AlignedData<49> b_d37007fde1f0027d = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_d37007fde1f0027d = b_d37007fde1f0027d.words;
+#if !CAPNP_LITE
 static const uint16_t m_d37007fde1f0027d[] = {0, 1};
 static const uint16_t i_d37007fde1f0027d[] = {0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_d37007fde1f0027d[] = {
@@ -1891,6 +1956,7 @@ const ::capnp::_::RawSchema s_d37007fde1f0027d = {
   0xd37007fde1f0027d, b_d37007fde1f0027d.words, 49, nullptr, m_d37007fde1f0027d,
   0, 2, i_d37007fde1f0027d, nullptr, nullptr, { &s_d37007fde1f0027d, nullptr, bd_d37007fde1f0027d, 0, sizeof(bd_d37007fde1f0027d) / sizeof(bd_d37007fde1f0027d[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<69> b_d625b7063acf691a = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      26, 105, 207,  58,   6, 183,  37, 214,
@@ -1962,6 +2028,8 @@ static const ::capnp::_::AlignedData<69> b_d625b7063acf691a = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_d625b7063acf691a = b_d625b7063acf691a.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_d625b7063acf691a[] = {
   &s_bbaeda2607b6f958,
 };
@@ -1973,6 +2041,7 @@ const ::capnp::_::RawSchema s_d625b7063acf691a = {
   0xd625b7063acf691a, b_d625b7063acf691a.words, 69, d_d625b7063acf691a, m_d625b7063acf691a,
   1, 3, i_d625b7063acf691a, nullptr, nullptr, { &s_d625b7063acf691a, nullptr, bd_d625b7063acf691a, 0, sizeof(bd_d625b7063acf691a) / sizeof(bd_d625b7063acf691a[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<34> b_bbaeda2607b6f958 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      88, 249, 182,   7,  38, 218, 174, 187,
@@ -2009,6 +2078,8 @@ static const ::capnp::_::AlignedData<34> b_bbaeda2607b6f958 = {
     111, 118, 101, 114, 108, 111,  97, 100,
     101, 100,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_bbaeda2607b6f958 = b_bbaeda2607b6f958.words;
+#if !CAPNP_LITE
 static const uint16_t m_bbaeda2607b6f958[] = {2, 0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_bbaeda2607b6f958[] = {
 };
@@ -2016,7 +2087,8 @@ const ::capnp::_::RawSchema s_bbaeda2607b6f958 = {
   0xbbaeda2607b6f958, b_bbaeda2607b6f958.words, 34, nullptr, m_bbaeda2607b6f958,
   0, 3, nullptr, nullptr, nullptr, { &s_bbaeda2607b6f958, nullptr, bd_bbaeda2607b6f958, 0, sizeof(bd_bbaeda2607b6f958) / sizeof(bd_bbaeda2607b6f958[0]), nullptr }
 };
-CAPNP_DEFINE_ENUM(Durability_bbaeda2607b6f958);
+#endif  // !CAPNP_LITE
+CAPNP_DEFINE_ENUM(Durability_bbaeda2607b6f958, bbaeda2607b6f958);
 }  // namespace schemas
 }  // namespace capnp
 
@@ -2025,29 +2097,29 @@ CAPNP_DEFINE_ENUM(Durability_bbaeda2607b6f958);
 namespace capnp {
 namespace rpc {
 
-CAPNP_DEFINE_STRUCT(Message, );
-CAPNP_DEFINE_STRUCT(Call, );
-CAPNP_DEFINE_STRUCT(Call::SendResultsTo, );
-CAPNP_DEFINE_STRUCT(Return, );
-CAPNP_DEFINE_STRUCT(Finish, );
-CAPNP_DEFINE_STRUCT(Resolve, );
-CAPNP_DEFINE_STRUCT(Release, );
-CAPNP_DEFINE_STRUCT(Disembargo, );
-CAPNP_DEFINE_STRUCT(Disembargo::Context, );
-CAPNP_DEFINE_STRUCT(Save, );
-CAPNP_DEFINE_STRUCT(Restore, );
-CAPNP_DEFINE_STRUCT(Delete, );
-CAPNP_DEFINE_STRUCT(Provide, );
-CAPNP_DEFINE_STRUCT(Accept, );
-CAPNP_DEFINE_STRUCT(Join, );
-CAPNP_DEFINE_STRUCT(MessageTarget, );
-CAPNP_DEFINE_STRUCT(Payload, );
-CAPNP_DEFINE_STRUCT(CapDescriptor, );
-CAPNP_DEFINE_STRUCT(PromisedAnswer, );
-CAPNP_DEFINE_STRUCT(PromisedAnswer::Op, );
-CAPNP_DEFINE_STRUCT(SturdyRef, );
-CAPNP_DEFINE_STRUCT(ThirdPartyCapDescriptor, );
-CAPNP_DEFINE_STRUCT(Exception, );
+CAPNP_DEFINE_STRUCT(Message, , 91b79f1f808db032);
+CAPNP_DEFINE_STRUCT(Call, , 836a53ce789d4cd4);
+CAPNP_DEFINE_STRUCT(Call::SendResultsTo, , dae8b0f61aab5f99);
+CAPNP_DEFINE_STRUCT(Return, , 9e19b28d3db3573a);
+CAPNP_DEFINE_STRUCT(Finish, , d37d2eb2c2f80e63);
+CAPNP_DEFINE_STRUCT(Resolve, , bbc29655fa89086e);
+CAPNP_DEFINE_STRUCT(Release, , ad1a6c0d7dd07497);
+CAPNP_DEFINE_STRUCT(Disembargo, , f964368b0fbd3711);
+CAPNP_DEFINE_STRUCT(Disembargo::Context, , d562b4df655bdd4d);
+CAPNP_DEFINE_STRUCT(Save, , e40ef0b4b02e882c);
+CAPNP_DEFINE_STRUCT(Restore, , ec0c922151b8b0a8);
+CAPNP_DEFINE_STRUCT(Delete, , 86267432565dee97);
+CAPNP_DEFINE_STRUCT(Provide, , 9c6a046bfbc1ac5a);
+CAPNP_DEFINE_STRUCT(Accept, , d4c9b56290554016);
+CAPNP_DEFINE_STRUCT(Join, , fbe1980490e001af);
+CAPNP_DEFINE_STRUCT(MessageTarget, , 95bc14545813fbc1);
+CAPNP_DEFINE_STRUCT(Payload, , 9a0e61223d96743b);
+CAPNP_DEFINE_STRUCT(CapDescriptor, , 8523ddc40b86b8b0);
+CAPNP_DEFINE_STRUCT(PromisedAnswer, , d800b1d6cd6f1ca0);
+CAPNP_DEFINE_STRUCT(PromisedAnswer::Op, , f316944415569081);
+CAPNP_DEFINE_STRUCT(SturdyRef, , ce8c7a90684b48ff);
+CAPNP_DEFINE_STRUCT(ThirdPartyCapDescriptor, , d37007fde1f0027d);
+CAPNP_DEFINE_STRUCT(Exception, , d625b7063acf691a);
 
 }  // namespace
 }  // namespace

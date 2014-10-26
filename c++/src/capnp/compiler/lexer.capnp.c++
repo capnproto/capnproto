@@ -202,6 +202,8 @@ static const ::capnp::_::AlignedData<195> b_91cc55cd57de5419 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_91cc55cd57de5419 = b_91cc55cd57de5419.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_91cc55cd57de5419[] = {
   &s_91cc55cd57de5419,
 };
@@ -213,6 +215,7 @@ const ::capnp::_::RawSchema s_91cc55cd57de5419 = {
   0x91cc55cd57de5419, b_91cc55cd57de5419.words, 195, d_91cc55cd57de5419, m_91cc55cd57de5419,
   1, 10, i_91cc55cd57de5419, nullptr, nullptr, { &s_91cc55cd57de5419, nullptr, bd_91cc55cd57de5419, 0, sizeof(bd_91cc55cd57de5419) / sizeof(bd_91cc55cd57de5419[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<119> b_c6725e678d60fa37 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      55, 250,  96, 141, 103,  94, 114, 198,
@@ -334,6 +337,8 @@ static const ::capnp::_::AlignedData<119> b_c6725e678d60fa37 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_c6725e678d60fa37 = b_c6725e678d60fa37.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_c6725e678d60fa37[] = {
   &s_91cc55cd57de5419,
   &s_c6725e678d60fa37,
@@ -346,6 +351,7 @@ const ::capnp::_::RawSchema s_c6725e678d60fa37 = {
   0xc6725e678d60fa37, b_c6725e678d60fa37.words, 119, d_c6725e678d60fa37, m_c6725e678d60fa37,
   2, 6, i_c6725e678d60fa37, nullptr, nullptr, { &s_c6725e678d60fa37, nullptr, bd_c6725e678d60fa37, 0, sizeof(bd_c6725e678d60fa37) / sizeof(bd_c6725e678d60fa37[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<38> b_9e69a92512b19d18 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
      24, 157, 177,  18,  37, 169, 105, 158,
@@ -386,6 +392,8 @@ static const ::capnp::_::AlignedData<38> b_9e69a92512b19d18 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_9e69a92512b19d18 = b_9e69a92512b19d18.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_9e69a92512b19d18[] = {
   &s_91cc55cd57de5419,
 };
@@ -397,6 +405,7 @@ const ::capnp::_::RawSchema s_9e69a92512b19d18 = {
   0x9e69a92512b19d18, b_9e69a92512b19d18.words, 38, d_9e69a92512b19d18, m_9e69a92512b19d18,
   1, 1, i_9e69a92512b19d18, nullptr, nullptr, { &s_9e69a92512b19d18, nullptr, bd_9e69a92512b19d18, 0, sizeof(bd_9e69a92512b19d18) / sizeof(bd_9e69a92512b19d18[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<40> b_a11f97b9d6c73dd4 = {
   {   0,   0,   0,   0,   5,   0,   6,   0,
     212,  61, 199, 214, 185, 151,  31, 161,
@@ -439,6 +448,8 @@ static const ::capnp::_::AlignedData<40> b_a11f97b9d6c73dd4 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
+::capnp::word const* const bp_a11f97b9d6c73dd4 = b_a11f97b9d6c73dd4.words;
+#if !CAPNP_LITE
 static const ::capnp::_::RawSchema* const d_a11f97b9d6c73dd4[] = {
   &s_c6725e678d60fa37,
 };
@@ -450,6 +461,7 @@ const ::capnp::_::RawSchema s_a11f97b9d6c73dd4 = {
   0xa11f97b9d6c73dd4, b_a11f97b9d6c73dd4.words, 40, d_a11f97b9d6c73dd4, m_a11f97b9d6c73dd4,
   1, 1, i_a11f97b9d6c73dd4, nullptr, nullptr, { &s_a11f97b9d6c73dd4, nullptr, bd_a11f97b9d6c73dd4, 0, sizeof(bd_a11f97b9d6c73dd4) / sizeof(bd_a11f97b9d6c73dd4[0]), nullptr }
 };
+#endif  // !CAPNP_LITE
 }  // namespace schemas
 }  // namespace capnp
 
@@ -458,10 +470,10 @@ const ::capnp::_::RawSchema s_a11f97b9d6c73dd4 = {
 namespace capnp {
 namespace compiler {
 
-CAPNP_DEFINE_STRUCT(Token, );
-CAPNP_DEFINE_STRUCT(Statement, );
-CAPNP_DEFINE_STRUCT(LexedTokens, );
-CAPNP_DEFINE_STRUCT(LexedStatements, );
+CAPNP_DEFINE_STRUCT(Token, , 91cc55cd57de5419);
+CAPNP_DEFINE_STRUCT(Statement, , c6725e678d60fa37);
+CAPNP_DEFINE_STRUCT(LexedTokens, , 9e69a92512b19d18);
+CAPNP_DEFINE_STRUCT(LexedStatements, , a11f97b9d6c73dd4);
 
 }  // namespace
 }  // namespace

@@ -14,18 +14,18 @@
 namespace capnp {
 namespace schemas {
 
-extern const ::capnp::_::RawSchema s_9fd69ebc87b9719c;
+CAPNP_DECLARE_SCHEMA(9fd69ebc87b9719c);
 enum class Side_9fd69ebc87b9719c: uint16_t {
   SERVER,
   CLIENT,
 };
 CAPNP_DECLARE_ENUM(Side, 9fd69ebc87b9719c);
-extern const ::capnp::_::RawSchema s_e615e371b1036508;
-extern const ::capnp::_::RawSchema s_b88d09a9c5f39817;
-extern const ::capnp::_::RawSchema s_89f389b6fd4082c1;
-extern const ::capnp::_::RawSchema s_b47f4979672cb59d;
-extern const ::capnp::_::RawSchema s_95b29059097fca83;
-extern const ::capnp::_::RawSchema s_9d263a3630b7ebee;
+CAPNP_DECLARE_SCHEMA(e615e371b1036508);
+CAPNP_DECLARE_SCHEMA(b88d09a9c5f39817);
+CAPNP_DECLARE_SCHEMA(89f389b6fd4082c1);
+CAPNP_DECLARE_SCHEMA(b47f4979672cb59d);
+CAPNP_DECLARE_SCHEMA(95b29059097fca83);
+CAPNP_DECLARE_SCHEMA(9d263a3630b7ebee);
 
 }  // namespace schemas
 }  // namespace capnp
@@ -109,9 +109,11 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
     return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
   }
+#endif  // !CAPNP_LITE
 
   inline  ::capnp::rpc::twoparty::Side getSide() const;
 
@@ -139,7 +141,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
   inline  ::capnp::rpc::twoparty::Side getSide();
   inline void setSide( ::capnp::rpc::twoparty::Side value);
@@ -151,6 +155,7 @@ private:
   friend class ::capnp::Orphanage;
 };
 
+#if !CAPNP_LITE
 class SturdyRefHostId::Pipeline {
 public:
   typedef SturdyRefHostId Pipelines;
@@ -164,6 +169,7 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 class ProvisionId::Reader {
 public:
@@ -176,9 +182,11 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
     return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
   }
+#endif  // !CAPNP_LITE
 
   inline  ::uint32_t getJoinId() const;
 
@@ -206,7 +214,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
@@ -218,6 +228,7 @@ private:
   friend class ::capnp::Orphanage;
 };
 
+#if !CAPNP_LITE
 class ProvisionId::Pipeline {
 public:
   typedef ProvisionId Pipelines;
@@ -231,6 +242,7 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 class RecipientId::Reader {
 public:
@@ -243,9 +255,11 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
     return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
   }
+#endif  // !CAPNP_LITE
 
 private:
   ::capnp::_::StructReader _reader;
@@ -271,7 +285,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -280,6 +296,7 @@ private:
   friend class ::capnp::Orphanage;
 };
 
+#if !CAPNP_LITE
 class RecipientId::Pipeline {
 public:
   typedef RecipientId Pipelines;
@@ -293,6 +310,7 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 class ThirdPartyCapId::Reader {
 public:
@@ -305,9 +323,11 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
     return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
   }
+#endif  // !CAPNP_LITE
 
 private:
   ::capnp::_::StructReader _reader;
@@ -333,7 +353,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -342,6 +364,7 @@ private:
   friend class ::capnp::Orphanage;
 };
 
+#if !CAPNP_LITE
 class ThirdPartyCapId::Pipeline {
 public:
   typedef ThirdPartyCapId Pipelines;
@@ -355,6 +378,7 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 class JoinKeyPart::Reader {
 public:
@@ -367,9 +391,11 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
     return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
   }
+#endif  // !CAPNP_LITE
 
   inline  ::uint32_t getJoinId() const;
 
@@ -401,7 +427,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
@@ -419,6 +447,7 @@ private:
   friend class ::capnp::Orphanage;
 };
 
+#if !CAPNP_LITE
 class JoinKeyPart::Pipeline {
 public:
   typedef JoinKeyPart Pipelines;
@@ -432,6 +461,7 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 class JoinResult::Reader {
 public:
@@ -444,9 +474,11 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
     return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
   }
+#endif  // !CAPNP_LITE
 
   inline  ::uint32_t getJoinId() const;
 
@@ -479,7 +511,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
@@ -498,6 +532,7 @@ private:
   friend class ::capnp::Orphanage;
 };
 
+#if !CAPNP_LITE
 class JoinResult::Pipeline {
 public:
   typedef JoinResult Pipelines;
@@ -511,6 +546,7 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 // =======================================================================================
 
