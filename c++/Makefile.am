@@ -293,8 +293,6 @@ capnpc_capnp_SOURCES = src/capnp/compiler/capnpc-capnp.c++
 capnpc_c___LDADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 capnpc_c___SOURCES = src/capnp/compiler/capnpc-c++.c++
 
-endif !LITE_MODE
-
 # Symlink capnpc -> capnp.  The capnp binary will behave like the old capnpc
 # binary (i.e. like "capnp compile") when invoked via this symlink.
 #
@@ -307,6 +305,13 @@ install-exec-hook:
 
 uninstall-hook:
 	rm -f $(DESTDIR)$(bindir)/capnpc
+
+else LITE_MODE
+
+install-exec-hook:
+	ldconfig < /dev/null > /dev/null 2>&1 || true
+
+endif LITE_MODE
 
 # Source files intentionally not included in the dist at this time:
 #  src/capnp/serialize-snappy*
