@@ -473,20 +473,19 @@ inline constexpr uint sizeInWords() {
 #define CAPNP_DEFINE_ENUM(type, id) \
     constexpr uint64_t EnumInfo<type>::typeId
 
-#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
     struct _capnpPrivate { \
       struct IsStruct; \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::_::StructSize structSize = ::capnp::_::StructSize( \
-          dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS, \
-          ::capnp::_::FieldSize::preferredElementEncoding); \
+          dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS); \
       static inline ::capnp::word const* encodedSchema() { return ::capnp::schemas::bp_##id; }
-#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding) \
-    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount) \
+    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
     }
-#define CAPNP_DECLARE_TEMPLATE_STRUCT(id, dataWordSize, pointerCount, preferredElementEncoding, \
+#define CAPNP_DECLARE_TEMPLATE_STRUCT(id, dataWordSize, pointerCount, \
                                       ...) \
-    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount, preferredElementEncoding) \
+    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
     }
 #define CAPNP_DEFINE_STRUCT(type, templates, id) \
     templates constexpr uint64_t type::_capnpPrivate::typeId; \
