@@ -336,6 +336,9 @@ static ChangeInfo fieldUpgradeList(Declaration::Builder decl, uint& nextOrdinal,
   if (nameText == "StructType" || nameText.endsWith("Struct")) {
     return { NO_CHANGE, "Upgrade primitive list to struct list, but it was already a struct list."};
   }
+  if (nameText == "Bool") {
+    return { NO_CHANGE, "Upgrade primitive list to struct list, but bool lists can't be upgraded."};
+  }
 
   relativeName.setValue(kj::str(nameText, "Struct"));
   return { COMPATIBLE, "Upgrade primitive list to struct list" };
