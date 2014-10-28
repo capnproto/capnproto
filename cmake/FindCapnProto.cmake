@@ -19,8 +19,12 @@
 #       Path to the `capnpc-c++` tool (can be set to override).
 #   CAPNP_INCLUDE_DIRS
 #       Include directories for the library's headers (can be set to override).
-#   CAPNP_LIBRARIES
-#       The necessary library paths to link with.
+#   CANP_LIBRARIES
+#       The Cap'n Proto library paths.
+#   CAPNP_LIBRARIES_LITE
+#       Paths to only the 'lite' libraries.
+#   CAPNP_DEFINITIONS
+#       Compiler definitions required for building with the library.
 #   CAPNP_FOUND
 #       Set if the libraries have been located.
 #
@@ -28,6 +32,7 @@
 #
 #   find_package(CapnProto REQUIRED)
 #   include_directories(${CAPNP_INCLUDE_DIRS})
+#   add_definitions(${CAPNP_DEFINITIONS})
 #
 #   capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS schema.capnp)
 #   add_executable(a a.cc ${CAPNP_SRCS} ${CAPNP_HDRS})
@@ -39,6 +44,8 @@
 #   include_directories(${CAPNPC_OUTPUT_DIR})
 #   capnp_generate_cpp(...)
 #
+
+# CAPNP_GENERATE_CPP ===========================================================
 
 function(CAPNP_GENERATE_CPP SOURCES HEADERS)
   if(NOT ARGN)
@@ -121,29 +128,64 @@ function(CAPNP_GENERATE_CPP SOURCES HEADERS)
   set(${HEADERS} ${${HEADERS}} PARENT_SCOPE)
 endfunction()
 
-find_library(CAPNP_LIB_KJ kj)
-find_library(CAPNP_LIB_KJ-ASYNC kj-async)
-find_library(CAPNP_LIB_CAPNP capnp)
-find_library(CAPNP_LIB_CAPNP-RPC capnp-rpc)
-find_library(CAPNP_LIB_CAPNPC capnpc)
-mark_as_advanced(CAPNP_LIB_KJ CAPNP_LIB_KJ-ASYNC CAPNP_LIB_CAPNP CAPNP_LIB_CAPNP-RPC CAPNP_LIB_CAPNPC)
-set(CAPNP_LIBRARIES
+# Find Libraries/Paths =========================================================
+
+# Use pkg-config to get path hints and definitions
+find_package(PkgConfig QUIET)
+pkg_check_modules(PKGCONFIG_CAPNP capnp)
+pkg_check_modules(PKGCONFIG_CAPNP_RPC capnp-rpc QUIET)
+
+find_library(CAPNP_LIB_KJ kj
+  HINTS ${PKGCONFIG_CAPNP_LIBDIR} ${PKGCONFIG_CAPNP_LIBRARY_DIRS}
+)
+find_library(CAPNP_LIB_KJ-ASYNC kj-async
+  HINTS ${PKGCONFIG_CAPNP_RPC_LIBDIR} ${PKGCONFIG_CAPNP_RPC_LIBRARY_DIRS}
+)
+find_library(CAPNP_LIB_CAPNP capnp
+  HINTS ${PKGCONFIG_CAPNP_LIBDIR} ${PKGCONFIG_CAPNP_LIBRARY_DIRS}
+)
+find_library(CAPNP_LIB_CAPNP-RPC capnp-rpc
+  HINTS ${PKGCONFIG_CAPNP_RPC_LIBDIR} ${PKGCONFIG_CAPNP_RPC_LIBRARY_DIRS}
+)
+mark_as_advanced(CAPNP_LIB_KJ CAPNP_LIB_KJ-ASYNC CAPNP_LIB_CAPNP CAPNP_LIB_CAPNP-RPC)
+set(CAPNP_LIBRARIES_LITE
   ${CAPNP_LIB_KJ}
-  ${CAPNP_LIB_KJ-ASYNC}
   ${CAPNP_LIB_CAPNP}
+)
+set(CAPNP_LIBRARIES
+  ${CAPNP_LIBRARIES_LITE}
+  ${CAPNP_LIB_KJ-ASYNC}
   ${CAPNP_LIB_CAPNP-RPC}
-  ${CAPNP_LIB_CAPNPC}
 )
 
-find_path(CAPNP_INCLUDE_DIRS capnp/generated-header-support.h)
+# Was only the 'lite' library found?
+if(CAPNP_LIB_CAPNP_FOUND AND NOT CAPNP_LIB_CAPNP-RPC_FOUND)
+  set(CAPNP_DEFINITIONS "-DCAPNP_LITE")
+else()
+  set(CAPNP_DEFINITIONS)
+endif()
+
+find_path(CAPNP_INCLUDE_DIRS capnp/generated-header-support.h
+  HINTS ${PKGCONFIG_CAPNP_INCLUDEDIR} ${PKGCONFIG_CAPNP_INCLUDE_DIRS}
+)
 
 find_program(CAPNP_EXECUTABLE
   NAMES capnp
   DOC "Cap'n Proto Command-line Tool"
+  HINTS ${PKGCONFIG_CAPNP_PREFIX}/bin
 )
 
 find_program(CAPNPC_CXX_EXECUTABLE
   NAMES capnpc-c++
   DOC "Capn'n Proto C++ Compiler"
+  HINTS ${PKGCONFIG_CAPNP_PREFIX}/bin
 )
 
+# Only *require* the include directory, libkj, and libcapnp. If compiling with
+# CAPNP_LITE, nothing else will be found.
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(CAPNP DEFAULT_MSG
+  CAPNP_INCLUDE_DIRS
+  CAPNP_LIB_KJ
+  CAPNP_LIB_CAPNP
+)
