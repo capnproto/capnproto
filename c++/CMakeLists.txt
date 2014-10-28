@@ -33,3 +33,28 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -std
 # Source =======================================================================
 
 add_subdirectory(src)
+
+# Install ======================================================================
+
+# Variables for pkg-config files
+set(prefix "${CMAKE_INSTALL_PREFIX}")
+set(exec_prefix "${EXEC_INSTALL_PREFIX}")
+set(libdir "${LIB_INSTALL_DIR}")
+set(includedir "${INCLUDE_INSTALL_DIR}")
+set(PTHREAD_CFLAGS "-pthread")
+set(STDLIB_FLAG)  # TODO: Unsupported
+
+configure_file(capnp.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+
+if(NOT CAPNP_LITE)
+  configure_file(capnp-rpc.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" @ONLY)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+endif()
+
+unset(STDLIB_FLAG)
+unset(PTHREAD_CFLAGS)
+unset(includedir)
+unset(libdir)
+unset(exec_prefix)
+unset(prefix)
