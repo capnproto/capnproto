@@ -76,8 +76,8 @@ set(capnp-rpc_headers
 if(NOT CAPNP_LITE)
   add_library(capnp-rpc ${capnp-rpc_sources})
   target_link_libraries(capnp-rpc kj-async kj)
-  install(TARGETS capnp-rpc ARCHIVE DESTINATION ${LIB_INSTALL_DIR})
-  install(FILES ${capnp-rpc_headers} DESTINATION ${INCLUDE_INSTALL_DIR}/capnp)
+  install(TARGETS capnp-rpc ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+  install(FILES ${capnp-rpc_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
 endif()
 
 # Tools/Compilers ==============================================================
@@ -102,8 +102,8 @@ set(capnpc_headers
 if(NOT CAPNP_LITE)
   add_library(capnpc ${capnpc_sources})
   target_link_libraries(capnpc capnp kj)
-  install(TARGETS capnpc ARCHIVE DESTINATION ${LIB_INSTALL_DIR})
-  install(FILES ${capnpc_headers} DESTINATION ${INCLUDE_INSTALL_DIR}/capnp)
+  install(TARGETS capnpc ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+  install(FILES ${capnpc_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
 endif()
 
 if(BUILD_TOOLS AND NOT CAPNP_LITE)
@@ -129,7 +129,7 @@ if(BUILD_TOOLS AND NOT CAPNP_LITE)
   install(TARGETS capnp_tool capnpc_cpp capnpc_capnp RUNTIME DESTINATION "${BIN_INSTALL_DIR}")
 
   # Symlink capnpc -> capnp
-  install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp ${BIN_INSTALL_DIR}/capnpc)")
+  install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp \"${BIN_INSTALL_DIR}/capnpc\")")
 endif()  # BUILD_TOOLS AND NOT CAPNP_LITE
 
 # Tests ========================================================================
@@ -150,7 +150,7 @@ if(BUILD_TESTING)
     # the FindCapnProto module; (2) environment variables; or (3) find_program()
     if (NOT CAPNP_EXECUTABLE)
       if (DEFINED ENV{CAPNP})
-        set(CAPNP_EXECUTABLE $ENV{CAPNP})
+        set(CAPNP_EXECUTABLE "$ENV{CAPNP}")
       else()
         find_program(CAPNP_EXECUTABLE capnp)
       endif()
@@ -158,19 +158,19 @@ if(BUILD_TESTING)
 
     if(NOT CAPNPC_CXX_EXECUTABLE)
       if (DEFINED ENV{CAPNPC_CXX})
-        set(CAPNPC_CXX_EXECUTABLE $ENV{CAPNPC_CXX})
+        set(CAPNPC_CXX_EXECUTABLE "$ENV{CAPNPC_CXX}")
       else()
         # Also search in the same directory that `capnp` was found in
-        get_filename_component(capnp_dir ${CAPNP_EXECUTABLE} DIRECTORY)
-        find_program(CAPNPC_CXX_EXECUTABLE capnpc-c++ HINTS ${capnp_dir})
+        get_filename_component(capnp_dir "${CAPNP_EXECUTABLE}" DIRECTORY)
+        find_program(CAPNPC_CXX_EXECUTABLE capnpc-c++ HINTS "${capnp_dir}")
       endif()
     endif()
   endif()
 
   # Add "/capnp" to match the path used to import the files in the test sources
-  set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/test_capnp/capnp)
-  include_directories(${CMAKE_CURRENT_BINARY_DIR}/test_capnp)  # Note: no "/capnp"
-  file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
+  set(CAPNPC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_capnp/capnp")
+  include_directories("${CMAKE_CURRENT_BINARY_DIR}/test_capnp")  # Note: no "/capnp"
+  file(MAKE_DIRECTORY "${CAPNPC_OUTPUT_DIR}")
 
   capnp_generate_cpp(test_capnp_cpp_files test_capnp_h_files ${test_capnp_files})
 

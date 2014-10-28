@@ -46,9 +46,9 @@ set(kj-parse_headers
   parse/char.h
 )
 add_library(kj ${kj_sources})
-install(TARGETS kj ARCHIVE DESTINATION ${LIB_INSTALL_DIR})
-install(FILES ${kj_headers} DESTINATION ${INCLUDE_INSTALL_DIR}/kj)
-install(FILES ${kj-parse_headers} DESTINATION ${INCLUDE_INSTALL_DIR}/kj/parse)
+install(TARGETS kj ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+install(FILES ${kj_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
+install(FILES ${kj-parse_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/parse")
 
 set(kj-async_sources
   async.c++
@@ -65,8 +65,8 @@ set(kj-async_headers
 if(NOT CAPNP_LITE)
   add_library(kj-async ${kj-async_sources})
   target_link_libraries(kj-async kj)
-  install(TARGETS kj-async ARCHIVE DESTINATION ${LIB_INSTALL_DIR})
-  install(FILES ${kj-async_headers} DESTINATION ${INCLUDE_INSTALL_DIR}/kj)
+  install(TARGETS kj-async ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+  install(FILES ${kj-async_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
 endif()
 
 # Tests ========================================================================
