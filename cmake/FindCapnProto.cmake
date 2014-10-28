@@ -81,7 +81,7 @@ function(CAPNP_GENERATE_CPP SOURCES HEADERS)
   set(${HEADERS})
   foreach(schema_file ${ARGN})
     get_filename_component(file_path ${schema_file} ABSOLUTE)
-    get_filename_component(file_dir ${file_path} DIRECTORY)
+    get_filename_component(file_dir ${file_path} PATH)
 
     # Figure out where the output files will go
     if (NOT DEFINED CAPNPC_OUTPUT_DIR)
