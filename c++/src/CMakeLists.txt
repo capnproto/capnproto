@@ -14,7 +14,7 @@ if(BUILD_TESTING)
   include(ExternalProject)
   ExternalProject_Add(gtest_build
     URL http://googletest.googlecode.com/files/gtest-1.7.0.zip
-    URL_HASH SHA1=f85f6d2481e2c6c4a18539e391aa4ea8ab0394af
+    URL_MD5 2d6ec8ccdf5c46b05ba54a9fd1d130d7
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     INSTALL_COMMAND ""  # Disable install
   )
