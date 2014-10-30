@@ -667,16 +667,19 @@ private:
       }
     }
 
+    auto brandDeps = makeBrandDepInitializers(templateContext, schema);
+
     return kj::strTree(
         "{\n",
         macroParam(kj::StringTree(scopes.finish(), "").flatten()),
         "}, {\n",
         macroParam(kj::StringTree(bindings.releaseAsArray(), "").flatten()),
-        "}, ", macroParam(makeBrandDepInitializers(templateContext, schema).flatten()));
+        "}, ",
+        brandDeps.size() == 0 ? kj::strTree("{}") : macroParam(brandDeps.flatten()));
   }
 
   kj::StringTree makeBrandDepInitializers(const TemplateContext& templateContext, Schema schema) {
-    // Build deps.
+    // Build deps. Returns a braced initialiser list, or an empty string if there are no dependencies.
     std::map<uint, kj::StringTree> depMap;
 
 #define ADD_DEP(kind, index, ...) \
@@ -718,6 +721,10 @@ private:
         break;
     }
 #undef ADD_DEP
+
+    if (!depMap.size()) {
+      return kj::strTree();
+    }
 
     auto deps = kj::heapArrayBuilder<kj::StringTree>(depMap.size());
     for (auto& entry: depMap) {
@@ -2335,6 +2342,8 @@ private:
         break;
     }
 
+    auto brandDeps = makeBrandDepInitializers(templateContext, schema.getGeneric());
+
     auto schemaDef = kj::strTree(
         "static const ::capnp::_::AlignedData<", rawSchema.size(), "> b_", hexId, " = {\n"
         "  {", kj::mv(schemaLiteral), " }\n"
@@ -2355,16 +2364,18 @@ private:
             "static const uint16_t i_", hexId, "[] = {",
             kj::StringTree(KJ_MAP(index, membersByDiscrim) { return kj::strTree(index); }, ", "),
             "};\n"),
-        "const ::capnp::_::RawBrandedSchema::Dependency bd_", hexId, "[] = ",
-            makeBrandDepInitializers(templateContext, schema.getGeneric()), ";\n"
+        brandDeps.size() == 0 ? kj::strTree() : kj::strTree(
+            "const ::capnp::_::RawBrandedSchema::Dependency bd_", hexId, "[] = ", kj::mv(brandDeps), ";\n"),
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
         "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", ",
         deps.size() == 0 ? kj::strTree("nullptr") : kj::strTree("d_", hexId), ", ",
         membersByName.size() == 0 ? kj::strTree("nullptr") : kj::strTree("m_", hexId), ",\n",
         "  ", deps.size(), ", ", membersByName.size(), ", ",
         membersByDiscrim.size() == 0 ? kj::strTree("nullptr") : kj::strTree("i_", hexId),
-        ", nullptr, nullptr, { &s_", hexId, ", nullptr, bd_", hexId, ", 0, "
-        "sizeof(bd_", hexId, ") / sizeof(bd_", hexId, "[0]), nullptr }\n"
+        ", nullptr, nullptr, { &s_", hexId, ", nullptr, ",
+        brandDeps.size() == 0 ? kj::strTree("nullptr, 0, 0") : kj::strTree(
+            "bd_", hexId, ", 0, " "sizeof(bd_", hexId, ") / sizeof(bd_", hexId, "[0])"),
+        ", nullptr }\n"
         "};\n"
         "#endif  // !CAPNP_LITE\n");
 
