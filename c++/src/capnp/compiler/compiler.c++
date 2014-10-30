@@ -836,7 +836,7 @@ Compiler::Node::resolve(kj::StringPtr name) {
     return p->resolve(name);
   } else KJ_IF_MAYBE(b, module->getCompiler().lookupBuiltin(name)) {
     ResolveResult result;
-    result.init<ResolvedDecl>(ResolvedDecl { b->id, b->genericParamCount, 0, b->kind, b });
+    result.init<ResolvedDecl>(ResolvedDecl { b->id, b->genericParamCount, 0, b->kind, b, nullptr });
     return result;
   } else {
     return nullptr;
@@ -854,7 +854,7 @@ Compiler::Node::resolveMember(kj::StringPtr name) {
         Node* node = iter->second;
         ResolveResult result;
         result.init<ResolvedDecl>(ResolvedDecl {
-            node->id, node->genericParamCount, id, node->kind, node });
+            node->id, node->genericParamCount, id, node->kind, node, nullptr });
         return result;
       }
     }
@@ -870,25 +870,25 @@ Compiler::Node::resolveMember(kj::StringPtr name) {
 
 NodeTranslator::Resolver::ResolvedDecl Compiler::Node::resolveBuiltin(Declaration::Which which) {
   auto& b = module->getCompiler().getBuiltin(which);
-  return { b.id, b.genericParamCount, 0, b.kind, &b };
+  return { b.id, b.genericParamCount, 0, b.kind, &b, nullptr };
 }
 
 NodeTranslator::Resolver::ResolvedDecl Compiler::Node::resolveId(uint64_t id) {
   auto& n = KJ_ASSERT_NONNULL(module->getCompiler().findNode(id));
   uint64_t parentId = n.parent.map([](Node& n) { return n.id; }).orDefault(0);
-  return { n.id, n.genericParamCount, parentId, n.kind, &n };
+  return { n.id, n.genericParamCount, parentId, n.kind, &n, nullptr };
 }
 
 kj::Maybe<NodeTranslator::Resolver::ResolvedDecl> Compiler::Node::getParent() {
   return parent.map([](Node& parent) {
     uint64_t scopeId = parent.parent.map([](Node& gp) { return gp.id; }).orDefault(0);
-    return ResolvedDecl { parent.id, parent.genericParamCount, scopeId, parent.kind, &parent };
+    return ResolvedDecl { parent.id, parent.genericParamCount, scopeId, parent.kind, &parent, nullptr };
   });
 }
 
 NodeTranslator::Resolver::ResolvedDecl Compiler::Node::getTopScope() {
   Node& node = module->getRootNode();
-  return ResolvedDecl { node.id, 0, 0, node.kind, &node };
+  return ResolvedDecl { node.id, 0, 0, node.kind, &node, nullptr };
 }
 
 kj::Maybe<Schema> Compiler::Node::resolveBootstrapSchema(
@@ -918,7 +918,7 @@ kj::Maybe<NodeTranslator::Resolver::ResolvedDecl>
 Compiler::Node::resolveImport(kj::StringPtr name) {
   KJ_IF_MAYBE(m, module->importRelative(name)) {
     Node& root = m->getRootNode();
-    return ResolvedDecl { root.id, 0, 0, root.kind, &root };
+    return ResolvedDecl { root.id, 0, 0, root.kind, &root, nullptr };
   } else {
     return nullptr;
   }
