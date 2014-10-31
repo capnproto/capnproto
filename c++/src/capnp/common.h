@@ -43,6 +43,10 @@ namespace capnp {
 // MSVC only supports "lite" mode for now, due to missing C++11 features.
 #endif
 
+#ifndef CAPNP_LITE
+#define CAPNP_LITE 0
+#endif
+
 typedef unsigned int uint;
 
 struct Void {
