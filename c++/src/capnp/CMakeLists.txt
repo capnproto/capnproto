@@ -219,6 +219,10 @@ if(BUILD_TESTING)
       ${test_capnp_h_files}
     )
     target_link_libraries(capnp-heavy-tests ${test_libraries})
+    set_target_properties(capnp-heavy-tests
+      PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations"
+    )
+
     add_dependencies(check capnp-heavy-tests)
     add_test(NAME capnp-heavy-tests-run COMMAND capnp-heavy-tests)
 
