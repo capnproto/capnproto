@@ -2049,29 +2049,190 @@ CAPNP_DEFINE_ENUM(Durability_bbaeda2607b6f958, bbaeda2607b6f958);
 namespace capnp {
 namespace rpc {
 
-CAPNP_DEFINE_STRUCT(Message, , 91b79f1f808db032);
-CAPNP_DEFINE_STRUCT(Call, , 836a53ce789d4cd4);
-CAPNP_DEFINE_STRUCT(Call::SendResultsTo, , dae8b0f61aab5f99);
-CAPNP_DEFINE_STRUCT(Return, , 9e19b28d3db3573a);
-CAPNP_DEFINE_STRUCT(Finish, , d37d2eb2c2f80e63);
-CAPNP_DEFINE_STRUCT(Resolve, , bbc29655fa89086e);
-CAPNP_DEFINE_STRUCT(Release, , ad1a6c0d7dd07497);
-CAPNP_DEFINE_STRUCT(Disembargo, , f964368b0fbd3711);
-CAPNP_DEFINE_STRUCT(Disembargo::Context, , d562b4df655bdd4d);
-CAPNP_DEFINE_STRUCT(Save, , e40ef0b4b02e882c);
-CAPNP_DEFINE_STRUCT(Restore, , ec0c922151b8b0a8);
-CAPNP_DEFINE_STRUCT(Delete, , 86267432565dee97);
-CAPNP_DEFINE_STRUCT(Provide, , 9c6a046bfbc1ac5a);
-CAPNP_DEFINE_STRUCT(Accept, , d4c9b56290554016);
-CAPNP_DEFINE_STRUCT(Join, , fbe1980490e001af);
-CAPNP_DEFINE_STRUCT(MessageTarget, , 95bc14545813fbc1);
-CAPNP_DEFINE_STRUCT(Payload, , 9a0e61223d96743b);
-CAPNP_DEFINE_STRUCT(CapDescriptor, , 8523ddc40b86b8b0);
-CAPNP_DEFINE_STRUCT(PromisedAnswer, , d800b1d6cd6f1ca0);
-CAPNP_DEFINE_STRUCT(PromisedAnswer::Op, , f316944415569081);
-CAPNP_DEFINE_STRUCT(SturdyRef, , ce8c7a90684b48ff);
-CAPNP_DEFINE_STRUCT(ThirdPartyCapDescriptor, , d37007fde1f0027d);
-CAPNP_DEFINE_STRUCT(Exception, , d625b7063acf691a);
+// Message
+constexpr ::capnp::_::StructSize Message::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Message::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Message::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Message::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Call
+constexpr ::capnp::_::StructSize Call::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Call::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Call::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Call::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Call::SendResultsTo
+constexpr ::capnp::_::StructSize Call::SendResultsTo::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Call::SendResultsTo::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Call::SendResultsTo::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Call::SendResultsTo::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Return
+constexpr ::capnp::_::StructSize Return::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Return::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Return::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Return::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Finish
+constexpr ::capnp::_::StructSize Finish::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Finish::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Finish::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Finish::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Resolve
+constexpr ::capnp::_::StructSize Resolve::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Resolve::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Resolve::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Resolve::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Release
+constexpr ::capnp::_::StructSize Release::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Release::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Release::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Release::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Disembargo
+constexpr ::capnp::_::StructSize Disembargo::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Disembargo::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Disembargo::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Disembargo::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Disembargo::Context
+constexpr ::capnp::_::StructSize Disembargo::Context::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Disembargo::Context::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Disembargo::Context::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Disembargo::Context::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Save
+constexpr ::capnp::_::StructSize Save::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Save::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Save::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Save::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Restore
+constexpr ::capnp::_::StructSize Restore::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Restore::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Restore::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Restore::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Delete
+constexpr ::capnp::_::StructSize Delete::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Delete::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Delete::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Delete::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Provide
+constexpr ::capnp::_::StructSize Provide::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Provide::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Provide::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Provide::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Accept
+constexpr ::capnp::_::StructSize Accept::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Accept::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Accept::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Accept::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Join
+constexpr ::capnp::_::StructSize Join::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Join::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Join::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Join::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// MessageTarget
+constexpr ::capnp::_::StructSize MessageTarget::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind MessageTarget::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* MessageTarget::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* MessageTarget::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Payload
+constexpr ::capnp::_::StructSize Payload::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Payload::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Payload::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Payload::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// CapDescriptor
+constexpr ::capnp::_::StructSize CapDescriptor::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind CapDescriptor::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* CapDescriptor::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* CapDescriptor::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// PromisedAnswer
+constexpr ::capnp::_::StructSize PromisedAnswer::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind PromisedAnswer::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* PromisedAnswer::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* PromisedAnswer::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// PromisedAnswer::Op
+constexpr ::capnp::_::StructSize PromisedAnswer::Op::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind PromisedAnswer::Op::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* PromisedAnswer::Op::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* PromisedAnswer::Op::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// SturdyRef
+constexpr ::capnp::_::StructSize SturdyRef::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind SturdyRef::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* SturdyRef::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* SturdyRef::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// ThirdPartyCapDescriptor
+constexpr ::capnp::_::StructSize ThirdPartyCapDescriptor::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind ThirdPartyCapDescriptor::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* ThirdPartyCapDescriptor::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* ThirdPartyCapDescriptor::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Exception
+constexpr ::capnp::_::StructSize Exception::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Exception::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Exception::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Exception::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
 
 }  // namespace
 }  // namespace

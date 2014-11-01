@@ -3221,38 +3221,255 @@ const ::capnp::_::RawSchema s_ae504193122357e5 = {
 namespace capnp {
 namespace schema {
 
-CAPNP_DEFINE_STRUCT(Node, , e682ab4cf923a417);
-CAPNP_DEFINE_STRUCT(Node::Parameter, , b9521bccf10fa3b1);
-CAPNP_DEFINE_STRUCT(Node::NestedNode, , debf55bbfa0fc242);
-CAPNP_DEFINE_STRUCT(Node::Struct, , 9ea0b19b37fb4435);
-CAPNP_DEFINE_STRUCT(Node::Enum, , b54ab3364333f598);
-CAPNP_DEFINE_STRUCT(Node::Interface, , e82753cff0c2218f);
-CAPNP_DEFINE_STRUCT(Node::Const, , b18aa5ac7a0d9420);
-CAPNP_DEFINE_STRUCT(Node::Annotation, , ec1619d4400a0290);
-CAPNP_DEFINE_STRUCT(Field, , 9aad50a41f4af45f);
+// Node
+constexpr ::capnp::_::StructSize Node::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Node::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Node::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Node::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Node::Parameter
+constexpr ::capnp::_::StructSize Node::Parameter::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Node::Parameter::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Node::Parameter::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Node::Parameter::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Node::NestedNode
+constexpr ::capnp::_::StructSize Node::NestedNode::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Node::NestedNode::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Node::NestedNode::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Node::NestedNode::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Node::Struct
+constexpr ::capnp::_::StructSize Node::Struct::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Node::Struct::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Node::Struct::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Node::Struct::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Node::Enum
+constexpr ::capnp::_::StructSize Node::Enum::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Node::Enum::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Node::Enum::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Node::Enum::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Node::Interface
+constexpr ::capnp::_::StructSize Node::Interface::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Node::Interface::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Node::Interface::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Node::Interface::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Node::Const
+constexpr ::capnp::_::StructSize Node::Const::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Node::Const::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Node::Const::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Node::Const::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Node::Annotation
+constexpr ::capnp::_::StructSize Node::Annotation::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Node::Annotation::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Node::Annotation::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Node::Annotation::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Field
+constexpr ::capnp::_::StructSize Field::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Field::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Field::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Field::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
 constexpr  ::uint16_t Field::NO_DISCRIMINANT;
-CAPNP_DEFINE_STRUCT(Field::Slot, , c42305476bb4746f);
-CAPNP_DEFINE_STRUCT(Field::Group, , cafccddb68db1d11);
-CAPNP_DEFINE_STRUCT(Field::Ordinal, , bb90d5c287870be6);
-CAPNP_DEFINE_STRUCT(Enumerant, , 978a7cebdc549a4d);
-CAPNP_DEFINE_STRUCT(Superclass, , a9962a9ed0a4d7f8);
-CAPNP_DEFINE_STRUCT(Method, , 9500cce23b334d80);
-CAPNP_DEFINE_STRUCT(Type, , d07378ede1f9cc60);
-CAPNP_DEFINE_STRUCT(Type::List, , 87e739250a60ea97);
-CAPNP_DEFINE_STRUCT(Type::Enum, , 9e0e78711a7f87a9);
-CAPNP_DEFINE_STRUCT(Type::Struct, , ac3a6f60ef4cc6d3);
-CAPNP_DEFINE_STRUCT(Type::Interface, , ed8bca69f7fb0cbf);
-CAPNP_DEFINE_STRUCT(Type::AnyPointer, , c2573fe8a23e49f1);
-CAPNP_DEFINE_STRUCT(Type::AnyPointer::Parameter, , 9dd1f724f4614a85);
-CAPNP_DEFINE_STRUCT(Type::AnyPointer::ImplicitMethodParameter, , baefc9120c56e274);
-CAPNP_DEFINE_STRUCT(Brand, , 903455f06065422b);
-CAPNP_DEFINE_STRUCT(Brand::Scope, , abd73485a9636bc9);
-CAPNP_DEFINE_STRUCT(Brand::Binding, , c863cd16969ee7fc);
-CAPNP_DEFINE_STRUCT(Value, , ce23dcd2d7b00c9b);
-CAPNP_DEFINE_STRUCT(Annotation, , f1c8950dab257542);
-CAPNP_DEFINE_STRUCT(CodeGeneratorRequest, , bfc546f6210ad7ce);
-CAPNP_DEFINE_STRUCT(CodeGeneratorRequest::RequestedFile, , cfea0eb02e810062);
-CAPNP_DEFINE_STRUCT(CodeGeneratorRequest::RequestedFile::Import, , ae504193122357e5);
+// Field::Slot
+constexpr ::capnp::_::StructSize Field::Slot::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Field::Slot::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Field::Slot::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Field::Slot::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Field::Group
+constexpr ::capnp::_::StructSize Field::Group::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Field::Group::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Field::Group::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Field::Group::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Field::Ordinal
+constexpr ::capnp::_::StructSize Field::Ordinal::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Field::Ordinal::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Field::Ordinal::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Field::Ordinal::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Enumerant
+constexpr ::capnp::_::StructSize Enumerant::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Enumerant::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Enumerant::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Enumerant::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Superclass
+constexpr ::capnp::_::StructSize Superclass::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Superclass::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Superclass::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Superclass::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Method
+constexpr ::capnp::_::StructSize Method::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Method::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Method::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Method::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Type
+constexpr ::capnp::_::StructSize Type::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Type::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Type::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Type::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Type::List
+constexpr ::capnp::_::StructSize Type::List::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Type::List::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Type::List::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Type::List::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Type::Enum
+constexpr ::capnp::_::StructSize Type::Enum::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Type::Enum::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Type::Enum::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Type::Enum::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Type::Struct
+constexpr ::capnp::_::StructSize Type::Struct::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Type::Struct::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Type::Struct::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Type::Struct::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Type::Interface
+constexpr ::capnp::_::StructSize Type::Interface::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Type::Interface::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Type::Interface::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Type::Interface::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Type::AnyPointer
+constexpr ::capnp::_::StructSize Type::AnyPointer::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Type::AnyPointer::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Type::AnyPointer::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Type::AnyPointer::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Type::AnyPointer::Parameter
+constexpr ::capnp::_::StructSize Type::AnyPointer::Parameter::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Type::AnyPointer::Parameter::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Type::AnyPointer::Parameter::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Type::AnyPointer::Parameter::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Type::AnyPointer::ImplicitMethodParameter
+constexpr ::capnp::_::StructSize Type::AnyPointer::ImplicitMethodParameter::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Type::AnyPointer::ImplicitMethodParameter::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Type::AnyPointer::ImplicitMethodParameter::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Type::AnyPointer::ImplicitMethodParameter::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Brand
+constexpr ::capnp::_::StructSize Brand::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Brand::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Brand::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Brand::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Brand::Scope
+constexpr ::capnp::_::StructSize Brand::Scope::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Brand::Scope::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Brand::Scope::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Brand::Scope::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Brand::Binding
+constexpr ::capnp::_::StructSize Brand::Binding::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Brand::Binding::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Brand::Binding::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Brand::Binding::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Value
+constexpr ::capnp::_::StructSize Value::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Value::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Value::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Value::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Annotation
+constexpr ::capnp::_::StructSize Annotation::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Annotation::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Annotation::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Annotation::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// CodeGeneratorRequest
+constexpr ::capnp::_::StructSize CodeGeneratorRequest::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind CodeGeneratorRequest::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* CodeGeneratorRequest::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* CodeGeneratorRequest::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// CodeGeneratorRequest::RequestedFile
+constexpr ::capnp::_::StructSize CodeGeneratorRequest::RequestedFile::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind CodeGeneratorRequest::RequestedFile::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* CodeGeneratorRequest::RequestedFile::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* CodeGeneratorRequest::RequestedFile::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// CodeGeneratorRequest::RequestedFile::Import
+constexpr ::capnp::_::StructSize CodeGeneratorRequest::RequestedFile::Import::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind CodeGeneratorRequest::RequestedFile::Import::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* CodeGeneratorRequest::RequestedFile::Import::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* CodeGeneratorRequest::RequestedFile::Import::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
 
 }  // namespace
 }  // namespace

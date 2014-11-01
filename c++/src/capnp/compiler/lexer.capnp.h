@@ -42,7 +42,12 @@ struct Token {
     BINARY_LITERAL,
   };
 
-  CAPNP_DECLARE_STRUCT(91cc55cd57de5419, 3, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(91cc55cd57de5419, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Statement {
@@ -56,7 +61,12 @@ struct Statement {
     BLOCK,
   };
 
-  CAPNP_DECLARE_STRUCT(c6725e678d60fa37, 2, 3);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(c6725e678d60fa37, 2, 3)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct LexedTokens {
@@ -66,7 +76,12 @@ struct LexedTokens {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9e69a92512b19d18, 0, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(9e69a92512b19d18, 0, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct LexedStatements {
@@ -76,7 +91,12 @@ struct LexedStatements {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(a11f97b9d6c73dd4, 0, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(a11f97b9d6c73dd4, 0, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 // =======================================================================================

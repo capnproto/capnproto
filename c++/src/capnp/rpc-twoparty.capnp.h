@@ -43,7 +43,12 @@ struct SturdyRefHostId {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(e615e371b1036508, 1, 0);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(e615e371b1036508, 1, 0)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct ProvisionId {
@@ -53,7 +58,12 @@ struct ProvisionId {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b88d09a9c5f39817, 1, 0);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(b88d09a9c5f39817, 1, 0)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct RecipientId {
@@ -63,7 +73,12 @@ struct RecipientId {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(89f389b6fd4082c1, 0, 0);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(89f389b6fd4082c1, 0, 0)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct ThirdPartyCapId {
@@ -73,7 +88,12 @@ struct ThirdPartyCapId {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b47f4979672cb59d, 0, 0);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(b47f4979672cb59d, 0, 0)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct JoinKeyPart {
@@ -83,7 +103,12 @@ struct JoinKeyPart {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(95b29059097fca83, 1, 0);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(95b29059097fca83, 1, 0)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct JoinResult {
@@ -93,7 +118,12 @@ struct JoinResult {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9d263a3630b7ebee, 1, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(9d263a3630b7ebee, 1, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 // =======================================================================================

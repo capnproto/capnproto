@@ -352,12 +352,54 @@ namespace capnp {
 namespace rpc {
 namespace twoparty {
 
-CAPNP_DEFINE_STRUCT(SturdyRefHostId, , e615e371b1036508);
-CAPNP_DEFINE_STRUCT(ProvisionId, , b88d09a9c5f39817);
-CAPNP_DEFINE_STRUCT(RecipientId, , 89f389b6fd4082c1);
-CAPNP_DEFINE_STRUCT(ThirdPartyCapId, , b47f4979672cb59d);
-CAPNP_DEFINE_STRUCT(JoinKeyPart, , 95b29059097fca83);
-CAPNP_DEFINE_STRUCT(JoinResult, , 9d263a3630b7ebee);
+// SturdyRefHostId
+constexpr ::capnp::_::StructSize SturdyRefHostId::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind SturdyRefHostId::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* SturdyRefHostId::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* SturdyRefHostId::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// ProvisionId
+constexpr ::capnp::_::StructSize ProvisionId::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind ProvisionId::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* ProvisionId::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* ProvisionId::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// RecipientId
+constexpr ::capnp::_::StructSize RecipientId::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind RecipientId::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* RecipientId::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* RecipientId::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// ThirdPartyCapId
+constexpr ::capnp::_::StructSize ThirdPartyCapId::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind ThirdPartyCapId::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* ThirdPartyCapId::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* ThirdPartyCapId::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// JoinKeyPart
+constexpr ::capnp::_::StructSize JoinKeyPart::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind JoinKeyPart::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* JoinKeyPart::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* JoinKeyPart::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// JoinResult
+constexpr ::capnp::_::StructSize JoinResult::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind JoinResult::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* JoinResult::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* JoinResult::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
 
 }  // namespace
 }  // namespace

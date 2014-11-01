@@ -462,10 +462,38 @@ const ::capnp::_::RawSchema s_a11f97b9d6c73dd4 = {
 namespace capnp {
 namespace compiler {
 
-CAPNP_DEFINE_STRUCT(Token, , 91cc55cd57de5419);
-CAPNP_DEFINE_STRUCT(Statement, , c6725e678d60fa37);
-CAPNP_DEFINE_STRUCT(LexedTokens, , 9e69a92512b19d18);
-CAPNP_DEFINE_STRUCT(LexedStatements, , a11f97b9d6c73dd4);
+// Token
+constexpr ::capnp::_::StructSize Token::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Token::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Token::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Token::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// Statement
+constexpr ::capnp::_::StructSize Statement::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind Statement::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* Statement::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* Statement::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// LexedTokens
+constexpr ::capnp::_::StructSize LexedTokens::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind LexedTokens::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* LexedTokens::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* LexedTokens::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
+// LexedStatements
+constexpr ::capnp::_::StructSize LexedStatements::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+constexpr ::capnp::Kind LexedStatements::_capnpPrivate::kind;
+constexpr ::capnp::_::RawSchema const* LexedStatements::_capnpPrivate::schema;
+constexpr ::capnp::_::RawBrandedSchema const* LexedStatements::_capnpPrivate::brand;
+#endif  // !CAPNP_LITE
+
 
 }  // namespace
 }  // namespace
