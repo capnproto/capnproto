@@ -55,10 +55,6 @@ namespace {
 static constexpr uint64_t NAMESPACE_ANNOTATION_ID = 0xb9c6f99ebf805f2cull;
 static constexpr uint64_t NAME_ANNOTATION_ID = 0xf264a779fef191ceull;
 
-static constexpr const char* FIELD_SIZE_NAMES[] = {
-  "VOID", "BIT", "BYTE", "TWO_BYTES", "FOUR_BYTES", "EIGHT_BYTES", "POINTER", "INLINE_COMPOSITE"
-};
-
 bool hasDiscriminantValue(const schema::Field::Reader& reader) {
   return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
 }
