@@ -115,8 +115,8 @@ Lists of structs use the smallest element size in which the struct can fit.  So,
 list of structs that each contain two `UInt8` fields and nothing else could be encoded with C = 3
 (2-byte elements).  A list of structs that each contain a single `Text` field would be encoded as
 C = 6 (pointer elements).  A list of structs that each contain a single `Bool` field would be
-encoded using C = 1 (1-bit elements).  A list structs which are each more than one word in size
-must be be encoded using C = 7 (composite).
+encoded using C = 1 (1-bit elements).  A list of structs which are each more than one word in size
+must be encoded using C = 7 (composite).
 
 When C = 7, the elements of the list are fixed-width composite values -- usually, structs.  In
 this case, the list content is prefixed by a "tag" word that describes each individual element.

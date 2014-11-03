@@ -118,6 +118,7 @@ interface Filesystem {
 {% endhighlight %}
 
 We've now solved our latency problem...  but at what cost?
+
 * We now have to implement path string manipulation, which is always a headache.
 * If someone wants to perform multiple operations on a file or directory, we now either have to
   re-allocate resources for every call or we have to implement some sort of cache, which tends to
