@@ -169,8 +169,8 @@ little-endian order (the first bit is the least-significant bit of the first byt
 list of structs that each contain two <code>UInt8</code> fields and nothing else could be encoded with C = 3
 (2-byte elements).  A list of structs that each contain a single <code>Text</code> field would be encoded as
 C = 6 (pointer elements).  A list of structs that each contain a single <code>Bool</code> field would be
-encoded using C = 1 (1-bit elements).  A list structs which are each more than one word in size
-must be be encoded using C = 7 (composite).</p>
+encoded using C = 1 (1-bit elements).  A list of structs which are each more than one word in size
+must be encoded using C = 7 (composite).</p>
 
 <p>When C = 7, the elements of the list are fixed-width composite values – usually, structs.  In
 this case, the list content is prefixed by a “tag” word that describes each individual element.
