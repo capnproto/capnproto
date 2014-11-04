@@ -28,6 +28,23 @@ namespace _ {
 namespace {
 
 TEST(EzRpc, Basic) {
+  int callCount = 0;
+  EzRpcServer server(kj::heap<TestInterfaceImpl>(callCount), "localhost");
+
+  EzRpcClient client("localhost", server.getPort().wait(server.getWaitScope()));
+
+  auto cap = client.getMain<test::TestInterface>();
+  auto request = cap.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+
+  EXPECT_EQ(0, callCount);
+  auto response = request.send().wait(server.getWaitScope());
+  EXPECT_EQ("foo", response.getX());
+  EXPECT_EQ(1, callCount);
+}
+
+TEST(EzRpc, DeprecatedNames) {
   EzRpcServer server("localhost");
   int callCount = 0;
   server.exportCap("cap1", kj::heap<TestInterfaceImpl>(callCount));

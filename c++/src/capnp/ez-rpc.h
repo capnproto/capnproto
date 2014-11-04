@@ -44,7 +44,7 @@ class EzRpcClient {
   //     // C++ client
   //     int main() {
   //       capnp::EzRpcClient client("localhost:3456");
-  //       Adder::Client adder = client.importCap<Adder>("adder");
+  //       Adder::Client adder = client.getMain<Adder>();
   //       auto request = adder.addRequest();
   //       request.setLeft(12);
   //       request.setRight(34);
@@ -64,8 +64,7 @@ class EzRpcClient {
   //     };
   //
   //     int main() {
-  //       capnp::EzRpcServer server("*:3456");
-  //       server.exportCap("adder", kj::heap<AdderImpl>());
+  //       capnp::EzRpcServer server(kj::heap<AdderImpl>(), "*:3456");
   //       kj::NEVER_DONE.wait(server.getWaitScope());
   //     }
   //
@@ -110,11 +109,6 @@ public:
   // your protocol to send large data blobs in multiple small chunks -- this is much better for
   // both security and performance. See `ReaderOptions` in `message.h` for more details.
 
-  // You should only need to set this if you are receiving errors about messages being too large or
-  // too deep in normal operation, and should consider restructuring your protocol to use simpler
-  // or smaller messages if this is an issue for you.
-
-
   EzRpcClient(const struct sockaddr* serverAddress, uint addrSize,
               ReaderOptions readerOpts = ReaderOptions());
   // Like the above constructor, but connects to an already-resolved socket address.  Any address
@@ -127,10 +121,22 @@ public:
   ~EzRpcClient() noexcept(false);
 
   template <typename Type>
-  typename Type::Client importCap(kj::StringPtr name);
-  Capability::Client importCap(kj::StringPtr name);
+  typename Type::Client getMain();
+  Capability::Client getMain();
+  // Get the server's main (aka "bootstrap") interface.
+
+  template <typename Type>
+  typename Type::Client importCap(kj::StringPtr name)
+      KJ_DEPRECATED("Change your server to export a main interface, then use getMain() instead.");
+  Capability::Client importCap(kj::StringPtr name)
+      KJ_DEPRECATED("Change your server to export a main interface, then use getMain() instead.");
+  // ** DEPRECATED **
+  //
   // Ask the sever for the capability with the given name.  You may specify a type to automatically
   // down-cast to that type.  It is up to you to specify the correct expected type.
+  //
+  // Named interfaces are deprecated. The new preferred usage pattern is for the server to export
+  // a "main" interface which itself has methods for getting any other interfaces.
 
   kj::WaitScope& getWaitScope();
   // Get the `WaitScope` for the client's `EventLoop`, which allows you to synchronously wait on
@@ -153,8 +159,8 @@ class EzRpcServer {
   // The server counterpart to `EzRpcClient`.  See `EzRpcClient` for an example.
 
 public:
-  explicit EzRpcServer(kj::StringPtr bindAddress, uint defaultPort = 0,
-                       ReaderOptions readerOpts = ReaderOptions());
+  explicit EzRpcServer(Capability::Client mainInterface, kj::StringPtr bindAddress,
+                       uint defaultPort = 0, ReaderOptions readerOpts = ReaderOptions());
   // Construct a new `EzRpcServer` that binds to the given address.  An address of "*" means to
   // bind to all local addresses.
   //
@@ -175,15 +181,25 @@ public:
   // your protocol to send large data blobs in multiple small chunks -- this is much better for
   // both security and performance. See `ReaderOptions` in `message.h` for more details.
 
-  EzRpcServer(struct sockaddr* bindAddress, uint addrSize,
+  EzRpcServer(Capability::Client mainInterface, struct sockaddr* bindAddress, uint addrSize,
               ReaderOptions readerOpts = ReaderOptions());
   // Like the above constructor, but binds to an already-resolved socket address.  Any address
   // format supported by `kj::Network` in `kj/async-io.h` is accepted.
 
-  EzRpcServer(int socketFd, uint port, ReaderOptions readerOpts = ReaderOptions());
+  EzRpcServer(Capability::Client mainInterface, int socketFd, uint port,
+              ReaderOptions readerOpts = ReaderOptions());
   // Create a server on top of an already-listening socket (i.e. one on which accept() may be
   // called).  `port` is returned by `getPort()` -- it serves no other purpose.
   // `readerOpts` acts as in the other two above constructors.
+
+  explicit EzRpcServer(kj::StringPtr bindAddress, uint defaultPort = 0,
+                       ReaderOptions readerOpts = ReaderOptions())
+      KJ_DEPRECATED("Please specify a main interface for your server.");
+  EzRpcServer(struct sockaddr* bindAddress, uint addrSize,
+              ReaderOptions readerOpts = ReaderOptions())
+      KJ_DEPRECATED("Please specify a main interface for your server.");
+  EzRpcServer(int socketFd, uint port, ReaderOptions readerOpts = ReaderOptions())
+      KJ_DEPRECATED("Please specify a main interface for your server.");
 
   ~EzRpcServer() noexcept(false);
 
@@ -218,6 +234,11 @@ private:
 
 // =======================================================================================
 // inline implementation details
+
+template <typename Type>
+inline typename Type::Client EzRpcClient::getMain() {
+  return getMain().castAs<Type>();
+}
 
 template <typename Type>
 inline typename Type::Client EzRpcClient::importCap(kj::StringPtr name) {

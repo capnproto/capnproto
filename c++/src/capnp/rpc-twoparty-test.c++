@@ -70,12 +70,12 @@ kj::AsyncIoProvider::PipeThread runServer(kj::AsyncIoProvider& ioProvider,
   });
 }
 
-Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& client,
+Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::VatId>& client,
                                     rpc::twoparty::Side side,
                                     test::TestSturdyRefObjectId::Tag tag) {
-  // Create the SturdyRefHostId.
+  // Create the VatId.
   MallocMessageBuilder hostIdMessage(8);
-  auto hostId = hostIdMessage.initRoot<rpc::twoparty::SturdyRefHostId>();
+  auto hostId = hostIdMessage.initRoot<rpc::twoparty::VatId>();
   hostId.setSide(side);
 
   // Create the SturdyRefObjectId.

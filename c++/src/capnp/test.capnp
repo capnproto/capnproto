@@ -781,6 +781,11 @@ interface TestKeywordMethods {
   return @3 ();
 }
 
+struct TestSturdyRef {
+  hostId @0 :TestSturdyRefHostId;
+  objectId @1 :AnyPointer;
+}
+
 struct TestSturdyRefHostId {
   host @0 :Text;
 }

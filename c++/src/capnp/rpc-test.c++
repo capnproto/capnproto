@@ -73,8 +73,8 @@ public:
             schemaProto.getDisplayName().slice(schemaProto.getDisplayNamePrefixLength());
 
         auto methodProto = method.getProto();
-        auto paramType = schema.getDependency(methodProto.getParamStructType()).asStruct();
-        auto resultType = schema.getDependency(methodProto.getResultStructType()).asStruct();
+        auto paramType = method.getParamType();
+        auto resultType = method.getResultType();
 
         if (call.getSendResultsTo().isCaller()) {
           returnTypes[std::make_pair(sender, call.getQuestionId())] = resultType;
@@ -126,13 +126,13 @@ public:
         }
       }
 
-      case rpc::Message::RESTORE: {
-        auto restore = message.getRestore();
+      case rpc::Message::BOOTSTRAP: {
+        auto restore = message.getBootstrap();
 
         returnTypes[std::make_pair(sender, restore.getQuestionId())] = InterfaceSchema();
 
-        return kj::str(senderName, "(", restore.getQuestionId(), "): restore ",
-                       restore.getObjectId().getAs<test::TestSturdyRefObjectId>());
+        return kj::str(senderName, "(", restore.getQuestionId(), "): bootstrap ",
+                       restore.getDeprecatedObjectId().getAs<test::TestSturdyRefObjectId>());
       }
 
       default:
@@ -314,19 +314,6 @@ public:
         return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::mv(result));
       }
     }
-    void introduceTo(Connection& recipient,
-        test::TestThirdPartyCapId::Builder sendToRecipient,
-        test::TestRecipientId::Builder sendToTarget) override {
-      KJ_FAIL_ASSERT("not implemented");
-    }
-    ConnectionAndProvisionId connectToIntroduced(
-        test::TestThirdPartyCapId::Reader capId) override {
-      KJ_FAIL_ASSERT("not implemented");
-    }
-    kj::Own<Connection> acceptIntroducedConnection(
-        test::TestRecipientId::Reader recipientId) override {
-      KJ_FAIL_ASSERT("not implemented");
-    }
 
     void taskFailed(kj::Exception&& exception) override {
       ADD_FAILURE() << kj::str(exception).cStr();
@@ -345,8 +332,7 @@ public:
     kj::Own<kj::TaskSet> tasks;
   };
 
-  kj::Maybe<kj::Own<Connection>> connectToRefHost(
-      test::TestSturdyRefHostId::Reader hostId) override {
+  kj::Maybe<kj::Own<Connection>> connect(test::TestSturdyRefHostId::Reader hostId) override {
     TestNetworkAdapter& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
 
     auto iter = connections.find(&dst);
@@ -371,7 +357,7 @@ public:
     }
   }
 
-  kj::Promise<kj::Own<Connection>> acceptConnectionAsRefHost() override {
+  kj::Promise<kj::Own<Connection>> accept() override {
     if (connectionQueue.empty()) {
       auto paf = kj::newPromiseAndFulfiller<kj::Own<Connection>>();
       fulfillerQueue.push(kj::mv(paf.fulfiller));
@@ -444,8 +430,8 @@ struct TestContext {
 
   Capability::Client connect(test::TestSturdyRefObjectId::Tag tag) {
     MallocMessageBuilder refMessage(128);
-    auto ref = refMessage.initRoot<rpc::SturdyRef>();
-    auto hostId = ref.getHostId().initAs<test::TestSturdyRefHostId>();
+    auto ref = refMessage.initRoot<test::TestSturdyRef>();
+    auto hostId = ref.initHostId();
     hostId.setHost("server");
     ref.getObjectId().initAs<test::TestSturdyRefObjectId>().setTag(tag);
 

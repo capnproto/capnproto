@@ -48,7 +48,7 @@ int main(int argc, const char* argv[]) {
   }
 
   capnp::EzRpcClient client(argv[1]);
-  Calculator::Client calculator = client.importCap<Calculator>("calculator");
+  Calculator::Client calculator = client.getMain<Calculator>();
 
   // Keep an eye on `waitScope`.  Whenever you see it used is a place where we
   // stop and wait for the server to respond.  If a line of code does not use

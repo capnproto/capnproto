@@ -264,10 +264,12 @@ private:
 
 class RpcConnectionState final: public kj::TaskSet::ErrorHandler, public kj::Refcounted {
 public:
-  RpcConnectionState(kj::Maybe<SturdyRefRestorerBase&> restorer,
+  RpcConnectionState(kj::Maybe<Capability::Client> bootstrapInterface,
+                     kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      kj::Own<kj::PromiseFulfiller<void>>&& disconnectFulfiller)
-      : restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), tasks(*this) {
+      : bootstrapInterface(kj::mv(bootstrapInterface)), restorer(restorer),
+        disconnectFulfiller(kj::mv(disconnectFulfiller)), tasks(*this) {
     connection.init<Connected>(kj::mv(connectionParam));
     tasks.add(messageLoop());
   }
@@ -291,11 +293,11 @@ public:
 
     {
       auto message = connection.get<Connected>()->newOutgoingMessage(
-          objectId.targetSize().wordCount + messageSizeHint<rpc::Restore>());
+          objectId.targetSize().wordCount + messageSizeHint<rpc::Bootstrap>());
 
-      auto builder = message->getBody().initAs<rpc::Message>().initRestore();
+      auto builder = message->getBody().initAs<rpc::Message>().initBootstrap();
       builder.setQuestionId(questionId);
-      builder.getObjectId().set(objectId);
+      builder.getDeprecatedObjectId().set(objectId);
 
       message->send();
     }
@@ -510,6 +512,7 @@ private:
   // =======================================================================================
   // OK, now we can define RpcConnectionState's member data.
 
+  kj::Maybe<Capability::Client> bootstrapInterface;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
 
   typedef kj::Own<VatNetworkBase::Connection> Connected;
@@ -1881,6 +1884,10 @@ private:
         handleAbort(reader.getAbort());
         break;
 
+      case rpc::Message::BOOTSTRAP:
+        handleBootstrap(kj::mv(message), reader.getBootstrap());
+        break;
+
       case rpc::Message::CALL:
         handleCall(kj::mv(message), reader.getCall());
         break;
@@ -1903,10 +1910,6 @@ private:
 
       case rpc::Message::DISEMBARGO:
         handleDisembargo(reader.getDisembargo());
-        break;
-
-      case rpc::Message::RESTORE:
-        handleRestore(kj::mv(message), reader.getRestore());
         break;
 
       default: {
@@ -1958,6 +1961,89 @@ private:
 
   // ---------------------------------------------------------------------------
   // Level 0
+
+  class SingleCapPipeline: public PipelineHook, public kj::Refcounted {
+  public:
+    SingleCapPipeline(kj::Own<ClientHook>&& cap)
+        : cap(kj::mv(cap)) {}
+
+    kj::Own<PipelineHook> addRef() override {
+      return kj::addRef(*this);
+    }
+
+    kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+      if (ops.size() == 0) {
+        return cap->addRef();
+      } else {
+        return newBrokenCap("Invalid pipeline transform.");
+      }
+    }
+
+  private:
+    kj::Own<ClientHook> cap;
+  };
+
+  void handleBootstrap(kj::Own<IncomingRpcMessage>&& message,
+                       const rpc::Bootstrap::Reader& bootstrap) {
+    AnswerId answerId = bootstrap.getQuestionId();
+
+    if (!connection.is<Connected>()) {
+      // Disconnected; ignore.
+      return;
+    }
+
+    auto response = connection.get<Connected>()->newOutgoingMessage(
+        messageSizeHint<rpc::Return>() + sizeInWords<rpc::CapDescriptor>() + 32);
+
+    rpc::Return::Builder ret = response->getBody().getAs<rpc::Message>().initReturn();
+    ret.setAnswerId(answerId);
+
+    kj::Own<ClientHook> capHook;
+    kj::Array<ExportId> resultExports;
+    KJ_DEFER(releaseExports(resultExports));  // in case something goes wrong
+
+    // Call the restorer and initialize the answer.
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      Capability::Client cap = nullptr;
+      KJ_IF_MAYBE(r, restorer) {
+        cap = r->baseRestore(bootstrap.getDeprecatedObjectId());
+      } else KJ_IF_MAYBE(b, bootstrapInterface) {
+        if (bootstrap.hasDeprecatedObjectId()) {
+          KJ_FAIL_REQUIRE("This vat only supports a bootstrap interface, not the old "
+                          "Cap'n-Proto-0.4-style named exports.") { return; }
+        } else {
+          cap = *b;
+        }
+      } else {
+        KJ_FAIL_REQUIRE("This vat does not expose any public/bootstrap interfaces.") { return; }
+      }
+
+      auto payload = ret.initResults();
+      payload.getContent().setAs<Capability>(kj::mv(cap));
+
+      auto capTable = response->getCapTable();
+      KJ_DASSERT(capTable.size() == 1);
+      resultExports = writeDescriptors(capTable, payload);
+      capHook = KJ_ASSERT_NONNULL(capTable[0])->addRef();
+    })) {
+      fromException(*exception, ret.initException());
+      capHook = newBrokenCap(kj::mv(*exception));
+    }
+
+    message = nullptr;
+
+    // Add the answer to the answer table for pipelining and send the response.
+    auto& answer = answers[answerId];
+    KJ_REQUIRE(!answer.active, "questionId is already in use") {
+      return;
+    }
+
+    answer.resultExports = kj::mv(resultExports);
+    answer.active = true;
+    answer.pipeline = kj::Own<PipelineHook>(kj::refcounted<SingleCapPipeline>(kj::mv(capHook)));
+
+    response->send();
+  }
 
   void handleCall(kj::Own<IncomingRpcMessage>&& message, const rpc::Call::Reader& call) {
     kj::Own<ClientHook> capability;
@@ -2378,86 +2464,17 @@ private:
 
   // ---------------------------------------------------------------------------
   // Level 2
-
-  class SingleCapPipeline: public PipelineHook, public kj::Refcounted {
-  public:
-    SingleCapPipeline(kj::Own<ClientHook>&& cap)
-        : cap(kj::mv(cap)) {}
-
-    kj::Own<PipelineHook> addRef() override {
-      return kj::addRef(*this);
-    }
-
-    kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
-      if (ops.size() == 0) {
-        return cap->addRef();
-      } else {
-        return newBrokenCap("Invalid pipeline transform.");
-      }
-    }
-
-  private:
-    kj::Own<ClientHook> cap;
-  };
-
-  void handleRestore(kj::Own<IncomingRpcMessage>&& message, const rpc::Restore::Reader& restore) {
-    AnswerId answerId = restore.getQuestionId();
-
-    if (!connection.is<Connected>()) {
-      // Disconnected; ignore.
-      return;
-    }
-
-    auto response = connection.get<Connected>()->newOutgoingMessage(
-        messageSizeHint<rpc::Return>() + sizeInWords<rpc::CapDescriptor>() + 32);
-
-    rpc::Return::Builder ret = response->getBody().getAs<rpc::Message>().initReturn();
-    ret.setAnswerId(answerId);
-
-    kj::Own<ClientHook> capHook;
-    kj::Array<ExportId> resultExports;
-    KJ_DEFER(releaseExports(resultExports));  // in case something goes wrong
-
-    // Call the restorer and initialize the answer.
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-      KJ_IF_MAYBE(r, restorer) {
-        Capability::Client cap = r->baseRestore(restore.getObjectId());
-        auto payload = ret.initResults();
-        payload.getContent().setAs<Capability>(kj::mv(cap));
-
-        auto capTable = response->getCapTable();
-        KJ_DASSERT(capTable.size() == 1);
-        resultExports = writeDescriptors(capTable, payload);
-        capHook = KJ_ASSERT_NONNULL(capTable[0])->addRef();
-      } else {
-        KJ_FAIL_REQUIRE("This vat cannot restore this SturdyRef.") { break; }
-      }
-    })) {
-      fromException(*exception, ret.initException());
-      capHook = newBrokenCap(kj::mv(*exception));
-    }
-
-    message = nullptr;
-
-    // Add the answer to the answer table for pipelining and send the response.
-    auto& answer = answers[answerId];
-    KJ_REQUIRE(!answer.active, "questionId is already in use") {
-      return;
-    }
-
-    answer.resultExports = kj::mv(resultExports);
-    answer.active = true;
-    answer.pipeline = kj::Own<PipelineHook>(kj::refcounted<SingleCapPipeline>(kj::mv(capHook)));
-
-    response->send();
-  }
 };
 
 }  // namespace
 
 class RpcSystemBase::Impl final: public kj::TaskSet::ErrorHandler {
 public:
-  Impl(VatNetworkBase& network, kj::Maybe<SturdyRefRestorerBase&> restorer)
+  Impl(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface)
+      : network(network), bootstrapInterface(kj::mv(bootstrapInterface)), tasks(*this) {
+    tasks.add(acceptLoop());
+  }
+  Impl(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
       : network(network), restorer(restorer), tasks(*this) {
     tasks.add(acceptLoop());
   }
@@ -2479,8 +2496,14 @@ public:
     });
   }
 
-  Capability::Client restore(_::StructReader hostId, AnyPointer::Reader objectId) {
-    KJ_IF_MAYBE(connection, network.baseConnectToRefHost(hostId)) {
+  Capability::Client bootstrap(_::StructReader vatId) {
+    // For now we delegate to restore() since it's equivalent, but eventually we'll remove restore()
+    // and implement bootstrap() directly.
+    return restore(vatId, AnyPointer::Reader());
+  }
+
+  Capability::Client restore(_::StructReader vatId, AnyPointer::Reader objectId) {
+    KJ_IF_MAYBE(connection, network.baseConnect(vatId)) {
       auto& state = getConnectionState(kj::mv(*connection));
       return Capability::Client(state.restore(objectId));
     } else KJ_IF_MAYBE(r, restorer) {
@@ -2497,6 +2520,7 @@ public:
 
 private:
   VatNetworkBase& network;
+  kj::Maybe<Capability::Client> bootstrapInterface;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
   kj::TaskSet tasks;
 
@@ -2515,7 +2539,7 @@ private:
         connections.erase(connectionPtr);
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
-          restorer, kj::mv(connection), kj::mv(onDisconnect.fulfiller));
+          bootstrapInterface, restorer, kj::mv(connection), kj::mv(onDisconnect.fulfiller));
       RpcConnectionState& result = *newState;
       connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
       return result;
@@ -2525,7 +2549,7 @@ private:
   }
 
   kj::Promise<void> acceptLoop() {
-    auto receive = network.baseAcceptConnectionAsRefHost().then(
+    auto receive = network.baseAccept().then(
         [this](kj::Own<VatNetworkBase::Connection>&& connection) {
       getConnectionState(kj::mv(connection));
     });
@@ -2539,10 +2563,17 @@ private:
   }
 };
 
-RpcSystemBase::RpcSystemBase(VatNetworkBase& network, kj::Maybe<SturdyRefRestorerBase&> restorer)
+RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
+                             kj::Maybe<Capability::Client> bootstrapInterface)
+    : impl(kj::heap<Impl>(network, kj::mv(bootstrapInterface))) {}
+RpcSystemBase::RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
     : impl(kj::heap<Impl>(network, restorer)) {}
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;
 RpcSystemBase::~RpcSystemBase() noexcept(false) {}
+
+Capability::Client RpcSystemBase::baseBootstrap(_::StructReader vatId) {
+  return impl->bootstrap(vatId);
+}
 
 Capability::Client RpcSystemBase::baseRestore(
     _::StructReader hostId, AnyPointer::Reader objectId) {

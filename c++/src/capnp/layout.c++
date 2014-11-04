@@ -2156,11 +2156,21 @@ bool PointerBuilder::isNull() {
 }
 
 void PointerBuilder::transferFrom(PointerBuilder other) {
+  if (!pointer->isNull()) {
+    WireHelpers::zeroObject(segment, pointer);
+    memset(pointer, 0, sizeof(*pointer));
+  }
   WireHelpers::transferPointer(segment, pointer, other.segment, other.pointer);
 }
 
 void PointerBuilder::copyFrom(PointerReader other) {
-  WireHelpers::copyPointer(segment, pointer, other.segment, other.pointer, other.nestingLimit);
+  if (!pointer->isNull()) {
+    WireHelpers::zeroObject(segment, pointer);
+    memset(pointer, 0, sizeof(*pointer));
+  }
+  if (other.pointer != nullptr) {
+    WireHelpers::copyPointer(segment, pointer, other.segment, other.pointer, other.nestingLimit);
+  }
 }
 
 PointerReader PointerBuilder::asReader() const {
@@ -2220,7 +2230,8 @@ const word* PointerReader::getUnchecked() const {
 }
 
 MessageSizeCounts PointerReader::targetSize() const {
-  return WireHelpers::totalSize(segment, pointer, nestingLimit);
+  return pointer == nullptr ? MessageSizeCounts { 0 * WORDS, 0 }
+                            : WireHelpers::totalSize(segment, pointer, nestingLimit);
 }
 
 bool PointerReader::isNull() const {

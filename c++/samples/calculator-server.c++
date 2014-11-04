@@ -197,8 +197,7 @@ int main(int argc, const char* argv[]) {
   }
 
   // Set up a server.
-  capnp::EzRpcServer server(argv[1]);
-  server.exportCap("calculator", kj::heap<CalculatorImpl>());
+  capnp::EzRpcServer server(kj::heap<CalculatorImpl>(), argv[1]);
 
   // Write the port number to stdout, in case it was chosen automatically.
   auto& waitScope = server.getWaitScope();

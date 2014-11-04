@@ -55,8 +55,8 @@
 # to the intended vat as well as to encrypt transmitted data for privacy and integrity.  See the
 # `VatNetwork` example interface near the end of this file.
 #
-# Once a connection is formed, nothing interesting can happen until one side sends a Restore
-# message to convert a persistent capability reference into a live one.
+# When a new connection is formed, the only interesting things that can be done are to send a
+# `Bootstrap` (level 0) or `Accept` (level 3) message.
 #
 # Unless otherwise specified, messages must be delivered to the receiving application in the same
 # order in which they were initiated by the sending application.  The goal is to support "E-Order",
@@ -69,13 +69,12 @@
 # Comments in this file indicate which level requires the corresponding feature to be
 # implemented.
 #
-# * **Level 0:** The implementation does not support object references.  `Restore` is supported
-#   only for looking up singleton objects which exist for the lifetime of the server, and only
-#   these singleton objects can receive calls.  At this level, the implementation does not support
-#   object-oriented protocols and is similar in complexity to JSON-RPC or Protobuf services.  This
-#   level should be considered only a temporary stepping-stone toward level 1 as the lack of object
-#   references drastically changes how protocols are designed.  Applications _should not_ attempt
-#   to design their protocols around the limitations of level 0 implementations.
+# * **Level 0:** The implementation does not support object references. Only the bootstrap interface
+#   can be called. At this level, the implementation does not support object-oriented protocols and
+#   is similar in complexity to JSON-RPC or Protobuf services. This level should be considered only
+#   a temporary stepping-stone toward level 1 as the lack of object references drastically changes
+#   how protocols are designed. Applications _should not_ attempt to design their protocols around
+#   the limitations of level 0 implementations.
 #
 # * **Level 1:** The implementation supports simple bilateral interaction with object references
 #   and promise pipelining, but interactions between three or more parties are supported only via
@@ -84,11 +83,12 @@
 #   reference to that; Bob cannot form a direct connection to Carol.  Level 1 implementations do
 #   not support checking if two capabilities received from different vats actually point to the
 #   same object ("join"), although they should be able to do this check on capabilities received
-#   from the same vat.  `Restore` is supported only for looking up singleton objects as in level 0.
+#   from the same vat.
 #
-# * **Level 2:** The implementation supports saving, restoring, and deleting persistent
-#   capabilities -- i.e. capabilities that remain valid even after disconnect, and can be restored
-#   on a future connection.
+# * **Level 2:** The implementation supports saving persistent capabilities -- i.e. capabilities
+#   that remain valid even after disconnect, and can be restored on a future connection. When a
+#   capability is saved, the requester receives a `SturdyRef`, which is a token that can be used
+#   to restore the capability later.
 #
 # * **Level 3:** The implementation supports three-way interactions.  That is, if Alice (in Vat A)
 #   sends Bob (in Vat B) a capability pointing to Carol (in Vat C), then Vat B will automatically
@@ -241,9 +241,10 @@ struct Message {
 
     # Level 0 features -----------------------------------------------
 
-    call @2 :Call;         # Begin a method call.
-    return @3 :Return;     # Complete a method call.
-    finish @4 :Finish;     # Release a returned answer / cancel a call.
+    bootstrap @8 :Bootstrap;  # Request the peer's bootstrap interface.
+    call @2 :Call;            # Begin a method call.
+    return @3 :Return;        # Complete a method call.
+    finish @4 :Finish;        # Release a returned answer / cancel a call.
 
     # Level 1 features -----------------------------------------------
 
@@ -254,8 +255,10 @@ struct Message {
     # Level 2 features -----------------------------------------------
 
     save @7 :Save;         # Save a capability persistently.
-    restore @8 :Restore;   # Restore a persistent capability from a previous connection.
-    delete @9 :Delete;     # Delete a persistent capability.
+
+    deprecatedDelete @9 :AnyPointer;
+    # Deprecated way to delete a SturdyRef. This was never implemented, therefore it has been
+    # reduted to AnyPointer.
 
     # Level 3 features -----------------------------------------------
 
@@ -269,6 +272,117 @@ struct Message {
 }
 
 # Level 0 message types ----------------------------------------------
+
+struct Bootstrap {
+  # **(level 0)**
+  #
+  # Get the "bootstrap" interface exported by the remote vat.
+  #
+  # For level 0, 1, and 2 implementations, the "bootstrap" interface is simply the main interface
+  # exported by a vat. If the vat acts as a server fielding connections from clients, then the
+  # bootstrap interface defines the basic functionality available to a client when it connects.
+  # The exact interface definition obviously depends on the application.
+  #
+  # We call this a "bootstrap" because in an ideal Cap'n Proto world, bootstrap interfaces would
+  # never be used. In such a world, any time you connect to a new vat, you do so because you
+  # received an introduction from some other vat (see `ThirdPartyCapId`). Thus, the first message
+  # you send is `Accept`, and further communications derive from there. `Bootstrap` is not used.
+  #
+  # In such an ideal world, DNS itself would support Cap'n Proto -- performing a DNS lookup would
+  # actually return a new Cap'n Proto capability, thus introducing you to the target system via
+  # level 3 RPC. Applications would receive the capability to talk to DNS in the first place as
+  # an initial endowment or part of a Powerbox interaction. Therefore, an app can form arbitrary
+  # connections without ever using `Bootstrap`.
+  #
+  # Of course, in the real world, DNS is not Cap'n-Proto-based, and we don't want Cap'n Proto to
+  # require a whole new internet infrastructure to be useful. Therefore, we offer bootstrap
+  # interfaces as a way to get up and running without a level 3 introduction. Thus, bootstrap
+  # interfaces are used to "bootstrap" from other, non-Cap'n-Proto-based means of service discovery,
+  # such as legacy DNS.
+  #
+  # Note that a vat need not provide a bootstrap interface, and in fact many vats (especially those
+  # acting as clients) do not. In this case, the vat should either reply to `Bootstrap` with a
+  # `Return` indicating an exception, or should return a dummy capability with no methods.
+
+  questionId @0 :QuestionId;
+  # A new question ID identifying this request, which will eventually receive a Return message
+  # containing the restored capability.
+
+  deprecatedObjectId @1 :AnyPointer;
+  # ** DEPRECATED **
+  #
+  # A Vat may export multiple bootstrap interfaces. In this case, `deprecatedObjectId` specifies
+  # which one to return. If this pointer is null, then the default bootstrap interface is returned.
+  #
+  # As of verison 0.5, use of this field is deprecated. If a service wants to export multiple
+  # bootstrap interfaces, it should instead define a single bootstarp interface which has methods
+  # that return each of the other interfaces.
+  #
+  # **History**
+  #
+  # In the first version of Cap'n Proto RPC (0.4.x) the `Bootstrap` message was called `Restore`.
+  # At the time, it was thought that this would eventually serve as the way to restore SturdyRefs
+  # (level 2). Meanwhile, an application could offer its "main" interface on a well-known
+  # (non-secret) SturdyRef.
+  #
+  # Since level 2 RPC was not implemented at the time, the `Restore` message was in practice only
+  # used to obtain the main interface. Since most applications had only one main interface which
+  # they wanted to restore, they tended to designate this with a null `objectId`.
+  #
+  # Unfortunately, the earliest version of the EZ RPC interfaces set a precedent of exporting
+  # multiple main interfaces by allowing them to be exported under string names. In this case,
+  # `objectId` was a Text value specifying the name.
+  #
+  # All of this proved problematic for several reasons:
+  #
+  # - The arrangement assumed that a client wishing to restore a SturdyRef would know exactly what
+  #   machine to connect to and would be able to immediately restore a SturdyRef on connection.
+  #   However, in practice, the ability to restore SturdyRefs is itself a capability which may
+  #   require going through an authentication process to obtain. Thus, it makes more sense to
+  #   define a "restorer service" as a full Cap'n Proto interface. If this restorer interface is
+  #   offered as the vat's bootstrap interface, then this is equivalent to the old arrangement.
+  #
+  # - Overloading "Restore" for the purpose of obtaining well-known capabilities encouraged the
+  #   practice of exporting singleton services with string names. If singleton services are desired,
+  #   it is better to have one main interface which has methods that can be used to obtain each
+  #   service, in order to get all the usual benefits of schemas and type checking.
+  #
+  # - Overloading "Restore" also had a security problem: Often, "main" or "well-known"
+  #   capabilities exported by a vat are in fact not public: they are intended to be accessed only
+  #   by clients who are capable of forming a connection to the vat. This can lead to trouble if
+  #   the client itself has other clients and wishes to foward some `Restore` requests from those
+  #   external clients -- it has to be very careful not to allow through `Restore` requests
+  #   addressing the default capability.
+  #
+  #   For example, consider the case of a sandboxed Sandstorm application and its supervisor. The
+  #   application exports a default capability to its supervisor that provides access to
+  #   functionality that only the supervisor is supposed to access. Meanwhile, though, applications
+  #   may publish other capabilities which may be persistent, in which case the application needs
+  #   to field `Restore` requests that could come from anywhere. These requests of course have to
+  #   pass through the supervisor, as all communications with the outside world must. But, the
+  #   supervisor has to be careful not to honor an external request addressing the application's
+  #   default capability, since this capability is privileged. Unfortunately, the default
+  #   capability cannot be given an unguessable name, because then the supervisor itself would not
+  #   be able to address it!
+  #
+  # As of Cap'n Proto 0.5, `Restore` has been renamed to `Bootstrap` and is no longer planned for
+  # use in restoring SturdyRefs.
+  #
+  # Note that 0.4 also defined a message type called `Delete` which, like `Restore`, addressed a
+  # SturdyRef, but indicated that the client would not restore the ref again in the future. This
+  # operation was never implemented, so it was removed entirely. If a "delete" operation is desired,
+  # it should exist as a method on the same interface that handles restoring SturdyRefs. However,
+  # the utility of such an operation is questionable. You wouldn't be able to rely on it for
+  # garbage collection since a client could always disappear permanently without remembering to
+  # delete all its SturdyRefs, thus leaving them dangling forever. Therefore, it is advisable to
+  # design systems such that SturdyRefs never represent "owned" pointers.
+  #
+  # For example, say a SturdyRef points to an image file hosted on some server. That image file
+  # should also live inside a collection (a gallery, perhaps) hosted on the same server, owned by
+  # a user who can delete the image at any time. If the user deletes the image, the SturdyRef
+  # stops working. On the other hand, if the SturdyRef is discarded, this has no effect on the
+  # existence of the image in its collection.
+}
 
 struct Call {
   # **(level 0)**
@@ -637,6 +751,15 @@ struct Save {
   # Message type sent to save a capability persistently so that it can be restored by a future
   # connection.  Not all capabilities can be saved -- application interfaces should define which
   # capabilities support this and which do not.
+  #
+  # The reason this is part of the protocol rather than a regular method on the object is because
+  # low-level Cap'n Proto infrastructure like proxies are likely to need to special-case `Save`
+  # requests while other message types are merely passed through. Relatedly, the result of a `Save`
+  # depends on the network interface on which it is issued -- an application which is connected
+  # to two separate VatNetworks needs to think about which one a given capability originated from
+  # when it saves a SturdyRef, whereas for the purpose of any application-level method it wouldn't
+  # make a difference. Thus, it's likely that the language-level interface to `Save` will look
+  # different from a regular method anyway.
 
   questionId @0 :QuestionId;
   # A new question ID identifying this request, which will eventually receive a Return
@@ -644,57 +767,6 @@ struct Save {
 
   target @1 :MessageTarget;
   # What is to be saved.
-}
-
-struct Restore {
-  # **(mostly level 2)**
-  #
-  # Message type sent to restore a persistent capability obtained during a previous connection, or
-  # through other means.
-  #
-  # Level 0/1 implementations need to implement a limited version of `Restore` only for the purpose
-  # of bootstrapping a new connection (otherwise, there would be no objects to which to address
-  # methods).  These levels may simply implement public singleton services that exist for the
-  # lifetime of the host process and probably have non-secret names.  A level 0 receiver of
-  # `Restore` should never actually send a `Return` message, but should simply expect `Call`
-  # messages addressed to the `PromisedAnswer` corresponding to the `Restore`.  A level 0 sender
-  # of `Restore` can ignore the corresponding `Return` and just keep addressing the
-  # `PromisedAnswer`.
-
-  questionId @0 :QuestionId;
-  # A new question ID identifying this request, which will eventually receive a Return message
-  # containing the restored capability.
-
-  objectId @1 :SturdyRefObjectId;
-  # Designates the capability to restore.
-}
-
-struct Delete {
-  # **(level 2)**
-  #
-  # Message type sent to delete a previously-saved persistent capability.  In other words, this
-  # means "this ref will no longer be used in the future", so that the host can potentially
-  # garbage collect resources associated with it.  Note that if any ExportId still refers to a
-  # capability restored from this ref, that export should still remain valid until released -- thus
-  # `Delete` behaves like POSIX's `unlink()` when called on a file that is currently open.
-  #
-  # Different applications may define different policies regarding saved capability lifetimes that
-  # may or may not rely on `Delete`.  For the purpose of implementation freedom, a receiver is
-  # allowed to silently ignore a delete request for a reference it doesn't recognize.  This way,
-  # a persistent capability could be given an expiration time, after which the capability is
-  # automatically deleted, and any future `Delete` message is ignored.
-  #
-  # A client must send no more than one `Delete` message for any given `Save`, so that a host
-  # can potentially implement reference counting.  However, hosts should be wary of reference
-  # counting across multiple clients, as a malicious client could of course send multiple
-  # `Delete`s.
-
-  questionId @0 :QuestionId;
-  # A new question ID identifying this request, which will eventually receive a Return message
-  # with an empty (null) result.
-
-  objectId @1 :SturdyRefObjectId;
-  # Designates the capability to delete.
 }
 
 # Level 3 message types ----------------------------------------------
@@ -860,7 +932,7 @@ struct MessageTarget {
     # This message is to a capability that is expected to be returned by another call that has not
     # yet been completed.
     #
-    # At level 0, this is supported only for addressing the result of a previous `Restore`, so that
+    # At level 0, this is supported only for addressing the result of a previous `Main`, so that
     # initial startup doesn't require a round trip.
   }
 }
@@ -935,7 +1007,7 @@ struct PromisedAnswer {
   # input to some other method call.
   #
   # Level 0 implementations must support `PromisedAnswer` only for the case where the answer is
-  # to a `Restore` message.  In this case, `path` is always empty since `Restore` always returns
+  # to a `Bootstrap` message.  In this case, `path` is always empty since `Bootstrap` always returns
   # a raw capability.
 
   questionId @0 :QuestionId;
@@ -969,20 +1041,6 @@ struct PromisedAnswer {
       #   were the eventual goal.
     }
   }
-}
-
-struct SturdyRef {
-  # **(level 2)**
-  #
-  # A combination of a SturdyRefObjectId and SturdyRefHostId.  This is what a client of the ref
-  # would typically save in its own storage.  This type is also the result of a `Save` message.
-
-  hostId @0 :SturdyRefHostId;
-  # Describes how to connect to and authenticate a vat that hosts this SturdyRef (and can therefore
-  # accept a `Restore` message for it).
-
-  objectId @1 :SturdyRefObjectId;
-  # The opaque ref in the scope of the host vat, to be sent in the `Restore` message.
 }
 
 struct ThirdPartyCapDescriptor {
@@ -1112,31 +1170,25 @@ struct Exception {
 # between the joiner and the host of the joined object, and this connection must be authenticated.
 # Thus, the details are network-dependent.
 
-using SturdyRefHostId = AnyPointer;
+using SturdyRef = AnyPointer;
 # **(level 2)**
 #
-# Identifies the host of a persistent capability which can be restored using a `Restore` message.
-# That is, this identifies where the `Restore` message should be sent, but does not provide any
-# part of the `Restore` message's content.  `SturdyRefHostId` is usually paired with a
-# `SturdyRefObjectId`, often in the form of a `SturdyRef`.
+# Identifies a persisted capability that can be restored in the future. How exactly a SturdyRef
+# is restored to a live object is specified along with the SturdyRef definition (i.e. not by
+# rpc.capnp).
 #
-# `SturdyRefHostId` could be as simple as a network address and public key fingerprint.  Or, it
-# might be more complicated or abstract.  For example, on some kinds of networks, `SturdyRefHostId`
-# might be an abstract service name without any information on where that service is physically
-# located; the network itself might provide a separate service for mapping such names to locations.
-# It could even be the case that a particular service name maps to a group of vats, where any vat
-# in the group is able to restore the ref.  Such an approach would make `SturdyRefHostId`s more
-# robust against changes in network topology.
-
-using SturdyRefObjectId = AnyPointer;
-# **(mostly level 2)**
+# Generally a SturdyRef needs to specify three things:
+# - How to reach the vat that can restore the ref (e.g. a hostname or IP address).
+# - How to authenticate the vat after connecting (e.g. a public key fingerprint).
+# - The identity of a specific object hosted by the vat. Generally, this is an opaque pointer whose
+#   format is defined by the specific vat -- the client has no need to inspect the object ID.
+#   It is important that the objec ID be unguessable if the object is not public (and objects
+#   should almost never be public).
 #
-# A SturdyRefObjectId identifies a persistent object which may be restored later, within the scope
-# of some host.  The contents of a SturdyRefObjectId are entirely determined by the vat that hosts
-# it.  In fact, different vats on the same network may actually use different definitions for
-# SturdyRefObjectId, so SturdyRefObjectId is not actually parameterized per-network but rather
-# per-vat.  A SturdyRefObjectId is typically paired with a `SturdyRefHostId` (in a
-# `SturdyRef`) which describes how to find a vat capable of restoring the ref.
+# The above are only suggestions. Some networks might work differently. For example, a private
+# network might employ a special restorer service whose sole purpose is to restore SturdyRefs.
+# In this case, the entire contents of SturdyRef might be opaque, because they are intended only
+# to be forwarded to the restorer service.
 
 using ProvisionId = AnyPointer;
 # **(level 3)**
@@ -1223,20 +1275,16 @@ using JoinResult = AnyPointer;
 #
 #   # Level 0 features -----------------------------------------------
 #
-#   connectToRefHost(hostId :SturdyRefHostId) :Connection;
-#   # Connect to the given SturdyRef host.  The transport should return a promise which does not
+#   connect(vatId :VatId) :Connection;
+#   # Connect to the given vat.  The transport should return a promise which does not
 #   # resolve until authentication has completed, but allows messages to be pipelined in before
 #   # that; the transport either queues these messages until authenticated, or sends them encrypted
 #   # such that only the authentic vat would be able to decrypt them.  The latter approach avoids a
 #   # round trip for authentication.
-#   #
-#   # Once connected, the caller should start by sending a `Restore` message.
 #
-#   acceptConnectionAsRefHost() :Connection;
+#   accept() :Connection;
 #   # Wait for the next incoming connection and return it.  Only connections formed by
-#   # connectToHostOf() are returned by this method.
-#   #
-#   # Once connected, the first received message will usually be a `Restore`.
+#   # connect() are returned by this method.
 #
 #   # Level 4 features -----------------------------------------------
 #

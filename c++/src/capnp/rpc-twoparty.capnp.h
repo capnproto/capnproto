@@ -20,7 +20,7 @@ enum class Side_9fd69ebc87b9719c: uint16_t {
   CLIENT,
 };
 CAPNP_DECLARE_ENUM(Side, 9fd69ebc87b9719c);
-CAPNP_DECLARE_SCHEMA(e615e371b1036508);
+CAPNP_DECLARE_SCHEMA(d20b909fee733a8e);
 CAPNP_DECLARE_SCHEMA(b88d09a9c5f39817);
 CAPNP_DECLARE_SCHEMA(89f389b6fd4082c1);
 CAPNP_DECLARE_SCHEMA(b47f4979672cb59d);
@@ -36,14 +36,14 @@ namespace twoparty {
 
 typedef ::capnp::schemas::Side_9fd69ebc87b9719c Side;
 
-struct SturdyRefHostId {
-  SturdyRefHostId() = delete;
+struct VatId {
+  VatId() = delete;
 
   class Reader;
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(e615e371b1036508, 1, 0);
+  CAPNP_DECLARE_STRUCT(d20b909fee733a8e, 1, 0);
 };
 
 struct ProvisionId {
@@ -98,9 +98,9 @@ struct JoinResult {
 
 // =======================================================================================
 
-class SturdyRefHostId::Reader {
+class VatId::Reader {
 public:
-  typedef SturdyRefHostId Reads;
+  typedef VatId Reads;
 
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
@@ -129,9 +129,9 @@ private:
   friend class ::capnp::Orphanage;
 };
 
-class SturdyRefHostId::Builder {
+class VatId::Builder {
 public:
-  typedef SturdyRefHostId Builds;
+  typedef VatId Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
                        // You can explicitly initialize to nullptr instead.
@@ -156,9 +156,9 @@ private:
 };
 
 #if !CAPNP_LITE
-class SturdyRefHostId::Pipeline {
+class VatId::Pipeline {
 public:
-  typedef SturdyRefHostId Pipelines;
+  typedef VatId Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -550,16 +550,16 @@ private:
 
 // =======================================================================================
 
-inline  ::capnp::rpc::twoparty::Side SturdyRefHostId::Reader::getSide() const {
+inline  ::capnp::rpc::twoparty::Side VatId::Reader::getSide() const {
   return _reader.getDataField< ::capnp::rpc::twoparty::Side>(
       0 * ::capnp::ELEMENTS);
 }
 
-inline  ::capnp::rpc::twoparty::Side SturdyRefHostId::Builder::getSide() {
+inline  ::capnp::rpc::twoparty::Side VatId::Builder::getSide() {
   return _builder.getDataField< ::capnp::rpc::twoparty::Side>(
       0 * ::capnp::ELEMENTS);
 }
-inline void SturdyRefHostId::Builder::setSide( ::capnp::rpc::twoparty::Side value) {
+inline void VatId::Builder::setSide( ::capnp::rpc::twoparty::Side value) {
   _builder.setDataField< ::capnp::rpc::twoparty::Side>(
       0 * ::capnp::ELEMENTS, value);
 }

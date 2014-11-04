@@ -44,8 +44,8 @@ kj::Own<TwoPartyVatNetworkBase::Connection> TwoPartyVatNetwork::asConnection() {
   return kj::Own<TwoPartyVatNetworkBase::Connection>(this, disconnectFulfiller);
 }
 
-kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::connectToRefHost(
-    rpc::twoparty::SturdyRefHostId::Reader ref) {
+kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::connect(
+    rpc::twoparty::VatId::Reader ref) {
   if (ref.getSide() == side) {
     return nullptr;
   } else {
@@ -53,8 +53,7 @@ kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::conne
   }
 }
 
-kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>>
-    TwoPartyVatNetwork::acceptConnectionAsRefHost() {
+kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::accept() {
   if (side == rpc::twoparty::Side::SERVER && !accepted) {
     accepted = true;
     return asConnection();
@@ -131,22 +130,6 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
       }
     });
   });
-}
-
-void TwoPartyVatNetwork::introduceTo(TwoPartyVatNetworkBase::Connection& recipient,
-    rpc::twoparty::ThirdPartyCapId::Builder sendToRecipient,
-    rpc::twoparty::RecipientId::Builder sendToTarget) {
-  KJ_FAIL_REQUIRE("Three-party introductions should never occur on two-party network.");
-}
-
-TwoPartyVatNetworkBase::ConnectionAndProvisionId TwoPartyVatNetwork::connectToIntroduced(
-    rpc::twoparty::ThirdPartyCapId::Reader capId) {
-  KJ_FAIL_REQUIRE("Three-party introductions should never occur on two-party network.");
-}
-
-kj::Own<TwoPartyVatNetworkBase::Connection> TwoPartyVatNetwork::acceptIntroducedConnection(
-    rpc::twoparty::RecipientId::Reader recipientId) {
-  KJ_FAIL_REQUIRE("Three-party introductions should never occur on two-party network.");
 }
 
 }  // namespace capnp

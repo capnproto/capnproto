@@ -29,7 +29,13 @@
 
 namespace capnp {
 
-typedef VatNetwork<rpc::twoparty::SturdyRefHostId, rpc::twoparty::ProvisionId,
+namespace rpc {
+  namespace twoparty {
+    typedef VatId SturdyRefHostId;  // For backwards-compatibility with version 0.4.
+  }
+}
+
+typedef VatNetwork<rpc::twoparty::VatId, rpc::twoparty::ProvisionId,
     rpc::twoparty::RecipientId, rpc::twoparty::ThirdPartyCapId, rpc::twoparty::JoinResult>
     TwoPartyVatNetworkBase;
 
@@ -50,9 +56,9 @@ public:
 
   // implements VatNetwork -----------------------------------------------------
 
-  kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> connectToRefHost(
-      rpc::twoparty::SturdyRefHostId::Reader ref) override;
-  kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>> acceptConnectionAsRefHost() override;
+  kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> connect(
+      rpc::twoparty::VatId::Reader ref) override;
+  kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>> accept() override;
 
 private:
   class OutgoingMessageImpl;
@@ -93,13 +99,6 @@ private:
 
   kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override;
   kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override;
-  void introduceTo(TwoPartyVatNetworkBase::Connection& recipient,
-      rpc::twoparty::ThirdPartyCapId::Builder sendToRecipient,
-      rpc::twoparty::RecipientId::Builder sendToTarget) override;
-  ConnectionAndProvisionId connectToIntroduced(
-      rpc::twoparty::ThirdPartyCapId::Reader capId) override;
-  kj::Own<TwoPartyVatNetworkBase::Connection> acceptIntroducedConnection(
-      rpc::twoparty::RecipientId::Reader recipientId) override;
 };
 
 }  // namespace capnp
