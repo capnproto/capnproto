@@ -1700,6 +1700,8 @@ private:
         "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
         "  friend class ::capnp::Orphanage;\n",
+        "  template <typename, ::capnp::Kind>\n"
+        "  friend struct ::capnp::_::PointerHelpers;\n"
         "};\n"
         "\n");
   }
