@@ -90,7 +90,8 @@ public_capnpc_inputs =                                         \
   src/capnp/c++.capnp                                          \
   src/capnp/schema.capnp                                       \
   src/capnp/rpc.capnp                                          \
-  src/capnp/rpc-twoparty.capnp
+  src/capnp/rpc-twoparty.capnp                                 \
+  src/capnp/persistent.capnp
 
 capnpc_inputs =                                                \
   $(public_capnpc_inputs)                                      \
@@ -106,6 +107,8 @@ capnpc_outputs =                                               \
   src/capnp/rpc.capnp.h                                        \
   src/capnp/rpc-twoparty.capnp.c++                             \
   src/capnp/rpc-twoparty.capnp.h                               \
+  src/capnp/persistent.capnp.c++                               \
+  src/capnp/persistent.capnp.h                                 \
   src/capnp/compiler/lexer.capnp.c++                           \
   src/capnp/compiler/lexer.capnp.h                             \
   src/capnp/compiler/grammar.capnp.c++                         \
@@ -179,6 +182,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/rpc-twoparty.h                                     \
   src/capnp/rpc.capnp.h                                        \
   src/capnp/rpc-twoparty.capnp.h                               \
+  src/capnp/persistent.capnp.h                                 \
   src/capnp/ez-rpc.h
 
 if LITE_MODE
@@ -255,6 +259,7 @@ libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/rpc.capnp.c++                                      \
   src/capnp/rpc-twoparty.c++                                   \
   src/capnp/rpc-twoparty.capnp.c++                             \
+  src/capnp/persistent.capnp.c++                               \
   src/capnp/ez-rpc.c++
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333

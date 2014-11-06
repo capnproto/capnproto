@@ -24,7 +24,6 @@ CAPNP_DECLARE_SCHEMA(bbc29655fa89086e);
 CAPNP_DECLARE_SCHEMA(ad1a6c0d7dd07497);
 CAPNP_DECLARE_SCHEMA(f964368b0fbd3711);
 CAPNP_DECLARE_SCHEMA(d562b4df655bdd4d);
-CAPNP_DECLARE_SCHEMA(e40ef0b4b02e882c);
 CAPNP_DECLARE_SCHEMA(9c6a046bfbc1ac5a);
 CAPNP_DECLARE_SCHEMA(d4c9b56290554016);
 CAPNP_DECLARE_SCHEMA(fbe1980490e001af);
@@ -63,9 +62,9 @@ struct Message {
     FINISH,
     RESOLVE,
     RELEASE,
-    SAVE,
+    OBSOLETE_SAVE,
     BOOTSTRAP,
-    DEPRECATED_DELETE,
+    OBSOLETE_DELETE,
     PROVIDE,
     ACCEPT,
     JOIN,
@@ -188,16 +187,6 @@ struct Disembargo::Context {
   };
 
   CAPNP_DECLARE_STRUCT(d562b4df655bdd4d, 1, 1);
-};
-
-struct Save {
-  Save() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-
-  CAPNP_DECLARE_STRUCT(e40ef0b4b02e882c, 1, 1);
 };
 
 struct Provide {
@@ -367,17 +356,17 @@ public:
   inline bool hasRelease() const;
   inline  ::capnp::rpc::Release::Reader getRelease() const;
 
-  inline bool isSave() const;
-  inline bool hasSave() const;
-  inline  ::capnp::rpc::Save::Reader getSave() const;
+  inline bool isObsoleteSave() const;
+  inline bool hasObsoleteSave() const;
+  inline ::capnp::AnyPointer::Reader getObsoleteSave() const;
 
   inline bool isBootstrap() const;
   inline bool hasBootstrap() const;
   inline  ::capnp::rpc::Bootstrap::Reader getBootstrap() const;
 
-  inline bool isDeprecatedDelete() const;
-  inline bool hasDeprecatedDelete() const;
-  inline ::capnp::AnyPointer::Reader getDeprecatedDelete() const;
+  inline bool isObsoleteDelete() const;
+  inline bool hasObsoleteDelete() const;
+  inline ::capnp::AnyPointer::Reader getObsoleteDelete() const;
 
   inline bool isProvide() const;
   inline bool hasProvide() const;
@@ -480,13 +469,10 @@ public:
   inline void adoptRelease(::capnp::Orphan< ::capnp::rpc::Release>&& value);
   inline ::capnp::Orphan< ::capnp::rpc::Release> disownRelease();
 
-  inline bool isSave();
-  inline bool hasSave();
-  inline  ::capnp::rpc::Save::Builder getSave();
-  inline void setSave( ::capnp::rpc::Save::Reader value);
-  inline  ::capnp::rpc::Save::Builder initSave();
-  inline void adoptSave(::capnp::Orphan< ::capnp::rpc::Save>&& value);
-  inline ::capnp::Orphan< ::capnp::rpc::Save> disownSave();
+  inline bool isObsoleteSave();
+  inline bool hasObsoleteSave();
+  inline ::capnp::AnyPointer::Builder getObsoleteSave();
+  inline ::capnp::AnyPointer::Builder initObsoleteSave();
 
   inline bool isBootstrap();
   inline bool hasBootstrap();
@@ -496,10 +482,10 @@ public:
   inline void adoptBootstrap(::capnp::Orphan< ::capnp::rpc::Bootstrap>&& value);
   inline ::capnp::Orphan< ::capnp::rpc::Bootstrap> disownBootstrap();
 
-  inline bool isDeprecatedDelete();
-  inline bool hasDeprecatedDelete();
-  inline ::capnp::AnyPointer::Builder getDeprecatedDelete();
-  inline ::capnp::AnyPointer::Builder initDeprecatedDelete();
+  inline bool isObsoleteDelete();
+  inline bool hasObsoleteDelete();
+  inline ::capnp::AnyPointer::Builder getObsoleteDelete();
+  inline ::capnp::AnyPointer::Builder initObsoleteDelete();
 
   inline bool isProvide();
   inline bool hasProvide();
@@ -1410,90 +1396,6 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
-  ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename, ::capnp::Kind>
-  friend struct ::capnp::ToDynamic_;
-};
-#endif  // !CAPNP_LITE
-
-class Save::Reader {
-public:
-  typedef Save Reads;
-
-  Reader() = default;
-  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
-
-  inline ::capnp::MessageSize totalSize() const {
-    return _reader.totalSize().asPublic();
-  }
-
-#if !CAPNP_LITE
-  inline ::kj::StringTree toString() const {
-    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
-  }
-#endif  // !CAPNP_LITE
-
-  inline  ::uint32_t getQuestionId() const;
-
-  inline bool hasTarget() const;
-  inline  ::capnp::rpc::MessageTarget::Reader getTarget() const;
-
-private:
-  ::capnp::_::StructReader _reader;
-  template <typename, ::capnp::Kind>
-  friend struct ::capnp::ToDynamic_;
-  template <typename, ::capnp::Kind>
-  friend struct ::capnp::_::PointerHelpers;
-  template <typename, ::capnp::Kind>
-  friend struct ::capnp::List;
-  friend class ::capnp::MessageBuilder;
-  friend class ::capnp::Orphanage;
-};
-
-class Save::Builder {
-public:
-  typedef Save Builds;
-
-  Builder() = delete;  // Deleted to discourage incorrect usage.
-                       // You can explicitly initialize to nullptr instead.
-  inline Builder(decltype(nullptr)) {}
-  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
-  inline operator Reader() const { return Reader(_builder.asReader()); }
-  inline Reader asReader() const { return *this; }
-
-  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
-#if !CAPNP_LITE
-  inline ::kj::StringTree toString() const { return asReader().toString(); }
-#endif  // !CAPNP_LITE
-
-  inline  ::uint32_t getQuestionId();
-  inline void setQuestionId( ::uint32_t value);
-
-  inline bool hasTarget();
-  inline  ::capnp::rpc::MessageTarget::Builder getTarget();
-  inline void setTarget( ::capnp::rpc::MessageTarget::Reader value);
-  inline  ::capnp::rpc::MessageTarget::Builder initTarget();
-  inline void adoptTarget(::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value);
-  inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> disownTarget();
-
-private:
-  ::capnp::_::StructBuilder _builder;
-  template <typename, ::capnp::Kind>
-  friend struct ::capnp::ToDynamic_;
-  friend class ::capnp::Orphanage;
-};
-
-#if !CAPNP_LITE
-class Save::Pipeline {
-public:
-  typedef Save Pipelines;
-
-  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
-      : _typeless(kj::mv(typeless)) {}
-
-  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename, ::capnp::Kind>
@@ -2772,56 +2674,39 @@ inline ::capnp::Orphan< ::capnp::rpc::Release> Message::Builder::disownRelease()
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Message::Reader::isSave() const {
-  return which() == Message::SAVE;
+inline bool Message::Reader::isObsoleteSave() const {
+  return which() == Message::OBSOLETE_SAVE;
 }
-inline bool Message::Builder::isSave() {
-  return which() == Message::SAVE;
+inline bool Message::Builder::isObsoleteSave() {
+  return which() == Message::OBSOLETE_SAVE;
 }
-inline bool Message::Reader::hasSave() const {
-  if (which() != Message::SAVE) return false;
+inline bool Message::Reader::hasObsoleteSave() const {
+  if (which() != Message::OBSOLETE_SAVE) return false;
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool Message::Builder::hasSave() {
-  if (which() != Message::SAVE) return false;
+inline bool Message::Builder::hasObsoleteSave() {
+  if (which() != Message::OBSOLETE_SAVE) return false;
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::rpc::Save::Reader Message::Reader::getSave() const {
-  KJ_IREQUIRE(which() == Message::SAVE,
+inline ::capnp::AnyPointer::Reader Message::Reader::getObsoleteSave() const {
+  KJ_IREQUIRE(which() == Message::OBSOLETE_SAVE,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::Save>::get(
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::rpc::Save::Builder Message::Builder::getSave() {
-  KJ_IREQUIRE(which() == Message::SAVE,
+inline ::capnp::AnyPointer::Builder Message::Builder::getObsoleteSave() {
+  KJ_IREQUIRE(which() == Message::OBSOLETE_SAVE,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::Save>::get(
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void Message::Builder::setSave( ::capnp::rpc::Save::Reader value) {
+inline ::capnp::AnyPointer::Builder Message::Builder::initObsoleteSave() {
   _builder.setDataField<Message::Which>(
-      0 * ::capnp::ELEMENTS, Message::SAVE);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::Save>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-inline  ::capnp::rpc::Save::Builder Message::Builder::initSave() {
-  _builder.setDataField<Message::Which>(
-      0 * ::capnp::ELEMENTS, Message::SAVE);
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::Save>::init(
+      0 * ::capnp::ELEMENTS, Message::OBSOLETE_SAVE);
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline void Message::Builder::adoptSave(
-    ::capnp::Orphan< ::capnp::rpc::Save>&& value) {
-  _builder.setDataField<Message::Which>(
-      0 * ::capnp::ELEMENTS, Message::SAVE);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::Save>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::rpc::Save> Message::Builder::disownSave() {
-  KJ_IREQUIRE(which() == Message::SAVE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::Save>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  result.clear();
+  return result;
 }
 
 inline bool Message::Reader::isBootstrap() const {
@@ -2876,35 +2761,35 @@ inline ::capnp::Orphan< ::capnp::rpc::Bootstrap> Message::Builder::disownBootstr
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Message::Reader::isDeprecatedDelete() const {
-  return which() == Message::DEPRECATED_DELETE;
+inline bool Message::Reader::isObsoleteDelete() const {
+  return which() == Message::OBSOLETE_DELETE;
 }
-inline bool Message::Builder::isDeprecatedDelete() {
-  return which() == Message::DEPRECATED_DELETE;
+inline bool Message::Builder::isObsoleteDelete() {
+  return which() == Message::OBSOLETE_DELETE;
 }
-inline bool Message::Reader::hasDeprecatedDelete() const {
-  if (which() != Message::DEPRECATED_DELETE) return false;
+inline bool Message::Reader::hasObsoleteDelete() const {
+  if (which() != Message::OBSOLETE_DELETE) return false;
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool Message::Builder::hasDeprecatedDelete() {
-  if (which() != Message::DEPRECATED_DELETE) return false;
+inline bool Message::Builder::hasObsoleteDelete() {
+  if (which() != Message::OBSOLETE_DELETE) return false;
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::AnyPointer::Reader Message::Reader::getDeprecatedDelete() const {
-  KJ_IREQUIRE(which() == Message::DEPRECATED_DELETE,
+inline ::capnp::AnyPointer::Reader Message::Reader::getObsoleteDelete() const {
+  KJ_IREQUIRE(which() == Message::OBSOLETE_DELETE,
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder Message::Builder::getDeprecatedDelete() {
-  KJ_IREQUIRE(which() == Message::DEPRECATED_DELETE,
+inline ::capnp::AnyPointer::Builder Message::Builder::getObsoleteDelete() {
+  KJ_IREQUIRE(which() == Message::OBSOLETE_DELETE,
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder Message::Builder::initDeprecatedDelete() {
+inline ::capnp::AnyPointer::Builder Message::Builder::initObsoleteDelete() {
   _builder.setDataField<Message::Which>(
-      0 * ::capnp::ELEMENTS, Message::DEPRECATED_DELETE);
+      0 * ::capnp::ELEMENTS, Message::OBSOLETE_DELETE);
   auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
@@ -3989,57 +3874,6 @@ inline void Disembargo::Context::Builder::setProvide( ::uint32_t value) {
       2 * ::capnp::ELEMENTS, Disembargo::Context::PROVIDE);
   _builder.setDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS, value);
-}
-
-inline  ::uint32_t Save::Reader::getQuestionId() const {
-  return _reader.getDataField< ::uint32_t>(
-      0 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint32_t Save::Builder::getQuestionId() {
-  return _builder.getDataField< ::uint32_t>(
-      0 * ::capnp::ELEMENTS);
-}
-inline void Save::Builder::setQuestionId( ::uint32_t value) {
-  _builder.setDataField< ::uint32_t>(
-      0 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Save::Reader::hasTarget() const {
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline bool Save::Builder::hasTarget() {
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline  ::capnp::rpc::MessageTarget::Reader Save::Reader::getTarget() const {
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
-}
-inline  ::capnp::rpc::MessageTarget::Builder Save::Builder::getTarget() {
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-#if !CAPNP_LITE
-inline  ::capnp::rpc::MessageTarget::Pipeline Save::Pipeline::getTarget() {
-  return  ::capnp::rpc::MessageTarget::Pipeline(_typeless.getPointerField(0));
-}
-#endif  // !CAPNP_LITE
-inline void Save::Builder::setTarget( ::capnp::rpc::MessageTarget::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-inline  ::capnp::rpc::MessageTarget::Builder Save::Builder::initTarget() {
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline void Save::Builder::adoptTarget(
-    ::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> Save::Builder::disownTarget() {
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline  ::uint32_t Provide::Reader::getQuestionId() const {

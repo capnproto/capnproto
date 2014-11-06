@@ -63,6 +63,7 @@ set(capnp-rpc_sources
   rpc.capnp.c++
   rpc-twoparty.c++
   rpc-twoparty.capnp.c++
+  persistent.capnp.c++
   ez-rpc.c++
 )
 set(capnp-rpc_headers
@@ -71,6 +72,7 @@ set(capnp-rpc_headers
   rpc-twoparty.h
   rpc.capnp.h
   rpc-twoparty.capnp.h
+  persistent.capnp.h
   ez-rpc.h
 )
 if(NOT CAPNP_LITE)
@@ -98,6 +100,7 @@ set(capnpc_headers
   schema.capnp
   rpc.capnp
   rpc-twoparty.capnp
+  persistent.capnp
 )
 if(NOT CAPNP_LITE)
   add_library(capnpc ${capnpc_sources})

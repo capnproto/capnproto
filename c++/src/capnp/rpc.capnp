@@ -254,11 +254,14 @@ struct Message {
 
     # Level 2 features -----------------------------------------------
 
-    save @7 :Save;         # Save a capability persistently.
+    obsoleteSave @7 :AnyPointer;
+    # Obsolete request to save a capability, resulting in a SturdyRef. This has been replaced
+    # by the `Persistent` interface defined in `persistent.capnp`. This operation was never
+    # implemented.
 
-    deprecatedDelete @9 :AnyPointer;
-    # Deprecated way to delete a SturdyRef. This was never implemented, therefore it has been
-    # reduted to AnyPointer.
+    obsoleteDelete @9 :AnyPointer;
+    # Obsolete way to delete a SturdyRef. This was never implemented, therefore it has been
+    # reduted to AnyPointer. This operation was never implemented.
 
     # Level 3 features -----------------------------------------------
 
@@ -745,29 +748,7 @@ struct Disembargo {
 
 # Level 2 message types ----------------------------------------------
 
-struct Save {
-  # **(level 2)**
-  #
-  # Message type sent to save a capability persistently so that it can be restored by a future
-  # connection.  Not all capabilities can be saved -- application interfaces should define which
-  # capabilities support this and which do not.
-  #
-  # The reason this is part of the protocol rather than a regular method on the object is because
-  # low-level Cap'n Proto infrastructure like proxies are likely to need to special-case `Save`
-  # requests while other message types are merely passed through. Relatedly, the result of a `Save`
-  # depends on the network interface on which it is issued -- an application which is connected
-  # to two separate VatNetworks needs to think about which one a given capability originated from
-  # when it saves a SturdyRef, whereas for the purpose of any application-level method it wouldn't
-  # make a difference. Thus, it's likely that the language-level interface to `Save` will look
-  # different from a regular method anyway.
-
-  questionId @0 :QuestionId;
-  # A new question ID identifying this request, which will eventually receive a Return
-  # message whose `results` is a SturdyRef.
-
-  target @1 :MessageTarget;
-  # What is to be saved.
-}
+# See persistent.capnp.
 
 # Level 3 message types ----------------------------------------------
 
