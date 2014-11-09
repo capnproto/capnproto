@@ -78,11 +78,6 @@ class BuilderArena;
 
 // =============================================================================
 
-using FieldSize = capnp::ElementSize;
-// Legacy typedef.
-//
-// TODO(cleanup): Replace all uses.
-
 typedef decltype(BITS / ELEMENTS) BitsPerElement;
 typedef decltype(POINTERS / ELEMENTS) PointersPerElement;
 
@@ -97,48 +92,48 @@ static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[8] = {
     0 * BITS / ELEMENTS
 };
 
-inline constexpr BitsPerElement dataBitsPerElement(FieldSize size) {
+inline constexpr BitsPerElement dataBitsPerElement(ElementSize size) {
   return _::BITS_PER_ELEMENT_TABLE[static_cast<int>(size)];
 }
 
-inline constexpr PointersPerElement pointersPerElement(FieldSize size) {
-  return size == FieldSize::POINTER ? 1 * POINTERS / ELEMENTS : 0 * POINTERS / ELEMENTS;
+inline constexpr PointersPerElement pointersPerElement(ElementSize size) {
+  return size == ElementSize::POINTER ? 1 * POINTERS / ELEMENTS : 0 * POINTERS / ELEMENTS;
 }
 
 template <size_t size> struct ElementSizeForByteSize;
-template <> struct ElementSizeForByteSize<1> { static constexpr FieldSize value = FieldSize::BYTE; };
-template <> struct ElementSizeForByteSize<2> { static constexpr FieldSize value = FieldSize::TWO_BYTES; };
-template <> struct ElementSizeForByteSize<4> { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
-template <> struct ElementSizeForByteSize<8> { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
+template <> struct ElementSizeForByteSize<1> { static constexpr ElementSize value = ElementSize::BYTE; };
+template <> struct ElementSizeForByteSize<2> { static constexpr ElementSize value = ElementSize::TWO_BYTES; };
+template <> struct ElementSizeForByteSize<4> { static constexpr ElementSize value = ElementSize::FOUR_BYTES; };
+template <> struct ElementSizeForByteSize<8> { static constexpr ElementSize value = ElementSize::EIGHT_BYTES; };
 
 template <typename T> struct ElementSizeForType {
-  static constexpr FieldSize value =
+  static constexpr ElementSize value =
       // Primitive types that aren't special-cased below can be determined from sizeof().
       CAPNP_KIND(T) == Kind::PRIMITIVE ? ElementSizeForByteSize<sizeof(T)>::value :
-      CAPNP_KIND(T) == Kind::ENUM ? FieldSize::TWO_BYTES :
-      CAPNP_KIND(T) == Kind::STRUCT ? FieldSize::INLINE_COMPOSITE :
+      CAPNP_KIND(T) == Kind::ENUM ? ElementSize::TWO_BYTES :
+      CAPNP_KIND(T) == Kind::STRUCT ? ElementSize::INLINE_COMPOSITE :
 
       // Everything else is a pointer.
-      FieldSize::POINTER;
+      ElementSize::POINTER;
 };
 
 // Void and bool are special.
-template <> struct ElementSizeForType<Void> { static constexpr FieldSize value = FieldSize::VOID; };
-template <> struct ElementSizeForType<bool> { static constexpr FieldSize value = FieldSize::BIT; };
+template <> struct ElementSizeForType<Void> { static constexpr ElementSize value = ElementSize::VOID; };
+template <> struct ElementSizeForType<bool> { static constexpr ElementSize value = ElementSize::BIT; };
 
 // Lists and blobs are pointers, not structs.
 template <typename T, bool b> struct ElementSizeForType<List<T, b>> {
-  static constexpr FieldSize value = FieldSize::POINTER;
+  static constexpr ElementSize value = ElementSize::POINTER;
 };
 template <> struct ElementSizeForType<Text> {
-  static constexpr FieldSize value = FieldSize::POINTER;
+  static constexpr ElementSize value = ElementSize::POINTER;
 };
 template <> struct ElementSizeForType<Data> {
-  static constexpr FieldSize value = FieldSize::POINTER;
+  static constexpr ElementSize value = ElementSize::POINTER;
 };
 
 template <typename T>
-inline constexpr FieldSize elementSizeForType() {
+inline constexpr ElementSize elementSizeForType() {
   return ElementSizeForType<T>::value;
 }
 
@@ -287,7 +282,7 @@ public:
   bool isList();
 
   StructBuilder getStruct(StructSize size, const word* defaultValue);
-  ListBuilder getList(FieldSize elementSize, const word* defaultValue);
+  ListBuilder getList(ElementSize elementSize, const word* defaultValue);
   ListBuilder getStructList(StructSize elementSize, const word* defaultValue);
   ListBuilder getListAnySize(const word* defaultValue);
   template <typename T> typename T::Builder getBlob(const void* defaultValue,ByteCount defaultSize);
@@ -299,7 +294,7 @@ public:
   // simple byte array for blobs.
 
   StructBuilder initStruct(StructSize size);
-  ListBuilder initList(FieldSize elementSize, ElementCount elementCount);
+  ListBuilder initList(ElementSize elementSize, ElementCount elementCount);
   ListBuilder initStructList(ElementCount elementCount, StructSize size);
   template <typename T> typename T::Builder initBlob(ByteCount size);
   // Init methods:  Initialize the pointer to a newly-allocated object, discarding the existing
@@ -368,7 +363,7 @@ public:
   bool isList() const;
 
   StructReader getStruct(const word* defaultValue) const;
-  ListReader getList(FieldSize expectedElementSize, const word* defaultValue) const;
+  ListReader getList(ElementSize expectedElementSize, const word* defaultValue) const;
   ListReader getListAnySize(const word* defaultValue) const;
   template <typename T>
   typename T::Reader getBlob(const void* defaultValue, ByteCount defaultSize) const;
@@ -566,7 +561,7 @@ public:
   inline word* getLocation() {
     // Get the object's location.
 
-    if (elementSize == FieldSize::INLINE_COMPOSITE) {
+    if (elementSize == ElementSize::INLINE_COMPOSITE) {
       return reinterpret_cast<word*>(ptr) - POINTER_SIZE_IN_WORDS;
     } else {
       return reinterpret_cast<word*>(ptr);
@@ -616,14 +611,14 @@ private:
   // The struct properties to use when interpreting the elements as structs.  All lists can be
   // interpreted as struct lists, so these are always filled in.
 
-  FieldSize elementSize;
-  // The element size as a FieldSize. This is only really needed to disambiguate INLINE_COMPOSITE
+  ElementSize elementSize;
+  // The element size as a ElementSize. This is only really needed to disambiguate INLINE_COMPOSITE
   // from other types when the overall size is exactly zero or one words.
 
   inline ListBuilder(SegmentBuilder* segment, void* ptr,
                      decltype(BITS / ELEMENTS) step, ElementCount size,
                      BitCount structDataSize, WirePointerCount structPointerCount,
-                     FieldSize elementSize)
+                     ElementSize elementSize)
       : segment(segment), ptr(reinterpret_cast<byte*>(ptr)),
         elementCount(size), step(step), structDataSize(structDataSize),
         structPointerCount(structPointerCount), elementSize(elementSize) {}
@@ -672,8 +667,8 @@ private:
   // The struct properties to use when interpreting the elements as structs.  All lists can be
   // interpreted as struct lists, so these are always filled in.
 
-  FieldSize elementSize;
-  // The element size as a FieldSize. This is only really needed to disambiguate INLINE_COMPOSITE
+  ElementSize elementSize;
+  // The element size as a ElementSize. This is only really needed to disambiguate INLINE_COMPOSITE
   // from other types when the overall size is exactly zero or one words.
 
   int nestingLimit;
@@ -683,7 +678,7 @@ private:
   inline ListReader(SegmentReader* segment, const void* ptr,
                     ElementCount elementCount, decltype(BITS / ELEMENTS) step,
                     BitCount structDataSize, WirePointerCount structPointerCount,
-                    FieldSize elementSize, int nestingLimit)
+                    ElementSize elementSize, int nestingLimit)
       : segment(segment), ptr(reinterpret_cast<const byte*>(ptr)), elementCount(elementCount),
         step(step), structDataSize(structDataSize),
         structPointerCount(structPointerCount), elementSize(elementSize),
@@ -706,7 +701,7 @@ public:
 
   static OrphanBuilder initStruct(BuilderArena* arena, StructSize size);
   static OrphanBuilder initList(BuilderArena* arena, ElementCount elementCount,
-                                FieldSize elementSize);
+                                ElementSize elementSize);
   static OrphanBuilder initStructList(BuilderArena* arena, ElementCount elementCount,
                                       StructSize elementSize);
   static OrphanBuilder initText(BuilderArena* arena, ByteCount size);
@@ -732,7 +727,7 @@ public:
   StructBuilder asStruct(StructSize size);
   // Interpret as a struct, or throw an exception if not a struct.
 
-  ListBuilder asList(FieldSize elementSize);
+  ListBuilder asList(ElementSize elementSize);
   // Interpret as a list, or throw an exception if not a list.  elementSize cannot be
   // INLINE_COMPOSITE -- use asStructList() instead.
 
@@ -744,7 +739,7 @@ public:
   // Interpret as a blob, or throw an exception if not a blob.
 
   StructReader asStructReader(StructSize size) const;
-  ListReader asListReader(FieldSize elementSize) const;
+  ListReader asListReader(ElementSize elementSize) const;
 #if !CAPNP_LITE
   kj::Own<ClientHook> asCapability() const;
 #endif  // !CAPNP_LITE
@@ -821,7 +816,7 @@ inline Data::Builder StructBuilder::getDataSectionAsBlob() {
 inline _::ListBuilder StructBuilder::getPointerSectionAsList() {
   return _::ListBuilder(segment, pointers, pointerCount * BITS_PER_POINTER / ELEMENTS,
                         pointerCount * (1 * ELEMENTS / POINTERS),
-                        0 * BITS, 1 * POINTERS, FieldSize::POINTER);
+                        0 * BITS, 1 * POINTERS, ElementSize::POINTER);
 }
 
 template <typename T>
@@ -905,7 +900,7 @@ inline Data::Reader StructReader::getDataSectionAsBlob() {
 inline _::ListReader StructReader::getPointerSectionAsList() {
   return _::ListReader(segment, pointers, pointerCount * (1 * ELEMENTS / POINTERS),
                        pointerCount * BITS_PER_POINTER / ELEMENTS,
-                       0 * BITS, 1 * POINTERS, FieldSize::POINTER, nestingLimit);
+                       0 * BITS, 1 * POINTERS, ElementSize::POINTER, nestingLimit);
 }
 
 template <typename T>

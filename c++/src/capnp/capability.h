@@ -564,14 +564,14 @@ struct List<T, Kind::INTERFACE> {
 
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
-    return builder.initList(_::FieldSize::POINTER, size * ELEMENTS);
+    return builder.initList(ElementSize::POINTER, size * ELEMENTS);
   }
   inline static _::ListBuilder getFromPointer(_::PointerBuilder builder, const word* defaultValue) {
-    return builder.getList(_::FieldSize::POINTER, defaultValue);
+    return builder.getList(ElementSize::POINTER, defaultValue);
   }
   inline static _::ListReader getFromPointer(
       const _::PointerReader& reader, const word* defaultValue) {
-    return reader.getList(_::FieldSize::POINTER, defaultValue);
+    return reader.getList(ElementSize::POINTER, defaultValue);
   }
 
   template <typename U, Kind k>

@@ -67,32 +67,32 @@ inline uint64_t bitCast<uint64_t, double>(double value) {
   return result;
 }
 
-_::FieldSize elementSizeFor(schema::Type::Which elementType) {
+ElementSize elementSizeFor(schema::Type::Which elementType) {
   switch (elementType) {
-    case schema::Type::VOID: return _::FieldSize::VOID;
-    case schema::Type::BOOL: return _::FieldSize::BIT;
-    case schema::Type::INT8: return _::FieldSize::BYTE;
-    case schema::Type::INT16: return _::FieldSize::TWO_BYTES;
-    case schema::Type::INT32: return _::FieldSize::FOUR_BYTES;
-    case schema::Type::INT64: return _::FieldSize::EIGHT_BYTES;
-    case schema::Type::UINT8: return _::FieldSize::BYTE;
-    case schema::Type::UINT16: return _::FieldSize::TWO_BYTES;
-    case schema::Type::UINT32: return _::FieldSize::FOUR_BYTES;
-    case schema::Type::UINT64: return _::FieldSize::EIGHT_BYTES;
-    case schema::Type::FLOAT32: return _::FieldSize::FOUR_BYTES;
-    case schema::Type::FLOAT64: return _::FieldSize::EIGHT_BYTES;
+    case schema::Type::VOID: return ElementSize::VOID;
+    case schema::Type::BOOL: return ElementSize::BIT;
+    case schema::Type::INT8: return ElementSize::BYTE;
+    case schema::Type::INT16: return ElementSize::TWO_BYTES;
+    case schema::Type::INT32: return ElementSize::FOUR_BYTES;
+    case schema::Type::INT64: return ElementSize::EIGHT_BYTES;
+    case schema::Type::UINT8: return ElementSize::BYTE;
+    case schema::Type::UINT16: return ElementSize::TWO_BYTES;
+    case schema::Type::UINT32: return ElementSize::FOUR_BYTES;
+    case schema::Type::UINT64: return ElementSize::EIGHT_BYTES;
+    case schema::Type::FLOAT32: return ElementSize::FOUR_BYTES;
+    case schema::Type::FLOAT64: return ElementSize::EIGHT_BYTES;
 
-    case schema::Type::TEXT: return _::FieldSize::POINTER;
-    case schema::Type::DATA: return _::FieldSize::POINTER;
-    case schema::Type::LIST: return _::FieldSize::POINTER;
-    case schema::Type::ENUM: return _::FieldSize::TWO_BYTES;
-    case schema::Type::STRUCT: return _::FieldSize::INLINE_COMPOSITE;
-    case schema::Type::INTERFACE: return _::FieldSize::POINTER;
+    case schema::Type::TEXT: return ElementSize::POINTER;
+    case schema::Type::DATA: return ElementSize::POINTER;
+    case schema::Type::LIST: return ElementSize::POINTER;
+    case schema::Type::ENUM: return ElementSize::TWO_BYTES;
+    case schema::Type::STRUCT: return ElementSize::INLINE_COMPOSITE;
+    case schema::Type::INTERFACE: return ElementSize::POINTER;
     case schema::Type::ANY_POINTER: KJ_FAIL_ASSERT("List(AnyPointer) not supported."); break;
   }
 
   // Unknown type.  Treat it as zero-size.
-  return _::FieldSize::VOID;
+  return ElementSize::VOID;
 }
 
 inline _::StructSize structSizeFromSchema(StructSchema schema) {
@@ -1293,15 +1293,15 @@ Orphan<DynamicValue> DynamicList::Builder::disown(uint index) {
     case schema::Type::ENUM: {
       auto result = Orphan<DynamicValue>(operator[](index), _::OrphanBuilder());
       switch (elementSizeFor(schema.whichElementType())) {
-        case _::FieldSize::VOID: break;
-        case _::FieldSize::BIT: builder.setDataElement<bool>(index * ELEMENTS, false); break;
-        case _::FieldSize::BYTE: builder.setDataElement<uint8_t>(index * ELEMENTS, 0); break;
-        case _::FieldSize::TWO_BYTES: builder.setDataElement<uint16_t>(index * ELEMENTS, 0); break;
-        case _::FieldSize::FOUR_BYTES: builder.setDataElement<uint32_t>(index * ELEMENTS, 0); break;
-        case _::FieldSize::EIGHT_BYTES: builder.setDataElement<uint64_t>(index * ELEMENTS, 0);break;
+        case ElementSize::VOID: break;
+        case ElementSize::BIT: builder.setDataElement<bool>(index * ELEMENTS, false); break;
+        case ElementSize::BYTE: builder.setDataElement<uint8_t>(index * ELEMENTS, 0); break;
+        case ElementSize::TWO_BYTES: builder.setDataElement<uint16_t>(index * ELEMENTS, 0); break;
+        case ElementSize::FOUR_BYTES: builder.setDataElement<uint32_t>(index * ELEMENTS, 0); break;
+        case ElementSize::EIGHT_BYTES: builder.setDataElement<uint64_t>(index * ELEMENTS, 0);break;
 
-        case _::FieldSize::POINTER:
-        case _::FieldSize::INLINE_COMPOSITE:
+        case ElementSize::POINTER:
+        case ElementSize::INLINE_COMPOSITE:
           KJ_UNREACHABLE;
       }
       return kj::mv(result);

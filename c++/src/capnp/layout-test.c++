@@ -124,7 +124,7 @@ static void setupStruct(StructBuilder builder) {
 
   {
     ListBuilder list = builder.getPointerField(1 * POINTERS)
-        .initList(FieldSize::FOUR_BYTES, 3 * ELEMENTS);
+        .initList(ElementSize::FOUR_BYTES, 3 * ELEMENTS);
     EXPECT_EQ(3 * ELEMENTS, list.size());
     list.setDataElement<int32_t>(0 * ELEMENTS, 200);
     list.setDataElement<int32_t>(1 * ELEMENTS, 201);
@@ -146,11 +146,11 @@ static void setupStruct(StructBuilder builder) {
 
   {
     ListBuilder list = builder.getPointerField(3 * POINTERS)
-                              .initList(FieldSize::POINTER, 5 * ELEMENTS);
+                              .initList(ElementSize::POINTER, 5 * ELEMENTS);
     EXPECT_EQ(5 * ELEMENTS, list.size());
     for (uint i = 0; i < 5; i++) {
       ListBuilder element = list.getPointerElement(i * ELEMENTS)
-                                .initList(FieldSize::TWO_BYTES, (i + 1) * ELEMENTS);
+                                .initList(ElementSize::TWO_BYTES, (i + 1) * ELEMENTS);
       EXPECT_EQ((i + 1) * ELEMENTS, element.size());
       for (uint j = 0; j <= i; j++) {
         element.setDataElement<uint16_t>(j * ELEMENTS, 500 + j);
@@ -181,7 +181,7 @@ static void checkStruct(StructBuilder builder) {
 
   {
     ListBuilder list = builder.getPointerField(1 * POINTERS)
-                              .getList(FieldSize::FOUR_BYTES, nullptr);
+                              .getList(ElementSize::FOUR_BYTES, nullptr);
     ASSERT_EQ(3 * ELEMENTS, list.size());
     EXPECT_EQ(200, list.getDataElement<int32_t>(0 * ELEMENTS));
     EXPECT_EQ(201, list.getDataElement<int32_t>(1 * ELEMENTS));
@@ -204,11 +204,11 @@ static void checkStruct(StructBuilder builder) {
   }
 
   {
-    ListBuilder list = builder.getPointerField(3 * POINTERS).getList(FieldSize::POINTER, nullptr);
+    ListBuilder list = builder.getPointerField(3 * POINTERS).getList(ElementSize::POINTER, nullptr);
     ASSERT_EQ(5 * ELEMENTS, list.size());
     for (uint i = 0; i < 5; i++) {
       ListBuilder element = list.getPointerElement(i * ELEMENTS)
-                                .getList(FieldSize::TWO_BYTES, nullptr);
+                                .getList(ElementSize::TWO_BYTES, nullptr);
       ASSERT_EQ((i + 1) * ELEMENTS, element.size());
       for (uint j = 0; j <= i; j++) {
         EXPECT_EQ(500u + j, element.getDataElement<uint16_t>(j * ELEMENTS));
@@ -238,7 +238,7 @@ static void checkStruct(StructReader reader) {
   }
 
   {
-    ListReader list = reader.getPointerField(1 * POINTERS).getList(FieldSize::FOUR_BYTES, nullptr);
+    ListReader list = reader.getPointerField(1 * POINTERS).getList(ElementSize::FOUR_BYTES, nullptr);
     ASSERT_EQ(3 * ELEMENTS, list.size());
     EXPECT_EQ(200, list.getDataElement<int32_t>(0 * ELEMENTS));
     EXPECT_EQ(201, list.getDataElement<int32_t>(1 * ELEMENTS));
@@ -247,7 +247,7 @@ static void checkStruct(StructReader reader) {
 
   {
     ListReader list = reader.getPointerField(2 * POINTERS)
-                            .getList(FieldSize::INLINE_COMPOSITE, nullptr);
+                            .getList(ElementSize::INLINE_COMPOSITE, nullptr);
     ASSERT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
       StructReader element = list.getStructElement(i * ELEMENTS);
@@ -260,11 +260,11 @@ static void checkStruct(StructReader reader) {
   }
 
   {
-    ListReader list = reader.getPointerField(3 * POINTERS).getList(FieldSize::POINTER, nullptr);
+    ListReader list = reader.getPointerField(3 * POINTERS).getList(ElementSize::POINTER, nullptr);
     ASSERT_EQ(5 * ELEMENTS, list.size());
     for (uint i = 0; i < 5; i++) {
       ListReader element = list.getPointerElement(i * ELEMENTS)
-                               .getList(FieldSize::TWO_BYTES, nullptr);
+                               .getList(ElementSize::TWO_BYTES, nullptr);
       ASSERT_EQ((i + 1) * ELEMENTS, element.size());
       for (uint j = 0; j <= i; j++) {
         EXPECT_EQ(500u + j, element.getDataElement<uint16_t>(j * ELEMENTS));
