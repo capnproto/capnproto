@@ -124,6 +124,10 @@ TEST(Any, AnyStruct) {
   EXPECT_EQ(48, b.getDataSection().size());
   EXPECT_EQ(20, b.getPointerSection().size());
 
+  b = root.getAnyPointerField().getAs<TestAllTypes>();
+  EXPECT_EQ(48, b.getDataSection().size());
+  EXPECT_EQ(20, b.getPointerSection().size());
+
   auto r = toAny(root.getAnyPointerField().getAs<TestAllTypes>().asReader());
   EXPECT_EQ(48, r.getDataSection().size());
   EXPECT_EQ(20, r.getPointerSection().size());
@@ -132,10 +136,15 @@ TEST(Any, AnyStruct) {
   EXPECT_EQ(48, r.getDataSection().size());
   EXPECT_EQ(20, r.getPointerSection().size());
 
+  r = root.getAnyPointerField().getAs<TestAllTypes>().asReader();
+  EXPECT_EQ(48, r.getDataSection().size());
+  EXPECT_EQ(20, r.getPointerSection().size());
+
   {
     MallocMessageBuilder b2;
     auto root2 = b2.getRoot<test::TestAnyPointer>();
-    auto sb = root2.getAnyPointerField().initAsAnyStruct(r.getDataSection().size() / 8, r.getPointerSection().size());
+    auto sb = root2.getAnyPointerField().initAsAnyStruct(
+        r.getDataSection().size() / 8, r.getPointerSection().size());
 
     EXPECT_EQ(48, sb.getDataSection().size());
     EXPECT_EQ(20, sb.getPointerSection().size());
@@ -168,6 +177,11 @@ TEST(Any, AnyList) {
   EXPECT_EQ(48, alb.as<List<AnyStruct>>()[0].getDataSection().size());
   EXPECT_EQ(20, alb.as<List<AnyStruct>>()[0].getPointerSection().size());
 
+  alb = root.getAnyPointerField().getAs<List<TestAllTypes>>();
+  EXPECT_EQ(2, alb.size());
+  EXPECT_EQ(48, alb.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alb.as<List<AnyStruct>>()[0].getPointerSection().size());
+
   auto alr = toAny(root.getAnyPointerField().getAs<List<TestAllTypes>>().asReader());
   EXPECT_EQ(2, alr.size());
   EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
@@ -178,6 +192,10 @@ TEST(Any, AnyList) {
   EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
   EXPECT_EQ(20, alr.as<List<AnyStruct>>()[0].getPointerSection().size());
 
+  alr = root.getAnyPointerField().getAs<List<TestAllTypes>>().asReader();
+  EXPECT_EQ(2, alr.size());
+  EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alr.as<List<AnyStruct>>()[0].getPointerSection().size());
 }
 
 }  // namespace

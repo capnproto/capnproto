@@ -231,6 +231,8 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
 };
 
 #if !CAPNP_LITE
@@ -351,6 +353,8 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
 };
 
 #if !CAPNP_LITE
@@ -430,6 +434,8 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
 };
 
 #if !CAPNP_LITE
@@ -509,6 +515,8 @@ private:
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
 };
 
 #if !CAPNP_LITE

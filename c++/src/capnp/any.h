@@ -224,12 +224,6 @@ struct AnyPointer {
     inline Reader asReader() const { return Reader(builder.asReader()); }
     inline operator Reader() const { return Reader(builder.asReader()); }
 
-    inline void setInternal(_::StructReader value) { builder.setStruct(value); }
-    // For internal use.
-    //
-    // TODO(cleanup):  RPC implementation uses this, but wouldn't have to if we had an AnyStruct
-    //   type, which would be useful anyawy.
-
   private:
     _::PointerBuilder builder;
     friend class Orphanage;
@@ -335,9 +329,6 @@ private:
   friend class AnyPointer::Builder;
 };
 
-struct AnyList;
-struct AnyStruct;
-
 template <Kind k> struct AnyTypeFor_;
 template <> struct AnyTypeFor_<Kind::STRUCT> { typedef AnyStruct Type; };
 template <> struct AnyTypeFor_<Kind::LIST> { typedef AnyList Type; };
@@ -347,17 +338,20 @@ using AnyTypeFor = typename AnyTypeFor_<kind<T>()>::Type;
 
 template <typename T>
 inline ReaderFor<AnyTypeFor<FromReader<T>>> toAny(T&& value) {
-  return ReaderFor<AnyTypeFor<FromReader<T> > >(
+  return ReaderFor<AnyTypeFor<FromReader<T>>>(
       _::PointerHelpers<FromReader<T>>::getInternalReader(value));
 }
 template <typename T>
 inline BuilderFor<AnyTypeFor<FromBuilder<T>>> toAny(T&& value) {
-  return BuilderFor<AnyTypeFor<FromBuilder<T> > >(
+  return BuilderFor<AnyTypeFor<FromBuilder<T>>>(
       _::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::mv(value)));
 }
 
 template <>
 struct List<AnyPointer, Kind::OTHER> {
+  // Note: This cannot be used for a list of structs, since such lists are not encoded as pointer
+  //   lists! Use List<AnyStruct>.
+
   List() = delete;
 
   class Reader {
@@ -411,10 +405,10 @@ struct List<AnyPointer, Kind::OTHER> {
 
   private:
     _::ListBuilder builder;
-    template <typename U, Kind K>
+    template <typename, Kind>
     friend struct _::PointerHelpers;
     friend class Orphanage;
-    template <typename U, Kind K>
+    template <typename, Kind>
     friend struct ToDynamic_;
   };
 };
@@ -423,6 +417,10 @@ class AnyStruct::Reader {
 public:
   Reader() = default;
   inline Reader(_::StructReader reader): _reader(reader) {}
+
+  template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::STRUCT>>
+  inline Reader(T&& value)
+      : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
 
   Data::Reader getDataSection() {
     return _reader.getDataSectionAsBlob();
@@ -436,13 +434,19 @@ public:
   // T must be a struct type.
 private:
   _::StructReader _reader;
+
+  template <typename, Kind>
+  friend struct _::PointerHelpers;
 };
 
 class AnyStruct::Builder {
 public:
   inline Builder(decltype(nullptr)) {}
-  inline Builder(_::PointerBuilder builder, _::StructSize size, const word* defaultValue = nullptr): _builder(builder.getStruct(size, defaultValue)) {}
   inline Builder(_::StructBuilder builder): _builder(builder) {}
+
+  template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::STRUCT>>
+  inline Builder(T&& value)
+      : _builder(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::fwd<T>(value))) {}
 
   inline Data::Builder getDataSection() {
     return _builder.getDataSectionAsBlob();
@@ -541,6 +545,10 @@ public:
   Reader() = default;
   inline Reader(_::ListReader reader): _reader(reader) {}
 
+  template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::LIST>>
+  inline Reader(T&& value)
+      : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
+
   inline ElementSize getElementSize() { return _reader.getElementSize(); }
   inline uint size() { return _reader.size() / ELEMENTS; }
 
@@ -550,12 +558,19 @@ public:
   }
 private:
   _::ListReader _reader;
+
+  template <typename, Kind>
+  friend struct _::PointerHelpers;
 };
 
 class AnyList::Builder {
 public:
   inline Builder(decltype(nullptr)) {}
   inline Builder(_::ListBuilder builder): _builder(builder) {}
+
+  template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::LIST>>
+  inline Builder(T&& value)
+      : _builder(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::fwd<T>(value))) {}
 
   inline ElementSize getElementSize() { return _builder.getElementSize(); }
   inline uint size() { return _builder.size() / ELEMENTS; }
@@ -571,50 +586,6 @@ public:
 private:
   _::ListBuilder _builder;
 };
-
-namespace _ {  // (private)
-
-template <>
-struct PointerHelpers<AnyStruct, Kind::OTHER> {
-  static inline typename AnyStruct::Reader get(
-      PointerReader reader, const word* defaultValue = nullptr) {
-    return typename AnyStruct::Reader(reader.getStruct(defaultValue));
-  }
-  static inline typename AnyStruct::Builder get(
-      PointerBuilder builder, const word* defaultValue = nullptr) {
-    // TODO(someday): allow specifying the size
-    return typename AnyStruct::Builder(
-        builder, _::StructSize(0 * WORDS, 0 * POINTERS), defaultValue);
-  }
-  static inline typename AnyStruct::Builder init(
-      PointerBuilder builder, uint dataWordCount, uint pointerCount) {
-    return typename AnyStruct::Builder(builder.initStruct(
-        StructSize(dataWordCount * WORDS, pointerCount * POINTERS)));
-  }
-};
-
-template <>
-struct PointerHelpers<AnyList, Kind::OTHER> {
-  static inline typename AnyList::Reader get(
-      PointerReader reader, const word* defaultValue = nullptr) {
-    return typename AnyList::Reader(reader.getListAnySize(defaultValue));
-  }
-  static inline typename AnyList::Builder get(
-      PointerBuilder builder, const word* defaultValue = nullptr) {
-    return typename AnyList::Builder(builder.getListAnySize(defaultValue));
-  }
-  static inline typename AnyList::Builder init(
-      PointerBuilder builder, ElementSize elementSize, uint elementCount) {
-    return typename AnyList::Builder(builder.initList(elementSize, elementCount * ELEMENTS));
-  }
-  static inline typename AnyList::Builder init(
-      PointerBuilder builder, uint dataWordCount, uint pointerCount, uint elementCount) {
-    return typename AnyList::Builder(builder.initStructList(
-        elementCount * ELEMENTS, StructSize(dataWordCount * WORDS, pointerCount * POINTERS)));
-  }
-};
-
-}  // namespace _ (private)
 
 // =======================================================================================
 // Pipeline helpers
@@ -836,6 +807,52 @@ struct PointerHelpers<AnyPointer, Kind::OTHER> {
   }
   static inline Orphan<AnyPointer> disown(PointerBuilder builder) {
     return Orphan<AnyPointer>(builder.disown());
+  }
+};
+
+template <>
+struct PointerHelpers<AnyStruct, Kind::OTHER> {
+  static inline typename AnyStruct::Reader get(
+      PointerReader reader, const word* defaultValue = nullptr) {
+    return AnyStruct::Reader(reader.getStruct(defaultValue));
+  }
+  static inline typename AnyStruct::Builder get(
+      PointerBuilder builder, const word* defaultValue = nullptr) {
+    // TODO(someday): Allow specifying the size somehow?
+    return AnyStruct::Builder(builder.getStruct(
+        _::StructSize(0 * WORDS, 0 * POINTERS), defaultValue));
+  }
+  static inline void set(PointerBuilder builder, AnyStruct::Reader value) {
+    builder.setStruct(value._reader);
+  }
+  static inline typename AnyStruct::Builder init(
+      PointerBuilder builder, uint dataWordCount, uint pointerCount) {
+    return typename AnyStruct::Builder(builder.initStruct(
+        StructSize(dataWordCount * WORDS, pointerCount * POINTERS)));
+  }
+};
+
+template <>
+struct PointerHelpers<AnyList, Kind::OTHER> {
+  static inline typename AnyList::Reader get(
+      PointerReader reader, const word* defaultValue = nullptr) {
+    return AnyList::Reader(reader.getListAnySize(defaultValue));
+  }
+  static inline typename AnyList::Builder get(
+      PointerBuilder builder, const word* defaultValue = nullptr) {
+    return AnyList::Builder(builder.getListAnySize(defaultValue));
+  }
+  static inline void set(PointerBuilder builder, AnyList::Reader value) {
+    builder.setList(value._reader);
+  }
+  static inline typename AnyList::Builder init(
+      PointerBuilder builder, ElementSize elementSize, uint elementCount) {
+    return AnyList::Builder(builder.initList(elementSize, elementCount * ELEMENTS));
+  }
+  static inline typename AnyList::Builder init(
+      PointerBuilder builder, uint dataWordCount, uint pointerCount, uint elementCount) {
+    return AnyList::Builder(builder.initStructList(
+        elementCount * ELEMENTS, StructSize(dataWordCount * WORDS, pointerCount * POINTERS)));
   }
 };
 
