@@ -588,13 +588,23 @@ private:
           sizeHint = sizeHint.map([](MessageSize hint) {
             ++hint.capCount;
             hint.wordCount += sizeInWords<RealmGateway<>::ImportParams>();
+            return hint;
           });
 
           auto request = g->importRequest(sizeHint);
           request.setCap(Persistent<>::Client(addRef()));
 
-          return Request<AnyPointer, AnyPointer>(request.getParams(),
-              RequestHook::from(kj::mv(request)));
+          // Awkwardly, request.initParams() would return a SaveParams struct, but to construct
+          // the Request<AnyPointer, AnyPointer> to return we need an AnyPointer::Builder, and you
+          // can't go backwards from a struct builder to an AnyPointer builder. So instead we
+          // manually get at the pointer by converting the outer request to AnyStruct and then
+          // pulling the pointer from the pointer section.
+          auto pointers = toAny(request).getPointerSection();
+          KJ_ASSERT(pointers.size() >= 2);
+          auto paramsPtr = pointers[1];
+          KJ_ASSERT(paramsPtr.isNull());
+
+          return Request<AnyPointer, AnyPointer>(paramsPtr, RequestHook::from(kj::mv(request)));
         }
       }
 
