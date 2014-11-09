@@ -265,11 +265,12 @@ private:
 class RpcConnectionState final: public kj::TaskSet::ErrorHandler, public kj::Refcounted {
 public:
   RpcConnectionState(kj::Maybe<Capability::Client> bootstrapInterface,
+                     kj::Maybe<RealmGateway<>::Client> gateway,
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      kj::Own<kj::PromiseFulfiller<void>>&& disconnectFulfiller)
-      : bootstrapInterface(kj::mv(bootstrapInterface)), restorer(restorer),
-        disconnectFulfiller(kj::mv(disconnectFulfiller)), tasks(*this) {
+      : bootstrapInterface(kj::mv(bootstrapInterface)), gateway(kj::mv(gateway)),
+        restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), tasks(*this) {
     connection.init<Connected>(kj::mv(connectionParam));
     tasks.add(messageLoop());
   }
@@ -513,6 +514,7 @@ private:
   // OK, now we can define RpcConnectionState's member data.
 
   kj::Maybe<Capability::Client> bootstrapInterface;
+  kj::Maybe<RealmGateway<>::Client> gateway;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
 
   typedef kj::Own<VatNetworkBase::Connection> Connected;
@@ -574,6 +576,28 @@ private:
 
     Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+      if (interfaceId == typeId<Persistent<>>() && methodId == 0) {
+        KJ_IF_MAYBE(g, connectionState->gateway) {
+          // Wait, this is a call to Persistent.save() and we need to translate it through our
+          // gateway.
+          //
+          // We pull a neat trick here: We actually end up returning a RequestHook for an import
+          // request on the gateway cap, but with the "root" of the request actually pointing
+          // to the "params" field of the real request.
+
+          sizeHint = sizeHint.map([](MessageSize hint) {
+            ++hint.capCount;
+            hint.wordCount += sizeInWords<RealmGateway<>::ImportParams>();
+          });
+
+          auto request = g->importRequest(sizeHint);
+          request.setCap(Persistent<>::Client(addRef()));
+
+          return Request<AnyPointer, AnyPointer>(request.getParams(),
+              RequestHook::from(kj::mv(request)));
+        }
+      }
+
       if (!connectionState->connection.is<Connected>()) {
         return newBrokenRequest(kj::cp(connectionState->connection.get<Disconnected>()), sizeHint);
       }
@@ -593,6 +617,26 @@ private:
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context) override {
       // Implement call() by copying params and results messages.
+
+      if (interfaceId == typeId<Persistent<>>() && methodId == 0) {
+        KJ_IF_MAYBE(g, connectionState->gateway) {
+          // Wait, this is a call to Persistent.save() and we need to translate it through our
+          // gateway.
+          auto params = context->getParams().getAs<Persistent<>::SaveParams>();
+
+          auto requestSize = params.totalSize();
+          ++requestSize.capCount;
+          requestSize.wordCount += sizeInWords<RealmGateway<>::ImportParams>();
+
+          auto request = g->importRequest(requestSize);
+          request.setCap(Persistent<>::Client(addRef()));
+          request.setParams(params);
+
+          context->allowCancellation();
+          context->releaseParams();
+          return context->directTailCall(RequestHook::from(kj::mv(request)));
+        }
+      }
 
       auto params = context->getParams();
       auto request = newCall(interfaceId, methodId, params.targetSize());
@@ -2090,10 +2134,10 @@ private:
       answer.callContext = *context;
     }
 
-    auto promiseAndPipeline = capability->call(
-        call.getInterfaceId(), call.getMethodId(), context->addRef());
+    auto promiseAndPipeline = startCall(
+        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef());
 
-    // Things may have changed -- in particular if call() immediately called
+    // Things may have changed -- in particular if startCall() immediately called
     // context->directTailCall().
 
     {
@@ -2135,6 +2179,33 @@ private:
             .detach([](kj::Exception&&) {});
       }
     }
+  }
+
+  ClientHook::VoidPromiseAndPipeline startCall(
+      uint64_t interfaceId, uint64_t methodId,
+      kj::Own<ClientHook>&& capability, kj::Own<CallContextHook>&& context) {
+    if (interfaceId == typeId<Persistent<>>() && methodId == 0) {
+      KJ_IF_MAYBE(g, gateway) {
+        // Wait, this is a call to Persistent.save() and we need to translate it through our
+        // gateway.
+
+        auto params = context->getParams().getAs<Persistent<>::SaveParams>();
+
+        auto requestSize = params.totalSize();
+        ++requestSize.capCount;
+        requestSize.wordCount += sizeInWords<RealmGateway<>::ExportParams>();
+
+        auto request = g->exportRequest(requestSize);
+        request.setCap(Persistent<>::Client(capability->addRef()));
+        request.setParams(params);
+
+        context->allowCancellation();
+        context->releaseParams();
+        return context->directTailCall(RequestHook::from(kj::mv(request)));
+      }
+    }
+
+    return capability->call(interfaceId, methodId, context->addRef());
   }
 
   kj::Maybe<kj::Own<ClientHook>> getMessageTarget(const rpc::MessageTarget::Reader& target) {
@@ -2470,8 +2541,10 @@ private:
 
 class RpcSystemBase::Impl final: public kj::TaskSet::ErrorHandler {
 public:
-  Impl(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface)
-      : network(network), bootstrapInterface(kj::mv(bootstrapInterface)), tasks(*this) {
+  Impl(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface,
+       kj::Maybe<RealmGateway<>::Client> gateway)
+      : network(network), bootstrapInterface(kj::mv(bootstrapInterface)),
+        gateway(kj::mv(gateway)), tasks(*this) {
     tasks.add(acceptLoop());
   }
   Impl(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
@@ -2521,6 +2594,7 @@ public:
 private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
+  kj::Maybe<RealmGateway<>::Client> gateway;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
   kj::TaskSet tasks;
 
@@ -2539,7 +2613,8 @@ private:
         connections.erase(connectionPtr);
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
-          bootstrapInterface, restorer, kj::mv(connection), kj::mv(onDisconnect.fulfiller));
+          bootstrapInterface, gateway, restorer, kj::mv(connection),
+          kj::mv(onDisconnect.fulfiller));
       RpcConnectionState& result = *newState;
       connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
       return result;
@@ -2564,8 +2639,9 @@ private:
 };
 
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
-                             kj::Maybe<Capability::Client> bootstrapInterface)
-    : impl(kj::heap<Impl>(network, kj::mv(bootstrapInterface))) {}
+                             kj::Maybe<Capability::Client> bootstrapInterface,
+                             kj::Maybe<RealmGateway<>::Client> gateway)
+    : impl(kj::heap<Impl>(network, kj::mv(bootstrapInterface), kj::mv(gateway))) {}
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
     : impl(kj::heap<Impl>(network, restorer)) {}
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;

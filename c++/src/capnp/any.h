@@ -186,6 +186,8 @@ struct AnyPointer {
 #if !CAPNP_LITE
   class Pipeline {
   public:
+    typedef AnyPointer Pipelines;
+
     inline Pipeline(decltype(nullptr)) {}
     inline explicit Pipeline(kj::Own<PipelineHook>&& hook): hook(kj::mv(hook)) {}
 
@@ -321,9 +323,11 @@ public:
   // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
   // Default implementation just calls the other version.
 
-  static inline kj::Own<PipelineHook> from(AnyPointer::Pipeline&& pipeline) {
-    return kj::mv(pipeline.hook);
-  }
+  template <typename Pipeline, typename = FromPipeline<Pipeline>>
+  static inline kj::Own<PipelineHook> from(Pipeline&& pipeline);
+
+private:
+  template <typename T> struct FromImpl;
 };
 
 #endif  // !CAPNP_LITE
@@ -490,6 +494,25 @@ struct PointerHelpers<AnyPointer, Kind::OTHER> {
 };
 
 }  // namespace _ (private)
+
+template <typename T>
+struct PipelineHook::FromImpl {
+  static inline kj::Own<PipelineHook> apply(typename T::Pipeline&& pipeline) {
+    return from(kj::mv(pipeline._typeless));
+  }
+};
+
+template <>
+struct PipelineHook::FromImpl<AnyPointer> {
+  static inline kj::Own<PipelineHook> apply(AnyPointer::Pipeline&& pipeline) {
+    return kj::mv(pipeline.hook);
+  }
+};
+
+template <typename Pipeline, typename T>
+inline kj::Own<PipelineHook> PipelineHook::from(Pipeline&& pipeline) {
+  return FromImpl<T>::apply(kj::fwd<Pipeline>(pipeline));
+}
 
 }  // namespace capnp
 

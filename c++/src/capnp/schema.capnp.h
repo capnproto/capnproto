@@ -639,6 +639,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -717,6 +718,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -800,6 +802,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -908,6 +911,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -986,6 +990,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1074,6 +1079,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1164,6 +1170,7 @@ public:
   inline  ::capnp::schema::Value::Pipeline getValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1303,6 +1310,7 @@ public:
   inline  ::capnp::schema::Type::Pipeline getType();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1423,6 +1431,7 @@ public:
   inline Ordinal::Pipeline getOrdinal();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1523,6 +1532,7 @@ public:
   inline  ::capnp::schema::Value::Pipeline getDefaultValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1596,6 +1606,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1680,6 +1691,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1773,6 +1785,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1857,6 +1870,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1992,6 +2006,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getResultBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2195,6 +2210,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2274,6 +2290,7 @@ public:
   inline  ::capnp::schema::Type::Pipeline getElementType();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2358,6 +2375,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2442,6 +2460,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2526,6 +2545,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2617,6 +2637,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2695,6 +2716,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2768,6 +2790,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2846,6 +2869,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2940,6 +2964,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -3029,6 +3054,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -3248,6 +3274,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -3343,6 +3370,7 @@ public:
   inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -3431,6 +3459,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -3524,6 +3553,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -3607,6 +3637,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };

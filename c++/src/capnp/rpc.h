@@ -53,7 +53,8 @@ public:
             typename ThirdPartyCapId, typename JoinResult>
   RpcSystem(
       VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
-      kj::Maybe<Capability::Client> bootstrapInterface);
+      kj::Maybe<Capability::Client> bootstrapInterface,
+      kj::Maybe<RealmGateway<>::Client> gateway = nullptr);
 
   template <typename ProvisionId, typename RecipientId,
             typename ThirdPartyCapId, typename JoinResult,
@@ -99,6 +100,17 @@ RpcSystem<VatId> makeRpcServer(
 // See also ez-rpc.h, which has simpler instructions for the common case of a two-party
 // client-server RPC connection.
 
+template <typename VatId, typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult,
+          typename InternalRef, typename ExternalRef>
+RpcSystem<VatId> makeRpcServer(
+    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    Capability::Client bootstrapInterface,
+    typename RealmGateway<InternalRef, ExternalRef>::Client gateway);
+// Make an RPC server for a VatNetwork that resides in a different realm from the application.
+// The given RealmGateway is used to translate SturdyRefs between the app's ("internal") format
+// and the network's ("external") format.
+
 template <typename VatId, typename LocalSturdyRefObjectId,
           typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
 RpcSystem<VatId> makeRpcServer(
@@ -133,6 +145,16 @@ RpcSystem<VatId> makeRpcClient(
 //
 // See also ez-rpc.h, which has simpler instructions for the common case of a two-party
 // client-server RPC connection.
+
+template <typename VatId, typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult,
+          typename InternalRef, typename ExternalRef>
+RpcSystem<VatId> makeRpcClient(
+    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    typename RealmGateway<InternalRef, ExternalRef>::Client gateway);
+// Make an RPC client for a VatNetwork that resides in a different realm from the application.
+// The given RealmGateway is used to translate SturdyRefs between the app's ("internal") format
+// and the network's ("external") format.
 
 template <typename SturdyRefObjectId>
 class SturdyRefRestorer: public _::SturdyRefRestorerBase {
@@ -310,8 +332,9 @@ template <typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
 RpcSystem<VatId>::RpcSystem(
       VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
-      kj::Maybe<Capability::Client> bootstrap)
-    : _::RpcSystemBase(network, kj::mv(bootstrap)) {}
+      kj::Maybe<Capability::Client> bootstrap,
+      kj::Maybe<RealmGateway<>::Client> gateway)
+    : _::RpcSystemBase(network, kj::mv(bootstrap), kj::mv(gateway)) {}
 
 template <typename VatId>
 template <typename ProvisionId, typename RecipientId,
@@ -341,6 +364,17 @@ RpcSystem<VatId> makeRpcServer(
   return RpcSystem<VatId>(network, kj::mv(bootstrapInterface));
 }
 
+template <typename VatId, typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult,
+          typename InternalRef, typename ExternalRef>
+RpcSystem<VatId> makeRpcServer(
+    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    Capability::Client bootstrapInterface,
+    typename RealmGateway<InternalRef, ExternalRef>::Client gateway) {
+  return RpcSystem<VatId>(network, kj::mv(bootstrapInterface),
+      gateway.template castAs<RealmGateway<>>());
+}
+
 template <typename VatId, typename LocalSturdyRefObjectId,
           typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
 RpcSystem<VatId> makeRpcServer(
@@ -354,6 +388,15 @@ template <typename VatId, typename ProvisionId,
 RpcSystem<VatId> makeRpcClient(
     VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network) {
   return RpcSystem<VatId>(network, nullptr);
+}
+
+template <typename VatId, typename ProvisionId,
+          typename RecipientId, typename ThirdPartyCapId, typename JoinResult,
+          typename InternalRef, typename ExternalRef>
+RpcSystem<VatId> makeRpcClient(
+    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    typename RealmGateway<InternalRef, ExternalRef>::Client gateway) {
+  return RpcSystem<VatId>(network, nullptr, gateway.template castAs<RealmGateway<>>());
 }
 
 }  // namespace capnp

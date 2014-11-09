@@ -1721,6 +1721,7 @@ private:
         kj::mv(methodDecls),
         "private:\n"
         "  ::capnp::AnyPointer::Pipeline _typeless;\n"
+        "  friend class ::capnp::PipelineHook;\n"
         "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
         "};\n"

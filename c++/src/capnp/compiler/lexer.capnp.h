@@ -244,6 +244,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -363,6 +364,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -441,6 +443,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -519,6 +522,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };

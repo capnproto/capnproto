@@ -52,8 +52,28 @@ interface Persistent@0xc8cb212fcd9f5691(SturdyRef) {
   # to specify the `SturdyRef` parameter, since this type may differ from app to app or even host
   # to host.
 
-  save @0 () -> (sturdyRef :SturdyRef);
+  save @0 SaveParams -> SaveResults;
   # Save a capability persistently so that it can be restored by a future connection.  Not all
   # capabilities can be saved -- application interfaces should define which capabilities support
   # this and which do not.
+
+  struct SaveParams {}
+  struct SaveResults {
+    sturdyRef @0 :SturdyRef;
+  }
+}
+
+interface RealmGateway(InternalRef, ExternalRef) {
+  # Interface invoked when a SturdyRef is about to cross realms. The RPC system supports providing
+  # a RealmGateway as a callback hook when setting up RPC over some VatNetwork.
+
+  import @0 (cap :Persistent(ExternalRef), params :Persistent(InternalRef).SaveParams)
+         -> Persistent(InternalRef).SaveResults;
+  # Given an external capability, save it and return an internal reference. Used when someone
+  # inside the realm tries to save a capability from outside the realm.
+
+  export @1 (cap :Persistent(InternalRef), params :Persistent(ExternalRef).SaveParams)
+         -> Persistent(ExternalRef).SaveResults;
+  # Given an internal capability, save it and return an external reference. Used when someone
+  # outside the realm tries to save a capability from inside the realm.
 }

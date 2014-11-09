@@ -466,6 +466,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -549,6 +550,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -632,6 +634,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -838,6 +841,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -938,6 +942,7 @@ public:
   inline  ::capnp::compiler::Expression::Pipeline getValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1027,6 +1032,7 @@ public:
   inline  ::capnp::compiler::Expression::Pipeline getFunction();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1117,6 +1123,7 @@ public:
   inline  ::capnp::compiler::LocatedText::Pipeline getName();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1481,6 +1488,7 @@ public:
   inline Id::Pipeline getId();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1569,6 +1577,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1654,6 +1663,7 @@ public:
   inline Value::Pipeline getValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1743,6 +1753,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1847,6 +1858,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1963,6 +1975,7 @@ public:
   inline DefaultValue::Pipeline getDefaultValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2052,6 +2065,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2153,6 +2167,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2232,6 +2247,7 @@ public:
   inline  ::capnp::compiler::Expression::Pipeline getTarget();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2322,6 +2338,7 @@ public:
   inline  ::capnp::compiler::Expression::Pipeline getValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2407,6 +2424,7 @@ public:
   inline DefaultValue::Pipeline getDefaultValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2496,6 +2514,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2574,6 +2593,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2659,6 +2679,7 @@ public:
   inline Results::Pipeline getResults();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2748,6 +2769,7 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2887,6 +2909,7 @@ public:
   inline  ::capnp::compiler::Expression::Pipeline getType();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2966,6 +2989,7 @@ public:
   inline  ::capnp::compiler::Declaration::Pipeline getRoot();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };

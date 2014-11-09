@@ -26,6 +26,7 @@
 #define CAPNP_RPC_PRELUDE_H_
 
 #include "capability.h"
+#include "persistent.capnp.h"
 
 namespace capnp {
 
@@ -65,7 +66,8 @@ public:
 
 class RpcSystemBase {
 public:
-  RpcSystemBase(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface);
+  RpcSystemBase(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface,
+                kj::Maybe<RealmGateway<>::Client> gateway);
   RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer);
   RpcSystemBase(RpcSystemBase&& other) noexcept;
   ~RpcSystemBase() noexcept(false);

@@ -182,6 +182,10 @@ using FromBuilder = typename kj::Decay<T>::Builds;
 // FromBuilder<MyType::Builder> = MyType (for any Cap'n Proto type).
 
 template <typename T>
+using FromPipeline = typename kj::Decay<T>::Pipelines;
+// FromBuilder<MyType::Pipeline> = MyType (for any Cap'n Proto type).
+
+template <typename T>
 using FromClient = typename kj::Decay<T>::Calls;
 // FromReader<MyType::Client> = MyType (for any Cap'n Proto interface type).
 
