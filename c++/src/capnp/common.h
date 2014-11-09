@@ -80,6 +80,21 @@ enum class Kind: uint8_t {
   // special handling. This includes types like AnyPointer, Dynamic*, etc.
 };
 
+enum class ElementSize: uint8_t {
+  // Size of a list element.
+
+  VOID = 0,
+  BIT = 1,
+  BYTE = 2,
+  TWO_BYTES = 3,
+  FOUR_BYTES = 4,
+  EIGHT_BYTES = 5,
+
+  POINTER = 6,
+
+  INLINE_COMPOSITE = 7
+};
+
 namespace schemas {
 
 template <typename T>

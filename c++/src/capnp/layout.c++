@@ -1172,6 +1172,58 @@ struct WireHelpers {
     }
   }
 
+  static KJ_ALWAYS_INLINE(ListBuilder getWritableListPointerAnySize(
+      WirePointer* origRef, SegmentBuilder* origSegment, const word* defaultValue)) {
+    return getWritableListPointerAnySize(origRef, origRef->target(), origSegment, defaultValue);
+  }
+
+  static KJ_ALWAYS_INLINE(ListBuilder getWritableListPointerAnySize(
+      WirePointer* origRef, word* origRefTarget, SegmentBuilder* origSegment,
+      const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
+    if (origRef->isNull()) {
+    useDefault:
+      if (defaultValue == nullptr ||
+          reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
+        return ListBuilder();
+      }
+      origRefTarget = copyMessage(
+          origSegment, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
+      defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
+    }
+
+    WirePointer* ref = origRef;
+    SegmentBuilder* segment = origSegment;
+    word* ptr = followFars(ref, origRefTarget, segment);
+
+    KJ_REQUIRE(ref->kind() == WirePointer::LIST,
+        "Called getList{Field,Element}() but existing pointer is not a list.") {
+      goto useDefault;
+    }
+
+    FieldSize elementSize = ref->listRef.elementSize();
+
+    if (elementSize == FieldSize::INLINE_COMPOSITE) {
+      // Read the tag to get the actual element count.
+      WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
+      KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
+          "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
+      ptr += POINTER_SIZE_IN_WORDS;
+
+      return ListBuilder(segment, ptr,
+                         tag->structRef.wordSize() * BITS_PER_WORD / ELEMENTS,
+                         tag->inlineCompositeListElementCount(),
+                         tag->structRef.dataSize.get() * BITS_PER_WORD,
+                         tag->structRef.ptrCount.get(), FieldSize::INLINE_COMPOSITE);
+    } else {
+      BitCount dataSize = dataBitsPerElement(elementSize) * ELEMENTS;
+      WirePointerCount pointerCount = pointersPerElement(elementSize) * ELEMENTS;
+
+      auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
+      return ListBuilder(segment, ptr, step, ref->listRef.elementCount(),
+                         dataSize, pointerCount, elementSize);
+    }
+  }
+
   static KJ_ALWAYS_INLINE(ListBuilder getWritableStructListPointer(
       WirePointer* origRef, SegmentBuilder* origSegment, StructSize elementSize,
       const word* defaultValue)) {
@@ -1810,14 +1862,15 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(ListReader readListPointer(
       SegmentReader* segment, const WirePointer* ref, const word* defaultValue,
-      FieldSize expectedElementSize, int nestingLimit)) {
+      FieldSize expectedElementSize, int nestingLimit, bool checkElementSize = true)) {
     return readListPointer(segment, ref, ref->target(), defaultValue,
-                           expectedElementSize, nestingLimit);
+                           expectedElementSize, nestingLimit, checkElementSize);
   }
 
   static KJ_ALWAYS_INLINE(ListReader readListPointer(
       SegmentReader* segment, const WirePointer* ref, const word* refTarget,
-      const word* defaultValue, FieldSize expectedElementSize, int nestingLimit)) {
+      const word* defaultValue, FieldSize expectedElementSize, int nestingLimit,
+      bool checkElementSize = true)) {
     if (ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr ||
@@ -1875,47 +1928,49 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      // If a struct list was not expected, then presumably a non-struct list was upgraded to a
-      // struct list.  We need to manipulate the pointer to point at the first field of the
-      // struct.  Together with the "stepBits", this will allow the struct list to be accessed as
-      // if it were a primitive list without branching.
+      if (checkElementSize) {
+        // If a struct list was not expected, then presumably a non-struct list was upgraded to a
+        // struct list.  We need to manipulate the pointer to point at the first field of the
+        // struct.  Together with the "stepBits", this will allow the struct list to be accessed as
+        // if it were a primitive list without branching.
 
-      // Check whether the size is compatible.
-      switch (expectedElementSize) {
-        case FieldSize::VOID:
-          break;
+        // Check whether the size is compatible.
+        switch (expectedElementSize) {
+          case FieldSize::VOID:
+            break;
 
-        case FieldSize::BIT:
-          KJ_FAIL_REQUIRE(
-              "Found struct list where bit list was expected; upgrading boolean lists to structs "
-              "is no longer supported.") {
-            goto useDefault;
-          }
-          break;
+          case FieldSize::BIT:
+            KJ_FAIL_REQUIRE(
+                "Found struct list where bit list was expected; upgrading boolean lists to structs "
+                "is no longer supported.") {
+              goto useDefault;
+            }
+            break;
 
-        case FieldSize::BYTE:
-        case FieldSize::TWO_BYTES:
-        case FieldSize::FOUR_BYTES:
-        case FieldSize::EIGHT_BYTES:
-          KJ_REQUIRE(tag->structRef.dataSize.get() > 0 * WORDS,
-                     "Expected a primitive list, but got a list of pointer-only structs.") {
-            goto useDefault;
-          }
-          break;
+          case FieldSize::BYTE:
+          case FieldSize::TWO_BYTES:
+          case FieldSize::FOUR_BYTES:
+          case FieldSize::EIGHT_BYTES:
+            KJ_REQUIRE(tag->structRef.dataSize.get() > 0 * WORDS,
+                       "Expected a primitive list, but got a list of pointer-only structs.") {
+              goto useDefault;
+            }
+            break;
 
-        case FieldSize::POINTER:
-          // We expected a list of pointers but got a list of structs.  Assuming the first field
-          // in the struct is the pointer we were looking for, we want to munge the pointer to
-          // point at the first element's pointer section.
-          ptr += tag->structRef.dataSize.get();
-          KJ_REQUIRE(tag->structRef.ptrCount.get() > 0 * POINTERS,
-                     "Expected a pointer list, but got a list of data-only structs.") {
-            goto useDefault;
-          }
-          break;
+          case FieldSize::POINTER:
+            // We expected a list of pointers but got a list of structs.  Assuming the first field
+            // in the struct is the pointer we were looking for, we want to munge the pointer to
+            // point at the first element's pointer section.
+            ptr += tag->structRef.dataSize.get();
+            KJ_REQUIRE(tag->structRef.ptrCount.get() > 0 * POINTERS,
+                       "Expected a pointer list, but got a list of data-only structs.") {
+              goto useDefault;
+            }
+            break;
 
-        case FieldSize::INLINE_COMPOSITE:
-          break;
+          case FieldSize::INLINE_COMPOSITE:
+            break;
+        }
       }
 
       return ListReader(
@@ -1938,31 +1993,33 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      if (elementSize == FieldSize::BIT && expectedElementSize != FieldSize::BIT) {
-        KJ_FAIL_REQUIRE(
-            "Found bit list where struct list was expected; upgrading boolean lists to structs "
-            "is no longer supported.") {
+      if (checkElementSize) {
+        if (elementSize == FieldSize::BIT && expectedElementSize != FieldSize::BIT) {
+          KJ_FAIL_REQUIRE(
+              "Found bit list where struct list was expected; upgrading boolean lists to structs "
+              "is no longer supported.") {
+            goto useDefault;
+          }
+        }
+
+        // Verify that the elements are at least as large as the expected type.  Note that if we
+        // expected INLINE_COMPOSITE, the expected sizes here will be zero, because bounds checking
+        // will be performed at field access time.  So this check here is for the case where we
+        // expected a list of some primitive or pointer type.
+
+        BitCount expectedDataBitsPerElement =
+            dataBitsPerElement(expectedElementSize) * ELEMENTS;
+        WirePointerCount expectedPointersPerElement =
+            pointersPerElement(expectedElementSize) * ELEMENTS;
+
+        KJ_REQUIRE(expectedDataBitsPerElement <= dataSize,
+                   "Message contained list with incompatible element type.") {
           goto useDefault;
         }
-      }
-
-      // Verify that the elements are at least as large as the expected type.  Note that if we
-      // expected INLINE_COMPOSITE, the expected sizes here will be zero, because bounds checking
-      // will be performed at field access time.  So this check here is for the case where we
-      // expected a list of some primitive or pointer type.
-
-      BitCount expectedDataBitsPerElement =
-          dataBitsPerElement(expectedElementSize) * ELEMENTS;
-      WirePointerCount expectedPointersPerElement =
-          pointersPerElement(expectedElementSize) * ELEMENTS;
-
-      KJ_REQUIRE(expectedDataBitsPerElement <= dataSize,
-                 "Message contained list with incompatible element type.") {
-        goto useDefault;
-      }
-      KJ_REQUIRE(expectedPointersPerElement <= pointerCount,
-                 "Message contained list with incompatible element type.") {
-        goto useDefault;
+        KJ_REQUIRE(expectedPointersPerElement <= pointerCount,
+                   "Message contained list with incompatible element type.") {
+          goto useDefault;
+        }
       }
 
       return ListReader(segment, ptr, ref->listRef.elementCount(), step,
@@ -2094,6 +2151,10 @@ ListBuilder PointerBuilder::getStructList(StructSize elementSize, const word* de
   return WireHelpers::getWritableStructListPointer(pointer, segment, elementSize, defaultValue);
 }
 
+ListBuilder PointerBuilder::getListAnySize(const word* defaultValue) {
+  return WireHelpers::getWritableListPointerAnySize(pointer, segment, defaultValue);
+}
+
 template <>
 Text::Builder PointerBuilder::initBlob<Text>(ByteCount size) {
   return WireHelpers::initTextPointer(pointer, segment, size).value;
@@ -2157,16 +2218,14 @@ bool PointerBuilder::isNull() {
 }
 
 bool PointerBuilder::isStruct() {
-  word* refTarget;
   WirePointer* ptr = pointer;
-  WireHelpers::followFars(ptr, refTarget, segment);
+  WireHelpers::followFars(ptr, ptr->target(), segment);
   return ptr->kind() == WirePointer::Kind::STRUCT;
 }
 
 bool PointerBuilder::isList() {
-  word* refTarget;
   WirePointer* ptr = pointer;
-  WireHelpers::followFars(ptr, refTarget, segment);
+  WireHelpers::followFars(ptr, ptr->target(), segment);
   return ptr->kind() == WirePointer::Kind::LIST;
 }
 
@@ -2218,6 +2277,12 @@ ListReader PointerReader::getList(FieldSize expectedElementSize, const word* def
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readListPointer(
       segment, ref, defaultValue, expectedElementSize, nestingLimit);
+}
+
+ListReader PointerReader::getListAnySize(const word* defaultValue) const {
+  const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
+  return WireHelpers::readListPointer(
+      segment, ref, defaultValue, FieldSize::VOID /* dummy */, nestingLimit, false);
 }
 
 template <>

@@ -24,7 +24,6 @@
 
 #include "layout.h"
 #include "list.h"
-// #include "any.h"
 
 namespace capnp {
 namespace _ {  // private
