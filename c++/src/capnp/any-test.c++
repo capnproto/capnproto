@@ -106,6 +106,80 @@ TEST(Any, AnyPointer) {
   }
 }
 
+TEST(Any, AnyStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<test::TestAnyPointer>();
+
+  initTestMessage(root.getAnyPointerField().initAs<TestAllTypes>());
+  checkTestMessage(root.getAnyPointerField().getAs<TestAllTypes>());
+  checkTestMessage(root.asReader().getAnyPointerField().getAs<TestAllTypes>());
+
+  EXPECT_EQ(48, root.getAnyPointerField().getAs<AnyStruct>().getDataSection().size());
+  EXPECT_EQ(20, root.getAnyPointerField().getAs<AnyStruct>().getPointerSection().size());
+
+  EXPECT_EQ(48, root.getAnyPointerField().asReader().getAs<AnyStruct>().getDataSection().size());
+  EXPECT_EQ(20, root.getAnyPointerField().asReader().getAs<AnyStruct>().getPointerSection().size());
+
+  auto b = toAny(root.getAnyPointerField().getAs<TestAllTypes>());
+  EXPECT_EQ(48, b.getDataSection().size());
+  EXPECT_EQ(20, b.getPointerSection().size());
+
+  auto r = toAny(root.getAnyPointerField().getAs<TestAllTypes>().asReader());
+  EXPECT_EQ(48, r.getDataSection().size());
+  EXPECT_EQ(20, r.getPointerSection().size());
+
+  r = toAny(root.getAnyPointerField().getAs<TestAllTypes>()).asReader();
+  EXPECT_EQ(48, r.getDataSection().size());
+  EXPECT_EQ(20, r.getPointerSection().size());
+
+  {
+    MallocMessageBuilder b2;
+    auto root2 = b2.getRoot<test::TestAnyPointer>();
+    auto sb = root2.getAnyPointerField().initAsAnyStruct(r.getDataSection().size() / 8, r.getPointerSection().size());
+
+    EXPECT_EQ(48, sb.getDataSection().size());
+    EXPECT_EQ(20, sb.getPointerSection().size());
+
+    // TODO: is there a higher-level API for this?
+    memcpy(sb.getDataSection().begin(), r.getDataSection().begin(), r.getDataSection().size());
+  }
+}
+
+TEST(Any, AnyList) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<test::TestAnyPointer>();
+  List<TestAllTypes>::Builder b = root.getAnyPointerField().initAs<List<TestAllTypes>>(2);
+  initTestMessage(b[0]);
+
+  auto ptr = root.getAnyPointerField().getAs<AnyList>();
+
+  EXPECT_EQ(2, ptr.size());
+  EXPECT_EQ(48, ptr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, ptr.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+  auto readPtr = root.getAnyPointerField().asReader().getAs<AnyList>();
+
+  EXPECT_EQ(2, readPtr.size());
+  EXPECT_EQ(48, readPtr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, readPtr.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+  auto alb = toAny(root.getAnyPointerField().getAs<List<TestAllTypes>>());
+  EXPECT_EQ(2, alb.size());
+  EXPECT_EQ(48, alb.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alb.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+  auto alr = toAny(root.getAnyPointerField().getAs<List<TestAllTypes>>().asReader());
+  EXPECT_EQ(2, alr.size());
+  EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alr.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+  alr = toAny(root.getAnyPointerField().getAs<List<TestAllTypes>>()).asReader();
+  EXPECT_EQ(2, alr.size());
+  EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alr.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

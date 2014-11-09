@@ -324,6 +324,8 @@ public:
   // location.
 
   bool isNull();
+  bool isStruct();
+  bool isList();
 
   StructBuilder getStruct(StructSize size, const word* defaultValue);
   ListBuilder getList(FieldSize elementSize, const word* defaultValue);
@@ -402,6 +404,8 @@ public:
   // exception if it overruns.
 
   bool isNull() const;
+  bool isStruct() const;
+  bool isList() const;
 
   StructReader getStruct(const word* defaultValue) const;
   ListReader getList(FieldSize expectedElementSize, const word* defaultValue) const;
@@ -452,6 +456,7 @@ public:
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
   inline Data::Builder getDataSectionAsBlob();
+  inline _::ListBuilder getPointerSectionAsList();
 
   template <typename T>
   KJ_ALWAYS_INLINE(bool hasDataField(ElementCount offset));
@@ -532,6 +537,7 @@ public:
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
   inline Data::Reader getDataSectionAsBlob();
+  inline _::ListReader getPointerSectionAsList();
 
   template <typename T>
   KJ_ALWAYS_INLINE(bool hasDataField(ElementCount offset) const);
@@ -662,6 +668,7 @@ private:
   friend class StructBuilder;
   friend struct WireHelpers;
   friend class OrphanBuilder;
+  friend class AnyStruct;
 };
 
 class ListReader {
@@ -846,6 +853,10 @@ inline Data::Builder StructBuilder::getDataSectionAsBlob() {
   return Data::Builder(reinterpret_cast<byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
 }
 
+inline _::ListBuilder StructBuilder::getPointerSectionAsList() {
+  return _::ListBuilder(segment, pointers, pointerCount * BITS_PER_WORD / ELEMENTS, pointerCount, 0, 1, FieldSize::POINTER);
+}
+
 template <typename T>
 inline bool StructBuilder::hasDataField(ElementCount offset) {
   return getDataField<Mask<T>>(offset) != 0;
@@ -922,6 +933,10 @@ inline PointerBuilder StructBuilder::getPointerField(WirePointerCount ptrIndex) 
 
 inline Data::Reader StructReader::getDataSectionAsBlob() {
   return Data::Reader(reinterpret_cast<const byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
+}
+
+inline _::ListReader StructReader::getPointerSectionAsList() {
+  return _::ListReader(segment, pointers, pointerCount, pointerCount * BITS_PER_WORD / ELEMENTS, 0, 1, FieldSize::POINTER, nestingLimit);
 }
 
 template <typename T>
