@@ -41,7 +41,16 @@ struct Persistent {
   struct SaveParams;
   struct SaveResults;
 
-  CAPNP_DECLARE_TEMPLATE_INTERFACE(c8cb212fcd9f5691, SturdyRef);
+  #if !CAPNP_LITE
+  struct _capnpPrivate {
+    CAPNP_DECLARE_INTERFACE_HEADER(c8cb212fcd9f5691)
+    static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
+    static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
+    static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];
+    static const ::capnp::_::RawBrandedSchema specificBrand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef>::brand;
+  };
+  #endif  // !CAPNP_LITE
 };
 
 template <typename SturdyRef>
@@ -52,7 +61,15 @@ struct Persistent<SturdyRef>::SaveParams {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_TEMPLATE_STRUCT(f76fba59183073a5, 0, 0, SturdyRef);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(f76fba59183073a5, 0, 0)
+    #if !CAPNP_LITE
+    static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
+    static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
+    static const ::capnp::_::RawBrandedSchema specificBrand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef>::brand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 template <typename SturdyRef>
@@ -63,7 +80,15 @@ struct Persistent<SturdyRef>::SaveResults {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_TEMPLATE_STRUCT(b76848c18c40efbf, 0, 1, SturdyRef);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(b76848c18c40efbf, 0, 1)
+    #if !CAPNP_LITE
+    static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
+    static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
+    static const ::capnp::_::RawBrandedSchema specificBrand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef>::brand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 template <typename InternalRef = ::capnp::AnyPointer, typename ExternalRef = ::capnp::AnyPointer>
@@ -78,7 +103,16 @@ struct RealmGateway {
   struct ImportParams;
   struct ExportParams;
 
-  CAPNP_DECLARE_TEMPLATE_INTERFACE(84ff286cd00a3ed4, InternalRef, ExternalRef);
+  #if !CAPNP_LITE
+  struct _capnpPrivate {
+    CAPNP_DECLARE_INTERFACE_HEADER(84ff286cd00a3ed4)
+    static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
+    static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
+    static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];
+    static const ::capnp::_::RawBrandedSchema specificBrand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, InternalRef, ExternalRef>::brand;
+  };
+  #endif  // !CAPNP_LITE
 };
 
 template <typename InternalRef, typename ExternalRef>
@@ -89,7 +123,16 @@ struct RealmGateway<InternalRef, ExternalRef>::ImportParams {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_TEMPLATE_STRUCT(f0c2cc1d3909574d, 0, 2, InternalRef, ExternalRef);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(f0c2cc1d3909574d, 0, 2)
+    #if !CAPNP_LITE
+    static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
+    static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
+    static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];
+    static const ::capnp::_::RawBrandedSchema specificBrand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, InternalRef, ExternalRef>::brand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 template <typename InternalRef, typename ExternalRef>
@@ -100,7 +143,16 @@ struct RealmGateway<InternalRef, ExternalRef>::ExportParams {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_TEMPLATE_STRUCT(ecafa18b482da3aa, 0, 2, InternalRef, ExternalRef);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(ecafa18b482da3aa, 0, 2)
+    #if !CAPNP_LITE
+    static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
+    static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
+    static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];
+    static const ::capnp::_::RawBrandedSchema specificBrand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, InternalRef, ExternalRef>::brand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 // =======================================================================================
@@ -596,13 +648,31 @@ inline typename  ::capnp::Persistent<SturdyRef>::Client& Persistent<SturdyRef>::
 }
 
 #endif  // !CAPNP_LITE
-CAPNP_DEFINE_TEMPLATE_STRUCT(Persistent<SturdyRef>::SaveParams, template <typename SturdyRef>
-, f76fba59183073a5, {
-  { 0xc8cb212fcd9f5691 CAPNP_COMMA  brandBindings + 0 CAPNP_COMMA  1 CAPNP_COMMA  false} CAPNP_COMMA 
-}, {
-  ::capnp::_::brandBindingFor<SturdyRef>() CAPNP_COMMA 
-}, {
-});
+// Persistent<SturdyRef>::SaveParams
+template <typename SturdyRef>
+constexpr ::capnp::_::StructSize Persistent<SturdyRef>::SaveParams::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+template <typename SturdyRef>
+constexpr ::capnp::Kind Persistent<SturdyRef>::SaveParams::_capnpPrivate::kind;
+template <typename SturdyRef>
+constexpr ::capnp::_::RawSchema const* Persistent<SturdyRef>::SaveParams::_capnpPrivate::schema;
+template <typename SturdyRef>
+constexpr ::capnp::_::RawBrandedSchema const* Persistent<SturdyRef>::SaveParams::_capnpPrivate::brand;
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema::Scope Persistent<SturdyRef>::SaveParams::_capnpPrivate::brandScopes[] = {
+  { 0xc8cb212fcd9f5691, brandBindings + 0, 1, false},
+};
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema::Binding Persistent<SturdyRef>::SaveParams::_capnpPrivate::brandBindings[] = {
+  ::capnp::_::brandBindingFor<SturdyRef>(),
+};
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema Persistent<SturdyRef>::SaveParams::_capnpPrivate::specificBrand = {
+  &::capnp::schemas::s_f76fba59183073a5, brandScopes, nullptr,
+  sizeof(brandScopes) / sizeof(brandScopes[0]), 0, nullptr
+};
+#endif  // !CAPNP_LITE
+
 template <typename SturdyRef>
 inline bool Persistent<SturdyRef>::SaveResults::Reader::hasSturdyRef() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
@@ -654,13 +724,31 @@ inline ::capnp::Orphan<SturdyRef> Persistent<SturdyRef>::SaveResults::Builder::d
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-CAPNP_DEFINE_TEMPLATE_STRUCT(Persistent<SturdyRef>::SaveResults, template <typename SturdyRef>
-, b76848c18c40efbf, {
-  { 0xc8cb212fcd9f5691 CAPNP_COMMA  brandBindings + 0 CAPNP_COMMA  1 CAPNP_COMMA  false} CAPNP_COMMA 
-}, {
-  ::capnp::_::brandBindingFor<SturdyRef>() CAPNP_COMMA 
-}, {
-});
+// Persistent<SturdyRef>::SaveResults
+template <typename SturdyRef>
+constexpr ::capnp::_::StructSize Persistent<SturdyRef>::SaveResults::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+template <typename SturdyRef>
+constexpr ::capnp::Kind Persistent<SturdyRef>::SaveResults::_capnpPrivate::kind;
+template <typename SturdyRef>
+constexpr ::capnp::_::RawSchema const* Persistent<SturdyRef>::SaveResults::_capnpPrivate::schema;
+template <typename SturdyRef>
+constexpr ::capnp::_::RawBrandedSchema const* Persistent<SturdyRef>::SaveResults::_capnpPrivate::brand;
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema::Scope Persistent<SturdyRef>::SaveResults::_capnpPrivate::brandScopes[] = {
+  { 0xc8cb212fcd9f5691, brandBindings + 0, 1, false},
+};
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema::Binding Persistent<SturdyRef>::SaveResults::_capnpPrivate::brandBindings[] = {
+  ::capnp::_::brandBindingFor<SturdyRef>(),
+};
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema Persistent<SturdyRef>::SaveResults::_capnpPrivate::specificBrand = {
+  &::capnp::schemas::s_b76848c18c40efbf, brandScopes, nullptr,
+  sizeof(brandScopes) / sizeof(brandScopes[0]), 0, nullptr
+};
+#endif  // !CAPNP_LITE
+
 #if !CAPNP_LITE
 template <typename SturdyRef>
 ::capnp::Request<typename  ::capnp::Persistent<SturdyRef>::SaveParams, typename  ::capnp::Persistent<SturdyRef>::SaveResults>
@@ -701,15 +789,34 @@ template <typename SturdyRef>
 }
 #endif  // !CAPNP_LITE
 
-CAPNP_DEFINE_TEMPLATE_INTERFACE(Persistent<SturdyRef>, template <typename SturdyRef>
-, c8cb212fcd9f5691, {
-  { 0xc8cb212fcd9f5691 CAPNP_COMMA  brandBindings + 0 CAPNP_COMMA  1 CAPNP_COMMA  false} CAPNP_COMMA 
-}, {
-  ::capnp::_::brandBindingFor<SturdyRef>() CAPNP_COMMA 
-}, {
-  { 33554432 CAPNP_COMMA   ::capnp::Persistent<SturdyRef>::SaveParams::_capnpPrivate::brand } CAPNP_COMMA 
-  { 50331648 CAPNP_COMMA   ::capnp::Persistent<SturdyRef>::SaveResults::_capnpPrivate::brand } CAPNP_COMMA 
-});
+// Persistent<SturdyRef>
+#if !CAPNP_LITE
+template <typename SturdyRef>
+constexpr ::capnp::Kind Persistent<SturdyRef>::_capnpPrivate::kind;
+template <typename SturdyRef>
+constexpr ::capnp::_::RawSchema const* Persistent<SturdyRef>::_capnpPrivate::schema;
+template <typename SturdyRef>
+constexpr ::capnp::_::RawBrandedSchema const* Persistent<SturdyRef>::_capnpPrivate::brand;
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema::Scope Persistent<SturdyRef>::_capnpPrivate::brandScopes[] = {
+  { 0xc8cb212fcd9f5691, brandBindings + 0, 1, false},
+};
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema::Binding Persistent<SturdyRef>::_capnpPrivate::brandBindings[] = {
+  ::capnp::_::brandBindingFor<SturdyRef>(),
+};
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema::Dependency Persistent<SturdyRef>::_capnpPrivate::brandDependencies[] = {
+  { 33554432,  ::capnp::Persistent<SturdyRef>::SaveParams::_capnpPrivate::brand },
+  { 50331648,  ::capnp::Persistent<SturdyRef>::SaveResults::_capnpPrivate::brand },
+};
+template <typename SturdyRef>
+const ::capnp::_::RawBrandedSchema Persistent<SturdyRef>::_capnpPrivate::specificBrand = {
+  &::capnp::schemas::s_c8cb212fcd9f5691, brandScopes, brandDependencies,
+  sizeof(brandScopes) / sizeof(brandScopes[0]), sizeof(brandDependencies) / sizeof(brandDependencies[0]), nullptr
+};
+#endif  // !CAPNP_LITE
+
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef>
 inline RealmGateway<InternalRef, ExternalRef>::Client::Client(decltype(nullptr))
@@ -833,16 +940,37 @@ inline ::capnp::Orphan<typename  ::capnp::Persistent<InternalRef>::SaveParams> R
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-CAPNP_DEFINE_TEMPLATE_STRUCT(RealmGateway<InternalRef CAPNP_COMMA  ExternalRef>::ImportParams, template <typename InternalRef CAPNP_COMMA  typename ExternalRef>
-, f0c2cc1d3909574d, {
-  { 0x84ff286cd00a3ed4 CAPNP_COMMA  brandBindings + 0 CAPNP_COMMA  2 CAPNP_COMMA  false} CAPNP_COMMA 
-}, {
-  ::capnp::_::brandBindingFor<InternalRef>() CAPNP_COMMA 
-  ::capnp::_::brandBindingFor<ExternalRef>() CAPNP_COMMA 
-}, {
-  { 16777216 CAPNP_COMMA   ::capnp::Persistent<ExternalRef>::_capnpPrivate::brand } CAPNP_COMMA 
-  { 16777217 CAPNP_COMMA   ::capnp::Persistent<InternalRef>::SaveParams::_capnpPrivate::brand } CAPNP_COMMA 
-});
+// RealmGateway<InternalRef, ExternalRef>::ImportParams
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::_::StructSize RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::kind;
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::_::RawSchema const* RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::schema;
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::_::RawBrandedSchema const* RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::brand;
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema::Scope RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::brandScopes[] = {
+  { 0x84ff286cd00a3ed4, brandBindings + 0, 2, false},
+};
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema::Binding RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::brandBindings[] = {
+  ::capnp::_::brandBindingFor<InternalRef>(),
+  ::capnp::_::brandBindingFor<ExternalRef>(),
+};
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema::Dependency RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::brandDependencies[] = {
+  { 16777216,  ::capnp::Persistent<ExternalRef>::_capnpPrivate::brand },
+  { 16777217,  ::capnp::Persistent<InternalRef>::SaveParams::_capnpPrivate::brand },
+};
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::specificBrand = {
+  &::capnp::schemas::s_f0c2cc1d3909574d, brandScopes, brandDependencies,
+  sizeof(brandScopes) / sizeof(brandScopes[0]), sizeof(brandDependencies) / sizeof(brandDependencies[0]), nullptr
+};
+#endif  // !CAPNP_LITE
+
 template <typename InternalRef, typename ExternalRef>
 inline bool RealmGateway<InternalRef, ExternalRef>::ExportParams::Reader::hasCap() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
@@ -935,16 +1063,37 @@ inline ::capnp::Orphan<typename  ::capnp::Persistent<ExternalRef>::SaveParams> R
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-CAPNP_DEFINE_TEMPLATE_STRUCT(RealmGateway<InternalRef CAPNP_COMMA  ExternalRef>::ExportParams, template <typename InternalRef CAPNP_COMMA  typename ExternalRef>
-, ecafa18b482da3aa, {
-  { 0x84ff286cd00a3ed4 CAPNP_COMMA  brandBindings + 0 CAPNP_COMMA  2 CAPNP_COMMA  false} CAPNP_COMMA 
-}, {
-  ::capnp::_::brandBindingFor<InternalRef>() CAPNP_COMMA 
-  ::capnp::_::brandBindingFor<ExternalRef>() CAPNP_COMMA 
-}, {
-  { 16777216 CAPNP_COMMA   ::capnp::Persistent<InternalRef>::_capnpPrivate::brand } CAPNP_COMMA 
-  { 16777217 CAPNP_COMMA   ::capnp::Persistent<ExternalRef>::SaveParams::_capnpPrivate::brand } CAPNP_COMMA 
-});
+// RealmGateway<InternalRef, ExternalRef>::ExportParams
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::_::StructSize RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::structSize;
+#if !CAPNP_LITE
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::kind;
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::_::RawSchema const* RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::schema;
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::_::RawBrandedSchema const* RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::brand;
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema::Scope RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::brandScopes[] = {
+  { 0x84ff286cd00a3ed4, brandBindings + 0, 2, false},
+};
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema::Binding RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::brandBindings[] = {
+  ::capnp::_::brandBindingFor<InternalRef>(),
+  ::capnp::_::brandBindingFor<ExternalRef>(),
+};
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema::Dependency RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::brandDependencies[] = {
+  { 16777216,  ::capnp::Persistent<InternalRef>::_capnpPrivate::brand },
+  { 16777217,  ::capnp::Persistent<ExternalRef>::SaveParams::_capnpPrivate::brand },
+};
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::specificBrand = {
+  &::capnp::schemas::s_ecafa18b482da3aa, brandScopes, brandDependencies,
+  sizeof(brandScopes) / sizeof(brandScopes[0]), sizeof(brandDependencies) / sizeof(brandDependencies[0]), nullptr
+};
+#endif  // !CAPNP_LITE
+
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef>
 ::capnp::Request<typename  ::capnp::RealmGateway<InternalRef, ExternalRef>::ImportParams, typename  ::capnp::Persistent<InternalRef>::SaveResults>
@@ -1000,18 +1149,37 @@ template <typename InternalRef, typename ExternalRef>
 }
 #endif  // !CAPNP_LITE
 
-CAPNP_DEFINE_TEMPLATE_INTERFACE(RealmGateway<InternalRef CAPNP_COMMA  ExternalRef>, template <typename InternalRef CAPNP_COMMA  typename ExternalRef>
-, 84ff286cd00a3ed4, {
-  { 0x84ff286cd00a3ed4 CAPNP_COMMA  brandBindings + 0 CAPNP_COMMA  2 CAPNP_COMMA  false} CAPNP_COMMA 
-}, {
-  ::capnp::_::brandBindingFor<InternalRef>() CAPNP_COMMA 
-  ::capnp::_::brandBindingFor<ExternalRef>() CAPNP_COMMA 
-}, {
-  { 33554432 CAPNP_COMMA   ::capnp::RealmGateway<InternalRef CAPNP_COMMA  ExternalRef>::ImportParams::_capnpPrivate::brand } CAPNP_COMMA 
-  { 33554433 CAPNP_COMMA   ::capnp::RealmGateway<InternalRef CAPNP_COMMA  ExternalRef>::ExportParams::_capnpPrivate::brand } CAPNP_COMMA 
-  { 50331648 CAPNP_COMMA   ::capnp::Persistent<InternalRef>::SaveResults::_capnpPrivate::brand } CAPNP_COMMA 
-  { 50331649 CAPNP_COMMA   ::capnp::Persistent<ExternalRef>::SaveResults::_capnpPrivate::brand } CAPNP_COMMA 
-});
+// RealmGateway<InternalRef, ExternalRef>
+#if !CAPNP_LITE
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef>::_capnpPrivate::kind;
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::_::RawSchema const* RealmGateway<InternalRef, ExternalRef>::_capnpPrivate::schema;
+template <typename InternalRef, typename ExternalRef>
+constexpr ::capnp::_::RawBrandedSchema const* RealmGateway<InternalRef, ExternalRef>::_capnpPrivate::brand;
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema::Scope RealmGateway<InternalRef, ExternalRef>::_capnpPrivate::brandScopes[] = {
+  { 0x84ff286cd00a3ed4, brandBindings + 0, 2, false},
+};
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema::Binding RealmGateway<InternalRef, ExternalRef>::_capnpPrivate::brandBindings[] = {
+  ::capnp::_::brandBindingFor<InternalRef>(),
+  ::capnp::_::brandBindingFor<ExternalRef>(),
+};
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema::Dependency RealmGateway<InternalRef, ExternalRef>::_capnpPrivate::brandDependencies[] = {
+  { 33554432,  ::capnp::RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::brand },
+  { 33554433,  ::capnp::RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::brand },
+  { 50331648,  ::capnp::Persistent<InternalRef>::SaveResults::_capnpPrivate::brand },
+  { 50331649,  ::capnp::Persistent<ExternalRef>::SaveResults::_capnpPrivate::brand },
+};
+template <typename InternalRef, typename ExternalRef>
+const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef>::_capnpPrivate::specificBrand = {
+  &::capnp::schemas::s_84ff286cd00a3ed4, brandScopes, brandDependencies,
+  sizeof(brandScopes) / sizeof(brandScopes[0]), sizeof(brandDependencies) / sizeof(brandDependencies[0]), nullptr
+};
+#endif  // !CAPNP_LITE
+
 }  // namespace
 
 #endif  // CAPNP_INCLUDED_b8630836983feed7_

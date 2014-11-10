@@ -26,6 +26,7 @@
 #include <kj/debug.h>
 #include <kj/io.h>
 #include <kj/string-tree.h>
+#include <kj/tuple.h>
 #include <kj/vector.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
@@ -54,10 +55,6 @@ namespace {
 
 static constexpr uint64_t NAMESPACE_ANNOTATION_ID = 0xb9c6f99ebf805f2cull;
 static constexpr uint64_t NAME_ANNOTATION_ID = 0xf264a779fef191ceull;
-
-static constexpr const char* FIELD_SIZE_NAMES[] = {
-  "VOID", "BIT", "BYTE", "TWO_BYTES", "FOUR_BYTES", "EIGHT_BYTES", "POINTER", "INLINE_COMPOSITE"
-};
 
 bool hasDiscriminantValue(const schema::Field::Reader& reader) {
   return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
@@ -381,22 +378,6 @@ private:
     }
   }
 
-  kj::String macroParam(kj::StringPtr text) {
-    kj::Vector<char> result;
-    for (;;) {
-      KJ_IF_MAYBE(pos, text.findFirst(',')) {
-        result.addAll(text.slice(0, *pos));
-        result.addAll(kj::StringPtr(" CAPNP_COMMA "));
-        text = text.slice(*pos + 1);
-      } else {
-        break;
-      }
-    }
-    result.addAll(text);
-    result.add('\0');
-    return kj::String(result.releaseAsArray());
-  }
-
   kj::String toUpperCase(kj::StringPtr name) {
     kj::Vector<char> result(name.size() + 4);
 
@@ -648,7 +629,10 @@ private:
     schema::Node::Reader node;
   };
 
-  kj::StringTree makeBrandInitializers(const TemplateContext& templateContext, Schema schema) {
+  using BrandInitializers = kj::Tuple<kj::StringTree, kj::StringTree, kj::StringTree>;
+  // A tuple of the initialisers for the {scopes, bindings, dependencies}.
+
+  BrandInitializers makeBrandInitializers(const TemplateContext& templateContext, Schema schema) {
     auto scopeMap = templateContext.getScopeMap();
 
     auto scopes = kj::heapArrayBuilder<kj::StringTree>(scopeMap.size());
@@ -667,16 +651,14 @@ private:
       }
     }
 
-    return kj::strTree(
-        "{\n",
-        macroParam(kj::StringTree(scopes.finish(), "").flatten()),
-        "}, {\n",
-        macroParam(kj::StringTree(bindings.releaseAsArray(), "").flatten()),
-        "}, ", macroParam(makeBrandDepInitializers(templateContext, schema).flatten()));
+    return kj::tuple(
+        kj::strTree("{\n", scopes.finish(), "}"),
+        kj::strTree("{\n", bindings.releaseAsArray(), "}"),
+        makeBrandDepInitializers(templateContext, schema));
   }
 
   kj::StringTree makeBrandDepInitializers(const TemplateContext& templateContext, Schema schema) {
-    // Build deps.
+    // Build deps. Returns a braced initialiser list, or an empty string if there are no dependencies.
     std::map<uint, kj::StringTree> depMap;
 
 #define ADD_DEP(kind, index, ...) \
@@ -718,6 +700,10 @@ private:
         break;
     }
 #undef ADD_DEP
+
+    if (!depMap.size()) {
+      return kj::strTree();
+    }
 
     auto deps = kj::heapArrayBuilder<kj::StringTree>(depMap.size());
     for (auto& entry: depMap) {
@@ -1731,6 +1717,45 @@ private:
         "\n");
   }
 
+  kj::StringTree makeGenericDeclarations(const TemplateContext& templateContext,
+                                         bool hasBrandDependencies) {
+    // Returns the declarations for the private members of a generic struct/interface;
+    // paired with the definitions from makeGenericDefinitions().
+    return kj::strTree(
+        "    static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];\n"
+        "    static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];\n",
+        (!hasBrandDependencies ? "" :
+            "    static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];\n"),
+        "    static const ::capnp::_::RawBrandedSchema specificBrand;\n"
+        "    static constexpr ::capnp::_::RawBrandedSchema const* brand = "
+        "::capnp::_::ChooseBrand<_capnpPrivate, ", templateContext.allArgs(), ">::brand;\n");
+  }
+
+  kj::StringTree makeGenericDefinitions(kj::StringPtr templates, kj::StringPtr fullName, kj::StringPtr hexId,
+                                        BrandInitializers brandInitializers) {
+    // Returns the definitions for the members from makeGenericDeclarations().
+    bool hasBrandDependencies = (kj::get<2>(brandInitializers).size() != 0);
+
+    return kj::strTree(
+        templates, "const ::capnp::_::RawBrandedSchema::Scope ", fullName,
+        "::_capnpPrivate::brandScopes[] = ", kj::mv(kj::get<0>(brandInitializers)), ";\n",
+
+        templates, "const ::capnp::_::RawBrandedSchema::Binding ", fullName,
+        "::_capnpPrivate::brandBindings[] = ", kj::mv(kj::get<1>(brandInitializers)), ";\n",
+
+        (!hasBrandDependencies ? kj::strTree("") : kj::strTree(
+            templates, "const ::capnp::_::RawBrandedSchema::Dependency ", fullName,
+            "::_capnpPrivate::brandDependencies[] = ", kj::mv(kj::get<2>(brandInitializers)), ";\n")),
+
+        templates, "const ::capnp::_::RawBrandedSchema ", fullName, "::_capnpPrivate::specificBrand = {\n",
+        "  &::capnp::schemas::s_", hexId, ", brandScopes, ",
+        (!hasBrandDependencies ? "nullptr" : "brandDependencies"), ",\n",
+        "  sizeof(brandScopes) / sizeof(brandScopes[0]), ",
+        (!hasBrandDependencies ? "0" : "sizeof(brandDependencies) / sizeof(brandDependencies[0])"),
+        ", nullptr\n"
+        "};\n");
+  }
+
   StructText makeStructText(kj::StringPtr scope, kj::StringPtr name, StructSchema schema,
                             kj::Array<kj::StringTree> nestedTypeDecls,
                             const TemplateContext& templateContext) {
@@ -1748,22 +1773,42 @@ private:
     uint discrimOffset = structNode.getDiscriminantOffset();
     auto hexId = kj::hex(proto.getId());
 
-    kj::StringTree declareText = kj::strTree(hexId, ", ",
-        structNode.getDataWordCount(), ", ", structNode.getPointerCount());
+    kj::String templates = kj::str(templateContext.allDecls());  // Ends with a newline
+
+    // Private members struct
+    kj::StringTree declareText = kj::strTree(
+         "  struct _capnpPrivate {\n"
+         "    CAPNP_DECLARE_STRUCT_HEADER(", hexId, ", ", structNode.getDataWordCount(), ", ",
+         structNode.getPointerCount(), ")\n");
+
     kj::StringTree defineText = kj::strTree(
-        macroParam(fullName), ", ", macroParam(templateContext.allDecls().flatten()), ", ", hexId);
+        "// ", fullName, "\n",
+        templates, "constexpr ::capnp::_::StructSize ", fullName, "::_capnpPrivate::structSize;\n",
+        "#if !CAPNP_LITE\n",
+        templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
+        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
+        templates, "constexpr ::capnp::_::RawBrandedSchema const* ", fullName, "::_capnpPrivate::brand;\n");
 
     if (templateContext.isGeneric()) {
-      declareText = kj::strTree(
-          "CAPNP_DECLARE_TEMPLATE_STRUCT(", kj::mv(declareText), ", ",
-              templateContext.allArgs(), ")");
-      defineText = kj::strTree(
-          "CAPNP_DEFINE_TEMPLATE_STRUCT(", kj::mv(defineText), ", ",
-          makeBrandInitializers(templateContext, schema), ");\n");
+      auto brandInitializers = makeBrandInitializers(templateContext, schema);
+      bool hasDeps = (kj::get<2>(brandInitializers).size() != 0);
+
+      declareText = kj::strTree(kj::mv(declareText),
+          "    #if !CAPNP_LITE\n",
+          makeGenericDeclarations(templateContext, hasDeps),
+          "    #endif  // !CAPNP_LITE\n");
+
+      defineText = kj::strTree(kj::mv(defineText),
+          makeGenericDefinitions(templates, fullName, kj::str(hexId), kj::mv(brandInitializers)));
     } else {
-      declareText = kj::strTree("CAPNP_DECLARE_STRUCT(", kj::mv(declareText), ")");
-      defineText = kj::strTree("CAPNP_DEFINE_STRUCT(", kj::mv(defineText), ");\n");
+      declareText = kj::strTree(kj::mv(declareText),
+          "    #if !CAPNP_LITE\n"
+          "    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;\n"
+          "    #endif  // !CAPNP_LITE\n");
     }
+
+    declareText = kj::strTree(kj::mv(declareText), "  };");
+    defineText = kj::strTree(kj::mv(defineText), "#endif  // !CAPNP_LITE\n\n");
 
     return StructText {
       kj::strTree(
@@ -1790,8 +1835,8 @@ private:
               },
               "  };\n"),
           KJ_MAP(n, nestedTypeDecls) { return kj::mv(n); },
-          "\n"
-          "  ", kj::mv(declareText), ";\n",
+          "\n",
+          kj::mv(declareText), "\n",
           "};\n"
           "\n"),
 
@@ -1975,20 +2020,37 @@ private:
     CppTypeName clientName = cppFullName(schema, nullptr);
     clientName.addMemberType("Client");
 
-    kj::StringTree declareText;
+    kj::String templates = kj::str(templateContext.allDecls());  // Ends with a newline
+
+    // Private members struct
+    kj::StringTree declareText = kj::strTree(
+         "  #if !CAPNP_LITE\n"
+         "  struct _capnpPrivate {\n"
+         "    CAPNP_DECLARE_INTERFACE_HEADER(", hexId, ")\n");
+
     kj::StringTree defineText = kj::strTree(
-        macroParam(fullName), ", ", macroParam(templateContext.allDecls().flatten()), ", ", hexId);
+        "// ", fullName, "\n",
+        "#if !CAPNP_LITE\n",
+        templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
+        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
+        templates, "constexpr ::capnp::_::RawBrandedSchema const* ", fullName, "::_capnpPrivate::brand;\n");
 
     if (templateContext.isGeneric()) {
-      declareText = kj::strTree(
-          "CAPNP_DECLARE_TEMPLATE_INTERFACE(", hexId, ", ", templateContext.allArgs(), ")");
-      defineText = kj::strTree(
-          "CAPNP_DEFINE_TEMPLATE_INTERFACE(", kj::mv(defineText), ", ",
-          makeBrandInitializers(templateContext, schema), ");\n");
+      auto brandInitializers = makeBrandInitializers(templateContext, schema);
+      bool hasDeps = (kj::get<2>(brandInitializers).size() != 0);
+
+      declareText = kj::strTree(kj::mv(declareText),
+          makeGenericDeclarations(templateContext, hasDeps));
+
+      defineText = kj::strTree(kj::mv(defineText),
+          makeGenericDefinitions(templates, fullName, kj::str(hexId), kj::mv(brandInitializers)));
     } else {
-      declareText = kj::strTree("CAPNP_DECLARE_INTERFACE(", hexId, ")");
-      defineText = kj::strTree("CAPNP_DEFINE_INTERFACE(", kj::mv(defineText), ");\n");
+      declareText = kj::strTree(kj::mv(declareText),
+        "    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;\n");
     }
+
+    declareText = kj::strTree(kj::mv(declareText), "  };\n  #endif  // !CAPNP_LITE");
+    defineText = kj::strTree(kj::mv(defineText), "#endif  // !CAPNP_LITE\n\n");
 
     return InterfaceText {
       kj::strTree(
@@ -2007,8 +2069,8 @@ private:
           "#endif  // !CAPNP_LITE\n"
           "\n",
           KJ_MAP(n, nestedTypeDecls) { return kj::mv(n); },
-          "\n"
-          "  ", kj::mv(declareText), ";\n"
+          "\n",
+          kj::mv(declareText), "\n"
           "};\n"
           "\n"),
 
@@ -2338,6 +2400,8 @@ private:
         break;
     }
 
+    auto brandDeps = makeBrandDepInitializers(templateContext, schema.getGeneric());
+
     auto schemaDef = kj::strTree(
         "static const ::capnp::_::AlignedData<", rawSchema.size(), "> b_", hexId, " = {\n"
         "  {", kj::mv(schemaLiteral), " }\n"
@@ -2358,16 +2422,18 @@ private:
             "static const uint16_t i_", hexId, "[] = {",
             kj::StringTree(KJ_MAP(index, membersByDiscrim) { return kj::strTree(index); }, ", "),
             "};\n"),
-        "const ::capnp::_::RawBrandedSchema::Dependency bd_", hexId, "[] = ",
-            makeBrandDepInitializers(templateContext, schema.getGeneric()), ";\n"
+        brandDeps.size() == 0 ? kj::strTree() : kj::strTree(
+            "const ::capnp::_::RawBrandedSchema::Dependency bd_", hexId, "[] = ", kj::mv(brandDeps), ";\n"),
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
         "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", ",
         deps.size() == 0 ? kj::strTree("nullptr") : kj::strTree("d_", hexId), ", ",
         membersByName.size() == 0 ? kj::strTree("nullptr") : kj::strTree("m_", hexId), ",\n",
         "  ", deps.size(), ", ", membersByName.size(), ", ",
         membersByDiscrim.size() == 0 ? kj::strTree("nullptr") : kj::strTree("i_", hexId),
-        ", nullptr, nullptr, { &s_", hexId, ", nullptr, bd_", hexId, ", 0, "
-        "sizeof(bd_", hexId, ") / sizeof(bd_", hexId, "[0]), nullptr }\n"
+        ", nullptr, nullptr, { &s_", hexId, ", nullptr, ",
+        brandDeps.size() == 0 ? kj::strTree("nullptr, 0, 0") : kj::strTree(
+            "bd_", hexId, ", 0, " "sizeof(bd_", hexId, ") / sizeof(bd_", hexId, "[0])"),
+        ", nullptr }\n"
         "};\n"
         "#endif  // !CAPNP_LITE\n");
 

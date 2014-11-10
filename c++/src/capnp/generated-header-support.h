@@ -454,11 +454,6 @@ inline constexpr uint sizeInWords() {
 
 }  // namespace capnp
 
-#define CAPNP_COMMA ,
-// Unfortunately needed if the `type` parameter to the macros below contains template parameters --
-// all commas must be replaced with CAPNP_COMMA otherwise they will be interpreted as macro
-// parameter separators! Ugh.
-
 #if CAPNP_LITE
 
 #define CAPNP_DECLARE_SCHEMA(id) \
@@ -474,33 +469,11 @@ inline constexpr uint sizeInWords() {
     constexpr uint64_t EnumInfo<type>::typeId
 
 #define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
-    struct _capnpPrivate { \
       struct IsStruct; \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::_::StructSize structSize = ::capnp::_::StructSize( \
           dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS); \
       static inline ::capnp::word const* encodedSchema() { return ::capnp::schemas::bp_##id; }
-#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount) \
-    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
-    }
-#define CAPNP_DECLARE_TEMPLATE_STRUCT(id, dataWordSize, pointerCount, \
-                                      ...) \
-    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
-    }
-#define CAPNP_DEFINE_STRUCT(type, templates, id) \
-    templates constexpr uint64_t type::_capnpPrivate::typeId; \
-    templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize
-#define CAPNP_DEFINE_TEMPLATE_STRUCT(type, templates, id, brandScopesInitializer, \
-                                     brandBindingsInitializer, brandDependenciesInitializer) \
-    templates constexpr uint64_t type::_capnpPrivate::typeId; \
-    templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize
-
-#define CAPNP_DECLARE_INTERFACE(id) static_assert(true, "")
-#define CAPNP_DECLARE_TEMPLATE_INTERFACE(id, ...) static_assert(true, "")
-#define CAPNP_DEFINE_INTERFACE(type, templates, id) static_assert(true, "")
-#define CAPNP_DEFINE_TEMPLATE_INTERFACE(type, templates, id, brandScopesInitializer, \
-                                        brandBindingsInitializer, brandDependenciesInitializer) \
-    static_assert(true, "")
 
 #else  // CAPNP_LITE
 
@@ -520,7 +493,6 @@ inline constexpr uint sizeInWords() {
     constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema
 
 #define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
-    struct _capnpPrivate { \
       struct IsStruct; \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::Kind kind = ::capnp::Kind::STRUCT; \
@@ -528,88 +500,13 @@ inline constexpr uint sizeInWords() {
           dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS); \
       static inline ::capnp::word const* encodedSchema() { return ::capnp::schemas::bp_##id; } \
       static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id;
-#define CAPNP_DECLARE_STRUCT(id, dataWordSize, pointerCount) \
-    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
-      static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand; \
-    }
-#define CAPNP_DECLARE_TEMPLATE_STRUCT(id, dataWordSize, pointerCount, ...) \
-    CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
-      static const ::capnp::_::RawBrandedSchema::Scope brandScopes[]; \
-      static const ::capnp::_::RawBrandedSchema::Binding brandBindings[]; \
-      static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[]; \
-      static const ::capnp::_::RawBrandedSchema specificBrand; \
-      static constexpr ::capnp::_::RawBrandedSchema const* brand = \
-          ::capnp::_::ChooseBrand<_capnpPrivate, __VA_ARGS__>::brand; \
-    }
-#define CAPNP_DEFINE_STRUCT(type, templates, id) \
-    templates constexpr uint64_t type::_capnpPrivate::typeId; \
-    templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
-    templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize; \
-    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema; \
-    templates constexpr ::capnp::_::RawBrandedSchema const* type::_capnpPrivate::brand
-#define CAPNP_DEFINE_TEMPLATE_STRUCT(type, templates, id, brandScopesInitializer, \
-                                     brandBindingsInitializer, brandDependenciesInitializer) \
-    templates constexpr uint64_t type::_capnpPrivate::typeId; \
-    templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
-    templates constexpr ::capnp::_::StructSize type::_capnpPrivate::structSize; \
-    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema; \
-    templates constexpr ::capnp::_::RawBrandedSchema const* type::_capnpPrivate::brand; \
-    templates const ::capnp::_::RawBrandedSchema::Scope type::_capnpPrivate::brandScopes[] = \
-        brandScopesInitializer; \
-    templates const ::capnp::_::RawBrandedSchema::Binding type::_capnpPrivate::brandBindings[] = \
-        brandBindingsInitializer; \
-    templates const ::capnp::_::RawBrandedSchema::Dependency type::_capnpPrivate::brandDependencies[] = \
-        brandDependenciesInitializer; \
-    templates const ::capnp::_::RawBrandedSchema type::_capnpPrivate::specificBrand = { \
-      &::capnp::schemas::s_##id, brandScopes, brandDependencies, \
-      sizeof(brandScopes) / sizeof(brandScopes[0]), \
-      sizeof(brandDependencies) / sizeof(brandDependencies[0]), \
-      nullptr \
-    }
 
 #define CAPNP_DECLARE_INTERFACE_HEADER(id) \
-    struct _capnpPrivate { \
       struct IsInterface; \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::Kind kind = ::capnp::Kind::INTERFACE; \
       static inline ::capnp::word const* encodedSchema() { return ::capnp::schemas::bp_##id; } \
       static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id;
-#define CAPNP_DECLARE_INTERFACE(id) \
-    CAPNP_DECLARE_INTERFACE_HEADER(id) \
-      static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand; \
-    }
-#define CAPNP_DECLARE_TEMPLATE_INTERFACE(id, ...) \
-    CAPNP_DECLARE_INTERFACE_HEADER(id) \
-      static const ::capnp::_::RawBrandedSchema::Scope brandScopes[]; \
-      static const ::capnp::_::RawBrandedSchema::Binding brandBindings[]; \
-      static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[]; \
-      static const ::capnp::_::RawBrandedSchema specificBrand; \
-      static constexpr ::capnp::_::RawBrandedSchema const* brand = \
-          ::capnp::_::ChooseBrand<_capnpPrivate, __VA_ARGS__>::brand; \
-    }
-#define CAPNP_DEFINE_INTERFACE(type, templates, id) \
-    templates constexpr uint64_t type::_capnpPrivate::typeId; \
-    templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
-    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema; \
-    templates constexpr ::capnp::_::RawBrandedSchema const* type::_capnpPrivate::brand
-#define CAPNP_DEFINE_TEMPLATE_INTERFACE(type, templates, id, brandScopesInitializer, \
-                                        brandBindingsInitializer, brandDependenciesInitializer) \
-    templates constexpr uint64_t type::_capnpPrivate::typeId; \
-    templates constexpr ::capnp::Kind type::_capnpPrivate::kind; \
-    templates constexpr ::capnp::_::RawSchema const* type::_capnpPrivate::schema; \
-    templates constexpr ::capnp::_::RawBrandedSchema const* type::_capnpPrivate::brand; \
-    templates const ::capnp::_::RawBrandedSchema::Scope type::_capnpPrivate::brandScopes[] = \
-        brandScopesInitializer; \
-    templates const ::capnp::_::RawBrandedSchema::Binding type::_capnpPrivate::brandBindings[] = \
-        brandBindingsInitializer; \
-    templates const ::capnp::_::RawBrandedSchema::Dependency type::_capnpPrivate::brandDependencies[] = \
-        brandDependenciesInitializer; \
-    templates const ::capnp::_::RawBrandedSchema type::_capnpPrivate::specificBrand = { \
-      &::capnp::schemas::s_##id, brandScopes, brandDependencies, \
-      sizeof(brandScopes) / sizeof(brandScopes[0]), \
-      sizeof(brandDependencies) / sizeof(brandDependencies[0]), \
-      nullptr \
-    }
 
 #endif  // CAPNP_LITE, else
 

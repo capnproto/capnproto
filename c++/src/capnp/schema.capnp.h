@@ -87,7 +87,12 @@ struct Node {
   struct Const;
   struct Annotation;
 
-  CAPNP_DECLARE_STRUCT(e682ab4cf923a417, 5, 6);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(e682ab4cf923a417, 5, 6)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Node::Parameter {
@@ -97,7 +102,12 @@ struct Node::Parameter {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b9521bccf10fa3b1, 0, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(b9521bccf10fa3b1, 0, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Node::NestedNode {
@@ -107,7 +117,12 @@ struct Node::NestedNode {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(debf55bbfa0fc242, 1, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(debf55bbfa0fc242, 1, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Node::Struct {
@@ -117,7 +132,12 @@ struct Node::Struct {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9ea0b19b37fb4435, 5, 6);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(9ea0b19b37fb4435, 5, 6)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Node::Enum {
@@ -127,7 +147,12 @@ struct Node::Enum {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b54ab3364333f598, 5, 6);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(b54ab3364333f598, 5, 6)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Node::Interface {
@@ -137,7 +162,12 @@ struct Node::Interface {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(e82753cff0c2218f, 5, 6);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(e82753cff0c2218f, 5, 6)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Node::Const {
@@ -147,7 +177,12 @@ struct Node::Const {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(b18aa5ac7a0d9420, 5, 6);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(b18aa5ac7a0d9420, 5, 6)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Node::Annotation {
@@ -157,7 +192,12 @@ struct Node::Annotation {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(ec1619d4400a0290, 5, 6);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(ec1619d4400a0290, 5, 6)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Field {
@@ -175,7 +215,12 @@ struct Field {
   struct Group;
   struct Ordinal;
 
-  CAPNP_DECLARE_STRUCT(9aad50a41f4af45f, 3, 4);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(9aad50a41f4af45f, 3, 4)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Field::Slot {
@@ -185,7 +230,12 @@ struct Field::Slot {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(c42305476bb4746f, 3, 4);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(c42305476bb4746f, 3, 4)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Field::Group {
@@ -195,7 +245,12 @@ struct Field::Group {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(cafccddb68db1d11, 3, 4);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(cafccddb68db1d11, 3, 4)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Field::Ordinal {
@@ -209,7 +264,12 @@ struct Field::Ordinal {
     EXPLICIT,
   };
 
-  CAPNP_DECLARE_STRUCT(bb90d5c287870be6, 3, 4);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(bb90d5c287870be6, 3, 4)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Enumerant {
@@ -219,7 +279,12 @@ struct Enumerant {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(978a7cebdc549a4d, 1, 2);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(978a7cebdc549a4d, 1, 2)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Superclass {
@@ -229,7 +294,12 @@ struct Superclass {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(a9962a9ed0a4d7f8, 1, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(a9962a9ed0a4d7f8, 1, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Method {
@@ -239,7 +309,12 @@ struct Method {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9500cce23b334d80, 3, 5);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(9500cce23b334d80, 3, 5)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Type {
@@ -275,7 +350,12 @@ struct Type {
   struct Interface;
   struct AnyPointer;
 
-  CAPNP_DECLARE_STRUCT(d07378ede1f9cc60, 3, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(d07378ede1f9cc60, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Type::List {
@@ -285,7 +365,12 @@ struct Type::List {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(87e739250a60ea97, 3, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(87e739250a60ea97, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Type::Enum {
@@ -295,7 +380,12 @@ struct Type::Enum {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9e0e78711a7f87a9, 3, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(9e0e78711a7f87a9, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Type::Struct {
@@ -305,7 +395,12 @@ struct Type::Struct {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(ac3a6f60ef4cc6d3, 3, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(ac3a6f60ef4cc6d3, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Type::Interface {
@@ -315,7 +410,12 @@ struct Type::Interface {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(ed8bca69f7fb0cbf, 3, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(ed8bca69f7fb0cbf, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Type::AnyPointer {
@@ -332,7 +432,12 @@ struct Type::AnyPointer {
   struct Parameter;
   struct ImplicitMethodParameter;
 
-  CAPNP_DECLARE_STRUCT(c2573fe8a23e49f1, 3, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(c2573fe8a23e49f1, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Type::AnyPointer::Parameter {
@@ -342,7 +447,12 @@ struct Type::AnyPointer::Parameter {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(9dd1f724f4614a85, 3, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(9dd1f724f4614a85, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Type::AnyPointer::ImplicitMethodParameter {
@@ -352,7 +462,12 @@ struct Type::AnyPointer::ImplicitMethodParameter {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(baefc9120c56e274, 3, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(baefc9120c56e274, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Brand {
@@ -364,7 +479,12 @@ struct Brand {
   struct Scope;
   struct Binding;
 
-  CAPNP_DECLARE_STRUCT(903455f06065422b, 0, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(903455f06065422b, 0, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Brand::Scope {
@@ -378,7 +498,12 @@ struct Brand::Scope {
     INHERIT,
   };
 
-  CAPNP_DECLARE_STRUCT(abd73485a9636bc9, 2, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(abd73485a9636bc9, 2, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Brand::Binding {
@@ -392,7 +517,12 @@ struct Brand::Binding {
     TYPE,
   };
 
-  CAPNP_DECLARE_STRUCT(c863cd16969ee7fc, 1, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(c863cd16969ee7fc, 1, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Value {
@@ -423,7 +553,12 @@ struct Value {
     ANY_POINTER,
   };
 
-  CAPNP_DECLARE_STRUCT(ce23dcd2d7b00c9b, 2, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(ce23dcd2d7b00c9b, 2, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Annotation {
@@ -433,7 +568,12 @@ struct Annotation {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(f1c8950dab257542, 1, 2);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(f1c8950dab257542, 1, 2)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 typedef ::capnp::schemas::ElementSize_d1958f7dba521926 ElementSize;
@@ -446,7 +586,12 @@ struct CodeGeneratorRequest {
   class Pipeline;
   struct RequestedFile;
 
-  CAPNP_DECLARE_STRUCT(bfc546f6210ad7ce, 0, 2);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(bfc546f6210ad7ce, 0, 2)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct CodeGeneratorRequest::RequestedFile {
@@ -457,7 +602,12 @@ struct CodeGeneratorRequest::RequestedFile {
   class Pipeline;
   struct Import;
 
-  CAPNP_DECLARE_STRUCT(cfea0eb02e810062, 1, 2);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(cfea0eb02e810062, 1, 2)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct CodeGeneratorRequest::RequestedFile::Import {
@@ -467,7 +617,12 @@ struct CodeGeneratorRequest::RequestedFile::Import {
   class Builder;
   class Pipeline;
 
-  CAPNP_DECLARE_STRUCT(ae504193122357e5, 1, 1);
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(ae504193122357e5, 1, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 // =======================================================================================
