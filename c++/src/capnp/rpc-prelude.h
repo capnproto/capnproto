@@ -85,6 +85,26 @@ private:
   friend class capnp::RpcSystem;
 };
 
+template <typename T> struct InternalRefFromRealmGateway_;
+template <typename InternalRef, typename ExternalRef>
+struct InternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef>> {
+  typedef InternalRef Type;
+};
+template <typename T>
+using InternalRefFromRealmGateway = typename InternalRefFromRealmGateway_<T>::Type;
+template <typename T>
+using InternalRefFromRealmGatewayClient = InternalRefFromRealmGateway<typename T::Calls>;
+
+template <typename T> struct ExternalRefFromRealmGateway_;
+template <typename InternalRef, typename ExternalRef>
+struct ExternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef>> {
+  typedef ExternalRef Type;
+};
+template <typename T>
+using ExternalRefFromRealmGateway = typename ExternalRefFromRealmGateway_<T>::Type;
+template <typename T>
+using ExternalRefFromRealmGatewayClient = ExternalRefFromRealmGateway<typename T::Calls>;
+
 }  // namespace _ (private)
 }  // namespace capnp
 

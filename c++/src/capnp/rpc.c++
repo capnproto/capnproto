@@ -592,7 +592,7 @@ private:
           });
 
           auto request = g->importRequest(sizeHint);
-          request.setCap(Persistent<>::Client(addRef()));
+          request.setCap(Persistent<>::Client(kj::refcounted<NoInterceptClient>(*this)));
 
           // Awkwardly, request.initParams() would return a SaveParams struct, but to construct
           // the Request<AnyPointer, AnyPointer> to return we need an AnyPointer::Builder, and you
@@ -608,6 +608,11 @@ private:
         }
       }
 
+      return newCallNoIntercept(interfaceId, methodId, sizeHint);
+    }
+
+    Request<AnyPointer, AnyPointer> newCallNoIntercept(
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) {
       if (!connectionState->connection.is<Connected>()) {
         return newBrokenRequest(kj::cp(connectionState->connection.get<Disconnected>()), sizeHint);
       }
@@ -626,8 +631,6 @@ private:
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context) override {
-      // Implement call() by copying params and results messages.
-
       if (interfaceId == typeId<Persistent<>>() && methodId == 0) {
         KJ_IF_MAYBE(g, connectionState->gateway) {
           // Wait, this is a call to Persistent.save() and we need to translate it through our
@@ -639,7 +642,7 @@ private:
           requestSize.wordCount += sizeInWords<RealmGateway<>::ImportParams>();
 
           auto request = g->importRequest(requestSize);
-          request.setCap(Persistent<>::Client(addRef()));
+          request.setCap(Persistent<>::Client(kj::refcounted<NoInterceptClient>(*this)));
           request.setParams(params);
 
           context->allowCancellation();
@@ -647,6 +650,13 @@ private:
           return context->directTailCall(RequestHook::from(kj::mv(request)));
         }
       }
+
+      return callNoIntercept(interfaceId, methodId, kj::mv(context));
+    }
+
+    VoidPromiseAndPipeline callNoIntercept(uint64_t interfaceId, uint16_t methodId,
+                                           kj::Own<CallContextHook>&& context) {
+      // Implement call() by copying params and results messages.
 
       auto params = context->getParams();
       auto request = newCall(interfaceId, methodId, params.targetSize());
@@ -667,7 +677,6 @@ private:
       return connectionState.get();
     }
 
-  protected:
     kj::Own<RpcConnectionState> connectionState;
   };
 
@@ -931,6 +940,55 @@ private:
       cap = replacement->addRef();
       isResolved = true;
     }
+  };
+
+  class NoInterceptClient final: public RpcClient {
+    // A wrapper around an RpcClient which bypasses special handling of "save" requests. When we
+    // intercept a "save" request and invoke a RealmGateway, we give it a version of the capability
+    // with intercepting disabled, since usually the first thing the RealmGateway will do is turn
+    // around and call save() again.
+    //
+    // This is admittedly sort of backwards: the interception of "save" ought to be the part
+    // implemented by a wrapper. However, that would require placing a wrapper around every
+    // RpcClient we create whereas NoInterceptClient only needs to be injected after a save()
+    // request occurs and is intercepted.
+
+  public:
+    NoInterceptClient(RpcClient& inner)
+        : RpcClient(*inner.connectionState),
+          inner(kj::addRef(inner)) {}
+
+    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
+      return inner->writeDescriptor(descriptor);
+    }
+
+    kj::Maybe<kj::Own<ClientHook>> writeTarget(rpc::MessageTarget::Builder target) override {
+      return inner->writeTarget(target);
+    }
+
+    kj::Own<ClientHook> getInnermostClient() override {
+      return inner->getInnermostClient();
+    }
+
+    Request<AnyPointer, AnyPointer> newCall(
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+      return inner->newCallNoIntercept(interfaceId, methodId, sizeHint);
+    }
+    VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                                kj::Own<CallContextHook>&& context) override {
+      return inner->callNoIntercept(interfaceId, methodId, kj::mv(context));
+    }
+
+    kj::Maybe<ClientHook&> getResolved() override {
+      return nullptr;
+    }
+
+    kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+      return nullptr;
+    }
+
+  private:
+    kj::Own<RpcClient> inner;
   };
 
   kj::Maybe<ExportId> writeDescriptor(ClientHook& cap, rpc::CapDescriptor::Builder descriptor) {

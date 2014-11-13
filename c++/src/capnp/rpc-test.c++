@@ -427,6 +427,21 @@ struct TestContext {
         serverNetwork(network.add("server")),
         rpcClient(makeRpcClient(clientNetwork)),
         rpcServer(makeRpcServer(serverNetwork, restorer)) {}
+  TestContext(Capability::Client bootstrap,
+              RealmGateway<test::TestSturdyRef, Text>::Client gateway)
+      : waitScope(loop),
+        clientNetwork(network.add("client")),
+        serverNetwork(network.add("server")),
+        rpcClient(makeRpcClient(clientNetwork, gateway)),
+        rpcServer(makeRpcServer(serverNetwork, bootstrap)) {}
+  TestContext(Capability::Client bootstrap,
+              RealmGateway<test::TestSturdyRef, Text>::Client gateway,
+              bool)
+      : waitScope(loop),
+        clientNetwork(network.add("client")),
+        serverNetwork(network.add("server")),
+        rpcClient(makeRpcClient(clientNetwork)),
+        rpcServer(makeRpcServer(serverNetwork, bootstrap, gateway)) {}
 
   Capability::Client connect(test::TestSturdyRefObjectId::Tag tag) {
     MallocMessageBuilder refMessage(128);
@@ -960,6 +975,91 @@ TEST(Rpc, CallBrokenPromise) {
 
   // Verify that we're still connected (there were no protocol errors).
   getCallSequence(client, 1).wait(context.waitScope);
+}
+
+// =======================================================================================
+
+typedef RealmGateway<test::TestSturdyRef, Text> TestRealmGateway;
+
+class TestGateway: public TestRealmGateway::Server {
+public:
+  kj::Promise<void> import(ImportContext context) override {
+    auto cap = context.getParams().getCap();
+    context.releaseParams();
+    return cap.saveRequest().send()
+        .then([context](Response<Persistent<Text>::SaveResults> response) mutable {
+      context.getResults().initSturdyRef().getObjectId().setAs<Text>(
+          kj::str("imported-", response.getSturdyRef()));
+    });
+  }
+
+  kj::Promise<void> export_(ExportContext context) override {
+    auto cap = context.getParams().getCap();
+    context.releaseParams();
+    return cap.saveRequest().send()
+        .then([context](Response<Persistent<test::TestSturdyRef>::SaveResults> response) mutable {
+      context.getResults().setSturdyRef(kj::str("exported-",
+          response.getSturdyRef().getObjectId().getAs<Text>()));
+    });
+  }
+};
+
+class TestPersistent: public Persistent<test::TestSturdyRef>::Server {
+public:
+  TestPersistent(kj::StringPtr name): name(name) {}
+
+  kj::Promise<void> save(SaveContext context) override {
+    context.initResults().initSturdyRef().getObjectId().setAs<Text>(name);
+    return kj::READY_NOW;
+  }
+
+private:
+  kj::StringPtr name;
+};
+
+class TestPersistentText: public Persistent<Text>::Server {
+public:
+  TestPersistentText(kj::StringPtr name): name(name) {}
+
+  kj::Promise<void> save(SaveContext context) override {
+    context.initResults().setSturdyRef(name);
+    return kj::READY_NOW;
+  }
+
+private:
+  kj::StringPtr name;
+};
+
+TEST(Rpc, RealmGatewayImport) {
+  TestRealmGateway::Client gateway = kj::heap<TestGateway>();
+  Persistent<Text>::Client bootstrap = kj::heap<TestPersistentText>("foo");
+
+  MallocMessageBuilder hostIdBuilder;
+  auto hostId = hostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  hostId.setHost("server");
+
+  TestContext context(bootstrap, gateway);
+  auto client = context.rpcClient.bootstrap(hostId).castAs<Persistent<test::TestSturdyRef>>();
+
+  auto response = client.saveRequest().send().wait(context.waitScope);
+
+  EXPECT_EQ("imported-foo", response.getSturdyRef().getObjectId().getAs<Text>());
+}
+
+TEST(Rpc, RealmGatewayExport) {
+  TestRealmGateway::Client gateway = kj::heap<TestGateway>();
+  Persistent<test::TestSturdyRef>::Client bootstrap = kj::heap<TestPersistent>("foo");
+
+  MallocMessageBuilder hostIdBuilder;
+  auto hostId = hostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  hostId.setHost("server");
+
+  TestContext context(bootstrap, gateway, true);
+  auto client = context.rpcClient.bootstrap(hostId).castAs<Persistent<Text>>();
+
+  auto response = client.saveRequest().send().wait(context.waitScope);
+
+  EXPECT_EQ("exported-foo", response.getSturdyRef());
 }
 
 }  // namespace

@@ -57,7 +57,9 @@ interface Persistent@0xc8cb212fcd9f5691(SturdyRef) {
   # capabilities can be saved -- application interfaces should define which capabilities support
   # this and which do not.
 
-  struct SaveParams {}
+  struct SaveParams {
+    # Nothing for now.
+  }
   struct SaveResults {
     sturdyRef @0 :SturdyRef;
   }
