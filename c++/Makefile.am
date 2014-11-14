@@ -117,6 +117,7 @@ capnpc_outputs =                                               \
 includecapnpdir = $(includedir)/capnp
 includekjdir = $(includedir)/kj
 includekjparsedir = $(includekjdir)/parse
+includekjstddir = $(includekjdir)/std
 
 dist_includecapnp_DATA = $(public_capnpc_inputs)
 
@@ -153,6 +154,9 @@ includekj_HEADERS =                                            \
 includekjparse_HEADERS =                                       \
   src/kj/parse/common.h                                        \
   src/kj/parse/char.h
+
+includekjstd_HEADERS =                                         \
+  src/kj/std/iostream.h
 
 includecapnp_HEADERS =                                         \
   src/capnp/c++.capnp.h                                        \
@@ -372,6 +376,7 @@ heavy_tests =                                                  \
   src/kj/async-io-test.c++                                     \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
+  src/kj/std/iostream-test.c++                                 \
   src/capnp/capability-test.c++                                \
   src/capnp/schema-test.c++                                    \
   src/capnp/schema-loader-test.c++                             \
