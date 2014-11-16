@@ -29,57 +29,52 @@
 #include <iostream>
 #include "../io.h"
 
-using namespace std;
-
 namespace kj {
 namespace std {
 
 class StdOutputStream: public kj::OutputStream {
 
 public:
-  explicit StdOutputStream(ostream& stream) : stream_(stream) {}
+  explicit StdOutputStream(::std::ostream& stream) : stream_(stream) {}
   ~StdOutputStream() noexcept(false) {}
 
-  /*
-   * Always writes the full size.
-   */
   virtual void write(const void* src, size_t size) override {
+    // Always writes the full size.
+
     stream_.write((char*)src, size);
   }
 
-  /*
-   * Equivalent to write()ing each byte array in sequence, which is what the
-   * default implementation does. Override if you can do something better,
-   * e.g. use writev() to do the write in a single syscall.
-   */
   virtual void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    // Equivalent to write()ing each byte array in sequence, which is what the
+    // default implementation does. Override if you can do something better,
+    // e.g. use writev() to do the write in a single syscall.
+
     for (auto piece : pieces) {
       write(piece.begin(), piece.size());
     }
   }
 
 private:
-  ostream& stream_;
+  ::std::ostream& stream_;
 
 };
 
 class StdInputStream: public kj::InputStream {
 
 public:
-  explicit StdInputStream(istream& stream) : stream_(stream) {}
+  explicit StdInputStream(::std::istream& stream) : stream_(stream) {}
   ~StdInputStream() noexcept(false) {}
 
-  /*
-   * Like read(), but may return fewer than minBytes on EOF.
-   */
   virtual size_t tryRead(
       void* buffer, size_t minBytes, size_t maxBytes) override {
+    // Like read(), but may return fewer than minBytes on EOF.
+
     stream_.read((char*)buffer, maxBytes);
     return stream_.gcount();
   }
 
 private:
-  istream& stream_;
+  ::std::istream& stream_;
 
 };
 

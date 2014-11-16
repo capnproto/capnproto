@@ -31,7 +31,7 @@ TEST(StdIoStream, WriteVec) {
   // Check that writing an array of arrays works even when some of the arrays
   // are empty.  (This used to not work in some cases.)
 
-  stringstream ss;
+  ::std::stringstream ss;
 
   StdInputStream in(ss);
   StdOutputStream out(ss);
@@ -51,6 +51,53 @@ TEST(StdIoStream, WriteVec) {
   buf[6] = '\0';
 
   EXPECT_STREQ("foobar", buf);
+}
+
+TEST(StdIoStream, TryReadToEndOfFile) {
+  // Check that tryRead works when eof is reached before minBytes.
+
+  ::std::stringstream ss;
+
+  StdInputStream in(ss);
+  StdOutputStream out(ss);
+
+  const void* bytes = "foobar";
+
+  out.write(bytes, 6);
+
+  char buf[9];
+  in.tryRead(buf, 8, 8);
+  buf[6] = '\0';
+
+  EXPECT_STREQ("foobar", buf);
+}
+
+TEST(StdIoStream, ReadToEndOfFile) {
+  // Check that read throws an exception when eof is reached before specified
+  // bytes.
+
+  ::std::stringstream ss;
+
+  StdInputStream in(ss);
+  StdOutputStream out(ss);
+
+  const void* bytes = "foobar";
+
+  out.write(bytes, 6);
+
+  char buf[9];
+
+  Maybe<Exception> e = kj::runCatchingExceptions([&]() {
+    in.read(buf, 8, 8);
+  });
+  buf[6] = '\0';
+
+  KJ_IF_MAYBE(ex, e) {
+    // Ensure that the value is still read up to the EOF.
+    EXPECT_STREQ("foobar", buf);
+  } else {
+    ADD_FAILURE() << "Expected exception";
+  }
 }
 
 }  // namespace
