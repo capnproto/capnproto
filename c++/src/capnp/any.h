@@ -334,7 +334,7 @@ template <> struct AnyTypeFor_<Kind::STRUCT> { typedef AnyStruct Type; };
 template <> struct AnyTypeFor_<Kind::LIST> { typedef AnyList Type; };
 
 template <typename T>
-using AnyTypeFor = typename AnyTypeFor_<kind<T>()>::Type;
+using AnyTypeFor = typename AnyTypeFor_<CAPNP_KIND(T)>::Type;
 
 template <typename T>
 inline ReaderFor<AnyTypeFor<FromReader<T>>> toAny(T&& value) {
@@ -418,7 +418,7 @@ public:
   Reader() = default;
   inline Reader(_::StructReader reader): _reader(reader) {}
 
-  template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::STRUCT>>
+  template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromReader<T>) == Kind::STRUCT>>
   inline Reader(T&& value)
       : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
 
@@ -444,7 +444,7 @@ public:
   inline Builder(decltype(nullptr)) {}
   inline Builder(_::StructBuilder builder): _builder(builder) {}
 
-  template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::STRUCT>>
+  template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromBuilder<T>) == Kind::STRUCT>>
   inline Builder(T&& value)
       : _builder(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::fwd<T>(value))) {}
 
@@ -463,6 +463,7 @@ private:
   friend class CapBuilderContext;
 };
 
+#if !CAPNP_LITE
 class AnyStruct::Pipeline {
 public:
   Pipeline getPointerField(uint16_t pointerIndex);
@@ -480,6 +481,7 @@ private:
       : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
 
 };
+#endif  // !CAPNP_LITE
 
 class List<AnyStruct, Kind::OTHER>::Reader {
 public:
@@ -545,7 +547,7 @@ public:
   Reader() = default;
   inline Reader(_::ListReader reader): _reader(reader) {}
 
-  template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::LIST>>
+  template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromReader<T>) == Kind::LIST>>
   inline Reader(T&& value)
       : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
 
@@ -568,7 +570,7 @@ public:
   inline Builder(decltype(nullptr)) {}
   inline Builder(_::ListBuilder builder): _builder(builder) {}
 
-  template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::LIST>>
+  template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromBuilder<T>) == Kind::LIST>>
   inline Builder(T&& value)
       : _builder(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::fwd<T>(value))) {}
 
@@ -858,6 +860,8 @@ struct PointerHelpers<AnyList, Kind::OTHER> {
 
 }  // namespace _ (private)
 
+#if !CAPNP_LITE
+
 template <typename T>
 struct PipelineHook::FromImpl {
   static inline kj::Own<PipelineHook> apply(typename T::Pipeline&& pipeline) {
@@ -876,6 +880,8 @@ template <typename Pipeline, typename T>
 inline kj::Own<PipelineHook> PipelineHook::from(Pipeline&& pipeline) {
   return FromImpl<T>::apply(kj::fwd<Pipeline>(pipeline));
 }
+
+#endif  // !CAPNP_LITE
 
 }  // namespace capnp
 
