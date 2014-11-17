@@ -1375,13 +1375,6 @@ struct WireHelpers {
             dst += newStep / WORDS_PER_POINTER * (1 * ELEMENTS);
             ++src;
           }
-        } else if (oldSize == ElementSize::BIT) {
-          word* dst = newPtr;
-          char* src = reinterpret_cast<char*>(oldPtr);
-          for (uint i = 0; i < elementCount / ELEMENTS; i++) {
-            *reinterpret_cast<char*>(dst) = (src[i/8] >> (i%8)) & 1;
-            dst += newStep * (1 * ELEMENTS);
-          }
         } else {
           word* dst = newPtr;
           char* src = reinterpret_cast<char*>(oldPtr);
