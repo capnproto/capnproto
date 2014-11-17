@@ -45,10 +45,14 @@ set(kj-parse_headers
   parse/common.h
   parse/char.h
 )
+set(kj-std_headers
+  std/iostream.h
+)
 add_library(kj ${kj_sources})
 install(TARGETS kj ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
 install(FILES ${kj_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
 install(FILES ${kj-parse_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/parse")
+install(FILES ${kj-std_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/std")
 
 set(kj-async_sources
   async.c++
@@ -103,6 +107,7 @@ if(BUILD_TESTING)
       async-io-test.c++
       parse/common-test.c++
       parse/char-test.c++
+      std/iostream-test.c++
     )
     target_link_libraries(kj-heavy-tests kj kj-async gtest gtest_main)
     add_dependencies(check kj-heavy-tests)
