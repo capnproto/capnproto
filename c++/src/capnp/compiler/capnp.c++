@@ -36,11 +36,19 @@
 #include <kj/parse/char.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <capnp/serialize.h>
 #include <capnp/serialize-packed.h>
 #include <errno.h>
 #include <stdlib.h>
+
+#if _WIN32
+#include <process.h>
+#include <io.h>
+#include <fcntl.h>
+#define pipe(fds) _pipe(fds, 8192, _O_BINARY)
+#else
+#include <sys/wait.h>
+#endif
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -408,49 +416,95 @@ public:
         exeName = kj::heapString(output.name);
       }
 
+      kj::Array<char> pwd = kj::heapArray<char>(256);
+      while (getcwd(pwd.begin(), pwd.size()) == nullptr) {
+        KJ_REQUIRE(pwd.size() < 8192, "WTF your working directory path is more than 8k?");
+        pwd = kj::heapArray<char>(pwd.size() * 2);
+      }
+
+#if _WIN32
+      int oldStdin;
+      KJ_SYSCALL(oldStdin = dup(STDIN_FILENO));
+      intptr_t child;
+
+#else  // _WIN32
       pid_t child;
       KJ_SYSCALL(child = fork());
       if (child == 0) {
         // I am the child!
+
         KJ_SYSCALL(close(pipeFds[1]));
+#endif  // _WIN32, else
+
         KJ_SYSCALL(dup2(pipeFds[0], STDIN_FILENO));
         KJ_SYSCALL(close(pipeFds[0]));
-
-        kj::Array<char> pwd = kj::heapArray<char>(256);
-        while (getcwd(pwd.begin(), pwd.size()) == nullptr) {
-          KJ_REQUIRE(pwd.size() < 8192, "WTF your working directory path is more than 8k?");
-          pwd = kj::heapArray<char>(pwd.size() * 2);
-        }
 
         if (output.dir != nullptr) {
           KJ_SYSCALL(chdir(output.dir.cStr()), output.dir);
         }
 
         if (shouldSearchPath) {
+#if _WIN32
+          child = _spawnlp(_P_NOWAIT, exeName.cStr(), exeName.cStr(), nullptr);
+#else
           execlp(exeName.cStr(), exeName.cStr(), nullptr);
+#endif
         } else {
           if (!exeName.startsWith("/")) {
             // The name is relative.  Prefix it with our original working directory path.
             exeName = kj::str(pwd.begin(), "/", exeName);
           }
 
+#if _WIN32
+          child = _spawnl(_P_NOWAIT, exeName.cStr(), exeName.cStr(), nullptr);
+#else
           execl(exeName.cStr(), exeName.cStr(), nullptr);
+#endif
         }
 
-        int error = errno;
-        if (error == ENOENT) {
-          context.exitError(kj::str(output.name, ": no such plugin (executable should be '",
-                                    exeName, "')"));
-        } else {
-          KJ_FAIL_SYSCALL("exec()", error);
+#if _WIN32
+        if (child == -1) {
+#endif
+          int error = errno;
+          if (error == ENOENT) {
+            context.exitError(kj::str(output.name, ": no such plugin (executable should be '",
+                                      exeName, "')"));
+          } else {
+#if _WIN32
+            KJ_FAIL_SYSCALL("spawn()", error);
+#else
+            KJ_FAIL_SYSCALL("exec()", error);
+#endif
+          }
+#if _WIN32
         }
+
+        // Restore stdin.
+        KJ_SYSCALL(dup2(oldStdin, STDIN_FILENO));
+        KJ_SYSCALL(close(oldStdin));
+
+        // Restore current directory.
+        KJ_SYSCALL(chdir(pwd.begin()), pwd.begin());
+#else  // _WIN32
       }
 
       KJ_SYSCALL(close(pipeFds[0]));
+#endif  // _WIN32, else
 
       writeMessageToFd(pipeFds[1], message);
       KJ_SYSCALL(close(pipeFds[1]));
 
+#if _WIN32
+      int status;
+      if (_cwait(&status, child, 0) == -1) {
+        KJ_FAIL_SYSCALL("_cwait()", errno);
+      }
+
+      if (status != 0) {
+        context.error(kj::str(output.name, ": plugin failed: exit code ", status));
+      }
+
+#else  // _WIN32
       int status;
       KJ_SYSCALL(waitpid(child, &status, 0));
       if (WIFSIGNALED(status)) {
@@ -458,6 +512,7 @@ public:
       } else if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
         context.error(kj::str(output.name, ": plugin failed: exit code ", WEXITSTATUS(status)));
       }
+#endif  // _WIN32, else
     }
 
     return true;

@@ -50,6 +50,10 @@
 #define VERSION "(unknown)"
 #endif
 
+#if _WIN32
+#define mkdir(path, mode) mkdir(path)
+#endif
+
 namespace capnp {
 namespace {
 

@@ -29,11 +29,16 @@
 #include <capnp/message.h>
 #include <map>
 #include <unistd.h>
-#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+
+#if _WIN32
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#endif
 
 namespace capnp {
 namespace compiler {
@@ -44,7 +49,11 @@ class MmapDisposer: public kj::ArrayDisposer {
 protected:
   void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
                    size_t capacity, void (*destroyElement)(void*)) const {
+#if _WIN32
+    KJ_ASSERT(UnmapViewOfFile(firstElement));
+#else
     munmap(firstElement, elementSize * elementCount);
+#endif
   }
 };
 
@@ -66,10 +75,20 @@ kj::Array<const char> mmapForRead(kj::StringPtr filename) {
     }
 
     // Regular file.  Just mmap() it.
+#if _WIN32
+    HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+    KJ_ASSERT(handle != INVALID_HANDLE_VALUE);
+    HANDLE mappingHandle = CreateFileMapping(
+        handle, NULL, PAGE_READONLY, 0, stats.st_size, NULL);
+    KJ_ASSERT(mappingHandle != INVALID_HANDLE_VALUE);
+    KJ_DEFER(KJ_ASSERT(CloseHandle(mappingHandle)));
+    const void* mapping = MapViewOfFile(mappingHandle, FILE_MAP_READ, 0, 0, stats.st_size);
+#else  // _WIN32
     const void* mapping = mmap(NULL, stats.st_size, PROT_READ, MAP_SHARED, fd, 0);
     if (mapping == MAP_FAILED) {
       KJ_FAIL_SYSCALL("mmap", errno, filename);
     }
+#endif  // _WIN32, else
 
     return kj::Array<const char>(
         reinterpret_cast<const char*>(mapping), stats.st_size, mmapDisposer);
