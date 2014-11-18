@@ -24,6 +24,9 @@
 #include <string>
 
 namespace kj {
+
+std::ostream& operator<<(std::ostream& os, const kj::String& s) { return os << s.cStr(); }
+
 namespace _ {  // private
 namespace {
 

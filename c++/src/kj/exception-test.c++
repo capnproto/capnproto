@@ -85,6 +85,7 @@ TEST(Exception, UnwindDetector) {
   }
 }
 
+#if !__MINGW32__  // Inexplicably crashes when exception is thrown from constructor.
 TEST(Exception, ExceptionCallbackMustBeOnStack) {
 #if KJ_NO_EXCEPTIONS
   EXPECT_DEATH_IF_SUPPORTED(new ExceptionCallback, "must be allocated on the stack");
@@ -92,6 +93,7 @@ TEST(Exception, ExceptionCallbackMustBeOnStack) {
   EXPECT_ANY_THROW(new ExceptionCallback);
 #endif
 }
+#endif  // !__MINGW32__
 
 #if !KJ_NO_EXCEPTIONS
 TEST(Exception, ScopeSuccessFail) {

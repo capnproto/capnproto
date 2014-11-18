@@ -210,6 +210,19 @@ void RemovePlus(char* buffer) {
   }
 }
 
+void RemoveE0(char* buffer) {
+  // Remove redundant leading 0's after an e, e.g. 1e012. Seems to appear on
+  // Windows.
+
+  for (;;) {
+    buffer = strstr(buffer, "e0");
+    if (buffer == NULL || buffer[2] < '0' || buffer[2] > '9') {
+      return;
+    }
+    memmove(buffer + 1, buffer + 2, strlen(buffer + 2) + 1);
+  }
+}
+
 char* DoubleToBuffer(double value, char* buffer) {
   // DBL_DIG is 15 for IEEE-754 doubles, which are used on almost all
   // platforms these days.  Just in case some system exists where DBL_DIG
@@ -252,6 +265,9 @@ char* DoubleToBuffer(double value, char* buffer) {
 
   DelocalizeRadix(buffer);
   RemovePlus(buffer);
+#if _WIN32
+  RemoveE0(buffer);
+#endif // _WIN32
   return buffer;
 }
 

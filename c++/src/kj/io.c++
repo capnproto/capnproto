@@ -22,10 +22,13 @@
 #include "io.h"
 #include "debug.h"
 #include <unistd.h>
-#include <sys/uio.h>
 #include <algorithm>
 #include <errno.h>
 #include <limits.h>
+
+#if !_WIN32
+#include <sys/uio.h>
+#endif
 
 namespace kj {
 
@@ -278,6 +281,15 @@ void FdOutputStream::write(const void* buffer, size_t size) {
 }
 
 void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+#if _WIN32
+  // Windows has no reasonable writev(). It has WriteFileGather, but this call has the unreasonable
+  // restriction that each segment must be page-aligned. So, fall back to write().
+
+  for (auto piece: pieces) {
+    write(piece.begin(), piece.size());
+  }
+
+#else
   // Apparently, there is a maximum number of iovecs allowed per call.  I don't understand why.
   // Also, most platforms define IOV_MAX but Linux defines only UIO_MAXIOV.  Unfortunately, Solaris
   // defines a constant UIO_MAXIOV with a different meaning, so we check for IOV_MAX first.
@@ -324,6 +336,7 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
       current->iov_len -= n;
     }
   }
+#endif
 }
 
 }  // namespace kj

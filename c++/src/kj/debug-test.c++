@@ -29,8 +29,11 @@
 #include <errno.h>
 #include <string.h>
 #include <exception>
+
+#if !_WIN32
 #include <sys/types.h>
 #include <sys/wait.h>
+#endif
 
 namespace kj {
 namespace _ {  // private
@@ -50,6 +53,11 @@ public:
     // This is called when exceptions are disabled.  We fork the process instead and then expect
     // the child to die.
 
+#if _WIN32
+    // Windows doesn't support fork() or anything like it. Just skip the test.
+    return false;
+
+#else
     int pipeFds[2];
     KJ_SYSCALL(pipe(pipeFds));
     pid_t child = fork();
@@ -98,6 +106,7 @@ public:
 
       return false;
     }
+#endif  // _WIN32, else
   }
 
   void flush() {
