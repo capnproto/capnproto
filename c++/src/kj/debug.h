@@ -223,7 +223,7 @@ public:
           const char* condition, const char* macroArgs, Params&&... params);
     ~Fault() noexcept(false);
 
-    void fatal() KJ_NORETURN;
+    KJ_NORETURN(void fatal());
     // Throw the exception.
 
   private:

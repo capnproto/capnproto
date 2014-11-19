@@ -191,7 +191,7 @@ public:
     return Promise<T>(false, neverDone());
   }
 
-  void wait(WaitScope& waitScope) const KJ_NORETURN;
+  KJ_NORETURN(void wait(WaitScope& waitScope) const);
 };
 
 }  // namespace _ (private)

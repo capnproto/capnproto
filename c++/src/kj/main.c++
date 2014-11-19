@@ -382,8 +382,8 @@ public:
 private:
   Own<Impl> impl;
 
-  void usageError(StringPtr programName, StringPtr message) KJ_NORETURN;
-  void printHelp(StringPtr programName) KJ_NORETURN;
+  KJ_NORETURN(void usageError(StringPtr programName, StringPtr message));
+  KJ_NORETURN(void printHelp(StringPtr programName));
   void wrapText(Vector<char>& output, StringPtr indent, StringPtr text);
 };
 
