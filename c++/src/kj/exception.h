@@ -184,7 +184,7 @@ private:
 ExceptionCallback& getExceptionCallback();
 // Returns the current exception callback.
 
-void throwFatalException(kj::Exception&& exception) KJ_NORETURN;
+KJ_NORETURN(void throwFatalException(kj::Exception&& exception));
 // Invoke the exception callback to throw the given fatal exception.  If the exception callback
 // returns, abort.
 
