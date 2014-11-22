@@ -23,6 +23,9 @@
 #include "async-unix.h"
 #include "debug.h"
 #include <gtest/gtest.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 namespace kj {
 namespace {
@@ -69,6 +72,20 @@ String tryParse(WaitScope& waitScope, Network& network, StringPtr text, uint por
   return network.parseAddress(text, portHint).wait(waitScope)->toString();
 }
 
+bool hasIpv6() {
+  // Can getaddrinfo() parse ipv6 addresses? This is only true if ipv6 is configured on at least
+  // one interface. (The loopback interface usually has it even if others don't... but not always.)
+  struct addrinfo* list;
+  int status = getaddrinfo("::", nullptr, nullptr, &list);
+  if (status == 0) {
+    freeaddrinfo(list);
+    return true;
+  } else {
+    KJ_FAIL_ASSERT("foo");
+    return false;
+  }
+}
+
 TEST(AsyncIo, AddressParsing) {
   auto ioContext = setupAsyncIo();
   auto& w = ioContext.waitScope;
@@ -76,18 +93,23 @@ TEST(AsyncIo, AddressParsing) {
 
   EXPECT_EQ("*:0", tryParse(w, network, "*"));
   EXPECT_EQ("*:123", tryParse(w, network, "*:123"));
-  EXPECT_EQ("[::]:123", tryParse(w, network, "0::0", 123));
   EXPECT_EQ("0.0.0.0:0", tryParse(w, network, "0.0.0.0"));
   EXPECT_EQ("1.2.3.4:5678", tryParse(w, network, "1.2.3.4", 5678));
-  EXPECT_EQ("[12ab:cd::34]:321", tryParse(w, network, "[12ab:cd:0::0:34]:321", 432));
 
   EXPECT_EQ("unix:foo/bar/baz", tryParse(w, network, "unix:foo/bar/baz"));
 
   // We can parse services by name...
   EXPECT_EQ("1.2.3.4:80", tryParse(w, network, "1.2.3.4:http", 5678));
-  EXPECT_EQ("[::]:80", tryParse(w, network, "[::]:http", 5678));
-  EXPECT_EQ("[12ab:cd::34]:80", tryParse(w, network, "[12ab:cd::34]:http", 5678));
   EXPECT_EQ("*:80", tryParse(w, network, "*:http", 5678));
+
+  // IPv6 tests. Annoyingly, these don't work on machines that don't have IPv6 configured on any
+  // interfaces.
+  if (hasIpv6()) {
+    EXPECT_EQ("[::]:123", tryParse(w, network, "0::0", 123));
+    EXPECT_EQ("[12ab:cd::34]:321", tryParse(w, network, "[12ab:cd:0::0:34]:321", 432));
+    EXPECT_EQ("[::]:80", tryParse(w, network, "[::]:http", 5678));
+    EXPECT_EQ("[12ab:cd::34]:80", tryParse(w, network, "[12ab:cd::34]:http", 5678));
+  }
 
   // It would be nice to test DNS lookup here but the test would not be very hermetic.  Even
   // localhost can map to different addresses depending on whether IPv6 is enabled.  We do
