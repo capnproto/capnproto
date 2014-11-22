@@ -175,7 +175,7 @@ public:
   // fail.  It's up to the application to decide how indicate that additional interfaces are
   // supported.
   //
-  // TODO(kenton):  GCC 4.8 / Clang 3.3:  rvalue-qualified version for better performance.
+  // TODO(perf):  GCC 4.8 / Clang 3.3:  rvalue-qualified version for better performance.
 
   template <typename T>
   typename T::Client castAs(InterfaceSchema schema);

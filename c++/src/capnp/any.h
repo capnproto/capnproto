@@ -470,7 +470,7 @@ public:
   // Return a new Promise representing a sub-object of the result.  `pointerIndex` is the index
   // of the sub-object within the pointer section of the result (the result must be a struct).
   //
-  // TODO(kenton):  On GCC 4.8 / Clang 3.3, use rvalue qualifiers to avoid the need for copies.
+  // TODO(perf):  On GCC 4.8 / Clang 3.3, use rvalue qualifiers to avoid the need for copies.
   //   Also make `ops` into a Vector to optimize this.
 
 private:
