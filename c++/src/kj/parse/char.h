@@ -25,6 +25,10 @@
 #ifndef KJ_PARSE_CHAR_H_
 #define KJ_PARSE_CHAR_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "common.h"
 #include "../string.h"
 #include <inttypes.h>

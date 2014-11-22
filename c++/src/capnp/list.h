@@ -22,6 +22,10 @@
 #ifndef CAPNP_LIST_H_
 #define CAPNP_LIST_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "layout.h"
 #include "orphan.h"
 #include <initializer_list>

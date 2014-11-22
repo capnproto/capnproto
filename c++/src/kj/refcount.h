@@ -24,6 +24,10 @@
 #ifndef KJ_REFCOUNT_H_
 #define KJ_REFCOUNT_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 namespace kj {
 
 class Refcounted: private Disposer {

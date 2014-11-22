@@ -23,6 +23,10 @@
 #ifndef KJ_TIME_H_
 #define KJ_TIME_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "async.h"
 #include "units.h"
 #include <inttypes.h>

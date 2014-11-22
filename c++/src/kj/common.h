@@ -26,6 +26,10 @@
 #ifndef KJ_COMMON_H_
 #define KJ_COMMON_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #ifndef KJ_NO_COMPILER_CHECK
 #if __cplusplus < 201103L && !__CDT_PARSER__
   #error "This code requires C++11. Either your compiler does not support it or it is not enabled."

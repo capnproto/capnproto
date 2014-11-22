@@ -29,6 +29,10 @@
 #ifndef CAPNP_MESSAGE_H_
 #define CAPNP_MESSAGE_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 namespace capnp {
 
 namespace _ {  // private

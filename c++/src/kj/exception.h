@@ -22,6 +22,10 @@
 #ifndef KJ_EXCEPTION_H_
 #define KJ_EXCEPTION_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "memory.h"
 #include "array.h"
 #include "string.h"

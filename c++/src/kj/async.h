@@ -22,6 +22,10 @@
 #ifndef KJ_ASYNC_H_
 #define KJ_ASYNC_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "async-prelude.h"
 #include "exception.h"
 #include "refcount.h"

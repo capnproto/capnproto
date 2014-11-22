@@ -22,6 +22,10 @@
 #ifndef KJ_STRING_TREE_H_
 #define KJ_STRING_TREE_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "string.h"
 
 namespace kj {

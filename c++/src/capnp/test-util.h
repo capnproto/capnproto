@@ -22,6 +22,10 @@
 #ifndef CAPNP_TEST_UTIL_H_
 #define CAPNP_TEST_UTIL_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include <capnp/test.capnp.h>
 #include <iostream>
 #include "blob.h"

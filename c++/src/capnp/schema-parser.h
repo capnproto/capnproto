@@ -22,6 +22,10 @@
 #ifndef CAPNP_SCHEMA_PARSER_H_
 #define CAPNP_SCHEMA_PARSER_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "schema-loader.h"
 #include <kj/string.h>
 

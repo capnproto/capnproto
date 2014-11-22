@@ -22,6 +22,10 @@
 #ifndef CAPNP_RPC_TWOPARTY_H_
 #define CAPNP_RPC_TWOPARTY_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "rpc.h"
 #include "message.h"
 #include <kj/async-io.h>

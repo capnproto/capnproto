@@ -22,6 +22,10 @@
 #ifndef CAPNP_POINTER_HELPERS_H_
 #define CAPNP_POINTER_HELPERS_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "layout.h"
 #include "list.h"
 

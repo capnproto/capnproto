@@ -22,6 +22,10 @@
 #ifndef KJ_FUNCTION_H_
 #define KJ_FUNCTION_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "memory.h"
 
 namespace kj {

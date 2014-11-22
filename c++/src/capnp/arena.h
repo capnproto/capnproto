@@ -22,6 +22,10 @@
 #ifndef CAPNP_ARENA_H_
 #define CAPNP_ARENA_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #ifndef CAPNP_PRIVATE
 #error "This header is only meant to be included by Cap'n Proto's own source code."
 #endif

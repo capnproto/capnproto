@@ -22,6 +22,10 @@
 #ifndef CAPNP_COMPILER_MODULE_LOADER_H_
 #define CAPNP_COMPILER_MODULE_LOADER_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "compiler.h"
 #include "error-reporter.h"
 #include <kj/memory.h>

@@ -22,6 +22,10 @@
 #ifndef CAPNP_ORPHAN_H_
 #define CAPNP_ORPHAN_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "layout.h"
 
 namespace capnp {

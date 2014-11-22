@@ -22,6 +22,10 @@
 #ifndef CAPNP_SERIALIZE_ASYNC_H_
 #define CAPNP_SERIALIZE_ASYNC_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include <kj/async-io.h>
 #include "message.h"
 

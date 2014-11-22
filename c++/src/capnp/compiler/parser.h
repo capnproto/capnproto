@@ -22,6 +22,10 @@
 #ifndef CAPNP_COMPILER_PARSER_H_
 #define CAPNP_COMPILER_PARSER_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include <capnp/compiler/grammar.capnp.h>
 #include <capnp/compiler/lexer.capnp.h>
 #include <kj/parse/common.h>

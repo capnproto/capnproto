@@ -107,6 +107,10 @@
 #ifndef KJ_DEBUG_H_
 #define KJ_DEBUG_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "string.h"
 #include "exception.h"
 

@@ -22,6 +22,10 @@
 #ifndef CAPNP_ENDIAN_H_
 #define CAPNP_ENDIAN_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "common.h"
 #include <inttypes.h>
 #include <string.h>  // memcpy

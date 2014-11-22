@@ -22,6 +22,10 @@
 #ifndef CAPNP_ANY_H_
 #define CAPNP_ANY_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "layout.h"
 #include "pointer-helpers.h"
 #include "orphan.h"

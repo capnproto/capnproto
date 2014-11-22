@@ -22,6 +22,10 @@
 #ifndef ERROR_REPORTER_H_
 #define ERROR_REPORTER_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "../common.h"
 #include <kj/string.h>
 #include <kj/exception.h>

@@ -22,6 +22,10 @@
 #ifndef CAPNP_COMPILER_LEXER_H_
 #define CAPNP_COMPILER_LEXER_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include <capnp/compiler/lexer.capnp.h>
 #include <kj/parse/common.h>
 #include <kj/arena.h>

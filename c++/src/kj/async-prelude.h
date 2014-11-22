@@ -25,6 +25,10 @@
 #ifndef KJ_ASYNC_PRELUDE_H_
 #define KJ_ASYNC_PRELUDE_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "exception.h"
 
 namespace kj {

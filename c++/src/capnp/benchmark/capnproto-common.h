@@ -22,6 +22,10 @@
 #ifndef CAPNP_BENCHMARK_CAPNP_COMMON_H_
 #define CAPNP_BENCHMARK_CAPNP_COMMON_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "common.h"
 #include <capnp/serialize.h>
 #include <capnp/serialize-packed.h>

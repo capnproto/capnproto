@@ -22,6 +22,10 @@
 #ifndef CAPNP_CAPABILITY_H_
 #define CAPNP_CAPABILITY_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #if CAPNP_LITE
 #error "RPC APIs, including this header, are not available in lite mode."
 #endif

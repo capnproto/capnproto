@@ -22,6 +22,10 @@
 #ifndef KJ_IO_H_
 #define KJ_IO_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include <stddef.h>
 #include "common.h"
 #include "array.h"

@@ -33,6 +33,10 @@
 #ifndef CAPNP_DYNAMIC_H_
 #define CAPNP_DYNAMIC_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "schema.h"
 #include "layout.h"
 #include "message.h"

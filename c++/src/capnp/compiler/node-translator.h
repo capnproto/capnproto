@@ -22,6 +22,10 @@
 #ifndef CAPNP_COMPILER_NODE_TRANSLATOR_H_
 #define CAPNP_COMPILER_NODE_TRANSLATOR_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include <capnp/orphan.h>
 #include <capnp/compiler/grammar.capnp.h>
 #include <capnp/schema.capnp.h>
