@@ -195,8 +195,7 @@ else
 lib_LTLIBRARIES = libkj.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnpc.la
 endif
 
-# -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
-libkj_la_LIBADD = $(PTHREAD_LIBS) -lpthread
+libkj_la_LIBADD = $(PTHREAD_LIBS)
 libkj_la_LDFLAGS = -release $(VERSION) -no-undefined
 libkj_la_SOURCES=                                              \
   src/kj/common.c++                                            \
@@ -216,8 +215,7 @@ libkj_la_SOURCES=                                              \
   src/kj/parse/char.c++
 
 if !LITE_MODE
-# -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
-libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
+libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS)
 libkj_async_la_LDFLAGS = -release $(VERSION) -no-undefined
 libkj_async_la_SOURCES=                                        \
   src/kj/async.c++                                             \
@@ -233,8 +231,7 @@ heavy_sources =                                                \
   src/capnp/stringify.c++
 endif !LITE_MODE
 
-# -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
-libcapnp_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
+libcapnp_la_LIBADD = libkj.la $(PTHREAD_LIBS)
 libcapnp_la_LDFLAGS = -release $(VERSION) -no-undefined
 libcapnp_la_SOURCES=                                           \
   src/capnp/c++.capnp.c++                                      \
@@ -252,8 +249,7 @@ libcapnp_la_SOURCES=                                           \
 
 if !LITE_MODE
 
-# -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
-libcapnp_rpc_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(PTHREAD_LIBS) -lpthread
+libcapnp_rpc_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(PTHREAD_LIBS)
 libcapnp_rpc_la_LDFLAGS = -release $(VERSION) -no-undefined
 libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/serialize-async.c++                                \
@@ -266,8 +262,7 @@ libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/persistent.capnp.c++                               \
   src/capnp/ez-rpc.c++
 
-# -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
-libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS) -lpthread
+libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 libcapnpc_la_LDFLAGS = -release $(VERSION) -no-undefined
 libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/md5.h                                     \

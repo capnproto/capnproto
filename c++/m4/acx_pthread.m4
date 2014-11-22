@@ -343,11 +343,50 @@ if test "x$acx_pthread_ok" = xyes; then
 	   acx_pthread_ok=no
 	fi
 
-	CFLAGS="$save_CFLAGS"
-	LIBS="$save_LIBS"
-	CC="$save_CC"
+        CFLAGS="$save_CFLAGS"
+        LIBS="$save_LIBS"
+        CC="$save_CC"
 else
         PTHREAD_CC="$CC"
+fi
+
+if test "x$acx_pthread_ok" = xyes; then
+        # One more check: If we chose to use a compiler flag like -pthread but it is combined with
+        # -nostdlib then the compiler won't implicitly link against libpthread. This can happen
+        # in particular when using some versions of libtool on some distros. See:
+        #     https://bugzilla.redhat.com/show_bug.cgi?id=661333
+
+        save_CFLAGS="$CFLAGS"
+        save_LIBS="$LIBS"
+        save_CC="$CC"
+        CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+        LIBS="-nostdlib $PTHREAD_LIBS $LIBS -lc"
+        CC="$PTHREAD_CC"
+
+        AC_MSG_CHECKING([whether pthread flag is sufficient with -nostdlib])
+        AC_TRY_LINK([#include <pthread.h>],
+                    [pthread_t th; pthread_join(th, 0);
+                     pthread_attr_init(0); pthread_cleanup_push(0, 0);
+                     pthread_create(0,0,0,0); pthread_cleanup_pop(0); ],
+                    [AC_MSG_RESULT([yes])], [
+          AC_MSG_RESULT([no])
+
+          AC_MSG_CHECKING([whether adding -lpthread fixes that])
+
+          LIBS="-nostdlib $PTHREAD_LIBS -lpthread $save_LIBS -lc"
+          AC_TRY_LINK([#include <pthread.h>],
+                      [pthread_t th; pthread_join(th, 0);
+                       pthread_attr_init(0); pthread_cleanup_push(0, 0);
+                       pthread_create(0,0,0,0); pthread_cleanup_pop(0); ],
+                      [
+            AC_MSG_RESULT([yes])
+            PTHREAD_LIBS="$PTHREAD_LIBS -lpthread"
+          ], [AC_MSG_RESULT([no])])
+        ])
+
+        CFLAGS="$save_CFLAGS"
+        LIBS="$save_LIBS"
+        CC="$save_CC"
 fi
 
 AC_SUBST(PTHREAD_LIBS)

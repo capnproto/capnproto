@@ -21,10 +21,49 @@
 
 #include "thread.h"
 #include "debug.h"
+
+#if _WIN32
+#include <windows.h>
+#else
 #include <pthread.h>
 #include <signal.h>
+#endif
 
 namespace kj {
+
+#if _WIN32
+
+Thread::Thread(Function<void()> func): func(kj::mv(func)) {
+  threadHandle = CreateThread(nullptr, 0, &runThread, this, 0, nullptr);
+  KJ_ASSERT(threadHandle != nullptr, "CreateThread failed.");
+}
+
+Thread::~Thread() noexcept(false) {
+  if (!detached) {
+    KJ_ASSERT(WaitForSingleObject(threadHandle, INFINITE) != WAIT_FAILED);
+
+    KJ_IF_MAYBE(e, exception) {
+      kj::throwRecoverableException(kj::mv(*e));
+    }
+  }
+}
+
+void Thread::detach() {
+  KJ_ASSERT(CloseHandle(threadHandle));
+  detached = true;
+}
+
+DWORD Thread::runThread(void* ptr) {
+  Thread* thread = reinterpret_cast<Thread*>(ptr);
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    thread->func();
+  })) {
+    thread->exception = kj::mv(*exception);
+  }
+  return 0;
+}
+
+#else  // _WIN32
 
 Thread::Thread(Function<void()> func): func(kj::mv(func)) {
   static_assert(sizeof(threadId) >= sizeof(pthread_t),
@@ -74,5 +113,7 @@ void* Thread::runThread(void* ptr) {
   }
   return nullptr;
 }
+
+#endif  // _WIN32, else
 
 }  // namespace kj

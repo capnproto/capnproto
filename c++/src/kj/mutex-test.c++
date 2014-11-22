@@ -22,9 +22,14 @@
 #include "mutex.h"
 #include "debug.h"
 #include "thread.h"
-#include <pthread.h>
 #include <unistd.h>
 #include <gtest/gtest.h>
+
+#if _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
 
 namespace kj {
 namespace {
@@ -114,8 +119,10 @@ TEST(Mutex, MutexGuarded) {
 
   EXPECT_EQ(321u, *value.lockExclusive());
 
+#if !_WIN32  // Not checked on win32.
   EXPECT_DEBUG_ANY_THROW(value.getAlreadyLockedExclusive());
   EXPECT_DEBUG_ANY_THROW(value.getAlreadyLockedShared());
+#endif
   EXPECT_EQ(321u, value.getWithoutLock());
 }
 
@@ -133,7 +140,11 @@ TEST(Mutex, Lazy) {
 
   // Spin until the initializer has been entered in the thread.
   while (!__atomic_load_n(&initStarted, __ATOMIC_RELAXED)) {
+#if _WIN32
+    Sleep(0);
+#else
     sched_yield();
+#endif
   }
 
   EXPECT_EQ(123u, lazy.get([](SpaceFor<uint>& space) { return space.construct(456); }));

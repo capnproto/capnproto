@@ -51,7 +51,22 @@ AC_PROG_CC
 AC_PROG_CXX
 AC_LANG([C++])
 AX_CXX_COMPILE_STDCXX_11
-ACX_PTHREAD
+
+AS_CASE("${host_os}", *mingw*, [
+    # We don't use pthreads on MinGW.
+    PTHREAD_CFLAGS="-mthreads"
+    PTHREAD_LIBS=""
+    PTHREAD_CC=""
+    AC_SUBST(PTHREAD_LIBS)
+    AC_SUBST(PTHREAD_CFLAGS)
+    AC_SUBST(PTHREAD_CC)
+
+    # Disable pthreads when configuring gtest.
+    ac_configure_args="$ac_configure_args --without-pthreads"
+  ], *, [
+    ACX_PTHREAD
+  ])
+
 LT_INIT
 
 AS_IF([test "$external_capnp" != "no"], [

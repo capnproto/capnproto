@@ -19,6 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN 1  // lolz
+#define WINVER 0x0600
+#define _WIN32_WINNT 0x0600
+#endif
+
 #include "mutex.h"
 #include "debug.h"
 
@@ -27,6 +33,8 @@
 #include <sys/syscall.h>
 #include <linux/futex.h>
 #include <limits.h>
+#elif _WIN32
+#include <windows.h>
 #endif
 
 namespace kj {
@@ -159,7 +167,7 @@ startOver:
     }
   } else {
     for (;;) {
-      if (state == INITIALIZED || state == DISABLED) {
+      if (state == INITIALIZED) {
         break;
       } else if (state == INITIALIZING) {
         // Initialization is taking place in another thread.  Indicate that we're waiting.
@@ -189,45 +197,88 @@ void Once::reset() {
   uint state = INITIALIZED;
   if (!__atomic_compare_exchange_n(&futex, &state, UNINITIALIZED,
                                    false, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
-    KJ_REQUIRE(state == DISABLED, "reset() called while not initialized.");
+    KJ_FAIL_REQUIRE("reset() called while not initialized.");
   }
 }
 
-void Once::disable() noexcept {
-  uint state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
-  for (;;) {
-    switch (state) {
-      case DISABLED:
-      default:
-        return;
+#elif _WIN32
+// =======================================================================================
+// Win32 implementation
 
-      case UNINITIALIZED:
-      case INITIALIZED:
-        // Try to transition the state to DISABLED.
-        if (!__atomic_compare_exchange_n(&futex, &state, DISABLED, true,
-                                         __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-          // State changed, retry.
-          continue;
-        }
-        // Success.
-        return;
+#define coercedSrwLock (*reinterpret_cast<SRWLOCK*>(&srwLock))
+#define coercedInitOnce (*reinterpret_cast<INIT_ONCE*>(&initOnce))
 
-      case INITIALIZING:
-        // Initialization is taking place in another thread.  Indicate that we're waiting.
-        if (!__atomic_compare_exchange_n(&futex, &state, INITIALIZING_WITH_WAITERS, true,
-                                         __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
-          // State changed, retry.
-          continue;
-        }
-        // no break
+Mutex::Mutex() {
+  static_assert(sizeof(SRWLOCK) == sizeof(srwLock), "SRWLOCK is not a pointer?");
+  InitializeSRWLock(&coercedSrwLock);
+}
+Mutex::~Mutex() {}
 
-      case INITIALIZING_WITH_WAITERS:
-        // Wait for initialization.
-        syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, INITIALIZING_WITH_WAITERS, NULL, NULL, 0);
-        state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
-        continue;
-    }
+void Mutex::lock(Exclusivity exclusivity) {
+  switch (exclusivity) {
+    case EXCLUSIVE:
+      AcquireSRWLockExclusive(&coercedSrwLock);
+      break;
+    case SHARED:
+      AcquireSRWLockShared(&coercedSrwLock);
+      break;
   }
+}
+
+void Mutex::unlock(Exclusivity exclusivity) {
+  switch (exclusivity) {
+    case EXCLUSIVE:
+      ReleaseSRWLockExclusive(&coercedSrwLock);
+      break;
+    case SHARED:
+      ReleaseSRWLockShared(&coercedSrwLock);
+      break;
+  }
+}
+
+void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
+  // We could use TryAcquireSRWLock*() here like we do with the pthread version. However, as of
+  // this writing, my version of Wine (1.6.2) doesn't implement these functions and will abort if
+  // they are called. Since we were only going to use them as a hacky way to check if the lock is
+  // held for debug purposes anyway, we just don't bother.
+}
+
+static BOOL nullInitializer(PINIT_ONCE initOnce, PVOID parameter, PVOID* context) {
+  return true;
+}
+
+Once::Once(bool startInitialized) {
+  static_assert(sizeof(INIT_ONCE) == sizeof(initOnce), "INIT_ONCE is not a pointer?");
+  InitOnceInitialize(&coercedInitOnce);
+  if (startInitialized) {
+    InitOnceExecuteOnce(&coercedInitOnce, &nullInitializer, nullptr, nullptr);
+  }
+}
+Once::~Once() {}
+
+void Once::runOnce(Initializer& init) {
+  BOOL needInit;
+  while (!InitOnceBeginInitialize(&coercedInitOnce, 0, &needInit, nullptr)) {
+    // Init was occurring in another thread, but then failed with an exception. Retry.
+  }
+
+  if (needInit) {
+    {
+      KJ_ON_SCOPE_FAILURE(InitOnceComplete(&coercedInitOnce, INIT_ONCE_INIT_FAILED, nullptr));
+      init.run();
+    }
+
+    KJ_ASSERT(InitOnceComplete(&coercedInitOnce, 0, nullptr));
+  }
+}
+
+bool Once::isInitialized() noexcept {
+  BOOL junk;
+  return InitOnceBeginInitialize(&coercedInitOnce, INIT_ONCE_CHECK_ONLY, &junk, nullptr);
+}
+
+void Once::reset() {
+  InitOnceInitialize(&coercedInitOnce);
 }
 
 #else
@@ -316,15 +367,8 @@ void Once::reset() {
   State oldState = INITIALIZED;
   if (!__atomic_compare_exchange_n(&state, &oldState, UNINITIALIZED,
                                    false, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
-    KJ_REQUIRE(oldState == DISABLED, "reset() called while not initialized.");
+    KJ_FAIL_REQUIRE("reset() called while not initialized.");
   }
-}
-
-void Once::disable() noexcept {
-  KJ_PTHREAD_CALL(pthread_mutex_lock(&mutex));
-  KJ_DEFER(KJ_PTHREAD_CALL(pthread_mutex_unlock(&mutex)));
-
-  __atomic_store_n(&state, DISABLED, __ATOMIC_RELAXED);
 }
 
 #endif

@@ -19,5 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !_WIN32
 #define KJ_USE_PTHREAD_TLS 1
 #include "threadlocal-test.c++"
+#endif

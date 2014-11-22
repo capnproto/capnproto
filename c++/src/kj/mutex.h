@@ -23,12 +23,13 @@
 #define KJ_MUTEX_H_
 
 #include "memory.h"
+#include <inttypes.h>
 
 #if __linux__ && !defined(KJ_USE_FUTEX)
 #define KJ_USE_FUTEX 1
 #endif
 
-#if !KJ_USE_FUTEX
+#if !KJ_USE_FUTEX && !_WIN32
 // On Linux we use futex.  On other platforms we wrap pthreads.
 // TODO(someday):  Write efficient low-level locking primitives for other platforms.
 #include <pthread.h>
@@ -75,6 +76,9 @@ private:
   static constexpr uint EXCLUSIVE_REQUESTED = 1u << 30;
   static constexpr uint SHARED_COUNT_MASK = EXCLUSIVE_REQUESTED - 1;
 
+#elif _WIN32
+  uintptr_t srwLock;  // Actually an SRWLOCK, but don't want to #include <windows.h> in header.
+
 #else
   mutable pthread_rwlock_t mutex;
 #endif
@@ -100,6 +104,10 @@ public:
 
   void runOnce(Initializer& init);
 
+#if _WIN32  // TODO(perf): Can we make this inline on win32 somehow?
+  bool isInitialized() noexcept;
+
+#else
   inline bool isInitialized() noexcept {
     // Fast path check to see if runOnce() would simply return immediately.
 #if KJ_USE_FUTEX
@@ -108,25 +116,12 @@ public:
     return __atomic_load_n(&state, __ATOMIC_ACQUIRE) == INITIALIZED;
 #endif
   }
+#endif
 
   void reset();
   // Returns the state from initialized to uninitialized.  It is an error to call this when
   // not already initialized, or when runOnce() or isInitialized() might be called concurrently in
   // another thread.
-
-  void disable() noexcept;
-  // Prevent future calls to runOnce() and reset() from having any effect, and make isInitialized()
-  // return false forever.  If an initializer is currently running, block until it completes.
-
-  bool isDisabled() noexcept {
-    // Returns true if `disable()` has been called.
-
-#if KJ_USE_FUTEX
-    return __atomic_load_n(&futex, __ATOMIC_ACQUIRE) == DISABLED;
-#else
-    return __atomic_load_n(&state, __ATOMIC_ACQUIRE) == DISABLED;
-#endif
-  }
 
 private:
 #if KJ_USE_FUTEX
@@ -136,15 +131,16 @@ private:
     UNINITIALIZED,
     INITIALIZING,
     INITIALIZING_WITH_WAITERS,
-    INITIALIZED,
-    DISABLED
+    INITIALIZED
   };
+
+#elif _WIN32
+  uintptr_t initOnce;  // Actually an INIT_ONCE, but don't want to #include <windows.h> in header.
 
 #else
   enum State {
     UNINITIALIZED,
-    INITIALIZED,
-    DISABLED
+    INITIALIZED
   };
   State state;
   pthread_mutex_t mutex;
