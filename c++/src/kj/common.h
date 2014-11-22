@@ -126,11 +126,20 @@ typedef unsigned char byte;
 #define KJ_ALWAYS_INLINE(prototype) inline prototype
 // Don't force inline in debug mode.
 #else
+#if defined(_MSC_VER)
+#define KJ_ALWAYS_INLINE(prototype) __forceinline prototype
+#else
 #define KJ_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
+#endif
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #endif
 
-#define KJ_NORETURN __attribute__((noreturn))
+#if defined(_MSC_VER)
+#define KJ_NORETURN(prototype) __declspec(noreturn) prototype
+#else
+#define KJ_NORETURN(prototype) prototype __attribute__((noreturn))
+#endif
+
 #define KJ_UNUSED __attribute__((unused))
 
 #define KJ_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
@@ -153,14 +162,14 @@ typedef unsigned char byte;
 
 namespace _ {  // private
 
-void inlineRequireFailure(
+KJ_NORETURN(void inlineRequireFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
-    const char* message = nullptr) KJ_NORETURN;
-void inlineAssertFailure(
+    const char* message = nullptr));
+KJ_NORETURN(void inlineAssertFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
-    const char* message = nullptr) KJ_NORETURN;
+    const char* message = nullptr));
 
-void unreachable() KJ_NORETURN;
+KJ_NORETURN(void unreachable());
 
 }  // namespace _ (private)
 

@@ -36,7 +36,7 @@ public:
   virtual StringPtr getProgramName() = 0;
   // Get argv[0] as passed to main().
 
-  virtual void exit() KJ_NORETURN = 0;
+  KJ_NORETURN(virtual void exit()) = 0;
   // Indicates program completion.  The program is considered successful unless `error()` was
   // called.  Typically this exits with _Exit(), meaning that the stack is not unwound, buffers
   // are not flushed, etc. -- it is the responsibility of the caller to flush any buffers that
@@ -110,10 +110,10 @@ public:
   // Like `warning()`, but also sets a flag indicating that the process has failed, and that when
   // it eventually exits it should indicate an error status.
 
-  virtual void exitError(StringPtr message) KJ_NORETURN = 0;
+  KJ_NORETURN(virtual void exitError(StringPtr message)) = 0;
   // Equivalent to `error(message)` followed by `exit()`.
 
-  virtual void exitInfo(StringPtr message) KJ_NORETURN = 0;
+  KJ_NORETURN(virtual void exitInfo(StringPtr message)) = 0;
   // Displays the given non-error message to the user and then calls `exit()`.  This is used to
   // implement things like --help.
 
@@ -141,11 +141,11 @@ public:
   // are easily confused by quick_exit().
 
   StringPtr getProgramName() override;
-  void exit() override KJ_NORETURN;
+  KJ_NORETURN(void exit() override);
   void warning(StringPtr message) override;
   void error(StringPtr message) override;
-  void exitError(StringPtr message) override KJ_NORETURN;
-  void exitInfo(StringPtr message) override KJ_NORETURN;
+  KJ_NORETURN(void exitError(StringPtr message) override);
+  KJ_NORETURN(void exitInfo(StringPtr message) override);
   void increaseLoggingVerbosity() override;
 
 private:
