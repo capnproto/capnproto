@@ -72,6 +72,10 @@ private:
 
 // =======================================================================================
 
+kj::Promise<kj::Own<kj::AsyncIoStream>> connectAttach(kj::Own<kj::NetworkAddress>&& addr) {
+  return addr->connect().attach(kj::mv(addr));
+}
+
 struct EzRpcClient::Impl {
   kj::Own<EzRpcContext> context;
 
@@ -123,7 +127,7 @@ struct EzRpcClient::Impl {
         setupPromise(context->getIoProvider().getNetwork()
             .parseAddress(serverAddress, defaultPort)
             .then([readerOpts](kj::Own<kj::NetworkAddress>&& addr) {
-              return addr->connect();
+              return connectAttach(kj::mv(addr));
             }).then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
               clientContext = kj::heap<ClientContext>(kj::mv(stream),
                                                       readerOpts);
@@ -132,8 +136,9 @@ struct EzRpcClient::Impl {
   Impl(const struct sockaddr* serverAddress, uint addrSize,
        ReaderOptions readerOpts)
       : context(EzRpcContext::getThreadLocal()),
-        setupPromise(context->getIoProvider().getNetwork()
-            .getSockaddr(serverAddress, addrSize)->connect()
+        setupPromise(
+            connectAttach(context->getIoProvider().getNetwork()
+                .getSockaddr(serverAddress, addrSize))
             .then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
               clientContext = kj::heap<ClientContext>(kj::mv(stream),
                                                       readerOpts);
