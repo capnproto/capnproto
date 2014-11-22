@@ -35,6 +35,7 @@ case "$INPUT" in
     *capnp/schema.capnp | \
     *capnp/rpc.capnp | \
     *capnp/rpc-twoparty.capnp | \
+    *capnp/persistent.capnp | \
     *capnp/compiler/lexer.capnp | \
     *capnp/compiler/grammar.capnp )
         exit 0
