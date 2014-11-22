@@ -117,9 +117,16 @@ constexpr auto saveComment =
              p::charsToString(p::many(p::anyOfChars("\n").invert())),
              p::oneOf(p::exactChar<'\n'>(), p::endOfInput));
 
-constexpr auto commentsAndWhitespace =
+constexpr auto utf8Bom =
+    sequence(p::exactChar<'\xef'>(), p::exactChar<'\xbb'>(), p::exactChar<'\xbf'>());
+
+constexpr auto bomsAndWhitespace =
     sequence(p::discardWhitespace,
-             p::discard(p::many(sequence(discardComment, p::discardWhitespace))));
+             p::discard(p::many(sequence(utf8Bom, p::discardWhitespace))));
+
+constexpr auto commentsAndWhitespace =
+    sequence(bomsAndWhitespace,
+             p::discard(p::many(sequence(discardComment, bomsAndWhitespace))));
 
 constexpr auto discardLineWhitespace =
     p::discard(p::many(p::discard(p::whitespaceChar.invert().orAny("\r\n").invert())));
@@ -136,7 +143,7 @@ constexpr auto docComment = p::optional(p::sequence(
 
 }  // namespace
 
-Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporterParam)
+Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
     : orphanage(orphanageParam) {
 
   // Note that because passing an lvalue to a parser constructor uses it by-referencee, it's safe
@@ -215,8 +222,16 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporterParam)
             buildTokenSequenceList(
                 initTok(t, loc).initBracketedList(items.size()), kj::mv(items));
             return t;
-          })
-      ));
+          }),
+      p::transformOrReject(p::transformWithLocation(
+          p::oneOf(sequence(p::exactChar<'\xff'>(), p::exactChar<'\xfe'>()),
+                   sequence(p::exactChar<'\xfe'>(), p::exactChar<'\xff'>()),
+                   sequence(p::exactChar<'\x00'>())),
+          [this, &errorReporter](Location loc) -> kj::Maybe<Orphan<Token>> {
+            errorReporter.addError(loc.begin(), loc.end(),
+                "Non-UTF-8 input detected. Cap'n Proto schema files must be UTF-8 text.");
+            return nullptr;
+          }), [](kj::Maybe<Orphan<Token>> param) { return param; })));
   parsers.tokenSequence = arena.copy(p::sequence(
       commentsAndWhitespace, p::many(p::sequence(token, commentsAndWhitespace))));
 

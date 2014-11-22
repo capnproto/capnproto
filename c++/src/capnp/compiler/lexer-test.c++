@@ -345,6 +345,16 @@ TEST(Lexer, DocComments) {
       doLex<LexedStatements>("foo {bar; baz;}\n# late comment\nqux;").cStr());
 }
 
+TEST(Lexer, Utf8Bom) {
+  EXPECT_STREQ(
+      "(tokens = ["
+        "(identifier = 'foo', startByte = 3, endByte = 6), "
+        "(identifier = 'bar', startByte = 7, endByte = 10), "
+        "(identifier = 'baz', startByte = 13, endByte = 16)"
+      "])",
+      doLex<LexedTokens>("\xef\xbb\xbf""foo bar\xef\xbb\xbf""baz").cStr());
+}
+
 }  // namespace
 }  // namespace compiler
 }  // namespace capnp
