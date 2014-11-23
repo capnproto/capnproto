@@ -38,7 +38,6 @@ set(kj_headers
   mutex.h
   thread.h
   threadlocal.h
-  time.h
   main.h
   windows-sanity.h
 )
@@ -59,6 +58,7 @@ set(kj-async_sources
   async.c++
   async-unix.c++
   async-io.c++
+  time.c++
 )
 set(kj-async_headers
   async-prelude.h
@@ -66,6 +66,7 @@ set(kj-async_headers
   async-inl.h
   async-unix.h
   async-io.h
+  time.h
 )
 if(NOT CAPNP_LITE)
   add_library(kj-async ${kj-async_sources})

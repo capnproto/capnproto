@@ -204,5 +204,17 @@ TEST(AsyncIo, PipeThreadDisconnects) {
   EXPECT_EQ(0, pipeThread.pipe->tryRead(buf, 1, 1).wait(ioContext.waitScope));
 }
 
+TEST(AsyncIo, Timeouts) {
+  auto ioContext = setupAsyncIo();
+
+  Timer& timer = ioContext.provider->getTimer();
+
+  auto promise1 = timer.timeoutAfter(1 * MILLISECONDS, kj::Promise<int>(kj::NEVER_DONE));
+  auto promise2 = timer.timeoutAfter(1 * MILLISECONDS, kj::Promise<int>(123));
+
+  EXPECT_TRUE(kj::runCatchingExceptions([&]() { promise1.wait(ioContext.waitScope); }) != nullptr);
+  EXPECT_EQ(123, promise2.wait(ioContext.waitScope));
+}
+
 }  // namespace
 }  // namespace kj

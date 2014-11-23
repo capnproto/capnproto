@@ -221,7 +221,8 @@ libkj_async_la_LDFLAGS = -release $(VERSION) -no-undefined
 libkj_async_la_SOURCES=                                        \
   src/kj/async.c++                                             \
   src/kj/async-unix.c++                                        \
-  src/kj/async-io.c++
+  src/kj/async-io.c++                                          \
+  src/kj/time.c++
 endif !LITE_MODE
 
 if !LITE_MODE
