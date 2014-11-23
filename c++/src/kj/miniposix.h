@@ -32,7 +32,9 @@
 #if _WIN32
 #include <io.h>
 #include <direct.h>
-#else
+#endif
+
+#if !_WIN32 || __MINGW32__
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -41,7 +43,7 @@
 namespace kj {
 namespace miniposix {
 
-#if _WIN32 && !__GNUC__
+#if _WIN32 && !__MINGW32__
 // We're on Windows and not MinGW. So, we need to define wrappers for the POSIX API.
 
 typedef int ssize_t;
@@ -54,12 +56,6 @@ inline ssize_t write(int fd, const void* buffer, size_t size) {
 }
 inline int close(int fd) {
   return ::_close(fd);
-}
-inline int pipe(int fds[2]) {
-  return ::_pipe(fds, 4096, false);
-}
-inline int mkdir(const char* path, int mode) {
-  return ::_mkdir(path);
 }
 
 #ifndef STDIN_FILENO
@@ -79,6 +75,22 @@ using ::ssize_t;
 using ::read;
 using ::write;
 using ::close;
+
+#endif
+
+#if _WIN32
+// We're on Windows, including MinGW. pipe() and mkdir() are non-standard even on MinGW.
+
+inline int pipe(int fds[2]) {
+  return ::_pipe(fds, 4096, false);
+}
+inline int mkdir(const char* path, int mode) {
+  return ::_mkdir(path);
+}
+
+#else
+// We're on real POSIX.
+
 using ::pipe;
 using ::mkdir;
 
