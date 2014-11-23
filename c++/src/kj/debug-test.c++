@@ -24,15 +24,20 @@
 #include <gtest/gtest.h>
 #include <string>
 #include <stdio.h>
-#include <unistd.h>
 #include <signal.h>
 #include <errno.h>
 #include <string.h>
 #include <exception>
 
+#include "miniposix.h"
+
 #if !_WIN32
-#include <sys/types.h>
 #include <sys/wait.h>
+#endif
+
+#if _MSC_VER
+#pragma warning(disable: 4996)
+// Warns that sprintf() is buffer-overrunny. Yeah, I know, it's cool.
 #endif
 
 namespace kj {
@@ -115,7 +120,7 @@ public:
       const char* end = pos + text.size();
 
       while (pos < end) {
-        ssize_t n = write(outputPipe, pos, end - pos);
+        miniposix::ssize_t n = miniposix::write(outputPipe, pos, end - pos);
         if (n < 0) {
           if (errno == EINTR) {
             continue;
@@ -319,6 +324,16 @@ TEST(Debug, Catch) {
 #endif
 }
 
+int mockSyscall(int i, int error = 0) {
+  errno = error;
+  return i;
+}
+
+int fail() {
+  errno = EBADF;
+  return -1;
+}
+
 TEST(Debug, Syscall) {
   MockExceptionCallback mockCallback;
   int line;
@@ -326,19 +341,21 @@ TEST(Debug, Syscall) {
   int i = 123;
   const char* str = "foo";
 
-  int fd;
-  KJ_SYSCALL(fd = dup(STDIN_FILENO));
-  KJ_SYSCALL(close(fd));
-  EXPECT_FATAL(KJ_SYSCALL(close(fd), i, "bar", str)); line = __LINE__;
-  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": error from OS: close(fd): "
-            + strerror(EBADF) + "; i = 123; bar; str = foo\n", mockCallback.text);
+  KJ_SYSCALL(mockSyscall(0));
+  KJ_SYSCALL(mockSyscall(1));
+
+  EXPECT_FATAL(KJ_SYSCALL(mockSyscall(-1, EBADF), i, "bar", str)); line = __LINE__;
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) +
+            ": error from OS: mockSyscall(-1, EBADF): " + strerror(EBADF) +
+            "; i = 123; bar; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
   int result = 0;
   bool recovered = false;
-  KJ_SYSCALL(result = close(fd), i, "bar", str) { recovered = true; break; } line = __LINE__;
-  EXPECT_EQ("recoverable exception: " + fileLine(__FILE__, line) + ": error from OS: close(fd): "
-            + strerror(EBADF) + "; i = 123; bar; str = foo\n", mockCallback.text);
+  KJ_SYSCALL(result = mockSyscall(-2, EBADF), i, "bar", str) { recovered = true; break; } line = __LINE__;
+  EXPECT_EQ("recoverable exception: " + fileLine(__FILE__, line) +
+            ": error from OS: mockSyscall(-2, EBADF): " + strerror(EBADF) +
+            "; i = 123; bar; str = foo\n", mockCallback.text);
   EXPECT_LT(result, 0);
   EXPECT_TRUE(recovered);
 }

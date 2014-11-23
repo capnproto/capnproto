@@ -28,6 +28,11 @@
 
 namespace kj {
 
+#if _MSC_VER
+#pragma warning(disable: 4996)
+// Warns that sprintf() is buffer-overrunny. We know that, it's cool.
+#endif
+
 String heapString(size_t size) {
   char* buffer = _::HeapArrayDisposer::allocate<char>(size + 1);
   buffer[size] = '\0';
@@ -256,11 +261,11 @@ char* DoubleToBuffer(double value, char* buffer) {
   // truncated to a double.
   volatile double parsed_value = strtod(buffer, NULL);
   if (parsed_value != value) {
-    int snprintf_result =
+    int snprintf_result2 =
       snprintf(buffer, kDoubleToBufferSize, "%.*g", DBL_DIG+2, value);
 
     // Should never overflow; see above.
-    KJ_DASSERT(snprintf_result > 0 && snprintf_result < kDoubleToBufferSize);
+    KJ_DASSERT(snprintf_result2 > 0 && snprintf_result2 < kDoubleToBufferSize);
   }
 
   DelocalizeRadix(buffer);
@@ -275,7 +280,7 @@ bool safe_strtof(const char* str, float* value) {
   char* endptr;
   errno = 0;  // errno only gets set on errors
 #if defined(_WIN32) || defined (__hpux)  // has no strtof()
-  *value = strtod(str, &endptr);
+  *value = static_cast<float>(strtod(str, &endptr));
 #else
   *value = strtof(str, &endptr);
 #endif
@@ -309,11 +314,11 @@ char* FloatToBuffer(float value, char* buffer) {
 
   float parsed_value;
   if (!safe_strtof(buffer, &parsed_value) || parsed_value != value) {
-    int snprintf_result =
+    int snprintf_result2 =
       snprintf(buffer, kFloatToBufferSize, "%.*g", FLT_DIG+2, value);
 
     // Should never overflow; see above.
-    KJ_DASSERT(snprintf_result > 0 && snprintf_result < kFloatToBufferSize);
+    KJ_DASSERT(snprintf_result2 > 0 && snprintf_result2 < kFloatToBufferSize);
   }
 
   DelocalizeRadix(buffer);

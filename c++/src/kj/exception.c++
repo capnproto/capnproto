@@ -23,7 +23,7 @@
 #include "string.h"
 #include "debug.h"
 #include "threadlocal.h"
-#include <unistd.h>
+#include "miniposix.h"
 #include <stdlib.h>
 #include <exception>
 
@@ -317,7 +317,7 @@ public:
     StringPtr textPtr = text;
 
     while (text != nullptr) {
-      ssize_t n = write(STDERR_FILENO, textPtr.begin(), textPtr.size());
+      miniposix::ssize_t n = miniposix::write(STDERR_FILENO, textPtr.begin(), textPtr.size());
       if (n <= 0) {
         // stderr is broken.  Give up.
         return;
@@ -395,6 +395,26 @@ uint uncaughtExceptionCount() {
   // TODO(perf):  Use __cxa_get_globals_fast()?  Requires that __cxa_get_globals() has been called
   //   from somewhere.
   return __cxa_get_globals()->uncaughtExceptions;
+}
+
+#elif _MSC_VER
+
+#if 0
+// TODO(msvc): The below was copied from:
+//     https://github.com/panaseleus/stack_unwinding/blob/master/boost/exception/uncaught_exception_count.hpp
+//   Alas, it doesn not appera to work on MSVC2015. The linker claims _getptd() doesn't exist.
+
+extern "C" char *__cdecl _getptd();
+
+uint uncaughtExceptionCount() {
+  return *reinterpret_cast<uint*>(_getptd() + (sizeof(void*) == 8 ? 0x100 : 0x90));
+}
+#endif
+
+uint uncaughtExceptionCount() {
+  // Since the above doesn't work, fall back to uncaught_exception(). This will produce incorrect
+  // results in very obscure cases that Cap'n Proto doesn't really rely on anyway.
+  return std::uncaught_exception();
 }
 
 #else

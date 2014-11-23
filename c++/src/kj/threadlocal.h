@@ -120,10 +120,14 @@ private:
 
 }  // namespace _ (private)
 
-#else
+#elif __GNUC__
 
 #define KJ_THREADLOCAL_PTR(type) static __thread type*
-// For
+// GCC's __thread is lighter-weight than thread_local and is good enough for our purposes.
+
+#else
+
+#define KJ_THREADLOCAL_PTR(type) static thread_local type*
 
 #endif // KJ_USE_PTHREAD_TLS
 

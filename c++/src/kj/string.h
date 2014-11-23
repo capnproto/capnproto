@@ -300,7 +300,7 @@ struct Stringifier {
   inline Result operator*(T&& value) const { return kj::fwd<T>(value).toString(); }
 #endif
 };
-static constexpr Stringifier STR = Stringifier();
+static KJ_CONSTEXPR(const) Stringifier STR = Stringifier();
 
 }  // namespace _ (private)
 

@@ -21,14 +21,8 @@
 
 #include "io.h"
 #include "debug.h"
+#include "miniposix.h"
 #include <gtest/gtest.h>
-#include <unistd.h>
-
-#if _WIN32
-#include <io.h>
-#include <fcntl.h>
-#define pipe(fds) _pipe(fds, 8192, _O_BINARY)
-#endif
 
 namespace kj {
 namespace {
@@ -38,7 +32,7 @@ TEST(Io, WriteVec) {
   // used to not work in some cases.)
 
   int fds[2];
-  KJ_SYSCALL(pipe(fds));
+  KJ_SYSCALL(miniposix::pipe(fds));
 
   FdInputStream in((AutoCloseFd(fds[0])));
   FdOutputStream out((AutoCloseFd(fds[1])));

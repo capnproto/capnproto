@@ -136,6 +136,7 @@ includekj_HEADERS =                                            \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
   src/kj/arena.h                                               \
+  src/kj/miniposix.h                                           \
   src/kj/io.h                                                  \
   src/kj/tuple.h                                               \
   src/kj/one-of.h                                              \

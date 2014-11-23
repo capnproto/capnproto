@@ -21,7 +21,7 @@
 
 #include "io.h"
 #include "debug.h"
-#include <unistd.h>
+#include "miniposix.h"
 #include <algorithm>
 #include <errno.h>
 #include <limits.h>
@@ -238,7 +238,7 @@ AutoCloseFd::~AutoCloseFd() noexcept(false) {
   if (fd >= 0) {
     unwindDetector.catchExceptionsIfUnwinding([&]() {
       // Don't use SYSCALL() here because close() should not be repeated on EINTR.
-      if (close(fd) < 0) {
+      if (miniposix::close(fd) < 0) {
         KJ_FAIL_SYSCALL("close", errno, fd) {
           break;
         }
@@ -255,8 +255,8 @@ size_t FdInputStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
   byte* max = pos + maxBytes;
 
   while (pos < min) {
-    ssize_t n;
-    KJ_SYSCALL(n = ::read(fd, pos, max - pos), fd);
+    miniposix::ssize_t n;
+    KJ_SYSCALL(n = miniposix::read(fd, pos, max - pos), fd);
     if (n == 0) {
       break;
     }
@@ -272,8 +272,8 @@ void FdOutputStream::write(const void* buffer, size_t size) {
   const char* pos = reinterpret_cast<const char*>(buffer);
 
   while (size > 0) {
-    ssize_t n;
-    KJ_SYSCALL(n = ::write(fd, pos, size), fd);
+    miniposix::ssize_t n;
+    KJ_SYSCALL(n = miniposix::write(fd, pos, size), fd);
     KJ_ASSERT(n > 0, "write() returned zero.");
     pos += n;
     size -= n;

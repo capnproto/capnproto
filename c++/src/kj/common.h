@@ -31,7 +31,7 @@
 #endif
 
 #ifndef KJ_NO_COMPILER_CHECK
-#if __cplusplus < 201103L && !__CDT_PARSER__
+#if __cplusplus < 201103L && !__CDT_PARSER__ && !_MSC_VER
   #error "This code requires C++11. Either your compiler does not support it or it is not enabled."
   #ifdef __GNUC__
     // Compiler claims compatibility with GCC, so presumably supports -std.
@@ -61,7 +61,12 @@
     #endif
   #endif
 #elif defined(_MSC_VER)
-  #warning "As of June 2013, Visual Studio's C++11 support was hopelessly behind what is needed to compile this code."
+  #if _MSC_VER < 1900
+    #error "You need Visual Studio 2015 or better to compile this code."
+  #elif !CAPNP_LITE
+    // TODO(cleanup): This is KJ, but we're talking about Cap'n Proto.
+    #error "As of this writing, Cap'n Proto only supports Visual C++ in 'lite mode'; please #define CAPNP_LITE"
+  #endif
 #else
   #warning "I don't recognize your compiler.  As of this writing, Clang and GCC are the only "\
            "known compilers with enough C++11 support for this library.  "\
@@ -104,7 +109,7 @@ typedef unsigned char byte;
 #if !defined(KJ_DEBUG) && !defined(KJ_NDEBUG)
 // Heuristically decide whether to enable debug mode.  If DEBUG or NDEBUG is defined, use that.
 // Otherwise, fall back to checking whether optimization is enabled.
-#if defined(DEBUG)
+#if defined(DEBUG) || defined(_DEBUG)
 #define KJ_DEBUG
 #elif defined(NDEBUG)
 #define KJ_NDEBUG
@@ -120,11 +125,16 @@ typedef unsigned char byte;
   classname& operator=(const classname&) = delete
 // Deletes the implicit copy constructor and assignment operator.
 
+#ifdef __GNUC__
 #define KJ_LIKELY(condition) __builtin_expect(condition, true)
 #define KJ_UNLIKELY(condition) __builtin_expect(condition, false)
 // Branch prediction macros.  Evaluates to the condition given, but also tells the compiler that we
 // expect the condition to be true/false enough of the time that it's worth hard-coding branch
 // prediction.
+#else
+#define KJ_LIKELY(condition) (condition)
+#define KJ_UNLIKELY(condition) (condition)
+#endif
 
 #if defined(KJ_DEBUG) || __NO_INLINE__
 #define KJ_ALWAYS_INLINE(prototype) inline prototype
@@ -140,13 +150,16 @@ typedef unsigned char byte;
 
 #if defined(_MSC_VER)
 #define KJ_NORETURN(prototype) __declspec(noreturn) prototype
+#define KJ_UNUSED
+#define KJ_WARN_UNUSED_RESULT
+// TODO(msvc): KJ_WARN_UNUSED_RESULT can use _Check_return_ on MSVC, but it's a prefix, so
+//   wrapping the whole prototype is needed. http://msdn.microsoft.com/en-us/library/jj159529.aspx
+//   Similarly, KJ_UNUSED could use __pragma(warning(suppress:...)), but again that's a prefix.
 #else
 #define KJ_NORETURN(prototype) prototype __attribute__((noreturn))
-#endif
-
 #define KJ_UNUSED __attribute__((unused))
-
 #define KJ_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+#endif
 
 #if __clang__
 #define KJ_UNUSED_MEMBER __attribute__((unused))
@@ -159,9 +172,12 @@ typedef unsigned char byte;
 #if __clang__
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated(reason)))
-#else
+#elif __GNUC__
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated))
+#else
+#define KJ_DEPRECATED(reason)
+// TODO(msvc): Again, here, MSVC prefers a prefix, __declspec(deprecated).
 #endif
 
 namespace _ {  // private
@@ -178,6 +194,22 @@ KJ_NORETURN(void unreachable());
 }  // namespace _ (private)
 
 #ifdef KJ_DEBUG
+#if _MSC_VER
+// TODO(msvc): Figure out __VA_ARGS__; see debug.h.
+#define KJ_IREQUIRE(condition, ...) \
+    if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
+        __FILE__, __LINE__, #condition, "")
+// Version of KJ_DREQUIRE() which is safe to use in headers that are #included by users.  Used to
+// check preconditions inside inline methods.  KJ_IREQUIRE is particularly useful in that
+// it will be enabled depending on whether the application is compiled in debug mode rather than
+// whether libkj is.
+
+#define KJ_IASSERT(condition, ...) \
+    if (KJ_LIKELY(condition)); else ::kj::_::inlineAssertFailure( \
+        __FILE__, __LINE__, #condition, "")
+// Version of KJ_DASSERT() which is safe to use in headers that are #included by users.  Used to
+// check state inside inline and templated methods.
+#else
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
@@ -191,6 +223,7 @@ KJ_NORETURN(void unreachable());
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
 // Version of KJ_DASSERT() which is safe to use in headers that are #included by users.  Used to
 // check state inside inline and templated methods.
+#endif
 #else
 #define KJ_IREQUIRE(condition, ...)
 #define KJ_IASSERT(condition, ...)
@@ -212,11 +245,11 @@ KJ_NORETURN(void unreachable());
 // variable-sized arrays.  For other compilers we could just use a fixed-size array.  `minStack`
 // is the stack array size to use if variable-width arrays are not supported.  `maxStack` is the
 // maximum stack array size if variable-width arrays *are* supported.
-#if __clang__
+#if __GNUC__ && !__clang__
 #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack) \
   size_t name##_size = (size); \
-  bool name##_isOnStack = name##_size <= (minStack); \
-  type name##_stack[minStack]; \
+  bool name##_isOnStack = name##_size <= (maxStack); \
+  type name##_stack[name##_isOnStack ? size : 0]; \
   ::kj::Array<type> name##_heap = name##_isOnStack ? \
       nullptr : kj::heapArray<type>(name##_size); \
   ::kj::ArrayPtr<type> name = name##_isOnStack ? \
@@ -224,8 +257,8 @@ KJ_NORETURN(void unreachable());
 #else
 #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack) \
   size_t name##_size = (size); \
-  bool name##_isOnStack = name##_size <= (maxStack); \
-  type name##_stack[name##_isOnStack ? size : 0]; \
+  bool name##_isOnStack = name##_size <= (minStack); \
+  type name##_stack[minStack]; \
   ::kj::Array<type> name##_heap = name##_isOnStack ? \
       nullptr : kj::heapArray<type>(name##_size); \
   ::kj::ArrayPtr<type> name = name##_isOnStack ? \
@@ -237,6 +270,32 @@ KJ_NORETURN(void unreachable());
 #define KJ_UNIQUE_NAME(prefix) KJ_CONCAT(prefix, __LINE__)
 // Create a unique identifier name.  We use concatenate __LINE__ rather than __COUNTER__ so that
 // the name can be used multiple times in the same macro.
+
+#if _MSC_VER
+
+#define KJ_CONSTEXPR(...) __VA_ARGS__
+// Use in cases where MSVC barfs on constexpr. A replacement keyword (e.g. "const") can be
+// provided, or just leave blank to remove the keyword entirely.
+//
+// TODO(msvc): Remove this hack once MSVC fully supports constexpr.
+
+#ifndef __restrict__
+#define __restrict__ __restrict
+// TODO(msvc): Would it be better to define a KJ_RESTRICT macro?
+#endif
+
+#pragma warning(disable: 4521 4522)
+// This warning complains when there are two copy constructors, one for a const reference and
+// one for a non-const reference. It is often quite necessary to do this in wrapper templates,
+// therefore this warning is dumb and we disable it.
+
+#pragma warning(disable: 4458)
+// Warns when a parameter name shadows a class member. Unfortunately my code does this a lot,
+// since I don't use a special name format for members.
+
+#else  // _MSC_VER
+#define KJ_CONSTEXPR(...) constexpr
+#endif
 
 // =======================================================================================
 // Template metaprogramming helpers.
@@ -403,9 +462,14 @@ template<typename T> constexpr T cp(const T& t) noexcept { return t; }
 // Useful to force a copy, particularly to pass into a function that expects T&&.
 
 template <typename T, typename U>
-inline constexpr auto min(T&& a, U&& b) -> decltype(a < b ? a : b) { return a < b ? a : b; }
+inline KJ_CONSTEXPR() auto min(T&& a, U&& b) -> Decay<decltype(a < b ? a : b)> {
+  return a < b ? a : b;
+}
+
 template <typename T, typename U>
-inline constexpr auto max(T&& a, U&& b) -> decltype(a > b ? a : b) { return a > b ? a : b; }
+inline KJ_CONSTEXPR() auto max(T&& a, U&& b) -> Decay<decltype(a > b ? a : b)> {
+  return a > b ? a : b;
+}
 
 template <typename T, size_t s>
 inline constexpr size_t size(T (&arr)[s]) { return s; }
@@ -474,22 +538,33 @@ public:
   }
 };
 
-static constexpr MaxValue_ maxValue = MaxValue_();
+static KJ_CONSTEXPR(const) MaxValue_ maxValue = MaxValue_();
 // A special constant which, when cast to an integer type, takes on the maximum possible value of
 // that type.  This is useful to use as e.g. a parameter to a function because it will be robust
 // in the face of changes to the parameter's type.
 //
 // `char` is not supported, but `signed char` and `unsigned char` are.
 
-static constexpr MinValue_ minValue = MinValue_();
+static KJ_CONSTEXPR(const) MinValue_ minValue = MinValue_();
 // A special constant which, when cast to an integer type, takes on the minimum possible value
 // of that type.  This is useful to use as e.g. a parameter to a function because it will be robust
 // in the face of changes to the parameter's type.
 //
 // `char` is not supported, but `signed char` and `unsigned char` are.
 
+#if __GNUC__
 inline constexpr float inf() { return __builtin_huge_valf(); }
 inline constexpr float nan() { return __builtin_nanf(""); }
+#elif _MSC_VER
+// Do what MSVC math.h does
+#pragma warning(push)
+#pragma warning(disable: 4756)  // "overflow in constant arithmetic"
+inline constexpr float inf() { return (float)(1e300 * 1e300); }
+#pragma warning(pop)
+inline constexpr float nan() { return inf() * 0.0F; }
+#else
+#error "Not sure how to support your compiler."
+#endif
 
 // =======================================================================================
 // Useful fake containers
@@ -623,6 +698,8 @@ struct PlacementNew {};
 inline void* operator new(size_t, kj::_::PlacementNew, void* __p) noexcept {
   return __p;
 }
+
+inline void operator delete(void*, kj::_::PlacementNew, void* __p) noexcept {}
 
 namespace kj {
 
@@ -793,9 +870,21 @@ private:  // internal interface used by friends only
 
 private:
   bool isSet;
+
+#if _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4624)
+// Warns that the anonymous union has a deleted destructor when T is non-trivial. This warning
+// seems broken.
+#endif
+
   union {
     T value;
   };
+
+#if _MSC_VER
+#pragma warning(pop)
+#endif
 
   friend class kj::Maybe<T>;
   template <typename U>
@@ -981,7 +1070,7 @@ public:
   inline constexpr ArrayPtr(decltype(nullptr)): ptr(nullptr), size_(0) {}
   inline constexpr ArrayPtr(T* ptr, size_t size): ptr(ptr), size_(size) {}
   inline constexpr ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
-  inline constexpr ArrayPtr(std::initializer_list<RemoveConstOrDisable<T>> init)
+  inline KJ_CONSTEXPR() ArrayPtr(std::initializer_list<RemoveConstOrDisable<T>> init)
       : ptr(init.begin()), size_(init.size()) {}
 
   template <size_t size>

@@ -446,7 +446,7 @@ class CappedArray {
   // TODO(someday):  Don't construct elements past currentSize?
 
 public:
-  inline constexpr CappedArray(): currentSize(fixedSize) {}
+  inline KJ_CONSTEXPR() CappedArray(): currentSize(fixedSize) {}
   inline explicit constexpr CappedArray(size_t s): currentSize(s) {}
 
   inline size_t size() const { return currentSize; }
