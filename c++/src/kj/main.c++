@@ -32,6 +32,7 @@
 #if _WIN32
 #include <windows.h>
 #include <io.h>
+#include <fcntl.h>
 #else
 #include <sys/uio.h>
 #endif
@@ -62,6 +63,21 @@ void TopLevelProcessContext::exit() {
   }
   _exit(exitCode);
 }
+
+#if _WIN32
+void setStandardIoMode(int fd) {
+  // Set mode to binary if the fd is not a console.
+  HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+  DWORD consoleMode;
+  if (GetConsoleMode(handle, &consoleMode)) {
+    // It's a console.
+  } else {
+    KJ_SYSCALL(_setmode(fd, _O_BINARY));
+  }
+}
+#else
+void setStandardIoMode(int fd) {}
+#endif
 
 static void writeLineToFd(int fd, StringPtr message) {
   // Write the given message to the given file descriptor with a trailing newline iff the message
@@ -186,6 +202,10 @@ void TopLevelProcessContext::increaseLoggingVerbosity() {
 // =======================================================================================
 
 int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* argv[]) {
+  setStandardIoMode(STDIN_FILENO);
+  setStandardIoMode(STDOUT_FILENO);
+  setStandardIoMode(STDERR_FILENO);
+
 #if !KJ_NO_EXCEPTIONS
   try {
 #endif
