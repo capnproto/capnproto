@@ -304,7 +304,7 @@ int mkstemp(char *tpl) {
 
     int error = errno;
     if (error != EEXIST && error != EINTR) {
-      KJ_FAIL_SYSCALL("open(mktemp())", error);
+      KJ_FAIL_SYSCALL("open(mktemp())", error, tpl);
     }
 
     memset(end, 'X', strlen(end));
@@ -313,7 +313,12 @@ int mkstemp(char *tpl) {
 #endif
 
 TEST(Serialize, FileDescriptors) {
+#if _WIN32
+  // TODO(cleanup): Find the Windows temp directory? Seems overly difficult.
+  char filename[] = "capnproto-serialize-test-XXXXXX";
+#else
   char filename[] = "/tmp/capnproto-serialize-test-XXXXXX";
+#endif
   kj::AutoCloseFd tmpfile(mkstemp(filename));
   ASSERT_GE(tmpfile.get(), 0);
 

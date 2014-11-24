@@ -461,9 +461,17 @@ template<typename T> constexpr T cp(T& t) noexcept { return t; }
 template<typename T> constexpr T cp(const T& t) noexcept { return t; }
 // Useful to force a copy, particularly to pass into a function that expects T&&.
 
+template <typename T, typename U, bool takeT> struct MinType_;
+template <typename T, typename U> struct MinType_<T, U, true> { typedef T Type; };
+template <typename T, typename U> struct MinType_<T, U, false> { typedef U Type; };
+
 template <typename T, typename U>
-inline KJ_CONSTEXPR() auto min(T&& a, U&& b) -> Decay<decltype(a < b ? a : b)> {
-  return a < b ? a : b;
+using MinType = typename MinType_<T, U, sizeof(T) <= sizeof(U)>::Type;
+// Resolves to the smaller of the two input types.
+
+template <typename T, typename U>
+inline KJ_CONSTEXPR() auto min(T&& a, U&& b) -> MinType<Decay<T>, Decay<U>> {
+  return MinType<Decay<T>, Decay<U>>(a < b ? a : b);
 }
 
 template <typename T, typename U>
@@ -555,13 +563,23 @@ static KJ_CONSTEXPR(const) MinValue_ minValue = MinValue_();
 #if __GNUC__
 inline constexpr float inf() { return __builtin_huge_valf(); }
 inline constexpr float nan() { return __builtin_nanf(""); }
+
 #elif _MSC_VER
+
 // Do what MSVC math.h does
 #pragma warning(push)
 #pragma warning(disable: 4756)  // "overflow in constant arithmetic"
 inline constexpr float inf() { return (float)(1e300 * 1e300); }
 #pragma warning(pop)
-inline constexpr float nan() { return inf() * 0.0F; }
+
+float nan();
+// Unfortunatley, inf() * 0.0f produces a NaN with the sign bit set, whereas our preferred
+// canonical NaN should not have the sign bit set. std::numeric_limits<float>::quiet_NaN()
+// returns the correct NaN, but we don't want to #include that here. So, we give up and make
+// this out-of-line on MSVC.
+//
+// TODO(msvc): Can we do better?
+
 #else
 #error "Not sure how to support your compiler."
 #endif

@@ -96,7 +96,7 @@ static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[8] = {
     0 * BITS / ELEMENTS
 };
 
-inline constexpr BitsPerElement dataBitsPerElement(ElementSize size) {
+inline KJ_CONSTEXPR() BitsPerElement dataBitsPerElement(ElementSize size) {
   return _::BITS_PER_ELEMENT_TABLE[static_cast<int>(size)];
 }
 
@@ -549,11 +549,25 @@ private:
 
 // -------------------------------------------------------------------
 
+#if _MSC_VER
+  // TODO(msvc): MSVC insists List{Reader,Builder}::operator= are deleted unless we
+  //   define them explicitly. Don't know why, especially for the readers.
+#define MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(const_, type) \
+  inline type& operator=(const_ type& other) { \
+    memcpy(this, &other, sizeof(*this)); \
+    return *this; \
+  }
+#else
+#define MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(const_, type)
+#endif
+
 class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline ListBuilder()
       : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
         step(0 * BITS / ELEMENTS) {}
+
+  MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder);
 
   inline word* getLocation() {
     // Get the object's location.
@@ -630,6 +644,8 @@ public:
   inline ListReader()
       : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
         structDataSize(0), structPointerCount(0), nestingLimit(0x7fffffff) {}
+
+  MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(const, ListReader);
 
   inline ElementCount size() const;
   // The number of elements in the list.

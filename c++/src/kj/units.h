@@ -67,6 +67,10 @@ struct Id {
 // =======================================================================================
 // Quantity and UnitRatio -- implement unit analysis via the type system
 
+#if !_MSC_VER
+// TODO(msvc): MSVC has trouble with this intense templating. Luckily Cap'n Proto can deal with
+//   using regular integers in place of Quantity, so we can just skip all this.
+
 template <typename T> constexpr bool isIntegral() { return false; }
 template <> constexpr bool isIntegral<char>() { return true; }
 template <> constexpr bool isIntegral<signed char>() { return true; }
@@ -350,10 +354,14 @@ private:
   friend inline constexpr T unit();
 };
 
+#endif  // !_MSC_VER
+
 template <typename T>
 inline constexpr T unit() { return T(1); }
 // unit<Quantity<T, U>>() returns a Quantity of value 1.  It also, intentionally, works on basic
 // numeric types.
+
+#if !_MSC_VER
 
 template <typename Number1, typename Number2, typename Unit>
 inline constexpr auto operator*(Number1 a, Quantity<Number2, Unit> b)
@@ -424,6 +432,8 @@ template <typename T>
 inline constexpr T origin() { return T(0 * unit<UnitOf<T>>()); }
 // origin<Absolute<T, U>>() returns an Absolute of value 0.  It also, intentionally, works on basic
 // numeric types.
+
+#endif  // !_MSC_VER
 
 }  // namespace kj
 

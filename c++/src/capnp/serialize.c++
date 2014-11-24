@@ -49,15 +49,17 @@ FlatArrayMessageReader::FlatArrayMessageReader(
     return;
   }
 
-  uint segmentSize = table[1].get();
+  {
+    uint segmentSize = table[1].get();
 
-  KJ_REQUIRE(array.size() >= offset + segmentSize,
-             "Message ends prematurely in first segment.") {
-    return;
+    KJ_REQUIRE(array.size() >= offset + segmentSize,
+               "Message ends prematurely in first segment.") {
+      return;
+    }
+
+    segment0 = array.slice(offset, offset + segmentSize);
+    offset += segmentSize;
   }
-
-  segment0 = array.slice(offset, offset + segmentSize);
-  offset += segmentSize;
 
   if (segmentCount > 1) {
     moreSegments = kj::heapArray<kj::ArrayPtr<const word>>(segmentCount - 1);
@@ -154,9 +156,9 @@ InputStreamMessageReader::InputStreamMessageReader(
   }
 
   // Read sizes for all segments except the first.  Include padding if necessary.
-  _::WireValue<uint32_t> moreSizes[segmentCount & ~1];
+  KJ_STACK_ARRAY(_::WireValue<uint32_t>, moreSizes, segmentCount & ~1, 16, 64);
   if (segmentCount > 1) {
-    inputStream.read(moreSizes, sizeof(moreSizes));
+    inputStream.read(moreSizes.begin(), moreSizes.size() * sizeof(moreSizes[0]));
     for (uint i = 0; i < segmentCount - 1; i++) {
       totalWords += moreSizes[i].get();
     }
@@ -239,7 +241,7 @@ kj::ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
 void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
 
-  _::WireValue<uint32_t> table[(segments.size() + 2) & ~size_t(1)];
+  KJ_STACK_ARRAY(_::WireValue<uint32_t>, table, (segments.size() + 2) & ~size_t(1), 16, 64);
 
   // We write the segment count - 1 because this makes the first word zero for single-segment
   // messages, improving compression.  We don't bother doing this with segment sizes because
@@ -254,7 +256,7 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
   }
 
   KJ_STACK_ARRAY(kj::ArrayPtr<const byte>, pieces, segments.size() + 1, 4, 32);
-  pieces[0] = kj::arrayPtr(reinterpret_cast<byte*>(table), sizeof(table));
+  pieces[0] = kj::arrayPtr(reinterpret_cast<byte*>(table.begin()), table.size() * sizeof(table[0]));
 
   for (uint i = 0; i < segments.size(); i++) {
     pieces[i + 1] = kj::arrayPtr(reinterpret_cast<const byte*>(segments[i].begin()),

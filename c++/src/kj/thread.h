@@ -61,7 +61,7 @@ private:
   bool detached = false;
 
 #if _WIN32
-  static unsigned long runThread(void* ptr);
+  static unsigned long __stdcall runThread(void* ptr);
 #else
   static void* runThread(void* ptr);
 #endif

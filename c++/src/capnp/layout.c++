@@ -960,9 +960,8 @@ struct WireHelpers {
       // run with it and do bounds checks at access time, because how would we handle writes?
       // Instead, we have to copy the struct to a new space now.
 
-      WordCount newDataSize = std::max<WordCount>(oldDataSize, size.data);
-      WirePointerCount newPointerCount =
-          std::max<WirePointerCount>(oldPointerCount, size.pointers);
+      WordCount newDataSize = kj::max(oldDataSize, size.data);
+      WirePointerCount newPointerCount = kj::max(oldPointerCount, size.pointers);
       WordCount totalSize = newDataSize + newPointerCount * WORDS_PER_POINTER;
 
       // Don't let allocate() zero out the object just yet.
@@ -1282,9 +1281,8 @@ struct WireHelpers {
       // The structs in this list are smaller than expected, probably written using an older
       // version of the protocol.  We need to make a copy and expand them.
 
-      WordCount newDataSize = std::max<WordCount>(oldDataSize, elementSize.data);
-      WirePointerCount newPointerCount =
-          std::max<WirePointerCount>(oldPointerCount, elementSize.pointers);
+      WordCount newDataSize = kj::max(oldDataSize, elementSize.data);
+      WirePointerCount newPointerCount = kj::max(oldPointerCount, elementSize.pointers);
       auto newStep = (newDataSize + newPointerCount * WORDS_PER_POINTER) / ELEMENTS;
       WordCount totalSize = newStep * elementCount;
 
@@ -1309,8 +1307,8 @@ struct WireHelpers {
         // Copy pointer section.
         WirePointer* newPointerSection = reinterpret_cast<WirePointer*>(dst + newDataSize);
         WirePointer* oldPointerSection = reinterpret_cast<WirePointer*>(src + oldDataSize);
-        for (uint i = 0; i < oldPointerCount / POINTERS; i++) {
-          transferPointer(origSegment, newPointerSection + i, oldSegment, oldPointerSection + i);
+        for (uint j = 0; j < oldPointerCount / POINTERS; j++) {
+          transferPointer(origSegment, newPointerSection + j, oldSegment, oldPointerSection + j);
         }
 
         dst += newStep * (1 * ELEMENTS);
@@ -1346,10 +1344,10 @@ struct WireHelpers {
         WirePointerCount newPointerCount = elementSize.pointers;
 
         if (oldSize == ElementSize::POINTER) {
-          newPointerCount = std::max(newPointerCount, 1 * POINTERS);
+          newPointerCount = kj::max(newPointerCount, 1 * POINTERS);
         } else {
           // Old list contains data elements, so we need at least 1 word of data.
-          newDataSize = std::max(newDataSize, 1 * WORDS);
+          newDataSize = kj::max(newDataSize, 1 * WORDS);
         }
 
         auto newStep = (newDataSize + newPointerCount * WORDS_PER_POINTER) / ELEMENTS;
@@ -1894,7 +1892,12 @@ struct WireHelpers {
 
     ElementSize elementSize = ref->listRef.elementSize();
     if (elementSize == ElementSize::INLINE_COMPOSITE) {
+#if _MSC_VER
+      // TODO(msvc): MSVC thinks decltype(WORDS/ELEMENTS) is a const type. /eyeroll
+      uint wordsPerElement;
+#else
       decltype(WORDS/ELEMENTS) wordsPerElement;
+#endif
       ElementCount size;
 
       WordCount wordCount = ref->listRef.inlineCompositeWordCount();
@@ -2312,7 +2315,7 @@ bool PointerReader::isNull() const {
 }
 
 bool PointerReader::isStruct() const {
-  word* refTarget;
+  word* refTarget = nullptr;
   const WirePointer* ptr = pointer;
   SegmentReader* sgmt = segment;
   WireHelpers::followFars(ptr, refTarget, sgmt);
@@ -2320,7 +2323,7 @@ bool PointerReader::isStruct() const {
 }
 
 bool PointerReader::isList() const {
-  word* refTarget;
+  word* refTarget = nullptr;
   const WirePointer* ptr = pointer;
   SegmentReader* sgmt = segment;
   WireHelpers::followFars(ptr, refTarget, sgmt);

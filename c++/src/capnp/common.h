@@ -61,7 +61,7 @@ struct Void {
   inline constexpr bool operator!=(Void other) const { return false; }
 };
 
-static constexpr Void VOID = Void();
+static KJ_CONSTEXPR(const) Void VOID = Void();
 // Constant value for `Void`,  which is an empty struct.
 
 template <typename T>
@@ -113,7 +113,13 @@ template <typename T, typename = typename T::_capnpPrivate::IsInterface> uint16_
 template <typename T, typename = typename schemas::EnumInfo<T>::IsEnum> uint32_t kindSfinae(int);
 template <typename T> uint64_t kindSfinae(...);
 
-template <typename T, size_t s = sizeof(kindSfinae<T>(0))> struct Kind_;
+template <typename T>
+struct MsvcWorkaround {
+  // TODO(msvc): Remove this once MSVC supports expression SFINAE.
+  enum { value = sizeof(kindSfinae<T>(0)) };
+};
+
+template <typename T, size_t s = MsvcWorkaround<T>::value> struct Kind_;
 
 template <> struct Kind_<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
 template <> struct Kind_<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
@@ -157,6 +163,17 @@ inline constexpr Kind kind() {
 
 template <typename T, Kind k = CAPNP_KIND(T)>
 struct List;
+
+#if _MSC_VER
+
+template <typename T, Kind k>
+struct List {};
+// For some reason, without this declaration, MSVC will error out on some uses of List
+// claiming that "T" -- as used in the default initializer for the second template param, "k" --
+// is not defined. I do not understand this error, but adding this empty default declaration fixes
+// it.
+
+#endif
 
 template <typename T> struct ListElementType_;
 template <typename T> struct ListElementType_<List<T>> { typedef T Type; };
@@ -213,8 +230,21 @@ using FromServer = typename kj::Decay<T>::Serves;
 // FromBuilder<MyType::Server> = MyType (for any Cap'n Proto interface type).
 
 namespace _ {  // private
+
 template <typename T, Kind k = CAPNP_KIND(T)>
 struct PointerHelpers;
+
+#if _MSC_VER
+
+template <typename T, Kind k>
+struct PointerHelpers {};
+// For some reason, without this declaration, MSVC will error out on some uses of PointerHelpers
+// claiming that "T" -- as used in the default initializer for the second template param, "k" --
+// is not defined. I do not understand this error, but adding this empty default declaration fixes
+// it.
+
+#endif
+
 }  // namespace _ (private)
 
 struct MessageSize {
@@ -370,12 +400,12 @@ constexpr auto WORDS_PER_POINTER KJ_UNUSED = 1 * WORDS / POINTERS;
 constexpr WordCount POINTER_SIZE_IN_WORDS = 1 * POINTERS * WORDS_PER_POINTER;
 
 template <typename T>
-inline constexpr decltype(BYTES / ELEMENTS) bytesPerElement() {
+inline KJ_CONSTEXPR() decltype(BYTES / ELEMENTS) bytesPerElement() {
   return sizeof(T) * BYTES / ELEMENTS;
 }
 
 template <typename T>
-inline constexpr decltype(BITS / ELEMENTS) bitsPerElement() {
+inline KJ_CONSTEXPR() decltype(BITS / ELEMENTS) bitsPerElement() {
   return sizeof(T) * 8 * BITS / ELEMENTS;
 }
 

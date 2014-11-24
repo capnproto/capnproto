@@ -56,7 +56,7 @@ void genericInitTestMessage(Builder builder) {
     subBuilder.setUInt16Field(1234u);
     subBuilder.setUInt32Field(56789012u);
     subBuilder.setUInt64Field(345678901234567890ull);
-    subBuilder.setFloat32Field(-1.25e-10);
+    subBuilder.setFloat32Field(-1.25e-10f);
     subBuilder.setFloat64Field(345);
     subBuilder.setTextField("baz");
     subBuilder.setDataField(data("qux"));
@@ -78,7 +78,7 @@ void genericInitTestMessage(Builder builder) {
     subBuilder.setUInt16List({1234u, 5678u, 0u, 0xffffu});
     subBuilder.setUInt32List({12345678u, 90123456u, 0u, 0xffffffffu});
     subBuilder.setUInt64List({123456789012345ull, 678901234567890ull, 0ull, 0xffffffffffffffffull});
-    subBuilder.setFloat32List({0, 1234567, 1e37, -1e37, 1e-37, -1e-37});
+    subBuilder.setFloat32List({0, 1234567, 1e37f, -1e37f, 1e-37f, -1e-37f});
     subBuilder.setFloat64List({0, 123456789012345, 1e306, -1e306, 1e-306, -1e-306});
     subBuilder.setTextList({"quux", "corge", "grault"});
     subBuilder.setDataList({data("garply"), data("waldo"), data("fred")});

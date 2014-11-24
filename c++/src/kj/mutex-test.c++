@@ -22,19 +22,23 @@
 #include "mutex.h"
 #include "debug.h"
 #include "thread.h"
-#include <unistd.h>
 #include <gtest/gtest.h>
 
 #if _WIN32
 #include <windows.h>
 #else
 #include <pthread.h>
+#include <unistd.h>
 #endif
 
 namespace kj {
 namespace {
 
+#if _WIN32
+inline void delay() { Sleep(10); }
+#else
 inline void delay() { usleep(10000); }
+#endif
 
 #if KJ_NO_EXCEPTIONS
 #undef EXPECT_ANY_THROW
@@ -128,18 +132,18 @@ TEST(Mutex, MutexGuarded) {
 
 TEST(Mutex, Lazy) {
   Lazy<uint> lazy;
-  bool initStarted = false;
+  volatile bool initStarted = false;
 
   Thread thread([&]() {
     EXPECT_EQ(123u, lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
-      __atomic_store_n(&initStarted, true, __ATOMIC_RELAXED);
+      initStarted = true;
       delay();
       return space.construct(123);
     }));
   });
 
   // Spin until the initializer has been entered in the thread.
-  while (!__atomic_load_n(&initStarted, __ATOMIC_RELAXED)) {
+  while (!initStarted) {
 #if _WIN32
     Sleep(0);
 #else

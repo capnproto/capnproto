@@ -124,9 +124,11 @@ TEST(Any, AnyStruct) {
   EXPECT_EQ(48, b.getDataSection().size());
   EXPECT_EQ(20, b.getPointerSection().size());
 
+#if !_MSC_VER  // TODO(msvc): ICE on the necessary constructor; see any.h.
   b = root.getAnyPointerField().getAs<TestAllTypes>();
   EXPECT_EQ(48, b.getDataSection().size());
   EXPECT_EQ(20, b.getPointerSection().size());
+#endif
 
   auto r = toAny(root.getAnyPointerField().getAs<TestAllTypes>().asReader());
   EXPECT_EQ(48, r.getDataSection().size());
@@ -136,9 +138,11 @@ TEST(Any, AnyStruct) {
   EXPECT_EQ(48, r.getDataSection().size());
   EXPECT_EQ(20, r.getPointerSection().size());
 
+#if !_MSC_VER  // TODO(msvc): ICE on the necessary constructor; see any.h.
   r = root.getAnyPointerField().getAs<TestAllTypes>().asReader();
   EXPECT_EQ(48, r.getDataSection().size());
   EXPECT_EQ(20, r.getPointerSection().size());
+#endif
 
   {
     MallocMessageBuilder b2;
@@ -177,10 +181,12 @@ TEST(Any, AnyList) {
   EXPECT_EQ(48, alb.as<List<AnyStruct>>()[0].getDataSection().size());
   EXPECT_EQ(20, alb.as<List<AnyStruct>>()[0].getPointerSection().size());
 
+#if !_MSC_VER  // TODO(msvc): ICE on the necessary constructor; see any.h.
   alb = root.getAnyPointerField().getAs<List<TestAllTypes>>();
   EXPECT_EQ(2, alb.size());
   EXPECT_EQ(48, alb.as<List<AnyStruct>>()[0].getDataSection().size());
   EXPECT_EQ(20, alb.as<List<AnyStruct>>()[0].getPointerSection().size());
+#endif
 
   auto alr = toAny(root.getAnyPointerField().getAs<List<TestAllTypes>>().asReader());
   EXPECT_EQ(2, alr.size());
@@ -192,10 +198,12 @@ TEST(Any, AnyList) {
   EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
   EXPECT_EQ(20, alr.as<List<AnyStruct>>()[0].getPointerSection().size());
 
+#if !_MSC_VER  // TODO(msvc): ICE on the necessary constructor; see any.h.
   alr = root.getAnyPointerField().getAs<List<TestAllTypes>>().asReader();
   EXPECT_EQ(2, alr.size());
   EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
   EXPECT_EQ(20, alr.as<List<AnyStruct>>()[0].getPointerSection().size());
+#endif
 }
 
 }  // namespace

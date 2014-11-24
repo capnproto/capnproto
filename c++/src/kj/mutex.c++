@@ -243,7 +243,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   // held for debug purposes anyway, we just don't bother.
 }
 
-static BOOL nullInitializer(PINIT_ONCE initOnce, PVOID parameter, PVOID* context) {
+static BOOL WINAPI nullInitializer(PINIT_ONCE initOnce, PVOID parameter, PVOID* context) {
   return true;
 }
 

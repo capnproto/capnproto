@@ -103,6 +103,7 @@ public:
   inline Builder(ArrayPtr<byte>& value): ArrayPtr<byte>(value) {}
 
   inline Data::Reader asReader() const { return Data::Reader(*this); }
+  inline operator Reader() const { return asReader(); }
 };
 
 class Text::Builder: public kj::DisallowConstCopy {
@@ -117,6 +118,7 @@ public:
   }
 
   inline Reader asReader() const { return Reader(content.begin(), content.size() - 1); }
+  inline operator Reader() const { return asReader(); }
 
   inline operator kj::ArrayPtr<char>();
   inline kj::ArrayPtr<char> asArray();

@@ -28,7 +28,6 @@
 #include <exception>
 #include <string>
 #include <vector>
-#include <unistd.h>
 #include <errno.h>
 
 namespace capnp {
@@ -193,7 +192,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
     ownFirstSegment = true;
   }
 
-  uint size = std::max(minimumSize, nextSize);
+  uint size = kj::max(minimumSize, nextSize);
 
   void* result = calloc(size, sizeof(word));
   if (result == nullptr) {

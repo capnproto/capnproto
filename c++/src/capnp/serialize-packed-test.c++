@@ -59,7 +59,7 @@ public:
 
   size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     KJ_ASSERT(maxBytes <= data.size() - readPos, "Overran end of stream.");
-    size_t amount = std::min(maxBytes, std::max(minBytes, preferredReadSize));
+    size_t amount = kj::min(maxBytes, kj::max(minBytes, preferredReadSize));
     memcpy(buffer, data.data() + readPos, amount);
     readPos += amount;
     return amount;
@@ -71,7 +71,7 @@ public:
   }
 
   kj::ArrayPtr<const byte> tryGetReadBuffer() override {
-    size_t amount = std::min(data.size() - readPos, preferredReadSize);
+    size_t amount = kj::min(data.size() - readPos, preferredReadSize);
     return kj::arrayPtr(reinterpret_cast<const byte*>(data.data() + readPos), amount);
   }
 
@@ -86,6 +86,8 @@ struct DisplayByteArray {
       : data(reinterpret_cast<const uint8_t*>(str.data())), size(str.size()) {}
   DisplayByteArray(const std::initializer_list<uint8_t>& list)
       : data(list.begin()), size(list.size()) {}
+  DisplayByteArray(kj::ArrayPtr<const byte> data)
+      : data(data.begin()), size(data.size()) {}
 
   const uint8_t* data;
   size_t size;
@@ -128,16 +130,15 @@ void expectPacksTo(std::initializer_list<uint8_t> unpacked,
   // -----------------------------------------------------------------
   // read
 
-  std::string roundTrip;
-  roundTrip.resize(unpacked.size());
+  kj::Array<byte> roundTrip = kj::heapArray<byte>(unpacked.size());
 
   {
     PackedInputStream packedIn(pipe);
-    packedIn.InputStream::read(&*roundTrip.begin(), roundTrip.size());
+    packedIn.InputStream::read(roundTrip.begin(), roundTrip.size());
     EXPECT_TRUE(pipe.allRead());
   }
 
-  if (roundTrip != std::string(reinterpret_cast<const char*>(unpacked.begin()), unpacked.size())) {
+  if (memcmp(roundTrip.begin(), unpacked.begin(), unpacked.size()) != 0) {
     ADD_FAILURE()
         << "Tried to unpack: " << DisplayByteArray(packed) << "\n"
         << "Expected:        " << DisplayByteArray(unpacked) << "\n"
@@ -150,12 +151,11 @@ void expectPacksTo(std::initializer_list<uint8_t> unpacked,
 
     {
       PackedInputStream packedIn(pipe);
-      packedIn.InputStream::read(&*roundTrip.begin(), roundTrip.size());
+      packedIn.InputStream::read(roundTrip.begin(), roundTrip.size());
       EXPECT_TRUE(pipe.allRead());
     }
 
-    if (roundTrip !=
-        std::string(reinterpret_cast<const char*>(unpacked.begin()), unpacked.size())) {
+    if (memcmp(roundTrip.begin(), unpacked.begin(), unpacked.size()) != 0) {
       ADD_FAILURE()
           << "Tried to unpack: " << DisplayByteArray(packed) << "\n"
           << "  Block size: " << blockSize << "\n"
@@ -202,8 +202,7 @@ void expectPacksTo(std::initializer_list<uint8_t> unpacked,
     PackedInputStream packedIn(pipe);
     packedIn.InputStream::read(&*roundTrip.begin(), roundTrip.size());
 
-    if (roundTrip !=
-        std::string(reinterpret_cast<const char*>(unpacked.begin()), unpacked.size())) {
+    if (memcmp(roundTrip.begin(), unpacked.begin(), unpacked.size()) != 0) {
       ADD_FAILURE()
           << "Tried to unpack: " << DisplayByteArray(packed) << "\n"
           << "  Index: " << i << "\n"

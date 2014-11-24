@@ -31,30 +31,6 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
-template <typename T, typename U>
-void checkList(T reader, std::initializer_list<U> expected) {
-  ASSERT_EQ(expected.size(), reader.size());
-  for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_EQ(expected.begin()[i], reader[i]);
-  }
-}
-
-template <typename T>
-void checkList(T reader, std::initializer_list<float> expected) {
-  ASSERT_EQ(expected.size(), reader.size());
-  for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_FLOAT_EQ(expected.begin()[i], reader[i]);
-  }
-}
-
-template <typename T>
-void checkList(T reader, std::initializer_list<double> expected) {
-  ASSERT_EQ(expected.size(), reader.size());
-  for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_DOUBLE_EQ(expected.begin()[i], reader[i]);
-  }
-}
-
 TEST(Encoding, AllTypes) {
   MallocMessageBuilder builder;
 
@@ -541,7 +517,7 @@ TEST(Encoding, SmallStructLists) {
   // Should match...
   EXPECT_EQ(defaultSegment.size(), segment.size());
 
-  for (size_t i = 0; i < std::min(segment.size(), defaultSegment.size()); i++) {
+  for (size_t i = 0; i < kj::min(segment.size(), defaultSegment.size()); i++) {
     EXPECT_EQ(reinterpret_cast<const uint64_t*>(defaultSegment.begin())[i],
               reinterpret_cast<const uint64_t*>(segment.begin())[i]);
   }
@@ -971,16 +947,6 @@ TEST(Encoding, UpgradeStructInBuilderDoubleFarPointers) {
   EXPECT_EQ(6u, builder.getSegmentsForOutput()[0].size());
   EXPECT_EQ(6u, builder.getSegmentsForOutput()[1].size());
   EXPECT_EQ(2u, builder.getSegmentsForOutput()[2].size());
-}
-
-void checkList(List<test::TestOldVersion>::Reader reader,
-               std::initializer_list<int64_t> expectedData,
-               std::initializer_list<Text::Reader> expectedPointers) {
-  ASSERT_EQ(expectedData.size(), reader.size());
-  for (uint i = 0; i < expectedData.size(); i++) {
-    EXPECT_EQ(expectedData.begin()[i], reader[i].getOld1());
-    EXPECT_EQ(expectedPointers.begin()[i], reader[i].getOld2());
-  }
 }
 
 void checkUpgradedList(test::TestAnyPointer::Builder root,

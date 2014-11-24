@@ -366,9 +366,9 @@ struct List<AnyPointer, Kind::OTHER> {
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
-    inline typename AnyPointer::Reader operator[](uint index) const {
+    inline AnyPointer::Reader operator[](uint index) const {
       KJ_IREQUIRE(index < size());
-      return typename AnyPointer::Reader(reader.getPointerElement(index * ELEMENTS));
+      return AnyPointer::Reader(reader.getPointerElement(index * ELEMENTS));
     }
 
     typedef _::IndexingIterator<const Reader, typename AnyPointer::Reader> Iterator;
@@ -398,9 +398,9 @@ struct List<AnyPointer, Kind::OTHER> {
     inline Reader asReader() { return Reader(builder.asReader()); }
 
     inline uint size() const { return builder.size() / ELEMENTS; }
-    inline typename AnyPointer::Builder operator[](uint index) {
+    inline AnyPointer::Builder operator[](uint index) {
       KJ_IREQUIRE(index < size());
-      return typename AnyPointer::Builder(builder.getPointerElement(index * ELEMENTS));
+      return AnyPointer::Builder(builder.getPointerElement(index * ELEMENTS));
     }
 
     typedef _::IndexingIterator<Builder, typename AnyPointer::Builder> Iterator;
@@ -422,9 +422,11 @@ public:
   Reader() = default;
   inline Reader(_::StructReader reader): _reader(reader) {}
 
+#if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
   template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromReader<T>) == Kind::STRUCT>>
   inline Reader(T&& value)
       : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
+#endif
 
   Data::Reader getDataSection() {
     return _reader.getDataSectionAsBlob();
@@ -448,9 +450,11 @@ public:
   inline Builder(decltype(nullptr)) {}
   inline Builder(_::StructBuilder builder): _builder(builder) {}
 
+#if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
   template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromBuilder<T>) == Kind::STRUCT>>
   inline Builder(T&& value)
       : _builder(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::fwd<T>(value))) {}
+#endif
 
   inline Data::Builder getDataSection() {
     return _builder.getDataSectionAsBlob();
@@ -495,9 +499,9 @@ public:
   inline explicit Reader(_::ListReader reader): reader(reader) {}
 
   inline uint size() const { return reader.size() / ELEMENTS; }
-  inline typename AnyStruct::Reader operator[](uint index) const {
+  inline AnyStruct::Reader operator[](uint index) const {
     KJ_IREQUIRE(index < size());
-    return typename AnyStruct::Reader(reader.getStructElement(index * ELEMENTS));
+    return AnyStruct::Reader(reader.getStructElement(index * ELEMENTS));
   }
 
   typedef _::IndexingIterator<const Reader, typename AnyStruct::Reader> Iterator;
@@ -528,9 +532,9 @@ public:
   inline Reader asReader() { return Reader(builder.asReader()); }
 
   inline uint size() const { return builder.size() / ELEMENTS; }
-  inline typename AnyStruct::Builder operator[](uint index) {
+  inline AnyStruct::Builder operator[](uint index) {
     KJ_IREQUIRE(index < size());
-    return typename AnyStruct::Builder(builder.getStructElement(index * ELEMENTS));
+    return AnyStruct::Builder(builder.getStructElement(index * ELEMENTS));
   }
 
   typedef _::IndexingIterator<Builder, typename AnyStruct::Builder> Iterator;
@@ -551,9 +555,11 @@ public:
   Reader() = default;
   inline Reader(_::ListReader reader): _reader(reader) {}
 
+#if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
   template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromReader<T>) == Kind::LIST>>
   inline Reader(T&& value)
       : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
+#endif
 
   inline ElementSize getElementSize() { return _reader.getElementSize(); }
   inline uint size() { return _reader.size() / ELEMENTS; }
@@ -574,9 +580,11 @@ public:
   inline Builder(decltype(nullptr)) {}
   inline Builder(_::ListBuilder builder): _builder(builder) {}
 
+#if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
   template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromBuilder<T>) == Kind::LIST>>
   inline Builder(T&& value)
       : _builder(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::fwd<T>(value))) {}
+#endif
 
   inline ElementSize getElementSize() { return _builder.getElementSize(); }
   inline uint size() { return _builder.size() / ELEMENTS; }
@@ -818,11 +826,11 @@ struct PointerHelpers<AnyPointer, Kind::OTHER> {
 
 template <>
 struct PointerHelpers<AnyStruct, Kind::OTHER> {
-  static inline typename AnyStruct::Reader get(
+  static inline AnyStruct::Reader get(
       PointerReader reader, const word* defaultValue = nullptr) {
     return AnyStruct::Reader(reader.getStruct(defaultValue));
   }
-  static inline typename AnyStruct::Builder get(
+  static inline AnyStruct::Builder get(
       PointerBuilder builder, const word* defaultValue = nullptr) {
     // TODO(someday): Allow specifying the size somehow?
     return AnyStruct::Builder(builder.getStruct(
@@ -831,31 +839,31 @@ struct PointerHelpers<AnyStruct, Kind::OTHER> {
   static inline void set(PointerBuilder builder, AnyStruct::Reader value) {
     builder.setStruct(value._reader);
   }
-  static inline typename AnyStruct::Builder init(
+  static inline AnyStruct::Builder init(
       PointerBuilder builder, uint dataWordCount, uint pointerCount) {
-    return typename AnyStruct::Builder(builder.initStruct(
+    return AnyStruct::Builder(builder.initStruct(
         StructSize(dataWordCount * WORDS, pointerCount * POINTERS)));
   }
 };
 
 template <>
 struct PointerHelpers<AnyList, Kind::OTHER> {
-  static inline typename AnyList::Reader get(
+  static inline AnyList::Reader get(
       PointerReader reader, const word* defaultValue = nullptr) {
     return AnyList::Reader(reader.getListAnySize(defaultValue));
   }
-  static inline typename AnyList::Builder get(
+  static inline AnyList::Builder get(
       PointerBuilder builder, const word* defaultValue = nullptr) {
     return AnyList::Builder(builder.getListAnySize(defaultValue));
   }
   static inline void set(PointerBuilder builder, AnyList::Reader value) {
     builder.setList(value._reader);
   }
-  static inline typename AnyList::Builder init(
+  static inline AnyList::Builder init(
       PointerBuilder builder, ElementSize elementSize, uint elementCount) {
     return AnyList::Builder(builder.initList(elementSize, elementCount * ELEMENTS));
   }
-  static inline typename AnyList::Builder init(
+  static inline AnyList::Builder init(
       PointerBuilder builder, uint dataWordCount, uint pointerCount, uint elementCount) {
     return AnyList::Builder(builder.initStructList(
         elementCount * ELEMENTS, StructSize(dataWordCount * WORDS, pointerCount * POINTERS)));

@@ -25,12 +25,14 @@
 #include "arena.h"
 #include <gtest/gtest.h>
 
-namespace capnp {
+#if CAPNP_DEBUG_TYPES
+namespace kj {
   template <typename T, typename U>
   std::ostream& operator<<(std::ostream& os, kj::Quantity<T, U> value) {
     return os << (value / kj::unit<kj::Quantity<T, U>>());
   }
 }
+#endif
 
 namespace capnp {
 namespace _ {  // private

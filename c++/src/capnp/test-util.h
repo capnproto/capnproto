@@ -112,27 +112,44 @@ void checkDynamicTestMessageAllZero(DynamicStruct::Builder builder);
 void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader);
 #endif  // !CAPNP_LITE
 
-template <typename T, typename U>
-void checkList(T reader, std::initializer_list<U> expected) {
+template <typename T>
+inline void checkElement(T a, T b) {
+  EXPECT_EQ(a, b);
+}
+
+template <>
+inline void checkElement<float>(float a, float b) {
+  EXPECT_FLOAT_EQ(a, b);
+}
+
+template <>
+inline void checkElement<double>(double a, double b) {
+  EXPECT_DOUBLE_EQ(a, b);
+}
+
+template <typename T, typename L = T::Reads>
+void checkList(T reader, std::initializer_list<decltype(reader[0])> expected) {
   ASSERT_EQ(expected.size(), reader.size());
   for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_EQ(expected.begin()[i], reader[i]);
+    checkElement<decltype(reader[0])>(expected.begin()[i], reader[i]);
   }
 }
 
-template <typename T>
-void checkList(T reader, std::initializer_list<float> expected) {
+template <typename T, typename L = T::Builds, bool = false>
+void checkList(T reader, std::initializer_list<decltype(L::Reader()[0])> expected) {
   ASSERT_EQ(expected.size(), reader.size());
   for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_FLOAT_EQ(expected.begin()[i], reader[i]);
+    checkElement<decltype(L::Reader()[0])>(expected.begin()[i], reader[i]);
   }
 }
 
-template <typename T>
-void checkList(T reader, std::initializer_list<double> expected) {
-  ASSERT_EQ(expected.size(), reader.size());
-  for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_DOUBLE_EQ(expected.begin()[i], reader[i]);
+inline void checkList(List<test::TestOldVersion>::Reader reader,
+                      std::initializer_list<int64_t> expectedData,
+                      std::initializer_list<Text::Reader> expectedPointers) {
+  ASSERT_EQ(expectedData.size(), reader.size());
+  for (uint i = 0; i < expectedData.size(); i++) {
+    EXPECT_EQ(expectedData.begin()[i], reader[i].getOld1());
+    EXPECT_EQ(expectedPointers.begin()[i], reader[i].getOld2());
   }
 }
 

@@ -44,7 +44,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>WIN32;CAPNP_LITE;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\gtest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;..\src;..\gtest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -60,7 +60,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>WIN32;CAPNP_LITE;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\gtest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;..\src;..\gtest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -75,14 +75,35 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\capnp\any.h" />
+    <ClInclude Include="..\src\capnp\arena.h" />
+    <ClInclude Include="..\src\capnp\blob.h" />
+    <ClInclude Include="..\src\capnp\common.h" />
+    <ClInclude Include="..\src\capnp\generated-header-support.h" />
+    <ClInclude Include="..\src\capnp\layout.h" />
+    <ClInclude Include="..\src\capnp\list.h" />
+    <ClInclude Include="..\src\capnp\message.h" />
+    <ClInclude Include="..\src\capnp\orphan.h" />
+    <ClInclude Include="..\src\capnp\pointer-helpers.h" />
+    <ClInclude Include="..\src\capnp\schema-lite.h" />
+    <ClInclude Include="..\src\capnp\serialize-packed.h" />
+    <ClInclude Include="..\src\capnp\serialize.h" />
+    <ClInclude Include="..\src\capnp\test-util.h" />
     <ClInclude Include="..\src\kj\array.h" />
     <ClInclude Include="..\src\kj\common.h" />
     <ClInclude Include="..\src\kj\debug.h" />
     <ClInclude Include="..\src\kj\exception.h" />
     <ClInclude Include="..\src\kj\io.h" />
     <ClInclude Include="..\src\kj\memory.h" />
+    <ClInclude Include="..\src\kj\mutex.h" />
     <ClInclude Include="..\src\kj\string.h" />
     <ClInclude Include="..\src\kj\miniposix.h" />
+    <ClInclude Include="..\src\kj\thread.h" />
+    <ClInclude Include="..\src\kj\threadlocal.h" />
+    <ClInclude Include="..\src\kj\units.h" />
+    <ClInclude Include="capnp\test-import.capnp.h" />
+    <ClInclude Include="capnp\test-import2.capnp.h" />
+    <ClInclude Include="capnp\test.capnp.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\kj\array-test.c++">
@@ -135,6 +156,105 @@
     <ProjectReference Include="..\gtest\msvc\gtest_main.vcxproj">
       <Project>{3af54c8a-10bf-4332-9147-f68ed9862032}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\capnp\any-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\any.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\arena.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\blob-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\blob.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\c++.capnp.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\common-test.c++">
+      <FileType>Document</FileType>
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)-capnp</ObjectFileName>
+      <ProgramDataBaseFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)-capnpvc$(PlatformToolsetVersion).pdb</ProgramDataBaseFileName>
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)-capnp</ObjectFileName>
+      <ProgramDataBaseFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)-capnpvc$(PlatformToolsetVersion).pdb</ProgramDataBaseFileName>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\encoding-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\endian-fallback-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\endian-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\layout-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\layout.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\list.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\message-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\message.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\orphan-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\schema.capnp.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\serialize-packed-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\serialize-packed.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\serialize-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\serialize.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\capnp\test-util.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="capnp\test-import.capnp.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="capnp\test-import2.capnp.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="capnp\test.capnp.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\kj\mutex-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\kj\mutex.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\kj\thread.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Include="..\src\kj\threadlocal-test.c++">
+      <FileType>Document</FileType>
+    </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
