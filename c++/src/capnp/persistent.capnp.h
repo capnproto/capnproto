@@ -649,8 +649,12 @@ inline typename  ::capnp::Persistent<SturdyRef>::Client& Persistent<SturdyRef>::
 
 #endif  // !CAPNP_LITE
 // Persistent<SturdyRef>::SaveParams
+#if !_MSC_VER
 template <typename SturdyRef>
-constexpr ::capnp::_::StructSize Persistent<SturdyRef>::SaveParams::_capnpPrivate::structSize;
+constexpr uint16_t Persistent<SturdyRef>::SaveParams::_capnpPrivate::dataWordSize;
+template <typename SturdyRef>
+constexpr uint16_t Persistent<SturdyRef>::SaveParams::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 template <typename SturdyRef>
 constexpr ::capnp::Kind Persistent<SturdyRef>::SaveParams::_capnpPrivate::kind;
@@ -725,8 +729,12 @@ inline ::capnp::Orphan<SturdyRef> Persistent<SturdyRef>::SaveResults::Builder::d
 }
 
 // Persistent<SturdyRef>::SaveResults
+#if !_MSC_VER
 template <typename SturdyRef>
-constexpr ::capnp::_::StructSize Persistent<SturdyRef>::SaveResults::_capnpPrivate::structSize;
+constexpr uint16_t Persistent<SturdyRef>::SaveResults::_capnpPrivate::dataWordSize;
+template <typename SturdyRef>
+constexpr uint16_t Persistent<SturdyRef>::SaveResults::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 template <typename SturdyRef>
 constexpr ::capnp::Kind Persistent<SturdyRef>::SaveResults::_capnpPrivate::kind;
@@ -941,8 +949,12 @@ inline ::capnp::Orphan<typename  ::capnp::Persistent<InternalRef>::SaveParams> R
 }
 
 // RealmGateway<InternalRef, ExternalRef>::ImportParams
+#if !_MSC_VER
 template <typename InternalRef, typename ExternalRef>
-constexpr ::capnp::_::StructSize RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::structSize;
+constexpr uint16_t RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::dataWordSize;
+template <typename InternalRef, typename ExternalRef>
+constexpr uint16_t RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef>
 constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::kind;
@@ -1064,8 +1076,12 @@ inline ::capnp::Orphan<typename  ::capnp::Persistent<ExternalRef>::SaveParams> R
 }
 
 // RealmGateway<InternalRef, ExternalRef>::ExportParams
+#if !_MSC_VER
 template <typename InternalRef, typename ExternalRef>
-constexpr ::capnp::_::StructSize RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::structSize;
+constexpr uint16_t RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::dataWordSize;
+template <typename InternalRef, typename ExternalRef>
+constexpr uint16_t RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef>
 constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::kind;

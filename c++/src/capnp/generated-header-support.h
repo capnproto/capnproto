@@ -458,6 +458,17 @@ inline constexpr uint sizeInWords() {
 
 }  // namespace capnp
 
+#if _MSC_VER
+// MSVC doesn't understand floating-point constexpr yet.
+//
+// TODO(msvc): Remove this hack when MSVC is fixed.
+#define CAPNP_NON_INT_CONSTEXPR_DECL_INIT(value)
+#define CAPNP_NON_INT_CONSTEXPR_DEF_INIT(value) = value
+#else
+#define CAPNP_NON_INT_CONSTEXPR_DECL_INIT(value) = value
+#define CAPNP_NON_INT_CONSTEXPR_DEF_INIT(value)
+#endif
+
 #if CAPNP_LITE
 
 #define CAPNP_DECLARE_SCHEMA(id) \
@@ -469,14 +480,20 @@ inline constexpr uint sizeInWords() {
       static constexpr uint64_t typeId = 0x##id; \
       static inline ::capnp::word const* encodedSchema() { return bp_##id; } \
     }
+
+#if _MSC_VER
+// TODO(msvc): MSVC dosen't expect constexprs to have definitions.
+#define CAPNP_DEFINE_ENUM(type, id)
+#else
 #define CAPNP_DEFINE_ENUM(type, id) \
     constexpr uint64_t EnumInfo<type>::typeId
+#endif
 
-#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
+#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize_, pointerCount_) \
       struct IsStruct; \
       static constexpr uint64_t typeId = 0x##id; \
-      static constexpr ::capnp::_::StructSize structSize = ::capnp::_::StructSize( \
-          dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS); \
+      static constexpr uint16_t dataWordSize = dataWordSize_; \
+      static constexpr uint16_t pointerCount = pointerCount_; \
       static inline ::capnp::word const* encodedSchema() { return ::capnp::schemas::bp_##id; }
 
 #else  // CAPNP_LITE
@@ -496,12 +513,12 @@ inline constexpr uint sizeInWords() {
     constexpr uint64_t EnumInfo<type>::typeId; \
     constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema
 
-#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize, pointerCount) \
+#define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize_, pointerCount_) \
       struct IsStruct; \
       static constexpr uint64_t typeId = 0x##id; \
       static constexpr ::capnp::Kind kind = ::capnp::Kind::STRUCT; \
-      static constexpr ::capnp::_::StructSize structSize = ::capnp::_::StructSize( \
-          dataWordSize * ::capnp::WORDS, pointerCount * ::capnp::POINTERS); \
+      static constexpr uint16_t dataWordSize = dataWordSize_; \
+      static constexpr uint16_t pointerCount = pointerCount_; \
       static inline ::capnp::word const* encodedSchema() { return ::capnp::schemas::bp_##id; } \
       static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id;
 

@@ -1786,8 +1786,13 @@ private:
          structNode.getPointerCount(), ")\n");
 
     kj::StringTree defineText = kj::strTree(
-        "// ", fullName, "\n",
-        templates, "constexpr ::capnp::_::StructSize ", fullName, "::_capnpPrivate::structSize;\n",
+        "// ", fullName, "\n"
+        // TODO(msvc): MSVC doen't expect constexprs to have definitions. Remove #if once
+        //   MSVC catches up on constexpr.
+        "#if !_MSC_VER\n",
+        templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::dataWordSize;\n",
+        templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::pointerCount;\n"
+        "#endif\n",
         "#if !CAPNP_LITE\n",
         templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
         templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
@@ -2221,7 +2226,6 @@ private:
     const char* linkage = scope.size() == 0 ? "extern " : "static ";
 
     switch (type.which()) {
-      case schema::Value::VOID:
       case schema::Value::BOOL:
       case schema::Value::INT8:
       case schema::Value::INT16:
@@ -2231,16 +2235,34 @@ private:
       case schema::Value::UINT16:
       case schema::Value::UINT32:
       case schema::Value::UINT64:
-      case schema::Value::FLOAT32:
-      case schema::Value::FLOAT64:
       case schema::Value::ENUM:
         return ConstText {
           false,
           kj::strTree("static constexpr ", typeName_, ' ', upperCase, " = ",
               literalValue(schema.getType(), constProto.getValue()), ";\n"),
           scope.size() == 0 ? kj::strTree() : kj::strTree(
-              "constexpr ", typeName_, ' ', scope, upperCase, ";\n")
+              // TODO(msvc): MSVC doesn't like definitions of constexprs, but other compilers and
+              //   the standard require them.
+              "#if !_MSC_VER\n"
+              "constexpr ", typeName_, ' ', scope, upperCase, ";\n"
+              "#endif\n")
         };
+
+      case schema::Value::VOID:
+      case schema::Value::FLOAT32:
+      case schema::Value::FLOAT64: {
+        // TODO(msvc): MSVC doesn't like float- or class-typed constexprs. As soon as this is fixed,
+        //   treat VOID, FLOAT32, and FLOAT64 the same as the other primitives.
+        kj::String value = literalValue(schema.getType(), constProto.getValue()).flatten();
+        return ConstText {
+          false,
+          kj::strTree("static KJ_CONSTEXPR(const) ", typeName_, ' ', upperCase,
+              " CAPNP_NON_INT_CONSTEXPR_DECL_INIT(", value, ");\n"),
+          scope.size() == 0 ? kj::strTree() : kj::strTree(
+              "KJ_CONSTEXPR(const) ", typeName_, ' ', scope, upperCase,
+              " CAPNP_NON_INT_CONSTEXPR_DEF_INIT(", value, ");\n")
+        };
+      }
 
       case schema::Value::TEXT: {
         kj::String constType = kj::strTree(

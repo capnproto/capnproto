@@ -1871,7 +1871,10 @@ namespace capnp {
 namespace rpc {
 
 // Message
-constexpr ::capnp::_::StructSize Message::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Message::_capnpPrivate::dataWordSize;
+constexpr uint16_t Message::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Message::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Message::_capnpPrivate::schema;
@@ -1879,7 +1882,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Message::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Bootstrap
-constexpr ::capnp::_::StructSize Bootstrap::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Bootstrap::_capnpPrivate::dataWordSize;
+constexpr uint16_t Bootstrap::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Bootstrap::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Bootstrap::_capnpPrivate::schema;
@@ -1887,7 +1893,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Bootstrap::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Call
-constexpr ::capnp::_::StructSize Call::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Call::_capnpPrivate::dataWordSize;
+constexpr uint16_t Call::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Call::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Call::_capnpPrivate::schema;
@@ -1895,7 +1904,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Call::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Call::SendResultsTo
-constexpr ::capnp::_::StructSize Call::SendResultsTo::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Call::SendResultsTo::_capnpPrivate::dataWordSize;
+constexpr uint16_t Call::SendResultsTo::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Call::SendResultsTo::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Call::SendResultsTo::_capnpPrivate::schema;
@@ -1903,7 +1915,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Call::SendResultsTo::_capnpPrivate
 #endif  // !CAPNP_LITE
 
 // Return
-constexpr ::capnp::_::StructSize Return::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Return::_capnpPrivate::dataWordSize;
+constexpr uint16_t Return::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Return::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Return::_capnpPrivate::schema;
@@ -1911,7 +1926,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Return::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Finish
-constexpr ::capnp::_::StructSize Finish::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Finish::_capnpPrivate::dataWordSize;
+constexpr uint16_t Finish::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Finish::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Finish::_capnpPrivate::schema;
@@ -1919,7 +1937,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Finish::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Resolve
-constexpr ::capnp::_::StructSize Resolve::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Resolve::_capnpPrivate::dataWordSize;
+constexpr uint16_t Resolve::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Resolve::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Resolve::_capnpPrivate::schema;
@@ -1927,7 +1948,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Resolve::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Release
-constexpr ::capnp::_::StructSize Release::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Release::_capnpPrivate::dataWordSize;
+constexpr uint16_t Release::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Release::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Release::_capnpPrivate::schema;
@@ -1935,7 +1959,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Release::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Disembargo
-constexpr ::capnp::_::StructSize Disembargo::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Disembargo::_capnpPrivate::dataWordSize;
+constexpr uint16_t Disembargo::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Disembargo::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Disembargo::_capnpPrivate::schema;
@@ -1943,7 +1970,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Disembargo::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Disembargo::Context
-constexpr ::capnp::_::StructSize Disembargo::Context::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Disembargo::Context::_capnpPrivate::dataWordSize;
+constexpr uint16_t Disembargo::Context::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Disembargo::Context::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Disembargo::Context::_capnpPrivate::schema;
@@ -1951,7 +1981,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Disembargo::Context::_capnpPrivate
 #endif  // !CAPNP_LITE
 
 // Provide
-constexpr ::capnp::_::StructSize Provide::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Provide::_capnpPrivate::dataWordSize;
+constexpr uint16_t Provide::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Provide::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Provide::_capnpPrivate::schema;
@@ -1959,7 +1992,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Provide::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Accept
-constexpr ::capnp::_::StructSize Accept::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Accept::_capnpPrivate::dataWordSize;
+constexpr uint16_t Accept::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Accept::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Accept::_capnpPrivate::schema;
@@ -1967,7 +2003,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Accept::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Join
-constexpr ::capnp::_::StructSize Join::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Join::_capnpPrivate::dataWordSize;
+constexpr uint16_t Join::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Join::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Join::_capnpPrivate::schema;
@@ -1975,7 +2014,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Join::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // MessageTarget
-constexpr ::capnp::_::StructSize MessageTarget::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t MessageTarget::_capnpPrivate::dataWordSize;
+constexpr uint16_t MessageTarget::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind MessageTarget::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* MessageTarget::_capnpPrivate::schema;
@@ -1983,7 +2025,10 @@ constexpr ::capnp::_::RawBrandedSchema const* MessageTarget::_capnpPrivate::bran
 #endif  // !CAPNP_LITE
 
 // Payload
-constexpr ::capnp::_::StructSize Payload::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Payload::_capnpPrivate::dataWordSize;
+constexpr uint16_t Payload::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Payload::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Payload::_capnpPrivate::schema;
@@ -1991,7 +2036,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Payload::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // CapDescriptor
-constexpr ::capnp::_::StructSize CapDescriptor::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t CapDescriptor::_capnpPrivate::dataWordSize;
+constexpr uint16_t CapDescriptor::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind CapDescriptor::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* CapDescriptor::_capnpPrivate::schema;
@@ -1999,7 +2047,10 @@ constexpr ::capnp::_::RawBrandedSchema const* CapDescriptor::_capnpPrivate::bran
 #endif  // !CAPNP_LITE
 
 // PromisedAnswer
-constexpr ::capnp::_::StructSize PromisedAnswer::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t PromisedAnswer::_capnpPrivate::dataWordSize;
+constexpr uint16_t PromisedAnswer::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind PromisedAnswer::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* PromisedAnswer::_capnpPrivate::schema;
@@ -2007,7 +2058,10 @@ constexpr ::capnp::_::RawBrandedSchema const* PromisedAnswer::_capnpPrivate::bra
 #endif  // !CAPNP_LITE
 
 // PromisedAnswer::Op
-constexpr ::capnp::_::StructSize PromisedAnswer::Op::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t PromisedAnswer::Op::_capnpPrivate::dataWordSize;
+constexpr uint16_t PromisedAnswer::Op::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind PromisedAnswer::Op::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* PromisedAnswer::Op::_capnpPrivate::schema;
@@ -2015,7 +2069,10 @@ constexpr ::capnp::_::RawBrandedSchema const* PromisedAnswer::Op::_capnpPrivate:
 #endif  // !CAPNP_LITE
 
 // ThirdPartyCapDescriptor
-constexpr ::capnp::_::StructSize ThirdPartyCapDescriptor::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t ThirdPartyCapDescriptor::_capnpPrivate::dataWordSize;
+constexpr uint16_t ThirdPartyCapDescriptor::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind ThirdPartyCapDescriptor::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* ThirdPartyCapDescriptor::_capnpPrivate::schema;
@@ -2023,7 +2080,10 @@ constexpr ::capnp::_::RawBrandedSchema const* ThirdPartyCapDescriptor::_capnpPri
 #endif  // !CAPNP_LITE
 
 // Exception
-constexpr ::capnp::_::StructSize Exception::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Exception::_capnpPrivate::dataWordSize;
+constexpr uint16_t Exception::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Exception::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Exception::_capnpPrivate::schema;

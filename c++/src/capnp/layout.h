@@ -178,16 +178,9 @@ struct StructSize {
       : data(data), pointers(pointers) {}
 };
 
-template <typename T> struct StructSize_;
-// Specialized for every struct type with member:  static constexpr StructSize value"
-
-template <typename T, typename = typename StructSize_<T>::Exists>
+template <typename T, typename CapnpPrivate = typename T::_capnpPrivate>
 inline constexpr StructSize structSize() {
-  return StructSize_<T>::value;
-}
-template <typename T, typename CapnpPrivate = typename T::_capnpPrivate, bool = false>
-inline constexpr StructSize structSize() {
-  return CapnpPrivate::structSize;
+  return StructSize(CapnpPrivate::dataWordSize * WORDS, CapnpPrivate::pointerCount * POINTERS);
 }
 
 // -------------------------------------------------------------------
@@ -630,7 +623,6 @@ private:
   friend class StructBuilder;
   friend struct WireHelpers;
   friend class OrphanBuilder;
-  friend class AnyStruct;
 };
 
 class ListReader {

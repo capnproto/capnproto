@@ -463,7 +463,10 @@ namespace capnp {
 namespace compiler {
 
 // Token
-constexpr ::capnp::_::StructSize Token::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Token::_capnpPrivate::dataWordSize;
+constexpr uint16_t Token::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Token::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Token::_capnpPrivate::schema;
@@ -471,7 +474,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Token::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Statement
-constexpr ::capnp::_::StructSize Statement::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t Statement::_capnpPrivate::dataWordSize;
+constexpr uint16_t Statement::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Statement::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Statement::_capnpPrivate::schema;
@@ -479,7 +485,10 @@ constexpr ::capnp::_::RawBrandedSchema const* Statement::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // LexedTokens
-constexpr ::capnp::_::StructSize LexedTokens::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t LexedTokens::_capnpPrivate::dataWordSize;
+constexpr uint16_t LexedTokens::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind LexedTokens::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* LexedTokens::_capnpPrivate::schema;
@@ -487,7 +496,10 @@ constexpr ::capnp::_::RawBrandedSchema const* LexedTokens::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // LexedStatements
-constexpr ::capnp::_::StructSize LexedStatements::_capnpPrivate::structSize;
+#if !_MSC_VER
+constexpr uint16_t LexedStatements::_capnpPrivate::dataWordSize;
+constexpr uint16_t LexedStatements::_capnpPrivate::pointerCount;
+#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind LexedStatements::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* LexedStatements::_capnpPrivate::schema;
