@@ -567,7 +567,7 @@ public:
       : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
         step(0 * BITS / ELEMENTS) {}
 
-  MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder);
+  MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder)
 
   inline word* getLocation() {
     // Get the object's location.
@@ -645,7 +645,7 @@ public:
       : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
         structDataSize(0), structPointerCount(0), nestingLimit(0x7fffffff) {}
 
-  MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(const, ListReader);
+  MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(const, ListReader)
 
   inline ElementCount size() const;
   // The number of elements in the list.

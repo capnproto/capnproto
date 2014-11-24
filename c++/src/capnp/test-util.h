@@ -127,7 +127,7 @@ inline void checkElement<double>(double a, double b) {
   EXPECT_DOUBLE_EQ(a, b);
 }
 
-template <typename T, typename L = T::Reads>
+template <typename T, typename L = typename T::Reads>
 void checkList(T reader, std::initializer_list<decltype(reader[0])> expected) {
   ASSERT_EQ(expected.size(), reader.size());
   for (uint i = 0; i < expected.size(); i++) {
@@ -135,11 +135,11 @@ void checkList(T reader, std::initializer_list<decltype(reader[0])> expected) {
   }
 }
 
-template <typename T, typename L = T::Builds, bool = false>
-void checkList(T reader, std::initializer_list<decltype(L::Reader()[0])> expected) {
+template <typename T, typename L = typename T::Builds, bool = false>
+void checkList(T reader, std::initializer_list<decltype(typename L::Reader()[0])> expected) {
   ASSERT_EQ(expected.size(), reader.size());
   for (uint i = 0; i < expected.size(); i++) {
-    checkElement<decltype(L::Reader()[0])>(expected.begin()[i], reader[i]);
+    checkElement<decltype(typename L::Reader()[0])>(expected.begin()[i], reader[i]);
   }
 }
 

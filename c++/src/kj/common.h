@@ -471,12 +471,20 @@ using MinType = typename MinType_<T, U, sizeof(T) <= sizeof(U)>::Type;
 
 template <typename T, typename U>
 inline KJ_CONSTEXPR() auto min(T&& a, U&& b) -> MinType<Decay<T>, Decay<U>> {
-  return MinType<Decay<T>, Decay<U>>(a < b ? a : b);
+  return a < b ? MinType<Decay<T>, Decay<U>>(a) : MinType<Decay<T>, Decay<U>>(b);
 }
 
+template <typename T, typename U, bool takeT> struct MaxType_;
+template <typename T, typename U> struct MaxType_<T, U, true> { typedef T Type; };
+template <typename T, typename U> struct MaxType_<T, U, false> { typedef U Type; };
+
 template <typename T, typename U>
-inline KJ_CONSTEXPR() auto max(T&& a, U&& b) -> Decay<decltype(a > b ? a : b)> {
-  return a > b ? a : b;
+using MaxType = typename MaxType_<T, U, sizeof(T) >= sizeof(U)>::Type;
+// Resolves to the larger of the two input types.
+
+template <typename T, typename U>
+inline KJ_CONSTEXPR() auto max(T&& a, U&& b) -> MaxType<Decay<T>, Decay<U>> {
+  return a > b ? MaxType<Decay<T>, Decay<U>>(a) : MaxType<Decay<T>, Decay<U>>(b);
 }
 
 template <typename T, size_t s>
