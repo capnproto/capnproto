@@ -217,6 +217,10 @@ public:
     needsTypename = false;
   }
 
+  bool hasDisambiguatedTemplate() {
+    return hasDisambiguatedTemplate_;
+  }
+
   void addMemberTemplate(kj::StringPtr innerName, kj::Array<CppTypeName>&& params) {
     // Append "::innerName<params, ...>".
     //
@@ -224,6 +228,7 @@ public:
 
     bool parentIsArgDependent = isArgDependent;
     needsTypename = parentIsArgDependent;
+    hasDisambiguatedTemplate_ = hasDisambiguatedTemplate_ || parentIsArgDependent;
 
     name = kj::strTree(kj::mv(name),
         parentIsArgDependent ? "::template " : "::",
@@ -231,6 +236,7 @@ public:
         kj::StringTree(KJ_MAP(p, params) {
           if (p.isArgDependent) isArgDependent = true;
           if (p.hasInterfaces_) hasInterfaces_ = true;
+          if (p.hasDisambiguatedTemplate_) hasDisambiguatedTemplate_ = true;
           return kj::strTree(kj::mv(p));
         }, ", "),
         '>');
@@ -257,9 +263,15 @@ private:
   // Does this type name refer to any interface types? If so it may need to be #ifdefed out in
   // lite mode.
 
+  bool hasDisambiguatedTemplate_;
+  // Whether the type name contains a template type that had to be disambiguated using the
+  // "template" keyword, e.g. "Foo<T>::template Bar<U>".
+  //
+  // TODO(msvc): We only track this because MSVC seems to get confused by it in some weird cases.
+
   inline CppTypeName(kj::StringTree&& name, bool isArgDependent)
       : name(kj::mv(name)), isArgDependent(isArgDependent), needsTypename(false),
-        hasInterfaces_(false) {}
+        hasInterfaces_(false), hasDisambiguatedTemplate_(false) {}
 
   friend kj::StringTree KJ_STRINGIFY(CppTypeName&& typeName);
   friend kj::String KJ_STRINGIFY(const CppTypeName& typeName);
@@ -360,7 +372,11 @@ private:
       if (params.size() > 0) {
         auto args = brand.getBrandArgumentsAtScope(node.getId());
 
+#if 0
         // Figure out exactly how many params are not bound to AnyPointer.
+        // TODO(msvc): In a few obscure cases, MSVC does not like empty template pramater lists,
+        //   even if all parameters have defaults. So, we give in and explicitly list all
+        //   parameters in our generated code for now. Try again later.
         uint paramCount = 0;
         for (uint i: kj::indices(params)) {
           auto arg = args[i];
@@ -369,6 +385,9 @@ private:
             paramCount = i + 1;
           }
         }
+#else
+        uint paramCount = params.size();
+#endif
 
         result.addMemberTemplate(unqualifiedName,
             KJ_MAP(i, kj::range(0u, paramCount)) {
@@ -1600,12 +1619,16 @@ private:
             "  ::capnp::_::PointerHelpers<", type, ">::adopt(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(value));\n"
             "}\n",
+            COND(type.hasDisambiguatedTemplate(),
+                "#if !_MSC_VER\n"
+                "// Excluded under MSVC because bugs may make it unable to compile this method.\n"),
             templateContext.allDecls(),
             "inline ::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::disown(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n",
+            COND(type.hasDisambiguatedTemplate(), "#endif  // !_MSC_VER\n"),
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n")
       };
