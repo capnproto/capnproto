@@ -107,45 +107,15 @@ Orphan<List<rpc::PromisedAnswer::Op>> fromPipelineOps(
 }
 
 kj::Exception toException(const rpc::Exception::Reader& exception) {
-  kj::Exception::Nature nature =
-      exception.getIsCallersFault()
-          ? kj::Exception::Nature::PRECONDITION
-          : kj::Exception::Nature::LOCAL_BUG;
-
-  kj::Exception::Durability durability;
-  switch (exception.getDurability()) {
-    default:
-    case rpc::Exception::Durability::PERMANENT:
-      durability = kj::Exception::Durability::PERMANENT;
-      break;
-    case rpc::Exception::Durability::TEMPORARY:
-      durability = kj::Exception::Durability::TEMPORARY;
-      break;
-    case rpc::Exception::Durability::OVERLOADED:
-      durability = kj::Exception::Durability::OVERLOADED;
-      break;
-  }
-
-  return kj::Exception(nature, durability, "(remote)", 0,
-                       kj::str("remote exception: ", exception.getReason()));
+  return kj::Exception(static_cast<kj::Exception::Type>(exception.getType()),
+      "(remote)", 0, kj::str("remote exception: ", exception.getReason()));
 }
 
 void fromException(const kj::Exception& exception, rpc::Exception::Builder builder) {
   // TODO(someday):  Indicate the remote server name as part of the stack trace.  Maybe even
   //   transmit stack traces?
   builder.setReason(exception.getDescription());
-  builder.setIsCallersFault(exception.getNature() == kj::Exception::Nature::PRECONDITION);
-  switch (exception.getDurability()) {
-    case kj::Exception::Durability::PERMANENT:
-      builder.setDurability(rpc::Exception::Durability::PERMANENT);
-      break;
-    case kj::Exception::Durability::TEMPORARY:
-      builder.setDurability(rpc::Exception::Durability::TEMPORARY);
-      break;
-    case kj::Exception::Durability::OVERLOADED:
-      builder.setDurability(rpc::Exception::Durability::OVERLOADED);
-      break;
-  }
+  builder.setType(static_cast<rpc::Exception::Type>(exception.getType()));
 }
 
 uint exceptionSizeHint(const kj::Exception& exception) {
@@ -318,9 +288,8 @@ public:
       return;
     }
 
-    kj::Exception networkException(
-        kj::Exception::Nature::NETWORK_FAILURE, kj::Exception::Durability::PERMANENT,
-        __FILE__, __LINE__, kj::str("Disconnected: ", exception.getDescription()));
+    kj::Exception networkException(kj::Exception::Type::DISCONNECTED,
+        exception.getFile(), exception.getLine(), kj::heapString(exception.getDescription()));
 
     KJ_IF_MAYBE(newException, kj::runCatchingExceptions([&]() {
       // Carefully pull all the objects out of the tables prior to releasing them because their
@@ -1970,9 +1939,7 @@ private:
         handleMessage(kj::mv(*m));
         return true;
       } else {
-        disconnect(kj::Exception(
-            kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
-            __FILE__, __LINE__, kj::str("Peer disconnected.")));
+        disconnect(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
         return false;
       }
     }).then([this](bool keepGoing) {
@@ -2626,9 +2593,7 @@ public:
       // disassemble it.
       if (!connections.empty()) {
         kj::Vector<kj::Own<RpcConnectionState>> deleteMe(connections.size());
-        kj::Exception shutdownException(
-            kj::Exception::Nature::LOCAL_BUG, kj::Exception::Durability::PERMANENT,
-            __FILE__, __LINE__, kj::str("RpcSystem was destroyed."));
+        kj::Exception shutdownException = KJ_EXCEPTION(FAILED, "RpcSystem was destroyed.");
         for (auto& entry: connections) {
           entry.second->disconnect(kj::cp(shutdownException));
           deleteMe.add(kj::mv(entry.second));

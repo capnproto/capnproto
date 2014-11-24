@@ -26,6 +26,7 @@
 #include "miniposix.h"
 #include <stdlib.h>
 #include <exception>
+#include <new>
 
 #if (__linux__ && !__ANDROID__) || __APPLE__
 #define KJ_HAS_BACKTRACE 1
@@ -122,27 +123,15 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 
 }  // namespace
 
-ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature) {
-  static const char* NATURE_STRINGS[] = {
-    "requirement not met",
-    "bug in code",
-    "error from OS",
-    "network failure",
-    "error"
+ArrayPtr<const char> KJ_STRINGIFY(Exception::Type type) {
+  static const char* TYPE_STRINGS[] = {
+    "failed",
+    "overloaded",
+    "disconnected",
+    "unimplemented"
   };
 
-  const char* s = NATURE_STRINGS[static_cast<uint>(nature)];
-  return arrayPtr(s, strlen(s));
-}
-
-ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability) {
-  static const char* DURABILITY_STRINGS[] = {
-    "permanent",
-    "temporary",
-    "overloaded"
-  };
-
-  const char* s = DURABILITY_STRINGS[static_cast<uint>(durability)];
+  const char* s = TYPE_STRINGS[static_cast<uint>(type)];
   return arrayPtr(s, strlen(s));
 }
 
@@ -174,16 +163,23 @@ String KJ_STRINGIFY(const Exception& e) {
   }
 
   return str(strArray(contextText, ""),
-             e.getFile(), ":", e.getLine(), ": ", e.getNature(),
-             e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
+             e.getFile(), ":", e.getLine(), ": ", e.getType(),
              e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
              e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
              getStackSymbols(e.getStackTrace()));
 }
 
-Exception::Exception(Nature nature, Durability durability, const char* file, int line,
-                     String description) noexcept
-    : file(file), line(line), nature(nature), durability(durability),
+Exception::Exception(Type type, const char* file, int line, String description) noexcept
+    : file(file), line(line), type(type), description(mv(description)) {
+#ifndef KJ_HAS_BACKTRACE
+  traceCount = 0;
+#else
+  traceCount = backtrace(trace, 16);
+#endif
+}
+
+Exception::Exception(Type type, String file, int line, String description) noexcept
+    : ownFile(kj::mv(file)), file(ownFile.cStr()), line(line), type(type),
       description(mv(description)) {
 #ifndef KJ_HAS_BACKTRACE
   traceCount = 0;
@@ -192,19 +188,8 @@ Exception::Exception(Nature nature, Durability durability, const char* file, int
 #endif
 }
 
-Exception::Exception(Nature nature, Durability durability, String file, int line,
-                     String description) noexcept
-    : ownFile(kj::mv(file)), file(ownFile.cStr()), line(line), nature(nature),
-      durability(durability), description(mv(description)) {
-#ifndef KJ_HAS_BACKTRACE
-  traceCount = 0;
-#else
-  traceCount = backtrace(trace, 16);
-#endif
-}
-
 Exception::Exception(const Exception& other) noexcept
-    : file(other.file), line(other.line), nature(other.nature), durability(other.durability),
+    : file(other.file), line(other.line), type(other.type),
       description(heapString(other.description)), traceCount(other.traceCount) {
   if (file == other.ownFile.cStr()) {
     ownFile = heapString(other.ownFile);
@@ -334,8 +319,7 @@ private:
     // We intentionally don't log the context since it should get re-added by the exception callback
     // anyway.
     getExceptionCallback().logMessage(e.getFile(), e.getLine(), 0, str(
-        e.getNature(), e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
-        e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
+        e.getType(), e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
         e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
         getStackSymbols(e.getStackTrace()), "\n"));
   }
@@ -467,11 +451,14 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
     return nullptr;
   } catch (Exception& e) {
     return kj::mv(e);
+  } catch (std::bad_alloc& e) {
+    return Exception(Exception::Type::OVERLOADED,
+                     "(unknown)", -1, str("std::bad_alloc: ", e.what()));
   } catch (std::exception& e) {
-    return Exception(Exception::Nature::OTHER, Exception::Durability::PERMANENT,
+    return Exception(Exception::Type::FAILED,
                      "(unknown)", -1, str("std::exception: ", e.what()));
   } catch (...) {
-    return Exception(Exception::Nature::OTHER, Exception::Durability::PERMANENT,
+    return Exception(Exception::Type::FAILED,
                      "(unknown)", -1, str("Unknown non-KJ exception."));
   }
 #endif

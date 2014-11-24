@@ -190,9 +190,7 @@ public:
   TestNetworkAdapter(TestNetwork& network): network(network) {}
 
   ~TestNetworkAdapter() {
-    kj::Exception exception(
-        kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
-        __FILE__, __LINE__, kj::str("Network was destroyed."));
+    kj::Exception exception = KJ_EXCEPTION(FAILED, "Network was destroyed.");
     for (auto& entry: connections) {
       entry.second->disconnect(kj::cp(exception));
     }

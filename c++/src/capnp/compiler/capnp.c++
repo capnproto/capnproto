@@ -646,17 +646,10 @@ public:
 private:
   struct ParseErrorCatcher: public kj::ExceptionCallback {
     void onRecoverableException(kj::Exception&& e) {
-      if (e.getNature() == kj::Exception::Nature::PRECONDITION) {
-        // This is probably a problem with the input.  Let's try to report it more nicely.
-
-        // Only capture the first exception, on the assumption that later exceptions are probably
-        // just cascading problems.
-        if (exception == nullptr) {
-          exception = kj::mv(e);
-        }
-      } else {
-        // This is probably a bug, not a problem with the input.
-        ExceptionCallback::onRecoverableException(kj::mv(e));
+      // Only capture the first exception, on the assumption that later exceptions are probably
+      // just cascading problems.
+      if (exception == nullptr) {
+        exception = kj::mv(e);
       }
     }
 

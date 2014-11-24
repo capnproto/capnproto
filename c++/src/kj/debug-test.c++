@@ -233,7 +233,7 @@ TEST(Debug, Log) {
 
   KJ_ASSERT(1 == 1);
   EXPECT_FATAL(KJ_ASSERT(1 == 2)); line = __LINE__;
-  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": failed: expected "
             "1 == 2\n", mockCallback.text);
   mockCallback.text.clear();
 
@@ -244,25 +244,36 @@ TEST(Debug, Log) {
 
   bool recovered = false;
   KJ_ASSERT(1 == 2, "1 is not 2") { recovered = true; break; } line = __LINE__;
-  EXPECT_EQ("recoverable exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
+  EXPECT_EQ("recoverable exception: " + fileLine(__FILE__, line) + ": failed: expected "
             "1 == 2; 1 is not 2\n", mockCallback.text);
   EXPECT_TRUE(recovered);
   mockCallback.text.clear();
 
   EXPECT_FATAL(KJ_ASSERT(1 == 2, i, "hi", str)); line = __LINE__;
-  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": failed: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
   EXPECT_FATAL(KJ_REQUIRE(1 == 2, i, "hi", str)); line = __LINE__;
-  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": requirement not met: expected "
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": failed: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
   EXPECT_FATAL(KJ_FAIL_ASSERT("foo")); line = __LINE__;
-  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: foo\n",
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": failed: foo\n",
             mockCallback.text);
   mockCallback.text.clear();
+}
+
+TEST(Debug, Exception) {
+  int i = 123;
+
+  int line = __LINE__; Exception exception = KJ_EXCEPTION(DISCONNECTED, "foo", i);
+
+  EXPECT_EQ(Exception::Type::DISCONNECTED, exception.getType());
+  EXPECT_STREQ(__FILE__, exception.getFile());
+  EXPECT_EQ(line, exception.getLine());
+  EXPECT_EQ("foo; i = 123", exception.getDescription());
 }
 
 TEST(Debug, Catch) {
@@ -280,7 +291,7 @@ TEST(Debug, Catch) {
         what = kj::str(what.slice(0, *eol));
       }
       std::string text(what.cStr());
-      EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+      EXPECT_EQ(fileLine(__FILE__, line) + ": failed: foo", text);
     } else {
       ADD_FAILURE() << "Expected exception.";
     }
@@ -299,7 +310,7 @@ TEST(Debug, Catch) {
         what = kj::str(what.slice(0, *eol));
       }
       std::string text(what.cStr());
-      EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+      EXPECT_EQ(fileLine(__FILE__, line) + ": failed: foo", text);
     } else {
       ADD_FAILURE() << "Expected exception.";
     }
@@ -318,7 +329,7 @@ TEST(Debug, Catch) {
       } else {
         text.assign(what.cStr());
       }
-      EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+      EXPECT_EQ(fileLine(__FILE__, line) + ": failed: foo", text);
     }
   }
 #endif
@@ -327,11 +338,6 @@ TEST(Debug, Catch) {
 int mockSyscall(int i, int error = 0) {
   errno = error;
   return i;
-}
-
-int fail() {
-  errno = EBADF;
-  return -1;
 }
 
 TEST(Debug, Syscall) {
@@ -346,7 +352,25 @@ TEST(Debug, Syscall) {
 
   EXPECT_FATAL(KJ_SYSCALL(mockSyscall(-1, EBADF), i, "bar", str)); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) +
-            ": error from OS: mockSyscall(-1, EBADF): " + strerror(EBADF) +
+            ": failed: mockSyscall(-1, EBADF): " + strerror(EBADF) +
+            "; i = 123; bar; str = foo\n", mockCallback.text);
+  mockCallback.text.clear();
+
+  EXPECT_FATAL(KJ_SYSCALL(mockSyscall(-1, ECONNRESET), i, "bar", str)); line = __LINE__;
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) +
+            ": disconnected: mockSyscall(-1, ECONNRESET): " + strerror(ECONNRESET) +
+            "; i = 123; bar; str = foo\n", mockCallback.text);
+  mockCallback.text.clear();
+
+  EXPECT_FATAL(KJ_SYSCALL(mockSyscall(-1, ENOMEM), i, "bar", str)); line = __LINE__;
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) +
+            ": overloaded: mockSyscall(-1, ENOMEM): " + strerror(ENOMEM) +
+            "; i = 123; bar; str = foo\n", mockCallback.text);
+  mockCallback.text.clear();
+
+  EXPECT_FATAL(KJ_SYSCALL(mockSyscall(-1, ENOSYS), i, "bar", str)); line = __LINE__;
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) +
+            ": unimplemented: mockSyscall(-1, ENOSYS): " + strerror(ENOSYS) +
             "; i = 123; bar; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
@@ -354,9 +378,9 @@ TEST(Debug, Syscall) {
   bool recovered = false;
   KJ_SYSCALL(result = mockSyscall(-2, EBADF), i, "bar", str) { recovered = true; break; } line = __LINE__;
   EXPECT_EQ("recoverable exception: " + fileLine(__FILE__, line) +
-            ": error from OS: mockSyscall(-2, EBADF): " + strerror(EBADF) +
+            ": failed: mockSyscall(-2, EBADF): " + strerror(EBADF) +
             "; i = 123; bar; str = foo\n", mockCallback.text);
-  EXPECT_LT(result, 0);
+  EXPECT_EQ(-2, result);
   EXPECT_TRUE(recovered);
 }
 
@@ -374,7 +398,7 @@ TEST(Debug, Context) {
 
     EXPECT_FATAL(KJ_FAIL_ASSERT("bar")); line = __LINE__;
     EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
-              + fileLine(__FILE__, line) + ": bug in code: bar\n",
+              + fileLine(__FILE__, line) + ": failed: bar\n",
               mockCallback.text);
     mockCallback.text.clear();
 
@@ -386,7 +410,7 @@ TEST(Debug, Context) {
 
       EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
                 + fileLine(__FILE__, cline2) + ": context: baz; i = 123; corge; str = qux\n"
-                + fileLine(__FILE__, line) + ": bug in code: bar\n",
+                + fileLine(__FILE__, line) + ": failed: bar\n",
                 mockCallback.text);
       mockCallback.text.clear();
     }
@@ -397,7 +421,7 @@ TEST(Debug, Context) {
 
       EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
                 + fileLine(__FILE__, cline2) + ": context: grault\n"
-                + fileLine(__FILE__, line) + ": bug in code: bar\n",
+                + fileLine(__FILE__, line) + ": failed: bar\n",
                 mockCallback.text);
       mockCallback.text.clear();
     }

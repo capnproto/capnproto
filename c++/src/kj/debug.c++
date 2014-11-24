@@ -49,14 +49,53 @@ ArrayPtr<const char> KJ_STRINGIFY(Debug::Severity severity) {
 
 namespace {
 
+Exception::Type typeOfErrno(int error) {
+  switch (error) {
+    case EDQUOT:
+    case EMFILE:
+    case ENFILE:
+    case ENOBUFS:
+    case ENOLCK:
+    case ENOMEM:
+    case ENOSPC:
+    case ETIMEDOUT:
+    case EUSERS:
+      return Exception::Type::OVERLOADED;
+
+    case ECONNABORTED:
+    case ECONNREFUSED:
+    case ECONNRESET:
+    case EHOSTDOWN:
+    case EHOSTUNREACH:
+    case ENETDOWN:
+    case ENETRESET:
+    case ENETUNREACH:
+    case ENONET:
+    case EPIPE:
+      return Exception::Type::DISCONNECTED;
+
+    case ENOSYS:
+#if ENOTSUP
+    case ENOTSUP:
+#endif
+#if EOPNOTSUPP && EOPNOTSUPP != ENOTSUP
+    case EOPNOTSUPP:
+#endif
+      return Exception::Type::UNIMPLEMENTED;
+
+    default:
+      return Exception::Type::FAILED;
+  }
+}
+
 enum DescriptionStyle {
   LOG,
   ASSERTION,
   SYSCALL
 };
 
-static String makeDescription(DescriptionStyle style, const char* code, int errorNumber,
-                              const char* macroArgs, ArrayPtr<String> argValues) {
+static String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
+                                  const char* macroArgs, ArrayPtr<String> argValues) {
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
   if (argValues.size() > 0) {
@@ -193,7 +232,7 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
 void Debug::logInternal(const char* file, int line, Severity severity, const char* macroArgs,
                         ArrayPtr<String> argValues) {
   getExceptionCallback().logMessage(file, line, 0,
-      str(severity, ": ", makeDescription(LOG, nullptr, 0, macroArgs, argValues), '\n'));
+      str(severity, ": ", makeDescriptionImpl(LOG, nullptr, 0, macroArgs, argValues), '\n'));
 }
 
 Debug::Fault::~Fault() noexcept(false) {
@@ -213,15 +252,15 @@ void Debug::Fault::fatal() {
 }
 
 void Debug::Fault::init(
-    const char* file, int line, Exception::Nature nature, int errorNumber,
+    const char* file, int line, int osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  exception = new Exception(nature, Exception::Durability::PERMANENT, file, line,
-      makeDescription(nature == Exception::Nature::OS_ERROR ? SYSCALL : ASSERTION,
-                      condition, errorNumber, macroArgs, argValues));
+  exception = new Exception(typeOfErrno(osErrorNumber), file, line,
+      makeDescriptionImpl(osErrorNumber != 0 ? SYSCALL : ASSERTION, condition,
+                          osErrorNumber, macroArgs, argValues));
 }
 
-String Debug::makeContextDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
-  return makeDescription(LOG, nullptr, 0, macroArgs, argValues);
+String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
+  return makeDescriptionImpl(LOG, nullptr, 0, macroArgs, argValues);
 }
 
 int Debug::getOsErrorNumber(bool nonblocking) {

@@ -575,8 +575,7 @@ class BrokenClient final: public ClientHook, public kj::Refcounted {
 public:
   BrokenClient(const kj::Exception& exception): exception(exception) {}
   BrokenClient(const kj::StringPtr description)
-      : exception(kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
-                  "", 0, kj::str(description)) {}
+      : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {

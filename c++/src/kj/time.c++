@@ -26,9 +26,7 @@
 namespace kj {
 
 kj::Exception Timer::makeTimeoutException() {
-  return kj::Exception(
-      kj::Exception::Nature::LOCAL_BUG, kj::Exception::Durability::OVERLOADED,
-      __FILE__, __LINE__, kj::heapString("operation timed out"));
+  return KJ_EXCEPTION(OVERLOADED, "operation timed out");
 }
 
 }  // namespace kj
