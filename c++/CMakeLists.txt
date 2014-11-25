@@ -22,13 +22,28 @@ if(CAPNP_LITE AND BUILD_TOOLS)
   message(WARNING "Command-line tools will not be built with CAPNP_LITE.")
 endif()
 
-if(CAPNP_LITE)
+if(MSVC AND NOT CAPNP_LITE)
+  message(SEND_ERROR "Building with MSVC is only supported with CAPNP_LITE.")
+endif()
+
+if(CAPNP_LITE AND MSVC)
+  set(CAPNP_LITE_FLAG "/DCAPNP_LITE")
+elseif(CAPNP_LITE)
   set(CAPNP_LITE_FLAG "-DCAPNP_LITE")
 else()
   set(CAPNP_LITE_FLAG)
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -std=c++11 -pthread ${CAPNP_LITE_FLAG}")
+if(MSVC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Wall ${CAPNP_LITE_FLAG}")
+  # Statically link with the runtime libraries.
+  # TODO: This should depend on whether or not Cap'n Proto is being built as a static or shared library.
+  #       When building the tests, this needs to match with how gtest is built as well.
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+else()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -std=c++11 -pthread ${CAPNP_LITE_FLAG}")
+endif()
 
 # Source =======================================================================
 
@@ -36,25 +51,27 @@ add_subdirectory(src)
 
 # Install ======================================================================
 
-# Variables for pkg-config files
-set(prefix "${CMAKE_INSTALL_PREFIX}")
-set(exec_prefix "${EXEC_INSTALL_PREFIX}")
-set(libdir "${LIB_INSTALL_DIR}")
-set(includedir "${INCLUDE_INSTALL_DIR}")
-set(PTHREAD_CFLAGS "-pthread")
-set(STDLIB_FLAG)  # TODO: Unsupported
+if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
+  # Variables for pkg-config files
+  set(prefix "${CMAKE_INSTALL_PREFIX}")
+  set(exec_prefix "${EXEC_INSTALL_PREFIX}")
+  set(libdir "${LIB_INSTALL_DIR}")
+  set(includedir "${INCLUDE_INSTALL_DIR}")
+  set(PTHREAD_CFLAGS "-pthread")
+  set(STDLIB_FLAG)  # TODO: Unsupported
 
-configure_file(capnp.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" @ONLY)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+  configure_file(capnp.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" @ONLY)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
 
-if(NOT CAPNP_LITE)
-  configure_file(capnp-rpc.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" @ONLY)
-  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+  if(NOT CAPNP_LITE)
+    configure_file(capnp-rpc.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+  endif()
+
+  unset(STDLIB_FLAG)
+  unset(PTHREAD_CFLAGS)
+  unset(includedir)
+  unset(libdir)
+  unset(exec_prefix)
+  unset(prefix)
 endif()
-
-unset(STDLIB_FLAG)
-unset(PTHREAD_CFLAGS)
-unset(includedir)
-unset(libdir)
-unset(exec_prefix)
-unset(prefix)

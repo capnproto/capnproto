@@ -22,15 +22,22 @@ if(BUILD_TESTING)
   ExternalProject_Get_Property(gtest_build binary_dir)
 
   add_library(gtest UNKNOWN IMPORTED)
-  set_property(TARGET gtest
-    PROPERTY IMPORTED_LOCATION "${binary_dir}/${CMAKE_FIND_LIBRARY_PREFIXES}gtest.a"
-  )
+  if(CMAKE_GENERATOR MATCHES "Visual Studio.*")
+    set_target_properties(gtest PROPERTIES IMPORTED_LOCATION_DEBUG "${binary_dir}/Debug/gtest.lib")
+    set_target_properties(gtest PROPERTIES IMPORTED_LOCATION_RELEASE "${binary_dir}/Release/gtest.lib")
+  else()
+    set_target_properties(gtest PROPERTIES IMPORTED_LOCATION "${binary_dir}/libgtest.a")
+  endif()
+  
   add_dependencies(gtest gtest_build)
 
   add_library(gtest_main UNKNOWN IMPORTED)
-  set_property(TARGET gtest_main
-    PROPERTY IMPORTED_LOCATION "${binary_dir}/${CMAKE_FIND_LIBRARY_PREFIXES}gtest_main.a"
-  )
+  if(CMAKE_GENERATOR MATCHES "Visual Studio.*")
+    set_target_properties(gtest_main PROPERTIES IMPORTED_LOCATION_DEBUG "${binary_dir}/Debug/gtest_main.lib")
+    set_target_properties(gtest_main PROPERTIES IMPORTED_LOCATION_RELEASE "${binary_dir}/Release/gtest_main.lib")
+  else()
+    set_target_properties(gtest_main PROPERTIES IMPORTED_LOCATION "${binary_dir}/libgtest_main.a")
+  endif()
   add_dependencies(gtest_main gtest)
 
   ExternalProject_Get_Property(gtest_build source_dir)
