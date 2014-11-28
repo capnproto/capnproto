@@ -321,7 +321,7 @@ interface Directory extends(Node) {
   }
 
   create @1 (name :Text) -> (file :File);
-  mkdir @2 (name :Text) -> (directory :Directory)
+  mkdir @2 (name :Text) -> (directory :Directory);
   open @3 (name :Text) -> (node :Node);
   delete @4 (name :Text);
   link @5 (name :Text, node :Node);
