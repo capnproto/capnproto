@@ -727,6 +727,14 @@ void Compiler::Node::traverseNodeDependencies(
       break;
     }
 
+    case schema::Node::CONST:
+      traverseType(schemaNode.getConst().getType(), eagerness, seen, finalLoader);
+      break;
+
+    case schema::Node::ANNOTATION:
+      traverseType(schemaNode.getAnnotation().getType(), eagerness, seen, finalLoader);
+      break;
+
     default:
       break;
   }
