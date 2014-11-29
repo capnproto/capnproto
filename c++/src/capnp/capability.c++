@@ -74,7 +74,7 @@ Capability::Client::Client(kj::Exception&& exception)
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* actualInterfaceName, uint64_t requestedTypeId) {
-  KJ_FAIL_REQUIRE("Requested interface not implemented.", actualInterfaceName, requestedTypeId) {
+  KJ_UNIMPLEMENTED("Requested interface not implemented.", actualInterfaceName, requestedTypeId) {
     // Recoverable exception will be caught by promise framework.
 
     // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -88,7 +88,7 @@ kj::Promise<void> Capability::Server::internalUnimplemented(
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* interfaceName, uint64_t typeId, uint16_t methodId) {
-  KJ_FAIL_REQUIRE("Method not implemented.", interfaceName, typeId, methodId) {
+  KJ_UNIMPLEMENTED("Method not implemented.", interfaceName, typeId, methodId) {
     // Recoverable exception will be caught by promise framework.
     break;
   }
@@ -97,7 +97,7 @@ kj::Promise<void> Capability::Server::internalUnimplemented(
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* interfaceName, const char* methodName, uint64_t typeId, uint16_t methodId) {
-  KJ_FAIL_REQUIRE("Method not implemented.", interfaceName, typeId, methodName, methodId) {
+  KJ_UNIMPLEMENTED("Method not implemented.", interfaceName, typeId, methodName, methodId) {
     // Recoverable exception will be caught by promise framework.
     break;
   }

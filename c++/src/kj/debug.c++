@@ -252,11 +252,17 @@ void Debug::Fault::fatal() {
 }
 
 void Debug::Fault::init(
+    const char* file, int line, Exception::Type type,
+    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
+  exception = new Exception(type, file, line,
+      makeDescriptionImpl(ASSERTION, condition, 0, macroArgs, argValues));
+}
+
+void Debug::Fault::init(
     const char* file, int line, int osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   exception = new Exception(typeOfErrno(osErrorNumber), file, line,
-      makeDescriptionImpl(osErrorNumber != 0 ? SYSCALL : ASSERTION, condition,
-                          osErrorNumber, macroArgs, argValues));
+      makeDescriptionImpl(SYSCALL, condition, osErrorNumber, macroArgs, argValues));
 }
 
 String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {

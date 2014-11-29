@@ -144,11 +144,11 @@ namespace kj {
 
 #define KJ_REQUIRE(cond, ...) \
   if (KJ_LIKELY(cond)) {} else \
-    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, 0, \
+    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                                  #cond, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_REQUIRE(...) \
-  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, 0, \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                                nullptr, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
 #define KJ_SYSCALL(call, ...) \
@@ -164,6 +164,10 @@ namespace kj {
 #define KJ_FAIL_SYSCALL(code, errorNumber, ...) \
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, \
            errorNumber, code, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
+
+#define KJ_UNIMPLEMENTED(...) \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::UNIMPLEMENTED, \
+                               nullptr, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
 #define KJ_CONTEXT(...) \
   auto KJ_UNIQUE_NAME(_kjContextFunc) = [&]() -> ::kj::_::Debug::Context::Value { \
@@ -198,11 +202,11 @@ namespace kj {
 
 #define KJ_REQUIRE(cond, ...) \
   if (KJ_LIKELY(cond)) {} else \
-    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, 0, \
+    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                                  #cond, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_REQUIRE(...) \
-  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, 0, \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                                nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_SYSCALL(call, ...) \
@@ -218,6 +222,10 @@ namespace kj {
 #define KJ_FAIL_SYSCALL(code, errorNumber, ...) \
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, \
            errorNumber, code, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_UNIMPLEMENTED(...) \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::UNIMPLEMENTED, \
+                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_CONTEXT(...) \
   auto KJ_UNIQUE_NAME(_kjContextFunc) = [&]() -> ::kj::_::Debug::Context::Value { \
@@ -292,8 +300,13 @@ public:
   class Fault {
   public:
     template <typename... Params>
+    Fault(const char* file, int line, Exception::Type type,
+          const char* condition, const char* macroArgs, Params&&... params);
+    template <typename... Params>
     Fault(const char* file, int line, int osErrorNumber,
           const char* condition, const char* macroArgs, Params&&... params);
+    Fault(const char* file, int line, Exception::Type type,
+          const char* condition, const char* macroArgs);
     Fault(const char* file, int line, int osErrorNumber,
           const char* condition, const char* macroArgs);
     ~Fault() noexcept(false);
@@ -302,6 +315,8 @@ public:
     // Throw the exception.
 
   private:
+    void init(const char* file, int line, Exception::Type type,
+              const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
     void init(const char* file, int line, int osErrorNumber,
               const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
 
@@ -391,6 +406,15 @@ inline void Debug::log<>(const char* file, int line, Severity severity, const ch
 }
 
 template <typename... Params>
+Debug::Fault::Fault(const char* file, int line, Exception::Type type,
+                    const char* condition, const char* macroArgs, Params&&... params)
+    : exception(nullptr) {
+  String argValues[sizeof...(Params)] = {str(params)...};
+  init(file, line, type, condition, macroArgs,
+       arrayPtr(argValues, sizeof...(Params)));
+}
+
+template <typename... Params>
 Debug::Fault::Fault(const char* file, int line, int osErrorNumber,
                     const char* condition, const char* macroArgs, Params&&... params)
     : exception(nullptr) {
@@ -403,6 +427,12 @@ inline Debug::Fault::Fault(const char* file, int line, int osErrorNumber,
                            const char* condition, const char* macroArgs)
     : exception(nullptr) {
   init(file, line, osErrorNumber, condition, macroArgs, nullptr);
+}
+
+inline Debug::Fault::Fault(const char* file, int line, kj::Exception::Type type,
+                           const char* condition, const char* macroArgs)
+    : exception(nullptr) {
+  init(file, line, type, condition, macroArgs, nullptr);
 }
 
 template <typename Call>

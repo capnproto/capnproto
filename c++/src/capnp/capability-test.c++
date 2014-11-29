@@ -62,6 +62,7 @@ TEST(Capability, Basic) {
       [](Response<test::TestInterface::BarResults>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
+        EXPECT_EQ(kj::Exception::Type::UNIMPLEMENTED, e.getType());
         barFailed = true;
       });
 
@@ -243,6 +244,7 @@ TEST(Capability, DynamicClient) {
       [](Response<DynamicStruct>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
+        EXPECT_EQ(kj::Exception::Type::UNIMPLEMENTED, e.getType());
         barFailed = true;
       });
 
@@ -364,7 +366,7 @@ public:
       EXPECT_ANY_THROW(context.getParams());
       return kj::READY_NOW;
     } else {
-      KJ_FAIL_ASSERT("Method not implemented", methodName) { break; }
+      KJ_UNIMPLEMENTED("Method not implemented", methodName) { break; }
       return kj::READY_NOW;
     }
   }
@@ -394,6 +396,7 @@ TEST(Capability, DynamicServer) {
       [](Response<test::TestInterface::BarResults>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
+        EXPECT_EQ(kj::Exception::Type::UNIMPLEMENTED, e.getType());
         barFailed = true;
       });
 
