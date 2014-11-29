@@ -81,7 +81,7 @@ kj::Array<word> messageToFlatArray(MessageBuilder& builder);
 // deleted. For example:
 //
 //     kj::Array<capnp::word> words = messageToFlatArray(myMessage);
-//     kj::Array<kj::byte> bytes = words.asBytes();
+//     kj::ArrayPtr<kj::byte> bytes = words.asBytes();
 //     write(fd, bytes.begin(), bytes.size());
 
 kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
