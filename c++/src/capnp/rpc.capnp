@@ -1053,29 +1053,86 @@ struct Exception {
   # **(level 0)**
   #
   # Describes an arbitrary error that prevented an operation (e.g. a call) from completing.
+  #
+  # Cap'n Proto exceptions always indicate that something went wrong. In other words, in a fantasy
+  # world where everything always works as expected, no exceptions would ever be thrown. Clients
+  # should only ever catch exceptions as a means to implement fault-tolerance, where "fault" can
+  # mean:
+  # - Bugs.
+  # - Invalid input.
+  # - Configuration errors.
+  # - Network probles.
+  # - Insufficient resources.
+  # - Version skew (unimplemented functionality).
+  # - Other logistical problems.
+  #
+  # Exceptions should NOT be used to flag application-specific conditions that a client is expected
+  # to handle in an application-specific way. Put another way, in the Cap'n Proto world,
+  # "checked exceptions" (where an interface explicitly defines the exceptions it throws and
+  # clients are forced by the type system to handle those exceptions) do NOT make sense.
 
   reason @0 :Text;
   # Human-readable failure description.
 
-  isCallersFault @1 :Bool;
-  # In the best estimate of the error source, is it the caller's fault that this error occurred
-  # (like HTTP 400), or is it the callee's fault (like HTTP 500)?  Or, put another way, if an
-  # automated bug report were to be generated for this error, should it be initially filed on the
-  # caller's code or the callee's?  This is a guess.  Generally guesses should err towards blaming
-  # the callee -- at the very least, the callee should be on the hook for improving their error
-  # handling to be more confident in assigning blame.
+  type @3 :Type;
+  # The type of the error. The purpose of this enum is not to describe the error itself, but
+  # rather to describe how the client might want to respond to the error.
 
-  durability @2 :Durability;
-  # In the best estimate of the error source, is this error likely to repeat if the same call is
-  # executed again?  Callers might use this to decide when to retry a request.
+  enum Type {
+    failed @0;
+    # A generic problem occurred, and it is believed that if the operation were repeated without
+    # any change in the state of the world, the problem would occur again.
+    #
+    # A client might respond to this error by logging it for investigation by the developer and/or
+    # displaying it to the user.
 
-  enum Durability {
-    permanent @0;     # Retrying the exact same operation will fail in the same way.
-    temporary @1;     # Retrying the exact same operation might succeed.
-    overloaded @2;    # The error may be due to the system being overloaded.  Retrying may work
-                      # later on, but for now the caller should not retry right away as this will
-                      # likely exacerbate the problem.
+    overloaded @1;
+    # The request was rejected due to a temporary lack of resources.
+    #
+    # Examples include:
+    # - There's not enough CPU time to keep up with incoming requests, so some are rejected.
+    # - The server ran out of RAM or disk space during the request.
+    # - The operation timed out (took significantly longer than it should have).
+    #
+    # A client might respond to this error by scheduling to retry the operation much later. The
+    # client should NOT retry again immediately since this would likely exacerbate the problem.
+
+    disconnected @2;
+    # The method failed because a connection to some necessary capability was lost.
+    #
+    # Examples include:
+    # - The client introduced the server to a third-party capability, the connection to that third
+    #   party was subsequently lost, and then the client requested that the server use the dead
+    #   capability for something.
+    # - The client previously requested that the server obtain a capability from some third party.
+    #   The server returned a capability to an object wrapping the third-party capability. Later,
+    #   the server's connection to the third party was lost.
+    # - The capability has been revoked. Revocation does not necessarily mean that the client is
+    #   no longer authorized to use the capability; it is often used simply as a way to force the
+    #   client to repeat the setup process, perhaps to efficiently move them to a new back-end or
+    #   get them to recognize some other change that has occurred.
+    #
+    # A client should normally respond to this error by releasing all capabilities it is currently
+    # holding related to the one it called and then re-creating them by restoring SturdyRefs and/or
+    # repeating the method calls used to create them originally. In other words, disconnect and
+    # start over. This should in turn cause the server to obtain a new copy of the capability that
+    # it lost, thus making everything work.
+    #
+    # If the client receives another `disconnencted` error in the process of rebuilding the
+    # capability and retrying the call, it should treat this as an `overloaded` error: the network
+    # is currently unreliable, possibly due to load or other temporary issues.
+
+    unimplemented @3;
+    # The server doesn't implement the requested method. If there is some other method that the
+    # client could call (perhaps an older and/or slower interface), it should try that instead.
+    # Otherwise, this should be treated like `serverError`.
   }
+
+  obsoleteIsCallersFault @1 :Bool;
+  # OBSOLETE. Ignore.
+
+  obsoleteDurability @2 :UInt16;
+  # OBSOLETE. See `type` instead.
 }
 
 # ========================================================================================

@@ -828,9 +828,7 @@ private:
       delete this;
     } else {
       if (inner->isWaiting()) {
-        inner->reject(kj::Exception(
-            kj::Exception::Nature::LOCAL_BUG, kj::Exception::Durability::PERMANENT,
-            __FILE__, __LINE__,
+        inner->reject(kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
             kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
       }
       inner = nullptr;

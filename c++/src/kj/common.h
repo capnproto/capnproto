@@ -185,9 +185,6 @@ namespace _ {  // private
 KJ_NORETURN(void inlineRequireFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
     const char* message = nullptr));
-KJ_NORETURN(void inlineAssertFailure(
-    const char* file, int line, const char* expectation, const char* macroArgs,
-    const char* message = nullptr));
 
 KJ_NORETURN(void unreachable());
 
@@ -195,20 +192,13 @@ KJ_NORETURN(void unreachable());
 
 #ifdef KJ_DEBUG
 #if _MSC_VER
-// TODO(msvc): Figure out __VA_ARGS__; see debug.h.
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
-        __FILE__, __LINE__, #condition, "")
+        __FILE__, __LINE__, #condition, "" #__VA_ARGS__, __VA_ARGS__)
 // Version of KJ_DREQUIRE() which is safe to use in headers that are #included by users.  Used to
 // check preconditions inside inline methods.  KJ_IREQUIRE is particularly useful in that
 // it will be enabled depending on whether the application is compiled in debug mode rather than
 // whether libkj is.
-
-#define KJ_IASSERT(condition, ...) \
-    if (KJ_LIKELY(condition)); else ::kj::_::inlineAssertFailure( \
-        __FILE__, __LINE__, #condition, "")
-// Version of KJ_DASSERT() which is safe to use in headers that are #included by users.  Used to
-// check state inside inline and templated methods.
 #else
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
@@ -217,17 +207,12 @@ KJ_NORETURN(void unreachable());
 // check preconditions inside inline methods.  KJ_IREQUIRE is particularly useful in that
 // it will be enabled depending on whether the application is compiled in debug mode rather than
 // whether libkj is.
-
-#define KJ_IASSERT(condition, ...) \
-    if (KJ_LIKELY(condition)); else ::kj::_::inlineAssertFailure( \
-        __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
-// Version of KJ_DASSERT() which is safe to use in headers that are #included by users.  Used to
-// check state inside inline and templated methods.
 #endif
 #else
 #define KJ_IREQUIRE(condition, ...)
-#define KJ_IASSERT(condition, ...)
 #endif
+
+#define KJ_IASSERT KJ_IREQUIRE
 
 #define KJ_UNREACHABLE ::kj::_::unreachable();
 // Put this on code paths that cannot be reached to suppress compiler warnings about missing

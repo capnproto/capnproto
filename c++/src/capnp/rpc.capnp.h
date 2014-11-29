@@ -34,13 +34,14 @@ CAPNP_DECLARE_SCHEMA(d800b1d6cd6f1ca0);
 CAPNP_DECLARE_SCHEMA(f316944415569081);
 CAPNP_DECLARE_SCHEMA(d37007fde1f0027d);
 CAPNP_DECLARE_SCHEMA(d625b7063acf691a);
-CAPNP_DECLARE_SCHEMA(bbaeda2607b6f958);
-enum class Durability_bbaeda2607b6f958: uint16_t {
-  PERMANENT,
-  TEMPORARY,
+CAPNP_DECLARE_SCHEMA(b28c96e23f4cbd58);
+enum class Type_b28c96e23f4cbd58: uint16_t {
+  FAILED,
   OVERLOADED,
+  DISCONNECTED,
+  UNIMPLEMENTED,
 };
-CAPNP_DECLARE_ENUM(Durability, bbaeda2607b6f958);
+CAPNP_DECLARE_ENUM(Type, b28c96e23f4cbd58);
 
 }  // namespace schemas
 }  // namespace capnp
@@ -397,7 +398,7 @@ struct Exception {
   class Reader;
   class Builder;
   class Pipeline;
-  typedef ::capnp::schemas::Durability_bbaeda2607b6f958 Durability;
+  typedef ::capnp::schemas::Type_b28c96e23f4cbd58 Type;
 
 
   struct _capnpPrivate {
@@ -2390,9 +2391,11 @@ public:
   inline bool hasReason() const;
   inline  ::capnp::Text::Reader getReason() const;
 
-  inline bool getIsCallersFault() const;
+  inline bool getObsoleteIsCallersFault() const;
 
-  inline  ::capnp::rpc::Exception::Durability getDurability() const;
+  inline  ::uint16_t getObsoleteDurability() const;
+
+  inline  ::capnp::rpc::Exception::Type getType() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2429,11 +2432,14 @@ public:
   inline void adoptReason(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownReason();
 
-  inline bool getIsCallersFault();
-  inline void setIsCallersFault(bool value);
+  inline bool getObsoleteIsCallersFault();
+  inline void setObsoleteIsCallersFault(bool value);
 
-  inline  ::capnp::rpc::Exception::Durability getDurability();
-  inline void setDurability( ::capnp::rpc::Exception::Durability value);
+  inline  ::uint16_t getObsoleteDurability();
+  inline void setObsoleteDurability( ::uint16_t value);
+
+  inline  ::capnp::rpc::Exception::Type getType();
+  inline void setType( ::capnp::rpc::Exception::Type value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -4754,32 +4760,46 @@ inline ::capnp::Orphan< ::capnp::Text> Exception::Builder::disownReason() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Exception::Reader::getIsCallersFault() const {
+inline bool Exception::Reader::getObsoleteIsCallersFault() const {
   return _reader.getDataField<bool>(
       0 * ::capnp::ELEMENTS);
 }
 
-inline bool Exception::Builder::getIsCallersFault() {
+inline bool Exception::Builder::getObsoleteIsCallersFault() {
   return _builder.getDataField<bool>(
       0 * ::capnp::ELEMENTS);
 }
-inline void Exception::Builder::setIsCallersFault(bool value) {
+inline void Exception::Builder::setObsoleteIsCallersFault(bool value) {
   _builder.setDataField<bool>(
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline  ::capnp::rpc::Exception::Durability Exception::Reader::getDurability() const {
-  return _reader.getDataField< ::capnp::rpc::Exception::Durability>(
+inline  ::uint16_t Exception::Reader::getObsoleteDurability() const {
+  return _reader.getDataField< ::uint16_t>(
       1 * ::capnp::ELEMENTS);
 }
 
-inline  ::capnp::rpc::Exception::Durability Exception::Builder::getDurability() {
-  return _builder.getDataField< ::capnp::rpc::Exception::Durability>(
+inline  ::uint16_t Exception::Builder::getObsoleteDurability() {
+  return _builder.getDataField< ::uint16_t>(
       1 * ::capnp::ELEMENTS);
 }
-inline void Exception::Builder::setDurability( ::capnp::rpc::Exception::Durability value) {
-  _builder.setDataField< ::capnp::rpc::Exception::Durability>(
+inline void Exception::Builder::setObsoleteDurability( ::uint16_t value) {
+  _builder.setDataField< ::uint16_t>(
       1 * ::capnp::ELEMENTS, value);
+}
+
+inline  ::capnp::rpc::Exception::Type Exception::Reader::getType() const {
+  return _reader.getDataField< ::capnp::rpc::Exception::Type>(
+      2 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::rpc::Exception::Type Exception::Builder::getType() {
+  return _builder.getDataField< ::capnp::rpc::Exception::Type>(
+      2 * ::capnp::ELEMENTS);
+}
+inline void Exception::Builder::setType( ::capnp::rpc::Exception::Type value) {
+  _builder.setDataField< ::capnp::rpc::Exception::Type>(
+      2 * ::capnp::ELEMENTS, value);
 }
 
 }  // namespace

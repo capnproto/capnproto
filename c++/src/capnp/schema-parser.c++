@@ -462,8 +462,8 @@ public:
 
   void reportError(SourcePos start, SourcePos end, kj::StringPtr message) const override {
     kj::getExceptionCallback().onRecoverableException(kj::Exception(
-        kj::Exception::Nature::LOCAL_BUG, kj::Exception::Durability::PERMANENT,
-        kj::heapString(diskPath), start.line, kj::heapString(message)));
+        kj::Exception::Type::FAILED, kj::heapString(diskPath), start.line,
+        kj::heapString(message)));
   }
 
 private:
