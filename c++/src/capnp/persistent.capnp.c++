@@ -67,8 +67,8 @@ static const ::capnp::_::RawSchema* const d_c8cb212fcd9f5691[] = {
 };
 static const uint16_t m_c8cb212fcd9f5691[] = {0};
 const ::capnp::_::RawBrandedSchema::Dependency bd_c8cb212fcd9f5691[] = {
-  { 33554432,  ::capnp::Persistent<>::SaveParams::_capnpPrivate::brand },
-  { 50331648,  ::capnp::Persistent<>::SaveResults::_capnpPrivate::brand },
+  { 33554432,  ::capnp::Persistent< ::capnp::AnyPointer>::SaveParams::_capnpPrivate::brand },
+  { 50331648,  ::capnp::Persistent< ::capnp::AnyPointer>::SaveResults::_capnpPrivate::brand },
 };
 const ::capnp::_::RawSchema s_c8cb212fcd9f5691 = {
   0xc8cb212fcd9f5691, b_c8cb212fcd9f5691.words, 52, d_c8cb212fcd9f5691, m_c8cb212fcd9f5691,
@@ -242,10 +242,10 @@ static const ::capnp::_::RawSchema* const d_84ff286cd00a3ed4[] = {
 };
 static const uint16_t m_84ff286cd00a3ed4[] = {1, 0};
 const ::capnp::_::RawBrandedSchema::Dependency bd_84ff286cd00a3ed4[] = {
-  { 33554432,  ::capnp::RealmGateway<>::ImportParams::_capnpPrivate::brand },
-  { 33554433,  ::capnp::RealmGateway<>::ExportParams::_capnpPrivate::brand },
-  { 50331648,  ::capnp::Persistent<>::SaveResults::_capnpPrivate::brand },
-  { 50331649,  ::capnp::Persistent<>::SaveResults::_capnpPrivate::brand },
+  { 33554432,  ::capnp::RealmGateway< ::capnp::AnyPointer,  ::capnp::AnyPointer>::ImportParams::_capnpPrivate::brand },
+  { 33554433,  ::capnp::RealmGateway< ::capnp::AnyPointer,  ::capnp::AnyPointer>::ExportParams::_capnpPrivate::brand },
+  { 50331648,  ::capnp::Persistent< ::capnp::AnyPointer>::SaveResults::_capnpPrivate::brand },
+  { 50331649,  ::capnp::Persistent< ::capnp::AnyPointer>::SaveResults::_capnpPrivate::brand },
 };
 const ::capnp::_::RawSchema s_84ff286cd00a3ed4 = {
   0x84ff286cd00a3ed4, b_84ff286cd00a3ed4.words, 81, d_84ff286cd00a3ed4, m_84ff286cd00a3ed4,
@@ -337,8 +337,8 @@ static const ::capnp::_::RawSchema* const d_f0c2cc1d3909574d[] = {
 static const uint16_t m_f0c2cc1d3909574d[] = {0, 1};
 static const uint16_t i_f0c2cc1d3909574d[] = {0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_f0c2cc1d3909574d[] = {
-  { 16777216,  ::capnp::Persistent<>::_capnpPrivate::brand },
-  { 16777217,  ::capnp::Persistent<>::SaveParams::_capnpPrivate::brand },
+  { 16777216,  ::capnp::Persistent< ::capnp::AnyPointer>::_capnpPrivate::brand },
+  { 16777217,  ::capnp::Persistent< ::capnp::AnyPointer>::SaveParams::_capnpPrivate::brand },
 };
 const ::capnp::_::RawSchema s_f0c2cc1d3909574d = {
   0xf0c2cc1d3909574d, b_f0c2cc1d3909574d.words, 74, d_f0c2cc1d3909574d, m_f0c2cc1d3909574d,
@@ -430,8 +430,8 @@ static const ::capnp::_::RawSchema* const d_ecafa18b482da3aa[] = {
 static const uint16_t m_ecafa18b482da3aa[] = {0, 1};
 static const uint16_t i_ecafa18b482da3aa[] = {0, 1};
 const ::capnp::_::RawBrandedSchema::Dependency bd_ecafa18b482da3aa[] = {
-  { 16777216,  ::capnp::Persistent<>::_capnpPrivate::brand },
-  { 16777217,  ::capnp::Persistent<>::SaveParams::_capnpPrivate::brand },
+  { 16777216,  ::capnp::Persistent< ::capnp::AnyPointer>::_capnpPrivate::brand },
+  { 16777217,  ::capnp::Persistent< ::capnp::AnyPointer>::SaveParams::_capnpPrivate::brand },
 };
 const ::capnp::_::RawSchema s_ecafa18b482da3aa = {
   0xecafa18b482da3aa, b_ecafa18b482da3aa.words, 74, d_ecafa18b482da3aa, m_ecafa18b482da3aa,
