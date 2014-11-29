@@ -70,7 +70,9 @@ Exception::Type typeOfErrno(int error) {
     case ENETDOWN:
     case ENETRESET:
     case ENETUNREACH:
+#if ENONET
     case ENONET:
+#endif
     case EPIPE:
       return Exception::Type::DISCONNECTED;
 
