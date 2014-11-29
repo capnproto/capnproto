@@ -1706,8 +1706,7 @@ kj::ArrayPtr<const T> SchemaLoader::Impl::copyDeduped(kj::ArrayPtr<const T> valu
     return kj::arrayPtr(kj::implicitCast<const T*>(nullptr), 0);
   }
 
-  auto bytes = kj::arrayPtr(
-      reinterpret_cast<const byte*>(values.begin()), values.size() * sizeof(T));
+  auto bytes = values.asBytes();
 
   auto iter = dedupTable.find(bytes);
   if (iter != dedupTable.end()) {
@@ -1718,8 +1717,7 @@ kj::ArrayPtr<const T> SchemaLoader::Impl::copyDeduped(kj::ArrayPtr<const T> valu
   auto copy = arena.allocateArray<T>(values.size());
   memcpy(copy.begin(), values.begin(), values.size() * sizeof(T));
 
-  bytes = kj::arrayPtr(reinterpret_cast<const byte*>(copy.begin()), values.size() * sizeof(T));
-  KJ_ASSERT(dedupTable.insert(bytes).second);
+  KJ_ASSERT(dedupTable.insert(copy.asBytes()).second);
 
   return copy;
 }

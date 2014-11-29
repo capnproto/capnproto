@@ -106,8 +106,7 @@ std::ostream& operator<<(std::ostream& os, const DisplayByteArray& bytes) {
   return os;
 }
 
-void expectPacksTo(std::initializer_list<uint8_t> unpacked,
-                   std::initializer_list<uint8_t> packed) {
+void expectPacksTo(kj::ArrayPtr<const byte> unpacked, kj::ArrayPtr<const byte> packed) {
   TestPipe pipe;
 
   // -----------------------------------------------------------------
@@ -119,7 +118,7 @@ void expectPacksTo(std::initializer_list<uint8_t> unpacked,
     packedOut.write(unpacked.begin(), unpacked.size());
   }
 
-  if (pipe.getData() != std::string(reinterpret_cast<const char*>(packed.begin()), packed.size())) {
+  if (pipe.getData() != std::string(packed.asChars().begin(), packed.asChars().size())) {
     ADD_FAILURE()
         << "Tried to pack: " << DisplayByteArray(unpacked) << "\n"
         << "Expected:      " << DisplayByteArray(packed) << "\n"

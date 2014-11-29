@@ -1749,8 +1749,7 @@ PipelineFor<DynamicCapability> DynamicValue::Pipeline::AsImpl<DynamicCapability>
 Data::Reader DynamicValue::Reader::AsImpl<Data>::apply(const Reader& reader) {
   if (reader.type == TEXT) {
     // Coerce text to data.
-    return Data::Reader(reinterpret_cast<const byte*>(reader.textValue.begin()),
-                        reader.textValue.size());
+    return reader.textValue.asBytes();
   }
   KJ_REQUIRE(reader.type == DATA, "Value type mismatch.") {
     return Data::Reader();
@@ -1760,8 +1759,7 @@ Data::Reader DynamicValue::Reader::AsImpl<Data>::apply(const Reader& reader) {
 Data::Builder DynamicValue::Builder::AsImpl<Data>::apply(Builder& builder) {
   if (builder.type == TEXT) {
     // Coerce text to data.
-    return Data::Builder(reinterpret_cast<byte*>(builder.textValue.begin()),
-                         builder.textValue.size());
+    return builder.textValue.asBytes();
   }
   KJ_REQUIRE(builder.type == DATA, "Value type mismatch.") {
     return BuilderFor<Data>();

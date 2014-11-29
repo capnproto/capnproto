@@ -205,12 +205,10 @@ kj::Promise<void> writeMessage(kj::AsyncOutputStream& output,
   }
 
   arrays.pieces = kj::heapArray<kj::ArrayPtr<const byte>>(segments.size() + 1);
-  arrays.pieces[0] = kj::arrayPtr(reinterpret_cast<byte*>(arrays.table.begin()),
-                                  arrays.table.size() * sizeof(arrays.table[0]));
+  arrays.pieces[0] = arrays.table.asBytes();
 
   for (uint i = 0; i < segments.size(); i++) {
-    arrays.pieces[i + 1] = kj::arrayPtr(reinterpret_cast<const byte*>(segments[i].begin()),
-                                        reinterpret_cast<const byte*>(segments[i].end()));
+    arrays.pieces[i + 1] = segments[i].asBytes();
   }
 
   auto promise = output.write(arrays.pieces);

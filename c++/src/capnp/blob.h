@@ -100,7 +100,7 @@ public:
   inline Builder(decltype(nullptr)): ArrayPtr<byte>(nullptr) {}
   inline Builder(byte* value, size_t size): ArrayPtr<byte>(value, size) {}
   inline Builder(kj::Array<byte>& value): ArrayPtr<byte>(value) {}
-  inline Builder(ArrayPtr<byte>& value): ArrayPtr<byte>(value) {}
+  inline Builder(ArrayPtr<byte> value): ArrayPtr<byte>(value) {}
 
   inline Data::Reader asReader() const { return Data::Reader(*this); }
   inline operator Reader() const { return asReader(); }
@@ -124,6 +124,8 @@ public:
   inline kj::ArrayPtr<char> asArray();
   inline operator kj::ArrayPtr<const char>() const;
   inline kj::ArrayPtr<const char> asArray() const;
+  inline kj::ArrayPtr<byte> asBytes() { return asArray().asBytes(); }
+  inline kj::ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
   inline operator kj::StringPtr() const;

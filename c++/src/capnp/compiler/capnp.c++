@@ -1040,8 +1040,7 @@ public:
       for (;;) {
         auto buf = input.tryGetReadBuffer();
         if (buf.size() == 0) break;
-        allText.addAll(reinterpret_cast<const char*>(buf.begin()),
-                       reinterpret_cast<const char*>(buf.end()));
+        allText.addAll(buf.asChars());
         input.skip(buf.size());
       }
     }

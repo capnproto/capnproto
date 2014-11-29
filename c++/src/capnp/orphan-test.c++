@@ -899,7 +899,7 @@ TEST(Orphans, ReferenceExternalData) {
   {
     auto segments = builder.getSegmentsForOutput();
     ASSERT_EQ(2, segments.size());
-    EXPECT_EQ(data, reinterpret_cast<const byte*>(segments[1].begin()));
+    EXPECT_EQ(data, segments[1].asBytes().begin());
     EXPECT_EQ((sizeof(data) + 7) / 8, segments[1].size());
   }
 

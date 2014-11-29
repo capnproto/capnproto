@@ -396,6 +396,13 @@ template <typename T> struct IsReference_ { static constexpr bool value = false;
 template <typename T> struct IsReference_<T&> { static constexpr bool value = true; };
 template <typename T> constexpr bool isReference() { return IsReference_<T>::value; }
 
+template <typename From, typename To>
+struct PropagateConst_ { typedef To Type; };
+template <typename From, typename To>
+struct PropagateConst_<const From, To> { typedef const To Type; };
+template <typename From, typename To>
+using PropagateConst = typename PropagateConst_<From, To>::Type;
+
 namespace _ {  // private
 
 template <typename T>
@@ -1136,6 +1143,17 @@ public:
   inline ArrayPtr slice(size_t start, size_t end) {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
+  }
+
+  inline ArrayPtr<PropagateConst<T, byte>> asBytes() const {
+    // Reinterpret the array as a byte array. This is explicitly legal under C++ aliasing
+    // rules.
+    return { reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_ * sizeof(T) };
+  }
+  inline ArrayPtr<PropagateConst<T, char>> asChars() const {
+    // Reinterpret the array as a char array. This is explicitly legal under C++ aliasing
+    // rules.
+    return { reinterpret_cast<PropagateConst<T, char>*>(ptr), size_ * sizeof(T) };
   }
 
   inline bool operator==(decltype(nullptr)) const { return size_ == 0; }

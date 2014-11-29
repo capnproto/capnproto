@@ -199,7 +199,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   if (segmentCount == 1) {
     inputStream.read(scratchSpace.begin(), totalWords * sizeof(word));
   } else if (segmentCount > 1) {
-    readPos = reinterpret_cast<byte*>(scratchSpace.begin());
+    readPos = scratchSpace.asBytes().begin();
     readPos += inputStream.read(readPos, segment0Size * sizeof(word), totalWords * sizeof(word));
   }
 }
@@ -256,11 +256,10 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
   }
 
   KJ_STACK_ARRAY(kj::ArrayPtr<const byte>, pieces, segments.size() + 1, 4, 32);
-  pieces[0] = kj::arrayPtr(reinterpret_cast<byte*>(table.begin()), table.size() * sizeof(table[0]));
+  pieces[0] = table.asBytes();
 
   for (uint i = 0; i < segments.size(); i++) {
-    pieces[i + 1] = kj::arrayPtr(reinterpret_cast<const byte*>(segments[i].begin()),
-                                 reinterpret_cast<const byte*>(segments[i].end()));
+    pieces[i + 1] = segments[i].asBytes();
   }
 
   output.write(pieces);

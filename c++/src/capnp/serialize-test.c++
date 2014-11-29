@@ -131,8 +131,8 @@ TEST(Serialize, FlatArrayEvenSegmentCount) {
 class TestInputStream: public kj::InputStream {
 public:
   TestInputStream(kj::ArrayPtr<const word> data, bool lazy)
-      : pos(reinterpret_cast<const char*>(data.begin())),
-        end(reinterpret_cast<const char*>(data.end())),
+      : pos(data.asChars().begin()),
+        end(data.asChars().end()),
         lazy(lazy) {}
   ~TestInputStream() {}
 
@@ -246,7 +246,7 @@ public:
 
   const bool dataEquals(kj::ArrayPtr<const word> other) {
     return data ==
-        std::string(reinterpret_cast<const char*>(other.begin()), other.size() * sizeof(word));
+        std::string(other.asChars().begin(), other.asChars().size());
   }
 
 private:

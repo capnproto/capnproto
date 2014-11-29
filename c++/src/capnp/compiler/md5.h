@@ -44,7 +44,7 @@ public:
 
   void update(kj::ArrayPtr<const kj::byte> data);
   inline void update(kj::ArrayPtr<const char> data) {
-    return update(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.begin()), data.size()));
+    return update(data.asBytes());
   }
   inline void update(kj::StringPtr data) {
     return update(data.asArray());

@@ -77,6 +77,7 @@ public:
 
   inline operator ArrayPtr<const char>() const;
   inline ArrayPtr<const char> asArray() const;
+  inline ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
   inline const char* cStr() const { return content.begin(); }
@@ -143,6 +144,8 @@ public:
   inline operator ArrayPtr<const char>() const;
   inline ArrayPtr<char> asArray();
   inline ArrayPtr<const char> asArray() const;
+  inline ArrayPtr<byte> asBytes() { return asArray().asBytes(); }
+  inline ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
   inline const char* cStr() const;

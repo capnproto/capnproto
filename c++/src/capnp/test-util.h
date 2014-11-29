@@ -52,10 +52,10 @@
 namespace capnp {
 
 inline std::ostream& operator<<(std::ostream& os, const Data::Reader& value) {
-  return os.write(reinterpret_cast<const char*>(value.begin()), value.size());
+  return os.write(value.asChars().begin(), value.asChars().size());
 }
 inline std::ostream& operator<<(std::ostream& os, const Data::Builder& value) {
-  return os.write(reinterpret_cast<const char*>(value.begin()), value.size());
+  return os.write(value.asChars().begin(), value.asChars().size());
 }
 inline std::ostream& operator<<(std::ostream& os, const Text::Reader& value) {
   return os.write(value.begin(), value.size());

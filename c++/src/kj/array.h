@@ -186,6 +186,11 @@ public:
     return ArrayPtr<const T>(ptr + start, end - start);
   }
 
+  inline ArrayPtr<const byte> asBytes() const { return asPtr().asBytes(); }
+  inline ArrayPtr<PropagateConst<T, byte>> asBytes() { return asPtr().asBytes(); }
+  inline ArrayPtr<const char> asChars() const { return asPtr().asChars(); }
+  inline ArrayPtr<PropagateConst<T, char>> asChars() { return asPtr().asChars(); }
+
   inline bool operator==(decltype(nullptr)) const { return size_ == 0; }
   inline bool operator!=(decltype(nullptr)) const { return size_ != 0; }
 

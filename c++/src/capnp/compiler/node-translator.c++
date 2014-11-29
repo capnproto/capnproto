@@ -2717,8 +2717,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(Expression::Reader src, 
     case Expression::STRING:
       if (type.isData()) {
         Text::Reader text = src.getString();
-        return orphanage.newOrphanCopy(Data::Reader(
-            reinterpret_cast<const byte*>(text.begin()), text.size()));
+        return orphanage.newOrphanCopy(Data::Reader(text.asBytes()));
       } else {
         return orphanage.newOrphanCopy(src.getString());
       }
