@@ -51,34 +51,74 @@ namespace {
 
 Exception::Type typeOfErrno(int error) {
   switch (error) {
+#ifdef EDQUOT
     case EDQUOT:
+#endif
+#ifdef EMFILE
     case EMFILE:
+#endif
+#ifdef ENFILE
     case ENFILE:
+#endif
+#ifdef ENOBUFS
     case ENOBUFS:
+#endif
+#ifdef ENOLCK
     case ENOLCK:
+#endif
+#ifdef ENOMEM
     case ENOMEM:
+#endif
+#ifdef ENOSPC
     case ENOSPC:
+#endif
+#ifdef ETIMEDOUT
     case ETIMEDOUT:
+#endif
+#ifdef EUSERS
     case EUSERS:
+#endif
       return Exception::Type::OVERLOADED;
 
+#ifdef ECONNABORTED
     case ECONNABORTED:
+#endif
+#ifdef ECONNREFUSED
     case ECONNREFUSED:
+#endif
+#ifdef ECONNRESET
     case ECONNRESET:
+#endif
+#ifdef EHOSTDOWN
     case EHOSTDOWN:
+#endif
+#ifdef EHOSTUNREACH
     case EHOSTUNREACH:
+#endif
+#ifdef ENETDOWN
     case ENETDOWN:
+#endif
+#ifdef ENETRESET
     case ENETRESET:
+#endif
+#ifdef ENETUNREACH
     case ENETUNREACH:
+#endif
+#ifdef ENONET
     case ENONET:
+#endif
+#ifdef EPIPE
     case EPIPE:
+#endif
       return Exception::Type::DISCONNECTED;
 
+#ifdef ENOSYS
     case ENOSYS:
-#if ENOTSUP
+#endif
+#ifdef ENOTSUP
     case ENOTSUP:
 #endif
-#if EOPNOTSUPP && EOPNOTSUPP != ENOTSUP
+#if defined(EOPNOTSUPP) && EOPNOTSUPP != ENOTSUP
     case EOPNOTSUPP:
 #endif
       return Exception::Type::UNIMPLEMENTED;
