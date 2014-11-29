@@ -76,12 +76,12 @@ private:
 kj::Array<word> messageToFlatArray(MessageBuilder& builder);
 // Constructs a flat array containing the entire content of the given message.
 //
-// To output the message as bytes, use `.toBytes()` on the returned word array. Keep in mind that
-// toBytes() returns an ArrayPtr, so you have to save the Array as well to prevent it from being
+// To output the message as bytes, use `.asBytes()` on the returned word array. Keep in mind that
+// `asBytes()` returns an ArrayPtr, so you have to save the Array as well to prevent it from being
 // deleted. For example:
 //
 //     kj::Array<capnp::word> words = messageToFlatArray(myMessage);
-//     kj::Array<kj::byte> bytes = words.toBytes();
+//     kj::Array<kj::byte> bytes = words.asBytes();
 //     write(fd, bytes.begin(), bytes.size());
 
 kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
