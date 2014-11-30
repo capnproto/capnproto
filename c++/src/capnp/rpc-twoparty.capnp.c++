@@ -351,7 +351,7 @@ namespace rpc {
 namespace twoparty {
 
 // VatId
-#if !_MSC_VER
+#ifndef _MSC_VER
 constexpr uint16_t VatId::_capnpPrivate::dataWordSize;
 constexpr uint16_t VatId::_capnpPrivate::pointerCount;
 #endif
@@ -362,7 +362,7 @@ constexpr ::capnp::_::RawBrandedSchema const* VatId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // ProvisionId
-#if !_MSC_VER
+#ifndef _MSC_VER
 constexpr uint16_t ProvisionId::_capnpPrivate::dataWordSize;
 constexpr uint16_t ProvisionId::_capnpPrivate::pointerCount;
 #endif
@@ -373,7 +373,7 @@ constexpr ::capnp::_::RawBrandedSchema const* ProvisionId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // RecipientId
-#if !_MSC_VER
+#ifndef _MSC_VER
 constexpr uint16_t RecipientId::_capnpPrivate::dataWordSize;
 constexpr uint16_t RecipientId::_capnpPrivate::pointerCount;
 #endif
@@ -384,7 +384,7 @@ constexpr ::capnp::_::RawBrandedSchema const* RecipientId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // ThirdPartyCapId
-#if !_MSC_VER
+#ifndef _MSC_VER
 constexpr uint16_t ThirdPartyCapId::_capnpPrivate::dataWordSize;
 constexpr uint16_t ThirdPartyCapId::_capnpPrivate::pointerCount;
 #endif
@@ -395,7 +395,7 @@ constexpr ::capnp::_::RawBrandedSchema const* ThirdPartyCapId::_capnpPrivate::br
 #endif  // !CAPNP_LITE
 
 // JoinKeyPart
-#if !_MSC_VER
+#ifndef _MSC_VER
 constexpr uint16_t JoinKeyPart::_capnpPrivate::dataWordSize;
 constexpr uint16_t JoinKeyPart::_capnpPrivate::pointerCount;
 #endif
@@ -406,7 +406,7 @@ constexpr ::capnp::_::RawBrandedSchema const* JoinKeyPart::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // JoinResult
-#if !_MSC_VER
+#ifndef _MSC_VER
 constexpr uint16_t JoinResult::_capnpPrivate::dataWordSize;
 constexpr uint16_t JoinResult::_capnpPrivate::pointerCount;
 #endif

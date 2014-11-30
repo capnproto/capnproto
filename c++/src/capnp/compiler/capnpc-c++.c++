@@ -1620,7 +1620,7 @@ private:
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(value));\n"
             "}\n",
             COND(type.hasDisambiguatedTemplate(),
-                "#if !_MSC_VER\n"
+                "#ifndef _MSC_VER\n"
                 "// Excluded under MSVC because bugs may make it unable to compile this method.\n"),
             templateContext.allDecls(),
             "inline ::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
@@ -1812,7 +1812,7 @@ private:
         "// ", fullName, "\n"
         // TODO(msvc): MSVC doen't expect constexprs to have definitions. Remove #if once
         //   MSVC catches up on constexpr.
-        "#if !_MSC_VER\n",
+        "#ifndef _MSC_VER\n",
         templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::dataWordSize;\n",
         templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::pointerCount;\n"
         "#endif\n",
@@ -2266,7 +2266,7 @@ private:
           scope.size() == 0 ? kj::strTree() : kj::strTree(
               // TODO(msvc): MSVC doesn't like definitions of constexprs, but other compilers and
               //   the standard require them.
-              "#if !_MSC_VER\n"
+              "#ifndef _MSC_VER\n"
               "constexpr ", typeName_, ' ', scope, upperCase, ";\n"
               "#endif\n")
         };
