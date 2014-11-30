@@ -649,7 +649,7 @@ inline typename  ::capnp::Persistent<SturdyRef>::Client& Persistent<SturdyRef>::
 
 #endif  // !CAPNP_LITE
 // Persistent<SturdyRef>::SaveParams
-#if !_MSC_VER
+#ifndef _MSC_VER
 template <typename SturdyRef>
 constexpr uint16_t Persistent<SturdyRef>::SaveParams::_capnpPrivate::dataWordSize;
 template <typename SturdyRef>
@@ -729,7 +729,7 @@ inline ::capnp::Orphan<SturdyRef> Persistent<SturdyRef>::SaveResults::Builder::d
 }
 
 // Persistent<SturdyRef>::SaveResults
-#if !_MSC_VER
+#ifndef _MSC_VER
 template <typename SturdyRef>
 constexpr uint16_t Persistent<SturdyRef>::SaveResults::_capnpPrivate::dataWordSize;
 template <typename SturdyRef>
@@ -949,7 +949,7 @@ inline ::capnp::Orphan<typename  ::capnp::Persistent<InternalRef>::SaveParams> R
 }
 
 // RealmGateway<InternalRef, ExternalRef>::ImportParams
-#if !_MSC_VER
+#ifndef _MSC_VER
 template <typename InternalRef, typename ExternalRef>
 constexpr uint16_t RealmGateway<InternalRef, ExternalRef>::ImportParams::_capnpPrivate::dataWordSize;
 template <typename InternalRef, typename ExternalRef>
@@ -1076,7 +1076,7 @@ inline ::capnp::Orphan<typename  ::capnp::Persistent<ExternalRef>::SaveParams> R
 }
 
 // RealmGateway<InternalRef, ExternalRef>::ExportParams
-#if !_MSC_VER
+#ifndef _MSC_VER
 template <typename InternalRef, typename ExternalRef>
 constexpr uint16_t RealmGateway<InternalRef, ExternalRef>::ExportParams::_capnpPrivate::dataWordSize;
 template <typename InternalRef, typename ExternalRef>
