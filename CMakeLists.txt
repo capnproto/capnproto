@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 2.8)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(CheckIncludeFileCXX)
-check_include_file_cxx(initializer_list HAS_CXX11)
+check_include_file_cxx(initializer_list HAS_CXX11 "-std=c++11")
 if(NOT HAS_CXX11)
   message(SEND_ERROR "Requires a C++11 compiler and standard library.")
 endif()
