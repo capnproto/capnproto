@@ -190,16 +190,31 @@ private:
       const _::RawSchema* schema,
       kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> bindings);
 
-  _::RawBrandedSchema::Binding makeDep(
+  void makeDep(_::RawBrandedSchema::Binding& result,
       schema::Type::Reader type, kj::StringPtr scopeName,
       kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
-  _::RawBrandedSchema::Binding makeDep(
+  void makeDep(_::RawBrandedSchema::Binding& result,
       uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
       schema::Brand::Reader brand, kj::StringPtr scopeName,
       kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
   // Looks up the schema and brand for a dependency, or creates lazily-evaluated placeholders if
-  // they don't already exist. `scopeName` is a human-readable name of the place where the type
-  // appeared.
+  // they don't already exist, and fills in `result`. `scopeName` is a human-readable name of the
+  // place where the type appeared.
+  //
+  // Note that we don't simply return a Binding because we need to be careful about initialization
+  // to ensure that our byte-based de-duplification works. If we constructed a Binding on the stack
+  // and returned it, padding bytes in that Binding could go uninitialized, causing it to appear
+  // unique when it's not. It is expected that `result` has been zero'd via memset() before these
+  // methods are called.
+
+  const _::RawBrandedSchema* makeDepSchema(
+      schema::Type::Reader type, kj::StringPtr scopeName,
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
+  const _::RawBrandedSchema* makeDepSchema(
+      uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
+      schema::Brand::Reader brand, kj::StringPtr scopeName,
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
+  // Invoke makeDep() then return the result's schema, or nullptr if it's a primitive type.
 
   template <typename T>
   kj::ArrayPtr<const T> copyDeduped(kj::ArrayPtr<const T> values);
@@ -1436,7 +1451,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
             case schema::Brand::Binding::UNBOUND:
               break;
             case schema::Brand::Binding::TYPE: {
-              dstBinding = makeDep(srcBinding.getType(), scopeName, clientBrand);
+              makeDep(dstBinding, srcBinding.getType(), scopeName, clientBrand);
               break;
             }
           }
@@ -1535,8 +1550,8 @@ SchemaLoader::Impl::makeBrandedDependencies(
       break;
 
     case schema::Node::CONST:
-      ADD_ENTRY(CONST_TYPE, 0, makeDep(
-          node.getConst().getType(), scopeName, bindings).schema);
+      ADD_ENTRY(CONST_TYPE, 0, makeDepSchema(
+          node.getConst().getType(), scopeName, bindings));
       break;
 
     case schema::Node::STRUCT: {
@@ -1545,8 +1560,8 @@ SchemaLoader::Impl::makeBrandedDependencies(
         auto field = fields[i];
         switch (field.which()) {
           case schema::Field::SLOT:
-            ADD_ENTRY(FIELD, i, makeDep(
-                field.getSlot().getType(), scopeName, bindings).schema)
+            ADD_ENTRY(FIELD, i, makeDepSchema(
+                field.getSlot().getType(), scopeName, bindings))
             break;
           case schema::Field::GROUP: {
             const _::RawSchema* group = loadEmpty(
@@ -1570,21 +1585,21 @@ SchemaLoader::Impl::makeBrandedDependencies(
         auto superclasses = interface.getSuperclasses();
         for (auto i: kj::indices(superclasses)) {
           auto superclass = superclasses[i];
-          ADD_ENTRY(SUPERCLASS, i, makeDep(
+          ADD_ENTRY(SUPERCLASS, i, makeDepSchema(
               superclass.getId(), schema::Type::INTERFACE, schema::Node::INTERFACE,
-              superclass.getBrand(), scopeName, bindings).schema)
+              superclass.getBrand(), scopeName, bindings))
         }
       }
       {
         auto methods = interface.getMethods();
         for (auto i: kj::indices(methods)) {
           auto method = methods[i];
-          ADD_ENTRY(METHOD_PARAMS, i, makeDep(
+          ADD_ENTRY(METHOD_PARAMS, i, makeDepSchema(
               method.getParamStructType(), schema::Type::STRUCT, schema::Node::STRUCT,
-              method.getParamBrand(), scopeName, bindings).schema)
-          ADD_ENTRY(METHOD_RESULTS, i, makeDep(
+              method.getParamBrand(), scopeName, bindings))
+          ADD_ENTRY(METHOD_RESULTS, i, makeDepSchema(
               method.getResultStructType(), schema::Type::STRUCT, schema::Node::STRUCT,
-              method.getResultBrand(), scopeName, bindings).schema)
+              method.getResultBrand(), scopeName, bindings))
         }
       }
       break;
@@ -1601,7 +1616,7 @@ SchemaLoader::Impl::makeBrandedDependencies(
   return copyDeduped(deps.asPtr());
 }
 
-_::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
+void SchemaLoader::Impl::makeDep(_::RawBrandedSchema::Binding& result,
     schema::Type::Reader type, kj::StringPtr scopeName,
     kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
   switch (type.which()) {
@@ -1619,35 +1634,40 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
     case schema::Type::FLOAT64:
     case schema::Type::TEXT:
     case schema::Type::DATA:
-      return { static_cast<uint8_t>(type.which()), 0, nullptr };
+      result.which = static_cast<uint8_t>(type.which());
+      return;
 
     case schema::Type::STRUCT: {
       auto structType = type.getStruct();
-      return makeDep(structType.getTypeId(), schema::Type::STRUCT, schema::Node::STRUCT,
-                     structType.getBrand(), scopeName, brandBindings);
+      makeDep(result, structType.getTypeId(), schema::Type::STRUCT, schema::Node::STRUCT,
+              structType.getBrand(), scopeName, brandBindings);
+      return;
     }
     case schema::Type::ENUM: {
       auto enumType = type.getEnum();
-      return makeDep(enumType.getTypeId(), schema::Type::ENUM, schema::Node::ENUM,
-                     enumType.getBrand(), scopeName, brandBindings);
+      makeDep(result, enumType.getTypeId(), schema::Type::ENUM, schema::Node::ENUM,
+              enumType.getBrand(), scopeName, brandBindings);
+      return;
     }
     case schema::Type::INTERFACE: {
       auto interfaceType = type.getInterface();
-      return makeDep(interfaceType.getTypeId(), schema::Type::INTERFACE, schema::Node::INTERFACE,
-                     interfaceType.getBrand(), scopeName, brandBindings);
+      makeDep(result, interfaceType.getTypeId(), schema::Type::INTERFACE, schema::Node::INTERFACE,
+              interfaceType.getBrand(), scopeName, brandBindings);
+      return;
     }
 
     case schema::Type::LIST: {
-      auto result = makeDep(type.getList().getElementType(), scopeName, brandBindings);
+      makeDep(result, type.getList().getElementType(), scopeName, brandBindings);
       ++result.listDepth;
-      return result;
+      return;
     }
 
     case schema::Type::ANY_POINTER: {
+      result.which = static_cast<uint8_t>(schema::Type::ANY_POINTER);
       auto anyPointer = type.getAnyPointer();
       switch (anyPointer.which()) {
         case schema::Type::AnyPointer::UNCONSTRAINED:
-          return { static_cast<uint8_t>(type.which()), 0, nullptr };
+          return;
         case schema::Type::AnyPointer::PARAMETER: {
           auto param = anyPointer.getParameter();
           uint64_t id = param.getScopeId();
@@ -1659,26 +1679,32 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
               if (scope.typeId == id) {
                 if (scope.isUnbound) {
                   // Unbound brand parameter.
-                  return { static_cast<uint8_t>(schema::Type::ANY_POINTER), 0, id, index };
+                  result.scopeId = id;
+                  result.paramIndex = index;
+                  return;
                 } else if (index >= scope.bindingCount) {
                   // Binding index out-of-range. Treat as AnyPointer. This is important to allow
                   // new type parameters to be added to existing types without breaking dependent
                   // schemas.
-                  break;
+                  return;
                 } else {
-                  return scope.bindings[index];
+                  result = scope.bindings[index];
+                  return;
                 }
               }
             }
-            return { static_cast<uint8_t>(schema::Type::ANY_POINTER), 0, 0, 0 };
+            return;
           } else {
             // Unbound brand parameter.
-            return { static_cast<uint8_t>(schema::Type::ANY_POINTER), 0, id, index };
+            result.scopeId = id;
+            result.paramIndex = index;
+            return;
           }
         }
         case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
-          return { static_cast<uint8_t>(schema::Type::ANY_POINTER), 0,
-                   anyPointer.getImplicitMethodParameter().getParameterIndex() };
+          result.isImplicitParameter = true;
+          result.paramIndex = anyPointer.getImplicitMethodParameter().getParameterIndex();
+          return;
       }
       KJ_UNREACHABLE;
     }
@@ -1687,17 +1713,34 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
   KJ_UNREACHABLE;
 }
 
-_::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
+void SchemaLoader::Impl::makeDep(_::RawBrandedSchema::Binding& result,
     uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
     schema::Brand::Reader brand, kj::StringPtr scopeName,
     kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
   const _::RawSchema* schema = loadEmpty(typeId,
       kj::str("(unknown type; seen as dependency of ", scopeName, ")"),
       expectedKind, true);
-  return _::RawBrandedSchema::Binding {
-    static_cast<uint8_t>(whichType), 0,
-    makeBranded(schema, brand, brandBindings)
-  };
+  result.which = static_cast<uint8_t>(whichType);
+  result.schema = makeBranded(schema, brand, brandBindings);
+}
+
+const _::RawBrandedSchema* SchemaLoader::Impl::makeDepSchema(
+    schema::Type::Reader type, kj::StringPtr scopeName,
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
+  _::RawBrandedSchema::Binding binding;
+  memset(&binding, 0, sizeof(binding));
+  makeDep(binding, type, scopeName, brandBindings);
+  return binding.schema;
+}
+
+const _::RawBrandedSchema* SchemaLoader::Impl::makeDepSchema(
+    uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
+    schema::Brand::Reader brand, kj::StringPtr scopeName,
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
+  _::RawBrandedSchema::Binding binding;
+  memset(&binding, 0, sizeof(binding));
+  makeDep(binding, typeId, whichType, expectedKind, brand, scopeName, brandBindings);
+  return binding.schema;
 }
 
 template <typename T>
@@ -1899,7 +1942,7 @@ Schema SchemaLoader::get(uint64_t id, schema::Brand::Reader brand, Schema scope)
   KJ_IF_MAYBE(result, tryGet(id, brand, scope)) {
     return *result;
   } else {
-    KJ_FAIL_REQUIRE("no schema node loaded for id", id);
+    KJ_FAIL_REQUIRE("no schema node loaded for id", kj::hex(id));
   }
 }
 

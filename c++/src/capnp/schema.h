@@ -633,6 +633,12 @@ public:
   bool operator==(const Type& other) const;
   inline bool operator!=(const Type& other) const { return !(*this == other); }
 
+  inline Type wrapInList(uint depth = 1) const;
+  // Return the Type formed by wrapping this type in List() `depth` times.
+
+  inline Type(schema::Type::Which derived, const _::RawBrandedSchema* schema);
+  // For internal use.
+
 private:
   schema::Type::Which baseType;  // type not including applications of List()
   uint8_t listDepth;             // 0 for T, 1 for List(T), 2 for List(List(T)), ...
@@ -652,11 +658,12 @@ private:
   };
 
   Type(schema::Type::Which baseType, uint8_t listDepth, const _::RawBrandedSchema* schema)
-      : baseType(baseType), listDepth(listDepth), schema(schema) {}
+      : baseType(baseType), listDepth(listDepth), schema(schema) {
+    KJ_IREQUIRE(baseType != schema::Type::ANY_POINTER);
+  }
 
   void requireUsableAs(Type expected) const;
 
-  friend class Schema;
   friend class ListSchema;
 };
 
@@ -826,11 +833,22 @@ struct ListSchema::FromImpl<List<T>> {
 
 inline Type::Type(): baseType(schema::Type::VOID), listDepth(0), schema(nullptr) {}
 inline Type::Type(schema::Type::Which primitive)
-    : baseType(primitive), listDepth(0), isImplicitParam(false), scopeId(0) {
+    : baseType(primitive), listDepth(0), isImplicitParam(false) {
   KJ_IREQUIRE(primitive != schema::Type::STRUCT &&
               primitive != schema::Type::ENUM &&
               primitive != schema::Type::INTERFACE &&
               primitive != schema::Type::LIST);
+  if (primitive == schema::Type::ANY_POINTER) {
+    scopeId = 0;
+  } else {
+    schema = nullptr;
+  }
+}
+inline Type::Type(schema::Type::Which derived, const _::RawBrandedSchema* schema)
+    : baseType(derived), listDepth(0), isImplicitParam(false), schema(schema) {
+  KJ_IREQUIRE(derived == schema::Type::STRUCT ||
+              derived == schema::Type::ENUM ||
+              derived == schema::Type::INTERFACE);
 }
 
 inline Type::Type(StructSchema schema)
@@ -877,6 +895,12 @@ inline bool Type::isInterface() const {
 }
 inline bool Type::isAnyPointer() const {
   return baseType == schema::Type::ANY_POINTER && listDepth == 0;
+}
+
+inline Type Type::wrapInList(uint depth) const {
+  Type result = *this;
+  result.listDepth += depth;
+  return result;
 }
 
 }  // namespace capnp

@@ -402,21 +402,24 @@ Type Schema::BrandArgumentList::operator[](uint index) const {
   }
 
   auto& binding = bindings[index];
+  Type result;
   if (binding.which == (uint)schema::Type::ANY_POINTER) {
     if (binding.scopeId != 0) {
-      return Type::BrandParameter { binding.scopeId, binding.paramIndex };
+      result = Type::BrandParameter { binding.scopeId, binding.paramIndex };
     } else if (binding.isImplicitParameter) {
-      return Type::ImplicitParameter { binding.paramIndex };
+      result = Type::ImplicitParameter { binding.paramIndex };
     } else {
-      return Type(schema::Type::ANY_POINTER, binding.listDepth, nullptr);
+      result = schema::Type::ANY_POINTER;
     }
   } else if (binding.schema == nullptr) {
     // Builtin / primitive type.
-    return Type(static_cast<schema::Type::Which>(binding.which), binding.listDepth, nullptr);
+    result = static_cast<schema::Type::Which>(binding.which);
   } else {
     binding.schema->ensureInitialized();
-    return Type(static_cast<schema::Type::Which>(binding.which), binding.listDepth, binding.schema);
+    result = Type(static_cast<schema::Type::Which>(binding.which), binding.schema);
   }
+
+  return result.wrapInList(binding.listDepth);
 }
 
 // =======================================================================================
