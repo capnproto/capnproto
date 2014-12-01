@@ -30,14 +30,11 @@
 #include "time.h"
 #include "vector.h"
 #include <signal.h>
-#include <poll.h>
 #include <pthread.h>
 
 namespace kj {
 
 class UnixEventPort: public EventPort {
-  // THIS INTERFACE IS LIKELY TO CHANGE; consider using only what is defined in async-io.h instead.
-  //
   // An EventPort implementation which can wait for events on file descriptors as well as signals.
   // This API only makes sense on Unix.
   //
@@ -54,9 +51,9 @@ public:
   UnixEventPort();
   ~UnixEventPort() noexcept(false);
 
-  Promise<short> onFdEvent(int fd, short eventMask);
-  // `eventMask` is a bitwise-OR of poll events (e.g. `POLLIN`, `POLLOUT`, etc.).  The next time
-  // one or more of the given events occurs on `fd`, the set of events that occurred are returned.
+  class ReadObserver;
+  class WriteObserver;
+  // Classes that watch an fd for readability or writability. See definitions below.
 
   Promise<siginfo_t> onSignal(int signum);
   // When the given signal is delivered to this thread, return the corresponding siginfo_t.
@@ -94,6 +91,9 @@ public:
   void poll() override;
 
 private:
+#if KJ_USE_EPOLL
+  // TODO(soon): epoll implementation
+#else
   class PollPromiseAdapter;
   class SignalPromiseAdapter;
   class TimerPromiseAdapter;
@@ -114,6 +114,132 @@ private:
   void processTimers();
 
   friend class TimerPromiseAdapter;
+#endif
+};
+
+class UnixEventPort::ReadObserver {
+  // Object which watches a file descriptor to determine when it is readable.
+  //
+  // For listen sockets, "readable" means that there is a connection to accept(). For everything
+  // else, it means that read() (or recv()) will return data.
+  //
+  // The presence of out-of-band data should NOT fire this event. However, the event may
+  // occasionally fire spurriously (when there is actually no data to read), and one thing that can
+  // cause such spurrious events is the arrival of OOB data on certain platforms whose event
+  // interfaces fail to distinguish between regular and OOB data (e.g. Mac OSX).
+  //
+  // WARNING: The exact behavior of this class differs across systems, since event interfaces
+  //   vary wildly. Be sure to read the documentation carefully and avoid depending on unspecified
+  //   behavior. If at all possible, use the higher-level AsyncInputStream interface instead.
+
+public:
+  ReadObserver(UnixEventPort& eventPort, int fd): eventPort(eventPort), fd(fd) {}
+  // Begin watching the given file descriptor for readability. Only one ReadObserver may exist
+  // for a given file descriptor at a time.
+
+  KJ_DISALLOW_COPY(ReadObserver);
+
+  Promise<void> whenBecomesReadable();
+  // Resolves the next time the file descriptor transitions from having no data to read to having
+  // some data to read.
+  //
+  // KJ uses "edge-triggered" event notification whenever possible. As a result, it is an error
+  // to call this method when there is already data in the read buffer which has been there since
+  // prior to the last turn of the event loop or prior to creation FdWatcher. In this case, it is
+  // unspecified whether the promise will ever resolve -- it depends on the underlying event
+  // mechanism being used.
+  //
+  // In order to avoid this problem, make sure that you only call `whenBecomesReadable()`
+  // only at times when you know the buffer is empty. You know this for sure when one of the
+  // following happens:
+  // * read() or recv() fails with EAGAIN or EWOULDBLOCK. (You MUST have non-blocking mode
+  //   enabled on the fd!)
+  // * The file descriptor is a regular byte-oriented object (like a socket or pipe),
+  //   read() or recv() returns fewer than the number of bytes requested, and `atEndHint()`
+  //   returns false. This can only happen if the buffer is empty but EOF is not reached. (Note,
+  //   though, that for record-oriented file descriptors like Linux's inotify interface, this
+  //   rule does not hold, because it could simply be that the next record did not fit into the
+  //   space available.)
+  //
+  // It is an error to call `whenBecomesReadable()` again when the promise returned previously
+  // has not yet resolved. If you do this, the previous promise may throw an exception.
+
+  inline Maybe<bool> atEndHint() { return atEnd; }
+  // Returns true if the event system has indicated that EOF has been received. There may still
+  // be data in the read buffer, but once that is gone, there's nothing left.
+  //
+  // Returns false if the event system has indicated that EOF had NOT been received as of the
+  // last turn of the event loop.
+  //
+  // Returns nullptr if the event system does not know whether EOF has been reached. In this
+  // case, the only way to know for sure is to call read() or recv() and check if it returns
+  // zero.
+  //
+  // This hint may be useful as an optimization to avoid an unnecessary system call.
+
+private:
+  UnixEventPort& eventPort;
+  int fd;
+
+#if KJ_USE_EPOLL
+  // TODO(soon): epoll implementation
+
+  Own<PromiseFulfiller<void>> fulfiller;
+  // Replaced each time `whenBecomesReadable()` is called.
+#else
+#endif
+
+  Maybe<bool> atEnd;
+
+  friend class UnixEventPort;
+};
+
+class UnixEventPort::WriteObserver {
+  // Object which watches a file descriptor to determine when it is writable.
+  //
+  // WARNING: The exact behavior of this class differs across systems, since event interfaces
+  //   vary wildly. Be sure to read the documentation carefully and avoid depending on unspecified
+  //   behavior. If at all possible, use the higher-level AsyncOutputStream interface instead.
+
+public:
+  WriteObserver(UnixEventPort& eventPort, int fd): eventPort(eventPort), fd(fd) {}
+  // Begin watching the given file descriptor for writability. Only one WriteObserver may exist
+  // for a given file descriptor at a time.
+
+  KJ_DISALLOW_COPY(WriteObserver);
+
+  Promise<void> whenBecomesWritable();
+  // Resolves the next time the file descriptor transitions from having no space available in the
+  // write buffer to having some space available.
+  //
+  // KJ uses "edge-triggered" event notification whenever possible. As a result, it is an error
+  // to call this method when there is already space in the write buffer which has been there
+  // since prior to the last turn of the event loop or prior to creation FdWatcher. In this case,
+  // it is unspecified whether the promise will ever resolve -- it depends on the underlying
+  // event mechanism being used.
+  //
+  // In order to avoid this problem, make sure that you only call `whenBecomesWritable()`
+  // only at times when you know the buffer is full. You know this for sure when one of the
+  // following happens:
+  // * write() or send() fails with EAGAIN or EWOULDBLOCK. (You MUST have non-blocking mode
+  //   enabled on the fd!)
+  // * write() or send() succeeds but accepts fewer than the number of bytes provided. This can
+  //   only happen if the buffer is full.
+  //
+  // It is an error to call `whenBecomesWritable()` again when the promise returned previously
+  // has not yet resolved. If you do this, the previous promise may throw an exception.
+
+private:
+  UnixEventPort& eventPort;
+  int fd;
+
+#if KJ_USE_EPOLL
+  Own<PromiseFulfiller<void>> fulfiller;
+  // Replaced each time `whenBecomesReadable()` is called.
+#else
+#endif
+
+  friend class UnixEventPort;
 };
 
 }  // namespace kj

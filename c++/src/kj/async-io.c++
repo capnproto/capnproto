@@ -38,11 +38,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <set>
-
-#ifndef POLLRDHUP
-// Linux-only optimization.  If not available, define to 0, as this will make it a no-op.
-#define POLLRDHUP 0
-#endif
+#include <poll.h>
 
 namespace kj {
 
@@ -113,7 +109,9 @@ private:
 class AsyncStreamFd: public OwnedFileDescriptor, public AsyncIoStream {
 public:
   AsyncStreamFd(UnixEventPort& eventPort, int fd, uint flags)
-      : OwnedFileDescriptor(fd, flags), eventPort(eventPort) {}
+      : OwnedFileDescriptor(fd, flags),
+        readObserver(eventPort, fd),
+        writeObserver(eventPort, fd) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
   Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -134,7 +132,17 @@ public:
   Promise<void> write(const void* buffer, size_t size) override {
     ssize_t writeResult;
     KJ_NONBLOCKING_SYSCALL(writeResult = ::write(fd, buffer, size)) {
-      return READY_NOW;
+      // Error.
+
+      // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
+      // a bug that exists in both Clang and GCC:
+      //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
+      //   http://llvm.org/bugs/show_bug.cgi?id=12286
+      goto error;
+    }
+    if (false) {
+    error:
+      return kj::READY_NOW;
     }
 
     // A negative result means EAGAIN, which we can treat the same as having written zero bytes.
@@ -142,12 +150,14 @@ public:
 
     if (n == size) {
       return READY_NOW;
-    } else {
-      buffer = reinterpret_cast<const byte*>(buffer) + n;
-      size -= n;
     }
 
-    return eventPort.onFdEvent(fd, POLLOUT).then([=](short) {
+    // Fewer than `size` bytes were written, therefore we must be out of buffer space. Wait until
+    // the fd becomes writable again.
+    buffer = reinterpret_cast<const byte*>(buffer) + n;
+    size -= n;
+
+    return writeObserver.whenBecomesWritable().then([=]() {
       return write(buffer, size);
     });
   }
@@ -166,9 +176,32 @@ public:
     KJ_SYSCALL(shutdown(fd, SHUT_WR));
   }
 
+  Promise<void> waitConnected() {
+    // Wait until initial connection has completed. This actually just waits until it is writable.
+
+    // Can't just go directly to writeObserver.whenBecomesWritable() because of edge triggering. We
+    // need to explicitly check if the socket is already connected.
+
+    struct pollfd pollfd;
+    memset(&pollfd, 0, sizeof(pollfd));
+    pollfd.fd = fd;
+    pollfd.events = POLLOUT;
+
+    int pollResult;
+    KJ_SYSCALL(pollResult = poll(&pollfd, 1, 0));
+
+    if (pollResult == 0) {
+      // Not ready yet. We can safely use the edge-triggered observer.
+      return readObserver.whenBecomesReadable();
+    } else {
+      // Ready now.
+      return kj::READY_NOW;
+    }
+  }
+
 private:
-  UnixEventPort& eventPort;
-  bool gotHup = false;
+  UnixEventPort::ReadObserver readObserver;
+  UnixEventPort::WriteObserver writeObserver;
 
   Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                   size_t alreadyRead) {
@@ -178,44 +211,61 @@ private:
 
     ssize_t n;
     KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes)) {
+      // Error.
+
+      // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
+      // a bug that exists in both Clang and GCC:
+      //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
+      //   http://llvm.org/bugs/show_bug.cgi?id=12286
+      goto error;
+    }
+    if (false) {
+    error:
       return alreadyRead;
     }
 
     if (n < 0) {
       // Read would block.
-      return eventPort.onFdEvent(fd, POLLIN | POLLRDHUP).then([=](short events) {
-        gotHup = events & (POLLHUP | POLLRDHUP);
+      return readObserver.whenBecomesReadable().then([=]() {
         return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
       });
     } else if (n == 0) {
       // EOF -OR- maxBytes == 0.
       return alreadyRead;
-    } else if (implicitCast<size_t>(n) < minBytes) {
-      // The kernel returned fewer bytes than we asked for (and fewer than we need).
-      if (gotHup) {
-        // We've already received an indication that the next read() will return EOF, so there's
-        // nothing to wait for.
-        return alreadyRead + n;
-      } else {
-        // We know that calling read() again will simply fail with EAGAIN (unless a new packet just
-        // arrived, which is unlikely), so let's not bother to call read() again but instead just
-        // go strait to polling.
-        //
-        // Note:  Actually, if we haven't done any polls yet, then we haven't had a chance to
-        //   receive POLLRDHUP yet, so it's possible we're at EOF.  But that seems like a
-        //   sufficiently unusual case that we're better off skipping straight to polling here.
-        buffer = reinterpret_cast<byte*>(buffer) + n;
-        minBytes -= n;
-        maxBytes -= n;
-        alreadyRead += n;
-        return eventPort.onFdEvent(fd, POLLIN | POLLRDHUP).then([=](short events) {
-          gotHup = events & (POLLHUP | POLLRDHUP);
-          return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
-        });
-      }
-    } else {
+    } else if (implicitCast<size_t>(n) >= minBytes) {
       // We read enough to stop here.
       return alreadyRead + n;
+    } else {
+      // The kernel returned fewer bytes than we asked for (and fewer than we need).
+
+      buffer = reinterpret_cast<byte*>(buffer) + n;
+      minBytes -= n;
+      maxBytes -= n;
+      alreadyRead += n;
+
+      KJ_IF_MAYBE(atEnd, readObserver.atEndHint()) {
+        if (*atEnd) {
+          // We've already received an indication that the next read() will return EOF, so there's
+          // nothing to wait for.
+          return alreadyRead;
+        } else {
+          // As of the last time the event queue was checked, the kernel reported that we were
+          // *not* at the end of the stream. It's unlikely that this has changed in the short time
+          // it took to handle the event, therefore calling read() now will almost certainly fail
+          // with EAGAIN. Moreover, since EOF had not been received as of the last check, we know
+          // that even if it was received since then, whenBecomesReadable() will catch that. So,
+          // let's go ahead and skip calling read() here and instead go straight to waiting for
+          // more input.
+          return readObserver.whenBecomesReadable().then([=]() {
+            return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
+          });
+        }
+      } else {
+        // The kernel has not indicated one way or the other whether we are likely to be at EOF.
+        // In this case we *must* keep calling read() until we either get a return of zero or
+        // EAGAIN.
+        return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
+      }
     }
   }
 
@@ -252,9 +302,9 @@ private:
     // Discard all data that was written, then issue a new write for what's left (if any).
     for (;;) {
       if (n < firstPiece.size()) {
-        // Only part of the first piece was consumed.  Wait for POLLOUT and then write again.
+        // Only part of the first piece was consumed.  Wait for buffer space and then write again.
         firstPiece = firstPiece.slice(n, firstPiece.size());
-        return eventPort.onFdEvent(fd, POLLOUT).then([=](short) {
+        return writeObserver.whenBecomesWritable().then([=]() {
           return writeInternal(firstPiece, morePieces);
         });
       } else if (morePieces.size() == 0) {
@@ -681,7 +731,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
 class FdConnectionReceiver final: public ConnectionReceiver, public OwnedFileDescriptor {
 public:
   FdConnectionReceiver(UnixEventPort& eventPort, int fd, uint flags)
-      : OwnedFileDescriptor(fd, flags), eventPort(eventPort) {}
+      : OwnedFileDescriptor(fd, flags), eventPort(eventPort), observer(eventPort, fd) {}
 
   Promise<Own<AsyncIoStream>> accept() override {
     int newFd;
@@ -704,7 +754,7 @@ public:
         case EWOULDBLOCK:
 #endif
           // Not ready yet.
-          return eventPort.onFdEvent(fd, POLLIN).then([this](short) {
+          return observer.whenBecomesReadable().then([this]() {
             return accept();
           });
 
@@ -735,6 +785,7 @@ public:
 
 public:
   UnixEventPort& eventPort;
+  UnixEventPort::ReadObserver observer;
 };
 
 class TimerImpl final: public Timer {
@@ -773,16 +824,17 @@ public:
   }
   Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(int fd, uint flags = 0) override {
     auto result = heap<AsyncStreamFd>(eventPort, fd, flags);
-    return eventPort.onFdEvent(fd, POLLOUT).then(kj::mvCapture(result,
-        [fd](Own<AsyncIoStream>&& stream, short events) {
-          int err;
-          socklen_t errlen = sizeof(err);
-          KJ_SYSCALL(getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &errlen));
-          if (err != 0) {
-            KJ_FAIL_SYSCALL("connect()", err) { break; }
-          }
-          return kj::mv(stream);
-        }));
+
+    auto connected = result->waitConnected();
+    return connected.then(kj::mvCapture(result, [fd](Own<AsyncIoStream>&& stream) {
+      int err;
+      socklen_t errlen = sizeof(err);
+      KJ_SYSCALL(getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &errlen));
+      if (err != 0) {
+        KJ_FAIL_SYSCALL("connect()", err) { break; }
+      }
+      return kj::mv(stream);
+    }));
   }
   Own<ConnectionReceiver> wrapListenSocketFd(int fd, uint flags = 0) override {
     return heap<FdConnectionReceiver>(eventPort, fd, flags);

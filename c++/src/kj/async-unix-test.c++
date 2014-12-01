@@ -22,6 +22,7 @@
 #include "async-unix.h"
 #include "thread.h"
 #include "debug.h"
+#include "io.h"
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -197,29 +198,49 @@ TEST_F(AsyncUnixTest, SignalsNoWait) {
 
 #endif  // !__CYGWIN32__
 
-TEST_F(AsyncUnixTest, Poll) {
+TEST_F(AsyncUnixTest, ReadObserver) {
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
   int pipefds[2];
-  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   KJ_SYSCALL(pipe(pipefds));
-  KJ_SYSCALL(write(pipefds[1], "foo", 3));
+  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
 
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
+  UnixEventPort::ReadObserver readObserver(port, infd);
+
+  KJ_SYSCALL(write(outfd, "foo", 3));
+
+  readObserver.whenBecomesReadable().wait(waitScope);
+
+#if __linux__  // platform known to support POLLRDHUP
+  EXPECT_FALSE(KJ_ASSERT_NONNULL(readObserver.atEndHint()));
+
+  char buffer[4096];
+  ssize_t n;
+  KJ_SYSCALL(n = read(infd, &buffer, sizeof(buffer)));
+  EXPECT_EQ(3, n);
+
+  KJ_SYSCALL(write(outfd, "bar", 3));
+  outfd = nullptr;
+
+  readObserver.whenBecomesReadable().wait(waitScope);
+
+  EXPECT_TRUE(KJ_ASSERT_NONNULL(readObserver.atEndHint()));
+#endif
 }
 
-TEST_F(AsyncUnixTest, PollMultiListen) {
+TEST_F(AsyncUnixTest, ReadObserverMultiListen) {
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
   int bogusPipefds[2];
   KJ_SYSCALL(pipe(bogusPipefds));
+  UnixEventPort::ReadObserver bogusReadObserver(port, bogusPipefds[0]);
   KJ_DEFER({ close(bogusPipefds[1]); close(bogusPipefds[0]); });
 
-  port.onFdEvent(bogusPipefds[0], POLLIN | POLLPRI).then([](short s) {
+  bogusReadObserver.whenBecomesReadable().then([]() {
     ADD_FAILURE() << "Received wrong poll.";
   }).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
@@ -228,12 +249,14 @@ TEST_F(AsyncUnixTest, PollMultiListen) {
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+
+  UnixEventPort::ReadObserver readObserver(port, pipefds[0]);
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
+  readObserver.whenBecomesReadable().wait(waitScope);
 }
 
-TEST_F(AsyncUnixTest, PollMultiReceive) {
+TEST_F(AsyncUnixTest, ReadObserverMultiReceive) {
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -241,36 +264,42 @@ TEST_F(AsyncUnixTest, PollMultiReceive) {
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+
+  UnixEventPort::ReadObserver readObserver(port, pipefds[0]);
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
   int pipefds2[2];
   KJ_SYSCALL(pipe(pipefds2));
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
+
+  UnixEventPort::ReadObserver readObserver2(port, pipefds2[0]);
   KJ_SYSCALL(write(pipefds2[1], "bar", 3));
 
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds2[0], POLLIN | POLLPRI).wait(waitScope));
+  readObserver.whenBecomesReadable().wait(waitScope);
+  readObserver2.whenBecomesReadable().wait(waitScope);
 }
 
-TEST_F(AsyncUnixTest, PollAsync) {
+TEST_F(AsyncUnixTest, ReadObserverAsync) {
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
   // Make a pipe and wait on its read end while another thread writes to it.
   int pipefds[2];
-  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   KJ_SYSCALL(pipe(pipefds));
+  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+  UnixEventPort::ReadObserver readObserver(port, pipefds[0]);
+
   Thread thread([&]() {
     delay();
     KJ_SYSCALL(write(pipefds[1], "foo", 3));
   });
 
   // Wait for the event in this thread.
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
+  readObserver.whenBecomesReadable().wait(waitScope);
 }
 
-TEST_F(AsyncUnixTest, PollNoWait) {
+TEST_F(AsyncUnixTest, ReadObserverNoWait) {
   // Verify that UnixEventPort::poll() correctly receives pending FD events.
 
   UnixEventPort port;
@@ -280,19 +309,19 @@ TEST_F(AsyncUnixTest, PollNoWait) {
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+  UnixEventPort::ReadObserver readObserver(port, pipefds[0]);
 
   int pipefds2[2];
   KJ_SYSCALL(pipe(pipefds2));
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
+  UnixEventPort::ReadObserver readObserver2(port, pipefds2[0]);
 
   int receivedCount = 0;
-  port.onFdEvent(pipefds[0], POLLIN | POLLPRI).then([&](short&& events) {
+  readObserver.whenBecomesReadable().then([&]() {
     receivedCount++;
-    EXPECT_EQ(POLLIN, events);
   }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
-  port.onFdEvent(pipefds2[0], POLLIN | POLLPRI).then([&](short&& events) {
+  readObserver2.whenBecomesReadable().then([&]() {
     receivedCount++;
-    EXPECT_EQ(POLLIN, events);
   }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
 
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
@@ -311,6 +340,52 @@ TEST_F(AsyncUnixTest, PollNoWait) {
   loop.run();
 
   EXPECT_EQ(2, receivedCount);
+}
+
+static void setNonblocking(int fd) {
+  int flags;
+  KJ_SYSCALL(flags = fcntl(fd, F_GETFL));
+  if ((flags & O_NONBLOCK) == 0) {
+    KJ_SYSCALL(fcntl(fd, F_SETFL, flags | O_NONBLOCK));
+  }
+}
+
+TEST_F(AsyncUnixTest, WriteObserver) {
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  int pipefds[2];
+  KJ_SYSCALL(pipe(pipefds));
+  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  setNonblocking(outfd);
+
+  UnixEventPort::WriteObserver writeObserver(port, outfd);
+
+  // Fill buffer.
+  ssize_t n;
+  do {
+    KJ_NONBLOCKING_SYSCALL(n = write(outfd, "foo", 3));
+  } while (n >= 0);
+
+  bool writable = false;
+  auto promise = writeObserver.whenBecomesWritable()
+      .then([&]() { writable = true; }).eagerlyEvaluate(nullptr);
+
+  loop.run();
+  port.poll();
+  loop.run();
+
+  EXPECT_FALSE(writable);
+
+  char buffer[4096];
+  KJ_SYSCALL(read(infd, &buffer, sizeof(buffer)));
+
+  loop.run();
+  port.poll();
+  loop.run();
+
+  EXPECT_TRUE(writable);
 }
 
 TEST_F(AsyncUnixTest, SteadyTimers) {

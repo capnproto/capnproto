@@ -28,6 +28,7 @@
 #include <limits>
 #include <set>
 #include <chrono>
+#include <poll.h>
 
 namespace kj {
 
@@ -135,9 +136,11 @@ public:
 
 class UnixEventPort::PollPromiseAdapter {
 public:
-  inline PollPromiseAdapter(PromiseFulfiller<short>& fulfiller,
-                            UnixEventPort& loop, int fd, short eventMask)
-      : loop(loop), fd(fd), eventMask(eventMask), fulfiller(fulfiller) {
+  inline PollPromiseAdapter(PromiseFulfiller<void>& fulfiller,
+                            UnixEventPort& loop, int fd, short eventMask,
+                            Maybe<UnixEventPort::ReadObserver&> readObserver)
+      : loop(loop), fd(fd), eventMask(eventMask),
+        fulfiller(fulfiller), readObserver(readObserver) {
     prev = loop.pollTail;
     *loop.pollTail = this;
     loop.pollTail = &next;
@@ -154,6 +157,24 @@ public:
     }
   }
 
+  void fire(short events) {
+    KJ_IF_MAYBE(ro, readObserver) {
+#ifndef POLLRDHUP
+#define POLLRDHUP 0
+#endif
+      if (events & (POLLHUP | POLLRDHUP)) {
+        ro->atEnd = true;
+#if POLLRDHUP
+      } else {
+        // Since POLLRDHUP exists on this platform, and we didn't receive it, we know that we're not
+        // at the end.
+        ro->atEnd = false;
+#endif
+      }
+    }
+    fulfiller.fulfill();
+  }
+
   void removeFromList() {
     if (next == nullptr) {
       loop.pollTail = prev;
@@ -168,7 +189,8 @@ public:
   UnixEventPort& loop;
   int fd;
   short eventMask;
-  PromiseFulfiller<short>& fulfiller;
+  PromiseFulfiller<void>& fulfiller;
+  Maybe<UnixEventPort::ReadObserver&> readObserver;  // to fill in atEnd hint.
   PollPromiseAdapter* next = nullptr;
   PollPromiseAdapter** prev = nullptr;
 };
@@ -211,8 +233,12 @@ UnixEventPort::UnixEventPort()
 
 UnixEventPort::~UnixEventPort() noexcept(false) {}
 
-Promise<short> UnixEventPort::onFdEvent(int fd, short eventMask) {
-  return newAdaptedPromise<short, PollPromiseAdapter>(*this, fd, eventMask);
+Promise<void> UnixEventPort::ReadObserver::whenBecomesReadable() {
+  return newAdaptedPromise<void, PollPromiseAdapter>(eventPort, fd, POLLIN | POLLRDHUP, *this);
+}
+
+Promise<void> UnixEventPort::WriteObserver::whenBecomesWritable() {
+  return newAdaptedPromise<void, PollPromiseAdapter>(eventPort, fd, POLLOUT, nullptr);
 }
 
 Promise<siginfo_t> UnixEventPort::onSignal(int signum) {
@@ -273,7 +299,7 @@ public:
 
     for (auto i: indices(pollfds)) {
       if (pollfds[i].revents != 0) {
-        pollEvents[i]->fulfiller.fulfill(kj::mv(pollfds[i].revents));
+        pollEvents[i]->fire(pollfds[i].revents);
         pollEvents[i]->removeFromList();
         if (--pollResult <= 0) {
           break;
