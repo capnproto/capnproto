@@ -34,11 +34,6 @@ endif()
 
 if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3 ${CAPNP_LITE_FLAG}")
-  # Statically link with the runtime libraries.
-  # TODO: This should depend on whether or not Cap'n Proto is being built as a static or shared library.
-  #       When building the tests, this needs to match with how gtest is built as well.
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -std=c++11 -pthread ${CAPNP_LITE_FLAG}")
 endif()
