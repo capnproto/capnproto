@@ -86,6 +86,27 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
   EXPECT_SI_CODE(SI_QUEUE, info.si_code);
   EXPECT_EQ(123, info.si_value.sival_int);
 }
+
+TEST_F(AsyncUnixTest, SignalWithPointerValue) {
+  // This tests that if we use sigqueue() to attach a value to the signal, that value is received
+  // correctly.  Note that this only works on platforms that support real-time signals -- even
+  // though the signal we're sending is SIGURG, the sigqueue() system call is introduced by RT
+  // signals.  Hence this test won't run on e.g. Mac OSX.
+
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  union sigval value;
+  memset(&value, 0, sizeof(value));
+  value.sival_ptr = &port;
+  sigqueue(getpid(), SIGURG, value);
+
+  siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
+  EXPECT_EQ(SIGURG, info.si_signo);
+  EXPECT_SI_CODE(SI_QUEUE, info.si_code);
+  EXPECT_EQ(&port, info.si_value.sival_ptr);
+}
 #endif
 
 TEST_F(AsyncUnixTest, SignalsMultiListen) {
@@ -207,14 +228,14 @@ TEST_F(AsyncUnixTest, ReadObserver) {
   KJ_SYSCALL(pipe(pipefds));
   kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
 
-  UnixEventPort::ReadObserver readObserver(port, infd);
+  UnixEventPort::FdObserver observer(port, infd, UnixEventPort::FdObserver::OBSERVE_READ);
 
   KJ_SYSCALL(write(outfd, "foo", 3));
 
-  readObserver.whenBecomesReadable().wait(waitScope);
+  observer.whenBecomesReadable().wait(waitScope);
 
 #if __linux__  // platform known to support POLLRDHUP
-  EXPECT_FALSE(KJ_ASSERT_NONNULL(readObserver.atEndHint()));
+  EXPECT_FALSE(KJ_ASSERT_NONNULL(observer.atEndHint()));
 
   char buffer[4096];
   ssize_t n;
@@ -224,9 +245,9 @@ TEST_F(AsyncUnixTest, ReadObserver) {
   KJ_SYSCALL(write(outfd, "bar", 3));
   outfd = nullptr;
 
-  readObserver.whenBecomesReadable().wait(waitScope);
+  observer.whenBecomesReadable().wait(waitScope);
 
-  EXPECT_TRUE(KJ_ASSERT_NONNULL(readObserver.atEndHint()));
+  EXPECT_TRUE(KJ_ASSERT_NONNULL(observer.atEndHint()));
 #endif
 }
 
@@ -237,10 +258,12 @@ TEST_F(AsyncUnixTest, ReadObserverMultiListen) {
 
   int bogusPipefds[2];
   KJ_SYSCALL(pipe(bogusPipefds));
-  UnixEventPort::ReadObserver bogusReadObserver(port, bogusPipefds[0]);
   KJ_DEFER({ close(bogusPipefds[1]); close(bogusPipefds[0]); });
 
-  bogusReadObserver.whenBecomesReadable().then([]() {
+  UnixEventPort::FdObserver bogusObserver(port, bogusPipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
+
+  bogusObserver.whenBecomesReadable().then([]() {
     ADD_FAILURE() << "Received wrong poll.";
   }).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
@@ -250,10 +273,11 @@ TEST_F(AsyncUnixTest, ReadObserverMultiListen) {
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
 
-  UnixEventPort::ReadObserver readObserver(port, pipefds[0]);
+  UnixEventPort::FdObserver observer(port, pipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
-  readObserver.whenBecomesReadable().wait(waitScope);
+  observer.whenBecomesReadable().wait(waitScope);
 }
 
 TEST_F(AsyncUnixTest, ReadObserverMultiReceive) {
@@ -265,18 +289,22 @@ TEST_F(AsyncUnixTest, ReadObserverMultiReceive) {
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
 
-  UnixEventPort::ReadObserver readObserver(port, pipefds[0]);
+  UnixEventPort::FdObserver observer(port, pipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
   int pipefds2[2];
   KJ_SYSCALL(pipe(pipefds2));
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
 
-  UnixEventPort::ReadObserver readObserver2(port, pipefds2[0]);
+  UnixEventPort::FdObserver observer2(port, pipefds2[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
   KJ_SYSCALL(write(pipefds2[1], "bar", 3));
 
-  readObserver.whenBecomesReadable().wait(waitScope);
-  readObserver2.whenBecomesReadable().wait(waitScope);
+  auto promise1 = observer.whenBecomesReadable();
+  auto promise2 = observer2.whenBecomesReadable();
+  promise1.wait(waitScope);
+  promise2.wait(waitScope);
 }
 
 TEST_F(AsyncUnixTest, ReadObserverAsync) {
@@ -288,7 +316,8 @@ TEST_F(AsyncUnixTest, ReadObserverAsync) {
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
-  UnixEventPort::ReadObserver readObserver(port, pipefds[0]);
+  UnixEventPort::FdObserver observer(port, pipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
 
   Thread thread([&]() {
     delay();
@@ -296,7 +325,7 @@ TEST_F(AsyncUnixTest, ReadObserverAsync) {
   });
 
   // Wait for the event in this thread.
-  readObserver.whenBecomesReadable().wait(waitScope);
+  observer.whenBecomesReadable().wait(waitScope);
 }
 
 TEST_F(AsyncUnixTest, ReadObserverNoWait) {
@@ -309,18 +338,20 @@ TEST_F(AsyncUnixTest, ReadObserverNoWait) {
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
-  UnixEventPort::ReadObserver readObserver(port, pipefds[0]);
+  UnixEventPort::FdObserver observer(port, pipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
 
   int pipefds2[2];
   KJ_SYSCALL(pipe(pipefds2));
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
-  UnixEventPort::ReadObserver readObserver2(port, pipefds2[0]);
+  UnixEventPort::FdObserver observer2(port, pipefds2[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
 
   int receivedCount = 0;
-  readObserver.whenBecomesReadable().then([&]() {
+  observer.whenBecomesReadable().then([&]() {
     receivedCount++;
   }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
-  readObserver2.whenBecomesReadable().then([&]() {
+  observer2.whenBecomesReadable().then([&]() {
     receivedCount++;
   }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
 
@@ -360,7 +391,7 @@ TEST_F(AsyncUnixTest, WriteObserver) {
   kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
   setNonblocking(outfd);
 
-  UnixEventPort::WriteObserver writeObserver(port, outfd);
+  UnixEventPort::FdObserver observer(port, outfd, UnixEventPort::FdObserver::OBSERVE_WRITE);
 
   // Fill buffer.
   ssize_t n;
@@ -369,7 +400,7 @@ TEST_F(AsyncUnixTest, WriteObserver) {
   } while (n >= 0);
 
   bool writable = false;
-  auto promise = writeObserver.whenBecomesWritable()
+  auto promise = observer.whenBecomesWritable()
       .then([&]() { writable = true; }).eagerlyEvaluate(nullptr);
 
   loop.run();

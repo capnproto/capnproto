@@ -29,8 +29,12 @@
 #include "async.h"
 #include "time.h"
 #include "vector.h"
+#include "io.h"
 #include <signal.h>
-#include <pthread.h>
+
+#if __linux__ && !defined(KJ_USE_EPOLL)
+#define KJ_USE_EPOLL 1
+#endif
 
 namespace kj {
 
@@ -51,9 +55,8 @@ public:
   UnixEventPort();
   ~UnixEventPort() noexcept(false);
 
-  class ReadObserver;
-  class WriteObserver;
-  // Classes that watch an fd for readability or writability. See definitions below.
+  class FdObserver;
+  // Class that watches an fd for readability or writability. See definition below.
 
   Promise<siginfo_t> onSignal(int signum);
   // When the given signal is delivered to this thread, return the corresponding siginfo_t.
@@ -91,34 +94,43 @@ public:
   void poll() override;
 
 private:
-#if KJ_USE_EPOLL
-  // TODO(soon): epoll implementation
-#else
-  class PollPromiseAdapter;
-  class SignalPromiseAdapter;
-  class TimerPromiseAdapter;
-  class PollContext;
-
   struct TimerSet;  // Defined in source file to avoid STL include.
+  class TimerPromiseAdapter;
+  class SignalPromiseAdapter;
 
-  PollPromiseAdapter* pollHead = nullptr;
-  PollPromiseAdapter** pollTail = &pollHead;
-  SignalPromiseAdapter* signalHead = nullptr;
-  SignalPromiseAdapter** signalTail = &signalHead;
   Own<TimerSet> timers;
   TimePoint frozenSteadyTime;
 
-  void gotSignal(const siginfo_t& siginfo);
+  SignalPromiseAdapter* signalHead = nullptr;
+  SignalPromiseAdapter** signalTail = &signalHead;
 
   TimePoint currentSteadyTime();
   void processTimers();
+  void gotSignal(const siginfo_t& siginfo);
 
   friend class TimerPromiseAdapter;
+
+#if KJ_USE_EPOLL
+  AutoCloseFd epollFd;
+  AutoCloseFd signalFd;
+  AutoCloseFd eventFd;   // Used for cross-thread wakeups.
+
+  sigset_t signalFdSigset;
+  // Signal mask as currently set on the signalFd. Tracked so we can detect whether or not it
+  // needs updating.
+
+  void doEpollWait(int timeout);
+
+#else
+  class PollContext;
+
+  FdObserver* observersHead = nullptr;
+  FdObserver** observersTail = &observersHead;
 #endif
 };
 
-class UnixEventPort::ReadObserver {
-  // Object which watches a file descriptor to determine when it is readable.
+class UnixEventPort::FdObserver {
+  // Object which watches a file descriptor to determine when it is readable or writable.
   //
   // For listen sockets, "readable" means that there is a connection to accept(). For everything
   // else, it means that read() (or recv()) will return data.
@@ -133,11 +145,19 @@ class UnixEventPort::ReadObserver {
   //   behavior. If at all possible, use the higher-level AsyncInputStream interface instead.
 
 public:
-  ReadObserver(UnixEventPort& eventPort, int fd): eventPort(eventPort), fd(fd) {}
+  enum Flags {
+    OBSERVE_READ = 1,
+    OBSERVE_WRITE = 2,
+    OBSERVE_READ_WRITE = OBSERVE_READ | OBSERVE_WRITE
+  };
+
+  FdObserver(UnixEventPort& eventPort, int fd, uint flags);
   // Begin watching the given file descriptor for readability. Only one ReadObserver may exist
   // for a given file descriptor at a time.
 
-  KJ_DISALLOW_COPY(ReadObserver);
+  ~FdObserver() noexcept(false);
+
+  KJ_DISALLOW_COPY(FdObserver);
 
   Promise<void> whenBecomesReadable();
   // Resolves the next time the file descriptor transitions from having no data to read to having
@@ -177,37 +197,6 @@ public:
   //
   // This hint may be useful as an optimization to avoid an unnecessary system call.
 
-private:
-  UnixEventPort& eventPort;
-  int fd;
-
-#if KJ_USE_EPOLL
-  // TODO(soon): epoll implementation
-
-  Own<PromiseFulfiller<void>> fulfiller;
-  // Replaced each time `whenBecomesReadable()` is called.
-#else
-#endif
-
-  Maybe<bool> atEnd;
-
-  friend class UnixEventPort;
-};
-
-class UnixEventPort::WriteObserver {
-  // Object which watches a file descriptor to determine when it is writable.
-  //
-  // WARNING: The exact behavior of this class differs across systems, since event interfaces
-  //   vary wildly. Be sure to read the documentation carefully and avoid depending on unspecified
-  //   behavior. If at all possible, use the higher-level AsyncOutputStream interface instead.
-
-public:
-  WriteObserver(UnixEventPort& eventPort, int fd): eventPort(eventPort), fd(fd) {}
-  // Begin watching the given file descriptor for writability. Only one WriteObserver may exist
-  // for a given file descriptor at a time.
-
-  KJ_DISALLOW_COPY(WriteObserver);
-
   Promise<void> whenBecomesWritable();
   // Resolves the next time the file descriptor transitions from having no space available in the
   // write buffer to having some space available.
@@ -232,11 +221,24 @@ public:
 private:
   UnixEventPort& eventPort;
   int fd;
+  uint flags;
 
-#if KJ_USE_EPOLL
-  Own<PromiseFulfiller<void>> fulfiller;
-  // Replaced each time `whenBecomesReadable()` is called.
-#else
+  kj::Maybe<Own<PromiseFulfiller<void>>> readFulfiller;
+  kj::Maybe<Own<PromiseFulfiller<void>>> writeFulfiller;
+  // Replaced each time `whenBecomesReadable()` or `whenBecomesWritable()` is called. Reverted to
+  // null every time an event is fired.
+
+  Maybe<bool> atEnd;
+
+  void fire(short events);
+
+#if !KJ_USE_EPOLL
+  FdObserver* next;
+  FdObserver** prev;
+  // Linked list of observers which currently have a non-null readFulfiller or writeFulfiller.
+  // If `prev` is null then the observer is not currently in the list.
+
+  short getEventMask();
 #endif
 
   friend class UnixEventPort;

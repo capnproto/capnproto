@@ -28,11 +28,82 @@
 #include <limits>
 #include <set>
 #include <chrono>
+#include <pthread.h>
+
+#if KJ_USE_EPOLL
+#include <unistd.h>
+#include <sys/epoll.h>
+#include <sys/signalfd.h>
+#include <sys/eventfd.h>
+#else
 #include <poll.h>
+#endif
 
 namespace kj {
 
 // =======================================================================================
+// Timer code common to multiple implementations
+
+struct UnixEventPort::TimerSet {
+  struct TimerBefore {
+    bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs);
+  };
+  using Timers = std::multiset<TimerPromiseAdapter*, TimerBefore>;
+  Timers timers;
+};
+
+class UnixEventPort::TimerPromiseAdapter {
+public:
+  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, UnixEventPort& port, TimePoint time)
+      : time(time), fulfiller(fulfiller), port(port) {
+    pos = port.timers->timers.insert(this);
+  }
+
+  ~TimerPromiseAdapter() {
+    if (pos != port.timers->timers.end()) {
+      port.timers->timers.erase(pos);
+    }
+  }
+
+  void fulfill() {
+    fulfiller.fulfill();
+    port.timers->timers.erase(pos);
+    pos = port.timers->timers.end();
+  }
+
+  const TimePoint time;
+  PromiseFulfiller<void>& fulfiller;
+  UnixEventPort& port;
+  TimerSet::Timers::const_iterator pos;
+};
+
+bool UnixEventPort::TimerSet::TimerBefore::operator()(
+    TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) {
+  return lhs->time < rhs->time;
+}
+
+Promise<void> UnixEventPort::atSteadyTime(TimePoint time) {
+  return newAdaptedPromise<void, TimerPromiseAdapter>(*this, time);
+}
+
+TimePoint UnixEventPort::currentSteadyTime() {
+  return origin<TimePoint>() + std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count() * NANOSECONDS;
+}
+
+void UnixEventPort::processTimers() {
+  frozenSteadyTime = currentSteadyTime();
+  for (;;) {
+    auto front = timers->timers.begin();
+    if (front == timers->timers.end() || (*front)->time > frozenSteadyTime) {
+      break;
+    }
+    (*front)->fulfill();
+  }
+}
+
+// =======================================================================================
+// Signal code common to multiple implementations
 
 namespace {
 
@@ -58,40 +129,30 @@ void registerSignalHandler(int signum) {
   tooLateToSetReserved = true;
 
   sigset_t mask;
-  sigemptyset(&mask);
-  sigaddset(&mask, signum);
-  sigprocmask(SIG_BLOCK, &mask, nullptr);
+  KJ_SYSCALL(sigemptyset(&mask));
+  KJ_SYSCALL(sigaddset(&mask, signum));
+  KJ_SYSCALL(sigprocmask(SIG_BLOCK, &mask, nullptr));
 
+#if !KJ_USE_EPOLL  // on Linux we'll use signalfd
   struct sigaction action;
   memset(&action, 0, sizeof(action));
   action.sa_sigaction = &signalHandler;
-  sigfillset(&action.sa_mask);
+  KJ_SYSCALL(sigfillset(&action.sa_mask));
   action.sa_flags = SA_SIGINFO;
-  sigaction(signum, &action, nullptr);
+  KJ_SYSCALL(sigaction(signum, &action, nullptr));
+#endif
 }
 
 void registerReservedSignal() {
   registerSignalHandler(reservedSignal);
 
   // We also disable SIGPIPE because users of UnixEventLoop almost certainly don't want it.
-  signal(SIGPIPE, SIG_IGN);
+  KJ_SYSCALL(signal(SIGPIPE, SIG_IGN));
 }
 
 pthread_once_t registerReservedSignalOnce = PTHREAD_ONCE_INIT;
 
 }  // namespace
-
-// =======================================================================================
-
-struct UnixEventPort::TimerSet {
-  struct TimerBefore {
-    bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs);
-  };
-  using Timers = std::multiset<TimerPromiseAdapter*, TimerBefore>;
-  Timers timers;
-};
-
-// =======================================================================================
 
 class UnixEventPort::SignalPromiseAdapter {
 public:
@@ -134,113 +195,6 @@ public:
   SignalPromiseAdapter** prev = nullptr;
 };
 
-class UnixEventPort::PollPromiseAdapter {
-public:
-  inline PollPromiseAdapter(PromiseFulfiller<void>& fulfiller,
-                            UnixEventPort& loop, int fd, short eventMask,
-                            Maybe<UnixEventPort::ReadObserver&> readObserver)
-      : loop(loop), fd(fd), eventMask(eventMask),
-        fulfiller(fulfiller), readObserver(readObserver) {
-    prev = loop.pollTail;
-    *loop.pollTail = this;
-    loop.pollTail = &next;
-  }
-
-  ~PollPromiseAdapter() noexcept(false) {
-    if (prev != nullptr) {
-      if (next == nullptr) {
-        loop.pollTail = prev;
-      } else {
-        next->prev = prev;
-      }
-      *prev = next;
-    }
-  }
-
-  void fire(short events) {
-    KJ_IF_MAYBE(ro, readObserver) {
-#ifndef POLLRDHUP
-#define POLLRDHUP 0
-#endif
-      if (events & (POLLHUP | POLLRDHUP)) {
-        ro->atEnd = true;
-#if POLLRDHUP
-      } else {
-        // Since POLLRDHUP exists on this platform, and we didn't receive it, we know that we're not
-        // at the end.
-        ro->atEnd = false;
-#endif
-      }
-    }
-    fulfiller.fulfill();
-  }
-
-  void removeFromList() {
-    if (next == nullptr) {
-      loop.pollTail = prev;
-    } else {
-      next->prev = prev;
-    }
-    *prev = next;
-    next = nullptr;
-    prev = nullptr;
-  }
-
-  UnixEventPort& loop;
-  int fd;
-  short eventMask;
-  PromiseFulfiller<void>& fulfiller;
-  Maybe<UnixEventPort::ReadObserver&> readObserver;  // to fill in atEnd hint.
-  PollPromiseAdapter* next = nullptr;
-  PollPromiseAdapter** prev = nullptr;
-};
-
-class UnixEventPort::TimerPromiseAdapter {
-public:
-  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, UnixEventPort& port, TimePoint time)
-      : time(time), fulfiller(fulfiller), port(port) {
-    pos = port.timers->timers.insert(this);
-  }
-
-  ~TimerPromiseAdapter() {
-    if (pos != port.timers->timers.end()) {
-      port.timers->timers.erase(pos);
-    }
-  }
-
-  void fulfill() {
-    fulfiller.fulfill();
-    port.timers->timers.erase(pos);
-    pos = port.timers->timers.end();
-  }
-
-  const TimePoint time;
-  PromiseFulfiller<void>& fulfiller;
-  UnixEventPort& port;
-  TimerSet::Timers::const_iterator pos;
-};
-
-bool UnixEventPort::TimerSet::TimerBefore::operator()(
-    TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) {
-  return lhs->time < rhs->time;
-}
-
-UnixEventPort::UnixEventPort()
-    : timers(kj::heap<TimerSet>()),
-      frozenSteadyTime(currentSteadyTime()) {
-  pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
-}
-
-UnixEventPort::~UnixEventPort() noexcept(false) {}
-
-Promise<void> UnixEventPort::ReadObserver::whenBecomesReadable() {
-  return newAdaptedPromise<void, PollPromiseAdapter>(eventPort, fd, POLLIN | POLLRDHUP, *this);
-}
-
-Promise<void> UnixEventPort::WriteObserver::whenBecomesWritable() {
-  return newAdaptedPromise<void, PollPromiseAdapter>(eventPort, fd, POLLOUT, nullptr);
-}
-
 Promise<siginfo_t> UnixEventPort::onSignal(int signum) {
   return newAdaptedPromise<siginfo_t, SignalPromiseAdapter>(*this, signum);
 }
@@ -268,14 +222,403 @@ void UnixEventPort::setReservedSignal(int signum) {
   reservedSignal = signum;
 }
 
+void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
+  // Fire any events waiting on this signal.
+  auto ptr = signalHead;
+  while (ptr != nullptr) {
+    if (ptr->signum == siginfo.si_signo) {
+      ptr->fulfiller.fulfill(kj::cp(siginfo));
+      ptr = ptr->removeFromList();
+    } else {
+      ptr = ptr->next;
+    }
+  }
+}
+
+#if KJ_USE_EPOLL
+// =======================================================================================
+// epoll FdObserver implementation
+
+UnixEventPort::UnixEventPort()
+    : timers(kj::heap<TimerSet>()),
+      frozenSteadyTime(currentSteadyTime()),
+      epollFd(-1),
+      signalFd(-1),
+      eventFd(-1) {
+  pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
+
+  int fd;
+  KJ_SYSCALL(fd = epoll_create1(EPOLL_CLOEXEC));
+  epollFd = AutoCloseFd(fd);
+
+  KJ_SYSCALL(sigemptyset(&signalFdSigset));
+  KJ_SYSCALL(fd = signalfd(-1, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
+  signalFd = AutoCloseFd(fd);
+
+  KJ_SYSCALL(fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
+  eventFd = AutoCloseFd(fd);
+
+
+  struct epoll_event event;
+  memset(&event, 0, sizeof(event));
+  event.events = EPOLLIN;
+  event.data.u64 = 0;
+  KJ_SYSCALL(epoll_ctl(epollFd, EPOLL_CTL_ADD, signalFd, &event));
+  event.data.u64 = 1;
+  KJ_SYSCALL(epoll_ctl(epollFd, EPOLL_CTL_ADD, eventFd, &event));
+}
+
+UnixEventPort::~UnixEventPort() noexcept(false) {}
+
+UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint flags)
+    : eventPort(eventPort), fd(fd), flags(flags) {
+  struct epoll_event event;
+  memset(&event, 0, sizeof(event));
+
+  if (flags & OBSERVE_READ) {
+    event.events |= EPOLLIN | EPOLLRDHUP;
+  }
+  if (flags & OBSERVE_WRITE) {
+    event.events |= EPOLLOUT;
+  }
+  event.events |= EPOLLET;  // Set edge-triggered mode.
+
+  event.data.ptr = this;
+
+  KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_ADD, fd, &event));
+}
+
+UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
+  KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_DEL, fd, nullptr));
+}
+
+void UnixEventPort::FdObserver::fire(short events) {
+  if (events & (EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR)) {
+    if (events & (EPOLLHUP | EPOLLRDHUP)) {
+      atEnd = true;
+    } else {
+      // Since we didn't receive EPOLLRDHUP, we know that we're not at the end.
+      atEnd = false;
+    }
+
+    KJ_IF_MAYBE(f, readFulfiller) {
+      f->get()->fulfill();
+      readFulfiller = nullptr;
+    }
+  }
+
+  if (events & (EPOLLOUT | EPOLLHUP | EPOLLERR)) {
+    KJ_IF_MAYBE(f, writeFulfiller) {
+      f->get()->fulfill();
+      writeFulfiller = nullptr;
+    }
+  }
+}
+
+Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
+  KJ_REQUIRE(flags & OBSERVE_READ, "FdObserver was not set to observe reads.");
+
+  auto paf = newPromiseAndFulfiller<void>();
+  readFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
+  KJ_REQUIRE(flags & OBSERVE_WRITE, "FdObserver was not set to observe writes.");
+
+  auto paf = newPromiseAndFulfiller<void>();
+  writeFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+void UnixEventPort::wait() {
+  // epoll_wait()'s timeout is an `int` count of milliseconds, so truncate to that.
+  // Also, make sure that we aren't within a millisecond of overflowing a `Duration` since that
+  // will break the math below.
+  constexpr Duration MAX_TIMEOUT =
+      min(int(maxValue) * MILLISECONDS, Duration(maxValue) - MILLISECONDS);
+
+  int epollTimeout = -1;
+  auto timer = timers->timers.begin();
+  if (timer != timers->timers.end()) {
+    Duration timeout = (*timer)->time - currentSteadyTime();
+    if (timeout < 0 * SECONDS) {
+      epollTimeout = 0;
+    } else if (timeout < MAX_TIMEOUT) {
+      // Round up to the next millisecond
+      epollTimeout = (timeout + 1 * MILLISECONDS - unit<Duration>()) / MILLISECONDS;
+    } else {
+      epollTimeout = MAX_TIMEOUT / MILLISECONDS;
+    }
+  }
+
+  doEpollWait(epollTimeout);
+}
+
+void UnixEventPort::poll() {
+  doEpollWait(0);
+}
+
+static siginfo_t toRegularSiginfo(const struct signalfd_siginfo& siginfo) {
+  // Unfortunately, siginfo_t is mostly a big union and the correct set of fields to fill in
+  // depends on the type of signal. OTOH, signalfd_siginfo is a flat struct that expands all
+  // siginfo_t's union fields out to be non-overlapping. We can't just copy all the fields over
+  // because of the unions; we have to carefully figure out which fields are appropriate to fill
+  // in for this signal. Ick.
+
+  siginfo_t result;
+  memset(&result, 0, sizeof(result));
+
+  result.si_signo = siginfo.ssi_signo;
+  result.si_errno = siginfo.ssi_errno;
+  result.si_code = siginfo.ssi_code;
+
+  if (siginfo.ssi_code > 0) {
+    // Signal originated from the kernel. The structure of the siginfo depends primarily on the
+    // signal number.
+
+    switch (siginfo.ssi_signo) {
+    case SIGCHLD:
+      result.si_pid = siginfo.ssi_pid;
+      result.si_uid = siginfo.ssi_uid;
+      result.si_status = siginfo.ssi_status;
+      result.si_utime = siginfo.ssi_utime;
+      result.si_stime = siginfo.ssi_stime;
+      break;
+
+    case SIGILL:
+    case SIGFPE:
+    case SIGSEGV:
+    case SIGBUS:
+    case SIGTRAP:
+      result.si_addr = reinterpret_cast<void*>(static_cast<uintptr_t>(siginfo.ssi_addr));
+#ifdef si_trapno
+      result.si_trapno = siginfo.ssi_trapno;
+#endif
+      // ssi_addr_lsb is defined as coming immediately after ssi_addr in the kernel headers but
+      // apparently the userspace headers were never updated. So we do a pointer hack. :(
+      result.si_addr_lsb = *reinterpret_cast<const uint16_t*>(&siginfo.ssi_addr + 1);
+      break;
+
+    case SIGIO:
+      static_assert(SIGIO == SIGPOLL, "SIGIO != SIGPOLL?");
+
+      // Note: Technically, code can arrange for SIGIO signals to be delivered with a signal number
+      //   other than SIGIO. AFAICT there is no way for us to detect this in the siginfo. Luckily
+      //   SIGIO is totally obsoleted by epoll so it shouldn't come up.
+
+      result.si_band = siginfo.ssi_band;
+      result.si_fd = siginfo.ssi_fd;
+      break;
+
+    case SIGSYS:
+      // Apparently SIGSYS's fields are not available in signalfd_siginfo?
+      break;
+    }
+
+  } else {
+    // Signal originated from userspace. The sender could specify whatever signal number they
+    // wanted. The structure of the signal is determined by the API they used, which is identified
+    // by SI_CODE.
+
+    switch (siginfo.ssi_code) {
+      case SI_USER:
+      case SI_TKILL:
+        // kill(), tkill(), or tgkill().
+        result.si_pid = siginfo.ssi_pid;
+        result.si_uid = siginfo.ssi_uid;
+        break;
+
+      case SI_QUEUE:
+      case SI_MESGQ:
+      case SI_ASYNCIO:
+      default:
+        result.si_pid = siginfo.ssi_pid;
+        result.si_uid = siginfo.ssi_uid;
+
+        // This is awkward. In siginfo_t, si_ptr and si_int are in a union together. In
+        // signalfd_siginfo, they are not. We don't really know whether the app intended to send
+        // an int or a pointer. Presumably since the pointer is always larger than the int, if
+        // we write the pointer, we'll end up with the right value for the int? Presumably the
+        // two fields of signalfd_siginfo are actually extracted from one of these unions
+        // originally, so actually contain redundant data? Better write some tests...
+        result.si_ptr = reinterpret_cast<void*>(static_cast<uintptr_t>(siginfo.ssi_ptr));
+        break;
+
+      case SI_TIMER:
+        result.si_timerid = siginfo.ssi_tid;
+        result.si_overrun = siginfo.ssi_overrun;
+
+        // Again with this weirdness...
+        result.si_ptr = reinterpret_cast<void*>(static_cast<uintptr_t>(siginfo.ssi_ptr));
+        break;
+    }
+  }
+
+  return result;
+}
+
+void UnixEventPort::doEpollWait(int timeout) {
+  sigset_t newMask;
+  sigemptyset(&newMask);
+
+  {
+    auto ptr = signalHead;
+    while (ptr != nullptr) {
+      sigaddset(&newMask, ptr->signum);
+      ptr = ptr->next;
+    }
+  }
+
+  if (memcmp(&newMask, &signalFdSigset, sizeof(newMask)) != 0) {
+    // Apparently we're not waiting on the same signals as last time. Need to update the signal
+    // FD's mask.
+    signalFdSigset = newMask;
+    KJ_SYSCALL(signalfd(signalFd, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
+  }
+
+  struct epoll_event events[16];
+  int n;
+  KJ_SYSCALL(n = epoll_wait(epollFd, events, kj::size(events), timeout));
+
+  for (int i = 0; i < n; i++) {
+    if (events[i].data.u64 == 0) {
+      for (;;) {
+        struct signalfd_siginfo siginfo;
+        ssize_t n;
+        KJ_NONBLOCKING_SYSCALL(n = read(signalFd, &siginfo, sizeof(siginfo)));
+        if (n < 0) break;  // no more signals
+
+        KJ_ASSERT(n == sizeof(siginfo));
+
+        gotSignal(toRegularSiginfo(siginfo));
+      }
+    } else if (events[i].data.u64 == 1) {
+      // Someone wanted to wake up this thread. Read and discard the event.
+      uint64_t value;
+      ssize_t n;
+      KJ_NONBLOCKING_SYSCALL(n = read(eventFd, &value, sizeof(value)));
+      KJ_ASSERT(n < 0 || n == sizeof(value));
+    } else {
+      FdObserver* observer = reinterpret_cast<FdObserver*>(events[i].data.ptr);
+      observer->fire(events[i].events);
+    }
+  }
+
+  processTimers();
+}
+
+#else  // KJ_USE_EPOLL
+// =======================================================================================
+// Traditional poll() FdObserver implementation.
+
+#ifndef POLLRDHUP
+#define POLLRDHUP 0
+#endif
+
+UnixEventPort::UnixEventPort()
+    : timers(kj::heap<TimerSet>()),
+      frozenSteadyTime(currentSteadyTime()) {
+  pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
+}
+
+UnixEventPort::~UnixEventPort() noexcept(false) {}
+
+UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint flags)
+    : eventPort(eventPort), fd(fd), flags(flags), next(nullptr), prev(nullptr) {}
+
+UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
+  if (prev != nullptr) {
+    if (next == nullptr) {
+      eventPort.observersTail = prev;
+    } else {
+      next->prev = prev;
+    }
+    *prev = next;
+  }
+}
+
+void UnixEventPort::FdObserver::fire(short events) {
+  if (events & (POLLIN | POLLHUP | POLLRDHUP | POLLERR | POLLNVAL)) {
+    if (events & (POLLHUP | POLLRDHUP)) {
+      atEnd = true;
+#if POLLRDHUP
+    } else {
+      // Since POLLRDHUP exists on this platform, and we didn't receive it, we know that we're not
+      // at the end.
+      atEnd = false;
+#endif
+    }
+
+    KJ_IF_MAYBE(f, readFulfiller) {
+      f->get()->fulfill();
+      readFulfiller = nullptr;
+    }
+  }
+
+  if (events & (POLLOUT | POLLHUP | POLLERR | POLLNVAL)) {
+    KJ_IF_MAYBE(f, writeFulfiller) {
+      f->get()->fulfill();
+      writeFulfiller = nullptr;
+    }
+  }
+
+  if (readFulfiller == nullptr && writeFulfiller == nullptr) {
+    // Remove from list.
+    if (next == nullptr) {
+      eventPort.observersTail = prev;
+    } else {
+      next->prev = prev;
+    }
+    *prev = next;
+    next = nullptr;
+    prev = nullptr;
+  }
+}
+
+short UnixEventPort::FdObserver::getEventMask() {
+  return (readFulfiller == nullptr ? 0 : (POLLIN | POLLRDHUP)) |
+         (writeFulfiller == nullptr ? 0 : POLLOUT);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
+  KJ_REQUIRE(flags & OBSERVE_READ, "FdObserver was not set to observe reads.");
+
+  if (prev == nullptr) {
+    KJ_DASSERT(next == nullptr);
+    prev = eventPort.observersTail;
+    *prev = this;
+    eventPort.observersTail = &next;
+  }
+
+  auto paf = newPromiseAndFulfiller<void>();
+  readFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
+  KJ_REQUIRE(flags & OBSERVE_WRITE, "FdObserver was not set to observe writes.");
+
+  if (prev == nullptr) {
+    KJ_DASSERT(next == nullptr);
+    prev = eventPort.observersTail;
+    *prev = this;
+    eventPort.observersTail = &next;
+  }
+
+  auto paf = newPromiseAndFulfiller<void>();
+  writeFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
 class UnixEventPort::PollContext {
 public:
-  PollContext(PollPromiseAdapter* ptr) {
+  PollContext(FdObserver* ptr) {
     while (ptr != nullptr) {
       struct pollfd pollfd;
       memset(&pollfd, 0, sizeof(pollfd));
       pollfd.fd = ptr->fd;
-      pollfd.events = ptr->eventMask;
+      pollfd.events = ptr->getEventMask();
       pollfds.add(pollfd);
       pollEvents.add(ptr);
       ptr = ptr->next;
@@ -300,7 +643,6 @@ public:
     for (auto i: indices(pollfds)) {
       if (pollfds[i].revents != 0) {
         pollEvents[i]->fire(pollfds[i].revents);
-        pollEvents[i]->removeFromList();
         if (--pollResult <= 0) {
           break;
         }
@@ -310,14 +652,10 @@ public:
 
 private:
   kj::Vector<struct pollfd> pollfds;
-  kj::Vector<PollPromiseAdapter*> pollEvents;
+  kj::Vector<FdObserver*> pollEvents;
   int pollResult = 0;
   int pollError = 0;
 };
-
-Promise<void> UnixEventPort::atSteadyTime(TimePoint time) {
-  return newAdaptedPromise<void, TimerPromiseAdapter>(*this, time);
-}
 
 void UnixEventPort::wait() {
   sigset_t newMask;
@@ -332,7 +670,7 @@ void UnixEventPort::wait() {
     }
   }
 
-  PollContext pollContext(pollHead);
+  PollContext pollContext(observersHead);
 
   // Capture signals.
   SignalCapture capture;
@@ -422,40 +760,13 @@ void UnixEventPort::poll() {
   }
 
   {
-    PollContext pollContext(pollHead);
+    PollContext pollContext(observersHead);
     pollContext.run(0);
     pollContext.processResults();
   }
   processTimers();
 }
 
-void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
-  // Fire any events waiting on this signal.
-  auto ptr = signalHead;
-  while (ptr != nullptr) {
-    if (ptr->signum == siginfo.si_signo) {
-      ptr->fulfiller.fulfill(kj::cp(siginfo));
-      ptr = ptr->removeFromList();
-    } else {
-      ptr = ptr->next;
-    }
-  }
-}
-
-TimePoint UnixEventPort::currentSteadyTime() {
-  return origin<TimePoint>() + std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count() * NANOSECONDS;
-}
-
-void UnixEventPort::processTimers() {
-  frozenSteadyTime = currentSteadyTime();
-  for (;;) {
-    auto front = timers->timers.begin();
-    if (front == timers->timers.end() || (*front)->time > frozenSteadyTime) {
-      break;
-    }
-    (*front)->fulfill();
-  }
-}
+#endif  // KJ_USE_EPOLL, else
 
 }  // namespace kj

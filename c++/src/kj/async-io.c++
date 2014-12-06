@@ -110,8 +110,7 @@ class AsyncStreamFd: public OwnedFileDescriptor, public AsyncIoStream {
 public:
   AsyncStreamFd(UnixEventPort& eventPort, int fd, uint flags)
       : OwnedFileDescriptor(fd, flags),
-        readObserver(eventPort, fd),
-        writeObserver(eventPort, fd) {}
+        observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ_WRITE) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
   Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -157,7 +156,7 @@ public:
     buffer = reinterpret_cast<const byte*>(buffer) + n;
     size -= n;
 
-    return writeObserver.whenBecomesWritable().then([=]() {
+    return observer.whenBecomesWritable().then([=]() {
       return write(buffer, size);
     });
   }
@@ -192,7 +191,7 @@ public:
 
     if (pollResult == 0) {
       // Not ready yet. We can safely use the edge-triggered observer.
-      return readObserver.whenBecomesReadable();
+      return observer.whenBecomesReadable();
     } else {
       // Ready now.
       return kj::READY_NOW;
@@ -200,8 +199,7 @@ public:
   }
 
 private:
-  UnixEventPort::ReadObserver readObserver;
-  UnixEventPort::WriteObserver writeObserver;
+  UnixEventPort::FdObserver observer;
 
   Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                   size_t alreadyRead) {
@@ -226,7 +224,7 @@ private:
 
     if (n < 0) {
       // Read would block.
-      return readObserver.whenBecomesReadable().then([=]() {
+      return observer.whenBecomesReadable().then([=]() {
         return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
       });
     } else if (n == 0) {
@@ -243,7 +241,7 @@ private:
       maxBytes -= n;
       alreadyRead += n;
 
-      KJ_IF_MAYBE(atEnd, readObserver.atEndHint()) {
+      KJ_IF_MAYBE(atEnd, observer.atEndHint()) {
         if (*atEnd) {
           // We've already received an indication that the next read() will return EOF, so there's
           // nothing to wait for.
@@ -256,7 +254,7 @@ private:
           // that even if it was received since then, whenBecomesReadable() will catch that. So,
           // let's go ahead and skip calling read() here and instead go straight to waiting for
           // more input.
-          return readObserver.whenBecomesReadable().then([=]() {
+          return observer.whenBecomesReadable().then([=]() {
             return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
           });
         }
@@ -304,7 +302,7 @@ private:
       if (n < firstPiece.size()) {
         // Only part of the first piece was consumed.  Wait for buffer space and then write again.
         firstPiece = firstPiece.slice(n, firstPiece.size());
-        return writeObserver.whenBecomesWritable().then([=]() {
+        return observer.whenBecomesWritable().then([=]() {
           return writeInternal(firstPiece, morePieces);
         });
       } else if (morePieces.size() == 0) {
@@ -731,7 +729,8 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
 class FdConnectionReceiver final: public ConnectionReceiver, public OwnedFileDescriptor {
 public:
   FdConnectionReceiver(UnixEventPort& eventPort, int fd, uint flags)
-      : OwnedFileDescriptor(fd, flags), eventPort(eventPort), observer(eventPort, fd) {}
+      : OwnedFileDescriptor(fd, flags), eventPort(eventPort),
+        observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ) {}
 
   Promise<Own<AsyncIoStream>> accept() override {
     int newFd;
@@ -785,7 +784,7 @@ public:
 
 public:
   UnixEventPort& eventPort;
-  UnixEventPort::ReadObserver observer;
+  UnixEventPort::FdObserver observer;
 };
 
 class TimerImpl final: public Timer {
