@@ -395,9 +395,11 @@ static siginfo_t toRegularSiginfo(const struct signalfd_siginfo& siginfo) {
 #ifdef si_trapno
       result.si_trapno = siginfo.ssi_trapno;
 #endif
+#ifdef si_addr_lsb
       // ssi_addr_lsb is defined as coming immediately after ssi_addr in the kernel headers but
       // apparently the userspace headers were never updated. So we do a pointer hack. :(
       result.si_addr_lsb = *reinterpret_cast<const uint16_t*>(&siginfo.ssi_addr + 1);
+#endif
       break;
 
     case SIGIO:
