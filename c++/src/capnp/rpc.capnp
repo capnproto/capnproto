@@ -1061,7 +1061,7 @@ struct Exception {
   # - Bugs.
   # - Invalid input.
   # - Configuration errors.
-  # - Network probles.
+  # - Network problems.
   # - Insufficient resources.
   # - Version skew (unimplemented functionality).
   # - Other logistical problems.

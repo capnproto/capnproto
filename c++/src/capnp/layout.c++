@@ -1069,7 +1069,7 @@ struct WireHelpers {
     }
 
     // We must verify that the pointer has the right size.  Unlike in
-    // getWritableStructListReference(), we never need to "upgrade" the data, because this
+    // getWritableStructListPointer(), we never need to "upgrade" the data, because this
     // method is called only for non-struct lists, and there is no allowed upgrade path *to*
     // a non-struct list, only *from* them.
 
