@@ -65,7 +65,7 @@ struct Node {
 
   struct NestedNode {
     name @0 :Text;
-    # Unqualified symbol name.  Unlike Node.name, this *can* be used programmatically.
+    # Unqualified symbol name.  Unlike Node.displayName, this *can* be used programmatically.
     #
     # (On Zooko's triangle, this is the node's petname according to its parent scope.)
 
@@ -361,7 +361,7 @@ struct Brand {
       # List of parameter bindings.
 
       inherit @2 :Void;
-      # The place where this TypeEnivornment appears is actually within this scope or a sub-scope,
+      # The place where this Brand appears is actually within this scope or a sub-scope,
       # and the bindings for this scope should be inherited from the reference point.
     }
   }
