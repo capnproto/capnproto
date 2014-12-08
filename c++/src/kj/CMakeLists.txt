@@ -1,23 +1,31 @@
 
 # kj ===========================================================================
 
-set(kj_sources
-  common.c++
-  units.c++
-  memory.c++
-  refcount.c++
+set(kj_sources_lite
   array.c++
-  string.c++
-  string-tree.c++
-  exception.c++
+  common.c++
   debug.c++
-  arena.c++
+  exception.c++
   io.c++
+  memory.c++
   mutex.c++
+  string.c++
   thread.c++
+)
+set(kj_sources_heavy
+  units.c++
+  refcount.c++
+  string-tree.c++
+  arena.c++
   main.c++
   parse/char.c++
 )
+if(NOT CAPNP_LITE)
+  set(kj_sources ${kj_sources_lite} ${kj_sources_heavy})
+else()
+  set(kj_sources ${kj_sources_lite})
+endif()
+
 set(kj_headers
   common.h
   units.h
@@ -81,21 +89,14 @@ if(BUILD_TESTING)
   add_executable(kj-tests
     common-test.c++
     memory-test.c++
-    refcount-test.c++
     array-test.c++
     string-test.c++
-    string-tree-test.c++
     exception-test.c++
     debug-test.c++
-    arena-test.c++
-    units-test.c++
-    tuple-test.c++
-    one-of-test.c++
-    function-test.c++
     io-test.c++
     mutex-test.c++
     threadlocal-test.c++
-    threadlocal-pthread-test.c++
+    std/iostream-test.c++
   )
   # TODO: Link with librt on Solaris for sched_yield
   target_link_libraries(kj-tests kj gtest gtest_main)
@@ -107,9 +108,16 @@ if(BUILD_TESTING)
       async-test.c++
       async-unix-test.c++
       async-io-test.c++
+      refcount-test.c++
+      string-tree-test.c++
+      arena-test.c++
+      units-test.c++
+      tuple-test.c++
+      one-of-test.c++
+      function-test.c++
+      threadlocal-pthread-test.c++
       parse/common-test.c++
       parse/char-test.c++
-      std/iostream-test.c++
     )
     target_link_libraries(kj-heavy-tests kj kj-async gtest gtest_main)
     add_dependencies(check kj-heavy-tests)
