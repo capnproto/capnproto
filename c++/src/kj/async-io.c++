@@ -191,7 +191,7 @@ public:
 
     if (pollResult == 0) {
       // Not ready yet. We can safely use the edge-triggered observer.
-      return observer.whenBecomesReadable();
+      return observer.whenBecomesWritable();
     } else {
       // Ready now.
       return kj::READY_NOW;
