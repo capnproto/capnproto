@@ -180,11 +180,17 @@ LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 
 class NullEventPort: public EventPort {
 public:
-  void wait() override {
+  bool wait() override {
     KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
   }
 
-  void poll() override {}
+  bool poll() override { return false; }
+
+  void wake() const override {
+    // TODO(soon): Implement using condvar.
+    kj::throwRecoverableException(KJ_EXCEPTION(UNIMPLEMENTED,
+        "Cross-thread events are not yet implemented for EventLoops with no EventPort."));
+  }
 
   static NullEventPort instance;
 };
@@ -196,6 +202,11 @@ NullEventPort NullEventPort::instance = NullEventPort();
 // =======================================================================================
 
 void EventPort::setRunnable(bool runnable) {}
+
+void EventPort::wake() const {
+  kj::throwRecoverableException(KJ_EXCEPTION(UNIMPLEMENTED,
+      "cross-thread wake() not implemented by this EventPort implementation"));
+}
 
 EventLoop::EventLoop()
     : port(_::NullEventPort::instance),

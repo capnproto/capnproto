@@ -513,7 +513,7 @@ class EventPort {
   // framework, allowing the two to coexist in a single thread.
 
 public:
-  virtual void wait() = 0;
+  virtual bool wait() = 0;
   // Wait for an external event to arrive, sleeping if necessary.  Once at least one event has
   // arrived, queue it to the event loop (e.g. by fulfilling a promise) and return.
   //
@@ -523,21 +523,37 @@ public:
   // It is safe to return even if nothing has actually been queued, so long as calling `wait()` in
   // a loop will eventually sleep.  (That is to say, false positives are fine.)
   //
-  // If the implementation knows that no event will ever arrive, it should throw an exception
-  // rather than deadlock.
+  // Returns true if wake() has been called from another thread. (Precisely, returns true if
+  // no previous call to wait `wait()` nor `poll()` has returned true since `wake()` was last
+  // called.)
 
-  virtual void poll() = 0;
+  virtual bool poll() = 0;
   // Check if any external events have arrived, but do not sleep.  If any events have arrived,
   // add them to the event queue (e.g. by fulfilling promises) before returning.
   //
   // This may be called during `Promise::wait()` when the EventLoop has been executing for a while
   // without a break but is still non-empty.
+  //
+  // Returns true if wake() has been called from another thread. (Precisely, returns true if
+  // no previous call to wait `wait()` nor `poll()` has returned true since `wake()` was last
+  // called.)
 
   virtual void setRunnable(bool runnable);
   // Called to notify the `EventPort` when the `EventLoop` has work to do; specifically when it
   // transitions from empty -> runnable or runnable -> empty.  This is typically useful when
   // integrating with an external event loop; if the loop is currently runnable then you should
   // arrange to call run() on it soon.  The default implementation does nothing.
+
+  virtual void wake() const;
+  // Wake up the EventPort's thread from another thread.
+  //
+  // Unlike all other methods on this interface, `wake()` may be called from another thread, hence
+  // it is `const`.
+  //
+  // Technically speaking, `wake()` causes the target thread to cease sleeping and not to sleep
+  // again until `wait()` or `poll()` has returned true at least once.
+  //
+  // The default implementation throws an UNIMPLEMENTED exception.
 };
 
 class EventLoop {

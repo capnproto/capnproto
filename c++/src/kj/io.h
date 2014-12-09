@@ -254,8 +254,8 @@ public:
     return *this;
   }
 
-  inline operator int() { return fd; }
-  inline int get() { return fd; }
+  inline operator int() const { return fd; }
+  inline int get() const { return fd; }
 
   inline bool operator==(decltype(nullptr)) { return fd < 0; }
   inline bool operator!=(decltype(nullptr)) { return fd >= 0; }

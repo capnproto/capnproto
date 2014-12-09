@@ -331,7 +331,7 @@ Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
   return kj::mv(paf.promise);
 }
 
-void UnixEventPort::wait() {
+bool UnixEventPort::wait() {
   // epoll_wait()'s timeout is an `int` count of milliseconds, so truncate to that.
   // Also, make sure that we aren't within a millisecond of overflowing a `Duration` since that
   // will break the math below.
@@ -352,11 +352,18 @@ void UnixEventPort::wait() {
     }
   }
 
-  doEpollWait(epollTimeout);
+  return doEpollWait(epollTimeout);
 }
 
-void UnixEventPort::poll() {
-  doEpollWait(0);
+bool UnixEventPort::poll() {
+  return doEpollWait(0);
+}
+
+void UnixEventPort::wake() const {
+  uint64_t one = 1;
+  ssize_t n;
+  KJ_NONBLOCKING_SYSCALL(n = write(eventFd, &one, sizeof(one)));
+  KJ_ASSERT(n < 0 || n == sizeof(one));
 }
 
 static siginfo_t toRegularSiginfo(const struct signalfd_siginfo& siginfo) {
@@ -460,7 +467,7 @@ static siginfo_t toRegularSiginfo(const struct signalfd_siginfo& siginfo) {
   return result;
 }
 
-void UnixEventPort::doEpollWait(int timeout) {
+bool UnixEventPort::doEpollWait(int timeout) {
   sigset_t newMask;
   sigemptyset(&newMask);
 
@@ -483,6 +490,8 @@ void UnixEventPort::doEpollWait(int timeout) {
   int n;
   KJ_SYSCALL(n = epoll_wait(epollFd, events, kj::size(events), timeout));
 
+  bool woken = false;
+
   for (int i = 0; i < n; i++) {
     if (events[i].data.u64 == 0) {
       for (;;) {
@@ -496,11 +505,14 @@ void UnixEventPort::doEpollWait(int timeout) {
         gotSignal(toRegularSiginfo(siginfo));
       }
     } else if (events[i].data.u64 == 1) {
-      // Someone wanted to wake up this thread. Read and discard the event.
+      // Someone called wake() from another thread. Consume the event.
       uint64_t value;
       ssize_t n;
       KJ_NONBLOCKING_SYSCALL(n = read(eventFd, &value, sizeof(value)));
       KJ_ASSERT(n < 0 || n == sizeof(value));
+
+      // We were woken. Need to return true.
+      woken = true;
     } else {
       FdObserver* observer = reinterpret_cast<FdObserver*>(events[i].data.ptr);
       observer->fire(events[i].events);
@@ -508,6 +520,8 @@ void UnixEventPort::doEpollWait(int timeout) {
   }
 
   processTimers();
+
+  return woken;
 }
 
 #else  // KJ_USE_EPOLL
@@ -521,6 +535,10 @@ void UnixEventPort::doEpollWait(int timeout) {
 UnixEventPort::UnixEventPort()
     : timers(kj::heap<TimerSet>()),
       frozenSteadyTime(currentSteadyTime()) {
+  static_assert(sizeof(threadId) >= sizeof(pthread_t),
+                "pthread_t is larger than a long long on your platform.  Please port.");
+  *reinterpret_cast<pthread_t*>(&threadId) = pthread_self();
+
   pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
 }
 
@@ -659,7 +677,7 @@ private:
   int pollError = 0;
 };
 
-void UnixEventPort::wait() {
+bool UnixEventPort::wait() {
   sigset_t newMask;
   sigemptyset(&newMask);
   sigaddset(&newMask, reservedSignal);
@@ -681,11 +699,12 @@ void UnixEventPort::wait() {
     // We received a signal and longjmp'd back out of the signal handler.
     threadCapture = nullptr;
 
-    if (capture.siginfo.si_signo != reservedSignal) {
+    if (capture.siginfo.si_signo == reservedSignal) {
+      return true;
+    } else {
       gotSignal(capture.siginfo);
+      return false;
     }
-
-    return;
   }
 
   // Enable signals, run the poll, then mask them again.
@@ -720,9 +739,13 @@ void UnixEventPort::wait() {
   // Queue events.
   pollContext.processResults();
   processTimers();
+
+  return false;
 }
 
-void UnixEventPort::poll() {
+bool UnixEventPort::poll() {
+  bool woken = false;
+
   sigset_t pending;
   sigset_t waitMask;
   sigemptyset(&pending);
@@ -731,6 +754,12 @@ void UnixEventPort::poll() {
   // Count how many signals that we care about are pending.
   KJ_SYSCALL(sigpending(&pending));
   uint signalCount = 0;
+
+  if (sigismember(&pending, reservedSignal)) {
+    ++signalCount;
+    sigdelset(&pending, reservedSignal);
+    sigdelset(&waitMask, reservedSignal);
+  }
 
   {
     auto ptr = signalHead;
@@ -752,7 +781,11 @@ void UnixEventPort::poll() {
     if (sigsetjmp(capture.jumpTo, true)) {
       // We received a signal and longjmp'd back out of the signal handler.
       sigdelset(&waitMask, capture.siginfo.si_signo);
-      gotSignal(capture.siginfo);
+      if (capture.siginfo.si_signo == reservedSignal) {
+        woken = true;
+      } else {
+        gotSignal(capture.siginfo);
+      }
     } else {
       sigsuspend(&waitMask);
       KJ_FAIL_ASSERT("sigsuspend() shouldn't return because the signal handler should "
@@ -767,6 +800,15 @@ void UnixEventPort::poll() {
     pollContext.processResults();
   }
   processTimers();
+
+  return woken;
+}
+
+void UnixEventPort::wake() const {
+  int error = pthread_kill(*reinterpret_cast<const pthread_t*>(&threadId), reservedSignal);
+  if (error != 0) {
+    KJ_FAIL_SYSCALL("pthread_kill", error);
+  }
 }
 
 #endif  // KJ_USE_EPOLL, else

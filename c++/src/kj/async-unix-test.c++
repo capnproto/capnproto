@@ -451,4 +451,32 @@ TEST_F(AsyncUnixTest, SteadyTimers) {
   }
 }
 
+TEST_F(AsyncUnixTest, Wake) {
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  EXPECT_FALSE(port.poll());
+  port.wake();
+  EXPECT_TRUE(port.poll());
+  EXPECT_FALSE(port.poll());
+
+  port.wake();
+  EXPECT_TRUE(port.wait());
+
+  {
+    auto promise = port.atSteadyTime(port.steadyTime());
+    EXPECT_FALSE(port.wait());
+  }
+
+  bool woken = false;
+  Thread thread([&]() {
+    delay();
+    woken = true;
+    port.wake();
+  });
+
+  EXPECT_TRUE(port.wait());
+}
+
 }  // namespace kj

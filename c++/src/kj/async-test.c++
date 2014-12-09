@@ -649,8 +649,8 @@ public:
   bool runnable = false;
   int callCount = 0;
 
-  void wait() override { KJ_FAIL_ASSERT("Nothing to wait for."); }
-  void poll() override {}
+  bool wait() override { KJ_FAIL_ASSERT("Nothing to wait for."); }
+  bool poll() override { return false; }
   void setRunnable(bool runnable) override {
     this->runnable = runnable;
     ++callCount;

@@ -90,8 +90,9 @@ public:
   Promise<void> atSteadyTime(TimePoint time);
 
   // implements EventPort ------------------------------------------------------
-  void wait() override;
-  void poll() override;
+  bool wait() override;
+  bool poll() override;
+  void wake() const override;
 
 private:
   struct TimerSet;  // Defined in source file to avoid STL include.
@@ -119,13 +120,15 @@ private:
   // Signal mask as currently set on the signalFd. Tracked so we can detect whether or not it
   // needs updating.
 
-  void doEpollWait(int timeout);
+  bool doEpollWait(int timeout);
 
 #else
   class PollContext;
 
   FdObserver* observersHead = nullptr;
   FdObserver** observersTail = &observersHead;
+
+  unsigned long long threadId;  // actually pthread_t
 #endif
 };
 
