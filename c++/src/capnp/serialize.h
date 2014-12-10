@@ -96,6 +96,9 @@ size_t computeSerializedSizeInWords(kj::ArrayPtr<const kj::ArrayPtr<const word>>
 // =======================================================================================
 
 class InputStreamMessageReader: public MessageReader {
+  // A MessageReader that reads from an abstract kj::InputStream. See also StreamFdMessageReader
+  // for a subclass specific to file descriptors.
+
 public:
   InputStreamMessageReader(kj::InputStream& inputStream,
                            ReaderOptions options = ReaderOptions(),
@@ -119,6 +122,17 @@ private:
   kj::UnwindDetector unwindDetector;
 };
 
+void readMessageCopy(kj::InputStream& input, MessageBuilder& target,
+                     ReaderOptions options = ReaderOptions(),
+                     kj::ArrayPtr<word> scratchSpace = nullptr);
+// Convenience function which reads a message using `InputStreamMessageReader` then copies the
+// content into the target `MessageBuilder`, verifying that the message structure is valid
+// (although not necessarily that it matches the desired schema).
+//
+// (Note that it's also possible to initialize a `MessageBuilder` directly without a copy using one
+// of `MessageBuilder`'s constructors. However, this approach skips the validation step and is not
+// safe to use on untrusted input. Therefore, we do not provide a convenience method for it.)
+
 void writeMessage(kj::OutputStream& output, MessageBuilder& builder);
 // Write the message to the given output stream.
 
@@ -129,8 +143,7 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
 // Specializations for reading from / writing to file descriptors.
 
 class StreamFdMessageReader: private kj::FdInputStream, public InputStreamMessageReader {
-  // A MessageReader that reads from a steam-based file descriptor.  For seekable file descriptors
-  // (e.g. actual disk files), FdFileMessageReader is better, but this will still work.
+  // A MessageReader that reads from a steam-based file descriptor.
 
 public:
   StreamFdMessageReader(int fd, ReaderOptions options = ReaderOptions(),
@@ -145,6 +158,17 @@ public:
 
   ~StreamFdMessageReader() noexcept(false);
 };
+
+void readMessageCopyFromFd(int fd, MessageBuilder& target,
+                           ReaderOptions options = ReaderOptions(),
+                           kj::ArrayPtr<word> scratchSpace = nullptr);
+// Convenience function which reads a message using `StreamFdMessageReader` then copies the
+// content into the target `MessageBuilder`, verifying that the message structure is valid
+// (although not necessarily that it matches the desired schema).
+//
+// (Note that it's also possible to initialize a `MessageBuilder` directly without a copy using one
+// of `MessageBuilder`'s constructors. However, this approach skips the validation step and is not
+// safe to use on untrusted input. Therefore, we do not provide a convenience method for it.)
 
 void writeMessageToFd(int fd, MessageBuilder& builder);
 // Write the message to the given file descriptor.

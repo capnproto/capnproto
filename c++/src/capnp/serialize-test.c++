@@ -235,6 +235,20 @@ TEST(Serialize, InputStreamEvenSegmentCountLazy) {
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
 
+TEST(Serialize, InputStreamToBuilder) {
+  TestMessageBuilder builder(1);
+  initTestMessage(builder.initRoot<TestAllTypes>());
+
+  kj::Array<word> serialized = messageToFlatArray(builder);
+
+  TestInputStream stream(serialized.asPtr(), false);
+
+  MallocMessageBuilder builder2;
+  readMessageCopy(stream, builder2);
+
+  checkTestMessage(builder2.getRoot<TestAllTypes>());
+}
+
 class TestOutputStream: public kj::OutputStream {
 public:
   TestOutputStream() {}

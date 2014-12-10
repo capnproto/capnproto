@@ -236,6 +236,12 @@ kj::ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
   return segment;
 }
 
+void readMessageCopy(kj::InputStream& input, MessageBuilder& target,
+                     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  InputStreamMessageReader message(input, options, scratchSpace);
+  target.setRoot(message.getRoot<AnyPointer>());
+}
+
 // -------------------------------------------------------------------
 
 void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
@@ -266,11 +272,18 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
 }
 
 // =======================================================================================
+
 StreamFdMessageReader::~StreamFdMessageReader() noexcept(false) {}
 
 void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   kj::FdOutputStream stream(fd);
   writeMessage(stream, segments);
+}
+
+void readMessageCopyFromFd(int fd, MessageBuilder& target,
+                           ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  kj::FdInputStream stream(fd);
+  readMessageCopy(stream, target, options, scratchSpace);
 }
 
 }  // namespace capnp
