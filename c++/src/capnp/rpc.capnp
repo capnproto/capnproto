@@ -48,7 +48,7 @@
 # Either end of any connection can potentially hold capabilities pointing to the other end, and
 # can call methods on those capabilities.  In the doc comments below, we use the words "sender"
 # and "receiver".  These refer to the sender and receiver of an instance of the struct or field
-# being documented.  Sometimes we refer to a "third-party" which is neither the sender nor the
+# being documented.  Sometimes we refer to a "third-party" that is neither the sender nor the
 # receiver.  Documentation is generally written from the point of view of the sender.
 #
 # It is generally up to the vat network implementation to securely verify that connections are made
@@ -64,7 +64,7 @@
 # were made:
 #     http://erights.org/elib/concurrency/partial-order.html
 #
-# Since the full protocol is complicated, we define multiple levels of support which an
+# Since the full protocol is complicated, we define multiple levels of support that an
 # implementation may target.  For many applications, level 1 support will be sufficient.
 # Comments in this file indicate which level requires the corresponding feature to be
 # implemented.
@@ -178,7 +178,7 @@ using ExportId = UInt32;
 # wire.  If the capability is already in the table, the exporter should reuse the same ID.  If the
 # ID is a promise (as opposed to a settled capability), this must be indicated at the time the ID
 # is introduced (e.g. by using `senderPromise` instead of `senderHosted` in `CapDescriptor`); in
-# this case, the importer shall expect a later `Resolve` message which replaces the promise.
+# this case, the importer shall expect a later `Resolve` message that replaces the promise.
 #
 # ExportId/ImportIds are subject to reference counting.  Whenever an `ExportId` is sent over the
 # wire (from the exporter to the importer), the export's reference count is incremented (unless
@@ -204,7 +204,7 @@ using ImportId = ExportId;
 # the sender's point of view.
 #
 # An `ImportId` remains valid in importer -> exporter messages until the importer has sent
-# `Release` messages which (it believes) have reduced the reference count to zero.
+# `Release` messages that (it believes) have reduced the reference count to zero.
 
 # ========================================================================================
 # Messages
@@ -260,8 +260,7 @@ struct Message {
     # implemented.
 
     obsoleteDelete @9 :AnyPointer;
-    # Obsolete way to delete a SturdyRef. This was never implemented, therefore it has been
-    # reduted to AnyPointer.
+    # Obsolete way to delete a SturdyRef. This operation was never implemented.
 
     # Level 3 features -----------------------------------------------
 
@@ -318,7 +317,7 @@ struct Bootstrap {
   # which one to return. If this pointer is null, then the default bootstrap interface is returned.
   #
   # As of verison 0.5, use of this field is deprecated. If a service wants to export multiple
-  # bootstrap interfaces, it should instead define a single bootstarp interface which has methods
+  # bootstrap interfaces, it should instead define a single bootstarp interface that has methods
   # that return each of the other interfaces.
   #
   # **History**
@@ -329,7 +328,7 @@ struct Bootstrap {
   # (non-secret) SturdyRef.
   #
   # Since level 2 RPC was not implemented at the time, the `Restore` message was in practice only
-  # used to obtain the main interface. Since most applications had only one main interface which
+  # used to obtain the main interface. Since most applications had only one main interface that
   # they wanted to restore, they tended to designate this with a null `objectId`.
   #
   # Unfortunately, the earliest version of the EZ RPC interfaces set a precedent of exporting
@@ -340,14 +339,14 @@ struct Bootstrap {
   #
   # - The arrangement assumed that a client wishing to restore a SturdyRef would know exactly what
   #   machine to connect to and would be able to immediately restore a SturdyRef on connection.
-  #   However, in practice, the ability to restore SturdyRefs is itself a capability which may
+  #   However, in practice, the ability to restore SturdyRefs is itself a capability that may
   #   require going through an authentication process to obtain. Thus, it makes more sense to
   #   define a "restorer service" as a full Cap'n Proto interface. If this restorer interface is
   #   offered as the vat's bootstrap interface, then this is equivalent to the old arrangement.
   #
   # - Overloading "Restore" for the purpose of obtaining well-known capabilities encouraged the
   #   practice of exporting singleton services with string names. If singleton services are desired,
-  #   it is better to have one main interface which has methods that can be used to obtain each
+  #   it is better to have one main interface that has methods that can be used to obtain each
   #   service, in order to get all the usual benefits of schemas and type checking.
   #
   # - Overloading "Restore" also had a security problem: Often, "main" or "well-known"
@@ -360,7 +359,7 @@ struct Bootstrap {
   #   For example, consider the case of a sandboxed Sandstorm application and its supervisor. The
   #   application exports a default capability to its supervisor that provides access to
   #   functionality that only the supervisor is supposed to access. Meanwhile, though, applications
-  #   may publish other capabilities which may be persistent, in which case the application needs
+  #   may publish other capabilities that may be persistent, in which case the application needs
   #   to field `Restore` requests that could come from anywhere. These requests of course have to
   #   pass through the supervisor, as all communications with the outside world must. But, the
   #   supervisor has to be careful not to honor an external request addressing the application's
@@ -371,7 +370,7 @@ struct Bootstrap {
   # As of Cap'n Proto 0.5, `Restore` has been renamed to `Bootstrap` and is no longer planned for
   # use in restoring SturdyRefs.
   #
-  # Note that 0.4 also defined a message type called `Delete` which, like `Restore`, addressed a
+  # Note that 0.4 also defined a message type called `Delete` that, like `Restore`, addressed a
   # SturdyRef, but indicated that the client would not restore the ref again in the future. This
   # operation was never implemented, so it was removed entirely. If a "delete" operation is desired,
   # it should exist as a method on the same interface that handles restoring SturdyRefs. However,
@@ -393,7 +392,7 @@ struct Call {
   # Message type initiating a method call on a capability.
 
   questionId @0 :QuestionId;
-  # A number, chosen by the caller, which identifies this call in future messages.  This number
+  # A number, chosen by the caller, that identifies this call in future messages.  This number
   # must be different from all other calls originating from the same end of the connection (but
   # may overlap with question IDs originating from the opposite end).  A fine strategy is to use
   # sequential question IDs, but the recipient should not assume this.
@@ -491,8 +490,8 @@ struct Return {
   releaseParamCaps @1 :Bool = true;
   # If true, all capabilities that were in the params should be considered released.  The sender
   # must not send separate `Release` messages for them.  Level 0 implementations in particular
-  # should always set this true.  This defaults true because if level 0 implementations forgot to
-  # set it they'd never notice (just silently leak caps), but if level >=1 implementations forget
+  # should always set this true.  This defaults true because if level 0 implementations forget to
+  # set it they'll never notice (just silently leak caps), but if level >=1 implementations forget
   # set it false they'll quickly get errors.
 
   union {
@@ -513,7 +512,7 @@ struct Return {
     # before the call had completed.
 
     resultsSentElsewhere @5 :Void;
-    # This is set when returning from a `Call` which had `sendResultsTo` set to something other
+    # This is set when returning from a `Call` that had `sendResultsTo` set to something other
     # than `caller`.
 
     takeFromOtherQuestion @6 :QuestionId;
@@ -526,6 +525,7 @@ struct Return {
     #
     # The caller should contact a third-party vat to pick up the results.  An `Accept` message
     # sent to the vat will return the result.  This pairs with `Call.sendResultsTo.thirdParty`.
+    # It should only be used if the corresponding `Call` had `allowThirdPartyTailCall` set.
   }
 }
 
@@ -555,8 +555,8 @@ struct Finish {
   releaseResultCaps @1 :Bool = true;
   # If true, all capabilities that were in the results should be considered released.  The sender
   # must not send separate `Release` messages for them.  Level 0 implementations in particular
-  # should always set this true.  This defaults true because if level 0 implementations forgot to
-  # set it they'd never notice (just silently leak caps), but if level >=1 implementations forget
+  # should always set this true.  This defaults true because if level 0 implementations forget to
+  # set it they'll never notice (just silently leak caps), but if level >=1 implementations forget
   # set it false they'll quickly get errors.
 }
 
@@ -572,8 +572,8 @@ struct Resolve {
   # doesn't implement it.  For example, a method call or return might contain a capability in the
   # payload.  Normally this is fine even if the receiver is level 0, because they will implicitly
   # release all such capabilities on return / finish.  But if the cap happens to be a promise, then
-  # a follow-up `Resolve` will be sent regardless of this release.  The level 0 receiver will reply
-  # with an `unimplemented` message.  The sender (of the `Resolve`) can respond to this as if the
+  # a follow-up `Resolve` may be sent regardless of this release.  The level 0 receiver will reply
+  # with an `unimplemented` message, and the sender (of the `Resolve`) can respond to this as if the
   # receiver had immediately released any capability to which the promise resolved.
   #
   # When implementing promise resolution, it's important to understand how embargos work and the
@@ -649,7 +649,7 @@ struct Disembargo {
   # `Disembargo` arrives, `bar()` can then be delivered.
   #
   # There are two particular cases where embargos are important.  Consider object Alice, in Vat A,
-  # who holds a promise P, pointing towards Vat B, which eventually resolves to Carol.  The two
+  # who holds a promise P, pointing towards Vat B, that eventually resolves to Carol.  The two
   # cases are:
   # - Carol lives in Vat A, i.e. next to Alice.  In this case, Vat A needs to send a `Disembargo`
   #   message that echos through Vat B and back, to ensure that all pipelined calls on the promise
@@ -685,7 +685,7 @@ struct Disembargo {
   #
   # Embargos are designed to work in the case where a two-hop path is being shortened to one hop.
   # But sometimes there are more hops. Imagine that Alice has a reference to a remote promise P1
-  # which eventually resolves to _another_ remote promise P2 (in a third vat), which _at the same
+  # that eventually resolves to _another_ remote promise P2 (in a third vat), which _at the same
   # time_ happens to resolve to Bob (in a fourth vat). In this case, we're shortening from a 3-hop
   # path (with four parties) to a 1-hop path (Alice -> Bob).
   #
@@ -710,8 +710,8 @@ struct Disembargo {
 
   context :union {
     senderLoopback @1 :EmbargoId;
-    # The sender is requesting a disembargo on a promise which is known to resolve back to a
-    # capability hoste by the sender.  As soon as the receiver has echoed back all pipelined calls
+    # The sender is requesting a disembargo on a promise that is known to resolve back to a
+    # capability hosted by the sender.  As soon as the receiver has echoed back all pipelined calls
     # on this promise, it will deliver the Disembargo back to the sender with `receiverLoopback`
     # set to the same value as `senderLoopback`.  This value is chosen by the sender, and since
     # it is also consumed be the sender, the sender can use whatever strategy it wants to make sure
@@ -727,8 +727,8 @@ struct Disembargo {
     accept @3 :Void;
     # **(level 3)**
     #
-    # The sender is requesting a disembargo on a promise which is known to resolve to a third-party
-    # capability which the sender is currently in the process of accepting (using `Accept`).
+    # The sender is requesting a disembargo on a promise that is known to resolve to a third-party
+    # capability that the sender is currently in the process of accepting (using `Accept`).
     # The receiver of this `Disembargo` has an outstanding `Provide` on said capability.  The
     # receiver should now send a `Disembargo` with `provide` set to the question ID of that
     # `Provide` message.
@@ -763,16 +763,16 @@ struct Provide {
   # every vat.  In Cap'n Proto, we bake this into the core protocol.)
 
   questionId @0 :QuestionId;
-  # Question ID to be held open until the recipient has received the capability.  A result will
-  # be returned once the third party has successfully received the capability.  The sender must
-  # at some point send a `Finish` message as with any other call, and such a message can be
-  # used to cancel the whole operation.
+  # Question ID to be held open until the recipient has received the capability.  A result will be
+  # returned once the third party has successfully received the capability.  The sender must at some
+  # point send a `Finish` message as with any other call, and that message can be used to cancel the
+  # whole operation.
 
   target @1 :MessageTarget;
   # What is to be provided to the third party.
 
   recipient @2 :RecipientId;
-  # Identity of the third party which is expected to pick up the capability.
+  # Identity of the third party that is expected to pick up the capability.
 }
 
 struct Accept {
@@ -820,9 +820,9 @@ struct Accept {
   # - At some point, Vat B forwards the foo() call from the beginning of this example on to Vat C.
   # - Vat B forwards the `Disembargo` from Vat A on to vat C.  It sets `context.provide` to the
   #   question ID of the `Provide` message it had sent previously.
-  # - Vat C receives foo() before `ReleaseEmbargo`, thus allowing it to correctly deliver foo()
+  # - Vat C receives foo() before `Disembargo`, thus allowing it to correctly deliver foo()
   #   before delivering bar().
-  # - Vat C receives `ReleaseEmbargo` from Vat B.  It can now send a `Return` for the `Accept` from
+  # - Vat C receives `Disembargo` from Vat B.  It can now send a `Return` for the `Accept` from
   #   Vat A, as well as deliver bar().
 }
 
@@ -831,9 +831,9 @@ struct Accept {
 struct Join {
   # **(level 4)**
   #
-  # Message type sent to implement E.join(), which, given a number of capabilities which are
+  # Message type sent to implement E.join(), which, given a number of capabilities that are
   # expected to be equivalent, finds the underlying object upon which they all agree and forms a
-  # direct connection to it, skipping any proxies which may have been constructed by other vats
+  # direct connection to it, skipping any proxies that may have been constructed by other vats
   # while transmitting the capability.  See:
   #     http://erights.org/elib/equality/index.html
   #
@@ -857,7 +857,7 @@ struct Join {
   #   also responds with another JoinResult.
   # - Bob receives the responses from Alice and Carol.  He uses the returned JoinResults to
   #   determine how to connect to Dana and attempts to form the connection.  Since Bob and Dana now
-  #   agree on a secret key which neither Alice nor Carol ever saw, this connection can be made
+  #   agree on a secret key that neither Alice nor Carol ever saw, this connection can be made
   #   securely even if Alice or Carol is conspiring against the other.  (If Alice and Carol are
   #   conspiring _together_, they can obviously reproduce the key, but this doesn't matter because
   #   the whole point of the join is to verify that Alice and Carol agree on what capability they
@@ -888,7 +888,7 @@ struct Join {
   # The capability to join.
 
   keyPart @2 :JoinKeyPart;
-  # A part of the join key.  These combine to form the complete join key which is used to establish
+  # A part of the join key.  These combine to form the complete join key, which is used to establish
   # a direct connection.
 
   # TODO(before implementing):  Change this so that multiple parts can be sent in a single Join
@@ -913,8 +913,8 @@ struct MessageTarget {
     # This message is to a capability that is expected to be returned by another call that has not
     # yet been completed.
     #
-    # At level 0, this is supported only for addressing the result of a previous `Main`, so that
-    # initial startup doesn't require a round trip.
+    # At level 0, this is supported only for addressing the result of a previous `Bootstrap`, so
+    # that initial startup doesn't require a round trip.
   }
 }
 
@@ -955,7 +955,7 @@ struct CapDescriptor {
     # sender's export table (receiver's import table).
 
     senderPromise @2 :ExportId;
-    # A promise which the sender will resolve later.  The sender will send exactly one Resolve
+    # A promise that the sender will resolve later.  The sender will send exactly one Resolve
     # message at a future point in time to replace this promise.  Note that even if the same
     # `senderPromise` is received multiple times, only one `Resolve` is sent to cover all of
     # them.  If `senderPromise` is released before the `Resolve` is sent, the sender (of this
@@ -1027,7 +1027,7 @@ struct PromisedAnswer {
 struct ThirdPartyCapDescriptor {
   # **(level 3)**
   #
-  # Identifies a capability in a third-party vat which the sender wants the receiver to pick up.
+  # Identifies a capability in a third-party vat that the sender wants the receiver to pick up.
 
   id @0 :ThirdPartyCapId;
   # Identifies the third-party host and the specific capability to accept from it.
@@ -1125,7 +1125,7 @@ struct Exception {
     unimplemented @3;
     # The server doesn't implement the requested method. If there is some other method that the
     # client could call (perhaps an older and/or slower interface), it should try that instead.
-    # Otherwise, this should be treated like `serverError`.
+    # Otherwise, this should be treated like `failed`.
   }
 
   obsoleteIsCallersFault @1 :Bool;
@@ -1168,7 +1168,7 @@ struct Exception {
 # implemented that network directly.  The types used by the two-party network are defined in
 # `rpc-twoparty.capnp`.
 #
-# The things which we need to parameterize are:
+# The things that we need to parameterize are:
 # - How to store capabilities long-term without holding a connection open (mostly level 2).
 # - How to authenticate vats in three-party introductions (level 3).
 # - How to implement `Join` (level 4).
@@ -1231,7 +1231,7 @@ using SturdyRef = AnyPointer;
 using ProvisionId = AnyPointer;
 # **(level 3)**
 #
-# The information which must be sent in an `Accept` message to identify the object being accepted.
+# The information that must be sent in an `Accept` message to identify the object being accepted.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
 # fingerprint of the provider vat along with the question ID used in the `Provide` message sent from
@@ -1240,7 +1240,7 @@ using ProvisionId = AnyPointer;
 using RecipientId = AnyPointer;
 # **(level 3)**
 #
-# The information which must be sent in a `Provide` message to identify the recipient of the
+# The information that must be sent in a `Provide` message to identify the recipient of the
 # capability.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
@@ -1277,7 +1277,7 @@ using JoinKeyPart = AnyPointer;
 # where proxying of objects occurs, joins are necessary.
 #
 # Typically, each JoinKeyPart would include a fixed-length data value such that all value parts
-# XOR'd together forms a shared secret which can be used to form an encrypted connection between
+# XOR'd together forms a shared secret that can be used to form an encrypted connection between
 # the joiner and the joined object's host.  Each JoinKeyPart should also include an indication of
 # how many parts to expect and a hash of the shared secret (used to match up parts).
 
@@ -1314,7 +1314,7 @@ using JoinResult = AnyPointer;
 #   # Level 0 features -----------------------------------------------
 #
 #   connect(vatId :VatId) :Connection;
-#   # Connect to the given vat.  The transport should return a promise which does not
+#   # Connect to the given vat.  The transport should return a promise that does not
 #   # resolve until authentication has completed, but allows messages to be pipelined in before
 #   # that; the transport either queues these messages until authenticated, or sends them encrypted
 #   # such that only the authentic vat would be able to decrypt them.  The latter approach avoids a
