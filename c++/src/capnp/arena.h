@@ -143,7 +143,7 @@ private:
 class SegmentBuilder: public SegmentReader {
 public:
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr,
-                        ReadLimiter* readLimiter);
+                        ReadLimiter* readLimiter, size_t wordsUsed = 0);
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, kj::ArrayPtr<const word> ptr,
                         ReadLimiter* readLimiter);
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, decltype(nullptr),
@@ -247,7 +247,8 @@ class BuilderArena final: public Arena {
   // A BuilderArena that does not allow the injection of capabilities.
 
 public:
-  BuilderArena(MessageBuilder* message);
+  explicit BuilderArena(MessageBuilder* message);
+  BuilderArena(MessageBuilder* message, kj::ArrayPtr<MessageBuilder::SegmentInit> segments);
   ~BuilderArena() noexcept(false);
   KJ_DISALLOW_COPY(BuilderArena);
 
@@ -379,8 +380,9 @@ inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amou
 // -------------------------------------------------------------------
 
 inline SegmentBuilder::SegmentBuilder(
-    BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr, ReadLimiter* readLimiter)
-    : SegmentReader(arena, id, ptr, readLimiter), pos(ptr.begin()), readOnly(false) {}
+    BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr, ReadLimiter* readLimiter,
+    size_t wordsUsed)
+    : SegmentReader(arena, id, ptr, readLimiter), pos(ptr.begin() + wordsUsed), readOnly(false) {}
 inline SegmentBuilder::SegmentBuilder(
     BuilderArena* arena, SegmentId id, kj::ArrayPtr<const word> ptr, ReadLimiter* readLimiter)
     : SegmentReader(arena, id, ptr, readLimiter),

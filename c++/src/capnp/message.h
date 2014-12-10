@@ -163,6 +163,35 @@ public:
   virtual ~MessageBuilder() noexcept(false);
   KJ_DISALLOW_COPY(MessageBuilder);
 
+  struct SegmentInit {
+    kj::ArrayPtr<word> space;
+
+    size_t wordsUsed;
+    // Number of words in `space` which are used; the rest are free space in which additional
+    // objects may be allocated.
+  };
+
+  explicit MessageBuilder(kj::ArrayPtr<SegmentInit> segments);
+  // Create a MessageBuilder backed by existing memory. This is an advanced interface that most
+  // people should not use. THIS METHOD IS INSECURE; see below.
+  //
+  // This allows a MessageBuilder to be constructed to modify an in-memory message without first
+  // making a copy of the content. This is especially useful in conjunction with mmap().
+  //
+  // The contents of each segment must outlive the MessageBuilder, but the SegmentInit array itself
+  // only need outlive the constructor.
+  //
+  // SECURITY: Do not use this in conjunction with untrusted data. This constructor assumes that
+  //   the input message is valid. This constructor is designed to be used with data you control,
+  //   e.g. an mmap'd file which is owned and accessed by only one program. When reading data you
+  //   do not trust, you *must* load it into a Reader and then copy into a Builder as a means of
+  //   validating the content.
+  //
+  // WARNING: It is NOT safe to initialize a MessageBuilder in this way from memory that is
+  //   currently in use by another MessageBuilder or MessageReader. Other readers/builders will
+  //   not observe changes to the segment sizes nor newly-allocated segments caused by allocating
+  //   new objects in this message.
+
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
   // Allocates an array of at least the given number of words, throwing an exception or crashing if
   // this is not possible.  It is expected that this method will usually return more space than

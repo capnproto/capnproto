@@ -62,10 +62,17 @@ AnyPointer::Reader MessageReader::getRootInternal() {
 // -------------------------------------------------------------------
 
 MessageBuilder::MessageBuilder(): allocatedArena(false) {}
+
 MessageBuilder::~MessageBuilder() noexcept(false) {
   if (allocatedArena) {
     kj::dtor(*arena());
   }
+}
+
+MessageBuilder::MessageBuilder(kj::ArrayPtr<SegmentInit> segments)
+    : allocatedArena(false) {
+  kj::ctor(*arena(), this, segments);
+  allocatedArena = true;
 }
 
 _::SegmentBuilder* MessageBuilder::getRootSegment() {
