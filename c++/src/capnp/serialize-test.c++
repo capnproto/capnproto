@@ -74,6 +74,14 @@ TEST(Serialize, FlatArray) {
     EXPECT_EQ(serialized.end(), reader.getEnd());
   }
 
+  {
+    MallocMessageBuilder builder2;
+    auto remaining = initMessageBuilderFromFlatArrayCopy(serialized, builder2);
+    checkTestMessage(builder2.getRoot<TestAllTypes>());
+    EXPECT_EQ(serialized.end(), remaining.begin());
+    EXPECT_EQ(serialized.end(), remaining.end());
+  }
+
   kj::Array<word> serializedWithSuffix = kj::heapArray<word>(serialized.size() + 5);
   memcpy(serializedWithSuffix.begin(), serialized.begin(), serialized.size() * sizeof(word));
 
@@ -81,6 +89,14 @@ TEST(Serialize, FlatArray) {
     FlatArrayMessageReader reader(serializedWithSuffix.asPtr());
     checkTestMessage(reader.getRoot<TestAllTypes>());
     EXPECT_EQ(serializedWithSuffix.end() - 5, reader.getEnd());
+  }
+
+  {
+    MallocMessageBuilder builder2;
+    auto remaining = initMessageBuilderFromFlatArrayCopy(serializedWithSuffix, builder2);
+    checkTestMessage(builder2.getRoot<TestAllTypes>());
+    EXPECT_EQ(serializedWithSuffix.end() - 5, remaining.begin());
+    EXPECT_EQ(serializedWithSuffix.end(), remaining.end());
   }
 }
 

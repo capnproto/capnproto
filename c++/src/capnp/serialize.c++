@@ -90,6 +90,13 @@ kj::ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {
   }
 }
 
+kj::ArrayPtr<const word> initMessageBuilderFromFlatArrayCopy(
+    kj::ArrayPtr<const word> array, MessageBuilder& target, ReaderOptions options) {
+  FlatArrayMessageReader reader(array, options);
+  target.setRoot(reader.getRoot<AnyPointer>());
+  return kj::arrayPtr(reader.getEnd(), array.end());
+}
+
 kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   kj::Array<word> result = kj::heapArray<word>(computeSerializedSizeInWords(segments));
 

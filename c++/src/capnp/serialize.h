@@ -73,6 +73,21 @@ private:
   const word* end;
 };
 
+kj::ArrayPtr<const word> initMessageBuilderFromFlatArrayCopy(
+    kj::ArrayPtr<const word> array, MessageBuilder& target,
+    ReaderOptions options = ReaderOptions());
+// Convenience function which reads a message using `FlatArrayMessageReader` then copies the
+// content into the target `MessageBuilder`, verifying that the message structure is valid
+// (although not necessarily that it matches the desired schema).
+//
+// Returns an ArrayPtr containing any words left over in the array after consuming the whole
+// message. This is useful when reading multiple messages that have been concatenated. See also
+// FlatArrayMessageReader::getEnd().
+//
+// (Note that it's also possible to initialize a `MessageBuilder` directly without a copy using one
+// of `MessageBuilder`'s constructors. However, this approach skips the validation step and is not
+// safe to use on untrusted input. Therefore, we do not provide a convenience method for it.)
+
 kj::Array<word> messageToFlatArray(MessageBuilder& builder);
 // Constructs a flat array containing the entire content of the given message.
 //
