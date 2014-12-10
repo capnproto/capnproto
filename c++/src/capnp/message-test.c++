@@ -131,7 +131,7 @@ TEST(Message, MessageBuilderInitSpaceAvailable) {
   ASSERT_EQ(1, segs.size());
   KJ_ASSERT(segs[0].begin() == buffer);
 
-  MessageBuilder::SegmentInit init = { buffer, segs[0].size() };
+  MessageBuilder::SegmentInit init = { kj::ArrayPtr<word>(buffer), segs[0].size() };
   KJ_DBG(init.space.size(), init.wordsUsed);
 
   // Init a new builder from the old segments.
