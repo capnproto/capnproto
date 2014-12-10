@@ -261,7 +261,7 @@ struct Message {
 
     obsoleteDelete @9 :AnyPointer;
     # Obsolete way to delete a SturdyRef. This was never implemented, therefore it has been
-    # reduted to AnyPointer. This operation was never implemented.
+    # reduted to AnyPointer.
 
     # Level 3 features -----------------------------------------------
 

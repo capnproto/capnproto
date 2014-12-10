@@ -234,11 +234,16 @@ private:
 
 class RpcConnectionState final: public kj::TaskSet::ErrorHandler, public kj::Refcounted {
 public:
+  struct DisconnectInfo {
+    kj::Promise<void> shutdownPromise;
+    // Task which is working on sending an abort message and cleanly ending the connection.
+  };
+
   RpcConnectionState(kj::Maybe<Capability::Client> bootstrapInterface,
                      kj::Maybe<RealmGateway<>::Client> gateway,
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
-                     kj::Own<kj::PromiseFulfiller<void>>&& disconnectFulfiller)
+                     kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller)
       : bootstrapInterface(kj::mv(bootstrapInterface)), gateway(kj::mv(gateway)),
         restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), tasks(*this) {
     connection.init<Connected>(kj::mv(connectionParam));
@@ -354,7 +359,8 @@ public:
     });
 
     // Indicate disconnect.
-    disconnectFulfiller->fulfill();
+    disconnectFulfiller->fulfill(DisconnectInfo {
+        connection.get<Connected>()->shutdown().attach(kj::mv(connection.get<Connected>())) });
     connection.init<Disconnected>(kj::mv(networkException));
   }
 
@@ -492,7 +498,7 @@ private:
   // Once the connection has failed, we drop it and replace it with an exception, which will be
   // thrown from all further calls.
 
-  kj::Own<kj::PromiseFulfiller<void>> disconnectFulfiller;
+  kj::Own<kj::PromiseFulfiller<DisconnectInfo>> disconnectFulfiller;
 
   ExportTable<ExportId, Export> exports;
   ExportTable<QuestionId, Question> questions;
@@ -2641,9 +2647,11 @@ private:
     auto iter = connections.find(connection);
     if (iter == connections.end()) {
       VatNetworkBase::Connection* connectionPtr = connection;
-      auto onDisconnect = kj::newPromiseAndFulfiller<void>();
-      tasks.add(onDisconnect.promise.then([this,connectionPtr]() {
+      auto onDisconnect = kj::newPromiseAndFulfiller<RpcConnectionState::DisconnectInfo>();
+      tasks.add(onDisconnect.promise
+          .then([this,connectionPtr](RpcConnectionState::DisconnectInfo info) {
         connections.erase(connectionPtr);
+        tasks.add(kj::mv(info.shutdownPromise));
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
           bootstrapInterface, gateway, restorer, kj::mv(connection),

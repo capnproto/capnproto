@@ -73,8 +73,9 @@ private:
   ReaderOptions receiveOptions;
   bool accepted = false;
 
-  kj::Promise<void> previousWrite;
+  kj::Maybe<kj::Promise<void>> previousWrite;
   // Resolves when the previous write completes.  This effectively serves as the write queue.
+  // Becomes null when shutdown() is called.
 
   kj::Own<kj::PromiseFulfiller<kj::Own<TwoPartyVatNetworkBase::Connection>>> acceptFulfiller;
   // Fulfiller for the promise returned by acceptConnectionAsRefHost() on the client side, or the
@@ -103,6 +104,7 @@ private:
 
   kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override;
   kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override;
+  kj::Promise<void> shutdown() override;
 };
 
 }  // namespace capnp

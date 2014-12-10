@@ -81,7 +81,8 @@ public:
   }
 
   void send() override {
-    network.previousWrite = network.previousWrite.then([&]() {
+    network.previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down")
+        .then([&]() {
       // Note that if the write fails, all further writes will be skipped due to the exception.
       // We never actually handle this exception because we assume the read end will fail as well
       // and it's cleaner to handle the failure there.
@@ -130,6 +131,14 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
       }
     });
   });
+}
+
+kj::Promise<void> TwoPartyVatNetwork::shutdown() {
+  kj::Promise<void> result = KJ_ASSERT_NONNULL(previousWrite, "already shut down").then([this]() {
+    stream.shutdownWrite();
+  });
+  previousWrite = nullptr;
+  return kj::mv(result);
 }
 
 }  // namespace capnp

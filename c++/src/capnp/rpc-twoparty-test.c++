@@ -21,6 +21,7 @@
 
 #include "rpc-twoparty.h"
 #include "test-util.h"
+#include <capnp/rpc.capnp.h>
 #include <kj/async-unix.h>
 #include <kj/debug.h>
 #include <kj/thread.h>
@@ -257,6 +258,37 @@ TEST(TwoPartyNetwork, Release) {
 
   ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
   EXPECT_EQ(0, handleCount);
+}
+
+TEST(TwoPartyNetwork, Abort) {
+  // Verify that aborts are received.
+
+  auto ioContext = kj::setupAsyncIo();
+  int callCount = 0;
+  int handleCount = 0;
+
+  auto serverThread = runServer(*ioContext.provider, callCount, handleCount);
+  TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT);
+
+  MallocMessageBuilder refMessage(128);
+  auto hostId = refMessage.initRoot<rpc::twoparty::VatId>();
+  hostId.setSide(rpc::twoparty::Side::SERVER);
+
+  auto conn = KJ_ASSERT_NONNULL(network.connect(hostId));
+
+  {
+    // Send an invalid message (Return to non-existent question).
+    auto msg = conn->newOutgoingMessage(128);
+    auto body = msg->getBody().initAs<rpc::Message>().initReturn();
+    body.setAnswerId(1234);
+    body.setCanceled();
+    msg->send();
+  }
+
+  auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(ioContext.waitScope));
+  EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
+
+  EXPECT_TRUE(conn->receiveIncomingMessage().wait(ioContext.waitScope) == nullptr);
 }
 
 }  // namespace

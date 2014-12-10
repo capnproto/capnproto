@@ -206,8 +206,15 @@ class OwnOwn {
 public:
   inline OwnOwn(Own<T>&& value) noexcept: value(kj::mv(value)) {}
 
+#if _MSC_VER
   inline Own<T>& operator*() { return value; }
   inline const Own<T>& operator*() const { return value; }
+#else
+  inline Own<T>& operator*() & { return value; }
+  inline const Own<T>& operator*() const & { return value; }
+  inline Own<T>&& operator*() && { return kj::mv(value); }
+  inline const Own<T>&& operator*() const && { return kj::mv(value); }
+#endif
   inline Own<T>* operator->() { return &value; }
   inline const Own<T>* operator->() const { return &value; }
   inline operator Own<T>*() { return value ? &value : nullptr; }

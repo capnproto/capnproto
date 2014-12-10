@@ -274,6 +274,10 @@ public:
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
     // Wait for a message to be received and return it.  If the read stream cleanly terminates,
     // return null.  If any other problem occurs, throw an exception.
+
+    virtual kj::Promise<void> shutdown() = 0;
+    // Waits until all outgoing messages have been sent, then shuts down the outgoing stream. The
+    // returned promise resolves after shutdown is complete.
   };
 
   // Level 0 features ------------------------------------------------

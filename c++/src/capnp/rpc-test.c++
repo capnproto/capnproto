@@ -302,14 +302,28 @@ public:
       }
 
       if (messages.empty()) {
-        auto paf = kj::newPromiseAndFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>();
-        fulfillers.push(kj::mv(paf.fulfiller));
-        return kj::mv(paf.promise);
+        KJ_IF_MAYBE(f, fulfillOnEnd) {
+          f->get()->fulfill();
+          return kj::Maybe<kj::Own<IncomingRpcMessage>>(nullptr);
+        } else {
+          auto paf = kj::newPromiseAndFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>();
+          fulfillers.push(kj::mv(paf.fulfiller));
+          return kj::mv(paf.promise);
+        }
       } else {
         ++network.received;
         auto result = kj::mv(messages.front());
         messages.pop();
         return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::mv(result));
+      }
+    }
+    kj::Promise<void> shutdown() override {
+      KJ_IF_MAYBE(p, partner) {
+        auto paf = kj::newPromiseAndFulfiller<void>();
+        p->fulfillOnEnd = kj::mv(paf.fulfiller);
+        return kj::mv(paf.promise);
+      } else {
+        return kj::READY_NOW;
       }
     }
 
@@ -326,6 +340,7 @@ public:
 
     std::queue<kj::Own<kj::PromiseFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>>> fulfillers;
     std::queue<kj::Own<IncomingRpcMessage>> messages;
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfillOnEnd;
 
     kj::Own<kj::TaskSet> tasks;
   };
@@ -973,6 +988,32 @@ TEST(Rpc, CallBrokenPromise) {
 
   // Verify that we're still connected (there were no protocol errors).
   getCallSequence(client, 1).wait(context.waitScope);
+}
+
+TEST(Rpc, Abort) {
+  // Verify that aborts are received.
+
+  TestContext context;
+
+  MallocMessageBuilder refMessage(128);
+  auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
+  hostId.setHost("server");
+
+  auto conn = KJ_ASSERT_NONNULL(context.clientNetwork.connect(hostId));
+
+  {
+    // Send an invalid message (Return to non-existent question).
+    auto msg = conn->newOutgoingMessage(128);
+    auto body = msg->getBody().initAs<rpc::Message>().initReturn();
+    body.setAnswerId(1234);
+    body.setCanceled();
+    msg->send();
+  }
+
+  auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(context.waitScope));
+  EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
+
+  EXPECT_TRUE(conn->receiveIncomingMessage().wait(context.waitScope) == nullptr);
 }
 
 // =======================================================================================

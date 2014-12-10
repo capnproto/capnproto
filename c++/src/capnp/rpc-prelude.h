@@ -58,6 +58,7 @@ public:
   public:
     virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
+    virtual kj::Promise<void> shutdown() = 0;
   };
   virtual kj::Maybe<kj::Own<Connection>> baseConnect(_::StructReader vatId) = 0;
   virtual kj::Promise<kj::Own<Connection>> baseAccept() = 0;

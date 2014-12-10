@@ -181,10 +181,10 @@ namespace kj {
   (*({ \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::Fault(__FILE__, __LINE__, 0, \
+      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                             #value " != nullptr", "" #__VA_ARGS__, __VA_ARGS__).fatal(); \
     } \
-    _kj_result; \
+    kj::mv(_kj_result); \
   }))
 
 #define KJ_EXCEPTION(type, ...) \
@@ -239,10 +239,10 @@ namespace kj {
   (*({ \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::Fault(__FILE__, __LINE__, 0, \
+      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                             #value " != nullptr", #__VA_ARGS__, ##__VA_ARGS__).fatal(); \
     } \
-    _kj_result; \
+    kj::mv(_kj_result); \
   }))
 
 #define KJ_EXCEPTION(type, ...) \
