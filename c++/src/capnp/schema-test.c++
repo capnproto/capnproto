@@ -36,7 +36,7 @@ TEST(Schema, Structs) {
   EXPECT_TRUE(schema.getDependency(typeId<TestEnum>()) != schema);
   EXPECT_TRUE(schema.getDependency(typeId<TestAllTypes>()) == Schema::from<TestAllTypes>());
   EXPECT_TRUE(schema.getDependency(typeId<TestAllTypes>()) == schema);
-  EXPECT_ANY_THROW(schema.getDependency(typeId<TestDefaults>()));
+  EXPECT_NONFATAL_FAILURE(schema.getDependency(typeId<TestDefaults>()));
 
   EXPECT_TRUE(schema.asStruct() == schema);
   EXPECT_NONFATAL_FAILURE(schema.asEnum());
@@ -122,8 +122,8 @@ TEST(Schema, Enums) {
 
   EXPECT_EQ(typeId<TestEnum>(), schema.getProto().getId());
 
-  EXPECT_ANY_THROW(schema.getDependency(typeId<TestAllTypes>()));
-  EXPECT_ANY_THROW(schema.getDependency(typeId<TestEnum>()));
+  EXPECT_NONFATAL_FAILURE(schema.getDependency(typeId<TestAllTypes>()));
+  EXPECT_NONFATAL_FAILURE(schema.getDependency(typeId<TestEnum>()));
 
   EXPECT_NONFATAL_FAILURE(schema.asStruct());
   EXPECT_NONFATAL_FAILURE(schema.asInterface());
@@ -165,27 +165,27 @@ TEST(Schema, Lists) {
   EXPECT_EQ(schema::Type::TEXT, Schema::from<List<Text>>().whichElementType());
   EXPECT_EQ(schema::Type::DATA, Schema::from<List<Data>>().whichElementType());
 
-  EXPECT_ANY_THROW(Schema::from<List<uint16_t>>().getStructElementType());
-  EXPECT_ANY_THROW(Schema::from<List<uint16_t>>().getEnumElementType());
-  EXPECT_ANY_THROW(Schema::from<List<uint16_t>>().getInterfaceElementType());
-  EXPECT_ANY_THROW(Schema::from<List<uint16_t>>().getListElementType());
+  EXPECT_NONFATAL_FAILURE(Schema::from<List<uint16_t>>().getStructElementType());
+  EXPECT_NONFATAL_FAILURE(Schema::from<List<uint16_t>>().getEnumElementType());
+  EXPECT_NONFATAL_FAILURE(Schema::from<List<uint16_t>>().getInterfaceElementType());
+  EXPECT_NONFATAL_FAILURE(Schema::from<List<uint16_t>>().getListElementType());
 
   {
     ListSchema schema = Schema::from<List<TestAllTypes>>();
     EXPECT_EQ(schema::Type::STRUCT, schema.whichElementType());
     EXPECT_TRUE(schema.getStructElementType() == Schema::from<TestAllTypes>());
-    EXPECT_ANY_THROW(schema.getEnumElementType());
-    EXPECT_ANY_THROW(schema.getInterfaceElementType());
-    EXPECT_ANY_THROW(schema.getListElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getEnumElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getInterfaceElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getListElementType());
   }
 
   {
     ListSchema schema = Schema::from<List<TestEnum>>();
     EXPECT_EQ(schema::Type::ENUM, schema.whichElementType());
     EXPECT_TRUE(schema.getEnumElementType() == Schema::from<TestEnum>());
-    EXPECT_ANY_THROW(schema.getStructElementType());
-    EXPECT_ANY_THROW(schema.getInterfaceElementType());
-    EXPECT_ANY_THROW(schema.getListElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getStructElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getInterfaceElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getListElementType());
   }
 
   // TODO(someday):  Test interfaces.
@@ -193,9 +193,9 @@ TEST(Schema, Lists) {
   {
     ListSchema schema = Schema::from<List<List<int32_t>>>();
     EXPECT_EQ(schema::Type::LIST, schema.whichElementType());
-    EXPECT_ANY_THROW(schema.getStructElementType());
-    EXPECT_ANY_THROW(schema.getEnumElementType());
-    EXPECT_ANY_THROW(schema.getInterfaceElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getStructElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getEnumElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getInterfaceElementType());
 
     ListSchema inner = schema.getListElementType();
     EXPECT_EQ(schema::Type::INT32, inner.whichElementType());
@@ -204,9 +204,9 @@ TEST(Schema, Lists) {
   {
     ListSchema schema = Schema::from<List<List<TestAllTypes>>>();
     EXPECT_EQ(schema::Type::LIST, schema.whichElementType());
-    EXPECT_ANY_THROW(schema.getStructElementType());
-    EXPECT_ANY_THROW(schema.getEnumElementType());
-    EXPECT_ANY_THROW(schema.getInterfaceElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getStructElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getEnumElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getInterfaceElementType());
 
     ListSchema inner = schema.getListElementType();
     EXPECT_EQ(schema::Type::STRUCT, inner.whichElementType());
@@ -216,9 +216,9 @@ TEST(Schema, Lists) {
   {
     ListSchema schema = Schema::from<List<List<TestEnum>>>();
     EXPECT_EQ(schema::Type::LIST, schema.whichElementType());
-    EXPECT_ANY_THROW(schema.getStructElementType());
-    EXPECT_ANY_THROW(schema.getEnumElementType());
-    EXPECT_ANY_THROW(schema.getInterfaceElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getStructElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getEnumElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getInterfaceElementType());
 
     ListSchema inner = schema.getListElementType();
     EXPECT_EQ(schema::Type::ENUM, inner.whichElementType());
@@ -232,9 +232,9 @@ TEST(Schema, Lists) {
     ListSchema schema = ListSchema::of(type.getList().getElementType(), context);
     EXPECT_EQ(schema::Type::ENUM, schema.whichElementType());
     EXPECT_TRUE(schema.getEnumElementType() == Schema::from<TestEnum>());
-    EXPECT_ANY_THROW(schema.getStructElementType());
-    EXPECT_ANY_THROW(schema.getInterfaceElementType());
-    EXPECT_ANY_THROW(schema.getListElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getStructElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getInterfaceElementType());
+    EXPECT_NONFATAL_FAILURE(schema.getListElementType());
   }
 }
 
@@ -274,7 +274,7 @@ TEST(Schema, Interfaces) {
   EXPECT_TRUE(schema.getDependency(typeId<test::TestCallOrder>()) ==
               Schema::from<test::TestCallOrder>());
   EXPECT_TRUE(schema.getDependency(typeId<test::TestCallOrder>()) != schema);
-  EXPECT_ANY_THROW(schema.getDependency(typeId<TestDefaults>()));
+  EXPECT_NONFATAL_FAILURE(schema.getDependency(typeId<TestDefaults>()));
 
   EXPECT_TRUE(schema.asInterface() == schema);
   EXPECT_NONFATAL_FAILURE(schema.asStruct());

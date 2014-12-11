@@ -69,6 +69,9 @@ while [ $# -gt 0 ]; do
     clang )
       export CXX=clang++
       ;;
+    gcc-4.9 )
+      export CXX=g++-4.9
+      ;;
     gcc-4.8 )
       export CXX=g++-4.8
       ;;
@@ -123,6 +126,7 @@ while [ $# -gt 0 ]; do
       doit make distclean
       doit ./configure --host="$CROSS_HOST" --with-external-capnp --disable-shared CXXFLAGS='-pie -fPIE' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
 
+      doit make -j6
       doit make -j6 capnp-test
 
       echo "Starting emulator..."
@@ -152,6 +156,7 @@ while [ $# -gt 0 ]; do
       echo "Android"
       echo "========================================================================="
       "$0" android /home/kenton/android/android-sdk-linux /home/kenton/android/android-16 arm-linux-androideabi
+      exit 0
       ;;
     clean )
       rm -rf tmp-staging
@@ -168,9 +173,12 @@ while [ $# -gt 0 ]; do
       echo "commands:"
       echo "  test          Runs tests (the default)."
       echo "  clang         Runs tests using Clang compiler."
+      echo "  gcc-4.7       Runs tests using gcc-4.7."
       echo "  gcc-4.8       Runs tests using gcc-4.8."
+      echo "  gcc-4.9       Runs tests using gcc-4.9."
       echo "  remote HOST   Runs tests on HOST via SSH."
-      echo "  kenton        Kenton's meta-test (uses hosts on Kenton's network)."
+      echo "  mingw         Cross-compiles to MinGW and runs tests using WINE."
+      echo "  android       Cross-compiles to Android and runs tests using emulator."
       echo "  clean         Delete temporary files that may be left after failure."
       echo "  help          Prints this help text."
       exit 0
@@ -189,7 +197,7 @@ done
 # because GCC warns about code that I know is OK.  Disable sign-compare because I've fixed more
 # sign-compare warnings than probably all other warnings combined and I've never seen it flag a
 # real problem.
-export CXXFLAGS="-O2 -DDEBUG -Wall -Werror -Wno-strict-aliasing -Wno-sign-compare"
+export CXXFLAGS="-O2 -DDEBUG -Wall -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-deprecated-declarations"
 
 STAGING=$PWD/tmp-staging
 
@@ -312,6 +320,7 @@ if [ "x`uname -m`" = "xx86_64" ]; then
     # Build as if we are cross-compiling, using the capnp we installed to $STAGING.
     doit ./configure --prefix="$STAGING" --disable-shared --host=i686-pc-cygwin \
         --with-external-capnp CAPNP=$STAGING/bin/capnp
+    doit make -j6
     doit make -j6 capnp-test.exe
 
     # Expect a cygwin32 sshd to be listening at localhost port 2222, and use it

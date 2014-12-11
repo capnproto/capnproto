@@ -2218,6 +2218,7 @@ private:
           "  switch (methodId) {\n",
           KJ_MAP(m, methods) { return kj::mv(m.dispatchCase); },
           "    default:\n"
+          "      (void)context;\n"
           "      return ::capnp::Capability::Server::internalUnimplemented(\n"
           "          \"", proto.getDisplayName(), "\",\n"
           "          0x", kj::hex(proto.getId()), "ull, methodId);\n"

@@ -790,7 +790,9 @@ InterfaceSchema Type::asInterface() const {
   return InterfaceSchema(Schema(schema));
 }
 ListSchema Type::asList() const {
-  KJ_REQUIRE(isList(), "Type::asList(): Not a list.");
+  KJ_REQUIRE(isList(), "Type::asList(): Not a list.") {
+    return ListSchema::of(schema::Type::VOID);
+  }
   Type elementType = *this;
   --elementType.listDepth;
   return ListSchema::of(elementType);

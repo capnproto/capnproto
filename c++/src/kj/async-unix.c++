@@ -115,6 +115,7 @@ struct SignalCapture {
   siginfo_t siginfo;
 };
 
+#if !KJ_USE_EPOLL  // on Linux we'll use signalfd
 KJ_THREADLOCAL_PTR(SignalCapture) threadCapture = nullptr;
 
 void signalHandler(int, siginfo_t* siginfo, void*) {
@@ -124,6 +125,7 @@ void signalHandler(int, siginfo_t* siginfo, void*) {
     siglongjmp(capture->jumpTo, 1);
   }
 }
+#endif
 
 void registerSignalHandler(int signum) {
   tooLateToSetReserved = true;

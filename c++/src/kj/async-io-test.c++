@@ -213,10 +213,11 @@ TEST(AsyncIo, Timeouts) {
 
   Timer& timer = ioContext.provider->getTimer();
 
-  auto promise1 = timer.timeoutAfter(1 * MILLISECONDS, kj::Promise<int>(kj::NEVER_DONE));
-  auto promise2 = timer.timeoutAfter(1 * MILLISECONDS, kj::Promise<int>(123));
+  auto promise1 = timer.timeoutAfter(10 * MILLISECONDS, kj::Promise<void>(kj::NEVER_DONE));
+  auto promise2 = timer.timeoutAfter(100 * MILLISECONDS, kj::Promise<int>(123));
 
-  EXPECT_TRUE(kj::runCatchingExceptions([&]() { promise1.wait(ioContext.waitScope); }) != nullptr);
+  EXPECT_TRUE(promise1.then([]() { return false; }, [](kj::Exception&& e) { return true; })
+      .wait(ioContext.waitScope));
   EXPECT_EQ(123, promise2.wait(ioContext.waitScope));
 }
 

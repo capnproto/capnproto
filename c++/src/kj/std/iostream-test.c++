@@ -92,12 +92,10 @@ TEST(StdIoStream, ReadToEndOfFile) {
   });
   buf[6] = '\0';
 
-  KJ_IF_MAYBE(ex, e) {
-    // Ensure that the value is still read up to the EOF.
-    EXPECT_STREQ("foobar", buf);
-  } else {
-    ADD_FAILURE() << "Expected exception";
-  }
+  ASSERT_FALSE(e == nullptr);
+
+  // Ensure that the value is still read up to the EOF.
+  EXPECT_STREQ("foobar", buf);
 }
 
 }  // namespace

@@ -893,6 +893,18 @@ TEST(Rpc, Embargo) {
   EXPECT_EQ(5, call5.wait(context.waitScope).getN());
 }
 
+template <typename T>
+void expectPromiseThrows(kj::Promise<T>&& promise, kj::WaitScope& waitScope) {
+  EXPECT_TRUE(promise.then([](T&&) { return false; }, [](kj::Exception&&) { return true; })
+      .wait(waitScope));
+}
+
+template <>
+void expectPromiseThrows(kj::Promise<void>&& promise, kj::WaitScope& waitScope) {
+  EXPECT_TRUE(promise.then([]() { return false; }, [](kj::Exception&&) { return true; })
+      .wait(waitScope));
+}
+
 TEST(Rpc, EmbargoError) {
   TestContext context;
 
@@ -924,14 +936,14 @@ TEST(Rpc, EmbargoError) {
   auto call4 = getCallSequence(pipeline, 4);
   auto call5 = getCallSequence(pipeline, 5);
 
-  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo"); });
+  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo") { break; } });
 
-  EXPECT_ANY_THROW(call0.wait(context.waitScope));
-  EXPECT_ANY_THROW(call1.wait(context.waitScope));
-  EXPECT_ANY_THROW(call2.wait(context.waitScope));
-  EXPECT_ANY_THROW(call3.wait(context.waitScope));
-  EXPECT_ANY_THROW(call4.wait(context.waitScope));
-  EXPECT_ANY_THROW(call5.wait(context.waitScope));
+  expectPromiseThrows(kj::mv(call0), context.waitScope);
+  expectPromiseThrows(kj::mv(call1), context.waitScope);
+  expectPromiseThrows(kj::mv(call2), context.waitScope);
+  expectPromiseThrows(kj::mv(call3), context.waitScope);
+  expectPromiseThrows(kj::mv(call4), context.waitScope);
+  expectPromiseThrows(kj::mv(call5), context.waitScope);
 
   // Verify that we're still connected (there were no protocol errors).
   getCallSequence(client, 1).wait(context.waitScope);
@@ -972,9 +984,9 @@ TEST(Rpc, CallBrokenPromise) {
 
   EXPECT_FALSE(returned);
 
-  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo"); });
+  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo") { break; } });
 
-  EXPECT_ANY_THROW(req.wait(context.waitScope));
+  expectPromiseThrows(kj::mv(req), context.waitScope);
   EXPECT_TRUE(returned);
 
   kj::evalLater([]() {}).wait(context.waitScope);
@@ -1020,7 +1032,7 @@ TEST(Rpc, Abort) {
 
 typedef RealmGateway<test::TestSturdyRef, Text> TestRealmGateway;
 
-class TestGateway: public TestRealmGateway::Server {
+class TestGateway final: public TestRealmGateway::Server {
 public:
   kj::Promise<void> import(ImportContext context) override {
     auto cap = context.getParams().getCap();
@@ -1043,7 +1055,7 @@ public:
   }
 };
 
-class TestPersistent: public Persistent<test::TestSturdyRef>::Server {
+class TestPersistent final: public Persistent<test::TestSturdyRef>::Server {
 public:
   TestPersistent(kj::StringPtr name): name(name) {}
 
@@ -1056,7 +1068,7 @@ private:
   kj::StringPtr name;
 };
 
-class TestPersistentText: public Persistent<Text>::Server {
+class TestPersistentText final: public Persistent<Text>::Server {
 public:
   TestPersistentText(kj::StringPtr name): name(name) {}
 
