@@ -32,7 +32,8 @@
 #include "io.h"
 #include <signal.h>
 
-#if __linux__ && !defined(KJ_USE_EPOLL)
+#if __linux__ && !__BIONIC__ && !defined(KJ_USE_EPOLL)
+// Default to epoll on Linux, except on Bionic (Android) which doesn't have signalfd.h.
 #define KJ_USE_EPOLL 1
 #endif
 

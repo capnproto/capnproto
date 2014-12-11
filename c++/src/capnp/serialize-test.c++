@@ -343,7 +343,7 @@ int mkstemp(char *tpl) {
 #endif
 
 TEST(Serialize, FileDescriptors) {
-#if _WIN32
+#if _WIN32 || __ANDROID__
   // TODO(cleanup): Find the Windows temp directory? Seems overly difficult.
   char filename[] = "capnproto-serialize-test-XXXXXX";
 #else

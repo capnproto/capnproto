@@ -99,16 +99,20 @@ TEST(AsyncIo, AddressParsing) {
   EXPECT_EQ("unix:foo/bar/baz", tryParse(w, network, "unix:foo/bar/baz"));
 
   // We can parse services by name...
+#if !__ANDROID__  // Service names not supported on Android for some reason?
   EXPECT_EQ("1.2.3.4:80", tryParse(w, network, "1.2.3.4:http", 5678));
   EXPECT_EQ("*:80", tryParse(w, network, "*:http", 5678));
+#endif
 
   // IPv6 tests. Annoyingly, these don't work on machines that don't have IPv6 configured on any
   // interfaces.
   if (hasIpv6()) {
     EXPECT_EQ("[::]:123", tryParse(w, network, "0::0", 123));
     EXPECT_EQ("[12ab:cd::34]:321", tryParse(w, network, "[12ab:cd:0::0:34]:321", 432));
+#if !__ANDROID__  // Service names not supported on Android for some reason?
     EXPECT_EQ("[::]:80", tryParse(w, network, "[::]:http", 5678));
     EXPECT_EQ("[12ab:cd::34]:80", tryParse(w, network, "[12ab:cd::34]:http", 5678));
+#endif
   }
 
   // It would be nice to test DNS lookup here but the test would not be very hermetic.  Even

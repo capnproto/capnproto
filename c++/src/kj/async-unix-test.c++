@@ -65,12 +65,14 @@ TEST_F(AsyncUnixTest, Signals) {
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
 
-#ifdef SIGRTMIN
+#if defined(SIGRTMIN) && !__BIONIC__
 TEST_F(AsyncUnixTest, SignalWithValue) {
   // This tests that if we use sigqueue() to attach a value to the signal, that value is received
   // correctly.  Note that this only works on platforms that support real-time signals -- even
   // though the signal we're sending is SIGURG, the sigqueue() system call is introduced by RT
   // signals.  Hence this test won't run on e.g. Mac OSX.
+  //
+  // Also, Android's bionic does not appear to support sigqueue() even though the kernel does.
 
   UnixEventPort port;
   EventLoop loop(port);
@@ -92,6 +94,8 @@ TEST_F(AsyncUnixTest, SignalWithPointerValue) {
   // correctly.  Note that this only works on platforms that support real-time signals -- even
   // though the signal we're sending is SIGURG, the sigqueue() system call is introduced by RT
   // signals.  Hence this test won't run on e.g. Mac OSX.
+  //
+  // Also, Android's bionic does not appear to support sigqueue() even though the kernel does.
 
   UnixEventPort port;
   EventLoop loop(port);

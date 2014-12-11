@@ -33,6 +33,18 @@
 #include <sys/syscall.h>
 #include <linux/futex.h>
 #include <limits.h>
+
+#ifndef SYS_futex
+// Missing on Android/Bionic.
+#define SYS_futex __NR_futex
+#endif
+
+#ifndef FUTEX_WAIT_PRIVATE
+// Missing on Android/Bionic.
+#define FUTEX_WAIT_PRIVATE FUTEX_WAIT
+#define FUTEX_WAKE_PRIVATE FUTEX_WAKE
+#endif
+
 #elif _WIN32
 #include <windows.h>
 #endif

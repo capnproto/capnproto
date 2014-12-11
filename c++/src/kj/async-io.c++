@@ -61,7 +61,7 @@ void setCloseOnExec(int fd) {
 }
 
 static constexpr uint NEW_FD_FLAGS =
-#if __linux__
+#if __linux__ && !__BIONIC__
     LowLevelAsyncIoProvider::ALREADY_CLOEXEC | LowLevelAsyncIoProvider::ALREADY_NONBLOCK |
 #endif
     LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
@@ -344,7 +344,7 @@ public:
     bool isStream = type == SOCK_STREAM;
 
     int result;
-#if __linux__
+#if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
 #endif
     KJ_SYSCALL(result = ::socket(addr.generic.sa_family, type, 0));
@@ -644,7 +644,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
   //   a custom DNS resolver...
 
   int fds[2];
-#if __linux__
+#if __linux__ && !__BIONIC__
   KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
 #else
   KJ_SYSCALL(pipe(fds));
@@ -736,7 +736,7 @@ public:
     int newFd;
 
   retry:
-#if __linux__
+#if __linux__ && !__BIONIC__
     newFd = ::accept4(fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
 #else
     newFd = ::accept(fd, nullptr, nullptr);
@@ -964,7 +964,7 @@ public:
 
   OneWayPipe newOneWayPipe() override {
     int fds[2];
-#if __linux__
+#if __linux__ && !__BIONIC__
     KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
 #else
     KJ_SYSCALL(pipe(fds));
@@ -978,7 +978,7 @@ public:
   TwoWayPipe newTwoWayPipe() override {
     int fds[2];
     int type = SOCK_STREAM;
-#if __linux__
+#if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
 #endif
     KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
@@ -996,7 +996,7 @@ public:
       Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) override {
     int fds[2];
     int type = SOCK_STREAM;
-#if __linux__
+#if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
 #endif
     KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
