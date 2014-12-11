@@ -245,7 +245,11 @@ TEST(TwoPartyNetwork, Release) {
   // we drop a reference on the client side, there's no particular way to wait for the release
   // message to reach the server except to make a subsequent call and wait for the return -- but
   // that would mask the bug. So we wait 10ms...
+  //
+  // (We skip this test on Android because the Android emulator is slow enough that it sometimes
+  // fails.)
 
+#if !__ANDROID__
   ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
   EXPECT_EQ(1, handleCount);
 
@@ -258,6 +262,7 @@ TEST(TwoPartyNetwork, Release) {
 
   ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
   EXPECT_EQ(0, handleCount);
+#endif
 }
 
 TEST(TwoPartyNetwork, Abort) {

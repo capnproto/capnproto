@@ -47,7 +47,7 @@ while [ $# -gt 0 ]; do
         cp -r c++/gtest $DIR/c++/gtest
       fi
       cd $DIR
-      exec ./super-test.sh $@
+      exec ./super-test.sh "$@"
       ;;
     remote )
       if [ "$#" -lt 2 ]; then
@@ -75,88 +75,83 @@ while [ $# -gt 0 ]; do
     gcc-4.7 )
       export CXX=g++-4.7
       ;;
-    kenton )
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-  _     _                        ____  ____ ____
- | |   (_)_ __  _   ___  __     / ___|/ ___/ ___|
- | |   | | '_ \| | | \ \/ /____| |  _| |  | |
- | |___| | | | | |_| |>  <_____| |_| | |__| |___
- |_____|_|_| |_|\__,_/_/\_\     \____|\____\____|
+    mingw )
+      if [ "$#" -ne 2 ]; then
+        echo "usage: $0 mingw CROSS_HOST" >&2
+        exit 1
+      fi
+      CROSS_HOST=$2
 
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 test $QUICK
-      $0 clean
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-   ___  ______  __      ____ _
-  / _ \/ ___\ \/ /     / ___| | __ _ _ __   __ _
- | | | \___ \\  /_____| |   | |/ _` | '_ \ / _` |
- | |_| |___) /  \_____| |___| | (_| | | | | (_| |
-  \___/|____/_/\_\     \____|_|\__,_|_| |_|\__, |
-                                           |___/
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 remote beat caffeinate $QUICK
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-   ____                     _
-  / ___|   _  __ ___      _(_)_ __
- | |  | | | |/ _` \ \ /\ / / | '_ \
- | |__| |_| | (_| |\ V  V /| | | | |
-  \____\__, |\__, | \_/\_/ |_|_| |_|
-       |___/ |___/
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 remote Kenton@flashman $QUICK
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-   ____  ____ ____   _  _    ___
-  / ___|/ ___/ ___| | || |  ( _ )
- | |  _| |  | |     | || |_ / _ \
- | |_| | |__| |___  |__   _| (_) |
-  \____|\____\____|    |_|(_)___/
+      cd c++
+      test -e gtest || doit ./setup-autotools.sh | tr = -
+      test -e configure || doit autoreconf -i
+      test ! -e Makefile || (echo "ERROR: Directory unclean!" >&2 && false)
+      doit ./configure --host="$CROSS_HOST" --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
+      doit make -j6 capnp.exe capnpc-c++.exe
 
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 gcc-4.8 $QUICK
-      $0 clean
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-  _     _                        ____ _
- | |   (_)_ __  _   ___  __     / ___| | __ _ _ __   __ _
- | |   | | '_ \| | | \ \/ /____| |   | |/ _` | '_ \ / _` |
- | |___| | | | | |_| |>  <_____| |___| | (_| | | | | (_| |
- |_____|_|_| |_|\__,_/_/\_\     \____|_|\__,_|_| |_|\__, |
-                                                    |___/
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 clang $QUICK
-      $0 clean
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-  ____  _   _ ___ ____    ___ _____
- / ___|| | | |_ _|  _ \  |_ _|_   _|
- \___ \| |_| || || |_) |  | |  | |
-  ___) |  _  || ||  __/   | |  | |
- |____/|_| |_|___|_|     |___| |_|
+      cp capnp.exe capnp-mingw.exe
+      cp capnpc-c++.exe capnpc-c++-mingw.exe
 
-*************************************************************************
-=========================================================================
-__EOF__
+      doit make distclean
+      doit ./configure --host="$CROSS_HOST" --with-external-capnp --disable-shared --disable-reflection CXXFLAGS='-static-libgcc -static-libstdc++' CAPNP=./capnp-mingw.exe CAPNPC_CXX=./capnpc-c++-mingw.exe
+
+      doit make -j6 check
+      doit make distclean
+      rm -f *-mingw.exe
       exit 0
+      ;;
+    android )
+      if [ "$#" -ne 4 ]; then
+        echo "usage: $0 android SDK_HOME TOOLCHAIN_HOME CROSS_HOST" >&2
+        exit 1
+      fi
+      SDK_HOME=$2
+      TOOLCHAIN_HOME=$3
+      CROSS_HOST=$4
+
+      cd c++
+      test -e gtest || doit ./setup-autotools.sh | tr = -
+      test -e configure || doit autoreconf -i
+      test ! -e Makefile || (echo "ERROR: Directory unclean!" >&2 && false)
+      doit ./configure --disable-shared
+      doit make -j6 capnp capnpc-c++
+
+      cp capnp capnp-host
+      cp capnpc-c++ capnpc-c++-host
+
+      export PATH="$TOOLCHAIN_HOME/bin:$PATH"
+      doit make distclean
+      doit ./configure --host="$CROSS_HOST" --with-external-capnp --disable-shared CXXFLAGS='-pie -fPIE' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
+
+      doit make -j6 capnp-test
+
+      echo "Starting emulator..."
+      trap 'kill $(jobs -p)' EXIT
+      $SDK_HOME/tools/emulator -avd n6 -no-window &
+      $SDK_HOME/platform-tools/adb wait-for-device
+      echo "Waiting for localhost to be resolvable..."
+      $SDK_HOME/platform-tools/adb shell 'while ! ping -c 1 localhost > /dev/null 2>&1; do sleep 1; done'
+      doit $SDK_HOME/platform-tools/adb push capnp-test /data/capnp-test
+      doit $SDK_HOME/platform-tools/adb shell 'cd /data && /data/capnp-test && echo ANDROID_""TESTS_PASSED' | tee android-test.log
+      grep -q ANDROID_TESTS_PASSED android-test.log
+
+      doit make distclean
+      rm -f capnp-host capnpc-c++-host
+      exit 0
+      ;;
+    exotic )
+      echo "========================================================================="
+      echo "MinGW 64-bit"
+      echo "========================================================================="
+      "$0" mingw x86_64-w64-mingw32
+      echo "========================================================================="
+      echo "MinGW 32-bit"
+      echo "========================================================================="
+      "$0" mingw i686-w64-mingw32
+      echo "========================================================================="
+      echo "Android"
+      echo "========================================================================="
+      "$0" android /home/kenton/android/android-sdk-linux /home/kenton/android/android-16 arm-linux-androideabi
       ;;
     clean )
       rm -rf tmp-staging
@@ -347,6 +342,16 @@ echo "========================================================================="
 doit make distcheck
 doit make distclean
 rm capnproto-*.tar.gz
+
+if [ "x`uname`" = xLinux ]; then
+  echo "========================================================================="
+  echo "Testing generic Unix (no Linux-specific features)"
+  echo "========================================================================="
+
+  doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -DKJ_USE_FUTEX=0 -DKJ_USE_EPOLL=0"
+  doit make -j6 check
+  doit make distclean
+fi
 
 echo "========================================================================="
 echo "Testing with -fno-rtti and -fno-exceptions"
