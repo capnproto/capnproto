@@ -2775,7 +2775,7 @@ void OrphanBuilder::truncate(ElementCount size, bool isText) {
     return;
   }
 
-  // TODO(soon): Implement truncation of all sizes.
+  // TODO(someday): Implement truncation of all sizes.
   KJ_ASSERT(ref->listRef.elementSize() == ElementSize::BYTE,
             "Not implemented: truncate non-blob.");
 

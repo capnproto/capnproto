@@ -187,7 +187,7 @@ public:
   bool poll() override { return false; }
 
   void wake() const override {
-    // TODO(soon): Implement using condvar.
+    // TODO(someday): Implement using condvar.
     kj::throwRecoverableException(KJ_EXCEPTION(UNIMPLEMENTED,
         "Cross-thread events are not yet implemented for EventLoops with no EventPort."));
   }

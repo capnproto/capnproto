@@ -351,7 +351,7 @@ public:
 
     if (isStream && (addr.generic.sa_family == AF_INET ||
                      addr.generic.sa_family == AF_INET6)) {
-      // TODO(0.5):  As a hack for the 0.4 release we are always setting
+      // TODO(perf):  As a hack for the 0.4 release we are always setting
       //   TCP_NODELAY because Nagle's algorithm pretty much kills Cap'n Proto's
       //   RPC protocol.  Later, we should extend the interface to provide more
       //   control over this.  Perhaps write() should have a flag which

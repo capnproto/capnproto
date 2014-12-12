@@ -1148,9 +1148,8 @@ private:
     size_t defaultOffset = 0;    // pointers only: offset of the default value within the schema.
     size_t defaultSize = 0;      // blobs only: byte size of the default value.
 
-    auto typeBody = slot.getType();
     auto defaultBody = slot.getDefaultValue();
-    switch (typeBody.which()) {  // TODO(now): Use typeSchema, not typeBody.
+    switch (typeSchema.which()) {
       case schema::Type::VOID:
         kind = FieldKind::PRIMITIVE;
         setterDefault = " = ::capnp::VOID";
@@ -1239,7 +1238,7 @@ private:
         if (defaultBody.hasAnyPointer()) {
           defaultOffset = field.getDefaultValueSchemaOffset();
         }
-        if (typeBody.getAnyPointer().isParameter()) {
+        if (typeSchema.getBrandParameter() != nullptr) {
           kind = FieldKind::BRAND_PARAMETER;
         }
         break;

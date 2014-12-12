@@ -123,7 +123,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 
 }  // namespace
 
-ArrayPtr<const char> KJ_STRINGIFY(Exception::Type type) {
+StringPtr KJ_STRINGIFY(Exception::Type type) {
   static const char* TYPE_STRINGS[] = {
     "failed",
     "overloaded",
@@ -131,8 +131,7 @@ ArrayPtr<const char> KJ_STRINGIFY(Exception::Type type) {
     "unimplemented"
   };
 
-  const char* s = TYPE_STRINGS[static_cast<uint>(type)];
-  return arrayPtr(s, strlen(s));
+  return TYPE_STRINGS[static_cast<uint>(type)];
 }
 
 String KJ_STRINGIFY(const Exception& e) {

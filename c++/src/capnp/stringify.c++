@@ -141,7 +141,7 @@ static kj::StringTree print(const DynamicValue::Reader& value,
       }
     case DynamicValue::TEXT:
     case DynamicValue::DATA: {
-      // TODO(now): Data should be printed as binary literal.
+      // TODO(someday): Maybe data should be printed as binary literal.
       kj::ArrayPtr<const char> chars;
       if (value.getType() == DynamicValue::DATA) {
         chars = value.as<Data>().asChars();

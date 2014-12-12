@@ -120,8 +120,7 @@ private:
   friend class ExceptionImpl;
 };
 
-// TODO(soon):  These should return StringPtr.
-ArrayPtr<const char> KJ_STRINGIFY(Exception::Type type);
+StringPtr KJ_STRINGIFY(Exception::Type type);
 String KJ_STRINGIFY(const Exception& e);
 
 // =======================================================================================
