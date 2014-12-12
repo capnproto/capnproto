@@ -361,7 +361,7 @@ echo "========================================================================="
 echo "Testing c++ dist"
 echo "========================================================================="
 
-doit make distcheck
+doit make -j6 distcheck
 doit make distclean
 rm capnproto-*.tar.gz
 
