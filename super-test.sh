@@ -143,6 +143,14 @@ while [ $# -gt 0 ]; do
       rm -f capnp-host capnpc-c++-host
       exit 0
       ;;
+    cmake )
+      rm -rf cmake-build
+      mkdir cmake-build
+      cd cmake-build
+      doit cmake -G "Unix Makefiles" ..
+      doit make -j6 check
+      exit 0
+      ;;
     exotic )
       echo "========================================================================="
       echo "MinGW 64-bit"
@@ -156,6 +164,10 @@ while [ $# -gt 0 ]; do
       echo "Android"
       echo "========================================================================="
       "$0" android /home/kenton/android/android-sdk-linux /home/kenton/android/android-16 arm-linux-androideabi
+      echo "========================================================================="
+      echo "CMake"
+      echo "========================================================================="
+      "$0" cmake
       exit 0
       ;;
     clean )
