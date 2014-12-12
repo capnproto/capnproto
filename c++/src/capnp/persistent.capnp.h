@@ -790,6 +790,7 @@ template <typename SturdyRef>
       return save(::capnp::Capability::Server::internalGetTypedContext<
           typename  ::capnp::Persistent<SturdyRef>::SaveParams, typename  ::capnp::Persistent<SturdyRef>::SaveResults>(context));
     default:
+      (void)context;
       return ::capnp::Capability::Server::internalUnimplemented(
           "capnp/persistent.capnp:Persistent",
           0xc8cb212fcd9f5691ull, methodId);
@@ -1158,6 +1159,7 @@ template <typename InternalRef, typename ExternalRef>
       return export_(::capnp::Capability::Server::internalGetTypedContext<
           typename  ::capnp::RealmGateway<InternalRef, ExternalRef>::ExportParams, typename  ::capnp::Persistent<ExternalRef>::SaveResults>(context));
     default:
+      (void)context;
       return ::capnp::Capability::Server::internalUnimplemented(
           "capnp/persistent.capnp:RealmGateway",
           0x84ff286cd00a3ed4ull, methodId);
