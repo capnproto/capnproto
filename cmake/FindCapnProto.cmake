@@ -76,7 +76,7 @@ function(CAPNP_GENERATE_CPP SOURCES HEADERS)
     # Prepend a ':' to get the format for the '-o' flag right
     set(output_dir ":${CAPNPC_OUTPUT_DIR}")
   else()
-    set(output_dir)
+    set(output_dir ":.")
   endif()
 
   if(NOT DEFINED CAPNPC_SRC_PREFIX)

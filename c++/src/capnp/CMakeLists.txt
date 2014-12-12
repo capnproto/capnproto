@@ -188,7 +188,6 @@ if(BUILD_TESTING)
     blob-test.c++
     endian-test.c++
     endian-fallback-test.c++
-    endian-reverse-test.c++
     layout-test.c++
     any-test.c++
     message-test.c++
@@ -206,6 +205,7 @@ if(BUILD_TESTING)
 
   if(NOT CAPNP_LITE)
     add_executable(capnp-heavy-tests
+      endian-reverse-test.c++
       capability-test.c++
       schema-test.c++
       schema-loader-test.c++
