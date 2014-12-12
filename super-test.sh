@@ -144,6 +144,7 @@ while [ $# -gt 0 ]; do
       exit 0
       ;;
     cmake )
+      cd c++
       rm -rf cmake-build
       mkdir cmake-build
       cd cmake-build
