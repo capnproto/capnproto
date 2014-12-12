@@ -3,9 +3,17 @@ layout: page
 title: Installation
 ---
 
-# Installation
+# Installation: Tools and C++ Runtime
 
-<p style="font-size: 125%; font-weight: bold;">Note: Cap'n Proto is in BETA</p>
+The Cap'n Proto tools, including the compiler which takes `.capnp` files and generates source code
+for them, are written in C++.  Therefore, you must install the C++ package even if your actual
+development language is something else.
+
+This package is licensed under the [MIT License](http://opensource.org/licenses/MIT).
+
+## Caveats
+
+<p style="font-size: 125%; font-weight: bold;">Cap'n Proto is in BETA</p>
 
 <div style="float: right"><a class="groups_link" style="color: #fff"
 href="https://groups.google.com/group/capnproto-announce">Sign Up for Updates</a></div>
@@ -22,9 +30,8 @@ you should keep in mind some caveats:
 * **Performance:** While Cap'n Proto is inherently fast by design, the implementation has not yet
   undergone serious profiling and optimization.  Currently it only beats Protobufs in realistic-ish
   end-to-end benchmarks by around 2x-5x.  We can do better.
-* **RPC:** The RPC implementation is very new (introduced in v0.4 / Dec 2013).  It is missing many
-  features that are essential in real-world use (like timeouts), the interface is still in flux,
-  and it needs a lot of optimization work.
+* **RPC:** The RPC implementation particularly experimental, though it is used heavily by
+  [Sandstorm.io](https://sandstorm.io).
 
 If you'd like to hack on Cap'n Proto, you should join the
 [discussion group](https://groups.google.com/group/capnproto)!
@@ -32,37 +39,43 @@ If you'd like to hack on Cap'n Proto, you should join the
 If you'd just like to receive updates as things progress, add yourself to the
 [announce list](https://groups.google.com/group/capnproto-announce).
 
-## Installing the Cap'n Proto tools and C++ Runtime
+## Prerequisites
 
-The Cap'n Proto tools, including the compiler which takes `.capnp` files and generates source code
-for them, are written in C++.  Therefore, you must install the C++ package even if your actual
-development language is something else.
+### Supported Compilers
 
-This package is licensed under the [MIT License](http://opensource.org/licenses/MIT).
+Cap'n Proto makes extensive use of C++11 language features. As a result, it requires a relatively
+new version of a well-supported compiler. The minimum versions are:
 
-### GCC 4.7 or Clang 3.2 Needed
+* GCC 4.8
+* Clang 3.3
+* Visual C++ 2015 (lite mode only)
 
-If you are using GCC, you MUST use at least version 4.7 as Cap'n Proto uses recently-implemented
-C++11 features.  If GCC 4.7 is installed but your system's default GCC is older, you will probably
-need to set the environment variable `CXX=g++-4.7` before following the instructions below.
+If your system's default compiler is older that the above, you will need to install a newer
+compiler and set the `CXX` environment variable before trying to build Cap'n Proto. For example,
+after installing GCC 4.8, you could set `CXX=g++-4.8` to use this compiler.
 
-If you are using Clang, you must use at least version 3.2.  To use Clang, set the environment
-variable `CXX=clang++` before following any instructions below, otherwise `g++` is used by default.
+### Supported Operating Systems
 
-This package is officially tested on Linux (GCC 4.7, GCC 4.8, Clang 3.2), Mac OSX (Xcode 5), and
-Cygwin (Windows; GCC 4.8), in 32-bit and 64-bit modes.
+In theory, Cap'n Proto should work on any POSIX platform supporting one of the above compilers,
+as well as on Windows. We test every Cap'n Proto release on the following platforms:
 
-Mac/Xcode users:  You must use at least Xcode 5, and you must download the Xcode command-line tools
-under Xcode menu > Preferences > Downloads.  Alternatively, compiler builds from
+* Android
+* Linux
+* Mac OSX
+* Windows - Cygwin
+* Windows - MinGW-w64 (lite mode and compiler binary only)
+* Windows - Visual C++ (lite mode only)
+
+**Windows users:** As of Visual Studio 2015, Visual C++ still does not support enough of C++11 to
+compile Cap'n Proto's reflection or RPC APIs. "Cap'n Proto Lite" omits these features from the
+library, giving you only the core serialization based on generated code.
+
+**Mac/Xcode users:** You must use at least Xcode 5, and you must download the Xcode command-line
+tools under Xcode menu > Preferences > Downloads.  Alternatively, compiler builds from
 [Macports](http://www.macports.org/), [Fink](http://www.finkproject.org/), or
 [Homebrew](http://brew.sh/) are reported to work.
 
-Sorry, but Microsoft Visual Studio 2013
-[does not implement enough of C++11](faq.html#can-i-use-capn-proto-with-visual-studio-pleeeeeaaaaassssseeeee)
-to compile Cap'n Proto.  We hope that the Internet Explorer of compilers will catch up in one of
-the upcoming CTPs (the November 2013 CTP is almost there).
-
-### Building from a release package
+## Installation: Unix
 
 You may download and install the release version of Cap'n Proto like so:
 
@@ -77,10 +90,9 @@ This will install `capnp`, the Cap'n Proto command-line tool.  It will also inst
 `libcapnpc`, and `libkj` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
 `/usr/local/include/kj`.
 
-### Building from Git with Autotools
+**From Git**
 
-If you download directly from Git, and you don't want to
-[build with Ekam](install.html#building-with-ekam), you will need to have the GNU autotools --
+If you download directly from Git, you will need to have the GNU autotools --
 [autoconf](http://www.gnu.org/software/autoconf/),
 [automake](http://www.gnu.org/software/automake/), and
 [libtool](http://www.gnu.org/software/libtool/) -- installed.  You will also need Subversion
@@ -95,94 +107,56 @@ installed (in addition to Git) in order to fetch the Google Test sources (done b
     make -j6 check
     sudo make install
 
-### Building with Ekam
+## Installation: Windows
 
-Ekam is a build system I wrote a while back that automatically figures out how to build your C++
-code without instructions.  It also supports continuous builds, where it watches the filesystem for
-changes (via inotify) and immediately rebuilds as necessary.  Instant feedback is key to
-productivity, so I really like using Ekam.
+1. Download Cap'n Proto Win32 build:
 
-Unfortunately it's very much unfinished.  It works (for me), but it is quirky and rough around the
-edges.  It only works on Linux, and is best used together with Eclipse.  If you find it
-unacceptable, scroll up to the [Automake instructions](#building-from-git-with-autotools).
+   <pre><a href="https://capnproto.org/capnproto-c++-win32-0.0.0.zip">https://capnproto.org/capnproto-c++-win32-0.0.0.zip</a></pre>
 
-The Cap'n Proto repo includes a script which will attempt to set up Ekam for you.
+2. Find `capnp.exe`, `capnpc-c++.exe`, and `capnpc-capnp.exe` under `capnproto-tools-win32-0.0.0` in
+   the zip and copy them to somewhere in your `PATH`.
 
-    git clone https://github.com/kentonv/capnproto.git
-    cd capnproto/c++
-    ./setup-ekam.sh
+If you don't care about C++ support, you can stop here. The compiler exe can be used with plugins
+provided by projects implementing Cap'n Proto in other languages.
 
-If all goes well, this downloads the Ekam code into a directory called `.ekam` and adds some
-symlinks under src.  It also imports the [Google Test](https://googletest.googlecode.com) and
-[Protobuf](http://protobuf.googlecode.com) source code, so you can compile tests and benchmarks.
+If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 
-Once Ekam is installed, you can do:
+1. Install [CMake](http://www.cmake.org/) version 3.1 or later.
 
-    make -f Makefile.ekam once
+2. Use CMake to generate Visual Studio project files under `capnproto-c++-0.0.0` in the zip file.
+   You will need to enable the CMake project options `CAPNP_LITE` and `EXTERNAL_CAPNP`.
+   You can use the CMake UI for this or run this shell command:
 
-This will build everything it can and run tests.
+       cmake -G "Visual Studio 14 2015" -DCAPNP_LITE=1 -DEXTERNAL_CAPNP=1
 
-Note that Ekam will fail to build some things and output a bunch of error messages.  You should
-be able to ignore any errors that originate outside of the `capnp` and `kj` directories -- these
-are just parts of other packages like Google Test that Ekam doesn't fully know how to build, but
-aren't needed by Cap'n Proto anyway.
+3. Open the "Cap'n Proto" solution in Visual Studio.
 
-#### Running the Benchmarks
+4. Adjust the project build options (e.g. choice of C++ runtime library, dll vs. static,
+   enable/disable exceptions and RTTI) to match the options of the project in which you plan to use
+   Cap'n Proto.
 
-Before getting into benchmarks, let me be frank:  performance varies wildly by use case, and no
-benchmark is going to properly reflect the big picture.  If performance is critical to your use
-case, you should write a benchmark specific to your case, and test multiple serialization
-technologies.  Don't assume anything.  If you find Cap'n Proto performs sub-optimally, though,
-[tell us about it](https://groups.google.com/group/capnproto).
+5. Build the solution.
 
-That said, Cap'n Proto does have a small suite of silly benchmarks used to validate changes.
+6. Find the compiled `.lib` files in the build directory under `src/{capnp,kj}/{Debug,Release}`
+   and place them somewhere where your project can link against them.
 
-The Ekam build will put the benchmark binaries in `tmp/capnp/benchmark`.
+7. Add the the `src` directory to your search path for `#include`s, or copy all the headers to your
+   include directory.
 
-    tmp/capnp/benchmark/runner
+**From Git**
 
-This runs the default test case, CatRank.  CatRank simulates a search engine scoring algorithm
-which promotes pages that discuss cats (and demotes ones discussing dogs).  A list of up to 1000
-random search results with URLs, scores, and snippets is sent to the server, which searches the
-snippets for instances of "cat" and "dog", adjusts their scores accordingly, then returns the new
-result list sorted by score.
+If you download directly from Git, you'll need to compile the Cap'n Proto tools (the `.exe`s) using
+MinGW-w64. This is easiest to do in Cygwin or on Linux. For example, on Debian or Ubuntu, you can
+install MinGW like so:
 
-This test case is very string-heavy.  Cap'n Proto performs well due to its zero-copy strings, but
-packing the message doesn't help much.
+    sudo apt-get install mingw-w64
 
-    tmp/capnp/benchmark/runner eval
+You'll first need to install Cap'n Proto on the host system (using the Unix installation
+instructions, above). Then, do:
 
-In this test case, the client generates a random, deeply-nested arithmetic expression for the
-server to evaluate.  This case is a pathologically bad case for Cap'n Proto as it involves lots of
-pointers with relatively little actual data.  When packing is enabled it actually loses to
-Protobufs by a little bit on CPU time (as of this writing, at least; it'll probably get better with
-optimization).
+    make distclean
+    ./configure --host=i686-w64-mingw32 --with-external-capnp \
+      --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
+    make -j6 capnp.exe capnpc-c++.exe capnpc-capnp.exe
 
-    tmp/capnp/benchmark/runner carsales
-
-This test case involves sending to the server a description of a bunch of cars, and asks the server
-to decide how much the lot is worth.  This case is very number-heavy, and because of this
-Cap'n Proto's "packed" mode really shines.
-
-#### Developing with Ekam
-
-If you intend to do some development, you should build `continuous` or `continuous-opt` instead
-of `once`.  These modes will build everything, then watch the source tree for changes and rebuild
-as necessary.  `continuous` does a debug build while `continuous-opt` optimizes; the former is best
-while developing but don't run the benchmarks in debug mode!
-
-If you use Eclipse, you should use the Ekam Eclipse plugin to get build results fed back into your
-editor while building in continuous mode.  Build the plugin like so:
-
-1. Open the `.ekam/eclipse` directory as an Eclipse project.
-2. File -> Export -> Plug-in Development -> Deployable Plug-ins and Fragments.
-3. Choose the Ekam Dashboard project and export to your Eclipse directory, or export to another
-   directory and copy the files into your Eclipse directory.
-4. Restart Eclipse.
-5. Make sure you have some sort of project in your work space containing your Ekam source tree. It
-   should be rooted at the directory containing "src", "tmp", etc. The plugin will mark errors
-   within this project.
-6. Window -> Show View -> Other -> Ekam -> Ekam Dashboard
-
-The dashboard view lets you browse the whole tree of build actions and also populates your editor
-with error markers.
+Now that you have the `exe`s, you can proceed with the usual Windows compilation instructions.
