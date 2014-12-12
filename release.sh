@@ -73,9 +73,9 @@ build_packages() {
       --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
   doit make -j6 capnp.exe capnpc-c++.exe capnpc-capnp.exe
   doit i686-w64-mingw32-strip capnp.exe capnpc-c++.exe capnpc-capnp.exe
-  doit mkdir capnproto-c++-win32-$VERSION
-  doit mv capnp.exe capnpc-c++.exe capnpc-capnp.exe capnproto-c++-win32-$VERSION
-  doit zip -r ../capnproto-c++-win32-$VERSION.zip capnproto-c++-win32-$VERSION
+  doit mkdir capnproto-tools-win32-$VERSION
+  doit mv capnp.exe capnpc-c++.exe capnpc-capnp.exe capnproto-tools-win32-$VERSION
+  doit zip -r ../capnproto-c++-win32-$VERSION.zip capnproto-tools-win32-$VERSION
   doit make maintainer-clean
   cd ..
 }
