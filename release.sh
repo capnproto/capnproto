@@ -64,7 +64,8 @@ build_packages() {
   doit ./setup-autotools.sh | tr = -
   doit autoreconf -i
   doit ./configure
-  doit make -j6 distcheck dist-zip
+  doit make -j6 distcheck
+  doit make dist-zip
   doit mv capnproto-c++-$VERSION.tar.gz ..
   doit mv capnproto-c++-$VERSION.zip ../capnproto-c++-win32-$VERSION.zip
   doit make distclean
