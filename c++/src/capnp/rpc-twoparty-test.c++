@@ -244,13 +244,14 @@ TEST(TwoPartyNetwork, Release) {
   // no reply). Here we are explicitly trying to catch this bug. This proves tricky, because when
   // we drop a reference on the client side, there's no particular way to wait for the release
   // message to reach the server except to make a subsequent call and wait for the return -- but
-  // that would mask the bug. So we wait 10ms...
-  //
-  // (We skip this test on Android because the Android emulator is slow enough that it sometimes
-  // fails.)
+  // that would mask the bug. So, we wait spin waiting for handleCount to change.
 
-#if !__ANDROID__
-  ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
+  uint maxSpins = 1000;
+
+  while (handleCount > 1) {
+    ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
+    KJ_ASSERT(--maxSpins > 0);
+  }
   EXPECT_EQ(1, handleCount);
 
   handle2 = nullptr;
@@ -260,9 +261,11 @@ TEST(TwoPartyNetwork, Release) {
 
   promise = nullptr;
 
-  ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
+  while (handleCount > 0) {
+    ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
+    KJ_ASSERT(--maxSpins > 0);
+  }
   EXPECT_EQ(0, handleCount);
-#endif
 }
 
 TEST(TwoPartyNetwork, Abort) {
