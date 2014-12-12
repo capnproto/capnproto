@@ -7,7 +7,7 @@ if (grep -r KJ_DBG c++/src | egrep -v '/debug(-test)?[.]'); then
   exit 1
 fi
 
-if (egrep -r 'TODO\((now|soon)\)'); then
+if (egrep -r 'TODO\((now|soon)\)' *); then
   echo '*** Error:  There are release-blocking TODOs in the code.' >&2
   exit 1
 fi
