@@ -64,8 +64,14 @@ build_packages() {
   doit ./setup-autotools.sh | tr = -
   doit autoreconf -i
   doit ./configure
-  doit make distcheck
+  doit make -j6 distcheck dist-zip
   doit mv capnproto-c++-$VERSION.tar.gz ..
+  doit mv capnproto-c++-$VERSION.zip ../capnproto-c++-win32-$VERSION.zip
+  doit make distclean
+  doit ./configure --host=i686-w64-mingw32 --with-external-capnp \
+      --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
+  doit make -j6 capnp.exe capnpc-c++.exe capnpc-capnp.exe
+  doit zip ../capnproto-c++-win32-$VERSION.zip capnp.exe capnpc-c++.exe capnpc-capnp.exe
   doit make maintainer-clean
   cd ..
 }
@@ -89,17 +95,18 @@ done_banner() {
   echo "========================================================================="
   echo "Ready to release:"
   echo "  capnproto-c++-$VERSION.tar.gz"
+  echo "  capnproto-c++-win32-$VERSION.zip"
   echo "Don't forget to push changes:"
   echo "  git push origin $PUSH"
 
-  read -s -n 1 -p "Shall I push to git and upload to S3 now? (y/N)" YESNO
+  read -s -n 1 -p "Shall I push to git and upload to capnproto.org now? (y/N)" YESNO
 
   echo
   case "$YESNO" in
     y | Y )
       doit git push origin $PUSH
-      doit s3cmd put --guess-mime-type --acl-public capnproto-c++-$VERSION.tar.gz \
-          s3://capnproto.org/capnproto-c++-$VERSION.tar.gz
+      doit gcutil push fe capnproto-c++-$VERSION.tar.gz capnproto-c++-win32-$VERSION.tar.gz \
+          /var/www/capnproto.org
 
       if [ "$FINAL" = yes ]; then
         echo "========================================================================="
@@ -228,6 +235,7 @@ case "${1-}:$BRANCH" in
     echo "========================================================================="
 
     doit sed -i -re "s/capnproto-c[+][+]-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-c++-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-c[+][+]-win32-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-c++-win32-$NEW_VERSION/g" doc/install.md
     update_version $OLD_VERSION $NEW_VERSION "release branch"
 
     doit git tag v$NEW_VERSION
