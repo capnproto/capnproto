@@ -72,6 +72,8 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
   
   on <span class="date">17 Jun 2014</span>
 </p>
+<p><strong>Update:</strong> I have made <a href="https://github.com/kentonv/capnproto/commit/e4e6c9076ae16804c07968cd3bdf6107155df7ee">some corrections</a> since the original version of this post.</p>
+
 <p>Yesterday, some engineers at Google released <a href="http://google-opensource.blogspot.com/2014/06/flatbuffers-memory-efficient.html">FlatBuffers</a>, a new serialization protocol and library with similar design principles to Cap’n Proto. Also, a few months back, Real Logic released <a href="http://mechanical-sympathy.blogspot.com/2014/05/simple-binary-encoding.html">Simple Binary Encoding</a>, another protocol and library of this nature.</p>
 
 <p>It seems we now have some friendly rivalry. :)</p>
@@ -80,37 +82,41 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>The goal of this blog post is to highlight some of the main <em>qualitative</em> differences between these libraries as I see them. Obviously, I am biased, and you should consider that as you read. Hopefully, though, this provides a good starting point for your own investigation of the alternatives.</p>
 
-<h3 id="feature_matrix">Feature Matrix</h3>
+<h3 id="feature-matrix">Feature Matrix</h3>
 
-<p>The following are a set of considerations I think are important. See something I missed? Please <a href="mailto:kenton@sandstorm.io">let me know</a> and I’ll add it. I’d like in particular to invite the SBE and FlatBuffers authors to suggest advantages of their libraries that I may have missed.</p>
+<p>The following are a set of considerations I think are important. See something I missed? Please <a href="&#109;&#097;&#105;&#108;&#116;&#111;:&#107;&#101;&#110;&#116;&#111;&#110;&#064;&#115;&#097;&#110;&#100;&#115;&#116;&#111;&#114;&#109;&#046;&#105;&#111;">let me know</a> and I’ll add it. I’d like in particular to invite the SBE and FlatBuffers authors to suggest advantages of their libraries that I may have missed.</p>
 
 <p>I will go into more detail on each item below.</p>
 
 <p>Note: For features which are properties of the implementation rather than the protocol or project, unless otherwise stated, I am judging the C++ implementations.</p>
-<table class='pass-fail'>
+
+<table class="pass-fail">
 <tr><td>Feature</td><td>Protobuf</td><td>Cap'n Proto</td><td>SBE</td><td>FlatBuffers</td></tr>
-<tr><td>Schema evolution</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
-<tr><td>Zero-copy</td><td class='fail'>no</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
-<tr><td>Random-access reads</td><td class='fail'>no</td><td class='pass'>yes</td><td class='fail'>no</td><td class='pass'>yes</td></tr>
-<tr><td>Safe against malicious input</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='fail'>no</td></tr>
-<tr><td>Reflection / generic algorithms</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td></tr>
-<tr><td>Initialiation order</td><td class='pass'>any</td><td class='pass'>any</td><td class='fail'>preorder</td><td class='warn'>bottom-up</td></tr>
-<tr><td>Unknown field retention</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td></tr>
-<tr><td>Object-capability RPC system</td><td class='fail'>no</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td></tr>
-<tr><td>Schema language</td><td class='pass'>custom</td><td class='pass'>custom</td><td class='warn'>XML</td><td class='pass'>custom</td></tr>
-<tr><td>Usable as mutable state</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td><td class='fail'>no</td></tr>
-<tr><td>Padding takes space on wire?</td><td class='pass'>no</td><td class='pass'>optional</td><td class='fail'>yes</td><td class='fail'>yes</td></tr>
-<tr><td>Unset fields take space on wire?</td><td class='pass'>no</td><td class='fail'>yes</td><td class='fail'>yes</td><td class='pass'>no</td></tr>
-<tr><td>Pointers take space on wire?</td><td class='pass'>no</td><td class='fail'>yes</td><td class='pass'>no</td><td class='fail'>yes</td></tr>
-<tr><td>C++</td><td class='pass'>yes</td><td class='warn'>GCC/Clang<br />(no MSVC)</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
-<tr><td>Java</td><td class='pass'>yes</td><td class='warn'>in progress</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
-<tr><td>Python</td><td class='pass'>yes</td><td class='warn'>yes (C ext)</td><td class='fail'>no</td><td class='fail'>no</td></tr>
-<tr><td>Other languages</td><td class='pass'>lots!</td><td class='warn'>6+ others</td><td class='warn'>C#</td><td class='fail'>no</td></tr>
-<tr><td>Authors' preferred use case</td><td>distributed<br />computing</td><td><a href='https://sandstorm.io'>platforms /<br />sandboxing</a></td><td>financial<br />trading</td><td>games</td></tr>
+<tr><td>Schema evolution</td><td class="pass">yes</td><td class="pass">yes</td><td class="warn">caveats</td><td class="pass">yes</td></tr>
+<tr><td>Zero-copy</td><td class="fail">no</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Random-access reads</td><td class="fail">no</td><td class="pass">yes</td><td class="fail">no</td><td class="pass">yes</td></tr>
+<tr><td>Safe against malicious input</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="warn">opt-in upfront</td></tr>
+<tr><td>Reflection / generic algorithms</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Initialization order</td><td class="pass">any</td><td class="pass">any</td><td class="fail">preorder</td><td class="warn">bottom-up</td></tr>
+<tr><td>Unknown field retention</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Object-capability RPC system</td><td class="fail">no</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Schema language</td><td class="pass">custom</td><td class="pass">custom</td><td class="warn">XML</td><td class="pass">custom</td></tr>
+<tr><td>Usable as mutable state</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Padding takes space on wire?</td><td class="pass">no</td><td class="warn">optional</td><td class="fail">yes</td><td class="fail">yes</td></tr>
+<tr><td>Unset fields take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="fail">yes</td><td class="pass">no</td></tr>
+<tr><td>Pointers take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="pass">no</td><td class="fail">yes</td></tr>
+<tr><td>C++</td><td class="pass">yes</td><td class="warn">GCC/Clang<br />(no MSVC)</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Java</td><td class="pass">yes</td><td class="warn">in progress</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Python</td><td class="pass">yes</td><td class="warn">yes (C ext)</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Other languages</td><td class="pass">lots!</td><td class="warn">6+ others</td><td class="warn">C#</td><td class="fail">no</td></tr>
+<tr><td>Authors' preferred use case</td><td>distributed<br />computing</td><td><a href="https://sandstorm.io">platforms /<br />sandboxing</a></td><td>financial<br />trading</td><td>games</td></tr>
 </table>
+
 <p><strong>Schema Evolution</strong></p>
 
 <p>All four protocols allow you to add new fields to a schema over time, without breaking backwards-compatibility. New fields will be ignored by old binaries, and new binaries will fill in a default value when reading old data.</p>
+
+<p>SBE, however, as far as I can tell from reading the code, does not allow you to add new variable-width fields inside of a sub-object (group), as it is the application’s responsibility to explicitly iterate over every variable-width field when reading. When an old app not knowing about the new nested field fails to cover it, its buffer pointer will get out-of-sync. Variable-width fields can be added to the topmost object since they’ll end up at the end of the message, so there’s no need for old code to traverse past them.</p>
 
 <p><strong>Zero-copy</strong></p>
 
@@ -120,15 +126,15 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p><strong>Random-access reads</strong></p>
 
-<p>Can you traverse the message content in an arbitrary order? Relatedly, can you <code>mmap()</code> in a large (say, 2GB) file, then traverse to and read one particular field without causing the entire file to be paged in from disk?</p>
+<p>Can you traverse the message content in an arbitrary order? Relatedly, can you <code>mmap()</code> in a large (say, 2GB) file – where the entire file is one enormous serialized message – then traverse to and read one particular field without causing the entire file to be paged in from disk?</p>
 
-<p>Protobufs does not allow this because the entire file must be parsed upfront before any of the content can be used. Even with a streaming Protobuf parser (which most libraries don’t provide), you would at least need to parse all data appearing before the bit you want.</p>
+<p>Protobufs does not allow this because the entire file must be parsed upfront before any of the content can be used. Even with a streaming Protobuf parser (which most libraries don’t provide), you would at least need to parse all data appearing before the bit you want. The Protobuf documentation recommends splitting large files up into many small pieces and implementing some other framing format that allows seeking between them, but this is left entirely up to the app.</p>
 
-<p>SBE does not allow random access because the message tree is written in preorder with no information that would allow one to skip over an entire sub-tree. While the primitive fields within a single object can be accessed in random order, sub-objects must be traversed strictly in preorder. SBE apparently chose to design around this restriction because sequential memory access is faster than random access, therefore this forces application code to be ordered to be as fast as possible.</p>
+<p>SBE does not allow random access because the message tree is written in preorder with no information that would allow one to skip over an entire sub-tree. While the primitive fields within a single object can be accessed in random order, sub-objects must be traversed strictly in preorder. SBE apparently chose to design around this restriction because sequential memory access is faster than random access, therefore this forces application code to be ordered to be as fast as possible. Similar to Protobufs, SBE recommends using some other framing format for large files.</p>
 
 <p>Cap’n Proto permits random access via the use of pointers, exactly as in-memory data structures in C normally do. These pointers are not quite native pointers – they are relative rather than absolute, to allow the message to be loaded at an arbitrary memory location.</p>
 
-<p>FlatBuffers permits random access by having each record store a table of offsets to all of the field positions.</p>
+<p>FlatBuffers permits random access by having each record store a table of offsets to all of the field positions, and by using pointers between objects like Cap’n Proto does.</p>
 
 <p><strong>Safe against malicious input</strong></p>
 
@@ -138,11 +144,13 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>SBE’s C++ library does bounds checking as of the resolution of <a href="https://github.com/real-logic/simple-binary-encoding/issues/130">this bug</a>.</p>
 
-<p>FlatBuffers does no bounds checking. When reading a message, you start by giving the library a bare pointer to the start of the message, with no size. FlatBuffers appears to be intended for use as a format for static, trusted data files, not network messages.</p>
+<p><em>Update July 12, 2014:</em> FlatBuffers <a href="https://github.com/google/flatbuffers/commit/a0b6ffc25b9a3c726a21e52d6453779265186dbd">now supports</a> performing an optional upfront verification pass over a message to ensure that all pointers are in-bounds. You must explicitly call the verifier, otherwise no bounds checking is performed. The verifier performs a pass over the entire message; it should be very fast, but it is O(n), so you lose the “random access” advantage if you are mmap()ing in a very large file. FlatBuffers is primarily designed for use as a format for static, trusted data files, not network messages.</p>
 
 <p><strong>Reflection / generic algorithms</strong></p>
 
-<p>Protobuf provides a “reflection” interface which allows dynamically iterating over all the fields of a message, getting their names and other metadata, and reading and modifying their values in a particular instance. Cap’n Proto also supports this, calling it the “Dynamic API”. SBE and FlatBuffers provide no such API.</p>
+<p><em>Update: I originally failed to discover that SBE and FlatBuffers do in fact have reflection APIs. Sorry!</em></p>
+
+<p>Protobuf provides a “reflection” interface which allows dynamically iterating over all the fields of a message, getting their names and other metadata, and reading and modifying their values in a particular instance. Cap’n Proto also supports this, calling it the “Dynamic API”. SBE provides the “OTF decoder” API with the usual SBE restriction that you can only iterate over the content in order. FlatBuffers has the <code>Parser</code> API in <code>idl.h</code>.</p>
 
 <p>Having a reflection/dynamic API opens up a wide range of use cases. You can write reflection-based code which converts the message to/from another format such as JSON – useful not just for interoperability, but for debugging, because it is human-readable. Another popular use of reflection is writing bindings for scripting languages. For example, Python’s Cap’n Proto implementation is simply a wrapper around the C++ dynamic API. Note that you can do all these things with types that are not even known at compile time, by parsing the schemas at runtime.</p>
 
@@ -172,7 +180,7 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>Cap’n Proto’s wire format was very carefully designed to contain just enough information to make it possible to recursively copy its target from one message to another without knowing the object’s schema. This is why Cap’n Proto pointers contain bits to indicate if they point to a struct or a list and how big it is – seemingly redundant information.</p>
 
-<p>SBE and FlatBuffers do not store any such type information on the wire, and thus it is not possible to copy an object without its schema.</p>
+<p>SBE and FlatBuffers do not store any such type information on the wire, and thus it is not possible to copy an object without its schema. (Note that, however, if you are willing to require that the sender sends its full schema on the wire, you can always use reflection-based code to effectively make all fields known. This takes some work, though.)</p>
 
 <p><strong>Object-capability RPC system</strong></p>
 
@@ -192,7 +200,7 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>This usage pattern does not work well with any zero-copy serialization format because these formats must use arena-style allocation to make sure the message is built in contiguous memory. Arena allocation has the property that you cannot free any object unless you free the entire arena. Therefore, when objects are discarded, the memory ends up leaked until the message as a whole is destoryed. A long-lived message that is modified many times will thus leak memory.</p>
 
-<p><strong>Padding on wire?</strong></p>
+<p><strong>Padding takes space on wire?</strong></p>
 
 <p>Does the protocol tend to write a lot of zero-valued padding bytes to the wire?</p>
 
@@ -202,11 +210,11 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>SBE and FlatBuffers leave the padding in to achieve zero-copy.</p>
 
-<p>Cap’n Proto normally leaves the padding in, but comes with a built-in option to apply a very fast compression algorithm called “packing” which aims only to deflate zeros. This algorithm tends to achieve similar sizes to Protobufs while still being faster (and <em>much</em> faster than general-purpose compression).</p>
+<p>Cap’n Proto normally leaves the padding in, but comes with a built-in option to apply a very fast compression algorithm called “packing” which aims only to deflate zeros. This algorithm tends to achieve similar sizes to Protobufs while still being faster (and <em>much</em> faster than general-purpose compression). In this mode, however, Cap’n Proto is no longer zero-copy.</p>
 
 <p>Note that Cap’n Proto’s packing algorithm would be appropriate for SBE and FlatBuffers as well. Feel free to steal it. :)</p>
 
-<p><strong>Unset fields on wire?</strong></p>
+<p><strong>Unset fields take space on wire?</strong></p>
 
 <p>If a field has not been explicitly assigned a value, will it take any space on the wire?</p>
 
@@ -216,7 +224,9 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>FlatBuffers uses a separate table of offsets (the vtable) to indicate the position of each field, with zero meaning the field isn’t present. So, unset fields take no space on the wire – although they do take space in the vtable. vtables can apparently be shared between instances where the offsets are all the same, amortizing this cost.</p>
 
-<p><strong>Pointers on wire?</strong></p>
+<p>Of course, all this applies to primitive fields and pointer values, not the sub-objects to which those pointers point. All of these formats elide sub-objects that haven’t been initialized.</p>
+
+<p><strong>Pointers take space on wire?</strong></p>
 
 <p>Do non-primitive fields require storing a pointer?</p>
 
@@ -226,7 +236,7 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>SBE requires variable-width fields to be embedded in preorder, which means pointers aren’t necessary.</p>
 
-<p>FlatBuffers also uses pointers, even though most objects are variable-width, possibly because the vtables only store 16-bit offsets, limiting the size of any one object.</p>
+<p>FlatBuffers also uses pointers, even though most objects are variable-width, possibly because the vtables only store 16-bit offsets, limiting the size of any one object. However, note that FlatBuffers’ “structs” (which are fixed-width and not extensible) are stored inline (what Cap’n Proto calls a “struct’, FlatBuffer calls a “table”).</p>
 
 <p><strong>Platform Support</strong></p>
 
@@ -245,6 +255,8 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <p>With that said, my intuition is that SBE will probably edge Cap’n Proto and FlatBuffers on performance in the average case, due to its decision to forgo support for random access. Between Cap’n Proto and FlatBuffers, it’s harder to say. FlatBuffers’ vtable approach seems like it would make access more expensive, though its simpler pointer format may be cheaper to follow. FlatBuffers also appears to do a lot of bookkeeping at encoding time which could get costly (such as de-duping vtables), but I don’t know how costly.</p>
 
 <p>For most people, the performance difference is probably small enough that qualitative (feature) differences in the libraries matter more.</p>
+
+
 <script type="text/javascript">setupNewsSidebar([
     
       { title: "Cap'n Proto, FlatBuffers, and SBE", url: "/capnproto/next/./news/2014-06-17-capnproto-flatbuffers-sbe.html" },

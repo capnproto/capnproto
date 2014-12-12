@@ -57,61 +57,90 @@
       </section>
       <section id="main_content" class="inner">
 
-<h1 id="the__tool">The <code>capnp</code> Tool</h1>
+<h1 id="the-capnp-tool">The <code>capnp</code> Tool</h1>
 
-<p>Cap’n Proto comes with a command-line tool called <code>capnp</code> intended to aid development and debugging. This tool can be used to:</p>
+<p>Cap’n Proto comes with a command-line tool called <code>capnp</code> intended to aid development and
+debugging.  This tool can be used to:</p>
 
 <ul>
-<li>Compile Cap’n Proto schemas to produce source code in multiple languages.</li>
-
-<li>Generate unique type IDs.</li>
-
-<li>Decode Cap’n Proto messages to human-readable text.</li>
-
-<li>Encode text representations of Cap’n Proto messages to binary.</li>
-
-<li>Evaluate and extract constants defined in Cap’n Proto schemas.</li>
+  <li>Compile Cap’n Proto schemas to produce source code in multiple languages.</li>
+  <li>Generate unique type IDs.</li>
+  <li>Decode Cap’n Proto messages to human-readable text.</li>
+  <li>Encode text representations of Cap’n Proto messages to binary.</li>
+  <li>Evaluate and extract constants defined in Cap’n Proto schemas.</li>
 </ul>
 
-<p>This page summarizes the functionality. A complete reference on the command’s usage can be found by typing:</p>
+<p>This page summarizes the functionality.  A complete reference on the command’s usage can be
+found by typing:</p>
 
-<pre><code>capnp help</code></pre>
+<pre><code>capnp help
+</code></pre>
 
-<h2 id="compiling_schemas">Compiling Schemas</h2>
+<h2 id="compiling-schemas">Compiling Schemas</h2>
 
-<pre><code>capnp compile -oc++ myschema.capnp</code></pre>
+<pre><code>capnp compile -oc++ myschema.capnp
+</code></pre>
 
-<p>This generates files <code>myschema.capnp.h</code> and <code>myschema.capnp.c++</code> which contain C++ source code corresponding to the types defined in <code>myschema.capnp</code>. Options exist to control output location and import paths.</p>
+<p>This generates files <code>myschema.capnp.h</code> and <code>myschema.capnp.c++</code> which contain C++ source code
+corresponding to the types defined in <code>myschema.capnp</code>.  Options exist to control output location
+and import paths.</p>
 
-<p>The above example generates C++ code, but the tool is able to generate output in any language for which a plugin is available. Compiler plugins are just regular programs named <code>capnpc-language</code>. For example, the above command runs <code>capnpc-c++</code>. <a href="otherlang.html#how_to_write_compiler_plugins">More on how to write compiler plugins</a>.</p>
+<p>The above example generates C++ code, but the tool is able to generate output in any language
+for which a plugin is available.  Compiler plugins are just regular programs named
+<code>capnpc-language</code>.  For example, the above command runs <code>capnpc-c++</code>.  <a href="otherlang.html#how-to-write-compiler-plugins">More on how to write
+compiler plugins</a>.</p>
 
-<p>Note that some Cap’n Proto implementations (especially for interpreted languages) do not require generating source code.</p>
+<p>Note that some Cap’n Proto implementations (especially for interpreted languages) do not require
+generating source code.</p>
 
-<h2 id="decoding_messages">Decoding Messages</h2>
+<h2 id="decoding-messages">Decoding Messages</h2>
 
-<pre><code>capnp decode myschema.capnp MyType &lt; message.bin &gt; message.txt</code></pre>
+<pre><code>capnp decode myschema.capnp MyType &lt; message.bin &gt; message.txt
+</code></pre>
 
-<p><code>capnp decode</code> reads a binary Cap’n Proto message from standard input and decodes it to a human-readable text format (specifically, the format used for specifying constants and default values in <a href="language.html">the schema language</a>). By default it expects an unpacked message, but you can decode a <a href="encoding.html#packing">packed</a> message with the <code>--packed</code> flag.</p>
+<p><code>capnp decode</code> reads a binary Cap’n Proto message from standard input and decodes it to a
+human-readable text format (specifically, the format used for specifying constants and default
+values in <a href="language.html">the schema language</a>).  By default it
+expects an unpacked message, but you can decode a
+<a href="encoding.html#packing">packed</a> message with the <code>--packed</code> flag.</p>
 
-<h2 id="encoding_messages">Encoding Messages</h2>
+<h2 id="encoding-messages">Encoding Messages</h2>
 
-<pre><code>capnp encode myschema.capnp MyType &lt; message.txt &gt; message.bin</code></pre>
+<pre><code>capnp encode myschema.capnp MyType &lt; message.txt &gt; message.bin
+</code></pre>
 
-<p><code>capnp encode</code> is the opposite of <code>capnp decode</code>: it takes a text-format message on stdin and encodes it to binary (possibly <a href="encoding.html#packing">packed</a>, with the <code>--packed</code> flag).</p>
+<p><code>capnp encode</code> is the opposite of <code>capnp decode</code>: it takes a text-format message on stdin and
+encodes it to binary (possibly <a href="encoding.html#packing">packed</a>,
+with the <code>--packed</code> flag).</p>
 
-<p>This is mainly useful for debugging purposes, to build test data or to apply tweaks to data decoded with <code>capnp decode</code>. You should not rely on <code>capnp encode</code> for encoding data written and maintained in text format long-term – instead, use <code>capnp eval</code>, which is much more powerful.</p>
+<p>This is mainly useful for debugging purposes, to build test data or to apply tweaks to data
+decoded with <code>capnp decode</code>.  You should not rely on <code>capnp encode</code> for encoding data written
+and maintained in text format long-term – instead, use <code>capnp eval</code>, which is much more powerful.</p>
 
-<h2 id="evaluating_constants">Evaluating Constants</h2>
+<h2 id="evaluating-constants">Evaluating Constants</h2>
 
-<pre><code>capnp eval myschema.capnp myConstant</code></pre>
+<pre><code>capnp eval myschema.capnp myConstant
+</code></pre>
 
-<p>This prints the value of <code>myConstant</code>, a <a href="language.html#constants">const</a> declaration, after applying variable substitution. It can also output the value in binary format (<code>--binary</code> or <code>--packed</code>).</p>
+<p>This prints the value of <code>myConstant</code>, a <a href="language.html#constants">const</a> declaration, after
+applying variable substitution.  It can also output the value in binary format (<code>--binary</code> or
+<code>--packed</code>).</p>
 
-<p>At first glance, this may seem no more interesting that <code>capnp encode</code>: the syntax used to define constants in schema files is the same as the format accepted by <code>capnp encode</code>, right? There is, however, a big difference: constants in schema files may be defined in terms of other constants, which may even be imported from other files.</p>
+<p>At first glance, this may seem no more interesting that <code>capnp encode</code>:  the syntax used to define
+constants in schema files is the same as the format accepted by <code>capnp encode</code>, right?  There is,
+however, a big difference:  constants in schema files may be defined in terms of other constants,
+which may even be imported from other files.</p>
 
-<p>As a result, <code>capnp eval</code> is a great basis for implementing config files. For example, a large company might maintain a production server that serves dozens of clients and needs configuration information about each one. Rather than maintaining the config as one enormous file, it can be written as several separate files with a master file that imports the rest.</p>
+<p>As a result, <code>capnp eval</code> is a great basis for implementing config files.  For example, a large
+company might maintain a production server that serves dozens of clients and needs configuration
+information about each one.  Rather than maintaining the config as one enormous file, it can be
+written as several separate files with a master file that imports the rest.</p>
 
-<p>Such a configuration should be compiled to binary format using <code>capnp eval</code> before deployment, in order to verify that there are no errors and to make deployment easier and faster. While you could techincally ship the text configs to production and have the servers parse them directly (e.g. with <code>capnp::SchemaParser</code>), encoding before deployment is more efficient and robust.</p>
+<p>Such a configuration should be compiled to binary format using <code>capnp eval</code> before deployment,
+in order to verify that there are no errors and to make deployment easier and faster.  While you
+could techincally ship the text configs to production and have the servers parse them directly
+(e.g. with <code>capnp::SchemaParser</code>), encoding before deployment is more efficient and robust.</p>
+
 <script type="text/javascript">setupSidebar()</script>
         <div style="clear: both;"></div>
       </section>

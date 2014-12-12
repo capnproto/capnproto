@@ -72,48 +72,80 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
   
   on <span class="date">04 Sep 2013</span>
 </p>
-<p>The first release of Cap’n Proto came three months after the project was announced. The second release came six weeks after that. And the third release is three weeks later. If the pattern holds, there will be an infinite number of releases before the end of this month.</p>
+<p>The first release of Cap’n Proto came three months after the project was announced.  The second
+release came six weeks after that.  And the third release is three weeks later.  If the pattern
+holds, there will be an infinite number of releases before the end of this month.</p>
 
-<p>Version 0.3 is not a paradigm-shifting release, but rather a slew of new features largely made possible by building on the rewritten compiler from the last release. Let’s go through the list</p>
+<p>Version 0.3 is not a paradigm-shifting release, but rather a slew of new features largely made
+possible by building on the rewritten compiler from the last release.  Let’s go through the
+list…</p>
 
-<h3 id="python_support">Python Support!</h3>
+<h3 id="python-support">Python Support!</h3>
 
-<p>Thanks to the tireless efforts of contributor <a href="https://github.com/jparyani">Jason Paryani</a>, I can now comfortably claim that Cap’n Proto supports multiple languages. <a href="http://jparyani.github.io/pycapnp/">His Python implementation</a> wraps the C++ library and exposes most of its features in a nice, easy-to-use way.</p>
+<p>Thanks to the tireless efforts of contributor <a href="https://github.com/jparyani">Jason Paryani</a>, I can
+now comfortably claim that Cap’n Proto supports multiple languages.  <a href="http://jparyani.github.io/pycapnp/">His Python
+implementation</a> wraps the C++ library and exposes
+most of its features in a nice, easy-to-use way.</p>
 
-<p>And I have to say, it’s <em>way</em> better than the old Python Protobuf implementation that I helped put together at Google. Here’s why:</p>
+<p>And I have to say, it’s <em>way</em> better than the old Python Protobuf implementation that I helped put
+together at Google.  Here’s why:</p>
 
 <ul>
-<li>Jason’s implementation parses Cap’n Proto schema files at runtime. There is no need to run a compiler to generate code every time you update your schema, as with protobufs. So, you get to use Python the way Python was intended to be used. In fact, he’s hooked into the Python import mechanism, so you can basically import a <code>.capnp</code> schema file as if it were a <code>.py</code> module. It’s even convenient to load schema files and play with Cap’n Proto messages from the interactive interpreter prompt.</li>
-
-<li>It’s <em>fast</em>. Whereas the Python Protobuf implementation – which we made the mistake of implementing in pure-Python – is <em>slow</em>. And while technically there is an experimental C-extension-based Python Protobuf implementation (which isn’t enabled by default due to various obscure problems), Jason’s Cap’n Proto implementation is faster than that, too.</li>
+  <li>Jason’s implementation parses Cap’n Proto schema files at runtime.  There is no need to run a
+compiler to generate code every time you update your schema, as with protobufs.  So, you get
+to use Python the way Python was intended to be used.  In fact, he’s hooked into the Python
+import mechanism, so you can basically import a <code>.capnp</code> schema file as if it were a <code>.py</code>
+module.  It’s even convenient to load schema files and play with Cap’n Proto messages from the
+interactive interpreter prompt.</li>
+  <li>It’s <em>fast</em>.  Whereas the Python Protobuf implementation – which we made the mistake of
+implementing in pure-Python – is <em>slow</em>.  And while technically there is an experimental
+C-extension-based Python Protobuf implementation (which isn’t enabled by default due to various
+obscure problems), Jason’s Cap’n Proto implementation is faster than that, too.</li>
 </ul>
 
 <p>Go <a href="http://jparyani.github.io/pycapnp/">check it out</a>!</p>
 
-<p>By the way, there is also a budding <a href="http://ecapnp.astekk.se/">Erlang implementation</a> (by Andreas Stenius), and work continues on <a href="https://github.com/dwrensha/capnproto-rust">Rust</a> (David Renshaw) and <a href="https://github.com/cstrahan/capnp-ruby">Ruby</a> (Charles Strahan) implementations.</p>
+<p>By the way, there is also a budding <a href="http://ecapnp.astekk.se/">Erlang implementation</a>
+(by Andreas Stenius), and work
+continues on <a href="https://github.com/dwrensha/capnproto-rust">Rust</a> (David Renshaw) and
+<a href="https://github.com/cstrahan/capnp-ruby">Ruby</a> (Charles Strahan) implementations.</p>
 
-<h3 id="tools_capn_proto_on_the_command_line">Tools: Cap’n Proto on the Command Line</h3>
+<h3 id="tools-capn-proto-on-the-command-line">Tools: Cap’n Proto on the Command Line</h3>
 
-<p>The <code>capnp</code> command-line tool previously served mostly to generate code, via the <code>capnp compile</code> command. It now additionally supports converting encoded Cap’n Proto messages to a human-readable text format via <code>capnp decode</code>, and converting that format back to binary with <code>capnp encode</code>. These tools are, of course, critical for debugging.</p>
+<p>The <code>capnp</code> command-line tool previously served mostly to generate code, via the <code>capnp compile</code>
+command.  It now additionally supports converting encoded Cap’n Proto messages to a human-readable
+text format via <code>capnp decode</code>, and converting that format back to binary with <code>capnp encode</code>.
+These tools are, of course, critical for debugging.</p>
 
-<p>You can also use the new <code>capnp eval</code> command to do something interesting: given a schema file and the name of a constant defined therein, it will print out the value of that constant, or optionally encode it to binary. This is more interesting than it sounds because the schema language supports variable substitution in the definitions of these constants. This means you can build a large structure by importing smaller bits from many different files. This may make it convenient to use Cap’n Proto schemas as a config format: define your service configuration as a constant in a schema file, importing bits specific to each client from other files that those clients submit to you. Use <code>capnp eval</code> to “compile” the whole thing to binary for deployment. (This has always been a common use case for Protobuf text format, which doesn’t even support variable substitution or imports.)</p>
+<p>You can also use the new <code>capnp eval</code> command to do something interesting: given a schema file and
+the name of a constant defined therein, it will print out the value of that constant, or optionally
+encode it to binary.  This is more interesting than it sounds because the schema language supports
+variable substitution in the definitions of these constants.  This means you can build a large
+structure by importing smaller bits from many different files.  This may make it convenient to
+use Cap’n Proto schemas as a config format: define your service configuration as a constant in
+a schema file, importing bits specific to each client from other files that those clients submit
+to you.  Use <code>capnp eval</code> to “compile” the whole thing to binary for deployment.  (This has always
+been a common use case for Protobuf text format, which doesn’t even support variable substitution
+or imports.)</p>
 
-<p>Anyway, check out the <a href="/capnproto/next/capnp-tool.html">full documentation</a> for more.</p>
+<p>Anyway, check out the <a href="/capnproto/next/capnp-tool.html">full documentation</a> for
+more.</p>
 
-<h3 id="new_features">New Features</h3>
+<h3 id="new-features">New Features</h3>
 
 <p>The core product has been updated as well:</p>
 
 <ul>
-<li>Support for unnamed <a href="/capnproto/next/language.html#unions">unions</a> reduces the need for noise-words, improving code readability. Additionally, the syntax for unions has been simplified by removing the unnecessary ordinal number.</li>
-
-<li><a href="/capnproto/next/language.html#groups">Groups</a> pair nicely with unions.</li>
-
-<li><a href="/capnproto/next/language.html#constants">Constants</a> are now <a href="/capnproto/next/cxx.html#constants">implemented in C++</a>. Additionally, they can now be defined in terms of other constants (variable substitution), as described earlier.</li>
-
-<li>The schema API and <code>schema.capnp</code> have been radically refactored, in particular to take advantage of the new union and group features, making the code more readable.</li>
-
-<li>More and better tests, bug fixes, etc.</li>
+  <li>Support for unnamed <a href="/capnproto/next/language.html#unions">unions</a> reduces the
+need for noise-words, improving code readability.  Additionally, the syntax for unions has been
+simplified by removing the unnecessary ordinal number.</li>
+  <li><a href="/capnproto/next/language.html#groups">Groups</a> pair nicely with unions.</li>
+  <li><a href="/capnproto/next/language.html#constants">Constants</a> are now
+<a href="/capnproto/next/cxx.html#constants">implemented in C++</a>.  Additionally, they
+can now be defined in terms of other constants (variable substitution), as described earlier.</li>
+  <li>The schema API and <code>schema.capnp</code> have been radically refactored, in particular to take advantage
+of the new union and group features, making the code more readable.</li>
+  <li>More and better tests, bug fixes, etc.</li>
 </ul>
 
 <h3 id="users">Users!</h3>
@@ -121,14 +153,22 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <p>Some news originating outside of the project itself:</p>
 
 <ul>
-<li><a href="http://www.debian.org/releases/sid/">Debian Unstable (sid)</a> now features <a href="http://packages.debian.org/sid/capnproto">a Cap’n Proto package</a>, thanks to <a href="https://github.com/thomaslee">Tom Lee</a>. Of course, since package updates take some time, this package is still v0.2.1 as of this writing, but it will be updated to v0.3 soon enough.</li>
-
-<li>Popular OSX-based text editor <a href="http://macromates.com/">TextMate</a> now <a href="https://github.com/textmate/textmate/commit/5c02b4ff5cc0c7c319d3d4f127c8ee19b81f80b7">uses Cap’n Proto internally</a>, and the developer’s feedback lead directly to several usability improvements included in this release.</li>
-
-<li>Many people using Cap’n Proto <em>haven’t bothered to tell us about it</em>! Please, if you use it, <a href="https://groups.google.com/group/capnproto">let us know</a> about your experience, both what you like and especially what you don’t like. This is the critical time where the system is usable but can still be changed if it’s not right, so your feedback is critical to our long-term success.</li>
-
-<li>I have revenue! A whopping <a href="https://www.gittip.com/kentonv/">$1.25 per week</a>! &gt;_&gt; It’s totally worth it; I love this project. (But thanks for the tips!)</li>
+  <li><a href="http://www.debian.org/releases/sid/">Debian Unstable (sid)</a> now features
+<a href="http://packages.debian.org/sid/capnproto">a Cap’n Proto package</a>, thanks to
+<a href="https://github.com/thomaslee">Tom Lee</a>.  Of course, since package updates take some time, this
+package is still v0.2.1 as of this writing, but it will be updated to v0.3 soon enough.</li>
+  <li>Popular OSX-based text editor <a href="http://macromates.com/">TextMate</a> now
+<a href="https://github.com/textmate/textmate/commit/5c02b4ff5cc0c7c319d3d4f127c8ee19b81f80b7">uses Cap’n Proto internally</a>,
+and the developer’s feedback lead directly to several usability improvements included in this
+release.</li>
+  <li>Many people using Cap’n Proto <em>haven’t bothered to tell us about it</em>!  Please, if you use it,
+<a href="https://groups.google.com/group/capnproto">let us know</a> about your experience, both what you like
+and especially what you don’t like.  This is the critical time where the system is usable but
+can still be changed if it’s not right, so your feedback is critical to our long-term success.</li>
+  <li>I have revenue!  A whopping <a href="https://www.gittip.com/kentonv/">$1.25 per week</a>!  &gt;_&gt;  It’s
+totally worth it; I love this project.  (But thanks for the tips!)</li>
 </ul>
+
 <script type="text/javascript">setupNewsSidebar([
     
       { title: "Cap'n Proto, FlatBuffers, and SBE", url: "/capnproto/next/./news/2014-06-17-capnproto-flatbuffers-sbe.html" },

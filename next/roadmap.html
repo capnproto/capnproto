@@ -57,99 +57,123 @@
       </section>
       <section id="main_content" class="inner">
 
-<h1 id="road_map">Road Map</h1>
+<h1 id="road-map">Road Map</h1>
 
-<p>Here’s what’s (hopefully) in store for future versions of Cap’n Proto! Of course, everything here is subject to change.</p>
+<p>Here’s what’s (hopefully) in store for future versions of Cap’n Proto!  Of course, everything here
+is subject to change.</p>
 
-<h2 id="next_version_05">Next version: 0.5</h2>
+<h2 id="next-version-05">Next version: 0.5</h2>
 
 <ul>
-<li><strong>Shared memory RPC:</strong> Zero-copy inter-process communication. Synchronized with futexes.</li>
-
-<li><strong>Persistent capabilities (level 2 RPC):</strong> Allow system-assisted saving and restoring of capabilities across connections.</li>
-
-<li><strong>Three-way introductions (level 3 RPC):</strong> Allow RPC interactions between more than two parties, with new connections formed automatically as needed.</li>
-
-<li><strong>Fiber-based concurrency:</strong> The C++ runtime’s event loop concurrency model will be augmented with support for fibers, which are like threads except that context switches happen only at well-defined points (thus avoiding the need for mutex locking). Fibers essentially provide syntax sugar on top of the event loop model.</li>
-
-<li><strong>Dynamic schema transmission:</strong> Allow e.g. Python applications to obtain schemas directly from the RPC server so that they need not have a local copy. Great for interactive debugging.</li>
+  <li><strong>Shared memory RPC:</strong>  Zero-copy inter-process communication.  Synchronized with futexes.</li>
+  <li><strong>Persistent capabilities (level 2 RPC):</strong>  Allow system-assisted saving and restoring of
+capabilities across connections.</li>
+  <li><strong>Three-way introductions (level 3 RPC):</strong>  Allow RPC interactions between more than two parties,
+with new connections formed automatically as needed.</li>
+  <li><strong>Fiber-based concurrency:</strong>  The C++ runtime’s event loop concurrency model will be augmented
+with support for fibers, which are like threads except that context switches happen only at
+well-defined points (thus avoiding the need for mutex locking).  Fibers essentially provide
+syntax sugar on top of the event loop model.</li>
+  <li><strong>Dynamic schema transmission:</strong>  Allow e.g. Python applications to obtain schemas directly from
+the RPC server so that they need not have a local copy.  Great for interactive debugging.</li>
 </ul>
 
-<h2 id="near_future_after_05">Near future (after 0.5)</h2>
+<h2 id="near-future-after-05">Near future (after 0.5)</h2>
 
 <p>Provisionally, these are probably the things that will be worked on after 0.5.</p>
 
 <ul>
-<li><strong>C++98 Backport:</strong> Fork and backport the key functionality from the C++11 implementation to work under C++98/C++03. This will make Cap’n Proto accessible to MSVC users. The schema and dynamic reflection APIs will not be included. This also means stringification will not be available (though you can use the external <code>capnp</code> tool for that).</li>
-
-<li><strong>Implement parameterized types:</strong> Template / generic types with type parameters.</li>
-
-<li><strong>Implement encapsulated types:</strong> This will allow you to create a hand-written wrapper around a type which will be automatically injected into the generated code, so that you can provide a nicer interface which encapsulates the type’s inner state.</li>
-
-<li><strong>Implement maps:</strong> Based on encapsulated and parameterized types.</li>
+  <li><strong>C++98 Backport:</strong>  Fork and backport the key functionality from the C++11 implementation to
+work under C++98/C++03.  This will make Cap’n Proto accessible to MSVC users.  The schema and
+dynamic reflection APIs will not be included.  This also means stringification will not be
+available (though you can use the external <code>capnp</code> tool for that).</li>
+  <li><strong>Implement parameterized types:</strong>  Template / generic types with type parameters.</li>
+  <li><strong>Implement encapsulated types:</strong>  This will allow you to create a hand-written wrapper around a
+type which will be automatically injected into the generated code, so that you can provide a
+nicer interface which encapsulates the type’s inner state.</li>
+  <li><strong>Implement maps:</strong>  Based on encapsulated and parameterized types.</li>
 </ul>
 
-<h2 id="before_version_10">Before version 1.0</h2>
+<h2 id="before-version-10">Before version 1.0</h2>
 
-<p>These things absolutely must happen before any 1.0 release. Note that it’s not yet decided when a 1.0 release would happen nor how many 0.x releases might precede it.</p>
+<p>These things absolutely must happen before any 1.0 release.  Note that it’s not yet decided when
+a 1.0 release would happen nor how many 0.x releases might precede it.</p>
 
 <ul>
-<li><strong>Expand test coverage:</strong> There are lots of tests now, but some important scenarios, such as handling invalid of invalid input, need better testing.</li>
-
-<li><strong>Performance review:</strong> Performance is already very good compared to competitors, but at some point we need to break out the profiler and really hone down on the details.</li>
-
-<li><strong>Security review:</strong> We need a careful security review to make sure malicious input cannot crash an application or corrupt memory.</li>
+  <li><strong>Expand test coverage:</strong>  There are lots of tests now, but some important scenarios, such as
+handling invalid of invalid input, need better testing.</li>
+  <li><strong>Performance review:</strong>  Performance is already very good compared to competitors, but at some
+point we need to break out the profiler and really hone down on the details.</li>
+  <li><strong>Security review:</strong>  We need a careful security review to make sure malicious input cannot
+crash an application or corrupt memory.</li>
 </ul>
 
-<h2 id="wish_list">Wish List</h2>
+<h2 id="wish-list">Wish List</h2>
 
-<p>These are features we’d like to implement some day but haven’t decided yet how to prioritize. Some of these features could make their way into Cap’n Proto before version 1.0. Others will certainly come after. If you have opinions on what you’d like to see next, <a href="https://groups.google.com/group/capnproto">tell us</a>!</p>
+<p>These are features we’d like to implement some day but haven’t decided yet how to prioritize.
+Some of these features could make their way into Cap’n Proto before version 1.0.  Others will
+certainly come after.  If you have opinions on what you’d like to see next,
+<a href="https://groups.google.com/group/capnproto">tell us</a>!</p>
 
-<h3 id="language_features">Language Features</h3>
+<h3 id="language-features">Language Features</h3>
 
 <ul>
-<li><strong>Inline lists:</strong> Lets you define a field composed of a fixed number of elements of the same type, and have those elements be stored directly within the struct rather than as a separate object. Useful mainly to avoid the need to validate list lengths when the length should always be the same. Also saves a pointer’s worth of space.</li>
-
-<li><strong>Type aliases:</strong> Ability to define a type which is just an alias of some other type, and have it show up as e.g. a <code>typedef</code> in languages that support that. (The current <code>using</code> keyword is intended only for local use and does not affect code generation.)</li>
-
-<li><strong>Doc comments:</strong> Harvest doc comments from schema files and use them to generate doc comments on generated code. Also make them available in the compiled schema so that a documentation generator could use them.</li>
+  <li><strong>Inline lists:</strong>  Lets you define a field composed of a fixed number of elements of the same
+type, and have those elements be stored directly within the struct rather than as a separate
+object.  Useful mainly to avoid the need to validate list lengths when the length should always
+be the same.  Also saves a pointer’s worth of space.</li>
+  <li><strong>Type aliases:</strong>  Ability to define a type which is just an alias of some other type, and
+have it show up as e.g. a <code>typedef</code> in languages that support that.  (The current <code>using</code>
+keyword is intended only for local use and does not affect code generation.)</li>
+  <li><strong>Doc comments:</strong>  Harvest doc comments from schema files and use them to generate doc comments
+on generated code.  Also make them available in the compiled schema so that a documentation
+generator could use them.</li>
 </ul>
 
-<h3 id="c_api_features">C++ API Features</h3>
+<h3 id="c-api-features">C++ API Features</h3>
 
 <ul>
-<li><strong>JSON codec:</strong> API for transcoding to JSON format, useful for interacting with legacy infrastructure.</li>
-
-<li><strong>Snappy integration:</strong> Integrate <a href="https://code.google.com/p/snappy/">Snappy compression</a> into the API to further reduce bandwidth needs with minimal CPU overhead.</li>
-
-<li><strong>Annotations API:</strong> For each annotation definition, generate code which assists in extracting that annotation from schema objects in a type-safe way.</li>
+  <li><strong>JSON codec:</strong>  API for transcoding to JSON format, useful for interacting with legacy
+infrastructure.</li>
+  <li><strong>Snappy integration:</strong>  Integrate <a href="https://code.google.com/p/snappy/">Snappy compression</a> into
+the API to further reduce bandwidth needs with minimal CPU overhead.</li>
+  <li><strong>Annotations API:</strong>  For each annotation definition, generate code which assists in extracting
+that annotation from schema objects in a type-safe way.</li>
 </ul>
 
 <h3 id="storage">Storage</h3>
 
 <ul>
-<li><strong>ORM interface:</strong> Define a standard interface for capabilities that represent remotely-stored objects, with get, put, publish, and subscribe methods. Ideally, parameterize this interface on the stored type.</li>
-
-<li><strong>mmap-friendly mutable storage format:</strong> Define a standard storage format that is friendly to mmap-based use while allowing modification. (With the current serialization format, mmap is only useful for read-only structures.) Possibly based on the ORM interface, updates only possible at the granularity of a whole ORM entry.</li>
+  <li><strong>ORM interface:</strong>  Define a standard interface for capabilities that represent remotely-stored
+objects, with get, put, publish, and subscribe methods.  Ideally, parameterize this interface
+on the stored type.</li>
+  <li><strong>mmap-friendly mutable storage format:</strong>  Define a standard storage format that is friendly
+to mmap-based use while allowing modification.  (With the current serialization format, mmap
+is only useful for read-only structures.)  Possibly based on the ORM interface, updates only
+possible at the granularity of a whole ORM entry.</li>
 </ul>
 
 <h3 id="tools">Tools</h3>
 
 <ul>
-<li><strong>Schema compatibility checker:</strong> Add a <code>capnp</code> command which, given two schemas, verifies that the latter is a compatible upgrade from the former. This could be used as a git hook to prevent submission of schema changes that would break wire compatibility.</li>
-
-<li><strong>RPC debugger:</strong> Add a <code>capnp</code> command which sends an RPC from the command line and prints the result. Useful for debugging RPC servers.</li>
+  <li><strong>Schema compatibility checker:</strong>  Add a <code>capnp</code> command which, given two schemas, verifies
+that the latter is a compatible upgrade from the former.  This could be used as a git hook
+to prevent submission of schema changes that would break wire compatibility.</li>
+  <li><strong>RPC debugger:</strong>  Add a <code>capnp</code> command which sends an RPC from the command line and prints
+the result.  Useful for debugging RPC servers.</li>
 </ul>
 
 <h3 id="infrastructure">Infrastructure</h3>
 
-<p>Note: These are very large projects.</p>
+<p>Note:  These are very large projects.</p>
 
 <ul>
-<li><strong>JSON-HTTP proxy:</strong> Develop a web server which can expose a Cap’n Proto RPC backend as a JSON-over-HTTP protocol.</li>
-
-<li><strong>Database:</strong> A fast storage database based on Cap’n Proto which implements the ORM interface on top of the mmap storage format.</li>
+  <li><strong>JSON-HTTP proxy:</strong>  Develop a web server which can expose a Cap’n Proto RPC backend as a
+JSON-over-HTTP protocol.</li>
+  <li><strong>Database:</strong>  A fast storage database based on Cap’n Proto which implements the ORM interface
+on top of the mmap storage format.</li>
 </ul>
+
 <script type="text/javascript">setupSidebar()</script>
         <div style="clear: both;"></div>
       </section>

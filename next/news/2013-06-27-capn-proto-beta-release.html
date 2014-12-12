@@ -72,35 +72,45 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
   
   on <span class="date">27 Jun 2013</span>
 </p>
-<p>It’s been nearly three months since Cap’n Proto was originally announced, and by now you’re probably wondering what I’ve been up to. The answer is basically <a href="https://github.com/kentonv/capnproto/commits/master">non-stop coding</a>. Features were implemented, code was refactored, tests were written, and now Cap’n Proto is beginning to resemble something like a real product. But as is so often the case with me, I’ve been so engrossed in coding that I forgot to post updates!</p>
+<p>It’s been nearly three months since Cap’n Proto was originally announced, and by now you’re
+probably wondering what I’ve been up to.  The answer is basically
+<a href="https://github.com/kentonv/capnproto/commits/master">non-stop coding</a>.  Features were implemented,
+code was refactored, tests were written, and now Cap’n Proto is beginning to resemble something
+like a real product.  But as is so often the case with me, I’ve been so engrossed in coding that I
+forgot to post updates!</p>
 
-<p>Well, that changes today, with the first official release of Cap’n Proto, v0.1. While not yet “done”, this release should be usable for Real Work. Feature-wise, for C++, the library is roughly on par with <a href="http://protobuf.googlecode.com">Google’s Protocol Buffers</a> (which, as you know, I used to maintain). Features include:</p>
+<p>Well, that changes today, with the first official release of Cap’n Proto, v0.1.  While not yet
+“done”, this release should be usable for Real Work.  Feature-wise, for C++, the library is roughly
+on par with <a href="http://protobuf.googlecode.com">Google’s Protocol Buffers</a> (which, as you know, I used
+to maintain).  Features include:</p>
 
 <ul>
-<li>Types: numbers, bytes, text, enums, lists, structs, and unions.</li>
-
-<li>Code generation from schema definition files.</li>
-
-<li>Reading from and writing to file descriptors (or other streams).</li>
-
-<li>Text-format output (e.g. for debugging).</li>
-
-<li>Reflection, for writing generic code that dynamically walks over message contents.</li>
-
-<li>Dynamic schema loading (to manipulate types not known at compile time).</li>
-
-<li>Code generator plugins for extending the compiler to support new languages.</li>
-
-<li>Tested on Linux and Mac OSX with GCC and Clang.</li>
+  <li>Types: numbers, bytes, text, enums, lists, structs, and unions.</li>
+  <li>Code generation from schema definition files.</li>
+  <li>Reading from and writing to file descriptors (or other streams).</li>
+  <li>Text-format output (e.g. for debugging).</li>
+  <li>Reflection, for writing generic code that dynamically walks over message contents.</li>
+  <li>Dynamic schema loading (to manipulate types not known at compile time).</li>
+  <li>Code generator plugins for extending the compiler to support new languages.</li>
+  <li>Tested on Linux and Mac OSX with GCC and Clang.</li>
 </ul>
 
-<p>Notably missing from this list is RPC (something Protocol Buffers never provided either). The RPC system is still in the design phase, but will be implemented over the coming weeks.</p>
+<p>Notably missing from this list is RPC (something Protocol Buffers never provided either).  The RPC
+system is still in the design phase, but will be implemented over the coming weeks.</p>
 
-<p>Also missing is support for languages other than C++. However, I’m happy to report that a number of awesome contributors have stepped up and are working on <a href="/capnproto/next/otherlang.html">implementations in C, Go, Python</a>, and a few others not yet announced. None of these are “ready” just yet, but watch this space. (Would you like to work on an implementation in your favorite language? <a href="https://groups.google.com/group/capnproto">Let us know!</a>)</p>
+<p>Also missing is support for languages other than C++.  However, I’m happy to report that a number
+of awesome contributors have stepped up and are working on
+<a href="/capnproto/next/otherlang.html">implementations in C, Go, Python</a>, and a few others not yet
+announced.  None of these are “ready” just yet, but watch this space.  (Would you like to work on
+an implementation in your favorite language?
+<a href="https://groups.google.com/group/capnproto">Let us know!</a>)</p>
 
-<p>Going forward, Cap’n Proto releases will occur more frequently, perhaps every 2-4 weeks. Consider <a href="https://groups.google.com/group/capnproto-announce">signing up for release announcements</a>.</p>
+<p>Going forward, Cap’n Proto releases will occur more frequently, perhaps every 2-4 weeks.
+Consider <a href="https://groups.google.com/group/capnproto-announce">signing up for release announcements</a>.</p>
 
-<p>In any case, go <a href="/capnproto/next/install.html">download the release</a> and <a href="https://groups.google.com/group/capnproto">tell us your thoughts</a>.</p>
+<p>In any case, go <a href="/capnproto/next/install.html">download the release</a> and
+<a href="https://groups.google.com/group/capnproto">tell us your thoughts</a>.</p>
+
 <script type="text/javascript">setupNewsSidebar([
     
       { title: "Cap'n Proto, FlatBuffers, and SBE", url: "/capnproto/next/./news/2014-06-17-capnproto-flatbuffers-sbe.html" },

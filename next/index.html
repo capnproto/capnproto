@@ -59,66 +59,100 @@
 
 <h1 id="introduction">Introduction</h1>
 
-<p><img src='images/infinity-times-faster.png' style='width:334px; height:306px; float: right;' /></p>
+<p><img src="images/infinity-times-faster.png" style="width:334px; height:306px; float: right;" /></p>
 
-<p>Cap’n Proto is an insanely fast data interchange format and capability-based RPC system. Think JSON, except binary. Or think <a href="http://protobuf.googlecode.com">Protocol Buffers</a>, except faster. In fact, in benchmarks, Cap’n Proto is INFINITY TIMES faster than Protocol Buffers.</p>
+<p>Cap’n Proto is an insanely fast data interchange format and capability-based RPC system. Think
+JSON, except binary. Or think <a href="http://protobuf.googlecode.com">Protocol Buffers</a>, except faster.
+In fact, in benchmarks, Cap’n Proto is INFINITY TIMES faster than Protocol Buffers.</p>
 
-<p>This benchmark is, of course, unfair. It is only measuring the time to encode and decode a message in memory. Cap’n Proto gets a perfect score because <em>there is no encoding/decoding step</em>. The Cap’n Proto encoding is appropriate both as a data interchange format and an in-memory representation, so once your structure is built, you can simply write the bytes straight out to disk!</p>
+<p>This benchmark is, of course, unfair. It is only measuring the time to encode and decode a message
+in memory. Cap’n Proto gets a perfect score because <em>there is no encoding/decoding step</em>. The Cap’n
+Proto encoding is appropriate both as a data interchange format and an in-memory representation, so
+once your structure is built, you can simply write the bytes straight out to disk!</p>
 
 <p><strong><em>But doesn’t that mean the encoding is platform-specific?</em></strong></p>
 
-<p>NO! The encoding is defined byte-for-byte independent of any platform. However, it is designed to be efficiently manipulated on common modern CPUs. Data is arranged like a compiler would arrange a struct – with fixed widths, fixed offsets, and proper alignment. Variable-sized elements are embedded as pointers. Pointers are offset-based rather than absolute so that messages are position-independent. Integers use little-endian byte order because most CPUs are little-endian, and even big-endian CPUs usually have instructions for reading little-endian data.</p>
+<p>NO! The encoding is defined byte-for-byte independent of any platform. However, it is designed to
+be efficiently manipulated on common modern CPUs. Data is arranged like a compiler would arrange a
+struct – with fixed widths, fixed offsets, and proper alignment. Variable-sized elements are
+embedded as pointers. Pointers are offset-based rather than absolute so that messages are
+position-independent. Integers use little-endian byte order because most CPUs are little-endian,
+and even big-endian CPUs usually have instructions for reading little-endian data.</p>
 
 <p><strong><em>Doesn’t that make backwards-compatibility hard?</em></strong></p>
 
-<p>Not at all! New fields are always added to the end of a struct (or replace padding space), so existing field positions are unchanged. The recipient simply needs to do a bounds check when reading each field. Fields are numbered in the order in which they were added, so Cap’n Proto always knows how to arrange them for backwards-compatibility.</p>
+<p>Not at all! New fields are always added to the end of a struct (or replace padding space), so
+existing field positions are unchanged. The recipient simply needs to do a bounds check when
+reading each field. Fields are numbered in the order in which they were added, so Cap’n Proto
+always knows how to arrange them for backwards-compatibility.</p>
 
 <p><strong><em>Won’t fixed-width integers, unset optional fields, and padding waste space on the wire?</em></strong></p>
 
-<p>Yes. However, since all these extra bytes are zeros, when bandwidth matters, we can apply an extremely fast Cap’n-Proto-specific compression scheme to remove them. Cap’n Proto calls this “packing” the message; it achieves similar (better, even) message sizes to protobuf encoding, and it’s still faster.</p>
+<p>Yes. However, since all these extra bytes are zeros, when bandwidth matters, we can apply an
+extremely fast Cap’n-Proto-specific compression scheme to remove them. Cap’n Proto calls this
+“packing” the message; it achieves similar (better, even) message sizes to protobuf encoding, and
+it’s still faster.</p>
 
-<p>When bandwidth really matters, you should apply general-purpose compression, like <a href="http://www.zlib.net/">zlib</a> or <a href="https://code.google.com/p/snappy/">Snappy</a>, regardless of your encoding format.</p>
+<p>When bandwidth really matters, you should apply general-purpose compression, like
+<a href="http://www.zlib.net/">zlib</a> or <a href="https://code.google.com/p/snappy/">Snappy</a>, regardless of your
+encoding format.</p>
 
 <p><strong><em>Are there other advantages?</em></strong></p>
 
 <p>Glad you asked!</p>
 
 <ul>
-<li><strong>Incremental reads:</strong> It is easy to start processing a Cap’n Proto message before you have received all of it since outer objects appear entirely before inner objects (as opposed to most encodings, where outer objects encompass inner objects).</li>
-
-<li><strong>Random access:</strong> You can read just one field of a message without parsing the whole thing.</li>
-
-<li><strong>mmap:</strong> Read a large Cap’n Proto file by memory-mapping it. The OS won’t even read in the parts that you don’t access.</li>
-
-<li><strong>Inter-language communication:</strong> Calling C++ code from, say, Java or Python tends to be painful or slow. With Cap’n Proto, the two languages can easily operate on the same in-memory data structure.</li>
-
-<li><strong>Inter-process communication:</strong> Multiple processes running on the same machine can share a Cap’n Proto message via shared memory. No need to pipe data through the kernel. Calling another process can be just as fast and easy as calling another thread.</li>
-
-<li><strong>Arena allocation:</strong> Manipulating Protobuf objects tends to be bogged down by memory allocation, unless you are very careful about object reuse. Cap’n Proto objects are always allocated in an “arena” or “region” style, which is faster and promotes cache locality.</li>
-
-<li><strong>Tiny generated code:</strong> Protobuf generates dedicated parsing and serialization code for every message type, and this code tends to be enormous. Cap’n Proto generated code is smaller by an order of magnitude or more. In fact, usually it’s no more than some inline accessor methods!</li>
-
-<li><strong>Tiny runtime library:</strong> Due to the simplicity of the Cap’n Proto format, the runtime library can be much smaller.</li>
-
-<li><strong>Time-traveling RPC:</strong> Cap’n Proto features an RPC system implements <a href="rpc.html">time travel</a> such that call results are returned to the client before the request even arrives at the server!</li>
+  <li><strong>Incremental reads:</strong> It is easy to start processing a Cap’n Proto message before you have
+received all of it since outer objects appear entirely before inner objects (as opposed to most
+encodings, where outer objects encompass inner objects).</li>
+  <li><strong>Random access:</strong> You can read just one field of a message without parsing the whole thing.</li>
+  <li><strong>mmap:</strong> Read a large Cap’n Proto file by memory-mapping it. The OS won’t even read in the
+parts that you don’t access.</li>
+  <li><strong>Inter-language communication:</strong> Calling C++ code from, say, Java or Python tends to be painful
+or slow. With Cap’n Proto, the two languages can easily operate on the same in-memory data
+structure.</li>
+  <li><strong>Inter-process communication:</strong> Multiple processes running on the same machine can share a
+Cap’n Proto message via shared memory. No need to pipe data through the kernel. Calling another
+process can be just as fast and easy as calling another thread.</li>
+  <li><strong>Arena allocation:</strong> Manipulating Protobuf objects tends to be bogged down by memory
+allocation, unless you are very careful about object reuse. Cap’n Proto objects are always
+allocated in an “arena” or “region” style, which is faster and promotes cache locality.</li>
+  <li><strong>Tiny generated code:</strong> Protobuf generates dedicated parsing and serialization code for every
+message type, and this code tends to be enormous. Cap’n Proto generated code is smaller by an
+order of magnitude or more.  In fact, usually it’s no more than some inline accessor methods!</li>
+  <li><strong>Tiny runtime library:</strong> Due to the simplicity of the Cap’n Proto format, the runtime library
+can be much smaller.</li>
+  <li><strong>Time-traveling RPC:</strong> Cap’n Proto features an RPC system that implements <a href="rpc.html">time travel</a>
+such that call results are returned to the client before the request even arrives at the server!</li>
 </ul>
 
-<p><a href='rpc.html'><img src='images/time-travel.png' style='max-width:639px' /></a></p>
+<p><a href="rpc.html"><img src="images/time-travel.png" style="max-width:639px" /></a></p>
 
 <p><strong><em>Why do you pick on Protocol Buffers so much?</em></strong></p>
 
-<p>Because it’s easy to pick on myself. :) I, Kenton Varda, was the primary author of Protocol Buffers version 2, which is the version that Google released open source. Cap’n Proto is the result of years of experience working on Protobufs, listening to user feedback, and thinking about how things could be done better.</p>
+<p>Because it’s easy to pick on myself. :) I, Kenton Varda, was the primary author of Protocol Buffers
+version 2, which is the version that Google released open source. Cap’n Proto is the result of
+years of experience working on Protobufs, listening to user feedback, and thinking about how
+things could be done better.</p>
 
 <p>I no longer work for Google. Cap’n Proto is not affiliated with Google or any other company.</p>
 
 <p><strong><em>OK, how do I get started?</em></strong></p>
 
-<p>To install Cap’n Proto, head over to the <a href="install.html">installation page</a>. If you’d like to help hack on Cap’n Proto, such as by writing bindings in other languages, let us know on the <a href="https://groups.google.com/group/capnproto">discussion group</a>. If you’d like to receive e-mail udpates about future releases, add yourself to the <a href="https://groups.google.com/group/capnproto-announce">announcement list</a>.</p>
-<div style='float: right'>
-<a class='github_link' href='https://github.com/kentonv/capnproto' style='color: #fff'>Develop</a>
-<a class='groups_link' href='https://groups.google.com/group/capnproto' style='color: #fff'>Discuss</a>
-<a class='groups_link' href='https://groups.google.com/group/capnproto-announce' style='color: #fff'>Stay Updated</a>
-</div><div style='clear: right;'> </div>
+<p>To install Cap’n Proto, head over to the <a href="install.html">installation page</a>.  If you’d like to help
+hack on Cap’n Proto, such as by writing bindings in other languages, let us know on the
+<a href="https://groups.google.com/group/capnproto">discussion group</a>.  If you’d like to receive e-mail
+udpates about future releases, add yourself to the
+<a href="https://groups.google.com/group/capnproto-announce">announcement list</a>.</p>
+
+<div style="float: right">
+<a class="github_link" style="color: #fff" href="https://github.com/kentonv/capnproto">Develop</a>
+<a class="groups_link" style="color: #fff" href="https://groups.google.com/group/capnproto">Discuss</a>
+<a class="groups_link" style="color: #fff" href="https://groups.google.com/group/capnproto-announce">Stay Updated</a>
+</div>
+<div style="clear: right;"> </div>
+
+
 <script type="text/javascript">setupSidebar()</script>
         <div style="clear: both;"></div>
       </section>
