@@ -565,7 +565,7 @@ class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline ListBuilder()
       : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
-        step(0 * BITS / ELEMENTS) {}
+        step(0 * BITS / ELEMENTS), elementSize(ElementSize::VOID) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder)
 

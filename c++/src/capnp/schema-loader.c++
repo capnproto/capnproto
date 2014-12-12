@@ -1261,21 +1261,24 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
   // Check if we already have a schema for this ID.
   _::RawSchema*& slot = schemas[validatedReader.getId()];
   bool shouldReplace;
+  bool shouldClearInitializer;
   if (slot == nullptr) {
     // Nope, allocate a new RawSchema.
     slot = &arena.allocate<_::RawSchema>();
+    memset(&slot->defaultBrand, 0, sizeof(slot->defaultBrand));
     slot->id = validatedReader.getId();
     slot->canCastTo = nullptr;
     slot->defaultBrand.generic = slot;
+    slot->lazyInitializer = isPlaceholder ? &initializer : nullptr;
+    slot->defaultBrand.lazyInitializer = isPlaceholder ? &brandedInitializer : nullptr;
     shouldReplace = true;
+    shouldClearInitializer = false;
   } else {
     // Yes, check if it is compatible and figure out which schema is newer.
 
-    if (slot->lazyInitializer == nullptr) {
-      // The existing slot is not a placeholder, so whether we overwrite it or not, we cannot
-      // end up with a placeholder.
-      isPlaceholder = false;
-    }
+    // If the existing slot is a placeholder, but we're upgrading it to a non-placeholder, we
+    // need to clear the initializer later.
+    shouldClearInitializer = slot->lazyInitializer != nullptr && !isPlaceholder;
 
     auto existing = readMessageUnchecked<schema::Node>(slot->encodedNode);
     CompatibilityChecker checker(*this);
@@ -1301,10 +1304,7 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
     slot->defaultBrand.dependencyCount = deps.size();
   }
 
-  if (isPlaceholder) {
-    slot->lazyInitializer = &initializer;
-    slot->defaultBrand.lazyInitializer = &brandedInitializer;
-  } else {
+  if (shouldClearInitializer) {
     // If this schema is not newly-allocated, it may already be in the wild, specifically in the
     // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
     // a release-store here.
@@ -1318,10 +1318,15 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
 _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
   _::RawSchema*& slot = schemas[nativeSchema->id];
   bool shouldReplace;
+  bool shouldClearInitializer;
   if (slot == nullptr) {
     slot = &arena.allocate<_::RawSchema>();
+    memset(&slot->defaultBrand, 0, sizeof(slot->defaultBrand));
     slot->defaultBrand.generic = slot;
+    slot->lazyInitializer = nullptr;
+    slot->defaultBrand.lazyInitializer = nullptr;
     shouldReplace = true;
+    shouldClearInitializer = false;  // already cleared above
   } else if (slot->canCastTo != nullptr) {
     // Already loaded natively, or we're currently in the process of loading natively and there
     // was a dependency cycle.
@@ -1336,6 +1341,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     auto native = readMessageUnchecked<schema::Node>(nativeSchema->encodedNode);
     CompatibilityChecker checker(*this);
     shouldReplace = checker.shouldReplace(existing, native, true);
+    shouldClearInitializer = slot->lazyInitializer != nullptr;
   }
 
   // Since we recurse below, the slot in the hash map could move around.  Copy out the pointer
@@ -1389,11 +1395,13 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     }
   }
 
-  // If this schema is not newly-allocated, it may already be in the wild, specifically in the
-  // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
-  // a release-store here.
-  __atomic_store_n(&result->lazyInitializer, nullptr, __ATOMIC_RELEASE);
-  __atomic_store_n(&result->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
+  if (shouldClearInitializer) {
+    // If this schema is not newly-allocated, it may already be in the wild, specifically in the
+    // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
+    // a release-store here.
+    __atomic_store_n(&result->lazyInitializer, nullptr, __ATOMIC_RELEASE);
+    __atomic_store_n(&result->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
+  }
 
   return result;
 }
@@ -1513,6 +1521,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
 
   if (slot == nullptr) {
     auto& brand = arena.allocate<_::RawBrandedSchema>();
+    memset(&brand, 0, sizeof(brand));
     slot = &brand;
 
     brand.generic = schema;
@@ -1537,10 +1546,11 @@ SchemaLoader::Impl::makeBrandedDependencies(
 
 #define ADD_ENTRY(kind, index, make) \
     if (const _::RawBrandedSchema* dep = make) { \
-      deps.add(_::RawBrandedSchema::Dependency {\
-        _::RawBrandedSchema::makeDepLocation(_::RawBrandedSchema::DepKind::kind, index), \
-        dep \
-      }); \
+      auto& slot = deps.add(); \
+      memset(&slot, 0, sizeof(slot)); \
+      slot.location = _::RawBrandedSchema::makeDepLocation( \
+        _::RawBrandedSchema::DepKind::kind, index); \
+      slot.schema = dep; \
     }
 
   switch (node.which()) {
@@ -1788,6 +1798,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::getUnbound(const _::RawSchema* sc
   auto& slot = unboundBrands[schema];
   if (slot == nullptr) {
     slot = &arena.allocate<_::RawBrandedSchema>();
+    memset(slot, 0, sizeof(*slot));
     slot->generic = schema;
     auto deps = makeBrandedDependencies(schema, nullptr);
     slot->dependencies = deps.begin();
