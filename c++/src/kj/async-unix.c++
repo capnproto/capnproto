@@ -149,7 +149,12 @@ void registerReservedSignal() {
   registerSignalHandler(reservedSignal);
 
   // We also disable SIGPIPE because users of UnixEventLoop almost certainly don't want it.
-  KJ_SYSCALL(signal(SIGPIPE, SIG_IGN));
+  while (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+    int error = errno;
+    if (error != EINTR) {
+      KJ_FAIL_SYSCALL("signal(SIGPIPE, SIG_IGN)", error);
+    }
+  }
 }
 
 pthread_once_t registerReservedSignalOnce = PTHREAD_ONCE_INIT;
@@ -746,7 +751,8 @@ bool UnixEventPort::wait() {
 }
 
 bool UnixEventPort::poll() {
-  bool woken = false;
+  // volatile so that longjmp() doesn't clobber it.
+  volatile bool woken = false;
 
   sigset_t pending;
   sigset_t waitMask;

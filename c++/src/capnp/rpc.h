@@ -333,7 +333,10 @@ kj::Promise<kj::Own<_::VatNetworkBase::Connection>>
 
 template <typename SturdyRef>
 Capability::Client SturdyRefRestorer<SturdyRef>::baseRestore(AnyPointer::Reader ref) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   return restore(ref.getAs<SturdyRef>());
+#pragma GCC diagnostic pop
 }
 
 template <typename VatId>
