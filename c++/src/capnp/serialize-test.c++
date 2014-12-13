@@ -274,7 +274,7 @@ public:
     data.append(reinterpret_cast<const char*>(buffer), size);
   }
 
-  const bool dataEquals(kj::ArrayPtr<const word> other) {
+  bool dataEquals(kj::ArrayPtr<const word> other) {
     return data ==
         std::string(other.asChars().begin(), other.asChars().size());
   }

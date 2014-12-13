@@ -60,7 +60,7 @@ while [ $# -gt 0 ]; do
       echo "Pushing code to $HOST..."
       echo "========================================================================="
       BRANCH=$(git rev-parse --abbrev-ref HEAD)
-      ssh $HOST 'rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
+      ssh $HOST 'chmod -R +w tmp-test-capnp && rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
       git push ssh://$HOST/~/tmp-test-capnp "$BRANCH:test"
       ssh $HOST "cd tmp-test-capnp && git checkout test"
       scp -qr c++/gtest $HOST:~/tmp-test-capnp/c++/gtest
@@ -209,8 +209,9 @@ done
 # Enable lots of warnings and make sure the build breaks if they fire.  Disable strict-aliasing
 # because GCC warns about code that I know is OK.  Disable sign-compare because I've fixed more
 # sign-compare warnings than probably all other warnings combined and I've never seen it flag a
-# real problem.
-export CXXFLAGS="-O2 -DDEBUG -Wall -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-deprecated-declarations"
+# real problem. Disable unused parameters because it's stupidly noisy and never a real problem.
+# Disable missing-field-initializers because unfortuntaley gtest contains a warning of this class.
+export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers"
 
 STAGING=$PWD/tmp-staging
 
@@ -238,14 +239,13 @@ else
 fi
 
 if [ $IS_CLANG = yes ]; then
-  # There's an unused private field in gtest.
-  export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field"
+  # There's an unused private field in gtest, which Clang dislikes.
+  #
+  # Also, don't fail out on this ridiculous "argument unused during compilation" warning.
+  export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field -Wno-error=unused-command-line-argument"
 else
-  # GCC 4.8 emits a weird uninitialized warning in kj/parse/char-test, deep in one of the parser
-  # combinators.  It could be a real bug but there is just not enough information to figure out
-  # where the problem is coming from, because GCC does not provide any description of the inlining
-  # that has occurred.  Since I have not observed any actual problem (tests pass, etc.), I'm
-  # muting it for now.
+  # GCC emits uninitialized warnings all over and they seem bogus. We use valgrind to test for
+  # uninitialized memory usage later on.
   CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized"
 fi
 

@@ -7,7 +7,7 @@ include(CheckIncludeFileCXX)
 if(MSVC)
   check_include_file_cxx(initializer_list HAS_CXX11)
 else()
-  check_include_file_cxx(initializer_list HAS_CXX11 "-std=c++11")
+  check_include_file_cxx(initializer_list HAS_CXX11 "-std=gnu++0x")
 endif()
 if(NOT HAS_CXX11)
   message(SEND_ERROR "Requires a C++11 compiler and standard library.")
@@ -61,9 +61,24 @@ else()
 endif()
 
 if(MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3 ${CAPNP_LITE_FLAG}")
+  # TODO(cleanup): Enable higher warning level in MSVC, but make sure to test
+  #   build with that warning level and clean out false positives.
+  set(CMAKE_CXX_FLAGS "${CAPNP_LITE_FLAG} ${CMAKE_CXX_FLAGS}")
 else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -std=c++11 -pthread ${CAPNP_LITE_FLAG}")
+  # Note that it's important to add new CXXFLAGS before ones specified by the
+  # user, so that the user's flags override them. This is particularly
+  # important if -Werror was enabled and then certain warnings need to be
+  # disabled, as is done in super-test.sh.
+  #
+  # We enable a lot of warnings, but then disable some:
+  # * strict-aliasing: We use type-punning in known-safe ways that GCC doesn't
+  #   recognize as safe.
+  # * sign-compare: Low S/N ratio.
+  # * unused-parameter: Low S/N ratio.
+  #
+  # We have to use -std=gnu++0x isntead of -std=c++11 because otherwise we lose
+  # GNU extensions that we need.
+  set(CMAKE_CXX_FLAGS "-std=gnu++0x -Wall -Wextra -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -pthread ${CAPNP_LITE_FLAG} ${CMAKE_CXX_FLAGS}")
 endif()
 
 # Source =======================================================================

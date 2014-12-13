@@ -37,7 +37,7 @@ clean-local:
 # the cmake build.
 distcheck-hook:
 	rm -rf distcheck-cmake
-	(which cmake && mkdir distcheck-cmake && cd distcheck-cmake && cmake ../$(distdir) && make -j6 check)
+	(mkdir distcheck-cmake && cd distcheck-cmake && cmake ../$(distdir) && make -j6 check)
 	rm -rf distcheck-cmake
 
 AM_CXXFLAGS = -I$(srcdir)/src -I$(builddir)/src -DKJ_HEADER_WARNINGS -DCAPNP_HEADER_WARNINGS -DCAPNP_INCLUDE_DIR='"$(includedir)"' $(PTHREAD_CFLAGS)
