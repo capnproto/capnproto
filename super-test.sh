@@ -60,7 +60,7 @@ while [ $# -gt 0 ]; do
       echo "Pushing code to $HOST..."
       echo "========================================================================="
       BRANCH=$(git rev-parse --abbrev-ref HEAD)
-      ssh $HOST 'chmod -R +w tmp-test-capnp && rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
+      ssh $HOST '(chmod -fR +w tmp-test-capnp || true) && rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
       git push ssh://$HOST/~/tmp-test-capnp "$BRANCH:test"
       ssh $HOST "cd tmp-test-capnp && git checkout test"
       scp -qr c++/gtest $HOST:~/tmp-test-capnp/c++/gtest
