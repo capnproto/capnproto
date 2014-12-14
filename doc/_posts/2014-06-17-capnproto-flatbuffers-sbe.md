@@ -4,7 +4,10 @@ title: Cap'n Proto, FlatBuffers, and SBE
 author: kentonv
 ---
 
-**Update:** I have made [some corrections](https://github.com/kentonv/capnproto/commit/e4e6c9076ae16804c07968cd3bdf6107155df7ee) since the original version of this post.
+**Update Jun 18, 2014:** I have made [some corrections](https://github.com/kentonv/capnproto/commit/e4e6c9076ae16804c07968cd3bdf6107155df7ee) since the original version of this post.
+
+**Update Dec 15, 2014:** Updated to reflect that Cap'n Proto 0.5 now supports Visual Studio and that
+Java is now well-supported.
 
 Yesterday, some engineers at Google released [FlatBuffers](http://google-opensource.blogspot.com/2014/06/flatbuffers-memory-efficient.html), a new serialization protocol and library with similar design principles to Cap'n Proto. Also, a few months back, Real Logic released [Simple Binary Encoding](http://mechanical-sympathy.blogspot.com/2014/05/simple-binary-encoding.html), another protocol and library of this nature.
 
@@ -37,12 +40,15 @@ Note: For features which are properties of the implementation rather than the pr
 <tr><td>Padding takes space on wire?</td><td class="pass">no</td><td class="warn">optional</td><td class="fail">yes</td><td class="fail">yes</td></tr>
 <tr><td>Unset fields take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="fail">yes</td><td class="pass">no</td></tr>
 <tr><td>Pointers take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="pass">no</td><td class="fail">yes</td></tr>
-<tr><td>C++</td><td class="pass">yes</td><td class="warn">GCC/Clang<br>(no MSVC)</td><td class="pass">yes</td><td class="pass">yes</td></tr>
-<tr><td>Java</td><td class="pass">yes</td><td class="warn">in progress</td><td class="pass">yes</td><td class="pass">yes</td></tr>
-<tr><td>Python</td><td class="pass">yes</td><td class="warn">yes (C ext)</td><td class="fail">no</td><td class="fail">no</td></tr>
-<tr><td>Other languages</td><td class="pass">lots!</td><td class="warn">6+ others</td><td class="warn">C#</td><td class="fail">no</td></tr>
+<tr><td>C++</td><td class="pass">yes</td><td class="pass">yes (C++11)*</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Java</td><td class="pass">yes</td><td class="pass">yes*</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>C#</td><td class="pass">yes</td><td class="pass">yes*</td><td class="pass">yes</td><td class="pass">yes*</td></tr>
+<tr><td>Go</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td><td class="pass">yes*</td></tr>
+<tr><td>Other languages</td><td class="pass">lots!</td><td class="warn">6+ others*</td><td class="fail">no</td><td class="fail">no</td></tr>
 <tr><td>Authors' preferred use case</td><td>distributed<br>computing</td><td><a href="https://sandstorm.io">platforms /<br>sandboxing</a></td><td>financial<br>trading</td><td>games</td></tr>
 </table>
+
+\* Updated Dec 15, 2014 (Cap'n Proto 0.5.0).
 
 **Schema Evolution**
 
@@ -172,9 +178,19 @@ FlatBuffers also uses pointers, even though most objects are variable-width, pos
 
 **Platform Support**
 
-A really huge weakness of Cap'n Proto today is that it doesn't compile in Visual Studio, and therefore effectively doesn't support Windows (unless you count Cygwin, but most people don't).
+As of Dec 15, 2014, Cap'n Proto supports a superset of the languages supported by FlatBuffers and
+SBE, but is still far behind Protocol Buffers.
 
-The problem initially was that Cap'n Proto makes liberal use of C++11 features, and MSVC has lagged behind in implementing them. We considered, but balked at, forking and backporting. It looks like [VS14 CTP1](http://blogs.msdn.com/b/vcblog/archive/2014/06/03/visual-studio-14-ctp.aspx) may finally be far enough to make a port practical, so now it's just a matter of finding the time. But that's a new problem: all my time is currently consumed by [Sandstorm.io](https://sandstorm.io), and while it is a major use of Cap'n Proto and will thus drive further development, it is entirely Linux-based, making it hard for me to justify spending my time on Windows support. What we need is a volunteer!
+While Cap'n Proto C++ is well-supported on POSIX platforms using GCC or Clang as their compiler,
+Cap'n Proto has only limited support for Visual C++: the basic serialization library works, but
+reflection and RPC do not yet work. Support will be expanded once Visual Studio's C++ compiler
+completes support for C++11.
+
+In comparison, SBE and FlatBuffers have reflection interfaces that work in Visual C++, though
+neither one has built-in RPC. Reflection is critical for certain use cases, but the majority of
+users won't need it.
+
+(This section has been updated. When originally written, Cap'n Proto did not support MSVC at all.)
 
 ### Benchmarks?
 

@@ -278,6 +278,9 @@ auto promise3 = promise2.then(
 });
 {% endhighlight %}
 
+For [generic methods](language.html#generic-methods), the `fooRequest()` method will be a template;
+you must explicitly specify type parameters.
+
 ### Servers
 
 The generated `Server` type is an abstract interface which may be subclassed to implement a
@@ -314,6 +317,11 @@ private:
   std::map<kj::StringPtr, File::Client> files;
 };
 {% endhighlight %}
+
+On the server side, [generic methods](language.html#generic-methods) are NOT templates. Instead,
+the generated code is exactly as if all of the generic parameters were bound to `AnyPointer`. The
+server generally does not get to know exactly what type the client requested; it must be designed
+to be correct for any parameterization.
 
 ## Initializing RPC
 

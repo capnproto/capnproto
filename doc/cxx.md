@@ -371,6 +371,46 @@ implicitly convertible in this way.  Unfortunately, this trick doesn't work on G
 
 [Interfaces (RPC) have their own page.](cxxrpc.html)
 
+### Generics
+
+[Generic types](language.html#generic-types) become templates in C++. The outer type (the one whose
+name matches the schema declaration's name) is templatized; the inner `Reader` and `Builder` types
+are not, because they inherit the parameters from the outer type. Similarly, template parameters
+should refer to outer types, not `Reader` or `Builder` types.
+
+For example, given:
+
+{% highlight capnp %}
+struct Map(Key, Value) {
+  entries @0 :List(Entry);
+  struct Entry {
+    key @0 :Key;
+    value @1 :Value;
+  }
+}
+
+struct People {
+  byName @0 :Map(Text, Person);
+  # Maps names to Person instances.
+}
+{% endhighlight %}
+
+You might write code like:
+
+{% highlight c++ %}
+void processPeople(People::Reader people) {
+  Map<Text, Person>::Reader reader = people.getByName();
+  capnp::List<Map<Text, Person>::Entry>::Reader entries =
+      reader.getEntries()
+  for (auto entry: entries) {
+    processPerson(entry);
+  }
+}
+{% endhighlight %}
+
+Note that all template parameters will be specified with a default value of `AnyPointer`.
+Therefore, the type `Map<>` is equivalent to `Map<capnp::AnyPointer, capnp::AnyPointer>`.
+
 ### Constants
 
 Constants are exposed with their names converted to UPPERCASE_WITH_UNDERSCORES naming style
