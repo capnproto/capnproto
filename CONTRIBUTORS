@@ -8,6 +8,7 @@ Remy Blank <rblank@google.com> (contributions copyright Google Inc.): KJ Timers
 Joshua Warner <joshuawarner32@gmail.com>: cmake build, AnyStruct/AnyList, other stuff
 Scott Purdy <scott@fer.io>: kj/std iostream interface
 Bryan Borham <bjboreham@gmail.com>: Initial MSVC support
+Philip Quinn <p@partylemon.com>: cmake build and other assorted bits
 
 This file does not list people who maintain their own Cap'n Proto
 implementations as separate projects.  Those people are awesome too!  :)

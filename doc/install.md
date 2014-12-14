@@ -5,8 +5,8 @@ title: Installation
 
 # Installation: Tools and C++ Runtime
 
-The Cap'n Proto tools, including the compiler which takes `.capnp` files and generates source code
-for them, are written in C++.  Therefore, you must install the C++ package even if your actual
+The Cap'n Proto tools, including the compiler (which takes `.capnp` files and generates source code
+for them), are written in C++.  Therefore, you must install the C++ package even if your actual
 development language is something else.
 
 This package is licensed under the [MIT License](http://opensource.org/licenses/MIT).
@@ -61,7 +61,7 @@ as well as on Windows. We test every Cap'n Proto release on the following platfo
 
 * Android
 * Linux
-* Mac OSX
+* Mac OS X
 * Windows - Cygwin
 * Windows - MinGW-w64 (lite mode and compiler binary only)
 * Windows - Visual C++ (lite mode only)
@@ -70,8 +70,9 @@ as well as on Windows. We test every Cap'n Proto release on the following platfo
 compile Cap'n Proto's reflection or RPC APIs. "Cap'n Proto Lite" omits these features from the
 library, giving you only the core serialization based on generated code.
 
-**Mac/Xcode users:** You must use at least Xcode 5, and you must download the Xcode command-line
-tools under Xcode menu > Preferences > Downloads.  Alternatively, compiler builds from
+**Mac OS X users:** You must use at least Xcode 5 with the Xcode command-line
+tools (Xcode menu > Preferences > Downloads).  Alternatively, the command-line tools
+package from [Apple](https://developer.apple.com/downloads/) or compiler builds from
 [Macports](http://www.macports.org/), [Fink](http://www.finkproject.org/), or
 [Homebrew](http://brew.sh/) are reported to work.
 
@@ -114,7 +115,7 @@ installed (in addition to Git) in order to fetch the Google Test sources (done b
    <pre><a href="https://capnproto.org/capnproto-c++-win32-0.0.0.zip">https://capnproto.org/capnproto-c++-win32-0.0.0.zip</a></pre>
 
 2. Find `capnp.exe`, `capnpc-c++.exe`, and `capnpc-capnp.exe` under `capnproto-tools-win32-0.0.0` in
-   the zip and copy them to somewhere in your `PATH`.
+   the zip and copy them somewhere.
 
 If you don't care about C++ support, you can stop here. The compiler exe can be used with plugins
 provided by projects implementing Cap'n Proto in other languages.
@@ -129,19 +130,24 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 
        cmake -G "Visual Studio 14 2015" -DCAPNP_LITE=1 -DEXTERNAL_CAPNP=1
 
+    If the `capnp.exe` and `capnpc-c++.exe` tools are not on your `PATH`, then `CAPNP_EXECUTABLE`
+    and `CAPNPC_CXX_EXECUTABLE` will need to be set to their respective locations.
+
 3. Open the "Cap'n Proto" solution in Visual Studio.
 
-4. Adjust the project build options (e.g. choice of C++ runtime library, dll vs. static,
-   enable/disable exceptions and RTTI) to match the options of the project in which you plan to use
-   Cap'n Proto.
+4. Adjust the project build options (e.g., choice of C++ runtime library, enable/disable exceptions
+   and RTTI) to match the options of the project in which you plan to use Cap'n Proto.
 
-5. Build the solution.
+5. Build the solution (`ALL_BUILD`).
 
-6. Find the compiled `.lib` files in the build directory under `src/{capnp,kj}/{Debug,Release}`
-   and place them somewhere where your project can link against them.
+6. Build the `INSTALL` project to copy the compiled libraries and header files into `CMAKE_INSTALL_PREFIX`.
+   
+   Alternatively, find the compiled `.lib` files in the build directory under
+   `src/{capnp,kj}/{Debug,Release}` and place them somewhere where your project can link against them.
+   Also add the `src` directory to your search path for `#include`s, or copy all the headers to your
+   project's include directory.
 
-7. Add the the `src` directory to your search path for `#include`s, or copy all the headers to your
-   include directory.
+7. Add `#define CAPNP_LITE 1` to either your project's precompiled/shared header or compiler options. 
 
 **From Git**
 
