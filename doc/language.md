@@ -284,6 +284,8 @@ group" in Cap'n Proto, which was the case that got into the most trouble with Pr
 A struct may have a field with type `AnyPointer`.  This field's value can be of any pointer type --
 i.e. any struct, interface, list, or blob.  This is essentially like a `void*` in C.
 
+See also [generics](#generic-types).
+
 ### Enums
 
 An enum is a type with a small finite set of symbolic values.
@@ -351,6 +353,126 @@ meant to have access, the sender shouldn't have sent the reference in the first 
 it very easy to develop secure protocols with Cap'n Proto -- you almost don't need to think about
 access control at all. This feature is what makes Cap'n Proto a "capability-based" RPC system -- a
 reference to an object inherently represents a "capability" to access it.
+
+### Generic Types
+
+A struct or interface type may be parameterized, making it "generic". For example, this is useful
+for defining type-safe containers:
+
+{% highlight capnp %}
+struct Map(Key, Value) {
+  entries @0 :List(Entry);
+  struct Entry {
+    key @0 :Key;
+    value @1 :Value;
+  }
+}
+
+struct People {
+  byName @0 :Map(Text, Person);
+  # Maps names to Person instances.
+}
+{% endhighlight %}
+
+Cap'n Proto generics work very similarly to Java generics or C++ templates. Some notes:
+
+* Only pointer types (structs, lists, blobs, and interfaces) can be used as generic parameters,
+  much like in Java. This is a pragmatic limitation: allowing parameters to have non-pointer types
+  would mean that different parameterizations of a struct could have completely different layouts,
+  which would excessively complicate the Cap'n Proto implementation.
+
+* A type declaration nested inside a generic type may use the type parameters of the outer type,
+  as you can see in the example above. This differs from Java, but matches C++. If you want to
+  refer to a nested type from outside the outer type, you must specify the parameters on the outer
+  type, not the inner. For example, `Map(Text, Person).Entry` is a valid type;
+  `Map.Entry(Text, Person)` is NOT valid. (Of course, an inner type may declare additional generic
+  parameters.)
+
+* If you refer to a generic type but omit its parameters (e.g. declare a field of type `Map` rather
+  than `Map(T, U)`), it is as if you specified `AnyPointer` for each parameter. Note that such
+  a type is wire-compatible with any specific parameterization, so long as you interpret the
+  `AnyPointer`s as the correct type at runtime.
+
+* Relatedly, it is safe to cast an generic interface of a specific parameterization to a generic
+  interface where all parameters are `AnyPointer` and vice versa, as long as the `AnyPointer`s are
+  treated as the correct type at runtime. This means that e.g. you can implement a server in a
+  generic way that is correct for all parameterizations but call it from clients using a specific
+  parameterization.
+
+* The encoding of a generic type is exactly the same as the encoding of a type produced by
+  substituting the type parameters manually. For example, `Map(Text, Person)` is encoded exactly
+  the same as:
+
+  <div>{% highlight capnp %}
+  struct PersonMap {
+    # Encoded the same as Map(Text, Person).
+    entries @0 :List(Entry);
+    struct Entry {
+      key @0 :Text;
+      value @1 :Person;
+    }
+  }
+  {% endhighlight %}
+  </div>
+
+  Therefore, it is possible to upgrade non-generic types to generic types while retaining
+  backwards-compatibility.
+
+* Similarly, a generic interface's protocol is exactly the same as the interface obtained by
+  manually substituting the generic parameters.
+
+### Generic Methods
+
+Interface methods may also have "implicit" generic parameters that apply to a particular method
+call. This commonly applies to "factory" methods. For example:
+
+{% highlight capnp %}
+interface Assignable(T) {
+  # A generic interface, with non-generic methods.
+  get @0 () -> (value :T);
+  set @1 (value :T) -> ();
+}
+
+interface AssignableFactory {
+  newAssignable @0 [T] (initialValue :T)
+      -> (assignable :Assignable(T));
+  # A generic method.
+}
+{% endhighlight %}
+
+Here, the method `newAssignable()` is generic. The return type of the method depends on the input
+type.
+
+Ideally, calls to a generic method should not have to explicitly specify the method's type
+parameters, because they should be inferred from the types of the method's regular parameters.
+However, this may not always be possible; it depends on the programming language and API details.
+
+Note that if a method's generic parameter is used only in its returns, not its parameters, then
+this implies that the returned value is appropriate for any parameterization. For example:
+
+{% highlight capnp %}
+newUnsetAssignable @1 [T] () -> (assignable :Assignable(T));
+# Create a new assignable. `get()` on the returned object will
+# throw an exception until `set()` has been called at least once.
+{% endhighlight %}
+
+Because of the way this method is designed, the returned `Assignable` is initially valid for any
+`T`. Effectively, it doesn't take on a type until the first time `set()` is called, and then `T`
+retroactively becomes the type of value passed to `set()`.
+
+In contrast, if it's the case that the returned type is unknown, then you should NOT declare it
+as generic. Instead, use `AnyPointer`, or omit a type's parameters (since they default to
+`AnyPointer`). For example:
+
+{% highlight capnp %}
+getNamedAssignable @2 (name :Text) -> (assignable :Assignable);
+# Get the `Assignable` with the given name. It is the
+# responsibility of the caller to keep track of the type of each
+# named `Assignable` and cast the returned object appropriately.
+{% endhighlight %}
+
+Here, we omitted the parameters to `Assignable` in the return type, because the returned object
+has a specific type parameterization but it is not locally knowable.
 
 ### Constants
 
@@ -577,34 +699,82 @@ are much more likely.
 
 ## Evolving Your Protocol
 
-A protocol can be changed in the following ways without breaking backwards-compatibility:
+A protocol can be changed in the following ways without breaking backwards-compatibility, and
+without changing the [canonical](encoding.html#canonicalization) encoding of a message:
 
 * New types, constants, and aliases can be added anywhere, since they obviously don't affect the
   encoding of any existing type.
+
 * New fields, enumerants, and methods may be added to structs, enums, and interfaces, respectively,
   as long as each new member's number is larger than all previous members.  Similarly, new fields
   may be added to existing groups and unions.
+
 * New parameters may be added to a method.  The new parameters must be added to the end of the
   parameter list and must have default values.
+
 * Members can be re-arranged in the source code, so long as their numbers stay the same.
+
 * Any symbolic name can be changed, as long as the type ID / ordinal numbers stay the same.  Note
   that type declarations have an implicit ID generated based on their name and parent's ID, but
   you can use `capnp compile -ocapnp myschema.capnp` to find out what that number is, and then
   declare it explicitly after your rename.
-* Types definitions can be moved to different scopes, as long as the type ID is declared
+
+* Type definitions can be moved to different scopes, as long as the type ID is declared
   explicitly.
-* A field of type `List(T)`, where `T` is a primitive type, blob, or list, may be changed to type
-  `List(U)`, where `U` is a struct type whose `@0` field is of type `T`.  This rule is useful when
-  you realize too late that you need to attach some extra data to each element of your list.
-  Without this rule, you would be stuck defining parallel lists, which are ugly and error-prone.
+
 * A field can be moved into a group or a union, as long as the group/union and all other fields
   within it are new.  In other words, a field can be replaced with a group or union containing an
   equivalent field and some new fields.
 
-Any other change should be assumed NOT to be safe.  In particular:
+* A non-generic type can be made [generic](#generic-types), and new generic parameters may be
+  added to an existing generic type. Other types used inside the body of the newly-generic type can
+  be replaced with the new generic parameter so long as all existing users of the type are updated
+  to bind that generic parameter to the type it replaced. For example:
+
+  <div>{% highlight capnp %}
+  struct Map {
+    entries @0 :List(Entry);
+    struct Entry {
+      key @0 :Text;
+      value @1 :Text;
+    }
+  }
+  {% endhighlight %}
+  </div>
+
+  Can change to:
+
+  <div>{% highlight capnp %}
+  struct Map(Key, Value) {
+    entries @0 :List(Entry);
+    struct Entry {
+      key @0 :Key;
+      value @1 :Value;
+    }
+  }
+  {% endhighlight %}
+  </div>
+
+  As long as all existing uses of `Map` are replaced with `Map(Text, Text)` (and any uses of
+  `Map.Entry` are replaced with `Map(Text, Text).Entry`).
+
+  (This rule applies analogously to generic methods.)
+
+The following changes are backwards-compatible but may change the canonical encoding of a mesasge.
+Apps that rely on canonicalization (such as some cryptographic protocols) should avoid changes in
+this list, but most apps can safely use them:
+
+* A field of type `List(T)`, where `T` is a primitive type, blob, or list, may be changed to type
+  `List(U)`, where `U` is a struct type whose `@0` field is of type `T`.  This rule is useful when
+  you realize too late that you need to attach some extra data to each element of your list.
+  Without this rule, you would be stuck defining parallel lists, which are ugly and error-prone.
+  As a special exception to this rule, `List(Bool)` may **not** be upgraded to a list of structs,
+  because implementing this for bit lists has proven unreasonably expensive.
+
+Any change not listed above should be assumed NOT to be safe.  In particular:
 
 * You cannot change a field, method, or enumerant's number.
-* You cannot change a field or method parameter's type or default value, except as described above.
+* You cannot change a field or method parameter's type or default value.
 * You cannot change a type's ID.
 * You cannot change the name of a type that doesn't have an explicit ID, as the implicit ID is
   generated based in part on the type name.

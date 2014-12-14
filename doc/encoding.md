@@ -84,62 +84,6 @@ The built-in blob types are encoded as follows:
   Note that the NUL terminator is included in the size sent on the wire, but the runtime library
   should not count it in any size reported to the application.
 
-### Lists
-
-A list value is encoded as a pointer to a flat array of values.
-
-    lsb                       list pointer                        msb
-    +-+-----------------------------+--+----------------------------+
-    |A|             B               |C |             D              |
-    +-+-----------------------------+--+----------------------------+
-
-    A (2 bits) = 1, to indicate that this is a list pointer.
-    B (30 bits) = Offset, in words, from the end of the pointer to the
-        start of the first element of the list.  Signed.
-    C (3 bits) = Size of each element:
-        0 = 0 (e.g. List(Void))
-        1 = 1 bit
-        2 = 1 byte
-        3 = 2 bytes
-        4 = 4 bytes
-        5 = 8 bytes (non-pointer)
-        6 = 8 bytes (pointer)
-        7 = composite (see below)
-    D (29 bits) = Number of elements in the list, except when C is 7
-        (see below).
-
-The pointed-to values are tightly-packed.  In particular, `Bool`s are packed bit-by-bit in
-little-endian order (the first bit is the least-significant bit of the first byte).
-
-Lists of structs use the smallest element size in which the struct can fit.  So, a
-list of structs that each contain two `UInt8` fields and nothing else could be encoded with C = 3
-(2-byte elements).  A list of structs that each contain a single `Text` field would be encoded as
-C = 6 (pointer elements).  A list of structs that each contain a single `Bool` field would be
-encoded using C = 1 (1-bit elements).  A list of structs which are each more than one word in size
-must be encoded using C = 7 (composite).
-
-When C = 7, the elements of the list are fixed-width composite values -- usually, structs.  In
-this case, the list content is prefixed by a "tag" word that describes each individual element.
-The tag has the same layout as a struct pointer, except that the pointer offset (B) instead
-indicates the number of elements in the list.  Meanwhile, section (D) of the list pointer -- which
-normally would store this element count -- instead stores the total number of _words_ in the list
-(not counting the tag word).  The reason we store a word count in the pointer rather than an element
-count is to ensure that the extents of the list's location can always be determined by inspecting
-the pointer alone, without having to look at the tag; this may allow more-efficient prefetching in
-some use cases.  The reason we don't store struct lists as a list of pointers is because doing so
-would take significantly more space (an extra pointer per element) and may be less cache-friendly.
-
-In the future, we could consider implementing matrixes using the "composite" element type, with the
-elements being fixed-size lists rather than structs.  In this case, the tag would look like a list
-pointer rather than a struct pointer.  As of this writing, no such feature has been implemented.
-
-Notice that because a small struct is encoded as if it were a primitive value, this means that
-if you have a field of type `List(T)` where `T` is a primitive or blob type, it
-is possible to change that field to `List(U)` where `U` is a struct whose `@0` field has type `T`,
-without breaking backwards-compatibility.  This comes in handy when you discover too late that you
-need to associate some extra data with each value in a primitive list -- instead of using parallel
-lists (eww), you can just replace it with a struct list.
-
 ### Structs
 
 A struct value is encoded as a pointer to its content.  The content is split into two sections:
@@ -174,6 +118,61 @@ Fields are positioned within the struct according to an algorithm with the follo
 Field offsets are computed by the Cap'n Proto compiler.  The precise algorithm is too complicated
 to describe here, but you need not implement it yourself, as the compiler can produce a compiled
 schema format which includes offset information.
+
+### Lists
+
+A list value is encoded as a pointer to a flat array of values.
+
+    lsb                       list pointer                        msb
+    +-+-----------------------------+--+----------------------------+
+    |A|             B               |C |             D              |
+    +-+-----------------------------+--+----------------------------+
+
+    A (2 bits) = 1, to indicate that this is a list pointer.
+    B (30 bits) = Offset, in words, from the end of the pointer to the
+        start of the first element of the list.  Signed.
+    C (3 bits) = Size of each element:
+        0 = 0 (e.g. List(Void))
+        1 = 1 bit
+        2 = 1 byte
+        3 = 2 bytes
+        4 = 4 bytes
+        5 = 8 bytes (non-pointer)
+        6 = 8 bytes (pointer)
+        7 = composite (see below)
+    D (29 bits) = Number of elements in the list, except when C is 7
+        (see below).
+
+The pointed-to values are tightly-packed.  In particular, `Bool`s are packed bit-by-bit in
+little-endian order (the first bit is the least-significant bit of the first byte).
+
+When C = 7, the elements of the list are fixed-width composite values -- usually, structs.  In
+this case, the list content is prefixed by a "tag" word that describes each individual element.
+The tag has the same layout as a struct pointer, except that the pointer offset (B) instead
+indicates the number of elements in the list.  Meanwhile, section (D) of the list pointer -- which
+normally would store this element count -- instead stores the total number of _words_ in the list
+(not counting the tag word).  The reason we store a word count in the pointer rather than an element
+count is to ensure that the extents of the list's location can always be determined by inspecting
+the pointer alone, without having to look at the tag; this may allow more-efficient prefetching in
+some use cases.  The reason we don't store struct lists as a list of pointers is because doing so
+would take significantly more space (an extra pointer per element) and may be less cache-friendly.
+
+In the future, we could consider implementing matrixes using the "composite" element type, with the
+elements being fixed-size lists rather than structs.  In this case, the tag would look like a list
+pointer rather than a struct pointer.  As of this writing, no such feature has been implemented.
+
+A struct list must always be written using C = 7. However, a list of any element size (except
+C = 1, i.e. 1-bit) may be *decoded* as a struct list, with each element being interpreted as being
+a prefix of the struct data. For instance, a list of 2-byte values (C = 3) can be decoded as a
+struct list where each struct has 2 bytes in their "data" section (and an empty pointer section). A
+list of pointer values (C = 6) can be decoded as a struct list where each sturct has a pointer
+section with one pointer (and an empty data section). The purpose of this rule is to make it
+possible to upgrade a list of primitives to a list of structs, as described under the
+[protocol evolution rules](http://localhost:4000/capnproto/language.html#evolving-your-protocol).
+(We make a special exception that boolean lists cannot be upgraded in this way due to the
+unreasonable implementation burden.) Note that even though struct lists can be decoded from any
+element size (except C = 1), it is NOT permitted to encode a struct list using any type other than
+C = 7 because doing so would interfere with the [canonicalization algorithm](#canonicalization).
 
 #### Default Values
 
@@ -329,27 +328,71 @@ section.
 ### Compression
 
 When Cap'n Proto messages may contain repetitive data (especially, large text blobs), it makes sense
-to apply a standard compression algorithm in addition to packing.  When CPU time is scarce, we
-recommend Google's [Snappy](https://code.google.com/p/snappy/).  Otherwise,
-[zlib](http://www.zlib.net) is slower but will compress more.
+to apply a standard compression algorithm in addition to packing. When CPU time is scarce, we
+recommend [LZ4 compression](https://code.google.com/p/lz4/). Otherwise, [zlib](http://www.zlib.net)
+is slower but will compress more.
 
-## Security Notes
+## Canonicalization
 
-A naive implementation of a Cap'n Proto reader may be vulnerable to DoS attacks based on two types
-of malicious input:
+Cap'n Proto messages have a well-defined canonical form. Cap'n Proto encoders are NOT required to
+output messages in canonical form, and in fact they will almost never do so by default. However,
+it is possible to write code which canonicalizes a Cap'n Proto message without knowing its schema.
 
-* A message containing cyclic (or even just overlapping) pointers can cause the reader to go into
-  an infinite loop while traversing the content.
-* A message with deeply-nested objects can cause a stack overflow in typical code which processes
-  messages recursively.
+A canonical Cap'n Proto message must adhere to the following rules:
 
-To defend against these attacks, every Cap'n Proto implementation should implement the following
-restrictions by default:
+* The object tree must be encoded in preorder (with respect to the order of the pointers within
+  each object).
+* The message must be encoded as a single segment. (When signing or hashing a canonical Cap'n Proto
+  message, the segment table shall not be included, because it would be redundant.)
+* Trailing zero-valued words in a struct's data or pointer segments must be truncated. Since zero
+  represents a default value, this does not change the struct's meaning. This rule is important
+  to ensure that adding a new field to a struct does not affect the canonical encoding of messages
+  that do not set that field.
+* Similarly, for a struct list, if a trailing word in a section of all structs in the list is zero,
+  then it must be truncated from all structs in the list. (All structs in a struct list must have
+  equal sizes, hence a trailing zero can only be removed if it is zero in all elements.)
+* Canonical messages are not packed. However, packing can still be applied for transmission
+  purposes; the message must simply be unpacked before checking signatures.
 
-* As the application traverses the message, each time a pointer is dereferenced, a counter should
-  be incremented by the size of the data to which it points.  If this counter goes over some limit,
-  an error should be raised, and/or default values should be returned.  The C++ implementation
-  currently defaults to a limit of 64MiB, but allows the caller to set a different limit if desired.
-* As the application traverses the message, the pointer depth should be tracked.  Again, if it goes
-  over some limit, an error should be raised.  The C++ implementation currently defaults to a limit
-  of 64 pointers, but allows the caller to set a different limit.
+Note that Cap'n Proto 0.5 introduced the rule that struct lists must always be encoded using
+C = 7 in the [list pointer](#lists). Prior versions of Cap'n Proto allowed struct lists to be
+encoded using any element size, so that small structs could be compacted to take less that a word
+per element, and many encoders in fact implemented this. Unfortunately, this "optimization" made
+canonicalization impossible without knowing the schema, which is a significant obstacle. Therefore,
+the rules have been changed in 0.5, but data written by previous versions may not be possible to
+canonicalize.
+
+## Security Considerations
+
+A naive implementation of a Cap'n Proto reader may be vulnerable to attacks based on various kinds
+of malicious input. Implementations MUST guard against these.
+
+### Pointer Validation
+
+Cap'n Proto readers must validate pointers, e.g. to check that the target object is within the
+bounds of its segment. To avoid an upfront scan of the message (which would defeat Cap'n Proto's
+O(1) parsing performance), validation should occur lazily when the getter method for a pointer is
+called, throwing an exception or returning a default value if the pointer is invalid.
+
+### Amplification attack
+
+A message containing cyclic (or even just overlapping) pointers can cause the reader to go into
+an infinite loop while traversing the content.
+
+To defend against this, as the application traverses the message, each time a pointer is
+dereferenced, a counter should be incremented by the size of the data to which it points.  If this
+counter goes over some limit, an error should be raised, and/or default values should be returned.
+
+The C++ implementation currently defaults to a limit of 64MiB, but allows the caller to set a
+different limit if desired. Another reasonable strategy is to set the limit to some multiple of
+the original message size; however, most applications should place limits on overall message sizes
+anyway, so it makes sense to have one check cover both.
+
+### Stack overflow DoS attack
+
+A message with deeply-nested objects can cause a stack overflow in typical code which processes
+messages recursively.
+
+To defend against this, as the application traverses the message, the pointer depth should be
+tracked. If it goes over some limit, an error should be raised.  The C++ implementation currently
+defaults to a limit of 64 pointers, but allows the caller to set a different limit.
