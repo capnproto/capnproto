@@ -80,9 +80,9 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <p>Microsoft Visual Studio 2015 (currently in “preview”) finally supports enough C++11 to get Cap’n
 Proto working, and we’ve duly added official support for it!</p>
 
-<p>Not everything works yet. The core serialization functionality sufficient for 90% of users is
-covered. Reflection and RPC APIs are not there yet. We will turn on these APIs as soon
-as Visual C++ is ready (the main blocker is incomplete <code>constexpr</code> support).</p>
+<p>Not all features are support yet. The core serialization functionality sufficient for 90% of users
+is available, but reflection and RPC APIs are not. We will turn on these APIs as soon as Visual C++
+is ready (the main blocker is incomplete <code>constexpr</code> support).</p>
 
 <p>As part of this, we now support CMake as a build system, and it can be used on Unix as well.</p>
 
@@ -176,7 +176,8 @@ ability to pass capabilities from machine to machine and have Cap’n Proto auto
 connections when you do. This allows servers running on different machines to interact with each
 other in a completely object-oriented way. Instead of passing around URLs (which necessitate a
 global namespace, lifetime management, firewall traversal, and all sorts of other obstacles), you
-can pass around capabilities and not worry about it.</p>
+can pass around capabilities and not worry about it. This will be central to Sandstorm’s strategies
+for federation and cluster management.</p>
 
 <h3 id="other-notes">Other notes</h3>
 

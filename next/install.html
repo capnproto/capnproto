@@ -59,8 +59,8 @@
 
 <h1 id="installation-tools-and-c-runtime">Installation: Tools and C++ Runtime</h1>
 
-<p>The Cap’n Proto tools, including the compiler which takes <code>.capnp</code> files and generates source code
-for them, are written in C++.  Therefore, you must install the C++ package even if your actual
+<p>The Cap’n Proto tools, including the compiler (which takes <code>.capnp</code> files and generates source code
+for them), are written in C++.  Therefore, you must install the C++ package even if your actual
 development language is something else.</p>
 
 <p>This package is licensed under the <a href="http://opensource.org/licenses/MIT">MIT License</a>.</p>
@@ -119,7 +119,7 @@ as well as on Windows. We test every Cap’n Proto release on the following plat
 <ul>
   <li>Android</li>
   <li>Linux</li>
-  <li>Mac OSX</li>
+  <li>Mac OS X</li>
   <li>Windows - Cygwin</li>
   <li>Windows - MinGW-w64 (lite mode and compiler binary only)</li>
   <li>Windows - Visual C++ (lite mode only)</li>
@@ -129,8 +129,9 @@ as well as on Windows. We test every Cap’n Proto release on the following plat
 compile Cap’n Proto’s reflection or RPC APIs. “Cap’n Proto Lite” omits these features from the
 library, giving you only the core serialization based on generated code.</p>
 
-<p><strong>Mac/Xcode users:</strong> You must use at least Xcode 5, and you must download the Xcode command-line
-tools under Xcode menu &gt; Preferences &gt; Downloads.  Alternatively, compiler builds from
+<p><strong>Mac OS X users:</strong> You must use at least Xcode 5 with the Xcode command-line
+tools (Xcode menu &gt; Preferences &gt; Downloads).  Alternatively, the command-line tools
+package from <a href="https://developer.apple.com/downloads/">Apple</a> or compiler builds from
 <a href="http://www.macports.org/">Macports</a>, <a href="http://www.finkproject.org/">Fink</a>, or
 <a href="http://brew.sh/">Homebrew</a> are reported to work.</p>
 
@@ -177,7 +178,7 @@ sudo make install
   </li>
   <li>
     <p>Find <code>capnp.exe</code>, <code>capnpc-c++.exe</code>, and <code>capnpc-capnp.exe</code> under <code>capnproto-tools-win32-0.0.0</code> in
-the zip and copy them to somewhere in your <code>PATH</code>.</p>
+the zip and copy them somewhere.</p>
   </li>
 </ol>
 
@@ -197,25 +198,30 @@ You can use the CMake UI for this or run this shell command:</p>
 
     <pre><code>cmake -G "Visual Studio 14 2015" -DCAPNP_LITE=1 -DEXTERNAL_CAPNP=1
 </code></pre>
+
+    <p>If the <code>capnp.exe</code> and <code>capnpc-c++.exe</code> tools are not on your <code>PATH</code>, then <code>CAPNP_EXECUTABLE</code>
+ and <code>CAPNPC_CXX_EXECUTABLE</code> will need to be set to their respective locations.</p>
   </li>
   <li>
     <p>Open the “Cap’n Proto” solution in Visual Studio.</p>
   </li>
   <li>
-    <p>Adjust the project build options (e.g. choice of C++ runtime library, dll vs. static,
-enable/disable exceptions and RTTI) to match the options of the project in which you plan to use
-Cap’n Proto.</p>
+    <p>Adjust the project build options (e.g., choice of C++ runtime library, enable/disable exceptions
+and RTTI) to match the options of the project in which you plan to use Cap’n Proto.</p>
   </li>
   <li>
-    <p>Build the solution.</p>
+    <p>Build the solution (<code>ALL_BUILD</code>).</p>
   </li>
   <li>
-    <p>Find the compiled <code>.lib</code> files in the build directory under <code>src/{capnp,kj}/{Debug,Release}</code>
-and place them somewhere where your project can link against them.</p>
+    <p>Build the <code>INSTALL</code> project to copy the compiled libraries and header files into <code>CMAKE_INSTALL_PREFIX</code>.</p>
+
+    <p>Alternatively, find the compiled <code>.lib</code> files in the build directory under
+<code>src/{capnp,kj}/{Debug,Release}</code> and place them somewhere where your project can link against them.
+Also add the <code>src</code> directory to your search path for <code>#include</code>s, or copy all the headers to your
+project’s include directory.</p>
   </li>
   <li>
-    <p>Add the the <code>src</code> directory to your search path for <code>#include</code>s, or copy all the headers to your
-include directory.</p>
+    <p>Add <code>#define CAPNP_LITE 1</code> to either your project’s precompiled/shared header or compiler options. </p>
   </li>
 </ol>
 
