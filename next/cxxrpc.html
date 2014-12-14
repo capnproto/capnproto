@@ -322,6 +322,9 @@ getters for that struct’s fields.</li>
   <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;File size is: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">response</span><span class="p">.</span><span class="n">getSize</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
 <span class="p">});</span></code></pre></div>
 
+<p>For <a href="language.html#generic-methods">generic methods</a>, the <code>fooRequest()</code> method will be a template;
+you must explicitly specify type parameters.</p>
+
 <h3 id="servers">Servers</h3>
 
 <p>The generated <code>Server</code> type is an abstract interface which may be subclassed to implement a
@@ -356,6 +359,11 @@ the shared memory segment.  Hence, the method implementation cannot just create 
 <span class="k">private</span><span class="o">:</span>
   <span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span><span class="n">kj</span><span class="o">::</span><span class="n">StringPtr</span><span class="p">,</span> <span class="n">File</span><span class="o">::</span><span class="n">Client</span><span class="o">&gt;</span> <span class="n">files</span><span class="p">;</span>
 <span class="p">};</span></code></pre></div>
+
+<p>On the server side, <a href="language.html#generic-methods">generic methods</a> are NOT templates. Instead,
+the generated code is exactly as if all of the generic parameters were bound to <code>AnyPointer</code>. The
+server generally does not get to know exactly what type the client requested; it must be designed
+to be correct for any parameterization.</p>
 
 <h2 id="initializing-rpc">Initializing RPC</h2>
 

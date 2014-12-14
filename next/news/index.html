@@ -64,6 +64,130 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <h1>News</h1>
 
 
+<h2><a href="/capnproto/next/./news/2014-12-15-capnproto-0.5-generics-msvc-java-csharp.html">Cap'n Proto 0.5: Generics, Visual C++, Java, C#, Sandstorm.io</a></h2>
+<p class="author">
+  <a href="https://github.com/kentonv">kentonv</a>
+  
+  <span class="gplus-followbutton"><span class="g-follow" data-annotation="none" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+  <a href="https://www.gittip.com/kentonv/"><img class="gittip" src="/capnproto/next/images/gittip.png" alt="Gittip"></a>
+  
+  on <span class="date">15 Dec 2014</span>
+</p>
+<p>Today we’re releasing Cap’n Proto 0.5. We’ve added lots of goodies!</p>
+
+<h3 id="finally-visual-studio">Finally: Visual Studio</h3>
+
+<p>Microsoft Visual Studio 2015 (currently in “preview”) finally supports enough C++11 to get Cap’n
+Proto working, and we’ve duly added official support for it!</p>
+
+<p>Not everything works yet. The core serialization functionality sufficient for 90% of users is
+covered. Reflection and RPC APIs are not there yet. We will turn on these APIs as soon
+as Visual C++ is ready (the main blocker is incomplete <code>constexpr</code> support).</p>
+
+<p>As part of this, we now support CMake as a build system, and it can be used on Unix as well.</p>
+
+<p>In related news, for Windows users not interested in C++ but who need the Cap’n Proto tools for
+other languages, we now provide precompiled Windows binaries. See
+<a href="/capnproto/next/install.html">the installation page</a>.</p>
+
+<p>I’d like to thank <a href="https://github.com/bboreham">Bryan Boreham</a>,
+<a href="https://github.com/joshuawarner32">Joshua Warner</a>, and <a href="https://github.com/pqu">Phillip Quinn</a> for
+their help in getting this working.</p>
+
+<h3 id="c-java">C#, Java</h3>
+
+<p>While not strictly part of this release, our two biggest missing languages recently gained support
+for Cap’n Proto:</p>
+
+<ul>
+  <li><a href="https://github.com/mgravell">Marc Gravell</a> – the man responsible for the most popular C#
+implementation of Protobufs – has now implemented
+<a href="https://github.com/mgravell/capnproto-net">Cap’n Proto in C#</a>.</li>
+  <li><a href="https://github.com/dwrensha">David Renshaw</a>, author of our existing Rust implementation and
+<a href="https://sandstorm.io">Sandstorm.io</a> core developer, has implemented
+<a href="https://github.com/dwrensha/capnproto-java">Cap’n Proto in Java</a>.</li>
+</ul>
+
+<h3 id="generics">Generics</h3>
+
+<p>Cap’n Proto now supports <a href="http://localhost:4000/capnproto/language.html#generic-types">generics</a>,
+in the sense of Java generics or C++ templates. While working on
+<a href="https://sandstorm.io">Sandstorm.io</a> we frequently found that we wanted this, and it turned out
+to be easy to support.</p>
+
+<p>This is a feature which Protocol Buffers does not support and likely never will. Cap’n Proto has a
+much easier time supporting exotic language features because the generated code is so simple. In
+C++, nearly all Cap’n Proto generated code is inline accessor methods, which can easily become
+templates. Protocol Buffers, in contrast, has generated parse and serialize functions and a host
+of other auxiliary stuff, which is too complex to inline and thus would need to be adapted to
+generics without using C++ templates. This would get ugly fast.</p>
+
+<p>Generics are not yet supported by all Cap’n Proto language implementations, but where they are not
+supported, things degrade gracefully: all type parameters simply become <code>AnyPointer</code>. You can still
+use generics in your schemas as documentation. Meanwhile, at least our C++, Java, and Python
+implementations have already been updated to support generics, and other implementations that
+wrap the C++ reflection API are likely to work too.</p>
+
+<h3 id="canonicalization">Canonicalization</h3>
+
+<p>0.5 introduces a (backwards-compatible) change in
+<a href="http://localhost:4000/capnproto/encoding.html#lists">the way struct lists should be encoded</a>, in
+order to support <a href="http://localhost:4000/capnproto/encoding.html#canonicalization">canonicalization</a>.
+We believe this will make Cap’n Proto more appropriate for use in cryptographic protocols. If
+you’ve implemented Cap’n Proto in another language, please update your code!</p>
+
+<h3 id="sandstorm-and-capability-systems">Sandstorm and Capability Systems</h3>
+
+<p><a href="https://sandstorm.io">Sandstorm.io</a> is Cap’n Proto’s parent project: a platform for personal
+servers that is radically easier and more secure.</p>
+
+<p>Cap’n Proto RPC is the underlying communications layer powering Sandstorm. Sandstorm is a
+<a href="http://www.erights.org/elib/capability/overview.html">capability system</a>: applications can send
+each other object references and address messages to those objects. Messages can themselves contain
+new object references, and the recipient implicitly gains permission to use any object reference
+they receive. Essentially, Sandstorm allows the interfaces between two apps, or between and app
+and the platform, to be designed using the same vocabulary as interfaces between objects or
+libraries in an object-oriented programming language (but
+<a href="http://localhost:4000/capnproto/rpc.html#distributed-objects">without the mistakes of CORBA or DCOM</a>).
+Cap’n Proto RPC is at the core of this.</p>
+
+<p>This has powerful implications: Consider the case of service discovery. On Sandstorm, all
+applications start out isolated from each other in secure containers. However, applications can
+(or, will be able to) publish Cap’n Proto object references to the system representing APIs they
+support. Then, another app can make a request to the system, saying “I need an object that
+implements interface Foo”. At this point, the system can display a picker UI to the user,
+presenting all objects the user owns that satisfy the requirement. However, the requesting app only
+ever receives a reference to the object the user chooses; all others remain hidden. Thus, security
+becomes “automatic”. The user does not have to edit an ACL on the providing app, nor copy around
+credentials, nor even answer any security question at all; it all derives automatically and
+naturally from the user’s choices. We call this interface “The Powerbox”.</p>
+
+<p>Moreover, because Sandstorm is fully aware of the object references held by every app, it will
+be able to display a visualization of these connections, allowing a user to quickly see which of
+their apps have access to each other and even revoke connections that are no longer desired with
+a mouse click.</p>
+
+<p>Cap’n Proto 0.5 introduces primitives to support “persistent” capabilities – that is, the ability
+to “save” an object reference to disk and then restore it later, on a different connection.
+Obviously, the features described above totally depend on this feature.</p>
+
+<p>The next release of Cap’n Proto is likely to include another feature essential for Sandstorm: the
+ability to pass capabilities from machine to machine and have Cap’n Proto automatically form direct
+connections when you do. This allows servers running on different machines to interact with each
+other in a completely object-oriented way. Instead of passing around URLs (which necessitate a
+global namespace, lifetime management, firewall traversal, and all sorts of other obstacles), you
+can pass around capabilities and not worry about it.</p>
+
+<h3 id="other-notes">Other notes</h3>
+
+<ul>
+  <li>The C++ RPC code now uses <code>epoll</code> on Linux.</li>
+  <li>We now test Cap’n Proto on Android and MinGW, in addition to Linux, Mac OSX, Cygwin, and Visual
+Studio. (iOS and FreeBSD are also reported to work, though are not yet part of our testing
+process.)</li>
+</ul>
+
+
 <h2><a href="/capnproto/next/./news/2014-06-17-capnproto-flatbuffers-sbe.html">Cap'n Proto, FlatBuffers, and SBE</a></h2>
 <p class="author">
   <a href="https://github.com/kentonv">kentonv</a>
@@ -73,7 +197,10 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
   
   on <span class="date">17 Jun 2014</span>
 </p>
-<p><strong>Update:</strong> I have made <a href="https://github.com/kentonv/capnproto/commit/e4e6c9076ae16804c07968cd3bdf6107155df7ee">some corrections</a> since the original version of this post.</p>
+<p><strong>Update Jun 18, 2014:</strong> I have made <a href="https://github.com/kentonv/capnproto/commit/e4e6c9076ae16804c07968cd3bdf6107155df7ee">some corrections</a> since the original version of this post.</p>
+
+<p><strong>Update Dec 15, 2014:</strong> Updated to reflect that Cap’n Proto 0.5 now supports Visual Studio and that
+Java is now well-supported.</p>
 
 <p>Yesterday, some engineers at Google released <a href="http://google-opensource.blogspot.com/2014/06/flatbuffers-memory-efficient.html">FlatBuffers</a>, a new serialization protocol and library with similar design principles to Cap’n Proto. Also, a few months back, Real Logic released <a href="http://mechanical-sympathy.blogspot.com/2014/05/simple-binary-encoding.html">Simple Binary Encoding</a>, another protocol and library of this nature.</p>
 
@@ -106,12 +233,15 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <tr><td>Padding takes space on wire?</td><td class="pass">no</td><td class="warn">optional</td><td class="fail">yes</td><td class="fail">yes</td></tr>
 <tr><td>Unset fields take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="fail">yes</td><td class="pass">no</td></tr>
 <tr><td>Pointers take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="pass">no</td><td class="fail">yes</td></tr>
-<tr><td>C++</td><td class="pass">yes</td><td class="warn">GCC/Clang<br />(no MSVC)</td><td class="pass">yes</td><td class="pass">yes</td></tr>
-<tr><td>Java</td><td class="pass">yes</td><td class="warn">in progress</td><td class="pass">yes</td><td class="pass">yes</td></tr>
-<tr><td>Python</td><td class="pass">yes</td><td class="warn">yes (C ext)</td><td class="fail">no</td><td class="fail">no</td></tr>
-<tr><td>Other languages</td><td class="pass">lots!</td><td class="warn">6+ others</td><td class="warn">C#</td><td class="fail">no</td></tr>
+<tr><td>C++</td><td class="pass">yes</td><td class="pass">yes (C++11)*</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Java</td><td class="pass">yes</td><td class="pass">yes*</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>C#</td><td class="pass">yes</td><td class="pass">yes*</td><td class="pass">yes</td><td class="pass">yes*</td></tr>
+<tr><td>Go</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td><td class="pass">yes*</td></tr>
+<tr><td>Other languages</td><td class="pass">lots!</td><td class="warn">6+ others*</td><td class="fail">no</td><td class="fail">no</td></tr>
 <tr><td>Authors' preferred use case</td><td>distributed<br />computing</td><td><a href="https://sandstorm.io">platforms /<br />sandboxing</a></td><td>financial<br />trading</td><td>games</td></tr>
 </table>
+
+<p>* Updated Dec 15, 2014 (Cap’n Proto 0.5.0).</p>
 
 <p><strong>Schema Evolution</strong></p>
 
@@ -241,9 +371,19 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p><strong>Platform Support</strong></p>
 
-<p>A really huge weakness of Cap’n Proto today is that it doesn’t compile in Visual Studio, and therefore effectively doesn’t support Windows (unless you count Cygwin, but most people don’t).</p>
+<p>As of Dec 15, 2014, Cap’n Proto supports a superset of the languages supported by FlatBuffers and
+SBE, but is still far behind Protocol Buffers.</p>
 
-<p>The problem initially was that Cap’n Proto makes liberal use of C++11 features, and MSVC has lagged behind in implementing them. We considered, but balked at, forking and backporting. It looks like <a href="http://blogs.msdn.com/b/vcblog/archive/2014/06/03/visual-studio-14-ctp.aspx">VS14 CTP1</a> may finally be far enough to make a port practical, so now it’s just a matter of finding the time. But that’s a new problem: all my time is currently consumed by <a href="https://sandstorm.io">Sandstorm.io</a>, and while it is a major use of Cap’n Proto and will thus drive further development, it is entirely Linux-based, making it hard for me to justify spending my time on Windows support. What we need is a volunteer!</p>
+<p>While Cap’n Proto C++ is well-supported on POSIX platforms using GCC or Clang as their compiler,
+Cap’n Proto has only limited support for Visual C++: the basic serialization library works, but
+reflection and RPC do not yet work. Support will be expanded once Visual Studio’s C++ compiler
+completes support for C++11.</p>
+
+<p>In comparison, SBE and FlatBuffers have reflection interfaces that work in Visual C++, though
+neither one has built-in RPC. Reflection is critical for certain use cases, but the majority of
+users won’t need it.</p>
+
+<p>(This section has been updated. When originally written, Cap’n Proto did not support MSVC at all.)</p>
 
 <h3 id="benchmarks">Benchmarks?</h3>
 

@@ -422,6 +422,42 @@ implicitly convertible in this way.  Unfortunately, this trick doesn’t work on
 
 <p><a href="cxxrpc.html">Interfaces (RPC) have their own page.</a></p>
 
+<h3 id="generics">Generics</h3>
+
+<p><a href="language.html#generic-types">Generic types</a> become templates in C++. The outer type (the one whose
+name matches the schema declaration’s name) is templatized; the inner <code>Reader</code> and <code>Builder</code> types
+are not, because they inherit the parameters from the outer type. Similarly, template parameters
+should refer to outer types, not <code>Reader</code> or <code>Builder</code> types.</p>
+
+<p>For example, given:</p>
+
+<div class="highlight"><pre><code class="language-capnp" data-lang="capnp"><span class="k">struct</span> <span class="n">Map</span>(<span class="n">Key</span>, <span class="n">Value</span>) {
+  <span class="n">entries</span> <span class="nd">@0</span> <span class="nc">:List(Entry)</span>;
+  <span class="k">struct</span> <span class="n">Entry</span> {
+    <span class="n">key</span> <span class="nd">@0</span> <span class="nc">:Key</span>;
+    <span class="n">value</span> <span class="nd">@1</span> <span class="nc">:Value</span>;
+  }
+}
+
+<span class="k">struct</span> <span class="n">People</span> {
+  <span class="n">byName</span> <span class="nd">@0</span> <span class="nc">:Map(Text, Person)</span>;
+  <span class="c1"># Maps names to Person instances.</span>
+}</code></pre></div>
+
+<p>You might write code like:</p>
+
+<div class="highlight"><pre><code class="language-c--" data-lang="c++"><span class="kt">void</span> <span class="nf">processPeople</span><span class="p">(</span><span class="n">People</span><span class="o">::</span><span class="n">Reader</span> <span class="n">people</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Map</span><span class="o">&lt;</span><span class="n">Text</span><span class="p">,</span> <span class="n">Person</span><span class="o">&gt;::</span><span class="n">Reader</span> <span class="n">reader</span> <span class="o">=</span> <span class="n">people</span><span class="p">.</span><span class="n">getByName</span><span class="p">();</span>
+  <span class="n">capnp</span><span class="o">::</span><span class="n">List</span><span class="o">&lt;</span><span class="n">Map</span><span class="o">&lt;</span><span class="n">Text</span><span class="p">,</span> <span class="n">Person</span><span class="o">&gt;::</span><span class="n">Entry</span><span class="o">&gt;::</span><span class="n">Reader</span> <span class="n">entries</span> <span class="o">=</span>
+      <span class="n">reader</span><span class="p">.</span><span class="n">getEntries</span><span class="p">()</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="nl">entry</span><span class="p">:</span> <span class="n">entries</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">processPerson</span><span class="p">(</span><span class="n">entry</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span></code></pre></div>
+
+<p>Note that all template parameters will be specified with a default value of <code>AnyPointer</code>.
+Therefore, the type <code>Map&lt;&gt;</code> is equivalent to <code>Map&lt;capnp::AnyPointer, capnp::AnyPointer&gt;</code>.</p>
+
 <h3 id="constants">Constants</h3>
 
 <p>Constants are exposed with their names converted to UPPERCASE_WITH_UNDERSCORES naming style
