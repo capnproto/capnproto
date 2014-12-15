@@ -80,9 +80,9 @@ package from [Apple](https://developer.apple.com/downloads/) or compiler builds 
 
 You may download and install the release version of Cap'n Proto like so:
 
-<pre><code>curl -O <a href="https://capnproto.org/capnproto-c++-0.0.0.tar.gz">https://capnproto.org/capnproto-c++-0.0.0.tar.gz</a>
-tar zxf capnproto-c++-0.0.0.tar.gz
-cd capnproto-c++-0.0.0
+<pre><code>curl -O <a href="https://capnproto.org/capnproto-c++-0.5.0.tar.gz">https://capnproto.org/capnproto-c++-0.5.0.tar.gz</a>
+tar zxf capnproto-c++-0.5.0.tar.gz
+cd capnproto-c++-0.5.0
 ./configure
 make -j6 check
 sudo make install</code></pre>
@@ -112,9 +112,9 @@ installed (in addition to Git) in order to fetch the Google Test sources (done b
 
 1. Download Cap'n Proto Win32 build:
 
-   <pre><a href="https://capnproto.org/capnproto-c++-win32-0.0.0.zip">https://capnproto.org/capnproto-c++-win32-0.0.0.zip</a></pre>
+   <pre><a href="https://capnproto.org/capnproto-c++-win32-0.5.0.zip">https://capnproto.org/capnproto-c++-win32-0.5.0.zip</a></pre>
 
-2. Find `capnp.exe`, `capnpc-c++.exe`, and `capnpc-capnp.exe` under `capnproto-tools-win32-0.0.0` in
+2. Find `capnp.exe`, `capnpc-c++.exe`, and `capnpc-capnp.exe` under `capnproto-tools-win32-0.5.0` in
    the zip and copy them somewhere.
 
 If you don't care about C++ support, you can stop here. The compiler exe can be used with plugins
@@ -124,7 +124,7 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 
 1. Install [CMake](http://www.cmake.org/) version 3.1 or later.
 
-2. Use CMake to generate Visual Studio project files under `capnproto-c++-0.0.0` in the zip file.
+2. Use CMake to generate Visual Studio project files under `capnproto-c++-0.5.0` in the zip file.
    You will need to enable the CMake project options `CAPNP_LITE` and `EXTERNAL_CAPNP`.
    You can use the CMake UI for this or run this shell command:
 
