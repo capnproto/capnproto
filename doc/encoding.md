@@ -168,7 +168,7 @@ struct list where each struct has 2 bytes in their "data" section (and an empty 
 list of pointer values (C = 6) can be decoded as a struct list where each sturct has a pointer
 section with one pointer (and an empty data section). The purpose of this rule is to make it
 possible to upgrade a list of primitives to a list of structs, as described under the
-[protocol evolution rules](http://localhost:4000/capnproto/language.html#evolving-your-protocol).
+[protocol evolution rules](language.html#evolving-your-protocol).
 (We make a special exception that boolean lists cannot be upgraded in this way due to the
 unreasonable implementation burden.) Note that even though struct lists can be decoded from any
 element size (except C = 1), it is NOT permitted to encode a struct list using any type other than
