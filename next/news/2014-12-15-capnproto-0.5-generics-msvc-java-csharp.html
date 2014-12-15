@@ -79,7 +79,7 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <p>Microsoft Visual Studio 2015 (currently in “preview”) finally supports enough C++11 to get Cap’n
 Proto working, and we’ve duly added official support for it!</p>
 
-<p>Not all features are support yet. The core serialization functionality sufficient for 90% of users
+<p>Not all features are supported yet. The core serialization functionality sufficient for 90% of users
 is available, but reflection and RPC APIs are not. We will turn on these APIs as soon as Visual C++
 is ready (the main blocker is incomplete <code>constexpr</code> support).</p>
 
@@ -109,7 +109,7 @@ implementation of Protobufs – has now implemented
 
 <h3 id="generics">Generics</h3>
 
-<p>Cap’n Proto now supports <a href="http://localhost:4000/capnproto/language.html#generic-types">generics</a>,
+<p>Cap’n Proto now supports <a href="/capnproto/next/language.html#generic-types">generics</a>,
 in the sense of Java generics or C++ templates. While working on
 <a href="https://sandstorm.io">Sandstorm.io</a> we frequently found that we wanted this, and it turned out
 to be easy to support.</p>
@@ -130,8 +130,8 @@ wrap the C++ reflection API are likely to work too.</p>
 <h3 id="canonicalization">Canonicalization</h3>
 
 <p>0.5 introduces a (backwards-compatible) change in
-<a href="http://localhost:4000/capnproto/encoding.html#lists">the way struct lists should be encoded</a>, in
-order to support <a href="http://localhost:4000/capnproto/encoding.html#canonicalization">canonicalization</a>.
+<a href="/capnproto/next/encoding.html#lists">the way struct lists should be encoded</a>, in
+order to support <a href="/capnproto/next/encoding.html#canonicalization">canonicalization</a>.
 We believe this will make Cap’n Proto more appropriate for use in cryptographic protocols. If
 you’ve implemented Cap’n Proto in another language, please update your code!</p>
 
@@ -147,7 +147,7 @@ new object references, and the recipient implicitly gains permission to use any 
 they receive. Essentially, Sandstorm allows the interfaces between two apps, or between and app
 and the platform, to be designed using the same vocabulary as interfaces between objects or
 libraries in an object-oriented programming language (but
-<a href="http://localhost:4000/capnproto/rpc.html#distributed-objects">without the mistakes of CORBA or DCOM</a>).
+<a href="/capnproto/next/rpc.html#distributed-objects">without the mistakes of CORBA or DCOM</a>).
 Cap’n Proto RPC is at the core of this.</p>
 
 <p>This has powerful implications: Consider the case of service discovery. On Sandstorm, all
