@@ -1,7 +1,12 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 set -eu
 shopt -s extglob
+
+if grep 'localhost:4000' *.md _posts/*.md; then
+  echo "ERROR: Your content has links to localhost:4000!" >&2
+  exit 1
+fi
 
 if [ "x$(git status --porcelain)" != "x" ]; then
   echo -n "git repo has uncommited changes.  Continue anyway? (y/N) " >&2

@@ -211,12 +211,31 @@ richer vocabulary.</p>
 
 <p>CORBA failed for many reasons, with the usual problems of design-by-committee being a big one.</p>
 
-<p>However, CORBA also had a critical technical flaw:  it did not implement promise pipelining.  As
-shown above, promise pipelining is absolutely critical to making object-oriented interfaces work
-in the presence of latency.  It is often said that object- and RPC-oriented protocols don’t work
-because they try to pretend that a network call is equivalent to a local call.  In reality, this
-is not actually a problem with object protocols in general, but specifically CORBA and
-similarly-naive protocols that lack promise pipelining.  Promise pipelining is the missing link.</p>
+<p>However, the biggest reason for CORBA’s failure is that it tried to make remote calls look the
+same as local calls. Cap’n Proto does NOT do this – remote calls have a different kind of API
+involving promises, and accounts for the presence of a network introducing latency and
+unreliability.</p>
+
+<p>As shown above, promise pipelining is absolutely critical to making object-oriented interfaces work
+in the presence of latency. If remote calls look the same as local calls, there is no opportunity
+to introduce promise pipelining, and latency is inevitable. Any distributed object protocol which
+does not support promise pipelining cannot – and should not – succeed. Thus the failure of CORBA
+(and DCOM, etc.) was inevitable, but Cap’n Proto is different.</p>
+
+<h3 id="handling-disconnects">Handling disconnects</h3>
+
+<p>Networks are unreliable. Occasionally, connections will be lost. When this happens, all
+capabilities (object references) served by the connection will become disconnected. Any further
+calls addressed to these capabilities will throw “disconnected” exceptions. When this happens, the
+client will need to create a new connection and try again. All Cap’n Proto applications with
+long-running connections (and probably short-running ones too) should be prepared to catch
+“disconnected” exceptions and respond appropriately.</p>
+
+<p>On the server side, when all references to an object have been “dropped” (either because the
+clients explicitly dropped them or because they became disconnected), the object will be closed
+(in C++, the destructor is called; in GC’d languages, a <code>close()</code> method is called). This allows
+servers to easily allocate per-client resources without having to clean up on a timeout or risk
+leaking memory.</p>
 
 <h3 id="security">Security</h3>
 
