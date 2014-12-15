@@ -162,7 +162,8 @@ includekj_HEADERS =                                            \
   src/kj/time.h                                                \
   src/kj/async-unix.h                                          \
   src/kj/async-io.h                                            \
-  src/kj/main.h
+  src/kj/main.h                                                \
+  src/kj/windows-sanity.h
 
 includekjparse_HEADERS =                                       \
   src/kj/parse/common.h                                        \
