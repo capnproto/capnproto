@@ -240,6 +240,7 @@ case "${1-}:$BRANCH" in
 
     doit sed -i -re "s/capnproto-c[+][+]-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-c++-$NEW_VERSION/g" doc/install.md
     doit sed -i -re "s/capnproto-c[+][+]-win32-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-c++-win32-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-tools-win32-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-tools-win32-$NEW_VERSION/g" doc/install.md
     update_version $OLD_VERSION $NEW_VERSION "release branch"
 
     doit git tag v$NEW_VERSION
