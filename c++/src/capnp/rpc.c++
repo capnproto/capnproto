@@ -359,8 +359,17 @@ public:
     });
 
     // Indicate disconnect.
-    disconnectFulfiller->fulfill(DisconnectInfo {
-        connection.get<Connected>()->shutdown().attach(kj::mv(connection.get<Connected>())) });
+    auto shutdownPromise = connection.get<Connected>()->shutdown()
+        .attach(kj::mv(connection.get<Connected>()))
+        .then([]() -> kj::Promise<void> { return kj::READY_NOW; },
+              [](kj::Exception&& e) -> kj::Promise<void> {
+          // Don't report disconnects as an error.
+          if (e.getType() != kj::Exception::Type::DISCONNECTED) {
+            return kj::mv(e);
+          }
+          return kj::READY_NOW;
+        });
+    disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
     connection.init<Disconnected>(kj::mv(networkException));
   }
 

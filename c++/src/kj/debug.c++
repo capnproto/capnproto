@@ -80,6 +80,9 @@ Exception::Type typeOfErrno(int error) {
 #endif
       return Exception::Type::OVERLOADED;
 
+#ifdef ENOTCONN:
+    case ENOTCONN:
+#endif
 #ifdef ECONNABORTED
     case ECONNABORTED:
 #endif
@@ -120,6 +123,13 @@ Exception::Type typeOfErrno(int error) {
 #endif
 #if defined(EOPNOTSUPP) && EOPNOTSUPP != ENOTSUP
     case EOPNOTSUPP:
+#endif
+#ifdef ENOPROTOOPT
+    case ENOPROTOOPT:
+#endif
+#ifdef ENOTSOCK
+    // This is really saying "syscall not implemented for non-sockets".
+    case ENOTSOCK:
 #endif
       return Exception::Type::UNIMPLEMENTED;
 
