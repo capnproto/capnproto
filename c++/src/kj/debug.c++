@@ -80,7 +80,7 @@ Exception::Type typeOfErrno(int error) {
 #endif
       return Exception::Type::OVERLOADED;
 
-#ifdef ENOTCONN:
+#ifdef ENOTCONN
     case ENOTCONN:
 #endif
 #ifdef ECONNABORTED
