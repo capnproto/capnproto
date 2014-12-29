@@ -311,7 +311,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, WordCount amount,
       WirePointer::Kind kind, BuilderArena* orphanArena)) {
-    // Allocate space in the mesasge for a new object, creating far pointers if necessary.
+    // Allocate space in the message for a new object, creating far pointers if necessary.
     //
     // * `ref` starts out being a reference to the pointer which shall be assigned to point at the
     //   new object.  On return, `ref` points to a pointer which needs to be initialized with
