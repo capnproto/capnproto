@@ -40,6 +40,7 @@ class WaitScope;
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
+Promise<void> joinPromises(Array<Promise<void>>&& promises);
 
 namespace _ {  // private
 
@@ -181,6 +182,7 @@ private:
   friend class TaskSetImpl;
   template <typename U>
   friend Promise<Array<U>> kj::joinPromises(Array<Promise<U>>&& promises);
+  friend Promise<void> kj::joinPromises(Array<Promise<void>>&& promises);
 };
 
 void detach(kj::Promise<void>&& promise);
