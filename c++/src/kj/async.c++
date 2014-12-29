@@ -885,6 +885,27 @@ Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
   return kj::mv(output.exception);
 }
 
+ArrayJoinPromiseNode<void>::ArrayJoinPromiseNode(
+    Array<Own<PromiseNode>> promises, Array<ExceptionOr<_::Void>> resultParts)
+    : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<_::Void>)),
+      resultParts(kj::mv(resultParts)) {}
+
+ArrayJoinPromiseNode<void>::~ArrayJoinPromiseNode() {}
+
+void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
+  output.as<_::Void>() = _::Void();
+}
+
+}  // namespace _ (private)
+
+Promise<void> joinPromises(Array<Promise<void>>&& promises) {
+  return Promise<void>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return kj::mv(p.node); },
+      heapArray<_::ExceptionOr<_::Void>>(promises.size())));
+}
+
+namespace _ {  // (private)
+
 // -------------------------------------------------------------------
 
 EagerPromiseNodeBase::EagerPromiseNodeBase(
