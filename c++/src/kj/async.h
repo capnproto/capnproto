@@ -294,6 +294,7 @@ private:
   friend class _::NeverDone;
   template <typename U>
   friend Promise<Array<U>> joinPromises(Array<Promise<U>>&& promises);
+  friend Promise<void> joinPromises(Array<Promise<void>>&& promises);
 };
 
 template <typename T>

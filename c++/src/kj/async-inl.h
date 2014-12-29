@@ -547,6 +547,24 @@ private:
   Array<ExceptionOr<T>> resultParts;
 };
 
+template <>
+class ArrayJoinPromiseNode<void> final: public ArrayJoinPromiseNodeBase {
+public:
+  ArrayJoinPromiseNode(Array<Own<PromiseNode>> promises,
+                       Array<ExceptionOr<_::Void>> resultParts)
+      : ArrayJoinPromiseNodeBase(
+            kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<_::Void>)),
+        resultParts(kj::mv(resultParts)) {}
+
+protected:
+  void getNoError(ExceptionOrValue& output) noexcept override {
+    output.as<_::Void>() = _::Void();
+  }
+
+private:
+  Array<ExceptionOr<_::Void>> resultParts;
+};
+
 // -------------------------------------------------------------------
 
 class EagerPromiseNodeBase: public PromiseNode, protected Event {
@@ -756,6 +774,12 @@ Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises) {
   return Promise<Array<T>>(false, kj::heap<_::ArrayJoinPromiseNode<T>>(
       KJ_MAP(p, promises) { return kj::mv(p.node); },
       heapArray<_::ExceptionOr<T>>(promises.size())));
+}
+
+inline Promise<void> joinPromises(Array<Promise<void>>&& promises) {
+  return Promise<void>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return kj::mv(p.node); },
+      heapArray<_::ExceptionOr<_::Void>>(promises.size())));
 }
 
 // =======================================================================================
