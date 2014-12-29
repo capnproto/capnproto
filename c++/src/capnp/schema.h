@@ -284,8 +284,8 @@ public:
   // value pointer itself can be treated as the root of an unchecked message -- if you know where
   // to find it, which is what this method helps you with.
   //
-  // For blobs, returns the offset of the begging of the blob's content within the first segment of
-  // the struct's schema.
+  // For blobs, returns the offset of the beginning of the blob's content within the first segment
+  // of the struct's schema.
   //
   // This is primarily useful for code generators.  The C++ code generator, for example, embeds
   // the entire schema as a raw word array within the generated code.  Of course, to implement

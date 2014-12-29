@@ -604,12 +604,12 @@ private:
 
 class NodeTranslator::BrandScope: public kj::Refcounted {
   // Tracks the brand parameter bindings affecting the current scope. For example, if we are
-  // interpreting the type expression "Foo(Text).Bar", we would start with the curernt scopes
+  // interpreting the type expression "Foo(Text).Bar", we would start with the current scopes
   // BrandScope, create a new child BrandScope representing "Foo", add the "(Text)" parameter
   // bindings to it, then create a further child scope for "Bar". Thus the BrandScope for Bar
   // knows that Foo's parameter list has been bound to "(Text)".
   //
-  // TODO(cleaup): This is too complicated to live here. We should refactor this class and
+  // TODO(cleanup): This is too complicated to live here. We should refactor this class and
   //   BrandedDecl out into their own file, independent of NodeTranslator.
 
 public:
