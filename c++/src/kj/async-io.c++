@@ -39,6 +39,11 @@
 #include <netdb.h>
 #include <set>
 #include <poll.h>
+#include <limits.h>
+
+#if !defined(IOV_MAX) && defined(UIO_MAXIOV)
+#define IOV_MAX UIO_MAXIOV
+#endif
 
 namespace kj {
 
@@ -175,6 +180,16 @@ public:
     KJ_SYSCALL(shutdown(fd, SHUT_WR));
   }
 
+  void getsockopt(int level, int option, void* value, uint* length) override {
+    socklen_t socklen = *length;
+    KJ_SYSCALL(::getsockopt(fd, level, option, value, &socklen));
+    *length = socklen;
+  }
+
+  void setsockopt(int level, int option, const void* value, uint length) override {
+    KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
+  }
+
   Promise<void> waitConnected() {
     // Wait until initial connection has completed. This actually just waits until it is writable.
 
@@ -269,14 +284,19 @@ private:
 
   Promise<void> writeInternal(ArrayPtr<const byte> firstPiece,
                               ArrayPtr<const ArrayPtr<const byte>> morePieces) {
-    KJ_STACK_ARRAY(struct iovec, iov, 1 + morePieces.size(), 16, 128);
+    // If there are more than IOV_MAX pieces, we'll only write the first IOV_MAX for now, and
+    // then we'll loop later.
+    KJ_STACK_ARRAY(struct iovec, iov, kj::min(1 + morePieces.size(), IOV_MAX), 16, 128);
+    size_t iovTotal = 0;
 
     // writev() interface is not const-correct.  :(
     iov[0].iov_base = const_cast<byte*>(firstPiece.begin());
     iov[0].iov_len = firstPiece.size();
-    for (uint i = 0; i < morePieces.size(); i++) {
-      iov[i + 1].iov_base = const_cast<byte*>(morePieces[i].begin());
-      iov[i + 1].iov_len = morePieces[i].size();
+    iovTotal += iov[0].iov_len;
+    for (uint i = 1; i < iov.size(); i++) {
+      iov[i].iov_base = const_cast<byte*>(morePieces[i - 1].begin());
+      iov[i].iov_len = morePieces[i - 1].size();
+      iovTotal += iov[i].iov_len;
     }
 
     ssize_t writeResult;
@@ -302,6 +322,13 @@ private:
       if (n < firstPiece.size()) {
         // Only part of the first piece was consumed.  Wait for buffer space and then write again.
         firstPiece = firstPiece.slice(n, firstPiece.size());
+        iovTotal -= n;
+
+        if (iovTotal == 0) {
+          // Oops, what actually happened is that we hit the IOV_MAX limit. Don't wait.
+          return writeInternal(firstPiece, morePieces);
+        }
+
         return observer.whenBecomesWritable().then([=]() {
           return writeInternal(firstPiece, morePieces);
         });
@@ -312,6 +339,7 @@ private:
       } else {
         // First piece was fully consumed, so move on to the next piece.
         n -= firstPiece.size();
+        iovTotal -= firstPiece.size();
         firstPiece = morePieces[0];
         morePieces = morePieces.slice(1, morePieces.size());
       }
@@ -339,6 +367,9 @@ public:
 
     return memcmp(&addr.generic, &other.addr.generic, addrlen) < 0;
   }
+
+  const struct sockaddr* getRaw() const { return &addr.generic; }
+  socklen_t getRawSize() const { return addrlen; }
 
   int socket(int type) const {
     bool isStream = type == SOCK_STREAM;
@@ -782,7 +813,50 @@ public:
     return SocketAddress::getLocalAddress(fd).getPort();
   }
 
+  void getsockopt(int level, int option, void* value, uint* length) override {
+    socklen_t socklen = *length;
+    KJ_SYSCALL(::getsockopt(fd, level, option, value, &socklen));
+    *length = socklen;
+  }
+  void setsockopt(int level, int option, const void* value, uint length) override {
+    KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
+  }
+
 public:
+  UnixEventPort& eventPort;
+  UnixEventPort::FdObserver observer;
+};
+
+class DatagramPortImpl final: public DatagramPort, public OwnedFileDescriptor {
+public:
+  DatagramPortImpl(LowLevelAsyncIoProvider& lowLevel, UnixEventPort& eventPort, int fd, uint flags)
+      : OwnedFileDescriptor(fd, flags), lowLevel(lowLevel), eventPort(eventPort),
+        observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ |
+                                UnixEventPort::FdObserver::OBSERVE_WRITE) {}
+
+  Promise<size_t> send(const void* buffer, size_t size, NetworkAddress& destination) override;
+  Promise<size_t> send(
+      ArrayPtr<const ArrayPtr<const byte>> pieces, NetworkAddress& destination) override;
+
+  class ReceiverImpl;
+
+  Own<DatagramReceiver> makeReceiver(DatagramReceiver::Capacity capacity) override;
+
+  uint getPort() override {
+    return SocketAddress::getLocalAddress(fd).getPort();
+  }
+
+  void getsockopt(int level, int option, void* value, uint* length) override {
+    socklen_t socklen = *length;
+    KJ_SYSCALL(::getsockopt(fd, level, option, value, &socklen));
+    *length = socklen;
+  }
+  void setsockopt(int level, int option, const void* value, uint length) override {
+    KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
+  }
+
+public:
+  LowLevelAsyncIoProvider& lowLevel;
   UnixEventPort& eventPort;
   UnixEventPort::FdObserver observer;
 };
@@ -838,6 +912,9 @@ public:
   Own<ConnectionReceiver> wrapListenSocketFd(int fd, uint flags = 0) override {
     return heap<FdConnectionReceiver>(eventPort, fd, flags);
   }
+  Own<DatagramPort> wrapDatagramSocketFd(int fd, uint flags = 0) override {
+    return heap<DatagramPortImpl>(*this, eventPort, fd, flags);
+  }
 
   Timer& getTimer() override { return timer; }
 
@@ -887,13 +964,46 @@ public:
     return lowLevel.wrapListenSocketFd(fd, NEW_FD_FLAGS);
   }
 
+  Own<DatagramPort> bindDatagramPort() override {
+    if (addrs.size() > 1) {
+      KJ_LOG(WARNING, "Bind address resolved to multiple addresses.  Only the first address will "
+          "be used.  If this is incorrect, specify the address numerically.  This may be fixed "
+          "in the future.", addrs[0].toString());
+    }
+
+    int fd = addrs[0].socket(SOCK_DGRAM);
+
+    {
+      KJ_ON_SCOPE_FAILURE(close(fd));
+
+      // We always enable SO_REUSEADDR because having to take your server down for five minutes
+      // before it can restart really sucks.
+      int optval = 1;
+      KJ_SYSCALL(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)));
+
+      addrs[0].bind(fd);
+    }
+
+    return lowLevel.wrapDatagramSocketFd(fd, NEW_FD_FLAGS);
+  }
+
+  Own<NetworkAddress> clone() override {
+    return kj::heap<NetworkAddressImpl>(lowLevel, kj::heapArray(addrs.asPtr()));
+  }
+
   String toString() override {
     return strArray(KJ_MAP(addr, addrs) { return addr.toString(); }, ",");
+  }
+
+  const SocketAddress& chooseOneAddress() {
+    KJ_REQUIRE(addrs.size() > 0, "No addresses available.");
+    return addrs[counter++ % addrs.size()];
   }
 
 private:
   LowLevelAsyncIoProvider& lowLevel;
   Array<SocketAddress> addrs;
+  uint counter = 0;
 
   Promise<Own<AsyncIoStream>> connectImpl(uint index) {
     KJ_ASSERT(index < addrs.size());
@@ -954,6 +1064,189 @@ public:
 private:
   LowLevelAsyncIoProvider& lowLevel;
 };
+
+// =======================================================================================
+
+Promise<size_t> DatagramPortImpl::send(
+    const void* buffer, size_t size, NetworkAddress& destination) {
+  auto& addr = downcast<NetworkAddressImpl>(destination).chooseOneAddress();
+
+  ssize_t n;
+  KJ_NONBLOCKING_SYSCALL(n = sendto(fd, buffer, size, 0, addr.getRaw(), addr.getRawSize()));
+  if (n < 0) {
+    // Write buffer full.
+    return observer.whenBecomesWritable().then([this, buffer, size, &destination]() {
+      return send(buffer, size, destination);
+    });
+  } else {
+    // If less than the whole message was sent, then it got truncated, and there's nothing we can
+    // do about it.
+    return n;
+  }
+}
+
+Promise<size_t> DatagramPortImpl::send(
+    ArrayPtr<const ArrayPtr<const byte>> pieces, NetworkAddress& destination) {
+  struct msghdr msg;
+  memset(&msg, 0, sizeof(msg));
+
+  auto& addr = downcast<NetworkAddressImpl>(destination).chooseOneAddress();
+  msg.msg_name = const_cast<void*>(implicitCast<const void*>(addr.getRaw()));
+  msg.msg_namelen = addr.getRawSize();
+
+  KJ_STACK_ARRAY(struct iovec, iov, kj::min(pieces.size(), IOV_MAX), 16, 64);
+
+  for (size_t i: kj::indices(pieces)) {
+    iov[i].iov_base = const_cast<void*>(implicitCast<const void*>(pieces[i].begin()));
+    iov[i].iov_len = pieces[i].size();
+  }
+
+  Array<byte> extra;
+  if (pieces.size() > IOV_MAX) {
+    // Too many pieces, but we can't use multiple syscalls because they'd send separate
+    // datagrams. We'll have to copy the trailing pieces into a temporary array.
+    //
+    // TODO(perf): On Linux we could use multiple syscalls via MSG_MORE.
+    size_t extraSize = 0;
+    for (size_t i = IOV_MAX - 1; i < pieces.size(); i++) {
+      extraSize += pieces[i].size();
+    }
+    extra = kj::heapArray<byte>(extraSize);
+    extraSize = 0;
+    for (size_t i = IOV_MAX - 1; i < pieces.size(); i++) {
+      memcpy(extra.begin() + extraSize, pieces[i].begin(), pieces[i].size());
+      extraSize += pieces[i].size();
+    }
+    iov[IOV_MAX - 1].iov_base = extra.begin();
+    iov[IOV_MAX - 1].iov_len = extra.size();
+  }
+
+  msg.msg_iov = iov.begin();
+  msg.msg_iovlen = iov.size();
+
+  ssize_t n;
+  KJ_NONBLOCKING_SYSCALL(n = sendmsg(fd, &msg, 0));
+  if (n < 0) {
+    // Write buffer full.
+    return observer.whenBecomesWritable().then([this, pieces, &destination]() {
+      return send(pieces, destination);
+    });
+  } else {
+    // If less than the whole message was sent, then it was truncated, and there's nothing we can
+    // do about that now.
+    return n;
+  }
+}
+
+class DatagramPortImpl::ReceiverImpl final: public DatagramReceiver {
+public:
+  explicit ReceiverImpl(DatagramPortImpl& port, Capacity capacity)
+      : port(port),
+        contentBuffer(heapArray<byte>(capacity.content)),
+        ancillaryBuffer(capacity.ancillary > 0 ? heapArray<byte>(capacity.ancillary)
+                                               : Array<byte>(nullptr)) {}
+
+  Promise<void> receive() override {
+    struct msghdr msg;
+    memset(&msg, 0, sizeof(msg));
+
+    struct sockaddr_storage addr;
+    memset(&addr, 0, sizeof(addr));
+    msg.msg_name = &addr;
+    msg.msg_namelen = sizeof(addr);
+
+    struct iovec iov;
+    iov.iov_base = contentBuffer.begin();
+    iov.iov_len = contentBuffer.size();
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = ancillaryBuffer.begin();
+    msg.msg_controllen = ancillaryBuffer.size();
+
+    ssize_t n;
+    KJ_NONBLOCKING_SYSCALL(n = recvmsg(port.fd, &msg, 0));
+
+    if (n < 0) {
+      // No data available. Wait.
+      return port.observer.whenBecomesReadable().then([this]() {
+        return receive();
+      });
+    } else {
+      receivedSize = n;
+      contentTruncated = msg.msg_flags & MSG_TRUNC;
+
+      source.emplace(port.lowLevel, msg.msg_name, msg.msg_namelen);
+
+      ancillaryList.resize(0);
+      ancillaryTruncated = msg.msg_flags & MSG_CTRUNC;
+
+      for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg); cmsg != nullptr;
+           cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+        // On some platforms (OSX), a cmsghdr's length may cross the end of the ancillary buffer
+        // when truncated. On other platforms (Linux) the length in cmsghdr will itself be
+        // truncated to fit within the buffer.
+
+        const byte* pos = reinterpret_cast<const byte*>(cmsg);
+        size_t available = ancillaryBuffer.end() - pos;
+        if (available < CMSG_SPACE(0)) {
+          // The buffer ends in the middle of the header. We can't use this message.
+          // (On Linux, this never happens, because the message is not included if there isn't
+          // space for a header. I'm not sure how other systems behave, though, so let's be safe.)
+          break;
+        }
+
+        // OK, we know the cmsghdr is valid, at least.
+
+        // Find the start of the message payload.
+        const byte* begin = CMSG_DATA(cmsg);
+
+        // Cap the message length to the available space.
+        const byte* end = pos + kj::min(available, cmsg->cmsg_len);
+
+        ancillaryList.add(AncillaryMessage(
+            cmsg->cmsg_level, cmsg->cmsg_type, arrayPtr(begin, end)));
+      }
+
+      return READY_NOW;
+    }
+  }
+
+  MaybeTruncated<ArrayPtr<const byte>> getContent() override {
+    return { contentBuffer.slice(0, receivedSize), contentTruncated };
+  }
+
+  MaybeTruncated<ArrayPtr<const AncillaryMessage>> getAncillary() override {
+    return { ancillaryList.asPtr(), ancillaryTruncated };
+  }
+
+  NetworkAddress& getSource() override {
+    return KJ_REQUIRE_NONNULL(source, "Haven't sent a message yet.").abstract;
+  }
+
+private:
+  DatagramPortImpl& port;
+  Array<byte> contentBuffer;
+  Array<byte> ancillaryBuffer;
+  Vector<AncillaryMessage> ancillaryList;
+  size_t receivedSize = 0;
+  bool contentTruncated = false;
+  bool ancillaryTruncated = false;
+
+  struct StoredAddress {
+    StoredAddress(LowLevelAsyncIoProvider& lowLevel, const void* sockaddr, uint length)
+        : raw(sockaddr, length),
+          abstract(lowLevel, Array<SocketAddress>(&raw, 1, NullArrayDisposer::instance)) {}
+
+    SocketAddress raw;
+    NetworkAddressImpl abstract;
+  };
+
+  kj::Maybe<StoredAddress> source;
+};
+
+Own<DatagramReceiver> DatagramPortImpl::makeReceiver(DatagramReceiver::Capacity capacity) {
+  return kj::heap<ReceiverImpl>(*this, capacity);
+}
 
 // =======================================================================================
 
@@ -1028,6 +1321,31 @@ private:
 
 Promise<void> AsyncInputStream::read(void* buffer, size_t bytes) {
   return read(buffer, bytes, bytes).then([](size_t) {});
+}
+
+void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length) {
+  KJ_UNIMPLEMENTED("Not a socket.");
+}
+void AsyncIoStream::setsockopt(int level, int option, const void* value, uint length) {
+  KJ_UNIMPLEMENTED("Not a socket.");
+}
+void ConnectionReceiver::getsockopt(int level, int option, void* value, uint* length) {
+  KJ_UNIMPLEMENTED("Not a socket.");
+}
+void ConnectionReceiver::setsockopt(int level, int option, const void* value, uint length) {
+  KJ_UNIMPLEMENTED("Not a socket.");
+}
+void DatagramPort::getsockopt(int level, int option, void* value, uint* length) {
+  KJ_UNIMPLEMENTED("Not a socket.");
+}
+void DatagramPort::setsockopt(int level, int option, const void* value, uint length) {
+  KJ_UNIMPLEMENTED("Not a socket.");
+}
+Own<DatagramPort> NetworkAddress::bindDatagramPort() {
+  KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
+}
+Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(int fd, uint flags) {
+  KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
 }
 
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel) {

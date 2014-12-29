@@ -797,6 +797,16 @@ public:
   inline operator T*() { return isSet ? &value : nullptr; }
   inline operator const T*() const { return isSet ? &value : nullptr; }
 
+  template <typename... Params>
+  inline void emplace(Params&&... params) {
+    if (isSet) {
+      isSet = false;
+      dtor(value);
+    }
+    ctor(value, kj::fwd<Params>(params)...);
+    isSet = true;
+  }
+
 private:  // internal interface used by friends only
   inline NullableValue() noexcept: isSet(false) {}
   inline NullableValue(T&& t) noexcept(noexcept(T(instance<T&&>())))
@@ -958,6 +968,14 @@ public:
   }
 
   Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+
+  template <typename... Params>
+  inline void emplace(Params&&... params) {
+    // Replace this Maybe's content with a new value constructed by passing the given parametrs to
+    // T's constructor. This can be used to initialize a Maybe without copying or even moving a T.
+
+    ptr.emplace(kj::fwd<Params>(params)...);
+  }
 
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
   inline Maybe& operator=(Maybe& other) { ptr = other.ptr; return *this; }

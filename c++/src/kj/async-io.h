@@ -34,6 +34,10 @@
 namespace kj {
 
 class UnixEventPort;
+class NetworkAddress;
+
+// =======================================================================================
+// Streaming I/O
 
 class AsyncInputStream {
   // Asynchronous equivalent of InputStream (from io.h).
@@ -59,6 +63,26 @@ class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
 public:
   virtual void shutdownWrite() = 0;
   // Cleanly shut down just the write end of the stream, while keeping the read end open.
+
+  virtual void getsockopt(int level, int option, void* value, uint* length);
+  virtual void setsockopt(int level, int option, const void* value, uint length);
+  // Corresponds to getsockopt() and setsockopt() syscalls. Will throw an "unimplemented" exception
+  // if the stream is not a socket or the option is not appropriate for the socket type. The
+  // default implementations always throw "unimplemented".
+};
+
+struct OneWayPipe {
+  // A data pipe with an input end and an output end.  (Typically backed by pipe() system call.)
+
+  Own<AsyncInputStream> in;
+  Own<AsyncOutputStream> out;
+};
+
+struct TwoWayPipe {
+  // A data pipe that supports sending in both directions.  Each end's output sends data to the
+  // other end's input.  (Typically backed by socketpair() system call.)
+
+  Own<AsyncIoStream> ends[2];
 };
 
 class ConnectionReceiver {
@@ -70,8 +94,119 @@ public:
 
   virtual uint getPort() = 0;
   // Gets the port number, if applicable (i.e. if listening on IP).  This is useful if you didn't
-  // specify a port when constructing the LocalAddress -- one will have been assigned automatically.
+  // specify a port when constructing the NetworkAddress -- one will have been assigned
+  // automatically.
+
+  virtual void getsockopt(int level, int option, void* value, uint* length);
+  virtual void setsockopt(int level, int option, const void* value, uint length);
+  // Same as the methods of AsyncIoStream.
 };
+
+// =======================================================================================
+// Datagram I/O
+
+class AncillaryMessage {
+  // Represents an ancillary message (aka control message) received using the recvmsg() system
+  // call (or equivalent). Most apps will not use this.
+
+public:
+  inline AncillaryMessage(int level, int type, ArrayPtr<const byte> data);
+  AncillaryMessage() = default;
+
+  inline int getLevel() const;
+  // Originating protocol / socket level.
+
+  inline int getType() const;
+  // Protocol-specific message type.
+
+  template <typename T>
+  inline Maybe<const T&> as();
+  // Interpret the ancillary message as the given struct type. Most ancillary messages are some
+  // sort of struct, so this is a convenient way to access it. Returns nullptr if the message
+  // is smaller than the struct -- this can happen if the message was truncated due to
+  // insufficient ancillary buffer space.
+
+  template <typename T>
+  inline ArrayPtr<const T> asArray();
+  // Interpret the ancillary message as an array of items. If the message size does not evenly
+  // divide into elements of type T, the remainder is discarded -- this can happen if the message
+  // was truncated due to insufficient ancillary buffer space.
+
+private:
+  int level;
+  int type;
+  ArrayPtr<const byte> data;
+  // Message data. In most cases you should use `as()` or `asArray()`.
+};
+
+class DatagramReceiver {
+  // Class encapsulating the recvmsg() system call. You must specify the DatagramReceiver's
+  // capacity in advance; if a received packet is larger than the capacity, it will be truncated.
+
+public:
+  virtual Promise<void> receive() = 0;
+  // Receive a new message, overwriting this object's content.
+  //
+  // receive() may reuse the same buffers for content and ancillary data with each call.
+
+  template <typename T>
+  struct MaybeTruncated {
+    T value;
+
+    bool isTruncated;
+    // True if the Receiver's capacity was insufficient to receive the value and therefore the
+    // value is truncated.
+  };
+
+  virtual MaybeTruncated<ArrayPtr<const byte>> getContent() = 0;
+  // Get the content of the datagram.
+
+  virtual MaybeTruncated<ArrayPtr<const AncillaryMessage>> getAncillary() = 0;
+  // Ancilarry messages received with the datagram. See the recvmsg() system call and the cmsghdr
+  // struct. Most apps don't need this.
+  //
+  // If the returned value is truncated, then the last message in the array may itself be
+  // truncated, meaning its as<T>() method will return nullptr or its asArray<T>() method will
+  // return fewer elements than expected. Truncation can also mean that additional messages were
+  // available but discarded.
+
+  virtual NetworkAddress& getSource() = 0;
+  // Get the datagram sender's address.
+
+  struct Capacity {
+    size_t content = 8192;
+    // How much space to allocate for the datagram content. If a datagram is received that is
+    // larger than this, it will be truncated, with no way to recover the tail.
+
+    size_t ancillary = 0;
+    // How much space to allocate for ancillary messages. As with content, if the ancillary data
+    // is larger than this, it will be truncated.
+  };
+};
+
+class DatagramPort {
+public:
+  virtual Promise<size_t> send(const void* buffer, size_t size, NetworkAddress& destination) = 0;
+  virtual Promise<size_t> send(ArrayPtr<const ArrayPtr<const byte>> pieces,
+                               NetworkAddress& destination) = 0;
+
+  virtual Own<DatagramReceiver> makeReceiver(
+      DatagramReceiver::Capacity capacity = DatagramReceiver::Capacity()) = 0;
+  // Create a new `Receiver` that can be used to receive datagrams. `capacity` specifies how much
+  // space to allocate for the received message. The `DatagramPort` must outlive the `Receiver`.
+
+  virtual uint getPort() = 0;
+  // Gets the port number, if applicable (i.e. if listening on IP).  This is useful if you didn't
+  // specify a port when constructing the NetworkAddress -- one will have been assigned
+  // automatically.
+
+  virtual void getsockopt(int level, int option, void* value, uint* length);
+  virtual void setsockopt(int level, int option, const void* value, uint length);
+  // Same as the methods of AsyncIoStream.
+};
+
+// =======================================================================================
+// Networks
 
 class NetworkAddress {
   // Represents a remote address to which the application can connect.
@@ -86,6 +221,14 @@ public:
   // Listen for incoming connections on this address.
   //
   // The address must be local.
+
+  virtual Own<DatagramPort> bindDatagramPort();
+  // Open this address as a datagram (e.g. UDP) port.
+  //
+  // The address must be local.
+
+  virtual Own<NetworkAddress> clone() = 0;
+  // Returns an equivalent copy of this NetworkAddress.
 
   virtual String toString() = 0;
   // Produce a human-readable string which hopefully can be passed to Network::parseRemoteAddress()
@@ -123,26 +266,15 @@ public:
   // `portHint`, if provided, specifies the "standard" IP port number for the application-level
   // service in play.  If the address turns out to be an IP address (v4 or v6), and it lacks a
   // port number, this port will be used.  If `addr` lacks a port number *and* `portHint` is
-  // omitted, then the returned address will only support listen() (not connect()), and a port
-  // will be chosen when listen() is called.
+  // omitted, then the returned address will only support listen() and bindDatagramPort()
+  // (not connect()), and an unused port will be chosen each time one of those methods is called.
 
   virtual Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) = 0;
   // Construct a network address from a legacy struct sockaddr.
 };
 
-struct OneWayPipe {
-  // A data pipe with an input end and an output end.  (Typically backed by pipe() system call.)
-
-  Own<AsyncInputStream> in;
-  Own<AsyncOutputStream> out;
-};
-
-struct TwoWayPipe {
-  // A data pipe that supports sending in both directions.  Each end's output sends data to the
-  // other end's input.  (Typically backed by socketpair() system call.)
-
-  Own<AsyncIoStream> ends[2];
-};
+// =======================================================================================
+// I/O Provider
 
 class AsyncIoProvider {
   // Class which constructs asynchronous wrappers around the operating system's I/O facilities.
@@ -284,6 +416,8 @@ public:
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
+  virtual Own<DatagramPort> wrapDatagramSocketFd(int fd, uint flags = 0);
+
   virtual Timer& getTimer() = 0;
   // Returns a `Timer` based on real time.  Time does not pass while event handlers are running --
   // it only updates when the event loop polls for system events.  This means that calling `now()`
@@ -327,6 +461,30 @@ AsyncIoContext setupAsyncIo();
 //       print(text);
 //       return 0;
 //     }
+
+// =======================================================================================
+// inline implementation details
+
+inline AncillaryMessage::AncillaryMessage(
+    int level, int type, ArrayPtr<const byte> data)
+    : level(level), type(type), data(data) {}
+
+inline int AncillaryMessage::getLevel() const { return level; }
+inline int AncillaryMessage::getType() const { return type; }
+
+template <typename T>
+inline Maybe<const T&> AncillaryMessage::as() {
+  if (data.size() >= sizeof(T)) {
+    return *reinterpret_cast<const T*>(data.begin());
+  } else {
+    return nullptr;
+  }
+}
+
+template <typename T>
+inline ArrayPtr<const T> AncillaryMessage::asArray() {
+  return arrayPtr(reinterpret_cast<const T*>(data.begin()), data.size() / sizeof(T));
+}
 
 }  // namespace kj
 

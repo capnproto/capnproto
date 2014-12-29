@@ -19,7 +19,7 @@ while [ $# -gt 0 ]; do
     caffeinate )
       # Re-run preventing sleep.
       shift
-      exec caffeinate $0 $@
+      exec caffeinate -ims $0 $@
       ;;
     tmpdir )
       # Clone to a temp directory.
