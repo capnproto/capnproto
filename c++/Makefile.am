@@ -4,35 +4,6 @@ ACLOCAL_AMFLAGS = -I m4
 
 AUTOMAKE_OPTIONS = foreign subdir-objects
 
-# Always include gtest in distributions.
-DIST_SUBDIRS = $(subdirs)
-
-# Build gtest before we build Cap'n Proto tests.  We don't add gtest to SUBDIRS
-# because then "make check" would also build and run all of gtest's own tests,
-# which takes a lot of time and is generally not useful to us.  Also, we don't
-# want "make install" to recurse into gtest since we don't want to overwrite
-# the installed version of gtest if there is one (and, actually, gtest doesn't
-# even support "make install" anyway).  So we define a rule such that it will
-# only be built when needed.
-gtest/lib/libgtest.la:
-	@echo "Making lib/libgtest.a lib/libgtest_main.a in gtest"
-	@cd gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
-
-gtest/lib/libgtest_main.la: gtest/lib/libgtest.la
-	@:
-
-# We would like to clean gtest when "make clean" is invoked.  But we have to
-# be careful because clean-local is also invoked during "make distclean", but
-# "make distclean" already recurses into gtest because it's listed among the
-# DIST_SUBDIRS.  distclean will delete gtest/Makefile, so if we then try to
-# cd to the directory again and "make clean" it will fail.  So, check that the
-# Makefile exists before recursing.
-clean-local:
-	@if test -e gtest/Makefile; then \
-	  echo "Making clean in gtest"; \
-	  cd gtest && $(MAKE) $(AM_MAKEFLAGS) clean; \
-	fi
-
 # When running distcheck, verify that we've included all the files needed by
 # the cmake build.
 distcheck-hook:
@@ -130,6 +101,7 @@ includecapnpdir = $(includedir)/capnp
 includekjdir = $(includedir)/kj
 includekjparsedir = $(includekjdir)/parse
 includekjstddir = $(includekjdir)/std
+includekjcompatdir = $(includekjdir)/compat
 
 dist_includecapnp_DATA = $(public_capnpc_inputs)
 
@@ -163,6 +135,7 @@ includekj_HEADERS =                                            \
   src/kj/async-unix.h                                          \
   src/kj/async-io.h                                            \
   src/kj/main.h                                                \
+  src/kj/test.h                                                \
   src/kj/windows-sanity.h
 
 includekjparse_HEADERS =                                       \
@@ -171,6 +144,9 @@ includekjparse_HEADERS =                                       \
 
 includekjstd_HEADERS =                                         \
   src/kj/std/iostream.h
+
+includekjcompat_HEADERS =                                      \
+  src/kj/compat/gtest.h
 
 includecapnp_HEADERS =                                         \
   src/capnp/c++.capnp.h                                        \
@@ -204,9 +180,9 @@ includecapnp_HEADERS =                                         \
   src/capnp/ez-rpc.h
 
 if LITE_MODE
-lib_LTLIBRARIES = libkj.la libcapnp.la
+lib_LTLIBRARIES = libkj.la libkj-test.la libcapnp.la
 else
-lib_LTLIBRARIES = libkj.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnpc.la
+lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnpc.la
 endif
 
 libkj_la_LIBADD = $(PTHREAD_LIBS)
@@ -227,6 +203,10 @@ libkj_la_SOURCES=                                              \
   src/kj/thread.c++                                            \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
+
+libkj_test_la_LIBADD = libkj.la $(PTHREAD_LIBS)
+libkj_test_la_LDFLAGS = -release $(VERSION) -no-undefined
+libkj_test_la_SOURCES = src/kj/test.c++
 
 if !LITE_MODE
 libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS)
@@ -374,8 +354,7 @@ if LITE_MODE
 
 check_PROGRAMS = capnp-test
 compiler_tests =
-capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la \
-                   libcapnp.la libkj.la
+capnp_test_LDADD = libcapnp.la libkj-test.la libkj.la
 
 else !LITE_MODE
 
@@ -398,12 +377,11 @@ heavy_tests =                                                  \
   src/capnp/ez-rpc-test.c++                                    \
   src/capnp/compiler/lexer-test.c++                            \
   src/capnp/compiler/md5-test.c++
-capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la \
-                   libcapnpc.la libcapnp-rpc.la libcapnp.la libkj-async.la libkj.la
+capnp_test_LDADD = libcapnpc.la libcapnp-rpc.la libcapnp.la libkj-async.la libkj-test.la libkj.la
 
 endif !LITE_MODE
 
-capnp_test_CPPFLAGS = -Wno-deprecated-declarations -Igtest/include -I$(srcdir)/gtest/include
+capnp_test_CPPFLAGS = -Wno-deprecated-declarations
 capnp_test_SOURCES =                                           \
   src/kj/common-test.c++                                       \
   src/kj/memory-test.c++                                       \

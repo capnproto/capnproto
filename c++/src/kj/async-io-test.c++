@@ -22,7 +22,7 @@
 #include "async-io.h"
 #include "async-unix.h"
 #include "debug.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -50,7 +50,7 @@ TEST(AsyncIo, SimpleNetwork) {
     client = kj::mv(result);
     return client->write("foo", 3);
   }).detach([](kj::Exception&& exception) {
-    ADD_FAILURE() << kj::str(exception).cStr();
+    KJ_FAIL_EXPECT(exception);
   });
 
   kj::String result = network.parseAddress("*").then([&](Own<NetworkAddress>&& result) {
@@ -127,7 +127,7 @@ TEST(AsyncIo, OneWayPipe) {
   char receiveBuffer[4];
 
   pipe.out->write("foo", 3).detach([](kj::Exception&& exception) {
-    ADD_FAILURE() << kj::str(exception).cStr();
+    KJ_FAIL_EXPECT(exception);
   });
 
   kj::String result = pipe.in->tryRead(receiveBuffer, 3, 4).then([&](size_t n) {

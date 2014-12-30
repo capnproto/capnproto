@@ -29,7 +29,7 @@
 #include <capnp/test.capnp.h>
 #include <iostream>
 #include "blob.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 #if !CAPNP_LITE
 #include "dynamic.h"
@@ -49,24 +49,36 @@
 #define EXPECT_DEBUG_ANY_THROW(EXP)
 #endif
 
+// TODO(cleanup): Auto-generate stringification functions for union discriminants.
+namespace capnproto_test {
 namespace capnp {
+namespace test {
+inline kj::String KJ_STRINGIFY(TestUnion::Union0::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+inline kj::String KJ_STRINGIFY(TestUnion::Union1::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+inline kj::String KJ_STRINGIFY(TestUnion::Union2::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+inline kj::String KJ_STRINGIFY(TestUnion::Union3::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+inline kj::String KJ_STRINGIFY(TestUnnamedUnion::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+inline kj::String KJ_STRINGIFY(TestGroups::Groups::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+inline kj::String KJ_STRINGIFY(TestInterleavedGroups::Group1::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+}  // namespace test
+}  // namespace capnp
+}  // namespace capnproto_test
 
-inline std::ostream& operator<<(std::ostream& os, const Data::Reader& value) {
-  return os.write(value.asChars().begin(), value.asChars().size());
-}
-inline std::ostream& operator<<(std::ostream& os, const Data::Builder& value) {
-  return os.write(value.asChars().begin(), value.asChars().size());
-}
-inline std::ostream& operator<<(std::ostream& os, const Text::Reader& value) {
-  return os.write(value.begin(), value.size());
-}
-inline std::ostream& operator<<(std::ostream& os, const Text::Builder& value) {
-  return os.write(value.begin(), value.size());
-}
-inline std::ostream& operator<<(std::ostream& os, Void) {
-  return os << "void";
-}
-
+namespace capnp {
 namespace _ {  // private
 
 inline Data::Reader data(const char* str) {

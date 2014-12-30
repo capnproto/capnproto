@@ -136,8 +136,8 @@ namespace kj {
 #define KJ_EXPAND(X) X
 
 #define KJ_LOG(severity, ...) \
-  if (!::kj::_::Debug::shouldLog(::kj::_::Debug::Severity::severity)) {} else \
-    ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::_::Debug::Severity::severity, \
+  if (!::kj::_::Debug::shouldLog(::kj::LogSeverity::severity)) {} else \
+    ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::LogSeverity::severity, \
                         "" #__VA_ARGS__, __VA_ARGS__)
 
 #define KJ_DBG(...) KJ_EXPAND(KJ_LOG(DBG, __VA_ARGS__))
@@ -194,9 +194,9 @@ namespace kj {
 #else
 
 #define KJ_LOG(severity, ...) \
-  if (!::kj::_::Debug::shouldLog(::kj::_::Debug::Severity::severity)) {} else \
-    ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::_::Debug::Severity::severity, \
-                        #__VA_ARGS__, __VA_ARGS__)
+  if (!::kj::_::Debug::shouldLog(::kj::LogSeverity::severity)) {} else \
+    ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::LogSeverity::severity, \
+                        #__VA_ARGS__, ##__VA_ARGS__)
 
 #define KJ_DBG(...) KJ_LOG(DBG, ##__VA_ARGS__)
 
@@ -273,28 +273,18 @@ class Debug {
 public:
   Debug() = delete;
 
-  enum class Severity {
-    INFO,      // Information describing what the code is up to, which users may request to see
-               // with a flag like `--verbose`.  Does not indicate a problem.  Not printed by
-               // default; you must call setLogLevel(INFO) to enable.
-    WARNING,   // A problem was detected but execution can continue with correct output.
-    ERROR,     // Something is wrong, but execution can continue with garbage output.
-    FATAL,     // Something went wrong, and execution cannot continue.
-    DBG        // Temporary debug logging.  See KJ_DBG.
+  typedef LogSeverity Severity;  // backwards-compatibility
 
-    // Make sure to update the stringifier if you add a new severity level.
-  };
-
-  static inline bool shouldLog(Severity severity) { return severity >= minSeverity; }
+  static inline bool shouldLog(LogSeverity severity) { return severity >= minSeverity; }
   // Returns whether messages of the given severity should be logged.
 
-  static inline void setLogLevel(Severity severity) { minSeverity = severity; }
+  static inline void setLogLevel(LogSeverity severity) { minSeverity = severity; }
   // Set the minimum message severity which will be logged.
   //
   // TODO(someday):  Expose publicly.
 
   template <typename... Params>
-  static void log(const char* file, int line, Severity severity, const char* macroArgs,
+  static void log(const char* file, int line, LogSeverity severity, const char* macroArgs,
                   Params&&... params);
 
   class Fault {
@@ -355,7 +345,8 @@ public:
 
     virtual void onRecoverableException(Exception&& exception) override;
     virtual void onFatalException(Exception&& exception) override;
-    virtual void logMessage(const char* file, int line, int contextDepth, String&& text) override;
+    virtual void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                            String&& text) override;
 
   private:
     bool logged;
@@ -381,9 +372,9 @@ public:
   static String makeDescription(const char* macroArgs, Params&&... params);
 
 private:
-  static Severity minSeverity;
+  static LogSeverity minSeverity;
 
-  static void logInternal(const char* file, int line, Severity severity, const char* macroArgs,
+  static void logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                           ArrayPtr<String> argValues);
   static String makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues);
 
@@ -391,17 +382,15 @@ private:
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 };
 
-ArrayPtr<const char> KJ_STRINGIFY(Debug::Severity severity);
-
 template <typename... Params>
-void Debug::log(const char* file, int line, Severity severity, const char* macroArgs,
+void Debug::log(const char* file, int line, LogSeverity severity, const char* macroArgs,
                 Params&&... params) {
   String argValues[sizeof...(Params)] = {str(params)...};
   logInternal(file, line, severity, macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 
 template <>
-inline void Debug::log<>(const char* file, int line, Severity severity, const char* macroArgs) {
+inline void Debug::log<>(const char* file, int line, LogSeverity severity, const char* macroArgs) {
   logInternal(file, line, severity, macroArgs, nullptr);
 }
 

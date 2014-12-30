@@ -22,7 +22,7 @@
 #include "io.h"
 #include "debug.h"
 #include "miniposix.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace kj {
 namespace {

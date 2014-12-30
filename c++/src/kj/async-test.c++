@@ -21,7 +21,7 @@
 
 #include "async.h"
 #include "debug.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace kj {
 namespace {
@@ -574,7 +574,7 @@ TEST(Async, TaskSet) {
   }));
 
   (void)evalLater([&]() {
-    ADD_FAILURE() << "Promise without waiter shouldn't execute.";
+    KJ_FAIL_EXPECT("Promise without waiter shouldn't execute.");
   });
 
   evalLater([&]() {

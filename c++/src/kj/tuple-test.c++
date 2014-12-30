@@ -22,7 +22,7 @@
 #include "tuple.h"
 #include "memory.h"
 #include "string.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace kj {
 

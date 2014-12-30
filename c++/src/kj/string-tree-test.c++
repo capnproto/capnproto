@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "string-tree.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace kj {
 namespace _ {  // private

@@ -23,14 +23,8 @@
 #include "dynamic.h"
 #include "pretty-print.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
-
-namespace kj {
-  inline std::ostream& operator<<(std::ostream& os, const kj::String& s) {
-    return os.write(s.begin(), s.size());
-  }
-}
 
 namespace capnp {
 namespace _ {  // private

@@ -21,7 +21,7 @@
 
 #include "arena.h"
 #include "debug.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <stdint.h>
 
 namespace kj {

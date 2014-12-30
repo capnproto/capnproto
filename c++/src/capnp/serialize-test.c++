@@ -21,7 +21,8 @@
 
 #include "serialize.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
+#include <kj/miniposix.h>
 #include <string>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -399,7 +400,7 @@ TEST(Serialize, RejectTooManySegments) {
 #endif
   });
 
-  EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
+  KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
 }
 
 #if !__MINGW32__  // Inexplicably crashes when exception is thrown from constructor.
@@ -420,7 +421,7 @@ TEST(Serialize, RejectHugeMessage) {
 #endif
   });
 
-  EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
+  KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
 }
 #endif  // !__MINGW32__
 

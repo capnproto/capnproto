@@ -125,6 +125,20 @@ String KJ_STRINGIFY(const Exception& e);
 
 // =======================================================================================
 
+enum class LogSeverity {
+  INFO,      // Information describing what the code is up to, which users may request to see
+             // with a flag like `--verbose`.  Does not indicate a problem.  Not printed by
+             // default; you must call setLogLevel(INFO) to enable.
+  WARNING,   // A problem was detected but execution can continue with correct output.
+  ERROR,     // Something is wrong, but execution can continue with garbage output.
+  FATAL,     // Something went wrong, and execution cannot continue.
+  DBG        // Temporary debug logging.  See KJ_DBG.
+
+  // Make sure to update the stringifier if you add a new severity level.
+};
+
+StringPtr KJ_STRINGIFY(LogSeverity severity);
+
 class ExceptionCallback {
   // If you don't like C++ exceptions, you may implement and register an ExceptionCallback in order
   // to perform your own exception handling.  For example, a reasonable thing to do is to have
@@ -159,10 +173,10 @@ public:
   // The global default implementation throws an exception unless the library was compiled with
   // -fno-exceptions, in which case it logs an error and returns.
 
-  virtual void logMessage(const char* file, int line, int contextDepth, String&& text);
-  // Called when something wants to log some debug text.  The text always ends in a newline if
-  // it is non-empty.  `contextDepth` indicates how many levels of context the message passed
-  // through; it may make sense to indent the message accordingly.
+  virtual void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                          String&& text);
+  // Called when something wants to log some debug text.  `contextDepth` indicates how many levels
+  // of context the message passed through; it may make sense to indent the message accordingly.
   //
   // The global default implementation writes the text to stderr.
 
@@ -276,6 +290,17 @@ void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
   ::kj::UnwindDetector KJ_UNIQUE_NAME(_kjUnwindDetector); \
   KJ_DEFER(if (KJ_UNIQUE_NAME(_kjUnwindDetector).isUnwinding()) { code; })
 // Runs `code` if the current scope is exited due to an exception.
+
+// =======================================================================================
+
+ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space);
+// Attempt to get the current stack trace, returning a list of pointers to instructions. The
+// returned array is a slice of `space`. Provide a larger `space` to get a deeper stack trace.
+// If the platform doesn't support stack traces, returns an empty array.
+
+String stringifyStackTrace(ArrayPtr<void* const>);
+// Convert the stack trace to a string with file names and line numbers. This may involve executing
+// suprocesses.
 
 }  // namespace kj
 

@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "units.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <iostream>
 
 namespace kj {
@@ -43,8 +43,8 @@ constexpr UnitRatio<int, Bytes, MiB> BYTES_PER_MIB = 1024 * 1024 * BYTE / MIB;
 constexpr auto KIB_PER_MIB = 1024 * KIB / MIB;
 
 template <typename T, typename U>
-std::ostream& operator<<(std::ostream& os, Quantity<T, U> value) {
-  return os << (value / unit<Quantity<T, U>>());
+kj::String KJ_STRINGIFY(Quantity<T, U> value) {
+  return kj::str(value / unit<Quantity<T, U>>());
 }
 
 TEST(UnitMeasure, Basics) {

@@ -178,9 +178,9 @@ if(BUILD_TESTING)
   capnp_generate_cpp(test_capnp_cpp_files test_capnp_h_files ${test_capnp_files})
 
   if(CAPNP_LITE)
-    set(test_libraries capnp kj gtest gtest_main)
+    set(test_libraries capnp kj-test kj)
   else()
-    set(test_libraries capnp capnp-rpc capnpc kj kj-async gtest gtest_main)
+    set(test_libraries capnp-rpc capnp capnpc kj-async kj-test kj)
   endif()
 
   add_executable(capnp-tests

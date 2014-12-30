@@ -422,6 +422,10 @@ Type Schema::BrandArgumentList::operator[](uint index) const {
   return result.wrapInList(binding.listDepth);
 }
 
+kj::StringPtr KJ_STRINGIFY(const Schema& schema) {
+  return schema.getProto().getDisplayName();
+}
+
 // =======================================================================================
 
 namespace {
@@ -509,6 +513,10 @@ Type StructSchema::Field::getType() const {
 
 uint32_t StructSchema::Field::getDefaultValueSchemaOffset() const {
   return parent.getSchemaOffset(proto.getSlot().getDefaultValue());
+}
+
+kj::StringPtr KJ_STRINGIFY(const StructSchema::Field& field) {
+  return field.getProto().getName();
 }
 
 // -------------------------------------------------------------------

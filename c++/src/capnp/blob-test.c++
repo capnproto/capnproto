@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "blob.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <iostream>
 #include <string>
 #include "test-util.h"

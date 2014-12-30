@@ -21,7 +21,7 @@
 
 #include "one-of.h"
 #include "string.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace kj {
 

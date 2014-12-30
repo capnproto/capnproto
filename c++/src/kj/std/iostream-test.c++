@@ -21,7 +21,7 @@
 
 #include "iostream.h"
 #include <sstream>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace kj {
 namespace std {

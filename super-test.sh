@@ -43,9 +43,6 @@ while [ $# -gt 0 ]; do
         rm -rf $DIR
       fi
       git clone . $DIR
-      if [ -e c++/gtest ]; then
-        cp -r c++/gtest $DIR/c++/gtest
-      fi
       cd $DIR
       exec ./super-test.sh "$@"
       ;;
@@ -63,7 +60,6 @@ while [ $# -gt 0 ]; do
       ssh $HOST '(chmod -fR +w tmp-test-capnp || true) && rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
       git push ssh://$HOST/~/tmp-test-capnp "$BRANCH:test"
       ssh $HOST "cd tmp-test-capnp && git checkout test"
-      scp -qr c++/gtest $HOST:~/tmp-test-capnp/c++/gtest
       exec ssh $HOST "cd tmp-test-capnp && ./super-test.sh $@ && cd .. && rm -rf tmp-test-capnp"
       ;;
     clang )
@@ -86,7 +82,6 @@ while [ $# -gt 0 ]; do
       CROSS_HOST=$2
 
       cd c++
-      test -e gtest || doit ./setup-autotools.sh | tr = -
       test -e configure || doit autoreconf -i
       test ! -e Makefile || (echo "ERROR: Directory unclean!" >&2 && false)
       doit ./configure --host="$CROSS_HOST" --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
@@ -113,7 +108,6 @@ while [ $# -gt 0 ]; do
       CROSS_HOST=$4
 
       cd c++
-      test -e gtest || doit ./setup-autotools.sh | tr = -
       test -e configure || doit autoreconf -i
       test ! -e Makefile || (echo "ERROR: Directory unclean!" >&2 && false)
       doit ./configure --disable-shared
@@ -210,8 +204,7 @@ done
 # because GCC warns about code that I know is OK.  Disable sign-compare because I've fixed more
 # sign-compare warnings than probably all other warnings combined and I've never seen it flag a
 # real problem. Disable unused parameters because it's stupidly noisy and never a real problem.
-# Disable missing-field-initializers because unfortuntaley gtest contains a warning of this class.
-export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers"
+export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter"
 
 STAGING=$PWD/tmp-staging
 
@@ -239,10 +232,8 @@ else
 fi
 
 if [ $IS_CLANG = yes ]; then
-  # There's an unused private field in gtest, which Clang dislikes.
-  #
-  # Also, don't fail out on this ridiculous "argument unused during compilation" warning.
-  export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field -Wno-error=unused-command-line-argument"
+  # Don't fail out on this ridiculous "argument unused during compilation" warning.
+  export CXXFLAGS="$CXXFLAGS -Wno-error=unused-command-line-argument"
 else
   # GCC emits uninitialized warnings all over and they seem bogus. We use valgrind to test for
   # uninitialized memory usage later on.

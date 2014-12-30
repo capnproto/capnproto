@@ -62,6 +62,21 @@ install(FILES ${kj_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
 install(FILES ${kj-parse_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/parse")
 install(FILES ${kj-std_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/std")
 
+set(kj-test_sources
+  test.c++
+)
+set(kj-test_headers
+  test.h
+)
+set(kj-test-compat_headers
+  compat/gtest.h
+)
+add_library(kj-test ${kj-test_sources})
+target_link_libraries(kj-test kj)
+install(TARGETS kj-test ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+install(FILES ${kj-test_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
+install(FILES ${kj-test-compat_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/compat")
+
 set(kj-async_sources
   async.c++
   async-unix.c++
@@ -99,7 +114,7 @@ if(BUILD_TESTING)
     std/iostream-test.c++
   )
   # TODO: Link with librt on Solaris for sched_yield
-  target_link_libraries(kj-tests kj gtest gtest_main)
+  target_link_libraries(kj-tests kj-test kj)
   add_dependencies(check kj-tests)
   add_test(NAME kj-tests-run COMMAND kj-tests)
 
@@ -119,7 +134,7 @@ if(BUILD_TESTING)
       parse/common-test.c++
       parse/char-test.c++
     )
-    target_link_libraries(kj-heavy-tests kj kj-async gtest gtest_main)
+    target_link_libraries(kj-heavy-tests kj-async kj-test kj)
     add_dependencies(check kj-heavy-tests)
     add_test(NAME kj-heavy-tests-run COMMAND kj-heavy-tests)
   endif()  # NOT CAPNP_LITE

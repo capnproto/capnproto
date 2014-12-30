@@ -63,6 +63,10 @@ HEXIFY_INT(unsigned long long, "%llx");
 
 namespace _ {  // private
 
+StringPtr Stringifier::operator*(decltype(nullptr)) const {
+  return "nullptr";
+}
+
 StringPtr Stringifier::operator*(bool b) const {
   return b ? StringPtr("true") : StringPtr("false");
 }

@@ -32,20 +32,7 @@
 namespace kj {
 namespace _ {  // private
 
-Debug::Severity Debug::minSeverity = Debug::Severity::WARNING;
-
-ArrayPtr<const char> KJ_STRINGIFY(Debug::Severity severity) {
-  static const char* SEVERITY_STRINGS[] = {
-    "info",
-    "warning",
-    "error",
-    "fatal",
-    "debug"
-  };
-
-  const char* s = SEVERITY_STRINGS[static_cast<uint>(severity)];
-  return arrayPtr(s, strlen(s));
-}
+LogSeverity Debug::minSeverity = LogSeverity::WARNING;
 
 namespace {
 
@@ -185,7 +172,7 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     ++index;
 
     if (index != argValues.size()) {
-      getExceptionCallback().logMessage(__FILE__, __LINE__, 0,
+      getExceptionCallback().logMessage(LogSeverity::ERROR, __FILE__, __LINE__, 0,
           str("Failed to parse logging macro args into ",
               argValues.size(), " names: ", macroArgs, '\n'));
     }
@@ -279,10 +266,10 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
 
 }  // namespace
 
-void Debug::logInternal(const char* file, int line, Severity severity, const char* macroArgs,
+void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                         ArrayPtr<String> argValues) {
-  getExceptionCallback().logMessage(file, line, 0,
-      str(severity, ": ", makeDescriptionImpl(LOG, nullptr, 0, macroArgs, argValues), '\n'));
+  getExceptionCallback().logMessage(severity, file, line, 0,
+      makeDescriptionImpl(LOG, nullptr, 0, macroArgs, argValues));
 }
 
 Debug::Fault::~Fault() noexcept(false) {
@@ -352,14 +339,16 @@ void Debug::Context::onFatalException(Exception&& exception) {
   exception.wrapContext(v.file, v.line, mv(v.description));
   next.onFatalException(kj::mv(exception));
 }
-void Debug::Context::logMessage(const char* file, int line, int contextDepth, String&& text) {
+void Debug::Context::logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                                String&& text) {
   if (!logged) {
     Value v = ensureInitialized();
-    next.logMessage(v.file, v.line, 0, str("context: ", mv(v.description), '\n'));
+    next.logMessage(LogSeverity::INFO, v.file, v.line, 0,
+                    str("context: ", mv(v.description), '\n'));
     logged = true;
   }
 
-  next.logMessage(file, line, contextDepth + 1, mv(text));
+  next.logMessage(severity, file, line, contextDepth + 1, mv(text));
 }
 
 }  // namespace _ (private)

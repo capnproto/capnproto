@@ -21,7 +21,7 @@
 
 #include "test-util.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace capnp {
 namespace _ {  // private

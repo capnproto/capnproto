@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "common.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <kj/string.h>
 #include <kj/debug.h>
 

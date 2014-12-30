@@ -23,7 +23,7 @@
 #include <capnp/test-import2.capnp.h>
 #include "message.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
 #include "schema-lite.h"
 
@@ -152,15 +152,8 @@ struct UnionState {
   }
 };
 
-std::ostream& operator<<(std::ostream& os, const UnionState& us) {
-  os << "UnionState({";
-
-  for (uint i = 0; i < 4; i++) {
-    if (i > 0) os << ", ";
-    os << us.discriminants[i];
-  }
-
-  return os << "}, " << us.dataOffset << ")";
+kj::String KJ_STRINGIFY(const UnionState& us) {
+  return kj::str("UnionState({", kj::strArray(us.discriminants, ", "), "}, ", us.dataOffset, ")");
 }
 
 template <typename StructType, typename Func>
@@ -565,7 +558,7 @@ TEST(Encoding, ListUpgrade) {
 #endif
     });
 
-    EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
+    KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
   }
 
   {
@@ -673,7 +666,7 @@ TEST(Encoding, BitListUpgrade) {
 #endif
     });
 
-    EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
+    KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
   }
 
   auto reader = root.asReader();
@@ -686,7 +679,7 @@ TEST(Encoding, BitListUpgrade) {
 #endif
     });
 
-    EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
+    KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
   }
 }
 

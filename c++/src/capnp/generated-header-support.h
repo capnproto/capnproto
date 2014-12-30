@@ -351,12 +351,17 @@ constexpr RawBrandedSchema::Binding brandBindingFor() {
 }
 
 kj::StringTree structString(StructReader reader, const RawBrandedSchema& schema);
+kj::String enumString(uint16_t value, const RawBrandedSchema& schema);
 // Declared here so that we can declare inline stringify methods on generated types.
 // Defined in stringify.c++, which depends on dynamic.c++, which is allowed not to be linked in.
 
 template <typename T>
 inline kj::StringTree structString(StructReader reader) {
   return structString(reader, rawBrandedSchema<T>());
+}
+template <typename T>
+inline kj::String enumString(T value) {
+  return enumString(static_cast<uint16_t>(value), rawBrandedSchema<T>());
 }
 
 #endif  // !CAPNP_LITE
@@ -415,9 +420,18 @@ public:
   inline Text::Reader operator*() const { return get(); }
   inline TemporaryPointer<Text::Reader> operator->() const { return get(); }
 
+  inline kj::StringPtr toString() const {
+    return get();
+  }
+
 private:
   const word* ptr;
 };
+
+template <size_t size>
+inline kj::StringPtr KJ_STRINGIFY(const ConstText<size>& s) {
+  return s.get();
+}
 
 template <size_t size>
 class ConstData {
@@ -437,6 +451,11 @@ public:
 private:
   const word* ptr;
 };
+
+template <size_t size>
+inline auto KJ_STRINGIFY(const ConstData<size>& s) -> decltype(kj::toCharSequence(s.get())) {
+  return kj::toCharSequence(s.get());
+}
 
 }  // namespace _ (private)
 
@@ -475,6 +494,9 @@ inline constexpr uint sizeInWords() {
     extern ::capnp::word const* const bp_##id
 
 #define CAPNP_DECLARE_ENUM(type, id) \
+    inline ::kj::String KJ_STRINGIFY(type##_##id value) { \
+      return ::kj::str(static_cast<uint16_t>(value)); \
+    } \
     template <> struct EnumInfo<type##_##id> { \
       struct IsEnum; \
       static constexpr uint64_t typeId = 0x##id; \
@@ -503,6 +525,9 @@ inline constexpr uint sizeInWords() {
     extern const ::capnp::_::RawSchema s_##id
 
 #define CAPNP_DECLARE_ENUM(type, id) \
+    inline ::kj::String KJ_STRINGIFY(type##_##id value) { \
+      return ::capnp::_::enumString(value); \
+    } \
     template <> struct EnumInfo<type##_##id> { \
       struct IsEnum; \
       static constexpr uint64_t typeId = 0x##id; \

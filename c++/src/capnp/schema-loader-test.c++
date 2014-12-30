@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "schema-loader.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
 #include <kj/debug.h>
 

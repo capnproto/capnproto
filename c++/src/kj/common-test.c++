@@ -20,20 +20,21 @@
 // THE SOFTWARE.
 
 #include "common.h"
+#include "test.h"
 #include <inttypes.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace kj {
 namespace {
 
-TEST(Common, Size) {
+KJ_TEST("kj::size() on native arrays") {
   int arr[] = {12, 34, 56, 78};
 
   size_t expected = 0;
   for (size_t i: indices(arr)) {
-    EXPECT_EQ(expected++, i);
+    KJ_EXPECT(i == expected++);
   }
-  EXPECT_EQ(4u, expected);
+  KJ_EXPECT(expected == 4u);
 }
 
 TEST(Common, Maybe) {
@@ -235,7 +236,7 @@ TEST(Common, Downcast) {
   KJ_IF_MAYBE(m, dynamicDowncastIfAvailable<Bar>(foo)) {
     EXPECT_EQ(&bar, m);
   } else {
-    ADD_FAILURE() << "Dynamic downcast returned null.";
+    KJ_FAIL_ASSERT("Dynamic downcast returned null.");
   }
   EXPECT_TRUE(dynamicDowncastIfAvailable<Baz>(foo) == nullptr);
 #endif

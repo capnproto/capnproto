@@ -20,10 +20,10 @@
 // THE SOFTWARE.
 
 #include "array.h"
-#include <gtest/gtest.h>
 #include "debug.h"
 #include <string>
 #include <list>
+#include <kj/compat/gtest.h>
 
 namespace kj {
 namespace {

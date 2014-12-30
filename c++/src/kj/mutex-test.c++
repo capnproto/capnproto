@@ -22,7 +22,7 @@
 #include "mutex.h"
 #include "debug.h"
 #include "thread.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 #if _WIN32
 #include <windows.h>

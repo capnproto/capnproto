@@ -21,7 +21,7 @@
 
 #include "ez-rpc.h"
 #include "test-util.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace capnp {
 namespace _ {

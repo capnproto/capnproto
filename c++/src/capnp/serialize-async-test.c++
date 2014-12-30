@@ -29,7 +29,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include "test-util.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace capnp {
 namespace _ {  // private
@@ -84,11 +84,9 @@ private:
   uint desiredSegmentCount;
 };
 
-class SerializeAsyncTest: public testing::Test {
-protected:
-  int fds[2];
-
-  SerializeAsyncTest() {
+class PipeWithSmallBuffer {
+public:
+  PipeWithSmallBuffer() {
     // Use a socketpair rather than a pipe so that we can set the buffer size extremely small.
     KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
 
@@ -111,13 +109,19 @@ protected:
     KJ_SYSCALL(setsockopt(fds[0], SOL_SOCKET, SO_RCVBUF, &small, sizeof(small)));
     KJ_SYSCALL(setsockopt(fds[1], SOL_SOCKET, SO_SNDBUF, &small, sizeof(small)));
   }
-  ~SerializeAsyncTest() {
+  ~PipeWithSmallBuffer() {
     close(fds[0]);
     close(fds[1]);
   }
+
+  inline int operator[](uint index) { return fds[index]; }
+
+private:
+  int fds[2];
 };
 
-TEST_F(SerializeAsyncTest, ParseAsync) {
+TEST(SerializeAsyncTest, ParseAsync) {
+  PipeWithSmallBuffer fds;
   auto ioContext = kj::setupAsyncIo();
   auto input = ioContext.lowLevelProvider->wrapInputFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
@@ -135,7 +139,8 @@ TEST_F(SerializeAsyncTest, ParseAsync) {
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
-TEST_F(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
+TEST(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
+  PipeWithSmallBuffer fds;
   auto ioContext = kj::setupAsyncIo();
   auto input = ioContext.lowLevelProvider->wrapInputFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
@@ -153,7 +158,8 @@ TEST_F(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
-TEST_F(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
+TEST(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
+  PipeWithSmallBuffer fds;
   auto ioContext = kj::setupAsyncIo();
   auto input = ioContext.lowLevelProvider->wrapInputFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
@@ -171,7 +177,8 @@ TEST_F(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
-TEST_F(SerializeAsyncTest, WriteAsync) {
+TEST(SerializeAsyncTest, WriteAsync) {
+  PipeWithSmallBuffer fds;
   auto ioContext = kj::setupAsyncIo();
   auto output = ioContext.lowLevelProvider->wrapOutputFd(fds[1]);
 
@@ -194,7 +201,8 @@ TEST_F(SerializeAsyncTest, WriteAsync) {
   writeMessage(*output, message).wait(ioContext.waitScope);
 }
 
-TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
+TEST(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
+  PipeWithSmallBuffer fds;
   auto ioContext = kj::setupAsyncIo();
   auto output = ioContext.lowLevelProvider->wrapOutputFd(fds[1]);
 
@@ -217,7 +225,8 @@ TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
   writeMessage(*output, message).wait(ioContext.waitScope);
 }
 
-TEST_F(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
+TEST(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
+  PipeWithSmallBuffer fds;
   auto ioContext = kj::setupAsyncIo();
   auto output = ioContext.lowLevelProvider->wrapOutputFd(fds[1]);
 

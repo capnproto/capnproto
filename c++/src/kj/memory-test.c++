@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "memory.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "debug.h"
 
 namespace kj {

@@ -22,7 +22,7 @@
 #include "dynamic.h"
 #include "message.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
 
 namespace capnp {
@@ -226,7 +226,7 @@ TEST(DynamicApi, DynamicAnyPointers) {
   KJ_IF_MAYBE(name, exp) { \
     EXPECT_EQ(expected, actual); \
   } else { \
-    FAIL() << "Maybe was empty."; \
+    KJ_FAIL_EXPECT("Maybe was empty."); \
   }
 
 TEST(DynamicApi, UnionsRead) {

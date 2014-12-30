@@ -20,8 +20,17 @@
 // THE SOFTWARE.
 
 #include "schema.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
+
+// TODO(cleanup): Auto-generate stringification functions for union discriminants.
+namespace capnp {
+namespace schema {
+inline kj::String KJ_STRINGIFY(Type::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+}  // namespace schema
+}  // namespace capnp
 
 namespace capnp {
 namespace _ {  // private

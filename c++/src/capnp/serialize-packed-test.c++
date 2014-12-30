@@ -21,7 +21,7 @@
 
 #include "serialize-packed.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <string>
 #include <stdlib.h>
 #include "test-util.h"
@@ -81,31 +81,6 @@ private:
   std::string::size_type readPos;
 };
 
-struct DisplayByteArray {
-  DisplayByteArray(const std::string& str)
-      : data(reinterpret_cast<const uint8_t*>(str.data())), size(str.size()) {}
-  DisplayByteArray(const std::initializer_list<uint8_t>& list)
-      : data(list.begin()), size(list.size()) {}
-  DisplayByteArray(kj::ArrayPtr<const byte> data)
-      : data(data.begin()), size(data.size()) {}
-
-  const uint8_t* data;
-  size_t size;
-};
-
-std::ostream& operator<<(std::ostream& os, const DisplayByteArray& bytes) {
-  os << "{ ";
-  for (size_t i = 0; i < bytes.size; i++) {
-    if (i > 0) {
-      os << ", ";
-    }
-    os << (uint)bytes.data[i];
-  }
-  os << " }";
-
-  return os;
-}
-
 void expectPacksTo(kj::ArrayPtr<const byte> unpacked, kj::ArrayPtr<const byte> packed) {
   TestPipe pipe;
 
@@ -119,10 +94,8 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpacked, kj::ArrayPtr<const byte> p
   }
 
   if (pipe.getData() != std::string(packed.asChars().begin(), packed.asChars().size())) {
-    ADD_FAILURE()
-        << "Tried to pack: " << DisplayByteArray(unpacked) << "\n"
-        << "Expected:      " << DisplayByteArray(packed) << "\n"
-        << "Actual:        " << DisplayByteArray(pipe.getData());
+    KJ_FAIL_ASSERT("Tried to pack `unpacked`, expected `packed`, got `pipe.getData()`",
+                   unpacked, packed, pipe.getData());
     return;
   }
 
@@ -138,10 +111,8 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpacked, kj::ArrayPtr<const byte> p
   }
 
   if (memcmp(roundTrip.begin(), unpacked.begin(), unpacked.size()) != 0) {
-    ADD_FAILURE()
-        << "Tried to unpack: " << DisplayByteArray(packed) << "\n"
-        << "Expected:        " << DisplayByteArray(unpacked) << "\n"
-        << "Actual:          " << DisplayByteArray(roundTrip);
+    KJ_FAIL_ASSERT("Tried to unpack `packed`, expected `unpacked`, got `roundTrip`",
+                   packed, unpacked, roundTrip);
     return;
   }
 
@@ -155,11 +126,8 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpacked, kj::ArrayPtr<const byte> p
     }
 
     if (memcmp(roundTrip.begin(), unpacked.begin(), unpacked.size()) != 0) {
-      ADD_FAILURE()
-          << "Tried to unpack: " << DisplayByteArray(packed) << "\n"
-          << "  Block size: " << blockSize << "\n"
-          << "Expected:        " << DisplayByteArray(unpacked) << "\n"
-          << "Actual:          " << DisplayByteArray(roundTrip);
+      KJ_FAIL_ASSERT("Tried to unpack `packed`, expected `unpacked`, got `roundTrip`",
+                     packed, blockSize, unpacked, roundTrip);
     }
   }
 
@@ -202,11 +170,8 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpacked, kj::ArrayPtr<const byte> p
     packedIn.InputStream::read(&*roundTrip.begin(), roundTrip.size());
 
     if (memcmp(roundTrip.begin(), unpacked.begin(), unpacked.size()) != 0) {
-      ADD_FAILURE()
-          << "Tried to unpack: " << DisplayByteArray(packed) << "\n"
-          << "  Index: " << i << "\n"
-          << "Expected:        " << DisplayByteArray(unpacked) << "\n"
-          << "Actual:          " << DisplayByteArray(roundTrip);
+      KJ_FAIL_ASSERT("Tried to unpack `packed`, expected `unpacked`, got `roundTrip`",
+                     packed, i, unpacked, roundTrip);
     }
   }
 

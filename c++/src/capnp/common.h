@@ -32,6 +32,7 @@
 
 #include <kj/units.h>
 #include <inttypes.h>
+#include <kj/string.h>
 
 namespace capnp {
 
@@ -64,8 +65,7 @@ struct Void {
 static KJ_CONSTEXPR(const) Void VOID = Void();
 // Constant value for `Void`,  which is an empty struct.
 
-template <typename T>
-inline T& operator<<(T& os, Void) { return os << "void"; }
+inline kj::StringPtr KJ_STRINGIFY(Void) { return "void"; }
 
 struct Text;
 struct Data;

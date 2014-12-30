@@ -23,13 +23,13 @@
 #include "layout.h"
 #include "message.h"
 #include "arena.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 #if CAPNP_DEBUG_TYPES
 namespace kj {
   template <typename T, typename U>
-  std::ostream& operator<<(std::ostream& os, kj::Quantity<T, U> value) {
-    return os << (value / kj::unit<kj::Quantity<T, U>>());
+  String KJ_STRINGIFY(kj::Quantity<T, U> value) {
+    return kj::str(value / kj::unit<kj::Quantity<T, U>>());
   }
 }
 #endif

@@ -40,9 +40,27 @@
 
 namespace kj {
 
-namespace {
+StringPtr KJ_STRINGIFY(LogSeverity severity) {
+  static const char* SEVERITY_STRINGS[] = {
+    "info",
+    "warning",
+    "error",
+    "fatal",
+    "debug"
+  };
 
-String getStackSymbols(ArrayPtr<void* const> trace) {
+  return SEVERITY_STRINGS[static_cast<uint>(severity)];
+}
+
+ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space) {
+#ifndef KJ_HAS_BACKTRACE
+  return nullptr;
+#else
+  return space.slice(0, backtrace(space.begin(), space.size()));
+#endif
+}
+
+String stringifyStackTrace(ArrayPtr<void* const> trace) {
 #if (__linux__ || __APPLE__) && !__ANDROID__ && defined(KJ_DEBUG)
   // We want to generate a human-readable stack trace.
 
@@ -121,8 +139,6 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 #endif
 }
 
-}  // namespace
-
 StringPtr KJ_STRINGIFY(Exception::Type type) {
   static const char* TYPE_STRINGS[] = {
     "failed",
@@ -165,26 +181,18 @@ String KJ_STRINGIFY(const Exception& e) {
              e.getFile(), ":", e.getLine(), ": ", e.getType(),
              e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
              e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
-             getStackSymbols(e.getStackTrace()));
+             stringifyStackTrace(e.getStackTrace()));
 }
 
 Exception::Exception(Type type, const char* file, int line, String description) noexcept
     : file(file), line(line), type(type), description(mv(description)) {
-#ifndef KJ_HAS_BACKTRACE
-  traceCount = 0;
-#else
-  traceCount = backtrace(trace, 16);
-#endif
+  traceCount = kj::getStackTrace(trace).size();
 }
 
 Exception::Exception(Type type, String file, int line, String description) noexcept
     : ownFile(kj::mv(file)), file(ownFile.cStr()), line(line), type(type),
       description(mv(description)) {
-#ifndef KJ_HAS_BACKTRACE
-  traceCount = 0;
-#else
-  traceCount = backtrace(trace, 16);
-#endif
+  traceCount = kj::getStackTrace(trace).size();
 }
 
 Exception::Exception(const Exception& other) noexcept
@@ -266,8 +274,9 @@ void ExceptionCallback::onFatalException(Exception&& exception) {
   next.onFatalException(mv(exception));
 }
 
-void ExceptionCallback::logMessage(const char* file, int line, int contextDepth, String&& text) {
-  next.logMessage(file, line, contextDepth, mv(text));
+void ExceptionCallback::logMessage(
+    LogSeverity severity, const char* file, int line, int contextDepth, String&& text) {
+  next.logMessage(severity, file, line, contextDepth, mv(text));
 }
 
 class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
@@ -276,11 +285,15 @@ public:
 
   void onRecoverableException(Exception&& exception) override {
 #if KJ_NO_EXCEPTIONS
-    logException(mv(exception));
+    logException(LogSeverity::ERROR, mv(exception));
 #else
     if (std::uncaught_exception()) {
       // Bad time to throw an exception.  Just log instead.
-      logException(mv(exception));
+      //
+      // TODO(someday): We should really compare uncaughtExceptionCount() against the count at
+      //   the innermost runCatchingExceptions() frame in this thread to tell if exceptions are
+      //   being caught correctly.
+      logException(LogSeverity::ERROR, mv(exception));
     } else {
       throw ExceptionImpl(mv(exception));
     }
@@ -289,14 +302,16 @@ public:
 
   void onFatalException(Exception&& exception) override {
 #if KJ_NO_EXCEPTIONS
-    logException(mv(exception));
+    logException(LogSeverity::FATAL, mv(exception));
 #else
     throw ExceptionImpl(mv(exception));
 #endif
   }
 
-  void logMessage(const char* file, int line, int contextDepth, String&& text) override {
-    text = str(kj::repeat('_', contextDepth), file, ":", line, ": ", mv(text));
+  void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                  String&& text) override {
+    text = str(kj::repeat('_', contextDepth), file, ":", line, ": ", severity, ": ",
+               mv(text), '\n');
 
     StringPtr textPtr = text;
 
@@ -311,16 +326,16 @@ public:
   }
 
 private:
-  void logException(Exception&& e) {
+  void logException(LogSeverity severity, Exception&& e) {
     // We intentionally go back to the top exception callback on the stack because we don't want to
     // bypass whatever log processing is in effect.
     //
     // We intentionally don't log the context since it should get re-added by the exception callback
     // anyway.
-    getExceptionCallback().logMessage(e.getFile(), e.getLine(), 0, str(
+    getExceptionCallback().logMessage(severity, e.getFile(), e.getLine(), 0, str(
         e.getType(), e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
         e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
-        getStackSymbols(e.getStackTrace()), "\n"));
+        stringifyStackTrace(e.getStackTrace()), "\n"));
   }
 };
 

@@ -179,7 +179,10 @@ private:
   friend class Type;
   friend kj::StringTree _::structString(
       _::StructReader reader, const _::RawBrandedSchema& schema);
+  friend kj::String _::enumString(uint16_t value, const _::RawBrandedSchema& schema);
 };
+
+kj::StringPtr KJ_STRINGIFY(const Schema& schema);
 
 class Schema::BrandArgumentList {
   // A list of generic parameter bindings for parameters of some particular type. Note that since
@@ -310,6 +313,8 @@ private:
 
   friend class StructSchema;
 };
+
+kj::StringPtr KJ_STRINGIFY(const StructSchema::Field& field);
 
 class StructSchema::FieldList {
 public:

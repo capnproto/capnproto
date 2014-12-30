@@ -21,7 +21,7 @@
 
 #include "lexer.h"
 #include "../message.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace capnp {
 namespace compiler {
@@ -30,7 +30,7 @@ namespace {
 class TestFailingErrorReporter: public ErrorReporter {
 public:
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
-    ADD_FAILURE() << "Parse failed: (" << startByte << "-" << endByte << ") " << message.cStr();
+    KJ_FAIL_EXPECT("Parse failed.", startByte, endByte, message);
   }
 
   bool hadErrors() override {

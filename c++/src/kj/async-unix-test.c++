@@ -27,7 +27,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <pthread.h>
 #include <algorithm>
 
@@ -42,18 +42,21 @@ inline void delay() { usleep(10000); }
 #define EXPECT_SI_CODE(a,b)
 #endif
 
-class AsyncUnixTest: public testing::Test {
-public:
-  static void SetUpTestCase() {
+void captureSignals() {
+  static bool captured = false;
+  if (!captured) {
+    captured = true;
+
     // We use SIGIO and SIGURG as our test signals because they're two signals that we can be
     // reasonably confident won't otherwise be delivered to any KJ or Cap'n Proto test.  We can't
     // use SIGUSR1 because it is reserved by UnixEventPort and SIGUSR2 is used by Valgrind on OSX.
     UnixEventPort::captureSignal(SIGURG);
     UnixEventPort::captureSignal(SIGIO);
   }
-};
+}
 
-TEST_F(AsyncUnixTest, Signals) {
+TEST(AsyncUnixTest, Signals) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -66,7 +69,7 @@ TEST_F(AsyncUnixTest, Signals) {
 }
 
 #if defined(SIGRTMIN) && !__BIONIC__
-TEST_F(AsyncUnixTest, SignalWithValue) {
+TEST(AsyncUnixTest, SignalWithValue) {
   // This tests that if we use sigqueue() to attach a value to the signal, that value is received
   // correctly.  Note that this only works on platforms that support real-time signals -- even
   // though the signal we're sending is SIGURG, the sigqueue() system call is introduced by RT
@@ -74,6 +77,7 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
   //
   // Also, Android's bionic does not appear to support sigqueue() even though the kernel does.
 
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -89,7 +93,7 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
   EXPECT_EQ(123, info.si_value.sival_int);
 }
 
-TEST_F(AsyncUnixTest, SignalWithPointerValue) {
+TEST(AsyncUnixTest, SignalWithPointerValue) {
   // This tests that if we use sigqueue() to attach a value to the signal, that value is received
   // correctly.  Note that this only works on platforms that support real-time signals -- even
   // though the signal we're sending is SIGURG, the sigqueue() system call is introduced by RT
@@ -97,6 +101,7 @@ TEST_F(AsyncUnixTest, SignalWithPointerValue) {
   //
   // Also, Android's bionic does not appear to support sigqueue() even though the kernel does.
 
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -113,15 +118,16 @@ TEST_F(AsyncUnixTest, SignalWithPointerValue) {
 }
 #endif
 
-TEST_F(AsyncUnixTest, SignalsMultiListen) {
+TEST(AsyncUnixTest, SignalsMultiListen) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
   port.onSignal(SIGIO).then([](siginfo_t&&) {
-    ADD_FAILURE() << "Received wrong signal.";
+    KJ_FAIL_EXPECT("Received wrong signal.");
   }).detach([](kj::Exception&& exception) {
-    ADD_FAILURE() << kj::str(exception).cStr();
+    KJ_FAIL_EXPECT(exception);
   });
 
   kill(getpid(), SIGURG);
@@ -136,7 +142,8 @@ TEST_F(AsyncUnixTest, SignalsMultiListen) {
 // deliver SIGIO, if you reverse the order of the waits).  Since this doesn't occur on any other
 // platform I'm assuming it's a Cygwin bug.
 
-TEST_F(AsyncUnixTest, SignalsMultiReceive) {
+TEST(AsyncUnixTest, SignalsMultiReceive) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -155,7 +162,8 @@ TEST_F(AsyncUnixTest, SignalsMultiReceive) {
 
 #endif  // !__CYGWIN32__
 
-TEST_F(AsyncUnixTest, SignalsAsync) {
+TEST(AsyncUnixTest, SignalsAsync) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -179,9 +187,10 @@ TEST_F(AsyncUnixTest, SignalsAsync) {
 // deliver SIGIO, if you reverse the order of the waits).  Since this doesn't occur on any other
 // platform I'm assuming it's a Cygwin bug.
 
-TEST_F(AsyncUnixTest, SignalsNoWait) {
+TEST(AsyncUnixTest, SignalsNoWait) {
   // Verify that UnixEventPort::poll() correctly receives pending signals.
 
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -192,12 +201,12 @@ TEST_F(AsyncUnixTest, SignalsNoWait) {
     receivedSigurg = true;
     EXPECT_EQ(SIGURG, info.si_signo);
     EXPECT_SI_CODE(SI_USER, info.si_code);
-  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { KJ_FAIL_EXPECT(e); });
   port.onSignal(SIGIO).then([&](siginfo_t&& info) {
     receivedSigio = true;
     EXPECT_EQ(SIGIO, info.si_signo);
     EXPECT_SI_CODE(SI_USER, info.si_code);
-  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { KJ_FAIL_EXPECT(e); });
 
   kill(getpid(), SIGURG);
   kill(getpid(), SIGIO);
@@ -223,7 +232,8 @@ TEST_F(AsyncUnixTest, SignalsNoWait) {
 
 #endif  // !__CYGWIN32__
 
-TEST_F(AsyncUnixTest, ReadObserver) {
+TEST(AsyncUnixTest, ReadObserver) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -255,7 +265,8 @@ TEST_F(AsyncUnixTest, ReadObserver) {
 #endif
 }
 
-TEST_F(AsyncUnixTest, ReadObserverMultiListen) {
+TEST(AsyncUnixTest, ReadObserverMultiListen) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -284,7 +295,8 @@ TEST_F(AsyncUnixTest, ReadObserverMultiListen) {
   observer.whenBecomesReadable().wait(waitScope);
 }
 
-TEST_F(AsyncUnixTest, ReadObserverMultiReceive) {
+TEST(AsyncUnixTest, ReadObserverMultiReceive) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -311,7 +323,8 @@ TEST_F(AsyncUnixTest, ReadObserverMultiReceive) {
   promise2.wait(waitScope);
 }
 
-TEST_F(AsyncUnixTest, ReadObserverAsync) {
+TEST(AsyncUnixTest, ReadObserverAsync) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -332,9 +345,10 @@ TEST_F(AsyncUnixTest, ReadObserverAsync) {
   observer.whenBecomesReadable().wait(waitScope);
 }
 
-TEST_F(AsyncUnixTest, ReadObserverNoWait) {
+TEST(AsyncUnixTest, ReadObserverNoWait) {
   // Verify that UnixEventPort::poll() correctly receives pending FD events.
 
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -385,7 +399,8 @@ static void setNonblocking(int fd) {
   }
 }
 
-TEST_F(AsyncUnixTest, WriteObserver) {
+TEST(AsyncUnixTest, WriteObserver) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -423,7 +438,8 @@ TEST_F(AsyncUnixTest, WriteObserver) {
   EXPECT_TRUE(writable);
 }
 
-TEST_F(AsyncUnixTest, SteadyTimers) {
+TEST(AsyncUnixTest, SteadyTimers) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -450,12 +466,13 @@ TEST_F(AsyncUnixTest, SteadyTimers) {
 
   ASSERT_EQ(expected.size(), actual.size());
   for (int i = 0; i < expected.size(); ++i) {
-    EXPECT_LE(expected[i], actual[i]) << "Actual time for timer " << i << " is "
-        << ((expected[i] - actual[i]) / NANOSECONDS) << " ns too early.";
+    KJ_EXPECT(expected[i] <= actual[i], "Actual time for timer i is too early.",
+              i, ((expected[i] - actual[i]) / NANOSECONDS));
   }
 }
 
-TEST_F(AsyncUnixTest, Wake) {
+TEST(AsyncUnixTest, Wake) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);

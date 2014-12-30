@@ -25,10 +25,19 @@
 #include "serialize.h"
 #include <kj/debug.h>
 #include <kj/string-tree.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <capnp/rpc.capnp.h>
 #include <map>
 #include <queue>
+
+// TODO(cleanup): Auto-generate stringification functions for union discriminants.
+namespace capnp {
+namespace rpc {
+inline kj::String KJ_STRINGIFY(Message::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+}  // namespace rpc
+}  // namespace capnp
 
 namespace capnp {
 namespace _ {  // private

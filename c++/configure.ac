@@ -60,9 +60,6 @@ AS_CASE("${host_os}", *mingw*, [
     AC_SUBST(PTHREAD_LIBS)
     AC_SUBST(PTHREAD_CFLAGS)
     AC_SUBST(PTHREAD_CC)
-
-    # Disable pthreads when configuring gtest.
-    ac_configure_args="$ac_configure_args --without-pthreads"
   ], *, [
     ACX_PTHREAD
   ])
@@ -103,12 +100,6 @@ AC_SUBST([STDLIB_FLAG])
 
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
-
-# AX_CXX_COMPILE_STDCXX_11 may have modified CXX, and we need gtest to use these modifications as
-# well (especially -stdlib).  Note that this may cause ac_configure_args to contain CXX= twice, but
-# the latter one should override the former.
-ac_configure_args="$ac_configure_args 'CXX=$CXX'"
-AC_CONFIG_SUBDIRS([gtest])
 
 AC_CONFIG_FILES([Makefile capnp.pc capnp-rpc.pc])
 AC_OUTPUT
