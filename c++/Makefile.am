@@ -400,6 +400,7 @@ capnp_test_SOURCES =                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/threadlocal-test.c++                                  \
   src/kj/threadlocal-pthread-test.c++                          \
+  src/kj/test-test.c++                                         \
   src/capnp/common-test.c++                                    \
   src/capnp/blob-test.c++                                      \
   src/capnp/endian-test.c++                                    \

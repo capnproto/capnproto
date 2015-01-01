@@ -27,6 +27,7 @@
 #endif
 
 #include "debug.h"
+#include "vector.h"
 
 namespace kj {
 
@@ -45,7 +46,7 @@ private:
   const char* description;
   TestCase* next;
   TestCase** prev;
-  bool shouldRun;
+  bool matchedFilter;
 
   friend class TestRunner;
 };
@@ -72,6 +73,29 @@ private:
   if (cond); else KJ_FAIL_EXPECT("failed: expected " #cond, ##__VA_ARGS__)
 #endif
 
+// =======================================================================================
+
+namespace _ {  // private
+
+class GlobFilter {
+  // Implements glob filters for the --filter flag.
+  //
+  // Exposed in header only for testing.
+
+public:
+  explicit GlobFilter(const char* pattern);
+  explicit GlobFilter(ArrayPtr<const char> pattern);
+
+  bool matches(StringPtr name);
+
+private:
+  String pattern;
+  Vector<uint> states;
+
+  void applyState(char c, int state);
+};
+
+}  // namespace _ (private)
 }  // namespace kj
 
 #endif // KJ_TEST_H_

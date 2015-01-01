@@ -39,7 +39,7 @@ TestCase** testCasesTail = &testCasesHead;
 
 TestCase::TestCase(const char* file, uint line, const char* description)
     : file(file), line(line), description(description), next(nullptr), prev(testCasesTail),
-      shouldRun(true) {
+      matchedFilter(false) {
   *prev = this;
   testCasesTail = &next;
 }
@@ -52,6 +52,95 @@ TestCase::~TestCase() {
     next->prev = prev;
   }
 }
+
+// =======================================================================================
+
+namespace _ {  // private
+
+GlobFilter::GlobFilter(const char* pattern): pattern(heapString(pattern)) {}
+GlobFilter::GlobFilter(ArrayPtr<const char> pattern): pattern(heapString(pattern)) {}
+
+bool GlobFilter::matches(StringPtr name) {
+  // Get out your computer science books. We're implementing a non-deterministic finite automaton.
+  //
+  // Our NDFA has one "state" corresponding to each character in the pattern.
+  //
+  // As you may recall, an NDFA can be transformed into a DFA where every state in the DFA
+  // represents some combination of states in the NDFA. Therefore, we actually have to store a
+  // list of states here. (Actually, what we really want is a set of states, but because our
+  // patterns are mostly non-cyclic a list of states should work fine and be a bit more efficient.)
+
+  // Our state list starts out pointing only at the start of the pattern.
+  states.resize(0);
+  states.add(0);
+
+  Vector<uint> scratch;
+
+  // Iterate through each character in the name.
+  for (char c: name) {
+    // Pull the current set of states off to the side, so that we can populate `states` with the
+    // new set of states.
+    Vector<uint> oldStates = kj::mv(states);
+    states = kj::mv(scratch);
+    states.resize(0);
+
+    // The pattern can omit a leading path. So if we're at a '/' then enter the state machine at
+    // the beginning on the next char.
+    if (c == '/' || c == '\\') {
+      states.add(0);
+    }
+
+    // Process each state.
+    for (uint state: oldStates) {
+      applyState(c, state);
+    }
+
+    // Store the previous state vector for reuse.
+    scratch = kj::mv(oldStates);
+  }
+
+  // If any one state is at the end of the pattern (or at a wildcard just before the end of the
+  // pattern), we have a match.
+  for (uint state: states) {
+    while (state < pattern.size() && pattern[state] == '*') {
+      ++state;
+    }
+    if (state == pattern.size()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void GlobFilter::applyState(char c, int state) {
+  if (state < pattern.size()) {
+    switch (pattern[state]) {
+      case '*':
+        // At a '*', we both re-add the current state and attempt to match the *next* state.
+        if (c != '/' && c != '\\') {  // '*' doesn't match '/'.
+          states.add(state);
+        }
+        applyState(c, state + 1);
+        break;
+
+      case '?':
+        // A '?' matches one character (never a '/').
+        if (c != '/' && c != '\\') {
+          states.add(state + 1);
+        }
+        break;
+
+      default:
+        // Any other character matches only itself.
+        if (c == pattern[state]) {
+          states.add(state + 1);
+        }
+        break;
+    }
+  }
+}
+
+}  // namespace _ (private)
 
 // =======================================================================================
 
@@ -132,12 +221,11 @@ public:
       text = kj::heapString("expectation failed");
     }
 
-    text = kj::str(kj::repeat('_', contextDepth), file, ':', line, ": ", kj::mv(text),
-                   "\nstack: ", strArray(trace, " "), stringifyStackTrace(trace));
+    text = kj::str(kj::repeat('_', contextDepth), file, ':', line, ": ", kj::mv(text));
 
     if (severity == LogSeverity::ERROR || severity == LogSeverity::FATAL) {
       sawError = true;
-      context.error(text);
+      context.error(kj::str(text, "\nstack: ", strArray(trace, " "), stringifyStackTrace(trace)));
     } else {
       context.warning(text);
     }
@@ -158,35 +246,70 @@ public:
   }
 
   MainFunc getMain() {
-    // TODO(now): Include summary of tests.
-    return MainBuilder(context, "(no version)", "Runs some tests.")
-        .addOptionWithArg({'t', "test-case"}, KJ_BIND_METHOD(*this, setTestCase), "<file>[:<line>]",
+    return MainBuilder(context, "KJ Test Runner (version not applicable)",
+        "Run all tests that have been linked into the binary with this test runner.")
+        .addOptionWithArg({'f', "filter"}, KJ_BIND_METHOD(*this, setFilter), "<file>[:<line>]",
             "Run only the specified test case(s). You may use a '*' wildcard in <file>. You may "
-            "also omit any prefix of <file>'s path; test from all matching files will run.")
+            "also omit any prefix of <file>'s path; test from all matching files will run. "
+            "You may specify multiple filters; any test matching at least one filter will run. "
+            "<line> may be a range, e.g. \"100-500\".")
+        .addOption({'l', "list"}, KJ_BIND_METHOD(*this, setList),
+            "List all test cases that would run, but don't run them. If --filter is specified "
+            "then only the match tests will be listed.")
         .callAfterParsing(KJ_BIND_METHOD(*this, run))
         .build();
   }
 
-  MainBuilder::Validity setTestCase(StringPtr pattern) {
+  MainBuilder::Validity setFilter(StringPtr pattern) {
+    hasFilter = true;
     ArrayPtr<const char> filePattern = pattern;
-    kj::Maybe<uint> lineNumber = nullptr;
+    uint minLine = kj::minValue;
+    uint maxLine = kj::maxValue;
 
     KJ_IF_MAYBE(colonPos, pattern.findLast(':')) {
       char* end;
       StringPtr lineStr = pattern.slice(*colonPos + 1);
-      lineNumber = strtoul(lineStr.cStr(), &end, 0);
-      if (lineStr.size() > 0 && *end == '\0') {
+
+      bool parsedRange = false;
+      minLine = strtoul(lineStr.cStr(), &end, 0);
+      if (end != lineStr.begin()) {
+        if (*end == '-') {
+          // A range.
+          const char* part2 = end + 1;
+          maxLine = strtoul(part2, &end, 0);
+          if (end > part2 && *end == '\0') {
+            parsedRange = true;
+          }
+        } else if (*end == '\0') {
+          parsedRange = true;
+        }
+      }
+
+      if (parsedRange) {
         // We have an exact line number.
         filePattern = pattern.slice(0, *colonPos);
       } else {
         // Can't parse as a number. Maybe the colon is part of a Windows path name or something.
         // Let's just keep it as part of the file pattern.
-        lineNumber = nullptr;
+        minLine = kj::minValue;
+        maxLine = kj::maxValue;
       }
     }
 
-    // TODO(now): do the filter
+    _::GlobFilter filter(filePattern);
 
+    for (TestCase* testCase = testCasesHead; testCase != nullptr; testCase = testCase->next) {
+      if (!testCase->matchedFilter && filter.matches(testCase->file) &&
+          testCase->line >= minLine && testCase->line <= maxLine) {
+        testCase->matchedFilter = true;
+      }
+    }
+
+    return true;
+  }
+
+  MainBuilder::Validity setList() {
+    listOnly = true;
     return true;
   }
 
@@ -207,7 +330,7 @@ public:
     }
 
     // Back off the prefix to the last '/'.
-    while (commonPrefix.size() > 0 && commonPrefix.back() != '/') {
+    while (commonPrefix.size() > 0 && commonPrefix.back() != '/' && commonPrefix.back() != '\\') {
       commonPrefix = commonPrefix.slice(0, commonPrefix.size() - 1);
     }
 
@@ -215,27 +338,29 @@ public:
     uint passCount = 0;
     uint failCount = 0;
     for (TestCase* testCase = testCasesHead; testCase != nullptr; testCase = testCase->next) {
-      if (testCase->shouldRun) {
+      if (!hasFilter || testCase->matchedFilter) {
         auto name = kj::str(testCase->file + commonPrefix.size(), ':', testCase->line,
                             ": ", testCase->description);
 
         write(BLUE, "[ TEST ]", name);
 
-        bool currentFailed = true;
-        KJ_IF_MAYBE(exception, runCatchingExceptions([&]() {
-          TestExceptionCallback exceptionCallback(context);
-          testCase->run();
-          currentFailed = exceptionCallback.failed();
-        })) {
-          context.error(kj::str(*exception));
-        }
+        if (!listOnly) {
+          bool currentFailed = true;
+          KJ_IF_MAYBE(exception, runCatchingExceptions([&]() {
+            TestExceptionCallback exceptionCallback(context);
+            testCase->run();
+            currentFailed = exceptionCallback.failed();
+          })) {
+            context.error(kj::str(*exception));
+          }
 
-        if (currentFailed) {
-          write(RED, "[ FAIL ]", name);
-          ++failCount;
-        } else {
-          write(GREEN, "[ PASS ]", name);
-          ++passCount;
+          if (currentFailed) {
+            write(RED, "[ FAIL ]", name);
+            ++failCount;
+          } else {
+            write(GREEN, "[ PASS ]", name);
+            ++passCount;
+          }
         }
       }
     }
@@ -248,6 +373,8 @@ public:
 private:
   ProcessContext& context;
   bool useColor;
+  bool hasFilter = false;
+  bool listOnly = false;
 
   enum Color {
     RED,

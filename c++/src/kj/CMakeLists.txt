@@ -111,6 +111,7 @@ if(BUILD_TESTING)
     io-test.c++
     mutex-test.c++
     threadlocal-test.c++
+    test-test.c++
     std/iostream-test.c++
   )
   # TODO: Link with librt on Solaris for sched_yield
