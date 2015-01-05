@@ -23,7 +23,7 @@
 
 $import "/capnp/c++.capnp".namespace("capnp");
 
-interface Persistent@0xc8cb212fcd9f5691(SturdyRef) {
+interface Persistent@0xc8cb212fcd9f5691(SturdyRef, Owner) {
   # Interface implemented by capabilities that outlive a single connection. A client may save()
   # the capability, producing a SturdyRef. The SturdyRef can be stored to disk, then later used to
   # obtain a new reference to the capability on a future connection.
@@ -51,6 +51,42 @@ interface Persistent@0xc8cb212fcd9f5691(SturdyRef) {
   # *might* make sense to explicitly inherit it. But, even in these cases, you probably don't want
   # to specify the `SturdyRef` parameter, since this type may differ from app to app or even host
   # to host.
+  #
+  # Sealing
+  # -------
+  #
+  # As an added security measure, SturdyRefs may be "sealed" to a particular owner, such that
+  # if the SturdyRef itself leaks to a third party, that party cannot actually restore it because
+  # they are not the owner. To restore a sealed capability, you must first prove to its host that
+  # you are the rightful owner. The precise mechanism for this authentication is defined by the
+  # realm.
+  #
+  # Sealing is a defense-in-depth mechanism meant to mitigate damage in the case of catastrophic
+  # attacks. For example, say an attacker temporarily gains read access to a database full of
+  # SturdyRefs: it would be unfortunate if it were then necessary to revoke every single reference
+  # in the database to prevent the attacker from using them.
+  #
+  # In general, an "owner" is a course-grained identity. Because capability-based security is still
+  # the primary mechanism of security, it is not necessary nor desirable to have a separate "owner"
+  # identity for every single process or object; that is exactly what capabilities are supposed to
+  # avoid! Instead, it makes sense for an "owner" to literally identify the owner of the machines
+  # where the capability is stored. If untrusted third parties are able to run arbitrary code on
+  # said machines, then the sandbox for that code should be designed using Distributed Confinement
+  # such that the third-party code never sees the bits of the SturdyRefs and cannot directly
+  # exercise the owner's power to restore refs. See:
+  #
+  #     http://www.erights.org/elib/capability/dist-confine.html
+  #
+  # Resist the urge to represent an Owner as a simple public key. The whole point of sealing is to
+  # defend against leaked-storage attacks. Such attacks can easily result in the owner's private
+  # key being stolen as well. A better solution is for `Owner` to contain a simple globally unique
+  # identifier for the owner, and for everyone to separately maintain a mapping of owner IDs to
+  # public keys. If an owner's private key is compromised, then humans will need to communicate
+  # and agree on a replacement public key, then update the mapping.
+  #
+  # As a concrete example, an `Owner` could simply contain a domain name, and restoring a SturdyRef
+  # would require signing a request using the domain's private key. Authenticating this key could
+  # be accomplished through certificate authorities or web-of-trust techniques.
 
   save @0 SaveParams -> SaveResults;
   # Save a capability persistently so that it can be restored by a future connection.  Not all
@@ -58,24 +94,32 @@ interface Persistent@0xc8cb212fcd9f5691(SturdyRef) {
   # this and which do not.
 
   struct SaveParams {
-    # Nothing for now.
+    sealFor @0 :Owner;
+    # Seal the SturdyRef so that it can only be restored by the specified Owner. This is meant
+    # to mitigate damage when a SturdyRef is leaked. See comments above.
+    #
+    # Leaving this value null may or may not be allowed; it is up to the realm to decide. If a
+    # realm does allow a null owner, this should indicate that anyone is allowed to restore the
+    # ref.
   }
   struct SaveResults {
     sturdyRef @0 :SturdyRef;
   }
 }
 
-interface RealmGateway(InternalRef, ExternalRef) {
+interface RealmGateway(InternalRef, ExternalRef, InternalOwner, ExternalOwner) {
   # Interface invoked when a SturdyRef is about to cross realms. The RPC system supports providing
   # a RealmGateway as a callback hook when setting up RPC over some VatNetwork.
 
-  import @0 (cap :Persistent(ExternalRef), params :Persistent(InternalRef).SaveParams)
-         -> Persistent(InternalRef).SaveResults;
+  import @0 (cap :Persistent(ExternalRef, ExternalOwner),
+             params :Persistent(InternalRef, InternalOwner).SaveParams)
+         -> Persistent(InternalRef, InternalOwner).SaveResults;
   # Given an external capability, save it and return an internal reference. Used when someone
   # inside the realm tries to save a capability from outside the realm.
 
-  export @1 (cap :Persistent(InternalRef), params :Persistent(ExternalRef).SaveParams)
-         -> Persistent(ExternalRef).SaveResults;
+  export @1 (cap :Persistent(InternalRef, InternalOwner),
+             params :Persistent(ExternalRef, ExternalOwner).SaveParams)
+         -> Persistent(ExternalRef, ExternalOwner).SaveResults;
   # Given an internal capability, save it and return an external reference. Used when someone
   # outside the realm tries to save a capability from inside the realm.
 }
