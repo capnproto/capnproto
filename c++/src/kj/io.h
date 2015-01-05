@@ -257,6 +257,10 @@ public:
   inline operator int() const { return fd; }
   inline int get() const { return fd; }
 
+  operator bool() const = delete;
+  // Deleting this operator prevents accidental use in boolean contexts, which
+  // the int conversion operator above would otherwise allow.
+
   inline bool operator==(decltype(nullptr)) { return fd < 0; }
   inline bool operator!=(decltype(nullptr)) { return fd >= 0; }
 
