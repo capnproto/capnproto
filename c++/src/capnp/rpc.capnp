@@ -1254,7 +1254,7 @@ using ThirdPartyCapId = AnyPointer;
 #
 # In a network where each vat has a public/private key pair, this could be a combination of the
 # third party's public key fingerprint, hints on how to connect to the third party (e.g. an IP
-# address), and the question ID used in the corresponding `Provide` mesasge sent to that third party
+# address), and the question ID used in the corresponding `Provide` message sent to that third party
 # (used to identify which capability to pick up).
 
 using JoinKeyPart = AnyPointer;
