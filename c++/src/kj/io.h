@@ -269,6 +269,11 @@ private:
   UnwindDetector unwindDetector;
 };
 
+inline auto KJ_STRINGIFY(const AutoCloseFd& fd)
+    -> decltype(kj::toCharSequence(implicitCast<int>(fd))) {
+  return kj::toCharSequence(implicitCast<int>(fd));
+}
+
 class FdInputStream: public InputStream {
   // An InputStream wrapping a file descriptor.
 
