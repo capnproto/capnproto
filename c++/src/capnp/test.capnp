@@ -560,6 +560,10 @@ interface TestImplicitMethodParams {
   call @0 [T, U] (foo :T, bar :U) -> TestGenerics(T, U);
 }
 
+interface TestImplicitMethodParamsInGeneric(V) {
+  call @0 [T, U] (foo :T, bar :U) -> TestGenerics(T, U);
+}
+
 struct TestUseGenerics $TestGenerics(Text, Data).ann("foo") {
   basic @0 :TestGenerics(TestAllTypes, TestAnyPointer);
   inner @1 :TestGenerics(TestAllTypes, TestAnyPointer).Inner;

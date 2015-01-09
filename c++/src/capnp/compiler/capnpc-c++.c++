@@ -652,10 +652,14 @@ private:
     schema::Node::Reader node;
   };
 
-  using BrandInitializers = kj::Tuple<kj::StringTree, kj::StringTree, kj::StringTree>;
-  // A tuple of the initialisers for the {scopes, bindings, dependencies}.
+  struct BrandInitializerText {
+    kj::StringTree scopes;
+    kj::StringTree bindings;
+    kj::StringTree dependencies;
+  };
 
-  BrandInitializers makeBrandInitializers(const TemplateContext& templateContext, Schema schema) {
+  BrandInitializerText makeBrandInitializers(
+      const TemplateContext& templateContext, Schema schema) {
     auto scopeMap = templateContext.getScopeMap();
 
     auto scopes = kj::heapArrayBuilder<kj::StringTree>(scopeMap.size());
@@ -674,10 +678,11 @@ private:
       }
     }
 
-    return kj::tuple(
-        kj::strTree("{\n", scopes.finish(), "}"),
-        kj::strTree("{\n", bindings.releaseAsArray(), "}"),
-        makeBrandDepInitializers(templateContext, schema));
+    return {
+      kj::strTree("{\n", scopes.finish(), "}"),
+      kj::strTree("{\n", bindings.releaseAsArray(), "}"),
+      makeBrandDepInitializers(templateContext, schema)
+    };
   }
 
   kj::StringTree makeBrandDepInitializers(const TemplateContext& templateContext, Schema schema) {
@@ -742,10 +747,20 @@ private:
 
   kj::Maybe<kj::StringTree> makeBrandDepInitializer(
       InterfaceSchema::Method method, StructSchema type, kj::StringPtr suffix) {
-    if (type.getProto().getScopeId() == 0) {
+    auto typeProto = type.getProto();
+    if (typeProto.getScopeId() == 0) {
       // This is an auto-generated params or results type.
       auto name = cppFullName(method.getContainingInterface(), nullptr);
-      name.addMemberType(kj::str(toTitleCase(protoName(method.getProto())), suffix));
+      auto memberTypeName = kj::str(toTitleCase(protoName(method.getProto())), suffix);
+
+      if (typeProto.getParameters().size() == 0) {
+        name.addMemberType(memberTypeName);
+      } else {
+        // The method has implicit parameters (i.e. it's generic). For the purpose of the brand
+        // dep initializer, we only want to supply the default AnyPointer variant, so just don't
+        // pass any parameters here.
+        name.addMemberTemplate(memberTypeName, nullptr);
+      }
       return makeBrandDepInitializer(type, kj::mv(name));
     } else {
       return makeBrandDepInitializer(type);
@@ -1757,21 +1772,23 @@ private:
         "::capnp::_::ChooseBrand<_capnpPrivate, ", templateContext.allArgs(), ">::brand;\n");
   }
 
-  kj::StringTree makeGenericDefinitions(kj::StringPtr templates, kj::StringPtr fullName, kj::StringPtr hexId,
-                                        BrandInitializers brandInitializers) {
+  kj::StringTree makeGenericDefinitions(
+      kj::StringPtr templates, kj::StringPtr fullName, kj::StringPtr hexId,
+      BrandInitializerText brandInitializers) {
     // Returns the definitions for the members from makeGenericDeclarations().
-    bool hasBrandDependencies = (kj::get<2>(brandInitializers).size() != 0);
+    bool hasBrandDependencies = (brandInitializers.dependencies.size() != 0);
 
     return kj::strTree(
         templates, "const ::capnp::_::RawBrandedSchema::Scope ", fullName,
-        "::_capnpPrivate::brandScopes[] = ", kj::mv(kj::get<0>(brandInitializers)), ";\n",
+        "::_capnpPrivate::brandScopes[] = ", kj::mv(brandInitializers.scopes), ";\n",
 
         templates, "const ::capnp::_::RawBrandedSchema::Binding ", fullName,
-        "::_capnpPrivate::brandBindings[] = ", kj::mv(kj::get<1>(brandInitializers)), ";\n",
+        "::_capnpPrivate::brandBindings[] = ", kj::mv(brandInitializers.bindings), ";\n",
 
         (!hasBrandDependencies ? kj::strTree("") : kj::strTree(
             templates, "const ::capnp::_::RawBrandedSchema::Dependency ", fullName,
-            "::_capnpPrivate::brandDependencies[] = ", kj::mv(kj::get<2>(brandInitializers)), ";\n")),
+            "::_capnpPrivate::brandDependencies[] = ", kj::mv(brandInitializers.dependencies),
+            ";\n")),
 
         templates, "const ::capnp::_::RawBrandedSchema ", fullName, "::_capnpPrivate::specificBrand = {\n",
         "  &::capnp::schemas::s_", hexId, ", brandScopes, ",
@@ -1822,7 +1839,7 @@ private:
 
     if (templateContext.isGeneric()) {
       auto brandInitializers = makeBrandInitializers(templateContext, schema);
-      bool hasDeps = (kj::get<2>(brandInitializers).size() != 0);
+      bool hasDeps = (brandInitializers.dependencies.size() != 0);
 
       declareText = kj::strTree(kj::mv(declareText),
           "    #if !CAPNP_LITE\n",
@@ -2068,7 +2085,7 @@ private:
 
     if (templateContext.isGeneric()) {
       auto brandInitializers = makeBrandInitializers(templateContext, schema);
-      bool hasDeps = (kj::get<2>(brandInitializers).size() != 0);
+      bool hasDeps = (brandInitializers.dependencies.size() != 0);
 
       declareText = kj::strTree(kj::mv(declareText),
           makeGenericDeclarations(templateContext, hasDeps));
