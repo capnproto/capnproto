@@ -68,7 +68,7 @@ schema from standard input and then generate the necessary code.  The descriptio
 Cap'n Proto message, defined by
 [schema.capnp](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp).
 Specifically, the plugin receives a `CodeGeneratorRequest`, using
-[standard serialization](http://kentonv.github.io/capnproto/encoding.html#serialization-over-a-stream)
+[standard serialization](encoding.html#serialization-over-a-stream)
 (not packed).  (Note that installing the C++ runtime causes schema.capnp to be placed in
 `$PREFIX/include/capnp` -- `/usr/local/include/capnp` by default).
 

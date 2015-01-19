@@ -12,4 +12,4 @@ I may have rewritten Protocol Buffers.
 
 Again.
 
-[And it's infinity times faster.](http://kentonv.github.com/capnproto)
+[And it's infinity times faster.](https://capnproto.org)
