@@ -173,18 +173,13 @@ and then put them together as a list later, because struct lists are encoded as 
 struct values, not an array of pointers to struct values.  You can, however, allocate any inner
 objects embedded within those structs as orphans.
 
-## Personal
+## Sandstorm
 
-### Who is paying you?
+### How does Cap'n Proto relate to Sandstorm.io?
 
-Nobody.  That is, aside from [Gittip](https://www.gittip.com/kentonv/) contributors (thanks!).
+[Sandstorm.io](https://sandstorm.io) is an Open Source project and startup founded by Kenton, the author of Cap'n Proto. Cap'n Proto is owned and developed by Sandstorm the company and heavily used in Sandstorm the project.
 
-### Can I hire you?
+### How does Sandstorm use Cap'n Proto?
 
-If you would like to purchase my services on a contract basis specifically to work on features you
-need in Cap'n Proto or to help you apply Cap'n Proto within your business, I'd be happy to talk.
+See [this Sandstorm blog post](https://blog.sandstorm.io/news/2014-12-15-capnproto-0.5.html).
 
-If you are simply looking for engineers in general and are interested in me because you are
-impressed with my work, I am flattered.  It is especially nice when such inquiries come from other
-engineers rather than from headhunters.  However, I am not looking for employment at this time,
-unless it is directly advancing Cap'n Proto.
