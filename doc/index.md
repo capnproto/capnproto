@@ -80,7 +80,7 @@ version 2, which is the version that Google released open source. Cap'n Proto is
 years of experience working on Protobufs, listening to user feedback, and thinking about how
 things could be done better.
 
-I no longer work for Google. Cap'n Proto is not affiliated with Google or any other company.
+Note that I no longer work for Google. Cap'n Proto is not, and never has been, affiliated with Google; in fact, it is a property of [Sandstorm.io](https://sandstorm.io), of which I am co-founder.
 
 **_OK, how do I get started?_**
 
