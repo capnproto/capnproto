@@ -277,17 +277,6 @@ p.author {
 	color: #888;
 }
 
-p.author>span.gplus-followbutton {
-	position: relative;
-	top: 3px;
-}
-
-p.copyright>span.gplus-followbutton {
-	position: relative;
-	top: 1px;
-	/* Yes, it's off by one goddamn pixel, you got a problem with that? */
-}
-
 h1>a, h2>a {
 	color: black;
 }
@@ -364,6 +353,21 @@ body.normal #main_content.inner {
   margin: 5px;
   color: #fff;
   background: url('../images/blacktocat.png') #0090ff no-repeat 95% 50%;
+  background-color: #0090ff;
+  font-weight: 700;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
+}
+
+.twitter_link {
+  display: inline-block;
+  z-index: 10;
+  padding: 10px 50px 10px 10px;
+  margin: 5px;
+  color: #fff;
+  background: url('../images/twitter.svg') #0090ff no-repeat 95% 50%;
   background-color: #0090ff;
   font-weight: 700;
   border-top-left-radius: 2px;

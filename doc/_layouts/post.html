@@ -1,17 +1,13 @@
 {% include header.html %}
 
 <div class="hmargin" style="float: right"><a class="groups_link" style="color: #fff"
-href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
+href="https://groups.google.com/group/capnproto-announce">Get Email Updates</a> <a class="twitter_link" style="color: #fff" href="https://twitter.com/capnproto">Follow on Twitter</a></div>
 
 <h1><a href="{{ site.baseurl }}news/">News</a></h1>
 
 <h2>{{ page.title }}</h2>
 <p class="author">
   <a href="https://github.com/{{ page.author }}">{{ page.author }}</a>
-  {% if page.author == 'kentonv' %}
-  <span class="gplus-followbutton"><span class="g-follow" data-annotation="none" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
-  <a href="https://www.gittip.com/kentonv/"><img class="gittip" src="{{ site.baseurl }}images/gittip.png" alt="Gittip"></a>
-  {% endif %}
   on <span class="date">{{ page.date | date_to_string }}</span>
 </p>
 {{ content }}

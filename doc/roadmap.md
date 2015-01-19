@@ -8,11 +8,11 @@ title: Road Map
 Here's what's (hopefully) in store for future versions of Cap'n Proto!  Of course, everything here
 is subject to change.
 
-## Next version: 0.5
+## Near-ish future
 
-* **Shared memory RPC:**  Zero-copy inter-process communication.  Synchronized with futexes.
-* **Persistent capabilities (level 2 RPC):**  Allow system-assisted saving and restoring of
-  capabilities across connections.
+Provisionally, these are probably the things that will be worked on in the next few releases of Cap'n Proto and its C++ reference implementation.
+
+* **Shared memory RPC:**  Zero-copy inter-process communication.
 * **Three-way introductions (level 3 RPC):**  Allow RPC interactions between more than two parties,
   with new connections formed automatically as needed.
 * **Fiber-based concurrency:**  The C++ runtime's event loop concurrency model will be augmented
@@ -21,16 +21,9 @@ is subject to change.
   syntax sugar on top of the event loop model.
 * **Dynamic schema transmission:**  Allow e.g. Python applications to obtain schemas directly from
   the RPC server so that they need not have a local copy.  Great for interactive debugging.
-
-## Near future (after 0.5)
-
-Provisionally, these are probably the things that will be worked on after 0.5.
-
-* **C++98 Backport:**  Fork and backport the key functionality from the C++11 implementation to
-  work under C++98/C++03.  This will make Cap'n Proto accessible to MSVC users.  The schema and
-  dynamic reflection APIs will not be included.  This also means stringification will not be
-  available (though you can use the external `capnp` tool for that).
-* **Implement parameterized types:**  Template / generic types with type parameters.
+* **Improved MSVC support:**  Once MSVC improves its support for C++11 language features, we will
+  support Cap'n Proto's reflection and RPC APIs in MSVC. (Currently, only core serialization is
+  supported.)
 * **Implement encapsulated types:**  This will allow you to create a hand-written wrapper around a
   type which will be automatically injected into the generated code, so that you can provide a
   nicer interface which encapsulates the type's inner state.
