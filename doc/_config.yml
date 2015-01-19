@@ -1,4 +1,4 @@
 safe: true
 permalink: /news/:year-:month-:day-:title.html
-baseurl: /capnproto/
+baseurl: /
 is_next: false
