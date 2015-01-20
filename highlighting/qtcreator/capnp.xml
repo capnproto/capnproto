@@ -3,7 +3,7 @@
 
 <!-- Syntax highlighting for Kate and QtCreator.  To customize colors, see end of file. -->
 
-<language name="Cap'n Proto" version="0.5" kateversion="2.4" section="Sources" extensions="*.capnp" mimetype="text/x-capnp" license="BSD 2-clause" author="Kenton Varda (temporal@gmail.com)">
+<language name="Cap'n Proto" version="0.5" kateversion="2.4" section="Sources" extensions="*.capnp" mimetype="text/x-capnp" license="BSD 2-clause" author="Kenton Varda (kenton@sandstorm.io)">
   <highlighting>
     <list name="keyword">
       <item>struct</item>

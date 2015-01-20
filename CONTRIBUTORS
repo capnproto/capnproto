@@ -2,7 +2,7 @@ The following people have made large code contributions to this repository.
 Those contributions are copyright the respective authors and licensed by them
 under the same MIT license terms as the rest of the library.
 
-Kenton Varda <temporal@gmail.com>: Primary Author
+Kenton Varda <kenton@sandstorm.io>: Primary Author
 Jason Choy <jjwchoy@gmail.com>: kj/threadlocal.h and other iOS tweaks, `name` annotation in C++ code generator
 Remy Blank <rblank@google.com> (contributions copyright Google Inc.): KJ Timers
 Joshua Warner <joshuawarner32@gmail.com>: cmake build, AnyStruct/AnyList, other stuff
