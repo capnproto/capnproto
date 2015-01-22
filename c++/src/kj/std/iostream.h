@@ -30,8 +30,8 @@
 #pragma GCC system_header
 #endif
 
-#include <iostream>
 #include "../io.h"
+#include <iostream>
 
 namespace kj {
 namespace std {

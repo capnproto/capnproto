@@ -30,7 +30,6 @@
 #error "This header is only meant to be included by Cap'n Proto's own source code."
 #endif
 
-#include <unordered_map>
 #include <kj/common.h>
 #include <kj/mutex.h>
 #include <kj/exception.h>
@@ -38,6 +37,7 @@
 #include "common.h"
 #include "message.h"
 #include "layout.h"
+#include <unordered_map>
 
 #if !CAPNP_LITE
 #include "capability.h"
