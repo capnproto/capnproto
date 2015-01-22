@@ -222,6 +222,15 @@ TEST(DynamicApi, DynamicAnyPointers) {
   }
 }
 
+TEST(DynamicApi, DynamicAnyStructs) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
+
+  root.as<AnyStruct>().as<TestAllTypes>().setInt8Field(123);
+  EXPECT_EQ(root.get("int8Field").as<int8_t>(), 123);
+  EXPECT_EQ(root.asReader().as<AnyStruct>().as<TestAllTypes>().getInt8Field(), 123);
+}
+
 #define EXPECT_MAYBE_EQ(name, exp, expected, actual) \
   KJ_IF_MAYBE(name, exp) { \
     EXPECT_EQ(expected, actual); \

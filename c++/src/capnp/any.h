@@ -436,7 +436,9 @@ public:
   }
 
   template <typename T>
-  ReaderFor<T> as();
+  ReaderFor<T> as() const {
+    return typename T::Reader(_reader);
+  }
   // T must be a struct type.
 private:
   _::StructReader _reader;
@@ -465,6 +467,12 @@ public:
 
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return Reader(_builder.asReader()); }
+
+  template <typename T>
+  BuilderFor<T> as() {
+    return typename T::Builder(_builder);
+  }
+  // T must be a struct type.
 private:
   _::StructBuilder _builder;
   friend class Orphanage;

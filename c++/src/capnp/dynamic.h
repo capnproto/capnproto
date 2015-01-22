@@ -1435,6 +1435,7 @@ typename T::Reader DynamicStruct::Reader::as() const {
   schema.requireUsableAs<T>();
   return typename T::Reader(reader);
 }
+
 template <typename T>
 typename T::Builder DynamicStruct::Builder::as() {
   static_assert(kind<T>() == Kind::STRUCT,
@@ -1454,6 +1455,16 @@ inline DynamicStruct::Builder DynamicStruct::Builder::as<DynamicStruct>() {
 
 inline DynamicStruct::Reader DynamicStruct::Builder::asReader() const {
   return DynamicStruct::Reader(schema, builder.asReader());
+}
+
+template <>
+inline AnyStruct::Reader DynamicStruct::Reader::as<AnyStruct>() const {
+  return AnyStruct::Reader(reader);
+}
+
+template <>
+inline AnyStruct::Builder DynamicStruct::Builder::as<AnyStruct>() {
+  return AnyStruct::Builder(builder);
 }
 
 template <typename T>
