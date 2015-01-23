@@ -245,7 +245,7 @@ A capability pointer, then, simply contains an index into the separate capabilit
     C (32 bits) = Index of the capability in the message's capability
         table.
 
-In [rpc.capnp](https://github.com/kentonv/capnproto/blob/master/c++/src/capnp/rpc.capnp), the
+In [rpc.capnp](https://github.com/sandstorm-io/capnproto/blob/master/c++/src/capnp/rpc.capnp), the
 capability table is encoded as a list of `CapDescriptors`, appearing along-side the message content
 in the `Payload` struct.  However, some use cases may call for different approaches.  A message
 that is built and consumed within the same process need not encode the capability table at all

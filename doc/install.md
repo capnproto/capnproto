@@ -100,7 +100,7 @@ If you download directly from Git, you will need to have the GNU autotools --
 installed (in addition to Git) in order to fetch the Google Test sources (done by
 `setup-autotools.sh`).
 
-    git clone https://github.com/kentonv/capnproto.git
+    git clone https://github.com/sandstorm-io/capnproto.git
     cd capnproto/c++
     ./setup-autotools.sh
     autoreconf -i
