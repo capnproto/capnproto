@@ -16,7 +16,7 @@ not yet implemented.
 
 ## Sample Code
 
-The [Calculator example](https://github.com/kentonv/capnproto/tree/master/c++/samples) implements
+The [Calculator example](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples) implements
 a fully-functional Cap'n Proto client and server.
 
 ## KJ Concurrency Framework
@@ -374,7 +374,7 @@ Note that for the connect address, Cap'n Proto supports DNS host names as well a
 addresses.  Additionally, a Unix domain socket can be specified as `unix:` followed by a path name.
 
 For a more complete example, see the
-[calculator client sample](https://github.com/kentonv/capnproto/tree/master/c++/samples/calculator-client.c++).
+[calculator client sample](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples/calculator-client.c++).
 
 ### Starting a server
 
@@ -416,7 +416,7 @@ IPv6 interfaces.  Additionally, a Unix domain socket can be specified as `unix:`
 path name.
 
 For a more complete example, see the
-[calculator server sample](https://github.com/kentonv/capnproto/tree/master/c++/samples/calculator-server.c++).
+[calculator server sample](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples/calculator-server.c++).
 
 ## Debugging
 
