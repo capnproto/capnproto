@@ -27,6 +27,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <chrono>
+#include <random>
 
 namespace capnp {
 namespace compiler {
@@ -34,12 +36,23 @@ namespace compiler {
 uint64_t generateRandomId() {
   uint64_t result;
 
+#if _WIN32
+  // 64-bit mersenne twister, seeded with the current time
+  // Avoid std::random_device because it always returns the same sequence on mingw!!!
+  typedef std::mt19937_64 gen_t;
+
+  auto seed = std::chrono::system_clock::now().time_since_epoch().count();
+  gen_t generator((gen_t::result_type)seed);
+  std::uniform_int_distribution<uint64_t> dist;
+  result = dist(generator);
+#else
   int fd;
   KJ_SYSCALL(fd = open("/dev/urandom", O_RDONLY));
 
   ssize_t n;
   KJ_SYSCALL(n = read(fd, &result, sizeof(result)), "/dev/urandom");
   KJ_ASSERT(n == sizeof(result), "Incomplete read from /dev/urandom.", n);
+#endif
 
   return result | (1ull << 63);
 }
