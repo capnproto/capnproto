@@ -523,18 +523,18 @@ Other than that, there is absolutely no good reason to space things one way or a
 
 * Doc comments go **after** the declaration. If the declaration starts a block, the doc comment should go inside the block at the top. A group of related declarations can have a single group doc comment after the last one as long as there are no black lines between the declarations.
 
-      int foo();
-      // This is documentation for foo().
+        int foo();
+        // This is documentation for foo().
 
-      class Bar {
-        // This is documentation for Bar.
-      public:
-        Bar();
+        class Bar {
+          // This is documentation for Bar.
+        public:
+          Bar();
 
-        inline int baz() { return 5; }
-        inline int qux() { return 6; }
-        // This is documentation for baz() and qux().
-      };
+          inline int baz() { return 5; }
+          inline int qux() { return 6; }
+          // This is documentation for baz() and qux().
+        };
 
   **Rationale:** When you start reading a doc comment, the first thing you want to know is *what the heck is being documented*. Having to scroll down through a long comment to see the declaration, then back up to read the docs, is bad. Sometimes, people actually repeat the declaration at the top of the comment just so that it's visible. This is silly. Let's just put the comment after the declaration.
 
