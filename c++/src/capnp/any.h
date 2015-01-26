@@ -437,9 +437,9 @@ public:
 
   template <typename T>
   ReaderFor<T> as() const {
+    // T must be a struct type.
     return typename T::Reader(_reader);
   }
-  // T must be a struct type.
 private:
   _::StructReader _reader;
 
@@ -470,9 +470,9 @@ public:
 
   template <typename T>
   BuilderFor<T> as() {
+    // T must be a struct type.
     return typename T::Builder(_builder);
   }
-  // T must be a struct type.
 private:
   _::StructBuilder _builder;
   friend class Orphanage;
