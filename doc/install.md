@@ -108,6 +108,10 @@ installed (in addition to Git) in order to fetch the Google Test sources (done b
     make -j6 check
     sudo make install
 
+**From Brew (Mac OS X)**
+
+<pre><code>brew install capnp</code></pre>
+
 ## Installation: Windows
 
 1. Download Cap'n Proto Win32 build:
@@ -141,13 +145,13 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 5. Build the solution (`ALL_BUILD`).
 
 6. Build the `INSTALL` project to copy the compiled libraries and header files into `CMAKE_INSTALL_PREFIX`.
-   
+
    Alternatively, find the compiled `.lib` files in the build directory under
    `src/{capnp,kj}/{Debug,Release}` and place them somewhere where your project can link against them.
    Also add the `src` directory to your search path for `#include`s, or copy all the headers to your
    project's include directory.
 
-7. Add `#define CAPNP_LITE 1` to either your project's precompiled/shared header or compiler options. 
+7. Add `#define CAPNP_LITE 1` to either your project's precompiled/shared header or compiler options.
 
 **From Git**
 
