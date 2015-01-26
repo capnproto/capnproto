@@ -195,11 +195,9 @@ Threads are hard, and synchronization between threads is slow. Even "lock-free" 
 
 KJ instead prefers event loop concurrency. In this model, each event callback is effectively a transaction; it does not need to worry about concurrent modification within the body of the function.
 
-Every object either belongs to a specific thread (who is allowed to read and modify it) or is transitively immutable (in which case all threads can safely read it concurrently).
+Multiple threads may exist, but each one has its own event loop and is treated as sort of a lightweight process with shared memory. Every object in the process either belongs to a specific thread (who is allowed to read and modify it) or is transitively immutable (in which case all threads can safely read it concurrently). Threads communicate through asynchronous message-passing. In fact, the only big difference between KJ-style threads compared to using separate processes is that threads may transfer ownership of in-memory objects as part of a message send.
 
-Threads communicate through asynchronous message-passing. The only big difference between threads compared to using separate processes is that threads may transfer ownership of in-memory objects as part of a message send.
-
-Note that with hardware transactional memory, it may become possible to execute a single event loop across multiple CPU cores while behaving equivalently to a single thread. If so, this will be implemented as part of KJ's event loop machinery, transparently to apps.
+Note that with hardware transactional memory, it may become possible to execute a single event loop across multiple CPU cores while behaving equivalently to a single thread, by executing each event callback as a hardware transaction. If so, this will be implemented as part of KJ's event loop machinery, transparently to apps.
 
 ### Lazy input validation
 
