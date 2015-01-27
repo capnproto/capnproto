@@ -106,8 +106,7 @@ public:
   }
 
   kj::MainFunc getGenIdMain() {
-    return kj::MainBuilder(
-          context, "Cap'n Proto multi-tool 0.2",
+    return kj::MainBuilder(context, VERSION_STRING,
           "Generates a new 64-bit unique ID for use in a Cap'n Proto schema.")
         .callAfterParsing(KJ_BIND_METHOD(*this, generateId))
         .build();
