@@ -78,6 +78,8 @@ package from [Apple](https://developer.apple.com/downloads/) or compiler builds 
 
 ## Installation: Unix
 
+**From Release Tarball**
+
 You may download and install the release version of Cap'n Proto like so:
 
 <pre><code>curl -O <a href="https://capnproto.org/capnproto-c++-0.0.0.tar.gz">https://capnproto.org/capnproto-c++-0.0.0.tar.gz</a>
@@ -90,6 +92,15 @@ sudo make install</code></pre>
 This will install `capnp`, the Cap'n Proto command-line tool.  It will also install `libcapnp`,
 `libcapnpc`, and `libkj` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
 `/usr/local/include/kj`.
+
+**From Package Managers**
+
+Some package managers include Cap'n Proto packages.
+
+Note: These packages are not maintained by us and are sometimes not up to date with the latest Cap'n Proto release.
+
+* Debian / Ubuntu: `apt-get install capnproto`
+* Homebrew (OSX): `brew install capnp`
 
 **From Git**
 
@@ -108,11 +119,9 @@ installed (in addition to Git) in order to fetch the Google Test sources (done b
     make -j6 check
     sudo make install
 
-**From Brew (Mac OS X)**
-
-<pre><code>brew install capnp</code></pre>
-
 ## Installation: Windows
+
+**From Release Zip**
 
 1. Download Cap'n Proto Win32 build:
 
