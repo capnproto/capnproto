@@ -3862,10 +3862,10 @@ private:
 
 // =======================================================================================
 
-inline Node::Which Node::Reader::which() const {
+inline  ::capnp::schema::Node::Which Node::Reader::which() const {
   return _reader.getDataField<Which>(6 * ::capnp::ELEMENTS);
 }
-inline Node::Which Node::Builder::which() {
+inline  ::capnp::schema::Node::Which Node::Builder::which() {
   return _builder.getDataField<Which>(6 * ::capnp::ELEMENTS);
 }
 
@@ -4778,10 +4778,10 @@ inline void Node::Annotation::Builder::setTargetsAnnotation(bool value) {
       123 * ::capnp::ELEMENTS, value);
 }
 
-inline Field::Which Field::Reader::which() const {
+inline  ::capnp::schema::Field::Which Field::Reader::which() const {
   return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
-inline Field::Which Field::Builder::which() {
+inline  ::capnp::schema::Field::Which Field::Builder::which() {
   return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
 
@@ -5056,10 +5056,10 @@ inline void Field::Group::Builder::setTypeId( ::uint64_t value) {
       2 * ::capnp::ELEMENTS, value);
 }
 
-inline Field::Ordinal::Which Field::Ordinal::Reader::which() const {
+inline  ::capnp::schema::Field::Ordinal::Which Field::Ordinal::Reader::which() const {
   return _reader.getDataField<Which>(5 * ::capnp::ELEMENTS);
 }
-inline Field::Ordinal::Which Field::Ordinal::Builder::which() {
+inline  ::capnp::schema::Field::Ordinal::Which Field::Ordinal::Builder::which() {
   return _builder.getDataField<Which>(5 * ::capnp::ELEMENTS);
 }
 
@@ -5456,10 +5456,10 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Parameter>> Method
       _builder.getPointerField(4 * ::capnp::POINTERS));
 }
 
-inline Type::Which Type::Reader::which() const {
+inline  ::capnp::schema::Type::Which Type::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Type::Which Type::Builder::which() {
+inline  ::capnp::schema::Type::Which Type::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -6132,10 +6132,10 @@ inline ::capnp::Orphan< ::capnp::schema::Brand> Type::Interface::Builder::disown
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline Type::AnyPointer::Which Type::AnyPointer::Reader::which() const {
+inline  ::capnp::schema::Type::AnyPointer::Which Type::AnyPointer::Reader::which() const {
   return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
-inline Type::AnyPointer::Which Type::AnyPointer::Builder::which() {
+inline  ::capnp::schema::Type::AnyPointer::Which Type::AnyPointer::Builder::which() {
   return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
 
@@ -6284,10 +6284,10 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Brand::Scope>> Brand::Bu
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline Brand::Scope::Which Brand::Scope::Reader::which() const {
+inline  ::capnp::schema::Brand::Scope::Which Brand::Scope::Reader::which() const {
   return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
-inline Brand::Scope::Which Brand::Scope::Builder::which() {
+inline  ::capnp::schema::Brand::Scope::Which Brand::Scope::Builder::which() {
   return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
 
@@ -6383,10 +6383,10 @@ inline void Brand::Scope::Builder::setInherit( ::capnp::Void value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline Brand::Binding::Which Brand::Binding::Reader::which() const {
+inline  ::capnp::schema::Brand::Binding::Which Brand::Binding::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Brand::Binding::Which Brand::Binding::Builder::which() {
+inline  ::capnp::schema::Brand::Binding::Which Brand::Binding::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -6468,10 +6468,10 @@ inline ::capnp::Orphan< ::capnp::schema::Type> Brand::Binding::Builder::disownTy
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline Value::Which Value::Reader::which() const {
+inline  ::capnp::schema::Value::Which Value::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Value::Which Value::Builder::which() {
+inline  ::capnp::schema::Value::Which Value::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 

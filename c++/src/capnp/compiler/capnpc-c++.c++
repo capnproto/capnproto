@@ -1858,6 +1858,13 @@ private:
     declareText = kj::strTree(kj::mv(declareText), "  };");
     defineText = kj::strTree(kj::mv(defineText), "#endif  // !CAPNP_LITE\n\n");
 
+    // Name of the ::Which type, when applicable.
+    CppTypeName whichName;
+    if (structNode.getDiscriminantCount() != 0) {
+      whichName = cppFullName(schema, nullptr);
+      whichName.addMemberType("Which");
+    }
+
     return StructText {
       kj::strTree(
           templateContext.hasParams() ? "  " : "", templateContext.decl(true),
@@ -1898,10 +1905,12 @@ private:
 
       kj::strTree(
           structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
-              "inline ", fullName, "::Which ", fullName, "::Reader::which() const {\n"
+              templateContext.allDecls(),
+              "inline ", whichName, " ", fullName, "::Reader::which() const {\n"
               "  return _reader.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
-              "}\n"
-              "inline ", fullName, "::Which ", fullName, "::Builder::which() {\n"
+              "}\n",
+              templateContext.allDecls(),
+              "inline ", whichName, " ", fullName, "::Builder::which() {\n"
               "  return _builder.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
               "}\n"
               "\n"),
