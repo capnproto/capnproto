@@ -2469,10 +2469,10 @@ private:
 
 // =======================================================================================
 
-inline Message::Which Message::Reader::which() const {
+inline  ::capnp::rpc::Message::Which Message::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Message::Which Message::Builder::which() {
+inline  ::capnp::rpc::Message::Which Message::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -3351,10 +3351,10 @@ inline void Call::Builder::setAllowThirdPartyTailCall(bool value) {
       128 * ::capnp::ELEMENTS, value);
 }
 
-inline Call::SendResultsTo::Which Call::SendResultsTo::Reader::which() const {
+inline  ::capnp::rpc::Call::SendResultsTo::Which Call::SendResultsTo::Reader::which() const {
   return _reader.getDataField<Which>(3 * ::capnp::ELEMENTS);
 }
-inline Call::SendResultsTo::Which Call::SendResultsTo::Builder::which() {
+inline  ::capnp::rpc::Call::SendResultsTo::Which Call::SendResultsTo::Builder::which() {
   return _builder.getDataField<Which>(3 * ::capnp::ELEMENTS);
 }
 
@@ -3445,10 +3445,10 @@ inline ::capnp::AnyPointer::Builder Call::SendResultsTo::Builder::initThirdParty
   return result;
 }
 
-inline Return::Which Return::Reader::which() const {
+inline  ::capnp::rpc::Return::Which Return::Reader::which() const {
   return _reader.getDataField<Which>(3 * ::capnp::ELEMENTS);
 }
-inline Return::Which Return::Builder::which() {
+inline  ::capnp::rpc::Return::Which Return::Builder::which() {
   return _builder.getDataField<Which>(3 * ::capnp::ELEMENTS);
 }
 
@@ -3725,10 +3725,10 @@ inline void Finish::Builder::setReleaseResultCaps(bool value) {
       32 * ::capnp::ELEMENTS, value, true);
 }
 
-inline Resolve::Which Resolve::Reader::which() const {
+inline  ::capnp::rpc::Resolve::Which Resolve::Reader::which() const {
   return _reader.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
-inline Resolve::Which Resolve::Builder::which() {
+inline  ::capnp::rpc::Resolve::Which Resolve::Builder::which() {
   return _builder.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
 
@@ -3931,10 +3931,10 @@ inline Disembargo::Context::Builder Disembargo::Builder::initContext() {
   _builder.setDataField< ::uint16_t>(2 * ::capnp::ELEMENTS, 0);
   return Disembargo::Context::Builder(_builder);
 }
-inline Disembargo::Context::Which Disembargo::Context::Reader::which() const {
+inline  ::capnp::rpc::Disembargo::Context::Which Disembargo::Context::Reader::which() const {
   return _reader.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
-inline Disembargo::Context::Which Disembargo::Context::Builder::which() {
+inline  ::capnp::rpc::Disembargo::Context::Which Disembargo::Context::Builder::which() {
   return _builder.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
 
@@ -4235,10 +4235,10 @@ inline ::capnp::AnyPointer::Builder Join::Builder::initKeyPart() {
   return result;
 }
 
-inline MessageTarget::Which MessageTarget::Reader::which() const {
+inline  ::capnp::rpc::MessageTarget::Which MessageTarget::Reader::which() const {
   return _reader.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
-inline MessageTarget::Which MessageTarget::Builder::which() {
+inline  ::capnp::rpc::MessageTarget::Which MessageTarget::Builder::which() {
   return _builder.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
 
@@ -4373,10 +4373,10 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::CapDescriptor>> Payload::Bu
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-inline CapDescriptor::Which CapDescriptor::Reader::which() const {
+inline  ::capnp::rpc::CapDescriptor::Which CapDescriptor::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline CapDescriptor::Which CapDescriptor::Builder::which() {
+inline  ::capnp::rpc::CapDescriptor::Which CapDescriptor::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -4634,10 +4634,10 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>> Promis
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline PromisedAnswer::Op::Which PromisedAnswer::Op::Reader::which() const {
+inline  ::capnp::rpc::PromisedAnswer::Op::Which PromisedAnswer::Op::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline PromisedAnswer::Op::Which PromisedAnswer::Op::Builder::which() {
+inline  ::capnp::rpc::PromisedAnswer::Op::Which PromisedAnswer::Op::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 

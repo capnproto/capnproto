@@ -3309,10 +3309,10 @@ inline void LocatedFloat::Builder::setEndByte( ::uint32_t value) {
       3 * ::capnp::ELEMENTS, value);
 }
 
-inline Expression::Which Expression::Reader::which() const {
+inline  ::capnp::compiler::Expression::Which Expression::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Expression::Which Expression::Builder::which() {
+inline  ::capnp::compiler::Expression::Which Expression::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -3858,10 +3858,10 @@ inline ::capnp::Orphan< ::capnp::compiler::LocatedText> Expression::Builder::dis
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline Expression::Param::Which Expression::Param::Reader::which() const {
+inline  ::capnp::compiler::Expression::Param::Which Expression::Param::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Expression::Param::Which Expression::Param::Builder::which() {
+inline  ::capnp::compiler::Expression::Param::Which Expression::Param::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -4123,10 +4123,10 @@ inline ::capnp::Orphan< ::capnp::compiler::LocatedText> Expression::Member::Buil
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-inline Declaration::Which Declaration::Reader::which() const {
+inline  ::capnp::compiler::Declaration::Which Declaration::Reader::which() const {
   return _reader.getDataField<Which>(1 * ::capnp::ELEMENTS);
 }
-inline Declaration::Which Declaration::Builder::which() {
+inline  ::capnp::compiler::Declaration::Which Declaration::Builder::which() {
   return _builder.getDataField<Which>(1 * ::capnp::ELEMENTS);
 }
 
@@ -5303,10 +5303,10 @@ inline Declaration::AnnotationApplication::Value::Builder Declaration::Annotatio
   _builder.getPointerField(1 * ::capnp::POINTERS).clear();
   return Declaration::AnnotationApplication::Value::Builder(_builder);
 }
-inline Declaration::AnnotationApplication::Value::Which Declaration::AnnotationApplication::Value::Reader::which() const {
+inline  ::capnp::compiler::Declaration::AnnotationApplication::Value::Which Declaration::AnnotationApplication::Value::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Declaration::AnnotationApplication::Value::Which Declaration::AnnotationApplication::Value::Builder::which() {
+inline  ::capnp::compiler::Declaration::AnnotationApplication::Value::Which Declaration::AnnotationApplication::Value::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -5388,10 +5388,10 @@ inline ::capnp::Orphan< ::capnp::compiler::Expression> Declaration::AnnotationAp
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-inline Declaration::ParamList::Which Declaration::ParamList::Reader::which() const {
+inline  ::capnp::compiler::Declaration::ParamList::Which Declaration::ParamList::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Declaration::ParamList::Which Declaration::ParamList::Builder::which() {
+inline  ::capnp::compiler::Declaration::ParamList::Which Declaration::ParamList::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -5677,10 +5677,10 @@ inline void Declaration::Param::Builder::setEndByte( ::uint32_t value) {
       2 * ::capnp::ELEMENTS, value);
 }
 
-inline Declaration::Param::DefaultValue::Which Declaration::Param::DefaultValue::Reader::which() const {
+inline  ::capnp::compiler::Declaration::Param::DefaultValue::Which Declaration::Param::DefaultValue::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Declaration::Param::DefaultValue::Which Declaration::Param::DefaultValue::Builder::which() {
+inline  ::capnp::compiler::Declaration::Param::DefaultValue::Which Declaration::Param::DefaultValue::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -5762,10 +5762,10 @@ inline ::capnp::Orphan< ::capnp::compiler::Expression> Declaration::Param::Defau
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
-inline Declaration::Id::Which Declaration::Id::Reader::which() const {
+inline  ::capnp::compiler::Declaration::Id::Which Declaration::Id::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Declaration::Id::Which Declaration::Id::Builder::which() {
+inline  ::capnp::compiler::Declaration::Id::Which Declaration::Id::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -6063,10 +6063,10 @@ inline Declaration::Field::DefaultValue::Builder Declaration::Field::Builder::in
   _builder.getPointerField(6 * ::capnp::POINTERS).clear();
   return Declaration::Field::DefaultValue::Builder(_builder);
 }
-inline Declaration::Field::DefaultValue::Which Declaration::Field::DefaultValue::Reader::which() const {
+inline  ::capnp::compiler::Declaration::Field::DefaultValue::Which Declaration::Field::DefaultValue::Reader::which() const {
   return _reader.getDataField<Which>(6 * ::capnp::ELEMENTS);
 }
-inline Declaration::Field::DefaultValue::Which Declaration::Field::DefaultValue::Builder::which() {
+inline  ::capnp::compiler::Declaration::Field::DefaultValue::Which Declaration::Field::DefaultValue::Builder::which() {
   return _builder.getDataField<Which>(6 * ::capnp::ELEMENTS);
 }
 
@@ -6233,10 +6233,10 @@ inline Declaration::Method::Results::Builder Declaration::Method::Builder::initR
   _builder.getPointerField(6 * ::capnp::POINTERS).clear();
   return Declaration::Method::Results::Builder(_builder);
 }
-inline Declaration::Method::Results::Which Declaration::Method::Results::Reader::which() const {
+inline  ::capnp::compiler::Declaration::Method::Results::Which Declaration::Method::Results::Reader::which() const {
   return _reader.getDataField<Which>(6 * ::capnp::ELEMENTS);
 }
-inline Declaration::Method::Results::Which Declaration::Method::Results::Builder::which() {
+inline  ::capnp::compiler::Declaration::Method::Results::Which Declaration::Method::Results::Builder::which() {
   return _builder.getDataField<Which>(6 * ::capnp::ELEMENTS);
 }
 

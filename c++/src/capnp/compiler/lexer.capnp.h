@@ -558,10 +558,10 @@ private:
 
 // =======================================================================================
 
-inline Token::Which Token::Reader::which() const {
+inline  ::capnp::compiler::Token::Which Token::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Token::Which Token::Builder::which() {
+inline  ::capnp::compiler::Token::Which Token::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -969,10 +969,10 @@ inline ::capnp::Orphan< ::capnp::Data> Token::Builder::disownBinaryLiteral() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline Statement::Which Statement::Reader::which() const {
+inline  ::capnp::compiler::Statement::Which Statement::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Statement::Which Statement::Builder::which() {
+inline  ::capnp::compiler::Statement::Which Statement::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
