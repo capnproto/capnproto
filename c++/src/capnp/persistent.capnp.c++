@@ -482,5 +482,35 @@ const ::capnp::_::RawSchema s_ecafa18b482da3aa = {
   2, 2, i_ecafa18b482da3aa, nullptr, nullptr, { &s_ecafa18b482da3aa, nullptr, bd_ecafa18b482da3aa, 0, sizeof(bd_ecafa18b482da3aa) / sizeof(bd_ecafa18b482da3aa[0]), nullptr }
 };
 #endif  // !CAPNP_LITE
+static const ::capnp::_::AlignedData<21> b_f622595091cafb67 = {
+  {   0,   0,   0,   0,   5,   0,   6,   0,
+    103, 251, 202, 145,  80,  89,  34, 246,
+     23,   0,   0,   0,   5,   0,  32,   1,
+    215, 238,  63, 152,  54,   8,  99, 184,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+     21,   0,   0,   0,  18,   1,   0,   0,
+     37,   0,   0,   0,   7,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+     32,   0,   0,   0,   2,   0,   1,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+     99,  97, 112, 110, 112,  47, 112, 101,
+    114, 115, 105, 115, 116, 101, 110, 116,
+     46,  99,  97, 112, 110, 112,  58, 112,
+    101, 114, 115, 105, 115, 116, 101, 110,
+    116,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   1,   0,   1,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0, }
+};
+::capnp::word const* const bp_f622595091cafb67 = b_f622595091cafb67.words;
+#if !CAPNP_LITE
+const ::capnp::_::RawSchema s_f622595091cafb67 = {
+  0xf622595091cafb67, b_f622595091cafb67.words, 21, nullptr, nullptr,
+  0, 0, nullptr, nullptr, nullptr, { &s_f622595091cafb67, nullptr, nullptr, 0, 0, nullptr }
+};
+#endif  // !CAPNP_LITE
 }  // namespace schemas
 }  // namespace capnp

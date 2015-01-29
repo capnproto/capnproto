@@ -48,9 +48,10 @@ interface Persistent@0xc8cb212fcd9f5691(SturdyRef, Owner) {
   # the capability's interface should NOT inherit `Persistent`; instead, just perform a cast at
   # runtime. It's not type-safe, but trying to be type-safe in these cases will likely lead to
   # tears. In cases where a particular interface only makes sense on persistent capabilities, it
-  # *might* make sense to explicitly inherit it. But, even in these cases, you probably don't want
-  # to specify the `SturdyRef` parameter, since this type may differ from app to app or even host
-  # to host.
+  # still should not explicitly inherit Persistent because the `SturdyRef` and `Owner` types will
+  # vary between realms (they may even be different at the call site than they are on the
+  # implementation). Instead, mark persistent interfaces with the $persistent annotation (defined
+  # below).
   #
   # Sealing
   # -------
@@ -123,3 +124,16 @@ interface RealmGateway(InternalRef, ExternalRef, InternalOwner, ExternalOwner) {
   # Given an internal capability, save it and return an external reference. Used when someone
   # outside the realm tries to save a capability from inside the realm.
 }
+
+annotation persistent(interface, field) :Void;
+# Apply this annotation to interfaces for objects that will always be persistent, instead of
+# extending the Persistent capability, since the correct type parameters to Persistent depend on
+# the realm, which is orthogonal to the interface type and therefore should not be defined
+# along-side it.
+#
+# You may also apply this annotation to a capability-typed field which will always contain a
+# persistent capability, but where the capability's interface itself is not already marked
+# persistent.
+#
+# Note that absence of the $persistent annotation doesn't mean a capability of that type isn't
+# persistent; it just means not *all* such capabilities are persistent.
