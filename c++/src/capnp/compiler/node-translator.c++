@@ -1418,6 +1418,22 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
   builder.adoptAnnotations(compileAnnotationApplications(decl.getAnnotations(), targetsFlagName));
 }
 
+static kj::StringPtr getExpressionTargetName(Expression::Reader exp) {
+  kj::StringPtr targetName;
+  switch (exp.which()) {
+    case Expression::ABSOLUTE_NAME:
+      return exp.getAbsoluteName().getValue();
+    case Expression::RELATIVE_NAME:
+      return exp.getRelativeName().getValue();
+    case Expression::APPLICATION:
+      return getExpressionTargetName(exp.getApplication().getFunction());
+    case Expression::MEMBER:
+      return exp.getMember().getName().getValue();
+    default:
+      return nullptr;
+  }
+}
+
 void NodeTranslator::DuplicateNameDetector::check(
     List<Declaration>::Reader nestedDecls, Declaration::Which parentKind) {
   for (auto decl: nestedDecls) {
@@ -1440,7 +1456,25 @@ void NodeTranslator::DuplicateNameDetector::check(
       }
 
       switch (decl.which()) {
-        case Declaration::USING:
+        case Declaration::USING: {
+          kj::StringPtr targetName = getExpressionTargetName(decl.getUsing().getTarget());
+          if (targetName.size() > 0 && targetName[0] >= 'a' && targetName[0] <= 'z') {
+            // Target starts with lower-case letter, so alias should too.
+            if (nameText.size() > 0 && (nameText[0] < 'a' || nameText[0] > 'z')) {
+              errorReporter.addErrorOn(name,
+                  "Non-type names must begin with a lower-case letter.");
+            }
+          } else {
+            // Target starts with capital or is not named (probably, an import). Require
+            // capitalization.
+            if (nameText.size() > 0 && (nameText[0] < 'A' || nameText[0] > 'Z')) {
+              errorReporter.addErrorOn(name,
+                  "Type names must begin with a capital letter.");
+            }
+          }
+          break;
+        }
+
         case Declaration::ENUM:
         case Declaration::STRUCT:
         case Declaration::INTERFACE:
