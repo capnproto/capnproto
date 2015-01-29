@@ -324,10 +324,14 @@ int mkstemp(char *tpl) {
   char* end = tpl + strlen(tpl);
   while (end > tpl && *(end-1) == 'X') --end;
 
-  for (;;) {
-    KJ_ASSERT(_mktemp(tpl) == tpl);
+#pragma warning(push)
+#pragma warning(disable: 4996)	// avoid microsoft crt warning of unsafe functions
 
-    int fd = open(tpl, O_RDWR | O_CREAT | O_EXCL | O_TEMPORARY | O_BINARY, 0700);
+  for (;;) {
+    KJ_ASSERT(mktemp(tpl) == tpl);
+
+	int fd = _open(tpl, O_RDWR | O_CREAT | O_EXCL | O_TEMPORARY | O_BINARY, 0700);
+
     if (fd >= 0) {
       return fd;
     }
@@ -339,6 +343,7 @@ int mkstemp(char *tpl) {
 
     memset(end, 'X', strlen(end));
   }
+#pragma warning(pop)
 }
 #endif
 
@@ -370,7 +375,7 @@ TEST(Serialize, FileDescriptors) {
     writeMessageToFd(tmpfile.get(), builder);
   }
 
-  lseek(tmpfile, 0, SEEK_SET);
+  _lseek(tmpfile, 0, SEEK_SET);
 
   {
     StreamFdMessageReader reader(tmpfile.get());

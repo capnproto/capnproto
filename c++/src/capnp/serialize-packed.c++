@@ -140,7 +140,7 @@ size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
         return out - reinterpret_cast<uint8_t*>(dst);
       }
 
-      uint inRemaining = BUFFER_REMAINING;
+      uint inRemaining = static_cast<uint>(BUFFER_REMAINING);
       if (inRemaining >= runLength) {
         // Fast path.
         memcpy(out, in, runLength);
@@ -266,7 +266,7 @@ void PackedInputStream::skip(size_t bytes) {
 
       bytes -= runLength;
 
-      uint inRemaining = BUFFER_REMAINING;
+      uint inRemaining = static_cast<uint>(BUFFER_REMAINING);
       if (inRemaining > runLength) {
         // Fast path.
         in += runLength;
@@ -365,7 +365,7 @@ void PackedOutputStream::write(const void* src, size_t size) {
       }
 
       // Write the count.
-      *out++ = inWord - reinterpret_cast<const uint64_t*>(in);
+      *out++ = static_cast<uint8_t>(inWord - reinterpret_cast<const uint64_t*>(in));
 
       // Advance input.
       in = reinterpret_cast<const uint8_t*>(inWord);
@@ -405,8 +405,8 @@ void PackedOutputStream::write(const void* src, size_t size) {
       }
 
       // Write the count.
-      uint count = in - runStart;
-      *out++ = count / sizeof(word);
+      uint count = static_cast<uint>(in - runStart);
+      *out++ = static_cast<uint8_t>(count / sizeof(word));
 
       if (count <= reinterpret_cast<uint8_t*>(buffer.end()) - out) {
         // There's enough space to memcpy.
