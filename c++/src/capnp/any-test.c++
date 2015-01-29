@@ -206,6 +206,13 @@ TEST(Any, AnyList) {
 #endif
 }
 
+TEST(Any, AnyStructListCapInSchema) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<test::TestAnyOthers>();
+
+  initTestMessage(root.initAnyStructFieldAs<TestAllTypes>());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

@@ -211,6 +211,9 @@ struct Declaration {
     BUILTIN_LIST,
     BUILTIN_OBJECT,
     BUILTIN_ANY_POINTER,
+    BUILTIN_ANY_STRUCT,
+    BUILTIN_ANY_LIST,
+    BUILTIN_CAPABILITY,
   };
   struct BrandParameter;
   struct AnnotationApplication;
@@ -1397,6 +1400,15 @@ public:
   inline bool hasParameters() const;
   inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Reader getParameters() const;
 
+  inline bool isBuiltinAnyStruct() const;
+  inline  ::capnp::Void getBuiltinAnyStruct() const;
+
+  inline bool isBuiltinAnyList() const;
+  inline  ::capnp::Void getBuiltinAnyList() const;
+
+  inline bool isBuiltinCapability() const;
+  inline  ::capnp::Void getBuiltinCapability() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -1601,6 +1613,18 @@ public:
   inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Builder initParameters(unsigned int size);
   inline void adoptParameters(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>> disownParameters();
+
+  inline bool isBuiltinAnyStruct();
+  inline  ::capnp::Void getBuiltinAnyStruct();
+  inline void setBuiltinAnyStruct( ::capnp::Void value = ::capnp::VOID);
+
+  inline bool isBuiltinAnyList();
+  inline  ::capnp::Void getBuiltinAnyList();
+  inline void setBuiltinAnyList( ::capnp::Void value = ::capnp::VOID);
+
+  inline bool isBuiltinCapability();
+  inline  ::capnp::Void getBuiltinCapability();
+  inline void setBuiltinCapability( ::capnp::Void value = ::capnp::VOID);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -5188,6 +5212,84 @@ inline void Declaration::Builder::adoptParameters(
 inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>> Declaration::Builder::disownParameters() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>::disown(
       _builder.getPointerField(7 * ::capnp::POINTERS));
+}
+
+inline bool Declaration::Reader::isBuiltinAnyStruct() const {
+  return which() == Declaration::BUILTIN_ANY_STRUCT;
+}
+inline bool Declaration::Builder::isBuiltinAnyStruct() {
+  return which() == Declaration::BUILTIN_ANY_STRUCT;
+}
+inline  ::capnp::Void Declaration::Reader::getBuiltinAnyStruct() const {
+  KJ_IREQUIRE(which() == Declaration::BUILTIN_ANY_STRUCT,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Declaration::Builder::getBuiltinAnyStruct() {
+  KJ_IREQUIRE(which() == Declaration::BUILTIN_ANY_STRUCT,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Declaration::Builder::setBuiltinAnyStruct( ::capnp::Void value) {
+  _builder.setDataField<Declaration::Which>(
+      1 * ::capnp::ELEMENTS, Declaration::BUILTIN_ANY_STRUCT);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Declaration::Reader::isBuiltinAnyList() const {
+  return which() == Declaration::BUILTIN_ANY_LIST;
+}
+inline bool Declaration::Builder::isBuiltinAnyList() {
+  return which() == Declaration::BUILTIN_ANY_LIST;
+}
+inline  ::capnp::Void Declaration::Reader::getBuiltinAnyList() const {
+  KJ_IREQUIRE(which() == Declaration::BUILTIN_ANY_LIST,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Declaration::Builder::getBuiltinAnyList() {
+  KJ_IREQUIRE(which() == Declaration::BUILTIN_ANY_LIST,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Declaration::Builder::setBuiltinAnyList( ::capnp::Void value) {
+  _builder.setDataField<Declaration::Which>(
+      1 * ::capnp::ELEMENTS, Declaration::BUILTIN_ANY_LIST);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Declaration::Reader::isBuiltinCapability() const {
+  return which() == Declaration::BUILTIN_CAPABILITY;
+}
+inline bool Declaration::Builder::isBuiltinCapability() {
+  return which() == Declaration::BUILTIN_CAPABILITY;
+}
+inline  ::capnp::Void Declaration::Reader::getBuiltinCapability() const {
+  KJ_IREQUIRE(which() == Declaration::BUILTIN_CAPABILITY,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Declaration::Builder::getBuiltinCapability() {
+  KJ_IREQUIRE(which() == Declaration::BUILTIN_CAPABILITY,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Declaration::Builder::setBuiltinCapability( ::capnp::Void value) {
+  _builder.setDataField<Declaration::Which>(
+      1 * ::capnp::ELEMENTS, Declaration::BUILTIN_CAPABILITY);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
 }
 
 inline bool Declaration::BrandParameter::Reader::hasName() const {

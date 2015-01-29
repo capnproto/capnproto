@@ -226,6 +226,9 @@ struct Declaration {
     builtinList @54 :Void $builtinParams([(name = "Element")]);
     builtinObject @55 :Void;  # only for "renamed to AnyPointer" error message
     builtinAnyPointer @56 :Void;
+    builtinAnyStruct @58 :Void;
+    builtinAnyList @59 :Void;
+    builtinCapability @60 :Void;
   }
 
   annotation builtinParams @0x94099c3f9eb32d6b (field) :List(BrandParameter);

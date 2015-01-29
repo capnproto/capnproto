@@ -45,6 +45,8 @@ struct ToDynamic_;   // Defined in dynamic.h, needs to be declared as everyone's
 
 struct DynamicStruct;  // So that it can be declared a friend.
 
+struct Capability;  // To declare brandBindingFor<Capability>()
+
 namespace _ {  // private
 
 #if !CAPNP_LITE
@@ -69,7 +71,10 @@ struct RawBrandedSchema {
 
     uint16_t listDepth;  // Number of times to wrap the base type in List().
 
-    uint16_t paramIndex;  // for AnyPointer, if it's a type parameter.
+    uint16_t paramIndex;
+    // For AnyPointer. If it's a type parameter (scopeId is non-zero) or it's an implicit parameter
+    // (isImplicitParameter is true), then this is the parameter index. Otherwise this is a numeric
+    // value of one of schema::Type::AnyPointer::Unconstrained::Which.
 
     union {
       const RawBrandedSchema* schema;  // for struct, enum, interface
@@ -342,6 +347,27 @@ template <>
 struct BrandBindingFor_<AnyPointer, Kind::OTHER> {
   static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
     return { 18, listDepth, 0, 0 };
+  }
+};
+
+template <>
+struct BrandBindingFor_<AnyStruct, Kind::OTHER> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return { 18, listDepth, 0, 1 };
+  }
+};
+
+template <>
+struct BrandBindingFor_<AnyList, Kind::OTHER> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return { 18, listDepth, 0, 2 };
+  }
+};
+
+template <>
+struct BrandBindingFor_<Capability, Kind::OTHER> {
+  static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
+    return { 18, listDepth, 0, 3 };
   }
 };
 

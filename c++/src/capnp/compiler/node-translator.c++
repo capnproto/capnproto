@@ -948,7 +948,16 @@ bool NodeTranslator::BrandedDecl::compileAsType(
             "inconvenience, and thanks for being an early adopter.  :)");
         // no break
       case Declaration::BUILTIN_ANY_POINTER:
-        target.initAnyPointer().setUnconstrained();
+        target.initAnyPointer().initUnconstrained().setAnyKind();
+        return true;
+      case Declaration::BUILTIN_ANY_STRUCT:
+        target.initAnyPointer().initUnconstrained().setStruct();
+        return true;
+      case Declaration::BUILTIN_ANY_LIST:
+        target.initAnyPointer().initUnconstrained().setList();
+        return true;
+      case Declaration::BUILTIN_CAPABILITY:
+        target.initAnyPointer().initUnconstrained().setCapability();
         return true;
 
       case Declaration::FILE:

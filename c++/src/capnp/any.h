@@ -265,6 +265,7 @@ struct AnyPointer {
 
     friend class LocalClient;
     friend class PipelineHook;
+    friend class AnyStruct::Pipeline;
   };
 #endif  // !CAPNP_LITE
 };
@@ -474,20 +475,21 @@ private:
 #if !CAPNP_LITE
 class AnyStruct::Pipeline {
 public:
-  Pipeline getPointerField(uint16_t pointerIndex);
-  // Return a new Promise representing a sub-object of the result.  `pointerIndex` is the index
-  // of the sub-object within the pointer section of the result (the result must be a struct).
-  //
-  // TODO(perf):  On GCC 4.8 / Clang 3.3, use rvalue qualifiers to avoid the need for copies.
-  //   Also make `ops` into a Vector to optimize this.
+  inline Pipeline(decltype(nullptr)): typeless(nullptr) {}
+  inline explicit Pipeline(AnyPointer::Pipeline&& typeless)
+      : typeless(kj::mv(typeless)) {}
+
+  inline AnyPointer::Pipeline getPointerField(uint16_t pointerIndex) {
+    // Return a new Promise representing a sub-object of the result.  `pointerIndex` is the index
+    // of the sub-object within the pointer section of the result (the result must be a struct).
+    //
+    // TODO(perf):  On GCC 4.8 / Clang 3.3, use rvalue qualifiers to avoid the need for copies.
+    //   Also make `ops` into a Vector to optimize this.
+    return typeless.getPointerField(pointerIndex);
+  }
 
 private:
-  kj::Own<PipelineHook> hook;
-  kj::Array<PipelineOp> ops;
-
-  inline Pipeline(kj::Own<PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
-      : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
-
+  AnyPointer::Pipeline typeless;
 };
 #endif  // !CAPNP_LITE
 
@@ -518,7 +520,6 @@ private:
   template <typename U, Kind K>
   friend struct ToDynamic_;
 };
-
 
 class List<AnyStruct, Kind::OTHER>::Builder {
 public:
@@ -844,6 +845,10 @@ struct PointerHelpers<AnyStruct, Kind::OTHER> {
     return AnyStruct::Builder(builder.initStruct(
         StructSize(dataWordCount * WORDS, pointerCount * POINTERS)));
   }
+
+  // TODO(soon): implement these
+  static void adopt(PointerBuilder builder, Orphan<AnyStruct>&& value);
+  static Orphan<AnyStruct> disown(PointerBuilder builder);
 };
 
 template <>
@@ -868,6 +873,10 @@ struct PointerHelpers<AnyList, Kind::OTHER> {
     return AnyList::Builder(builder.initStructList(
         elementCount * ELEMENTS, StructSize(dataWordCount * WORDS, pointerCount * POINTERS)));
   }
+
+  // TODO(soon): implement these
+  static void adopt(PointerBuilder builder, Orphan<AnyList>&& value);
+  static Orphan<AnyList> disown(PointerBuilder builder);
 };
 
 }  // namespace _ (private)

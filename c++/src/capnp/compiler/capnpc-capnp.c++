@@ -225,7 +225,17 @@ private:
         auto anyPointer = type.getAnyPointer();
         switch (anyPointer.which()) {
           case schema::Type::AnyPointer::UNCONSTRAINED:
-            return kj::strTree("AnyPointer");
+            switch (anyPointer.getUnconstrained().which()) {
+              case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
+                return kj::strTree("AnyPointer");
+              case schema::Type::AnyPointer::Unconstrained::STRUCT:
+                return kj::strTree("AnyStruct");
+              case schema::Type::AnyPointer::Unconstrained::LIST:
+                return kj::strTree("AnyList");
+              case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+                return kj::strTree("Capability");
+            }
+            KJ_UNREACHABLE;
           case schema::Type::AnyPointer::PARAMETER: {
             auto param = anyPointer.getParameter();
             auto scopeProto = scope.getProto();

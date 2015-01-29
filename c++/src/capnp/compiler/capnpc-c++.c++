@@ -478,7 +478,18 @@ private:
             return CppTypeName::makePrimitive(" ::capnp::AnyPointer");
           }
         } else {
-          return CppTypeName::makePrimitive(" ::capnp::AnyPointer");
+          switch (type.whichAnyPointerKind()) {
+            case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
+              return CppTypeName::makePrimitive(" ::capnp::AnyPointer");
+            case schema::Type::AnyPointer::Unconstrained::STRUCT:
+              return CppTypeName::makePrimitive(" ::capnp::AnyStruct");
+            case schema::Type::AnyPointer::Unconstrained::LIST:
+              return CppTypeName::makePrimitive(" ::capnp::AnyList");
+            case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+              hasInterfaces = true;  // Probably need to #inculde <capnp/capability.h>.
+              return CppTypeName::makePrimitive(" ::capnp::Capability");
+          }
+          KJ_UNREACHABLE;
         }
     }
     KJ_UNREACHABLE;
@@ -1249,12 +1260,27 @@ private:
         kind = FieldKind::INTERFACE;
         break;
       case schema::Type::ANY_POINTER:
-        kind = FieldKind::ANY_POINTER;
         if (defaultBody.hasAnyPointer()) {
           defaultOffset = field.getDefaultValueSchemaOffset();
         }
         if (typeSchema.getBrandParameter() != nullptr) {
           kind = FieldKind::BRAND_PARAMETER;
+        } else {
+          kind = FieldKind::ANY_POINTER;
+          switch (typeSchema.whichAnyPointerKind()) {
+            case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
+              kind = FieldKind::ANY_POINTER;
+              break;
+            case schema::Type::AnyPointer::Unconstrained::STRUCT:
+              kind = FieldKind::STRUCT;
+              break;
+            case schema::Type::AnyPointer::Unconstrained::LIST:
+              kind = FieldKind::LIST;
+              break;
+            case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+              kind = FieldKind::INTERFACE;
+              break;
+          }
         }
         break;
     }
@@ -1461,6 +1487,8 @@ private:
           (kind == FieldKind::STRUCT || kind == FieldKind::BRAND_PARAMETER);
       bool shouldIncludeArrayInitializer = false;
       bool shouldExcludeInLiteMode = type.hasInterfaces();
+      bool shouldTemplatizeInit = typeSchema.which() == schema::Type::ANY_POINTER &&
+          kind != FieldKind::BRAND_PARAMETER;
 
       CppTypeName elementReaderType;
       if (typeSchema.isList()) {
@@ -1555,9 +1583,17 @@ private:
             COND(shouldIncludeArrayInitializer,
               "  inline void set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value);\n"),
             COND(shouldIncludeStructInit,
-              "  inline ", builderType, " init", titleCase, "();\n"),
+              COND(shouldTemplatizeInit,
+                "  template <typename T_>\n"
+                "  inline ::capnp::BuilderFor<T_> init", titleCase, "As();\n"),
+              COND(!shouldTemplatizeInit,
+                "  inline ", builderType, " init", titleCase, "();\n")),
             COND(shouldIncludeSizedInit,
-              "  inline ", builderType, " init", titleCase, "(unsigned int size);\n"),
+              COND(shouldTemplatizeInit,
+                "  template <typename T_>\n"
+                "  inline ::capnp::BuilderFor<T_> init", titleCase, "As(unsigned int size);\n"),
+              COND(!shouldTemplatizeInit,
+                "  inline ", builderType, " init", titleCase, "(unsigned int size);\n")),
             "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
             "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n",
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
@@ -1613,19 +1649,41 @@ private:
               "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
               "}\n"),
             COND(shouldIncludeStructInit,
-              templateContext.allDecls(),
-              "inline ", builderType, " ", scope, "Builder::init", titleCase, "() {\n",
-              unionDiscrim.set,
-              "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
-              "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
-              "}\n"),
+              COND(shouldTemplatizeInit,
+                templateContext.allDecls(),
+                "template <typename T_>\n"
+                "inline ::capnp::BuilderFor<T_> ", scope, "Builder::init", titleCase, "As() {\n",
+                "  static_assert(::capnp::kind<T_>() == ::capnp::Kind::STRUCT,\n"
+                "                \"", proto.getName(), " must be a struct\");\n",
+                unionDiscrim.set,
+                "  return ::capnp::_::PointerHelpers<T_>::init(\n"
+                "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
+                "}\n"),
+              COND(!shouldTemplatizeInit,
+                templateContext.allDecls(),
+                "inline ", builderType, " ", scope, "Builder::init", titleCase, "() {\n",
+                unionDiscrim.set,
+                "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
+                "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
+                "}\n")),
             COND(shouldIncludeSizedInit,
-              templateContext.allDecls(),
-              "inline ", builderType, " ", scope, "Builder::init", titleCase, "(unsigned int size) {\n",
-              unionDiscrim.set,
-              "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
-              "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), size);\n"
-              "}\n"),
+              COND(shouldTemplatizeInit,
+                templateContext.allDecls(),
+                "template <typename T_>\n"
+                "inline ::capnp::BuilderFor<T_> ", scope, "Builder::init", titleCase, "As(unsigned int size) {\n",
+                "  static_assert(::capnp::kind<T_>() == ::capnp::Kind::LIST,\n"
+                "                \"", proto.getName(), " must be a list\");\n",
+                unionDiscrim.set,
+                "  return ::capnp::_::PointerHelpers<T_>::init(\n"
+                "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), size);\n"
+                "}\n"),
+              COND(!shouldTemplatizeInit,
+                templateContext.allDecls(),
+                "inline ", builderType, " ", scope, "Builder::init", titleCase, "(unsigned int size) {\n",
+                unionDiscrim.set,
+                "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
+                "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), size);\n"
+                "}\n")),
             templateContext.allDecls(),
             "inline void ", scope, "Builder::adopt", titleCase, "(\n"
             "    ::capnp::Orphan<", type, ">&& value) {\n",

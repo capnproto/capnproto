@@ -372,7 +372,7 @@ Type Schema::interpretType(schema::Type::Reader proto, uint location) const {
       auto anyPointer = proto.getAnyPointer();
       switch (anyPointer.which()) {
         case schema::Type::AnyPointer::UNCONSTRAINED:
-          return schema::Type::ANY_POINTER;
+          return anyPointer.getUnconstrained().which();
         case schema::Type::AnyPointer::PARAMETER: {
           auto param = anyPointer.getParameter();
           return getBrandBinding(param.getScopeId(), param.getParameterIndex());
@@ -409,7 +409,7 @@ Type Schema::BrandArgumentList::operator[](uint index) const {
     } else if (binding.isImplicitParameter) {
       result = Type::ImplicitParameter { binding.paramIndex };
     } else {
-      result = schema::Type::ANY_POINTER;
+      result = static_cast<schema::Type::AnyPointer::Unconstrained::Which>(binding.paramIndex);
     }
   } else if (binding.schema == nullptr) {
     // Builtin / primitive type.
@@ -858,7 +858,11 @@ bool Type::operator==(const Type& other) const {
       KJ_UNREACHABLE;
 
     case schema::Type::ANY_POINTER:
-      return scopeId == other.scopeId && (scopeId == 0 || paramIndex == other.paramIndex);
+      return scopeId == other.scopeId &&
+          // Trying to comply with strict aliasing rules. Hopefully the compiler realizes that
+          // both branches compile to the same instructions and can optimize it away.
+          (scopeId != 0 || isImplicitParam ? paramIndex == other.paramIndex
+                                           : anyPointerKind == other.anyPointerKind);
   }
 
   KJ_UNREACHABLE;

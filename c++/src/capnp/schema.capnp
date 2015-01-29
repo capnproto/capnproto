@@ -319,8 +319,18 @@ struct Type {
     }
 
     anyPointer :union {
-      unconstrained @18 :Void;
-      # A regular AnyPointer.
+      unconstrained :union {
+        # A regular AnyPointer.
+        #
+        # The name "unconstained" means as opposed to constraining it to match a type parameter.
+        # In retrospect this name is probably a poor choice given that it may still be constrained
+        # to be a struct, list, or capability.
+
+        anyKind @18 :Void;       # truly AnyPointer
+        struct @25 :Void;        # AnyStruct
+        list @26 :Void;          # AnyList
+        capability @27 :Void;    # Capability
+      }
 
       parameter :group {
         # This is actually a reference to a type parameter defined within this scope.

@@ -36,6 +36,7 @@ CAPNP_DECLARE_SCHEMA(9e0e78711a7f87a9);
 CAPNP_DECLARE_SCHEMA(ac3a6f60ef4cc6d3);
 CAPNP_DECLARE_SCHEMA(ed8bca69f7fb0cbf);
 CAPNP_DECLARE_SCHEMA(c2573fe8a23e49f1);
+CAPNP_DECLARE_SCHEMA(8e3b5f79fe593656);
 CAPNP_DECLARE_SCHEMA(9dd1f724f4614a85);
 CAPNP_DECLARE_SCHEMA(baefc9120c56e274);
 CAPNP_DECLARE_SCHEMA(903455f06065422b);
@@ -351,7 +352,7 @@ struct Type {
   struct AnyPointer;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d07378ede1f9cc60, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(d07378ede1f9cc60, 2, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
@@ -366,7 +367,7 @@ struct Type::List {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(87e739250a60ea97, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(87e739250a60ea97, 2, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
@@ -381,7 +382,7 @@ struct Type::Enum {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(9e0e78711a7f87a9, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(9e0e78711a7f87a9, 2, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
@@ -396,7 +397,7 @@ struct Type::Struct {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(ac3a6f60ef4cc6d3, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(ac3a6f60ef4cc6d3, 2, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
@@ -411,7 +412,7 @@ struct Type::Interface {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(ed8bca69f7fb0cbf, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(ed8bca69f7fb0cbf, 2, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
@@ -429,11 +430,33 @@ struct Type::AnyPointer {
     PARAMETER,
     IMPLICIT_METHOD_PARAMETER,
   };
+  struct Unconstrained;
   struct Parameter;
   struct ImplicitMethodParameter;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(c2573fe8a23e49f1, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(c2573fe8a23e49f1, 2, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct Type::AnyPointer::Unconstrained {
+  Unconstrained() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    ANY_KIND,
+    STRUCT,
+    LIST,
+    CAPABILITY,
+  };
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(8e3b5f79fe593656, 2, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
@@ -448,7 +471,7 @@ struct Type::AnyPointer::Parameter {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(9dd1f724f4614a85, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(9dd1f724f4614a85, 2, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
@@ -463,7 +486,7 @@ struct Type::AnyPointer::ImplicitMethodParameter {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(baefc9120c56e274, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(baefc9120c56e274, 2, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
@@ -2765,7 +2788,7 @@ public:
 
   inline Which which() const;
   inline bool isUnconstrained() const;
-  inline  ::capnp::Void getUnconstrained() const;
+  inline Unconstrained::Reader getUnconstrained() const;
 
   inline bool isParameter() const;
   inline Parameter::Reader getParameter() const;
@@ -2803,8 +2826,8 @@ public:
 
   inline Which which();
   inline bool isUnconstrained();
-  inline  ::capnp::Void getUnconstrained();
-  inline void setUnconstrained( ::capnp::Void value = ::capnp::VOID);
+  inline Unconstrained::Builder getUnconstrained();
+  inline Unconstrained::Builder initUnconstrained();
 
   inline bool isParameter();
   inline Parameter::Builder getParameter();
@@ -2827,6 +2850,107 @@ private:
 class Type::AnyPointer::Pipeline {
 public:
   typedef AnyPointer Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class Type::AnyPointer::Unconstrained::Reader {
+public:
+  typedef Unconstrained Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+#endif  // !CAPNP_LITE
+
+  inline Which which() const;
+  inline bool isAnyKind() const;
+  inline  ::capnp::Void getAnyKind() const;
+
+  inline bool isStruct() const;
+  inline  ::capnp::Void getStruct() const;
+
+  inline bool isList() const;
+  inline  ::capnp::Void getList() const;
+
+  inline bool isCapability() const;
+  inline  ::capnp::Void getCapability() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class Type::AnyPointer::Unconstrained::Builder {
+public:
+  typedef Unconstrained Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline Which which();
+  inline bool isAnyKind();
+  inline  ::capnp::Void getAnyKind();
+  inline void setAnyKind( ::capnp::Void value = ::capnp::VOID);
+
+  inline bool isStruct();
+  inline  ::capnp::Void getStruct();
+  inline void setStruct( ::capnp::Void value = ::capnp::VOID);
+
+  inline bool isList();
+  inline  ::capnp::Void getList();
+  inline void setList( ::capnp::Void value = ::capnp::VOID);
+
+  inline bool isCapability();
+  inline  ::capnp::Void getCapability();
+  inline void setCapability( ::capnp::Void value = ::capnp::VOID);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class Type::AnyPointer::Unconstrained::Pipeline {
+public:
+  typedef Unconstrained Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -5937,9 +6061,9 @@ inline Type::AnyPointer::Builder Type::Builder::getAnyPointer() {
 inline Type::AnyPointer::Builder Type::Builder::initAnyPointer() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::ANY_POINTER);
-  _builder.setDataField< ::uint16_t>(4 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint16_t>(1 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint16_t>(2 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
   return Type::AnyPointer::Builder(_builder);
 }
 inline bool Type::List::Reader::hasElementType() const {
@@ -6133,10 +6257,10 @@ inline ::capnp::Orphan< ::capnp::schema::Brand> Type::Interface::Builder::disown
 }
 
 inline  ::capnp::schema::Type::AnyPointer::Which Type::AnyPointer::Reader::which() const {
-  return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
+  return _reader.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::schema::Type::AnyPointer::Which Type::AnyPointer::Builder::which() {
-  return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
+  return _builder.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
 
 inline bool Type::AnyPointer::Reader::isUnconstrained() const {
@@ -6145,26 +6269,22 @@ inline bool Type::AnyPointer::Reader::isUnconstrained() const {
 inline bool Type::AnyPointer::Builder::isUnconstrained() {
   return which() == Type::AnyPointer::UNCONSTRAINED;
 }
-inline  ::capnp::Void Type::AnyPointer::Reader::getUnconstrained() const {
+inline Type::AnyPointer::Unconstrained::Reader Type::AnyPointer::Reader::getUnconstrained() const {
   KJ_IREQUIRE(which() == Type::AnyPointer::UNCONSTRAINED,
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
+  return Type::AnyPointer::Unconstrained::Reader(_reader);
 }
-
-inline  ::capnp::Void Type::AnyPointer::Builder::getUnconstrained() {
+inline Type::AnyPointer::Unconstrained::Builder Type::AnyPointer::Builder::getUnconstrained() {
   KJ_IREQUIRE(which() == Type::AnyPointer::UNCONSTRAINED,
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
+  return Type::AnyPointer::Unconstrained::Builder(_builder);
 }
-inline void Type::AnyPointer::Builder::setUnconstrained( ::capnp::Void value) {
+inline Type::AnyPointer::Unconstrained::Builder Type::AnyPointer::Builder::initUnconstrained() {
   _builder.setDataField<Type::AnyPointer::Which>(
-      4 * ::capnp::ELEMENTS, Type::AnyPointer::UNCONSTRAINED);
-  _builder.setDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS, value);
+      2 * ::capnp::ELEMENTS, Type::AnyPointer::UNCONSTRAINED);
+  _builder.setDataField< ::uint16_t>(1 * ::capnp::ELEMENTS, 0);
+  return Type::AnyPointer::Unconstrained::Builder(_builder);
 }
-
 inline bool Type::AnyPointer::Reader::isParameter() const {
   return which() == Type::AnyPointer::PARAMETER;
 }
@@ -6183,9 +6303,9 @@ inline Type::AnyPointer::Parameter::Builder Type::AnyPointer::Builder::getParame
 }
 inline Type::AnyPointer::Parameter::Builder Type::AnyPointer::Builder::initParameter() {
   _builder.setDataField<Type::AnyPointer::Which>(
-      4 * ::capnp::ELEMENTS, Type::AnyPointer::PARAMETER);
-  _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
+      2 * ::capnp::ELEMENTS, Type::AnyPointer::PARAMETER);
+  _builder.setDataField< ::uint16_t>(1 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
   return Type::AnyPointer::Parameter::Builder(_builder);
 }
 inline bool Type::AnyPointer::Reader::isImplicitMethodParameter() const {
@@ -6206,50 +6326,161 @@ inline Type::AnyPointer::ImplicitMethodParameter::Builder Type::AnyPointer::Buil
 }
 inline Type::AnyPointer::ImplicitMethodParameter::Builder Type::AnyPointer::Builder::initImplicitMethodParameter() {
   _builder.setDataField<Type::AnyPointer::Which>(
-      4 * ::capnp::ELEMENTS, Type::AnyPointer::IMPLICIT_METHOD_PARAMETER);
-  _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
+      2 * ::capnp::ELEMENTS, Type::AnyPointer::IMPLICIT_METHOD_PARAMETER);
+  _builder.setDataField< ::uint16_t>(1 * ::capnp::ELEMENTS, 0);
   return Type::AnyPointer::ImplicitMethodParameter::Builder(_builder);
 }
+inline  ::capnp::schema::Type::AnyPointer::Unconstrained::Which Type::AnyPointer::Unconstrained::Reader::which() const {
+  return _reader.getDataField<Which>(1 * ::capnp::ELEMENTS);
+}
+inline  ::capnp::schema::Type::AnyPointer::Unconstrained::Which Type::AnyPointer::Unconstrained::Builder::which() {
+  return _builder.getDataField<Which>(1 * ::capnp::ELEMENTS);
+}
+
+inline bool Type::AnyPointer::Unconstrained::Reader::isAnyKind() const {
+  return which() == Type::AnyPointer::Unconstrained::ANY_KIND;
+}
+inline bool Type::AnyPointer::Unconstrained::Builder::isAnyKind() {
+  return which() == Type::AnyPointer::Unconstrained::ANY_KIND;
+}
+inline  ::capnp::Void Type::AnyPointer::Unconstrained::Reader::getAnyKind() const {
+  KJ_IREQUIRE(which() == Type::AnyPointer::Unconstrained::ANY_KIND,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Type::AnyPointer::Unconstrained::Builder::getAnyKind() {
+  KJ_IREQUIRE(which() == Type::AnyPointer::Unconstrained::ANY_KIND,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Type::AnyPointer::Unconstrained::Builder::setAnyKind( ::capnp::Void value) {
+  _builder.setDataField<Type::AnyPointer::Unconstrained::Which>(
+      1 * ::capnp::ELEMENTS, Type::AnyPointer::Unconstrained::ANY_KIND);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Type::AnyPointer::Unconstrained::Reader::isStruct() const {
+  return which() == Type::AnyPointer::Unconstrained::STRUCT;
+}
+inline bool Type::AnyPointer::Unconstrained::Builder::isStruct() {
+  return which() == Type::AnyPointer::Unconstrained::STRUCT;
+}
+inline  ::capnp::Void Type::AnyPointer::Unconstrained::Reader::getStruct() const {
+  KJ_IREQUIRE(which() == Type::AnyPointer::Unconstrained::STRUCT,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Type::AnyPointer::Unconstrained::Builder::getStruct() {
+  KJ_IREQUIRE(which() == Type::AnyPointer::Unconstrained::STRUCT,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Type::AnyPointer::Unconstrained::Builder::setStruct( ::capnp::Void value) {
+  _builder.setDataField<Type::AnyPointer::Unconstrained::Which>(
+      1 * ::capnp::ELEMENTS, Type::AnyPointer::Unconstrained::STRUCT);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Type::AnyPointer::Unconstrained::Reader::isList() const {
+  return which() == Type::AnyPointer::Unconstrained::LIST;
+}
+inline bool Type::AnyPointer::Unconstrained::Builder::isList() {
+  return which() == Type::AnyPointer::Unconstrained::LIST;
+}
+inline  ::capnp::Void Type::AnyPointer::Unconstrained::Reader::getList() const {
+  KJ_IREQUIRE(which() == Type::AnyPointer::Unconstrained::LIST,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Type::AnyPointer::Unconstrained::Builder::getList() {
+  KJ_IREQUIRE(which() == Type::AnyPointer::Unconstrained::LIST,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Type::AnyPointer::Unconstrained::Builder::setList( ::capnp::Void value) {
+  _builder.setDataField<Type::AnyPointer::Unconstrained::Which>(
+      1 * ::capnp::ELEMENTS, Type::AnyPointer::Unconstrained::LIST);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Type::AnyPointer::Unconstrained::Reader::isCapability() const {
+  return which() == Type::AnyPointer::Unconstrained::CAPABILITY;
+}
+inline bool Type::AnyPointer::Unconstrained::Builder::isCapability() {
+  return which() == Type::AnyPointer::Unconstrained::CAPABILITY;
+}
+inline  ::capnp::Void Type::AnyPointer::Unconstrained::Reader::getCapability() const {
+  KJ_IREQUIRE(which() == Type::AnyPointer::Unconstrained::CAPABILITY,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Type::AnyPointer::Unconstrained::Builder::getCapability() {
+  KJ_IREQUIRE(which() == Type::AnyPointer::Unconstrained::CAPABILITY,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Type::AnyPointer::Unconstrained::Builder::setCapability( ::capnp::Void value) {
+  _builder.setDataField<Type::AnyPointer::Unconstrained::Which>(
+      1 * ::capnp::ELEMENTS, Type::AnyPointer::Unconstrained::CAPABILITY);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
 inline  ::uint64_t Type::AnyPointer::Parameter::Reader::getScopeId() const {
   return _reader.getDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS);
+      1 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint64_t Type::AnyPointer::Parameter::Builder::getScopeId() {
   return _builder.getDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS);
+      1 * ::capnp::ELEMENTS);
 }
 inline void Type::AnyPointer::Parameter::Builder::setScopeId( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS, value);
+      1 * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint16_t Type::AnyPointer::Parameter::Reader::getParameterIndex() const {
   return _reader.getDataField< ::uint16_t>(
-      5 * ::capnp::ELEMENTS);
+      1 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint16_t Type::AnyPointer::Parameter::Builder::getParameterIndex() {
   return _builder.getDataField< ::uint16_t>(
-      5 * ::capnp::ELEMENTS);
+      1 * ::capnp::ELEMENTS);
 }
 inline void Type::AnyPointer::Parameter::Builder::setParameterIndex( ::uint16_t value) {
   _builder.setDataField< ::uint16_t>(
-      5 * ::capnp::ELEMENTS, value);
+      1 * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint16_t Type::AnyPointer::ImplicitMethodParameter::Reader::getParameterIndex() const {
   return _reader.getDataField< ::uint16_t>(
-      5 * ::capnp::ELEMENTS);
+      1 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint16_t Type::AnyPointer::ImplicitMethodParameter::Builder::getParameterIndex() {
   return _builder.getDataField< ::uint16_t>(
-      5 * ::capnp::ELEMENTS);
+      1 * ::capnp::ELEMENTS);
 }
 inline void Type::AnyPointer::ImplicitMethodParameter::Builder::setParameterIndex( ::uint16_t value) {
   _builder.setDataField< ::uint16_t>(
-      5 * ::capnp::ELEMENTS, value);
+      1 * ::capnp::ELEMENTS, value);
 }
 
 inline bool Brand::Reader::hasScopes() const {

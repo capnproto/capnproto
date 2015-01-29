@@ -165,6 +165,12 @@ struct TestAnyPointer {
   # in the struct.
 }
 
+struct TestAnyOthers {
+  anyStructField @0 :AnyStruct;
+  anyListField @1 :AnyList;
+  capabilityField @2 :Capability;
+}
+
 struct TestOutOfOrder {
   foo @3 :Text;
   bar @2 :Text;
