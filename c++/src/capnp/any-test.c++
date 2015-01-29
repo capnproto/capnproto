@@ -114,6 +114,12 @@ TEST(Any, AnyStruct) {
   checkTestMessage(root.getAnyPointerField().getAs<TestAllTypes>());
   checkTestMessage(root.asReader().getAnyPointerField().getAs<TestAllTypes>());
 
+  auto allTypes = root.getAnyPointerField().getAs<AnyStruct>().as<TestAllTypes>();
+  auto allTypesReader = root.getAnyPointerField().getAs<AnyStruct>().asReader().as<TestAllTypes>();
+  allTypes.setInt32Field(100);
+  EXPECT_EQ(100, allTypes.getInt32Field());
+  EXPECT_EQ(100, allTypesReader.getInt32Field());
+
   EXPECT_EQ(48, root.getAnyPointerField().getAs<AnyStruct>().getDataSection().size());
   EXPECT_EQ(20, root.getAnyPointerField().getAs<AnyStruct>().getPointerSection().size());
 
