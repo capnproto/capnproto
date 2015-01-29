@@ -216,7 +216,35 @@ TEST(Any, AnyStructListCapInSchema) {
   MallocMessageBuilder builder;
   auto root = builder.getRoot<test::TestAnyOthers>();
 
-  initTestMessage(root.initAnyStructFieldAs<TestAllTypes>());
+  {
+    initTestMessage(root.initAnyStructFieldAs<TestAllTypes>());
+    AnyStruct::Builder anyStruct = root.getAnyStructField();
+    checkTestMessage(anyStruct.as<TestAllTypes>());
+    checkTestMessage(anyStruct.asReader().as<TestAllTypes>());
+  }
+
+  {
+    List<int>::Builder list = root.initAnyListFieldAs<List<int>>(3);
+    list.set(0, 123);
+    list.set(1, 456);
+    list.set(2, 789);
+
+    AnyList::Builder anyList = root.getAnyListField();
+    checkList(anyList.as<List<int>>(), {123, 456, 789});
+  }
+
+  {
+    kj::EventLoop loop;
+    kj::WaitScope waitScope(loop);
+    int callCount = 0;
+    root.setCapabilityField(kj::heap<TestInterfaceImpl>(callCount));
+    Capability::Client client = root.getCapabilityField();
+    auto req = client.castAs<test::TestInterface>().fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.send().wait(waitScope);
+    EXPECT_EQ(1, callCount);
+  }
 }
 
 }  // namespace
