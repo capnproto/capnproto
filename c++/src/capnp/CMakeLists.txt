@@ -6,7 +6,6 @@ set(capnp_sources_lite
   blob.c++
   arena.c++
   layout.c++
-  list.c++
   any.c++
   message.c++
   schema.capnp.c++
@@ -133,6 +132,24 @@ if(BUILD_TOOLS AND NOT CAPNP_LITE)
 
   # Symlink capnpc -> capnp
   install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp \"${BIN_INSTALL_DIR}/capnpc\")")
+else()
+  if (EXTERNAL_CAPNP)
+    get_filename_component(CAPNPC_TOOLS_PREFIX "${CAPNP_EXECUTABLE}" PATH)
+
+    if(WIN32)
+      set(CAPNPC_TOOLS_SUFFIX ".exe")
+    else ()
+      set(CAPNPC_TOOLS_SUFFIX "")
+    endif()
+  
+    set(CAPN_TOOLS
+      "${CAPNPC_TOOLS_PREFIX}/capnpc-capnp${CAPNPC_TOOLS_SUFFIX}"
+	  "${CAPNP_EXECUTABLE}"
+	  "${CAPNPC_CXX_EXECUTABLE}"
+	)
+  
+    install(FILES ${CAPN_TOOLS} DESTINATION "${BIN_INSTALL_DIR}/")
+  endif()	# NOT(BUILD_TOOLS AND NOT CAPNP_LITE) AND EXTERNAL_CAPNP
 endif()  # BUILD_TOOLS AND NOT CAPNP_LITE
 
 # Tests ========================================================================
