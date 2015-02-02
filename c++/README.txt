@@ -1,23 +1,18 @@
 Cap'n Proto - Insanely Fast Data Serialization Format
-Copyright 2013 Kenton Varda
-http://kentonv.github.com/capnproto/
+Copyright 2013-2015 Sandstorm Development Group, Inc.
+https://capnproto.org
 
 Cap'n Proto is an insanely fast data interchange format and capability-based
 RPC system.  Think JSON, except binary.  Or think of Google's Protocol Buffers
 (http://protobuf.googlecode.com), except faster.  In fact, in benchmarks,
 Cap'n Proto is INFINITY TIMES faster than Protocol Buffers.
 
-This package contains the C++ runtime implementation of Cap'n Proto.  To build
-and use it, you will first need to install the Cap'n Proto compiler, capnpc,
-which comes in a separate package.
-
 Full installation and usage instructions and other documentation are maintained
 on the Cap'n Proto web site:
   http://kentonv.github.io/capnproto/install.html
 
-WARNING:  You must be using either GCC 4.7+ or Clang 3.2+.  On OSX, Xcode 4's
-command-line tools are NOT sufficient -- see the web site for step-by-step
-instructions to get Clang 3.2 working on OSX.
+WARNING: Cap'n Proto requires a modern compiler. See the above link for
+detailed requirements.
 
 To build and install (from a release package), simply do:
   ./configure
