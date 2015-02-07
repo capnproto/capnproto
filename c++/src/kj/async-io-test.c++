@@ -81,7 +81,6 @@ bool hasIpv6() {
     freeaddrinfo(list);
     return true;
   } else {
-    KJ_FAIL_ASSERT("foo");
     return false;
   }
 }
