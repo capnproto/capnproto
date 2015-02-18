@@ -180,6 +180,12 @@ public:
     KJ_SYSCALL(shutdown(fd, SHUT_WR));
   }
 
+  void abortRead() override {
+    // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
+    // UnixAsyncIoProvider interface.
+    KJ_SYSCALL(shutdown(fd, SHUT_RD));
+  }
+
   void getsockopt(int level, int option, void* value, uint* length) override {
     socklen_t socklen = *length;
     KJ_SYSCALL(::getsockopt(fd, level, option, value, &socklen));
