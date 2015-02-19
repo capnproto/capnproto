@@ -57,6 +57,41 @@ TestCase::~TestCase() {
 
 namespace _ {  // private
 
+bool hasSubstring(kj::StringPtr haystack, kj::StringPtr needle) {
+  // TODO(perf): This is not the best algorithm for substring matching.
+  for (size_t i = 0; i <= haystack.size() - needle.size(); i++) {
+    if (haystack.slice(i).startsWith(needle)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+LogExpectation::LogExpectation(LogSeverity severity, StringPtr substring)
+    : severity(severity), substring(substring), seen(false) {}
+LogExpectation::~LogExpectation() {
+  if (!unwindDetector.isUnwinding()) {
+    KJ_ASSERT(seen, "expected log message not seen", severity, substring);
+  }
+}
+
+void LogExpectation::logMessage(
+    LogSeverity severity, const char* file, int line, int contextDepth,
+    String&& text) {
+  if (!seen && severity == this->severity) {
+    if (hasSubstring(text, substring)) {
+      // Match. Ignore it.
+      seen = true;
+      return;
+    }
+  }
+
+  // Pass up the chain.
+  ExceptionCallback::logMessage(severity, file, line, contextDepth, kj::mv(text));
+}
+
+// =======================================================================================
+
 GlobFilter::GlobFilter(const char* pattern): pattern(heapString(pattern)) {}
 GlobFilter::GlobFilter(ArrayPtr<const char> pattern): pattern(heapString(pattern)) {}
 

@@ -73,9 +73,51 @@ private:
   if (cond); else KJ_FAIL_EXPECT("failed: expected " #cond, ##__VA_ARGS__)
 #endif
 
+#define KJ_EXPECT_THROW(type, code) \
+  do { \
+    KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+      KJ_EXPECT(e->getType() == ::kj::Exception::Type::type, \
+          "code threw wrong exception type: " #code, e->getType()); \
+    } else { \
+      KJ_FAIL_EXPECT("code did not throw: " #code); \
+    } \
+  } while (false)
+
+#define KJ_EXPECT_THROW_MESSAGE(message, code) \
+  do { \
+    KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+      KJ_EXPECT(::kj::_::hasSubstring(e->getDescription(), message), \
+          "exception description didn't contain expected substring", e->getDescription()); \
+    } else { \
+      KJ_FAIL_EXPECT("code did not throw: " #code); \
+    } \
+  } while (false)
+
+#define KJ_EXPECT_LOG(level, substring) \
+  ::kj::_::LogExpectation KJ_UNIQUE_NAME(_kjLogExpectation)(::kj::LogSeverity::level, substring)
+// Expects that a log message with the given level and substring text will be printed within
+// the current scope. This message will not cause the test to fail, even if it is an error.
+
 // =======================================================================================
 
 namespace _ {  // private
+
+bool hasSubstring(kj::StringPtr haystack, kj::StringPtr needle);
+
+class LogExpectation: public ExceptionCallback {
+public:
+  LogExpectation(LogSeverity severity, StringPtr substring);
+  ~LogExpectation();
+
+  void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                  String&& text) override;
+
+private:
+  LogSeverity severity;
+  StringPtr substring;
+  bool seen;
+  UnwindDetector unwindDetector;
+};
 
 class GlobFilter {
   // Implements glob filters for the --filter flag.
