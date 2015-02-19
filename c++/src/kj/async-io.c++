@@ -190,6 +190,18 @@ public:
     KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
   }
 
+  void getsockname(struct sockaddr* addr, uint* length) override {
+    socklen_t socklen = *length;
+    KJ_SYSCALL(::getsockname(fd, addr, &socklen));
+    *length = socklen;
+  }
+
+  void getpeername(struct sockaddr* addr, uint* length) override {
+    socklen_t socklen = *length;
+    KJ_SYSCALL(::getpeername(fd, addr, &socklen));
+    *length = socklen;
+  }
+
   Promise<void> waitConnected() {
     // Wait until initial connection has completed. This actually just waits until it is writable.
 
@@ -1327,6 +1339,12 @@ void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length)
   KJ_UNIMPLEMENTED("Not a socket.");
 }
 void AsyncIoStream::setsockopt(int level, int option, const void* value, uint length) {
+  KJ_UNIMPLEMENTED("Not a socket.");
+}
+void AsyncIoStream::getsockname(struct sockaddr* addr, uint* length) {
+  KJ_UNIMPLEMENTED("Not a socket.");
+}
+void AsyncIoStream::getpeername(struct sockaddr* addr, uint* length) {
   KJ_UNIMPLEMENTED("Not a socket.");
 }
 void ConnectionReceiver::getsockopt(int level, int option, void* value, uint* length) {

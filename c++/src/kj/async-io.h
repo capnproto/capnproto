@@ -31,6 +31,8 @@
 #include "thread.h"
 #include "time.h"
 
+struct sockaddr;
+
 namespace kj {
 
 class UnixEventPort;
@@ -69,6 +71,16 @@ public:
   // Corresponds to getsockopt() and setsockopt() syscalls. Will throw an "unimplemented" exception
   // if the stream is not a socket or the option is not appropriate for the socket type. The
   // default implementations always throw "unimplemented".
+
+  virtual void getsockname(struct sockaddr* addr, uint* length);
+  virtual void getpeername(struct sockaddr* addr, uint* length);
+  // Corresponds to getsockname() and getpeername() syscalls. Will throw an "unimplemented"
+  // exception if the stream is not a socket. The default implementations always throw
+  // "unimplemented".
+  //
+  // Note that we don't provide methods that return NetworkAddress because it usually wouldn't
+  // be useful. You can't connect() to or listen() on these addresses, obviously, because they are
+  // ephemeral addresses for a single connection.
 };
 
 struct OneWayPipe {
