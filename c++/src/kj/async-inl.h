@@ -683,6 +683,42 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
 }
 
+namespace _ {  // private
+
+template <typename T>
+struct IdentityFunc {
+  inline T operator()(T&& value) const {
+    return kj::mv(value);
+  }
+};
+template <typename T>
+struct IdentityFunc<Promise<T>> {
+  inline Promise<T> operator()(T&& value) const {
+    return kj::mv(value);
+  }
+};
+template <>
+struct IdentityFunc<void> {
+  inline void operator()() const {}
+};
+template <>
+struct IdentityFunc<Promise<void>> {
+  inline Promise<void> operator()() const { return READY_NOW; }
+};
+
+}  // namespace _ (private)
+
+template <typename T>
+template <typename ErrorFunc>
+Promise<T> Promise<T>::catch_(ErrorFunc&& errorHandler) {
+  // then()'s ErrorFunc can only return a Promise if Func also returns a Promise. In this case,
+  // Func is being filled in automatically. We want to make sure ErrorFunc can return a Promise,
+  // but we don't want the extra overhead of promise chaining if ErrorFunc doesn't actually
+  // return a promise. So we make our Func return match ErrorFunc.
+  return then(_::IdentityFunc<decltype(errorHandler(instance<Exception&&>()))>(),
+              kj::fwd<ErrorFunc>(errorHandler));
+}
+
 template <typename T>
 T Promise<T>::wait(WaitScope& waitScope) {
   _::ExceptionOr<_::FixVoid<T>> result;
@@ -727,15 +763,10 @@ Promise<T> Promise<T>::attach(Attachments&&... attachments) {
 template <typename T>
 template <typename ErrorFunc>
 Promise<T> Promise<T>::eagerlyEvaluate(ErrorFunc&& errorHandler) {
-  return Promise(false, _::spark<_::FixVoid<T>>(
-      then([](T&& value) -> T { return kj::mv(value); }, kj::fwd<ErrorFunc>(errorHandler)).node));
-}
-
-template <>
-template <typename ErrorFunc>
-Promise<void> Promise<void>::eagerlyEvaluate(ErrorFunc&& errorHandler) {
-  return Promise(false, _::spark<_::Void>(
-      then([]() {}, kj::fwd<ErrorFunc>(errorHandler)).node));
+  // See catch_() for commentary.
+  return Promise(false, _::spark<_::FixVoid<T>>(then(
+      _::IdentityFunc<decltype(errorHandler(instance<Exception&&>()))>(),
+      kj::fwd<ErrorFunc>(errorHandler)).node));
 }
 
 template <typename T>
@@ -751,6 +782,17 @@ kj::String Promise<T>::trace() {
 template <typename Func>
 inline PromiseForResult<Func, void> evalLater(Func&& func) {
   return _::yield().then(kj::fwd<Func>(func), _::PropagateException());
+}
+
+template <typename Func>
+inline PromiseForResult<Func, void> evalNow(Func&& func) {
+  PromiseForResult<Func, void> result = nullptr;
+  KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+    result = func();
+  })) {
+    result = kj::mv(*e);
+  }
+  return result;
 }
 
 template <typename T>

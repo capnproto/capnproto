@@ -82,13 +82,13 @@ public:
   // Equivalent to atTime(now() + delay).
 
   template <typename T>
-  Promise<T> timeoutAt(TimePoint time, Promise<T>&& promise);
+  Promise<T> timeoutAt(TimePoint time, Promise<T>&& promise) KJ_WARN_UNUSED_RESULT;
   // Return a promise equivalent to `promise` but which throws an exception (and cancels the
   // original promise) if it hasn't completed by `time`. The thrown exception is of type
   // "OVERLOADED".
 
   template <typename T>
-  Promise<T> timeoutAfter(Duration delay, Promise<T>&& promise);
+  Promise<T> timeoutAfter(Duration delay, Promise<T>&& promise) KJ_WARN_UNUSED_RESULT;
   // Return a promise equivalent to `promise` but which throws an exception (and cancels the
   // original promise) if it hasn't completed after `delay` from now. The thrown exception is of
   // type "OVERLOADED".
