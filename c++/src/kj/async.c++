@@ -941,5 +941,9 @@ void AdapterPromiseNodeBase::onReady(Event& event) noexcept {
   onReadyEvent.init(event);
 }
 
+// -------------------------------------------------------------------
+
+Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW; }
+
 }  // namespace _ (private)
 }  // namespace kj

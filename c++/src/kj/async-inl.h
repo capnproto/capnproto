@@ -703,7 +703,10 @@ struct IdentityFunc<void> {
 };
 template <>
 struct IdentityFunc<Promise<void>> {
-  inline Promise<void> operator()() const { return READY_NOW; }
+  Promise<void> operator()() const;
+  // This can't be inline because it will make the translation unit depend on kj-async. Awkwardly,
+  // Cap'n Proto relies on being able to include this header without creating such a link-time
+  // dependency.
 };
 
 }  // namespace _ (private)
