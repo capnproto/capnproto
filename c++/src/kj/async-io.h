@@ -66,6 +66,10 @@ public:
   virtual void shutdownWrite() = 0;
   // Cleanly shut down just the write end of the stream, while keeping the read end open.
 
+  virtual void abortRead() {}
+  // Similar to shutdownWrite, but this will shut down the read end of the stream, and should only
+  // be called when an error has occurred.
+
   virtual void getsockopt(int level, int option, void* value, uint* length);
   virtual void setsockopt(int level, int option, const void* value, uint length);
   // Corresponds to getsockopt() and setsockopt() syscalls. Will throw an "unimplemented" exception
