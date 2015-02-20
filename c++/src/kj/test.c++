@@ -211,8 +211,10 @@ void registerCrashHandler() {
 #endif
 
   stack.ss_size = 65536;
-  stack.ss_sp = mmap(nullptr, stack.ss_size, PROT_READ | PROT_WRITE,
-                     MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN, -1, 0);
+  stack.ss_sp = reinterpret_cast<char *>(mmap(nullptr, stack.ss_size,
+					      PROT_READ | PROT_WRITE,
+					      MAP_ANONYMOUS | MAP_PRIVATE
+					      | MAP_GROWSDOWN, -1, 0));
   KJ_SYSCALL(sigaltstack(&stack, nullptr));
 
   // Catch all relevant signals.
