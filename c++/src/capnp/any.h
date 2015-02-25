@@ -574,7 +574,7 @@ public:
   inline uint size() { return _reader.size() / ELEMENTS; }
 
   template <typename T> ReaderFor<T> as() {
-  // T must be List<U>.
+    // T must be List<U>.
     return ReaderFor<T>(_reader);
   }
 private:
@@ -599,7 +599,7 @@ public:
   inline uint size() { return _builder.size() / ELEMENTS; }
 
   template <typename T> BuilderFor<T> as() {
-  // T must be List<U>.
+    // T must be List<U>.
     return BuilderFor<T>(_builder);
   }
 

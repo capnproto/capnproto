@@ -826,7 +826,7 @@ inline Data::Builder StructBuilder::getDataSectionAsBlob() {
 }
 
 inline _::ListBuilder StructBuilder::getPointerSectionAsList() {
-  return _::ListBuilder(segment, pointers, pointerCount * BITS_PER_POINTER / ELEMENTS,
+  return _::ListBuilder(segment, pointers, 1 * POINTERS * BITS_PER_POINTER / ELEMENTS,
                         pointerCount * (1 * ELEMENTS / POINTERS),
                         0 * BITS, 1 * POINTERS, ElementSize::POINTER);
 }
@@ -911,8 +911,8 @@ inline Data::Reader StructReader::getDataSectionAsBlob() {
 
 inline _::ListReader StructReader::getPointerSectionAsList() {
   return _::ListReader(segment, pointers, pointerCount * (1 * ELEMENTS / POINTERS),
-                       pointerCount * BITS_PER_POINTER / ELEMENTS,
-                       0 * BITS, 1 * POINTERS, ElementSize::POINTER, nestingLimit);
+                       1 * POINTERS * BITS_PER_POINTER / ELEMENTS, 0 * BITS, 1 * POINTERS,
+                       ElementSize::POINTER, nestingLimit);
 }
 
 template <typename T>
