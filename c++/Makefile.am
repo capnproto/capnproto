@@ -413,6 +413,7 @@ capnp_test_SOURCES =                                           \
   src/capnp/orphan-test.c++                                    \
   src/capnp/serialize-test.c++                                 \
   src/capnp/serialize-packed-test.c++                          \
+  src/capnp/fuzz-test.c++                                      \
   src/capnp/test-util.c++                                      \
   src/capnp/test-util.h                                        \
   $(heavy_tests)
