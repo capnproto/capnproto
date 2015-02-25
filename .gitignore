@@ -33,3 +33,39 @@
 
 # cabal-install artifacts
 /compiler/dist/
+
+# Make artefacts
+/c++/.libs/
+/c++/Makefile
+/c++/Makefile.in
+/c++/**/*.o
+/c++/**/*.lo
+/c++/**/.deps/
+/c++/**/.dirstamp
+/c++/stamp-h1
+/c++/**/*.log
+/c++/test_capnpc_middleman
+/c++/**/*.capnp.*
+/c++/*.la
+/c++/**/*.trs
+/c++/aclocal.m4
+/c++/autom4te.cache/
+/c++/build-aux/
+/c++/capnp
+/c++/capnp-evolution-test
+/c++/*.pc
+/c++/capnp-test
+/c++/capnpc-c++
+/c++/capnpc-capnp
+/c++/config.*
+/c++/configure
+/c++/libtool
+/c++/m4/libtool.m4
+/c++/m4/ltoptions.m4
+/c++/m4/ltsugar.m4
+/c++/m4/ltversion.m4
+/c++/m4/lt~obsolete.m4
+/c++/samples/addressbook
+
+# editor artefacts
+*~
