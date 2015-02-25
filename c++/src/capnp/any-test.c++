@@ -156,6 +156,20 @@ TEST(Any, AnyStruct) {
     // TODO: is there a higher-level API for this?
     memcpy(sb.getDataSection().begin(), r.getDataSection().begin(), r.getDataSection().size());
   }
+
+  {
+    auto ptrs = r.getPointerSection();
+    EXPECT_EQ("foo", ptrs[0].getAs<Text>());
+    EXPECT_EQ("bar", kj::heapString(ptrs[1].getAs<Data>().asChars()));
+    EXPECT_EQ("xyzzy", ptrs[15].getAs<List<Text>>()[1]);
+  }
+
+  {
+    auto ptrs = b.getPointerSection();
+    EXPECT_EQ("foo", ptrs[0].getAs<Text>());
+    EXPECT_EQ("bar", kj::heapString(ptrs[1].getAs<Data>().asChars()));
+    EXPECT_EQ("xyzzy", ptrs[15].getAs<List<Text>>()[1]);
+  }
 }
 
 TEST(Any, AnyList) {
