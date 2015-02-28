@@ -27,7 +27,7 @@ get_version() {
 }
 
 get_release_version() {
-  get_version '^[0-9]+[.][0-9]+[.][0-9]+(-rc[0-9]+)?$'
+  get_version '^[0-9]+[.][0-9]+[.][0-9]+(-rc[0-9]+|[.][0-9]+)?$'
 }
 
 update_version() {
@@ -239,10 +239,43 @@ case "${1-}:$BRANCH" in
     echo "Updating version number to $NEW_VERSION..."
     echo "========================================================================="
 
-    doit sed -i -re "s/capnproto-c[+][+]-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-c++-$NEW_VERSION/g" doc/install.md
-    doit sed -i -re "s/capnproto-c[+][+]-win32-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-c++-win32-$NEW_VERSION/g" doc/install.md
-    doit sed -i -re "s/capnproto-tools-win32-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-tools-win32-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-c[+][+]-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-c++-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-c[+][+]-win32-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-c++-win32-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-tools-win32-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-tools-win32-$NEW_VERSION/g" doc/install.md
     update_version $OLD_VERSION $NEW_VERSION "release branch"
+
+    doit git tag v$NEW_VERSION
+
+    build_packages $NEW_VERSION
+
+    done_banner $NEW_VERSION "v$NEW_VERSION release-$NEW_VERSION" yes
+    ;;
+
+  # ======================================================================================
+  security:release-* )
+    echo "Security release."
+    OLD_VERSION=$(get_release_version)
+
+    if [[ $OLD_VERSION == *-rc* ]]; then
+      echo "Security releases don't have candidates." >&2
+      exit 1
+    fi
+
+    declare -a VERSION_ARR=(${OLD_VERSION//./ } 0)
+    NEW_VERSION=${VERSION_ARR[0]}.${VERSION_ARR[1]}.${VERSION_ARR[2]}.$((VERSION_ARR[3] + 1))
+
+    echo "Version: $NEW_VERSION"
+
+    echo "========================================================================="
+    echo "Updating version number to $NEW_VERSION..."
+    echo "========================================================================="
+
+    doit sed -i -re "s/capnproto-c[+][+]-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-c++-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-c[+][+]-win32-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-c++-win32-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-tools-win32-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-tools-win32-$NEW_VERSION/g" doc/install.md
+    update_version $OLD_VERSION $NEW_VERSION "release branch"
+
+    cherry_pick "$@"
 
     doit git tag v$NEW_VERSION
 

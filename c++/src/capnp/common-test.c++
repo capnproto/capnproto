@@ -40,6 +40,7 @@ TEST(Common, Version) {
   kj::StringPtr actualVersion = VERSION;
   KJ_ASSERT(actualVersion == expectedVersion ||
             actualVersion.startsWith(kj::str(expectedVersion, '-')) ||
+            actualVersion.startsWith(kj::str(expectedVersion, '.')) ||
             (actualVersion == devVersion && CAPNP_VERSION_MICRO == 0),
             expectedVersion, actualVersion);
 #endif
