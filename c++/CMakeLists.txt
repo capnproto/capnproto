@@ -28,6 +28,14 @@ set(INCLUDE_INSTALL_DIR "${EXEC_INSTALL_PREFIX}/include"
   CACHE PATH "Installation directory for header files (default: prefix/include)."
 )
 
+# these arguments are passed to all install(TARGETS) calls
+set(INSTALL_TARGETS_DEFAULT_ARGS
+  EXPORT CapnProtoTargets
+  ARCHIVE DESTINATION "${LIB_INSTALL_DIR}"
+  LIBRARY DESTINATION "${LIB_INSTALL_DIR}"
+  RUNTIME DESTINATION "${BIN_INSTALL_DIR}"
+)
+
 # Options ======================================================================
 
 option(BUILD_TOOLS "Build command-line tools and compiler." ON)

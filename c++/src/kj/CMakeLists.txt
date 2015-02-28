@@ -64,7 +64,7 @@ endif()
 target_compile_definitions(kj PUBLIC ${CAPNP_LITE_FLAG})
 #make sure external consumers don't need to manually set the include dirs
 target_include_directories(kj INTERFACE $<INSTALL_INTERFACE:include>)
-install(TARGETS kj EXPORT CapnProtoTargets ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+install(TARGETS kj ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${kj_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
 install(FILES ${kj-parse_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/parse")
 install(FILES ${kj-std_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/std")
@@ -80,7 +80,7 @@ set(kj-test-compat_headers
 )
 add_library(kj-test ${kj-test_sources})
 target_link_libraries(kj-test kj)
-install(TARGETS kj-test EXPORT CapnProtoTargets ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+install(TARGETS kj-test ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${kj-test_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
 install(FILES ${kj-test-compat_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/compat")
 
@@ -105,7 +105,7 @@ if(NOT CAPNP_LITE)
     # external clients of this library need to link to pthreads
     target_compile_options(kj-async INTERFACE "-pthread")
   endif()
-  install(TARGETS kj-async EXPORT CapnProtoTargets ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+  install(TARGETS kj-async ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${kj-async_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
 endif()
 

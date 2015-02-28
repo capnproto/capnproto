@@ -59,7 +59,7 @@ add_library(capnp ${capnp_sources})
 target_link_libraries(capnp kj)
 #make sure external consumers don't need to manually set the include dirs
 target_include_directories(capnp INTERFACE $<INSTALL_INTERFACE:include>)
-install(TARGETS capnp EXPORT CapnProtoTargets ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+install(TARGETS capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${capnp_headers} ${capnp_schemas} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
 
 set(capnp-rpc_sources
@@ -91,7 +91,7 @@ set(capnp-rpc_schemas
 if(NOT CAPNP_LITE)
   add_library(capnp-rpc ${capnp-rpc_sources})
   target_link_libraries(capnp-rpc kj-async kj)
-  install(TARGETS capnp-rpc EXPORT CapnProtoTargets ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+  install(TARGETS capnp-rpc ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${capnp-rpc_headers} ${capnp-rpc_schemas} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
 endif()
 
@@ -111,7 +111,7 @@ set(capnp-json_schemas
 if(NOT CAPNP_LITE)
   add_library(capnp-json ${capnp-json_sources})
   target_link_libraries(capnp-json capnp kj-async kj)
-  install(TARGETS capnp-json EXPORT CapnProtoTargets ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+  install(TARGETS capnp-json ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${capnp-json_headers} ${capnp-json_schemas} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp/compat")
 endif()
 
@@ -132,7 +132,7 @@ set(capnpc_sources
 if(NOT CAPNP_LITE)
   add_library(capnpc ${capnpc_sources})
   target_link_libraries(capnpc capnp kj)
-  install(TARGETS capnpc EXPORT CapnProtoTargets ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+  install(TARGETS capnpc ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${capnpc_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
 endif()
 
@@ -156,7 +156,7 @@ if(BUILD_TOOLS AND NOT CAPNP_LITE)
   target_link_libraries(capnpc_capnp capnp kj)
   set_target_properties(capnpc_capnp PROPERTIES OUTPUT_NAME capnpc-capnp)
 
-  install(TARGETS capnp_tool capnpc_cpp capnpc_capnp EXPORT CapnProtoTargets RUNTIME DESTINATION "${BIN_INSTALL_DIR}")
+  install(TARGETS capnp_tool capnpc_cpp capnpc_capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
 
   # Symlink capnpc -> capnp
   install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp \"\$ENV{DESTDIR}${BIN_INSTALL_DIR}/capnpc\")")
