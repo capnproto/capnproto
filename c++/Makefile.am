@@ -181,6 +181,10 @@ includecapnp_HEADERS =                                         \
 
 lib_LTLIBRARIES = libkj.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnpc.la
 
+# Don't include security release in soname -- we want to replace old binaries
+# in this case.
+SO_VERSION = $(shell echo $(VERSION) | sed -re 's/^([0-9]+[.][0-9]+[.][0-9]+)([.][0-9]+)?(-.*)?$$/\1\3/g')
+
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libkj_la_LIBADD = $(PTHREAD_LIBS) -lpthread
 libkj_la_LDFLAGS = -release $(VERSION) -no-undefined
@@ -203,7 +207,7 @@ libkj_la_SOURCES=                                              \
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
-libkj_async_la_LDFLAGS = -release $(VERSION) -no-undefined
+libkj_async_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_async_la_SOURCES=                                        \
   src/kj/async.c++                                             \
   src/kj/async-unix.c++                                        \
@@ -211,7 +215,7 @@ libkj_async_la_SOURCES=                                        \
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnp_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
-libcapnp_la_LDFLAGS = -release $(VERSION) -no-undefined
+libcapnp_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnp_la_SOURCES=                                           \
   src/capnp/c++.capnp.c++                                      \
   src/capnp/blob.c++                                           \
@@ -231,7 +235,7 @@ libcapnp_la_SOURCES=                                           \
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnp_rpc_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(PTHREAD_LIBS) -lpthread
-libcapnp_rpc_la_LDFLAGS = -release $(VERSION) -no-undefined
+libcapnp_rpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/serialize-async.c++                                \
   src/capnp/capability.c++                                     \
@@ -244,7 +248,7 @@ libcapnp_rpc_la_SOURCES=                                       \
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS) -lpthread
-libcapnpc_la_LDFLAGS = -release $(VERSION) -no-undefined
+libcapnpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/md5.h                                     \
   src/capnp/compiler/md5.c++                                   \
