@@ -209,8 +209,12 @@ else
 lib_LTLIBRARIES = libkj.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnpc.la
 endif
 
+# Don't include security release in soname -- we want to replace old binaries
+# in this case.
+SO_VERSION = $(shell echo $(VERSION) | sed -re 's/^([0-9]+[.][0-9]+[.][0-9]+)([.][0-9]+)?(-.*)?$$/\1\3/g')
+
 libkj_la_LIBADD = $(PTHREAD_LIBS)
-libkj_la_LDFLAGS = -release $(VERSION) -no-undefined
+libkj_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_la_SOURCES=                                              \
   src/kj/common.c++                                            \
   src/kj/units.c++                                             \
@@ -230,7 +234,7 @@ libkj_la_SOURCES=                                              \
 
 if !LITE_MODE
 libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS)
-libkj_async_la_LDFLAGS = -release $(VERSION) -no-undefined
+libkj_async_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_async_la_SOURCES=                                        \
   src/kj/async.c++                                             \
   src/kj/async-unix.c++                                        \
@@ -247,7 +251,7 @@ heavy_sources =                                                \
 endif !LITE_MODE
 
 libcapnp_la_LIBADD = libkj.la $(PTHREAD_LIBS)
-libcapnp_la_LDFLAGS = -release $(VERSION) -no-undefined
+libcapnp_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnp_la_SOURCES=                                           \
   src/capnp/c++.capnp.c++                                      \
   src/capnp/blob.c++                                           \
@@ -265,7 +269,7 @@ libcapnp_la_SOURCES=                                           \
 if !LITE_MODE
 
 libcapnp_rpc_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(PTHREAD_LIBS)
-libcapnp_rpc_la_LDFLAGS = -release $(VERSION) -no-undefined
+libcapnp_rpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/serialize-async.c++                                \
   src/capnp/capability.c++                                     \
@@ -278,7 +282,7 @@ libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/ez-rpc.c++
 
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
-libcapnpc_la_LDFLAGS = -release $(VERSION) -no-undefined
+libcapnpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/md5.h                                     \
   src/capnp/compiler/md5.c++                                   \
