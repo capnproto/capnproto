@@ -117,6 +117,13 @@ public:
 
   KJ_ALWAYS_INLINE(bool containsInterval(const void* from, const void* to));
 
+  KJ_ALWAYS_INLINE(bool amplifiedRead(WordCount virtualAmount));
+  // Indicates that the reader should pretend that `virtualAmount` additional data was read even
+  // though no actual pointer was traversed. This is used e.g. when reading a struct list pointer
+  // where the element sizes are zero -- the sender could set the list size arbitrarily high and
+  // cause the receiver to iterate over this list even though the message itself is small, so we
+  // need to defend agaisnt DoS attacks based on this.
+
   inline Arena* getArena();
   inline SegmentId getSegmentId();
 
@@ -365,6 +372,10 @@ inline bool SegmentReader::containsInterval(const void* from, const void* to) {
           intervalLength(reinterpret_cast<const byte*>(from),
                          reinterpret_cast<const byte*>(to)) / BYTES_PER_WORD,
           arena);
+}
+
+inline bool SegmentReader::amplifiedRead(WordCount virtualAmount) {
+  return readLimiter->canRead(virtualAmount, arena);
 }
 
 inline Arena* SegmentReader::getArena() { return arena; }

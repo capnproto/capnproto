@@ -9,6 +9,7 @@ Joshua Warner <joshuawarner32@gmail.com>: cmake build, AnyStruct/AnyList, other 
 Scott Purdy <scott@fer.io>: kj/std iostream interface
 Bryan Borham <bjboreham@gmail.com>: Initial MSVC support
 Philip Quinn <p@partylemon.com>: cmake build and other assorted bits
+Ben Laurie <ben@links.org>: discovered and responsibly disclosed security bugs
 
 This file does not list people who maintain their own Cap'n Proto
 implementations as separate projects.  Those people are awesome too!  :)
