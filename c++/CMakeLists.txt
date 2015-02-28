@@ -5,6 +5,7 @@ set(VERSION 0.6-dev)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(CheckIncludeFileCXX)
+include(GNUInstallDirs)
 if(MSVC)
   check_include_file_cxx(initializer_list HAS_CXX11)
 else()
@@ -14,26 +15,12 @@ if(NOT HAS_CXX11)
   message(SEND_ERROR "Requires a C++11 compiler and standard library.")
 endif()
 
-# Set installation paths; these can be overridden in the cache.
-set(EXEC_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}"
-  CACHE PATH "Base installation path for executables."
-)
-set(BIN_INSTALL_DIR "${EXEC_INSTALL_PREFIX}/bin"
-  CACHE PATH "Installation directory for binaries (default: prefix/bin)."
-)
-set(LIB_INSTALL_DIR "${EXEC_INSTALL_PREFIX}/lib"
-  CACHE PATH "Installation directory for libraries (default: prefix/lib)."
-)
-set(INCLUDE_INSTALL_DIR "${EXEC_INSTALL_PREFIX}/include"
-  CACHE PATH "Installation directory for header files (default: prefix/include)."
-)
-
 # these arguments are passed to all install(TARGETS) calls
 set(INSTALL_TARGETS_DEFAULT_ARGS
   EXPORT CapnProtoTargets
-  ARCHIVE DESTINATION "${LIB_INSTALL_DIR}"
-  LIBRARY DESTINATION "${LIB_INSTALL_DIR}"
-  RUNTIME DESTINATION "${BIN_INSTALL_DIR}"
+  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 )
 
 # Options ======================================================================
@@ -101,12 +88,12 @@ write_basic_package_version_file(
   VERSION ${VERSION}
   COMPATIBILITY AnyNewerVersion
 )
-set(CONFIG_PACKAGE_LOCATION ${LIB_INSTALL_DIR}/cmake/CapnProto)
+set(CONFIG_PACKAGE_LOCATION ${CMAKE_INSTALL_LIBDIR}/cmake/CapnProto)
 
 configure_package_config_file(cmake/CapnProtoConfig.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfig.cmake
   INSTALL_DESTINATION ${CONFIG_PACKAGE_LOCATION}
-  PATH_VARS INCLUDE_INSTALL_DIR
+  PATH_VARS CMAKE_INSTALL_FULL_INCLUDEDIR
 )
 export(EXPORT CapnProtoTargets
   FILE "${CMAKE_CURRENT_BINARY_DIR}/CapnProtoTargets.cmake"
@@ -127,27 +114,27 @@ install(FILES
 if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
   # Variables for pkg-config files
   set(prefix "${CMAKE_INSTALL_PREFIX}")
-  set(exec_prefix "${EXEC_INSTALL_PREFIX}")
-  set(libdir "${LIB_INSTALL_DIR}")
-  set(includedir "${INCLUDE_INSTALL_DIR}")
+  set(exec_prefix "") # not needed since we use absolute paths in libdir and includedir
+  set(libdir "${CMAKE_INSTALL_FULL_LIBDIR}")
+  set(includedir "${CMAKE_INSTALL_FULL_INCLUDEDIR}")
   set(PTHREAD_CFLAGS "-pthread")
   set(STDLIB_FLAG)  # TODO: Unsupported
 
   configure_file(kj.pc.in "${CMAKE_CURRENT_BINARY_DIR}/kj.pc" @ONLY)
-  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kj.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kj.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
   configure_file(capnp.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" @ONLY)
-  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
   if(NOT CAPNP_LITE)
     configure_file(kj-async.pc.in "${CMAKE_CURRENT_BINARY_DIR}/kj-async.pc" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kj-async.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kj-async.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
     configure_file(capnp-rpc.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
     configure_file(capnp-json.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-json.pc" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-json.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-json.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
   endif()
 
   unset(STDLIB_FLAG)
