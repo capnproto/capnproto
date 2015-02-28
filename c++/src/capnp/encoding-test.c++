@@ -1484,6 +1484,36 @@ TEST(Encoding, Has) {
   EXPECT_TRUE(root.asReader().hasInt32List());
 }
 
+TEST(Encoding, VoidListAmplification) {
+  MallocMessageBuilder builder;
+  builder.initRoot<test::TestAnyPointer>().getAnyPointerField().initAs<List<Void>>(1u << 28);
+
+  auto segments = builder.getSegmentsForOutput();
+  EXPECT_EQ(1, segments.size());
+  EXPECT_LT(segments[0].size(), 16);  // quite small for such a big list!
+
+  SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
+  auto root = reader.getRoot<test::TestAnyPointer>().getAnyPointerField();
+  EXPECT_NONFATAL_FAILURE(root.getAs<List<TestAllTypes>>());
+
+  MallocMessageBuilder copy;
+  EXPECT_NONFATAL_FAILURE(copy.setRoot(reader.getRoot<AnyPointer>()));
+}
+
+TEST(Encoding, EmptyStructListAmplification) {
+  MallocMessageBuilder builder;
+  builder.initRoot<test::TestAnyPointer>().getAnyPointerField()
+      .initAs<List<test::TestEmptyStruct>>(1u << 28);
+
+  auto segments = builder.getSegmentsForOutput();
+  EXPECT_EQ(1, segments.size());
+  EXPECT_LT(segments[0].size(), 16);  // quite small for such a big list!
+
+  SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
+  auto root = reader.getRoot<test::TestAnyPointer>().getAnyPointerField();
+  EXPECT_NONFATAL_FAILURE(root.getAs<List<TestAllTypes>>());
+}
+
 TEST(Encoding, Constants) {
   EXPECT_EQ(VOID, test::TestConstants::VOID_CONST);
   EXPECT_EQ(true, test::TestConstants::BOOL_CONST);
