@@ -1437,6 +1437,7 @@ struct WireHelpers {
       WirePointer* ref, word* refTarget, SegmentBuilder* segment,
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref->isNull()) {
+    useDefault:
       if (defaultSize == 0 * BYTES) {
         return nullptr;
       } else {
@@ -1446,14 +1447,19 @@ struct WireHelpers {
       }
     } else {
       word* ptr = followFars(ref, refTarget, segment);
+      char* cptr = reinterpret_cast<char*>(ptr);
 
       KJ_REQUIRE(ref->kind() == WirePointer::LIST,
           "Called getText{Field,Element}() but existing pointer is not a list.");
       KJ_REQUIRE(ref->listRef.elementSize() == FieldSize::BYTE,
           "Called getText{Field,Element}() but existing list pointer is not byte-sized.");
 
-      // Subtract 1 from the size for the NUL terminator.
-      return Text::Builder(reinterpret_cast<char*>(ptr), ref->listRef.elementCount() / ELEMENTS - 1);
+      size_t size = ref->listRef.elementCount() / ELEMENTS;
+      KJ_REQUIRE(size > 0 && cptr[size-1] == '\0', "Text blob missing NUL terminator.") {
+        goto useDefault;
+      }
+
+      return Text::Builder(cptr, size - 1);
     }
   }
 
