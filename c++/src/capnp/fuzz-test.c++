@@ -84,54 +84,131 @@ uint64_t traverse(AnyPointer::Reader reader) {
   }
 }
 
+template <typename Checker>
 void traverseCatchingExceptions(kj::ArrayPtr<const word> data) {
+  // Try traversing through Checker.
+  kj::runCatchingExceptions([&]() {
+    FlatArrayMessageReader reader(data);
+    KJ_ASSERT(Checker::check(reader) != 0);
+  });
+
+  // Try traversing through AnyPointer.
   kj::runCatchingExceptions([&]() {
     FlatArrayMessageReader reader(data);
     KJ_ASSERT(traverse(reader.getRoot<AnyPointer>()) != 0);
   });
 
+  // Try counting the size..
+  kj::runCatchingExceptions([&]() {
+    FlatArrayMessageReader reader(data);
+    KJ_ASSERT(reader.getRoot<AnyPointer>().targetSize().wordCount != 0);
+  });
+
+  // Try copying into a builder, and if that works, traversing it with Checker.
   static word buffer[8192];
-  memset(buffer, 0, sizeof(buffer));
   kj::runCatchingExceptions([&]() {
     FlatArrayMessageReader reader(data);
     MallocMessageBuilder copyBuilder(buffer);
     copyBuilder.setRoot(reader.getRoot<AnyPointer>());
+    KJ_ASSERT(Checker::check(copyBuilder) != 0);
   });
 }
 
+template <typename Checker>
 void fuzz(kj::ArrayPtr<word> data, uint flipCount, uint startAt, uint endAt) {
   if (flipCount == 0) {
-    traverseCatchingExceptions(data);
+    traverseCatchingExceptions<Checker>(data);
   } else {
     for (uint i = startAt; i < endAt; i++) {
       byte bit = 1u << (i % 8);
       byte old = data.asBytes()[i / 8];
       data.asBytes()[i / 8] |= bit;
-      fuzz(data, flipCount - 1, i + 1, endAt);
+      fuzz<Checker>(data, flipCount - 1, i + 1, endAt);
       data.asBytes()[i / 8] &= ~bit;
-      fuzz(data, flipCount - 1, i + 1, endAt);
+      fuzz<Checker>(data, flipCount - 1, i + 1, endAt);
       data.asBytes()[i / 8] = bit;
-      fuzz(data, flipCount - 1, i + 1, endAt);
+      fuzz<Checker>(data, flipCount - 1, i + 1, endAt);
       data.asBytes()[i / 8] = old;
     }
   }
 }
 
+struct StructChecker {
+  template <typename ReaderOrBuilder>
+  static uint check(ReaderOrBuilder& message) {
+    uint result = 0;
+    for (auto c: message.template getRoot<TestAllTypes>().getTextField()) {
+      result += c;
+    }
+    return result;
+  }
+};
+
 KJ_TEST("fuzz-test struct pointer") {
   MallocMessageBuilder builder;
-  initTestMessage(builder.getRoot<TestAllTypes>());
+  builder.getRoot<TestAllTypes>().setTextField("foo");
   KJ_ASSERT(builder.getSegmentsForOutput().size() == 1);
-  fuzz(messageToFlatArray(builder), 2, 64, 192);
+  fuzz<StructChecker>(messageToFlatArray(builder), 2, 64, 192);
 }
+
+struct ListChecker {
+  template <typename ReaderOrBuilder>
+  static uint check(ReaderOrBuilder& message) {
+    uint result = 0;
+    for (auto e: message.template getRoot<List<uint32_t>>()) {
+      result += e;
+    }
+    return result;
+  }
+};
+
+KJ_TEST("fuzz-test list pointer") {
+  MallocMessageBuilder builder;
+  auto list = builder.getRoot<AnyPointer>().initAs<List<uint32_t>>(2);
+  list.set(0, 12345);
+  list.set(1, 67890);
+  fuzz<ListChecker>(messageToFlatArray(builder), 2, 64, 192);
+}
+
+struct StructListChecker {
+  template <typename ReaderOrBuilder>
+  static uint check(ReaderOrBuilder& message) {
+    uint result = 0;
+    auto l = message.template getRoot<List<TestAllTypes>>();
+    for (size_t i = l.size(); i > 0; i--) {
+      for (auto c: l[i-1].getTextField()) {
+        result += c;
+      }
+    }
+    return result;
+  }
+};
 
 KJ_TEST("fuzz-test struct list pointer") {
   MallocMessageBuilder builder;
   auto list = builder.getRoot<AnyPointer>().initAs<List<test::TestAllTypes>>(2);
-  initTestMessage(list[0]);
-  initTestMessage(list[1]);
+  list[0].setTextField("foo");
+  list[1].setTextField("bar");
   KJ_ASSERT(builder.getSegmentsForOutput().size() == 1);
 
-  fuzz(messageToFlatArray(builder), 2, 64, 192);
+  fuzz<StructListChecker>(messageToFlatArray(builder), 2, 64, 192);
+}
+
+struct TextChecker {
+  template <typename ReaderOrBuilder>
+  static uint check(ReaderOrBuilder& message) {
+    uint result = 0;
+    for (auto c: message.template getRoot<Text>()) {
+      result += c;
+    }
+    return result;
+  }
+};
+
+KJ_TEST("fuzz-test text pointer") {
+  MallocMessageBuilder builder;
+  builder.template getRoot<AnyPointer>().setAs<Text>("foo");
+  fuzz<TextChecker>(messageToFlatArray(builder), 2, 64, 192);
 }
 
 KJ_TEST("fuzz-test far pointer") {
@@ -142,7 +219,7 @@ KJ_TEST("fuzz-test far pointer") {
   uint tableSize = segmentCount / 2 + 1;
 
   // Fuzz the root far pointer plus its landing pad, which should be in the next word.
-  fuzz(messageToFlatArray(builder), 2, tableSize * 64, tableSize * 64 + 128);
+  fuzz<StructChecker>(messageToFlatArray(builder), 2, tableSize * 64, tableSize * 64 + 128);
 }
 
 KJ_TEST("fuzz-test double-far pointer") {
@@ -159,10 +236,10 @@ KJ_TEST("fuzz-test double-far pointer") {
   KJ_ASSERT(builder.getSegmentsForOutput()[2].size() == 2);  // double-far landing pad
 
   // Fuzz the root far pointer.
-  fuzz(messageToFlatArray(builder), 2, 64, 128);
+  fuzz<TextChecker>(messageToFlatArray(builder), 2, 64, 128);
 
   // Fuzz the landing pad.
-  fuzz(messageToFlatArray(builder), 2, 192, 320);
+  fuzz<TextChecker>(messageToFlatArray(builder), 2, 192, 320);
 }
 
 }  // namespace
