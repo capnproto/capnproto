@@ -145,13 +145,13 @@ typedef unsigned char byte;
 #endif
 
 #if defined(KJ_DEBUG) || __NO_INLINE__
-#define KJ_ALWAYS_INLINE(prototype) inline prototype
+#define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__
 // Don't force inline in debug mode.
 #else
 #if defined(_MSC_VER)
-#define KJ_ALWAYS_INLINE(prototype) __forceinline prototype
+#define KJ_ALWAYS_INLINE(...) __forceinline __VA_ARGS__
 #else
-#define KJ_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
+#define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__ __attribute__((always_inline))
 #endif
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #endif
@@ -599,6 +599,7 @@ template <typename T>
 class Range {
 public:
   inline constexpr Range(const T& begin, const T& end): begin_(begin), end_(end) {}
+  inline explicit constexpr Range(const T& end): begin_(0), end_(end) {}
 
   class Iterator {
   public:
@@ -645,6 +646,14 @@ inline constexpr Range<Decay<T>> range(T begin, T end) { return Range<Decay<T>>(
 //
 //     // Prints 1, 2, 3, 4, 5, 6, 7, 8, 9.
 //     for (int i: kj::range(1, 10)) { print(i); }
+
+template <typename T>
+inline constexpr Range<Decay<T>> zeroTo(T end) { return Range<Decay<T>>(end); }
+// Returns a fake iterable container containing all values of T from zero (inclusive) to `end`
+// (exclusive).  Example:
+//
+//     // Prints 0, 1, 2, 3, 4, 5, 6, 7, 8, 9.
+//     for (int i: kj::zeroTo(10)) { print(i); }
 
 template <typename T>
 inline constexpr Range<size_t> indices(T&& container) {

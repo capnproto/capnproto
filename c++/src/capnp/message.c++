@@ -88,7 +88,7 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
 
     KJ_ASSERT(allocation.segment->getSegmentId() == _::SegmentId(0),
         "First allocated word of new arena was not in segment ID 0.");
-    KJ_ASSERT(allocation.words == allocation.segment->getPtrUnchecked(0 * WORDS),
+    KJ_ASSERT(allocation.words == allocation.segment->getPtrUnchecked(ZERO * WORDS),
         "First allocated word of new arena was not the first word in its segment.");
     return allocation.segment;
   }
@@ -97,7 +97,7 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
 AnyPointer::Builder MessageBuilder::getRootInternal() {
   _::SegmentBuilder* rootSegment = getRootSegment();
   return AnyPointer::Builder(_::PointerBuilder::getRoot(
-      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS)));
+      rootSegment, rootSegment->getPtrUnchecked(ZERO * WORDS)));
 }
 
 kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {

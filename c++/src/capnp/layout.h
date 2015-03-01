@@ -82,26 +82,48 @@ class BuilderArena;
 
 // =============================================================================
 
-typedef decltype(BITS / ELEMENTS) BitsPerElement;
-typedef decltype(POINTERS / ELEMENTS) PointersPerElement;
+#if CAPNP_DEBUG_TYPES
+typedef kj::UnitRatio<kj::Guarded<64, uint>, BitLabel, ElementLabel> BitsPerElementTableType;
+#else
+typedef uint BitsPerElementTableType;
+#endif
 
-static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[8] = {
-    0 * BITS / ELEMENTS,
-    1 * BITS / ELEMENTS,
-    8 * BITS / ELEMENTS,
-    16 * BITS / ELEMENTS,
-    32 * BITS / ELEMENTS,
-    64 * BITS / ELEMENTS,
-    0 * BITS / ELEMENTS,
-    0 * BITS / ELEMENTS
+static constexpr BitsPerElementTableType BITS_PER_ELEMENT_TABLE[8] = {
+  guarded< 0>() * BITS / ELEMENTS,
+  guarded< 1>() * BITS / ELEMENTS,
+  guarded< 8>() * BITS / ELEMENTS,
+  guarded<16>() * BITS / ELEMENTS,
+  guarded<32>() * BITS / ELEMENTS,
+  guarded<64>() * BITS / ELEMENTS,
+  guarded< 0>() * BITS / ELEMENTS,
+  guarded< 0>() * BITS / ELEMENTS
 };
 
-inline KJ_CONSTEXPR() BitsPerElement dataBitsPerElement(ElementSize size) {
+inline KJ_CONSTEXPR() BitsPerElementTableType dataBitsPerElement(ElementSize size) {
   return _::BITS_PER_ELEMENT_TABLE[static_cast<int>(size)];
 }
 
-inline constexpr PointersPerElement pointersPerElement(ElementSize size) {
-  return size == ElementSize::POINTER ? 1 * POINTERS / ELEMENTS : 0 * POINTERS / ELEMENTS;
+inline constexpr PointersPerElementN<1> pointersPerElement(ElementSize size) {
+  if (size == ElementSize::POINTER) {
+    return ONE * POINTERS / ELEMENTS;
+  } else {
+    return ZERO * POINTERS / ELEMENTS;
+  }
+}
+
+static constexpr BitsPerElementTableType BITS_PER_ELEMENT_INCLUDING_PONITERS_TABLE[8] = {
+  guarded< 0>() * BITS / ELEMENTS,
+  guarded< 1>() * BITS / ELEMENTS,
+  guarded< 8>() * BITS / ELEMENTS,
+  guarded<16>() * BITS / ELEMENTS,
+  guarded<32>() * BITS / ELEMENTS,
+  guarded<64>() * BITS / ELEMENTS,
+  guarded<64>() * BITS / ELEMENTS,
+  guarded< 0>() * BITS / ELEMENTS
+};
+
+inline KJ_CONSTEXPR() BitsPerElementTableType bitsPerElementIncludingPointers(ElementSize size) {
+  return _::BITS_PER_ELEMENT_INCLUDING_PONITERS_TABLE[static_cast<int>(size)];
 }
 
 template <size_t size> struct ElementSizeForByteSize;
@@ -142,17 +164,23 @@ inline constexpr ElementSize elementSizeForType() {
 }
 
 struct MessageSizeCounts {
-  WordCount64 wordCount;
+  WordCountN<61, uint64_t> wordCount;  // 2^64 bytes
   uint capCount;
 
   MessageSizeCounts& operator+=(const MessageSizeCounts& other) {
-    wordCount += other.wordCount;
+    // OK to truncate unchecked because this class is used to count actual stuff in memory, and
+    // we couldn't possibly have anywhere near 2^61 words.
+    wordCount = assumeBits<61>(wordCount + other.wordCount);
     capCount += other.capCount;
     return *this;
   }
 
+  void addWords(WordCountN<61, uint64_t> other) {
+    wordCount = assumeBits<61>(wordCount + other);
+  }
+
   MessageSize asPublic() {
-    return MessageSize { wordCount / WORDS, capCount };
+    return MessageSize { unguard(wordCount / WORDS), capCount };
   }
 };
 
@@ -168,13 +196,13 @@ union AlignedData {
 };
 
 struct StructSize {
-  WordCount16 data;
-  WirePointerCount16 pointers;
+  StructDataWordCount data;
+  StructPointerCount pointers;
 
-  inline constexpr WordCount total() const { return data + pointers * WORDS_PER_POINTER; }
+  inline constexpr WordCountN<17> total() const { return data + pointers * WORDS_PER_POINTER; }
 
   StructSize() = default;
-  inline constexpr StructSize(WordCount data, WirePointerCount pointers)
+  inline constexpr StructSize(StructDataWordCount data, StructPointerCount pointers)
       : data(data), pointers(pointers) {}
 };
 
@@ -282,7 +310,8 @@ public:
   ListBuilder getList(ElementSize elementSize, const word* defaultValue);
   ListBuilder getStructList(StructSize elementSize, const word* defaultValue);
   ListBuilder getListAnySize(const word* defaultValue);
-  template <typename T> typename T::Builder getBlob(const void* defaultValue,ByteCount defaultSize);
+  template <typename T> typename T::Builder getBlob(
+      const void* defaultValue, ByteCount defaultSize);
 #if !CAPNP_LITE
   kj::Own<ClientHook> getCapability();
 #endif  // !CAPNP_LITE
@@ -406,37 +435,36 @@ public:
   // Get the object's location.  Only valid for independently-allocated objects (i.e. not list
   // elements).
 
-  inline BitCount getDataSectionSize() const { return dataSize; }
-  inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
+  inline StructDataBitCount getDataSectionSize() const { return dataSize; }
+  inline StructPointerCount getPointerSectionSize() const { return pointerCount; }
   inline Data::Builder getDataSectionAsBlob();
   inline _::ListBuilder getPointerSectionAsList();
 
   template <typename T>
-  KJ_ALWAYS_INLINE(bool hasDataField(ElementCount offset));
+  KJ_ALWAYS_INLINE(bool hasDataField(StructDataElementOffset offset));
   // Return true if the field is set to something other than its default value.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset));
+  KJ_ALWAYS_INLINE(T getDataField(StructDataElementOffset offset));
   // Gets the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset, Mask<T> mask));
+  KJ_ALWAYS_INLINE(T getDataField(StructDataElementOffset offset, Mask<T> mask));
   // Like getDataField() but applies the given XOR mask to the data on load.  Used for reading
   // fields with non-zero default values.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(void setDataField(
-      ElementCount offset, kj::NoInfer<T> value));
+  KJ_ALWAYS_INLINE(void setDataField(StructDataElementOffset offset, kj::NoInfer<T> value));
   // Sets the data field value at the given offset.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(void setDataField(
-      ElementCount offset, kj::NoInfer<T> value, Mask<T> mask));
+  KJ_ALWAYS_INLINE(void setDataField(StructDataElementOffset offset,
+                                     kj::NoInfer<T> value, Mask<T> mask));
   // Like setDataField() but applies the given XOR mask before storing.  Used for writing fields
   // with non-zero default values.
 
-  KJ_ALWAYS_INLINE(PointerBuilder getPointerField(WirePointerCount ptrIndex));
+  KJ_ALWAYS_INLINE(PointerBuilder getPointerField(StructPointerCount ptrIndex));
   // Get a builder for a pointer field given the index within the pointer section.
 
   void clearAll();
@@ -463,14 +491,14 @@ private:
   void* data;                  // Pointer to the encoded data.
   WirePointer* pointers;   // Pointer to the encoded pointers.
 
-  BitCount32 dataSize;
+  StructDataBitCount dataSize;
   // Size of data section.  We use a bit count rather than a word count to more easily handle the
   // case of struct lists encoded with less than a word per element.
 
-  WirePointerCount16 pointerCount;  // Size of the pointer section.
+  StructPointerCount pointerCount;  // Size of the pointer section.
 
   inline StructBuilder(SegmentBuilder* segment, void* data, WirePointer* pointers,
-                       BitCount dataSize, WirePointerCount pointerCount)
+                       StructDataBitCount dataSize, StructPointerCount pointerCount)
       : segment(segment), data(data), pointers(pointers),
         dataSize(dataSize), pointerCount(pointerCount) {}
 
@@ -482,33 +510,32 @@ private:
 class StructReader {
 public:
   inline StructReader()
-      : segment(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
-        pointerCount(0), nestingLimit(0x7fffffff) {}
+      : segment(nullptr), data(nullptr), pointers(nullptr), dataSize(ZERO * BITS),
+        pointerCount(ZERO * POINTERS), nestingLimit(0x7fffffff) {}
 
   const void* getLocation() const { return data; }
 
-  inline BitCount getDataSectionSize() const { return dataSize; }
-  inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
+  inline StructDataBitCount getDataSectionSize() const { return dataSize; }
+  inline StructPointerCount getPointerSectionSize() const { return pointerCount; }
   inline Data::Reader getDataSectionAsBlob();
   inline _::ListReader getPointerSectionAsList();
 
   template <typename T>
-  KJ_ALWAYS_INLINE(bool hasDataField(ElementCount offset) const);
+  KJ_ALWAYS_INLINE(bool hasDataField(StructDataElementOffset offset) const);
   // Return true if the field is set to something other than its default value.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
+  KJ_ALWAYS_INLINE(T getDataField(StructDataElementOffset offset) const);
   // Get the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.  Returns zero if the offset is past the
   // end of the struct's data section.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(
-      T getDataField(ElementCount offset, Mask<T> mask) const);
+  KJ_ALWAYS_INLINE(T getDataField(StructDataElementOffset offset, Mask<T> mask) const);
   // Like getDataField(offset), but applies the given XOR mask to the result.  Used for reading
   // fields with non-zero default values.
 
-  KJ_ALWAYS_INLINE(PointerReader getPointerField(WirePointerCount ptrIndex) const);
+  KJ_ALWAYS_INLINE(PointerReader getPointerField(StructPointerCount ptrIndex) const);
   // Get a reader for a pointer field given the index within the pointer section.  If the index
   // is out-of-bounds, returns a null pointer.
 
@@ -525,11 +552,11 @@ private:
   const void* data;
   const WirePointer* pointers;
 
-  BitCount32 dataSize;
+  StructDataBitCount dataSize;
   // Size of data section.  We use a bit count rather than a word count to more easily handle the
   // case of struct lists encoded with less than a word per element.
 
-  WirePointerCount16 pointerCount;  // Size of the pointer section.
+  StructPointerCount pointerCount;  // Size of the pointer section.
 
   int nestingLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
@@ -537,7 +564,8 @@ private:
   // TODO(perf):  Limit to 16 bits for better packing?
 
   inline StructReader(SegmentReader* segment, const void* data, const WirePointer* pointers,
-                      BitCount dataSize, WirePointerCount pointerCount, int nestingLimit)
+                      StructDataBitCount dataSize, StructPointerCount pointerCount,
+                      int nestingLimit)
       : segment(segment), data(data), pointers(pointers),
         dataSize(dataSize), pointerCount(pointerCount),
         nestingLimit(nestingLimit) {}
@@ -564,8 +592,8 @@ private:
 class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline ListBuilder()
-      : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
-        step(0 * BITS / ELEMENTS), elementSize(ElementSize::VOID) {}
+      : segment(nullptr), ptr(nullptr), elementCount(ZERO * ELEMENTS),
+        step(ZERO * BITS / ELEMENTS), elementSize(ElementSize::VOID) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder)
 
@@ -581,7 +609,7 @@ public:
 
   inline ElementSize getElementSize() const { return elementSize; }
 
-  inline ElementCount size() const;
+  inline ListElementCount size() const;
   // The number of elements in the list.
 
   Text::Builder asText();
@@ -593,8 +621,7 @@ public:
   // Get the element of the given type at the given index.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(void setDataElement(
-      ElementCount index, kj::NoInfer<T> value));
+  KJ_ALWAYS_INLINE(void setDataElement(ElementCount index, kj::NoInfer<T> value));
   // Set the element at the given index.
 
   KJ_ALWAYS_INLINE(PointerBuilder getPointerElement(ElementCount index));
@@ -612,13 +639,14 @@ private:
 
   byte* ptr;  // Pointer to list content.
 
-  ElementCount elementCount;  // Number of elements in the list.
+  ListElementCount elementCount;  // Number of elements in the list.
 
-  decltype(BITS / ELEMENTS) step;
-  // The distance between elements.
+  BitsPerElementN<23> step;
+  // The distance between elements. The maximum value occurs when a struct contains 2^16-1 data
+  // words and 2^16-1 pointers, i.e. 2^17 - 2 words, or 2^23 - 128 bits.
 
-  BitCount32 structDataSize;
-  WirePointerCount16 structPointerCount;
+  StructDataBitCount structDataSize;
+  StructPointerCount structPointerCount;
   // The struct properties to use when interpreting the elements as structs.  All lists can be
   // interpreted as struct lists, so these are always filled in.
 
@@ -627,8 +655,8 @@ private:
   // from other types when the overall size is exactly zero or one words.
 
   inline ListBuilder(SegmentBuilder* segment, void* ptr,
-                     decltype(BITS / ELEMENTS) step, ElementCount size,
-                     BitCount structDataSize, WirePointerCount structPointerCount,
+                     BitsPerElementN<23> step, ListElementCount size,
+                     StructDataBitCount structDataSize, StructPointerCount structPointerCount,
                      ElementSize elementSize)
       : segment(segment), ptr(reinterpret_cast<byte*>(ptr)),
         elementCount(size), step(step), structDataSize(structDataSize),
@@ -642,12 +670,13 @@ private:
 class ListReader {
 public:
   inline ListReader()
-      : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
-        structDataSize(0), structPointerCount(0), nestingLimit(0x7fffffff) {}
+      : segment(nullptr), ptr(nullptr), elementCount(ZERO * ELEMENTS),
+        step(ZERO * BITS / ELEMENTS), structDataSize(ZERO * BITS),
+        structPointerCount(ZERO * POINTERS), nestingLimit(0x7fffffff) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(const, ListReader)
 
-  inline ElementCount size() const;
+  inline ListElementCount size() const;
   // The number of elements in the list.
 
   inline ElementSize getElementSize() const { return elementSize; }
@@ -669,13 +698,14 @@ private:
 
   const byte* ptr;  // Pointer to list content.
 
-  ElementCount elementCount;  // Number of elements in the list.
+  ListElementCount elementCount;  // Number of elements in the list.
 
-  decltype(BITS / ELEMENTS) step;
-  // The distance between elements.
+  BitsPerElementN<23> step;
+  // The distance between elements. The maximum value occurs when a struct contains 2^16-1 data
+  // words and 2^16-1 pointers, i.e. 2^17 - 2 words, or 2^23 - 2 bits.
 
-  BitCount32 structDataSize;
-  WirePointerCount16 structPointerCount;
+  StructDataBitCount structDataSize;
+  StructPointerCount structPointerCount;
   // The struct properties to use when interpreting the elements as structs.  All lists can be
   // interpreted as struct lists, so these are always filled in.
 
@@ -688,8 +718,8 @@ private:
   // Once this reaches zero, further pointers will be pruned.
 
   inline ListReader(SegmentReader* segment, const void* ptr,
-                    ElementCount elementCount, decltype(BITS / ELEMENTS) step,
-                    BitCount structDataSize, WirePointerCount structPointerCount,
+                    ListElementCount elementCount, BitsPerElementN<23> step,
+                    StructDataBitCount structDataSize, StructPointerCount structPointerCount,
                     ElementSize elementSize, int nestingLimit)
       : segment(segment), ptr(reinterpret_cast<const byte*>(ptr)), elementCount(elementCount),
         step(step), structDataSize(structDataSize),
@@ -761,7 +791,7 @@ public:
   void truncate(ElementCount size, bool isText);
 
 private:
-  static_assert(1 * POINTERS * WORDS_PER_POINTER == 1 * WORDS,
+  static_assert(ONE * POINTERS * WORDS_PER_POINTER == ONE * WORDS,
                 "This struct assumes a pointer is one word.");
   word tag;
   // Contains an encoded WirePointer representing this object.  WirePointer is defined in
@@ -803,13 +833,17 @@ private:
 // These are defined in the source file.
 template <> typename Text::Builder PointerBuilder::initBlob<Text>(ByteCount size);
 template <> void PointerBuilder::setBlob<Text>(typename Text::Reader value);
-template <> typename Text::Builder PointerBuilder::getBlob<Text>(const void* defaultValue, ByteCount defaultSize);
-template <> typename Text::Reader PointerReader::getBlob<Text>(const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Text::Builder PointerBuilder::getBlob<Text>(
+    const void* defaultValue, ByteCount defaultSize);
+template <> typename Text::Reader PointerReader::getBlob<Text>(
+    const void* defaultValue, ByteCount defaultSize) const;
 
 template <> typename Data::Builder PointerBuilder::initBlob<Data>(ByteCount size);
 template <> void PointerBuilder::setBlob<Data>(typename Data::Reader value);
-template <> typename Data::Builder PointerBuilder::getBlob<Data>(const void* defaultValue, ByteCount defaultSize);
-template <> typename Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Data::Builder PointerBuilder::getBlob<Data>(
+    const void* defaultValue, ByteCount defaultSize);
+template <> typename Data::Reader PointerReader::getBlob<Data>(
+    const void* defaultValue, ByteCount defaultSize) const;
 
 inline PointerBuilder PointerBuilder::getRoot(SegmentBuilder* segment, word* location) {
   return PointerBuilder(segment, reinterpret_cast<WirePointer*>(location));
@@ -822,82 +856,84 @@ inline PointerReader PointerReader::getRootUnchecked(const word* location) {
 // -------------------------------------------------------------------
 
 inline Data::Builder StructBuilder::getDataSectionAsBlob() {
-  return Data::Builder(reinterpret_cast<byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
+  return Data::Builder(reinterpret_cast<byte*>(data), unguard(dataSize / BITS_PER_BYTE / BYTES));
 }
 
 inline _::ListBuilder StructBuilder::getPointerSectionAsList() {
-  return _::ListBuilder(segment, pointers, 1 * POINTERS * BITS_PER_POINTER / ELEMENTS,
-                        pointerCount * (1 * ELEMENTS / POINTERS),
-                        0 * BITS, 1 * POINTERS, ElementSize::POINTER);
+  return _::ListBuilder(segment, pointers, ONE * POINTERS * BITS_PER_POINTER / ELEMENTS,
+                        pointerCount * (ONE * ELEMENTS / POINTERS),
+                        ZERO * BITS, ONE * POINTERS, ElementSize::POINTER);
 }
 
 template <typename T>
-inline bool StructBuilder::hasDataField(ElementCount offset) {
+inline bool StructBuilder::hasDataField(StructDataElementOffset offset) {
   return getDataField<Mask<T>>(offset) != 0;
 }
 
 template <>
-inline bool StructBuilder::hasDataField<Void>(ElementCount offset) {
+inline bool StructBuilder::hasDataField<Void>(StructDataElementOffset offset) {
   return false;
 }
 
 template <typename T>
-inline T StructBuilder::getDataField(ElementCount offset) {
+inline T StructBuilder::getDataField(StructDataElementOffset offset) {
   return reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].get();
 }
 
 template <>
-inline bool StructBuilder::getDataField<bool>(ElementCount offset) {
-  BitCount boffset = offset * (1 * BITS / ELEMENTS);
+inline bool StructBuilder::getDataField<bool>(StructDataElementOffset offset) {
+  BitCountN<22> boffset = offset * (ONE * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
-  return (*reinterpret_cast<uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
+  return (*reinterpret_cast<uint8_t*>(b) &
+      unguard(ONE << (boffset % BITS_PER_BYTE / BITS))) != 0;
 }
 
 template <>
-inline Void StructBuilder::getDataField<Void>(ElementCount offset) {
+inline Void StructBuilder::getDataField<Void>(StructDataElementOffset offset) {
   return VOID;
 }
 
 template <typename T>
-inline T StructBuilder::getDataField(ElementCount offset, Mask<T> mask) {
+inline T StructBuilder::getDataField(StructDataElementOffset offset, Mask<T> mask) {
   return unmask<T>(getDataField<Mask<T> >(offset), mask);
 }
 
 template <typename T>
-inline void StructBuilder::setDataField(ElementCount offset, kj::NoInfer<T> value) {
+inline void StructBuilder::setDataField(StructDataElementOffset offset, kj::NoInfer<T> value) {
   reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].set(value);
 }
 
 #if CAPNP_CANONICALIZE_NAN
 // Use mask() on floats and doubles to make sure we canonicalize NaNs.
 template <>
-inline void StructBuilder::setDataField<float>(ElementCount offset, float value) {
+inline void StructBuilder::setDataField<float>(StructDataElementOffset offset, float value) {
   setDataField<uint32_t>(offset, mask<float>(value, 0));
 }
 template <>
-inline void StructBuilder::setDataField<double>(ElementCount offset, double value) {
+inline void StructBuilder::setDataField<double>(StructDataElementOffset offset, double value) {
   setDataField<uint64_t>(offset, mask<double>(value, 0));
 }
 #endif
 
 template <>
-inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) {
-  BitCount boffset = offset * (1 * BITS / ELEMENTS);
+inline void StructBuilder::setDataField<bool>(StructDataElementOffset offset, bool value) {
+  auto boffset = offset * (ONE * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
-  uint bitnum = boffset % BITS_PER_BYTE / BITS;
+  uint bitnum = unguardMaxBits<3>(boffset % BITS_PER_BYTE / BITS);
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
                                  | (static_cast<uint8_t>(value) << bitnum);
 }
 
 template <>
-inline void StructBuilder::setDataField<Void>(ElementCount offset, Void value) {}
+inline void StructBuilder::setDataField<Void>(StructDataElementOffset offset, Void value) {}
 
 template <typename T>
-inline void StructBuilder::setDataField(ElementCount offset, kj::NoInfer<T> value, Mask<T> m) {
+inline void StructBuilder::setDataField(StructDataElementOffset offset,
+                                        kj::NoInfer<T> value, Mask<T> m) {
   setDataField<Mask<T> >(offset, mask<T>(value, m));
 }
 
-inline PointerBuilder StructBuilder::getPointerField(WirePointerCount ptrIndex) {
+inline PointerBuilder StructBuilder::getPointerField(StructPointerCount ptrIndex) {
   // Hacky because WirePointer is defined in the .c++ file (so is incomplete here).
   return PointerBuilder(segment, reinterpret_cast<WirePointer*>(
       reinterpret_cast<word*>(pointers) + ptrIndex * WORDS_PER_POINTER));
@@ -906,28 +942,30 @@ inline PointerBuilder StructBuilder::getPointerField(WirePointerCount ptrIndex) 
 // -------------------------------------------------------------------
 
 inline Data::Reader StructReader::getDataSectionAsBlob() {
-  return Data::Reader(reinterpret_cast<const byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
+  return Data::Reader(reinterpret_cast<const byte*>(data),
+      unguard(dataSize / BITS_PER_BYTE / BYTES));
 }
 
 inline _::ListReader StructReader::getPointerSectionAsList() {
-  return _::ListReader(segment, pointers, pointerCount * (1 * ELEMENTS / POINTERS),
-                       1 * POINTERS * BITS_PER_POINTER / ELEMENTS, 0 * BITS, 1 * POINTERS,
+  return _::ListReader(segment, pointers, pointerCount * (ONE * ELEMENTS / POINTERS),
+                       ONE * POINTERS * BITS_PER_POINTER / ELEMENTS,
+                       ZERO * BITS, ONE * POINTERS,
                        ElementSize::POINTER, nestingLimit);
 }
 
 template <typename T>
-inline bool StructReader::hasDataField(ElementCount offset) const {
+inline bool StructReader::hasDataField(StructDataElementOffset offset) const {
   return getDataField<Mask<T>>(offset) != 0;
 }
 
 template <>
-inline bool StructReader::hasDataField<Void>(ElementCount offset) const {
+inline bool StructReader::hasDataField<Void>(StructDataElementOffset offset) const {
   return false;
 }
 
 template <typename T>
-inline T StructReader::getDataField(ElementCount offset) const {
-  if ((offset + 1 * ELEMENTS) * capnp::bitsPerElement<T>() <= dataSize) {
+inline T StructReader::getDataField(StructDataElementOffset offset) const {
+  if ((offset + ONE * ELEMENTS) * capnp::bitsPerElement<T>() <= dataSize) {
     return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
   } else {
     return static_cast<T>(0);
@@ -935,27 +973,28 @@ inline T StructReader::getDataField(ElementCount offset) const {
 }
 
 template <>
-inline bool StructReader::getDataField<bool>(ElementCount offset) const {
-  BitCount boffset = offset * (1 * BITS / ELEMENTS);
+inline bool StructReader::getDataField<bool>(StructDataElementOffset offset) const {
+  auto boffset = offset * (ONE * BITS / ELEMENTS);
   if (boffset < dataSize) {
     const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
-    return (*reinterpret_cast<const uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
+    return (*reinterpret_cast<const uint8_t*>(b) &
+        unguard(ONE << (boffset % BITS_PER_BYTE / BITS))) != 0;
   } else {
     return false;
   }
 }
 
 template <>
-inline Void StructReader::getDataField<Void>(ElementCount offset) const {
+inline Void StructReader::getDataField<Void>(StructDataElementOffset offset) const {
   return VOID;
 }
 
 template <typename T>
-T StructReader::getDataField(ElementCount offset, Mask<T> mask) const {
+T StructReader::getDataField(StructDataElementOffset offset, Mask<T> mask) const {
   return unmask<T>(getDataField<Mask<T> >(offset), mask);
 }
 
-inline PointerReader StructReader::getPointerField(WirePointerCount ptrIndex) const {
+inline PointerReader StructReader::getPointerField(StructPointerCount ptrIndex) const {
   if (ptrIndex < pointerCount) {
     // Hacky because WirePointer is defined in the .c++ file (so is incomplete here).
     return PointerReader(segment, reinterpret_cast<const WirePointer*>(
@@ -967,11 +1006,12 @@ inline PointerReader StructReader::getPointerField(WirePointerCount ptrIndex) co
 
 // -------------------------------------------------------------------
 
-inline ElementCount ListBuilder::size() const { return elementCount; }
+inline ListElementCount ListBuilder::size() const { return elementCount; }
 
 template <typename T>
 inline T ListBuilder::getDataElement(ElementCount index) {
-  return reinterpret_cast<WireValue<T>*>(ptr + index * step / BITS_PER_BYTE)->get();
+  return reinterpret_cast<WireValue<T>*>(
+      ptr + upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE)->get();
 
   // TODO(perf):  Benchmark this alternate implementation, which I suspect may make better use of
   //   the x86 SIB byte.  Also use it for all the other getData/setData implementations below, and
@@ -984,9 +1024,10 @@ inline T ListBuilder::getDataElement(ElementCount index) {
 template <>
 inline bool ListBuilder::getDataElement<bool>(ElementCount index) {
   // Ignore step for bit lists because bit lists cannot be upgraded to struct lists.
-  BitCount bindex = index * (1 * BITS / ELEMENTS);
+  auto bindex = index * (ONE * BITS / ELEMENTS);
   byte* b = ptr + bindex / BITS_PER_BYTE;
-  return (*reinterpret_cast<uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
+  return (*reinterpret_cast<uint8_t*>(b) &
+      unguard(ONE << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
 
 template <>
@@ -996,7 +1037,8 @@ inline Void ListBuilder::getDataElement<Void>(ElementCount index) {
 
 template <typename T>
 inline void ListBuilder::setDataElement(ElementCount index, kj::NoInfer<T> value) {
-  reinterpret_cast<WireValue<T>*>(ptr + index * step / BITS_PER_BYTE)->set(value);
+  reinterpret_cast<WireValue<T>*>(
+      ptr + upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE)->set(value);
 }
 
 #if CAPNP_CANONICALIZE_NAN
@@ -1014,36 +1056,38 @@ inline void ListBuilder::setDataElement<double>(ElementCount index, double value
 template <>
 inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) {
   // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
-  BitCount bindex = index * (1 * BITS / ELEMENTS);
+  auto bindex = index * (ONE * BITS / ELEMENTS);
   byte* b = ptr + bindex / BITS_PER_BYTE;
-  uint bitnum = bindex % BITS_PER_BYTE / BITS;
-  *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
-                                 | (static_cast<uint8_t>(value) << bitnum);
+  auto bitnum = bindex % BITS_PER_BYTE / BITS;
+  *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << unguard(bitnum)))
+                                 | (static_cast<uint8_t>(value) << unguard(bitnum));
 }
 
 template <>
 inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) {}
 
 inline PointerBuilder ListBuilder::getPointerElement(ElementCount index) {
-  return PointerBuilder(segment,
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE));
+  return PointerBuilder(segment, reinterpret_cast<WirePointer*>(ptr +
+      upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE));
 }
 
 // -------------------------------------------------------------------
 
-inline ElementCount ListReader::size() const { return elementCount; }
+inline ListElementCount ListReader::size() const { return elementCount; }
 
 template <typename T>
 inline T ListReader::getDataElement(ElementCount index) const {
-  return reinterpret_cast<const WireValue<T>*>(ptr + index * step / BITS_PER_BYTE)->get();
+  return reinterpret_cast<const WireValue<T>*>(
+      ptr + upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE)->get();
 }
 
 template <>
 inline bool ListReader::getDataElement<bool>(ElementCount index) const {
   // Ignore step for bit lists because bit lists cannot be upgraded to struct lists.
-  BitCount bindex = index * (1 * BITS / ELEMENTS);
+  auto bindex = index * (ONE * BITS / ELEMENTS);
   const byte* b = ptr + bindex / BITS_PER_BYTE;
-  return (*reinterpret_cast<const uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
+  return (*reinterpret_cast<const uint8_t*>(b) &
+      unguard(ONE << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
 
 template <>
@@ -1052,8 +1096,8 @@ inline Void ListReader::getDataElement<Void>(ElementCount index) const {
 }
 
 inline PointerReader ListReader::getPointerElement(ElementCount index) const {
-  return PointerReader(segment,
-      reinterpret_cast<const WirePointer*>(ptr + index * step / BITS_PER_BYTE), nestingLimit);
+  return PointerReader(segment, reinterpret_cast<const WirePointer*>(
+      ptr + upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE), nestingLimit);
 }
 
 // -------------------------------------------------------------------

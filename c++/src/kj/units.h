@@ -31,6 +31,7 @@
 #endif
 
 #include "common.h"
+#include <inttypes.h>
 
 namespace kj {
 
@@ -71,6 +72,15 @@ struct Id {
 // TODO(msvc): MSVC has trouble with this intense templating. Luckily Cap'n Proto can deal with
 //   using regular integers in place of Quantity, so we can just skip all this.
 
+struct Unsafe_ {};
+constexpr Unsafe_ unsafe = Unsafe_();
+// Use as a parameter to constructors that are unsafe to indicate that you really do mean it.
+
+template <uint64_t maxN, typename T>
+class Guarded;
+template <uint value>
+class GuardedConst;
+
 template <typename T> constexpr bool isIntegral() { return false; }
 template <> constexpr bool isIntegral<char>() { return true; }
 template <> constexpr bool isIntegral<signed char>() { return true; }
@@ -84,6 +94,16 @@ template <> constexpr bool isIntegral<unsigned int>() { return true; }
 template <> constexpr bool isIntegral<unsigned long>() { return true; }
 template <> constexpr bool isIntegral<unsigned long long>() { return true; }
 
+template <typename T>
+struct IsIntegralOrGuarded_ { static constexpr bool value = isIntegral<T>(); };
+template <uint64_t m, typename T>
+struct IsIntegralOrGuarded_<Guarded<m, T>> { static constexpr bool value = true; };
+template <uint64_t v>
+struct IsIntegralOrGuarded_<GuardedConst<v>> { static constexpr bool value = true; };
+
+template <typename T>
+inline constexpr bool isIntegralOrGuarded() { return IsIntegralOrGuarded_<T>::value; }
+
 template <typename Number, typename Unit1, typename Unit2>
 class UnitRatio {
   // A multiplier used to convert Quantities of one unit to Quantities of another unit.  See
@@ -92,12 +112,13 @@ class UnitRatio {
   // Construct this type by dividing one Quantity by another of a different unit.  Use this type
   // by multiplying it by a Quantity, or dividing a Quantity by it.
 
-  static_assert(isIntegral<Number>(), "Underlying type for UnitRatio must be integer.");
+  static_assert(isIntegralOrGuarded<Number>(),
+      "Underlying type for UnitRatio must be integer.");
 
 public:
   inline UnitRatio() {}
 
-  constexpr explicit UnitRatio(Number unit1PerUnit2): unit1PerUnit2(unit1PerUnit2) {}
+  constexpr UnitRatio(Number unit1PerUnit2, decltype(unsafe)): unit1PerUnit2(unit1PerUnit2) {}
   // This constructor was intended to be private, but GCC complains about it being private in a
   // bunch of places that don't appear to even call it, so I made it public.  Oh well.
 
@@ -106,50 +127,50 @@ public:
       : unit1PerUnit2(other.unit1PerUnit2) {}
 
   template <typename OtherNumber>
-  inline constexpr UnitRatio<decltype(Number(1)+OtherNumber(1)), Unit1, Unit2>
+  inline constexpr UnitRatio<decltype(Number()+OtherNumber()), Unit1, Unit2>
       operator+(UnitRatio<OtherNumber, Unit1, Unit2> other) const {
-    return UnitRatio<decltype(Number(1)+OtherNumber(1)), Unit1, Unit2>(
-        unit1PerUnit2 + other.unit1PerUnit2);
+    return UnitRatio<decltype(Number()+OtherNumber()), Unit1, Unit2>(
+        unit1PerUnit2 + other.unit1PerUnit2, unsafe);
   }
   template <typename OtherNumber>
-  inline constexpr UnitRatio<decltype(Number(1)-OtherNumber(1)), Unit1, Unit2>
+  inline constexpr UnitRatio<decltype(Number()-OtherNumber()), Unit1, Unit2>
       operator-(UnitRatio<OtherNumber, Unit1, Unit2> other) const {
-    return UnitRatio<decltype(Number(1)-OtherNumber(1)), Unit1, Unit2>(
-        unit1PerUnit2 - other.unit1PerUnit2);
+    return UnitRatio<decltype(Number()-OtherNumber()), Unit1, Unit2>(
+        unit1PerUnit2 - other.unit1PerUnit2, unsafe);
   }
 
   template <typename OtherNumber, typename Unit3>
-  inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>
+  inline constexpr UnitRatio<decltype(Number()*OtherNumber()), Unit3, Unit2>
       operator*(UnitRatio<OtherNumber, Unit3, Unit1> other) const {
     // U1 / U2 * U3 / U1 = U3 / U2
-    return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>(
-        unit1PerUnit2 * other.unit1PerUnit2);
+    return UnitRatio<decltype(Number()*OtherNumber()), Unit3, Unit2>(
+        unit1PerUnit2 * other.unit1PerUnit2, unsafe);
   }
   template <typename OtherNumber, typename Unit3>
-  inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>
+  inline constexpr UnitRatio<decltype(Number()*OtherNumber()), Unit1, Unit3>
       operator*(UnitRatio<OtherNumber, Unit2, Unit3> other) const {
     // U1 / U2 * U2 / U3 = U1 / U3
-    return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>(
-        unit1PerUnit2 * other.unit1PerUnit2);
+    return UnitRatio<decltype(Number()*OtherNumber()), Unit1, Unit3>(
+        unit1PerUnit2 * other.unit1PerUnit2, unsafe);
   }
 
   template <typename OtherNumber, typename Unit3>
-  inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>
+  inline constexpr UnitRatio<decltype(Number()*OtherNumber()), Unit3, Unit2>
       operator/(UnitRatio<OtherNumber, Unit1, Unit3> other) const {
     // (U1 / U2) / (U1 / U3) = U3 / U2
-    return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>(
-        unit1PerUnit2 / other.unit1PerUnit2);
+    return UnitRatio<decltype(Number()*OtherNumber()), Unit3, Unit2>(
+        unit1PerUnit2 / other.unit1PerUnit2, unsafe);
   }
   template <typename OtherNumber, typename Unit3>
-  inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>
+  inline constexpr UnitRatio<decltype(Number()*OtherNumber()), Unit1, Unit3>
       operator/(UnitRatio<OtherNumber, Unit3, Unit2> other) const {
     // (U1 / U2) / (U3 / U2) = U1 / U3
-    return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>(
-        unit1PerUnit2 / other.unit1PerUnit2);
+    return UnitRatio<decltype(Number()*OtherNumber()), Unit1, Unit3>(
+        unit1PerUnit2 / other.unit1PerUnit2, unsafe);
   }
 
   template <typename OtherNumber>
-  inline decltype(Number(1) / OtherNumber(1))
+  inline decltype(Number() / OtherNumber())
       operator/(UnitRatio<OtherNumber, Unit1, Unit2> other) const {
     return unit1PerUnit2 / other.unit1PerUnit2;
   }
@@ -166,14 +187,14 @@ private:
   friend class UnitRatio;
 
   template <typename N1, typename N2, typename U1, typename U2>
-  friend inline constexpr UnitRatio<decltype(N1(1) * N2(1)), U1, U2>
+  friend inline constexpr UnitRatio<decltype(N1() * N2()), U1, U2>
       operator*(N1, UnitRatio<N2, U1, U2>);
 };
 
 template <typename N1, typename N2, typename U1, typename U2>
-inline constexpr UnitRatio<decltype(N1(1) * N2(1)), U1, U2>
+inline constexpr UnitRatio<decltype(N1() * N2()), U1, U2>
     operator*(N1 n, UnitRatio<N2, U1, U2> r) {
-  return UnitRatio<decltype(N1(1) * N2(1)), U1, U2>(n * r.unit1PerUnit2);
+  return UnitRatio<decltype(N1() * N2()), U1, U2>(n * r.unit1PerUnit2, unsafe);
 }
 
 template <typename Number, typename Unit>
@@ -220,16 +241,17 @@ class Quantity {
   //     waitFor(3 * MINUTES);
   //   }
 
-  static_assert(isIntegral<Number>(), "Underlying type for Quantity must be integer.");
+  static_assert(isIntegralOrGuarded<Number>(),
+      "Underlying type for Quantity must be integer.");
 
 public:
-  inline constexpr Quantity() {}
+  inline constexpr Quantity() = default;
 
   inline constexpr Quantity(decltype(maxValue)): value(maxValue) {}
   inline constexpr Quantity(decltype(minValue)): value(minValue) {}
   // Allow initialization from maxValue and minValue.
 
-  inline explicit constexpr Quantity(Number value): value(value) {}
+  inline constexpr Quantity(Number value, decltype(unsafe)): value(value) {}
   // This constructor was intended to be private, but GCC complains about it being private in a
   // bunch of places that don't appear to even call it, so I made it public.  Oh well.
 
@@ -238,60 +260,65 @@ public:
       : value(other.value) {}
 
   template <typename OtherNumber>
-  inline constexpr Quantity<decltype(Number(1) + OtherNumber(1)), Unit>
+  inline Quantity& operator=(const Quantity<OtherNumber, Unit>& other) {
+    value = other.value;
+    return *this;
+  }
+
+  template <typename OtherNumber>
+  inline constexpr Quantity<decltype(Number() + OtherNumber()), Unit>
       operator+(const Quantity<OtherNumber, Unit>& other) const {
-    return Quantity<decltype(Number(1) + OtherNumber(1)), Unit>(value + other.value);
+    return Quantity<decltype(Number() + OtherNumber()), Unit>(value + other.value, unsafe);
   }
   template <typename OtherNumber>
-  inline constexpr Quantity<decltype(Number(1) - OtherNumber(1)), Unit>
+  inline constexpr Quantity<decltype(Number() - OtherNumber()), Unit>
       operator-(const Quantity<OtherNumber, Unit>& other) const {
-    return Quantity<decltype(Number(1) - OtherNumber(1)), Unit>(value - other.value);
+    return Quantity<decltype(Number() - OtherNumber()), Unit>(value - other.value, unsafe);
   }
-  template <typename OtherNumber>
-  inline constexpr Quantity<decltype(Number(1) * OtherNumber(1)), Unit>
+  template <typename OtherNumber, typename = EnableIf<isIntegralOrGuarded<OtherNumber>()>>
+  inline constexpr Quantity<decltype(Number() * OtherNumber()), Unit>
       operator*(OtherNumber other) const {
-    static_assert(isIntegral<OtherNumber>(), "Multiplied Quantity by non-integer.");
-    return Quantity<decltype(Number(1) * other), Unit>(value * other);
+    return Quantity<decltype(Number() * other), Unit>(value * other, unsafe);
   }
-  template <typename OtherNumber>
-  inline constexpr Quantity<decltype(Number(1) / OtherNumber(1)), Unit>
+  template <typename OtherNumber, typename = EnableIf<isIntegralOrGuarded<OtherNumber>()>>
+  inline constexpr Quantity<decltype(Number() / OtherNumber()), Unit>
       operator/(OtherNumber other) const {
-    static_assert(isIntegral<OtherNumber>(), "Divided Quantity by non-integer.");
-    return Quantity<decltype(Number(1) / other), Unit>(value / other);
+    return Quantity<decltype(Number() / other), Unit>(value / other, unsafe);
   }
   template <typename OtherNumber>
-  inline constexpr decltype(Number(1) / OtherNumber(1))
+  inline constexpr decltype(Number() / OtherNumber())
       operator/(const Quantity<OtherNumber, Unit>& other) const {
     return value / other.value;
   }
   template <typename OtherNumber>
-  inline constexpr decltype(Number(1) % OtherNumber(1))
+  inline constexpr decltype(Number() % OtherNumber())
       operator%(const Quantity<OtherNumber, Unit>& other) const {
     return value % other.value;
   }
 
   template <typename OtherNumber, typename OtherUnit>
-  inline constexpr Quantity<decltype(Number(1) * OtherNumber(1)), OtherUnit>
+  inline constexpr Quantity<decltype(Number() * OtherNumber()), OtherUnit>
       operator*(const UnitRatio<OtherNumber, OtherUnit, Unit>& ratio) const {
-    return Quantity<decltype(Number(1) * OtherNumber(1)), OtherUnit>(
-        value * ratio.unit1PerUnit2);
+    return Quantity<decltype(Number() * OtherNumber()), OtherUnit>(
+        value * ratio.unit1PerUnit2, unsafe);
   }
   template <typename OtherNumber, typename OtherUnit>
-  inline constexpr Quantity<decltype(Number(1) / OtherNumber(1)), OtherUnit>
+  inline constexpr Quantity<decltype(Number() / OtherNumber()), OtherUnit>
       operator/(const UnitRatio<OtherNumber, Unit, OtherUnit>& ratio) const {
-    return Quantity<decltype(Number(1) / OtherNumber(1)), OtherUnit>(
-        value / ratio.unit1PerUnit2);
+    return Quantity<decltype(Number() / OtherNumber()), OtherUnit>(
+        value / ratio.unit1PerUnit2, unsafe);
   }
   template <typename OtherNumber, typename OtherUnit>
-  inline constexpr Quantity<decltype(Number(1) % OtherNumber(1)), Unit>
+  inline constexpr Quantity<decltype(Number() % OtherNumber()), Unit>
       operator%(const UnitRatio<OtherNumber, Unit, OtherUnit>& ratio) const {
-    return Quantity<decltype(Number(1) % OtherNumber(1)), Unit>(
-        value % ratio.unit1PerUnit2);
+    return Quantity<decltype(Number() % OtherNumber()), Unit>(
+        value % ratio.unit1PerUnit2, unsafe);
   }
   template <typename OtherNumber, typename OtherUnit>
-  inline constexpr UnitRatio<decltype(Number(1) / OtherNumber(1)), Unit, OtherUnit>
+  inline constexpr UnitRatio<decltype(Number() / OtherNumber()), Unit, OtherUnit>
       operator/(const Quantity<OtherNumber, OtherUnit>& other) const {
-    return UnitRatio<decltype(Number(1) / OtherNumber(1)), Unit, OtherUnit>(value / other.value);
+    return UnitRatio<decltype(Number() / OtherNumber()), Unit, OtherUnit>(
+        value / other.value, unsafe);
   }
 
   template <typename OtherNumber>
@@ -348,25 +375,30 @@ private:
 
   template <typename Number1, typename Number2, typename Unit2>
   friend inline constexpr auto operator*(Number1 a, Quantity<Number2, Unit2> b)
-      -> Quantity<decltype(Number1(1) * Number2(1)), Unit2>;
+      -> Quantity<decltype(Number1() * Number2()), Unit2>;
 
   template <typename T>
   friend inline constexpr T unit();
 };
 
-#endif  // !_MSC_VER
+template <typename T> struct Unit_ {
+  static inline constexpr T get() { return T(1); }
+};
+template <typename T, typename U>
+struct Unit_<Quantity<T, U>> {
+  static inline constexpr Quantity<decltype(Unit_<T>::get()), U> get() {
+    return Quantity<decltype(Unit_<T>::get()), U>(Unit_<T>::get(), unsafe);
+  }
+};
 
 template <typename T>
-inline constexpr T unit() { return T(1); }
-// unit<Quantity<T, U>>() returns a Quantity of value 1.  It also, intentionally, works on basic
-// numeric types.
-
-#if !_MSC_VER
+inline constexpr auto unit() -> decltype(Unit_<T>::get()) { return Unit_<T>::get(); }
+// Get the number 1.
 
 template <typename Number1, typename Number2, typename Unit>
 inline constexpr auto operator*(Number1 a, Quantity<Number2, Unit> b)
-    -> Quantity<decltype(Number1(1) * Number2(1)), Unit> {
-  return Quantity<decltype(Number1(1) * Number2(1)), Unit>(a * b.value);
+    -> Quantity<decltype(Number1() * Number2()), Unit> {
+  return Quantity<decltype(Number1() * Number2()), Unit>(a * b.value, unsafe);
 }
 
 template <typename Number1, typename Number2, typename Unit, typename Unit2>
@@ -432,6 +464,592 @@ template <typename T>
 inline constexpr T origin() { return T(0 * unit<UnitOf<T>>()); }
 // origin<Absolute<T, U>>() returns an Absolute of value 0.  It also, intentionally, works on basic
 // numeric types.
+
+// =======================================================================================
+// Overflow avoidance
+
+template <uint64_t n, uint accum = 0>
+struct BitCount_ {
+  static constexpr uint value = BitCount_<(n >> 1), accum + 1>::value;
+};
+template <uint accum>
+struct BitCount_<0, accum> {
+  static constexpr uint value = accum;
+};
+
+template <uint64_t n>
+inline constexpr uint bitCount() { return BitCount_<n>::value; }
+// Number of bits required to represent the number `n`.
+
+template <uint bitCountBitCount> struct AtLeastUInt_ {
+  static_assert(bitCountBitCount < 7, "don't know how to represent integers over 64 bits");
+};
+template <> struct AtLeastUInt_<0> { typedef uint8_t Type; };
+template <> struct AtLeastUInt_<1> { typedef uint8_t Type; };
+template <> struct AtLeastUInt_<2> { typedef uint8_t Type; };
+template <> struct AtLeastUInt_<3> { typedef uint8_t Type; };
+template <> struct AtLeastUInt_<4> { typedef uint16_t Type; };
+template <> struct AtLeastUInt_<5> { typedef uint32_t Type; };
+template <> struct AtLeastUInt_<6> { typedef uint64_t Type; };
+
+template <uint bits>
+using AtLeastUInt = typename AtLeastUInt_<bitCount<max(bits, 1) - 1>()>::Type;
+// AtLeastUInt<n> is an unsigned integer of at least n bits. E.g. AtLeastUInt<12> is uint16_t.
+
+template <uint bits>
+inline constexpr uint64_t maxValueForBits() {
+  // Get the maximum integer representable in the given number of bits.
+
+  // 1ull << 64 is unfortunately undefined.
+  return (bits == 64 ? 0 : (1ull << bits)) - 1;
+}
+
+// -------------------------------------------------------------------
+
+template <uint value>
+class GuardedConst {
+  // A constant integer value on which we can do bit size analysis.
+
+public:
+  inline constexpr uint unwrap() const { return value; }
+
+#define OP(op, check) \
+  template <uint other> \
+  inline constexpr GuardedConst<(value op other)> \
+      operator op(GuardedConst<other>) const { \
+    static_assert(check, "overflow in GuardedConst arithmetic"); \
+    return GuardedConst<(value op other)>(); \
+  }
+#define COMPARE_OP(op) \
+  template <uint other> \
+  inline constexpr bool operator op(GuardedConst<other>) const { \
+    return value op other; \
+  }
+
+  OP(+, value + other >= value)
+  OP(-, value - other <= value)
+  OP(*, value * other / other == value)
+  OP(/, true)   // div by zero already errors out; no other division ever overflows
+  OP(%, true)   // mod by zero already errors out; no other modulus ever overflows
+  OP(<<, value << other >= value)
+  OP(>>, true)  // right shift can't overflow
+  OP(&, true)   // bitwise ops can't overflow
+  OP(|, true)   // bitwise ops can't overflow
+
+  COMPARE_OP(==)
+  COMPARE_OP(!=)
+  COMPARE_OP(< )
+  COMPARE_OP(> )
+  COMPARE_OP(<=)
+  COMPARE_OP(>=)
+#undef OP
+#undef BOP
+};
+
+template <uint64_t m, typename T>
+struct Unit_<Guarded<m, T>> {
+  static inline constexpr GuardedConst<1> get() { return GuardedConst<1>(); }
+};
+
+template <uint value>
+struct Unit_<GuardedConst<value>> {
+  static inline constexpr GuardedConst<1> get() { return GuardedConst<1>(); }
+};
+
+template <uint value>
+inline constexpr GuardedConst<value> guarded() {
+  return GuardedConst<value>();
+}
+
+template <uint64_t a, uint64_t b>
+static constexpr uint64_t guardedAdd() {
+  static_assert(a + b >= a, "possible overflow detected");
+  return a + b;
+}
+template <uint64_t a, uint64_t b>
+static constexpr uint64_t guardedSub() {
+  static_assert(a - b <= a, "possible underflow detected");
+  return a - b;
+}
+template <uint64_t a, uint64_t b>
+static constexpr uint64_t guardedMul() {
+  static_assert(a * b / b == a, "possible overflow detected");
+  return a * b;
+}
+template <uint64_t a, uint64_t b>
+static constexpr uint64_t guardedLShift() {
+  static_assert(a << b >= a, "possible overflow detected");
+  return a << b;
+}
+
+// -------------------------------------------------------------------
+
+template <uint64_t maxN, typename T>
+class Guarded {
+public:
+  static_assert(maxN <= T(kj::maxValue), "possible overflow detected");
+
+  Guarded() = default;
+  inline constexpr Guarded(decltype(kj::maxValue)): value(maxN) {}
+  inline constexpr Guarded(decltype(kj::minValue)): value(0) {}
+
+  Guarded(const Guarded& other) = default;
+  template <typename OtherInt, typename = EnableIf<isIntegral<OtherInt>()>>
+  inline constexpr Guarded(OtherInt value): value(value) {
+    static_assert(OtherInt(maxValue) <= maxN, "possible overflow detected");
+  }
+  template <uint64_t otherMax, typename OtherT>
+  inline constexpr Guarded(const Guarded<otherMax, OtherT>& other)
+      : value(other.value) {
+    static_assert(otherMax <= maxN, "possible overflow detected");
+  }
+  template <uint otherValue>
+  inline constexpr Guarded(GuardedConst<otherValue>)
+      : value(otherValue) {
+    static_assert(otherValue <= maxN, "overflow detected");
+  }
+
+  Guarded& operator=(const Guarded& other) = default;
+  template <typename OtherInt, typename = EnableIf<isIntegral<OtherInt>()>>
+  Guarded& operator=(OtherInt other) {
+    static_assert(OtherInt(maxValue) <= maxN, "possible overflow detected");
+    value = other;
+    return *this;
+  }
+  template <uint64_t otherMax, typename OtherT>
+  inline Guarded& operator=(const Guarded<otherMax, OtherT>& other) {
+    static_assert(otherMax <= maxN, "possible overflow detected");
+    value = other.value;
+    return *this;
+  }
+  template <uint otherValue>
+  inline Guarded& operator=(GuardedConst<otherValue>) {
+    static_assert(otherValue <= maxN, "overflow detected");
+    value = otherValue;
+    return *this;
+  }
+
+  inline constexpr T unwrap() const { return value; }
+
+#define OP(op, newMax) \
+  template <uint64_t otherMax, typename otherT> \
+  inline constexpr Guarded<newMax, decltype(T() op otherT())> \
+      operator op(const Guarded<otherMax, otherT>& other) const { \
+    return Guarded<newMax, decltype(T() op otherT())>(value op other.value, unsafe); \
+  }
+#define COMPARE_OP(op) \
+  template <uint64_t otherMax, typename OtherT> \
+  inline constexpr bool operator op(const Guarded<otherMax, OtherT>& other) const { \
+    return value op other.value; \
+  }
+
+  OP(+, (guardedAdd<maxN, otherMax>()))
+  OP(*, (guardedMul<maxN, otherMax>()))
+  OP(/, maxN)
+  OP(%, otherMax - 1)
+
+  // operator- is intentionally omitted because we mostly use this with unsigned types, and
+  // subtraction requires proof that subtrahend is not greater than the minuend.
+
+  COMPARE_OP(==)
+  COMPARE_OP(!=)
+  COMPARE_OP(< )
+  COMPARE_OP(> )
+  COMPARE_OP(<=)
+  COMPARE_OP(>=)
+
+#undef OP
+#undef COMPARE_OP
+
+  template <uint64_t newMax, typename ErrorFunc>
+  inline Guarded<newMax, T> assertMax(ErrorFunc&& func) const {
+    // Assert that the number is no more than `newMax`. Otherwise, call `func`.
+    static_assert(newMax < maxN, "this guarded size assertion is redundant");
+    if (KJ_UNLIKELY(value > newMax)) func();
+    return Guarded<newMax, T>(value, unsafe);
+  }
+
+  template <uint64_t otherMax, typename OtherT, typename ErrorFunc>
+  inline Guarded<maxN, decltype(T() - OtherT())> subtractChecked(
+      const Guarded<otherMax, OtherT>& other, ErrorFunc&& func) const {
+    // Subtract a number, calling func() if the result would underflow.
+    if (KJ_UNLIKELY(value < other.value)) func();
+    return Guarded<maxN, decltype(T() - OtherT())>(value - other.value, unsafe);
+  }
+
+  template <uint otherValue, typename ErrorFunc>
+  inline Guarded<maxN - otherValue, T> subtractChecked(
+      GuardedConst<otherValue>, ErrorFunc&& func) const {
+    // Subtract a number, calling func() if the result would underflow.
+    static_assert(otherValue <= maxN, "underflow detected");
+    if (KJ_UNLIKELY(value < otherValue)) func();
+    return Guarded<maxN - otherValue, T>(value - otherValue, unsafe);
+  }
+
+  inline constexpr Guarded(T value, decltype(unsafe)): value(value) {}
+  template <uint64_t otherMax, typename OtherT>
+  inline constexpr Guarded(Guarded<otherMax, OtherT> value, decltype(unsafe))
+      : value(value.value) {}
+  // Mainly for internal use.
+  //
+  // Only use these as a last resort, with ample commentary on why you think it's safe.
+
+private:
+  T value;
+
+  template <uint64_t, typename>
+  friend class Guarded;
+};
+
+template <typename Number>
+inline constexpr Guarded<Number(kj::maxValue), Number> guarded(Number value) {
+  return Guarded<Number(kj::maxValue), Number>(value, unsafe);
+}
+
+inline constexpr Guarded<1, uint8_t> guarded(bool value) {
+  return Guarded<1, uint8_t>(value, unsafe);
+}
+
+template <uint bits, typename Number>
+inline constexpr Guarded<maxValueForBits<bits>(), Number> assumeBits(Number value) {
+  return Guarded<maxValueForBits<bits>(), Number>(value, unsafe);
+}
+
+template <uint bits, uint64_t maxN, typename T>
+inline constexpr Guarded<maxValueForBits<bits>(), T> assumeBits(Guarded<maxN, T> value) {
+  return Guarded<maxValueForBits<bits>(), T>(value, unsafe);
+}
+
+template <uint bits, typename Number, typename Unit>
+inline constexpr auto assumeBits(Quantity<Number, Unit> value)
+    -> Quantity<decltype(assumeBits<bits>(value / unit<Quantity<Number, Unit>>())), Unit> {
+  return Quantity<decltype(assumeBits<bits>(value / unit<Quantity<Number, Unit>>())), Unit>(
+      assumeBits<bits>(value / unit<Quantity<Number, Unit>>()), unsafe);
+}
+
+struct ThrowOverflow {
+  void operator()() const;
+};
+
+template <uint64_t newMax, uint64_t maxN, typename T, typename ErrorFunc>
+inline constexpr Guarded<newMax, T> assertMax(Guarded<maxN, T> value, ErrorFunc&& errorFunc) {
+  // Assert that the guarded value is less than or equal to the given maximum, calling errorFunc()
+  // if not.
+  static_assert(newMax < maxN, "this guarded size assertion is redundant");
+  return value.template assertMax<newMax>(kj::fwd<ErrorFunc>(errorFunc));
+}
+
+template <uint64_t newMax, uint64_t maxN, typename T, typename Unit, typename ErrorFunc>
+inline constexpr Quantity<Guarded<newMax, T>, Unit> assertMax(
+    Quantity<Guarded<maxN, T>, Unit> value, ErrorFunc&& errorFunc) {
+  // Assert that the guarded value is less than or equal to the given maximum, calling errorFunc()
+  // if not.
+  static_assert(newMax < maxN, "this guarded size assertion is redundant");
+  return (value / unit<decltype(value)>()).template assertMax<newMax>(
+      kj::fwd<ErrorFunc>(errorFunc)) * unit<decltype(value)>();
+}
+
+template <uint64_t newBits, uint64_t maxN, typename T, typename ErrorFunc = ThrowOverflow>
+inline constexpr Guarded<maxValueForBits<newBits>(), T> assertMaxBits(
+    Guarded<maxN, T> value, ErrorFunc&& errorFunc = ErrorFunc()) {
+  // Assert that the guarded value requires no more than the given number of bits, calling
+  // errorFunc() if not.
+  return assertMax<maxValueForBits<newBits>()>(value, kj::fwd<ErrorFunc>(errorFunc));
+}
+
+template <uint64_t newBits, uint64_t maxN, typename T, typename Unit,
+          typename ErrorFunc = ThrowOverflow>
+inline constexpr Quantity<Guarded<maxValueForBits<newBits>(), T>, Unit> assertMaxBits(
+    Quantity<Guarded<maxN, T>, Unit> value, ErrorFunc&& errorFunc = ErrorFunc()) {
+  // Assert that the guarded value requires no more than the given number of bits, calling
+  // errorFunc() if not.
+  return assertMax<maxValueForBits<newBits>()>(value, kj::fwd<ErrorFunc>(errorFunc));
+}
+
+template <typename newT, uint64_t maxN, typename T>
+inline constexpr Guarded<maxN, newT> upgradeGuard(Guarded<maxN, T> value) {
+  return value;
+}
+
+template <typename newT, uint64_t maxN, typename T, typename Unit>
+inline constexpr Quantity<Guarded<maxN, newT>, Unit> upgradeGuard(
+    Quantity<Guarded<maxN, T>, Unit> value) {
+  return value;
+}
+
+template <uint64_t maxN, typename T, typename Other, typename ErrorFunc>
+inline auto subtractChecked(Guarded<maxN, T> value, Other other, ErrorFunc&& errorFunc)
+    -> decltype(value.subtractChecked(other, kj::fwd<ErrorFunc>(errorFunc))) {
+  return value.subtractChecked(other, kj::fwd<ErrorFunc>(errorFunc));
+}
+
+template <typename T, typename U, typename Unit, typename ErrorFunc>
+inline auto subtractChecked(Quantity<T, Unit> value, Quantity<U, Unit> other, ErrorFunc&& errorFunc)
+    -> Quantity<decltype(subtractChecked(T(), U(), kj::fwd<ErrorFunc>(errorFunc))), Unit> {
+  return subtractChecked(value / unit<Quantity<T, Unit>>(),
+                         other / unit<Quantity<U, Unit>>(),
+                         kj::fwd<ErrorFunc>(errorFunc))
+      * unit<Quantity<T, Unit>>();
+}
+
+// -------------------------------------------------------------------
+// Operators between Guarded and GuardedConst
+
+#define OP(op, newMax) \
+template <uint64_t maxN, uint cvalue, typename T> \
+inline constexpr Guarded<(newMax), decltype(T() op uint())> operator op( \
+    Guarded<maxN, T> value, GuardedConst<cvalue>) { \
+  return Guarded<(newMax), decltype(T() op uint())>(value.unwrap() op cvalue, unsafe); \
+}
+
+#define REVERSE_OP(op, newMax) \
+template <uint64_t maxN, uint cvalue, typename T> \
+inline constexpr Guarded<(newMax), decltype(uint() op T())> operator op( \
+    GuardedConst<cvalue>, Guarded<maxN, T> value) { \
+  return Guarded<(newMax), decltype(uint() op T())>(cvalue op value.unwrap(), unsafe); \
+}
+
+#define COMPARE_OP(op) \
+template <uint64_t maxN, uint cvalue, typename T> \
+inline constexpr bool operator op(Guarded<maxN, T> value, GuardedConst<cvalue>) { \
+  return value.unwrap() op cvalue; \
+} \
+template <uint64_t maxN, uint cvalue, typename T> \
+inline constexpr bool operator op(GuardedConst<cvalue>, Guarded<maxN, T> value) { \
+  return cvalue op value.unwrap(); \
+}
+
+OP(+, (guardedAdd<maxN, cvalue>()))
+REVERSE_OP(+, (guardedAdd<maxN, cvalue>()))
+
+OP(*, (guardedMul<maxN, cvalue>()))
+REVERSE_OP(*, (guardedAdd<maxN, cvalue>()))
+
+OP(/, maxN / cvalue)
+REVERSE_OP(/, cvalue)  // denominator could be 1
+
+OP(%, cvalue - 1)
+REVERSE_OP(%, maxN - 1)
+
+OP(<<, (guardedLShift<maxN, cvalue>()))
+REVERSE_OP(<<, (guardedLShift<cvalue, maxN>()))
+
+OP(>>, maxN >> cvalue)
+REVERSE_OP(>>, cvalue >> maxN)
+
+OP(&, maxValueForBits<bitCount<maxN>()>() & cvalue)
+REVERSE_OP(&, maxValueForBits<bitCount<maxN>()>() & cvalue)
+
+OP(|, maxN | cvalue)
+REVERSE_OP(|, maxN | cvalue)
+
+COMPARE_OP(==)
+COMPARE_OP(!=)
+COMPARE_OP(< )
+COMPARE_OP(> )
+COMPARE_OP(<=)
+COMPARE_OP(>=)
+
+#undef OP
+#undef REVERSE_OP
+#undef COMPARE_OP
+
+template <uint64_t maxN, uint cvalue, typename T>
+inline constexpr Guarded<cvalue, decltype(uint() - T())>
+    operator-(GuardedConst<cvalue>, Guarded<maxN, T> value) {
+  // We allow subtraction of a variable from a constant only if the constant is greater than or
+  // equal to the maximum possible value of the variable. Since the variable could be zero, the
+  // result can be as large as the constant.
+  //
+  // We do not allow subtraction of a constant from a variable because there's never a guarantee it
+  // won't underflow (unless the constant is zero, which is silly).
+  static_assert(cvalue >= maxN, "possible underflow detected");
+  return Guarded<cvalue, decltype(uint() - T())>(cvalue - value.unwrap(), unsafe);
+}
+
+// -------------------------------------------------------------------
+
+template <uint64_t maxN, typename T>
+class SafeUnwrapper {
+public:
+  inline explicit constexpr SafeUnwrapper(Guarded<maxN, T> value): value(value.unwrap()) {}
+
+  template <typename U, typename = EnableIf<isIntegral<U>()>>
+  inline constexpr operator U() {
+    static_assert(maxN <= U(maxValue), "possible truncation detected");
+    return value;
+  }
+
+  inline constexpr operator bool() {
+    static_assert(maxN <= 1, "possible truncation detected");
+    return value;
+  }
+
+private:
+  T value;
+};
+
+template <uint64_t maxN, typename T>
+inline constexpr SafeUnwrapper<maxN, T> unguard(Guarded<maxN, T> guarded) {
+  // Unwraps the guarded value, returning a value that can be implicitly cast to any integer type.
+  // If this implicit cast could truncate, a compile-time error will be raised.
+  return SafeUnwrapper<maxN, T>(guarded);
+}
+
+template <uint64_t value>
+class SafeConstUnwrapper {
+public:
+  template <typename T, typename = EnableIf<isIntegral<T>()>>
+  inline constexpr operator T() {
+    static_assert(value <= T(maxValue), "this operation will truncate");
+    return value;
+  }
+
+  inline constexpr operator bool() {
+    static_assert(value <= 1, "this operation will truncate");
+    return value;
+  }
+};
+
+template <uint value>
+inline constexpr SafeConstUnwrapper<value> unguard(GuardedConst<value>) {
+  return SafeConstUnwrapper<value>();
+}
+
+template <typename T, typename U>
+inline constexpr T unguardAs(U value) {
+  return unguard(value);
+}
+
+template <uint64_t requestedMax, uint64_t maxN, typename T>
+inline constexpr T unguardMax(Guarded<maxN, T> value) {
+  // Explicitly ungaurd expecting a value that is at most `maxN`.
+  static_assert(maxN <= requestedMax, "possible overflow detected");
+  return value.unwrap();
+}
+
+template <uint64_t requestedMax, uint value>
+inline constexpr uint unguardMax(GuardedConst<value>) {
+  // Explicitly ungaurd expecting a value that is at most `maxN`.
+  static_assert(value <= requestedMax, "overflow detected");
+  return value;
+}
+
+template <uint bits, typename T>
+inline constexpr auto unguardMaxBits(T value) ->
+    decltype(unguardMax<maxValueForBits<bits>()>(value)) {
+  // Explicitly ungaurd expecting a value that fits into `bits` bits.
+  return unguardMax<maxValueForBits<bits>()>(value);
+}
+
+#define OP(op) \
+template <uint64_t maxN, typename T, typename U> \
+inline constexpr auto operator op(T a, SafeUnwrapper<maxN, U> b) -> decltype(a op (T)b) { \
+  return a op (AtLeastUInt<sizeof(T)*8>)b; \
+} \
+template <uint64_t maxN, typename T, typename U> \
+inline constexpr auto operator op(SafeUnwrapper<maxN, U> b, T a) -> decltype((T)b op a) { \
+  return (AtLeastUInt<sizeof(T)*8>)b op a; \
+} \
+template <uint64_t value, typename T> \
+inline constexpr auto operator op(T a, SafeConstUnwrapper<value> b) -> decltype(a op (T)b) { \
+  return a op (AtLeastUInt<sizeof(T)*8>)b; \
+} \
+template <uint64_t value, typename T> \
+inline constexpr auto operator op(SafeConstUnwrapper<value> b, T a) -> decltype((T)b op a) { \
+  return (AtLeastUInt<sizeof(T)*8>)b op a; \
+}
+
+OP(+)
+OP(-)
+OP(*)
+OP(/)
+OP(%)
+OP(<<)
+OP(>>)
+OP(&)
+OP(|)
+OP(==)
+OP(!=)
+OP(<=)
+OP(>=)
+OP(<)
+OP(>)
+
+#undef OP
+
+// -------------------------------------------------------------------
+
+template <uint64_t maxN, typename T>
+class Range<Guarded<maxN, T>> {
+public:
+  inline constexpr Range(Guarded<maxN, T> begin, Guarded<maxN, T> end)
+      : inner(unguard(begin), unguard(end)) {}
+  inline explicit constexpr Range(Guarded<maxN, T> end)
+      : inner(unguard(end)) {}
+
+  class Iterator {
+  public:
+    Iterator() = default;
+    inline explicit Iterator(typename Range<T>::Iterator inner): inner(inner) {}
+
+    inline Guarded<maxN, T> operator* () const { return Guarded<maxN, T>(*inner, unsafe); }
+    inline Iterator& operator++() { ++inner; return *this; }
+
+    inline bool operator==(const Iterator& other) const { return inner == other.inner; }
+    inline bool operator!=(const Iterator& other) const { return inner != other.inner; }
+
+  private:
+    typename Range<T>::Iterator inner;
+  };
+
+  inline Iterator begin() const { return Iterator(inner.begin()); }
+  inline Iterator end() const { return Iterator(inner.end()); }
+
+private:
+  Range<T> inner;
+};
+
+template <typename T, typename U>
+class Range<Quantity<T, U>> {
+public:
+  inline constexpr Range(Quantity<T, U> begin, Quantity<T, U> end)
+      : inner(begin / unit<Quantity<T, U>>(), end / unit<Quantity<T, U>>()) {}
+  inline explicit constexpr Range(Quantity<T, U> end)
+      : inner(end / unit<Quantity<T, U>>()) {}
+
+  class Iterator {
+  public:
+    Iterator() = default;
+    inline explicit Iterator(typename Range<T>::Iterator inner): inner(inner) {}
+
+    inline Quantity<T, U> operator* () const { return *inner * unit<Quantity<T, U>>(); }
+    inline Iterator& operator++() { ++inner; return *this; }
+
+    inline bool operator==(const Iterator& other) const { return inner == other.inner; }
+    inline bool operator!=(const Iterator& other) const { return inner != other.inner; }
+
+  private:
+    typename Range<T>::Iterator inner;
+  };
+
+  inline Iterator begin() const { return Iterator(inner.begin()); }
+  inline Iterator end() const { return Iterator(inner.end()); }
+
+private:
+  Range<T> inner;
+};
+
+template <uint value>
+inline constexpr Range<Guarded<value, uint>> zeroTo(GuardedConst<value> end) {
+  return Range<Guarded<value, uint>>(end);
+}
+
+template <uint value, typename Unit>
+inline constexpr Range<Quantity<Guarded<value, uint>, Unit>>
+    zeroTo(Quantity<GuardedConst<value>, Unit> end) {
+  return Range<Quantity<Guarded<value, uint>, Unit>>(end);
+}
 
 #endif  // !_MSC_VER
 

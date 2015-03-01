@@ -253,12 +253,12 @@ inline ReaderFor<T> Orphan<T>::getReader() const {
 
 template <typename T>
 inline void Orphan<T>::truncate(uint size) {
-  builder.truncate(size * ELEMENTS, false);
+  builder.truncate(guarded(size) * ELEMENTS, false);
 }
 
 template <>
 inline void Orphan<Text>::truncate(uint size) {
-  builder.truncate(size * ELEMENTS, true);
+  builder.truncate(guarded(size) * ELEMENTS, true);
 }
 
 template <typename T>
@@ -288,28 +288,29 @@ Orphan<RootType> Orphanage::newOrphan() const {
 template <typename T, Kind k>
 struct Orphanage::NewOrphanListImpl<List<T, k>> {
   static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initList(arena, size * ELEMENTS, _::ElementSizeForType<T>::value);
+    return _::OrphanBuilder::initList(
+        arena, guarded(size) * ELEMENTS, _::ElementSizeForType<T>::value);
   }
 };
 
 template <typename T>
 struct Orphanage::NewOrphanListImpl<List<T, Kind::STRUCT>> {
   static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initStructList(arena, size * ELEMENTS, _::structSize<T>());
+    return _::OrphanBuilder::initStructList(arena, guarded(size) * ELEMENTS, _::structSize<T>());
   }
 };
 
 template <>
 struct Orphanage::NewOrphanListImpl<Text> {
   static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initText(arena, size * BYTES);
+    return _::OrphanBuilder::initText(arena, guarded(size) * BYTES);
   }
 };
 
 template <>
 struct Orphanage::NewOrphanListImpl<Data> {
   static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initData(arena, size * BYTES);
+    return _::OrphanBuilder::initData(arena, guarded(size) * BYTES);
   }
 };
 

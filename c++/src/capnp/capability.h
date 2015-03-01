@@ -508,7 +508,8 @@ struct List<T, Kind::INTERFACE> {
     inline uint size() const { return reader.size() / ELEMENTS; }
     inline typename T::Client operator[](uint index) const {
       KJ_IREQUIRE(index < size());
-      return typename T::Client(reader.getPointerElement(index * ELEMENTS).getCapability());
+      return typename T::Client(reader.getPointerElement(
+          guarded(index) * ELEMENTS).getCapability());
     }
 
     typedef _::IndexingIterator<const Reader, typename T::Client> Iterator;
@@ -540,19 +541,20 @@ struct List<T, Kind::INTERFACE> {
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename T::Client operator[](uint index) {
       KJ_IREQUIRE(index < size());
-      return typename T::Client(builder.getPointerElement(index * ELEMENTS).getCapability());
+      return typename T::Client(builder.getPointerElement(
+          guarded(index) * ELEMENTS).getCapability());
     }
     inline void set(uint index, typename T::Client value) {
       KJ_IREQUIRE(index < size());
-      builder.getPointerElement(index * ELEMENTS).setCapability(kj::mv(value.hook));
+      builder.getPointerElement(guarded(index) * ELEMENTS).setCapability(kj::mv(value.hook));
     }
     inline void adopt(uint index, Orphan<T>&& value) {
       KJ_IREQUIRE(index < size());
-      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value));
+      builder.getPointerElement(guarded(index) * ELEMENTS).adopt(kj::mv(value));
     }
     inline Orphan<T> disown(uint index) {
       KJ_IREQUIRE(index < size());
-      return Orphan<T>(builder.getPointerElement(index * ELEMENTS).disown());
+      return Orphan<T>(builder.getPointerElement(guarded(index) * ELEMENTS).disown());
     }
 
     typedef _::IndexingIterator<Builder, typename T::Client> Iterator;
@@ -568,7 +570,7 @@ struct List<T, Kind::INTERFACE> {
 
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
-    return builder.initList(ElementSize::POINTER, size * ELEMENTS);
+    return builder.initList(ElementSize::POINTER, guarded(size) * ELEMENTS);
   }
   inline static _::ListBuilder getFromPointer(_::PointerBuilder builder, const word* defaultValue) {
     return builder.getList(ElementSize::POINTER, defaultValue);
