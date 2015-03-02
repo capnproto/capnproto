@@ -6,11 +6,11 @@ author: kentonv
 
 As the installation page has always stated, I do not yet recommend using Cap'n Proto's C++ library for handling possibly-malicious input, and will not recommend it until it undergoes a formal security review. That said, security is obviously a high priority for the project. The security of Cap'n Proto is in fact essential to the security of [Sandstorm.io](https://sandstorm.io), Cap'n Proto's parent project, in which sandboxed apps communicate with each other and the platform via Cap'n Proto RPC.
 
-A few days ago, the first critical security bugs were found in Cap'n Proto C++ -- two by security guru [Ben Laurie](http://en.wikipedia.org/wiki/Ben_Laurie) and one by myself during subsequent review (see below). You can read details about each bug in the commit logs:
+A few days ago, the first major security bugs were found in Cap'n Proto C++ -- two by security guru [Ben Laurie](http://en.wikipedia.org/wiki/Ben_Laurie) and one by myself during subsequent review (see below). You can read details about each bug in our new [security advisories directory](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories):
 
-* [fabd69c](https://github.com/sandstorm-io/capnproto/commit/fabd69cbb92ca24c91bef4c778206be3d5b97100): Integer overflow in pointer validation.
-* [93fcd82](https://github.com/sandstorm-io/capnproto/commit/93fcd82bfadf1f402c068454241a22366cad254d): Integer underflow in pointer validation.
-* [72e6654](https://github.com/sandstorm-io/capnproto/commit/72e6654bb546cdf12848284e5d523195705bf3d5): CPU usage amplification attack.
+* [Integer overflow in pointer validation.](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2014-03-02-0-c++-integer-overflow.md)
+* [Integer underflow in pointer validation.](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2014-03-02-1-c++-integer-underflow.md)
+* [CPU usage amplification attack.](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2014-03-02-0-all-cpu-amplification.md)
 
 I have backported the fixes to the last two release branches -- 0.5 and 0.4:
 
@@ -20,6 +20,27 @@ I have backported the fixes to the last two release branches -- 0.5 and 0.4:
 Note that we added a "nano" component to the version number (rather than use 0.5.2/0.4.2) to indicate that this release is ABI-compatible with the previous release. If you are linking Cap'n Proto as a shared library, you only need to update the library, not re-compile your app.
 
 To be clear, the first two bugs affect only the C++ implementation of Cap'n Proto; implementations in other languages are likely safe. The third bug probably affects all languages, and as of this writing only the C++ implementation (and wrappers around it) is fixed. However, this third bug is not as serious as the other two.
+
+### Preventative Measures
+
+It is our policy that any time a security problem is found, we will not only fix the problem, but also implement new measures to prevent the class of problems from occurring again. To that end, here's what we're doing doing to avoid problems like these in the future:
+
+1. A fuzz test of each pointer type has been added to the standard unit test
+   suite.
+2. We will additionally add fuzz testing with American Fuzzy Lop to our
+   extended test suite.
+3. In parallel, we will extend our use of template metaprogramming for
+   compile-time unit analysis (kj::Quantity in kj/units.h) to also cover
+   overflow detection (by tracking the maximum size of an integer value across
+   arithmetic expressions and raising an error when it overflows). More on this
+   below.
+4. We will continue to require that all tests (including the new fuzz test) run
+   cleanly under Valgrind before each release.
+5. We will commission a professional security review before any 1.0 release.
+   Until that time, we continue to recommend agaisnt using Cap'n Proto to
+   interpret data from potentially-malicious sources.
+
+I am pleased to report that measures 1, 2, and 3 all detected both integer overflow/underflow problems, and AFL additionally detected the CPU amplification problem.
 
 ### Integer Overflow is Hard
 
@@ -31,9 +52,9 @@ But developing a similar sense for integer overflow is hard. We do arithmetic in
 
 And by the way, integer overflow affects many memory-safe languages too! Java and C# don't protect against overflow. Python does, using slow arbitrary-precision integers. Javascript doesn't use integers, and is instead succeptible to loss-of-precision bugs, which can have similar (but more subtle) consequences.
 
-While writing Cap'n Proto, I made sure to think carefully about overflow and managed to correct for it most of the time. On learning that I missed a case, I immediately wondered how many others I might have missed, and how I might go about systematically finding them.
+While writing Cap'n Proto, I made sure to think carefully about overflow and managed to correct for it most of the time. On learning that I missed a case, I immediately feared that I might have missed many more, and wondered how I might go about systematically finding them.
 
-Fuzz testing -- e.g. using [American Fuzzy Lop](http://lcamtuf.coredump.cx/afl/) -- is one approach, and is indeed how Ben found the two bugs he reported. We will make AFL part of our release process in the future. However, AFL cannot really _prove_ anything -- it can only try lots of possibilities. I want my compiler to refuse to compile arithmetic which might overflow.
+Fuzz testing -- e.g. using [American Fuzzy Lop](http://lcamtuf.coredump.cx/afl/) -- is one approach, and is indeed how Ben found the two bugs he reported. As mentioned above, we will make AFL part of our release process in the future. However, AFL cannot really _prove_ anything -- it can only try lots of possibilities. I want my compiler to refuse to compile arithmetic which might overflow.
 
 ### Proving Safety Through Template Metaprogramming
 

@@ -24,7 +24,8 @@ you should keep in mind some caveats:
 
 * **Security:** Cap'n Proto has not yet had a security review.  Although Kenton has a background
   in security and is not aware of any vulnerabilities in the current code, it's likely that there
-  are a few.  For now, do not accept Cap'n Proto messages from parties you do not trust.
+  are a few, and [some have been found](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories)
+  in the past.  For now, do not accept Cap'n Proto messages from parties you do not trust.
 * **API Stability:** The Cap'n Proto programming interface may still change in ways that break
   existing code.  Such changes are likely to be minor and should not affect the wire format.
 * **Performance:** While Cap'n Proto is inherently fast by design, the implementation has not yet
