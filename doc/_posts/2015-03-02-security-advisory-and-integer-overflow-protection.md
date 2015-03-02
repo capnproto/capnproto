@@ -131,4 +131,4 @@ Languages could even do something which my templates cannot: allow me to declare
 
 Obviously, I'm not the first to think of this. "Dependent types" have been researched for decades, but we have yet to see a practical language supporting them. Apparently, something about them is complicated, even though the rules look like they should be simple enough from where I'm standing.
 
-Some day, I would like to design a language that gets this right. But for the moment, I remain focused on [Sandstorm.io](https://sandstorm.io). Hopefully someone will beat me too it. Hint hint.
+Some day, I would like to design a language that gets this right. But for the moment, I remain focused on [Sandstorm.io](https://sandstorm.io). Hopefully someone will beat me to it. Hint hint.
