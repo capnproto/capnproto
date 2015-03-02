@@ -252,7 +252,7 @@ char* DoubleToBuffer(double value, char* buffer) {
     return buffer;
   }
 
-  int snprintf_result =
+  int snprintf_result KJ_UNUSED =
     snprintf(buffer, kDoubleToBufferSize, "%.*g", DBL_DIG, value);
 
   // The snprintf should never overflow because the buffer is significantly
@@ -267,7 +267,7 @@ char* DoubleToBuffer(double value, char* buffer) {
   // truncated to a double.
   volatile double parsed_value = strtod(buffer, NULL);
   if (parsed_value != value) {
-    int snprintf_result2 =
+    int snprintf_result2 KJ_UNUSED =
       snprintf(buffer, kDoubleToBufferSize, "%.*g", DBL_DIG+2, value);
 
     // Should never overflow; see above.
@@ -311,7 +311,7 @@ char* FloatToBuffer(float value, char* buffer) {
     return buffer;
   }
 
-  int snprintf_result =
+  int snprintf_result KJ_UNUSED =
     snprintf(buffer, kFloatToBufferSize, "%.*g", FLT_DIG, value);
 
   // The snprintf should never overflow because the buffer is significantly
@@ -320,7 +320,7 @@ char* FloatToBuffer(float value, char* buffer) {
 
   float parsed_value;
   if (!safe_strtof(buffer, &parsed_value) || parsed_value != value) {
-    int snprintf_result2 =
+    int snprintf_result2 KJ_UNUSED =
       snprintf(buffer, kFloatToBufferSize, "%.*g", FLT_DIG+2, value);
 
     // Should never overflow; see above.
