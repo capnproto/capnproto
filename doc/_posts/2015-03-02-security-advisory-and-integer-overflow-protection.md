@@ -10,7 +10,7 @@ A few days ago, the first major security bugs were found in Cap'n Proto C++ -- t
 
 * [Integer overflow in pointer validation.](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2014-03-02-0-c++-integer-overflow.md)
 * [Integer underflow in pointer validation.](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2014-03-02-1-c++-integer-underflow.md)
-* [CPU usage amplification attack.](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2014-03-02-0-all-cpu-amplification.md)
+* [CPU usage amplification attack.](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2014-03-02-2-all-cpu-amplification.md)
 
 I have backported the fixes to the last two release branches -- 0.5 and 0.4:
 
@@ -116,12 +116,12 @@ Of course, the full implementation is considerably more complicated than this. T
 I switched Cap'n Proto's core pointer validation code (`capnp/layout.c++`) over to `Guarded`. In the process, I found:
 
 * Several overflows that could be triggered by the application calling methods with invalid parameters, but not by a remote attacker providing invalid message data. We will change the code to check these in the future, but they are not critical security problems.
-* The overflow that Ben had already reported, fixed in [fabd69c](https://github.com/sandstorm-io/capnproto/commit/fabd69cbb92ca24c91bef4c778206be3d5b97100). I had intentionally left this unfixed during my analysis to verify that `Guarded` would catch it.
-* One otherwise-undiscovered integer underflow, fixed in commit [93fcd82](https://github.com/sandstorm-io/capnproto/commit/93fcd82bfadf1f402c068454241a22366cad254d).
+* The overflow that Ben had already reported ([2014-03-02-0](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2014-03-02-0-c++-integer-overflow.md)). I had intentionally left this unfixed during my analysis to verify that `Guarded` would catch it.
+* One otherwise-undiscovered integer underflow ([2014-03-02-1](https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2014-03-02-1-c++-integer-underflow.md)).
 
 Based on these results, I conclude that `Guarded` is in fact effective at finding overflow bugs, and that such bugs are thankfully _not_ endemic in Cap'n Proto's code.
 
-With that said, it does not seem practical to change every integer throughout the Cap'n Proto codebase to use `Guarded` -- using it in the API would create too much confusion and cognitive overhead for users, and would force application code to be more verbose. Therefore, this approach unfortunately will not be able to find all integer overflows throughout the library.
+With that said, it does not seem practical to change every integer throughout the Cap'n Proto codebase to use `Guarded` -- using it in the API would create too much confusion and cognitive overhead for users, and would force application code to be more verbose. Therefore, this approach unfortunately will not be able to find all integer overflows throughout the entire library, but fortunately the most sensitive parts are covered in `layout.c++`.
 
 ### Why don't programming languages do this?
 
