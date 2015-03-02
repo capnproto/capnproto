@@ -6,7 +6,7 @@ Integer underflow in pointer validation.
 Discovered by
 =============
 
-Kenton Varda <kenton@sandstorm.io>
+Kenton Varda &lt;kenton@sandstorm.io>
 
 Announced
 =========

@@ -6,7 +6,7 @@ Integer overflow in pointer validation.
 Discovered by
 =============
 
-Ben Laurie <ben@links.org>
+Ben Laurie &lt;ben@links.org> using [American Fuzzy Lop](http://lcamtuf.coredump.cx/afl/)
 
 Announced
 =========
