@@ -1,25 +1,24 @@
-// Copyright (c) 2014, Jason Choy <jjwchoy@gmail.com>
-// All rights reserved.
+// Copyright (c) 2014 Jason Choy <jjwchoy@gmail.com>
+// Copyright (c) 2015 Google Inc. (Jason Choy <jjwchoy@google.com>)
+// Licensed under the MIT License:
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
 //
-// 1. Redistributions of source code must retain the above copyright notice, this
-//    list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-//    this list of conditions and the following disclaimer in the documentation
-//    and/or other materials provided with the distribution.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 #ifdef __APPLE__
 
@@ -60,7 +59,7 @@ void setCloseOnExec(int fd) {
 
 class CocoaEventPort: public EventPort {
 public:
-  CocoaEventPort(CFRunLoopRef runLoop, CFStringRef runLoopMode) : runLoop(runLoop ? runLoop : CFRunLoopGetCurrent()), runLoopMode(runLoopMode), kjLoop(*this) {
+  CocoaEventPort(CFRunLoopRef runLoop, CFStringRef runLoopMode) : runLoop(runLoop), runLoopMode(runLoopMode), kjLoop(*this), wasAwoken(false) {
     CFRetain(runLoop);
     CFRetain(runLoopMode);
     CFRunLoopSourceContext context = { 0, this, NULL, NULL, NULL, NULL, NULL, NULL, NULL, kjCocoaScheduleCallback };
@@ -80,14 +79,23 @@ public:
   CFRunLoopRef getRunLoop() { return runLoop; }
   CFStringRef getRunLoopMode() { return runLoopMode; }
 
-  void wait() override {
+  bool wait() override {
     CFRunLoopRunInMode(runLoopMode, DBL_MAX, true);
+    return checkAwoken();
   }
 
-  void poll() override {
+  bool poll() override {
     CFRunLoopRunInMode(runLoopMode, 0, true);
+    return checkAwoken();
   }
 
+  void wake() const override {
+    CFRunLoopPerformBlock(runLoop, kCFRunLoopCommonModes, ^{
+      wasAwoken = true;
+    });
+    CFRunLoopWakeUp(runLoop);
+  }
+    
   void setRunnable(bool runnable) override {
     if (runnable != this->runnable) {
       this->runnable = runnable;
@@ -102,6 +110,7 @@ private:
   bool runnable = false;
   bool scheduled = false;
   CFRunLoopSourceRef scheduleSource;
+  mutable bool wasAwoken;
 
   EventLoop kjLoop;
 
@@ -119,6 +128,12 @@ private:
     if (runnable) {
       schedule();
     }
+  }
+    
+  bool checkAwoken() {
+    bool res = wasAwoken;
+    wasAwoken = false;
+    return res;
   }
 
   friend void ::kjCocoaScheduleCallback(void*);
@@ -428,6 +443,39 @@ private:
   CFStringRef runLoopMode;
 };
 
+/*
+class CocoaDatagramPort final: public DatagramPort, public CocoaOwnedFileDescriptor {
+public:
+  Promise<size_t> send(const void* buffer, size_t size, NetworkAddress& destination) {
+    // TODO
+  }
+    
+  Promise<size_t> send(ArrayPtr<const ArrayPtr<const byte>> pieces,
+                       NetworkAddress& destination) {
+    // TODO
+  }
+
+  Own<DatagramReceiver> makeReceiver(DatagramReceiver::Capacity capacity) override;
+
+  uint getPort() override {
+    // TODO
+  }
+
+  void getsockopt(int level, int option, void* value, uint* length) override {
+    socklen_t socklen = *length;
+    KJ_SYSCALL(::getsockopt(fd, level, option, value, &socklen));
+    *length = socklen;
+  }
+
+  void setsockopt(int level, int option, const void* value, uint length) override {
+    KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
+  }
+private:
+  LowLevelAsyncIoProvider& lowLevel;
+  EventPort& eventPort;
+};
+*/
+
 class CocoaLowLevelAsyncIoProvider final: public LowLevelAsyncIoProvider {
 public:
   CocoaLowLevelAsyncIoProvider(CFRunLoopRef runLoop, CFStringRef runLoopMode) : eventPort(runLoop, runLoopMode), waitScope(eventPort.getKjLoop()) {}
@@ -466,6 +514,12 @@ public:
     return kj::heap<CocoaConnectionReceiver>(eventPort.getRunLoop(), eventPort.getRunLoopMode(), fd, flags);
   }
 
+/*
+  Own<DatagramPort> wrapDatagramSocketFd(int fd, uint flags = 0) {
+      return kj::heap<CocoaDatagramPort>(eventPort.getRunLoop(), eventPort.getRunLoopMode(), fd, flags);
+  }
+*/
+ 
   Timer& getTimer() override {
     KJ_FAIL_ASSERT("Timers not implemented.");
   }
@@ -477,7 +531,7 @@ private:
 } // end anonymous ns
 
 AsyncCocoaIoContext setupCocoaAsyncIo(CFRunLoopRef runLoop, CFStringRef runLoopMode) {
-  auto lowLevel = kj::heap<CocoaLowLevelAsyncIoProvider>(runLoop, runLoopMode);
+  auto lowLevel = kj::heap<CocoaLowLevelAsyncIoProvider>(runLoop ? runLoop : CFRunLoopGetCurrent(), runLoopMode);
   auto ioProvider = kj::newAsyncIoProvider(*lowLevel);
   auto& waitScope = lowLevel->getWaitScope();
   return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope };

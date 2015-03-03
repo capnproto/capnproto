@@ -79,6 +79,7 @@ install(FILES ${kj-test-compat_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/c
 
 set(kj-async_sources
   async.c++
+  async-cocoa.c++
   async-unix.c++
   async-io.c++
   time.c++
@@ -94,6 +95,10 @@ set(kj-async_headers
 if(NOT CAPNP_LITE)
   add_library(kj-async ${kj-async_sources})
   target_link_libraries(kj-async kj)
+  if(APPLE)
+    find_library(COREFOUNDATION_LIBRARY CoreFoundation)
+target_link_libraries(kj-async ${COREFOUNDATION_LIBRARY})
+  endif(APPLE)
   install(TARGETS kj-async ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
   install(FILES ${kj-async_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
 endif()
