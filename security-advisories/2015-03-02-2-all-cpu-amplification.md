@@ -22,7 +22,7 @@ Impact
 Fixed in
 ========
 
-- git commit [b9da55c6b003cca89b25f19d52749461215292d1][0]
+- git commit [104870608fde3c698483fdef6b97f093fc15685d][0]
 - release 0.5.1.1:
   - Unix: https://capnproto.org/capnproto-c++-0.5.1.1.tar.gz
   - Windows: https://capnproto.org/capnproto-c++-win32-0.5.1.1.zip
@@ -30,7 +30,7 @@ Fixed in
   - Unix: https://capnproto.org/capnproto-c++-0.4.1.1.tar.gz
 - release 0.6 (future)
 
-[0]: https://github.com/sandstorm-io/capnproto/commit/b9da55c6b003cca89b25f19d52749461215292d1
+[0]: https://github.com/sandstorm-io/capnproto/commit/104870608fde3c698483fdef6b97f093fc15685d
 
 Details
 =======
