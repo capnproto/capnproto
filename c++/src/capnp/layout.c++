@@ -1620,7 +1620,10 @@ struct WireHelpers {
 
     if (src->isNull()) {
     useDefault:
-      memset(dst, 0, sizeof(*dst));
+      if (!dst->isNull()) {
+        zeroObject(dstSegment, dst);
+        memset(dst, 0, sizeof(*dst));
+      }
       return { dstSegment, nullptr };
     }
 
