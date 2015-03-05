@@ -555,14 +555,16 @@ struct WireHelpers {
             WordCount dataSize = elementTag->structRef.dataSize.get();
             WirePointerCount pointerCount = elementTag->structRef.ptrCount.get();
 
-            word* pos = ptr + POINTER_SIZE_IN_WORDS;
             uint count = elementTag->inlineCompositeListElementCount() / ELEMENTS;
-            for (uint i = 0; i < count; i++) {
-              pos += dataSize;
+            if (pointerCount > 0 * POINTERS) {
+              word* pos = ptr + POINTER_SIZE_IN_WORDS;
+              for (uint i = 0; i < count; i++) {
+                pos += dataSize;
 
-              for (uint j = 0; j < pointerCount / POINTERS; j++) {
-                zeroObject(segment, reinterpret_cast<WirePointer*>(pos));
-                pos += POINTER_SIZE_IN_WORDS;
+                for (uint j = 0; j < pointerCount / POINTERS; j++) {
+                  zeroObject(segment, reinterpret_cast<WirePointer*>(pos));
+                  pos += POINTER_SIZE_IN_WORDS;
+                }
               }
             }
 
@@ -680,8 +682,6 @@ struct WireHelpers {
               return result;
             }
 
-            result.wordCount += wordCount + POINTER_SIZE_IN_WORDS;
-
             const WirePointer* elementTag = reinterpret_cast<const WirePointer*>(ptr);
             ElementCount count = elementTag->inlineCompositeListElementCount();
 
@@ -690,23 +690,29 @@ struct WireHelpers {
               return result;
             }
 
-            KJ_REQUIRE(elementTag->structRef.wordSize() / ELEMENTS *
-                       ElementCount64(count) <= wordCount,
+            auto actualSize = elementTag->structRef.wordSize() / ELEMENTS * ElementCount64(count);
+            KJ_REQUIRE(actualSize <= wordCount,
                        "Struct list pointer's elements overran size.") {
               return result;
             }
 
+            // We count the actual size rather than the claimed word count because that's what
+            // we'll end up with if we make a copy.
+            result.wordCount += actualSize + POINTER_SIZE_IN_WORDS;
+
             WordCount dataSize = elementTag->structRef.dataSize.get();
             WirePointerCount pointerCount = elementTag->structRef.ptrCount.get();
 
-            const word* pos = ptr + POINTER_SIZE_IN_WORDS;
-            for (uint i = 0; i < count / ELEMENTS; i++) {
-              pos += dataSize;
+            if (pointerCount > 0 * POINTERS) {
+              const word* pos = ptr + POINTER_SIZE_IN_WORDS;
+              for (uint i = 0; i < count / ELEMENTS; i++) {
+                pos += dataSize;
 
-              for (uint j = 0; j < pointerCount / POINTERS; j++) {
-                result += totalSize(segment, reinterpret_cast<const WirePointer*>(pos),
-                                    nestingLimit);
-                pos += POINTER_SIZE_IN_WORDS;
+                for (uint j = 0; j < pointerCount / POINTERS; j++) {
+                  result += totalSize(segment, reinterpret_cast<const WirePointer*>(pos),
+                                      nestingLimit);
+                  pos += POINTER_SIZE_IN_WORDS;
+                }
               }
             }
             break;
