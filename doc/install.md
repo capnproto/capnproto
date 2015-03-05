@@ -67,9 +67,9 @@ the upcoming CTPs (the November 2013 CTP is almost there).
 
 You may download and install the release version of Cap'n Proto like so:
 
-<pre><code>curl -O <a href="https://capnproto.org/capnproto-c++-0.4.1.1.tar.gz">https://capnproto.org/capnproto-c++-0.4.1.1.tar.gz</a>
-tar zxf capnproto-c++-0.4.1.1.tar.gz
-cd capnproto-c++-0.4.1.1
+<pre><code>curl -O <a href="https://capnproto.org/capnproto-c++-0.4.1.2.tar.gz">https://capnproto.org/capnproto-c++-0.4.1.2.tar.gz</a>
+tar zxf capnproto-c++-0.4.1.2.tar.gz
+cd capnproto-c++-0.4.1.2
 ./configure
 make -j6 check
 sudo make install</code></pre>
