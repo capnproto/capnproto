@@ -1501,17 +1501,24 @@ TEST(Encoding, VoidListAmplification) {
 }
 
 TEST(Encoding, EmptyStructListAmplification) {
-  MallocMessageBuilder builder;
-  builder.initRoot<test::TestAnyPointer>().getAnyPointerField()
-      .initAs<List<test::TestEmptyStruct>>(1u << 28);
+  MallocMessageBuilder builder(1024);
+  auto listList = builder.initRoot<test::TestAnyPointer>().getAnyPointerField()
+      .initAs<List<List<test::TestEmptyStruct>>>(500);
+
+  for (uint i = 0; i < listList.size(); i++) {
+    listList.init(i, 1u << 28);
+  }
 
   auto segments = builder.getSegmentsForOutput();
-  EXPECT_EQ(1, segments.size());
-  EXPECT_LT(segments[0].size(), 16);  // quite small for such a big list!
+  ASSERT_EQ(1, segments.size());
 
   SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
-  auto root = reader.getRoot<test::TestAnyPointer>().getAnyPointerField();
-  EXPECT_NONFATAL_FAILURE(root.getAs<List<TestAllTypes>>());
+  auto root = reader.getRoot<test::TestAnyPointer>();
+  auto listListReader = root.getAnyPointerField().getAs<List<List<TestAllTypes>>>();
+  EXPECT_NONFATAL_FAILURE(listListReader[0]);
+  EXPECT_NONFATAL_FAILURE(listListReader[10]);
+
+  EXPECT_EQ(segments[0].size() - 1, root.totalSize().wordCount);
 }
 
 TEST(Encoding, Constants) {
