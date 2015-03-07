@@ -33,7 +33,7 @@ Note: For features which are properties of the implementation rather than the pr
 <tr><td>Safe against malicious input</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="warn">opt-in upfront</td></tr>
 <tr><td>Reflection / generic algorithms</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
 <tr><td>Initialization order</td><td class="pass">any</td><td class="pass">any</td><td class="fail">preorder</td><td class="warn">bottom-up</td></tr>
-<tr><td>Unknown field retention</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Unknown field retention</td><td class="warn">removed<br>in proto3</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
 <tr><td>Object-capability RPC system</td><td class="fail">no</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
 <tr><td>Schema language</td><td class="pass">custom</td><td class="pass">custom</td><td class="warn">XML</td><td class="pass">custom</td></tr>
 <tr><td>Usable as mutable state</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td><td class="fail">no</td></tr>
@@ -114,7 +114,7 @@ Say you read in a message, then copy one sub-object of that message over to a su
 
 This question is extremely important for any kind of service that acts as a proxy or broker, forwarding messages on to others. It can be inconvenient if you have to update these middlemen every time a particular backend protocol changes, when the middlemen often don't care about the protocol details anyway.
 
-When Protobufs sees an unknown field tag on the wire, it stores the value into the message's `UnknownFieldSet`, which can be copied and written back out later.
+When Protobufs sees an unknown field tag on the wire, it stores the value into the message's `UnknownFieldSet`, which can be copied and written back out later. (UPDATE: Apparently, version 3 of Protocol Buffers, aka "proto3", removes this feature. I honestly don't know what they're thinking. This feature has been absolutely essential in many of Google's internal systems.)
 
 Cap'n Proto's wire format was very carefully designed to contain just enough information to make it possible to recursively copy its target from one message to another without knowing the object's schema. This is why Cap'n Proto pointers contain bits to indicate if they point to a struct or a list and how big it is -- seemingly redundant information.
 
