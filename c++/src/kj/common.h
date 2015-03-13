@@ -798,8 +798,10 @@ public:
     }
   }
 
-  inline T& operator*() { return value; }
-  inline const T& operator*() const { return value; }
+  inline T& operator*() & { return value; }
+  inline const T& operator*() const & { return value; }
+  inline T&& operator*() && { return kj::mv(value); }
+  inline const T&& operator*() const && { return kj::mv(value); }
   inline T* operator->() { return &value; }
   inline const T* operator->() const { return &value; }
   inline operator T*() { return isSet ? &value : nullptr; }
