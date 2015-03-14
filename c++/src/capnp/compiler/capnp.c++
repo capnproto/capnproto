@@ -243,10 +243,12 @@ public:
     builder.addOptionWithArg({'o', "output"}, KJ_BIND_METHOD(*this, addOutput), "<lang>[:<dir>]",
                              "Generate source code for language <lang> in directory <dir> "
                              "(default: current directory).  <lang> actually specifies a plugin "
-                             "to use.  If <lang> is a simple word, the compiler for a plugin "
+                             "to use.  If <lang> is a simple word, the compiler searches for a plugin "
                              "called 'capnpc-<lang>' in $PATH.  If <lang> is a file path "
                              "containing slashes, it is interpreted as the exact plugin "
-                             "executable file name, and $PATH is not searched.")
+                             "executable file name, and $PATH is not searched.  The special case of "
+                             "'/bin/cat' is hardcoded to dump the request to standard output, as "
+                             "this is a common operation and /bin/cat is not available on all systems.")
            .addOptionWithArg({"src-prefix"}, KJ_BIND_METHOD(*this, addSourcePrefix), "<prefix>",
                              "If a file specified for compilation starts with <prefix>, remove "
                              "the prefix for the purpose of deciding the names of output files.  "
@@ -441,6 +443,11 @@ public:
     }
 
     for (auto& output: outputs) {
+      if (kj::str(output.name) == "/bin/cat") {
+        writeMessageToFd(STDOUT_FILENO, message);
+        continue;
+      }
+
       int pipeFds[2];
       KJ_SYSCALL(pipe(pipeFds));
 
