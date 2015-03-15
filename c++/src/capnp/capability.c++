@@ -59,6 +59,10 @@ ClientHook::ClientHook() {
   setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
 }
 
+void* ClientHook::getLocalServer(_::CapabilityServerSetBase& capServerSet) {
+  return nullptr;
+}
+
 void MessageReader::initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable) {
   setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
   arena()->initCapTable(kj::mv(capTable));
@@ -457,8 +461,22 @@ private:
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
 public:
-  LocalClient(kj::Own<Capability::Server>&& server)
-      : server(kj::mv(server)) {}
+  LocalClient(kj::Own<Capability::Server>&& server): server(kj::mv(server)) {}
+  LocalClient(kj::Own<Capability::Server>&& server,
+              _::CapabilityServerSetBase& capServerSet, void* ptr)
+      : server(kj::mv(server)), capServerSet(&capServerSet), ptr(ptr) {}
+
+  ~LocalClient() noexcept(false) {
+    KJ_IF_MAYBE(w, weak) {
+      w->client = nullptr;
+    }
+  }
+
+  void setWeak(_::WeakCapabilityBase& weak) {
+    KJ_REQUIRE(this->weak == nullptr && weak.client == nullptr);
+    weak.client = *this;
+    this->weak = weak;
+  }
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
@@ -523,8 +541,20 @@ public:
     return nullptr;
   }
 
+  void* getLocalServer(_::CapabilityServerSetBase& capServerSet) override {
+    if (this->capServerSet == &capServerSet) {
+      return ptr;
+    } else {
+      return nullptr;
+    }
+  }
+
 private:
   kj::Own<Capability::Server> server;
+  _::CapabilityServerSetBase* capServerSet = nullptr;
+  void* ptr = nullptr;
+  kj::Maybe<_::WeakCapabilityBase&> weak;
+  friend class _::WeakCapabilityBase;
 };
 
 kj::Own<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Server>&& server) {
@@ -631,5 +661,59 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
   auto root = hook->message.getRoot<AnyPointer>();
   return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
 }
+
+// =======================================================================================
+// CapabilityServerSet
+
+namespace _ {  // private
+
+WeakCapabilityBase::~WeakCapabilityBase() noexcept(false) {
+  KJ_IF_MAYBE(c, client) {
+    c->weak = nullptr;
+  }
+}
+
+kj::Maybe<Capability::Client> WeakCapabilityBase::getInternal() {
+  return client.map([](LocalClient& client) {
+    return Capability::Client(client.addRef());
+  });
+}
+
+Capability::Client CapabilityServerSetBase::addInternal(
+    kj::Own<Capability::Server>&& server, void* ptr) {
+  return Capability::Client(kj::refcounted<LocalClient>(kj::mv(server), *this, ptr));
+}
+
+Capability::Client CapabilityServerSetBase::addWeakInternal(
+    kj::Own<Capability::Server>&& server, _::WeakCapabilityBase& weak, void* ptr) {
+  auto result = kj::refcounted<LocalClient>(kj::mv(server), *this, ptr);
+  result->setWeak(weak);
+  return Capability::Client(kj::mv(result));
+}
+
+kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::Client& client) {
+  ClientHook* hook = client.hook.get();
+
+  // Get the most-resolved-so-far version of the hook.
+  KJ_IF_MAYBE(h, hook->getResolved()) {
+    hook = h;
+  };
+
+  KJ_IF_MAYBE(p, hook->whenMoreResolved()) {
+    // This hook is an unresolved promise. We need to wait for it.
+    return p->attach(hook->addRef())
+        .then([this](kj::Own<ClientHook>&& resolved) {
+      Capability::Client client(kj::mv(resolved));
+      return getLocalServerInternal(client);
+    }, [](kj::Exception&&) -> void* {
+      // A broken promise is simply not a local capability.
+      return nullptr;
+    });
+  } else {
+    return hook->getLocalServer(*this);
+  }
+}
+
+}  // namespace _ (private)
 
 }  // namespace capnp

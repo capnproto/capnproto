@@ -823,6 +823,69 @@ TEST(Capability, ImplicitParams) {
   promise.wait(waitScope);
 }
 
+TEST(Capability, CapabilityServerSet) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  CapabilityServerSet<test::TestInterface> set1, set2;
+
+  int callCount = 0;
+  test::TestInterface::Client clientStandalone(kj::heap<TestInterfaceImpl>(callCount));
+  test::TestInterface::Client clientNull = nullptr;
+
+  auto ownServer1 = kj::heap<TestInterfaceImpl>(callCount);
+  auto& server1 = *ownServer1;
+  test::TestInterface::Client client1 = set1.add(kj::mv(ownServer1));
+
+  auto ownServer2 = kj::heap<TestInterfaceImpl>(callCount);
+  auto& server2 = *ownServer2;
+  auto client2AndWeak = set2.addWeak(kj::mv(ownServer2));
+  test::TestInterface::Client client2 = kj::mv(client2AndWeak.client);
+  kj::Own<WeakCapability<test::TestInterface>> client2Weak = kj::mv(client2AndWeak.weak);
+
+  // Getting the local server using the correct set works.
+  EXPECT_EQ(&server1, &KJ_ASSERT_NONNULL(set1.getLocalServer(client1).wait(waitScope)));
+  EXPECT_EQ(&server2, &KJ_ASSERT_NONNULL(set2.getLocalServer(client2).wait(waitScope)));
+
+  // Getting the local server using the wrong set doesn't work.
+  EXPECT_TRUE(set1.getLocalServer(client2).wait(waitScope) == nullptr);
+  EXPECT_TRUE(set2.getLocalServer(client1).wait(waitScope) == nullptr);
+  EXPECT_TRUE(set1.getLocalServer(clientStandalone).wait(waitScope) == nullptr);
+  EXPECT_TRUE(set1.getLocalServer(clientNull).wait(waitScope) == nullptr);
+
+  // A promise client waits to be resolved.
+  auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+  test::TestInterface::Client clientPromise = kj::mv(paf.promise);
+
+  bool resolved1 = false, resolved2 = false;
+  auto promise1 = set1.getLocalServer(clientPromise)
+      .then([&](kj::Maybe<test::TestInterface::Server&> server) {
+    resolved1 = true;
+    EXPECT_EQ(&server1, &KJ_ASSERT_NONNULL(server));
+  });
+  auto promise2 = set2.getLocalServer(clientPromise)
+      .then([&](kj::Maybe<test::TestInterface::Server&> server) {
+    resolved2 = true;
+    EXPECT_TRUE(server == nullptr);
+  });
+
+  kj::evalLater([](){}).wait(waitScope);
+  kj::evalLater([](){}).wait(waitScope);
+  kj::evalLater([](){}).wait(waitScope);
+  kj::evalLater([](){}).wait(waitScope);
+
+  EXPECT_FALSE(resolved1);
+  EXPECT_FALSE(resolved2);
+
+  paf.fulfiller->fulfill(kj::cp(client1));
+
+  promise1.wait(waitScope);
+  promise2.wait(waitScope);
+
+  EXPECT_TRUE(resolved1);
+  EXPECT_TRUE(resolved2);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

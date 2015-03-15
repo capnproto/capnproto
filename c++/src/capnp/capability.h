@@ -61,10 +61,12 @@ public:
   RemotePromise& operator=(RemotePromise&& other) = default;
 };
 
+class LocalClient;
 namespace _ { // private
 struct RawSchema;
 struct RawBrandedSchema;
 extern const RawSchema NULL_INTERFACE_SCHEMA;  // defined in schema.c++
+class CapabilityServerSetBase;
 }  // namespace _ (private)
 
 struct Capability {
@@ -141,6 +143,9 @@ class Capability::Client {
   // Base type for capability clients.
 
 public:
+  typedef Capability Reads;
+  typedef Capability Calls;
+
   Client(decltype(nullptr));
   // If you need to declare a Client before you have anything to assign to it (perhaps because
   // the assignment is going to occur in an if/else scope), you can start by initializing it to
@@ -220,6 +225,7 @@ private:
   friend struct DynamicList;
   template <typename, Kind>
   friend struct List;
+  friend class _::CapabilityServerSetBase;
 };
 
 // =======================================================================================
@@ -313,6 +319,8 @@ class Capability::Server {
   // dispatchCall().
 
 public:
+  typedef Capability Serves;
+
   virtual kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
                                          CallContext<AnyPointer, AnyPointer> context) = 0;
   // Call the given method.  `params` is the input struct, and should be released as soon as it
@@ -332,6 +340,83 @@ protected:
                                           uint64_t typeId, uint16_t methodId);
   kj::Promise<void> internalUnimplemented(const char* interfaceName, const char* methodName,
                                           uint64_t typeId, uint16_t methodId);
+};
+
+// =======================================================================================
+
+namespace _ {  // private
+
+class WeakCapabilityBase {
+public:
+  ~WeakCapabilityBase() noexcept(false);
+
+  kj::Maybe<Capability::Client> getInternal();
+
+private:
+  kj::Maybe<LocalClient&> client;
+  friend class capnp::LocalClient;
+};
+
+class CapabilityServerSetBase {
+public:
+  Capability::Client addInternal(kj::Own<Capability::Server>&& server, void* ptr);
+  Capability::Client addWeakInternal(kj::Own<Capability::Server>&& server,
+                                     _::WeakCapabilityBase& weak, void* ptr);
+  kj::Promise<void*> getLocalServerInternal(Capability::Client& client);
+};
+
+}  // namespace _ (private)
+
+template <typename T>
+class WeakCapability: private _::WeakCapabilityBase {
+public:
+  kj::Maybe<typename T::Client> get();
+  // If the server is still alive, get a live client to it.
+
+private:
+  template <typename>
+  friend class CapabilityServerSet;
+};
+
+template <typename T>
+class CapabilityServerSet: private _::CapabilityServerSetBase {
+  // Allows a server to:
+  // 1) Recognize its own capabilities when passed back to it, and obtain the underlying Server
+  //    objects associated with them.
+  // 2) Obtain "weak" versions of these capabilities, which do not prevent the underlying Server
+  //    from being destroyed but can be upgraded to normal Clients as long as the Server is still
+  //    alive.
+  //
+  // All objects in the set must have the same interface type T. The objects may implement various
+  // interfaces derived from T (and in fact T can be `capnp::Capability` to accept all objects),
+  // but note that if you compile with RTTI disabled then you will not be able to down-cast through
+  // virtual inheritance, and all inheritance between server interfaces is virtual. So, with RTTI
+  // disabled, you will likely need to set T to be the most-derived Cap'n Proto interface type,
+  // and you server class will need to be directly derived from that, so that you can use
+  // static_cast (or kj::downcast) to cast to it after calling getLocalServer(). (If you compile
+  // with RTTI, then you can freely dynamic_cast and ignore this issue!)
+
+public:
+  CapabilityServerSet() = default;
+  KJ_DISALLOW_COPY(CapabilityServerSet);
+
+  typename T::Client add(kj::Own<typename T::Server>&& server);
+  // Create a new capability Client for the given Server and also add this server to the set.
+
+  struct ClientAndWeak {
+    typename T::Client client;
+    kj::Own<WeakCapability<T>> weak;
+  };
+
+  ClientAndWeak addWeak(kj::Own<typename T::Server>&& server);
+  // Like add() but also creates a weak reference.
+
+  kj::Promise<kj::Maybe<typename T::Server&>> getLocalServer(typename T::Client& client);
+  // Given a Client pointing to a server previously passed to add(), return the corresponding
+  // Server. This returns a promise because if the input client is itself a promise, this must
+  // wait for it to resolve. Keep in mind that the server will be deleted when all clients are
+  // gone, so the caller should make sure to keep the client alive (hence why this method only
+  // accepts an lvalue input).
 };
 
 // =======================================================================================
@@ -421,6 +506,11 @@ public:
   // Returns a void* that identifies who made this client.  This can be used by an RPC adapter to
   // discover when a capability it needs to marshal is one that it created in the first place, and
   // therefore it can transfer the capability without proxying.
+
+  virtual void* getLocalServer(_::CapabilityServerSetBase& capServerSet);
+  // If this is a local capability created through `capServerSet`, return the underlying Server.
+  // Otherwise, return nullptr. Default implementation (which everyone except LocalClient should
+  // use) always returns nullptr.
 };
 
 class CallContextHook {
@@ -687,6 +777,45 @@ template <typename Params, typename Results>
 CallContext<Params, Results> Capability::Server::internalGetTypedContext(
     CallContext<AnyPointer, AnyPointer> typeless) {
   return CallContext<Params, Results>(*typeless.hook);
+}
+
+template <typename T>
+kj::Maybe<typename T::Client> WeakCapability<T>::get() {
+  return getInternal().map([](Capability::Client&& client) {
+    return client.castAs<T>();
+  });
+}
+
+template <typename T>
+typename T::Client CapabilityServerSet<T>::add(kj::Own<typename T::Server>&& server) {
+  void* ptr = reinterpret_cast<void*>(server.get());
+  // Clang insists that `castAs` is a template-dependent member and therefore we need the
+  // `template` keyword here, but AFAICT this is wrong: addImpl() is not a template.
+  return addInternal(kj::mv(server), ptr).template castAs<T>();
+}
+
+template <typename T>
+typename CapabilityServerSet<T>::ClientAndWeak CapabilityServerSet<T>::addWeak(
+    kj::Own<typename T::Server>&& server) {
+  void* ptr = reinterpret_cast<void*>(server.get());
+  auto weak = kj::heap<WeakCapability<T>>();
+  // Clang insists that `castAs` is a template-dependent member and therefore we need the
+  // `template` keyword here, but AFAICT this is wrong: addWeakImpl() is not a template.
+  auto client = addWeakInternal(kj::mv(server), *weak, ptr).template castAs<T>();
+  return { kj::mv(client), kj::mv(weak) };
+}
+
+template <typename T>
+kj::Promise<kj::Maybe<typename T::Server&>> CapabilityServerSet<T>::getLocalServer(
+    typename T::Client& client) {
+  return getLocalServerInternal(client)
+      .then([](void* server) -> kj::Maybe<typename T::Server&> {
+    if (server == nullptr) {
+      return nullptr;
+    } else {
+      return *reinterpret_cast<typename T::Server*>(server);
+    }
+  });
 }
 
 }  // namespace capnp
