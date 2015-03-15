@@ -1010,7 +1010,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
+  auto map(Func&& f) & -> Maybe<decltype(f(instance<T&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -1019,7 +1019,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
+  auto map(Func&& f) const & -> Maybe<decltype(f(instance<const T&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -1027,8 +1027,23 @@ public:
     }
   }
 
-  // TODO(someday):  Once it's safe to require GCC 4.8, use ref qualifiers to provide a version of
-  //   map() that uses move semantics if *this is an rvalue.
+  template <typename Func>
+  auto map(Func&& f) && -> Maybe<decltype(f(instance<T&&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(kj::mv(*ptr));
+    }
+  }
+
+  template <typename Func>
+  auto map(Func&& f) const && -> Maybe<decltype(f(instance<const T&&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(kj::mv(*ptr));
+    }
+  }
 
 private:
   _::NullableValue<T> ptr;

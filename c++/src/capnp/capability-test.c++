@@ -884,6 +884,16 @@ TEST(Capability, CapabilityServerSet) {
 
   EXPECT_TRUE(resolved1);
   EXPECT_TRUE(resolved2);
+
+  // Check weak pointer.
+  {
+    auto restored = KJ_ASSERT_NONNULL(client2Weak->get());
+    EXPECT_EQ(&server2, &KJ_ASSERT_NONNULL(set2.getLocalServer(restored).wait(waitScope)));
+  }
+
+  client2 = nullptr;
+
+  EXPECT_TRUE(client2Weak->get() == nullptr);
 }
 
 }  // namespace

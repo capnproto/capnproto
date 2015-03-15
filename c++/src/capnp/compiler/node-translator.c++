@@ -827,7 +827,7 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandedDecl::applyParams(
     return nullptr;
   } else {
     return brand->setParams(kj::mv(params), body.get<Resolver::ResolvedDecl>().kind, subSource)
-        .map([&](kj::Own<BrandScope>& scope) {
+        .map([&](kj::Own<BrandScope>&& scope) {
       BrandedDecl result = *this;
       result.brand = kj::mv(scope);
       result.source = subSource;
