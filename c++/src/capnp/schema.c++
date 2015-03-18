@@ -599,7 +599,7 @@ bool InterfaceSchema::extends(InterfaceSchema other) const {
 bool InterfaceSchema::extends(InterfaceSchema other, uint& counter) const {
   // Security:  Don't let someone DOS us with a dynamic schema containing cyclic inheritance.
   KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.") {
-    return nullptr;
+    return false;
   }
 
   if (other == *this) {
