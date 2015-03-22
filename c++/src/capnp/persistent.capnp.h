@@ -178,6 +178,11 @@ public:
   Client& operator=(Client& other);
   Client& operator=(Client&& other);
 
+  template <typename SturdyRef2 = ::capnp::AnyPointer, typename Owner2 = ::capnp::AnyPointer>
+  typename Persistent<SturdyRef2, Owner2>::Client asGeneric() {
+    return castAs<Persistent<SturdyRef2, Owner2>>();
+  }
+
   ::capnp::Request<typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults> saveRequest(
       ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);
 
@@ -222,6 +227,10 @@ public:
   }
 #endif  // !CAPNP_LITE
 
+    typename SaveParams::Reader asGeneric() {
+    return typename SaveParams::Reader(_reader);
+  }
+
   inline bool hasSealFor() const;
   inline  ::capnp::ReaderFor<Owner> getSealFor() const;
 
@@ -253,6 +262,10 @@ public:
 #if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
+
+    typename SaveParams::Builder asGeneric() {
+    return typename SaveParams::Builder(_builder);
+  }
 
   inline bool hasSealFor();
   inline  ::capnp::BuilderFor<Owner> getSealFor();
@@ -308,6 +321,10 @@ public:
   }
 #endif  // !CAPNP_LITE
 
+    typename SaveResults::Reader asGeneric() {
+    return typename SaveResults::Reader(_reader);
+  }
+
   inline bool hasSturdyRef() const;
   inline  ::capnp::ReaderFor<SturdyRef> getSturdyRef() const;
 
@@ -339,6 +356,10 @@ public:
 #if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
+
+    typename SaveResults::Builder asGeneric() {
+    return typename SaveResults::Builder(_builder);
+  }
 
   inline bool hasSturdyRef();
   inline  ::capnp::BuilderFor<SturdyRef> getSturdyRef();
@@ -396,6 +417,11 @@ public:
   Client& operator=(Client& other);
   Client& operator=(Client&& other);
 
+  template <typename InternalRef2 = ::capnp::AnyPointer, typename ExternalRef2 = ::capnp::AnyPointer, typename InternalOwner2 = ::capnp::AnyPointer, typename ExternalOwner2 = ::capnp::AnyPointer>
+  typename RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>::Client asGeneric() {
+    return castAs<RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>>();
+  }
+
   ::capnp::Request<typename  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams, typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveResults> importRequest(
       ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);
   ::capnp::Request<typename  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams, typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveResults> exportRequest(
@@ -446,6 +472,10 @@ public:
   }
 #endif  // !CAPNP_LITE
 
+    typename ImportParams::Reader asGeneric() {
+    return typename ImportParams::Reader(_reader);
+  }
+
   inline bool hasCap() const;
 #if !CAPNP_LITE
   inline typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::Client getCap() const;
@@ -482,6 +512,10 @@ public:
 #if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
+
+    typename ImportParams::Builder asGeneric() {
+    return typename ImportParams::Builder(_builder);
+  }
 
   inline bool hasCap();
 #if !CAPNP_LITE
@@ -546,6 +580,10 @@ public:
   }
 #endif  // !CAPNP_LITE
 
+    typename ExportParams::Reader asGeneric() {
+    return typename ExportParams::Reader(_reader);
+  }
+
   inline bool hasCap() const;
 #if !CAPNP_LITE
   inline typename  ::capnp::Persistent<InternalRef, InternalOwner>::Client getCap() const;
@@ -582,6 +620,10 @@ public:
 #if !CAPNP_LITE
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
+
+    typename ExportParams::Builder asGeneric() {
+    return typename ExportParams::Builder(_builder);
+  }
 
   inline bool hasCap();
 #if !CAPNP_LITE

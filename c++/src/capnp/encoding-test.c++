@@ -1687,6 +1687,22 @@ TEST(Encoding, Generics) {
   initTestMessage(root.initBasic().initFoo());
   checkTestMessage(reader.getBasic().getFoo());
 
+  {
+    auto typed = root.getBasic();
+    test::TestGenerics<>::Reader generic = typed.asGeneric<>();
+    checkTestMessage(generic.getFoo().getAs<TestAllTypes>());
+    test::TestGenerics<TestAllTypes>::Reader halfGeneric = typed.asGeneric<TestAllTypes>();
+    checkTestMessage(halfGeneric.getFoo());
+  }
+
+  {
+    auto typed = root.getBasic().asReader();
+    test::TestGenerics<>::Reader generic = typed.asGeneric<>();
+    checkTestMessage(generic.getFoo().getAs<TestAllTypes>());
+    test::TestGenerics<TestAllTypes>::Reader halfGeneric = typed.asGeneric<TestAllTypes>();
+    checkTestMessage(halfGeneric.getFoo());
+  }
+
   initTestMessage(root.initInner().initFoo());
   checkTestMessage(reader.getInner().getFoo());
 

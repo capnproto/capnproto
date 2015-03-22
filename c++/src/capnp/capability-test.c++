@@ -787,9 +787,16 @@ TEST(Capability, Generics) {
     List<uint32_t>::Reader qux = response.getQux();
     qux.size();
     checkTestMessage(response.getGen().getFoo());
-  }, [](kj::Exception&& e) {});
+  }, [](kj::Exception&& e) {
+    // Ignore exception (which we'll always get because we're calling a null capability).
+  });
 
   promise.wait(waitScope);
+
+  // Check that asGeneric<>() compiles.
+  test::TestGenerics<TestAllTypes>::Interface<>::Client castClient = client.asGeneric<>();
+  test::TestGenerics<TestAllTypes>::Interface<TestAllTypes>::Client castClient2 =
+      client.asGeneric<TestAllTypes>();
 }
 
 TEST(Capability, Generics2) {

@@ -576,7 +576,7 @@ private:
       return node.getIsGeneric();
     }
 
-    kj::StringTree decl(bool withDefaults) const {
+    kj::StringTree decl(bool withDefaults, kj::StringPtr suffix = nullptr) const {
       // "template <typename T, typename U>" for this type. Includes default assignments
       // ("= ::capnp::AnyPointer") if `withDefaults` is true. Returns empty string if this type
       // is not parameterized.
@@ -588,7 +588,7 @@ private:
       } else {
         return kj::strTree(
             "template <", kj::StringTree(KJ_MAP(p, params) {
-              return kj::strTree("typename ", p.getName(),
+              return kj::strTree("typename ", p.getName(), suffix,
                   withDefaults ? " = ::capnp::AnyPointer" : "");
             }, ", "), ">\n");
       }
@@ -608,7 +608,7 @@ private:
       }
     }
 
-    kj::StringTree args() const {
+    kj::StringTree args(kj::StringPtr suffix = nullptr) const {
       // "<T, U>" for this type.
       auto params = node.getParameters();
 
@@ -617,7 +617,7 @@ private:
       } else {
         return kj::strTree(
             "<", kj::StringTree(KJ_MAP(p, params) {
-              return kj::strTree(p.getName());
+              return kj::strTree(p.getName(), suffix);
             }, ", "), ">");
       }
     }
@@ -1741,6 +1741,13 @@ private:
         "  }\n"
         "#endif  // !CAPNP_LITE\n"
         "\n",
+        templateContext.isGeneric() ? kj::strTree(
+          "  ", templateContext.decl(true, "2"),
+          "  typename ", unqualifiedParentType, templateContext.args("2"), "::Reader asGeneric() {\n"
+          "    return typename ", unqualifiedParentType, templateContext.args("2"),
+                     "::Reader(_reader);\n"
+          "  }\n"
+          "\n") : kj::strTree(),
         isUnion ? kj::strTree("  inline Which which() const;\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
@@ -1778,6 +1785,13 @@ private:
         "  inline ::kj::StringTree toString() const { return asReader().toString(); }\n"
         "#endif  // !CAPNP_LITE\n"
         "\n",
+        templateContext.isGeneric() ? kj::strTree(
+          "  ", templateContext.decl(true, "2"),
+          "  typename ", unqualifiedParentType, templateContext.args("2"), "::Builder asGeneric() {\n"
+          "    return typename ", unqualifiedParentType, templateContext.args("2"),
+                       "::Builder(_builder);\n"
+          "  }\n"
+          "\n") : kj::strTree(),
         isUnion ? kj::strTree("  inline Which which();\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
@@ -2213,6 +2227,12 @@ private:
           "  Client& operator=(Client& other);\n"
           "  Client& operator=(Client&& other);\n"
           "\n",
+          templateContext.isGeneric() ? kj::strTree(
+            "  ", templateContext.decl(true, "2"),
+            "  typename ", name, templateContext.args("2"), "::Client asGeneric() {\n"
+            "    return castAs<", name, templateContext.args("2"), ">();\n"
+            "  }\n"
+            "\n") : kj::strTree(),
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },
           "\n"
           "protected:\n"
