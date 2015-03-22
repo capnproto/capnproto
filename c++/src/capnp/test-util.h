@@ -198,7 +198,7 @@ private:
   int& callCount;
 };
 
-class TestExtendsImpl final: public test::TestExtends::Server {
+class TestExtendsImpl final: public test::TestExtends2::Server {
 public:
   TestExtendsImpl(int& callCount);
 

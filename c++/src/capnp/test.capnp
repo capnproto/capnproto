@@ -712,6 +712,8 @@ interface TestExtends extends(TestInterface) {
   grault @2 () -> TestAllTypes;
 }
 
+interface TestExtends2 extends(TestExtends) {}
+
 interface TestPipeline {
   getCap @0 (n: UInt32, inCap :TestInterface) -> (s: Text, outBox :Box);
   testPointers @1 (cap :TestInterface, obj :AnyPointer, list :List(TestInterface)) -> ();
