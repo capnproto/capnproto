@@ -53,6 +53,8 @@ public:
 
 static BrokenCapFactoryImpl brokenCapFactory;
 
+static kj::Own<ClientHook> newNullCap();
+
 }  // namespace
 
 ClientHook::ClientHook() {
@@ -71,7 +73,7 @@ void MessageReader::initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTa
 // =======================================================================================
 
 Capability::Client::Client(decltype(nullptr))
-    : hook(newBrokenCap("Called null capability.")) {}
+    : hook(newNullCap()) {}
 
 Capability::Client::Client(kj::Exception&& exception)
     : hook(newBrokenCap(kj::mv(exception))) {}
@@ -603,9 +605,10 @@ public:
 
 class BrokenClient final: public ClientHook, public kj::Refcounted {
 public:
-  BrokenClient(const kj::Exception& exception): exception(exception) {}
-  BrokenClient(const kj::StringPtr description)
-      : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)) {}
+  BrokenClient(const kj::Exception& exception, bool resolved)
+      : exception(exception), resolved(resolved) {}
+  BrokenClient(const kj::StringPtr description, bool resolved)
+      : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)), resolved(resolved) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
@@ -622,7 +625,11 @@ public:
   }
 
   kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-    return kj::Promise<kj::Own<ClientHook>>(kj::cp(exception));
+    if (resolved) {
+      return nullptr;
+    } else {
+      return kj::Promise<kj::Own<ClientHook>>(kj::cp(exception));
+    }
   }
 
   kj::Own<ClientHook> addRef() override {
@@ -635,20 +642,26 @@ public:
 
 private:
   kj::Exception exception;
+  bool resolved;
 };
 
 kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
-  return kj::refcounted<BrokenClient>(exception);
+  return kj::refcounted<BrokenClient>(exception, false);
+}
+
+kj::Own<ClientHook> newNullCap() {
+  // A null capability, unlike other broken capabilities, is considered resolved.
+  return kj::refcounted<BrokenClient>("Called null capability.", true);
 }
 
 }  // namespace
 
 kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason) {
-  return kj::refcounted<BrokenClient>(reason);
+  return kj::refcounted<BrokenClient>(reason, false);
 }
 
 kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason) {
-  return kj::refcounted<BrokenClient>(kj::mv(reason));
+  return kj::refcounted<BrokenClient>(kj::mv(reason), false);
 }
 
 kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
@@ -705,9 +718,6 @@ kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::C
         .then([this](kj::Own<ClientHook>&& resolved) {
       Capability::Client client(kj::mv(resolved));
       return getLocalServerInternal(client);
-    }, [](kj::Exception&&) -> void* {
-      // A broken promise is simply not a local capability.
-      return nullptr;
     });
   } else {
     return hook->getLocalServer(*this);

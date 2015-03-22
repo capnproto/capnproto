@@ -864,7 +864,10 @@ TEST(Capability, CapabilityServerSet) {
   auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
   test::TestInterface::Client clientPromise = kj::mv(paf.promise);
 
-  bool resolved1 = false, resolved2 = false;
+  auto errorPaf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+  test::TestInterface::Client errorPromise = kj::mv(errorPaf.promise);
+
+  bool resolved1 = false, resolved2 = false, resolved3 = false;
   auto promise1 = set1.getLocalServer(clientPromise)
       .then([&](kj::Maybe<test::TestInterface::Server&> server) {
     resolved1 = true;
@@ -875,6 +878,13 @@ TEST(Capability, CapabilityServerSet) {
     resolved2 = true;
     EXPECT_TRUE(server == nullptr);
   });
+  auto promise3 = set1.getLocalServer(errorPromise)
+      .then([&](kj::Maybe<test::TestInterface::Server&> server) {
+    KJ_FAIL_EXPECT("getLocalServer() on error promise should have thrown");
+  }, [&](kj::Exception&& e) {
+    resolved3 = true;
+    KJ_EXPECT(e.getDescription().endsWith("foo"), e.getDescription());
+  });
 
   kj::evalLater([](){}).wait(waitScope);
   kj::evalLater([](){}).wait(waitScope);
@@ -883,14 +893,18 @@ TEST(Capability, CapabilityServerSet) {
 
   EXPECT_FALSE(resolved1);
   EXPECT_FALSE(resolved2);
+  EXPECT_FALSE(resolved3);
 
   paf.fulfiller->fulfill(kj::cp(client1));
+  errorPaf.fulfiller->reject(KJ_EXCEPTION(FAILED, "foo"));
 
   promise1.wait(waitScope);
   promise2.wait(waitScope);
+  promise3.wait(waitScope);
 
   EXPECT_TRUE(resolved1);
   EXPECT_TRUE(resolved2);
+  EXPECT_TRUE(resolved3);
 
   // Check weak pointer.
   {
