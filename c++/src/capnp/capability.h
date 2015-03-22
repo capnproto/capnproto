@@ -226,6 +226,7 @@ private:
   template <typename, Kind>
   friend struct List;
   friend class _::CapabilityServerSetBase;
+  friend class ClientHook;
 };
 
 // =======================================================================================
@@ -511,6 +512,8 @@ public:
   // If this is a local capability created through `capServerSet`, return the underlying Server.
   // Otherwise, return nullptr. Default implementation (which everyone except LocalClient should
   // use) always returns nullptr.
+
+  static kj::Own<ClientHook> from(Capability::Client client) { return kj::mv(client.hook); }
 };
 
 class CallContextHook {
