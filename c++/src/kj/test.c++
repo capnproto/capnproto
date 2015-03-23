@@ -319,6 +319,7 @@ public:
           }
         } else if (*end == '\0') {
           parsedRange = true;
+          maxLine = minLine;
         }
       }
 
