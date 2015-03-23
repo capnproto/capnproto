@@ -85,7 +85,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   }
   KJ_DEFER(if (oldPreload != nullptr) { setenv("LD_PRELOAD", oldPreload.cStr(), true); });
 
-  String lines[8];
+  String lines[32];
   FILE* p = nullptr;
 
 #if __linux__
