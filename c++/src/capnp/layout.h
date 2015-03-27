@@ -274,9 +274,8 @@ public:
   // Get a PointerBuilder representing a message root located in the given segment at the given
   // location.
 
-  bool isNull();
-  bool isStruct();
-  bool isList();
+  inline bool isNull() { return getPointerType() == PointerType::NULL_; }
+  PointerType getPointerType();
 
   StructBuilder getStruct(StructSize size, const word* defaultValue);
   ListBuilder getList(ElementSize elementSize, const word* defaultValue);
@@ -355,9 +354,8 @@ public:
   // use the result as a hint for allocating the first segment, do the copy, and then throw an
   // exception if it overruns.
 
-  bool isNull() const;
-  bool isStruct() const;
-  bool isList() const;
+  inline bool isNull() const { return getPointerType() == PointerType::NULL_; }
+  PointerType getPointerType() const;
 
   StructReader getStruct(const word* defaultValue) const;
   ListReader getList(ElementSize expectedElementSize, const word* defaultValue) const;
@@ -655,6 +653,8 @@ public:
   Text::Reader asText();
   Data::Reader asData();
   // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
+
+  Data::Reader asDataOfAnySize();
 
   template <typename T>
   KJ_ALWAYS_INLINE(T getDataElement(ElementCount index) const);

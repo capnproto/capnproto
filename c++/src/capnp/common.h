@@ -99,6 +99,20 @@ enum class ElementSize: uint8_t {
   INLINE_COMPOSITE = 7
 };
 
+enum class PointerType {
+  // Various wire types a pointer field can take
+
+  NULL_,
+  // Should be NULL, but that's #defined in stddef.h
+
+  STRUCT,
+  LIST,
+  CAPABILITY,
+
+  OTHER
+  // currently unused
+};
+
 namespace schemas {
 
 template <typename T>

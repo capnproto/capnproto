@@ -261,6 +261,56 @@ TEST(Any, AnyStructListCapInSchema) {
   }
 }
 
+
+
+TEST(Any, Equals) {
+  MallocMessageBuilder builderA;
+  auto rootA = builderA.getRoot<test::TestAllTypes>();
+  initTestMessage(rootA);
+
+  MallocMessageBuilder builderB;
+  auto rootB = builderB.getRoot<test::TestAllTypes>();
+  initTestMessage(rootB);
+
+  EXPECT_EQ(StructEqualityResult::EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootA.setBoolField(false);
+  EXPECT_EQ(StructEqualityResult::NOT_EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootB.setBoolField(false);
+  EXPECT_EQ(StructEqualityResult::EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootB.setEnumField(test::TestEnum::GARPLY);
+  EXPECT_EQ(StructEqualityResult::NOT_EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootA.setEnumField(test::TestEnum::GARPLY);
+  EXPECT_EQ(StructEqualityResult::EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootA.getStructField().setTextField("buzz");
+  EXPECT_EQ(StructEqualityResult::NOT_EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootB.getStructField().setTextField("buzz");
+  EXPECT_EQ(StructEqualityResult::EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootA.initVoidList(3);
+  EXPECT_EQ(StructEqualityResult::NOT_EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootB.initVoidList(3);
+  EXPECT_EQ(StructEqualityResult::EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootA.getBoolList().set(2, true);
+  EXPECT_EQ(StructEqualityResult::NOT_EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootB.getBoolList().set(2, true);
+  EXPECT_EQ(StructEqualityResult::EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootB.getStructList()[1].setTextField("my NEW structlist 2");
+  EXPECT_EQ(StructEqualityResult::NOT_EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+
+  rootA.getStructList()[1].setTextField("my NEW structlist 2");
+  EXPECT_EQ(StructEqualityResult::EQUAL, equal(builderA.getRoot<AnyPointer>(), builderB.getRoot<AnyPointer>()));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

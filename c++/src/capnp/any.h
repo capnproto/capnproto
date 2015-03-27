@@ -90,13 +90,12 @@ struct AnyPointer {
     inline MessageSize targetSize() const;
     // Get the total size of the target object and all its children.
 
-    inline bool isNull() const;
-    inline bool isStruct() {
-      return reader.isStruct();
-    }
-    inline bool isList() {
-      return reader.isList();
-    }
+    inline PointerType getPointerType() const;
+
+    inline bool isNull() const { return getPointerType() == PointerType::NULL_; }
+    inline bool isStruct() const { return getPointerType() == PointerType::STRUCT; }
+    inline bool isList() const { return getPointerType() == PointerType::LIST; }
+    inline bool isCapability() const { return getPointerType() == PointerType::CAPABILITY; }
 
     template <typename T>
     inline ReaderFor<T> getAs() const;
@@ -138,13 +137,12 @@ struct AnyPointer {
     inline MessageSize targetSize() const;
     // Get the total size of the target object and all its children.
 
-    inline bool isNull();
-    inline bool isStruct() {
-      return builder.isStruct();
-    }
-    inline bool isList() {
-      return builder.isList();
-    }
+    inline PointerType getPointerType();
+
+    inline bool isNull() { return getPointerType() == PointerType::NULL_; }
+    inline bool isStruct() { return getPointerType() == PointerType::STRUCT; }
+    inline bool isList() { return getPointerType() == PointerType::LIST; }
+    inline bool isCapability() { return getPointerType() == PointerType::CAPABILITY; }
 
     inline void clear();
     // Set to null.
@@ -573,6 +571,8 @@ public:
   inline ElementSize getElementSize() { return _reader.getElementSize(); }
   inline uint size() { return _reader.size() / ELEMENTS; }
 
+  inline Data::Reader getData() { return _reader.asDataOfAnySize(); }
+
   template <typename T> ReaderFor<T> as() {
     // T must be List<U>.
     return ReaderFor<T>(_reader);
@@ -665,8 +665,8 @@ inline MessageSize AnyPointer::Reader::targetSize() const {
   return reader.targetSize().asPublic();
 }
 
-inline bool AnyPointer::Reader::isNull() const {
-  return reader.isNull();
+inline PointerType AnyPointer::Reader::getPointerType() const {
+  return reader.getPointerType();
 }
 
 template <typename T>
@@ -678,8 +678,8 @@ inline MessageSize AnyPointer::Builder::targetSize() const {
   return asReader().targetSize();
 }
 
-inline bool AnyPointer::Builder::isNull() {
-  return builder.isNull();
+inline PointerType AnyPointer::Builder::getPointerType() {
+  return builder.getPointerType();
 }
 
 inline void AnyPointer::Builder::clear() {
@@ -804,6 +804,31 @@ inline Orphan<AnyPointer> AnyPointer::Builder::disownAs<AnyPointer>() {
 template <>
 inline Orphan<AnyPointer> Orphan<AnyPointer>::releaseAs() {
   return kj::mv(*this);
+}
+
+enum class StructEqualityResult {
+  NOT_EQUAL,
+  EQUAL,
+  UNKNOWN_CONTAINS_CAPS
+};
+
+inline kj::StringPtr KJ_STRINGIFY(StructEqualityResult res) {
+  switch(res) {
+  case StructEqualityResult::NOT_EQUAL:
+    return "NOT_EQUAL";
+  case StructEqualityResult::EQUAL:
+    return "EQUAL";
+  case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+    return "UNKNOWN_CONTAINS_CAPS";
+  }
+}
+
+StructEqualityResult equal(AnyStruct::Reader left, AnyStruct::Reader right);
+StructEqualityResult equal(List<AnyStruct>::Reader left, List<AnyStruct>::Reader right);
+StructEqualityResult equal(AnyPointer::Reader left, AnyPointer::Reader right);
+bool operator ==(AnyPointer::Reader left, AnyPointer::Reader right);
+inline bool operator !=(AnyPointer::Reader left, AnyPointer::Reader right) {
+  return !(left == right);
 }
 
 namespace _ {  // private
