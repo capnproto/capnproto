@@ -27,6 +27,9 @@
 #include <stdlib.h>
 #include <exception>
 #include <new>
+#include <signal.h>
+#include <sys/mman.h>
+#include "io.h"
 
 #if (__linux__ && !__ANDROID__) || __APPLE__
 #define KJ_HAS_BACKTRACE 1
@@ -136,6 +139,71 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   return strArray(arrayPtr(lines, i), "");
 #else
   return nullptr;
+#endif
+}
+
+namespace {
+
+void crashHandler(int signo, siginfo_t* info, void* context) {
+  void* traceSpace[32];
+  auto trace = getStackTrace(traceSpace);
+
+  if (trace.size() >= 3) {
+    // Remove getStackTrace(), crashHandler() and signal trampoline from trace.
+    trace = trace.slice(3, trace.size());
+  }
+
+  auto message = kj::str("*** Received signal #", signo, ": ", strsignal(signo),
+                         "\nstack: ", strArray(trace, " "),
+                         stringifyStackTrace(trace), '\n');
+
+  FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  _exit(1);
+}
+
+}  // namespace
+
+void printStackTraceOnCrash() {
+#if KJ_HAS_BACKTRACE
+  // Set up alternate signal stack so that stack overflows can be handled.
+  stack_t stack;
+  memset(&stack, 0, sizeof(stack));
+
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+#ifndef MAP_GROWSDOWN
+#define MAP_GROWSDOWN 0
+#endif
+
+  stack.ss_size = 65536;
+  // Note: ss_sp is char* on FreeBSD, void* on Linux and OSX.
+  stack.ss_sp = reinterpret_cast<char*>(mmap(
+      nullptr, stack.ss_size, PROT_READ | PROT_WRITE,
+      MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN, -1, 0));
+  KJ_SYSCALL(sigaltstack(&stack, nullptr));
+
+  // Catch all relevant signals.
+  struct sigaction action;
+  memset(&action, 0, sizeof(action));
+
+  action.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_NODEFER | SA_RESETHAND;
+  action.sa_sigaction = &crashHandler;
+
+  // Dump stack on common "crash" signals.
+  KJ_SYSCALL(sigaction(SIGSEGV, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGBUS, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGFPE, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGABRT, &action, nullptr));
+
+  // Dump stack on unimplemented syscalls -- useful in seccomp sandboxes.
+  KJ_SYSCALL(sigaction(SIGSYS, &action, nullptr));
+
+#ifdef KJ_DEBUG
+  // Dump stack on keyboard interrupt -- useful for infinite loops. Only in debug mode, though,
+  // because stack traces on ctrl+c can be obnoxious for, say, command-line tools.
+  KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
+#endif
 #endif
 }
 

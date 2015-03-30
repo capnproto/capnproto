@@ -302,6 +302,11 @@ String stringifyStackTrace(ArrayPtr<void* const>);
 // Convert the stack trace to a string with file names and line numbers. This may involve executing
 // suprocesses.
 
+void printStackTraceOnCrash();
+// Registers signal handlers on common "crash" signals like SIGSEGV that will (attempt to) print
+// a stack trace. You should call this as early as possible on program startup. Programs using
+// KJ_MAIN get this automatically.
+
 }  // namespace kj
 
 #endif  // KJ_EXCEPTION_H_
