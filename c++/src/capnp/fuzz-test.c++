@@ -24,11 +24,23 @@
 #include "message.h"
 #include "serialize.h"
 #include <kj/test.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include "test-util.h"
 
 namespace capnp {
 namespace _ {  // private
 namespace {
+
+struct SkipTestHack {
+  SkipTestHack() {
+    if (getenv("CAPNP_SKIP_FUZZ_TEST") != nullptr) {
+      char message[] = "Skipping test because CAPNP_SKIP_FUZZ_TEST is set in environment.\n";
+      write(STDOUT_FILENO, message, sizeof(message));
+      _exit(0);
+    }
+  }
+} skipTestHack;
 
 uint64_t traverse(AnyPointer::Reader reader);
 uint64_t traverse(AnyStruct::Reader reader);
