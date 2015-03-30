@@ -256,6 +256,9 @@ struct AnyPointer {
     inline kj::Own<PipelineHook> releasePipelineHook() { return kj::mv(hook); }
     // For use by RPC implementations.
 
+    template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromClient<T>) == Kind::INTERFACE>>
+    inline operator T() { return T(asCap()); }
+
   private:
     kj::Own<PipelineHook> hook;
     kj::Array<PipelineOp> ops;
