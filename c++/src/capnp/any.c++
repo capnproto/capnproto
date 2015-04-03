@@ -96,7 +96,7 @@ StructEqualityResult equal(AnyStruct::Reader left, AnyStruct::Reader right) {
     return StructEqualityResult::NOT_EQUAL;
   }
 
-  if(0 != memcmp(dataL.begin(), dataR.begin(), dataSizeL * sizeof(word))) {
+  if(0 != memcmp(dataL.begin(), dataR.begin(), dataSizeL)) {
     return StructEqualityResult::NOT_EQUAL;
   }
 
