@@ -2373,7 +2373,7 @@ MessageSizeCounts PointerReader::targetSize() const {
 }
 
 PointerType PointerReader::getPointerType() const {
-  if(pointer->isNull()) {
+  if(pointer == nullptr || pointer->isNull()) {
     return PointerType::NULL_;
   } else {
     word* refTarget = nullptr;
