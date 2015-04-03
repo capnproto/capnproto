@@ -134,7 +134,7 @@ StructEqualityResult equal(AnyList::Reader left, AnyList::Reader right) {
   case ElementSize::FOUR_BYTES:
   case ElementSize::EIGHT_BYTES:
     if(left.getElementSize() == right.getElementSize()) {
-      if(memcmp(left.getData().begin(), right.getData().begin(), left.getData().size()) == 0) {
+      if(memcmp(left.getRawBytes().begin(), right.getRawBytes().begin(), left.getRawBytes().size()) == 0) {
         return StructEqualityResult::EQUAL;
       } else {
         return StructEqualityResult::NOT_EQUAL;

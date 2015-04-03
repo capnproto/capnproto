@@ -2605,13 +2605,13 @@ Data::Reader ListReader::asData() {
   return Data::Reader(reinterpret_cast<const byte*>(ptr), elementCount / ELEMENTS);
 }
 
-Data::Reader ListReader::asDataOfAnySize() {
+kj::ArrayPtr<const byte> ListReader::asRawBytes() {
   KJ_REQUIRE(structPointerCount == 0 * POINTERS,
              "Expected data only, got pointers.") {
-    return Data::Reader();
+    return kj::ArrayPtr<const byte>();
   }
 
-  return Data::Reader(reinterpret_cast<const byte*>(ptr), structDataSize * elementCount / ELEMENTS);
+  return kj::ArrayPtr<const byte>(reinterpret_cast<const byte*>(ptr), structDataSize * elementCount / ELEMENTS);
 }
 
 

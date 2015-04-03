@@ -406,7 +406,7 @@ public:
 
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
-  inline Data::Builder getDataSectionAsBlob();
+  inline kj::ArrayPtr<byte> getDataSectionAsBlob();
   inline _::ListBuilder getPointerSectionAsList();
 
   template <typename T>
@@ -487,7 +487,7 @@ public:
 
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
-  inline Data::Reader getDataSectionAsBlob();
+  inline kj::ArrayPtr<const byte> getDataSectionAsBlob();
   inline _::ListReader getPointerSectionAsList();
 
   template <typename T>
@@ -654,7 +654,7 @@ public:
   Data::Reader asData();
   // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
 
-  Data::Reader asDataOfAnySize();
+  kj::ArrayPtr<const byte> asRawBytes();
 
   template <typename T>
   KJ_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
@@ -821,8 +821,8 @@ inline PointerReader PointerReader::getRootUnchecked(const word* location) {
 
 // -------------------------------------------------------------------
 
-inline Data::Builder StructBuilder::getDataSectionAsBlob() {
-  return Data::Builder(reinterpret_cast<byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
+inline kj::ArrayPtr<byte> StructBuilder::getDataSectionAsBlob() {
+  return kj::ArrayPtr<byte>(reinterpret_cast<byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
 }
 
 inline _::ListBuilder StructBuilder::getPointerSectionAsList() {
@@ -905,8 +905,8 @@ inline PointerBuilder StructBuilder::getPointerField(WirePointerCount ptrIndex) 
 
 // -------------------------------------------------------------------
 
-inline Data::Reader StructReader::getDataSectionAsBlob() {
-  return Data::Reader(reinterpret_cast<const byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
+inline kj::ArrayPtr<const byte> StructReader::getDataSectionAsBlob() {
+  return kj::ArrayPtr<const byte>(reinterpret_cast<const byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
 }
 
 inline _::ListReader StructReader::getPointerSectionAsList() {

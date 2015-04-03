@@ -427,7 +427,7 @@ public:
       : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
 #endif
 
-  Data::Reader getDataSection() {
+  kj::ArrayPtr<const byte> getDataSection() {
     return _reader.getDataSectionAsBlob();
   }
   List<AnyPointer>::Reader getPointerSection() {
@@ -457,7 +457,7 @@ public:
       : _builder(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::fwd<T>(value))) {}
 #endif
 
-  inline Data::Builder getDataSection() {
+  inline kj::ArrayPtr<byte> getDataSection() {
     return _builder.getDataSectionAsBlob();
   }
   List<AnyPointer>::Builder getPointerSection() {
@@ -571,7 +571,7 @@ public:
   inline ElementSize getElementSize() { return _reader.getElementSize(); }
   inline uint size() { return _reader.size() / ELEMENTS; }
 
-  inline Data::Reader getData() { return _reader.asDataOfAnySize(); }
+  inline kj::ArrayPtr<const byte> getRawBytes() { return _reader.asRawBytes(); }
 
   template <typename T> ReaderFor<T> as() {
     // T must be List<U>.
