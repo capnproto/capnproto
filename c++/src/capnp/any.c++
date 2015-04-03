@@ -122,6 +122,17 @@ StructEqualityResult equal(AnyStruct::Reader left, AnyStruct::Reader right) {
 
 }
 
+kj::StringPtr KJ_STRINGIFY(StructEqualityResult res) {
+  switch(res) {
+  case StructEqualityResult::NOT_EQUAL:
+    return "NOT_EQUAL";
+  case StructEqualityResult::EQUAL:
+    return "EQUAL";
+  case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+    return "UNKNOWN_CONTAINS_CAPS";
+  }
+}
+
 StructEqualityResult equal(AnyList::Reader left, AnyList::Reader right) {
   if(left.size() != right.size()) {
     return StructEqualityResult::NOT_EQUAL;

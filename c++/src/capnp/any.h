@@ -812,16 +812,7 @@ enum class StructEqualityResult {
   UNKNOWN_CONTAINS_CAPS
 };
 
-inline kj::StringPtr KJ_STRINGIFY(StructEqualityResult res) {
-  switch(res) {
-  case StructEqualityResult::NOT_EQUAL:
-    return "NOT_EQUAL";
-  case StructEqualityResult::EQUAL:
-    return "EQUAL";
-  case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-    return "UNKNOWN_CONTAINS_CAPS";
-  }
-}
+kj::StringPtr KJ_STRINGIFY(StructEqualityResult res);
 
 StructEqualityResult equal(AnyStruct::Reader left, AnyStruct::Reader right);
 StructEqualityResult equal(List<AnyStruct>::Reader left, List<AnyStruct>::Reader right);
