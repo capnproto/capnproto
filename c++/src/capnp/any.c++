@@ -79,7 +79,7 @@ kj::Own<ClientHook> AnyPointer::Pipeline::asCap() {
 
 #endif  // !CAPNP_LITE
 
-StructEqualityResult AnyStruct::Reader::equals(AnyStruct::Reader right) {
+Equality AnyStruct::Reader::equals(AnyStruct::Reader right) {
   auto dataL = getDataSection();
   size_t dataSizeL = dataL.size();
   while(dataSizeL > 0 && dataL[dataSizeL - 1] == 0) {
@@ -93,11 +93,11 @@ StructEqualityResult AnyStruct::Reader::equals(AnyStruct::Reader right) {
   }
 
   if(dataSizeL != dataSizeR) {
-    return StructEqualityResult::NOT_EQUAL;
+    return Equality::NOT_EQUAL;
   }
 
   if(0 != memcmp(dataL.begin(), dataR.begin(), dataSizeL)) {
-    return StructEqualityResult::NOT_EQUAL;
+    return Equality::NOT_EQUAL;
   }
 
   auto ptrsL = getPointerSection();
@@ -105,17 +105,17 @@ StructEqualityResult AnyStruct::Reader::equals(AnyStruct::Reader right) {
 
   size_t i = 0;
 
-  auto eqResult = StructEqualityResult::EQUAL;
+  auto eqResult = Equality::EQUAL;
   for(; i < kj::min(ptrsL.size(), ptrsR.size()); i++) {
     auto l = ptrsL[i];
     auto r = ptrsR[i];
     switch(l.equals(r)) {
-      case StructEqualityResult::EQUAL:
+      case Equality::EQUAL:
         break;
-      case StructEqualityResult::NOT_EQUAL:
-        return StructEqualityResult::NOT_EQUAL;
-      case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-        eqResult = StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+      case Equality::NOT_EQUAL:
+        return Equality::NOT_EQUAL;
+      case Equality::UNKNOWN_CONTAINS_CAPS:
+        eqResult = Equality::UNKNOWN_CONTAINS_CAPS;
         break;
       default:
         KJ_UNREACHABLE;
@@ -125,24 +125,24 @@ StructEqualityResult AnyStruct::Reader::equals(AnyStruct::Reader right) {
   return eqResult;
 }
 
-kj::StringPtr KJ_STRINGIFY(StructEqualityResult res) {
+kj::StringPtr KJ_STRINGIFY(Equality res) {
   switch(res) {
-    case StructEqualityResult::NOT_EQUAL:
+    case Equality::NOT_EQUAL:
       return "NOT_EQUAL";
-    case StructEqualityResult::EQUAL:
+    case Equality::EQUAL:
       return "EQUAL";
-    case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+    case Equality::UNKNOWN_CONTAINS_CAPS:
       return "UNKNOWN_CONTAINS_CAPS";
     default:
       KJ_UNREACHABLE;
   }
 }
 
-StructEqualityResult AnyList::Reader::equals(AnyList::Reader right) {
+Equality AnyList::Reader::equals(AnyList::Reader right) {
   if(size() != right.size()) {
-    return StructEqualityResult::NOT_EQUAL;
+    return Equality::NOT_EQUAL;
   }
-  auto eqResult = StructEqualityResult::EQUAL;
+  auto eqResult = Equality::EQUAL;
   switch(getElementSize()) {
     case ElementSize::VOID:
     case ElementSize::BIT:
@@ -152,12 +152,12 @@ StructEqualityResult AnyList::Reader::equals(AnyList::Reader right) {
     case ElementSize::EIGHT_BYTES:
       if(getElementSize() == right.getElementSize()) {
         if(memcmp(getRawBytes().begin(), right.getRawBytes().begin(), getRawBytes().size()) == 0) {
-          return StructEqualityResult::EQUAL;
+          return Equality::EQUAL;
         } else {
-          return StructEqualityResult::NOT_EQUAL;
+          return Equality::NOT_EQUAL;
         }
       } else {
-        return StructEqualityResult::NOT_EQUAL;
+        return Equality::NOT_EQUAL;
       }
     case ElementSize::POINTER:
     case ElementSize::INLINE_COMPOSITE: {
@@ -165,12 +165,12 @@ StructEqualityResult AnyList::Reader::equals(AnyList::Reader right) {
       auto rlist = right.as<List<AnyStruct>>();
       for(size_t i = 0; i < size(); i++) {
         switch(llist[i].equals(rlist[i])) {
-          case StructEqualityResult::EQUAL:
+          case Equality::EQUAL:
             break;
-          case StructEqualityResult::NOT_EQUAL:
-            return StructEqualityResult::NOT_EQUAL;
-          case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-            eqResult = StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+          case Equality::NOT_EQUAL:
+            return Equality::NOT_EQUAL;
+          case Equality::UNKNOWN_CONTAINS_CAPS:
+            eqResult = Equality::UNKNOWN_CONTAINS_CAPS;
             break;
           default:
             KJ_UNREACHABLE;
@@ -183,19 +183,19 @@ StructEqualityResult AnyList::Reader::equals(AnyList::Reader right) {
   }
 }
 
-StructEqualityResult AnyPointer::Reader::equals(AnyPointer::Reader right) {
+Equality AnyPointer::Reader::equals(AnyPointer::Reader right) {
   if(getPointerType() != right.getPointerType()) {
-    return StructEqualityResult::NOT_EQUAL;
+    return Equality::NOT_EQUAL;
   }
   switch(getPointerType()) {
     case PointerType::NULL_:
-      return StructEqualityResult::EQUAL;
+      return Equality::EQUAL;
     case PointerType::STRUCT:
       return getAs<AnyStruct>().equals(right.getAs<AnyStruct>());
     case PointerType::LIST:
       return getAs<AnyList>().equals(right.getAs<AnyList>());
     case PointerType::CAPABILITY:
-      return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+      return Equality::UNKNOWN_CONTAINS_CAPS;
     default:
       // There aren't currently any other types of pointers
       KJ_UNREACHABLE;
@@ -204,11 +204,11 @@ StructEqualityResult AnyPointer::Reader::equals(AnyPointer::Reader right) {
 
 bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
   switch(equals(right)) {
-    case StructEqualityResult::EQUAL:
+    case Equality::EQUAL:
       return true;
-    case StructEqualityResult::NOT_EQUAL:
+    case Equality::NOT_EQUAL:
       return false;
-    case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+    case Equality::UNKNOWN_CONTAINS_CAPS:
       KJ_FAIL_REQUIRE(
         "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
     default:
@@ -218,11 +218,11 @@ bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
 
 bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
   switch(equals(right)) {
-    case StructEqualityResult::EQUAL:
+    case Equality::EQUAL:
       return true;
-    case StructEqualityResult::NOT_EQUAL:
+    case Equality::NOT_EQUAL:
       return false;
-    case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+    case Equality::UNKNOWN_CONTAINS_CAPS:
       KJ_FAIL_REQUIRE(
         "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
     default:
@@ -232,11 +232,11 @@ bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
 
 bool AnyList::Reader::operator ==(AnyList::Reader right) {
   switch(equals(right)) {
-    case StructEqualityResult::EQUAL:
+    case Equality::EQUAL:
       return true;
-    case StructEqualityResult::NOT_EQUAL:
+    case Equality::NOT_EQUAL:
       return false;
-    case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+    case Equality::UNKNOWN_CONTAINS_CAPS:
       KJ_FAIL_REQUIRE(
         "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
     default:

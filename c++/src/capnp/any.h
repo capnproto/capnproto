@@ -74,13 +74,13 @@ template <> struct Kind_<AnyList> { static constexpr Kind kind = Kind::OTHER; };
 // =======================================================================================
 // AnyPointer!
 
-enum class StructEqualityResult {
+enum class Equality {
   NOT_EQUAL,
   EQUAL,
   UNKNOWN_CONTAINS_CAPS
 };
 
-kj::StringPtr KJ_STRINGIFY(StructEqualityResult res);
+kj::StringPtr KJ_STRINGIFY(Equality res);
 
 struct AnyPointer {
   // Reader/Builder for the `AnyPointer` field type, i.e. a pointer that can point to an arbitrary
@@ -105,7 +105,7 @@ struct AnyPointer {
     inline bool isList() const { return getPointerType() == PointerType::LIST; }
     inline bool isCapability() const { return getPointerType() == PointerType::CAPABILITY; }
 
-    StructEqualityResult equals(AnyPointer::Reader right);
+    Equality equals(AnyPointer::Reader right);
     bool operator ==(AnyPointer::Reader right);
     inline bool operator !=(AnyPointer::Reader right) {
       return !(*this == right);
@@ -158,7 +158,7 @@ struct AnyPointer {
     inline bool isList() { return getPointerType() == PointerType::LIST; }
     inline bool isCapability() { return getPointerType() == PointerType::CAPABILITY; }
 
-    inline StructEqualityResult equals(AnyPointer::Reader right) {
+    inline Equality equals(AnyPointer::Reader right) {
       return asReader().equals(right);
     }
     inline bool operator ==(AnyPointer::Reader right) {
@@ -458,7 +458,7 @@ public:
     return List<AnyPointer>::Reader(_reader.getPointerSectionAsList());
   }
 
-  StructEqualityResult equals(AnyStruct::Reader right);
+  Equality equals(AnyStruct::Reader right);
   bool operator ==(AnyStruct::Reader right);
   inline bool operator !=(AnyStruct::Reader right) {
     return !(*this == right);
@@ -494,7 +494,7 @@ public:
     return List<AnyPointer>::Builder(_builder.getPointerSectionAsList());
   }
 
-  inline StructEqualityResult equals(AnyStruct::Reader right) {
+  inline Equality equals(AnyStruct::Reader right) {
     return asReader().equals(right);
   }
   inline bool operator ==(AnyStruct::Reader right) {
@@ -613,7 +613,7 @@ public:
 
   inline kj::ArrayPtr<const byte> getRawBytes() { return _reader.asRawBytes(); }
 
-  StructEqualityResult equals(AnyList::Reader right);
+  Equality equals(AnyList::Reader right);
   inline bool operator ==(AnyList::Reader right);
   inline bool operator !=(AnyList::Reader right) {
     return !(*this == right);
@@ -644,7 +644,7 @@ public:
   inline ElementSize getElementSize() { return _builder.getElementSize(); }
   inline uint size() { return _builder.size() / ELEMENTS; }
 
-  StructEqualityResult equals(AnyList::Reader right);
+  Equality equals(AnyList::Reader right);
   inline bool operator ==(AnyList::Reader right) {
     return asReader() == right;
   }
