@@ -463,21 +463,18 @@ private:
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
 public:
-  LocalClient(kj::Own<Capability::Server>&& server): server(kj::mv(server)) {}
-  LocalClient(kj::Own<Capability::Server>&& server,
+  LocalClient(kj::Own<Capability::Server>&& serverParam)
+      : server(kj::mv(serverParam)) {
+    server->thisHook = this;
+  }
+  LocalClient(kj::Own<Capability::Server>&& serverParam,
               _::CapabilityServerSetBase& capServerSet, void* ptr)
-      : server(kj::mv(server)), capServerSet(&capServerSet), ptr(ptr) {}
-
-  ~LocalClient() noexcept(false) {
-    KJ_IF_MAYBE(w, weak) {
-      w->client = nullptr;
-    }
+      : server(kj::mv(serverParam)), capServerSet(&capServerSet), ptr(ptr) {
+    server->thisHook = this;
   }
 
-  void setWeak(_::WeakCapabilityBase& weak) {
-    KJ_REQUIRE(this->weak == nullptr && weak.client == nullptr);
-    weak.client = *this;
-    this->weak = weak;
+  ~LocalClient() noexcept(false) {
+    server->thisHook = nullptr;
   }
 
   Request<AnyPointer, AnyPointer> newCall(
@@ -555,8 +552,6 @@ private:
   kj::Own<Capability::Server> server;
   _::CapabilityServerSetBase* capServerSet = nullptr;
   void* ptr = nullptr;
-  kj::Maybe<_::WeakCapabilityBase&> weak;
-  friend class _::WeakCapabilityBase;
 };
 
 kj::Own<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Server>&& server) {
@@ -680,28 +675,9 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
 
 namespace _ {  // private
 
-WeakCapabilityBase::~WeakCapabilityBase() noexcept(false) {
-  KJ_IF_MAYBE(c, client) {
-    c->weak = nullptr;
-  }
-}
-
-kj::Maybe<Capability::Client> WeakCapabilityBase::getInternal() {
-  return client.map([](LocalClient& client) {
-    return Capability::Client(client.addRef());
-  });
-}
-
 Capability::Client CapabilityServerSetBase::addInternal(
     kj::Own<Capability::Server>&& server, void* ptr) {
   return Capability::Client(kj::refcounted<LocalClient>(kj::mv(server), *this, ptr));
-}
-
-Capability::Client CapabilityServerSetBase::addWeakInternal(
-    kj::Own<Capability::Server>&& server, _::WeakCapabilityBase& weak, void* ptr) {
-  auto result = kj::refcounted<LocalClient>(kj::mv(server), *this, ptr);
-  result->setWeak(weak);
-  return Capability::Client(kj::mv(result));
 }
 
 kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::Client& client) {

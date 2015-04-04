@@ -250,6 +250,10 @@ public:
     return hasInterfaces_;
   }
 
+  kj::StringTree strNoTypename() const & { return name.flatten(); }
+  kj::StringTree strNoTypename() && { return kj::mv(name); }
+  // Stringify but never prefix with `typename`. Use in contexts where `typename` is implicit.
+
 private:
   kj::StringTree name;
 
@@ -2164,7 +2168,9 @@ private:
       };
     }
 
-    CppTypeName clientName = cppFullName(schema, nullptr);
+    CppTypeName typeName = cppFullName(schema, nullptr);
+
+    CppTypeName clientName = typeName;
     clientName.addMemberType("Client");
 
     kj::String templates = kj::str(templateContext.allDecls());  // Ends with a newline
@@ -2227,7 +2233,7 @@ private:
           "class ", fullName, "::Client\n"
           "    : public virtual ::capnp::Capability::Client",
           KJ_MAP(s, superclasses) {
-            return kj::strTree(",\n      public virtual ", s.typeName, "::Client");
+            return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Client");
           }, " {\n"
           "public:\n"
           "  typedef ", fullName, " Calls;\n"
@@ -2261,7 +2267,7 @@ private:
           "class ", fullName, "::Server\n"
           "    : public virtual ::capnp::Capability::Server",
           KJ_MAP(s, superclasses) {
-            return kj::strTree(",\n      public virtual ", s.typeName, "::Server");
+            return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Server");
           }, " {\n"
           "public:\n",
           "  typedef ", fullName, " Serves;\n"
@@ -2272,6 +2278,11 @@ private:
           "\n"
           "protected:\n",
           KJ_MAP(m, methods) { return kj::mv(m.serverDecls); },
+          "\n"
+          "  inline ", clientName, " thisCap() {\n"
+          "    return ::capnp::Capability::Server::thisCap()\n"
+          "        .template castAs<", typeName, ">();\n"
+          "  }\n"
           "\n"
           "  ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,\n"
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);\n"
@@ -2326,7 +2337,8 @@ private:
           KJ_MAP(s, transitiveSuperclasses) {
             return kj::strTree(
               "    case 0x", kj::hex(s.id), "ull:\n"
-              "      return ", s.typeName, "::Server::dispatchCallInternal(methodId, context);\n");
+              "      return ", s.typeName.strNoTypename(),
+                         "::Server::dispatchCallInternal(methodId, context);\n");
           },
           "    default:\n"
           "      return internalUnimplemented(\"", proto.getDisplayName(), "\", interfaceId);\n"

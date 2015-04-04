@@ -332,6 +332,17 @@ public:
   //   a proxy.
 
 protected:
+  inline Capability::Client thisCap();
+  // Get a capability pointing to this object, much like the `this` keyword.
+  //
+  // The effect of this method is undefined if:
+  // - No capability client has been created pointing to this object. (This is always the case in
+  //   the server's constructor.)
+  // - The capability client pointing at this object has been destoryed. (This is always the case
+  //   in the server's destructor.)
+  // - Multiple capability clients have been created around the same server (possible if the server
+  //   is refcounted, which is not recommended since the client itself provides refcounting).
+
   template <typename Params, typename Results>
   CallContext<Params, Results> internalGetTypedContext(
       CallContext<AnyPointer, AnyPointer> typeless);
@@ -341,52 +352,28 @@ protected:
                                           uint64_t typeId, uint16_t methodId);
   kj::Promise<void> internalUnimplemented(const char* interfaceName, const char* methodName,
                                           uint64_t typeId, uint16_t methodId);
+
+private:
+  ClientHook* thisHook = nullptr;
+  friend class LocalClient;
 };
 
 // =======================================================================================
 
 namespace _ {  // private
 
-class WeakCapabilityBase {
-public:
-  ~WeakCapabilityBase() noexcept(false);
-
-  kj::Maybe<Capability::Client> getInternal();
-
-private:
-  kj::Maybe<LocalClient&> client;
-  friend class capnp::LocalClient;
-};
-
 class CapabilityServerSetBase {
 public:
   Capability::Client addInternal(kj::Own<Capability::Server>&& server, void* ptr);
-  Capability::Client addWeakInternal(kj::Own<Capability::Server>&& server,
-                                     _::WeakCapabilityBase& weak, void* ptr);
   kj::Promise<void*> getLocalServerInternal(Capability::Client& client);
 };
 
 }  // namespace _ (private)
 
 template <typename T>
-class WeakCapability: private _::WeakCapabilityBase {
-public:
-  kj::Maybe<typename T::Client> get();
-  // If the server is still alive, get a live client to it.
-
-private:
-  template <typename>
-  friend class CapabilityServerSet;
-};
-
-template <typename T>
 class CapabilityServerSet: private _::CapabilityServerSetBase {
-  // Allows a server to:
-  // 1) Recognize its own capabilities when passed back to it, and obtain the underlying Server
-  //    objects associated with them.
-  // 2) Obtain "weak" versions of these capabilities, which do not prevent the underlying Server
-  //    from being destroyed but can be upgraded to normal Clients as long as the Server is still
-  //    alive.
+  // Allows a server to recognize its own capabilities when passed back to it, and obtain the
+  // underlying Server objects associated with them.
   //
   // All objects in the set must have the same interface type T. The objects may implement various
   // interfaces derived from T (and in fact T can be `capnp::Capability` to accept all objects),
@@ -403,14 +390,6 @@ public:
 
   typename T::Client add(kj::Own<typename T::Server>&& server);
   // Create a new capability Client for the given Server and also add this server to the set.
-
-  struct ClientAndWeak {
-    typename T::Client client;
-    kj::Own<WeakCapability<T>> weak;
-  };
-
-  ClientAndWeak addWeak(kj::Own<typename T::Server>&& server);
-  // Like add() but also creates a weak reference.
 
   kj::Promise<kj::Maybe<typename T::Server&>> getLocalServer(typename T::Client& client);
   // Given a Client pointing to a server previously passed to add(), return the corresponding
@@ -782,11 +761,8 @@ CallContext<Params, Results> Capability::Server::internalGetTypedContext(
   return CallContext<Params, Results>(*typeless.hook);
 }
 
-template <typename T>
-kj::Maybe<typename T::Client> WeakCapability<T>::get() {
-  return getInternal().map([](Capability::Client&& client) {
-    return client.castAs<T>();
-  });
+Capability::Client Capability::Server::thisCap() {
+  return Client(thisHook->addRef());
 }
 
 template <typename T>
@@ -795,17 +771,6 @@ typename T::Client CapabilityServerSet<T>::add(kj::Own<typename T::Server>&& ser
   // Clang insists that `castAs` is a template-dependent member and therefore we need the
   // `template` keyword here, but AFAICT this is wrong: addImpl() is not a template.
   return addInternal(kj::mv(server), ptr).template castAs<T>();
-}
-
-template <typename T>
-typename CapabilityServerSet<T>::ClientAndWeak CapabilityServerSet<T>::addWeak(
-    kj::Own<typename T::Server>&& server) {
-  void* ptr = reinterpret_cast<void*>(server.get());
-  auto weak = kj::heap<WeakCapability<T>>();
-  // Clang insists that `castAs` is a template-dependent member and therefore we need the
-  // `template` keyword here, but AFAICT this is wrong: addWeakImpl() is not a template.
-  auto client = addWeakInternal(kj::mv(server), *weak, ptr).template castAs<T>();
-  return { kj::mv(client), kj::mv(weak) };
 }
 
 template <typename T>

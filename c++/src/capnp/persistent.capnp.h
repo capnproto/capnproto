@@ -204,6 +204,11 @@ protected:
   typedef ::capnp::CallContext<typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults> SaveContext;
   virtual ::kj::Promise<void> save(SaveContext context);
 
+  inline typename  ::capnp::Persistent<SturdyRef, Owner>::Client thisCap() {
+    return ::capnp::Capability::Server::thisCap()
+        .template castAs< ::capnp::Persistent<SturdyRef, Owner>>();
+  }
+
   ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,
       ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);
 };
@@ -448,6 +453,11 @@ protected:
   typedef typename  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams ExportParams;
   typedef ::capnp::CallContext<ExportParams, typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveResults> ExportContext;
   virtual ::kj::Promise<void> export_(ExportContext context);
+
+  inline typename  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Client thisCap() {
+    return ::capnp::Capability::Server::thisCap()
+        .template castAs< ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>>();
+  }
 
   ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,
       ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);

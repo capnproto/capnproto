@@ -854,9 +854,7 @@ TEST(Capability, CapabilityServerSet) {
 
   auto ownServer2 = kj::heap<TestInterfaceImpl>(callCount);
   auto& server2 = *ownServer2;
-  auto client2AndWeak = set2.addWeak(kj::mv(ownServer2));
-  test::TestInterface::Client client2 = kj::mv(client2AndWeak.client);
-  kj::Own<WeakCapability<test::TestInterface>> client2Weak = kj::mv(client2AndWeak.weak);
+  test::TestInterface::Client client2 = set2.add(kj::mv(ownServer2));
 
   // Getting the local server using the correct set works.
   EXPECT_EQ(&server1, &KJ_ASSERT_NONNULL(set1.getLocalServer(client1).wait(waitScope)));
@@ -913,16 +911,53 @@ TEST(Capability, CapabilityServerSet) {
   EXPECT_TRUE(resolved1);
   EXPECT_TRUE(resolved2);
   EXPECT_TRUE(resolved3);
+}
 
-  // Check weak pointer.
-  {
-    auto restored = KJ_ASSERT_NONNULL(client2Weak->get());
-    EXPECT_EQ(&server2, &KJ_ASSERT_NONNULL(set2.getLocalServer(restored).wait(waitScope)));
+class TestThisCap final: public test::TestInterface::Server {
+public:
+  TestThisCap(int& callCount): callCount(callCount) {}
+  ~TestThisCap() noexcept(false) { callCount = -1; }
+
+  test::TestInterface::Client getSelf() {
+    return thisCap();
   }
+
+protected:
+  kj::Promise<void> bar(BarContext context) {
+    ++callCount;
+    return kj::READY_NOW;
+  }
+
+private:
+  int& callCount;
+};
+
+TEST(Capability, ThisCap) {
+  int callCount = 0;
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto server = kj::heap<TestThisCap>(callCount);
+  TestThisCap* serverPtr = server;
+
+  test::TestInterface::Client client = kj::mv(server);
+  client.barRequest().send().wait(waitScope);
+  EXPECT_EQ(1, callCount);
+
+  test::TestInterface::Client client2 = serverPtr->getSelf();
+  EXPECT_EQ(1, callCount);
+  client2.barRequest().send().wait(waitScope);
+  EXPECT_EQ(2, callCount);
+
+  client = nullptr;
+
+  EXPECT_EQ(2, callCount);
+  client2.barRequest().send().wait(waitScope);
+  EXPECT_EQ(3, callCount);
 
   client2 = nullptr;
 
-  EXPECT_TRUE(client2Weak->get() == nullptr);
+  EXPECT_EQ(-1, callCount);
 }
 
 }  // namespace
