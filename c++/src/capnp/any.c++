@@ -187,7 +187,7 @@ StructEqualityResult AnyPointer::Reader::equals(AnyPointer::Reader right) {
       return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
     default:
       // There aren't currently any other types of pointers
-      KJ_FAIL_REQUIRE();
+      KJ_UNREACHABLE;
   }
 }
 
@@ -199,6 +199,8 @@ bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
       return false;
     case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
       KJ_FAIL_REQUIRE();
+    default:
+      KJ_UNREACHABLE;
   }
 }
 
@@ -210,6 +212,8 @@ bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
       return false;
     case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
       KJ_FAIL_REQUIRE();
+    default:
+      KJ_UNREACHABLE;
   }
 }
 
@@ -221,6 +225,8 @@ bool AnyList::Reader::operator ==(AnyList::Reader right) {
       return false;
     case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
       KJ_FAIL_REQUIRE();
+    default:
+      KJ_UNREACHABLE;
   }
 }
 
