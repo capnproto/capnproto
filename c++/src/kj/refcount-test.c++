@@ -34,13 +34,18 @@ struct SetTrueInDestructor: public Refcounted {
 TEST(Refcount, Basic) {
   bool b = false;
   Own<SetTrueInDestructor> ref1 = kj::refcounted<SetTrueInDestructor>(&b);
+  EXPECT_FALSE(ref1->isShared());
   Own<SetTrueInDestructor> ref2 = kj::addRef(*ref1);
+  EXPECT_TRUE(ref1->isShared());
   Own<SetTrueInDestructor> ref3 = kj::addRef(*ref2);
+  EXPECT_TRUE(ref1->isShared());
 
   EXPECT_FALSE(b);
   ref1 = Own<SetTrueInDestructor>();
+  EXPECT_TRUE(ref2->isShared());
   EXPECT_FALSE(b);
   ref3 = Own<SetTrueInDestructor>();
+  EXPECT_FALSE(ref2->isShared());
   EXPECT_FALSE(b);
   ref2 = Own<SetTrueInDestructor>();
   EXPECT_TRUE(b);
