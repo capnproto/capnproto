@@ -109,12 +109,12 @@ StructEqualityResult AnyStruct::Reader::equals(AnyStruct::Reader right) {
     auto l = ptrsL[i];
     auto r = ptrsR[i];
     switch(l.equals(r)) {
-    case StructEqualityResult::EQUAL:
-      break;
-    case StructEqualityResult::NOT_EQUAL:
-      return StructEqualityResult::NOT_EQUAL;
-    case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-      return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+      case StructEqualityResult::EQUAL:
+        break;
+      case StructEqualityResult::NOT_EQUAL:
+        return StructEqualityResult::NOT_EQUAL;
+      case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+        return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
     }
   }
 
@@ -124,12 +124,12 @@ StructEqualityResult AnyStruct::Reader::equals(AnyStruct::Reader right) {
 
 kj::StringPtr KJ_STRINGIFY(StructEqualityResult res) {
   switch(res) {
-  case StructEqualityResult::NOT_EQUAL:
-    return "NOT_EQUAL";
-  case StructEqualityResult::EQUAL:
-    return "EQUAL";
-  case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-    return "UNKNOWN_CONTAINS_CAPS";
+    case StructEqualityResult::NOT_EQUAL:
+      return "NOT_EQUAL";
+    case StructEqualityResult::EQUAL:
+      return "EQUAL";
+    case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+      return "UNKNOWN_CONTAINS_CAPS";
   }
 }
 
@@ -138,37 +138,37 @@ StructEqualityResult AnyList::Reader::equals(AnyList::Reader right) {
     return StructEqualityResult::NOT_EQUAL;
   }
   switch(getElementSize()) {
-  case ElementSize::VOID:
-  case ElementSize::BIT:
-  case ElementSize::BYTE:
-  case ElementSize::TWO_BYTES:
-  case ElementSize::FOUR_BYTES:
-  case ElementSize::EIGHT_BYTES:
-    if(getElementSize() == right.getElementSize()) {
-      if(memcmp(getRawBytes().begin(), right.getRawBytes().begin(), getRawBytes().size()) == 0) {
-        return StructEqualityResult::EQUAL;
+    case ElementSize::VOID:
+    case ElementSize::BIT:
+    case ElementSize::BYTE:
+    case ElementSize::TWO_BYTES:
+    case ElementSize::FOUR_BYTES:
+    case ElementSize::EIGHT_BYTES:
+      if(getElementSize() == right.getElementSize()) {
+        if(memcmp(getRawBytes().begin(), right.getRawBytes().begin(), getRawBytes().size()) == 0) {
+          return StructEqualityResult::EQUAL;
+        } else {
+          return StructEqualityResult::NOT_EQUAL;
+        }
       } else {
         return StructEqualityResult::NOT_EQUAL;
       }
-    } else {
-      return StructEqualityResult::NOT_EQUAL;
-    }
-  case ElementSize::POINTER:
-  case ElementSize::INLINE_COMPOSITE: {
-    auto llist = as<List<AnyStruct>>();
-    auto rlist = right.as<List<AnyStruct>>();
-    for(size_t i = 0; i < size(); i++) {
-      switch(llist[i].equals(rlist[i])) {
-      case StructEqualityResult::EQUAL:
-        break;
-      case StructEqualityResult::NOT_EQUAL:
-        return StructEqualityResult::NOT_EQUAL;
-      case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-        return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+    case ElementSize::POINTER:
+    case ElementSize::INLINE_COMPOSITE: {
+      auto llist = as<List<AnyStruct>>();
+      auto rlist = right.as<List<AnyStruct>>();
+      for(size_t i = 0; i < size(); i++) {
+        switch(llist[i].equals(rlist[i])) {
+          case StructEqualityResult::EQUAL:
+            break;
+          case StructEqualityResult::NOT_EQUAL:
+            return StructEqualityResult::NOT_EQUAL;
+          case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+            return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+        }
       }
+      return StructEqualityResult::EQUAL;
     }
-    return StructEqualityResult::EQUAL;
-  }
   }
 }
 
@@ -204,34 +204,34 @@ StructEqualityResult AnyPointer::Reader::equals(AnyPointer::Reader right) {
 
 bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
   switch(equals(right)) {
-  case StructEqualityResult::EQUAL:
-    return true;
-  case StructEqualityResult::NOT_EQUAL:
-    return false;
-  case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-    KJ_FAIL_REQUIRE();
+    case StructEqualityResult::EQUAL:
+      return true;
+    case StructEqualityResult::NOT_EQUAL:
+      return false;
+    case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+      KJ_FAIL_REQUIRE();
   }
 }
 
 bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
   switch(equals(right)) {
-  case StructEqualityResult::EQUAL:
-    return true;
-  case StructEqualityResult::NOT_EQUAL:
-    return false;
-  case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-    KJ_FAIL_REQUIRE();
+    case StructEqualityResult::EQUAL:
+      return true;
+    case StructEqualityResult::NOT_EQUAL:
+      return false;
+    case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+      KJ_FAIL_REQUIRE();
   }
 }
 
 bool AnyList::Reader::operator ==(AnyList::Reader right) {
   switch(equals(right)) {
-  case StructEqualityResult::EQUAL:
-    return true;
-  case StructEqualityResult::NOT_EQUAL:
-    return false;
-  case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-    KJ_FAIL_REQUIRE();
+    case StructEqualityResult::EQUAL:
+      return true;
+    case StructEqualityResult::NOT_EQUAL:
+      return false;
+    case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+      KJ_FAIL_REQUIRE();
   }
 }
 
