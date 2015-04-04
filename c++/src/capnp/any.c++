@@ -198,7 +198,8 @@ bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
     case StructEqualityResult::NOT_EQUAL:
       return false;
     case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-      KJ_FAIL_REQUIRE();
+      KJ_FAIL_REQUIRE(
+        "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
     default:
       KJ_UNREACHABLE;
   }
@@ -211,7 +212,8 @@ bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
     case StructEqualityResult::NOT_EQUAL:
       return false;
     case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-      KJ_FAIL_REQUIRE();
+      KJ_FAIL_REQUIRE(
+        "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
     default:
       KJ_UNREACHABLE;
   }
@@ -224,7 +226,8 @@ bool AnyList::Reader::operator ==(AnyList::Reader right) {
     case StructEqualityResult::NOT_EQUAL:
       return false;
     case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-      KJ_FAIL_REQUIRE();
+      KJ_FAIL_REQUIRE(
+        "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
     default:
       KJ_UNREACHABLE;
   }
