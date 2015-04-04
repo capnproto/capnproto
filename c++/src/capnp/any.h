@@ -74,6 +74,14 @@ template <> struct Kind_<AnyList> { static constexpr Kind kind = Kind::OTHER; };
 // =======================================================================================
 // AnyPointer!
 
+enum class StructEqualityResult {
+  NOT_EQUAL,
+  EQUAL,
+  UNKNOWN_CONTAINS_CAPS
+};
+
+kj::StringPtr KJ_STRINGIFY(StructEqualityResult res);
+
 struct AnyPointer {
   // Reader/Builder for the `AnyPointer` field type, i.e. a pointer that can point to an arbitrary
   // object.
@@ -96,6 +104,12 @@ struct AnyPointer {
     inline bool isStruct() const { return getPointerType() == PointerType::STRUCT; }
     inline bool isList() const { return getPointerType() == PointerType::LIST; }
     inline bool isCapability() const { return getPointerType() == PointerType::CAPABILITY; }
+
+    StructEqualityResult equals(AnyPointer::Reader right);
+    bool operator ==(AnyPointer::Reader right);
+    inline bool operator !=(AnyPointer::Reader right) {
+      return !(*this == right);
+    }
 
     template <typename T>
     inline ReaderFor<T> getAs() const;
@@ -143,6 +157,16 @@ struct AnyPointer {
     inline bool isStruct() { return getPointerType() == PointerType::STRUCT; }
     inline bool isList() { return getPointerType() == PointerType::LIST; }
     inline bool isCapability() { return getPointerType() == PointerType::CAPABILITY; }
+
+    inline StructEqualityResult equals(AnyPointer::Reader right) {
+      return asReader().equals(right);
+    }
+    inline bool operator ==(AnyPointer::Reader right) {
+      return asReader() == right;
+    }
+    inline bool operator !=(AnyPointer::Reader right) {
+      return !(*this == right);
+    }
 
     inline void clear();
     // Set to null.
@@ -434,6 +458,12 @@ public:
     return List<AnyPointer>::Reader(_reader.getPointerSectionAsList());
   }
 
+  StructEqualityResult equals(AnyStruct::Reader right);
+  bool operator ==(AnyStruct::Reader right);
+  inline bool operator !=(AnyStruct::Reader right) {
+    return !(*this == right);
+  }
+
   template <typename T>
   ReaderFor<T> as() const {
     // T must be a struct type.
@@ -462,6 +492,16 @@ public:
   }
   List<AnyPointer>::Builder getPointerSection() {
     return List<AnyPointer>::Builder(_builder.getPointerSectionAsList());
+  }
+
+  inline StructEqualityResult equals(AnyStruct::Reader right) {
+    return asReader().equals(right);
+  }
+  inline bool operator ==(AnyStruct::Reader right) {
+    return asReader() == right;
+  }
+  inline bool operator !=(AnyStruct::Reader right) {
+    return !(*this == right);
   }
 
   inline operator Reader() const { return Reader(_builder.asReader()); }
@@ -573,6 +613,12 @@ public:
 
   inline kj::ArrayPtr<const byte> getRawBytes() { return _reader.asRawBytes(); }
 
+  StructEqualityResult equals(AnyList::Reader right);
+  inline bool operator ==(AnyList::Reader right);
+  inline bool operator !=(AnyList::Reader right) {
+    return !(*this == right);
+  }
+
   template <typename T> ReaderFor<T> as() {
     // T must be List<U>.
     return ReaderFor<T>(_reader);
@@ -597,6 +643,14 @@ public:
 
   inline ElementSize getElementSize() { return _builder.getElementSize(); }
   inline uint size() { return _builder.size() / ELEMENTS; }
+
+  StructEqualityResult equals(AnyList::Reader right);
+  inline bool operator ==(AnyList::Reader right) {
+    return asReader() == right;
+  }
+  inline bool operator !=(AnyList::Reader right) {
+    return !(*this == right);
+  }
 
   template <typename T> BuilderFor<T> as() {
     // T must be List<U>.
@@ -804,22 +858,6 @@ inline Orphan<AnyPointer> AnyPointer::Builder::disownAs<AnyPointer>() {
 template <>
 inline Orphan<AnyPointer> Orphan<AnyPointer>::releaseAs() {
   return kj::mv(*this);
-}
-
-enum class StructEqualityResult {
-  NOT_EQUAL,
-  EQUAL,
-  UNKNOWN_CONTAINS_CAPS
-};
-
-kj::StringPtr KJ_STRINGIFY(StructEqualityResult res);
-
-StructEqualityResult equal(AnyStruct::Reader left, AnyStruct::Reader right);
-StructEqualityResult equal(List<AnyStruct>::Reader left, List<AnyStruct>::Reader right);
-StructEqualityResult equal(AnyPointer::Reader left, AnyPointer::Reader right);
-bool operator ==(AnyPointer::Reader left, AnyPointer::Reader right);
-inline bool operator !=(AnyPointer::Reader left, AnyPointer::Reader right) {
-  return !(left == right);
 }
 
 namespace _ {  // private

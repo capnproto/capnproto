@@ -79,8 +79,8 @@ kj::Own<ClientHook> AnyPointer::Pipeline::asCap() {
 
 #endif  // !CAPNP_LITE
 
-StructEqualityResult equal(AnyStruct::Reader left, AnyStruct::Reader right) {
-  auto dataL = left.getDataSection();
+StructEqualityResult AnyStruct::Reader::equals(AnyStruct::Reader right) {
+  auto dataL = getDataSection();
   size_t dataSizeL = dataL.size();
   while(dataSizeL > 0 && dataL[dataSizeL - 1] == 0) {
     -- dataSizeL;
@@ -100,7 +100,7 @@ StructEqualityResult equal(AnyStruct::Reader left, AnyStruct::Reader right) {
     return StructEqualityResult::NOT_EQUAL;
   }
 
-  auto ptrsL = left.getPointerSection();
+  auto ptrsL = getPointerSection();
   auto ptrsR = right.getPointerSection();
 
   size_t i = 0;
@@ -108,7 +108,7 @@ StructEqualityResult equal(AnyStruct::Reader left, AnyStruct::Reader right) {
   for(; i < kj::min(ptrsL.size(), ptrsR.size()); i++) {
     auto l = ptrsL[i];
     auto r = ptrsR[i];
-    switch(equal(l, r)) {
+    switch(l.equals(r)) {
     case StructEqualityResult::EQUAL:
       break;
     case StructEqualityResult::NOT_EQUAL:
@@ -133,19 +133,19 @@ kj::StringPtr KJ_STRINGIFY(StructEqualityResult res) {
   }
 }
 
-StructEqualityResult equal(AnyList::Reader left, AnyList::Reader right) {
-  if(left.size() != right.size()) {
+StructEqualityResult AnyList::Reader::equals(AnyList::Reader right) {
+  if(size() != right.size()) {
     return StructEqualityResult::NOT_EQUAL;
   }
-  switch(left.getElementSize()) {
+  switch(getElementSize()) {
   case ElementSize::VOID:
   case ElementSize::BIT:
   case ElementSize::BYTE:
   case ElementSize::TWO_BYTES:
   case ElementSize::FOUR_BYTES:
   case ElementSize::EIGHT_BYTES:
-    if(left.getElementSize() == right.getElementSize()) {
-      if(memcmp(left.getRawBytes().begin(), right.getRawBytes().begin(), left.getRawBytes().size()) == 0) {
+    if(getElementSize() == right.getElementSize()) {
+      if(memcmp(getRawBytes().begin(), right.getRawBytes().begin(), getRawBytes().size()) == 0) {
         return StructEqualityResult::EQUAL;
       } else {
         return StructEqualityResult::NOT_EQUAL;
@@ -155,10 +155,10 @@ StructEqualityResult equal(AnyList::Reader left, AnyList::Reader right) {
     }
   case ElementSize::POINTER:
   case ElementSize::INLINE_COMPOSITE: {
-    auto llist = left.as<List<AnyStruct>>();
+    auto llist = as<List<AnyStruct>>();
     auto rlist = right.as<List<AnyStruct>>();
-    for(size_t i = 0; i < left.size(); i++) {
-      switch(equal(llist[i], rlist[i])) {
+    for(size_t i = 0; i < size(); i++) {
+      switch(llist[i].equals(rlist[i])) {
       case StructEqualityResult::EQUAL:
         break;
       case StructEqualityResult::NOT_EQUAL:
@@ -172,29 +172,29 @@ StructEqualityResult equal(AnyList::Reader left, AnyList::Reader right) {
   }
 }
 
-StructEqualityResult equal(AnyPointer::Reader left, AnyPointer::Reader right) {
+StructEqualityResult AnyPointer::Reader::equals(AnyPointer::Reader right) {
   if(right.isCapability()) {
     return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
   }
-  if(left.isNull()) {
+  if(isNull()) {
     if(right.isNull()) {
       return StructEqualityResult::EQUAL;
     } else {
       return StructEqualityResult::NOT_EQUAL;
     }
-  } else if(left.isStruct()) {
+  } else if(isStruct()) {
     if(right.isStruct()) {
-      return equal(left.getAs<AnyStruct>(), right.getAs<AnyStruct>());
+      return getAs<AnyStruct>().equals(right.getAs<AnyStruct>());
     } else {
       return StructEqualityResult::NOT_EQUAL;
     }
-  } else if(left.isList()) {
+  } else if(isList()) {
     if(right.isList()) {
-      return equal(left.getAs<AnyList>(), right.getAs<AnyList>());
+      return getAs<AnyList>().equals(right.getAs<AnyList>());
     } else {
       return StructEqualityResult::NOT_EQUAL;
     }
-  } else if(left.isCapability()) {
+  } else if(isCapability()) {
     return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
   } else {
     // There aren't currently any other types of pointers
@@ -202,8 +202,30 @@ StructEqualityResult equal(AnyPointer::Reader left, AnyPointer::Reader right) {
   }
 }
 
-bool operator ==(AnyPointer::Reader left, AnyPointer::Reader right) {
-  switch(equal(left, right)) {
+bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
+  switch(equals(right)) {
+  case StructEqualityResult::EQUAL:
+    return true;
+  case StructEqualityResult::NOT_EQUAL:
+    return false;
+  case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+    KJ_FAIL_REQUIRE();
+  }
+}
+
+bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
+  switch(equals(right)) {
+  case StructEqualityResult::EQUAL:
+    return true;
+  case StructEqualityResult::NOT_EQUAL:
+    return false;
+  case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
+    KJ_FAIL_REQUIRE();
+  }
+}
+
+bool AnyList::Reader::operator ==(AnyList::Reader right) {
+  switch(equals(right)) {
   case StructEqualityResult::EQUAL:
     return true;
   case StructEqualityResult::NOT_EQUAL:
