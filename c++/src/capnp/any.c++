@@ -105,6 +105,7 @@ StructEqualityResult AnyStruct::Reader::equals(AnyStruct::Reader right) {
 
   size_t i = 0;
 
+  auto eqResult = StructEqualityResult::EQUAL;
   for(; i < kj::min(ptrsL.size(), ptrsR.size()); i++) {
     auto l = ptrsL[i];
     auto r = ptrsR[i];
@@ -114,12 +115,14 @@ StructEqualityResult AnyStruct::Reader::equals(AnyStruct::Reader right) {
       case StructEqualityResult::NOT_EQUAL:
         return StructEqualityResult::NOT_EQUAL;
       case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-        return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+        eqResult = StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+        break;
+      default:
+        KJ_UNREACHABLE;
     }
   }
 
-  return StructEqualityResult::EQUAL;
-
+  return eqResult;
 }
 
 kj::StringPtr KJ_STRINGIFY(StructEqualityResult res) {
@@ -130,6 +133,8 @@ kj::StringPtr KJ_STRINGIFY(StructEqualityResult res) {
       return "EQUAL";
     case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
       return "UNKNOWN_CONTAINS_CAPS";
+    default:
+      KJ_UNREACHABLE;
   }
 }
 
@@ -137,6 +142,7 @@ StructEqualityResult AnyList::Reader::equals(AnyList::Reader right) {
   if(size() != right.size()) {
     return StructEqualityResult::NOT_EQUAL;
   }
+  auto eqResult = StructEqualityResult::EQUAL;
   switch(getElementSize()) {
     case ElementSize::VOID:
     case ElementSize::BIT:
@@ -164,11 +170,16 @@ StructEqualityResult AnyList::Reader::equals(AnyList::Reader right) {
           case StructEqualityResult::NOT_EQUAL:
             return StructEqualityResult::NOT_EQUAL;
           case StructEqualityResult::UNKNOWN_CONTAINS_CAPS:
-            return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+            eqResult = StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+            break;
+          default:
+            KJ_UNREACHABLE;
         }
       }
-      return StructEqualityResult::EQUAL;
+      return eqResult;
     }
+    default:
+      KJ_UNREACHABLE;
   }
 }
 
