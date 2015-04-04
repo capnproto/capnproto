@@ -173,32 +173,21 @@ StructEqualityResult AnyList::Reader::equals(AnyList::Reader right) {
 }
 
 StructEqualityResult AnyPointer::Reader::equals(AnyPointer::Reader right) {
-  if(right.isCapability()) {
-    return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+  if(getPointerType() != right.getPointerType()) {
+    return StructEqualityResult::NOT_EQUAL;
   }
-  if(isNull()) {
-    if(right.isNull()) {
+  switch(getPointerType()) {
+    case PointerType::NULL_:
       return StructEqualityResult::EQUAL;
-    } else {
-      return StructEqualityResult::NOT_EQUAL;
-    }
-  } else if(isStruct()) {
-    if(right.isStruct()) {
+    case PointerType::STRUCT:
       return getAs<AnyStruct>().equals(right.getAs<AnyStruct>());
-    } else {
-      return StructEqualityResult::NOT_EQUAL;
-    }
-  } else if(isList()) {
-    if(right.isList()) {
+    case PointerType::LIST:
       return getAs<AnyList>().equals(right.getAs<AnyList>());
-    } else {
-      return StructEqualityResult::NOT_EQUAL;
-    }
-  } else if(isCapability()) {
-    return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
-  } else {
-    // There aren't currently any other types of pointers
-    KJ_FAIL_REQUIRE();
+    case PointerType::CAPABILITY:
+      return StructEqualityResult::UNKNOWN_CONTAINS_CAPS;
+    default:
+      // There aren't currently any other types of pointers
+      KJ_FAIL_REQUIRE();
   }
 }
 
