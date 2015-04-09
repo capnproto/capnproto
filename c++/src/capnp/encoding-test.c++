@@ -1632,7 +1632,7 @@ TEST(Encoding, NameAnnotation) {
   EXPECT_EQ(true, root.getGoodFieldName());
   EXPECT_TRUE(root.isGoodFieldName());
 
-  root.setBar(0xff);
+  root.setBar(static_cast<int8_t>(0xff));
   EXPECT_FALSE(root.isGoodFieldName());
 
   root.setAnotherGoodFieldName(test::RenamedStruct::RenamedEnum::QUX);

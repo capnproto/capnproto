@@ -123,7 +123,7 @@ struct WirePointer {
     KJ_DREQUIRE(segment->containsInterval(
         reinterpret_cast<word*>(this), reinterpret_cast<word*>(this + 1)));
     KJ_DREQUIRE(segment->containsInterval(target, target));
-    offsetAndKind.set(((target - reinterpret_cast<word*>(this) - 1) << 2) | kind);
+    offsetAndKind.set(static_cast<uint32_t>(((target - reinterpret_cast<word*>(this) - 1) << 2) | kind));
   }
   KJ_ALWAYS_INLINE(void setKindWithZeroOffset(Kind kind)) {
     offsetAndKind.set(kind);
@@ -784,9 +784,9 @@ struct WireHelpers {
           case ElementSize::TWO_BYTES:
           case ElementSize::FOUR_BYTES:
           case ElementSize::EIGHT_BYTES: {
-            WordCount wordCount = roundBitsUpToWords(
+            WordCount wordCount = static_cast<WordCount>(roundBitsUpToWords(
                 ElementCount64(src->listRef.elementCount()) *
-                dataBitsPerElement(src->listRef.elementSize()));
+                dataBitsPerElement(src->listRef.elementSize())));
             const word* srcPtr = src->target();
             word* dstPtr = allocate(dst, segment, wordCount, WirePointer::LIST, nullptr);
             memcpy(dstPtr, srcPtr, wordCount * BYTES_PER_WORD / BYTES);
@@ -1018,7 +1018,7 @@ struct WireHelpers {
     auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
 
     // Calculate size of the list.
-    WordCount wordCount = roundBitsUpToWords(ElementCount64(elementCount) * step);
+    WordCount wordCount = static_cast<WordCount>(roundBitsUpToWords(ElementCount64(elementCount) * step));
 
     // Allocate the list.
     word* ptr = allocate(ref, segment, wordCount, WirePointer::LIST, orphanArena);
@@ -1426,7 +1426,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(SegmentAnd<Text::Builder> setTextPointer(
       WirePointer* ref, SegmentBuilder* segment, Text::Reader value,
       BuilderArena* orphanArena = nullptr)) {
-    auto allocation = initTextPointer(ref, segment, value.size() * BYTES, orphanArena);
+    auto allocation = initTextPointer(ref, segment, static_cast<ByteCount>(value.size()) * BYTES, orphanArena);
     memcpy(allocation.value.begin(), value.begin(), value.size());
     return allocation;
   }
@@ -1483,7 +1483,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(SegmentAnd<Data::Builder> setDataPointer(
       WirePointer* ref, SegmentBuilder* segment, Data::Reader value,
       BuilderArena* orphanArena = nullptr)) {
-    auto allocation = initDataPointer(ref, segment, value.size() * BYTES, orphanArena);
+    auto allocation = initDataPointer(ref, segment, static_cast<ByteCount>(value.size()) * BYTES, orphanArena);
     memcpy(allocation.value.begin(), value.begin(), value.size());
     return allocation;
   }
@@ -1520,7 +1520,7 @@ struct WireHelpers {
   static SegmentAnd<word*> setStructPointer(
       SegmentBuilder* segment, WirePointer* ref, StructReader value,
       BuilderArena* orphanArena = nullptr) {
-    WordCount dataSize = roundBitsUpToWords(value.dataSize);
+    WordCount dataSize = static_cast<WordCount>(roundBitsUpToWords(value.dataSize));
     WordCount totalSize = dataSize + value.pointerCount * WORDS_PER_POINTER;
 
     word* ptr = allocate(ref, segment, totalSize, WirePointer::STRUCT, orphanArena);
@@ -1556,7 +1556,7 @@ struct WireHelpers {
   static SegmentAnd<word*> setListPointer(
       SegmentBuilder* segment, WirePointer* ref, ListReader value,
       BuilderArena* orphanArena = nullptr) {
-    WordCount totalSize = roundBitsUpToWords(value.elementCount * value.step);
+    WordCount totalSize = static_cast<WordCount>(roundBitsUpToWords(value.elementCount * value.step));
 
     if (value.elementSize != ElementSize::INLINE_COMPOSITE) {
       // List of non-structs.
@@ -1583,7 +1583,7 @@ struct WireHelpers {
                            orphanArena);
       ref->listRef.setInlineComposite(totalSize);
 
-      WordCount dataSize = roundBitsUpToWords(value.structDataSize);
+      WordCount dataSize = static_cast<WordCount>(roundBitsUpToWords(value.structDataSize));
       WirePointerCount pointerCount = value.structPointerCount;
 
       WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
@@ -2723,12 +2723,12 @@ OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Re
   KJ_REQUIRE(reinterpret_cast<uintptr_t>(data.begin()) % sizeof(void*) == 0,
              "Cannot referenceExternalData() that is not aligned.");
 
-  auto wordCount = WireHelpers::roundBytesUpToWords(data.size() * BYTES);
+  auto wordCount = WireHelpers::roundBytesUpToWords(static_cast<ByteCount>(data.size()) * BYTES);
   kj::ArrayPtr<const word> words(reinterpret_cast<const word*>(data.begin()), wordCount / WORDS);
 
   OrphanBuilder result;
   result.tagAsPtr()->setKindForOrphan(WirePointer::LIST);
-  result.tagAsPtr()->listRef.set(ElementSize::BYTE, data.size() * ELEMENTS);
+  result.tagAsPtr()->listRef.set(ElementSize::BYTE, static_cast<ElementCount>(data.size()) * ELEMENTS);
   result.segment = arena->addExternalSegment(words);
 
   // const_cast OK here because we will check whether the segment is writable when we try to get

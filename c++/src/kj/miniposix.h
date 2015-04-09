@@ -49,10 +49,10 @@ namespace miniposix {
 typedef int ssize_t;
 
 inline ssize_t read(int fd, void* buffer, size_t size) {
-  return ::_read(fd, buffer, size);
+  return ::_read(fd, buffer, static_cast<unsigned int>(size));
 }
 inline ssize_t write(int fd, const void* buffer, size_t size) {
-  return ::_write(fd, buffer, size);
+  return ::_write(fd, buffer, static_cast<unsigned int>(size));
 }
 inline int close(int fd) {
   return ::_close(fd);

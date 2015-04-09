@@ -148,7 +148,7 @@ TEST(Any, AnyStruct) {
     MallocMessageBuilder b2;
     auto root2 = b2.getRoot<test::TestAnyPointer>();
     auto sb = root2.getAnyPointerField().initAsAnyStruct(
-        r.getDataSection().size() / 8, r.getPointerSection().size());
+        static_cast<uint>(r.getDataSection().size() / 8), static_cast<uint>(r.getPointerSection().size()));
 
     EXPECT_EQ(48, sb.getDataSection().size());
     EXPECT_EQ(20, sb.getPointerSection().size());

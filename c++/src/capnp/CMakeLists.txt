@@ -6,7 +6,6 @@ set(capnp_sources_lite
   blob.c++
   arena.c++
   layout.c++
-  list.c++
   any.c++
   message.c++
   schema.capnp.c++

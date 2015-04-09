@@ -224,7 +224,7 @@ SegmentBuilder* BuilderArena::addSegmentInternal(kj::ArrayPtr<T> content) {
   }
 
   kj::Own<SegmentBuilder> newBuilder = kj::heap<SegmentBuilder>(
-      this, SegmentId(segmentState->builders.size() + 1), content, &this->dummyLimiter);
+      this, SegmentId(static_cast<int>(segmentState->builders.size()) + 1), content, &this->dummyLimiter);
   SegmentBuilder* result = newBuilder.get();
   segmentState->builders.add(kj::mv(newBuilder));
 

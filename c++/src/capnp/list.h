@@ -378,7 +378,7 @@ struct List<List<T>, Kind::LIST> {
     }
     void set(uint index, std::initializer_list<ReaderFor<T>> value) {
       KJ_IREQUIRE(index < size());
-      auto l = init(index, value.size());
+      auto l = init(index, static_cast<uint>(value.size()));
       uint i = 0;
       for (auto& element: value) {
         l.set(i++, element);

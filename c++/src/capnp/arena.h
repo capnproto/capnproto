@@ -384,7 +384,7 @@ inline const word* SegmentReader::getStartPtr() { return ptr.begin(); }
 inline WordCount SegmentReader::getOffsetTo(const word* ptr) {
   return intervalLength(this->ptr.begin(), ptr);
 }
-inline WordCount SegmentReader::getSize() { return ptr.size() * WORDS; }
+inline WordCount SegmentReader::getSize() { return static_cast<WordCount>(ptr.size()) * WORDS; }
 inline kj::ArrayPtr<const word> SegmentReader::getArray() { return ptr; }
 inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amount); }
 

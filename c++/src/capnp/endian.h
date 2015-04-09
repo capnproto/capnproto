@@ -215,8 +215,8 @@ public:
   KJ_ALWAYS_INLINE(void set(T newValue)) {
     uint16_t raw;
     memcpy(&raw, &newValue, sizeof(T));
-    bytes[0] = raw;
-    bytes[1] = raw >> 8;
+    bytes[0] = static_cast<uint8_t>(raw);
+    bytes[1] = static_cast<uint8_t>(raw >> 8);
   }
 
 private:
@@ -273,14 +273,14 @@ public:
   KJ_ALWAYS_INLINE(void set(T newValue)) {
     uint64_t raw;
     memcpy(&raw, &newValue, sizeof(T));
-    bytes[0] = raw;
-    bytes[1] = raw >> 8;
-    bytes[2] = raw >> 16;
-    bytes[3] = raw >> 24;
-    bytes[4] = raw >> 32;
-    bytes[5] = raw >> 40;
-    bytes[6] = raw >> 48;
-    bytes[7] = raw >> 56;
+    bytes[0] = static_cast<uint8_t>(raw);
+    bytes[1] = static_cast<uint8_t>(raw >> 8);
+    bytes[2] = static_cast<uint8_t>(raw >> 16);
+    bytes[3] = static_cast<uint8_t>(raw >> 24);
+    bytes[4] = static_cast<uint8_t>(raw >> 32);
+    bytes[5] = static_cast<uint8_t>(raw >> 40);
+    bytes[6] = static_cast<uint8_t>(raw >> 48);
+    bytes[7] = static_cast<uint8_t>(raw >> 56);
   }
 
 private:
