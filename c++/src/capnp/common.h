@@ -107,10 +107,7 @@ enum class PointerType {
 
   STRUCT,
   LIST,
-  CAPABILITY,
-
-  OTHER
-  // currently unused
+  CAPABILITY
 };
 
 namespace schemas {

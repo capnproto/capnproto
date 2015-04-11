@@ -133,9 +133,8 @@ kj::StringPtr KJ_STRINGIFY(Equality res) {
       return "EQUAL";
     case Equality::UNKNOWN_CONTAINS_CAPS:
       return "UNKNOWN_CONTAINS_CAPS";
-    default:
-      KJ_UNREACHABLE;
   }
+  KJ_UNREACHABLE;
 }
 
 Equality AnyList::Reader::equals(AnyList::Reader right) {
@@ -178,9 +177,8 @@ Equality AnyList::Reader::equals(AnyList::Reader right) {
       }
       return eqResult;
     }
-    default:
-      KJ_UNREACHABLE;
   }
+  KJ_UNREACHABLE;
 }
 
 Equality AnyPointer::Reader::equals(AnyPointer::Reader right) {
@@ -196,10 +194,9 @@ Equality AnyPointer::Reader::equals(AnyPointer::Reader right) {
       return getAs<AnyList>().equals(right.getAs<AnyList>());
     case PointerType::CAPABILITY:
       return Equality::UNKNOWN_CONTAINS_CAPS;
-    default:
-      // There aren't currently any other types of pointers
-      KJ_UNREACHABLE;
   }
+  // There aren't currently any other types of pointers
+  KJ_UNREACHABLE;
 }
 
 bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
@@ -211,9 +208,8 @@ bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
     case Equality::UNKNOWN_CONTAINS_CAPS:
       KJ_FAIL_REQUIRE(
         "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
-    default:
-      KJ_UNREACHABLE;
   }
+  KJ_UNREACHABLE;
 }
 
 bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
@@ -225,9 +221,8 @@ bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
     case Equality::UNKNOWN_CONTAINS_CAPS:
       KJ_FAIL_REQUIRE(
         "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
-    default:
-      KJ_UNREACHABLE;
   }
+  KJ_UNREACHABLE;
 }
 
 bool AnyList::Reader::operator ==(AnyList::Reader right) {
@@ -239,9 +234,8 @@ bool AnyList::Reader::operator ==(AnyList::Reader right) {
     case Equality::UNKNOWN_CONTAINS_CAPS:
       KJ_FAIL_REQUIRE(
         "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
-    default:
-      KJ_UNREACHABLE;
   }
+  KJ_UNREACHABLE;
 }
 
 }  // namespace capnp
