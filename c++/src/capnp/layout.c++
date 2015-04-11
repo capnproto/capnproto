@@ -2267,20 +2267,24 @@ void PointerBuilder::clear() {
   memset(pointer, 0, sizeof(WirePointer));
 }
 
-bool PointerBuilder::isNull() {
-  return pointer->isNull();
-}
-
-bool PointerBuilder::isStruct() {
-  WirePointer* ptr = pointer;
-  WireHelpers::followFars(ptr, ptr->target(), segment);
-  return ptr->kind() == WirePointer::Kind::STRUCT;
-}
-
-bool PointerBuilder::isList() {
-  WirePointer* ptr = pointer;
-  WireHelpers::followFars(ptr, ptr->target(), segment);
-  return ptr->kind() == WirePointer::Kind::LIST;
+PointerType PointerBuilder::getPointerType() {
+  if(pointer->isNull()) {
+    return PointerType::NULL_;
+  } else {
+    WirePointer* ptr = pointer;
+    WireHelpers::followFars(ptr, ptr->target(), segment);
+    switch(ptr->kind()) {
+    case WirePointer::Kind::FAR:
+      KJ_FAIL_REQUIRE();
+    case WirePointer::Kind::STRUCT:
+      return PointerType::STRUCT;
+    case WirePointer::Kind::LIST:
+      return PointerType::LIST;
+    case WirePointer::Kind::OTHER:
+      // TODO: make sure we're only looking at capability pointers
+      return PointerType::CAPABILITY;
+    }
+  }
 }
 
 void PointerBuilder::transferFrom(PointerBuilder other) {
@@ -2368,24 +2372,26 @@ MessageSizeCounts PointerReader::targetSize() const {
                             : WireHelpers::totalSize(segment, pointer, nestingLimit);
 }
 
-bool PointerReader::isNull() const {
-  return pointer == nullptr || pointer->isNull();
-}
-
-bool PointerReader::isStruct() const {
-  word* refTarget = nullptr;
-  const WirePointer* ptr = pointer;
-  SegmentReader* sgmt = segment;
-  WireHelpers::followFars(ptr, refTarget, sgmt);
-  return ptr->kind() == WirePointer::Kind::STRUCT;
-}
-
-bool PointerReader::isList() const {
-  word* refTarget = nullptr;
-  const WirePointer* ptr = pointer;
-  SegmentReader* sgmt = segment;
-  WireHelpers::followFars(ptr, refTarget, sgmt);
-  return ptr->kind() == WirePointer::Kind::LIST;
+PointerType PointerReader::getPointerType() const {
+  if(pointer == nullptr || pointer->isNull()) {
+    return PointerType::NULL_;
+  } else {
+    word* refTarget = nullptr;
+    const WirePointer* ptr = pointer;
+    SegmentReader* sgmt = segment;
+    WireHelpers::followFars(ptr, refTarget, sgmt);
+    switch(ptr->kind()) {
+    case WirePointer::Kind::FAR:
+      KJ_FAIL_REQUIRE();
+    case WirePointer::Kind::STRUCT:
+      return PointerType::STRUCT;
+    case WirePointer::Kind::LIST:
+      return PointerType::LIST;
+    case WirePointer::Kind::OTHER:
+      // TODO: make sure we're only looking at capability pointers
+      return PointerType::CAPABILITY;
+    }
+  }
 }
 
 kj::Maybe<Arena&> PointerReader::getArena() const {
@@ -2598,6 +2604,16 @@ Data::Reader ListReader::asData() {
 
   return Data::Reader(reinterpret_cast<const byte*>(ptr), elementCount / ELEMENTS);
 }
+
+kj::ArrayPtr<const byte> ListReader::asRawBytes() {
+  KJ_REQUIRE(structPointerCount == 0 * POINTERS,
+             "Expected data only, got pointers.") {
+    return kj::ArrayPtr<const byte>();
+  }
+
+  return kj::ArrayPtr<const byte>(reinterpret_cast<const byte*>(ptr), structDataSize * elementCount / ELEMENTS);
+}
+
 
 StructReader ListReader::getStructElement(ElementCount index) const {
   KJ_REQUIRE(nestingLimit > 0,

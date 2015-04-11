@@ -261,6 +261,58 @@ TEST(Any, AnyStructListCapInSchema) {
   }
 }
 
+
+
+TEST(Any, Equals) {
+  MallocMessageBuilder builderA;
+  auto rootA = builderA.getRoot<test::TestAllTypes>();
+  auto anyA = builderA.getRoot<AnyPointer>();
+  initTestMessage(rootA);
+
+  MallocMessageBuilder builderB;
+  auto rootB = builderB.getRoot<test::TestAllTypes>();
+  auto anyB = builderB.getRoot<AnyPointer>();
+  initTestMessage(rootB);
+
+  EXPECT_EQ(Equality::EQUAL, anyA.equals(anyB));
+
+  rootA.setBoolField(false);
+  EXPECT_EQ(Equality::NOT_EQUAL, anyA.equals(anyB));
+
+  rootB.setBoolField(false);
+  EXPECT_EQ(Equality::EQUAL, anyA.equals(anyB));
+
+  rootB.setEnumField(test::TestEnum::GARPLY);
+  EXPECT_EQ(Equality::NOT_EQUAL, anyA.equals(anyB));
+
+  rootA.setEnumField(test::TestEnum::GARPLY);
+  EXPECT_EQ(Equality::EQUAL, anyA.equals(anyB));
+
+  rootA.getStructField().setTextField("buzz");
+  EXPECT_EQ(Equality::NOT_EQUAL, anyA.equals(anyB));
+
+  rootB.getStructField().setTextField("buzz");
+  EXPECT_EQ(Equality::EQUAL, anyA.equals(anyB));
+
+  rootA.initVoidList(3);
+  EXPECT_EQ(Equality::NOT_EQUAL, anyA.equals(anyB));
+
+  rootB.initVoidList(3);
+  EXPECT_EQ(Equality::EQUAL, anyA.equals(anyB));
+
+  rootA.getBoolList().set(2, true);
+  EXPECT_EQ(Equality::NOT_EQUAL, anyA.equals(anyB));
+
+  rootB.getBoolList().set(2, true);
+  EXPECT_EQ(Equality::EQUAL, anyA.equals(anyB));
+
+  rootB.getStructList()[1].setTextField("my NEW structlist 2");
+  EXPECT_EQ(Equality::NOT_EQUAL, anyA.equals(anyB));
+
+  rootA.getStructList()[1].setTextField("my NEW structlist 2");
+  EXPECT_EQ(Equality::EQUAL, anyA.equals(anyB));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
