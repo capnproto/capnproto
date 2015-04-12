@@ -182,6 +182,8 @@ public:
 #endif
 
 std::string fileLine(std::string file, int line) {
+  file = trimSourceFilename(file.c_str()).cStr();
+
   file += ':';
   char buffer[32];
   sprintf(buffer, "%d", line);
@@ -266,7 +268,7 @@ TEST(Debug, Exception) {
   int line = __LINE__; Exception exception = KJ_EXCEPTION(DISCONNECTED, "foo", i);
 
   EXPECT_EQ(Exception::Type::DISCONNECTED, exception.getType());
-  EXPECT_STREQ(__FILE__, exception.getFile());
+  EXPECT_TRUE(kj::StringPtr(__FILE__).endsWith(exception.getFile()));
   EXPECT_EQ(line, exception.getLine());
   EXPECT_EQ("foo; i = 123", exception.getDescription());
 }

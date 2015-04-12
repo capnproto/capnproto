@@ -268,7 +268,7 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                         ArrayPtr<String> argValues) {
-  getExceptionCallback().logMessage(severity, file, line, 0,
+  getExceptionCallback().logMessage(severity, trimSourceFilename(file).cStr(), line, 0,
       makeDescriptionImpl(LOG, nullptr, 0, macroArgs, argValues));
 }
 

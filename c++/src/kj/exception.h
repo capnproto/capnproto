@@ -307,6 +307,10 @@ void printStackTraceOnCrash();
 // a stack trace. You should call this as early as possible on program startup. Programs using
 // KJ_MAIN get this automatically.
 
+kj::StringPtr trimSourceFilename(kj::StringPtr filename);
+// Given a source code file name, trim off noisy prefixes like "src/" or
+// "/ekam-provider/canonical/".
+
 }  // namespace kj
 
 #endif  // KJ_EXCEPTION_H_

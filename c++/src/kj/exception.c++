@@ -207,6 +207,28 @@ void printStackTraceOnCrash() {
 #endif
 }
 
+kj::StringPtr trimSourceFilename(kj::StringPtr filename) {
+  // Removes noisy prefixes from source code file name.
+
+  static constexpr const char* PREFIXES[] = {
+    "../",
+    "/ekam-provider/canonical/",
+    "/ekam-provider/c++header/",
+    "src/",
+    "tmp/"
+  };
+
+retry:
+  for (const char* prefix: PREFIXES) {
+    if (filename.startsWith(prefix)) {
+      filename = filename.slice(strlen(prefix));
+      goto retry;
+    }
+  }
+
+  return filename;
+}
+
 StringPtr KJ_STRINGIFY(Exception::Type type) {
   static const char* TYPE_STRINGS[] = {
     "failed",
@@ -253,12 +275,12 @@ String KJ_STRINGIFY(const Exception& e) {
 }
 
 Exception::Exception(Type type, const char* file, int line, String description) noexcept
-    : file(file), line(line), type(type), description(mv(description)) {
+    : file(trimSourceFilename(file).cStr()), line(line), type(type), description(mv(description)) {
   traceCount = kj::getStackTrace(trace).size();
 }
 
 Exception::Exception(Type type, String file, int line, String description) noexcept
-    : ownFile(kj::mv(file)), file(ownFile.cStr()), line(line), type(type),
+    : ownFile(kj::mv(file)), file(trimSourceFilename(ownFile).cStr()), line(line), type(type),
       description(mv(description)) {
   traceCount = kj::getStackTrace(trace).size();
 }
