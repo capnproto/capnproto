@@ -199,7 +199,7 @@ Equality AnyPointer::Reader::equals(AnyPointer::Reader right) {
   KJ_UNREACHABLE;
 }
 
-bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
+bool AnyPointer::Reader::operator==(AnyPointer::Reader right) {
   switch(equals(right)) {
     case Equality::EQUAL:
       return true;
@@ -212,7 +212,7 @@ bool AnyPointer::Reader::operator ==(AnyPointer::Reader right) {
   KJ_UNREACHABLE;
 }
 
-bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
+bool AnyStruct::Reader::operator==(AnyStruct::Reader right) {
   switch(equals(right)) {
     case Equality::EQUAL:
       return true;
@@ -225,7 +225,7 @@ bool AnyStruct::Reader::operator ==(AnyStruct::Reader right) {
   KJ_UNREACHABLE;
 }
 
-bool AnyList::Reader::operator ==(AnyList::Reader right) {
+bool AnyList::Reader::operator==(AnyList::Reader right) {
   switch(equals(right)) {
     case Equality::EQUAL:
       return true;

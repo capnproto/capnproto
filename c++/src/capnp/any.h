@@ -106,8 +106,8 @@ struct AnyPointer {
     inline bool isCapability() const { return getPointerType() == PointerType::CAPABILITY; }
 
     Equality equals(AnyPointer::Reader right);
-    bool operator ==(AnyPointer::Reader right);
-    inline bool operator !=(AnyPointer::Reader right) {
+    bool operator==(AnyPointer::Reader right);
+    inline bool operator!=(AnyPointer::Reader right) {
       return !(*this == right);
     }
 
@@ -161,10 +161,10 @@ struct AnyPointer {
     inline Equality equals(AnyPointer::Reader right) {
       return asReader().equals(right);
     }
-    inline bool operator ==(AnyPointer::Reader right) {
+    inline bool operator==(AnyPointer::Reader right) {
       return asReader() == right;
     }
-    inline bool operator !=(AnyPointer::Reader right) {
+    inline bool operator!=(AnyPointer::Reader right) {
       return !(*this == right);
     }
 
@@ -462,8 +462,8 @@ public:
   }
 
   Equality equals(AnyStruct::Reader right);
-  bool operator ==(AnyStruct::Reader right);
-  inline bool operator !=(AnyStruct::Reader right) {
+  bool operator==(AnyStruct::Reader right);
+  inline bool operator!=(AnyStruct::Reader right) {
     return !(*this == right);
   }
 
@@ -500,10 +500,10 @@ public:
   inline Equality equals(AnyStruct::Reader right) {
     return asReader().equals(right);
   }
-  inline bool operator ==(AnyStruct::Reader right) {
+  inline bool operator==(AnyStruct::Reader right) {
     return asReader() == right;
   }
-  inline bool operator !=(AnyStruct::Reader right) {
+  inline bool operator!=(AnyStruct::Reader right) {
     return !(*this == right);
   }
 
@@ -617,8 +617,8 @@ public:
   inline kj::ArrayPtr<const byte> getRawBytes() { return _reader.asRawBytes(); }
 
   Equality equals(AnyList::Reader right);
-  inline bool operator ==(AnyList::Reader right);
-  inline bool operator !=(AnyList::Reader right) {
+  bool operator==(AnyList::Reader right);
+  inline bool operator!=(AnyList::Reader right) {
     return !(*this == right);
   }
 
@@ -648,10 +648,10 @@ public:
   inline uint size() { return _builder.size() / ELEMENTS; }
 
   Equality equals(AnyList::Reader right);
-  inline bool operator ==(AnyList::Reader right) {
+  inline bool operator==(AnyList::Reader right) {
     return asReader() == right;
   }
-  inline bool operator !=(AnyList::Reader right) {
+  inline bool operator!=(AnyList::Reader right) {
     return !(*this == right);
   }
 
