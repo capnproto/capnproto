@@ -515,7 +515,7 @@ public:
             //     https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=781060
             // For the moment, we can get away with skipping it as the previous line will set
             // things up in a way that allows the test to complete successfully.
-            // TODO(soon): Remove this #if block when the bug is fixed.
+            // TODO(0.6): Remove this #if block when the bug is fixed.
             return;
 #endif
             box.set("cap", kj::heap<TestExtendsImpl>(callCount));
