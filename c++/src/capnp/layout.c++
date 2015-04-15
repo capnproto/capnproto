@@ -2274,16 +2274,17 @@ PointerType PointerBuilder::getPointerType() {
     WirePointer* ptr = pointer;
     WireHelpers::followFars(ptr, ptr->target(), segment);
     switch(ptr->kind()) {
-    case WirePointer::Kind::FAR:
-      KJ_FAIL_REQUIRE();
-    case WirePointer::Kind::STRUCT:
-      return PointerType::STRUCT;
-    case WirePointer::Kind::LIST:
-      return PointerType::LIST;
-    case WirePointer::Kind::OTHER:
-      // TODO: make sure we're only looking at capability pointers
-      return PointerType::CAPABILITY;
+      case WirePointer::FAR:
+        KJ_FAIL_ASSERT("far pointer not followed?");
+      case WirePointer::STRUCT:
+        return PointerType::STRUCT;
+      case WirePointer::LIST:
+        return PointerType::LIST;
+      case WirePointer::OTHER:
+        KJ_REQUIRE(ptr->isCapability(), "unknown pointer type");
+        return PointerType::CAPABILITY;
     }
+    KJ_UNREACHABLE;
   }
 }
 
@@ -2381,16 +2382,17 @@ PointerType PointerReader::getPointerType() const {
     SegmentReader* sgmt = segment;
     WireHelpers::followFars(ptr, refTarget, sgmt);
     switch(ptr->kind()) {
-    case WirePointer::Kind::FAR:
-      KJ_FAIL_REQUIRE();
-    case WirePointer::Kind::STRUCT:
-      return PointerType::STRUCT;
-    case WirePointer::Kind::LIST:
-      return PointerType::LIST;
-    case WirePointer::Kind::OTHER:
-      // TODO: make sure we're only looking at capability pointers
-      return PointerType::CAPABILITY;
+      case WirePointer::FAR:
+        KJ_FAIL_ASSERT("far pointer not followed?");
+      case WirePointer::STRUCT:
+        return PointerType::STRUCT;
+      case WirePointer::LIST:
+        return PointerType::LIST;
+      case WirePointer::OTHER:
+        KJ_REQUIRE(ptr->isCapability(), "unknown pointer type");
+        return PointerType::CAPABILITY;
     }
+    KJ_UNREACHABLE;
   }
 }
 
