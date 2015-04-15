@@ -138,6 +138,8 @@ public:
   Capability::Client bootstrap();
   // Get the server's bootstrap interface.
 
+  inline kj::Promise<void> onDisconnect() { return network.onDisconnect(); }
+
 private:
   TwoPartyVatNetwork network;
   RpcSystem<rpc::twoparty::VatId> rpcSystem;
