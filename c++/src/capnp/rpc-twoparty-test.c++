@@ -308,6 +308,34 @@ TEST(TwoPartyNetwork, Abort) {
   EXPECT_TRUE(conn->receiveIncomingMessage().wait(ioContext.waitScope) == nullptr);
 }
 
+TEST(TwoPartyNetwork, ConvenienceClasses) {
+  auto ioContext = kj::setupAsyncIo();
+
+  int callCount = 0;
+  TwoPartyServer server(kj::heap<TestInterfaceImpl>(callCount));
+
+  auto address = ioContext.provider->getNetwork()
+      .parseAddress("127.0.0.1").wait(ioContext.waitScope);
+
+  auto listener = address->listen();
+  auto listenPromise = server.listen(*listener);
+
+  address = ioContext.provider->getNetwork()
+      .parseAddress("127.0.0.1", listener->getPort()).wait(ioContext.waitScope);
+
+  auto connection = address->connect().wait(ioContext.waitScope);
+  TwoPartyClient client(*connection);
+  auto cap = client.bootstrap().castAs<test::TestInterface>();
+
+  auto request = cap.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+  EXPECT_EQ(0, callCount);
+  auto response = request.send().wait(ioContext.waitScope);
+  EXPECT_EQ("foo", response.getX());
+  EXPECT_EQ(1, callCount);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

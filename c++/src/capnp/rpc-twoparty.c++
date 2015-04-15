@@ -141,4 +141,49 @@ kj::Promise<void> TwoPartyVatNetwork::shutdown() {
   return kj::mv(result);
 }
 
+// =======================================================================================
+
+TwoPartyServer::TwoPartyServer(Capability::Client bootstrapInterface)
+    : bootstrapInterface(kj::mv(bootstrapInterface)), tasks(*this) {}
+
+struct TwoPartyServer::AcceptedConnection {
+  kj::Own<kj::AsyncIoStream> connection;
+  TwoPartyVatNetwork network;
+  RpcSystem<rpc::twoparty::VatId> rpcSystem;
+
+  explicit AcceptedConnection(Capability::Client bootstrapInterface,
+                              kj::Own<kj::AsyncIoStream>&& connectionParam)
+      : connection(kj::mv(connectionParam)),
+        network(*connection, rpc::twoparty::Side::SERVER),
+        rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))) {}
+};
+
+kj::Promise<void> TwoPartyServer::listen(kj::ConnectionReceiver& listener) {
+  return listener.accept()
+      .then([this,&listener](kj::Own<kj::AsyncIoStream>&& connection) mutable {
+    auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface, kj::mv(connection));
+
+    // Run the connection until disconnect.
+    auto promise = connectionState->network.onDisconnect();
+    tasks.add(promise.attach(kj::mv(connectionState)));
+
+    return listen(listener);
+  });
+}
+
+void TwoPartyServer::taskFailed(kj::Exception&& exception) {
+  KJ_LOG(ERROR, exception);
+}
+
+TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection)
+    : network(connection, rpc::twoparty::Side::CLIENT),
+      rpcSystem(makeRpcClient(network)) {}
+
+Capability::Client TwoPartyClient::bootstrap() {
+  MallocMessageBuilder message(4);
+  auto vatId = message.getRoot<rpc::twoparty::VatId>();
+  vatId.setSide(rpc::twoparty::Side::SERVER);
+  return rpcSystem.bootstrap(vatId);
+}
+
 }  // namespace capnp

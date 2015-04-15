@@ -54,6 +54,7 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
 public:
   TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                      ReaderOptions receiveOptions = ReaderOptions());
+  KJ_DISALLOW_COPY(TwoPartyVatNetwork);
 
   kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
   // Returns a promise that resolves when the peer disconnects.
@@ -105,6 +106,41 @@ private:
   kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override;
   kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override;
   kj::Promise<void> shutdown() override;
+};
+
+class TwoPartyServer: private kj::TaskSet::ErrorHandler {
+  // Convenience class which implements a simple server which accepts connections on a listener
+  // socket and serices them as two-party connections.
+
+public:
+  explicit TwoPartyServer(Capability::Client bootstrapInterface);
+
+  kj::Promise<void> listen(kj::ConnectionReceiver& listener);
+  // Listens for connections on the given listener. The returned promise never resolves unless an
+  // exception is thrown while trying to accept. You may discard the returned promise to cancel
+  // listening.
+
+private:
+  Capability::Client bootstrapInterface;
+  kj::TaskSet tasks;
+
+  struct AcceptedConnection;
+
+  void taskFailed(kj::Exception&& exception) override;
+};
+
+class TwoPartyClient {
+  // Convenience class which implements a simple client.
+
+public:
+  explicit TwoPartyClient(kj::AsyncIoStream& connection);
+
+  Capability::Client bootstrap();
+  // Get the server's bootstrap interface.
+
+private:
+  TwoPartyVatNetwork network;
+  RpcSystem<rpc::twoparty::VatId> rpcSystem;
 };
 
 }  // namespace capnp
