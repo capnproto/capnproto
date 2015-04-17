@@ -195,6 +195,7 @@ void printStackTraceOnCrash() {
   KJ_SYSCALL(sigaction(SIGBUS, &action, nullptr));
   KJ_SYSCALL(sigaction(SIGFPE, &action, nullptr));
   KJ_SYSCALL(sigaction(SIGABRT, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGILL, &action, nullptr));
 
   // Dump stack on unimplemented syscalls -- useful in seccomp sandboxes.
   KJ_SYSCALL(sigaction(SIGSYS, &action, nullptr));

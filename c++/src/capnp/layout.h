@@ -334,6 +334,7 @@ private:
 
   friend class StructBuilder;
   friend class ListBuilder;
+  friend class OrphanBuilder;
 };
 
 class PointerReader {

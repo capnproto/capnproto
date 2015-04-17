@@ -177,6 +177,11 @@ public:
   // If `from` points just past the current end of the segment, then move the end back to `to`.
   // Otherwise, do nothing.
 
+  inline bool tryExtend(word* from, word* to);
+  // If `from` points just past the current end of the segment, and `to` is within the segment
+  // boundaries, then move the end up to `to` and return true. Otherwise, do nothing and return
+  // false.
+
 private:
   word* pos;
   // Pointer to a pointer to the current end point of the segment, i.e. the location where the
@@ -443,6 +448,16 @@ inline void SegmentBuilder::reset() {
 
 inline void SegmentBuilder::tryTruncate(word* from, word* to) {
   if (pos == from) pos = to;
+}
+
+inline bool SegmentBuilder::tryExtend(word* from, word* to) {
+  // Careful about overflow.
+  if (pos == from && to <= ptr.end() && to >= from) {
+    pos = to;
+    return true;
+  } else {
+    return false;
+  }
 }
 
 }  // namespace _ (private)

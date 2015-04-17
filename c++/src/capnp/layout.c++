@@ -2294,6 +2294,7 @@ void PointerBuilder::transferFrom(PointerBuilder other) {
     memset(pointer, 0, sizeof(*pointer));
   }
   WireHelpers::transferPointer(segment, pointer, other.segment, other.pointer);
+  memset(other.pointer, 0, sizeof(*other.pointer));
 }
 
 void PointerBuilder::copyFrom(PointerReader other) {
@@ -2613,9 +2614,9 @@ kj::ArrayPtr<const byte> ListReader::asRawBytes() {
     return kj::ArrayPtr<const byte>();
   }
 
-  return kj::ArrayPtr<const byte>(reinterpret_cast<const byte*>(ptr), structDataSize * elementCount / ELEMENTS);
+  return kj::ArrayPtr<const byte>(reinterpret_cast<const byte*>(ptr),
+      WireHelpers::roundBitsUpToBytes(elementCount * (structDataSize / ELEMENTS)) / BYTES);
 }
-
 
 StructReader ListReader::getStructElement(ElementCount index) const {
   KJ_REQUIRE(nestingLimit > 0,
@@ -2851,26 +2852,123 @@ void OrphanBuilder::truncate(ElementCount size, bool isText) {
     return;
   }
 
-  // TODO(someday): Implement truncation of all sizes.
-  KJ_ASSERT(ref->listRef.elementSize() == ElementSize::BYTE,
-            "Not implemented: truncate non-blob.");
+  ElementSize elementSize = ref->listRef.elementSize();
 
-  auto oldSize = ref->listRef.elementCount();
-  KJ_REQUIRE(size <= oldSize, "Truncate size must be smaller than existing size.") {
-    return;
+  if (elementSize == ElementSize::INLINE_COMPOSITE) {
+    WordCount oldWordCount = ref->listRef.inlineCompositeWordCount();
+
+    WirePointer* tag = reinterpret_cast<WirePointer*>(target);
+    ++target;
+    KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
+               "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
+      return;
+    }
+    StructSize structSize(tag->structRef.dataSize.get(), tag->structRef.ptrCount.get());
+    WordCount elementWordCount = structSize.total();
+
+    ElementCount oldSize = tag->inlineCompositeListElementCount();
+    word* newEndWord = target + size * (elementWordCount / ELEMENTS);
+    word* oldEndWord = target + oldWordCount;
+
+    if (size <= oldSize) {
+      // Zero the trailing elements.
+      for (uint i = size / ELEMENTS; i < oldSize / ELEMENTS; i++) {
+        WireHelpers::zeroObject(segment, tag, target + i * elementWordCount);
+      }
+      ref->listRef.setInlineComposite(size * (elementWordCount / ELEMENTS));
+      tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
+      segment->tryTruncate(oldEndWord, newEndWord);
+    } else if (newEndWord <= oldEndWord) {
+      // Apparently the old list was over-allecated? The word count is more than needed to store
+      // the elements. This is "valid" but shouldn't happen in practice unless someone is toying
+      // with us.
+      word* expectedEnd = target + oldSize * (elementWordCount / ELEMENTS);
+      KJ_ASSERT(newEndWord >= expectedEnd);
+      memset(expectedEnd, 0, (newEndWord - expectedEnd) * sizeof(word));
+      tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
+    } else {
+      if (segment->tryExtend(oldEndWord, newEndWord)) {
+        // Done in-place. Nothing else to do now; the new memory is already zero'd.
+        ref->listRef.setInlineComposite(size * (elementWordCount / ELEMENTS));
+        tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
+      } else {
+        // Need to re-allocate and transfer.
+        StructSize structSize(tag->structRef.dataSize.get(), tag->structRef.ptrCount.get());
+        OrphanBuilder replacement = initStructList(segment->getArena(), size, structSize);
+
+        ListBuilder newList = replacement.asStructList(structSize);
+        word* element = target;
+        for (uint i = 0; i < oldSize / ELEMENTS; i++) {
+          newList.getStructElement(i * ELEMENTS).transferContentFrom(
+              StructBuilder(segment, element,
+                            reinterpret_cast<WirePointer*>(element + structSize.data),
+                            structSize.data * BITS_PER_WORD, structSize.pointers));
+          element += elementWordCount;
+        }
+
+        *this = kj::mv(replacement);
+      }
+    }
+  } else if (elementSize == ElementSize::POINTER) {
+    auto oldSize = ref->listRef.elementCount();
+    word* newEndWord = target + size * (POINTER_SIZE_IN_WORDS / ELEMENTS);
+    word* oldEndWord = target + oldSize * (POINTER_SIZE_IN_WORDS / ELEMENTS);
+
+    if (size <= oldSize) {
+      // Zero the trailing elements.
+      for (WirePointer* element = reinterpret_cast<WirePointer*>(newEndWord);
+           element < reinterpret_cast<WirePointer*>(oldEndWord); ++element) {
+        WireHelpers::zeroPointerAndFars(segment, element);
+      }
+      ref->listRef.set(ElementSize::POINTER, size);
+      segment->tryTruncate(oldEndWord, newEndWord);
+    } else {
+      if (segment->tryExtend(oldEndWord, newEndWord)) {
+        // Done in-place. Nothing else to do now; the new memory is already zero'd.
+        ref->listRef.set(ElementSize::POINTER, size);
+      } else {
+        // Need to re-allocate and transfer.
+        OrphanBuilder replacement = initList(segment->getArena(), size, ElementSize::POINTER);
+        ListBuilder newList = replacement.asList(ElementSize::POINTER);
+        WirePointer* oldPointers = reinterpret_cast<WirePointer*>(target);
+        for (uint i = 0; i < oldSize / ELEMENTS; i++) {
+          newList.getPointerElement(i * ELEMENTS).transferFrom(
+              PointerBuilder(segment, oldPointers + i));
+        }
+        *this = kj::mv(replacement);
+      }
+    }
+  } else {
+    auto oldSize = ref->listRef.elementCount();
+    auto step = dataBitsPerElement(elementSize);
+    word* newEndWord = target + WireHelpers::roundBitsUpToWords(size * step);
+    word* oldEndWord = target + WireHelpers::roundBitsUpToWords(oldSize * step);
+
+    if (size <= oldSize) {
+      // When truncating text, we want to set the null terminator as well, so we'll do our zeroing
+      // at the byte level.
+      byte* begin = reinterpret_cast<byte*>(target);
+      byte* newEndByte = begin + WireHelpers::roundBitsUpToBytes(size * step) - isText;
+      byte* oldEndByte = reinterpret_cast<byte*>(oldEndWord);
+
+      memset(newEndByte, 0, oldEndByte - newEndByte);
+      ref->listRef.set(elementSize, size);
+      segment->tryTruncate(oldEndWord, newEndWord);
+    } else {
+      // We're trying to extend, not truncate.
+      if (segment->tryExtend(oldEndWord, newEndWord)) {
+        // Done in-place. Nothing else to do now; the memory is already zero'd.
+        ref->listRef.set(elementSize, size);
+      } else {
+        // Need to re-allocate and transfer.
+        OrphanBuilder replacement = initList(segment->getArena(), size, elementSize);
+        ListBuilder newList = replacement.asList(elementSize);
+        auto words = WireHelpers::roundBitsUpToWords(dataBitsPerElement(elementSize) * oldSize);
+        memcpy(newList.ptr, target, words * BYTES_PER_WORD / BYTES);
+        *this = kj::mv(replacement);
+      }
+    }
   }
-
-  ref->listRef.set(ref->listRef.elementSize(), size);
-
-  byte* begin = reinterpret_cast<byte*>(target);
-  byte* truncPoint = begin + size * (1 * BYTES / ELEMENTS);
-  byte* end = begin + oldSize * (1 * BYTES / ELEMENTS);
-  memset(truncPoint - isText, 0, end - truncPoint + isText);
-
-  word* truncWord = target + WireHelpers::roundBytesUpToWords(size * (1 * BYTES / ELEMENTS));
-  word* endWord = target + WireHelpers::roundBytesUpToWords(oldSize * (1 * BYTES / ELEMENTS));
-
-  segment->tryTruncate(endWord, truncWord);
 }
 
 void OrphanBuilder::euthanize() {
