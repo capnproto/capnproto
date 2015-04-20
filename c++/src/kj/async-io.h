@@ -477,6 +477,12 @@ AsyncIoContext setupAsyncIo();
 //       print(text);
 //       return 0;
 //     }
+//
+// WARNING: An AsyncIoContext can only be used in the thread and process that created it. In
+//   particular, note that after a fork(), an AsyncIoContext created in the parent process will
+//   not work correctly in the child, even if the parent ceases to use its copy. In particular
+//   note that this means that server processes which daemonize themselves at startup must wait
+//   until after daemonization to create an AsyncIoContext.
 
 // =======================================================================================
 // inline implementation details
