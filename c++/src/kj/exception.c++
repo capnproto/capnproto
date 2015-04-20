@@ -128,7 +128,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
 
     size_t len = strlen(line);
     if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
-    lines[i++] = str("\n", line, ": called here");
+    lines[i++] = str("\n    ", trimSourceFilename(line), ": called here");
   }
 
   // Skip remaining input.
