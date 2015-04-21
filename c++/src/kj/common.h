@@ -349,15 +349,11 @@ struct DisallowConstCopy {
   // disallow const copies.  Hey, cool, that's exactly what we want.
 
   DisallowConstCopy() = default;
-  DisallowConstCopy(DisallowConstCopy&);
+  DisallowConstCopy(DisallowConstCopy&) = default;
   DisallowConstCopy(DisallowConstCopy&&) = default;
-  DisallowConstCopy& operator=(DisallowConstCopy&);
+  DisallowConstCopy& operator=(DisallowConstCopy&) = default;
   DisallowConstCopy& operator=(DisallowConstCopy&&) = default;
 };
-
-// Apparently these cannot be defaulted inside the class due to some obscure C++ rule.
-inline DisallowConstCopy::DisallowConstCopy(DisallowConstCopy&) = default;
-inline DisallowConstCopy& DisallowConstCopy::operator=(DisallowConstCopy&) = default;
 
 template <typename T>
 struct DisallowConstCopyIfNotConst: public DisallowConstCopy {
