@@ -431,7 +431,7 @@ private:
   State state;
 
   Own<PromiseNode> inner;
-  // In PRE_STEP1 / STEP1, a PromiseNode for a Promise<T>.
+  // In STEP1, a PromiseNode for a Promise<T>.
   // In STEP2, a PromiseNode for a T.
 
   Event* onReadyEvent = nullptr;
