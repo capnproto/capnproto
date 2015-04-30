@@ -148,7 +148,7 @@ void registerSignalHandler(int signum) {
 void registerReservedSignal() {
   registerSignalHandler(reservedSignal);
 
-  // We also disable SIGPIPE because users of UnixEventLoop almost certainly don't want it.
+  // We also disable SIGPIPE because users of UnixEventPort almost certainly don't want it.
   while (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
     int error = errno;
     if (error != EINTR) {

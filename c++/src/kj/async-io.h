@@ -473,7 +473,7 @@ AsyncIoContext setupAsyncIo();
 //
 //       // And we can wait for the promise to complete.  Note that you can only use `wait()`
 //       // from the top level, not from inside a promise callback.
-//       String text = textPromise.wait();
+//       String text = textPromise.wait(ioContext.waitScope);
 //       print(text);
 //       return 0;
 //     }

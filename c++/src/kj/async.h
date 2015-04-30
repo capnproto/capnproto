@@ -597,7 +597,7 @@ class EventLoop {
   //       return 0;
   //     }
   //
-  // Most applications that do I/O will prefer to use `setupIoEventLoop()` from `async-io.h` rather
+  // Most applications that do I/O will prefer to use `setupAsyncIo()` from `async-io.h` rather
   // than allocate an `EventLoop` directly.
 
 public:
