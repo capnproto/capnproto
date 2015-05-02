@@ -40,8 +40,18 @@ extremely fast Cap'n-Proto-specific compression scheme to remove them. Cap'n Pro
 it's still faster.
 
 When bandwidth really matters, you should apply general-purpose compression, like
-[zlib](http://www.zlib.net/) or [Snappy](https://code.google.com/p/snappy/), regardless of your
+[zlib](http://www.zlib.net/) or [LZ4](https://github.com/Cyan4973/lz4), regardless of your
 encoding format.
+
+**_Isn't this all horribly insecure?_**
+
+No no no! To be clear, we're NOT just casting a buffer pointer to a struct pointer and calling it a day.
+
+Cap'n Proto generates classes with accessor methods that you use to traverse the message. These accessors validate pointers before following them. If a pointer is invalid (e.g. out-of-bounds), the library can throw an exception or simply replace the value with a default / empty object (your choice).
+
+Thus, Cap'n Proto checks the structural integrity of the message just like any other serialization protocol would. And, just like any other protocol, it is up to the app to check the validity of the content.
+
+Cap'n Proto was built to be used in [Sandstorm.io](https://sandstorm.io), where security is a major concern. As of this writing, Cap'n Proto has not undergone a security review, therefore we suggest caution when handling messages from untrusted sources. That said, our response to security issues was once described by security guru Ben Laurie as ["the most awesome response I've ever had."](https://twitter.com/BenLaurie/status/575079375307153409) (Please report all security issues to [security@sandstorm.io](mailto:security@sandstorm.io).)
 
 **_Are there other advantages?_**
 

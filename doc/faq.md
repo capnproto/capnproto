@@ -173,6 +173,32 @@ and then put them together as a list later, because struct lists are encoded as 
 struct values, not an array of pointers to struct values.  You can, however, allocate any inner
 objects embedded within those structs as orphans.
 
+## Security
+
+### Is Cap'n Proto secure?
+
+What is your threat model?
+
+### Sorry. Can Cap'n Proto be used to deserialize malicious messages?
+
+Cap'n Proto's serialization layer is designed to be safe against malicious input. The Cap'n Proto implementation should never segfault, corrupt memory, leak secrets, execute attacker-specified code, consume excessive resources, etc. as a result of any sequence of input bytes. Moreover, the API is carefully designed to avoid putting app developers into situations where it is easy to write insecure code -- we consider it a bug in Cap'n Proto if apps commonly misuse it in a way that is a security problem.
+
+With all that said, Cap'n Proto's C++ reference implementation has not yet undergone a formal security review. It may have bugs.
+
+### Is it safe to use Cap'n Proto RPC with a malicious peer?
+
+Cap'n Proto's RPC layer is explicitly designed to be useful for interactions between mutually-distrusting parties. Its capability-based security model makes it easy to express complex interactions securely.
+
+At this time, the RPC layer is not robust against resource exhaustion attacks, possibly allowing denials of service.
+
+### Is Cap'n Proto encrypted?
+
+Cap'n Proto may be layered on top of an existing encrypted transport, such as TLS, but at this time it is the application's responsibility to add this layer. We plan to integrate this into the Cap'n Proto library proper in the future.
+
+### How do I report security bugs?
+
+Please email [security@sandstorm.io](mailto:security@sandstorm.io).
+
 ## Sandstorm
 
 ### How does Cap'n Proto relate to Sandstorm.io?
