@@ -39,7 +39,7 @@
 #include "blob.h"
 #include "endian.h"
 
-#if __mips__ && !defined(CAPNP_CANONICALIZE_NAN)
+#if (defined(__mips__) || defined(__hppa__)) && !defined(CAPNP_CANONICALIZE_NAN)
 #define CAPNP_CANONICALIZE_NAN 1
 // Explicitly detect NaNs and canonicalize them to the quiet NaN value as would be returned by
 // __builtin_nan("") on systems implementing the IEEE-754 recommended (but not required) NaN
