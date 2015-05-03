@@ -854,6 +854,8 @@ public:
   // the original Orphan<DynamicStruct> is no longer valid after this call; ownership is
   // transferred to the returned Orphan<T>.
 
+  // TODO(someday): Support truncate().
+
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 

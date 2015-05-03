@@ -188,12 +188,22 @@ template <typename T, Kind = CAPNP_KIND(T)>
 struct OrphanGetImpl;
 
 template <typename T>
+struct OrphanGetImpl<T, Kind::PRIMITIVE> {
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, _::elementSizeForType<T>());
+  }
+};
+
+template <typename T>
 struct OrphanGetImpl<T, Kind::STRUCT> {
   static inline typename T::Builder apply(_::OrphanBuilder& builder) {
     return typename T::Builder(builder.asStruct(_::structSize<T>()));
   }
   static inline typename T::Reader applyReader(const _::OrphanBuilder& builder) {
     return typename T::Reader(builder.asStructReader(_::structSize<T>()));
+  }
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, _::structSize<T>());
   }
 };
 
@@ -206,6 +216,9 @@ struct OrphanGetImpl<T, Kind::INTERFACE> {
   static inline typename T::Client applyReader(const _::OrphanBuilder& builder) {
     return typename T::Client(builder.asCapability());
   }
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, ElementSize::POINTER);
+  }
 };
 #endif  // !CAPNP_LITE
 
@@ -217,6 +230,9 @@ struct OrphanGetImpl<List<T, k>, Kind::LIST> {
   static inline typename List<T>::Reader applyReader(const _::OrphanBuilder& builder) {
     return typename List<T>::Reader(builder.asListReader(_::ElementSizeForType<T>::value));
   }
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, ElementSize::POINTER);
+  }
 };
 
 template <typename T>
@@ -226,6 +242,9 @@ struct OrphanGetImpl<List<T, Kind::STRUCT>, Kind::LIST> {
   }
   static inline typename List<T>::Reader applyReader(const _::OrphanBuilder& builder) {
     return typename List<T>::Reader(builder.asListReader(_::ElementSizeForType<T>::value));
+  }
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, ElementSize::POINTER);
   }
 };
 
@@ -237,6 +256,9 @@ struct OrphanGetImpl<Text, Kind::BLOB> {
   static inline Text::Reader applyReader(const _::OrphanBuilder& builder) {
     return Text::Reader(builder.asTextReader());
   }
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, ElementSize::POINTER);
+  }
 };
 
 template <>
@@ -246,6 +268,9 @@ struct OrphanGetImpl<Data, Kind::BLOB> {
   }
   static inline Data::Reader applyReader(const _::OrphanBuilder& builder) {
     return Data::Reader(builder.asDataReader());
+  }
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, ElementSize::POINTER);
   }
 };
 
@@ -263,12 +288,17 @@ inline ReaderFor<T> Orphan<T>::getReader() const {
 
 template <typename T>
 inline void Orphan<T>::truncate(uint size) {
-  builder.truncate(size * ELEMENTS, false);
+  _::OrphanGetImpl<ListElementType<T>>::truncateListOf(builder, size * ELEMENTS);
 }
 
 template <>
 inline void Orphan<Text>::truncate(uint size) {
-  builder.truncate(size * ELEMENTS, true);
+  builder.truncateText(size * ELEMENTS);
+}
+
+template <>
+inline void Orphan<Data>::truncate(uint size) {
+  builder.truncate(size * ELEMENTS, ElementSize::BYTE);
 }
 
 template <typename T>

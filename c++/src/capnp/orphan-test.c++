@@ -1061,6 +1061,20 @@ TEST(Orphans, ExtendDataCopy) {
   EXPECT_EQ(32, orphan2.getReader()[0]);
 }
 
+TEST(Orphans, ExtendDataFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownDataField();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ(0, reader[i]);
+  }
+}
+
 TEST(Orphans, TruncateText) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<Text>(17);
@@ -1128,6 +1142,20 @@ TEST(Orphans, ExtendTextCopy) {
   }
 
   EXPECT_EQ(32, orphan2.getReader()[0]);
+}
+
+TEST(Orphans, ExtendTextFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownTextField();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ('\0', reader[i]);
+  }
 }
 
 TEST(Orphans, TruncatePrimitiveList) {
@@ -1218,6 +1246,20 @@ TEST(Orphans, ExtendPrimitiveListCopy) {
   EXPECT_EQ(123456789, reader[0]);
 
   EXPECT_EQ(32, orphan2.getReader()[0]);
+}
+
+TEST(Orphans, ExtendPointerListFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownUInt32List();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ(0, reader[i]);
+  }
 }
 
 TEST(Orphans, TruncatePointerList) {
@@ -1331,6 +1373,20 @@ TEST(Orphans, ExtendPointerListCopy) {
   EXPECT_EQ("foo0", reader[0]);
 
   EXPECT_EQ(32, orphan2.getReader()[0]);
+}
+
+TEST(Orphans, ExtendPointerListFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownTextList();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ("", reader[i]);
+  }
 }
 
 TEST(Orphans, TruncateStructList) {
@@ -1468,6 +1524,20 @@ TEST(Orphans, ExtendStructListCopy) {
   EXPECT_EQ(123456789, reader[0].getUInt32Field());
 
   EXPECT_EQ(32, orphan2.getReader()[0]);
+}
+
+TEST(Orphans, ExtendStructListFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownStructList();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    checkTestMessageAllZero(reader[i]);
+  }
 }
 
 }  // namespace

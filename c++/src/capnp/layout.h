@@ -759,7 +759,14 @@ public:
   Text::Reader asTextReader() const;
   Data::Reader asDataReader() const;
 
-  void truncate(ElementCount size, bool isText);
+  bool truncate(ElementCount size, bool isText) KJ_WARN_UNUSED_RESULT;
+  // Resize the orphan list to the given size. Returns false if the list is currently empty but
+  // the requested size is non-zero, in which case the caller will need to allocate a new list.
+
+  void truncate(ElementCount size, ElementSize elementSize);
+  void truncate(ElementCount size, StructSize elementSize);
+  void truncateText(ElementCount size);
+  // Versions of truncate() that know how to allocate a new list if needed.
 
 private:
   static_assert(1 * POINTERS * WORDS_PER_POINTER == 1 * WORDS,

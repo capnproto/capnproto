@@ -2840,17 +2840,22 @@ Data::Reader OrphanBuilder::asDataReader() const {
   return WireHelpers::readDataPointer(segment, tagAsPtr(), location, nullptr, 0 * BYTES);
 }
 
-void OrphanBuilder::truncate(ElementCount size, bool isText) {
-  if (isText) size += 1 * ELEMENTS;
-
+bool OrphanBuilder::truncate(ElementCount size, bool isText) {
   WirePointer* ref = tagAsPtr();
   SegmentBuilder* segment = this->segment;
 
   word* target = WireHelpers::followFars(ref, location, segment);
 
-  KJ_REQUIRE(ref->kind() == WirePointer::LIST, "Can't truncate non-list.") {
-    return;
+  if (ref->isNull()) {
+    // We don't know the right element size, so we can't resize this list.
+    return size == 0 * ELEMENTS;
   }
+
+  KJ_REQUIRE(ref->kind() == WirePointer::LIST, "Can't truncate non-list.") {
+    return false;
+  }
+
+  if (isText) size += 1 * ELEMENTS;
 
   ElementSize elementSize = ref->listRef.elementSize();
 
@@ -2861,7 +2866,7 @@ void OrphanBuilder::truncate(ElementCount size, bool isText) {
     ++target;
     KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
                "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
-      return;
+      return false;
     }
     StructSize structSize(tag->structRef.dataSize.get(), tag->structRef.ptrCount.get());
     WordCount elementWordCount = structSize.total();
@@ -2968,6 +2973,26 @@ void OrphanBuilder::truncate(ElementCount size, bool isText) {
         *this = kj::mv(replacement);
       }
     }
+  }
+
+  return true;
+}
+
+void OrphanBuilder::truncate(ElementCount size, ElementSize elementSize) {
+  if (!truncate(size, false)) {
+    *this = initList(segment->getArena(), size, elementSize);
+  }
+}
+
+void OrphanBuilder::truncate(ElementCount size, StructSize elementSize) {
+  if (!truncate(size, false)) {
+    *this = initStructList(segment->getArena(), size, elementSize);
+  }
+}
+
+void OrphanBuilder::truncateText(ElementCount size) {
+  if (!truncate(size, true)) {
+    *this = initText(segment->getArena(), size * (1 * BYTES / ELEMENTS));
   }
 }
 
