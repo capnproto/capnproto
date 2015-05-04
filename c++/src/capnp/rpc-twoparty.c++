@@ -179,6 +179,12 @@ TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection)
     : network(connection, rpc::twoparty::Side::CLIENT),
       rpcSystem(makeRpcClient(network)) {}
 
+
+TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection,
+                               Capability::Client bootstrapInterface)
+    : network(connection, rpc::twoparty::Side::CLIENT),
+      rpcSystem(network, bootstrapInterface) {}
+
 Capability::Client TwoPartyClient::bootstrap() {
   MallocMessageBuilder message(4);
   auto vatId = message.getRoot<rpc::twoparty::VatId>();
