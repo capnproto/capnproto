@@ -134,6 +134,7 @@ class TwoPartyClient {
 
 public:
   explicit TwoPartyClient(kj::AsyncIoStream& connection);
+  TwoPartyClient(kj::AsyncIoStream& connection, Capability::Client bootstrapInterface);
 
   Capability::Client bootstrap();
   // Get the server's bootstrap interface.
