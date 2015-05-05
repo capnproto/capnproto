@@ -296,7 +296,7 @@ UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint fla
 }
 
 UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
-  KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_DEL, fd, nullptr));
+  KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_DEL, fd, nullptr)) { break; }
 }
 
 void UnixEventPort::FdObserver::fire(short events) {
