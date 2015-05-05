@@ -276,7 +276,7 @@ Debug::Fault::~Fault() noexcept(false) {
   if (exception != nullptr) {
     Exception copy = mv(*exception);
     delete exception;
-    throwRecoverableException(mv(copy));
+    throwRecoverableException(mv(copy), 2);
   }
 }
 
@@ -284,7 +284,7 @@ void Debug::Fault::fatal() {
   Exception copy = mv(*exception);
   delete exception;
   exception = nullptr;
-  throwFatalException(mv(copy));
+  throwFatalException(mv(copy), 2);
   abort();
 }
 

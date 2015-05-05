@@ -157,6 +157,12 @@ typedef unsigned char byte;
 #endif
 
 #if defined(_MSC_VER)
+#define KJ_NOINLINE __declspec(noinline)
+#else
+#define KJ_NOINLINE __attribute__((noinline))
+#endif
+
+#if defined(_MSC_VER)
 #define KJ_NORETURN(prototype) __declspec(noreturn) prototype
 #define KJ_UNUSED
 #define KJ_WARN_UNUSED_RESULT

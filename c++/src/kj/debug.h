@@ -301,7 +301,7 @@ public:
           const char* condition, const char* macroArgs);
     ~Fault() noexcept(false);
 
-    KJ_NORETURN(void fatal());
+    KJ_NOINLINE KJ_NORETURN(void fatal());
     // Throw the exception.
 
   private:

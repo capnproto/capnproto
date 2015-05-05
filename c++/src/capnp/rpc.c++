@@ -116,6 +116,11 @@ void fromException(const kj::Exception& exception, rpc::Exception::Builder build
   //   transmit stack traces?
   builder.setReason(exception.getDescription());
   builder.setType(static_cast<rpc::Exception::Type>(exception.getType()));
+
+  if (exception.getType() == kj::Exception::Type::FAILED &&
+      !exception.getDescription().startsWith("remote exception:")) {
+    KJ_LOG(INFO, "returning failure over rpc", exception);
+  }
 }
 
 uint exceptionSizeHint(const kj::Exception& exception) {

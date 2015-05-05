@@ -55,15 +55,18 @@ StringPtr KJ_STRINGIFY(LogSeverity severity) {
   return SEVERITY_STRINGS[static_cast<uint>(severity)];
 }
 
-ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space) {
+ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
 #ifndef KJ_HAS_BACKTRACE
   return nullptr;
 #else
-  return space.slice(0, backtrace(space.begin(), space.size()));
+  size_t size = backtrace(space.begin(), space.size());
+  return space.slice(kj::min(ignoreCount + 1, size), size);
 #endif
 }
 
 String stringifyStackTrace(ArrayPtr<void* const> trace) {
+  if (trace.size() == 0) return nullptr;
+
 #if (__linux__ || __APPLE__) && !__ANDROID__ && defined(KJ_DEBUG)
   // We want to generate a human-readable stack trace.
 
@@ -115,20 +118,22 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   char line[512];
   size_t i = 0;
   while (i < kj::size(lines) && fgets(line, sizeof(line), p) != nullptr) {
-    // Don't include exception-handling infrastructure in stack trace.
+    // Don't include exception-handling infrastructure or promise infrastructure in stack trace.
     // addr2line output matches file names; atos output matches symbol names.
-    if (i == 0 &&
-        (strstr(line, "kj/common.c++") != nullptr ||
-         strstr(line, "kj/exception.") != nullptr ||
-         strstr(line, "kj/debug.") != nullptr ||
-         strstr(line, "kj::Exception") != nullptr ||
-         strstr(line, "kj::_::Debug") != nullptr)) {
+    if (strstr(line, "kj/common.c++") != nullptr ||
+        strstr(line, "kj/exception.") != nullptr ||
+        strstr(line, "kj/debug.") != nullptr ||
+        strstr(line, "kj/async.") != nullptr ||
+        strstr(line, "kj/async-prelude.h") != nullptr ||
+        strstr(line, "kj/async-inl.h") != nullptr ||
+        strstr(line, "kj::Exception") != nullptr ||
+        strstr(line, "kj::_::Debug") != nullptr) {
       continue;
     }
 
     size_t len = strlen(line);
     if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
-    lines[i++] = str("\n    ", trimSourceFilename(line), ": called here");
+    lines[i++] = str("\n    ", trimSourceFilename(line), ": returning here");
   }
 
   // Skip remaining input.
@@ -146,12 +151,9 @@ namespace {
 
 void crashHandler(int signo, siginfo_t* info, void* context) {
   void* traceSpace[32];
-  auto trace = getStackTrace(traceSpace);
 
-  if (trace.size() >= 3) {
-    // Remove getStackTrace(), crashHandler() and signal trampoline from trace.
-    trace = trace.slice(3, trace.size());
-  }
+  // ignoreCount = 2 to ignore crashHandler() and signal trampoline.
+  auto trace = getStackTrace(traceSpace, 2);
 
   auto message = kj::str("*** Received signal #", signo, ": ", strsignal(signo),
                          "\nstack: ", strArray(trace, " "),
@@ -276,15 +278,12 @@ String KJ_STRINGIFY(const Exception& e) {
 }
 
 Exception::Exception(Type type, const char* file, int line, String description) noexcept
-    : file(trimSourceFilename(file).cStr()), line(line), type(type), description(mv(description)) {
-  traceCount = kj::getStackTrace(trace).size();
-}
+    : file(trimSourceFilename(file).cStr()), line(line), type(type), description(mv(description)),
+      traceCount(0) {}
 
 Exception::Exception(Type type, String file, int line, String description) noexcept
     : ownFile(kj::mv(file)), file(trimSourceFilename(ownFile).cStr()), line(line), type(type),
-      description(mv(description)) {
-  traceCount = kj::getStackTrace(trace).size();
-}
+      description(mv(description)), traceCount(0) {}
 
 Exception::Exception(const Exception& other) noexcept
     : file(other.file), line(other.line), type(other.type),
@@ -312,6 +311,64 @@ Exception::Context::Context(const Context& other) noexcept
 
 void Exception::wrapContext(const char* file, int line, String&& description) {
   context = heap<Context>(file, line, mv(description), mv(context));
+}
+
+void Exception::extendTrace(uint ignoreCount) {
+  KJ_STACK_ARRAY(void*, newTraceSpace, kj::size(trace) + ignoreCount + 1,
+      sizeof(trace)/sizeof(trace[0]) + 8, 128);
+
+  auto newTrace = kj::getStackTrace(newTraceSpace, ignoreCount + 1);
+  if (newTrace.size() > ignoreCount + 2) {
+    // Remove suffix that won't fit into our static-sized trace.
+    newTrace = newTrace.slice(0, kj::min(kj::size(trace) - traceCount, newTrace.size()));
+
+    // Copy the rest into our trace.
+    memcpy(trace + traceCount, newTrace.begin(), newTrace.asBytes().size());
+    traceCount += newTrace.size();
+  }
+}
+
+void Exception::truncateCommonTrace() {
+  if (traceCount > 0) {
+    // Create a "reference" stack trace that is a little bit deeper than the one in the exception.
+    void* refTraceSpace[sizeof(this->trace) / sizeof(this->trace[0]) + 4];
+    auto refTrace = kj::getStackTrace(refTraceSpace, 0);
+
+    // We expect that the deepest frame in the exception's stack trace should be somewhere in our
+    // own trace, since our own trace has a deeper limit. Search for it.
+    for (uint i = refTrace.size(); i > 0; i--) {
+      if (refTrace[i-1] == trace[traceCount-1]) {
+        // See how many frames match.
+        for (uint j = 0; j < i; j++) {
+          if (j >= traceCount) {
+            // We matched the whole trace, apparently?
+            traceCount = 0;
+            return;
+          } else if (refTrace[i-j-1] != trace[traceCount-j-1]) {
+            // Found mismatching entry.
+
+            // If we matched more than half of the reference trace, guess that this is in fact
+            // the prefix we're looking for.
+            if (j > refTrace.size() / 2) {
+              // Delete the matching suffix. Also delete one non-matched entry on the assumption
+              // that both traces contain that stack frame but are simply at different points in
+              // the function.
+              traceCount -= j + 1;
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // No match. Ignore.
+  }
+}
+
+void Exception::addTrace(void* ptr) {
+  if (traceCount < kj::size(trace)) {
+    trace[traceCount++] = ptr;
+  }
 }
 
 class ExceptionImpl: public Exception, public std::exception {
@@ -436,12 +493,14 @@ ExceptionCallback& getExceptionCallback() {
   return scoped != nullptr ? *scoped : defaultCallback;
 }
 
-void throwFatalException(kj::Exception&& exception) {
+void throwFatalException(kj::Exception&& exception, uint ignoreCount) {
+  exception.extendTrace(ignoreCount + 1);
   getExceptionCallback().onFatalException(kj::mv(exception));
   abort();
 }
 
-void throwRecoverableException(kj::Exception&& exception) {
+void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
+  exception.extendTrace(ignoreCount + 1);
   getExceptionCallback().onRecoverableException(kj::mv(exception));
 }
 
@@ -549,12 +608,16 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
 #if KJ_NO_EXCEPTIONS
   RecoverableExceptionCatcher catcher;
   runnable.run();
+  KJ_IF_MAYBE(e, catcher.caught) {
+    e->truncateCommonTrace();
+  }
   return mv(catcher.caught);
 #else
   try {
     runnable.run();
     return nullptr;
   } catch (Exception& e) {
+    e.truncateCommonTrace();
     return kj::mv(e);
   } catch (std::bad_alloc& e) {
     return Exception(Exception::Type::OVERLOADED,
