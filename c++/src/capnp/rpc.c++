@@ -244,12 +244,12 @@ public:
     // Task which is working on sending an abort message and cleanly ending the connection.
   };
 
-  RpcConnectionState(kj::Maybe<Capability::Client> bootstrapInterface,
+  RpcConnectionState(BootstrapFactoryBase& bootstrapFactory,
                      kj::Maybe<RealmGateway<>::Client> gateway,
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller)
-      : bootstrapInterface(kj::mv(bootstrapInterface)), gateway(kj::mv(gateway)),
+      : bootstrapFactory(bootstrapFactory), gateway(kj::mv(gateway)),
         restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), tasks(*this) {
     connection.init<Connected>(kj::mv(connectionParam));
     tasks.add(messageLoop());
@@ -502,7 +502,7 @@ private:
   // =======================================================================================
   // OK, now we can define RpcConnectionState's member data.
 
-  kj::Maybe<Capability::Client> bootstrapInterface;
+  BootstrapFactoryBase& bootstrapFactory;
   kj::Maybe<RealmGateway<>::Client> gateway;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
 
@@ -2091,7 +2091,8 @@ private:
       return;
     }
 
-    auto response = connection.get<Connected>()->newOutgoingMessage(
+    VatNetworkBase::Connection& conn = *connection.get<Connected>();
+    auto response = conn.newOutgoingMessage(
         messageSizeHint<rpc::Return>() + sizeInWords<rpc::CapDescriptor>() + 32);
 
     rpc::Return::Builder ret = response->getBody().getAs<rpc::Message>().initReturn();
@@ -2104,17 +2105,16 @@ private:
     // Call the restorer and initialize the answer.
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
       Capability::Client cap = nullptr;
-      KJ_IF_MAYBE(r, restorer) {
-        cap = r->baseRestore(bootstrap.getDeprecatedObjectId());
-      } else KJ_IF_MAYBE(b, bootstrapInterface) {
-        if (bootstrap.hasDeprecatedObjectId()) {
+
+      if (bootstrap.hasDeprecatedObjectId()) {
+        KJ_IF_MAYBE(r, restorer) {
+          cap = r->baseRestore(bootstrap.getDeprecatedObjectId());
+        } else {
           KJ_FAIL_REQUIRE("This vat only supports a bootstrap interface, not the old "
                           "Cap'n-Proto-0.4-style named exports.") { return; }
-        } else {
-          cap = *b;
         }
       } else {
-        KJ_FAIL_REQUIRE("This vat does not expose any public/bootstrap interfaces.") { return; }
+        cap = bootstrapFactory.baseCreateFor(conn.baseGetPeerVatId());
       }
 
       auto payload = ret.initResults();
@@ -2594,16 +2594,22 @@ private:
 
 }  // namespace
 
-class RpcSystemBase::Impl final: public kj::TaskSet::ErrorHandler {
+class RpcSystemBase::Impl final: private BootstrapFactoryBase, private kj::TaskSet::ErrorHandler {
 public:
   Impl(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface,
        kj::Maybe<RealmGateway<>::Client> gateway)
       : network(network), bootstrapInterface(kj::mv(bootstrapInterface)),
+        bootstrapFactory(*this), gateway(kj::mv(gateway)), tasks(*this) {
+    tasks.add(acceptLoop());
+  }
+  Impl(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory,
+       kj::Maybe<RealmGateway<>::Client> gateway)
+      : network(network), bootstrapFactory(bootstrapFactory),
         gateway(kj::mv(gateway)), tasks(*this) {
     tasks.add(acceptLoop());
   }
   Impl(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
-      : network(network), restorer(restorer), tasks(*this) {
+      : network(network), bootstrapFactory(*this), restorer(restorer), tasks(*this) {
     tasks.add(acceptLoop());
   }
 
@@ -2640,13 +2646,10 @@ public:
     }
   }
 
-  void taskFailed(kj::Exception&& exception) override {
-    KJ_LOG(ERROR, exception);
-  }
-
 private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
+  BootstrapFactoryBase& bootstrapFactory;
   kj::Maybe<RealmGateway<>::Client> gateway;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
   kj::TaskSet tasks;
@@ -2668,7 +2671,7 @@ private:
         tasks.add(kj::mv(info.shutdownPromise));
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
-          bootstrapInterface, gateway, restorer, kj::mv(connection),
+          bootstrapFactory, gateway, restorer, kj::mv(connection),
           kj::mv(onDisconnect.fulfiller));
       RpcConnectionState& result = *newState;
       connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
@@ -2691,12 +2694,33 @@ private:
       tasks.add(acceptLoop());
     });
   }
+
+  Capability::Client baseCreateFor(AnyStruct::Reader clientId) override {
+    // Implements BootstrapFactory::baseCreateFor() in terms of `bootstrapInterface` or `restorer`,
+    // for use when we were given one of those instead of an actual `bootstrapFactory`.
+
+    KJ_IF_MAYBE(cap, bootstrapInterface) {
+      return *cap;
+    } else KJ_IF_MAYBE(r, restorer) {
+      return r->baseRestore(AnyPointer::Reader());
+    } else {
+      return KJ_EXCEPTION(FAILED, "This vat does not expose any public/bootstrap interfaces.");
+    }
+  }
+
+  void taskFailed(kj::Exception&& exception) override {
+    KJ_LOG(ERROR, exception);
+  }
 };
 
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
                              kj::Maybe<Capability::Client> bootstrapInterface,
                              kj::Maybe<RealmGateway<>::Client> gateway)
     : impl(kj::heap<Impl>(network, kj::mv(bootstrapInterface), kj::mv(gateway))) {}
+RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
+                             BootstrapFactoryBase& bootstrapFactory,
+                             kj::Maybe<RealmGateway<>::Client> gateway)
+    : impl(kj::heap<Impl>(network, bootstrapFactory, kj::mv(gateway))) {}
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
     : impl(kj::heap<Impl>(network, restorer)) {}
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;

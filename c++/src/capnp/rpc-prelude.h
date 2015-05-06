@@ -43,7 +43,7 @@ class RpcSystem;
 namespace _ {  // private
 
 class VatNetworkBase {
-  // Non-template version of VatNetwork.  Ignore this class; see VatNetwork, below.
+  // Non-template version of VatNetwork.  Ignore this class; see VatNetwork in rpc.h.
 
 public:
   class Connection;
@@ -59,6 +59,7 @@ public:
     virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
     virtual kj::Promise<void> shutdown() = 0;
+    virtual AnyStruct::Reader baseGetPeerVatId() = 0;
   };
   virtual kj::Maybe<kj::Own<Connection>> baseConnect(_::StructReader vatId) = 0;
   virtual kj::Promise<kj::Own<Connection>> baseAccept() = 0;
@@ -69,9 +70,19 @@ public:
   virtual Capability::Client baseRestore(AnyPointer::Reader ref) = 0;
 };
 
+class BootstrapFactoryBase {
+  // Non-template version of BootstrapFactory.  Ignore this class; see BootstrapFactory in rpc.h.
+public:
+  virtual Capability::Client baseCreateFor(AnyStruct::Reader clientId) = 0;
+};
+
 class RpcSystemBase {
+  // Non-template version of RpcSystem.  Ignore this class; see RpcSystem in rpc.h.
+
 public:
   RpcSystemBase(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface,
+                kj::Maybe<RealmGateway<>::Client> gateway);
+  RpcSystemBase(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory,
                 kj::Maybe<RealmGateway<>::Client> gateway);
   RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer);
   RpcSystemBase(RpcSystemBase&& other) noexcept;

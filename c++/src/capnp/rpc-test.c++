@@ -302,6 +302,11 @@ public:
       MallocMessageBuilder message;
     };
 
+    test::TestSturdyRefHostId::Reader getPeerVatId() override {
+      // Not actually implemented for the purpose of this test.
+      return test::TestSturdyRefHostId::Reader();
+    }
+
     kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override {
       return kj::heap<OutgoingRpcMessageImpl>(*this, firstSegmentWordSize);
     }

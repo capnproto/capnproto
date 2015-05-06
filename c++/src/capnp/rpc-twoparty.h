@@ -71,6 +71,7 @@ private:
 
   kj::AsyncIoStream& stream;
   rpc::twoparty::Side side;
+  MallocMessageBuilder peerVatId;
   ReaderOptions receiveOptions;
   bool accepted = false;
 
@@ -103,6 +104,7 @@ private:
 
   // implements Connection -----------------------------------------------------
 
+  rpc::twoparty::VatId::Reader getPeerVatId() override;
   kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override;
   kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override;
   kj::Promise<void> shutdown() override;

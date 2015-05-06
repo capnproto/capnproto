@@ -793,6 +793,10 @@ interface TestKeywordMethods {
   return @3 ();
 }
 
+interface TestAuthenticatedBootstrap(VatId) {
+  getCallerId @0 () -> (caller :VatId);
+}
+
 struct TestSturdyRef {
   hostId @0 :TestSturdyRefHostId;
   objectId @1 :AnyPointer;

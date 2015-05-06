@@ -27,7 +27,12 @@ namespace capnp {
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                                        ReaderOptions receiveOptions)
-    : stream(stream), side(side), receiveOptions(receiveOptions), previousWrite(kj::READY_NOW) {
+    : stream(stream), side(side), peerVatId(4),
+      receiveOptions(receiveOptions), previousWrite(kj::READY_NOW) {
+  peerVatId.initRoot<rpc::twoparty::VatId>().setSide(
+      side == rpc::twoparty::Side::CLIENT ? rpc::twoparty::Side::SERVER
+                                          : rpc::twoparty::Side::CLIENT);
+
   auto paf = kj::newPromiseAndFulfiller<void>();
   disconnectPromise = paf.promise.fork();
   disconnectFulfiller.fulfiller = kj::mv(paf.fulfiller);
@@ -114,6 +119,10 @@ public:
 private:
   kj::Own<MessageReader> message;
 };
+
+rpc::twoparty::VatId::Reader TwoPartyVatNetwork::getPeerVatId() {
+  return peerVatId.getRoot<rpc::twoparty::VatId>();
+}
 
 kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSegmentWordSize) {
   return kj::refcounted<OutgoingMessageImpl>(*this, firstSegmentWordSize);
