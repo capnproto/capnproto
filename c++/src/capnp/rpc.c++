@@ -2628,13 +2628,13 @@ public:
     });
   }
 
-  Capability::Client bootstrap(_::StructReader vatId) {
+  Capability::Client bootstrap(AnyStruct::Reader vatId) {
     // For now we delegate to restore() since it's equivalent, but eventually we'll remove restore()
     // and implement bootstrap() directly.
     return restore(vatId, AnyPointer::Reader());
   }
 
-  Capability::Client restore(_::StructReader vatId, AnyPointer::Reader objectId) {
+  Capability::Client restore(AnyStruct::Reader vatId, AnyPointer::Reader objectId) {
     KJ_IF_MAYBE(connection, network.baseConnect(vatId)) {
       auto& state = getConnectionState(kj::mv(*connection));
       return Capability::Client(state.restore(objectId));
@@ -2726,12 +2726,12 @@ RpcSystemBase::RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& res
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;
 RpcSystemBase::~RpcSystemBase() noexcept(false) {}
 
-Capability::Client RpcSystemBase::baseBootstrap(_::StructReader vatId) {
+Capability::Client RpcSystemBase::baseBootstrap(AnyStruct::Reader vatId) {
   return impl->bootstrap(vatId);
 }
 
 Capability::Client RpcSystemBase::baseRestore(
-    _::StructReader hostId, AnyPointer::Reader objectId) {
+    AnyStruct::Reader hostId, AnyPointer::Reader objectId) {
   return impl->restore(hostId, objectId);
 }
 

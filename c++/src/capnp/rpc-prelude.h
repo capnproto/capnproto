@@ -61,7 +61,7 @@ public:
     virtual kj::Promise<void> shutdown() = 0;
     virtual AnyStruct::Reader baseGetPeerVatId() = 0;
   };
-  virtual kj::Maybe<kj::Own<Connection>> baseConnect(_::StructReader vatId) = 0;
+  virtual kj::Maybe<kj::Own<Connection>> baseConnect(AnyStruct::Reader vatId) = 0;
   virtual kj::Promise<kj::Own<Connection>> baseAccept() = 0;
 };
 
@@ -92,10 +92,8 @@ private:
   class Impl;
   kj::Own<Impl> impl;
 
-  Capability::Client baseBootstrap(_::StructReader vatId);
-  Capability::Client baseRestore(_::StructReader vatId, AnyPointer::Reader objectId);
-  // TODO(someday):  Maybe define a public API called `TypelessStruct` so we don't have to rely
-  // on `_::StructReader` here?
+  Capability::Client baseBootstrap(AnyStruct::Reader vatId);
+  Capability::Client baseRestore(AnyStruct::Reader vatId, AnyPointer::Reader objectId);
 
   template <typename>
   friend class capnp::RpcSystem;

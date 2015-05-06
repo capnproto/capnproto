@@ -353,7 +353,7 @@ public:
 
 private:
   kj::Maybe<kj::Own<_::VatNetworkBase::Connection>>
-      baseConnect(_::StructReader hostId) override final;
+      baseConnect(AnyStruct::Reader hostId) override final;
   kj::Promise<kj::Own<_::VatNetworkBase::Connection>> baseAccept() override final;
 };
 
@@ -372,8 +372,8 @@ template <typename SturdyRef, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
 kj::Maybe<kj::Own<_::VatNetworkBase::Connection>>
     VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::
-    baseConnect(_::StructReader ref) {
-  auto maybe = connect(typename SturdyRef::Reader(ref));
+    baseConnect(AnyStruct::Reader ref) {
+  auto maybe = connect(ref.as<SturdyRef>());
   return maybe.map([](kj::Own<Connection>& conn) -> kj::Own<_::VatNetworkBase::Connection> {
     return kj::mv(conn);
   });
