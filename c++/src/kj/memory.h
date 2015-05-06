@@ -165,10 +165,12 @@ public:
     return result;
   }
 
-  inline T* operator->() { return ptr; }
-  inline const T* operator->() const { return ptr; }
-  inline T& operator*() { return *ptr; }
-  inline const T& operator*() const { return *ptr; }
+#define NULLCHECK KJ_IREQUIRE(ptr != nullptr, "null Own<> dereference")
+  inline T* operator->() { NULLCHECK; return ptr; }
+  inline const T* operator->() const { NULLCHECK; return ptr; }
+  inline T& operator*() { NULLCHECK; return *ptr; }
+  inline const T& operator*() const { NULLCHECK; return *ptr; }
+#undef NULLCHECK
   inline T* get() { return ptr; }
   inline const T* get() const { return ptr; }
   inline operator T*() { return ptr; }
