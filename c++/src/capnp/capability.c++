@@ -80,34 +80,19 @@ Capability::Client::Client(kj::Exception&& exception)
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* actualInterfaceName, uint64_t requestedTypeId) {
-  KJ_UNIMPLEMENTED("Requested interface not implemented.", actualInterfaceName, requestedTypeId) {
-    // Recoverable exception will be caught by promise framework.
-
-    // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-    // a bug that exists in both Clang and GCC:
-    //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-    //   http://llvm.org/bugs/show_bug.cgi?id=12286
-    break;
-  }
-  return kj::READY_NOW;
+  return KJ_EXCEPTION(UNIMPLEMENTED, "Requested interface not implemented.",
+                      actualInterfaceName, requestedTypeId);
 }
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* interfaceName, uint64_t typeId, uint16_t methodId) {
-  KJ_UNIMPLEMENTED("Method not implemented.", interfaceName, typeId, methodId) {
-    // Recoverable exception will be caught by promise framework.
-    break;
-  }
-  return kj::READY_NOW;
+  return KJ_EXCEPTION(UNIMPLEMENTED, "Method not implemented.", interfaceName, typeId, methodId);
 }
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* interfaceName, const char* methodName, uint64_t typeId, uint16_t methodId) {
-  KJ_UNIMPLEMENTED("Method not implemented.", interfaceName, typeId, methodName, methodId) {
-    // Recoverable exception will be caught by promise framework.
-    break;
-  }
-  return kj::READY_NOW;
+  return KJ_EXCEPTION(UNIMPLEMENTED, "Method not implemented.", interfaceName,
+                      typeId, methodName, methodId);
 }
 
 ResponseHook::~ResponseHook() noexcept(false) {}
