@@ -960,6 +960,30 @@ TEST(Capability, ThisCap) {
   EXPECT_EQ(-1, callCount);
 }
 
+TEST(Capability, TransferCap) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::TestTransferCap>();
+
+  auto orphan = message.getOrphanage().newOrphan<test::TestTransferCap::Element>();
+  auto e = orphan.get();
+  e.setText("foo");
+  e.setCap(KJ_EXCEPTION(FAILED, "whatever"));
+
+  root.initList(1).adoptWithCaveats(0, kj::mv(orphan));
+
+  // This line used to throw due to capability pointers being incorrectly transferred.
+  auto cap = root.getList()[0].getCap();
+
+  cap.whenResolved().then([]() {
+    KJ_FAIL_EXPECT("didn't throw?");
+  }, [](kj::Exception&&) {
+    // success
+  }).wait(waitScope);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

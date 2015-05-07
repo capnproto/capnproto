@@ -868,11 +868,11 @@ struct WireHelpers {
 
     if (src->isNull()) {
       memset(dst, 0, sizeof(WirePointer));
-    } else if (src->kind() == WirePointer::FAR) {
-      // Far pointers are position-independent, so we can just copy.
-      memcpy(dst, src, sizeof(WirePointer));
-    } else {
+    } else if (src->isPositional()) {
       transferPointer(dstSegment, dst, srcSegment, src, src->target());
+    } else {
+      // Far and other pointers are position-independent, so we can just copy.
+      memcpy(dst, src, sizeof(WirePointer));
     }
   }
 
@@ -2884,7 +2884,7 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
       tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
       segment->tryTruncate(oldEndWord, newEndWord);
     } else if (newEndWord <= oldEndWord) {
-      // Apparently the old list was over-allecated? The word count is more than needed to store
+      // Apparently the old list was over-allocated? The word count is more than needed to store
       // the elements. This is "valid" but shouldn't happen in practice unless someone is toying
       // with us.
       word* expectedEnd = target + oldSize * (elementWordCount / ELEMENTS);
@@ -2898,7 +2898,6 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
         tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
       } else {
         // Need to re-allocate and transfer.
-        StructSize structSize(tag->structRef.dataSize.get(), tag->structRef.ptrCount.get());
         OrphanBuilder replacement = initStructList(segment->getArena(), size, structSize);
 
         ListBuilder newList = replacement.asStructList(structSize);

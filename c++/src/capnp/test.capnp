@@ -786,6 +786,14 @@ interface TestMoreStuff extends(TestCallOrder) {
   # this can be used to test garbage collection.
 }
 
+struct TestTransferCap {
+  list @0 :List(Element);
+  struct Element {
+    text @0 :Text;
+    cap @1 :TestInterface;
+  }
+}
+
 interface TestKeywordMethods {
   delete @0 ();
   class @1 ();
