@@ -247,30 +247,19 @@ public:
   // Returns an equivalent copy of this NetworkAddress.
 
   virtual String toString() = 0;
-  // Produce a human-readable string which hopefully can be passed to Network::parseRemoteAddress()
-  // to reproduce this address, although whether or not that works of course depends on the Network
-  // implementation.  This should be called only to display the address to human users, who will
-  // hopefully know what they are able to do with it.
-};
-
-class LocalAddress {
-  // Represents a local address on which the application can potentially accept connections.
-
-public:
-  virtual String toString() = 0;
-  // Produce a human-readable string which hopefully can be passed to Network::parseRemoteAddress()
+  // Produce a human-readable string which hopefully can be passed to Network::parseAddress()
   // to reproduce this address, although whether or not that works of course depends on the Network
   // implementation.  This should be called only to display the address to human users, who will
   // hopefully know what they are able to do with it.
 };
 
 class Network {
-  // Factory for LocalAddress and RemoteAddress instances, representing the network services
-  // offered by the operating system.
+  // Factory for NetworkAddress instances, representing the network services offered by the
+  // operating system.
   //
   // This interface typically represents broad authority, and well-designed code should limit its
   // use to high-level startup code and user interaction.  Low-level APIs should accept
-  // LocalAddress and/or RemoteAddress instances directly and work from there, if at all possible.
+  // NetworkAddress instances directly and work from there, if at all possible.
 
 public:
   virtual Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint = 0) = 0;
