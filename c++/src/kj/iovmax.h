@@ -24,6 +24,7 @@
 
 #if !_WIN32
 #include <limits.h>
+#include <errno.h>
 
 // Apparently, there is a maximum number of iovecs allowed per call.  I don't understand why.
 // Most platforms define IOV_MAX but Linux defines only UIO_MAXIOV and others, like Hurd,
