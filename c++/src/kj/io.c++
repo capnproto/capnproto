@@ -22,7 +22,6 @@
 #include "io.h"
 #include "debug.h"
 #include "miniposix.h"
-#include "iovmax.h"
 #include <algorithm>
 #include <errno.h>
 
@@ -290,7 +289,7 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   }
 
 #else
-  const size_t iovmax = iovMax(pieces.size());
+  const size_t iovmax = miniposix::iovMax(pieces.size());
   while (pieces.size() > iovmax) {
     write(pieces.slice(0, iovmax));
     pieces = pieces.slice(iovmax, pieces.size());

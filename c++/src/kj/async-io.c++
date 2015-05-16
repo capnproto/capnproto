@@ -24,7 +24,7 @@
 #include "debug.h"
 #include "thread.h"
 #include "io.h"
-#include "iovmax.h"
+#include "miniposix.h"
 #include <unistd.h>
 #include <sys/uio.h>
 #include <errno.h>
@@ -299,7 +299,7 @@ private:
 
   Promise<void> writeInternal(ArrayPtr<const byte> firstPiece,
                               ArrayPtr<const ArrayPtr<const byte>> morePieces) {
-    const size_t iovmax = iovMax(1 + morePieces.size());
+    const size_t iovmax = kj::miniposix::iovMax(1 + morePieces.size());
     // If there are more than IOV_MAX pieces, we'll only write the first IOV_MAX for now, and
     // then we'll loop later.
     KJ_STACK_ARRAY(struct iovec, iov, kj::min(1 + morePieces.size(), iovmax), 16, 128);
@@ -1110,7 +1110,7 @@ Promise<size_t> DatagramPortImpl::send(
   msg.msg_name = const_cast<void*>(implicitCast<const void*>(addr.getRaw()));
   msg.msg_namelen = addr.getRawSize();
 
-  const size_t iovmax = iovMax(pieces.size());
+  const size_t iovmax = kj::miniposix::iovMax(pieces.size());
   KJ_STACK_ARRAY(struct iovec, iov, kj::min(pieces.size(), iovmax), 16, 64);
 
   for (size_t i: kj::indices(pieces)) {
