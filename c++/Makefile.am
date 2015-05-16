@@ -108,6 +108,9 @@ dist_includecapnp_DATA = $(public_capnpc_inputs)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = capnp.pc capnp-rpc.pc
 
+noinst_HEADERS = \
+  src/kj/miniposix.h
+
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
   src/kj/units.h                                               \
@@ -120,7 +123,6 @@ includekj_HEADERS =                                            \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
   src/kj/arena.h                                               \
-  src/kj/miniposix.h                                           \
   src/kj/io.h                                                  \
   src/kj/tuple.h                                               \
   src/kj/one-of.h                                              \

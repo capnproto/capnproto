@@ -24,6 +24,7 @@
 #include "debug.h"
 #include "thread.h"
 #include "io.h"
+#include "miniposix.h"
 #include <unistd.h>
 #include <sys/uio.h>
 #include <errno.h>
@@ -40,10 +41,6 @@
 #include <set>
 #include <poll.h>
 #include <limits.h>
-
-#if !defined(IOV_MAX) && defined(UIO_MAXIOV)
-#define IOV_MAX UIO_MAXIOV
-#endif
 
 namespace kj {
 
@@ -302,9 +299,10 @@ private:
 
   Promise<void> writeInternal(ArrayPtr<const byte> firstPiece,
                               ArrayPtr<const ArrayPtr<const byte>> morePieces) {
+    const size_t iovmax = kj::miniposix::iovMax(1 + morePieces.size());
     // If there are more than IOV_MAX pieces, we'll only write the first IOV_MAX for now, and
     // then we'll loop later.
-    KJ_STACK_ARRAY(struct iovec, iov, kj::min(1 + morePieces.size(), IOV_MAX), 16, 128);
+    KJ_STACK_ARRAY(struct iovec, iov, kj::min(1 + morePieces.size(), iovmax), 16, 128);
     size_t iovTotal = 0;
 
     // writev() interface is not const-correct.  :(
@@ -1112,7 +1110,8 @@ Promise<size_t> DatagramPortImpl::send(
   msg.msg_name = const_cast<void*>(implicitCast<const void*>(addr.getRaw()));
   msg.msg_namelen = addr.getRawSize();
 
-  KJ_STACK_ARRAY(struct iovec, iov, kj::min(pieces.size(), IOV_MAX), 16, 64);
+  const size_t iovmax = kj::miniposix::iovMax(pieces.size());
+  KJ_STACK_ARRAY(struct iovec, iov, kj::min(pieces.size(), iovmax), 16, 64);
 
   for (size_t i: kj::indices(pieces)) {
     iov[i].iov_base = const_cast<void*>(implicitCast<const void*>(pieces[i].begin()));
@@ -1120,23 +1119,23 @@ Promise<size_t> DatagramPortImpl::send(
   }
 
   Array<byte> extra;
-  if (pieces.size() > IOV_MAX) {
+  if (pieces.size() > iovmax) {
     // Too many pieces, but we can't use multiple syscalls because they'd send separate
     // datagrams. We'll have to copy the trailing pieces into a temporary array.
     //
     // TODO(perf): On Linux we could use multiple syscalls via MSG_MORE.
     size_t extraSize = 0;
-    for (size_t i = IOV_MAX - 1; i < pieces.size(); i++) {
+    for (size_t i = iovmax - 1; i < pieces.size(); i++) {
       extraSize += pieces[i].size();
     }
     extra = kj::heapArray<byte>(extraSize);
     extraSize = 0;
-    for (size_t i = IOV_MAX - 1; i < pieces.size(); i++) {
+    for (size_t i = iovmax - 1; i < pieces.size(); i++) {
       memcpy(extra.begin() + extraSize, pieces[i].begin(), pieces[i].size());
       extraSize += pieces[i].size();
     }
-    iov[IOV_MAX - 1].iov_base = extra.begin();
-    iov[IOV_MAX - 1].iov_len = extra.size();
+    iov[iovmax - 1].iov_base = extra.begin();
+    iov[iovmax - 1].iov_len = extra.size();
   }
 
   msg.msg_iov = iov.begin();

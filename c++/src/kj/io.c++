@@ -24,7 +24,6 @@
 #include "miniposix.h"
 #include <algorithm>
 #include <errno.h>
-#include <limits.h>
 
 #if !_WIN32
 #include <sys/uio.h>
@@ -290,15 +289,10 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   }
 
 #else
-  // Apparently, there is a maximum number of iovecs allowed per call.  I don't understand why.
-  // Also, most platforms define IOV_MAX but Linux defines only UIO_MAXIOV.  Unfortunately, Solaris
-  // defines a constant UIO_MAXIOV with a different meaning, so we check for IOV_MAX first.
-#if !defined(IOV_MAX) && defined(UIO_MAXIOV)
-#define IOV_MAX UIO_MAXIOV
-#endif
-  while (pieces.size() > IOV_MAX) {
-    write(pieces.slice(0, IOV_MAX));
-    pieces = pieces.slice(IOV_MAX, pieces.size());
+  const size_t iovmax = miniposix::iovMax(pieces.size());
+  while (pieces.size() > iovmax) {
+    write(pieces.slice(0, iovmax));
+    pieces = pieces.slice(iovmax, pieces.size());
   }
 
   KJ_STACK_ARRAY(struct iovec, iov, pieces.size(), 16, 128);
