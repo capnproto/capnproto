@@ -336,7 +336,7 @@ TEST(TwoPartyNetwork, ConvenienceClasses) {
   EXPECT_EQ(1, callCount);
 }
 
-class TestAuthenticatedBootstrapImpl
+class TestAuthenticatedBootstrapImpl final
     : public test::TestAuthenticatedBootstrap<rpc::twoparty::VatId>::Server {
 public:
   TestAuthenticatedBootstrapImpl(rpc::twoparty::VatId::Reader clientId) {

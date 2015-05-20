@@ -643,7 +643,7 @@ TEST(Async, Detach) {
   bool ran2 = false;
   bool ran3 = false;
 
-  evalLater([&]() { ran1 = true; });
+  (void)evalLater([&]() { ran1 = true; });  // let returned promise be destroyed (canceled)
   evalLater([&]() { ran2 = true; }).detach([](kj::Exception&&) { ADD_FAILURE(); });
   evalLater([]() { KJ_FAIL_ASSERT("foo"){break;} }).detach([&](kj::Exception&& e) { ran3 = true; });
 
