@@ -147,6 +147,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
 #endif
 }
 
+#if KJ_HAS_BACKTRACE
 namespace {
 
 void crashHandler(int signo, siginfo_t* info, void* context) {
@@ -166,7 +167,6 @@ void crashHandler(int signo, siginfo_t* info, void* context) {
 }  // namespace
 
 void printStackTraceOnCrash() {
-#if KJ_HAS_BACKTRACE
   // Set up alternate signal stack so that stack overflows can be handled.
   stack_t stack;
   memset(&stack, 0, sizeof(stack));
@@ -207,8 +207,11 @@ void printStackTraceOnCrash() {
   // because stack traces on ctrl+c can be obnoxious for, say, command-line tools.
   KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
 #endif
-#endif
 }
+#else
+void printStackTraceOnCrash() {
+}
+#endif
 
 kj::StringPtr trimSourceFilename(kj::StringPtr filename) {
   // Removes noisy prefixes from source code file name.
