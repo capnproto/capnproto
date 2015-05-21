@@ -26,6 +26,13 @@
       <item>true</item>
       <item>false</item>
     </list>
+    <list name="annotationTargets">
+      <item>field</item>
+      <item>file</item>
+      <item>enumerant</item>
+      <item>method</item>
+      <item>param</item>
+    </list>
     <list name="type">
       <item>Void</item>
       <item>Bool</item>
@@ -121,8 +128,7 @@
       <context name="AnnotationDecl" attribute="Annotation" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
         <keyword String="keyword" context="#stay" attribute="Keyword" />
-        <StringDetect String="field" attribute="Keyword" context="#stay"/>
-        <StringDetect String="file" attribute="Keyword" context="#stay"/>
+        <keyword String="annotationTargets" context="#stay" attribute="Keyword" />
         <RegExpr attribute="Id" context="#stay" String="@(0x[0-9a-fA-F]+|[0-9]+)\b"/>
         <AnyChar attribute="Symbol" context="#stay" String="([,"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};:=$)" lookAhead="true"/>
