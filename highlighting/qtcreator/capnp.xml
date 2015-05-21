@@ -58,8 +58,13 @@
         <AnyChar attribute="Symbol" context="#stay" String="!%&amp;*+-./&lt;=&gt;?^|~;[]()"/>
       </context>
       <context name="Comment" attribute="Comment" lineEndContext="#pop"></context>
+      <context name="String" attribute="String" lineEndContext="#stay">
+        <DetectChar attribute="String" context="#pop" char="&quot;"/>
+      </context>
       <context name="Value" attribute="Value" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
+        <keyword String="keyword" context="#stay" attribute="Keyword" />
         <AnyChar attribute="Value" context="ParenValue" String="(["/>
         <RegExpr attribute="Value" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Value" context="#stay" String="'([^'\\]|\\.)*'"/>
@@ -75,6 +80,7 @@
       </context>
       <context name="Type" attribute="Type" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
         <AnyChar attribute="Type" context="ParenType" String="(["/>
         <keyword String="type" context="#stay" attribute="KeyType" />
         <RegExpr attribute="Type" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
@@ -92,6 +98,7 @@
       </context>
       <context name="Annotation" attribute="Annotation" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
         <AnyChar attribute="Annotation" context="ParenAnnotation" String="(["/>
         <RegExpr attribute="Annotation" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
@@ -99,6 +106,7 @@
       </context>
       <context name="ParenAnnotation" attribute="Annotation" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
         <AnyChar attribute="Annotation" context="ParenAnnotation" String="(["/>
         <AnyChar attribute="Annotation" context="#pop" String=")]"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
@@ -122,6 +130,7 @@
       <itemData name="KeyType"      defStyleNum="dsOthers" color="#009900" bold="1"/>
       <itemData name="Value"        defStyleNum="dsOthers" color="#003399"/>
       <itemData name="Comment"      defStyleNum="dsComment"/>
+      <itemData name="String"       defStyleNum="dsString"/>
       <itemData name="Symbol"       defStyleNum="dsOthers" bold="1"/>
     </itemDatas>
   </highlighting>
