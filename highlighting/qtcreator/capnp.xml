@@ -63,6 +63,10 @@
         <DetectChar attribute="String" context="#pop" char="&quot;"/>
       </context>
       <context name="Value" attribute="Value" lineEndContext="#stay">
+        <StringDetect String="0x&quot;" attribute="String" context="String"/>
+        <HlCHex attribute="Hex" context="#stay"/>
+        <Float attribute="Float" context="#stay"/>
+        <Int attribute="Decimal" context="#stay"/>
         <DetectChar attribute="Comment" context="Comment" char="#"/>
         <DetectChar attribute="String" context="String" char="&quot;"/>
         <keyword String="keyword" context="#stay" attribute="Keyword" />
@@ -73,11 +77,18 @@
       </context>
       <context name="ParenValue" attribute="Value" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <StringDetect String="0x&quot;" attribute="String" context="String"/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
+        <HlCHex attribute="Hex" context="#stay"/>
+        <Float attribute="Float" context="#stay"/>
+        <Int attribute="Decimal" context="#stay"/>
+        <keyword String="keyword" context="#stay" attribute="Keyword" />
         <AnyChar attribute="Value" context="ParenValue" String="(["/>
         <AnyChar attribute="Value" context="#pop" String=")]"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
         <RegExpr attribute="Value" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Value" context="#stay" String="'([^'\\]|\\.)*'"/>
+        <DetectChar attribute="Symbol" context="Value" char="="/>
       </context>
       <context name="Type" attribute="Type" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
@@ -133,6 +144,9 @@
       <itemData name="Value"        defStyleNum="dsOthers" color="#003399"/>
       <itemData name="Comment"      defStyleNum="dsComment"/>
       <itemData name="String"       defStyleNum="dsString"/>
+      <itemData name="Float"        defStyleNum="dsFloat"/>
+      <itemData name="Hex"          defStyleNum="dsBaseN"/>
+      <itemData name="Decimal"      defStyleNum="dsDecVal"/>
       <itemData name="Symbol"       defStyleNum="dsOthers" bold="1"/>
     </itemDatas>
   </highlighting>
