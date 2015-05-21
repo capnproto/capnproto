@@ -112,19 +112,10 @@
       <context name="Annotation" attribute="Annotation" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
         <DetectChar attribute="String" context="String" char="&quot;"/>
-        <AnyChar attribute="Annotation" context="ParenAnnotation" String="(["/>
+        <AnyChar attribute="Value" context="ParenValue" String="(["/>
         <RegExpr attribute="Annotation" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};:=$)," lookAhead="true"/>
-      </context>
-      <context name="ParenAnnotation" attribute="Annotation" lineEndContext="#stay">
-        <DetectChar attribute="Comment" context="Comment" char="#"/>
-        <DetectChar attribute="String" context="String" char="&quot;"/>
-        <AnyChar attribute="Annotation" context="ParenAnnotation" String="(["/>
-        <AnyChar attribute="Annotation" context="#pop" String=")]"/>
-        <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
-        <RegExpr attribute="Annotation" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
-        <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
       </context>
     </contexts>
     <itemDatas>
