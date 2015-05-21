@@ -48,8 +48,8 @@
       <context name="Normal" attribute="Normal" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
         <RegExpr attribute="Id" context="#stay" String="@(0x[0-9a-fA-F]+|[0-9]+)\b"/>
-        <DetectChar attribute="Value" context="Value" char="="/>
-        <DetectChar attribute="Type" context="Type" char=":"/>
+        <DetectChar attribute="Symbol" context="Value" char="="/>
+        <DetectChar attribute="Symbol" context="Type" char=":"/>
         <DetectChar attribute="Annotation" context="Annotation" char="$"/>
         <keyword String="keyword" context="#stay" attribute="Keyword" />
         <DetectChar attribute="Symbol" context="#stay" char="{" beginRegion="Brace1"/>
