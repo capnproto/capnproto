@@ -25,6 +25,8 @@
       <item>group</item>
       <item>true</item>
       <item>false</item>
+      <item>file</item>
+      <item>field</item>
     </list>
     <list name="type">
       <item>Void</item>
