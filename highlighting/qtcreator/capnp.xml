@@ -23,6 +23,8 @@
       <item>from</item>
       <item>fixed</item>
       <item>group</item>
+      <item>true</item>
+      <item>false</item>
     </list>
     <list name="type">
       <item>Void</item>
