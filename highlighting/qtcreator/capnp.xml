@@ -72,7 +72,7 @@
         <DetectChar attribute="Comment" context="Comment" char="#"/>
         <DetectChar attribute="String" context="String" char="&quot;"/>
         <keyword String="keyword" context="#stay" attribute="Keyword" />
-        <AnyChar attribute="Value" context="ParenValue" String="(["/>
+        <AnyChar attribute="Symbol" context="ParenValue" String="(["/>
         <RegExpr attribute="Value" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Value" context="#stay" String="'([^'\\]|\\.)*'"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};:=$)," lookAhead="true"/>
@@ -85,8 +85,8 @@
         <Float attribute="Float" context="#stay"/>
         <Int attribute="Decimal" context="#stay"/>
         <keyword String="keyword" context="#stay" attribute="Keyword" />
-        <AnyChar attribute="Value" context="ParenValue" String="(["/>
-        <AnyChar attribute="Value" context="#pop" String=")]"/>
+        <AnyChar attribute="Symbol" context="ParenValue" String="(["/>
+        <AnyChar attribute="Symbol" context="#pop" String=")]"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
         <RegExpr attribute="Value" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Value" context="#stay" String="'([^'\\]|\\.)*'"/>
@@ -95,7 +95,7 @@
       <context name="Type" attribute="Type" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
         <DetectChar attribute="String" context="String" char="&quot;"/>
-        <AnyChar attribute="Type" context="ParenType" String="(["/>
+        <AnyChar attribute="Symbol" context="ParenType" String="(["/>
         <keyword String="keyword" context="#stay" attribute="Keyword" />
         <keyword String="type" context="#stay" attribute="KeyType" />
         <RegExpr attribute="Type" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
@@ -104,8 +104,8 @@
       </context>
       <context name="ParenType" attribute="Type" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
-        <AnyChar attribute="Type" context="ParenType" String="(["/>
-        <AnyChar attribute="Type" context="#pop" String=")]"/>
+        <AnyChar attribute="Symbol" context="ParenType" String="(["/>
+        <AnyChar attribute="Symbol" context="#pop" String=")]"/>
         <keyword String="type" context="#stay" attribute="KeyType" />
         <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
         <RegExpr attribute="Type" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
@@ -114,7 +114,7 @@
       <context name="Annotation" attribute="Annotation" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
         <DetectChar attribute="String" context="String" char="&quot;"/>
-        <AnyChar attribute="Value" context="ParenValue" String="(["/>
+        <AnyChar attribute="Symbol" context="ParenValue" String="(["/>
         <RegExpr attribute="Annotation" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};:=$)," lookAhead="true"/>
