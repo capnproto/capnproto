@@ -25,8 +25,6 @@
       <item>group</item>
       <item>true</item>
       <item>false</item>
-      <item>file</item>
-      <item>field</item>
     </list>
     <list name="type">
       <item>Void</item>
@@ -55,6 +53,7 @@
         <DetectChar attribute="Symbol" context="Value" char="="/>
         <DetectChar attribute="Symbol" context="Type" char=":"/>
         <DetectChar attribute="Annotation" context="Annotation" char="$"/>
+        <StringDetect String="annotation" attribute="Keyword" context="AnnotationDecl"/>
         <keyword String="keyword" context="#stay" attribute="Keyword" />
         <DetectChar attribute="Symbol" context="#stay" char="{" beginRegion="Brace1"/>
         <DetectChar attribute="Symbol" context="#stay" char="}" endRegion="Brace1"/>
@@ -118,6 +117,15 @@
         <RegExpr attribute="Annotation" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};:=$)," lookAhead="true"/>
+      </context>
+      <context name="AnnotationDecl" attribute="Annotation" lineEndContext="#stay">
+        <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <keyword String="keyword" context="#stay" attribute="Keyword" />
+        <StringDetect String="field" attribute="Keyword" context="#stay"/>
+        <StringDetect String="file" attribute="Keyword" context="#stay"/>
+        <RegExpr attribute="Id" context="#stay" String="@(0x[0-9a-fA-F]+|[0-9]+)\b"/>
+        <AnyChar attribute="Symbol" context="#stay" String="([,"/>
+        <AnyChar attribute="Symbol" context="#pop" String="{};:=$)" lookAhead="true"/>
       </context>
     </contexts>
     <itemDatas>
