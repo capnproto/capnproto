@@ -142,19 +142,19 @@
           conflict with the manually-defined colors here, which would probably be even more annoying
           than having the colors be inconsitent from other languages.  So, I use manual colors for
           everything, except comments, which I figure are less likely to have this problem. -->
-      <itemData name="Normal"       defStyleNum="dsNormal"/>
-      <itemData name="Keyword"      defStyleNum="dsKeyword"/>
-      <itemData name="Id"           defStyleNum="dsOthers" color="#0099FF"/>
-      <itemData name="Annotation"   defStyleNum="dsOthers" color="#999900"/>
-      <itemData name="Type"         defStyleNum="dsDataType" />
-      <itemData name="KeyType"      defStyleNum="dsDataType" bold="1"/>
-      <itemData name="Value"        defStyleNum="dsOthers" color="#003399"/>
+      <itemData name="Normal"       defStyleNum="dsNormal" spellChecking="false"/>
+      <itemData name="Keyword"      defStyleNum="dsKeyword" spellChecking="false"/>
+      <itemData name="Id"           defStyleNum="dsOthers" color="#0099FF" spellChecking="false"/>
+      <itemData name="Annotation"   defStyleNum="dsOthers" color="#999900" spellChecking="false"/>
+      <itemData name="Type"         defStyleNum="dsDataType" spellChecking="false"/>
+      <itemData name="KeyType"      defStyleNum="dsDataType" bold="1" spellChecking="false"/>
+      <itemData name="Value"        defStyleNum="dsOthers" color="#003399" spellChecking="false"/>
       <itemData name="Comment"      defStyleNum="dsComment"/>
-      <itemData name="String"       defStyleNum="dsString"/>
-      <itemData name="Float"        defStyleNum="dsFloat"/>
-      <itemData name="Hex"          defStyleNum="dsBaseN"/>
-      <itemData name="Decimal"      defStyleNum="dsDecVal"/>
-      <itemData name="Symbol"       defStyleNum="dsOthers" bold="1"/>
+      <itemData name="String"       defStyleNum="dsString" spellChecking="false"/>
+      <itemData name="Float"        defStyleNum="dsFloat" spellChecking="false"/>
+      <itemData name="Hex"          defStyleNum="dsBaseN" spellChecking="false"/>
+      <itemData name="Decimal"      defStyleNum="dsDecVal" spellChecking="false"/>
+      <itemData name="Symbol"       defStyleNum="dsOthers" bold="1" spellChecking="false"/>
     </itemDatas>
   </highlighting>
   <general>
