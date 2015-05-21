@@ -22,10 +22,9 @@
       <item>with</item>
       <item>from</item>
       <item>fixed</item>
+      <item>group</item>
     </list>
     <list name="type">
-      <item>union</item>
-      <item>group</item>
       <item>Void</item>
       <item>Bool</item>
       <item>Int8</item>
@@ -82,6 +81,7 @@
         <DetectChar attribute="Comment" context="Comment" char="#"/>
         <DetectChar attribute="String" context="String" char="&quot;"/>
         <AnyChar attribute="Type" context="ParenType" String="(["/>
+        <keyword String="keyword" context="#stay" attribute="Keyword" />
         <keyword String="type" context="#stay" attribute="KeyType" />
         <RegExpr attribute="Type" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Type" context="#stay" String="'([^'\\]|\\.)*'"/>
