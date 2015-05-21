@@ -137,11 +137,11 @@
           than having the colors be inconsitent from other languages.  So, I use manual colors for
           everything, except comments, which I figure are less likely to have this problem. -->
       <itemData name="Normal"       defStyleNum="dsNormal"/>
-      <itemData name="Keyword"      defStyleNum="dsOthers" color="#000099" bold="1"/>
+      <itemData name="Keyword"      defStyleNum="dsKeyword"/>
       <itemData name="Id"           defStyleNum="dsOthers" color="#0099FF"/>
       <itemData name="Annotation"   defStyleNum="dsOthers" color="#999900"/>
-      <itemData name="Type"         defStyleNum="dsOthers" color="#009900"/>
-      <itemData name="KeyType"      defStyleNum="dsOthers" color="#009900" bold="1"/>
+      <itemData name="Type"         defStyleNum="dsDataType" />
+      <itemData name="KeyType"      defStyleNum="dsDataType" bold="1"/>
       <itemData name="Value"        defStyleNum="dsOthers" color="#003399"/>
       <itemData name="Comment"      defStyleNum="dsComment"/>
       <itemData name="String"       defStyleNum="dsString"/>
