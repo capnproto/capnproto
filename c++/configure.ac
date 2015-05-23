@@ -52,6 +52,21 @@ AC_PROG_CXX
 AC_LANG([C++])
 AX_CXX_COMPILE_STDCXX_11
 
+AC_MSG_CHECKING([how to run sed with extended regex support])
+AS_IF(
+    [test "$(echo test | sed -E 's/([st]+)$/xx\1/' 2>/dev/null)" = "texxst"], [
+        AC_MSG_RESULT([sed -E])
+        ESED="sed -E"
+    ],
+    [test "$(echo test | sed -r 's/([st]+)$/xx\1/' 2>/dev/null)" = "texxst"], [
+        AC_MSG_RESULT([sed -r])
+        ESED="sed -r"
+    ],
+    [AC_MSG_ERROR([cannot find sed with extended regex support (neither -r nor -E work)])]
+)
+AC_SUBST([ESED])
+
+
 AS_CASE("${host_os}", *mingw*, [
     # We don't use pthreads on MinGW.
     PTHREAD_CFLAGS="-mthreads"
