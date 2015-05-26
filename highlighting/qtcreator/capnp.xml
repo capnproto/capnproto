@@ -22,10 +22,18 @@
       <item>with</item>
       <item>from</item>
       <item>fixed</item>
+      <item>group</item>
+      <item>true</item>
+      <item>false</item>
+    </list>
+    <list name="annotationTargets">
+      <item>field</item>
+      <item>file</item>
+      <item>enumerant</item>
+      <item>method</item>
+      <item>param</item>
     </list>
     <list name="type">
-      <item>union</item>
-      <item>group</item>
       <item>Void</item>
       <item>Bool</item>
       <item>Int8</item>
@@ -49,33 +57,52 @@
       <context name="Normal" attribute="Normal" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
         <RegExpr attribute="Id" context="#stay" String="@(0x[0-9a-fA-F]+|[0-9]+)\b"/>
-        <DetectChar attribute="Value" context="Value" char="="/>
-        <DetectChar attribute="Type" context="Type" char=":"/>
+        <DetectChar attribute="Symbol" context="Value" char="="/>
+        <DetectChar attribute="Symbol" context="Type" char=":"/>
         <DetectChar attribute="Annotation" context="Annotation" char="$"/>
+        <StringDetect String="annotation" attribute="Keyword" context="AnnotationDecl"/>
         <keyword String="keyword" context="#stay" attribute="Keyword" />
         <DetectChar attribute="Symbol" context="#stay" char="{" beginRegion="Brace1"/>
         <DetectChar attribute="Symbol" context="#stay" char="}" endRegion="Brace1"/>
         <AnyChar attribute="Symbol" context="#stay" String="!%&amp;*+-./&lt;=&gt;?^|~;[]()"/>
       </context>
       <context name="Comment" attribute="Comment" lineEndContext="#pop"></context>
+      <context name="String" attribute="String" lineEndContext="#stay">
+        <DetectChar attribute="String" context="#pop" char="&quot;"/>
+      </context>
       <context name="Value" attribute="Value" lineEndContext="#stay">
+        <StringDetect String="0x&quot;" attribute="String" context="String"/>
+        <HlCHex attribute="Hex" context="#stay"/>
+        <Float attribute="Float" context="#stay"/>
+        <Int attribute="Decimal" context="#stay"/>
         <DetectChar attribute="Comment" context="Comment" char="#"/>
-        <AnyChar attribute="Value" context="ParenValue" String="(["/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
+        <keyword String="keyword" context="#stay" attribute="Keyword" />
+        <AnyChar attribute="Symbol" context="ParenValue" String="(["/>
         <RegExpr attribute="Value" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Value" context="#stay" String="'([^'\\]|\\.)*'"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};:=$)," lookAhead="true"/>
       </context>
       <context name="ParenValue" attribute="Value" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
-        <AnyChar attribute="Value" context="ParenValue" String="(["/>
-        <AnyChar attribute="Value" context="#pop" String=")]"/>
+        <StringDetect String="0x&quot;" attribute="String" context="String"/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
+        <HlCHex attribute="Hex" context="#stay"/>
+        <Float attribute="Float" context="#stay"/>
+        <Int attribute="Decimal" context="#stay"/>
+        <keyword String="keyword" context="#stay" attribute="Keyword" />
+        <AnyChar attribute="Symbol" context="ParenValue" String="(["/>
+        <AnyChar attribute="Symbol" context="#pop" String=")]"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
         <RegExpr attribute="Value" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Value" context="#stay" String="'([^'\\]|\\.)*'"/>
+        <DetectChar attribute="Symbol" context="Value" char="="/>
       </context>
       <context name="Type" attribute="Type" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
-        <AnyChar attribute="Type" context="ParenType" String="(["/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
+        <AnyChar attribute="Symbol" context="ParenType" String="(["/>
+        <keyword String="keyword" context="#stay" attribute="Keyword" />
         <keyword String="type" context="#stay" attribute="KeyType" />
         <RegExpr attribute="Type" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Type" context="#stay" String="'([^'\\]|\\.)*'"/>
@@ -83,8 +110,8 @@
       </context>
       <context name="ParenType" attribute="Type" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
-        <AnyChar attribute="Type" context="ParenType" String="(["/>
-        <AnyChar attribute="Type" context="#pop" String=")]"/>
+        <AnyChar attribute="Symbol" context="ParenType" String="(["/>
+        <AnyChar attribute="Symbol" context="#pop" String=")]"/>
         <keyword String="type" context="#stay" attribute="KeyType" />
         <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
         <RegExpr attribute="Type" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
@@ -92,39 +119,44 @@
       </context>
       <context name="Annotation" attribute="Annotation" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
-        <AnyChar attribute="Annotation" context="ParenAnnotation" String="(["/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
+        <AnyChar attribute="Symbol" context="ParenValue" String="(["/>
         <RegExpr attribute="Annotation" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
         <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
         <AnyChar attribute="Symbol" context="#pop" String="{};:=$)," lookAhead="true"/>
       </context>
-      <context name="ParenAnnotation" attribute="Annotation" lineEndContext="#stay">
+      <context name="AnnotationDecl" attribute="Annotation" lineEndContext="#stay">
         <DetectChar attribute="Comment" context="Comment" char="#"/>
-        <AnyChar attribute="Annotation" context="ParenAnnotation" String="(["/>
-        <AnyChar attribute="Annotation" context="#pop" String=")]"/>
-        <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
-        <RegExpr attribute="Annotation" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
-        <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
+        <keyword String="keyword" context="#stay" attribute="Keyword" />
+        <keyword String="annotationTargets" context="#stay" attribute="Keyword" />
+        <RegExpr attribute="Id" context="#stay" String="@(0x[0-9a-fA-F]+|[0-9]+)\b"/>
+        <AnyChar attribute="Symbol" context="#stay" String="([,"/>
+        <AnyChar attribute="Symbol" context="#pop" String="{};:=$)" lookAhead="true"/>
       </context>
     </contexts>
+    <itemDatas>
+      <!-- Since my highlighting approach is different from most programming languages, the contexts
+          don't fit nicely into the standard set, so I have to define colors explicitly.  A couple
+          of these, like "keyword" and "type", could be mapped to dsKeyword and dsDataType, but
+          there's a chance the user has mapped the colors for those things to things that would
+          conflict with the manually-defined colors here, which would probably be even more annoying
+          than having the colors be inconsitent from other languages.  So, I use manual colors for
+          everything, except comments, which I figure are less likely to have this problem. -->
+      <itemData name="Normal"       defStyleNum="dsNormal" spellChecking="false"/>
+      <itemData name="Keyword"      defStyleNum="dsKeyword" spellChecking="false"/>
+      <itemData name="Id"           defStyleNum="dsOthers" color="#0099FF" spellChecking="false"/>
+      <itemData name="Annotation"   defStyleNum="dsOthers" color="#999900" spellChecking="false"/>
+      <itemData name="Type"         defStyleNum="dsDataType" spellChecking="false"/>
+      <itemData name="KeyType"      defStyleNum="dsDataType" bold="1" spellChecking="false"/>
+      <itemData name="Value"        defStyleNum="dsOthers" color="#003399" spellChecking="false"/>
+      <itemData name="Comment"      defStyleNum="dsComment"/>
+      <itemData name="String"       defStyleNum="dsString" spellChecking="false"/>
+      <itemData name="Float"        defStyleNum="dsFloat" spellChecking="false"/>
+      <itemData name="Hex"          defStyleNum="dsBaseN" spellChecking="false"/>
+      <itemData name="Decimal"      defStyleNum="dsDecVal" spellChecking="false"/>
+      <itemData name="Symbol"       defStyleNum="dsOthers" bold="1" spellChecking="false"/>
+    </itemDatas>
   </highlighting>
-  <itemDatas>
-    <!-- Since my highlighting approach is different from most programming languages, the contexts
-         don't fit nicely into the standard set, so I have to define colors explicitly.  A couple
-         of these, like "keyword" and "type", could be mapped to dsKeyword and dsDataType, but
-         there's a chance the user has mapped the colors for those things to things that would
-         conflict with the manually-defined colors here, which would probably be even more annoying
-         than having the colors be inconsitent from other languages.  So, I use manual colors for
-         everything, except comments, which I figure are less likely to have this problem. -->
-    <itemData name="Normal"       defStyleNum="dsNormal"/>
-    <itemData name="Keyword"      defStyleNum="dsOthers" color="#000099" bold="1"/>
-    <itemData name="Id"           defStyleNum="dsOthers" color="#0099FF"/>
-    <itemData name="Annotation"   defStyleNum="dsOthers" color="#999900"/>
-    <itemData name="Type"         defStyleNum="dsOthers" color="#009900"/>
-    <itemData name="KeyType"      defStyleNum="dsOthers" color="#009900" bold="1"/>
-    <itemData name="Value"        defStyleNum="dsOthers" color="#003399"/>
-    <itemData name="Comment"      defStyleNum="dsComment"/>
-    <itemData name="Symbol"       defStyleNum="dsOthers" bold="1"/>
-  </itemDatas>
   <general>
     <comments><comment name="singleLine" start="#"/></comments>
     <keywords casesensitive="1"/>
