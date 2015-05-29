@@ -64,7 +64,6 @@ endif()
 if(MSVC)
   # TODO(cleanup): Enable higher warning level in MSVC, but make sure to test
   #   build with that warning level and clean out false positives.
-  set(CMAKE_CXX_FLAGS "${CAPNP_LITE_FLAG} ${CMAKE_CXX_FLAGS}")
 else()
   # Note that it's important to add new CXXFLAGS before ones specified by the
   # user, so that the user's flags override them. This is particularly
@@ -79,14 +78,43 @@ else()
   #
   # We have to use -std=gnu++0x isntead of -std=c++11 because otherwise we lose
   # GNU extensions that we need.
-  set(CMAKE_CXX_FLAGS "-std=gnu++0x -Wall -Wextra -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -pthread ${CAPNP_LITE_FLAG} ${CMAKE_CXX_FLAGS}")
+  add_compile_options(-std=gnu++0x -Wall -Wextra -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -pthread)
 endif()
 
 # Source =======================================================================
-
+include(CapnProtoMacros)
 add_subdirectory(src)
 
 # Install ======================================================================
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfigVersion.cmake"
+  VERSION ${VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+set(CONFIG_PACKAGE_LOCATION ${LIB_INSTALL_DIR}/cmake/CapnProto)
+
+configure_package_config_file(cmake/CapnProtoConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfig.cmake
+  INSTALL_DESTINATION ${CONFIG_PACKAGE_LOCATION}
+  PATH_VARS INCLUDE_INSTALL_DIR
+)
+export(EXPORT CapnProtoTargets
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/CapnProtoTargets.cmake"
+  NAMESPACE CapnProto::
+)
+install(EXPORT CapnProtoTargets
+  FILE CapnProtoTargets.cmake
+  NAMESPACE CapnProto::
+  DESTINATION ${CONFIG_PACKAGE_LOCATION}
+)
+install(FILES
+  cmake/CapnProtoMacros.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfig.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfigVersion.cmake
+  DESTINATION ${CONFIG_PACKAGE_LOCATION}
+)
 
 if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
   # Variables for pkg-config files
