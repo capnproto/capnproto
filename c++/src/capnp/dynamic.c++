@@ -735,6 +735,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
                      orphan.getType() == DynamicValue::LIST ||
                      orphan.getType() == DynamicValue::TEXT ||
                      orphan.getType() == DynamicValue::DATA ||
+                     orphan.getType() == DynamicValue::CAPABILITY ||
                      orphan.getType() == DynamicValue::ANY_POINTER,
                      "Value type mismatch.") {
             return;
