@@ -2287,10 +2287,8 @@ private:
         KJ_IF_MAYBE(p, base.pipeline) {
           pipeline = p->get()->addRef();
         } else {
-          KJ_FAIL_REQUIRE("PromisedAnswer.questionId is already finished or contained no "
-                          "capabilities.") {
-            return nullptr;
-          }
+          pipeline = newBrokenPipeline(KJ_EXCEPTION(FAILED,
+              "Pipeline call on a request that returned no capabilities or was already closed."));
         }
 
         KJ_IF_MAYBE(ops, toPipelineOps(promisedAnswer.getTransform())) {
