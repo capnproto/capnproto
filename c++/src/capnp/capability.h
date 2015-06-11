@@ -662,6 +662,7 @@ private:
 template <typename Params, typename Results>
 RemotePromise<Results> Request<Params, Results>::send() {
   auto typelessPromise = hook->send();
+  hook = nullptr;  // prevent reuse
 
   // Convert the Promise to return the correct response type.
   // Explicitly upcast to kj::Promise to make clear that calling .then() doesn't invalidate the
