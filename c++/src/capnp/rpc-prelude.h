@@ -100,8 +100,10 @@ private:
 };
 
 template <typename T> struct InternalRefFromRealmGateway_;
-template <typename InternalRef, typename ExternalRef>
-struct InternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef>> {
+template <typename InternalRef, typename ExternalRef, typename InternalOwner,
+          typename ExternalOwner>
+struct InternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef, InternalOwner,
+                                    ExternalOwner>> {
   typedef InternalRef Type;
 };
 template <typename T>
@@ -110,8 +112,10 @@ template <typename T>
 using InternalRefFromRealmGatewayClient = InternalRefFromRealmGateway<typename T::Calls>;
 
 template <typename T> struct ExternalRefFromRealmGateway_;
-template <typename InternalRef, typename ExternalRef>
-struct ExternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef>> {
+template <typename InternalRef, typename ExternalRef, typename InternalOwner,
+          typename ExternalOwner>
+struct ExternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef, InternalOwner,
+                                    ExternalOwner>> {
   typedef ExternalRef Type;
 };
 template <typename T>
