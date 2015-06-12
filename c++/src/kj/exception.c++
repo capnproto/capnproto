@@ -93,22 +93,22 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
 
   String lines[32];
   FILE* p = nullptr;
+  auto strTrace = strArray(trace, " ");
 
 #if __linux__
-  // Get executable name from /proc/self/exe, then pass it and the stack trace to addr2line to
-  // get file/line pairs.
-  char exe[512];
-  ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe));
-  if (n < 0 || n >= static_cast<ssize_t>(sizeof(exe))) {
+  if (access("/proc/self/exe", R_OK) < 0) {
+    // Apparently /proc is not available?
     return nullptr;
   }
-  exe[n] = '\0';
 
-  p = popen(str("addr2line -e ", exe, ' ', strArray(trace, " ")).cStr(), "r");
+  // Obtain symbolic stack trace using addr2line.
+  // TODO(cleanup): Use fork() and exec() or maybe our own Subprocess API (once it exists), to
+  //   avoid depending on a shell.
+  p = popen(str("addr2line -e /proc/", getpid(), "/exe ", strTrace).cStr(), "r");
 #elif __APPLE__
   // The Mac OS X equivalent of addr2line is atos.
   // (Internally, it uses the private CoreSymbolication.framework library.)
-  p = popen(str("xcrun atos -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
+  p = popen(str("xcrun atos -p ", getpid(), ' ', strTrace).cStr(), "r");
 #endif
 
   if (p == nullptr) {
