@@ -45,7 +45,7 @@
 /c++/stamp-h1
 /c++/**/*.log
 /c++/test_capnpc_middleman
-/c++/**/*.capnp.*
+/c++/**/test*.capnp.*
 /c++/*.la
 /c++/**/*.trs
 /c++/aclocal.m4
