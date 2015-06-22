@@ -211,6 +211,7 @@ if(BUILD_TESTING)
       capability-test.c++
       schema-test.c++
       schema-loader-test.c++
+      schema-parser-test.c++
       dynamic-test.c++
       stringify-test.c++
       serialize-async-test.c++

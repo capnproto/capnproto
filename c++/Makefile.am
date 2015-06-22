@@ -375,6 +375,7 @@ heavy_tests =                                                  \
   src/capnp/capability-test.c++                                \
   src/capnp/schema-test.c++                                    \
   src/capnp/schema-loader-test.c++                             \
+  src/capnp/schema-parser-test.c++                             \
   src/capnp/dynamic-test.c++                                   \
   src/capnp/stringify-test.c++                                 \
   src/capnp/serialize-async-test.c++                           \
