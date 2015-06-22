@@ -158,9 +158,16 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
           // Completely empty list.
           return nullptr;
         } else {
-          auto result = kj::heapArrayBuilder<kj::Array<Orphan<Token>>>(rest.size() + 1);
+          uint restSize = rest.size();
+          if (rest.size() > 0 && rest[restSize - 1] == nullptr) {
+            // Allow for trailing commas by shortening the list by one item if the final token is
+            // nullptr
+            restSize--;
+          }
+          auto result = kj::heapArrayBuilder<kj::Array<Orphan<Token>>>(1 + restSize); // first + rest
           result.add(kj::mv(first));
-          for (auto& item: rest) {
+          for (uint i = 0; i < restSize ; i++) {
+            auto& item = rest[i];
             result.add(kj::mv(item));
           }
           return result.finish();

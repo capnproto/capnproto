@@ -146,6 +146,19 @@ TEST(Lexer, Tokens) {
       "])",
       doLex<LexedTokens>("[foo bar, baz qux, corge grault]").cStr());
 
+  // Trailing commas should not create an empty final list item, but be stripped by the lexer.
+  EXPECT_STREQ(
+      "(tokens = ["
+        "(bracketedList = ["
+          "["
+            "(identifier = 'foo', startByte = 1, endByte = 4)"
+          "], ["
+            "(identifier = 'bar', startByte = 6, endByte = 9)"
+          "]"
+        "], startByte = 0, endByte = 11)"
+      "])",
+      doLex<LexedTokens>("[foo, bar,]").cStr());
+
   EXPECT_STREQ(
       "(tokens = ["
         "(bracketedList = ["
