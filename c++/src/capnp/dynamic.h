@@ -351,7 +351,7 @@ class DynamicList::Reader {
 public:
   typedef DynamicList Reads;
 
-  Reader() = default;
+  inline Reader(): reader(ElementSize::VOID) {}
 
   template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::LIST>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
@@ -392,8 +392,8 @@ class DynamicList::Builder {
 public:
   typedef DynamicList Builds;
 
-  Builder() = default;
-  inline Builder(decltype(nullptr)) {}
+  inline Builder(): builder(ElementSize::VOID) {}
+  inline Builder(decltype(nullptr)): builder(ElementSize::VOID) {}
 
   template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::LIST>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}

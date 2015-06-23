@@ -1073,7 +1073,7 @@ struct WireHelpers {
     useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
-        return ListBuilder();
+        return ListBuilder(elementSize);
       }
       origRefTarget = copyMessage(
           origSegment, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
@@ -1195,7 +1195,7 @@ struct WireHelpers {
     useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
-        return ListBuilder();
+        return ListBuilder(ElementSize::VOID);
       }
       origRefTarget = copyMessage(
           origSegment, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
@@ -1248,7 +1248,7 @@ struct WireHelpers {
     useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
-        return ListBuilder();
+        return ListBuilder(ElementSize::INLINE_COMPOSITE);
       }
       origRefTarget = copyMessage(
           origSegment, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
@@ -1905,7 +1905,7 @@ struct WireHelpers {
     useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
-        return ListReader();
+        return ListReader(expectedElementSize);
       }
       segment = nullptr;
       ref = reinterpret_cast<const WirePointer*>(defaultValue);

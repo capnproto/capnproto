@@ -111,7 +111,7 @@ struct List<T, Kind::PRIMITIVE> {
   public:
     typedef List<T> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(_::elementSizeForType<T>()) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -139,7 +139,7 @@ struct List<T, Kind::PRIMITIVE> {
   public:
     typedef List<T> Builds;
 
-    Builder() = delete;
+    inline Builder(): builder(_::elementSizeForType<T>()) {}
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
@@ -207,7 +207,7 @@ struct List<T, Kind::STRUCT> {
   public:
     typedef List<T> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(ElementSize::INLINE_COMPOSITE) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -235,7 +235,7 @@ struct List<T, Kind::STRUCT> {
   public:
     typedef List<T> Builds;
 
-    Builder() = delete;
+    inline Builder(): builder(ElementSize::INLINE_COMPOSITE) {}
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
@@ -325,7 +325,7 @@ struct List<List<T>, Kind::LIST> {
   public:
     typedef List<List<T>> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(ElementSize::POINTER) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -354,7 +354,7 @@ struct List<List<T>, Kind::LIST> {
   public:
     typedef List<List<T>> Builds;
 
-    Builder() = delete;
+    inline Builder(): builder(ElementSize::POINTER) {}
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
@@ -434,7 +434,7 @@ struct List<T, Kind::BLOB> {
   public:
     typedef List<T> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(ElementSize::POINTER) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -462,7 +462,7 @@ struct List<T, Kind::BLOB> {
   public:
     typedef List<T> Builds;
 
-    Builder() = delete;
+    inline Builder(): builder(ElementSize::POINTER) {}
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 

@@ -388,7 +388,7 @@ struct List<AnyPointer, Kind::OTHER> {
   public:
     typedef List<AnyPointer> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(ElementSize::POINTER) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -417,7 +417,7 @@ struct List<AnyPointer, Kind::OTHER> {
     typedef List<AnyPointer> Builds;
 
     Builder() = delete;
-    inline Builder(decltype(nullptr)) {}
+    inline Builder(decltype(nullptr)): builder(ElementSize::POINTER) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }
@@ -546,7 +546,7 @@ class List<AnyStruct, Kind::OTHER>::Reader {
 public:
   typedef List<AnyStruct> Reads;
 
-  Reader() = default;
+  inline Reader(): reader(ElementSize::INLINE_COMPOSITE) {}
   inline explicit Reader(_::ListReader reader): reader(reader) {}
 
   inline uint size() const { return reader.size() / ELEMENTS; }
@@ -575,7 +575,7 @@ public:
   typedef List<AnyStruct> Builds;
 
   Builder() = delete;
-  inline Builder(decltype(nullptr)) {}
+  inline Builder(decltype(nullptr)): builder(ElementSize::INLINE_COMPOSITE) {}
   inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
   inline operator Reader() { return Reader(builder.asReader()); }
@@ -602,7 +602,7 @@ private:
 
 class AnyList::Reader {
 public:
-  Reader() = default;
+  inline Reader(): _reader(ElementSize::VOID) {}
   inline Reader(_::ListReader reader): _reader(reader) {}
 
 #if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
@@ -635,7 +635,7 @@ private:
 
 class AnyList::Builder {
 public:
-  inline Builder(decltype(nullptr)) {}
+  inline Builder(decltype(nullptr)): _builder(ElementSize::VOID) {}
   inline Builder(_::ListBuilder builder): _builder(builder) {}
 
 #if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.

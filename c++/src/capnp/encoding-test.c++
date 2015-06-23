@@ -516,6 +516,80 @@ TEST(Encoding, SmallStructLists) {
   }
 }
 
+TEST(Encoding, SetListToEmpty) {
+  // Test initializing list fields from various ways of constructing zero-sized lists.
+  // At one point this would often fail because the lists would have ElementSize::VOID which is
+  // incompatible with other list sizes.
+
+#define ALL_LIST_TYPES(MACRO) \
+  MACRO(Void, Void) \
+  MACRO(Bool, bool) \
+  MACRO(UInt8, uint8_t) \
+  MACRO(UInt16, uint16_t) \
+  MACRO(UInt32, uint32_t) \
+  MACRO(UInt64, uint64_t) \
+  MACRO(Int8, int8_t) \
+  MACRO(Int16, int16_t) \
+  MACRO(Int32, int32_t) \
+  MACRO(Int64, int64_t) \
+  MACRO(Float32, float) \
+  MACRO(Float64, double) \
+  MACRO(Text, Text) \
+  MACRO(Data, Data) \
+  MACRO(Struct, TestAllTypes)
+
+#define SET_FROM_READER_ACCESSOR(name, type) \
+  root.set##name##List(reader.get##name##List());
+
+#define SET_FROM_BUILDER_ACCESSOR(name, type) \
+  root.set##name##List(root.get##name##List());
+
+#define SET_FROM_READER_CONSTRUCTOR(name, type) \
+  root.set##name##List(List<type>::Reader());
+
+#define SET_FROM_BUILDER_CONSTRUCTOR(name, type) \
+  root.set##name##List(List<type>::Builder());
+
+#define CHECK_EMPTY_NONNULL(name, type) \
+  EXPECT_TRUE(root.has##name##List()); \
+  EXPECT_EQ(0, root.get##name##List().size());
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.initRoot<test::TestAllTypes>();
+    auto reader = root.asReader();
+    ALL_LIST_TYPES(SET_FROM_READER_ACCESSOR)
+    ALL_LIST_TYPES(CHECK_EMPTY_NONNULL)
+  }
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.initRoot<test::TestAllTypes>();
+    ALL_LIST_TYPES(SET_FROM_BUILDER_ACCESSOR)
+    ALL_LIST_TYPES(CHECK_EMPTY_NONNULL)
+  }
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.initRoot<test::TestAllTypes>();
+    ALL_LIST_TYPES(SET_FROM_READER_CONSTRUCTOR)
+    ALL_LIST_TYPES(CHECK_EMPTY_NONNULL)
+  }
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.initRoot<test::TestAllTypes>();
+    ALL_LIST_TYPES(SET_FROM_BUILDER_CONSTRUCTOR)
+    ALL_LIST_TYPES(CHECK_EMPTY_NONNULL)
+  }
+
+#undef SET_FROM_READER_ACCESSOR
+#undef SET_FROM_BUILDER_ACCESSOR
+#undef SET_FROM_READER_CONSTRUCTOR
+#undef SET_FROM_BUILDER_CONSTRUCTOR
+#undef CHECK_EMPTY_NONNULL
+}
+
 // =======================================================================================
 
 TEST(Encoding, ListUpgrade) {

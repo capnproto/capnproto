@@ -562,16 +562,16 @@ private:
 
 class ListBuilder: public kj::DisallowConstCopy {
 public:
-  inline ListBuilder()
+  inline explicit ListBuilder(ElementSize elementSize)
       : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
-        step(0 * BITS / ELEMENTS), elementSize(ElementSize::VOID) {}
+        step(0 * BITS / ELEMENTS), elementSize(elementSize) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder)
 
   inline word* getLocation() {
     // Get the object's location.
 
-    if (elementSize == ElementSize::INLINE_COMPOSITE) {
+    if (elementSize == ElementSize::INLINE_COMPOSITE && ptr != nullptr) {
       return reinterpret_cast<word*>(ptr) - POINTER_SIZE_IN_WORDS;
     } else {
       return reinterpret_cast<word*>(ptr);
@@ -640,9 +640,10 @@ private:
 
 class ListReader {
 public:
-  inline ListReader()
+  inline explicit ListReader(ElementSize elementSize)
       : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
-        structDataSize(0), structPointerCount(0), nestingLimit(0x7fffffff) {}
+        structDataSize(0), structPointerCount(0), elementSize(elementSize),
+        nestingLimit(0x7fffffff) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(const, ListReader)
 
