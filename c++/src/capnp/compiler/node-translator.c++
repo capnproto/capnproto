@@ -427,15 +427,25 @@ public:
     inline Group(Union& parent): parent(parent) {}
     KJ_DISALLOW_COPY(Group);
 
-    void addVoid() override {
+    void addMember() {
       if (!hasMembers) {
         hasMembers = true;
         parent.newGroupAddingFirstMember();
       }
     }
 
+    void addVoid() override {
+      addMember();
+
+      // Make sure that if this is a member of a union which is in turn a member of another union,
+      // that we let the outer union know that a field is being added, even though it is a
+      // zero-size field. This is important because the union needs to allocate its discriminant
+      // just before its second member is added.
+      parent.parent.addVoid();
+    }
+
     uint addData(uint lgSize) override {
-      addVoid();
+      addMember();
 
       uint bestSize = kj::maxValue;
       kj::Maybe<uint> bestLocation = nullptr;
@@ -476,7 +486,7 @@ public:
     }
 
     uint addPointer() override {
-      addVoid();
+      addMember();
 
       if (parentPointerLocationUsage < parent.pointerLocations.size()) {
         return parent.pointerLocations[parentPointerLocationUsage++];

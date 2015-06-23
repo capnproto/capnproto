@@ -478,6 +478,23 @@ struct TestNewVersion {
   new2 @4 :Text = "baz";
 }
 
+struct TestOldUnionVersion {
+  union {
+    a @0 :Void;
+    b @1 :UInt64;
+  }
+}
+
+struct TestNewUnionVersion {
+  union {
+    a :union {
+      a0 @0 :Void;
+      a1 @2 :UInt64;
+    }
+    b @1 :UInt64;
+  }
+}
+
 struct TestStructUnion {
   un @0! :union {
     struct @1 :SomeStruct;

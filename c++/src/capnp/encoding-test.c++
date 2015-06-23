@@ -1228,6 +1228,22 @@ TEST(Encoding, UpgradeListInBuilder) {
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 }
 
+TEST(Encoding, UpgradeUnion) {
+  // This tests for a specific case that was broken originally.
+  MallocMessageBuilder builder;
+
+  {
+    auto root = builder.getRoot<test::TestOldUnionVersion>();
+    root.setB(123);
+  }
+
+  {
+    auto root = builder.getRoot<test::TestNewUnionVersion>();
+    ASSERT_TRUE(root.isB())
+    EXPECT_EQ(123, root.getB());
+  }
+}
+
 // =======================================================================================
 // Tests of generated code, not really of the encoding.
 // TODO(cleanup):  Move to a different test?
