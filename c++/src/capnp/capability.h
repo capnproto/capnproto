@@ -452,17 +452,17 @@ public:
                                       kj::Own<CallContextHook>&& context) = 0;
   // Call the object, but the caller controls allocation of the request/response objects.  If the
   // callee insists on allocating these objects itself, it must make a copy.  This version is used
-  // when calls come in over the network via an RPC system.  During the call, the context object
-  // may be used from any thread so long as it is only used from one thread at a time.  Note that
-  // even if the returned `Promise<void>` is discarded, the call may continue executing if any
-  // pipelined calls are waiting for it; the call is only truly done when the CallContextHook is
-  // destroyed.
+  // when calls come in over the network via an RPC system.  Note that even if the returned
+  // `Promise<void>` is discarded, the call may continue executing if any pipelined calls are
+  // waiting for it.
   //
   // Since the caller of this method chooses the CallContext implementation, it is the caller's
   // responsibility to ensure that the returned promise is not canceled unless allowed via
   // the context's `allowCancellation()`.
   //
-  // The call must not begin synchronously, as the caller may hold arbitrary mutexes.
+  // The call must not begin synchronously; the callee must arrange for the call to begin in a
+  // later turn of the event loop. Otherwise, application code may call back and affect the
+  // callee's state in an unexpected way.
 
   virtual kj::Maybe<ClientHook&> getResolved() = 0;
   // If this ClientHook is a promise that has already resolved, returns the inner, resolved version
