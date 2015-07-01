@@ -806,7 +806,9 @@ public:
 
         case EINTR:
         case ENETDOWN:
+#if !__OpenBSD__
         case EPROTO:
+#endif
         case EHOSTDOWN:
         case EHOSTUNREACH:
         case ENETUNREACH:
