@@ -806,7 +806,10 @@ public:
 
         case EINTR:
         case ENETDOWN:
+#ifdef EPROTO
+        // EPROTO is not defined on OpenBSD.
         case EPROTO:
+#endif
         case EHOSTDOWN:
         case EHOSTUNREACH:
         case ENETUNREACH:
