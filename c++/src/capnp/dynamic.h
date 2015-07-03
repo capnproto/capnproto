@@ -1044,20 +1044,21 @@ template <>
 inline Orphan<DynamicStruct> Orphanage::newOrphanCopy<DynamicStruct::Reader>(
     const DynamicStruct::Reader& copyFrom) const {
   return Orphan<DynamicStruct>(
-      copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.reader));
+      copyFrom.getSchema(), _::OrphanBuilder::copy(arena, capTable, copyFrom.reader));
 }
 
 template <>
 inline Orphan<DynamicList> Orphanage::newOrphanCopy<DynamicList::Reader>(
     const DynamicList::Reader& copyFrom) const {
-  return Orphan<DynamicList>(copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.reader));
+  return Orphan<DynamicList>(copyFrom.getSchema(),
+      _::OrphanBuilder::copy(arena, capTable, copyFrom.reader));
 }
 
 template <>
 inline Orphan<DynamicCapability> Orphanage::newOrphanCopy<DynamicCapability::Client>(
     DynamicCapability::Client& copyFrom) const {
   return Orphan<DynamicCapability>(
-      copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.hook->addRef()));
+      copyFrom.getSchema(), _::OrphanBuilder::copy(arena, capTable, copyFrom.hook->addRef()));
 }
 
 template <>

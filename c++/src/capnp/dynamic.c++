@@ -1939,16 +1939,16 @@ Orphan<DynamicCapability> Orphan<AnyPointer>::releaseAs<DynamicCapability>(
 
 Orphan<DynamicStruct> Orphanage::newOrphan(StructSchema schema) const {
   return Orphan<DynamicStruct>(
-      schema, _::OrphanBuilder::initStruct(arena, structSizeFromSchema(schema)));
+      schema, _::OrphanBuilder::initStruct(arena, capTable, structSizeFromSchema(schema)));
 }
 
 Orphan<DynamicList> Orphanage::newOrphan(ListSchema schema, uint size) const {
   if (schema.whichElementType() == schema::Type::STRUCT) {
     return Orphan<DynamicList>(schema, _::OrphanBuilder::initStructList(
-        arena, size * ELEMENTS, structSizeFromSchema(schema.getStructElementType())));
+        arena, capTable, size * ELEMENTS, structSizeFromSchema(schema.getStructElementType())));
   } else {
     return Orphan<DynamicList>(schema, _::OrphanBuilder::initList(
-        arena, size * ELEMENTS, elementSizeFor(schema.whichElementType())));
+        arena, capTable, size * ELEMENTS, elementSizeFor(schema.whichElementType())));
   }
 }
 

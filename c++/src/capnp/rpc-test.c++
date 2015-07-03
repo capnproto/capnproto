@@ -244,10 +244,6 @@ public:
         return message.getRoot<AnyPointer>();
       }
 
-      void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>>&& capTable) override {
-        message.initCapTable(kj::mv(capTable));
-      }
-
       kj::Array<word> data;
       FlatArrayMessageReader message;
     };
@@ -261,10 +257,6 @@ public:
 
       AnyPointer::Builder getBody() override {
         return message.getRoot<AnyPointer>();
-      }
-
-      kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() override {
-        return message.getCapTable();
       }
 
       void send() override {

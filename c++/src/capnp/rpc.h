@@ -243,9 +243,6 @@ public:
   // Get the message body, which the caller may fill in any way it wants.  (The standard RPC
   // implementation initializes it as a Message as defined in rpc.capnp.)
 
-  virtual kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() = 0;
-  // Calls getCapTable() on the underlying MessageBuilder.
-
   virtual void send() = 0;
   // Send the message, or at least put it in a queue to be sent later.  Note that the builder
   // returned by `getBody()` remains valid at least until the `OutgoingRpcMessage` is destroyed.
@@ -258,9 +255,6 @@ public:
   virtual AnyPointer::Reader getBody() = 0;
   // Get the message body, to be interpreted by the caller.  (The standard RPC implementation
   // interprets it as a Message as defined in rpc.capnp.)
-
-  virtual void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>>&& capTable) = 0;
-  // Calls initCapTable() on the underlying MessageReader.
 };
 
 template <typename VatId, typename ProvisionId, typename RecipientId,

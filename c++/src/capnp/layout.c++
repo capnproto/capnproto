@@ -314,7 +314,7 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(word* allocate(
-      WirePointer*& ref, SegmentBuilder*& segment, WordCount amount,
+      WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable, WordCount amount,
       WirePointer::Kind kind, BuilderArena* orphanArena)) {
     // Allocate space in the message for a new object, creating far pointers if necessary.
     //
@@ -337,7 +337,7 @@ struct WireHelpers {
     //   target offset will be set to zero.
 
     if (orphanArena == nullptr) {
-      if (!ref->isNull()) zeroObject(segment, ref);
+      if (!ref->isNull()) zeroObject(segment, capTable, ref);
 
       if (amount == 0 * WORDS && kind == WirePointer::STRUCT) {
         // Note that the check for kind == WirePointer::STRUCT will hopefully cause this whole
@@ -464,7 +464,7 @@ struct WireHelpers {
 
   // -----------------------------------------------------------------
 
-  static void zeroObject(SegmentBuilder* segment, WirePointer* ref) {
+  static void zeroObject(SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref) {
     // Zero out the pointed-to object.  Use when the pointer is about to be overwritten making the
     // target object no longer reachable.
 
@@ -474,7 +474,7 @@ struct WireHelpers {
     switch (ref->kind()) {
       case WirePointer::STRUCT:
       case WirePointer::LIST:
-        zeroObject(segment, ref, ref->target());
+        zeroObject(segment, capTable, ref, ref->target());
         break;
       case WirePointer::FAR: {
         segment = segment->getArena()->getSegment(ref->farRef.segmentId.get());
@@ -485,11 +485,12 @@ struct WireHelpers {
           if (ref->isDoubleFar()) {
             segment = segment->getArena()->getSegment(pad->farRef.segmentId.get());
             if (segment->isWritable()) {
-              zeroObject(segment, pad + 1, segment->getPtrUnchecked(pad->farPositionInSegment()));
+              zeroObject(segment, capTable,
+                         pad + 1, segment->getPtrUnchecked(pad->farPositionInSegment()));
             }
             memset(pad, 0, sizeof(WirePointer) * 2);
           } else {
-            zeroObject(segment, pad);
+            zeroObject(segment, capTable, pad);
             memset(pad, 0, sizeof(WirePointer));
           }
         }
@@ -500,7 +501,7 @@ struct WireHelpers {
 #if CAPNP_LITE
           KJ_FAIL_ASSERT("Capability encountered in builder in lite mode?") { break; }
 #else  // CAPNP_LINE
-          segment->getArena()->dropCap(ref->capRef.index.get());
+          capTable->dropCap(ref->capRef.index.get());
 #endif  // CAPNP_LITE, else
         } else {
           KJ_FAIL_REQUIRE("Unknown pointer type.") { break; }
@@ -509,7 +510,8 @@ struct WireHelpers {
     }
   }
 
-  static void zeroObject(SegmentBuilder* segment, WirePointer* tag, word* ptr) {
+  static void zeroObject(SegmentBuilder* segment, CapTableBuilder* capTable,
+                         WirePointer* tag, word* ptr) {
     // We shouldn't zero out external data linked into the message.
     if (!segment->isWritable()) return;
 
@@ -519,7 +521,7 @@ struct WireHelpers {
             reinterpret_cast<WirePointer*>(ptr + tag->structRef.dataSize.get());
         uint count = tag->structRef.ptrCount.get() / POINTERS;
         for (uint i = 0; i < count; i++) {
-          zeroObject(segment, pointerSection + i);
+          zeroObject(segment, capTable, pointerSection + i);
         }
         memset(ptr, 0, tag->structRef.wordSize() * BYTES_PER_WORD / BYTES);
         break;
@@ -542,7 +544,7 @@ struct WireHelpers {
           case ElementSize::POINTER: {
             uint count = tag->listRef.elementCount() / ELEMENTS;
             for (uint i = 0; i < count; i++) {
-              zeroObject(segment, reinterpret_cast<WirePointer*>(ptr) + i);
+              zeroObject(segment, capTable, reinterpret_cast<WirePointer*>(ptr) + i);
             }
             memset(ptr, 0, POINTER_SIZE_IN_WORDS * count * BYTES_PER_WORD / BYTES);
             break;
@@ -562,7 +564,7 @@ struct WireHelpers {
                 pos += dataSize;
 
                 for (uint j = 0; j < pointerCount / POINTERS; j++) {
-                  zeroObject(segment, reinterpret_cast<WirePointer*>(pos));
+                  zeroObject(segment, capTable, reinterpret_cast<WirePointer*>(pos));
                   pos += POINTER_SIZE_IN_WORDS;
                 }
               }
@@ -741,7 +743,8 @@ struct WireHelpers {
   // Copy from an unchecked message.
 
   static KJ_ALWAYS_INLINE(
-      void copyStruct(SegmentBuilder* segment, word* dst, const word* src,
+      void copyStruct(SegmentBuilder* segment, CapTableBuilder* capTable,
+                      word* dst, const word* src,
                       WordCount dataSize, WirePointerCount pointerCount)) {
     memcpy(dst, src, dataSize * BYTES_PER_WORD / BYTES);
 
@@ -751,12 +754,13 @@ struct WireHelpers {
     for (uint i = 0; i < pointerCount / POINTERS; i++) {
       SegmentBuilder* subSegment = segment;
       WirePointer* dstRef = dstRefs + i;
-      copyMessage(subSegment, dstRef, srcRefs + i);
+      copyMessage(subSegment, capTable, dstRef, srcRefs + i);
     }
   }
 
   static word* copyMessage(
-      SegmentBuilder*& segment, WirePointer*& dst, const WirePointer* src) {
+      SegmentBuilder*& segment, CapTableBuilder* capTable,
+      WirePointer*& dst, const WirePointer* src) {
     // Not always-inline because it's recursive.
 
     switch (src->kind()) {
@@ -767,9 +771,9 @@ struct WireHelpers {
         } else {
           const word* srcPtr = src->target();
           word* dstPtr = allocate(
-              dst, segment, src->structRef.wordSize(), WirePointer::STRUCT, nullptr);
+              dst, segment, capTable, src->structRef.wordSize(), WirePointer::STRUCT, nullptr);
 
-          copyStruct(segment, dstPtr, srcPtr, src->structRef.dataSize.get(),
+          copyStruct(segment, capTable, dstPtr, srcPtr, src->structRef.dataSize.get(),
                      src->structRef.ptrCount.get());
 
           dst->structRef.set(src->structRef.dataSize.get(), src->structRef.ptrCount.get());
@@ -788,7 +792,7 @@ struct WireHelpers {
                 ElementCount64(src->listRef.elementCount()) *
                 dataBitsPerElement(src->listRef.elementSize()));
             const word* srcPtr = src->target();
-            word* dstPtr = allocate(dst, segment, wordCount, WirePointer::LIST, nullptr);
+            word* dstPtr = allocate(dst, segment, capTable, wordCount, WirePointer::LIST, nullptr);
             memcpy(dstPtr, srcPtr, wordCount * BYTES_PER_WORD / BYTES);
 
             dst->listRef.set(src->listRef.elementSize(), src->listRef.elementCount());
@@ -798,7 +802,7 @@ struct WireHelpers {
           case ElementSize::POINTER: {
             const WirePointer* srcRefs = reinterpret_cast<const WirePointer*>(src->target());
             WirePointer* dstRefs = reinterpret_cast<WirePointer*>(
-                allocate(dst, segment, src->listRef.elementCount() *
+                allocate(dst, segment, capTable, src->listRef.elementCount() *
                     (1 * POINTERS / ELEMENTS) * WORDS_PER_POINTER,
                     WirePointer::LIST, nullptr));
 
@@ -806,7 +810,7 @@ struct WireHelpers {
             for (uint i = 0; i < n; i++) {
               SegmentBuilder* subSegment = segment;
               WirePointer* dstRef = dstRefs + i;
-              copyMessage(subSegment, dstRef, srcRefs + i);
+              copyMessage(subSegment, capTable, dstRef, srcRefs + i);
             }
 
             dst->listRef.set(ElementSize::POINTER, src->listRef.elementCount());
@@ -815,7 +819,7 @@ struct WireHelpers {
 
           case ElementSize::INLINE_COMPOSITE: {
             const word* srcPtr = src->target();
-            word* dstPtr = allocate(dst, segment,
+            word* dstPtr = allocate(dst, segment, capTable,
                 src->listRef.inlineCompositeWordCount() + POINTER_SIZE_IN_WORDS,
                 WirePointer::LIST, nullptr);
 
@@ -832,7 +836,7 @@ struct WireHelpers {
 
             uint n = srcTag->inlineCompositeListElementCount() / ELEMENTS;
             for (uint i = 0; i < n; i++) {
-              copyStruct(segment, dstElement, srcElement,
+              copyStruct(segment, capTable, dstElement, srcElement,
                   srcTag->structRef.dataSize.get(), srcTag->structRef.ptrCount.get());
               srcElement += srcTag->structRef.wordSize();
               dstElement += srcTag->structRef.wordSize();
@@ -922,34 +926,36 @@ struct WireHelpers {
   // -----------------------------------------------------------------
 
   static KJ_ALWAYS_INLINE(StructBuilder initStructPointer(
-      WirePointer* ref, SegmentBuilder* segment, StructSize size,
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, StructSize size,
       BuilderArena* orphanArena = nullptr)) {
     // Allocate space for the new struct.  Newly-allocated space is automatically zeroed.
-    word* ptr = allocate(ref, segment, size.total(), WirePointer::STRUCT, orphanArena);
+    word* ptr = allocate(ref, segment, capTable, size.total(), WirePointer::STRUCT, orphanArena);
 
     // Initialize the pointer.
     ref->structRef.set(size);
 
     // Build the StructBuilder.
-    return StructBuilder(segment, ptr, reinterpret_cast<WirePointer*>(ptr + size.data),
+    return StructBuilder(segment, capTable, ptr, reinterpret_cast<WirePointer*>(ptr + size.data),
                          size.data * BITS_PER_WORD, size.pointers);
   }
 
   static KJ_ALWAYS_INLINE(StructBuilder getWritableStructPointer(
-      WirePointer* ref, SegmentBuilder* segment, StructSize size, const word* defaultValue)) {
-    return getWritableStructPointer(ref, ref->target(), segment, size, defaultValue);
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, StructSize size,
+      const word* defaultValue)) {
+    return getWritableStructPointer(ref, ref->target(), segment, capTable, size, defaultValue);
   }
 
   static KJ_ALWAYS_INLINE(StructBuilder getWritableStructPointer(
-      WirePointer* ref, word* refTarget, SegmentBuilder* segment, StructSize size,
-      const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
+      WirePointer* ref, word* refTarget, SegmentBuilder* segment, CapTableBuilder* capTable,
+      StructSize size, const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
     if (ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
-        return initStructPointer(ref, segment, size, orphanArena);
+        return initStructPointer(ref, segment, capTable, size, orphanArena);
       }
-      refTarget = copyMessage(segment, ref, reinterpret_cast<const WirePointer*>(defaultValue));
+      refTarget = copyMessage(segment, capTable, ref,
+          reinterpret_cast<const WirePointer*>(defaultValue));
       defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
     }
 
@@ -979,7 +985,7 @@ struct WireHelpers {
       // Don't let allocate() zero out the object just yet.
       zeroPointerAndFars(segment, ref);
 
-      word* ptr = allocate(ref, segment, totalSize, WirePointer::STRUCT, orphanArena);
+      word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::STRUCT, orphanArena);
       ref->structRef.set(newDataSize, newPointerCount);
 
       // Copy data section.
@@ -999,17 +1005,17 @@ struct WireHelpers {
       memset(oldPtr, 0,
              (oldDataSize + oldPointerCount * WORDS_PER_POINTER) * BYTES_PER_WORD / BYTES);
 
-      return StructBuilder(segment, ptr, newPointerSection, newDataSize * BITS_PER_WORD,
+      return StructBuilder(segment, capTable, ptr, newPointerSection, newDataSize * BITS_PER_WORD,
                            newPointerCount);
     } else {
-      return StructBuilder(oldSegment, oldPtr, oldPointerSection, oldDataSize * BITS_PER_WORD,
-                           oldPointerCount);
+      return StructBuilder(oldSegment, capTable, oldPtr, oldPointerSection,
+                           oldDataSize * BITS_PER_WORD, oldPointerCount);
     }
   }
 
   static KJ_ALWAYS_INLINE(ListBuilder initListPointer(
-      WirePointer* ref, SegmentBuilder* segment, ElementCount elementCount,
-      ElementSize elementSize, BuilderArena* orphanArena = nullptr)) {
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable,
+      ElementCount elementCount, ElementSize elementSize, BuilderArena* orphanArena = nullptr)) {
     KJ_DREQUIRE(elementSize != ElementSize::INLINE_COMPOSITE,
         "Should have called initStructListPointer() instead.");
 
@@ -1021,24 +1027,25 @@ struct WireHelpers {
     WordCount wordCount = roundBitsUpToWords(ElementCount64(elementCount) * step);
 
     // Allocate the list.
-    word* ptr = allocate(ref, segment, wordCount, WirePointer::LIST, orphanArena);
+    word* ptr = allocate(ref, segment, capTable, wordCount, WirePointer::LIST, orphanArena);
 
     // Initialize the pointer.
     ref->listRef.set(elementSize, elementCount);
 
     // Build the ListBuilder.
-    return ListBuilder(segment, ptr, step, elementCount, dataSize, pointerCount, elementSize);
+    return ListBuilder(segment, capTable, ptr, step, elementCount, dataSize,
+                       pointerCount, elementSize);
   }
 
   static KJ_ALWAYS_INLINE(ListBuilder initStructListPointer(
-      WirePointer* ref, SegmentBuilder* segment, ElementCount elementCount,
-      StructSize elementSize, BuilderArena* orphanArena = nullptr)) {
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable,
+      ElementCount elementCount, StructSize elementSize, BuilderArena* orphanArena = nullptr)) {
     auto wordsPerElement = elementSize.total() / ELEMENTS;
 
     // Allocate the list, prefixed by a single WirePointer.
     WordCount wordCount = elementCount * wordsPerElement;
-    word* ptr = allocate(ref, segment, POINTER_SIZE_IN_WORDS + wordCount, WirePointer::LIST,
-                         orphanArena);
+    word* ptr = allocate(ref, segment, capTable, POINTER_SIZE_IN_WORDS + wordCount,
+                         WirePointer::LIST, orphanArena);
 
     // Initialize the pointer.
     // INLINE_COMPOSITE lists replace the element count with the word count.
@@ -1051,20 +1058,21 @@ struct WireHelpers {
     ptr += POINTER_SIZE_IN_WORDS;
 
     // Build the ListBuilder.
-    return ListBuilder(segment, ptr, wordsPerElement * BITS_PER_WORD, elementCount,
+    return ListBuilder(segment, capTable, ptr, wordsPerElement * BITS_PER_WORD, elementCount,
                        elementSize.data * BITS_PER_WORD, elementSize.pointers,
                        ElementSize::INLINE_COMPOSITE);
   }
 
   static KJ_ALWAYS_INLINE(ListBuilder getWritableListPointer(
-      WirePointer* origRef, SegmentBuilder* origSegment, ElementSize elementSize,
-      const word* defaultValue)) {
-    return getWritableListPointer(origRef, origRef->target(), origSegment, elementSize,
+      WirePointer* origRef, SegmentBuilder* origSegment, CapTableBuilder* capTable,
+      ElementSize elementSize, const word* defaultValue)) {
+    return getWritableListPointer(origRef, origRef->target(), origSegment, capTable, elementSize,
                                   defaultValue);
   }
 
   static KJ_ALWAYS_INLINE(ListBuilder getWritableListPointer(
-      WirePointer* origRef, word* origRefTarget, SegmentBuilder* origSegment, ElementSize elementSize,
+      WirePointer* origRef, word* origRefTarget,
+      SegmentBuilder* origSegment, CapTableBuilder* capTable, ElementSize elementSize,
       const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
     KJ_DREQUIRE(elementSize != ElementSize::INLINE_COMPOSITE,
              "Use getStructList{Element,Field}() for structs.");
@@ -1076,7 +1084,7 @@ struct WireHelpers {
         return ListBuilder(elementSize);
       }
       origRefTarget = copyMessage(
-          origSegment, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
+          origSegment, capTable, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
       defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
     }
 
@@ -1149,7 +1157,7 @@ struct WireHelpers {
 
       // OK, looks valid.
 
-      return ListBuilder(segment, ptr,
+      return ListBuilder(segment, capTable, ptr,
                          tag->structRef.wordSize() * BITS_PER_WORD / ELEMENTS,
                          tag->inlineCompositeListElementCount(),
                          dataSize * BITS_PER_WORD, pointerCount, ElementSize::INLINE_COMPOSITE);
@@ -1178,18 +1186,21 @@ struct WireHelpers {
       }
 
       auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
-      return ListBuilder(segment, ptr, step, ref->listRef.elementCount(),
+      return ListBuilder(segment, capTable, ptr, step, ref->listRef.elementCount(),
                          dataSize, pointerCount, oldSize);
     }
   }
 
   static KJ_ALWAYS_INLINE(ListBuilder getWritableListPointerAnySize(
-      WirePointer* origRef, SegmentBuilder* origSegment, const word* defaultValue)) {
-    return getWritableListPointerAnySize(origRef, origRef->target(), origSegment, defaultValue);
+      WirePointer* origRef, SegmentBuilder* origSegment, CapTableBuilder* capTable,
+      const word* defaultValue)) {
+    return getWritableListPointerAnySize(origRef, origRef->target(), origSegment,
+                                         capTable, defaultValue);
   }
 
   static KJ_ALWAYS_INLINE(ListBuilder getWritableListPointerAnySize(
-      WirePointer* origRef, word* origRefTarget, SegmentBuilder* origSegment,
+      WirePointer* origRef, word* origRefTarget,
+      SegmentBuilder* origSegment, CapTableBuilder* capTable,
       const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
     if (origRef->isNull()) {
     useDefault:
@@ -1198,7 +1209,7 @@ struct WireHelpers {
         return ListBuilder(ElementSize::VOID);
       }
       origRefTarget = copyMessage(
-          origSegment, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
+          origSegment, capTable, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
       defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
     }
 
@@ -1220,7 +1231,7 @@ struct WireHelpers {
           "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
       ptr += POINTER_SIZE_IN_WORDS;
 
-      return ListBuilder(segment, ptr,
+      return ListBuilder(segment, capTable, ptr,
                          tag->structRef.wordSize() * BITS_PER_WORD / ELEMENTS,
                          tag->inlineCompositeListElementCount(),
                          tag->structRef.dataSize.get() * BITS_PER_WORD,
@@ -1230,19 +1241,20 @@ struct WireHelpers {
       WirePointerCount pointerCount = pointersPerElement(elementSize) * ELEMENTS;
 
       auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
-      return ListBuilder(segment, ptr, step, ref->listRef.elementCount(),
+      return ListBuilder(segment, capTable, ptr, step, ref->listRef.elementCount(),
                          dataSize, pointerCount, elementSize);
     }
   }
 
   static KJ_ALWAYS_INLINE(ListBuilder getWritableStructListPointer(
-      WirePointer* origRef, SegmentBuilder* origSegment, StructSize elementSize,
-      const word* defaultValue)) {
-    return getWritableStructListPointer(origRef, origRef->target(), origSegment, elementSize,
-                                        defaultValue);
+      WirePointer* origRef, SegmentBuilder* origSegment, CapTableBuilder* capTable,
+      StructSize elementSize, const word* defaultValue)) {
+    return getWritableStructListPointer(origRef, origRef->target(), origSegment, capTable,
+                                        elementSize, defaultValue);
   }
   static KJ_ALWAYS_INLINE(ListBuilder getWritableStructListPointer(
-      WirePointer* origRef, word* origRefTarget, SegmentBuilder* origSegment,
+      WirePointer* origRef, word* origRefTarget,
+      SegmentBuilder* origSegment, CapTableBuilder* capTable,
       StructSize elementSize, const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
     if (origRef->isNull()) {
     useDefault:
@@ -1251,7 +1263,7 @@ struct WireHelpers {
         return ListBuilder(ElementSize::INLINE_COMPOSITE);
       }
       origRefTarget = copyMessage(
-          origSegment, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
+          origSegment, capTable, origRef, reinterpret_cast<const WirePointer*>(defaultValue));
       defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
     }
 
@@ -1285,7 +1297,7 @@ struct WireHelpers {
 
       if (oldDataSize >= elementSize.data && oldPointerCount >= elementSize.pointers) {
         // Old size is at least as large as we need.  Ship it.
-        return ListBuilder(oldSegment, oldPtr, oldStep * BITS_PER_WORD, elementCount,
+        return ListBuilder(oldSegment, capTable, oldPtr, oldStep * BITS_PER_WORD, elementCount,
                            oldDataSize * BITS_PER_WORD, oldPointerCount,
                            ElementSize::INLINE_COMPOSITE);
       }
@@ -1301,7 +1313,7 @@ struct WireHelpers {
       // Don't let allocate() zero out the object just yet.
       zeroPointerAndFars(origSegment, origRef);
 
-      word* newPtr = allocate(origRef, origSegment, totalSize + POINTER_SIZE_IN_WORDS,
+      word* newPtr = allocate(origRef, origSegment, capTable, totalSize + POINTER_SIZE_IN_WORDS,
                               WirePointer::LIST, orphanArena);
       origRef->listRef.setInlineComposite(totalSize);
 
@@ -1330,7 +1342,7 @@ struct WireHelpers {
       // Zero out old location.  See explanation in getWritableStructPointer().
       memset(oldPtr, 0, oldStep * elementCount * BYTES_PER_WORD / BYTES);
 
-      return ListBuilder(origSegment, newPtr, newStep * BITS_PER_WORD, elementCount,
+      return ListBuilder(origSegment, capTable, newPtr, newStep * BITS_PER_WORD, elementCount,
                          newDataSize * BITS_PER_WORD, newPointerCount, ElementSize::INLINE_COMPOSITE);
     } else {
       // We're upgrading from a non-struct list.
@@ -1342,7 +1354,7 @@ struct WireHelpers {
 
       if (oldSize == ElementSize::VOID) {
         // Nothing to copy, just allocate a new list.
-        return initStructListPointer(origRef, origSegment, elementCount, elementSize);
+        return initStructListPointer(origRef, origSegment, capTable, elementCount, elementSize);
       } else {
         // Upgrading to an inline composite list.
 
@@ -1368,7 +1380,7 @@ struct WireHelpers {
         // Don't let allocate() zero out the object just yet.
         zeroPointerAndFars(origSegment, origRef);
 
-        word* newPtr = allocate(origRef, origSegment, totalWords + POINTER_SIZE_IN_WORDS,
+        word* newPtr = allocate(origRef, origSegment, capTable, totalWords + POINTER_SIZE_IN_WORDS,
                                 WirePointer::LIST, orphanArena);
         origRef->listRef.setInlineComposite(totalWords);
 
@@ -1399,7 +1411,7 @@ struct WireHelpers {
         // Zero out old location.  See explanation in getWritableStructPointer().
         memset(oldPtr, 0, roundBitsUpToBytes(oldStep * elementCount) / BYTES);
 
-        return ListBuilder(origSegment, newPtr, newStep * BITS_PER_WORD, elementCount,
+        return ListBuilder(origSegment, capTable, newPtr, newStep * BITS_PER_WORD, elementCount,
                            newDataSize * BITS_PER_WORD, newPointerCount,
                            ElementSize::INLINE_COMPOSITE);
       }
@@ -1407,14 +1419,14 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(SegmentAnd<Text::Builder> initTextPointer(
-      WirePointer* ref, SegmentBuilder* segment, ByteCount size,
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, ByteCount size,
       BuilderArena* orphanArena = nullptr)) {
     // The byte list must include a NUL terminator.
     ByteCount byteSize = size + 1 * BYTES;
 
     // Allocate the space.
     word* ptr = allocate(
-        ref, segment, roundBytesUpToWords(byteSize), WirePointer::LIST, orphanArena);
+        ref, segment, capTable, roundBytesUpToWords(byteSize), WirePointer::LIST, orphanArena);
 
     // Initialize the pointer.
     ref->listRef.set(ElementSize::BYTE, byteSize * (1 * ELEMENTS / BYTES));
@@ -1424,28 +1436,28 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(SegmentAnd<Text::Builder> setTextPointer(
-      WirePointer* ref, SegmentBuilder* segment, Text::Reader value,
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, Text::Reader value,
       BuilderArena* orphanArena = nullptr)) {
-    auto allocation = initTextPointer(ref, segment, value.size() * BYTES, orphanArena);
+    auto allocation = initTextPointer(ref, segment, capTable, value.size() * BYTES, orphanArena);
     memcpy(allocation.value.begin(), value.begin(), value.size());
     return allocation;
   }
 
   static KJ_ALWAYS_INLINE(Text::Builder getWritableTextPointer(
-      WirePointer* ref, SegmentBuilder* segment,
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable,
       const void* defaultValue, ByteCount defaultSize)) {
-    return getWritableTextPointer(ref, ref->target(), segment, defaultValue, defaultSize);
+    return getWritableTextPointer(ref, ref->target(), segment, capTable, defaultValue, defaultSize);
   }
 
   static KJ_ALWAYS_INLINE(Text::Builder getWritableTextPointer(
-      WirePointer* ref, word* refTarget, SegmentBuilder* segment,
+      WirePointer* ref, word* refTarget, SegmentBuilder* segment, CapTableBuilder* capTable,
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref->isNull()) {
     useDefault:
       if (defaultSize == 0 * BYTES) {
         return nullptr;
       } else {
-        Text::Builder builder = initTextPointer(ref, segment, defaultSize).value;
+        Text::Builder builder = initTextPointer(ref, segment, capTable, defaultSize).value;
         memcpy(builder.begin(), defaultValue, defaultSize / BYTES);
         return builder;
       }
@@ -1468,10 +1480,11 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(SegmentAnd<Data::Builder> initDataPointer(
-      WirePointer* ref, SegmentBuilder* segment, ByteCount size,
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, ByteCount size,
       BuilderArena* orphanArena = nullptr)) {
     // Allocate the space.
-    word* ptr = allocate(ref, segment, roundBytesUpToWords(size), WirePointer::LIST, orphanArena);
+    word* ptr = allocate(ref, segment, capTable, roundBytesUpToWords(size),
+                         WirePointer::LIST, orphanArena);
 
     // Initialize the pointer.
     ref->listRef.set(ElementSize::BYTE, size * (1 * ELEMENTS / BYTES));
@@ -1481,27 +1494,27 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(SegmentAnd<Data::Builder> setDataPointer(
-      WirePointer* ref, SegmentBuilder* segment, Data::Reader value,
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, Data::Reader value,
       BuilderArena* orphanArena = nullptr)) {
-    auto allocation = initDataPointer(ref, segment, value.size() * BYTES, orphanArena);
+    auto allocation = initDataPointer(ref, segment, capTable, value.size() * BYTES, orphanArena);
     memcpy(allocation.value.begin(), value.begin(), value.size());
     return allocation;
   }
 
   static KJ_ALWAYS_INLINE(Data::Builder getWritableDataPointer(
-      WirePointer* ref, SegmentBuilder* segment,
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable,
       const void* defaultValue, ByteCount defaultSize)) {
-    return getWritableDataPointer(ref, ref->target(), segment, defaultValue, defaultSize);
+    return getWritableDataPointer(ref, ref->target(), segment, capTable, defaultValue, defaultSize);
   }
 
   static KJ_ALWAYS_INLINE(Data::Builder getWritableDataPointer(
-      WirePointer* ref, word* refTarget, SegmentBuilder* segment,
+      WirePointer* ref, word* refTarget, SegmentBuilder* segment, CapTableBuilder* capTable,
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref->isNull()) {
       if (defaultSize == 0 * BYTES) {
         return nullptr;
       } else {
-        Data::Builder builder = initDataPointer(ref, segment, defaultSize).value;
+        Data::Builder builder = initDataPointer(ref, segment, capTable, defaultSize).value;
         memcpy(builder.begin(), defaultValue, defaultSize / BYTES);
         return builder;
       }
@@ -1518,12 +1531,12 @@ struct WireHelpers {
   }
 
   static SegmentAnd<word*> setStructPointer(
-      SegmentBuilder* segment, WirePointer* ref, StructReader value,
+      SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref, StructReader value,
       BuilderArena* orphanArena = nullptr) {
     WordCount dataSize = roundBitsUpToWords(value.dataSize);
     WordCount totalSize = dataSize + value.pointerCount * WORDS_PER_POINTER;
 
-    word* ptr = allocate(ref, segment, totalSize, WirePointer::STRUCT, orphanArena);
+    word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::STRUCT, orphanArena);
     ref->structRef.set(dataSize, value.pointerCount);
 
     if (value.dataSize == 1 * BITS) {
@@ -1534,8 +1547,8 @@ struct WireHelpers {
 
     WirePointer* pointerSection = reinterpret_cast<WirePointer*>(ptr + dataSize);
     for (uint i = 0; i < value.pointerCount / POINTERS; i++) {
-      copyPointer(segment, pointerSection + i, value.segment, value.pointers + i,
-                  value.nestingLimit);
+      copyPointer(segment, capTable, pointerSection + i,
+                  value.segment, value.capTable, value.pointers + i, value.nestingLimit);
     }
 
     return { segment, ptr };
@@ -1543,31 +1556,31 @@ struct WireHelpers {
 
 #if !CAPNP_LITE
   static void setCapabilityPointer(
-      SegmentBuilder* segment, WirePointer* ref, kj::Own<ClientHook>&& cap,
-      BuilderArena* orphanArena = nullptr) {
-    if (orphanArena == nullptr) {
-      ref->setCap(segment->getArena()->injectCap(kj::mv(cap)));
-    } else {
-      ref->setCap(orphanArena->injectCap(kj::mv(cap)));
+      SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref,
+      kj::Own<ClientHook>&& cap) {
+    if (!ref->isNull()) {
+      zeroObject(segment, capTable, ref);
     }
+    ref->setCap(capTable->injectCap(kj::mv(cap)));
   }
 #endif  // !CAPNP_LITE
 
   static SegmentAnd<word*> setListPointer(
-      SegmentBuilder* segment, WirePointer* ref, ListReader value,
+      SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref, ListReader value,
       BuilderArena* orphanArena = nullptr) {
     WordCount totalSize = roundBitsUpToWords(value.elementCount * value.step);
 
     if (value.elementSize != ElementSize::INLINE_COMPOSITE) {
       // List of non-structs.
-      word* ptr = allocate(ref, segment, totalSize, WirePointer::LIST, orphanArena);
+      word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::LIST, orphanArena);
 
       if (value.elementSize == ElementSize::POINTER) {
         // List of pointers.
         ref->listRef.set(ElementSize::POINTER, value.elementCount);
         for (uint i = 0; i < value.elementCount / ELEMENTS; i++) {
-          copyPointer(segment, reinterpret_cast<WirePointer*>(ptr) + i,
-                      value.segment, reinterpret_cast<const WirePointer*>(value.ptr) + i,
+          copyPointer(segment, capTable, reinterpret_cast<WirePointer*>(ptr) + i,
+                      value.segment, value.capTable,
+                      reinterpret_cast<const WirePointer*>(value.ptr) + i,
                       value.nestingLimit);
         }
       } else {
@@ -1579,8 +1592,8 @@ struct WireHelpers {
       return { segment, ptr };
     } else {
       // List of structs.
-      word* ptr = allocate(ref, segment, totalSize + POINTER_SIZE_IN_WORDS, WirePointer::LIST,
-                           orphanArena);
+      word* ptr = allocate(ref, segment, capTable, totalSize + POINTER_SIZE_IN_WORDS,
+                           WirePointer::LIST, orphanArena);
       ref->listRef.setInlineComposite(totalSize);
 
       WordCount dataSize = roundBitsUpToWords(value.structDataSize);
@@ -1598,8 +1611,9 @@ struct WireHelpers {
         src += dataSize;
 
         for (uint j = 0; j < pointerCount / POINTERS; j++) {
-          copyPointer(segment, reinterpret_cast<WirePointer*>(dst),
-              value.segment, reinterpret_cast<const WirePointer*>(src), value.nestingLimit);
+          copyPointer(segment, capTable, reinterpret_cast<WirePointer*>(dst),
+              value.segment, value.capTable, reinterpret_cast<const WirePointer*>(src),
+              value.nestingLimit);
           dst += POINTER_SIZE_IN_WORDS;
           src += POINTER_SIZE_IN_WORDS;
         }
@@ -1610,16 +1624,18 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(SegmentAnd<word*> copyPointer(
-      SegmentBuilder* dstSegment, WirePointer* dst,
-      SegmentReader* srcSegment, const WirePointer* src,
+      SegmentBuilder* dstSegment, CapTableBuilder* dstCapTable, WirePointer* dst,
+      SegmentReader* srcSegment, CapTableReader* srcCapTable, const WirePointer* src,
       int nestingLimit, BuilderArena* orphanArena = nullptr)) {
-    return copyPointer(dstSegment, dst, srcSegment, src, src->target(), nestingLimit, orphanArena);
+    return copyPointer(dstSegment, dstCapTable, dst,
+                       srcSegment, srcCapTable, src, src->target(),
+                       nestingLimit, orphanArena);
   }
 
   static SegmentAnd<word*> copyPointer(
-      SegmentBuilder* dstSegment, WirePointer* dst,
-      SegmentReader* srcSegment, const WirePointer* src, const word* srcTarget,
-      int nestingLimit, BuilderArena* orphanArena = nullptr) {
+      SegmentBuilder* dstSegment, CapTableBuilder* dstCapTable, WirePointer* dst,
+      SegmentReader* srcSegment, CapTableReader* srcCapTable, const WirePointer* src,
+      const word* srcTarget, int nestingLimit, BuilderArena* orphanArena = nullptr) {
     // Deep-copy the object pointed to by src into dst.  It turns out we can't reuse
     // readStructPointer(), etc. because they do type checking whereas here we want to accept any
     // valid pointer.
@@ -1627,7 +1643,7 @@ struct WireHelpers {
     if (src->isNull()) {
     useDefault:
       if (!dst->isNull()) {
-        zeroObject(dstSegment, dst);
+        zeroObject(dstSegment, dstCapTable, dst);
         memset(dst, 0, sizeof(*dst));
       }
       return { dstSegment, nullptr };
@@ -1650,8 +1666,8 @@ struct WireHelpers {
                    "Message contained out-of-bounds struct pointer.") {
           goto useDefault;
         }
-        return setStructPointer(dstSegment, dst,
-            StructReader(srcSegment, ptr,
+        return setStructPointer(dstSegment, dstCapTable, dst,
+            StructReader(srcSegment, srcCapTable, ptr,
                          reinterpret_cast<const WirePointer*>(ptr + src->structRef.dataSize.get()),
                          src->structRef.dataSize.get() * BITS_PER_WORD,
                          src->structRef.ptrCount.get(),
@@ -1698,8 +1714,9 @@ struct WireHelpers {
             }
           }
 
-          return setListPointer(dstSegment, dst,
-              ListReader(srcSegment, ptr, elementCount, wordsPerElement * BITS_PER_WORD,
+          return setListPointer(dstSegment, dstCapTable, dst,
+              ListReader(srcSegment, srcCapTable, ptr,
+                         elementCount, wordsPerElement * BITS_PER_WORD,
                          tag->structRef.dataSize.get() * BITS_PER_WORD,
                          tag->structRef.ptrCount.get(), ElementSize::INLINE_COMPOSITE,
                          nestingLimit - 1),
@@ -1725,9 +1742,9 @@ struct WireHelpers {
             }
           }
 
-          return setListPointer(dstSegment, dst,
-              ListReader(srcSegment, ptr, elementCount, step, dataSize, pointerCount, elementSize,
-                         nestingLimit - 1),
+          return setListPointer(dstSegment, dstCapTable, dst,
+              ListReader(srcSegment, srcCapTable, ptr, elementCount, step, dataSize, pointerCount,
+                         elementSize, nestingLimit - 1),
               orphanArena);
         }
       }
@@ -1743,8 +1760,8 @@ struct WireHelpers {
         }
 
 #if !CAPNP_LITE
-        KJ_IF_MAYBE(cap, srcSegment->getArena()->extractCap(src->capRef.index.get())) {
-          setCapabilityPointer(dstSegment, dst, kj::mv(*cap), orphanArena);
+        KJ_IF_MAYBE(cap, srcCapTable->extractCap(src->capRef.index.get())) {
+          setCapabilityPointer(dstSegment, dstCapTable, dst, kj::mv(*cap));
           return { dstSegment, nullptr };
         } else {
 #endif  // !CAPNP_LITE
@@ -1760,12 +1777,13 @@ struct WireHelpers {
     KJ_UNREACHABLE;
   }
 
-  static void adopt(SegmentBuilder* segment, WirePointer* ref, OrphanBuilder&& value) {
+  static void adopt(SegmentBuilder* segment, CapTableBuilder* capTable,
+                    WirePointer* ref, OrphanBuilder&& value) {
     KJ_REQUIRE(value.segment == nullptr || value.segment->getArena() == segment->getArena(),
                "Adopted object must live in the same message.");
 
     if (!ref->isNull()) {
-      zeroObject(segment, ref);
+      zeroObject(segment, capTable, ref);
     }
 
     if (value == nullptr) {
@@ -1784,7 +1802,8 @@ struct WireHelpers {
     value.segment = nullptr;
   }
 
-  static OrphanBuilder disown(SegmentBuilder* segment, WirePointer* ref) {
+  static OrphanBuilder disown(SegmentBuilder* segment, CapTableBuilder* capTable,
+                              WirePointer* ref) {
     word* location;
 
     if (ref->isNull()) {
@@ -1797,7 +1816,7 @@ struct WireHelpers {
       location = followFarsNoWritableCheck(refCopy, ref->target(), segment);
     }
 
-    OrphanBuilder result(ref, segment, location);
+    OrphanBuilder result(ref, segment, capTable, location);
 
     if (!ref->isNull() && ref->isPositional()) {
       result.tagAsPtr()->setKindForOrphan(ref->kind());
@@ -1812,13 +1831,15 @@ struct WireHelpers {
   // -----------------------------------------------------------------
 
   static KJ_ALWAYS_INLINE(StructReader readStructPointer(
-      SegmentReader* segment, const WirePointer* ref, const word* defaultValue,
+      SegmentReader* segment, CapTableReader* capTable,
+      const WirePointer* ref, const word* defaultValue,
       int nestingLimit)) {
-    return readStructPointer(segment, ref, ref->target(), defaultValue, nestingLimit);
+    return readStructPointer(segment, capTable, ref, ref->target(), defaultValue, nestingLimit);
   }
 
   static KJ_ALWAYS_INLINE(StructReader readStructPointer(
-      SegmentReader* segment, const WirePointer* ref, const word* refTarget,
+      SegmentReader* segment, CapTableReader* capTable,
+      const WirePointer* ref, const word* refTarget,
       const word* defaultValue, int nestingLimit)) {
     if (ref->isNull()) {
     useDefault:
@@ -1854,7 +1875,8 @@ struct WireHelpers {
     }
 
     return StructReader(
-        segment, ptr, reinterpret_cast<const WirePointer*>(ptr + ref->structRef.dataSize.get()),
+        segment, capTable,
+        ptr, reinterpret_cast<const WirePointer*>(ptr + ref->structRef.dataSize.get()),
         ref->structRef.dataSize.get() * BITS_PER_WORD,
         ref->structRef.ptrCount.get(),
         nestingLimit - 1);
@@ -1862,7 +1884,8 @@ struct WireHelpers {
 
 #if !CAPNP_LITE
   static KJ_ALWAYS_INLINE(kj::Own<ClientHook> readCapabilityPointer(
-      SegmentReader* segment, const WirePointer* ref, int nestingLimit)) {
+      SegmentReader* segment, CapTableReader* capTable,
+      const WirePointer* ref, int nestingLimit)) {
     kj::Maybe<kj::Own<ClientHook>> maybeCap;
 
     KJ_REQUIRE(brokenCapFactory != nullptr,
@@ -1879,7 +1902,7 @@ struct WireHelpers {
       }
       return brokenCapFactory->newBrokenCap(
           "Calling capability extracted from a non-capability pointer.");
-    } else KJ_IF_MAYBE(cap, segment->getArena()->extractCap(ref->capRef.index.get())) {
+    } else KJ_IF_MAYBE(cap, capTable->extractCap(ref->capRef.index.get())) {
       return kj::mv(*cap);
     } else {
       KJ_FAIL_REQUIRE("Message contains invalid capability pointer.") {
@@ -1891,14 +1914,16 @@ struct WireHelpers {
 #endif  // !CAPNP_LITE
 
   static KJ_ALWAYS_INLINE(ListReader readListPointer(
-      SegmentReader* segment, const WirePointer* ref, const word* defaultValue,
+      SegmentReader* segment, CapTableReader* capTable,
+      const WirePointer* ref, const word* defaultValue,
       ElementSize expectedElementSize, int nestingLimit, bool checkElementSize = true)) {
-    return readListPointer(segment, ref, ref->target(), defaultValue,
+    return readListPointer(segment, capTable, ref, ref->target(), defaultValue,
                            expectedElementSize, nestingLimit, checkElementSize);
   }
 
   static KJ_ALWAYS_INLINE(ListReader readListPointer(
-      SegmentReader* segment, const WirePointer* ref, const word* refTarget,
+      SegmentReader* segment, CapTableReader* capTable,
+      const WirePointer* ref, const word* refTarget,
       const word* defaultValue, ElementSize expectedElementSize, int nestingLimit,
       bool checkElementSize = true)) {
     if (ref->isNull()) {
@@ -2018,7 +2043,7 @@ struct WireHelpers {
       }
 
       return ListReader(
-          segment, ptr, size, wordsPerElement * BITS_PER_WORD,
+          segment, capTable, ptr, size, wordsPerElement * BITS_PER_WORD,
           tag->structRef.dataSize.get() * BITS_PER_WORD,
           tag->structRef.ptrCount.get(), ElementSize::INLINE_COMPOSITE,
           nestingLimit - 1);
@@ -2076,7 +2101,7 @@ struct WireHelpers {
         }
       }
 
-      return ListReader(segment, ptr, elementCount, step,
+      return ListReader(segment, capTable, ptr, elementCount, step,
                         dataSize, pointerCount, elementSize, nestingLimit - 1);
     }
   }
@@ -2182,88 +2207,89 @@ struct WireHelpers {
 // PointerBuilder
 
 StructBuilder PointerBuilder::initStruct(StructSize size) {
-  return WireHelpers::initStructPointer(pointer, segment, size);
+  return WireHelpers::initStructPointer(pointer, segment, capTable, size);
 }
 
 StructBuilder PointerBuilder::getStruct(StructSize size, const word* defaultValue) {
-  return WireHelpers::getWritableStructPointer(pointer, segment, size, defaultValue);
+  return WireHelpers::getWritableStructPointer(pointer, segment, capTable, size, defaultValue);
 }
 
 ListBuilder PointerBuilder::initList(ElementSize elementSize, ElementCount elementCount) {
-  return WireHelpers::initListPointer(pointer, segment, elementCount, elementSize);
+  return WireHelpers::initListPointer(pointer, segment, capTable, elementCount, elementSize);
 }
 
 ListBuilder PointerBuilder::initStructList(ElementCount elementCount, StructSize elementSize) {
-  return WireHelpers::initStructListPointer(pointer, segment, elementCount, elementSize);
+  return WireHelpers::initStructListPointer(pointer, segment, capTable, elementCount, elementSize);
 }
 
 ListBuilder PointerBuilder::getList(ElementSize elementSize, const word* defaultValue) {
-  return WireHelpers::getWritableListPointer(pointer, segment, elementSize, defaultValue);
+  return WireHelpers::getWritableListPointer(pointer, segment, capTable, elementSize, defaultValue);
 }
 
 ListBuilder PointerBuilder::getStructList(StructSize elementSize, const word* defaultValue) {
-  return WireHelpers::getWritableStructListPointer(pointer, segment, elementSize, defaultValue);
+  return WireHelpers::getWritableStructListPointer(
+      pointer, segment, capTable, elementSize, defaultValue);
 }
 
 ListBuilder PointerBuilder::getListAnySize(const word* defaultValue) {
-  return WireHelpers::getWritableListPointerAnySize(pointer, segment, defaultValue);
+  return WireHelpers::getWritableListPointerAnySize(pointer, segment, capTable, defaultValue);
 }
 
 template <>
 Text::Builder PointerBuilder::initBlob<Text>(ByteCount size) {
-  return WireHelpers::initTextPointer(pointer, segment, size).value;
+  return WireHelpers::initTextPointer(pointer, segment, capTable, size).value;
 }
 template <>
 void PointerBuilder::setBlob<Text>(Text::Reader value) {
-  WireHelpers::setTextPointer(pointer, segment, value);
+  WireHelpers::setTextPointer(pointer, segment, capTable, value);
 }
 template <>
 Text::Builder PointerBuilder::getBlob<Text>(const void* defaultValue, ByteCount defaultSize) {
-  return WireHelpers::getWritableTextPointer(pointer, segment, defaultValue, defaultSize);
+  return WireHelpers::getWritableTextPointer(pointer, segment, capTable, defaultValue, defaultSize);
 }
 
 template <>
 Data::Builder PointerBuilder::initBlob<Data>(ByteCount size) {
-  return WireHelpers::initDataPointer(pointer, segment, size).value;
+  return WireHelpers::initDataPointer(pointer, segment, capTable, size).value;
 }
 template <>
 void PointerBuilder::setBlob<Data>(Data::Reader value) {
-  WireHelpers::setDataPointer(pointer, segment, value);
+  WireHelpers::setDataPointer(pointer, segment, capTable, value);
 }
 template <>
 Data::Builder PointerBuilder::getBlob<Data>(const void* defaultValue, ByteCount defaultSize) {
-  return WireHelpers::getWritableDataPointer(pointer, segment, defaultValue, defaultSize);
+  return WireHelpers::getWritableDataPointer(pointer, segment, capTable, defaultValue, defaultSize);
 }
 
 void PointerBuilder::setStruct(const StructReader& value) {
-  WireHelpers::setStructPointer(segment, pointer, value);
+  WireHelpers::setStructPointer(segment, capTable, pointer, value);
 }
 
 void PointerBuilder::setList(const ListReader& value) {
-  WireHelpers::setListPointer(segment, pointer, value);
+  WireHelpers::setListPointer(segment, capTable, pointer, value);
 }
 
 #if !CAPNP_LITE
 kj::Own<ClientHook> PointerBuilder::getCapability() {
   return WireHelpers::readCapabilityPointer(
-      segment, pointer, kj::maxValue);
+      segment, capTable, pointer, kj::maxValue);
 }
 
 void PointerBuilder::setCapability(kj::Own<ClientHook>&& cap) {
-  WireHelpers::setCapabilityPointer(segment, pointer, kj::mv(cap));
+  WireHelpers::setCapabilityPointer(segment, capTable, pointer, kj::mv(cap));
 }
 #endif  // !CAPNP_LITE
 
 void PointerBuilder::adopt(OrphanBuilder&& value) {
-  WireHelpers::adopt(segment, pointer, kj::mv(value));
+  WireHelpers::adopt(segment, capTable, pointer, kj::mv(value));
 }
 
 OrphanBuilder PointerBuilder::disown() {
-  return WireHelpers::disown(segment, pointer);
+  return WireHelpers::disown(segment, capTable, pointer);
 }
 
 void PointerBuilder::clear() {
-  WireHelpers::zeroObject(segment, pointer);
+  WireHelpers::zeroObject(segment, capTable, pointer);
   memset(pointer, 0, sizeof(WirePointer));
 }
 
@@ -2290,7 +2316,7 @@ PointerType PointerBuilder::getPointerType() {
 
 void PointerBuilder::transferFrom(PointerBuilder other) {
   if (!pointer->isNull()) {
-    WireHelpers::zeroObject(segment, pointer);
+    WireHelpers::zeroObject(segment, capTable, pointer);
     memset(pointer, 0, sizeof(*pointer));
   }
   WireHelpers::transferPointer(segment, pointer, other.segment, other.pointer);
@@ -2298,51 +2324,64 @@ void PointerBuilder::transferFrom(PointerBuilder other) {
 }
 
 void PointerBuilder::copyFrom(PointerReader other) {
-  if (!pointer->isNull()) {
-    WireHelpers::zeroObject(segment, pointer);
-    memset(pointer, 0, sizeof(*pointer));
-  }
-  if (other.pointer != nullptr) {
-    WireHelpers::copyPointer(segment, pointer, other.segment, other.pointer, other.nestingLimit);
+  if (other.pointer == nullptr) {
+    if (!pointer->isNull()) {
+      WireHelpers::zeroObject(segment, capTable, pointer);
+      memset(pointer, 0, sizeof(*pointer));
+    }
+  } else {
+    WireHelpers::copyPointer(segment, capTable, pointer,
+                             other.segment, other.capTable, other.pointer, other.nestingLimit);
   }
 }
 
 PointerReader PointerBuilder::asReader() const {
-  return PointerReader(segment, pointer, kj::maxValue);
+  return PointerReader(segment, capTable, pointer, kj::maxValue);
 }
 
 BuilderArena* PointerBuilder::getArena() const {
   return segment->getArena();
 }
 
+CapTableBuilder* PointerBuilder::getCapTable() {
+  return capTable;
+}
+
+PointerBuilder PointerBuilder::imbue(CapTableBuilder* capTable) {
+  auto result = *this;
+  result.capTable = capTable;
+  return result;
+}
+
 // =======================================================================================
 // PointerReader
 
-PointerReader PointerReader::getRoot(SegmentReader* segment, const word* location,
-                                     int nestingLimit) {
+PointerReader PointerReader::getRoot(SegmentReader* segment, CapTableReader* capTable,
+                                     const word* location, int nestingLimit) {
   KJ_REQUIRE(WireHelpers::boundsCheck(segment, location, location + POINTER_SIZE_IN_WORDS),
              "Root location out-of-bounds.") {
     location = nullptr;
   }
 
-  return PointerReader(segment, reinterpret_cast<const WirePointer*>(location), nestingLimit);
+  return PointerReader(segment, capTable,
+      reinterpret_cast<const WirePointer*>(location), nestingLimit);
 }
 
 StructReader PointerReader::getStruct(const word* defaultValue) const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
-  return WireHelpers::readStructPointer(segment, ref, defaultValue, nestingLimit);
+  return WireHelpers::readStructPointer(segment, capTable, ref, defaultValue, nestingLimit);
 }
 
 ListReader PointerReader::getList(ElementSize expectedElementSize, const word* defaultValue) const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readListPointer(
-      segment, ref, defaultValue, expectedElementSize, nestingLimit);
+      segment, capTable, ref, defaultValue, expectedElementSize, nestingLimit);
 }
 
 ListReader PointerReader::getListAnySize(const word* defaultValue) const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readListPointer(
-      segment, ref, defaultValue, ElementSize::VOID /* dummy */, nestingLimit, false);
+      segment, capTable, ref, defaultValue, ElementSize::VOID /* dummy */, nestingLimit, false);
 }
 
 template <>
@@ -2360,7 +2399,7 @@ Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount de
 #if !CAPNP_LITE
 kj::Own<ClientHook> PointerReader::getCapability() const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
-  return WireHelpers::readCapabilityPointer(segment, ref, nestingLimit);
+  return WireHelpers::readCapabilityPointer(segment, capTable, ref, nestingLimit);
 }
 #endif  // !CAPNP_LITE
 
@@ -2401,6 +2440,12 @@ kj::Maybe<Arena&> PointerReader::getArena() const {
   return segment == nullptr ? nullptr : segment->getArena();
 }
 
+PointerReader PointerReader::imbue(CapTableReader* capTable) const {
+  auto result = *this;
+  result.capTable = capTable;
+  return result;
+}
+
 // =======================================================================================
 // StructBuilder
 
@@ -2412,7 +2457,7 @@ void StructBuilder::clearAll() {
   }
 
   for (uint i = 0; i < pointerCount / POINTERS; i++) {
-    WireHelpers::zeroObject(segment, pointers + i);
+    WireHelpers::zeroObject(segment, capTable, pointers + i);
   }
   memset(pointers, 0, pointerCount * BYTES_PER_POINTER / BYTES);
 }
@@ -2441,7 +2486,7 @@ void StructBuilder::transferContentFrom(StructBuilder other) {
 
   // Zero out all pointers in the target.
   for (uint i = 0; i < pointerCount / POINTERS; i++) {
-    WireHelpers::zeroObject(segment, pointers + i);
+    WireHelpers::zeroObject(segment, capTable, pointers + i);
   }
   memset(pointers, 0, pointerCount * BYTES_PER_POINTER / BYTES);
 
@@ -2481,25 +2526,35 @@ void StructBuilder::copyContentFrom(StructReader other) {
 
   // Zero out all pointers in the target.
   for (uint i = 0; i < pointerCount / POINTERS; i++) {
-    WireHelpers::zeroObject(segment, pointers + i);
+    WireHelpers::zeroObject(segment, capTable, pointers + i);
   }
   memset(pointers, 0, pointerCount * BYTES_PER_POINTER / BYTES);
 
   // Copy the pointers.
   WirePointerCount sharedPointerCount = kj::min(pointerCount, other.pointerCount);
   for (uint i = 0; i < sharedPointerCount / POINTERS; i++) {
-    WireHelpers::copyPointer(segment, pointers + i,
-        other.segment, other.pointers + i, other.nestingLimit);
+    WireHelpers::copyPointer(segment, capTable, pointers + i,
+        other.segment, other.capTable, other.pointers + i, other.nestingLimit);
   }
 }
 
 StructReader StructBuilder::asReader() const {
-  return StructReader(segment, data, pointers,
+  return StructReader(segment, capTable, data, pointers,
       dataSize, pointerCount, kj::maxValue);
 }
 
 BuilderArena* StructBuilder::getArena() {
   return segment->getArena();
+}
+
+CapTableBuilder* StructBuilder::getCapTable() {
+  return capTable;
+}
+
+StructBuilder StructBuilder::imbue(CapTableBuilder* capTable) {
+  auto result = *this;
+  result.capTable = capTable;
+  return result;
 }
 
 // =======================================================================================
@@ -2519,6 +2574,12 @@ MessageSizeCounts StructReader::totalSize() const {
     segment->unread(result.wordCount);
   }
 
+  return result;
+}
+
+StructReader StructReader::imbue(CapTableReader* capTable) const {
+  auto result = *this;
+  result.capTable = capTable;
   return result;
 }
 
@@ -2560,18 +2621,28 @@ StructBuilder ListBuilder::getStructElement(ElementCount index) {
   BitCount64 indexBit = ElementCount64(index) * step;
   byte* structData = ptr + indexBit / BITS_PER_BYTE;
   KJ_DASSERT(indexBit % BITS_PER_BYTE == 0 * BITS);
-  return StructBuilder(segment, structData,
+  return StructBuilder(segment, capTable, structData,
       reinterpret_cast<WirePointer*>(structData + structDataSize / BITS_PER_BYTE),
       structDataSize, structPointerCount);
 }
 
 ListReader ListBuilder::asReader() const {
-  return ListReader(segment, ptr, elementCount, step, structDataSize, structPointerCount,
+  return ListReader(segment, capTable, ptr, elementCount, step, structDataSize, structPointerCount,
                     elementSize, kj::maxValue);
 }
 
 BuilderArena* ListBuilder::getArena() {
   return segment->getArena();
+}
+
+CapTableBuilder* ListBuilder::getCapTable() {
+  return capTable;
+}
+
+ListBuilder ListBuilder::imbue(CapTableBuilder* capTable) {
+  auto result = *this;
+  result.capTable = capTable;
+  return result;
 }
 
 // =======================================================================================
@@ -2636,106 +2707,138 @@ StructReader ListReader::getStructElement(ElementCount index) const {
 
   KJ_DASSERT(indexBit % BITS_PER_BYTE == 0 * BITS);
   return StructReader(
-      segment, structData, structPointers,
+      segment, capTable, structData, structPointers,
       structDataSize, structPointerCount,
       nestingLimit - 1);
+}
+
+ListReader ListReader::imbue(CapTableReader* capTable) const {
+  auto result = *this;
+  result.capTable = capTable;
+  return result;
 }
 
 // =======================================================================================
 // OrphanBuilder
 
-OrphanBuilder OrphanBuilder::initStruct(BuilderArena* arena, StructSize size) {
+OrphanBuilder OrphanBuilder::initStruct(
+    BuilderArena* arena, CapTableBuilder* capTable, StructSize size) {
   OrphanBuilder result;
-  StructBuilder builder = WireHelpers::initStructPointer(result.tagAsPtr(), nullptr, size, arena);
+  StructBuilder builder = WireHelpers::initStructPointer(
+      result.tagAsPtr(), nullptr, capTable, size, arena);
   result.segment = builder.segment;
+  result.capTable = capTable;
   result.location = builder.getLocation();
   return result;
 }
 
 OrphanBuilder OrphanBuilder::initList(
-    BuilderArena* arena, ElementCount elementCount, ElementSize elementSize) {
+    BuilderArena* arena, CapTableBuilder* capTable,
+    ElementCount elementCount, ElementSize elementSize) {
   OrphanBuilder result;
   ListBuilder builder = WireHelpers::initListPointer(
-      result.tagAsPtr(), nullptr, elementCount, elementSize, arena);
+      result.tagAsPtr(), nullptr, capTable, elementCount, elementSize, arena);
   result.segment = builder.segment;
+  result.capTable = capTable;
   result.location = builder.getLocation();
   return result;
 }
 
 OrphanBuilder OrphanBuilder::initStructList(
-    BuilderArena* arena, ElementCount elementCount, StructSize elementSize) {
+    BuilderArena* arena, CapTableBuilder* capTable,
+    ElementCount elementCount, StructSize elementSize) {
   OrphanBuilder result;
   ListBuilder builder = WireHelpers::initStructListPointer(
-      result.tagAsPtr(), nullptr, elementCount, elementSize, arena);
+      result.tagAsPtr(), nullptr, capTable, elementCount, elementSize, arena);
   result.segment = builder.segment;
+  result.capTable = capTable;
   result.location = builder.getLocation();
   return result;
 }
 
-OrphanBuilder OrphanBuilder::initText(BuilderArena* arena, ByteCount size) {
+OrphanBuilder OrphanBuilder::initText(
+    BuilderArena* arena, CapTableBuilder* capTable, ByteCount size) {
   OrphanBuilder result;
-  auto allocation = WireHelpers::initTextPointer(result.tagAsPtr(), nullptr, size, arena);
+  auto allocation = WireHelpers::initTextPointer(result.tagAsPtr(), nullptr, capTable, size, arena);
   result.segment = allocation.segment;
+  result.capTable = capTable;
   result.location = reinterpret_cast<word*>(allocation.value.begin());
   return result;
 }
 
-OrphanBuilder OrphanBuilder::initData(BuilderArena* arena, ByteCount size) {
+OrphanBuilder OrphanBuilder::initData(
+    BuilderArena* arena, CapTableBuilder* capTable, ByteCount size) {
   OrphanBuilder result;
-  auto allocation = WireHelpers::initDataPointer(result.tagAsPtr(), nullptr, size, arena);
+  auto allocation = WireHelpers::initDataPointer(result.tagAsPtr(), nullptr, capTable, size, arena);
   result.segment = allocation.segment;
+  result.capTable = capTable;
   result.location = reinterpret_cast<word*>(allocation.value.begin());
   return result;
 }
 
-OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, StructReader copyFrom) {
+OrphanBuilder OrphanBuilder::copy(
+    BuilderArena* arena, CapTableBuilder* capTable, StructReader copyFrom) {
   OrphanBuilder result;
-  auto allocation = WireHelpers::setStructPointer(nullptr, result.tagAsPtr(), copyFrom, arena);
+  auto allocation = WireHelpers::setStructPointer(
+      nullptr, capTable, result.tagAsPtr(), copyFrom, arena);
   result.segment = allocation.segment;
+  result.capTable = capTable;
   result.location = reinterpret_cast<word*>(allocation.value);
   return result;
 }
 
-OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, ListReader copyFrom) {
+OrphanBuilder OrphanBuilder::copy(
+    BuilderArena* arena, CapTableBuilder* capTable, ListReader copyFrom) {
   OrphanBuilder result;
-  auto allocation = WireHelpers::setListPointer(nullptr, result.tagAsPtr(), copyFrom, arena);
+  auto allocation = WireHelpers::setListPointer(
+      nullptr, capTable, result.tagAsPtr(), copyFrom, arena);
   result.segment = allocation.segment;
+  result.capTable = capTable;
   result.location = reinterpret_cast<word*>(allocation.value);
   return result;
 }
 
-OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, PointerReader copyFrom) {
+OrphanBuilder OrphanBuilder::copy(
+    BuilderArena* arena, CapTableBuilder* capTable, PointerReader copyFrom) {
   OrphanBuilder result;
   auto allocation = WireHelpers::copyPointer(
-      nullptr, result.tagAsPtr(), copyFrom.segment, copyFrom.pointer, copyFrom.nestingLimit, arena);
+      nullptr, capTable, result.tagAsPtr(),
+      copyFrom.segment, copyFrom.capTable, copyFrom.pointer, copyFrom.nestingLimit, arena);
   result.segment = allocation.segment;
+  result.capTable = capTable;
   result.location = reinterpret_cast<word*>(allocation.value);
   return result;
 }
 
-OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, Text::Reader copyFrom) {
+OrphanBuilder OrphanBuilder::copy(
+    BuilderArena* arena, CapTableBuilder* capTable, Text::Reader copyFrom) {
   OrphanBuilder result;
   auto allocation = WireHelpers::setTextPointer(
-      result.tagAsPtr(), nullptr, copyFrom, arena);
+      result.tagAsPtr(), nullptr, capTable, copyFrom, arena);
   result.segment = allocation.segment;
+  result.capTable = capTable;
   result.location = reinterpret_cast<word*>(allocation.value.begin());
   return result;
 }
 
-OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, Data::Reader copyFrom) {
+OrphanBuilder OrphanBuilder::copy(
+    BuilderArena* arena, CapTableBuilder* capTable, Data::Reader copyFrom) {
   OrphanBuilder result;
   auto allocation = WireHelpers::setDataPointer(
-      result.tagAsPtr(), nullptr, copyFrom, arena);
+      result.tagAsPtr(), nullptr, capTable, copyFrom, arena);
   result.segment = allocation.segment;
+  result.capTable = capTable;
   result.location = reinterpret_cast<word*>(allocation.value.begin());
   return result;
 }
 
 #if !CAPNP_LITE
-OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, kj::Own<ClientHook> copyFrom) {
+OrphanBuilder OrphanBuilder::copy(
+    BuilderArena* arena, CapTableBuilder* capTable, kj::Own<ClientHook> copyFrom) {
   OrphanBuilder result;
-  WireHelpers::setCapabilityPointer(nullptr, result.tagAsPtr(), kj::mv(copyFrom), arena);
+  WireHelpers::setCapabilityPointer(nullptr, capTable, result.tagAsPtr(), kj::mv(copyFrom));
   result.segment = arena->getSegment(SegmentId(0));
+  result.capTable = capTable;
   result.location = &result.tag;  // dummy to make location non-null
   return result;
 }
@@ -2753,6 +2856,9 @@ OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Re
   result.tagAsPtr()->listRef.set(ElementSize::BYTE, data.size() * ELEMENTS);
   result.segment = arena->addExternalSegment(words);
 
+  // External data cannot possibly contain capabilities.
+  result.capTable = nullptr;
+
   // const_cast OK here because we will check whether the segment is writable when we try to get
   // a builder.
   result.location = const_cast<word*>(words.begin());
@@ -2764,7 +2870,7 @@ StructBuilder OrphanBuilder::asStruct(StructSize size) {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
 
   StructBuilder result = WireHelpers::getWritableStructPointer(
-      tagAsPtr(), location, segment, size, nullptr, segment->getArena());
+      tagAsPtr(), location, segment, capTable, size, nullptr, segment->getArena());
 
   // Watch out, the pointer could have been updated if the object had to be relocated.
   location = reinterpret_cast<word*>(result.data);
@@ -2776,7 +2882,7 @@ ListBuilder OrphanBuilder::asList(ElementSize elementSize) {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
 
   ListBuilder result = WireHelpers::getWritableListPointer(
-      tagAsPtr(), location, segment, elementSize, nullptr, segment->getArena());
+      tagAsPtr(), location, segment, capTable, elementSize, nullptr, segment->getArena());
 
   // Watch out, the pointer could have been updated if the object had to be relocated.
   // (Actually, currently this is not true for primitive lists, but let's not turn into a bug if
@@ -2790,7 +2896,7 @@ ListBuilder OrphanBuilder::asStructList(StructSize elementSize) {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
 
   ListBuilder result = WireHelpers::getWritableStructListPointer(
-      tagAsPtr(), location, segment, elementSize, nullptr, segment->getArena());
+      tagAsPtr(), location, segment, capTable, elementSize, nullptr, segment->getArena());
 
   // Watch out, the pointer could have been updated if the object had to be relocated.
   location = result.getLocation();
@@ -2802,31 +2908,33 @@ Text::Builder OrphanBuilder::asText() {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
 
   // Never relocates.
-  return WireHelpers::getWritableTextPointer(tagAsPtr(), location, segment, nullptr, 0 * BYTES);
+  return WireHelpers::getWritableTextPointer(
+      tagAsPtr(), location, segment, capTable, nullptr, 0 * BYTES);
 }
 
 Data::Builder OrphanBuilder::asData() {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
 
   // Never relocates.
-  return WireHelpers::getWritableDataPointer(tagAsPtr(), location, segment, nullptr, 0 * BYTES);
+  return WireHelpers::getWritableDataPointer(
+      tagAsPtr(), location, segment, capTable, nullptr, 0 * BYTES);
 }
 
 StructReader OrphanBuilder::asStructReader(StructSize size) const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readStructPointer(
-      segment, tagAsPtr(), location, nullptr, kj::maxValue);
+      segment, capTable, tagAsPtr(), location, nullptr, kj::maxValue);
 }
 
 ListReader OrphanBuilder::asListReader(ElementSize elementSize) const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readListPointer(
-      segment, tagAsPtr(), location, nullptr, elementSize, kj::maxValue);
+      segment, capTable, tagAsPtr(), location, nullptr, elementSize, kj::maxValue);
 }
 
 #if !CAPNP_LITE
 kj::Own<ClientHook> OrphanBuilder::asCapability() const {
-  return WireHelpers::readCapabilityPointer(segment, tagAsPtr(), kj::maxValue);
+  return WireHelpers::readCapabilityPointer(segment, capTable, tagAsPtr(), kj::maxValue);
 }
 #endif  // !CAPNP_LITE
 
@@ -2878,7 +2986,7 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
     if (size <= oldSize) {
       // Zero the trailing elements.
       for (uint i = size / ELEMENTS; i < oldSize / ELEMENTS; i++) {
-        WireHelpers::zeroObject(segment, tag, target + i * elementWordCount);
+        WireHelpers::zeroObject(segment, capTable, tag, target + i * elementWordCount);
       }
       ref->listRef.setInlineComposite(size * (elementWordCount / ELEMENTS));
       tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
@@ -2898,13 +3006,13 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
         tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
       } else {
         // Need to re-allocate and transfer.
-        OrphanBuilder replacement = initStructList(segment->getArena(), size, structSize);
+        OrphanBuilder replacement = initStructList(segment->getArena(), capTable, size, structSize);
 
         ListBuilder newList = replacement.asStructList(structSize);
         word* element = target;
         for (uint i = 0; i < oldSize / ELEMENTS; i++) {
           newList.getStructElement(i * ELEMENTS).transferContentFrom(
-              StructBuilder(segment, element,
+              StructBuilder(segment, capTable, element,
                             reinterpret_cast<WirePointer*>(element + structSize.data),
                             structSize.data * BITS_PER_WORD, structSize.pointers));
           element += elementWordCount;
@@ -2932,12 +3040,13 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
         ref->listRef.set(ElementSize::POINTER, size);
       } else {
         // Need to re-allocate and transfer.
-        OrphanBuilder replacement = initList(segment->getArena(), size, ElementSize::POINTER);
+        OrphanBuilder replacement = initList(
+            segment->getArena(), capTable, size, ElementSize::POINTER);
         ListBuilder newList = replacement.asList(ElementSize::POINTER);
         WirePointer* oldPointers = reinterpret_cast<WirePointer*>(target);
         for (uint i = 0; i < oldSize / ELEMENTS; i++) {
           newList.getPointerElement(i * ELEMENTS).transferFrom(
-              PointerBuilder(segment, oldPointers + i));
+              PointerBuilder(segment, capTable, oldPointers + i));
         }
         *this = kj::mv(replacement);
       }
@@ -2965,7 +3074,7 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
         ref->listRef.set(elementSize, size);
       } else {
         // Need to re-allocate and transfer.
-        OrphanBuilder replacement = initList(segment->getArena(), size, elementSize);
+        OrphanBuilder replacement = initList(segment->getArena(), capTable, size, elementSize);
         ListBuilder newList = replacement.asList(elementSize);
         auto words = WireHelpers::roundBitsUpToWords(dataBitsPerElement(elementSize) * oldSize);
         memcpy(newList.ptr, target, words * BYTES_PER_WORD / BYTES);
@@ -2979,19 +3088,19 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
 
 void OrphanBuilder::truncate(ElementCount size, ElementSize elementSize) {
   if (!truncate(size, false)) {
-    *this = initList(segment->getArena(), size, elementSize);
+    *this = initList(segment->getArena(), capTable, size, elementSize);
   }
 }
 
 void OrphanBuilder::truncate(ElementCount size, StructSize elementSize) {
   if (!truncate(size, false)) {
-    *this = initStructList(segment->getArena(), size, elementSize);
+    *this = initStructList(segment->getArena(), capTable, size, elementSize);
   }
 }
 
 void OrphanBuilder::truncateText(ElementCount size) {
   if (!truncate(size, true)) {
-    *this = initText(segment->getArena(), size * (1 * BYTES / ELEMENTS));
+    *this = initText(segment->getArena(), capTable, size * (1 * BYTES / ELEMENTS));
   }
 }
 
@@ -3000,9 +3109,9 @@ void OrphanBuilder::euthanize() {
   // a destructor.
   auto exception = kj::runCatchingExceptions([&]() {
     if (tagAsPtr()->isPositional()) {
-      WireHelpers::zeroObject(segment, tagAsPtr(), location);
+      WireHelpers::zeroObject(segment, capTable, tagAsPtr(), location);
     } else {
-      WireHelpers::zeroObject(segment, tagAsPtr());
+      WireHelpers::zeroObject(segment, capTable, tagAsPtr());
     }
 
     memset(&tag, 0, sizeof(tag));

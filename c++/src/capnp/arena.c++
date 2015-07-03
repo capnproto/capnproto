@@ -108,16 +108,6 @@ void ReaderArena::reportReadLimitReached() {
   }
 }
 
-#if !CAPNP_LITE
-kj::Maybe<kj::Own<ClientHook>> ReaderArena::extractCap(uint index) {
-  if (index < capTable.size()) {
-    return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
-  } else {
-    return nullptr;
-  }
-}
-#endif  // !CAPNP_LITE
-
 // =======================================================================================
 
 BuilderArena::BuilderArena(MessageBuilder* message)
@@ -294,7 +284,7 @@ void BuilderArena::reportReadLimitReached() {
 }
 
 #if !CAPNP_LITE
-kj::Maybe<kj::Own<ClientHook>> BuilderArena::extractCap(uint index) {
+kj::Maybe<kj::Own<ClientHook>> BuilderArena::LocalCapTable::extractCap(uint index) {
   if (index < capTable.size()) {
     return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
   } else {
@@ -302,15 +292,13 @@ kj::Maybe<kj::Own<ClientHook>> BuilderArena::extractCap(uint index) {
   }
 }
 
-uint BuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
-  // TODO(perf):  Detect if the cap is already on the table and reuse the index?  Perhaps this
-  //   doesn't happen enough to be worth the effort.
+uint BuilderArena::LocalCapTable::injectCap(kj::Own<ClientHook>&& cap) {
   uint result = capTable.size();
   capTable.add(kj::mv(cap));
   return result;
 }
 
-void BuilderArena::dropCap(uint index) {
+void BuilderArena::LocalCapTable::dropCap(uint index) {
   KJ_ASSERT(index < capTable.size(), "Invalid capability descriptor in message.") {
     return;
   }

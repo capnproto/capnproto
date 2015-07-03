@@ -166,8 +166,10 @@ public:
 
 private:
   _::BuilderArena* arena;
+  _::CapTableBuilder* capTable;
 
-  inline explicit Orphanage(_::BuilderArena* arena): arena(arena) {}
+  inline explicit Orphanage(_::BuilderArena* arena, _::CapTableBuilder* capTable)
+      : arena(arena), capTable(capTable) {}
 
   template <typename T, Kind = CAPNP_KIND(T)>
   struct GetInnerBuilder;
@@ -317,45 +319,52 @@ struct Orphanage::GetInnerBuilder<T, Kind::LIST> {
 
 template <typename BuilderType>
 Orphanage Orphanage::getForMessageContaining(BuilderType builder) {
-  return Orphanage(GetInnerBuilder<FromBuilder<BuilderType>>::apply(builder).getArena());
+  auto inner = GetInnerBuilder<FromBuilder<BuilderType>>::apply(builder);
+  return Orphanage(inner.getArena(), inner.getCapTable());
 }
 
 template <typename RootType>
 Orphan<RootType> Orphanage::newOrphan() const {
-  return Orphan<RootType>(_::OrphanBuilder::initStruct(arena, _::structSize<RootType>()));
+  return Orphan<RootType>(_::OrphanBuilder::initStruct(arena, capTable, _::structSize<RootType>()));
 }
 
 template <typename T, Kind k>
 struct Orphanage::NewOrphanListImpl<List<T, k>> {
-  static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initList(arena, size * ELEMENTS, _::ElementSizeForType<T>::value);
+  static inline _::OrphanBuilder apply(
+      _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
+    return _::OrphanBuilder::initList(
+        arena, capTable, size * ELEMENTS, _::ElementSizeForType<T>::value);
   }
 };
 
 template <typename T>
 struct Orphanage::NewOrphanListImpl<List<T, Kind::STRUCT>> {
-  static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initStructList(arena, size * ELEMENTS, _::structSize<T>());
+  static inline _::OrphanBuilder apply(
+      _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
+    return _::OrphanBuilder::initStructList(
+        arena, capTable, size * ELEMENTS, _::structSize<T>());
   }
 };
 
 template <>
 struct Orphanage::NewOrphanListImpl<Text> {
-  static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initText(arena, size * BYTES);
+  static inline _::OrphanBuilder apply(
+      _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
+    return _::OrphanBuilder::initText(arena, capTable, size * BYTES);
   }
 };
 
 template <>
 struct Orphanage::NewOrphanListImpl<Data> {
-  static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initData(arena, size * BYTES);
+  static inline _::OrphanBuilder apply(
+      _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
+    return _::OrphanBuilder::initData(arena, capTable, size * BYTES);
   }
 };
 
 template <typename RootType>
 Orphan<RootType> Orphanage::newOrphan(uint size) const {
-  return Orphan<RootType>(NewOrphanListImpl<RootType>::apply(arena, size));
+  return Orphan<RootType>(NewOrphanListImpl<RootType>::apply(arena, capTable, size));
 }
 
 template <typename T>
@@ -382,7 +391,7 @@ struct Orphanage::GetInnerReader<T, Kind::BLOB> {
 template <typename Reader>
 inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(const Reader& copyFrom) const {
   return Orphan<FromReader<Reader>>(_::OrphanBuilder::copy(
-      arena, GetInnerReader<FromReader<Reader>>::apply(copyFrom)));
+      arena, capTable, GetInnerReader<FromReader<Reader>>::apply(copyFrom)));
 }
 template <typename Reader>
 inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(Reader& copyFrom) const {

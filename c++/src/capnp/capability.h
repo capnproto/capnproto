@@ -31,6 +31,7 @@
 #endif
 
 #include <kj/async.h>
+#include <kj/vector.h>
 #include "any.h"
 #include "pointer-helpers.h"
 
@@ -91,6 +92,7 @@ struct Capability {
 };
 
 // =======================================================================================
+// Capability clients
 
 class RequestHook;
 class ResponseHook;
@@ -230,7 +232,7 @@ private:
 };
 
 // =======================================================================================
-// Local capabilities
+// Capability servers
 
 class CallContextHook;
 
@@ -356,6 +358,62 @@ protected:
 private:
   ClientHook* thisHook = nullptr;
   friend class LocalClient;
+};
+
+// =======================================================================================
+
+class ReaderCapabilityTable: private _::CapTableReader {
+  // Class which imbues Readers with the ability to read capabilities.
+  //
+  // In Cap'n Proto format, the encoding of a capability pointer is simply an integer index into
+  // an external table. Since these pointers fundamentally point outside the message, a
+  // MessageReader by default has no idea what they point at, and therefore reading capabilities
+  // from such a reader will throw exceptions.
+  //
+  // In order to be able to read capabilities, you must first attach a capability table, using
+  // this class. By "imbuing" a Reader, you get a new Reader which will interpret capability
+  // pointers by treating them as indexes into the ReaderCapabilityTable.
+  //
+  // Note that when using Cap'n Proto's RPC system, this is handled automatically.
+
+public:
+  explicit ReaderCapabilityTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> table);
+  KJ_DISALLOW_COPY(ReaderCapabilityTable);
+
+  template <typename T>
+  T imbue(T reader);
+  // Return a reader equivalent to `reader` except that when reading capability-valued fields,
+  // the capabilities are looked up in this table.
+
+private:
+  kj::Array<kj::Maybe<kj::Own<ClientHook>>> table;
+
+  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
+};
+
+class BuilderCapabilityTable: private _::CapTableBuilder {
+  // Class which imbues Builders with the ability to read and write capabilities.
+  //
+  // This is much like ReaderCapabilityTable, except for builders. The table starts out empty,
+  // but capabilities can be added to it over time.
+
+public:
+  BuilderCapabilityTable();
+  KJ_DISALLOW_COPY(BuilderCapabilityTable);
+
+  inline kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getTable() { return table; }
+
+  template <typename T>
+  T imbue(T builder);
+  // Return a builder equivalent to `builder` except that when reading capability-valued fields,
+  // the capabilities are looked up in this table.
+
+private:
+  kj::Vector<kj::Maybe<kj::Own<ClientHook>>> table;
+
+  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
+  uint injectCap(kj::Own<ClientHook>&& cap) override;
+  void dropCap(uint index) override;
 };
 
 // =======================================================================================
@@ -764,6 +822,16 @@ CallContext<Params, Results> Capability::Server::internalGetTypedContext(
 
 Capability::Client Capability::Server::thisCap() {
   return Client(thisHook->addRef());
+}
+
+template <typename T>
+T ReaderCapabilityTable::imbue(T reader) {
+  return T(_::PointerHelpers<FromReader<T>>::getInternalReader(reader).imbue(this));
+}
+
+template <typename T>
+T BuilderCapabilityTable::imbue(T builder) {
+  return T(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::mv(builder)).imbue(this));
 }
 
 template <typename T>

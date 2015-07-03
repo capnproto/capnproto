@@ -264,13 +264,37 @@ inline double unmask<double>(uint64_t value, uint64_t mask) {
 
 // -------------------------------------------------------------------
 
+class CapTableReader {
+public:
+#if !CAPNP_LITE
+  virtual kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) = 0;
+  // Extract the capability at the given index.  If the index is invalid, returns null.
+#endif  // !CAPNP_LITE
+};
+
+class CapTableBuilder: public CapTableReader {
+public:
+#if !CAPNP_LITE
+  virtual uint injectCap(kj::Own<ClientHook>&& cap) = 0;
+  // Add the capability to the message and return its index.  If the same ClientHook is injected
+  // twice, this may return the same index both times, but in this case dropCap() needs to be
+  // called an equal number of times to actually remove the cap.
+
+  virtual void dropCap(uint index) = 0;
+  // Remove a capability injected earlier.  Called when the pointer is overwritten or zero'd out.
+#endif  // !CAPNP_LITE
+};
+
+// -------------------------------------------------------------------
+
 class PointerBuilder: public kj::DisallowConstCopy {
   // Represents a single pointer, usually embedded in a struct or a list.
 
 public:
-  inline PointerBuilder(): segment(nullptr), pointer(nullptr) {}
+  inline PointerBuilder(): segment(nullptr), capTable(nullptr), pointer(nullptr) {}
 
-  static inline PointerBuilder getRoot(SegmentBuilder* segment, word* location);
+  static inline PointerBuilder getRoot(
+      SegmentBuilder* segment, CapTableBuilder* capTable, word* location);
   // Get a PointerBuilder representing a message root located in the given segment at the given
   // location.
 
@@ -325,12 +349,19 @@ public:
   BuilderArena* getArena() const;
   // Get the arena containing this pointer.
 
+  CapTableBuilder* getCapTable();
+  // Gets the capability context in which this object is operating.
+
+  PointerBuilder imbue(CapTableBuilder* capTable);
+  // Return a copy of this builder except using the given capability context.
+
 private:
   SegmentBuilder* segment;     // Memory segment in which the pointer resides.
+  CapTableBuilder* capTable;   // Table of capability indexes.
   WirePointer* pointer;        // Pointer to the pointer.
 
-  inline PointerBuilder(SegmentBuilder* segment, WirePointer* pointer)
-      : segment(segment), pointer(pointer) {}
+  inline PointerBuilder(SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* pointer)
+      : segment(segment), capTable(capTable), pointer(pointer) {}
 
   friend class StructBuilder;
   friend class ListBuilder;
@@ -339,9 +370,11 @@ private:
 
 class PointerReader {
 public:
-  inline PointerReader(): segment(nullptr), pointer(nullptr), nestingLimit(0x7fffffff) {}
+  inline PointerReader()
+      : segment(nullptr), capTable(nullptr), pointer(nullptr), nestingLimit(0x7fffffff) {}
 
-  static PointerReader getRoot(SegmentReader* segment, const word* location, int nestingLimit);
+  static PointerReader getRoot(SegmentReader* segment, CapTableReader* capTable,
+                               const word* location, int nestingLimit);
   // Get a PointerReader representing a message root located in the given segment at the given
   // location.
 
@@ -378,16 +411,21 @@ public:
   kj::Maybe<Arena&> getArena() const;
   // Get the arena containing this pointer.
 
+  PointerReader imbue(CapTableReader* capTable) const;
+  // Return a copy of this reader except using the given capability context.
+
 private:
   SegmentReader* segment;      // Memory segment in which the pointer resides.
+  CapTableReader* capTable;    // Table of capability indexes.
   const WirePointer* pointer;  // Pointer to the pointer.  null = treat as null pointer.
 
   int nestingLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
 
-  inline PointerReader(SegmentReader* segment, const WirePointer* pointer, int nestingLimit)
-      : segment(segment), pointer(pointer), nestingLimit(nestingLimit) {}
+  inline PointerReader(SegmentReader* segment, CapTableReader* capTable,
+                       const WirePointer* pointer, int nestingLimit)
+      : segment(segment), capTable(capTable), pointer(pointer), nestingLimit(nestingLimit) {}
 
   friend class StructReader;
   friend class ListReader;
@@ -399,7 +437,7 @@ private:
 
 class StructBuilder: public kj::DisallowConstCopy {
 public:
-  inline StructBuilder(): segment(nullptr), data(nullptr), pointers(nullptr) {}
+  inline StructBuilder(): segment(nullptr), capTable(nullptr), data(nullptr), pointers(nullptr) {}
 
   inline word* getLocation() { return reinterpret_cast<word*>(data); }
   // Get the object's location.  Only valid for independently-allocated objects (i.e. not list
@@ -457,8 +495,15 @@ public:
   BuilderArena* getArena();
   // Gets the arena in which this object is allocated.
 
+  CapTableBuilder* getCapTable();
+  // Gets the capability context in which this object is operating.
+
+  StructBuilder imbue(CapTableBuilder* capTable);
+  // Return a copy of this builder except using the given capability context.
+
 private:
   SegmentBuilder* segment;     // Memory segment in which the struct resides.
+  CapTableBuilder* capTable;   // Table of capability indexes.
   void* data;                  // Pointer to the encoded data.
   WirePointer* pointers;   // Pointer to the encoded pointers.
 
@@ -468,9 +513,10 @@ private:
 
   WirePointerCount16 pointerCount;  // Size of the pointer section.
 
-  inline StructBuilder(SegmentBuilder* segment, void* data, WirePointer* pointers,
+  inline StructBuilder(SegmentBuilder* segment, CapTableBuilder* capTable,
+                       void* data, WirePointer* pointers,
                        BitCount dataSize, WirePointerCount pointerCount)
-      : segment(segment), data(data), pointers(pointers),
+      : segment(segment), capTable(capTable), data(data), pointers(pointers),
         dataSize(dataSize), pointerCount(pointerCount) {}
 
   friend class ListBuilder;
@@ -481,7 +527,7 @@ private:
 class StructReader {
 public:
   inline StructReader()
-      : segment(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
+      : segment(nullptr), capTable(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
         pointerCount(0), nestingLimit(0x7fffffff) {}
 
   const void* getLocation() const { return data; }
@@ -518,8 +564,12 @@ public:
   // use the result as a hint for allocating the first segment, do the copy, and then throw an
   // exception if it overruns.
 
+  StructReader imbue(CapTableReader* capTable) const;
+  // Return a copy of this reader except using the given capability context.
+
 private:
-  SegmentReader* segment;  // Memory segment in which the struct resides.
+  SegmentReader* segment;    // Memory segment in which the struct resides.
+  CapTableReader* capTable;  // Table of capability indexes.
 
   const void* data;
   const WirePointer* pointers;
@@ -535,9 +585,10 @@ private:
   // Once this reaches zero, further pointers will be pruned.
   // TODO(perf):  Limit to 16 bits for better packing?
 
-  inline StructReader(SegmentReader* segment, const void* data, const WirePointer* pointers,
+  inline StructReader(SegmentReader* segment, CapTableReader* capTable,
+                      const void* data, const WirePointer* pointers,
                       BitCount dataSize, WirePointerCount pointerCount, int nestingLimit)
-      : segment(segment), data(data), pointers(pointers),
+      : segment(segment), capTable(capTable), data(data), pointers(pointers),
         dataSize(dataSize), pointerCount(pointerCount),
         nestingLimit(nestingLimit) {}
 
@@ -563,7 +614,7 @@ private:
 class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline explicit ListBuilder(ElementSize elementSize)
-      : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
+      : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
         step(0 * BITS / ELEMENTS), elementSize(elementSize) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder)
@@ -606,8 +657,15 @@ public:
   BuilderArena* getArena();
   // Gets the arena in which this object is allocated.
 
+  CapTableBuilder* getCapTable();
+  // Gets the capability context in which this object is operating.
+
+  ListBuilder imbue(CapTableBuilder* capTable);
+  // Return a copy of this builder except using the given capability context.
+
 private:
-  SegmentBuilder* segment;  // Memory segment in which the list resides.
+  SegmentBuilder* segment;    // Memory segment in which the list resides.
+  CapTableBuilder* capTable;  // Table of capability indexes.
 
   byte* ptr;  // Pointer to list content.
 
@@ -625,11 +683,11 @@ private:
   // The element size as a ElementSize. This is only really needed to disambiguate INLINE_COMPOSITE
   // from other types when the overall size is exactly zero or one words.
 
-  inline ListBuilder(SegmentBuilder* segment, void* ptr,
+  inline ListBuilder(SegmentBuilder* segment, CapTableBuilder* capTable, void* ptr,
                      decltype(BITS / ELEMENTS) step, ElementCount size,
                      BitCount structDataSize, WirePointerCount structPointerCount,
                      ElementSize elementSize)
-      : segment(segment), ptr(reinterpret_cast<byte*>(ptr)),
+      : segment(segment), capTable(capTable), ptr(reinterpret_cast<byte*>(ptr)),
         elementCount(size), step(step), structDataSize(structDataSize),
         structPointerCount(structPointerCount), elementSize(elementSize) {}
 
@@ -641,9 +699,9 @@ private:
 class ListReader {
 public:
   inline explicit ListReader(ElementSize elementSize)
-      : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
-        structDataSize(0), structPointerCount(0), elementSize(elementSize),
-        nestingLimit(0x7fffffff) {}
+      : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(0),
+        step(0 * BITS / ELEMENTS), structDataSize(0), structPointerCount(0),
+        elementSize(elementSize), nestingLimit(0x7fffffff) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(const, ListReader)
 
@@ -666,8 +724,12 @@ public:
 
   StructReader getStructElement(ElementCount index) const;
 
+  ListReader imbue(CapTableReader* capTable) const;
+  // Return a copy of this reader except using the given capability context.
+
 private:
-  SegmentReader* segment;  // Memory segment in which the list resides.
+  SegmentReader* segment;    // Memory segment in which the list resides.
+  CapTableReader* capTable;  // Table of capability indexes.
 
   const byte* ptr;  // Pointer to list content.
 
@@ -689,12 +751,12 @@ private:
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
 
-  inline ListReader(SegmentReader* segment, const void* ptr,
+  inline ListReader(SegmentReader* segment, CapTableReader* capTable, const void* ptr,
                     ElementCount elementCount, decltype(BITS / ELEMENTS) step,
                     BitCount structDataSize, WirePointerCount structPointerCount,
                     ElementSize elementSize, int nestingLimit)
-      : segment(segment), ptr(reinterpret_cast<const byte*>(ptr)), elementCount(elementCount),
-        step(step), structDataSize(structDataSize),
+      : segment(segment), capTable(capTable), ptr(reinterpret_cast<const byte*>(ptr)),
+        elementCount(elementCount), step(step), structDataSize(structDataSize),
         structPointerCount(structPointerCount), elementSize(elementSize),
         nestingLimit(nestingLimit) {}
 
@@ -708,26 +770,29 @@ private:
 
 class OrphanBuilder {
 public:
-  inline OrphanBuilder(): segment(nullptr), location(nullptr) { memset(&tag, 0, sizeof(tag)); }
+  inline OrphanBuilder(): segment(nullptr), capTable(nullptr), location(nullptr) {
+    memset(&tag, 0, sizeof(tag));
+  }
   OrphanBuilder(const OrphanBuilder& other) = delete;
   inline OrphanBuilder(OrphanBuilder&& other) noexcept;
   inline ~OrphanBuilder() noexcept(false);
 
-  static OrphanBuilder initStruct(BuilderArena* arena, StructSize size);
-  static OrphanBuilder initList(BuilderArena* arena, ElementCount elementCount,
-                                ElementSize elementSize);
-  static OrphanBuilder initStructList(BuilderArena* arena, ElementCount elementCount,
-                                      StructSize elementSize);
-  static OrphanBuilder initText(BuilderArena* arena, ByteCount size);
-  static OrphanBuilder initData(BuilderArena* arena, ByteCount size);
+  static OrphanBuilder initStruct(BuilderArena* arena, CapTableBuilder* capTable, StructSize size);
+  static OrphanBuilder initList(BuilderArena* arena, CapTableBuilder* capTable,
+                                ElementCount elementCount, ElementSize elementSize);
+  static OrphanBuilder initStructList(BuilderArena* arena, CapTableBuilder* capTable,
+                                      ElementCount elementCount, StructSize elementSize);
+  static OrphanBuilder initText(BuilderArena* arena, CapTableBuilder* capTable, ByteCount size);
+  static OrphanBuilder initData(BuilderArena* arena, CapTableBuilder* capTable, ByteCount size);
 
-  static OrphanBuilder copy(BuilderArena* arena, StructReader copyFrom);
-  static OrphanBuilder copy(BuilderArena* arena, ListReader copyFrom);
-  static OrphanBuilder copy(BuilderArena* arena, PointerReader copyFrom);
-  static OrphanBuilder copy(BuilderArena* arena, Text::Reader copyFrom);
-  static OrphanBuilder copy(BuilderArena* arena, Data::Reader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, CapTableBuilder* capTable, StructReader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, CapTableBuilder* capTable, ListReader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, CapTableBuilder* capTable, PointerReader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, CapTableBuilder* capTable, Text::Reader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, CapTableBuilder* capTable, Data::Reader copyFrom);
 #if !CAPNP_LITE
-  static OrphanBuilder copy(BuilderArena* arena, kj::Own<ClientHook> copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, CapTableBuilder* capTable,
+                            kj::Own<ClientHook> copyFrom);
 #endif  // !CAPNP_LITE
 
   static OrphanBuilder referenceExternalData(BuilderArena* arena, Data::Reader data);
@@ -787,12 +852,16 @@ private:
   SegmentBuilder* segment;
   // Segment in which the object resides.
 
+  CapTableBuilder* capTable;
+  // Table of capability indexes.
+
   word* location;
   // Pointer to the object, or nullptr if the pointer is null.  For capabilities, we make this
   // point at `tag` just so that it is non-null for operator==, but it is never used.
 
-  inline OrphanBuilder(const void* tagPtr, SegmentBuilder* segment, word* location)
-      : segment(segment), location(location) {
+  inline OrphanBuilder(const void* tagPtr, SegmentBuilder* segment,
+                       CapTableBuilder* capTable, word* location)
+      : segment(segment), capTable(capTable), location(location) {
     memcpy(&tag, tagPtr, sizeof(tag));
   }
 
@@ -820,12 +889,14 @@ template <> void PointerBuilder::setBlob<Data>(typename Data::Reader value);
 template <> typename Data::Builder PointerBuilder::getBlob<Data>(const void* defaultValue, ByteCount defaultSize);
 template <> typename Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount defaultSize) const;
 
-inline PointerBuilder PointerBuilder::getRoot(SegmentBuilder* segment, word* location) {
-  return PointerBuilder(segment, reinterpret_cast<WirePointer*>(location));
+inline PointerBuilder PointerBuilder::getRoot(
+    SegmentBuilder* segment, CapTableBuilder* capTable, word* location) {
+  return PointerBuilder(segment, capTable, reinterpret_cast<WirePointer*>(location));
 }
 
 inline PointerReader PointerReader::getRootUnchecked(const word* location) {
-  return PointerReader(nullptr, reinterpret_cast<const WirePointer*>(location), 0x7fffffff);
+  return PointerReader(nullptr, nullptr,
+                       reinterpret_cast<const WirePointer*>(location), 0x7fffffff);
 }
 
 // -------------------------------------------------------------------
@@ -835,7 +906,7 @@ inline kj::ArrayPtr<byte> StructBuilder::getDataSectionAsBlob() {
 }
 
 inline _::ListBuilder StructBuilder::getPointerSectionAsList() {
-  return _::ListBuilder(segment, pointers, 1 * POINTERS * BITS_PER_POINTER / ELEMENTS,
+  return _::ListBuilder(segment, capTable, pointers, 1 * POINTERS * BITS_PER_POINTER / ELEMENTS,
                         pointerCount * (1 * ELEMENTS / POINTERS),
                         0 * BITS, 1 * POINTERS, ElementSize::POINTER);
 }
@@ -908,7 +979,7 @@ inline void StructBuilder::setDataField(ElementCount offset, kj::NoInfer<T> valu
 
 inline PointerBuilder StructBuilder::getPointerField(WirePointerCount ptrIndex) {
   // Hacky because WirePointer is defined in the .c++ file (so is incomplete here).
-  return PointerBuilder(segment, reinterpret_cast<WirePointer*>(
+  return PointerBuilder(segment, capTable, reinterpret_cast<WirePointer*>(
       reinterpret_cast<word*>(pointers) + ptrIndex * WORDS_PER_POINTER));
 }
 
@@ -919,7 +990,7 @@ inline kj::ArrayPtr<const byte> StructReader::getDataSectionAsBlob() {
 }
 
 inline _::ListReader StructReader::getPointerSectionAsList() {
-  return _::ListReader(segment, pointers, pointerCount * (1 * ELEMENTS / POINTERS),
+  return _::ListReader(segment, capTable, pointers, pointerCount * (1 * ELEMENTS / POINTERS),
                        1 * POINTERS * BITS_PER_POINTER / ELEMENTS, 0 * BITS, 1 * POINTERS,
                        ElementSize::POINTER, nestingLimit);
 }
@@ -967,7 +1038,7 @@ T StructReader::getDataField(ElementCount offset, Mask<T> mask) const {
 inline PointerReader StructReader::getPointerField(WirePointerCount ptrIndex) const {
   if (ptrIndex < pointerCount) {
     // Hacky because WirePointer is defined in the .c++ file (so is incomplete here).
-    return PointerReader(segment, reinterpret_cast<const WirePointer*>(
+    return PointerReader(segment, capTable, reinterpret_cast<const WirePointer*>(
         reinterpret_cast<const word*>(pointers) + ptrIndex * WORDS_PER_POINTER), nestingLimit);
   } else{
     return PointerReader();
@@ -1034,7 +1105,7 @@ template <>
 inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) {}
 
 inline PointerBuilder ListBuilder::getPointerElement(ElementCount index) {
-  return PointerBuilder(segment,
+  return PointerBuilder(segment, capTable,
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE));
 }
 
@@ -1061,14 +1132,14 @@ inline Void ListReader::getDataElement<Void>(ElementCount index) const {
 }
 
 inline PointerReader ListReader::getPointerElement(ElementCount index) const {
-  return PointerReader(segment,
+  return PointerReader(segment, capTable,
       reinterpret_cast<const WirePointer*>(ptr + index * step / BITS_PER_BYTE), nestingLimit);
 }
 
 // -------------------------------------------------------------------
 
 inline OrphanBuilder::OrphanBuilder(OrphanBuilder&& other) noexcept
-    : segment(other.segment), location(other.location) {
+    : segment(other.segment), capTable(other.capTable), location(other.location) {
   memcpy(&tag, &other.tag, sizeof(tag));  // Needs memcpy to comply with aliasing rules.
   other.segment = nullptr;
   other.location = nullptr;
@@ -1087,6 +1158,7 @@ inline OrphanBuilder& OrphanBuilder::operator=(OrphanBuilder&& other) {
 
   if (segment != nullptr) euthanize();
   segment = other.segment;
+  capTable = other.capTable;
   location = other.location;
   memcpy(&tag, &other.tag, sizeof(tag));  // Needs memcpy to comply with aliasing rules.
   other.segment = nullptr;

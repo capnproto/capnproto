@@ -65,11 +65,6 @@ void* ClientHook::getLocalServer(_::CapabilityServerSetBase& capServerSet) {
   return nullptr;
 }
 
-void MessageReader::initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable) {
-  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
-  arena()->initCapTable(kj::mv(capTable));
-}
-
 // =======================================================================================
 
 Capability::Client::Client(decltype(nullptr))
@@ -653,6 +648,47 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
   auto hook = kj::heap<BrokenRequest>(kj::mv(reason), sizeHint);
   auto root = hook->message.getRoot<AnyPointer>();
   return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
+}
+
+// =======================================================================================
+
+ReaderCapabilityTable::ReaderCapabilityTable(
+    kj::Array<kj::Maybe<kj::Own<ClientHook>>> table)
+    : table(kj::mv(table)) {
+  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
+}
+
+kj::Maybe<kj::Own<ClientHook>> ReaderCapabilityTable::extractCap(uint index) {
+  if (index < table.size()) {
+    return table[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
+  } else {
+    return nullptr;
+  }
+}
+
+BuilderCapabilityTable::BuilderCapabilityTable() {
+  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
+}
+
+kj::Maybe<kj::Own<ClientHook>> BuilderCapabilityTable::extractCap(uint index) {
+  if (index < table.size()) {
+    return table[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
+  } else {
+    return nullptr;
+  }
+}
+
+uint BuilderCapabilityTable::injectCap(kj::Own<ClientHook>&& cap) {
+  uint result = table.size();
+  table.add(kj::mv(cap));
+  return result;
+}
+
+void BuilderCapabilityTable::dropCap(uint index) {
+  KJ_ASSERT(index < table.size(), "Invalid capability descriptor in message.") {
+    return;
+  }
+  table[index] = nullptr;
 }
 
 // =======================================================================================

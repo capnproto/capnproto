@@ -138,6 +138,7 @@ struct AnyPointer {
     friend struct AnyPointer;
     friend class Orphanage;
     friend class CapReaderContext;
+    friend class _::PointerHelpers<AnyPointer>;
   };
 
   class Builder {
@@ -254,6 +255,7 @@ struct AnyPointer {
     _::PointerBuilder builder;
     friend class Orphanage;
     friend class CapBuilderContext;
+    friend class _::PointerHelpers<AnyPointer>;
   };
 
 #if !CAPNP_LITE
@@ -887,6 +889,12 @@ struct PointerHelpers<AnyPointer, Kind::OTHER> {
   }
   static inline Orphan<AnyPointer> disown(PointerBuilder builder) {
     return Orphan<AnyPointer>(builder.disown());
+  }
+  static inline _::PointerReader getInternalReader(const AnyPointer::Reader& reader) {
+    return reader.reader;
+  }
+  static inline _::PointerBuilder getInternalBuilder(AnyPointer::Builder&& builder) {
+    return builder.builder;
   }
 };
 

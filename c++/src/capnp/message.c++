@@ -32,6 +32,18 @@
 
 namespace capnp {
 
+namespace {
+
+class DummyCapTableReader: public _::CapTableReader {
+public:
+  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override {
+    return nullptr;
+  }
+};
+static constexpr DummyCapTableReader dummyCapTableReader = DummyCapTableReader();
+
+}  // namespace
+
 MessageReader::MessageReader(ReaderOptions options): options(options), allocatedArena(false) {}
 MessageReader::~MessageReader() noexcept(false) {
   if (allocatedArena) {
@@ -55,8 +67,10 @@ AnyPointer::Reader MessageReader::getRootInternal() {
     return AnyPointer::Reader();
   }
 
+  // const_cast here is safe because dummyCapTableReader has no state.
   return AnyPointer::Reader(_::PointerReader::getRoot(
-      segment, segment->getStartPtr(), options.nestingLimit));
+      segment, const_cast<DummyCapTableReader*>(&dummyCapTableReader),
+      segment->getStartPtr(), options.nestingLimit));
 }
 
 // -------------------------------------------------------------------
@@ -97,7 +111,7 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
 AnyPointer::Builder MessageBuilder::getRootInternal() {
   _::SegmentBuilder* rootSegment = getRootSegment();
   return AnyPointer::Builder(_::PointerBuilder::getRoot(
-      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS)));
+      rootSegment, arena()->getLocalCapTable(), rootSegment->getPtrUnchecked(0 * WORDS)));
 }
 
 kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {
@@ -108,22 +122,12 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutpu
   }
 }
 
-#if !CAPNP_LITE
-kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> MessageBuilder::getCapTable() {
-  if (allocatedArena) {
-    return arena()->getCapTable();
-  } else {
-    return nullptr;
-  }
-}
-#endif  // !CAPNP_LITE
-
 Orphanage MessageBuilder::getOrphanage() {
   // We must ensure that the arena and root pointer have been allocated before the Orphanage
   // can be used.
   if (!allocatedArena) getRootSegment();
 
-  return Orphanage(arena());
+  return Orphanage(arena(), arena()->getLocalCapTable());
 }
 
 // =======================================================================================

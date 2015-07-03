@@ -1322,7 +1322,7 @@ private:
               firstSegmentSize(sizeHint, messageSizeHint<rpc::Call>() +
                   sizeInWords<rpc::Payload>() + MESSAGE_TARGET_SIZE_HINT))),
           callBuilder(message->getBody().getAs<rpc::Message>().initCall()),
-          paramsBuilder(callBuilder.getParams().getContent()) {}
+          paramsBuilder(capTable.imbue(callBuilder.getParams().getContent())) {}
 
     inline AnyPointer::Builder getRoot() {
       return paramsBuilder;
@@ -1417,6 +1417,7 @@ private:
 
     kj::Own<RpcClient> target;
     kj::Own<OutgoingRpcMessage> message;
+    BuilderCapabilityTable capTable;
     rpc::Call::Builder callBuilder;
     AnyPointer::Builder paramsBuilder;
 
@@ -1428,7 +1429,7 @@ private:
     SendInternalResult sendInternal(bool isTailCall) {
       // Build the cap table.
       auto exports = connectionState->writeDescriptors(
-          message->getCapTable(), callBuilder.getParams());
+          capTable.getTable(), callBuilder.getParams());
 
       // Init the question table.  Do this after writing descriptors to avoid interference.
       QuestionId questionId;
@@ -1560,10 +1561,12 @@ private:
     RpcResponseImpl(RpcConnectionState& connectionState,
                     kj::Own<QuestionRef>&& questionRef,
                     kj::Own<IncomingRpcMessage>&& message,
+                    kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTableArray,
                     AnyPointer::Reader results)
         : connectionState(kj::addRef(connectionState)),
           message(kj::mv(message)),
-          reader(results),
+          capTable(kj::mv(capTableArray)),
+          reader(capTable.imbue(results)),
           questionRef(kj::mv(questionRef)) {}
 
     AnyPointer::Reader getResults() override {
@@ -1577,6 +1580,7 @@ private:
   private:
     kj::Own<RpcConnectionState> connectionState;
     kj::Own<IncomingRpcMessage> message;
+    ReaderCapabilityTable capTable;
     AnyPointer::Reader reader;
     kj::Own<QuestionRef> questionRef;
   };
@@ -1599,7 +1603,7 @@ private:
           payload(payload) {}
 
     AnyPointer::Builder getResultsBuilder() override {
-      return payload.getContent();
+      return capTable.imbue(payload.getContent());
     }
 
     kj::Maybe<kj::Array<ExportId>> send() {
@@ -1607,7 +1611,7 @@ private:
       // (Could return a non-null empty array if there were caps but none of them were exports.)
 
       // Build the cap table.
-      auto capTable = message->getCapTable();
+      auto capTable = this->capTable.getTable();
       auto exports = connectionState.writeDescriptors(capTable, payload);
 
       // Capabilities that we are returning are subject to embargos. See `Disembargo` in rpc.capnp.
@@ -1632,6 +1636,7 @@ private:
   private:
     RpcConnectionState& connectionState;
     kj::Own<OutgoingRpcMessage> message;
+    BuilderCapabilityTable capTable;
     rpc::Payload::Builder payload;
   };
 
@@ -1661,12 +1666,15 @@ private:
   class RpcCallContext final: public CallContextHook, public kj::Refcounted {
   public:
     RpcCallContext(RpcConnectionState& connectionState, AnswerId answerId,
-                   kj::Own<IncomingRpcMessage>&& request, const AnyPointer::Reader& params,
+                   kj::Own<IncomingRpcMessage>&& request,
+                   kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTableArray,
+                   const AnyPointer::Reader& params,
                    bool redirectResults, kj::Own<kj::PromiseFulfiller<void>>&& cancelFulfiller)
         : connectionState(kj::addRef(connectionState)),
           answerId(answerId),
           request(kj::mv(request)),
-          params(params),
+          paramsCapTable(kj::mv(capTableArray)),
+          params(paramsCapTable.imbue(params)),
           returnMessage(nullptr),
           redirectResults(redirectResults),
           cancelFulfiller(kj::mv(cancelFulfiller)) {}
@@ -1881,6 +1889,7 @@ private:
     // Request ---------------------------------------------
 
     kj::Maybe<kj::Own<IncomingRpcMessage>> request;
+    ReaderCapabilityTable paramsCapTable;
     AnyPointer::Reader params;
 
     // Response --------------------------------------------
@@ -2117,13 +2126,14 @@ private:
         cap = bootstrapFactory.baseCreateFor(conn.baseGetPeerVatId());
       }
 
+      BuilderCapabilityTable capTable;
       auto payload = ret.initResults();
-      payload.getContent().setAs<Capability>(kj::mv(cap));
+      capTable.imbue(payload.getContent()).setAs<Capability>(kj::mv(cap));
 
-      auto capTable = response->getCapTable();
-      KJ_DASSERT(capTable.size() == 1);
-      resultExports = writeDescriptors(capTable, payload);
-      capHook = KJ_ASSERT_NONNULL(capTable[0])->addRef();
+      auto capTableArray = capTable.getTable();
+      KJ_DASSERT(capTableArray.size() == 1);
+      resultExports = writeDescriptors(capTableArray, payload);
+      capHook = KJ_ASSERT_NONNULL(capTableArray[0])->addRef();
     })) {
       fromException(*exception, ret.initException());
       capHook = newBrokenCap(kj::mv(*exception));
@@ -2167,13 +2177,13 @@ private:
     }
 
     auto payload = call.getParams();
-    message->initCapTable(receiveCaps(payload.getCapTable()));
+    auto capTableArray = receiveCaps(payload.getCapTable());
     auto cancelPaf = kj::newPromiseAndFulfiller<void>();
 
     AnswerId answerId = call.getQuestionId();
 
     auto context = kj::refcounted<RpcCallContext>(
-        *this, answerId, kj::mv(message), payload.getContent(),
+        *this, answerId, kj::mv(message), kj::mv(capTableArray), payload.getContent(),
         redirectResults, kj::mv(cancelPaf.fulfiller));
 
     // No more using `call` after this point, as it now belongs to the context.
@@ -2334,9 +2344,10 @@ private:
             }
 
             auto payload = ret.getResults();
-            message->initCapTable(receiveCaps(payload.getCapTable()));
+            auto capTableArray = receiveCaps(payload.getCapTable());
             questionRef->fulfill(kj::refcounted<RpcResponseImpl>(
-                *this, kj::addRef(*questionRef), kj::mv(message), payload.getContent()));
+                *this, kj::addRef(*questionRef), kj::mv(message),
+                kj::mv(capTableArray), payload.getContent()));
             break;
           }
 
