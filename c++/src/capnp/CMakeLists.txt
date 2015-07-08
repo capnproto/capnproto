@@ -36,6 +36,7 @@ set(capnp_headers
   any.h
   message.h
   capability.h
+  membrane.h
   dynamic.h
   schema.h
   schema.capnp.h
@@ -62,6 +63,7 @@ install(FILES ${capnp_headers} ${capnp_schemas} DESTINATION "${INCLUDE_INSTALL_D
 set(capnp-rpc_sources
   serialize-async.c++
   capability.c++
+  membrane.c++
   dynamic-capability.c++
   rpc.c++
   rpc.capnp.c++
@@ -209,6 +211,7 @@ if(BUILD_TESTING)
     add_executable(capnp-heavy-tests
       endian-reverse-test.c++
       capability-test.c++
+      membrane-test.c++
       schema-test.c++
       schema-loader-test.c++
       schema-parser-test.c++

@@ -139,6 +139,7 @@ private:
 
   template <typename, typename>
   friend class Request;
+  friend class ResponseHook;
 };
 
 class Capability::Client {
@@ -488,6 +489,11 @@ class ResponseHook {
 public:
   virtual ~ResponseHook() noexcept(false);
   // Just here to make sure the type is dynamic.
+
+  template <typename T>
+  inline static kj::Own<ResponseHook> from(Response<T>&& response) {
+    return kj::mv(response.hook);
+  }
 };
 
 // class PipelineHook is declared in any.h because it is needed there.

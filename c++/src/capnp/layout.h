@@ -411,6 +411,9 @@ public:
   kj::Maybe<Arena&> getArena() const;
   // Get the arena containing this pointer.
 
+  CapTableReader* getCapTable();
+  // Gets the capability context in which this object is operating.
+
   PointerReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
 

@@ -2440,6 +2440,10 @@ kj::Maybe<Arena&> PointerReader::getArena() const {
   return segment == nullptr ? nullptr : segment->getArena();
 }
 
+CapTableReader* PointerReader::getCapTable() {
+  return capTable;
+}
+
 PointerReader PointerReader::imbue(CapTableReader* capTable) const {
   auto result = *this;
   result.capTable = capTable;

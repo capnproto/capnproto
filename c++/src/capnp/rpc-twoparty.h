@@ -59,6 +59,8 @@ public:
   kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
   // Returns a promise that resolves when the peer disconnects.
 
+  rpc::twoparty::Side getSide() { return side; }
+
   // implements VatNetwork -----------------------------------------------------
 
   kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> connect(
@@ -136,7 +138,8 @@ class TwoPartyClient {
 
 public:
   explicit TwoPartyClient(kj::AsyncIoStream& connection);
-  TwoPartyClient(kj::AsyncIoStream& connection, Capability::Client bootstrapInterface);
+  TwoPartyClient(kj::AsyncIoStream& connection, Capability::Client bootstrapInterface,
+                 rpc::twoparty::Side side = rpc::twoparty::Side::CLIENT);
 
   Capability::Client bootstrap();
   // Get the server's bootstrap interface.

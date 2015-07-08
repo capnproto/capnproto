@@ -803,6 +803,22 @@ interface TestMoreStuff extends(TestCallOrder) {
   # this can be used to test garbage collection.
 }
 
+interface TestMembrane {
+  makeThing @0 () -> (thing :Thing);
+  callPassThrough @1 (thing :Thing, tailCall :Bool) -> Result;
+  callIntercept @2 (thing :Thing, tailCall :Bool) -> Result;
+  loopback @3 (thing :Thing) -> (thing :Thing);
+
+  interface Thing {
+    passThrough @0 () -> Result;
+    intercept @1 () -> Result;
+  }
+
+  struct Result {
+    text @0 :Text;
+  }
+}
+
 struct TestTransferCap {
   list @0 :List(Element);
   struct Element {
