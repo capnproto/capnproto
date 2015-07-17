@@ -352,9 +352,8 @@ int main(int argc, const char* argv[]) {
   capnp::EzRpcClient client(argv[1], 5923);
   auto& waitScope = client.getWaitScope();
 
-  // Request the service named "foo" from the server.
-  MyInterface::Client cap =
-      client.importCap<MyInterface>("foo");
+  // Request the bootstrap capability from the server.
+  MyInterface::Client cap = client.getMain<MyInterface>();
 
   // Make a call to the capability.
   auto request = cap.fooRequest();
@@ -395,15 +394,12 @@ int main(int argc, const char* argv[]) {
   }
 
   // Set up the EzRpcServer, binding to port 5923 unless a
-  // different port was specified by the user.
-  capnp::EzRpcServer server(argv[1], 5923);
-  auto& waitScope = server.getWaitScope();
-
-  // Export a capability under the name "foo".  Note that the
-  // second parameter here can be any "Client" object or anything
+  // different port was specified by the user.  Note that the
+  // first parameter here can be any "Client" object or anything
   // that can implicitly cast to a "Client" object.  You can even
   // re-export a capability imported from another server.
-  server.exportCap("foo", kj::heap<MyInterfaceImpl>());
+  capnp::EzRpcServer server(kj::heap<MyInterfaceImpl>(), argv[1], 5923);
+  auto& waitScope = server.getWaitScope();
 
   // Run forever, accepting connections and handling requests.
   kj::NEVER_DONE.wait(waitScope);
