@@ -102,10 +102,8 @@ public:
   virtual ~MessageReader() noexcept(false);
 
   virtual kj::ArrayPtr<const word> getSegment(uint id) = 0;
-  // Gets the segment with the given ID, or returns null if no such segment exists.
-  //
-  // Normally getSegment() will only be called once for each segment ID.  Subclasses can call
-  // reset() to clear the segment table and start over with new segments.
+  // Gets the segment with the given ID, or returns null if no such segment exists. This method
+  // will be called at most once for each segment ID.
 
   inline const ReaderOptions& getOptions();
   // Get the options passed to the constructor.
