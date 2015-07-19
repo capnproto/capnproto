@@ -105,7 +105,7 @@ class Request: public Params::Builder {
   // structure with a method send() that actually sends it.
   //
   // Given a Cap'n Proto method `foo(a :A, b :B): C`, the generated client interface will have
-  // a method `Request<FooParams, C> startFoo()` (as well as a convenience method
+  // a method `Request<FooParams, C> fooRequest()` (as well as a convenience method
   // `RemotePromise<C> foo(A::Reader a, B::Reader b)`).
 
 public:
@@ -298,7 +298,7 @@ public:
   //
   // Keep in mind that asynchronous cancellation cannot occur while the method is synchronously
   // executing on a local thread.  The method must perform an asynchronous operation or call
-  // `EventLoop::current().runLater()` to yield control.
+  // `EventLoop::current().evalLater()` to yield control.
   //
   // Note:  You might think that we should offer `onCancel()` and/or `isCanceled()` methods that
   // provide notification when the caller cancels the request without forcefully killing off the
