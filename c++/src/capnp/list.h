@@ -386,7 +386,7 @@ struct List<List<T>, Kind::LIST> {
     }
     inline void adopt(uint index, Orphan<T>&& value) {
       KJ_IREQUIRE(index < size());
-      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value));
+      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value.builder));
     }
     inline Orphan<T> disown(uint index) {
       KJ_IREQUIRE(index < size());
@@ -484,7 +484,7 @@ struct List<T, Kind::BLOB> {
     }
     inline void adopt(uint index, Orphan<T>&& value) {
       KJ_IREQUIRE(index < size());
-      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value));
+      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value.builder));
     }
     inline Orphan<T> disown(uint index) {
       KJ_IREQUIRE(index < size());
