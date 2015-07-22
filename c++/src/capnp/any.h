@@ -305,6 +305,9 @@ public:
   Orphan() = default;
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
+  inline Orphan(_::OrphanBuilder&& builder)
+      : builder(kj::mv(builder)) {}
+
   Orphan& operator=(Orphan&&) = default;
 
   template <typename T>
@@ -349,9 +352,6 @@ public:
 
 private:
   _::OrphanBuilder builder;
-
-  inline Orphan(_::OrphanBuilder&& builder)
-      : builder(kj::mv(builder)) {}
 
   template <typename, Kind>
   friend struct _::PointerHelpers;

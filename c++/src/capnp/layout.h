@@ -567,6 +567,9 @@ public:
   // use the result as a hint for allocating the first segment, do the copy, and then throw an
   // exception if it overruns.
 
+  CapTableReader* getCapTable();
+  // Gets the capability context in which this object is operating.
+
   StructReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
 
@@ -727,6 +730,9 @@ public:
 
   StructReader getStructElement(ElementCount index) const;
 
+  CapTableReader* getCapTable();
+  // Gets the capability context in which this object is operating.
+
   ListReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
 
@@ -860,7 +866,7 @@ private:
 
   word* location;
   // Pointer to the object, or nullptr if the pointer is null.  For capabilities, we make this
-  // point at `tag` just so that it is non-null for operator==, but it is never used.
+  // 0x1 just so that it is non-null for operator==, but it is never used.
 
   inline OrphanBuilder(const void* tagPtr, SegmentBuilder* segment,
                        CapTableBuilder* capTable, word* location)

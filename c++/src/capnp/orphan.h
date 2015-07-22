@@ -34,6 +34,7 @@ class StructSchema;
 class ListSchema;
 struct DynamicStruct;
 struct DynamicList;
+namespace _ { struct OrphanageInternal; }
 
 template <typename T>
 class Orphan {
@@ -53,6 +54,7 @@ public:
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
+  inline Orphan(_::OrphanBuilder&& builder): builder(kj::mv(builder)) {}
 
   inline BuilderFor<T> get();
   // Get the underlying builder.  If the orphan is null, this will allocate and return a default
@@ -88,8 +90,6 @@ public:
 
 private:
   _::OrphanBuilder builder;
-
-  inline Orphan(_::OrphanBuilder&& builder): builder(kj::mv(builder)) {}
 
   template <typename, Kind>
   friend struct _::PointerHelpers;
@@ -179,6 +179,7 @@ private:
   struct NewOrphanListImpl;
 
   friend class MessageBuilder;
+  friend struct _::OrphanageInternal;
 };
 
 // =======================================================================================
@@ -274,6 +275,11 @@ struct OrphanGetImpl<Data, Kind::BLOB> {
   static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
     builder.truncate(size, ElementSize::POINTER);
   }
+};
+
+struct OrphanageInternal {
+  static inline _::BuilderArena* getArena(Orphanage orphanage) { return orphanage.arena; }
+  static inline _::CapTableBuilder* getCapTable(Orphanage orphanage) { return orphanage.capTable; }
 };
 
 }  // namespace _ (private)

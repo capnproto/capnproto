@@ -819,6 +819,11 @@ interface TestMembrane {
   }
 }
 
+struct TestContainMembrane {
+  cap @0 :TestMembrane.Thing;
+  list @1 :List(TestMembrane.Thing);
+}
+
 struct TestTransferCap {
   list @0 :List(Element);
   struct Element {

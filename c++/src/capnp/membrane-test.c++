@@ -90,7 +90,8 @@ protected:
 
 class MembranePolicyImpl: public MembranePolicy, public kj::Refcounted {
 public:
-  kj::Maybe<Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId) override {
+  kj::Maybe<Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId,
+                                            Capability::Client target) override {
     if (interfaceId == capnp::typeId<Thing>() && methodId == 1) {
       return Capability::Client(kj::heap<ThingImpl>("inbound"));
     } else {
@@ -98,7 +99,8 @@ public:
     }
   }
 
-  kj::Maybe<Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId) override {
+  kj::Maybe<Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId,
+                                             Capability::Client target) override {
     if (interfaceId == capnp::typeId<Thing>() && methodId == 1) {
       return Capability::Client(kj::heap<ThingImpl>("outbound"));
     } else {
@@ -147,11 +149,13 @@ void testThingImpl(kj::WaitScope& waitScope, test::TestMembrane::Client membrane
 struct TestEnv {
   kj::EventLoop loop;
   kj::WaitScope waitScope;
+  kj::Own<MembranePolicyImpl> policy;
   test::TestMembrane::Client membraned;
 
   TestEnv()
       : waitScope(loop),
-        membraned(membrane(kj::heap<TestMembraneImpl>(), kj::refcounted<MembranePolicyImpl>())) {}
+        policy(kj::refcounted<MembranePolicyImpl>()),
+        membraned(membrane(kj::heap<TestMembraneImpl>(), policy->addRef())) {}
 
   void testThing(kj::Function<Thing::Client()> makeThing,
                  kj::StringPtr localPassThrough, kj::StringPtr localIntercept,
@@ -207,6 +211,49 @@ KJ_TEST("call local promise pointing into membrane that eventually resolves to o
     req.setThing(kj::heap<ThingImpl>("outside"));
     return req.send().getThing();
   }, "outside", "outside", "outside", "outbound");
+}
+
+KJ_TEST("apply membrane using copyOutOfMembrane() on struct") {
+  TestEnv env;
+
+  env.testThing([&]() {
+    MallocMessageBuilder outsideBuilder;
+    auto root = outsideBuilder.initRoot<test::TestContainMembrane>();
+    root.setCap(kj::heap<ThingImpl>("inside"));
+    MallocMessageBuilder insideBuilder;
+    insideBuilder.adoptRoot(copyOutOfMembrane(
+        root.asReader(), insideBuilder.getOrphanage(), env.policy->addRef()));
+    return insideBuilder.getRoot<test::TestContainMembrane>().getCap();
+  }, "inside", "inbound", "inside", "inside");
+}
+
+KJ_TEST("apply membrane using copyOutOfMembrane() on list") {
+  TestEnv env;
+
+  env.testThing([&]() {
+    MallocMessageBuilder outsideBuilder;
+    auto list = outsideBuilder.initRoot<test::TestContainMembrane>().initList(1);
+    list.set(0, kj::heap<ThingImpl>("inside"));
+    MallocMessageBuilder insideBuilder;
+    insideBuilder.initRoot<test::TestContainMembrane>().adoptList(copyOutOfMembrane(
+        list.asReader(), insideBuilder.getOrphanage(), env.policy->addRef()));
+    return insideBuilder.getRoot<test::TestContainMembrane>().getList()[0];
+  }, "inside", "inbound", "inside", "inside");
+}
+
+KJ_TEST("apply membrane using copyOutOfMembrane() on AnyPointer") {
+  TestEnv env;
+
+  env.testThing([&]() {
+    MallocMessageBuilder outsideBuilder;
+    auto ptr = outsideBuilder.initRoot<test::TestAnyPointer>().getAnyPointerField();
+    ptr.setAs<test::TestMembrane::Thing>(kj::heap<ThingImpl>("inside"));
+    MallocMessageBuilder insideBuilder;
+    insideBuilder.initRoot<test::TestAnyPointer>().getAnyPointerField().adopt(copyOutOfMembrane(
+        ptr.asReader(), insideBuilder.getOrphanage(), env.policy->addRef()));
+    return insideBuilder.getRoot<test::TestAnyPointer>().getAnyPointerField()
+        .getAs<test::TestMembrane::Thing>();
+  }, "inside", "inbound", "inside", "inside");
 }
 
 struct TestRpcEnv {

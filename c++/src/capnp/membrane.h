@@ -57,7 +57,8 @@ class MembranePolicy {
   // calls crossing the membrane to be blocked or redirected.
 
 public:
-  virtual kj::Maybe<Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId) = 0;
+  virtual kj::Maybe<Capability::Client> inboundCall(
+      uint64_t interfaceId, uint16_t methodId, Capability::Client target) = 0;
   // Given an inbound call (a call originating "outside" the membrane destined for an object
   // "inside" the membrane), decides what to do with it. The policy may:
   //
@@ -68,8 +69,20 @@ public:
   //   auto-wrapped; however, the callee can easily wrap the returned capability in the membrane
   //   itself before returning to achieve this effect.
   // - Throw an exception to cause the call to fail with that exception.
+  //
+  // `target` is the underlying capability (*inside* the membrane) for which the call is destined.
+  // Generally, the only way you should use `target` is to wrap it in some capbaility which you
+  // return as a redirect. The redirect capability may modify the call in some way and send it to
+  // `target`. Be careful to use `copyIntoMembrane()` and `copyOutOfMembrane()` as appropriate when
+  // copying parameters or results across the membrane.
+  //
+  // Note that since `target` is inside the capability, if you were to directly return it (rather
+  // than return null), the effect would be that the membrane would be broken: the call would
+  // proceed directly and any new capabilities introduced through it would not be membraned. You
+  // generally should not do that.
 
-  virtual kj::Maybe<Capability::Client> outboundCall(uint64_t interfaceId, uint16_t methodId) = 0;
+  virtual kj::Maybe<Capability::Client> outboundCall(
+      uint64_t interfaceId, uint16_t methodId, Capability::Client target) = 0;
   // Like `inboundCall()`, but applies to calls originating *inside* the membrane and terminating
   // outside.
   //
@@ -119,6 +132,17 @@ typename ServerType::Serves::Client reverseMembrane(
 // Convenience templates which input a capability server type and return the appropriate client
 // type.
 
+template <typename Reader>
+Orphan<typename kj::Decay<Reader>::Reads> copyIntoMembrane(
+    Reader&& from, Orphanage to, kj::Own<MembranePolicy> policy);
+// Copy a Cap'n Proto object (e.g. struct or list), adding the given membrane to any capabilities
+// found within it. `from` is interpreted as "outside" the membrane while `to` is "inside".
+
+template <typename Reader>
+Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
+    Reader&& from, Orphanage to, kj::Own<MembranePolicy> policy);
+// Like copyIntoMembrane() except that `from` is "inside" the membrane and `to` is "outside".
+
 // =======================================================================================
 // inline implementation details
 
@@ -144,6 +168,33 @@ typename ServerType::Serves::Client reverseMembrane(
     kj::Own<ServerType> inner, kj::Own<MembranePolicy> policy) {
   return reverseMembrane(Capability::Client(kj::mv(inner)), kj::mv(policy))
       .castAs<typename ServerType::Serves::Client>();
+}
+
+namespace _ {  // private
+
+OrphanBuilder copyOutOfMembrane(PointerReader from, Orphanage to,
+                                kj::Own<MembranePolicy> policy, bool reverse);
+OrphanBuilder copyOutOfMembrane(StructReader from, Orphanage to,
+                                kj::Own<MembranePolicy> policy, bool reverse);
+OrphanBuilder copyOutOfMembrane(ListReader from, Orphanage to,
+                                kj::Own<MembranePolicy> policy, bool reverse);
+
+}  // namespace _ (private)
+
+template <typename Reader>
+Orphan<typename kj::Decay<Reader>::Reads> copyIntoMembrane(
+    Reader&& from, Orphanage to, kj::Own<MembranePolicy> policy) {
+  return _::copyOutOfMembrane(
+      _::PointerHelpers<typename kj::Decay<Reader>::Reads>::getInternalReader(from),
+      to, kj::mv(policy), true);
+}
+
+template <typename Reader>
+Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
+    Reader&& from, Orphanage to, kj::Own<MembranePolicy> policy) {
+  return _::copyOutOfMembrane(
+      _::PointerHelpers<typename kj::Decay<Reader>::Reads>::getInternalReader(from),
+      to, kj::mv(policy), false);
 }
 
 } // namespace capnp

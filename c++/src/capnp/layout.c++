@@ -1762,7 +1762,8 @@ struct WireHelpers {
 #if !CAPNP_LITE
         KJ_IF_MAYBE(cap, srcCapTable->extractCap(src->capRef.index.get())) {
           setCapabilityPointer(dstSegment, dstCapTable, dst, kj::mv(*cap));
-          return { dstSegment, nullptr };
+          // Return dummy non-null pointer so OrphanBuilder doesn't end up null.
+          return { dstSegment, reinterpret_cast<word*>(1) };
         } else {
 #endif  // !CAPNP_LITE
           KJ_FAIL_REQUIRE("Message contained invalid capability pointer.") {
@@ -1810,7 +1811,7 @@ struct WireHelpers {
       location = nullptr;
     } else if (ref->kind() == WirePointer::OTHER) {
       KJ_REQUIRE(ref->isCapability(), "Unknown pointer type.") { break; }
-      location = reinterpret_cast<word*>(ref);  // dummy so that it is non-null
+      location = reinterpret_cast<word*>(1);  // dummy so that it is non-null
     } else {
       WirePointer* refCopy = ref;
       location = followFarsNoWritableCheck(refCopy, ref->target(), segment);
@@ -2581,6 +2582,10 @@ MessageSizeCounts StructReader::totalSize() const {
   return result;
 }
 
+CapTableReader* StructReader::getCapTable() {
+  return capTable;
+}
+
 StructReader StructReader::imbue(CapTableReader* capTable) const {
   auto result = *this;
   result.capTable = capTable;
@@ -2714,6 +2719,10 @@ StructReader ListReader::getStructElement(ElementCount index) const {
       segment, capTable, structData, structPointers,
       structDataSize, structPointerCount,
       nestingLimit - 1);
+}
+
+CapTableReader* ListReader::getCapTable() {
+  return capTable;
 }
 
 ListReader ListReader::imbue(CapTableReader* capTable) const {

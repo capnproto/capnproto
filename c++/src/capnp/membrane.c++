@@ -37,10 +37,26 @@ public:
       : policy(policy), reverse(reverse) {}
 
   AnyPointer::Reader imbue(AnyPointer::Reader reader) {
+    return AnyPointer::Reader(imbue(
+        _::PointerHelpers<AnyPointer>::getInternalReader(kj::mv(reader))));
+  }
+
+  _::PointerReader imbue(_::PointerReader reader) {
     KJ_REQUIRE(inner == nullptr, "can only call this once");
-    auto pointerReader = _::PointerHelpers<AnyPointer>::getInternalReader(kj::mv(reader));
-    inner = pointerReader.getCapTable();
-    return AnyPointer::Reader(pointerReader.imbue(this));
+    inner = reader.getCapTable();
+    return reader.imbue(this);
+  }
+
+  _::StructReader imbue(_::StructReader reader) {
+    KJ_REQUIRE(inner == nullptr, "can only call this once");
+    inner = reader.getCapTable();
+    return reader.imbue(this);
+  }
+
+  _::ListReader imbue(_::ListReader reader) {
+    KJ_REQUIRE(inner == nullptr, "can only call this once");
+    inner = reader.getCapTable();
+    return reader.imbue(this);
   }
 
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override {
@@ -320,8 +336,9 @@ public:
       return r->get()->newCall(interfaceId, methodId, sizeHint);
     }
 
-    auto redirect = reverse ? policy->outboundCall(interfaceId, methodId)
-                            : policy->inboundCall(interfaceId, methodId);
+    auto redirect = reverse
+        ? policy->outboundCall(interfaceId, methodId, Capability::Client(inner->addRef()))
+        : policy->inboundCall(interfaceId, methodId, Capability::Client(inner->addRef()));
     KJ_IF_MAYBE(r, redirect) {
       // The policy says that *if* this capability points into the membrane, then we want to
       // redirect the call. However, if this capability is a promise, then it could resolve to
@@ -346,8 +363,9 @@ public:
       return r->get()->call(interfaceId, methodId, kj::mv(context));
     }
 
-    auto redirect = reverse ? policy->outboundCall(interfaceId, methodId)
-                            : policy->inboundCall(interfaceId, methodId);
+    auto redirect = reverse
+        ? policy->outboundCall(interfaceId, methodId, Capability::Client(inner->addRef()))
+        : policy->inboundCall(interfaceId, methodId, Capability::Client(inner->addRef()));
     KJ_IF_MAYBE(r, redirect) {
       // The policy says that *if* this capability points into the membrane, then we want to
       // redirect the call. However, if this capability is a promise, then it could resolve to
@@ -434,5 +452,36 @@ Capability::Client reverseMembrane(Capability::Client inner, kj::Own<MembranePol
       ClientHook::from(kj::mv(inner)), *policy, true));
 }
 
-} // namespace capnp
+namespace _ {  // private
+
+_::OrphanBuilder copyOutOfMembrane(PointerReader from, Orphanage to,
+                                   kj::Own<MembranePolicy> policy, bool reverse) {
+  MembraneCapTableReader capTable(*policy, reverse);
+  return _::OrphanBuilder::copy(
+      OrphanageInternal::getArena(to),
+      OrphanageInternal::getCapTable(to),
+      capTable.imbue(from));
+}
+
+_::OrphanBuilder copyOutOfMembrane(StructReader from, Orphanage to,
+                                   kj::Own<MembranePolicy> policy, bool reverse) {
+  MembraneCapTableReader capTable(*policy, reverse);
+  return _::OrphanBuilder::copy(
+      OrphanageInternal::getArena(to),
+      OrphanageInternal::getCapTable(to),
+      capTable.imbue(from));
+}
+
+_::OrphanBuilder copyOutOfMembrane(ListReader from, Orphanage to,
+                                   kj::Own<MembranePolicy> policy, bool reverse) {
+  MembraneCapTableReader capTable(*policy, reverse);
+  return _::OrphanBuilder::copy(
+      OrphanageInternal::getArena(to),
+      OrphanageInternal::getCapTable(to),
+      capTable.imbue(from));
+}
+
+}  // namespace _ (private)
+
+}  // namespace capnp
 
