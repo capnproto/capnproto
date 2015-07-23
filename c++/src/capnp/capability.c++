@@ -105,8 +105,6 @@ kj::Promise<void> ClientHook::whenResolved() {
   }
 }
 
-const uint ClientHook::NULL_CAPABILITY_BRAND = 0;
-
 // =======================================================================================
 
 static inline uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint) {

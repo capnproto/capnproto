@@ -43,6 +43,14 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
   // is ready for it.  May be called multiple times but always with the same value.
   __atomic_store_n(&brokenCapFactory, &factory, __ATOMIC_RELAXED);
 }
+
+}  // namespace _ (private)
+
+const uint ClientHook::NULL_CAPABILITY_BRAND = 0;
+// Defined here rather than capability.c++ so that we can safely call isNull() in this file.
+
+namespace _ {  // private
+
 #endif  // !CAPNP_LITE
 
 // =======================================================================================
