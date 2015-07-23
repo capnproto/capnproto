@@ -284,6 +284,8 @@ public:
 
   kj::Promise<void> getHandle(GetHandleContext context) override;
 
+  kj::Promise<void> getNull(GetNullContext context) override;
+
 private:
   int& callCount;
   int& handleCount;

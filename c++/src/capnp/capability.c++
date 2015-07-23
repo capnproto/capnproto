@@ -44,16 +44,19 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory);
 
 namespace {
 
+static kj::Own<ClientHook> newNullCap();
+
 class BrokenCapFactoryImpl: public _::BrokenCapFactory {
 public:
   kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) override {
     return capnp::newBrokenCap(description);
   }
+  kj::Own<ClientHook> newNullCap() override {
+    return capnp::newNullCap();
+  }
 };
 
 static BrokenCapFactoryImpl brokenCapFactory;
-
-static kj::Own<ClientHook> newNullCap();
 
 }  // namespace
 
@@ -101,6 +104,8 @@ kj::Promise<void> ClientHook::whenResolved() {
     return kj::READY_NOW;
   }
 }
+
+const uint ClientHook::NULL_CAPABILITY_BRAND = 0;
 
 // =======================================================================================
 
@@ -580,10 +585,11 @@ public:
 
 class BrokenClient final: public ClientHook, public kj::Refcounted {
 public:
-  BrokenClient(const kj::Exception& exception, bool resolved)
-      : exception(exception), resolved(resolved) {}
-  BrokenClient(const kj::StringPtr description, bool resolved)
-      : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)), resolved(resolved) {}
+  BrokenClient(const kj::Exception& exception, bool resolved, const void* brand = nullptr)
+      : exception(exception), resolved(resolved), brand(brand) {}
+  BrokenClient(const kj::StringPtr description, bool resolved, const void* brand = nullptr)
+      : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)),
+        resolved(resolved), brand(brand) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
@@ -612,12 +618,13 @@ public:
   }
 
   const void* getBrand() override {
-    return nullptr;
+    return brand;
   }
 
 private:
   kj::Exception exception;
   bool resolved;
+  const void* brand;
 };
 
 kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
@@ -626,7 +633,8 @@ kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineO
 
 kj::Own<ClientHook> newNullCap() {
   // A null capability, unlike other broken capabilities, is considered resolved.
-  return kj::refcounted<BrokenClient>("Called null capability.", true);
+  return kj::refcounted<BrokenClient>("Called null capability.", true,
+                                      &ClientHook::NULL_CAPABILITY_BRAND);
 }
 
 }  // namespace

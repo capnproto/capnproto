@@ -107,6 +107,7 @@ class BrokenCapFactory {
 
 public:
   virtual kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) = 0;
+  virtual kj::Own<ClientHook> newNullCap() = 0;
 };
 #endif  // !CAPNP_LITE
 

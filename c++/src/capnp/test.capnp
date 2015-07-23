@@ -801,6 +801,9 @@ interface TestMoreStuff extends(TestCallOrder) {
   getHandle @9 () -> (handle :TestHandle);
   # Get a new handle. Tests have an out-of-band way to check the current number of live handles, so
   # this can be used to test garbage collection.
+
+  getNull @10 () -> (nullCap :TestMoreStuff);
+  # Always returns a null capability.
 }
 
 interface TestMembrane {

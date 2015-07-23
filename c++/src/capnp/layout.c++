@@ -1561,7 +1561,11 @@ struct WireHelpers {
     if (!ref->isNull()) {
       zeroObject(segment, capTable, ref);
     }
-    ref->setCap(capTable->injectCap(kj::mv(cap)));
+    if (cap->isNull()) {
+      memset(ref, 0, sizeof(*ref));
+    } else {
+      ref->setCap(capTable->injectCap(kj::mv(cap)));
+    }
   }
 #endif  // !CAPNP_LITE
 
@@ -1895,7 +1899,7 @@ struct WireHelpers {
                "use the Cap'n Proto RPC system.");
 
     if (ref->isNull()) {
-      return brokenCapFactory->newBrokenCap("Calling null capability pointer.");
+      return brokenCapFactory->newNullCap();
     } else if (!ref->isCapability()) {
       KJ_FAIL_REQUIRE(
           "Message contains non-capability pointer where capability pointer was expected.") {

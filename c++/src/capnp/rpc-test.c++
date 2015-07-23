@@ -955,6 +955,34 @@ TEST(Rpc, EmbargoError) {
   getCallSequence(client, 1).wait(context.waitScope);
 }
 
+TEST(Rpc, EmbargoNull) {
+  // Set up a situation where we pipeline on a capability that ends up coming back null. This
+  // should NOT cause a Disembargo to be sent, but due to a bug in earlier versions of Cap'n Proto,
+  // a Disembargo was indeed sent to the null capability, which caused the server to disconnect
+  // due to protocol error.
+
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  auto promise = client.getNullRequest().send();
+
+  auto cap = promise.getNullCap();
+
+  auto call0 = cap.getCallSequenceRequest().send();
+
+  promise.wait(context.waitScope);
+
+  auto call1 = cap.getCallSequenceRequest().send();
+
+  expectPromiseThrows(kj::mv(call0), context.waitScope);
+  expectPromiseThrows(kj::mv(call1), context.waitScope);
+
+  // Verify that we're still connected (there were no protocol errors).
+  getCallSequence(client, 0).wait(context.waitScope);
+}
+
 TEST(Rpc, CallBrokenPromise) {
   // Tell the server to call back to a promise client, then resolve the promise to an error.
 

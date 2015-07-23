@@ -551,6 +551,13 @@ public:
   // discover when a capability it needs to marshal is one that it created in the first place, and
   // therefore it can transfer the capability without proxying.
 
+  static const uint NULL_CAPABILITY_BRAND;
+  // Value is irrelevant; used for pointer.
+
+  inline bool isNull() { return getBrand() == &NULL_CAPABILITY_BRAND; }
+  // Returns true if the capability was created as a result of assigning a Client to null or by
+  // reading a null pointer out of a Cap'n Proto message.
+
   virtual void* getLocalServer(_::CapabilityServerSetBase& capServerSet);
   // If this is a local capability created through `capServerSet`, return the underlying Server.
   // Otherwise, return nullptr. Default implementation (which everyone except LocalClient should
