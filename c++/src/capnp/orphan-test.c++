@@ -1540,6 +1540,179 @@ TEST(Orphans, ExtendStructListFromEmpty) {
   }
 }
 
+template <typename ListBuilder>
+void initList(ListBuilder builder,
+    std::initializer_list<ReaderFor<ListElementType<FromBuilder<ListBuilder>>>> values) {
+  KJ_ASSERT(builder.size() == values.size());
+  size_t i = 0;
+  for (auto& value: values) {
+    builder.set(i++, value);
+  }
+}
+
+TEST(Orphans, ConcatenatePrimitiveLists) {
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto list1 = orphanage.newOrphan<List<uint32_t>>(3);
+  initList(list1.get(), {12, 34, 56});
+
+  auto list2 = orphanage.newOrphan<List<uint32_t>>(2);
+  initList(list2.get(), {78, 90});
+
+  auto list3 = orphanage.newOrphan<List<uint32_t>>(4);
+  initList(list3.get(), {23, 45, 67, 89});
+
+  List<uint32_t>::Reader lists[] = { list1.getReader(), list2.getReader(), list3.getReader() };
+  kj::ArrayPtr<List<uint32_t>::Reader> array = lists;
+
+  auto cat = message.getOrphanage().newOrphanConcat(array);
+
+  checkList(cat.getReader(), {12, 34, 56, 78, 90, 23, 45, 67, 89});
+}
+
+TEST(Orphans, ConcatenateBitLists) {
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto list1 = orphanage.newOrphan<List<bool>>(3);
+  initList(list1.get(), {true, true, false});
+
+  auto list2 = orphanage.newOrphan<List<bool>>(2);
+  initList(list2.get(), {false, true});
+
+  auto list3 = orphanage.newOrphan<List<bool>>(4);
+  initList(list3.get(), {false, false, true, false});
+
+  List<bool>::Reader lists[] = { list1.getReader(), list2.getReader(), list3.getReader() };
+  kj::ArrayPtr<List<bool>::Reader> array = lists;
+
+  auto cat = message.getOrphanage().newOrphanConcat(array);
+
+  checkList(cat.getReader(), {true, true, false, false, true, false, false, true, false});
+}
+
+TEST(Orphans, ConcatenatePointerLists) {
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto list1 = orphanage.newOrphan<List<Text>>(3);
+  initList(list1.get(), {"foo", "bar", "baz"});
+
+  auto list2 = orphanage.newOrphan<List<Text>>(2);
+  initList(list2.get(), {"qux", "corge"});
+
+  auto list3 = orphanage.newOrphan<List<Text>>(4);
+  initList(list3.get(), {"grault", "garply", "waldo", "fred"});
+
+  List<Text>::Reader lists[] = { list1.getReader(), list2.getReader(), list3.getReader() };
+  kj::ArrayPtr<List<Text>::Reader> array = lists;
+
+  auto cat = message.getOrphanage().newOrphanConcat(array);
+
+  checkList(cat.getReader(), {
+      "foo", "bar", "baz", "qux", "corge", "grault", "garply", "waldo", "fred"});
+}
+
+TEST(Orphans, ConcatenateStructLists) {
+  // In this test, we not only concatenate two struct lists, but we concatenate in a list that
+  // contains a newer-than-expected version of the struct with extra fields, in order to verify
+  // that the new fields aren't lost.
+
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto orphan1 = orphanage.newOrphan<List<test::TestOldVersion>>(2);
+  auto list1 = orphan1.get();
+  list1[0].setOld1(12);
+  list1[0].setOld2("foo");
+  list1[1].setOld1(34);
+  list1[1].setOld2("bar");
+
+  auto orphan2 = orphanage.newOrphan<test::TestAnyPointer>();
+  auto list2 = orphan2.get().getAnyPointerField().initAs<List<test::TestNewVersion>>(2);
+  list2[0].setOld1(56);
+  list2[0].setOld2("baz");
+  list2[0].setNew1(123);
+  list2[0].setNew2("corge");
+  list2[1].setOld1(78);
+  list2[1].setOld2("qux");
+  list2[1].setNew1(456);
+  list2[1].setNew2("grault");
+
+  List<test::TestOldVersion>::Reader lists[] = {
+    orphan1.getReader(),
+    orphan2.getReader().getAnyPointerField().getAs<List<test::TestOldVersion>>()
+  };
+  kj::ArrayPtr<List<test::TestOldVersion>::Reader> array = lists;
+
+  auto orphan3 = orphanage.newOrphan<test::TestAnyPointer>();
+  orphan3.get().getAnyPointerField().adopt(message.getOrphanage().newOrphanConcat(array));
+
+  auto cat = orphan3.getReader().getAnyPointerField().getAs<List<test::TestNewVersion>>();
+  ASSERT_EQ(4, cat.size());
+
+  EXPECT_EQ(12, cat[0].getOld1());
+  EXPECT_EQ("foo", cat[0].getOld2());
+  EXPECT_EQ(987, cat[0].getNew1());
+  EXPECT_FALSE(cat[0].hasNew2());
+
+  EXPECT_EQ(34, cat[1].getOld1());
+  EXPECT_EQ("bar", cat[1].getOld2());
+  EXPECT_EQ(987, cat[1].getNew1());
+  EXPECT_FALSE(cat[1].hasNew2());
+
+  EXPECT_EQ(56, cat[2].getOld1());
+  EXPECT_EQ("baz", cat[2].getOld2());
+  EXPECT_EQ(123, cat[2].getNew1());
+  EXPECT_EQ("corge", cat[2].getNew2());
+
+  EXPECT_EQ(78, cat[3].getOld1());
+  EXPECT_EQ("qux", cat[3].getOld2());
+  EXPECT_EQ(456, cat[3].getNew1());
+  EXPECT_EQ("grault", cat[3].getNew2());
+}
+
+TEST(Orphans, ConcatenateStructListsUpgradeFromPrimitive) {
+  // Like above, but we're "upgrading" a primitive list to a struct list.
+
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto orphan1 = orphanage.newOrphan<List<test::TestOldVersion>>(2);
+  auto list1 = orphan1.get();
+  list1[0].setOld1(12);
+  list1[0].setOld2("foo");
+  list1[1].setOld1(34);
+  list1[1].setOld2("bar");
+
+  auto orphan2 = orphanage.newOrphan<test::TestAnyPointer>();
+  auto list2 = orphan2.get().getAnyPointerField().initAs<List<uint64_t>>(2);
+  initList(list2, {12345, 67890});
+
+  List<test::TestOldVersion>::Reader lists[] = {
+    orphan1.getReader(),
+    orphan2.getReader().getAnyPointerField().getAs<List<test::TestOldVersion>>()
+  };
+  kj::ArrayPtr<List<test::TestOldVersion>::Reader> array = lists;
+
+  auto orphan3 = message.getOrphanage().newOrphanConcat(array);
+  auto cat = orphan3.getReader();
+  ASSERT_EQ(4, cat.size());
+
+  EXPECT_EQ(12, cat[0].getOld1());
+  EXPECT_EQ("foo", cat[0].getOld2());
+
+  EXPECT_EQ(34, cat[1].getOld1());
+  EXPECT_EQ("bar", cat[1].getOld2());
+
+  EXPECT_EQ(12345, cat[2].getOld1());
+  EXPECT_FALSE(cat[2].hasOld2());
+
+  EXPECT_EQ(67890, cat[3].getOld1());
+  EXPECT_FALSE(cat[3].hasOld2());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

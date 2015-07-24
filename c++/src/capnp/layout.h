@@ -183,6 +183,25 @@ inline constexpr StructSize structSize() {
   return StructSize(CapnpPrivate::dataWordSize * WORDS, CapnpPrivate::pointerCount * POINTERS);
 }
 
+template <typename T, typename CapnpPrivate = typename T::_capnpPrivate,
+          typename = kj::EnableIf<CAPNP_KIND(T) == Kind::STRUCT>>
+inline constexpr StructSize minStructSizeForElement() {
+  // If T is a struct, return its struct size. Otherwise return the minimum struct size big enough
+  // to hold a T.
+
+  return StructSize(CapnpPrivate::dataWordSize * WORDS, CapnpPrivate::pointerCount * POINTERS);
+}
+
+template <typename T, typename = kj::EnableIf<CAPNP_KIND(T) != Kind::STRUCT>>
+inline constexpr StructSize minStructSizeForElement() {
+  // If T is a struct, return its struct size. Otherwise return the minimum struct size big enough
+  // to hold a T.
+
+  return StructSize(
+      dataBitsPerElement(elementSizeForType<T>()) * ELEMENTS > 0 * BITS ? 1 * WORDS : 0 * WORDS,
+      pointersPerElement(elementSizeForType<T>()) * ELEMENTS);
+}
+
 // -------------------------------------------------------------------
 // Masking of default values
 
@@ -803,6 +822,10 @@ public:
   static OrphanBuilder copy(BuilderArena* arena, CapTableBuilder* capTable,
                             kj::Own<ClientHook> copyFrom);
 #endif  // !CAPNP_LITE
+
+  static OrphanBuilder concat(BuilderArena* arena, CapTableBuilder* capTable,
+                              ElementSize expectedElementSize, StructSize expectedStructSize,
+                              kj::ArrayPtr<const ListReader> lists);
 
   static OrphanBuilder referenceExternalData(BuilderArena* arena, Data::Reader data);
 

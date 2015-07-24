@@ -142,6 +142,19 @@ public:
   // Allocate a new orphaned object (struct, list, or blob) and initialize it as a copy of the
   // given object.
 
+  template <typename T>
+  Orphan<List<ListElementType<FromReader<T>>>> newOrphanConcat(kj::ArrayPtr<T> lists) const;
+  template <typename T>
+  Orphan<List<ListElementType<FromReader<T>>>> newOrphanConcat(kj::ArrayPtr<const T> lists) const;
+  // Given an array of List readers, copy and concatenate the lists, creating a new Orphan.
+  //
+  // Note that compared to allocating the list yourself and using `setWithCaveats()` to set each
+  // item, this method avoids the "caveats": the new list will be allocated with the element size
+  // being the maximum of that from all the input lists. This is particularly important when
+  // concatenating struct lists: if the lists were created using a newer version of the protocol
+  // in which some new fields had been added to the struct, using `setWithCaveats()` would
+  // truncate off those new fields.
+
   Orphan<Data> referenceExternalData(Data::Reader data) const;
   // Creates an Orphan<Data> that points at an existing region of memory (e.g. from another message)
   // without copying it.  There are some SEVERE restrictions on how this can be used:
@@ -402,6 +415,26 @@ inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(const Reader& copyFro
 template <typename Reader>
 inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(Reader& copyFrom) const {
   return newOrphanCopy(kj::implicitCast<const Reader&>(copyFrom));
+}
+
+template <typename T>
+inline Orphan<List<ListElementType<FromReader<T>>>>
+Orphanage::newOrphanConcat(kj::ArrayPtr<T> lists) const {
+  return newOrphanConcat(kj::implicitCast<kj::ArrayPtr<const T>>(lists));
+}
+template <typename T>
+inline Orphan<List<ListElementType<FromReader<T>>>>
+Orphanage::newOrphanConcat(kj::ArrayPtr<const T> lists) const {
+  // Optimization / simplification: Rely on List<T>::Reader containing nothing except a
+  // _::ListReader.
+  static_assert(sizeof(T) == sizeof(_::ListReader), "lists are not bare readers?");
+  kj::ArrayPtr<const _::ListReader> raw(
+      reinterpret_cast<const _::ListReader*>(lists.begin()), lists.size());
+  typedef ListElementType<FromReader<T>> Element;
+  return Orphan<List<Element>>(
+      _::OrphanBuilder::concat(arena, capTable,
+          _::elementSizeForType<Element>(),
+          _::minStructSizeForElement<Element>(), raw));
 }
 
 inline Orphan<Data> Orphanage::referenceExternalData(Data::Reader data) const {

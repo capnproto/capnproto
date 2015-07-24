@@ -2869,6 +2869,91 @@ OrphanBuilder OrphanBuilder::copy(
 }
 #endif  // !CAPNP_LITE
 
+OrphanBuilder OrphanBuilder::concat(
+    BuilderArena* arena, CapTableBuilder* capTable,
+    ElementSize elementSize, StructSize structSize,
+    kj::ArrayPtr<const ListReader> lists) {
+  KJ_REQUIRE(lists.size() > 0, "Can't concat empty list ");
+
+  // Find the overall element count and size.
+  ElementCount elementCount = 0 * ELEMENTS;
+  for (auto& list: lists) {
+    elementCount += list.elementCount;
+    if (list.elementSize != elementSize) {
+      // If element sizes don't all match, upgrade to struct list.
+      KJ_REQUIRE(list.elementSize != ElementSize::BIT && elementSize != ElementSize::BIT,
+                 "can't upgrade bit lists to struct lists");
+      elementSize = ElementSize::INLINE_COMPOSITE;
+    }
+    structSize.data = kj::max(structSize.data,
+        WireHelpers::roundBitsUpToWords(list.structDataSize));
+    structSize.pointers = kj::max(structSize.pointers, list.structPointerCount);
+  }
+
+  // Allocate the list.
+  OrphanBuilder result;
+  ListBuilder builder = (elementSize == ElementSize::INLINE_COMPOSITE)
+      ? WireHelpers::initStructListPointer(
+          result.tagAsPtr(), nullptr, capTable, elementCount, structSize, arena)
+      : WireHelpers::initListPointer(
+          result.tagAsPtr(), nullptr, capTable, elementCount, elementSize, arena);
+
+  // Copy elements.
+  switch (elementSize) {
+    case ElementSize::INLINE_COMPOSITE: {
+      ElementCount pos = 0 * ELEMENTS;
+      for (auto& list: lists) {
+        for (ElementCount i = 0 * ELEMENTS; i < list.size(); i += 1 * ELEMENTS) {
+          builder.getStructElement(pos).copyContentFrom(list.getStructElement(i));
+          pos += 1 * ELEMENTS;
+        }
+      }
+      break;
+    }
+    case ElementSize::POINTER: {
+      ElementCount pos = 0 * ELEMENTS;
+      for (auto& list: lists) {
+        for (ElementCount i = 0 * ELEMENTS; i < list.size(); i += 1 * ELEMENTS) {
+          builder.getPointerElement(pos).copyFrom(list.getPointerElement(i));
+          pos += 1 * ELEMENTS;
+        }
+      }
+      break;
+    }
+    case ElementSize::BIT: {
+      // It's difficult to memcpy() bits since a list could start or end mid-byte. For now we
+      // do a slow, naive loop. Probably no one will ever care.
+      ElementCount pos = 0 * ELEMENTS;
+      for (auto& list: lists) {
+        for (ElementCount i = 0 * ELEMENTS; i < list.size(); i += 1 * ELEMENTS) {
+          builder.setDataElement<bool>(pos, list.getDataElement<bool>(i));
+          pos += 1 * ELEMENTS;
+        }
+      }
+      break;
+    }
+    default: {
+      // We know all the inputs had identical size because otherwise we would have chosen
+      // INLINE_COMPOSITE. Therefore, we can safely use memcpy() here instead of copying each
+      // element manually.
+      byte* target = builder.ptr;
+      auto step = builder.step / BITS_PER_BYTE;
+      for (auto& list: lists) {
+        auto count = step * list.size();
+        memcpy(target, list.ptr, count / BYTES);
+        target += count / BYTES;
+      }
+      break;
+    }
+  }
+
+  // Return orphan.
+  result.segment = builder.segment;
+  result.capTable = capTable;
+  result.location = builder.getLocation();
+  return result;
+}
+
 OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Reader data) {
   KJ_REQUIRE(reinterpret_cast<uintptr_t>(data.begin()) % sizeof(void*) == 0,
              "Cannot referenceExternalData() that is not aligned.");

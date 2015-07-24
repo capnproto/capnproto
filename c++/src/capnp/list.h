@@ -272,6 +272,10 @@ struct List<T, Kind::STRUCT> {
       // If the source struct is larger than the target struct -- say, because the source was built
       // using a newer version of the schema that has additional fields -- it will be truncated,
       // losing data.
+      //
+      // Note: If you are trying to concatenate some lists, use Orphanage::newOrphanConcat() to
+      //   do it without losing any data in case the source lists come from a newer version of the
+      //   protocol. (Plus, it's easier to use anyhow.)
 
       KJ_IREQUIRE(index < size());
       builder.getStructElement(index * ELEMENTS).copyContentFrom(reader._reader);
