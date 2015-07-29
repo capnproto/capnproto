@@ -723,6 +723,10 @@ const derivedConstant :TestAllTypes = (
 const genericConstant :TestGenerics(TestAllTypes, Text) =
     (foo = (int16Field = 123), rev = (foo = "text", rev = (foo = (int16Field = 321))));
 
+const embeddedData :Data = embed "testdata/packed";
+const embeddedText :Text = embed "testdata/short.txt";
+const embeddedStruct :TestAllTypes = embed "testdata/binary";
+
 interface TestInterface {
   foo @0 (i :UInt32, j :Bool) -> (x :Text);
   bar @1 () -> ();

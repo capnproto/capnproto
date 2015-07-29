@@ -26,6 +26,7 @@
 #include <kj/compat/gtest.h>
 #include "test-util.h"
 #include "schema-lite.h"
+#include "serialize-packed.h"
 
 namespace capnp {
 namespace _ {  // private
@@ -1656,6 +1657,26 @@ TEST(Encoding, GlobalConstants) {
     EXPECT_EQ("structlist 1", listReader[0].getTextField());
     EXPECT_EQ("structlist 2", listReader[1].getTextField());
     EXPECT_EQ("structlist 3", listReader[2].getTextField());
+  }
+}
+
+TEST(Encoding, Embeds) {
+  {
+    kj::ArrayInputStream input(test::EMBEDDED_DATA);
+    PackedMessageReader reader(input);
+    checkTestMessage(reader.getRoot<TestAllTypes>());
+  }
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.getRoot<TestAllTypes>();
+    initTestMessage(root);
+    kj::StringPtr text = test::EMBEDDED_TEXT;
+    EXPECT_EQ(kj::str(root, '\n').size(), text.size());
+  }
+
+  {
+    checkTestMessage(test::EMBEDDED_STRUCT);
   }
 }
 

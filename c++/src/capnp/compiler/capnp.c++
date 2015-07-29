@@ -1352,8 +1352,13 @@ private:
       return loader.get(id);
     }
 
-    kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) {
+    kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) override {
       errorReporter.addErrorOn(name, kj::str("External constants not allowed in encode input."));
+      return nullptr;
+    }
+
+    kj::Maybe<kj::Array<const byte>> readEmbed(LocatedText::Reader filename) override {
+      errorReporter.addErrorOn(filename, kj::str("External embeds not allowed in encode input."));
       return nullptr;
     }
 

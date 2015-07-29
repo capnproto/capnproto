@@ -110,12 +110,13 @@ public:
     virtual kj::Maybe<ResolvedDecl> resolveImport(kj::StringPtr name) = 0;
     // Get the ID of an imported file given the import path.
 
+    virtual kj::Maybe<kj::Array<const byte>> readEmbed(kj::StringPtr name) = 0;
+    // Read and return the contents of a file for an `embed` expression.
+
     virtual kj::Maybe<Type> resolveBootstrapType(schema::Type::Reader type, Schema scope) = 0;
     // Compile a schema::Type into a Type whose dependencies may safely be traversed via the schema
     // API. These dependencies may have only bootstrap schemas. Returns null if the type could not
     // be constructed due to already-reported errors.
-    //
-    // `scope` is the schema
   };
 
   NodeTranslator(Resolver& resolver, ErrorReporter& errorReporter,
@@ -265,6 +266,9 @@ private:
   // Get the value of the given constant.  May return null if some error occurs, which will already
   // have been reported.
 
+  kj::Maybe<kj::Array<const byte>> readEmbed(LocatedText::Reader filename);
+  // Read a raw file for embedding.
+
   Orphan<List<schema::Annotation>> compileAnnotationApplications(
       List<Declaration::AnnotationApplication>::Reader annotations,
       kj::StringPtr targetsFlagName);
@@ -275,6 +279,7 @@ public:
   class Resolver {
   public:
     virtual kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) = 0;
+    virtual kj::Maybe<kj::Array<const byte>> readEmbed(LocatedText::Reader filename) = 0;
   };
 
   ValueTranslator(Resolver& resolver, ErrorReporter& errorReporter, Orphanage orphanage)

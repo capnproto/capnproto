@@ -333,5 +333,40 @@ TEST(Array, Map) {
   EXPECT_STREQ("bcde", str(bar).cStr());
 }
 
+TEST(Array, ReleaseAsBytesOrChars) {
+  {
+    Array<char> chars = kj::heapArray<char>("foo", 3);
+    Array<byte> bytes = chars.releaseAsBytes();
+    EXPECT_TRUE(chars == nullptr);
+    ASSERT_EQ(3, bytes.size());
+    EXPECT_EQ('f', bytes[0]);
+    EXPECT_EQ('o', bytes[1]);
+    EXPECT_EQ('o', bytes[2]);
+
+    chars = bytes.releaseAsChars();
+    EXPECT_TRUE(bytes == nullptr);
+    ASSERT_EQ(3, chars.size());
+    EXPECT_EQ('f', chars[0]);
+    EXPECT_EQ('o', chars[1]);
+    EXPECT_EQ('o', chars[2]);
+  }
+  {
+    Array<const char> chars = kj::heapArray<char>("foo", 3);
+    Array<const byte> bytes = chars.releaseAsBytes();
+    EXPECT_TRUE(chars == nullptr);
+    ASSERT_EQ(3, bytes.size());
+    EXPECT_EQ('f', bytes[0]);
+    EXPECT_EQ('o', bytes[1]);
+    EXPECT_EQ('o', bytes[2]);
+
+    chars = bytes.releaseAsChars();
+    EXPECT_TRUE(bytes == nullptr);
+    ASSERT_EQ(3, chars.size());
+    EXPECT_EQ('f', chars[0]);
+    EXPECT_EQ('o', chars[1]);
+    EXPECT_EQ('o', chars[2]);
+  }
+}
+
 }  // namespace
 }  // namespace kj

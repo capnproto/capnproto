@@ -149,3 +149,6 @@ struct UseGeneric {
   doubleBind @2 :Generic(Text, Data)(Data, Text);
   primitiveBinding @3 :Generic(Text, Int32);
 }
+
+const embedBadType :UInt32 = embed "binary";
+const embedNoSuchFile :Data = embed "no-such-file";

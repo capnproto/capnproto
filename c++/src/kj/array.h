@@ -191,6 +191,27 @@ public:
   inline ArrayPtr<const char> asChars() const { return asPtr().asChars(); }
   inline ArrayPtr<PropagateConst<T, char>> asChars() { return asPtr().asChars(); }
 
+  inline Array<PropagateConst<T, byte>> releaseAsBytes() {
+    // Like asBytes() but transfers ownership.
+    static_assert(sizeof(T) == sizeof(byte),
+        "releaseAsBytes() only possible on arrays with byte-size elements (e.g. chars).");
+    Array<PropagateConst<T, byte>> result(
+        reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_, *disposer);
+    ptr = nullptr;
+    size_ = 0;
+    return result;
+  }
+  inline Array<PropagateConst<T, char>> releaseAsChars() {
+    // Like asChars() but transfers ownership.
+    static_assert(sizeof(T) == sizeof(PropagateConst<T, char>),
+        "releaseAsChars() only possible on arrays with char-size elements (e.g. bytes).");
+    Array<PropagateConst<T, char>> result(
+        reinterpret_cast<PropagateConst<T, char>*>(ptr), size_, *disposer);
+    ptr = nullptr;
+    size_ = 0;
+    return result;
+  }
+
   inline bool operator==(decltype(nullptr)) const { return size_ == 0; }
   inline bool operator!=(decltype(nullptr)) const { return size_ != 0; }
 

@@ -111,6 +111,7 @@ struct Expression {
     MEMBER,
     ABSOLUTE_NAME,
     IMPORT,
+    EMBED,
   };
   struct Param;
   struct Application;
@@ -837,6 +838,10 @@ public:
   inline bool hasImport() const;
   inline  ::capnp::compiler::LocatedText::Reader getImport() const;
 
+  inline bool isEmbed() const;
+  inline bool hasEmbed() const;
+  inline  ::capnp::compiler::LocatedText::Reader getEmbed() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -951,6 +956,14 @@ public:
   inline  ::capnp::compiler::LocatedText::Builder initImport();
   inline void adoptImport(::capnp::Orphan< ::capnp::compiler::LocatedText>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::LocatedText> disownImport();
+
+  inline bool isEmbed();
+  inline bool hasEmbed();
+  inline  ::capnp::compiler::LocatedText::Builder getEmbed();
+  inline void setEmbed( ::capnp::compiler::LocatedText::Reader value);
+  inline  ::capnp::compiler::LocatedText::Builder initEmbed();
+  inline void adoptEmbed(::capnp::Orphan< ::capnp::compiler::LocatedText>&& value);
+  inline ::capnp::Orphan< ::capnp::compiler::LocatedText> disownEmbed();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3877,6 +3890,58 @@ inline void Expression::Builder::adoptImport(
 }
 inline ::capnp::Orphan< ::capnp::compiler::LocatedText> Expression::Builder::disownImport() {
   KJ_IREQUIRE(which() == Expression::IMPORT,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
+inline bool Expression::Reader::isEmbed() const {
+  return which() == Expression::EMBED;
+}
+inline bool Expression::Builder::isEmbed() {
+  return which() == Expression::EMBED;
+}
+inline bool Expression::Reader::hasEmbed() const {
+  if (which() != Expression::EMBED) return false;
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Expression::Builder::hasEmbed() {
+  if (which() != Expression::EMBED) return false;
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::compiler::LocatedText::Reader Expression::Reader::getEmbed() const {
+  KJ_IREQUIRE(which() == Expression::EMBED,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::compiler::LocatedText::Builder Expression::Builder::getEmbed() {
+  KJ_IREQUIRE(which() == Expression::EMBED,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Expression::Builder::setEmbed( ::capnp::compiler::LocatedText::Reader value) {
+  _builder.setDataField<Expression::Which>(
+      0 * ::capnp::ELEMENTS, Expression::EMBED);
+  ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::compiler::LocatedText::Builder Expression::Builder::initEmbed() {
+  _builder.setDataField<Expression::Which>(
+      0 * ::capnp::ELEMENTS, Expression::EMBED);
+  return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Expression::Builder::adoptEmbed(
+    ::capnp::Orphan< ::capnp::compiler::LocatedText>&& value) {
+  _builder.setDataField<Expression::Which>(
+      0 * ::capnp::ELEMENTS, Expression::EMBED);
+  ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::compiler::LocatedText> Expression::Builder::disownEmbed() {
+  KJ_IREQUIRE(which() == Expression::EMBED,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
