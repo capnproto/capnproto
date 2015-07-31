@@ -417,6 +417,7 @@ TEST(AsyncUnixTest, WriteObserver) {
   KJ_SYSCALL(pipe(pipefds));
   kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
   setNonblocking(outfd);
+  setNonblocking(infd);
 
   UnixEventPort::FdObserver observer(port, outfd, UnixEventPort::FdObserver::OBSERVE_WRITE);
 
@@ -442,7 +443,7 @@ TEST(AsyncUnixTest, WriteObserver) {
   // 1 page. To be safe, we read everything.
   char buffer[4096];
   do {
-    KJ_SYSCALL(n = read(infd, &buffer, sizeof(buffer)));
+    KJ_NONBLOCKING_SYSCALL(n = read(infd, &buffer, sizeof(buffer)));
   } while (n > 0);
 
   loop.run();
