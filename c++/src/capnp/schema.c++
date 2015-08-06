@@ -858,11 +858,49 @@ bool Type::operator==(const Type& other) const {
       KJ_UNREACHABLE;
 
     case schema::Type::ANY_POINTER:
-      return scopeId == other.scopeId &&
+      return scopeId == other.scopeId && isImplicitParam == other.isImplicitParam &&
           // Trying to comply with strict aliasing rules. Hopefully the compiler realizes that
           // both branches compile to the same instructions and can optimize it away.
           (scopeId != 0 || isImplicitParam ? paramIndex == other.paramIndex
                                            : anyPointerKind == other.anyPointerKind);
+  }
+
+  KJ_UNREACHABLE;
+}
+
+size_t Type::hashCode() const {
+  switch (baseType) {
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::TEXT:
+    case schema::Type::DATA:
+      return (static_cast<size_t>(baseType) << 3) + listDepth;
+
+    case schema::Type::STRUCT:
+    case schema::Type::ENUM:
+    case schema::Type::INTERFACE:
+      return reinterpret_cast<size_t>(schema) + listDepth;
+
+    case schema::Type::LIST:
+      KJ_UNREACHABLE;
+
+    case schema::Type::ANY_POINTER: {
+      // Trying to comply with strict aliasing rules. Hopefully the compiler realizes that
+      // both branches compile to the same instructions and can optimize it away.
+      size_t val = scopeId != 0 || isImplicitParam ?
+          paramIndex : static_cast<uint16_t>(anyPointerKind);
+      return (val << 1 | isImplicitParam) ^ scopeId;
+    }
   }
 
   KJ_UNREACHABLE;

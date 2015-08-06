@@ -419,6 +419,11 @@ private:
       }
     }
 
+    if (result.size() == 4 && memcmp(result.begin(), "NULL", 4) == 0) {
+      // NULL probably collides with a macro.
+      result.add('_');
+    }
+
     result.add('\0');
 
     return kj::String(result.releaseAsArray());

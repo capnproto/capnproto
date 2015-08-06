@@ -122,6 +122,12 @@ template <> struct Kind_<DynamicCapability> { static constexpr Kind kind = Kind:
 
 }  // namespace _ (private)
 
+template <> inline constexpr Style style<DynamicValue     >() { return Style::POINTER;    }
+template <> inline constexpr Style style<DynamicEnum      >() { return Style::PRIMITIVE;  }
+template <> inline constexpr Style style<DynamicStruct    >() { return Style::STRUCT;     }
+template <> inline constexpr Style style<DynamicList      >() { return Style::POINTER;    }
+template <> inline constexpr Style style<DynamicCapability>() { return Style::CAPABILITY; }
+
 // -------------------------------------------------------------------
 
 class DynamicEnum {

@@ -642,6 +642,8 @@ public:
   bool operator==(const Type& other) const;
   inline bool operator!=(const Type& other) const { return !(*this == other); }
 
+  size_t hashCode() const;
+
   inline Type wrapInList(uint depth = 1) const;
   // Return the Type formed by wrapping this type in List() `depth` times.
 
