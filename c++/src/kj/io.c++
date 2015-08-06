@@ -127,7 +127,7 @@ void BufferedInputStreamWrapper::skip(size_t bytes) {
     } else {
       // Forward large skip to the underlying stream.
       bufferAvailable = nullptr;
-      inner.skip(bytes - bufferAvailable.size());
+      inner.skip(bytes);
     }
   }
 }
