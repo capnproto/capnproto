@@ -331,7 +331,7 @@ private:
   }
   void decodeStructBase(const JsonCodec& codec, JsonValue::Reader input,
                         DynamicStruct::Builder output) const override final {
-    decode(codec, input, output);
+    decode(codec, input, output.as<T>());
   }
   friend class JsonCodec;
 };
