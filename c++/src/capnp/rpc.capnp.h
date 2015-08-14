@@ -2491,13 +2491,13 @@ inline bool Message::Builder::hasUnimplemented() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Message::Reader Message::Reader::getUnimplemented() const {
-  KJ_IREQUIRE(which() == Message::UNIMPLEMENTED,
+  KJ_IREQUIRE((which() == Message::UNIMPLEMENTED),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Message>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Message::Builder Message::Builder::getUnimplemented() {
-  KJ_IREQUIRE(which() == Message::UNIMPLEMENTED,
+  KJ_IREQUIRE((which() == Message::UNIMPLEMENTED),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Message>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2522,7 +2522,7 @@ inline void Message::Builder::adoptUnimplemented(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Message> Message::Builder::disownUnimplemented() {
-  KJ_IREQUIRE(which() == Message::UNIMPLEMENTED,
+  KJ_IREQUIRE((which() == Message::UNIMPLEMENTED),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Message>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2543,13 +2543,13 @@ inline bool Message::Builder::hasAbort() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Exception::Reader Message::Reader::getAbort() const {
-  KJ_IREQUIRE(which() == Message::ABORT,
+  KJ_IREQUIRE((which() == Message::ABORT),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Exception::Builder Message::Builder::getAbort() {
-  KJ_IREQUIRE(which() == Message::ABORT,
+  KJ_IREQUIRE((which() == Message::ABORT),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2574,7 +2574,7 @@ inline void Message::Builder::adoptAbort(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Exception> Message::Builder::disownAbort() {
-  KJ_IREQUIRE(which() == Message::ABORT,
+  KJ_IREQUIRE((which() == Message::ABORT),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2595,13 +2595,13 @@ inline bool Message::Builder::hasCall() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Call::Reader Message::Reader::getCall() const {
-  KJ_IREQUIRE(which() == Message::CALL,
+  KJ_IREQUIRE((which() == Message::CALL),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Call>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Call::Builder Message::Builder::getCall() {
-  KJ_IREQUIRE(which() == Message::CALL,
+  KJ_IREQUIRE((which() == Message::CALL),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Call>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2626,7 +2626,7 @@ inline void Message::Builder::adoptCall(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Call> Message::Builder::disownCall() {
-  KJ_IREQUIRE(which() == Message::CALL,
+  KJ_IREQUIRE((which() == Message::CALL),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Call>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2647,13 +2647,13 @@ inline bool Message::Builder::hasReturn() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Return::Reader Message::Reader::getReturn() const {
-  KJ_IREQUIRE(which() == Message::RETURN,
+  KJ_IREQUIRE((which() == Message::RETURN),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Return>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Return::Builder Message::Builder::getReturn() {
-  KJ_IREQUIRE(which() == Message::RETURN,
+  KJ_IREQUIRE((which() == Message::RETURN),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Return>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2678,7 +2678,7 @@ inline void Message::Builder::adoptReturn(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Return> Message::Builder::disownReturn() {
-  KJ_IREQUIRE(which() == Message::RETURN,
+  KJ_IREQUIRE((which() == Message::RETURN),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Return>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2699,13 +2699,13 @@ inline bool Message::Builder::hasFinish() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Finish::Reader Message::Reader::getFinish() const {
-  KJ_IREQUIRE(which() == Message::FINISH,
+  KJ_IREQUIRE((which() == Message::FINISH),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Finish>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Finish::Builder Message::Builder::getFinish() {
-  KJ_IREQUIRE(which() == Message::FINISH,
+  KJ_IREQUIRE((which() == Message::FINISH),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Finish>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2730,7 +2730,7 @@ inline void Message::Builder::adoptFinish(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Finish> Message::Builder::disownFinish() {
-  KJ_IREQUIRE(which() == Message::FINISH,
+  KJ_IREQUIRE((which() == Message::FINISH),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Finish>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2751,13 +2751,13 @@ inline bool Message::Builder::hasResolve() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Resolve::Reader Message::Reader::getResolve() const {
-  KJ_IREQUIRE(which() == Message::RESOLVE,
+  KJ_IREQUIRE((which() == Message::RESOLVE),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Resolve>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Resolve::Builder Message::Builder::getResolve() {
-  KJ_IREQUIRE(which() == Message::RESOLVE,
+  KJ_IREQUIRE((which() == Message::RESOLVE),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Resolve>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2782,7 +2782,7 @@ inline void Message::Builder::adoptResolve(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Resolve> Message::Builder::disownResolve() {
-  KJ_IREQUIRE(which() == Message::RESOLVE,
+  KJ_IREQUIRE((which() == Message::RESOLVE),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Resolve>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2803,13 +2803,13 @@ inline bool Message::Builder::hasRelease() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Release::Reader Message::Reader::getRelease() const {
-  KJ_IREQUIRE(which() == Message::RELEASE,
+  KJ_IREQUIRE((which() == Message::RELEASE),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Release>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Release::Builder Message::Builder::getRelease() {
-  KJ_IREQUIRE(which() == Message::RELEASE,
+  KJ_IREQUIRE((which() == Message::RELEASE),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Release>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2834,7 +2834,7 @@ inline void Message::Builder::adoptRelease(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Release> Message::Builder::disownRelease() {
-  KJ_IREQUIRE(which() == Message::RELEASE,
+  KJ_IREQUIRE((which() == Message::RELEASE),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Release>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2855,13 +2855,13 @@ inline bool Message::Builder::hasObsoleteSave() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline ::capnp::AnyPointer::Reader Message::Reader::getObsoleteSave() const {
-  KJ_IREQUIRE(which() == Message::OBSOLETE_SAVE,
+  KJ_IREQUIRE((which() == Message::OBSOLETE_SAVE),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline ::capnp::AnyPointer::Builder Message::Builder::getObsoleteSave() {
-  KJ_IREQUIRE(which() == Message::OBSOLETE_SAVE,
+  KJ_IREQUIRE((which() == Message::OBSOLETE_SAVE),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2890,13 +2890,13 @@ inline bool Message::Builder::hasBootstrap() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Bootstrap::Reader Message::Reader::getBootstrap() const {
-  KJ_IREQUIRE(which() == Message::BOOTSTRAP,
+  KJ_IREQUIRE((which() == Message::BOOTSTRAP),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Bootstrap>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Bootstrap::Builder Message::Builder::getBootstrap() {
-  KJ_IREQUIRE(which() == Message::BOOTSTRAP,
+  KJ_IREQUIRE((which() == Message::BOOTSTRAP),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Bootstrap>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2921,7 +2921,7 @@ inline void Message::Builder::adoptBootstrap(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Bootstrap> Message::Builder::disownBootstrap() {
-  KJ_IREQUIRE(which() == Message::BOOTSTRAP,
+  KJ_IREQUIRE((which() == Message::BOOTSTRAP),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Bootstrap>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2942,13 +2942,13 @@ inline bool Message::Builder::hasObsoleteDelete() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline ::capnp::AnyPointer::Reader Message::Reader::getObsoleteDelete() const {
-  KJ_IREQUIRE(which() == Message::OBSOLETE_DELETE,
+  KJ_IREQUIRE((which() == Message::OBSOLETE_DELETE),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline ::capnp::AnyPointer::Builder Message::Builder::getObsoleteDelete() {
-  KJ_IREQUIRE(which() == Message::OBSOLETE_DELETE,
+  KJ_IREQUIRE((which() == Message::OBSOLETE_DELETE),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -2977,13 +2977,13 @@ inline bool Message::Builder::hasProvide() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Provide::Reader Message::Reader::getProvide() const {
-  KJ_IREQUIRE(which() == Message::PROVIDE,
+  KJ_IREQUIRE((which() == Message::PROVIDE),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Provide>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Provide::Builder Message::Builder::getProvide() {
-  KJ_IREQUIRE(which() == Message::PROVIDE,
+  KJ_IREQUIRE((which() == Message::PROVIDE),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Provide>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3008,7 +3008,7 @@ inline void Message::Builder::adoptProvide(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Provide> Message::Builder::disownProvide() {
-  KJ_IREQUIRE(which() == Message::PROVIDE,
+  KJ_IREQUIRE((which() == Message::PROVIDE),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Provide>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3029,13 +3029,13 @@ inline bool Message::Builder::hasAccept() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Accept::Reader Message::Reader::getAccept() const {
-  KJ_IREQUIRE(which() == Message::ACCEPT,
+  KJ_IREQUIRE((which() == Message::ACCEPT),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Accept>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Accept::Builder Message::Builder::getAccept() {
-  KJ_IREQUIRE(which() == Message::ACCEPT,
+  KJ_IREQUIRE((which() == Message::ACCEPT),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Accept>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3060,7 +3060,7 @@ inline void Message::Builder::adoptAccept(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Accept> Message::Builder::disownAccept() {
-  KJ_IREQUIRE(which() == Message::ACCEPT,
+  KJ_IREQUIRE((which() == Message::ACCEPT),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Accept>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3081,13 +3081,13 @@ inline bool Message::Builder::hasJoin() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Join::Reader Message::Reader::getJoin() const {
-  KJ_IREQUIRE(which() == Message::JOIN,
+  KJ_IREQUIRE((which() == Message::JOIN),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Join>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Join::Builder Message::Builder::getJoin() {
-  KJ_IREQUIRE(which() == Message::JOIN,
+  KJ_IREQUIRE((which() == Message::JOIN),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Join>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3112,7 +3112,7 @@ inline void Message::Builder::adoptJoin(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Join> Message::Builder::disownJoin() {
-  KJ_IREQUIRE(which() == Message::JOIN,
+  KJ_IREQUIRE((which() == Message::JOIN),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Join>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3133,13 +3133,13 @@ inline bool Message::Builder::hasDisembargo() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Disembargo::Reader Message::Reader::getDisembargo() const {
-  KJ_IREQUIRE(which() == Message::DISEMBARGO,
+  KJ_IREQUIRE((which() == Message::DISEMBARGO),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Disembargo>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Disembargo::Builder Message::Builder::getDisembargo() {
-  KJ_IREQUIRE(which() == Message::DISEMBARGO,
+  KJ_IREQUIRE((which() == Message::DISEMBARGO),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Disembargo>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3164,7 +3164,7 @@ inline void Message::Builder::adoptDisembargo(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Disembargo> Message::Builder::disownDisembargo() {
-  KJ_IREQUIRE(which() == Message::DISEMBARGO,
+  KJ_IREQUIRE((which() == Message::DISEMBARGO),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Disembargo>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3365,14 +3365,14 @@ inline bool Call::SendResultsTo::Builder::isCaller() {
   return which() == Call::SendResultsTo::CALLER;
 }
 inline  ::capnp::Void Call::SendResultsTo::Reader::getCaller() const {
-  KJ_IREQUIRE(which() == Call::SendResultsTo::CALLER,
+  KJ_IREQUIRE((which() == Call::SendResultsTo::CALLER),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::Void Call::SendResultsTo::Builder::getCaller() {
-  KJ_IREQUIRE(which() == Call::SendResultsTo::CALLER,
+  KJ_IREQUIRE((which() == Call::SendResultsTo::CALLER),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
@@ -3391,14 +3391,14 @@ inline bool Call::SendResultsTo::Builder::isYourself() {
   return which() == Call::SendResultsTo::YOURSELF;
 }
 inline  ::capnp::Void Call::SendResultsTo::Reader::getYourself() const {
-  KJ_IREQUIRE(which() == Call::SendResultsTo::YOURSELF,
+  KJ_IREQUIRE((which() == Call::SendResultsTo::YOURSELF),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::Void Call::SendResultsTo::Builder::getYourself() {
-  KJ_IREQUIRE(which() == Call::SendResultsTo::YOURSELF,
+  KJ_IREQUIRE((which() == Call::SendResultsTo::YOURSELF),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
@@ -3425,13 +3425,13 @@ inline bool Call::SendResultsTo::Builder::hasThirdParty() {
   return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
 inline ::capnp::AnyPointer::Reader Call::SendResultsTo::Reader::getThirdParty() const {
-  KJ_IREQUIRE(which() == Call::SendResultsTo::THIRD_PARTY,
+  KJ_IREQUIRE((which() == Call::SendResultsTo::THIRD_PARTY),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(2 * ::capnp::POINTERS));
 }
 inline ::capnp::AnyPointer::Builder Call::SendResultsTo::Builder::getThirdParty() {
-  KJ_IREQUIRE(which() == Call::SendResultsTo::THIRD_PARTY,
+  KJ_IREQUIRE((which() == Call::SendResultsTo::THIRD_PARTY),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(2 * ::capnp::POINTERS));
@@ -3495,13 +3495,13 @@ inline bool Return::Builder::hasResults() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Payload::Reader Return::Reader::getResults() const {
-  KJ_IREQUIRE(which() == Return::RESULTS,
+  KJ_IREQUIRE((which() == Return::RESULTS),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Payload>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Payload::Builder Return::Builder::getResults() {
-  KJ_IREQUIRE(which() == Return::RESULTS,
+  KJ_IREQUIRE((which() == Return::RESULTS),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Payload>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3526,7 +3526,7 @@ inline void Return::Builder::adoptResults(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Payload> Return::Builder::disownResults() {
-  KJ_IREQUIRE(which() == Return::RESULTS,
+  KJ_IREQUIRE((which() == Return::RESULTS),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Payload>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3547,13 +3547,13 @@ inline bool Return::Builder::hasException() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Exception::Reader Return::Reader::getException() const {
-  KJ_IREQUIRE(which() == Return::EXCEPTION,
+  KJ_IREQUIRE((which() == Return::EXCEPTION),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Exception::Builder Return::Builder::getException() {
-  KJ_IREQUIRE(which() == Return::EXCEPTION,
+  KJ_IREQUIRE((which() == Return::EXCEPTION),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3578,7 +3578,7 @@ inline void Return::Builder::adoptException(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Exception> Return::Builder::disownException() {
-  KJ_IREQUIRE(which() == Return::EXCEPTION,
+  KJ_IREQUIRE((which() == Return::EXCEPTION),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3591,14 +3591,14 @@ inline bool Return::Builder::isCanceled() {
   return which() == Return::CANCELED;
 }
 inline  ::capnp::Void Return::Reader::getCanceled() const {
-  KJ_IREQUIRE(which() == Return::CANCELED,
+  KJ_IREQUIRE((which() == Return::CANCELED),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::Void Return::Builder::getCanceled() {
-  KJ_IREQUIRE(which() == Return::CANCELED,
+  KJ_IREQUIRE((which() == Return::CANCELED),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
@@ -3617,14 +3617,14 @@ inline bool Return::Builder::isResultsSentElsewhere() {
   return which() == Return::RESULTS_SENT_ELSEWHERE;
 }
 inline  ::capnp::Void Return::Reader::getResultsSentElsewhere() const {
-  KJ_IREQUIRE(which() == Return::RESULTS_SENT_ELSEWHERE,
+  KJ_IREQUIRE((which() == Return::RESULTS_SENT_ELSEWHERE),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::Void Return::Builder::getResultsSentElsewhere() {
-  KJ_IREQUIRE(which() == Return::RESULTS_SENT_ELSEWHERE,
+  KJ_IREQUIRE((which() == Return::RESULTS_SENT_ELSEWHERE),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
@@ -3643,14 +3643,14 @@ inline bool Return::Builder::isTakeFromOtherQuestion() {
   return which() == Return::TAKE_FROM_OTHER_QUESTION;
 }
 inline  ::uint32_t Return::Reader::getTakeFromOtherQuestion() const {
-  KJ_IREQUIRE(which() == Return::TAKE_FROM_OTHER_QUESTION,
+  KJ_IREQUIRE((which() == Return::TAKE_FROM_OTHER_QUESTION),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
       2 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Return::Builder::getTakeFromOtherQuestion() {
-  KJ_IREQUIRE(which() == Return::TAKE_FROM_OTHER_QUESTION,
+  KJ_IREQUIRE((which() == Return::TAKE_FROM_OTHER_QUESTION),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
       2 * ::capnp::ELEMENTS);
@@ -3677,13 +3677,13 @@ inline bool Return::Builder::hasAcceptFromThirdParty() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline ::capnp::AnyPointer::Reader Return::Reader::getAcceptFromThirdParty() const {
-  KJ_IREQUIRE(which() == Return::ACCEPT_FROM_THIRD_PARTY,
+  KJ_IREQUIRE((which() == Return::ACCEPT_FROM_THIRD_PARTY),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline ::capnp::AnyPointer::Builder Return::Builder::getAcceptFromThirdParty() {
-  KJ_IREQUIRE(which() == Return::ACCEPT_FROM_THIRD_PARTY,
+  KJ_IREQUIRE((which() == Return::ACCEPT_FROM_THIRD_PARTY),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3761,13 +3761,13 @@ inline bool Resolve::Builder::hasCap() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::CapDescriptor::Reader Resolve::Reader::getCap() const {
-  KJ_IREQUIRE(which() == Resolve::CAP,
+  KJ_IREQUIRE((which() == Resolve::CAP),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::CapDescriptor>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::CapDescriptor::Builder Resolve::Builder::getCap() {
-  KJ_IREQUIRE(which() == Resolve::CAP,
+  KJ_IREQUIRE((which() == Resolve::CAP),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::CapDescriptor>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3792,7 +3792,7 @@ inline void Resolve::Builder::adoptCap(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::CapDescriptor> Resolve::Builder::disownCap() {
-  KJ_IREQUIRE(which() == Resolve::CAP,
+  KJ_IREQUIRE((which() == Resolve::CAP),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::CapDescriptor>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3813,13 +3813,13 @@ inline bool Resolve::Builder::hasException() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::Exception::Reader Resolve::Reader::getException() const {
-  KJ_IREQUIRE(which() == Resolve::EXCEPTION,
+  KJ_IREQUIRE((which() == Resolve::EXCEPTION),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::Exception::Builder Resolve::Builder::getException() {
-  KJ_IREQUIRE(which() == Resolve::EXCEPTION,
+  KJ_IREQUIRE((which() == Resolve::EXCEPTION),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3844,7 +3844,7 @@ inline void Resolve::Builder::adoptException(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::Exception> Resolve::Builder::disownException() {
-  KJ_IREQUIRE(which() == Resolve::EXCEPTION,
+  KJ_IREQUIRE((which() == Resolve::EXCEPTION),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -3945,14 +3945,14 @@ inline bool Disembargo::Context::Builder::isSenderLoopback() {
   return which() == Disembargo::Context::SENDER_LOOPBACK;
 }
 inline  ::uint32_t Disembargo::Context::Reader::getSenderLoopback() const {
-  KJ_IREQUIRE(which() == Disembargo::Context::SENDER_LOOPBACK,
+  KJ_IREQUIRE((which() == Disembargo::Context::SENDER_LOOPBACK),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Disembargo::Context::Builder::getSenderLoopback() {
-  KJ_IREQUIRE(which() == Disembargo::Context::SENDER_LOOPBACK,
+  KJ_IREQUIRE((which() == Disembargo::Context::SENDER_LOOPBACK),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3971,14 +3971,14 @@ inline bool Disembargo::Context::Builder::isReceiverLoopback() {
   return which() == Disembargo::Context::RECEIVER_LOOPBACK;
 }
 inline  ::uint32_t Disembargo::Context::Reader::getReceiverLoopback() const {
-  KJ_IREQUIRE(which() == Disembargo::Context::RECEIVER_LOOPBACK,
+  KJ_IREQUIRE((which() == Disembargo::Context::RECEIVER_LOOPBACK),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Disembargo::Context::Builder::getReceiverLoopback() {
-  KJ_IREQUIRE(which() == Disembargo::Context::RECEIVER_LOOPBACK,
+  KJ_IREQUIRE((which() == Disembargo::Context::RECEIVER_LOOPBACK),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3997,14 +3997,14 @@ inline bool Disembargo::Context::Builder::isAccept() {
   return which() == Disembargo::Context::ACCEPT;
 }
 inline  ::capnp::Void Disembargo::Context::Reader::getAccept() const {
-  KJ_IREQUIRE(which() == Disembargo::Context::ACCEPT,
+  KJ_IREQUIRE((which() == Disembargo::Context::ACCEPT),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::Void Disembargo::Context::Builder::getAccept() {
-  KJ_IREQUIRE(which() == Disembargo::Context::ACCEPT,
+  KJ_IREQUIRE((which() == Disembargo::Context::ACCEPT),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
@@ -4023,14 +4023,14 @@ inline bool Disembargo::Context::Builder::isProvide() {
   return which() == Disembargo::Context::PROVIDE;
 }
 inline  ::uint32_t Disembargo::Context::Reader::getProvide() const {
-  KJ_IREQUIRE(which() == Disembargo::Context::PROVIDE,
+  KJ_IREQUIRE((which() == Disembargo::Context::PROVIDE),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Disembargo::Context::Builder::getProvide() {
-  KJ_IREQUIRE(which() == Disembargo::Context::PROVIDE,
+  KJ_IREQUIRE((which() == Disembargo::Context::PROVIDE),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -4249,14 +4249,14 @@ inline bool MessageTarget::Builder::isImportedCap() {
   return which() == MessageTarget::IMPORTED_CAP;
 }
 inline  ::uint32_t MessageTarget::Reader::getImportedCap() const {
-  KJ_IREQUIRE(which() == MessageTarget::IMPORTED_CAP,
+  KJ_IREQUIRE((which() == MessageTarget::IMPORTED_CAP),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t MessageTarget::Builder::getImportedCap() {
-  KJ_IREQUIRE(which() == MessageTarget::IMPORTED_CAP,
+  KJ_IREQUIRE((which() == MessageTarget::IMPORTED_CAP),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -4283,13 +4283,13 @@ inline bool MessageTarget::Builder::hasPromisedAnswer() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::PromisedAnswer::Reader MessageTarget::Reader::getPromisedAnswer() const {
-  KJ_IREQUIRE(which() == MessageTarget::PROMISED_ANSWER,
+  KJ_IREQUIRE((which() == MessageTarget::PROMISED_ANSWER),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::PromisedAnswer::Builder MessageTarget::Builder::getPromisedAnswer() {
-  KJ_IREQUIRE(which() == MessageTarget::PROMISED_ANSWER,
+  KJ_IREQUIRE((which() == MessageTarget::PROMISED_ANSWER),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -4314,7 +4314,7 @@ inline void MessageTarget::Builder::adoptPromisedAnswer(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> MessageTarget::Builder::disownPromisedAnswer() {
-  KJ_IREQUIRE(which() == MessageTarget::PROMISED_ANSWER,
+  KJ_IREQUIRE((which() == MessageTarget::PROMISED_ANSWER),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -4387,14 +4387,14 @@ inline bool CapDescriptor::Builder::isNone() {
   return which() == CapDescriptor::NONE;
 }
 inline  ::capnp::Void CapDescriptor::Reader::getNone() const {
-  KJ_IREQUIRE(which() == CapDescriptor::NONE,
+  KJ_IREQUIRE((which() == CapDescriptor::NONE),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::Void CapDescriptor::Builder::getNone() {
-  KJ_IREQUIRE(which() == CapDescriptor::NONE,
+  KJ_IREQUIRE((which() == CapDescriptor::NONE),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
@@ -4413,14 +4413,14 @@ inline bool CapDescriptor::Builder::isSenderHosted() {
   return which() == CapDescriptor::SENDER_HOSTED;
 }
 inline  ::uint32_t CapDescriptor::Reader::getSenderHosted() const {
-  KJ_IREQUIRE(which() == CapDescriptor::SENDER_HOSTED,
+  KJ_IREQUIRE((which() == CapDescriptor::SENDER_HOSTED),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t CapDescriptor::Builder::getSenderHosted() {
-  KJ_IREQUIRE(which() == CapDescriptor::SENDER_HOSTED,
+  KJ_IREQUIRE((which() == CapDescriptor::SENDER_HOSTED),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
@@ -4439,14 +4439,14 @@ inline bool CapDescriptor::Builder::isSenderPromise() {
   return which() == CapDescriptor::SENDER_PROMISE;
 }
 inline  ::uint32_t CapDescriptor::Reader::getSenderPromise() const {
-  KJ_IREQUIRE(which() == CapDescriptor::SENDER_PROMISE,
+  KJ_IREQUIRE((which() == CapDescriptor::SENDER_PROMISE),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t CapDescriptor::Builder::getSenderPromise() {
-  KJ_IREQUIRE(which() == CapDescriptor::SENDER_PROMISE,
+  KJ_IREQUIRE((which() == CapDescriptor::SENDER_PROMISE),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
@@ -4465,14 +4465,14 @@ inline bool CapDescriptor::Builder::isReceiverHosted() {
   return which() == CapDescriptor::RECEIVER_HOSTED;
 }
 inline  ::uint32_t CapDescriptor::Reader::getReceiverHosted() const {
-  KJ_IREQUIRE(which() == CapDescriptor::RECEIVER_HOSTED,
+  KJ_IREQUIRE((which() == CapDescriptor::RECEIVER_HOSTED),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t CapDescriptor::Builder::getReceiverHosted() {
-  KJ_IREQUIRE(which() == CapDescriptor::RECEIVER_HOSTED,
+  KJ_IREQUIRE((which() == CapDescriptor::RECEIVER_HOSTED),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
@@ -4499,13 +4499,13 @@ inline bool CapDescriptor::Builder::hasReceiverAnswer() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::PromisedAnswer::Reader CapDescriptor::Reader::getReceiverAnswer() const {
-  KJ_IREQUIRE(which() == CapDescriptor::RECEIVER_ANSWER,
+  KJ_IREQUIRE((which() == CapDescriptor::RECEIVER_ANSWER),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::PromisedAnswer::Builder CapDescriptor::Builder::getReceiverAnswer() {
-  KJ_IREQUIRE(which() == CapDescriptor::RECEIVER_ANSWER,
+  KJ_IREQUIRE((which() == CapDescriptor::RECEIVER_ANSWER),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -4530,7 +4530,7 @@ inline void CapDescriptor::Builder::adoptReceiverAnswer(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> CapDescriptor::Builder::disownReceiverAnswer() {
-  KJ_IREQUIRE(which() == CapDescriptor::RECEIVER_ANSWER,
+  KJ_IREQUIRE((which() == CapDescriptor::RECEIVER_ANSWER),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -4551,13 +4551,13 @@ inline bool CapDescriptor::Builder::hasThirdPartyHosted() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::rpc::ThirdPartyCapDescriptor::Reader CapDescriptor::Reader::getThirdPartyHosted() const {
-  KJ_IREQUIRE(which() == CapDescriptor::THIRD_PARTY_HOSTED,
+  KJ_IREQUIRE((which() == CapDescriptor::THIRD_PARTY_HOSTED),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyCapDescriptor>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::rpc::ThirdPartyCapDescriptor::Builder CapDescriptor::Builder::getThirdPartyHosted() {
-  KJ_IREQUIRE(which() == CapDescriptor::THIRD_PARTY_HOSTED,
+  KJ_IREQUIRE((which() == CapDescriptor::THIRD_PARTY_HOSTED),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyCapDescriptor>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -4582,7 +4582,7 @@ inline void CapDescriptor::Builder::adoptThirdPartyHosted(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyCapDescriptor> CapDescriptor::Builder::disownThirdPartyHosted() {
-  KJ_IREQUIRE(which() == CapDescriptor::THIRD_PARTY_HOSTED,
+  KJ_IREQUIRE((which() == CapDescriptor::THIRD_PARTY_HOSTED),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyCapDescriptor>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -4648,14 +4648,14 @@ inline bool PromisedAnswer::Op::Builder::isNoop() {
   return which() == PromisedAnswer::Op::NOOP;
 }
 inline  ::capnp::Void PromisedAnswer::Op::Reader::getNoop() const {
-  KJ_IREQUIRE(which() == PromisedAnswer::Op::NOOP,
+  KJ_IREQUIRE((which() == PromisedAnswer::Op::NOOP),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::Void PromisedAnswer::Op::Builder::getNoop() {
-  KJ_IREQUIRE(which() == PromisedAnswer::Op::NOOP,
+  KJ_IREQUIRE((which() == PromisedAnswer::Op::NOOP),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
@@ -4674,14 +4674,14 @@ inline bool PromisedAnswer::Op::Builder::isGetPointerField() {
   return which() == PromisedAnswer::Op::GET_POINTER_FIELD;
 }
 inline  ::uint16_t PromisedAnswer::Op::Reader::getGetPointerField() const {
-  KJ_IREQUIRE(which() == PromisedAnswer::Op::GET_POINTER_FIELD,
+  KJ_IREQUIRE((which() == PromisedAnswer::Op::GET_POINTER_FIELD),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint16_t>(
       1 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint16_t PromisedAnswer::Op::Builder::getGetPointerField() {
-  KJ_IREQUIRE(which() == PromisedAnswer::Op::GET_POINTER_FIELD,
+  KJ_IREQUIRE((which() == PromisedAnswer::Op::GET_POINTER_FIELD),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint16_t>(
       1 * ::capnp::ELEMENTS);
