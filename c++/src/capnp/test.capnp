@@ -587,6 +587,15 @@ interface TestImplicitMethodParamsInGeneric(V) {
   call @0 [T, U] (foo :T, bar :U) -> TestGenerics(T, U);
 }
 
+struct TestGenericsUnion(Foo, Bar) {
+  # At one point this failed to compile.
+
+  union {
+    foo @0 :Foo;
+    bar @1 :Bar;
+  }
+}
+
 struct TestUseGenerics $TestGenerics(Text, Data).ann("foo") {
   basic @0 :TestGenerics(TestAllTypes, TestAnyPointer);
   inner @1 :TestGenerics(TestAllTypes, TestAnyPointer).Inner;
