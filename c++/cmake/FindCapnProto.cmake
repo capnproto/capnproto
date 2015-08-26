@@ -72,12 +72,12 @@ function(CAPNP_GENERATE_CPP SOURCES HEADERS)
     endforeach()
   endif()
 
-  if(DEFINED CAPNPC_OUTPUT_DIR)
-    # Prepend a ':' to get the format for the '-o' flag right
-    set(output_dir ":${CAPNPC_OUTPUT_DIR}")
-  else()
-    set(output_dir ":.")
-  endif()
+  if (NOT DEFINED CAPNPC_OUTPUT_DIR)
+    set (CAPNPC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+  endif()  
+  
+  # Prepend a ':' to get the format for the '-o' flag right
+  set(output_dir ":${CAPNPC_OUTPUT_DIR}")
 
   if(NOT DEFINED CAPNPC_SRC_PREFIX)
     set(CAPNPC_SRC_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -91,20 +91,16 @@ function(CAPNP_GENERATE_CPP SOURCES HEADERS)
     get_filename_component(file_dir "${file_path}" PATH)
 
     # Figure out where the output files will go
-    if (NOT DEFINED CAPNPC_OUTPUT_DIR)
-      set(output_base "${file_path}")
-    else()
-      # Output files are placed in CAPNPC_OUTPUT_DIR, at a location as if they were
-      # relative to CAPNPC_SRC_PREFIX.
-      string(LENGTH "${CAPNPC_SRC_PREFIX}" prefix_len)
-      string(SUBSTRING "${file_path}" 0 ${prefix_len} output_prefix)
-      if(NOT "${CAPNPC_SRC_PREFIX}" STREQUAL "${output_prefix}")
-        message(SEND_ERROR "Could not determine output path for '${schema_file}' ('${file_path}') with source prefix '${CAPNPC_SRC_PREFIX}' into '${CAPNPC_OUTPUT_DIR}'.")
-      endif()
-
-      string(SUBSTRING "${file_path}" ${prefix_len} -1 output_path)
-      set(output_base "${CAPNPC_OUTPUT_DIR}${output_path}")
+    # Output files are placed in CAPNPC_OUTPUT_DIR, at a location as if they were
+    # relative to CAPNPC_SRC_PREFIX.
+    string(LENGTH "${CAPNPC_SRC_PREFIX}" prefix_len)
+    string(SUBSTRING "${file_path}" 0 ${prefix_len} output_prefix)
+    if(NOT "${CAPNPC_SRC_PREFIX}" STREQUAL "${output_prefix}")
+      message(SEND_ERROR "Could not determine output path for '${schema_file}' ('${file_path}') with source prefix '${CAPNPC_SRC_PREFIX}' into '${CAPNPC_OUTPUT_DIR}'.")
     endif()
+
+    string(SUBSTRING "${file_path}" ${prefix_len} -1 output_path)
+    set(output_base "${CAPNPC_OUTPUT_DIR}${output_path}")
 
     add_custom_command(
       OUTPUT "${output_base}.c++" "${output_base}.h"
