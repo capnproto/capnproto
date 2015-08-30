@@ -119,6 +119,9 @@ class TwoPartyServer: private kj::TaskSet::ErrorHandler {
 public:
   explicit TwoPartyServer(Capability::Client bootstrapInterface);
 
+  void accept(kj::Own<kj::AsyncIoStream>&& connection);
+  // Accepts the connection for servicing.
+
   kj::Promise<void> listen(kj::ConnectionReceiver& listener);
   // Listens for connections on the given listener. The returned promise never resolves unless an
   // exception is thrown while trying to accept. You may discard the returned promise to cancel
