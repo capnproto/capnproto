@@ -1,0 +1,5 @@
+#! /usr/bin/env bash
+
+set -exuo pipefail
+
+@ADDRESSBOOK_EXEC@ dwrite | @ADDRESSBOOK_EXEC@ dread

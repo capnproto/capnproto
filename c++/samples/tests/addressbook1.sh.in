@@ -1,0 +1,5 @@
+#! /usr/bin/env bash
+
+set -exuo pipefail
+
+@ADDRESSBOOK_EXEC@ write | @ADDRESSBOOK_EXEC@ read

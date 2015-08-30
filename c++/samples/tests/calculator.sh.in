@@ -1,0 +1,9 @@
+#! /usr/bin/env bash
+
+set -exuo pipefail
+
+@CALCULATOR_SERVER_EXEC@ unix:/tmp/capnp-calculator-example-$$ &
+sleep 0.1
+@CALCULATOR_CLIENT_EXEC@ unix:/tmp/capnp-calculator-example-$$
+kill %+
+wait %+ || true
