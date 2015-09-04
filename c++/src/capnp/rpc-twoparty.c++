@@ -159,8 +159,7 @@ struct TwoPartyServer::AcceptedConnection {
         rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))) {}
 };
 
-void TwoPartyServer::accept(kj::Own<kj::AsyncIoStream>&& connection)
-{
+void TwoPartyServer::accept(kj::Own<kj::AsyncIoStream>&& connection) {
   auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface, kj::mv(connection));
 
   // Run the connection until disconnect.
