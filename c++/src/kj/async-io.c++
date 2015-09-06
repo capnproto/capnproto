@@ -412,12 +412,14 @@ public:
   }
 
   void bind(int sockfd) const {
+#if !defined(__OpenBSD__)
     if (wildcard) {
       // Disable IPV6_V6ONLY because we want to handle both ipv4 and ipv6 on this socket.  (The
       // default value of this option varies across platforms.)
       int value = 0;
       KJ_SYSCALL(setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &value, sizeof(value)));
     }
+#endif
 
     KJ_SYSCALL(::bind(sockfd, &addr.generic, addrlen), toString());
   }
@@ -560,9 +562,18 @@ public:
     // Check for wildcard.
     if (addrPart.size() == 1 && addrPart[0] == '*') {
       result.wildcard = true;
+#if defined(__OpenBSD__)
+      // On OpenBSD, all sockets are either v4-only or v6-only, so use v4 as a
+      // temporary workaround for wildcards.
+      result.addrlen = sizeof(addr.inet4);
+      result.addr.inet4.sin_family = AF_INET;
+      result.addr.inet4.sin_port = htons(port);
+#else
+      // Create an ip6 socket and set IPV6_V6ONLY to 0 later.
       result.addrlen = sizeof(addr.inet6);
       result.addr.inet6.sin6_family = AF_INET6;
       result.addr.inet6.sin6_port = htons(port);
+#endif
       auto array = kj::heapArrayBuilder<SocketAddress>(1);
       array.add(result);
       return array.finish();
