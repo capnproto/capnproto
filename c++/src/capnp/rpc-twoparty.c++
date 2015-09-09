@@ -159,15 +159,18 @@ struct TwoPartyServer::AcceptedConnection {
         rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))) {}
 };
 
+void TwoPartyServer::accept(kj::Own<kj::AsyncIoStream>&& connection) {
+  auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface, kj::mv(connection));
+
+  // Run the connection until disconnect.
+  auto promise = connectionState->network.onDisconnect();
+  tasks.add(promise.attach(kj::mv(connectionState)));
+}
+
 kj::Promise<void> TwoPartyServer::listen(kj::ConnectionReceiver& listener) {
   return listener.accept()
       .then([this,&listener](kj::Own<kj::AsyncIoStream>&& connection) mutable {
-    auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface, kj::mv(connection));
-
-    // Run the connection until disconnect.
-    auto promise = connectionState->network.onDisconnect();
-    tasks.add(promise.attach(kj::mv(connectionState)));
-
+    accept(kj::mv(connection));
     return listen(listener);
   });
 }

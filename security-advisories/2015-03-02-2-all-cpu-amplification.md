@@ -21,7 +21,7 @@ CVE-2015-2312
 Impact
 ======
 
-- Remotely cause a peer to use excessive CPU time and other resoucres to
+- Remotely cause a peer to use excessive CPU time and other resources to
   process a very small message, possibly enabling a DoS attack.
 
 Fixed in
@@ -69,6 +69,6 @@ Preventative measures
 =====================
 
 This problem was discovered through fuzz testing using American Fuzzy Lop,
-wich identified the problem as a "hang", although in fact the test case just
+which identified the problem as a "hang", although in fact the test case just
 took a very long time to complete. We are incorporating testing with AFL into
 our release process going forward.
