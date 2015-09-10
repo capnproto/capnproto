@@ -23,7 +23,7 @@ CheckCXX11(FATAL_ERROR)
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
 # Find Cap'n'proto
-find_package (CapnProto REQUIRED)
+find_package (Capnp REQUIRED)
 add_definitions(${CAPNP_DEFINITIONS})
 
 # Compile .capnp files
