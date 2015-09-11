@@ -6,21 +6,13 @@ project ("Cap'n'proto sample" CXX)
 set (CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # Include CMake scripts
-include (FindPkgConfig)
-set (CMAKE_MODULE_PATH
-    "${PROJECT_SOURCE_DIR}/../cmake"
-    "${PROJECT_SOURCE_DIR}/cmake"
-)
+set (CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/../cmake")
 
 # Enable tests
 include(CTest)
 
-# Check for C++11 support
-include (C++11)
-CheckCXX11(FATAL_ERROR)
-
 # Add "-Wall" to compiler flags
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++0x")
 
 # Find Cap'n'proto
 find_package (Capnp REQUIRED)
