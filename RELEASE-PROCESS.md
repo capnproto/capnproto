@@ -26,8 +26,8 @@ How to release
 
 * Install your release candidates on your local machine, as if you were a user.
 
-* Go to `c++/samples` in the git repo and run `./test.sh`.  It will try to build against your
-  installed copy.
+* Go to `c++/samples` in the git repo and run `./test-cmake.sh`, or `./test.sh` if you don't like
+  CMake.  It will try to build against your installed copy.
 
 * Post the release candidates somewhere public and then send links to the mailing list for people
   to test.  Wait a bit for bug reports.
