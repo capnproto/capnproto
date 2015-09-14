@@ -6,13 +6,20 @@ project ("Cap'n'proto sample" CXX)
 set (CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # Include CMake scripts
-set (CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/../cmake")
+set (CMAKE_MODULE_PATH
+    "${PROJECT_SOURCE_DIR}/cmake"
+    "${PROJECT_SOURCE_DIR}/../cmake"
+)
 
 # Enable tests
 include(CTest)
 
 # Add "-Wall" to compiler flags
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++0x")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+
+# Add C++11 support
+include (C++11)
+CheckCXX11(FATAL_ERROR)
 
 # Find Cap'n'proto
 find_package (Capnp REQUIRED)
@@ -23,10 +30,7 @@ capnp_generate_cpp(CAPNPSRC_addressbook CAPNPHDR_addressbook "${PROJECT_SOURCE_D
 capnp_generate_cpp(CAPNPSRC_calculator CAPNPHDR_calculator "${PROJECT_SOURCE_DIR}/calculator.capnp")
 
 # Includes
-include_directories (
-    "${PROJECT_SOURCE_DIR}"
-    ${CAPNP_INCLUDE_DIRS}
-)
+include_directories (${CAPNP_INCLUDE_DIRS})
 
 # Targets
 add_executable (addressbook
