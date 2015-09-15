@@ -88,7 +88,7 @@ private:
   kj::ForkedPromise<void> disconnectPromise = nullptr;
 
   class FulfillerDisposer: public kj::Disposer {
-    // Hack:  TwoPartyVatNetwork is both a VatNetwork and a VatNetwork::Connection.  Whet the RPC
+    // Hack:  TwoPartyVatNetwork is both a VatNetwork and a VatNetwork::Connection.  When the RPC
     //   system detects (or initiates) a disconnection, it drops its reference to the Connection.
     //   When all references have been dropped, then we want onDrained() to fire.  So we hand out
     //   Own<Connection>s with this disposer attached, so that we can detect when they are dropped.
