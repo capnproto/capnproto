@@ -22,6 +22,7 @@
 #include "string.h"
 #include <kj/compat/gtest.h>
 #include <string>
+#include "vector.h"
 
 namespace kj {
 namespace _ {  // private
@@ -38,11 +39,15 @@ TEST(String, Str) {
   char buf[3] = {'f', 'o', 'o'};
   kj::ArrayPtr<char> a = buf;
   kj::ArrayPtr<const char> ca = a;
+  kj::Vector<char> v;
+  v.addAll(a);
 
   EXPECT_EQ("foo", str(a));
   EXPECT_EQ("foo", str(ca));
+  EXPECT_EQ("foo", str(v));
   EXPECT_EQ("foo", str(mv(a)));
   EXPECT_EQ("foo", str(mv(ca)));
+  EXPECT_EQ("foo", str(mv(v)));
 }
 
 TEST(String, StartsEndsWith) {
