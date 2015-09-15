@@ -34,6 +34,15 @@ TEST(String, Str) {
   EXPECT_EQ("foo", str('f', 'o', 'o'));
   EXPECT_EQ("123 234 -123 e7",
             str((int8_t)123, " ", (uint8_t)234, " ", (int8_t)-123, " ", hex((uint8_t)0xe7)));
+
+  char buf[3] = {'f', 'o', 'o'};
+  kj::ArrayPtr<char> a = buf;
+  kj::ArrayPtr<const char> ca = a;
+
+  EXPECT_EQ("foo", str(a));
+  EXPECT_EQ("foo", str(ca));
+  EXPECT_EQ("foo", str(mv(a)));
+  EXPECT_EQ("foo", str(mv(ca)));
 }
 
 TEST(String, StartsEndsWith) {
