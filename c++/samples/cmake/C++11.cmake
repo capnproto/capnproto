@@ -9,8 +9,7 @@
 #                               this is severity of message if no C++11 was found
 #
 # Output variables:
-#   COMPILER_SUPPORTS_CXX11     compiler supports `-std=c++11` flag
-#   COMPILER_SUPPORTS_CXX0X     compiler supports `-std=c++0x` flag
+#   COMPILER_SUPPORTS_CXX11     ON when compiler supports C++11
 #
 # Copyright (c) 2015, Marek Pikuła <marek@pikula.co>
 #
@@ -30,25 +29,44 @@
 #
 
 macro (CheckCXX11)
-    if (MSVC) # MSVC somehow doesn't support checking flags
-        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+    set (COMPILER_SUPPORTS_CXX11 OFF)
+    
+    if (MSVC)
+        # MSVC has C++11 turned on by default
+        set (COMPILER_SUPPORTS_CXX11 ON)
     else ()
         include (CheckCXXCompilerFlag)
-        check_cxx_compiler_flag ("-std=c++11" COMPILER_SUPPORTS_CXX11)
-        check_cxx_compiler_flag ("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-        if (COMPILER_SUPPORTS_CXX11)
+        if (CMAKE_COMPILER_IS_GNUCXX)
+            check_cxx_compiler_flag ("-std=gnu++11" GNUXX11)
+        endif ()
+        if (NOT GNUXX11)
+            check_cxx_compiler_flag ("-std=c++11" CXX11)
+            check_cxx_compiler_flag ("-std=c++0x" CXX0X)
+        endif ()
+        
+        if (GNUXX11)
+            set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11")
+            set (COMPILER_SUPPORTS_CXX11 ON)
+        elseif (CXX11)
             set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-        elseif (COMPILER_SUPPORTS_CXX0X)
+            set (COMPILER_SUPPORTS_CXX11 ON)
+        elseif (CXX0X)
             set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
-        else ()
-            if (${ARGC})
-                set (MESSAGE_SEVERITY ${ARGV0})
-            else ()
-                set (MESSAGE_SEVERITY "STATUS")
-            endif ()
-            message (${MESSAGE_SEVERITY}
-                     "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
-            unset (MESSAGE_SEVERITY)
+            set (COMPILER_SUPPORTS_CXX11 ON)
         endif ()
     endif ()
+    
+    if (NOT COMPILER_SUPPORTS_CXX11)
+        if (${ARGC})
+            set (MESSAGE_SEVERITY ${ARGV0})
+        else ()
+            set (MESSAGE_SEVERITY "STATUS")
+        endif ()
+        message (${MESSAGE_SEVERITY} "C++11 support in ${CMAKE_CXX_COMPILER} compiler was not detected. Please use a different C++ compiler.")
+        unset (MESSAGE_SEVERITY)
+    endif ()
+    
+    unset (GNUXX11)
+    unset (CXX11)
+    unset (CXX0X)
 endmacro ()

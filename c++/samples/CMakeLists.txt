@@ -15,11 +15,21 @@ set (CMAKE_MODULE_PATH
 include(CTest)
 
 # Add "-Wall" to compiler flags
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+add_definitions ("-Wall")
 
 # Add C++11 support
 include (C++11)
-CheckCXX11(FATAL_ERROR)
+CheckCXX11(FATAL_ERROR) # Add compiler flags if needed
+
+# Check if kj/common.h compiles
+check_cxx_source_compiles (
+    "#include <kj/common.h>
+     int main() {return 0;}"
+    KJ_COMMON_COMPILES
+)
+if (NOT KJ_COMMON_COMPILES)
+    message (FATAL_ERROR "kj/common.h compile check failed!")
+endif ()
 
 # Find Cap'n'proto
 find_package (Capnp REQUIRED)
