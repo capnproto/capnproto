@@ -19,7 +19,7 @@
 #       Path to the `capnpc-c++` tool (can be set to override).
 #   CAPNP_INCLUDE_DIRS
 #       Include directories for the library's headers (can be set to override).
-#   CANP_LIBRARIES
+#   CAPNP_LIBRARIES
 #       The Cap'n Proto library paths.
 #   CAPNP_LIBRARIES_LITE
 #       Paths to only the 'lite' libraries.
@@ -30,7 +30,7 @@
 #
 # Example usage:
 #
-#   find_package(CapnProto REQUIRED)
+#   find_package(Capnp REQUIRED)
 #   include_directories(${CAPNP_INCLUDE_DIRS})
 #   add_definitions(${CAPNP_DEFINITIONS})
 #
@@ -176,6 +176,20 @@ find_program(CAPNPC_CXX_EXECUTABLE
   DOC "Capn'n Proto C++ Compiler"
   HINTS "${PKGCONFIG_CAPNP_PREFIX}/bin"
 )
+
+# Check for C++11 and add required compiler flags
+include(C++11)
+CheckCXX11(FATAL_ERROR)
+
+# Check if kj/common.h compiles (indicates all needed C++11 features are available)
+check_cxx_source_compiles(
+  "#include <kj/common.h>
+   int main() {return 0;}"
+  KJ_COMMON_COMPILES
+)
+if(NOT KJ_COMMON_COMPILES)
+  message (FATAL_ERROR "kj/common.h compile check failed! Your compiler probably doesn't support C++11 enough.")
+endif ()
 
 # Only *require* the include directory, libkj, and libcapnp. If compiling with
 # CAPNP_LITE, nothing else will be found.

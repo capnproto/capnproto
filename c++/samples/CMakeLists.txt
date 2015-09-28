@@ -6,30 +6,13 @@ project ("Cap'n'proto sample" CXX)
 set (CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # Include CMake scripts
-set (CMAKE_MODULE_PATH
-    "${PROJECT_SOURCE_DIR}/cmake"
-    "${PROJECT_SOURCE_DIR}/../cmake"
-)
+set (CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/../cmake")
 
 # Enable tests
 include(CTest)
 
 # Add "-Wall" to compiler flags
 add_definitions ("-Wall")
-
-# Add C++11 support
-include (C++11)
-CheckCXX11(FATAL_ERROR) # Add compiler flags if needed
-
-# Check if kj/common.h compiles
-check_cxx_source_compiles (
-    "#include <kj/common.h>
-     int main() {return 0;}"
-    KJ_COMMON_COMPILES
-)
-if (NOT KJ_COMMON_COMPILES)
-    message (FATAL_ERROR "kj/common.h compile check failed!")
-endif ()
 
 # Find Cap'n'proto
 find_package (Capnp REQUIRED)
