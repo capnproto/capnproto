@@ -172,6 +172,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/serialize.h                                        \
   src/capnp/serialize-async.h                                  \
   src/capnp/serialize-packed.h                                 \
+  src/capnp/serialize-text.h                                   \
   src/capnp/pointer-helpers.h                                  \
   src/capnp/generated-header-support.h                         \
   src/capnp/rpc-prelude.h                                      \
@@ -284,7 +285,8 @@ libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/node-translator.c++                       \
   src/capnp/compiler/compiler.h                                \
   src/capnp/compiler/compiler.c++                              \
-  src/capnp/schema-parser.c++
+  src/capnp/schema-parser.c++                                  \
+  src/capnp/serialize-text.c++
 
 bin_PROGRAMS = capnp capnpc-capnp capnpc-c++
 
@@ -382,6 +384,7 @@ heavy_tests =                                                  \
   src/capnp/dynamic-test.c++                                   \
   src/capnp/stringify-test.c++                                 \
   src/capnp/serialize-async-test.c++                           \
+  src/capnp/serialize-text-test.c++                            \
   src/capnp/rpc-test.c++                                       \
   src/capnp/rpc-twoparty-test.c++                              \
   src/capnp/ez-rpc-test.c++                                    \
