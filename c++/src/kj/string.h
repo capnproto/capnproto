@@ -260,10 +260,13 @@ struct Stringifier {
   // anything.
 
   inline ArrayPtr<const char> operator*(ArrayPtr<const char> s) const { return s; }
+  inline ArrayPtr<const char> operator*(ArrayPtr<char> s) const { return s; }
   inline ArrayPtr<const char> operator*(const Array<const char>& s) const { return s; }
   inline ArrayPtr<const char> operator*(const Array<char>& s) const { return s; }
   template<size_t n>
   inline ArrayPtr<const char> operator*(const CappedArray<char, n>& s) const { return s; }
+  template<size_t n>
+  inline ArrayPtr<const char> operator*(const FixedArray<char, n>& s) const { return s; }
   inline ArrayPtr<const char> operator*(const char* s) const { return arrayPtr(s, strlen(s)); }
   inline ArrayPtr<const char> operator*(const String& s) const { return s.asArray(); }
   inline ArrayPtr<const char> operator*(const StringPtr& s) const { return s.asArray(); }

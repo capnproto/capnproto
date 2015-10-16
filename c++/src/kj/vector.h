@@ -119,6 +119,11 @@ private:
   }
 };
 
+template <typename T>
+inline auto KJ_STRINGIFY(const Vector<T>& v) -> decltype(toCharSequence(v.asPtr())) {
+  return toCharSequence(v.asPtr());
+}
+
 }  // namespace kj
 
 #endif  // KJ_VECTOR_H_

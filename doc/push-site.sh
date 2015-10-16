@@ -50,7 +50,7 @@ echo
 
 if [ "x$YESNO" == "xy" ]; then
   echo "Pushing..."
-  tar cz --xform='s,_site/,,' _site/* | ssh fe.sandstorm.io "cd /var/www/capnproto.org$PREFIX && tar xz"
+  tar cz --xform='s,_site/,,' _site/* | gce-ss ssh fe --command "cd /var/www/capnproto.org$PREFIX && tar xz"
 else
   echo "Push CANCELED"
 fi

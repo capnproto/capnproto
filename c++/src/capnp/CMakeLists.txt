@@ -47,6 +47,7 @@ set(capnp_headers
   serialize.h
   serialize-async.h
   serialize-packed.h
+  serialize-text.h
   pointer-helpers.h
   generated-header-support.h
 )
@@ -105,6 +106,7 @@ set(capnpc_sources
   compiler/node-translator.c++
   compiler/compiler.c++
   schema-parser.c++
+  serialize-text.c++
 )
 if(NOT CAPNP_LITE)
   add_library(capnpc ${capnpc_sources})
@@ -218,6 +220,7 @@ if(BUILD_TESTING)
       dynamic-test.c++
       stringify-test.c++
       serialize-async-test.c++
+      serialize-text-test.c++
       rpc-test.c++
       rpc-twoparty-test.c++
       ez-rpc-test.c++
