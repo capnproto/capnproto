@@ -308,6 +308,83 @@ TEST(TwoPartyNetwork, Abort) {
   EXPECT_TRUE(conn->receiveIncomingMessage().wait(ioContext.waitScope) == nullptr);
 }
 
+TEST(TwoPartyNetwork, ConvenienceClasses) {
+  auto ioContext = kj::setupAsyncIo();
+
+  int callCount = 0;
+  TwoPartyServer server(kj::heap<TestInterfaceImpl>(callCount));
+
+  auto address = ioContext.provider->getNetwork()
+      .parseAddress("127.0.0.1").wait(ioContext.waitScope);
+
+  auto listener = address->listen();
+  auto listenPromise = server.listen(*listener);
+
+  address = ioContext.provider->getNetwork()
+      .parseAddress("127.0.0.1", listener->getPort()).wait(ioContext.waitScope);
+
+  auto connection = address->connect().wait(ioContext.waitScope);
+  TwoPartyClient client(*connection);
+  auto cap = client.bootstrap().castAs<test::TestInterface>();
+
+  auto request = cap.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+  EXPECT_EQ(0, callCount);
+  auto response = request.send().wait(ioContext.waitScope);
+  EXPECT_EQ("foo", response.getX());
+  EXPECT_EQ(1, callCount);
+}
+
+class TestAuthenticatedBootstrapImpl final
+    : public test::TestAuthenticatedBootstrap<rpc::twoparty::VatId>::Server {
+public:
+  TestAuthenticatedBootstrapImpl(rpc::twoparty::VatId::Reader clientId) {
+    this->clientId.setRoot(clientId);
+  }
+
+protected:
+  kj::Promise<void> getCallerId(GetCallerIdContext context) override {
+    context.getResults().setCaller(clientId.getRoot<rpc::twoparty::VatId>());
+    return kj::READY_NOW;
+  }
+
+private:
+  MallocMessageBuilder clientId;
+};
+
+class TestBootstrapFactory: public BootstrapFactory<rpc::twoparty::VatId> {
+public:
+  Capability::Client createFor(rpc::twoparty::VatId::Reader clientId) {
+    called = true;
+    EXPECT_EQ(rpc::twoparty::Side::CLIENT, clientId.getSide());
+    return kj::heap<TestAuthenticatedBootstrapImpl>(clientId);
+  }
+
+  bool called = false;
+};
+
+kj::AsyncIoProvider::PipeThread runAuthenticatingServer(
+    kj::AsyncIoProvider& ioProvider, BootstrapFactory<rpc::twoparty::VatId>& bootstrapFactory) {
+  return ioProvider.newPipeThread([&bootstrapFactory](
+      kj::AsyncIoProvider& ioProvider, kj::AsyncIoStream& stream, kj::WaitScope& waitScope) {
+    TwoPartyVatNetwork network(stream, rpc::twoparty::Side::SERVER);
+    auto server = makeRpcServer(network, bootstrapFactory);
+    network.onDisconnect().wait(waitScope);
+  });
+}
+
+TEST(TwoPartyNetwork, BootstrapFactory) {
+  auto ioContext = kj::setupAsyncIo();
+  TestBootstrapFactory bootstrapFactory;
+  auto serverThread = runAuthenticatingServer(*ioContext.provider, bootstrapFactory);
+  TwoPartyClient client(*serverThread.pipe);
+  auto resp = client.bootstrap().castAs<test::TestAuthenticatedBootstrap<rpc::twoparty::VatId>>()
+      .getCallerIdRequest().send().wait(ioContext.waitScope);
+  EXPECT_EQ(rpc::twoparty::Side::CLIENT, resp.getCaller().getSide());
+  EXPECT_TRUE(bootstrapFactory.called);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

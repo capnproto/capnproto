@@ -43,7 +43,7 @@ class RpcSystem;
 namespace _ {  // private
 
 class VatNetworkBase {
-  // Non-template version of VatNetwork.  Ignore this class; see VatNetwork, below.
+  // Non-template version of VatNetwork.  Ignore this class; see VatNetwork in rpc.h.
 
 public:
   class Connection;
@@ -59,8 +59,9 @@ public:
     virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
     virtual kj::Promise<void> shutdown() = 0;
+    virtual AnyStruct::Reader baseGetPeerVatId() = 0;
   };
-  virtual kj::Maybe<kj::Own<Connection>> baseConnect(_::StructReader vatId) = 0;
+  virtual kj::Maybe<kj::Own<Connection>> baseConnect(AnyStruct::Reader vatId) = 0;
   virtual kj::Promise<kj::Own<Connection>> baseAccept() = 0;
 };
 
@@ -69,9 +70,19 @@ public:
   virtual Capability::Client baseRestore(AnyPointer::Reader ref) = 0;
 };
 
+class BootstrapFactoryBase {
+  // Non-template version of BootstrapFactory.  Ignore this class; see BootstrapFactory in rpc.h.
+public:
+  virtual Capability::Client baseCreateFor(AnyStruct::Reader clientId) = 0;
+};
+
 class RpcSystemBase {
+  // Non-template version of RpcSystem.  Ignore this class; see RpcSystem in rpc.h.
+
 public:
   RpcSystemBase(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface,
+                kj::Maybe<RealmGateway<>::Client> gateway);
+  RpcSystemBase(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory,
                 kj::Maybe<RealmGateway<>::Client> gateway);
   RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer);
   RpcSystemBase(RpcSystemBase&& other) noexcept;
@@ -81,18 +92,18 @@ private:
   class Impl;
   kj::Own<Impl> impl;
 
-  Capability::Client baseBootstrap(_::StructReader vatId);
-  Capability::Client baseRestore(_::StructReader vatId, AnyPointer::Reader objectId);
-  // TODO(someday):  Maybe define a public API called `TypelessStruct` so we don't have to rely
-  // on `_::StructReader` here?
+  Capability::Client baseBootstrap(AnyStruct::Reader vatId);
+  Capability::Client baseRestore(AnyStruct::Reader vatId, AnyPointer::Reader objectId);
 
   template <typename>
   friend class capnp::RpcSystem;
 };
 
 template <typename T> struct InternalRefFromRealmGateway_;
-template <typename InternalRef, typename ExternalRef>
-struct InternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef>> {
+template <typename InternalRef, typename ExternalRef, typename InternalOwner,
+          typename ExternalOwner>
+struct InternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef, InternalOwner,
+                                    ExternalOwner>> {
   typedef InternalRef Type;
 };
 template <typename T>
@@ -101,8 +112,10 @@ template <typename T>
 using InternalRefFromRealmGatewayClient = InternalRefFromRealmGateway<typename T::Calls>;
 
 template <typename T> struct ExternalRefFromRealmGateway_;
-template <typename InternalRef, typename ExternalRef>
-struct ExternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef>> {
+template <typename InternalRef, typename ExternalRef, typename InternalOwner,
+          typename ExternalOwner>
+struct ExternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef, InternalOwner,
+                                    ExternalOwner>> {
   typedef ExternalRef Type;
 };
 template <typename T>

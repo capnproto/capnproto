@@ -107,6 +107,7 @@ class BrokenCapFactory {
 
 public:
   virtual kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) = 0;
+  virtual kj::Own<ClientHook> newNullCap() = 0;
 };
 #endif  // !CAPNP_LITE
 
@@ -177,6 +178,11 @@ public:
   // If `from` points just past the current end of the segment, then move the end back to `to`.
   // Otherwise, do nothing.
 
+  inline bool tryExtend(word* from, word* to);
+  // If `from` points just past the current end of the segment, and `to` is within the segment
+  // boundaries, then move the end up to `to` and return true. Otherwise, do nothing and return
+  // false.
+
 private:
   word* pos;
   // Pointer to a pointer to the current end point of the segment, i.e. the location where the
@@ -200,11 +206,6 @@ public:
   // Called to report that the read limit has been reached.  See ReadLimiter, below.  This invokes
   // the VALIDATE_INPUT() macro which may throw an exception; if it returns normally, the caller
   // will need to continue with default values.
-
-#if !CAPNP_LITE
-  virtual kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) = 0;
-  // Extract the capability at the given index.  If the index is invalid, returns null.
-#endif  // !CAPNP_LITE
 };
 
 class ReaderArena final: public Arena {
@@ -213,28 +214,13 @@ public:
   ~ReaderArena() noexcept(false);
   KJ_DISALLOW_COPY(ReaderArena);
 
-#if !CAPNP_LITE
-  inline void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable) {
-    // Imbues the arena with a capability table.  This is not passed to the constructor because the
-    // table itself may be built based on some other part of the message (as is the case with the
-    // RPC protocol).
-    this->capTable = kj::mv(capTable);
-  }
-#endif  // !CAPNP_LITE
-
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-#if !CAPNP_LITE
-  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
-#endif  // !CAPNP_LITE
 
 private:
   MessageReader* message;
   ReadLimiter readLimiter;
-#if !CAPNP_LITE
-  kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable;
-#endif  // !CAPNP_LITE
 
   // Optimize for single-segment messages so that small messages are handled quickly.
   SegmentReader segment0;
@@ -267,8 +253,22 @@ public:
   // not-yet-allocated space.
 
 #if !CAPNP_LITE
-  inline kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() { return capTable; }
-  // Return the capability table.
+  inline CapTableBuilder* getLocalCapTable() {
+    // Return a CapTableBuilder that merely implements local loopback. That is, you can set
+    // capabilities, then read the same capabilities back, but there is no intent ever to transmit
+    // these capabilities. A MessageBuilder that isn't imbued with some other CapTable uses this
+    // by default.
+    //
+    // TODO(cleanup): It's sort of a hack that this exists. In theory, perhaps, unimbued
+    //   MessageBuilders should throw exceptions on any attempt to access capability fields, like
+    //   unimbued MessageReaders do. However, lots of code exists which uses MallocMessageBuilder
+    //   as a temporary holder for data to be copied in and out (without being serialized), and it
+    //   is expected that such data can include capabilities, which is admittedly reasonable.
+    //   Therefore, all MessageBuilders must have a cap table by default. Arguably we should
+    //   deprecate this usage and instead define a new helper type for this exact purpose.
+
+    return &localCapTable;
+  }
 #endif  // !CAPNP_LITE
 
   SegmentBuilder* getSegment(SegmentId id);
@@ -296,28 +296,26 @@ public:
   // from disk (until the message itself is written out).  `Orphanage` provides the public API for
   // this feature.
 
-#if !CAPNP_LITE
-  uint injectCap(kj::Own<ClientHook>&& cap);
-  // Add the capability to the message and return its index.  If the same ClientHook is injected
-  // twice, this may return the same index both times, but in this case dropCap() needs to be
-  // called an equal number of times to actually remove the cap.
-#endif  // !CAPNP_LITE
-
-  void dropCap(uint index);
-  // Remove a capability injected earlier.  Called when the pointer is overwritten or zero'd out.
-
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-#if !CAPNP_LITE
-  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
-#endif  // !CAPNP_LITE
 
 private:
   MessageBuilder* message;
   ReadLimiter dummyLimiter;
+
 #if !CAPNP_LITE
-  kj::Vector<kj::Maybe<kj::Own<ClientHook>>> capTable;
+  class LocalCapTable: public CapTableBuilder {
+  public:
+    kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
+    uint injectCap(kj::Own<ClientHook>&& cap) override;
+    void dropCap(uint index) override;
+
+  private:
+    kj::Vector<kj::Maybe<kj::Own<ClientHook>>> capTable;
+  };
+
+  LocalCapTable localCapTable;
 #endif  // !CAPNP_LITE
 
   SegmentBuilder segment0;
@@ -443,6 +441,16 @@ inline void SegmentBuilder::reset() {
 
 inline void SegmentBuilder::tryTruncate(word* from, word* to) {
   if (pos == from) pos = to;
+}
+
+inline bool SegmentBuilder::tryExtend(word* from, word* to) {
+  // Careful about overflow.
+  if (pos == from && to <= ptr.end() && to >= from) {
+    pos = to;
+    return true;
+  } else {
+    return false;
+  }
 }
 
 }  // namespace _ (private)

@@ -429,6 +429,7 @@ static ChangeInfo fieldChangeType(Declaration::Builder decl, uint& nextOrdinal,
 
       case Expression::ABSOLUTE_NAME:
       case Expression::IMPORT:
+      case Expression::EMBED:
       case Expression::APPLICATION:
       case Expression::MEMBER:
         KJ_FAIL_ASSERT("Unexpected expression type.");
@@ -643,6 +644,9 @@ public:
     return orphanage.newOrphanCopy(content);
   }
   kj::Maybe<Module&> importRelative(kj::StringPtr importPath) override {
+    return nullptr;
+  }
+  kj::Maybe<kj::Array<const byte>> embedRelative(kj::StringPtr embedPath) override {
     return nullptr;
   }
 

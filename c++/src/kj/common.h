@@ -157,6 +157,12 @@ typedef unsigned char byte;
 #endif
 
 #if defined(_MSC_VER)
+#define KJ_NOINLINE __declspec(noinline)
+#else
+#define KJ_NOINLINE __attribute__((noinline))
+#endif
+
+#if defined(_MSC_VER)
 #define KJ_NORETURN(prototype) __declspec(noreturn) prototype
 #define KJ_UNUSED
 #define KJ_WARN_UNUSED_RESULT
@@ -349,15 +355,11 @@ struct DisallowConstCopy {
   // disallow const copies.  Hey, cool, that's exactly what we want.
 
   DisallowConstCopy() = default;
-  DisallowConstCopy(DisallowConstCopy&);
+  DisallowConstCopy(DisallowConstCopy&) = default;
   DisallowConstCopy(DisallowConstCopy&&) = default;
-  DisallowConstCopy& operator=(DisallowConstCopy&);
+  DisallowConstCopy& operator=(DisallowConstCopy&) = default;
   DisallowConstCopy& operator=(DisallowConstCopy&&) = default;
 };
-
-// Apparently these cannot be defaulted inside the class due to some obscure C++ rule.
-inline DisallowConstCopy::DisallowConstCopy(DisallowConstCopy&) = default;
-inline DisallowConstCopy& DisallowConstCopy::operator=(DisallowConstCopy&) = default;
 
 template <typename T>
 struct DisallowConstCopyIfNotConst: public DisallowConstCopy {
@@ -798,21 +800,24 @@ public:
     }
   }
 
-  inline T& operator*() { return value; }
-  inline const T& operator*() const { return value; }
+  inline T& operator*() & { return value; }
+  inline const T& operator*() const & { return value; }
+  inline T&& operator*() && { return kj::mv(value); }
+  inline const T&& operator*() const && { return kj::mv(value); }
   inline T* operator->() { return &value; }
   inline const T* operator->() const { return &value; }
   inline operator T*() { return isSet ? &value : nullptr; }
   inline operator const T*() const { return isSet ? &value : nullptr; }
 
   template <typename... Params>
-  inline void emplace(Params&&... params) {
+  inline T& emplace(Params&&... params) {
     if (isSet) {
       isSet = false;
       dtor(value);
     }
     ctor(value, kj::fwd<Params>(params)...);
     isSet = true;
+    return value;
   }
 
 private:  // internal interface used by friends only
@@ -978,11 +983,12 @@ public:
   Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
   template <typename... Params>
-  inline void emplace(Params&&... params) {
+  inline T& emplace(Params&&... params) {
     // Replace this Maybe's content with a new value constructed by passing the given parametrs to
     // T's constructor. This can be used to initialize a Maybe without copying or even moving a T.
+    // Returns a reference to the newly-constructed value.
 
-    ptr.emplace(kj::fwd<Params>(params)...);
+    return ptr.emplace(kj::fwd<Params>(params)...);
   }
 
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
@@ -1008,7 +1014,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
+  auto map(Func&& f) & -> Maybe<decltype(f(instance<T&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -1017,7 +1023,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
+  auto map(Func&& f) const & -> Maybe<decltype(f(instance<const T&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -1025,8 +1031,23 @@ public:
     }
   }
 
-  // TODO(someday):  Once it's safe to require GCC 4.8, use ref qualifiers to provide a version of
-  //   map() that uses move semantics if *this is an rvalue.
+  template <typename Func>
+  auto map(Func&& f) && -> Maybe<decltype(f(instance<T&&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(kj::mv(*ptr));
+    }
+  }
+
+  template <typename Func>
+  auto map(Func&& f) const && -> Maybe<decltype(f(instance<const T&&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(kj::mv(*ptr));
+    }
+  }
 
 private:
   _::NullableValue<T> ptr;
@@ -1253,7 +1274,7 @@ namespace _ {  // private
 template <typename Func>
 class Deferred {
 public:
-  inline Deferred(Func func): func(func), canceled(false) {}
+  inline Deferred(Func&& func): func(kj::fwd<Func>(func)), canceled(false) {}
   inline ~Deferred() noexcept(false) { if (!canceled) func(); }
   KJ_DISALLOW_COPY(Deferred);
 
@@ -1269,7 +1290,7 @@ private:
 }  // namespace _ (private)
 
 template <typename Func>
-_::Deferred<Decay<Func>> defer(Func&& func) {
+_::Deferred<Func> defer(Func&& func) {
   // Returns an object which will invoke the given functor in its destructor.  The object is not
   // copyable but is movable with the semantics you'd expect.  Since the return type is private,
   // you need to assign to an `auto` variable.
@@ -1277,7 +1298,7 @@ _::Deferred<Decay<Func>> defer(Func&& func) {
   // The KJ_DEFER macro provides slightly more convenient syntax for the common case where you
   // want some code to run at function exit.
 
-  return _::Deferred<Decay<Func>>(kj::fwd<Func>(func));
+  return _::Deferred<Func>(kj::fwd<Func>(func));
 }
 
 #define KJ_DEFER(code) auto KJ_UNIQUE_NAME(_kjDefer) = ::kj::defer([&](){code;})

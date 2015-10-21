@@ -388,7 +388,7 @@ different limit if desired. Another reasonable strategy is to set the limit to s
 the original message size; however, most applications should place limits on overall message sizes
 anyway, so it makes sense to have one check cover both.
 
-**List amplification:** A list of `Void` values or zero-size structs can have a very large element count while taking constant space on the wire. If the receiving application expects a list of structs, it will see these zero-sized elements as valid structs set to their default values. If it iterates through the list processing each element, it could spend a large amount of CPU time or other resources despite the message being small. To defend against this, the "traversal limit" should count a list of zero-sized elements as if each element were one word instead. This rule was introduced in the C++ implementation in [commit 72e6654](https://github.com/sandstorm-io/capnproto/commit/72e6654bb546cdf12848284e5d523195705bf3d5).
+**List amplification:** A list of `Void` values or zero-size structs can have a very large element count while taking constant space on the wire. If the receiving application expects a list of structs, it will see these zero-sized elements as valid structs set to their default values. If it iterates through the list processing each element, it could spend a large amount of CPU time or other resources despite the message being small. To defend against this, the "traversal limit" should count a list of zero-sized elements as if each element were one word instead. This rule was introduced in the C++ implementation in [commit 1048706](https://github.com/sandstorm-io/capnproto/commit/104870608fde3c698483fdef6b97f093fc15685d).
 
 ### Stack overflow DoS attack
 

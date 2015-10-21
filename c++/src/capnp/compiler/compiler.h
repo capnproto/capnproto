@@ -47,6 +47,9 @@ public:
   // Find another module, relative to this one.  Importing the same logical module twice should
   // produce the exact same object, comparable by identity.  These objects are owned by some
   // outside pool that outlives the Compiler instance.
+
+  virtual kj::Maybe<kj::Array<const byte>> embedRelative(kj::StringPtr embedPath) = 0;
+  // Read and return the content of a file specified using `embed`.
 };
 
 class Compiler: private SchemaLoader::LazyLoadCallback {

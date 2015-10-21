@@ -71,6 +71,9 @@ struct Expression {
     import @16 :LocatedText;
     # An import directive.
 
+    embed @17 :LocatedText;
+    # An embed directive.
+
     list @6 :List(Expression);
     # Bracketed list; members are never named.
 

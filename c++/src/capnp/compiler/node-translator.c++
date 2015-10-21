@@ -21,6 +21,7 @@
 
 #include "node-translator.h"
 #include "parser.h"      // only for generateGroupId()
+#include <capnp/serialize.h>
 #include <kj/debug.h>
 #include <kj/arena.h>
 #include <set>
@@ -427,15 +428,25 @@ public:
     inline Group(Union& parent): parent(parent) {}
     KJ_DISALLOW_COPY(Group);
 
-    void addVoid() override {
+    void addMember() {
       if (!hasMembers) {
         hasMembers = true;
         parent.newGroupAddingFirstMember();
       }
     }
 
+    void addVoid() override {
+      addMember();
+
+      // Make sure that if this is a member of a union which is in turn a member of another union,
+      // that we let the outer union know that a field is being added, even though it is a
+      // zero-size field. This is important because the union needs to allocate its discriminant
+      // just before its second member is added.
+      parent.parent.addVoid();
+    }
+
     uint addData(uint lgSize) override {
-      addVoid();
+      addMember();
 
       uint bestSize = kj::maxValue;
       kj::Maybe<uint> bestLocation = nullptr;
@@ -476,7 +487,7 @@ public:
     }
 
     uint addPointer() override {
-      addVoid();
+      addMember();
 
       if (parentPointerLocationUsage < parent.pointerLocations.size()) {
         return parent.pointerLocations[parentPointerLocationUsage++];
@@ -827,7 +838,7 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandedDecl::applyParams(
     return nullptr;
   } else {
     return brand->setParams(kj::mv(params), body.get<Resolver::ResolvedDecl>().kind, subSource)
-        .map([&](kj::Own<BrandScope>& scope) {
+        .map([&](kj::Own<BrandScope>&& scope) {
       BrandedDecl result = *this;
       result.brand = kj::mv(scope);
       result.source = subSource;
@@ -1205,6 +1216,7 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclEx
     case Expression::BINARY:
     case Expression::LIST:
     case Expression::TUPLE:
+    case Expression::EMBED:
       errorReporter.addErrorOn(source, "Expected name.");
       return nullptr;
 
@@ -1246,7 +1258,7 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclEx
     case Expression::IMPORT: {
       auto filename = source.getImport();
       KJ_IF_MAYBE(decl, resolver.resolveImport(filename.getValue())) {
-        // Import is always a root scopee, so create a fresh BrandScope.
+        // Import is always a root scope, so create a fresh BrandScope.
         return BrandedDecl(*decl, kj::refcounted<BrandScope>(
             errorReporter, decl->id, decl->genericParamCount, *decl->resolver), source);
       } else {
@@ -2412,6 +2424,8 @@ static kj::StringTree expressionStringTree(Expression::Reader exp) {
       return kj::strTree('.', exp.getAbsoluteName().getValue());
     case Expression::IMPORT:
       return kj::strTree("import ", stringLiteral(exp.getImport().getValue()));
+    case Expression::EMBED:
+      return kj::strTree("embed ", stringLiteral(exp.getEmbed().getValue()));
 
     case Expression::LIST: {
       auto list = exp.getList();
@@ -2535,6 +2549,10 @@ void NodeTranslator::compileValue(Expression::Reader source, schema::Type::Reade
 
     kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) override {
       return translator.readConstant(name, isBootstrap);
+    }
+
+    kj::Maybe<kj::Array<const byte>> readEmbed(LocatedText::Reader filename) override {
+      return translator.readEmbed(filename);
     }
 
   private:
@@ -2736,6 +2754,62 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(Expression::Reader src, 
     case Expression::MEMBER:
       KJ_IF_MAYBE(constValue, resolver.resolveConstant(src)) {
         return orphanage.newOrphanCopy(*constValue);
+      } else {
+        return nullptr;
+      }
+
+    case Expression::EMBED:
+      KJ_IF_MAYBE(data, resolver.readEmbed(src.getEmbed())) {
+        switch (type.which()) {
+          case schema::Type::TEXT: {
+            // Sadly, we need to make a copy to add the NUL terminator.
+            auto text = orphanage.newOrphan<Text>(data->size());
+            memcpy(text.get().begin(), data->begin(), data->size());
+            return kj::mv(text);
+          }
+          case schema::Type::DATA:
+            // TODO(perf): It would arguably be neat to use orphanage.referenceExternalData(),
+            //   since typically the data is mmap()ed and this would avoid forcing a large file
+            //   to become memory-resident. However, we'd have to figure out who should own the
+            //   Array<byte>. Also, we'd have to deal with the possibility of misaligned data --
+            //   though arguably in that case we know it's not mmap()ed so whatever. One more
+            //   thing: it would be neat to be able to reference text blobs this way too, if only
+            //   we could rely on the assumption that as long as the data doesn't end on a page
+            //   boundary, it will be zero-padded, thus giving us our NUL terminator (4095/4096 of
+            //   the time), but this seems to require documenting constraints on the underlying
+            //   file-reading interfaces. Hm.
+            return orphanage.newOrphanCopy(Data::Reader(*data));
+          case schema::Type::STRUCT: {
+            // We will almost certainly
+            if (data->size() % sizeof(word) != 0) {
+              errorReporter.addErrorOn(src,
+                  "Embedded file is not a valid Cap'n Proto message.");
+              return nullptr;
+            }
+            kj::Array<word> copy;
+            kj::ArrayPtr<const word> words;
+            if (reinterpret_cast<uintptr_t>(data->begin()) % sizeof(void*) == 0) {
+              // Hooray, data is aligned.
+              words = kj::ArrayPtr<const word>(
+                  reinterpret_cast<const word*>(data->begin()),
+                  data->size() / sizeof(word));
+            } else {
+              // Ugh, data not aligned. Make a copy.
+              copy = kj::heapArray<word>(data->size() / sizeof(word));
+              memcpy(copy.begin(), data->begin(), data->size());
+              words = copy;
+            }
+            ReaderOptions options;
+            options.traversalLimitInWords = kj::maxValue;
+            options.nestingLimit = kj::maxValue;
+            FlatArrayMessageReader reader(words, options);
+            return orphanage.newOrphanCopy(reader.getRoot<DynamicStruct>(type.asStruct()));
+          }
+          default:
+            errorReporter.addErrorOn(src,
+                "Embeds can only be used when Text, Data, or a struct is expected.");
+            return nullptr;
+        }
       } else {
         return nullptr;
       }
@@ -2969,6 +3043,16 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
   }
 
   return constValue;
+}
+
+kj::Maybe<kj::Array<const byte>> NodeTranslator::readEmbed(LocatedText::Reader filename) {
+  KJ_IF_MAYBE(data, resolver.readEmbed(filename.getValue())) {
+    return kj::mv(*data);
+  } else {
+    errorReporter.addErrorOn(filename,
+        kj::str("Couldn't read file for embed: ", filename.getValue()));
+    return nullptr;
+  }
 }
 
 Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(

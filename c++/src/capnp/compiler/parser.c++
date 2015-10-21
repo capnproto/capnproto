@@ -552,6 +552,15 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                     filename.copyTo(builder.initImport());
                     return result;
                   }),
+              p::transformWithLocation(p::sequence(keyword("embed"), stringLiteral),
+                  [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
+                         Located<Text::Reader>&& filename) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    initLocation(location, builder);
+                    filename.copyTo(builder.initEmbed());
+                    return result;
+                  }),
               p::transformWithLocation(p::sequence(op("."), identifier),
                   [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
                          Located<Text::Reader>&& name) -> Orphan<Expression> {

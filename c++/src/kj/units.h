@@ -382,7 +382,7 @@ inline constexpr auto operator*(UnitRatio<Number1, Unit2, Unit> ratio,
 template <typename T, typename Label>
 class Absolute {
   // Wraps some other value -- typically a Quantity -- but represents a value measured based on
-  // some absolute origin.  For exmaple, if `Duration` is a type representing a time duration,
+  // some absolute origin.  For example, if `Duration` is a type representing a time duration,
   // Absolute<Duration, UnixEpoch> might be a calendar date.
   //
   // Since Absolute represents measurements relative to some arbitrary origin, the only sensible

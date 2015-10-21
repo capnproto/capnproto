@@ -22,6 +22,7 @@
 #include "string.h"
 #include <kj/compat/gtest.h>
 #include <string>
+#include "vector.h"
 
 namespace kj {
 namespace _ {  // private
@@ -34,6 +35,23 @@ TEST(String, Str) {
   EXPECT_EQ("foo", str('f', 'o', 'o'));
   EXPECT_EQ("123 234 -123 e7",
             str((int8_t)123, " ", (uint8_t)234, " ", (int8_t)-123, " ", hex((uint8_t)0xe7)));
+
+  char buf[3] = {'f', 'o', 'o'};
+  ArrayPtr<char> a = buf;
+  ArrayPtr<const char> ca = a;
+  Vector<char> v;
+  v.addAll(a);
+  FixedArray<char, 3> f;
+  memcpy(f.begin(), buf, 3);
+
+  EXPECT_EQ("foo", str(a));
+  EXPECT_EQ("foo", str(ca));
+  EXPECT_EQ("foo", str(v));
+  EXPECT_EQ("foo", str(f));
+  EXPECT_EQ("foo", str(mv(a)));
+  EXPECT_EQ("foo", str(mv(ca)));
+  EXPECT_EQ("foo", str(mv(v)));
+  EXPECT_EQ("foo", str(mv(f)));
 }
 
 TEST(String, StartsEndsWith) {

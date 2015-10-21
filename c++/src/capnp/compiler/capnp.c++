@@ -242,10 +242,11 @@ public:
     builder.addOptionWithArg({'o', "output"}, KJ_BIND_METHOD(*this, addOutput), "<lang>[:<dir>]",
                              "Generate source code for language <lang> in directory <dir> "
                              "(default: current directory).  <lang> actually specifies a plugin "
-                             "to use.  If <lang> is a simple word, the compiler for a plugin "
+                             "to use.  If <lang> is a simple word, the compiler searches for a plugin "
                              "called 'capnpc-<lang>' in $PATH.  If <lang> is a file path "
                              "containing slashes, it is interpreted as the exact plugin "
-                             "executable file name, and $PATH is not searched.")
+                             "executable file name, and $PATH is not searched.  If <lang> is '-', "
+                             "the compiler dumps the request to standard output.")
            .addOptionWithArg({"src-prefix"}, KJ_BIND_METHOD(*this, addSourcePrefix), "<prefix>",
                              "If a file specified for compilation starts with <prefix>, remove "
                              "the prefix for the purpose of deciding the names of output files.  "
@@ -440,6 +441,11 @@ public:
     }
 
     for (auto& output: outputs) {
+      if (kj::str(output.name) == "-") {
+        writeMessageToFd(STDOUT_FILENO, message);
+        continue;
+      }
+
       int pipeFds[2];
       KJ_SYSCALL(pipe(pipeFds));
 
@@ -1346,8 +1352,13 @@ private:
       return loader.get(id);
     }
 
-    kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) {
+    kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) override {
       errorReporter.addErrorOn(name, kj::str("External constants not allowed in encode input."));
+      return nullptr;
+    }
+
+    kj::Maybe<kj::Array<const byte>> readEmbed(LocatedText::Reader filename) override {
+      errorReporter.addErrorOn(filename, kj::str("External embeds not allowed in encode input."));
       return nullptr;
     }
 

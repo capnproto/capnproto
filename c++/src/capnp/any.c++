@@ -21,6 +21,8 @@
 
 #include "any.h"
 
+#include <kj/debug.h>
+
 #if !CAPNP_LITE
 #include "capability.h"
 #endif  // !CAPNP_LITE
@@ -76,5 +78,164 @@ kj::Own<ClientHook> AnyPointer::Pipeline::asCap() {
 }
 
 #endif  // !CAPNP_LITE
+
+Equality AnyStruct::Reader::equals(AnyStruct::Reader right) {
+  auto dataL = getDataSection();
+  size_t dataSizeL = dataL.size();
+  while(dataSizeL > 0 && dataL[dataSizeL - 1] == 0) {
+    -- dataSizeL;
+  }
+
+  auto dataR = right.getDataSection();
+  size_t dataSizeR = dataR.size();
+  while(dataSizeR > 0 && dataR[dataSizeR - 1] == 0) {
+    -- dataSizeR;
+  }
+
+  if(dataSizeL != dataSizeR) {
+    return Equality::NOT_EQUAL;
+  }
+
+  if(0 != memcmp(dataL.begin(), dataR.begin(), dataSizeL)) {
+    return Equality::NOT_EQUAL;
+  }
+
+  auto ptrsL = getPointerSection();
+  auto ptrsR = right.getPointerSection();
+
+  size_t i = 0;
+
+  auto eqResult = Equality::EQUAL;
+  for(; i < kj::min(ptrsL.size(), ptrsR.size()); i++) {
+    auto l = ptrsL[i];
+    auto r = ptrsR[i];
+    switch(l.equals(r)) {
+      case Equality::EQUAL:
+        break;
+      case Equality::NOT_EQUAL:
+        return Equality::NOT_EQUAL;
+      case Equality::UNKNOWN_CONTAINS_CAPS:
+        eqResult = Equality::UNKNOWN_CONTAINS_CAPS;
+        break;
+      default:
+        KJ_UNREACHABLE;
+    }
+  }
+
+  return eqResult;
+}
+
+kj::StringPtr KJ_STRINGIFY(Equality res) {
+  switch(res) {
+    case Equality::NOT_EQUAL:
+      return "NOT_EQUAL";
+    case Equality::EQUAL:
+      return "EQUAL";
+    case Equality::UNKNOWN_CONTAINS_CAPS:
+      return "UNKNOWN_CONTAINS_CAPS";
+  }
+  KJ_UNREACHABLE;
+}
+
+Equality AnyList::Reader::equals(AnyList::Reader right) {
+  if(size() != right.size()) {
+    return Equality::NOT_EQUAL;
+  }
+  auto eqResult = Equality::EQUAL;
+  switch(getElementSize()) {
+    case ElementSize::VOID:
+    case ElementSize::BIT:
+    case ElementSize::BYTE:
+    case ElementSize::TWO_BYTES:
+    case ElementSize::FOUR_BYTES:
+    case ElementSize::EIGHT_BYTES:
+      if(getElementSize() == right.getElementSize()) {
+        if(memcmp(getRawBytes().begin(), right.getRawBytes().begin(), getRawBytes().size()) == 0) {
+          return Equality::EQUAL;
+        } else {
+          return Equality::NOT_EQUAL;
+        }
+      } else {
+        return Equality::NOT_EQUAL;
+      }
+    case ElementSize::POINTER:
+    case ElementSize::INLINE_COMPOSITE: {
+      auto llist = as<List<AnyStruct>>();
+      auto rlist = right.as<List<AnyStruct>>();
+      for(size_t i = 0; i < size(); i++) {
+        switch(llist[i].equals(rlist[i])) {
+          case Equality::EQUAL:
+            break;
+          case Equality::NOT_EQUAL:
+            return Equality::NOT_EQUAL;
+          case Equality::UNKNOWN_CONTAINS_CAPS:
+            eqResult = Equality::UNKNOWN_CONTAINS_CAPS;
+            break;
+          default:
+            KJ_UNREACHABLE;
+        }
+      }
+      return eqResult;
+    }
+  }
+  KJ_UNREACHABLE;
+}
+
+Equality AnyPointer::Reader::equals(AnyPointer::Reader right) {
+  if(getPointerType() != right.getPointerType()) {
+    return Equality::NOT_EQUAL;
+  }
+  switch(getPointerType()) {
+    case PointerType::NULL_:
+      return Equality::EQUAL;
+    case PointerType::STRUCT:
+      return getAs<AnyStruct>().equals(right.getAs<AnyStruct>());
+    case PointerType::LIST:
+      return getAs<AnyList>().equals(right.getAs<AnyList>());
+    case PointerType::CAPABILITY:
+      return Equality::UNKNOWN_CONTAINS_CAPS;
+  }
+  // There aren't currently any other types of pointers
+  KJ_UNREACHABLE;
+}
+
+bool AnyPointer::Reader::operator==(AnyPointer::Reader right) {
+  switch(equals(right)) {
+    case Equality::EQUAL:
+      return true;
+    case Equality::NOT_EQUAL:
+      return false;
+    case Equality::UNKNOWN_CONTAINS_CAPS:
+      KJ_FAIL_REQUIRE(
+        "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
+  }
+  KJ_UNREACHABLE;
+}
+
+bool AnyStruct::Reader::operator==(AnyStruct::Reader right) {
+  switch(equals(right)) {
+    case Equality::EQUAL:
+      return true;
+    case Equality::NOT_EQUAL:
+      return false;
+    case Equality::UNKNOWN_CONTAINS_CAPS:
+      KJ_FAIL_REQUIRE(
+        "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
+  }
+  KJ_UNREACHABLE;
+}
+
+bool AnyList::Reader::operator==(AnyList::Reader right) {
+  switch(equals(right)) {
+    case Equality::EQUAL:
+      return true;
+    case Equality::NOT_EQUAL:
+      return false;
+    case Equality::UNKNOWN_CONTAINS_CAPS:
+      KJ_FAIL_REQUIRE(
+        "operator== cannot determine equality of capabilities; use equals() instead if you need to handle this case");
+  }
+  KJ_UNREACHABLE;
+}
 
 }  // namespace capnp

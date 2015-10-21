@@ -250,6 +250,10 @@ public:
     return hasInterfaces_;
   }
 
+  kj::StringTree strNoTypename() const & { return name.flatten(); }
+  kj::StringTree strNoTypename() && { return kj::mv(name); }
+  // Stringify but never prefix with `typename`. Use in contexts where `typename` is implicit.
+
 private:
   kj::StringTree name;
 
@@ -415,6 +419,11 @@ private:
       }
     }
 
+    if (result.size() == 4 && memcmp(result.begin(), "NULL", 4) == 0) {
+      // NULL probably collides with a macro.
+      result.add('_');
+    }
+
     result.add('\0');
 
     return kj::String(result.releaseAsArray());
@@ -576,7 +585,7 @@ private:
       return node.getIsGeneric();
     }
 
-    kj::StringTree decl(bool withDefaults) const {
+    kj::StringTree decl(bool withDefaults, kj::StringPtr suffix = nullptr) const {
       // "template <typename T, typename U>" for this type. Includes default assignments
       // ("= ::capnp::AnyPointer") if `withDefaults` is true. Returns empty string if this type
       // is not parameterized.
@@ -588,7 +597,7 @@ private:
       } else {
         return kj::strTree(
             "template <", kj::StringTree(KJ_MAP(p, params) {
-              return kj::strTree("typename ", p.getName(),
+              return kj::strTree("typename ", p.getName(), suffix,
                   withDefaults ? " = ::capnp::AnyPointer" : "");
             }, ", "), ">\n");
       }
@@ -608,7 +617,7 @@ private:
       }
     }
 
-    kj::StringTree args() const {
+    kj::StringTree args(kj::StringPtr suffix = nullptr) const {
       // "<T, U>" for this type.
       auto params = node.getParameters();
 
@@ -617,7 +626,7 @@ private:
       } else {
         return kj::strTree(
             "<", kj::StringTree(KJ_MAP(p, params) {
-              return kj::strTree(p.getName());
+              return kj::strTree(p.getName(), suffix);
             }, ", "), ">");
       }
     }
@@ -1047,7 +1056,10 @@ private:
         kj::str(
             "  if (which() != ", scope, upperCase, ") return false;\n"),
         kj::str(
-            "  KJ_IREQUIRE(which() == ", scope, upperCase, ",\n"
+            // Extra parens around the condition are needed for when we're compiling a multi-arg
+            // generic type, which will have a comma, which would otherwise mess up the macro.
+            // Ah, C++.
+            "  KJ_IREQUIRE((which() == ", scope, upperCase, "),\n"
             "              \"Must check which() before get()ing a union member.\");\n"),
         kj::str(
             "  _builder.setDataField<", scope, "Which>(\n"
@@ -1741,6 +1753,13 @@ private:
         "  }\n"
         "#endif  // !CAPNP_LITE\n"
         "\n",
+        templateContext.isGeneric() ? kj::strTree(
+          "  ", templateContext.decl(true, "2"),
+          "  typename ", unqualifiedParentType, templateContext.args("2"), "::Reader asGeneric() {\n"
+          "    return typename ", unqualifiedParentType, templateContext.args("2"),
+                     "::Reader(_reader);\n"
+          "  }\n"
+          "\n") : kj::strTree(),
         isUnion ? kj::strTree("  inline Which which() const;\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
@@ -1778,6 +1797,13 @@ private:
         "  inline ::kj::StringTree toString() const { return asReader().toString(); }\n"
         "#endif  // !CAPNP_LITE\n"
         "\n",
+        templateContext.isGeneric() ? kj::strTree(
+          "  ", templateContext.decl(true, "2"),
+          "  typename ", unqualifiedParentType, templateContext.args("2"), "::Builder asGeneric() {\n"
+          "    return typename ", unqualifiedParentType, templateContext.args("2"),
+                       "::Builder(_builder);\n"
+          "  }\n"
+          "\n") : kj::strTree(),
         isUnion ? kj::strTree("  inline Which which();\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
@@ -2117,6 +2143,14 @@ private:
     uint64_t id;
   };
 
+  void getTransitiveSuperclasses(InterfaceSchema schema, std::map<uint64_t, InterfaceSchema>& map) {
+    if (map.insert(std::make_pair(schema.getProto().getId(), schema)).second) {
+      for (auto sup: schema.getSuperclasses()) {
+        getTransitiveSuperclasses(sup, map);
+      }
+    }
+  }
+
   InterfaceText makeInterfaceText(kj::StringPtr scope, kj::StringPtr name, InterfaceSchema schema,
                                   kj::Array<kj::StringTree> nestedTypeDecls,
                                   const TemplateContext& templateContext) {
@@ -2132,7 +2166,19 @@ private:
       return ExtendInfo { cppFullName(superclass, nullptr), superclass.getProto().getId() };
     };
 
-    CppTypeName clientName = cppFullName(schema, nullptr);
+    kj::Array<ExtendInfo> transitiveSuperclasses;
+    {
+      std::map<uint64_t, InterfaceSchema> map;
+      getTransitiveSuperclasses(schema, map);
+      map.erase(schema.getProto().getId());
+      transitiveSuperclasses = KJ_MAP(entry, map) {
+        return ExtendInfo { cppFullName(entry.second, nullptr), entry.second.getProto().getId() };
+      };
+    }
+
+    CppTypeName typeName = cppFullName(schema, nullptr);
+
+    CppTypeName clientName = typeName;
     clientName.addMemberType("Client");
 
     kj::String templates = kj::str(templateContext.allDecls());  // Ends with a newline
@@ -2195,7 +2241,7 @@ private:
           "class ", fullName, "::Client\n"
           "    : public virtual ::capnp::Capability::Client",
           KJ_MAP(s, superclasses) {
-            return kj::strTree(",\n      public virtual ", s.typeName, "::Client");
+            return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Client");
           }, " {\n"
           "public:\n"
           "  typedef ", fullName, " Calls;\n"
@@ -2213,6 +2259,12 @@ private:
           "  Client& operator=(Client& other);\n"
           "  Client& operator=(Client&& other);\n"
           "\n",
+          templateContext.isGeneric() ? kj::strTree(
+            "  ", templateContext.decl(true, "2"),
+            "  typename ", name, templateContext.args("2"), "::Client asGeneric() {\n"
+            "    return castAs<", name, templateContext.args("2"), ">();\n"
+            "  }\n"
+            "\n") : kj::strTree(),
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },
           "\n"
           "protected:\n"
@@ -2223,7 +2275,7 @@ private:
           "class ", fullName, "::Server\n"
           "    : public virtual ::capnp::Capability::Server",
           KJ_MAP(s, superclasses) {
-            return kj::strTree(",\n      public virtual ", s.typeName, "::Server");
+            return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Server");
           }, " {\n"
           "public:\n",
           "  typedef ", fullName, " Serves;\n"
@@ -2234,6 +2286,11 @@ private:
           "\n"
           "protected:\n",
           KJ_MAP(m, methods) { return kj::mv(m.serverDecls); },
+          "\n"
+          "  inline ", clientName, " thisCap() {\n"
+          "    return ::capnp::Capability::Server::thisCap()\n"
+          "        .template castAs<", typeName, ">();\n"
+          "  }\n"
           "\n"
           "  ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,\n"
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);\n"
@@ -2285,10 +2342,11 @@ private:
           "  switch (interfaceId) {\n"
           "    case 0x", kj::hex(proto.getId()), "ull:\n"
           "      return dispatchCallInternal(methodId, context);\n",
-          KJ_MAP(s, superclasses) {
+          KJ_MAP(s, transitiveSuperclasses) {
             return kj::strTree(
               "    case 0x", kj::hex(s.id), "ull:\n"
-              "      return ", s.typeName, "::Server::dispatchCallInternal(methodId, context);\n");
+              "      return ", s.typeName.strNoTypename(),
+                         "::Server::dispatchCallInternal(methodId, context);\n");
           },
           "    default:\n"
           "      return internalUnimplemented(\"", proto.getDisplayName(), "\", interfaceId);\n"

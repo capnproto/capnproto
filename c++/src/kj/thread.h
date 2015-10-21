@@ -39,6 +39,7 @@ class Thread {
 
 public:
   explicit Thread(Function<void()> func);
+  KJ_DISALLOW_COPY(Thread);
 
   ~Thread() noexcept(false);
 
@@ -49,6 +50,9 @@ public:
 
   void detach();
   // Don't join the thread in ~Thread().
+  //
+  // TODO(soon): Currently broken: the thread uses the Thread objects during its execution; instead
+  //   the Thread object and the thread itself will need to share a refcounted object.
 
 private:
   Function<void()> func;

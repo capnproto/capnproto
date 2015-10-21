@@ -27,6 +27,9 @@
 #include <stdlib.h>
 #include <exception>
 #include <new>
+#include <signal.h>
+#include <sys/mman.h>
+#include "io.h"
 
 #if (__linux__ && !__ANDROID__) || __APPLE__
 #define KJ_HAS_BACKTRACE 1
@@ -52,15 +55,18 @@ StringPtr KJ_STRINGIFY(LogSeverity severity) {
   return SEVERITY_STRINGS[static_cast<uint>(severity)];
 }
 
-ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space) {
+ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
 #ifndef KJ_HAS_BACKTRACE
   return nullptr;
 #else
-  return space.slice(0, backtrace(space.begin(), space.size()));
+  size_t size = backtrace(space.begin(), space.size());
+  return space.slice(kj::min(ignoreCount + 1, size), size);
 #endif
 }
 
 String stringifyStackTrace(ArrayPtr<void* const> trace) {
+  if (trace.size() == 0) return nullptr;
+
 #if (__linux__ || __APPLE__) && !__ANDROID__ && defined(KJ_DEBUG)
   // We want to generate a human-readable stack trace.
 
@@ -85,24 +91,24 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   }
   KJ_DEFER(if (oldPreload != nullptr) { setenv("LD_PRELOAD", oldPreload.cStr(), true); });
 
-  String lines[8];
+  String lines[32];
   FILE* p = nullptr;
+  auto strTrace = strArray(trace, " ");
 
 #if __linux__
-  // Get executable name from /proc/self/exe, then pass it and the stack trace to addr2line to
-  // get file/line pairs.
-  char exe[512];
-  ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe));
-  if (n < 0 || n >= static_cast<ssize_t>(sizeof(exe))) {
+  if (access("/proc/self/exe", R_OK) < 0) {
+    // Apparently /proc is not available?
     return nullptr;
   }
-  exe[n] = '\0';
 
-  p = popen(str("addr2line -e ", exe, ' ', strArray(trace, " ")).cStr(), "r");
+  // Obtain symbolic stack trace using addr2line.
+  // TODO(cleanup): Use fork() and exec() or maybe our own Subprocess API (once it exists), to
+  //   avoid depending on a shell.
+  p = popen(str("addr2line -e /proc/", getpid(), "/exe ", strTrace).cStr(), "r");
 #elif __APPLE__
   // The Mac OS X equivalent of addr2line is atos.
   // (Internally, it uses the private CoreSymbolication.framework library.)
-  p = popen(str("xcrun atos -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
+  p = popen(str("xcrun atos -p ", getpid(), ' ', strTrace).cStr(), "r");
 #endif
 
   if (p == nullptr) {
@@ -112,20 +118,22 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   char line[512];
   size_t i = 0;
   while (i < kj::size(lines) && fgets(line, sizeof(line), p) != nullptr) {
-    // Don't include exception-handling infrastructure in stack trace.
+    // Don't include exception-handling infrastructure or promise infrastructure in stack trace.
     // addr2line output matches file names; atos output matches symbol names.
-    if (i == 0 &&
-        (strstr(line, "kj/common.c++") != nullptr ||
-         strstr(line, "kj/exception.") != nullptr ||
-         strstr(line, "kj/debug.") != nullptr ||
-         strstr(line, "kj::Exception") != nullptr ||
-         strstr(line, "kj::_::Debug") != nullptr)) {
+    if (strstr(line, "kj/common.c++") != nullptr ||
+        strstr(line, "kj/exception.") != nullptr ||
+        strstr(line, "kj/debug.") != nullptr ||
+        strstr(line, "kj/async.") != nullptr ||
+        strstr(line, "kj/async-prelude.h") != nullptr ||
+        strstr(line, "kj/async-inl.h") != nullptr ||
+        strstr(line, "kj::Exception") != nullptr ||
+        strstr(line, "kj::_::Debug") != nullptr) {
       continue;
     }
 
     size_t len = strlen(line);
     if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
-    lines[i++] = str("\n", line, ": called here");
+    lines[i++] = str("\n    ", trimSourceFilename(line), ": returning here");
   }
 
   // Skip remaining input.
@@ -137,6 +145,94 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
 #else
   return nullptr;
 #endif
+}
+
+#if KJ_HAS_BACKTRACE
+namespace {
+
+void crashHandler(int signo, siginfo_t* info, void* context) {
+  void* traceSpace[32];
+
+  // ignoreCount = 2 to ignore crashHandler() and signal trampoline.
+  auto trace = getStackTrace(traceSpace, 2);
+
+  auto message = kj::str("*** Received signal #", signo, ": ", strsignal(signo),
+                         "\nstack: ", strArray(trace, " "),
+                         stringifyStackTrace(trace), '\n');
+
+  FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  _exit(1);
+}
+
+}  // namespace
+
+void printStackTraceOnCrash() {
+  // Set up alternate signal stack so that stack overflows can be handled.
+  stack_t stack;
+  memset(&stack, 0, sizeof(stack));
+
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+#ifndef MAP_GROWSDOWN
+#define MAP_GROWSDOWN 0
+#endif
+
+  stack.ss_size = 65536;
+  // Note: ss_sp is char* on FreeBSD, void* on Linux and OSX.
+  stack.ss_sp = reinterpret_cast<char*>(mmap(
+      nullptr, stack.ss_size, PROT_READ | PROT_WRITE,
+      MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN, -1, 0));
+  KJ_SYSCALL(sigaltstack(&stack, nullptr));
+
+  // Catch all relevant signals.
+  struct sigaction action;
+  memset(&action, 0, sizeof(action));
+
+  action.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_NODEFER | SA_RESETHAND;
+  action.sa_sigaction = &crashHandler;
+
+  // Dump stack on common "crash" signals.
+  KJ_SYSCALL(sigaction(SIGSEGV, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGBUS, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGFPE, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGABRT, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGILL, &action, nullptr));
+
+  // Dump stack on unimplemented syscalls -- useful in seccomp sandboxes.
+  KJ_SYSCALL(sigaction(SIGSYS, &action, nullptr));
+
+#ifdef KJ_DEBUG
+  // Dump stack on keyboard interrupt -- useful for infinite loops. Only in debug mode, though,
+  // because stack traces on ctrl+c can be obnoxious for, say, command-line tools.
+  KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
+#endif
+}
+#else
+void printStackTraceOnCrash() {
+}
+#endif
+
+kj::StringPtr trimSourceFilename(kj::StringPtr filename) {
+  // Removes noisy prefixes from source code file name.
+
+  static constexpr const char* PREFIXES[] = {
+    "../",
+    "/ekam-provider/canonical/",
+    "/ekam-provider/c++header/",
+    "src/",
+    "tmp/"
+  };
+
+retry:
+  for (const char* prefix: PREFIXES) {
+    if (filename.startsWith(prefix)) {
+      filename = filename.slice(strlen(prefix));
+      goto retry;
+    }
+  }
+
+  return filename;
 }
 
 StringPtr KJ_STRINGIFY(Exception::Type type) {
@@ -185,15 +281,12 @@ String KJ_STRINGIFY(const Exception& e) {
 }
 
 Exception::Exception(Type type, const char* file, int line, String description) noexcept
-    : file(file), line(line), type(type), description(mv(description)) {
-  traceCount = kj::getStackTrace(trace).size();
-}
+    : file(trimSourceFilename(file).cStr()), line(line), type(type), description(mv(description)),
+      traceCount(0) {}
 
 Exception::Exception(Type type, String file, int line, String description) noexcept
-    : ownFile(kj::mv(file)), file(ownFile.cStr()), line(line), type(type),
-      description(mv(description)) {
-  traceCount = kj::getStackTrace(trace).size();
-}
+    : ownFile(kj::mv(file)), file(trimSourceFilename(ownFile).cStr()), line(line), type(type),
+      description(mv(description)), traceCount(0) {}
 
 Exception::Exception(const Exception& other) noexcept
     : file(other.file), line(other.line), type(other.type),
@@ -221,6 +314,64 @@ Exception::Context::Context(const Context& other) noexcept
 
 void Exception::wrapContext(const char* file, int line, String&& description) {
   context = heap<Context>(file, line, mv(description), mv(context));
+}
+
+void Exception::extendTrace(uint ignoreCount) {
+  KJ_STACK_ARRAY(void*, newTraceSpace, kj::size(trace) + ignoreCount + 1,
+      sizeof(trace)/sizeof(trace[0]) + 8, 128);
+
+  auto newTrace = kj::getStackTrace(newTraceSpace, ignoreCount + 1);
+  if (newTrace.size() > ignoreCount + 2) {
+    // Remove suffix that won't fit into our static-sized trace.
+    newTrace = newTrace.slice(0, kj::min(kj::size(trace) - traceCount, newTrace.size()));
+
+    // Copy the rest into our trace.
+    memcpy(trace + traceCount, newTrace.begin(), newTrace.asBytes().size());
+    traceCount += newTrace.size();
+  }
+}
+
+void Exception::truncateCommonTrace() {
+  if (traceCount > 0) {
+    // Create a "reference" stack trace that is a little bit deeper than the one in the exception.
+    void* refTraceSpace[sizeof(this->trace) / sizeof(this->trace[0]) + 4];
+    auto refTrace = kj::getStackTrace(refTraceSpace, 0);
+
+    // We expect that the deepest frame in the exception's stack trace should be somewhere in our
+    // own trace, since our own trace has a deeper limit. Search for it.
+    for (uint i = refTrace.size(); i > 0; i--) {
+      if (refTrace[i-1] == trace[traceCount-1]) {
+        // See how many frames match.
+        for (uint j = 0; j < i; j++) {
+          if (j >= traceCount) {
+            // We matched the whole trace, apparently?
+            traceCount = 0;
+            return;
+          } else if (refTrace[i-j-1] != trace[traceCount-j-1]) {
+            // Found mismatching entry.
+
+            // If we matched more than half of the reference trace, guess that this is in fact
+            // the prefix we're looking for.
+            if (j > refTrace.size() / 2) {
+              // Delete the matching suffix. Also delete one non-matched entry on the assumption
+              // that both traces contain that stack frame but are simply at different points in
+              // the function.
+              traceCount -= j + 1;
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // No match. Ignore.
+  }
+}
+
+void Exception::addTrace(void* ptr) {
+  if (traceCount < kj::size(trace)) {
+    trace[traceCount++] = ptr;
+  }
 }
 
 class ExceptionImpl: public Exception, public std::exception {
@@ -345,12 +496,14 @@ ExceptionCallback& getExceptionCallback() {
   return scoped != nullptr ? *scoped : defaultCallback;
 }
 
-void throwFatalException(kj::Exception&& exception) {
+void throwFatalException(kj::Exception&& exception, uint ignoreCount) {
+  exception.extendTrace(ignoreCount + 1);
   getExceptionCallback().onFatalException(kj::mv(exception));
   abort();
 }
 
-void throwRecoverableException(kj::Exception&& exception) {
+void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
+  exception.extendTrace(ignoreCount + 1);
   getExceptionCallback().onRecoverableException(kj::mv(exception));
 }
 
@@ -458,12 +611,16 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
 #if KJ_NO_EXCEPTIONS
   RecoverableExceptionCatcher catcher;
   runnable.run();
+  KJ_IF_MAYBE(e, catcher.caught) {
+    e->truncateCommonTrace();
+  }
   return mv(catcher.caught);
 #else
   try {
     runnable.run();
     return nullptr;
   } catch (Exception& e) {
+    e.truncateCommonTrace();
     return kj::mv(e);
   } catch (std::bad_alloc& e) {
     return Exception(Exception::Type::OVERLOADED,

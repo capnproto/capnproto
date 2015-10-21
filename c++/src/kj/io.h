@@ -54,10 +54,7 @@ public:
   // attempt a non-blocking read or may just return zero.  To force a read, use a non-zero minBytes.
   // To detect EOF without throwing an exception, use tryRead().
   //
-  // Cap'n Proto never asks for more bytes than it knows are part of the message.  Therefore, if
-  // the InputStream happens to know that the stream will never reach maxBytes -- even if it has
-  // reached minBytes -- it should throw an exception to avoid wasting time processing an incomplete
-  // message.  If it can't even reach minBytes, it MUST throw an exception, as the caller is not
+  // If the InputStream can't produce minBytes, it MUST throw an exception, as the caller is not
   // expected to understand how to deal with partial reads.
 
   virtual size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;

@@ -122,6 +122,12 @@ template <> struct Kind_<DynamicCapability> { static constexpr Kind kind = Kind:
 
 }  // namespace _ (private)
 
+template <> inline constexpr Style style<DynamicValue     >() { return Style::POINTER;    }
+template <> inline constexpr Style style<DynamicEnum      >() { return Style::PRIMITIVE;  }
+template <> inline constexpr Style style<DynamicStruct    >() { return Style::STRUCT;     }
+template <> inline constexpr Style style<DynamicList      >() { return Style::POINTER;    }
+template <> inline constexpr Style style<DynamicCapability>() { return Style::CAPABILITY; }
+
 // -------------------------------------------------------------------
 
 class DynamicEnum {
@@ -351,7 +357,7 @@ class DynamicList::Reader {
 public:
   typedef DynamicList Reads;
 
-  Reader() = default;
+  inline Reader(): reader(ElementSize::VOID) {}
 
   template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::LIST>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
@@ -392,8 +398,8 @@ class DynamicList::Builder {
 public:
   typedef DynamicList Builds;
 
-  Builder() = default;
-  inline Builder(decltype(nullptr)) {}
+  inline Builder(): builder(ElementSize::VOID) {}
+  inline Builder(decltype(nullptr)): builder(ElementSize::VOID) {}
 
   template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::LIST>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
@@ -854,6 +860,8 @@ public:
   // the original Orphan<DynamicStruct> is no longer valid after this call; ownership is
   // transferred to the returned Orphan<T>.
 
+  // TODO(someday): Support truncate().
+
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
@@ -1042,20 +1050,21 @@ template <>
 inline Orphan<DynamicStruct> Orphanage::newOrphanCopy<DynamicStruct::Reader>(
     const DynamicStruct::Reader& copyFrom) const {
   return Orphan<DynamicStruct>(
-      copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.reader));
+      copyFrom.getSchema(), _::OrphanBuilder::copy(arena, capTable, copyFrom.reader));
 }
 
 template <>
 inline Orphan<DynamicList> Orphanage::newOrphanCopy<DynamicList::Reader>(
     const DynamicList::Reader& copyFrom) const {
-  return Orphan<DynamicList>(copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.reader));
+  return Orphan<DynamicList>(copyFrom.getSchema(),
+      _::OrphanBuilder::copy(arena, capTable, copyFrom.reader));
 }
 
 template <>
 inline Orphan<DynamicCapability> Orphanage::newOrphanCopy<DynamicCapability::Client>(
     DynamicCapability::Client& copyFrom) const {
   return Orphan<DynamicCapability>(
-      copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.hook->addRef()));
+      copyFrom.getSchema(), _::OrphanBuilder::copy(arena, capTable, copyFrom.hook->addRef()));
 }
 
 template <>

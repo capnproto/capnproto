@@ -36,6 +36,7 @@ set(capnp_headers
   any.h
   message.h
   capability.h
+  membrane.h
   dynamic.h
   schema.h
   schema.capnp.h
@@ -46,18 +47,24 @@ set(capnp_headers
   serialize.h
   serialize-async.h
   serialize-packed.h
+  serialize-text.h
   pointer-helpers.h
   generated-header-support.h
+)
+set(capnp_schemas
+  c++.capnp
+  schema.capnp
 )
 add_library(capnp ${capnp_sources})
 target_link_libraries(capnp kj)
 
 install(TARGETS capnp ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
-install(FILES ${capnp_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
+install(FILES ${capnp_headers} ${capnp_schemas} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
 
 set(capnp-rpc_sources
   serialize-async.c++
   capability.c++
+  membrane.c++
   dynamic-capability.c++
   rpc.c++
   rpc.capnp.c++
@@ -75,11 +82,16 @@ set(capnp-rpc_headers
   persistent.capnp.h
   ez-rpc.h
 )
+set(capnp-rpc_schemas
+  rpc.capnp
+  rpc-twoparty.capnp
+  persistent.capnp
+)
 if(NOT CAPNP_LITE)
   add_library(capnp-rpc ${capnp-rpc_sources})
   target_link_libraries(capnp-rpc kj-async kj)
   install(TARGETS capnp-rpc ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
-  install(FILES ${capnp-rpc_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
+  install(FILES ${capnp-rpc_headers} ${capnp-rpc_schemas} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
 endif()
 
 # Tools/Compilers ==============================================================
@@ -94,19 +106,12 @@ set(capnpc_sources
   compiler/node-translator.c++
   compiler/compiler.c++
   schema-parser.c++
-)
-set(capnpc_headers
-  c++.capnp
-  schema.capnp
-  rpc.capnp
-  rpc-twoparty.capnp
-  persistent.capnp
+  serialize-text.c++
 )
 if(NOT CAPNP_LITE)
   add_library(capnpc ${capnpc_sources})
   target_link_libraries(capnpc capnp kj)
   install(TARGETS capnpc ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
-  install(FILES ${capnpc_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
 endif()
 
 if(BUILD_TOOLS AND NOT CAPNP_LITE)
@@ -208,11 +213,14 @@ if(BUILD_TESTING)
     add_executable(capnp-heavy-tests
       endian-reverse-test.c++
       capability-test.c++
+      membrane-test.c++
       schema-test.c++
       schema-loader-test.c++
+      schema-parser-test.c++
       dynamic-test.c++
       stringify-test.c++
       serialize-async-test.c++
+      serialize-text-test.c++
       rpc-test.c++
       rpc-twoparty-test.c++
       ez-rpc-test.c++

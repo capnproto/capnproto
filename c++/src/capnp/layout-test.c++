@@ -282,7 +282,7 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
   SegmentBuilder* segment = allocation.segment;
   word* rootLocation = allocation.words;
 
-  StructBuilder builder = PointerBuilder::getRoot(segment, rootLocation)
+  StructBuilder builder = PointerBuilder::getRoot(segment, nullptr, rootLocation)
       .initStruct(StructSize(2 * WORDS, 4 * POINTERS));
   setupStruct(builder);
 
@@ -309,7 +309,8 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
   checkStruct(builder);
   checkStruct(builder.asReader());
   checkStruct(PointerReader::getRootUnchecked(segment->getStartPtr()).getStruct(nullptr));
-  checkStruct(PointerReader::getRoot(segment, segment->getStartPtr(), 4).getStruct(nullptr));
+  checkStruct(PointerReader::getRoot(segment, nullptr, segment->getStartPtr(), 4)
+      .getStruct(nullptr));
 }
 
 TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
@@ -319,7 +320,7 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
   SegmentBuilder* segment = allocation.segment;
   word* rootLocation = allocation.words;
 
-  StructBuilder builder = PointerBuilder::getRoot(segment, rootLocation)
+  StructBuilder builder = PointerBuilder::getRoot(segment, nullptr, rootLocation)
       .initStruct(StructSize(2 * WORDS, 4 * POINTERS));
   setupStruct(builder);
 
@@ -347,7 +348,8 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
 
   checkStruct(builder);
   checkStruct(builder.asReader());
-  checkStruct(PointerReader::getRoot(segment, segment->getStartPtr(), 4).getStruct(nullptr));
+  checkStruct(PointerReader::getRoot(segment, nullptr, segment->getStartPtr(), 4)
+      .getStruct(nullptr));
 }
 
 TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
@@ -357,7 +359,7 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
   SegmentBuilder* segment = allocation.segment;
   word* rootLocation = allocation.words;
 
-  StructBuilder builder = PointerBuilder::getRoot(segment, rootLocation)
+  StructBuilder builder = PointerBuilder::getRoot(segment, nullptr, rootLocation)
       .initStruct(StructSize(2 * WORDS, 4 * POINTERS));
   setupStruct(builder);
 
@@ -376,7 +378,8 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
 
   checkStruct(builder);
   checkStruct(builder.asReader());
-  checkStruct(PointerReader::getRoot(segment, segment->getStartPtr(), 4).getStruct(nullptr));
+  checkStruct(PointerReader::getRoot(segment, nullptr, segment->getStartPtr(), 4)
+      .getStruct(nullptr));
 }
 
 inline bool isNan(float f) { return f != f; }

@@ -106,25 +106,25 @@
         <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
       </context>
     </contexts>
+    <itemDatas>
+      <!-- Since my highlighting approach is different from most programming languages, the contexts
+          don't fit nicely into the standard set, so I have to define colors explicitly.  A couple
+          of these, like "keyword" and "type", could be mapped to dsKeyword and dsDataType, but
+          there's a chance the user has mapped the colors for those things to things that would
+          conflict with the manually-defined colors here, which would probably be even more annoying
+          than having the colors be inconsitent from other languages.  So, I use manual colors for
+          everything, except comments, which I figure are less likely to have this problem. -->
+      <itemData name="Normal"       defStyleNum="dsNormal"/>
+      <itemData name="Keyword"      defStyleNum="dsOthers" color="#000099" bold="1"/>
+      <itemData name="Id"           defStyleNum="dsOthers" color="#0099FF"/>
+      <itemData name="Annotation"   defStyleNum="dsOthers" color="#999900"/>
+      <itemData name="Type"         defStyleNum="dsOthers" color="#009900"/>
+      <itemData name="KeyType"      defStyleNum="dsOthers" color="#009900" bold="1"/>
+      <itemData name="Value"        defStyleNum="dsOthers" color="#003399"/>
+      <itemData name="Comment"      defStyleNum="dsComment"/>
+      <itemData name="Symbol"       defStyleNum="dsOthers" bold="1"/>
+    </itemDatas>
   </highlighting>
-  <itemDatas>
-    <!-- Since my highlighting approach is different from most programming languages, the contexts
-         don't fit nicely into the standard set, so I have to define colors explicitly.  A couple
-         of these, like "keyword" and "type", could be mapped to dsKeyword and dsDataType, but
-         there's a chance the user has mapped the colors for those things to things that would
-         conflict with the manually-defined colors here, which would probably be even more annoying
-         than having the colors be inconsitent from other languages.  So, I use manual colors for
-         everything, except comments, which I figure are less likely to have this problem. -->
-    <itemData name="Normal"       defStyleNum="dsNormal"/>
-    <itemData name="Keyword"      defStyleNum="dsOthers" color="#000099" bold="1"/>
-    <itemData name="Id"           defStyleNum="dsOthers" color="#0099FF"/>
-    <itemData name="Annotation"   defStyleNum="dsOthers" color="#999900"/>
-    <itemData name="Type"         defStyleNum="dsOthers" color="#009900"/>
-    <itemData name="KeyType"      defStyleNum="dsOthers" color="#009900" bold="1"/>
-    <itemData name="Value"        defStyleNum="dsOthers" color="#003399"/>
-    <itemData name="Comment"      defStyleNum="dsComment"/>
-    <itemData name="Symbol"       defStyleNum="dsOthers" bold="1"/>
-  </itemDatas>
   <general>
     <comments><comment name="singleLine" start="#"/></comments>
     <keywords casesensitive="1"/>

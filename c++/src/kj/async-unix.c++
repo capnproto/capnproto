@@ -148,7 +148,7 @@ void registerSignalHandler(int signum) {
 void registerReservedSignal() {
   registerSignalHandler(reservedSignal);
 
-  // We also disable SIGPIPE because users of UnixEventLoop almost certainly don't want it.
+  // We also disable SIGPIPE because users of UnixEventPort almost certainly don't want it.
   while (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
     int error = errno;
     if (error != EINTR) {
@@ -296,7 +296,7 @@ UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint fla
 }
 
 UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
-  KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_DEL, fd, nullptr));
+  KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_DEL, fd, nullptr)) { break; }
 }
 
 void UnixEventPort::FdObserver::fire(short events) {

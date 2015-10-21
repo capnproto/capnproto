@@ -244,10 +244,6 @@ public:
         return message.getRoot<AnyPointer>();
       }
 
-      void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>>&& capTable) override {
-        message.initCapTable(kj::mv(capTable));
-      }
-
       kj::Array<word> data;
       FlatArrayMessageReader message;
     };
@@ -261,10 +257,6 @@ public:
 
       AnyPointer::Builder getBody() override {
         return message.getRoot<AnyPointer>();
-      }
-
-      kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() override {
-        return message.getCapTable();
       }
 
       void send() override {
@@ -301,6 +293,11 @@ public:
       ConnectionImpl& connection;
       MallocMessageBuilder message;
     };
+
+    test::TestSturdyRefHostId::Reader getPeerVatId() override {
+      // Not actually implemented for the purpose of this test.
+      return test::TestSturdyRefHostId::Reader();
+    }
 
     kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override {
       return kj::heap<OutgoingRpcMessageImpl>(*this, firstSegmentWordSize);
@@ -956,6 +953,34 @@ TEST(Rpc, EmbargoError) {
 
   // Verify that we're still connected (there were no protocol errors).
   getCallSequence(client, 1).wait(context.waitScope);
+}
+
+TEST(Rpc, EmbargoNull) {
+  // Set up a situation where we pipeline on a capability that ends up coming back null. This
+  // should NOT cause a Disembargo to be sent, but due to a bug in earlier versions of Cap'n Proto,
+  // a Disembargo was indeed sent to the null capability, which caused the server to disconnect
+  // due to protocol error.
+
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  auto promise = client.getNullRequest().send();
+
+  auto cap = promise.getNullCap();
+
+  auto call0 = cap.getCallSequenceRequest().send();
+
+  promise.wait(context.waitScope);
+
+  auto call1 = cap.getCallSequenceRequest().send();
+
+  expectPromiseThrows(kj::mv(call0), context.waitScope);
+  expectPromiseThrows(kj::mv(call1), context.waitScope);
+
+  // Verify that we're still connected (there were no protocol errors).
+  getCallSequence(client, 0).wait(context.waitScope);
 }
 
 TEST(Rpc, CallBrokenPromise) {

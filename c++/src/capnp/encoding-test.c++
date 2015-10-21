@@ -26,6 +26,7 @@
 #include <kj/compat/gtest.h>
 #include "test-util.h"
 #include "schema-lite.h"
+#include "serialize-packed.h"
 
 namespace capnp {
 namespace _ {  // private
@@ -514,6 +515,80 @@ TEST(Encoding, SmallStructLists) {
     EXPECT_EQ(reinterpret_cast<const uint64_t*>(defaultSegment.begin())[i],
               reinterpret_cast<const uint64_t*>(segment.begin())[i]);
   }
+}
+
+TEST(Encoding, SetListToEmpty) {
+  // Test initializing list fields from various ways of constructing zero-sized lists.
+  // At one point this would often fail because the lists would have ElementSize::VOID which is
+  // incompatible with other list sizes.
+
+#define ALL_LIST_TYPES(MACRO) \
+  MACRO(Void, Void) \
+  MACRO(Bool, bool) \
+  MACRO(UInt8, uint8_t) \
+  MACRO(UInt16, uint16_t) \
+  MACRO(UInt32, uint32_t) \
+  MACRO(UInt64, uint64_t) \
+  MACRO(Int8, int8_t) \
+  MACRO(Int16, int16_t) \
+  MACRO(Int32, int32_t) \
+  MACRO(Int64, int64_t) \
+  MACRO(Float32, float) \
+  MACRO(Float64, double) \
+  MACRO(Text, Text) \
+  MACRO(Data, Data) \
+  MACRO(Struct, TestAllTypes)
+
+#define SET_FROM_READER_ACCESSOR(name, type) \
+  root.set##name##List(reader.get##name##List());
+
+#define SET_FROM_BUILDER_ACCESSOR(name, type) \
+  root.set##name##List(root.get##name##List());
+
+#define SET_FROM_READER_CONSTRUCTOR(name, type) \
+  root.set##name##List(List<type>::Reader());
+
+#define SET_FROM_BUILDER_CONSTRUCTOR(name, type) \
+  root.set##name##List(List<type>::Builder());
+
+#define CHECK_EMPTY_NONNULL(name, type) \
+  EXPECT_TRUE(root.has##name##List()); \
+  EXPECT_EQ(0, root.get##name##List().size());
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.initRoot<test::TestAllTypes>();
+    auto reader = root.asReader();
+    ALL_LIST_TYPES(SET_FROM_READER_ACCESSOR)
+    ALL_LIST_TYPES(CHECK_EMPTY_NONNULL)
+  }
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.initRoot<test::TestAllTypes>();
+    ALL_LIST_TYPES(SET_FROM_BUILDER_ACCESSOR)
+    ALL_LIST_TYPES(CHECK_EMPTY_NONNULL)
+  }
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.initRoot<test::TestAllTypes>();
+    ALL_LIST_TYPES(SET_FROM_READER_CONSTRUCTOR)
+    ALL_LIST_TYPES(CHECK_EMPTY_NONNULL)
+  }
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.initRoot<test::TestAllTypes>();
+    ALL_LIST_TYPES(SET_FROM_BUILDER_CONSTRUCTOR)
+    ALL_LIST_TYPES(CHECK_EMPTY_NONNULL)
+  }
+
+#undef SET_FROM_READER_ACCESSOR
+#undef SET_FROM_BUILDER_ACCESSOR
+#undef SET_FROM_READER_CONSTRUCTOR
+#undef SET_FROM_BUILDER_CONSTRUCTOR
+#undef CHECK_EMPTY_NONNULL
 }
 
 // =======================================================================================
@@ -1228,6 +1303,22 @@ TEST(Encoding, UpgradeListInBuilder) {
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 }
 
+TEST(Encoding, UpgradeUnion) {
+  // This tests for a specific case that was broken originally.
+  MallocMessageBuilder builder;
+
+  {
+    auto root = builder.getRoot<test::TestOldUnionVersion>();
+    root.setB(123);
+  }
+
+  {
+    auto root = builder.getRoot<test::TestNewUnionVersion>();
+    ASSERT_TRUE(root.isB())
+    EXPECT_EQ(123, root.getB());
+  }
+}
+
 // =======================================================================================
 // Tests of generated code, not really of the encoding.
 // TODO(cleanup):  Move to a different test?
@@ -1427,17 +1518,24 @@ TEST(Encoding, VoidListAmplification) {
 }
 
 TEST(Encoding, EmptyStructListAmplification) {
-  MallocMessageBuilder builder;
-  builder.initRoot<test::TestAnyPointer>().getAnyPointerField()
-      .initAs<List<test::TestEmptyStruct>>(1u << 28);
+  MallocMessageBuilder builder(1024);
+  auto listList = builder.initRoot<test::TestAnyPointer>().getAnyPointerField()
+      .initAs<List<List<test::TestEmptyStruct>>>(500);
+
+  for (uint i = 0; i < listList.size(); i++) {
+    listList.init(i, 1u << 28);
+  }
 
   auto segments = builder.getSegmentsForOutput();
-  EXPECT_EQ(1, segments.size());
-  EXPECT_LT(segments[0].size(), 16);  // quite small for such a big list!
+  ASSERT_EQ(1, segments.size());
 
   SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
-  auto root = reader.getRoot<test::TestAnyPointer>().getAnyPointerField();
-  EXPECT_NONFATAL_FAILURE(root.getAs<List<TestAllTypes>>());
+  auto root = reader.getRoot<test::TestAnyPointer>();
+  auto listListReader = root.getAnyPointerField().getAs<List<List<TestAllTypes>>>();
+  EXPECT_NONFATAL_FAILURE(listListReader[0]);
+  EXPECT_NONFATAL_FAILURE(listListReader[10]);
+
+  EXPECT_EQ(segments[0].size() - 1, root.totalSize().wordCount);
 }
 
 TEST(Encoding, Constants) {
@@ -1562,6 +1660,26 @@ TEST(Encoding, GlobalConstants) {
   }
 }
 
+TEST(Encoding, Embeds) {
+  {
+    kj::ArrayInputStream input(test::EMBEDDED_DATA);
+    PackedMessageReader reader(input);
+    checkTestMessage(reader.getRoot<TestAllTypes>());
+  }
+
+  {
+    MallocMessageBuilder builder;
+    auto root = builder.getRoot<TestAllTypes>();
+    initTestMessage(root);
+    kj::StringPtr text = test::EMBEDDED_TEXT;
+    EXPECT_EQ(kj::str(root, '\n').size(), text.size());
+  }
+
+  {
+    checkTestMessage(test::EMBEDDED_STRUCT);
+  }
+}
+
 TEST(Encoding, HasEmptyStruct) {
   MallocMessageBuilder message;
   auto root = message.initRoot<test::TestAnyPointer>();
@@ -1679,6 +1797,22 @@ TEST(Encoding, Generics) {
 
   initTestMessage(root.initBasic().initFoo());
   checkTestMessage(reader.getBasic().getFoo());
+
+  {
+    auto typed = root.getBasic();
+    test::TestGenerics<>::Reader generic = typed.asGeneric<>();
+    checkTestMessage(generic.getFoo().getAs<TestAllTypes>());
+    test::TestGenerics<TestAllTypes>::Reader halfGeneric = typed.asGeneric<TestAllTypes>();
+    checkTestMessage(halfGeneric.getFoo());
+  }
+
+  {
+    auto typed = root.getBasic().asReader();
+    test::TestGenerics<>::Reader generic = typed.asGeneric<>();
+    checkTestMessage(generic.getFoo().getAs<TestAllTypes>());
+    test::TestGenerics<TestAllTypes>::Reader halfGeneric = typed.asGeneric<TestAllTypes>();
+    checkTestMessage(halfGeneric.getFoo());
+  }
 
   initTestMessage(root.initInner().initFoo());
   checkTestMessage(reader.getInner().getFoo());

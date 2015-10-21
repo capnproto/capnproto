@@ -99,6 +99,7 @@ public:
       uint64_t id, schema::Brand::Reader brand) override;
   kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) override;
   kj::Maybe<ResolvedDecl> resolveImport(kj::StringPtr name) override;
+  kj::Maybe<kj::Array<const byte>> readEmbed(kj::StringPtr name) override;
   kj::Maybe<Type> resolveBootstrapType(schema::Type::Reader type, Schema scope) override;
 
 private:
@@ -232,6 +233,7 @@ public:
   kj::StringPtr getSourceName() { return parserModule.getSourceName(); }
 
   kj::Maybe<CompiledModule&> importRelative(kj::StringPtr importPath);
+  kj::Maybe<kj::Array<const byte>> embedRelative(kj::StringPtr importPath);
 
   Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
       getFileImportTable(Orphanage orphanage);
@@ -932,6 +934,10 @@ Compiler::Node::resolveImport(kj::StringPtr name) {
   }
 }
 
+kj::Maybe<kj::Array<const byte>> Compiler::Node::readEmbed(kj::StringPtr name) {
+  return module->embedRelative(name);
+}
+
 kj::Maybe<Type> Compiler::Node::resolveBootstrapType(schema::Type::Reader type, Schema scope) {
   // TODO(someday): Arguably should return null if the type or its dependencies are placeholders.
 
@@ -963,6 +969,10 @@ kj::Maybe<Compiler::CompiledModule&> Compiler::CompiledModule::importRelative(
       });
 }
 
+kj::Maybe<kj::Array<const byte>> Compiler::CompiledModule::embedRelative(kj::StringPtr embedPath) {
+  return parserModule.embedRelative(embedPath);
+}
+
 static void findImports(Expression::Reader exp, std::set<kj::StringPtr>& output) {
   switch (exp.which()) {
     case Expression::UNKNOWN:
@@ -973,6 +983,7 @@ static void findImports(Expression::Reader exp, std::set<kj::StringPtr>& output)
     case Expression::BINARY:
     case Expression::RELATIVE_NAME:
     case Expression::ABSOLUTE_NAME:
+    case Expression::EMBED:
       break;
 
     case Expression::IMPORT:
@@ -1068,6 +1079,11 @@ static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& outpu
 
 Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
     Compiler::CompiledModule::getFileImportTable(Orphanage orphanage) {
+  // Build a table of imports for CodeGeneratorRequest.RequestedFile.imports. Note that we only
+  // care about type imports, not constant value imports, since constant values (including default
+  // values) are already embedded in full in the schema. In other words, we only need the imports
+  // that would need to be #included in the generated code.
+
   std::set<kj::StringPtr> importNames;
   findImports(content.getReader().getRoot(), importNames);
 

@@ -111,7 +111,7 @@ struct List<T, Kind::PRIMITIVE> {
   public:
     typedef List<T> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(_::elementSizeForType<T>()) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -139,7 +139,7 @@ struct List<T, Kind::PRIMITIVE> {
   public:
     typedef List<T> Builds;
 
-    Builder() = delete;
+    inline Builder(): builder(_::elementSizeForType<T>()) {}
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
@@ -207,7 +207,7 @@ struct List<T, Kind::STRUCT> {
   public:
     typedef List<T> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(ElementSize::INLINE_COMPOSITE) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -235,7 +235,7 @@ struct List<T, Kind::STRUCT> {
   public:
     typedef List<T> Builds;
 
-    Builder() = delete;
+    inline Builder(): builder(ElementSize::INLINE_COMPOSITE) {}
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
@@ -272,6 +272,10 @@ struct List<T, Kind::STRUCT> {
       // If the source struct is larger than the target struct -- say, because the source was built
       // using a newer version of the schema that has additional fields -- it will be truncated,
       // losing data.
+      //
+      // Note: If you are trying to concatenate some lists, use Orphanage::newOrphanConcat() to
+      //   do it without losing any data in case the source lists come from a newer version of the
+      //   protocol. (Plus, it's easier to use anyhow.)
 
       KJ_IREQUIRE(index < size());
       builder.getStructElement(index * ELEMENTS).copyContentFrom(reader._reader);
@@ -325,7 +329,7 @@ struct List<List<T>, Kind::LIST> {
   public:
     typedef List<List<T>> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(ElementSize::POINTER) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -354,7 +358,7 @@ struct List<List<T>, Kind::LIST> {
   public:
     typedef List<List<T>> Builds;
 
-    Builder() = delete;
+    inline Builder(): builder(ElementSize::POINTER) {}
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
@@ -386,7 +390,7 @@ struct List<List<T>, Kind::LIST> {
     }
     inline void adopt(uint index, Orphan<T>&& value) {
       KJ_IREQUIRE(index < size());
-      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value));
+      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value.builder));
     }
     inline Orphan<T> disown(uint index) {
       KJ_IREQUIRE(index < size());
@@ -434,7 +438,7 @@ struct List<T, Kind::BLOB> {
   public:
     typedef List<T> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(ElementSize::POINTER) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -462,7 +466,7 @@ struct List<T, Kind::BLOB> {
   public:
     typedef List<T> Builds;
 
-    Builder() = delete;
+    inline Builder(): builder(ElementSize::POINTER) {}
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
@@ -484,7 +488,7 @@ struct List<T, Kind::BLOB> {
     }
     inline void adopt(uint index, Orphan<T>&& value) {
       KJ_IREQUIRE(index < size());
-      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value));
+      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value.builder));
     }
     inline Orphan<T> disown(uint index) {
       KJ_IREQUIRE(index < size());

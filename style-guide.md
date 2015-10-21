@@ -73,7 +73,7 @@ Be careful when writing complicated destructors. If a destructor performs multip
 
 Every object has an "owner". The owner may be another object, or it may be a stack frame (which is in turn owned by its parent stack frame, and so on up to the top frame, which is owned by the thread, which itself is an object which is owned by something).
 
-The owner decides when to destroy an object. If the owner itself is destroyed, everything it owns must be transtiviley destroyed. This should be accomplished through RAII style.
+The owner decides when to destroy an object. If the owner itself is destroyed, everything it owns must be transitively destroyed. This should be accomplished through RAII style.
 
 The owner specifies the lifetime of the object and how the object may be accessed. This specification may be through documented convention or actually enforced through the type system; the latter is preferred when possible.
 
@@ -109,7 +109,7 @@ Keep in mind that atomic (thread-safe) reference counting can be extremely slow.
 
 A "singleton" is any mutable object or value that is globally accessible. "Globally accessible" means that the object is declared as a global variable or static member variable, or that the object can be found by following pointers from such variables.
 
-Never use singletons. Singletons cause invisible and unexpected dependencies between components of your software that appear unrelated. Worse, the assumption that "there should only be one of this object per process" is almost always wrong, but its wrongness only becomes apparent after so much code uses the singleton that it is infeasible to change. Singleton interfaces ofter turn into unusuable monstrosities in an attempt to work around the fact that they should never have been a singleton in the first place.
+Never use singletons. Singletons cause invisible and unexpected dependencies between components of your software that appear unrelated. Worse, the assumption that "there should only be one of this object per process" is almost always wrong, but its wrongness only becomes apparent after so much code uses the singleton that it is infeasible to change. Singleton interfaces ofter turn into unusable monstrosities in an attempt to work around the fact that they should never have been a singleton in the first place.
 
 See ["Singletons Considered Harmful"](http://www.object-oriented-security.org/lets-argue/singletons) for a complete discussion.
 
@@ -124,7 +124,7 @@ This global registry is a singleton, and has many of the same problems as single
 
 #### What to do instead
 
-High-level code (such as your `main()` function) should expilcitly initialize the components the program needs. If component Foo depends on component Bar, then Foo's constructor should take a pointer to Bar as a parameter; the high-level code can then point each component at its dependencies explicitly.
+High-level code (such as your `main()` function) should explicitly initialize the components the program needs. If component Foo depends on component Bar, then Foo's constructor should take a pointer to Bar as a parameter; the high-level code can then point each component at its dependencies explicitly.
 
 For example, instead of a global registry, have high-level code construct a registry object and explicitly call some `register()` method to register each component that should be available through it. This way, when you read your `main()` function it's easy to see what components your program is using.
 
@@ -152,7 +152,7 @@ For example, exceptions may indicate conditions like:
   * A network connection was reset.
   * An optimistic transaction was aborted due to concurrent modification.
 * Logistics of physical computation:
-  * The system's resources are exhuasted (e.g. out of memory, out of disk space).
+  * The system's resources are exhausted (e.g. out of memory, out of disk space).
   * The system is overloaded and must reject some requests to avoid long queues.
 
 #### Business logic should never catch
@@ -166,7 +166,7 @@ Note that with this exception philosophy, Java-style "checked exceptions" (excep
 In framework and logistical code, you may catch exceptions and try to handle them. Given the nature of exceptions, though, there are only a few things that are reasonable to do when receiving an exception:
 
 * On network disconnect or transaction failures, back up and start over from the beginning (restore connections and state, redo operations).
-* On resources exhuasted / overloaded, retry again later, with exponential back-off.
+* On resources exhausted / overloaded, retry again later, with exponential back-off.
 * On unimplemented methods, retry with a different implementation strategy, if there is one.
 * When no better option is available, report the problem to a human (the user and/or the developer).
 
@@ -270,7 +270,7 @@ KJ requires C++11. Application code (not used as a library) may consider requiri
 * Always use `kj::ArrayPtr<T>` rather than `T*` to point to an array.
 * Always use `kj::StringPtr` rather than `const char*` to point to a NUL-terminated string.
 * Always use `kj::Maybe<T&>` rather than `T*` when a pointer can be null. This forces the user to check for null-ness.
-* In other cases, prefer references over pointers. Note, though, that members of an assignable type cannot be references, so you'll need to use poniters in that case (darn).
+* In other cases, prefer references over pointers. Note, though, that members of an assignable type cannot be references, so you'll need to use pointers in that case (darn).
 
 **Rationale:** There is an argument that says that references should always be const and pointers mutable, because then when you see `foo(&bar)` you know that the function modifies `bar`. This is a nice theory, but in practice real C++ code is rarely so consistent that you can use this as a real signal. We prefer references because they make it unambiguous that the value cannot be null.
 
@@ -292,7 +292,7 @@ Interfaces should NOT declare a destructor, because:
 
 Multiple inheritance is allowed and encouraged, keeping in mind that you are usually inheriting interfaces.
 
-You should think carefully about whether to use virtual inheritance; it's not often needed, and it is relatively inefficient, but in complex inheritance heirarchies it becomes critical.
+You should think carefully about whether to use virtual inheritance; it's not often needed, and it is relatively inefficient, but in complex inheritance hierarchies it becomes critical.
 
 Implementation inheritance (that is, inheriting an implementation class) is allowed as a way to compose classes without requiring extra allocations. For example, Cap'n Proto's `capnp::InputStreamMessageReader` implements the `capnp::MessageReader` interface by reading from a `kj::InputStream`, which is itself an interface. One implementation of `kj::InputStream` is `kj::FdInputStream`, which reads from a unix file descriptor. As a convenience, Cap'n Proto defines `capnp::StreamFdMessageReader` which multiply-inherits `capnp::InputStreamMessageReader` and `kj::FdInputStream` -- that is, it inherits two implementations, and even inherits the latter privately. Many style guides would consider this taboo. The benefit, though, is that people can declare this composed class on the stack as one unit, with no heap allocation, and end up with something that they can directly treat as a `capnp::MessageReader`; any other solution would lose one of these benefits.
 
@@ -304,7 +304,7 @@ Never use `throw` explicitly. Almost all exceptions should originate from the `K
 
 Never declare anything `noexcept`. As explained in the philosophy section, whether you like it or not, bugs can happen anywhere and therefore exceptions can happen anywhere. `noexcept` causes the process to abort on exceptions. Aborting is _never_ the right answer.
 
-Explicit destructors must always be declared `noexcept(false)`, to work around C++11's regretable decision that destructors should be `noexcept` by default. In destructors, always use `kj::UnwindDetector` or make all your asserts recoverable in order to ensure that an exception is not thrown during unwind.
+Explicit destructors must always be declared `noexcept(false)`, to work around C++11's regrettable decision that destructors should be `noexcept` by default. In destructors, always use `kj::UnwindDetector` or make all your asserts recoverable in order to ensure that an exception is not thrown during unwind.
 
 Do not fret too much about recovering into a perfectly consistent state after every exception. That's not the point. The point is to be able to recover at all -- to _improve_ reliability, but not to make it perfect. So, write your code to do a reasonable thing in most cases.
 
@@ -378,13 +378,19 @@ The KJ and Cap'n Proto libraries are designed to function correctly when compile
 
 We do NOT recommend disabling RTTI in your own code.
 
+### Lambdas
+
+Lamba capture lists must never use `=` to specify "capture all by value", because this makes it hard to review the capture list for possible lifetime issues.
+
+Capture lists *may* use `&` ("capture all by reference") but *only* in cases where it is known that the lambda will not outlive the current stack frame. In fact, they generally *should* use `&` in this case, to make clear that there are no lifetime issues to think about.
+
 ### Use of Standard libraries
 
 #### C++ Standard Library
 
 The C++ standard library is old and full of a lot of cruft. Many APIs are designed in pre-C++11 styles that are no longer ideal. Mistakes like giving copy constructors to objects that own heap space (because in the absence of move semantics, it was needed for usability) and atomically-reference-counted strings (intended as an optimization to avoid so much heap copying, but actually a pessimization) are now baked into the library and cannot change. The `iostream` library was designed before anyone knew how to write good C++ code and is absolutely awful by today's standards. Some parts of the library, such as `<chrono>`, are over-engineered, designed by committees more interested in theoretical perfection than practicality. To add insult to injury, the library's naming style does not distinguish types from values.
 
-For these resaons and others, KJ aims to be a replacement for the C++ standard libraries.
+For these reasons and others, KJ aims to be a replacement for the C++ standard libraries.
 
 It is not there yet. As of this writing, the biggest missing piece is that KJ provides no implementation of maps or sets, nor a `sort()` function.
 
@@ -411,8 +417,8 @@ Use the following warning settings with Clang or GCC:
 
 * `-Wall -Wextra`: Enable most warnings.
 * `-Wglobal-constructors`: (Clang-only) This catches global variables with constructors, which KJ style disallows (see above). You will, however, want to disable this warning in tests, since test frameworks use global constructors and are excepted from the style rule.
-* `-Wno-sign-compare`: While comparison between signed and unsigned values could be a serious bug, we find that in practice this warning is almost always spurrious.
-* `-Wno-unused-parameter`: This warning is always spurrious. I have never seen it find a real bug. Worse, it encourages people to delete parameter names which harms readability.
+* `-Wno-sign-compare`: While comparison between signed and unsigned values could be a serious bug, we find that in practice this warning is almost always spurious.
+* `-Wno-unused-parameter`: This warning is always spurious. I have never seen it find a real bug. Worse, it encourages people to delete parameter names which harms readability.
 
 For development builds, `-Werror` should also be enabled. However, this should not be on by default in open source code as not everyone uses the same compiler or compiler version and different compiler versions often produce different warnings.
 
@@ -436,7 +442,7 @@ As a code reviewer, when you see a violation of formatting rules, think carefull
 
 * Type names: `TitleCase`
 * Variable, member, function, and method names: `camelCase`
-* Constant and enumerant names: `CAPTIAL_WITH_UNDERSCORES`
+* Constant and enumerant names: `CAPITAL_WITH_UNDERSCORES`
 * Macro names: `CAPITAL_WITH_UNDERSCORES`, with an appropriate project-specific prefix like `KJ_` or `CAPNP_`.
 * Namespaces: `oneword`. Namespaces should be kept short, because you'll have to type them a lot. The name of KJ itself was chosen for the sole purpose of making the namespace easy to type (while still being sufficiently unique). Use a nested namespace called `_` to contain package-private declarations.
 * Files: `module-name.c++`, `module-name.h`, `module-name-test.c++`
@@ -457,10 +463,10 @@ There has also never been any agreement on C++ file extensions, for some reason.
 * Do not place a space between a function name and an open parenthesis, e.g.: `foo(bar)`
 * Place an opening brace at the end of the statement which initiates the block, not on its own line.
 * Place a closing brace on a new line indented the same as the parent block. If there is post-brace code related to the block (e.g. `else` or `while`), place it on the same line as the closing brace.
-* Always place braces around a block *unless* the block is so short that it can acutally go on the same line as the introductory `if` or `while`, e.g.: `if (done) return;`.
+* Always place braces around a block *unless* the block is so short that it can actually go on the same line as the introductory `if` or `while`, e.g.: `if (done) return;`.
 * `case` statements are indented within the `switch`, and their following blocks are **further** indented (so the actual statements in a case are indented four spaces more than the `switch`).
 * `public:`, `private:`, and `protected:` are reverse-indented by one stop.
-* Statements inside a `namespace` are **not** indendent unless the namespace is a short block that is just forward-declaring things at the top of a file.
+* Statements inside a `namespace` are **not** indented unless the namespace is a short block that is just forward-declaring things at the top of a file.
 * Set your editor to strip trailing whitespace on save, otherwise other people who use this setting will see spurious diffs when they edit a file after you.
 
 

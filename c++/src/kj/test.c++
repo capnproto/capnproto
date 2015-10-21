@@ -59,9 +59,11 @@ namespace _ {  // private
 
 bool hasSubstring(kj::StringPtr haystack, kj::StringPtr needle) {
   // TODO(perf): This is not the best algorithm for substring matching.
-  for (size_t i = 0; i <= haystack.size() - needle.size(); i++) {
-    if (haystack.slice(i).startsWith(needle)) {
-      return true;
+  if (needle.size() <= haystack.size()) {
+    for (size_t i = 0; i <= haystack.size() - needle.size(); i++) {
+      if (haystack.slice(i).startsWith(needle)) {
+        return true;
+      }
     }
   }
   return false;
@@ -181,68 +183,6 @@ void GlobFilter::applyState(char c, int state) {
 
 namespace {
 
-void crashHandler(int signo, siginfo_t* info, void* context) {
-  void* traceSpace[32];
-  auto trace = getStackTrace(traceSpace);
-
-  if (trace.size() >= 3) {
-    // Remove getStackTrace(), crashHandler() and signal trampoline from trace.
-    trace = trace.slice(3, trace.size());
-  }
-
-  auto message = kj::str("*** Received signal #", signo, ": ", strsignal(signo),
-                         "\nstack: ", strArray(trace, " "),
-                         stringifyStackTrace(trace), '\n');
-
-  FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
-  _exit(1);
-}
-
-void registerCrashHandler() {
-  // Set up alternate signal stack so that stack overflows can be handled.
-  stack_t stack;
-  memset(&stack, 0, sizeof(stack));
-
-#ifndef MAP_ANONYMOUS
-#define MAP_ANONYMOUS MAP_ANON
-#endif
-#ifndef MAP_GROWSDOWN
-#define MAP_GROWSDOWN 0
-#endif
-
-  stack.ss_size = 65536;
-  // Note: ss_sp is char* on FreeBSD, void* on Linux and OSX.
-  stack.ss_sp = reinterpret_cast<char*>(mmap(
-      nullptr, stack.ss_size, PROT_READ | PROT_WRITE,
-      MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN, -1, 0));
-  KJ_SYSCALL(sigaltstack(&stack, nullptr));
-
-  // Catch all relevant signals.
-  struct sigaction action;
-  memset(&action, 0, sizeof(action));
-
-  action.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_NODEFER | SA_RESETHAND;
-  action.sa_sigaction = &crashHandler;
-
-  // Dump stack on common "crash" signals.
-  KJ_SYSCALL(sigaction(SIGSEGV, &action, nullptr));
-  KJ_SYSCALL(sigaction(SIGBUS, &action, nullptr));
-  KJ_SYSCALL(sigaction(SIGFPE, &action, nullptr));
-  KJ_SYSCALL(sigaction(SIGABRT, &action, nullptr));
-
-  // Dump stack on unimplemented syscalls -- useful in seccomp sandboxes.
-  KJ_SYSCALL(sigaction(SIGSYS, &action, nullptr));
-
-  // Dump stack on keyboard interrupt -- useful for infinite loops.
-  KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
-}
-
-}  // namespace
-
-// =======================================================================================
-
-namespace {
-
 class TestExceptionCallback: public ExceptionCallback {
 public:
   TestExceptionCallback(ProcessContext& context): context(context) {}
@@ -252,7 +192,7 @@ public:
   void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                   String&& text) override {
     void* traceSpace[32];
-    auto trace = getStackTrace(traceSpace);
+    auto trace = getStackTrace(traceSpace, 2);
 
     if (text.size() == 0) {
       text = kj::heapString("expectation failed");
@@ -278,9 +218,7 @@ private:
 class TestRunner {
 public:
   explicit TestRunner(ProcessContext& context)
-      : context(context), useColor(isatty(STDOUT_FILENO)) {
-    registerCrashHandler();
-  }
+      : context(context), useColor(isatty(STDOUT_FILENO)) {}
 
   MainFunc getMain() {
     return MainBuilder(context, "KJ Test Runner (version not applicable)",
@@ -319,6 +257,7 @@ public:
           }
         } else if (*end == '\0') {
           parsedRange = true;
+          maxLine = minLine;
         }
       }
 

@@ -246,9 +246,84 @@ private:
 
 // -------------------------------------------------------------------
 
+class PtmfHelper {
+  // This class is a private helper for GetFunctorStartAddress. The class represents the internal
+  // representation of a pointer-to-member-function.
+
+  template <typename... ParamTypes>
+  friend struct GetFunctorStartAddress;
+
+#if __GNUG__
+  void* ptr;
+  ptrdiff_t adj;
+  // Layout of a pointer-to-member-function used by GCC and compatible compilers.
+#else
+#error "TODO(port): PTMF instruction address extraction"
+#endif
+
+#define BODY \
+    PtmfHelper result; \
+    static_assert(sizeof(p) == sizeof(result), "unknown ptmf layout"); \
+    memcpy(&result, &p, sizeof(result)); \
+    return result
+
+  template <typename R, typename C, typename... P, typename F>
+  static PtmfHelper from(F p) { BODY; }
+  // Create a PtmfHelper from some arbitrary pointer-to-member-function which is not
+  // overloaded nor a template. In this case the compiler is able to deduce the full function
+  // signature directly given the name since there is only one function with that name.
+
+  template <typename R, typename C, typename... P>
+  static PtmfHelper from(R (C::*p)(NoInfer<P>...)) { BODY; }
+  template <typename R, typename C, typename... P>
+  static PtmfHelper from(R (C::*p)(NoInfer<P>...) const) { BODY; }
+  // Create a PtmfHelper from some poniter-to-member-function which is a template. In this case
+  // the function must match exactly the containing type C, return type R, and parameter types P...
+  // GetFunctorStartAddress normally specifies exactly the correct C and R, but can only make a
+  // guess at P. Luckily, if the function parameters are template parameters then it's not
+  // necessary to be precise about P.
+#undef BODY
+
+  void* apply(void* obj) {
+    ptrdiff_t voff = (ptrdiff_t)ptr;
+    if (voff & 1) {
+      voff &= ~1;
+      return *(void**)(*(char**)obj + voff);
+    } else {
+      return ptr;
+    }
+  }
+};
+
+template <typename... ParamTypes>
+struct GetFunctorStartAddress {
+  // Given a functor (any object defining operator()), return the start address of the function,
+  // suitable for passing to addr2line to obtain a source file/line for debugging purposes.
+  //
+  // This turns out to be incredibly hard to implement in the presence of overloaded or templated
+  // functors. Therefore, we impose these specific restrictions, specific to our use case:
+  // - Overloading is not allowed, but templating is. (Generally we only intend to support lambdas
+  //   anyway.)
+  // - The template parameters to GetFunctorStartAddress specify a hint as to the expected
+  //   parameter types. If the functor is templated, its parameters must match exactly these types.
+  //   (If it's not templated, ParamTypes are ignored.)
+
+  template <typename Func>
+  static void* apply(Func&& func) {
+    typedef decltype(func(instance<ParamTypes>()...)) ReturnType;
+    return PtmfHelper::from<ReturnType, Decay<Func>, ParamTypes...>(
+        &Decay<Func>::operator()).apply(&func);
+  }
+};
+
+template <>
+struct GetFunctorStartAddress<Void&&>: public GetFunctorStartAddress<> {};
+// Hack for TransformPromiseNode use case: an input type of `Void` indicates that the function
+// actually has no parameters.
+
 class TransformPromiseNodeBase: public PromiseNode {
 public:
-  TransformPromiseNodeBase(Own<PromiseNode>&& dependency);
+  TransformPromiseNodeBase(Own<PromiseNode>&& dependency, void* continuationTracePtr);
 
   void onReady(Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
@@ -256,6 +331,7 @@ public:
 
 private:
   Own<PromiseNode> dependency;
+  void* continuationTracePtr;
 
   void dropDependency();
   void getDepResult(ExceptionOrValue& output);
@@ -273,7 +349,8 @@ class TransformPromiseNode final: public TransformPromiseNodeBase {
 
 public:
   TransformPromiseNode(Own<PromiseNode>&& dependency, Func&& func, ErrorFunc&& errorHandler)
-      : TransformPromiseNodeBase(kj::mv(dependency)),
+      : TransformPromiseNodeBase(kj::mv(dependency),
+            GetFunctorStartAddress<DepT&&>::apply(func)),
         func(kj::fwd<Func>(func)), errorHandler(kj::fwd<ErrorFunc>(errorHandler)) {}
 
   ~TransformPromiseNode() noexcept(false) {
@@ -431,7 +508,7 @@ private:
   State state;
 
   Own<PromiseNode> inner;
-  // In PRE_STEP1 / STEP1, a PromiseNode for a Promise<T>.
+  // In STEP1, a PromiseNode for a Promise<T>.
   // In STEP2, a PromiseNode for a T.
 
   Event* onReadyEvent = nullptr;

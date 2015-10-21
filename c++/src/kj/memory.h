@@ -165,10 +165,12 @@ public:
     return result;
   }
 
-  inline T* operator->() { return ptr; }
-  inline const T* operator->() const { return ptr; }
-  inline T& operator*() { return *ptr; }
-  inline const T& operator*() const { return *ptr; }
+#define NULLCHECK KJ_IREQUIRE(ptr != nullptr, "null Own<> dereference")
+  inline T* operator->() { NULLCHECK; return ptr; }
+  inline const T* operator->() const { NULLCHECK; return ptr; }
+  inline T& operator*() { NULLCHECK; return *ptr; }
+  inline const T& operator*() const { NULLCHECK; return *ptr; }
+#undef NULLCHECK
   inline T* get() { return ptr; }
   inline const T* get() const { return ptr; }
   inline operator T*() { return ptr; }
@@ -269,7 +271,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) -> Maybe<decltype(f(instance<Own<T>&>()))> {
+  auto map(Func&& f) & -> Maybe<decltype(f(instance<Own<T>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -278,7 +280,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const -> Maybe<decltype(f(instance<const Own<T>&>()))> {
+  auto map(Func&& f) const & -> Maybe<decltype(f(instance<const Own<T>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -286,8 +288,23 @@ public:
     }
   }
 
-  // TODO(someday):  Once it's safe to require GCC 4.8, use ref qualifiers to provide a version of
-  //   map() that uses move semantics if *this is an rvalue.
+  template <typename Func>
+  auto map(Func&& f) && -> Maybe<decltype(f(instance<Own<T>&&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(kj::mv(ptr));
+    }
+  }
+
+  template <typename Func>
+  auto map(Func&& f) const && -> Maybe<decltype(f(instance<const Own<T>&&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(kj::mv(ptr));
+    }
+  }
 
 private:
   Own<T> ptr;

@@ -38,6 +38,25 @@ template <typename SturdyRefObjectId>
 class SturdyRefRestorer;
 
 template <typename VatId>
+class BootstrapFactory: public _::BootstrapFactoryBase {
+  // Interface that constructs per-client bootstrap interfaces. Use this if you want each client
+  // who connects to see a different bootstrap interface based on their (authenticated) VatId.
+  // This allows an application to bootstrap off of the authentication performed at the VatNetwork
+  // level. (Typically VatId is some sort of public key.)
+  //
+  // This is only useful for multi-party networks. For TwoPartyVatNetwork, there's no reason to
+  // use a BootstrapFactory; just specify a single bootstrap capability in this case.
+
+public:
+  virtual Capability::Client createFor(typename VatId::Reader clientId) = 0;
+  // Create a bootstrap capability appropriate for exposing to the given client. VatNetwork will
+  // have authenticated the client VatId before this is called.
+
+private:
+  Capability::Client baseCreateFor(AnyStruct::Reader clientId) override;
+};
+
+template <typename VatId>
 class RpcSystem: public _::RpcSystemBase {
   // Represents the RPC system, which is the portal to objects available on the network.
   //
@@ -58,6 +77,13 @@ public:
   RpcSystem(
       VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
       kj::Maybe<Capability::Client> bootstrapInterface,
+      kj::Maybe<RealmGateway<>::Client> gateway = nullptr);
+
+  template <typename ProvisionId, typename RecipientId,
+            typename ThirdPartyCapId, typename JoinResult>
+  RpcSystem(
+      VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+      BootstrapFactory<VatId>& bootstrapFactory,
       kj::Maybe<RealmGateway<>::Client> gateway = nullptr);
 
   template <typename ProvisionId, typename RecipientId,
@@ -114,6 +140,25 @@ RpcSystem<VatId> makeRpcServer(
 // Make an RPC server for a VatNetwork that resides in a different realm from the application.
 // The given RealmGateway is used to translate SturdyRefs between the app's ("internal") format
 // and the network's ("external") format.
+
+template <typename VatId, typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult>
+RpcSystem<VatId> makeRpcServer(
+    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    BootstrapFactory<VatId>& bootstrapFactory);
+// Make an RPC server that can serve different bootstrap interfaces to different clients via a
+// BootstrapInterface.
+
+template <typename VatId, typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult, typename RealmGatewayClient,
+          typename InternalRef = _::InternalRefFromRealmGatewayClient<RealmGatewayClient>,
+          typename ExternalRef = _::ExternalRefFromRealmGatewayClient<RealmGatewayClient>>
+RpcSystem<VatId> makeRpcServer(
+    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    BootstrapFactory<VatId>& bootstrapFactory, RealmGatewayClient gateway);
+// Make an RPC server that can serve different bootstrap interfaces to different clients via a
+// BootstrapInterface and communicates with a different realm than the application is in via a
+// RealmGateway.
 
 template <typename VatId, typename LocalSturdyRefObjectId,
           typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
@@ -198,9 +243,6 @@ public:
   // Get the message body, which the caller may fill in any way it wants.  (The standard RPC
   // implementation initializes it as a Message as defined in rpc.capnp.)
 
-  virtual kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() = 0;
-  // Calls getCapTable() on the underlying MessageBuilder.
-
   virtual void send() = 0;
   // Send the message, or at least put it in a queue to be sent later.  Note that the builder
   // returned by `getBody()` remains valid at least until the `OutgoingRpcMessage` is destroyed.
@@ -213,9 +255,6 @@ public:
   virtual AnyPointer::Reader getBody() = 0;
   // Get the message body, to be interpreted by the caller.  (The standard RPC implementation
   // interprets it as a Message as defined in rpc.capnp.)
-
-  virtual void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>>&& capTable) = 0;
-  // Calls initCapTable() on the underlying MessageReader.
 };
 
 template <typename VatId, typename ProvisionId, typename RecipientId,
@@ -264,6 +303,11 @@ public:
   public:
     // Level 0 features ----------------------------------------------
 
+    virtual typename VatId::Reader getPeerVatId() = 0;
+    // Returns the connected vat's authenticated VatId. It is the VatNetwork's responsibility to
+    // authenticate this, so that the caller can be assured that they are really talking to the
+    // identified vat and not an imposter.
+
     virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
     // Allocate a new message to be sent on this connection.
     //
@@ -278,6 +322,9 @@ public:
     virtual kj::Promise<void> shutdown() KJ_WARN_UNUSED_RESULT = 0;
     // Waits until all outgoing messages have been sent, then shuts down the outgoing stream. The
     // returned promise resolves after shutdown is complete.
+
+  private:
+    AnyStruct::Reader baseGetPeerVatId() override;
   };
 
   // Level 0 features ------------------------------------------------
@@ -300,7 +347,7 @@ public:
 
 private:
   kj::Maybe<kj::Own<_::VatNetworkBase::Connection>>
-      baseConnect(_::StructReader hostId) override final;
+      baseConnect(AnyStruct::Reader hostId) override final;
   kj::Promise<kj::Own<_::VatNetworkBase::Connection>> baseAccept() override final;
 };
 
@@ -310,12 +357,17 @@ private:
 // ***************************************************************************************
 // =======================================================================================
 
+template <typename VatId>
+Capability::Client BootstrapFactory<VatId>::baseCreateFor(AnyStruct::Reader clientId) {
+  return createFor(clientId.as<VatId>());
+}
+
 template <typename SturdyRef, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
 kj::Maybe<kj::Own<_::VatNetworkBase::Connection>>
     VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::
-    baseConnect(_::StructReader ref) {
-  auto maybe = connect(typename SturdyRef::Reader(ref));
+    baseConnect(AnyStruct::Reader ref) {
+  auto maybe = connect(ref.as<SturdyRef>());
   return maybe.map([](kj::Own<Connection>& conn) -> kj::Own<_::VatNetworkBase::Connection> {
     return kj::mv(conn);
   });
@@ -329,6 +381,14 @@ kj::Promise<kj::Own<_::VatNetworkBase::Connection>>
       [](kj::Own<Connection>&& connection) -> kj::Own<_::VatNetworkBase::Connection> {
     return kj::mv(connection);
   });
+}
+
+template <typename SturdyRef, typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult>
+AnyStruct::Reader VatNetwork<
+    SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::
+    Connection::baseGetPeerVatId() {
+  return getPeerVatId();
 }
 
 template <typename SturdyRef>
@@ -347,6 +407,15 @@ RpcSystem<VatId>::RpcSystem(
       kj::Maybe<Capability::Client> bootstrap,
       kj::Maybe<RealmGateway<>::Client> gateway)
     : _::RpcSystemBase(network, kj::mv(bootstrap), kj::mv(gateway)) {}
+
+template <typename VatId>
+template <typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult>
+RpcSystem<VatId>::RpcSystem(
+      VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+      BootstrapFactory<VatId>& bootstrapFactory,
+      kj::Maybe<RealmGateway<>::Client> gateway)
+    : _::RpcSystemBase(network, bootstrapFactory, kj::mv(gateway)) {}
 
 template <typename VatId>
 template <typename ProvisionId, typename RecipientId,
@@ -384,6 +453,23 @@ RpcSystem<VatId> makeRpcServer(
     Capability::Client bootstrapInterface, RealmGatewayClient gateway) {
   return RpcSystem<VatId>(network, kj::mv(bootstrapInterface),
       gateway.template castAs<RealmGateway<>>());
+}
+
+template <typename VatId, typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult>
+RpcSystem<VatId> makeRpcServer(
+    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    BootstrapFactory<VatId>& bootstrapFactory) {
+  return RpcSystem<VatId>(network, bootstrapFactory);
+}
+
+template <typename VatId, typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult,
+          typename RealmGatewayClient, typename InternalRef, typename ExternalRef>
+RpcSystem<VatId> makeRpcServer(
+    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    BootstrapFactory<VatId>& bootstrapFactory, RealmGatewayClient gateway) {
+  return RpcSystem<VatId>(network, bootstrapFactory, gateway.template castAs<RealmGateway<>>());
 }
 
 template <typename VatId, typename LocalSturdyRefObjectId,

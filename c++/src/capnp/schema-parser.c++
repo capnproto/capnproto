@@ -110,6 +110,14 @@ public:
     }
   }
 
+  kj::Maybe<kj::Array<const byte>> embedRelative(kj::StringPtr embedPath) override {
+    KJ_IF_MAYBE(importedFile, file->import(embedPath)) {
+      return importedFile->get()->readContent().releaseAsBytes();
+    } else {
+      return nullptr;
+    }
+  }
+
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
     auto& lines = lineBreaks.get(
         [](kj::SpaceFor<kj::Vector<uint>>& space) {

@@ -108,6 +108,9 @@ dist_includecapnp_DATA = $(public_capnpc_inputs)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = capnp.pc capnp-rpc.pc
 
+noinst_HEADERS = \
+  src/kj/miniposix.h
+
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
   src/kj/units.h                                               \
@@ -120,7 +123,6 @@ includekj_HEADERS =                                            \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
   src/kj/arena.h                                               \
-  src/kj/miniposix.h                                           \
   src/kj/io.h                                                  \
   src/kj/tuple.h                                               \
   src/kj/one-of.h                                              \
@@ -159,6 +161,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/any.h                                              \
   src/capnp/message.h                                          \
   src/capnp/capability.h                                       \
+  src/capnp/membrane.h                                         \
   src/capnp/schema.capnp.h                                     \
   src/capnp/schema-lite.h                                      \
   src/capnp/schema.h                                           \
@@ -169,6 +172,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/serialize.h                                        \
   src/capnp/serialize-async.h                                  \
   src/capnp/serialize-packed.h                                 \
+  src/capnp/serialize-text.h                                   \
   src/capnp/pointer-helpers.h                                  \
   src/capnp/generated-header-support.h                         \
   src/capnp/rpc-prelude.h                                      \
@@ -187,7 +191,7 @@ endif
 
 # Don't include security release in soname -- we want to replace old binaries
 # in this case.
-SO_VERSION = $(shell echo $(VERSION) | sed -re 's/^([0-9]+[.][0-9]+[.][0-9]+)([.][0-9]+)?(-.*)?$$/\1\3/g')
+SO_VERSION = $(shell echo $(VERSION) | sed -e 's/^\([0-9]*[.][0-9]*[.][0-9]*\)\([.][0-9]*\)*\(-.*\)*$$/\1\3/g')
 
 libkj_la_LIBADD = $(PTHREAD_LIBS)
 libkj_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
@@ -253,6 +257,7 @@ libcapnp_rpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/serialize-async.c++                                \
   src/capnp/capability.c++                                     \
+  src/capnp/membrane.c++                                       \
   src/capnp/dynamic-capability.c++                             \
   src/capnp/rpc.c++                                            \
   src/capnp/rpc.capnp.c++                                      \
@@ -280,7 +285,8 @@ libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/node-translator.c++                       \
   src/capnp/compiler/compiler.h                                \
   src/capnp/compiler/compiler.c++                              \
-  src/capnp/schema-parser.c++
+  src/capnp/schema-parser.c++                                  \
+  src/capnp/serialize-text.c++
 
 bin_PROGRAMS = capnp capnpc-capnp capnpc-c++
 
@@ -371,11 +377,14 @@ heavy_tests =                                                  \
   src/kj/parse/char-test.c++                                   \
   src/kj/std/iostream-test.c++                                 \
   src/capnp/capability-test.c++                                \
+  src/capnp/membrane-test.c++                                  \
   src/capnp/schema-test.c++                                    \
   src/capnp/schema-loader-test.c++                             \
+  src/capnp/schema-parser-test.c++                             \
   src/capnp/dynamic-test.c++                                   \
   src/capnp/stringify-test.c++                                 \
   src/capnp/serialize-async-test.c++                           \
+  src/capnp/serialize-text-test.c++                            \
   src/capnp/rpc-test.c++                                       \
   src/capnp/rpc-twoparty-test.c++                              \
   src/capnp/ez-rpc-test.c++                                    \

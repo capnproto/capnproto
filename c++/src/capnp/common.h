@@ -33,6 +33,7 @@
 #include <kj/units.h>
 #include <inttypes.h>
 #include <kj/string.h>
+#include <kj/memory.h>
 
 namespace capnp {
 
@@ -84,6 +85,13 @@ enum class Kind: uint8_t {
   // special handling. This includes types like AnyPointer, Dynamic*, etc.
 };
 
+enum class Style: uint8_t {
+  PRIMITIVE,
+  POINTER,      // other than struct
+  STRUCT,
+  CAPABILITY
+};
+
 enum class ElementSize: uint8_t {
   // Size of a list element.
 
@@ -97,6 +105,17 @@ enum class ElementSize: uint8_t {
   POINTER = 6,
 
   INLINE_COMPOSITE = 7
+};
+
+enum class PointerType {
+  // Various wire types a pointer field can take
+
+  NULL_,
+  // Should be NULL, but that's #defined in stddef.h
+
+  STRUCT,
+  LIST,
+  CAPABILITY
 };
 
 namespace schemas {
@@ -158,6 +177,13 @@ inline constexpr Kind kind() {
 
 #define CAPNP_KIND(T) ::capnp::kind<T>()
 // Use this macro rather than kind<T>() in any code which must work in lite mode.
+
+template <typename T, Kind k = kind<T>()>
+inline constexpr Style style() {
+  return k == Kind::PRIMITIVE || k == Kind::ENUM ? Style::PRIMITIVE
+       : k == Kind::STRUCT ? Style::STRUCT
+       : k == Kind::INTERFACE ? Style::CAPABILITY : Style::POINTER;
+}
 
 #endif  // CAPNP_LITE, else
 
@@ -228,6 +254,27 @@ using FromClient = typename kj::Decay<T>::Calls;
 template <typename T>
 using FromServer = typename kj::Decay<T>::Serves;
 // FromBuilder<MyType::Server> = MyType (for any Cap'n Proto interface type).
+
+struct FromAny_ {
+  template <typename T, typename X = FromReader<T>> static X apply(T*, int);
+  template <typename T, typename X = FromBuilder<T>> static X apply(T*, char);
+  template <typename T, typename X = FromPipeline<T>> static X apply(T*, long);
+  // note that ::Client is covered by FromReader
+  template <typename T, typename X = FromServer<T>> static X apply(kj::Own<T>*, short);
+  template <typename T, typename = kj::EnableIf<style<T>() == Style::PRIMITIVE>>
+      static T apply(T*, unsigned int);
+};
+
+template <typename T>
+using FromAny = kj::Decay<decltype(FromAny_::apply(kj::instance<T*>(), 0))>;
+// Given any Cap'n Proto value type as an input, return the Cap'n Proto base type. That is:
+//
+//     Foo::Reader -> Foo
+//     Foo::Builder -> Foo
+//     Foo::Pipeline -> Foo
+//     Foo::Client -> Foo
+//     Own<Foo::Server> -> Foo
+//     uint32_t -> uint32_t
 
 namespace _ {  // private
 

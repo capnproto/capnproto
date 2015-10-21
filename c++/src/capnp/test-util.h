@@ -210,7 +210,7 @@ private:
   int& callCount;
 };
 
-class TestExtendsImpl final: public test::TestExtends::Server {
+class TestExtendsImpl final: public test::TestExtends2::Server {
 public:
   TestExtendsImpl(int& callCount);
 
@@ -283,6 +283,8 @@ public:
   kj::Promise<void> expectCancel(ExpectCancelContext context) override;
 
   kj::Promise<void> getHandle(GetHandleContext context) override;
+
+  kj::Promise<void> getNull(GetNullContext context) override;
 
 private:
   int& callCount;

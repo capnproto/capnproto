@@ -54,3 +54,5 @@ file:147:14-27: error: Not enough generic parameters.
 file:148:15-47: error: Too many generic parameters.
 file:149:18-49: error: Double-application of generic parameters.
 file:150:38-43: error: Sorry, only pointer types can be used as generic parameters.
+file:153:30-44: error: Embeds can only be used when Text, Data, or a struct is expected.
+file:154:37-51: error: Couldn't read file for embed: no-such-file

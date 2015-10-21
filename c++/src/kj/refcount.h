@@ -59,6 +59,10 @@ class Refcounted: private Disposer {
 public:
   virtual ~Refcounted() noexcept(false);
 
+  inline bool isShared() const { return refcount > 1; }
+  // Check if there are multiple references to this object. This is sometimes useful for deciding
+  // whether it's safe to modify the object vs. make a copy.
+
 private:
   mutable uint refcount = 0;
   // "mutable" because disposeImpl() is const.  Bleh.

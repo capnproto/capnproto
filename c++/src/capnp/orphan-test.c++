@@ -992,7 +992,7 @@ TEST(Orphans, ReferenceExternalData_NoZeroImmediateAbandon) {
   }
 }
 
-TEST(Orphans, Truncate) {
+TEST(Orphans, TruncateData) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<Data>(17);
   auto builder = orphan.get();
@@ -1011,6 +1011,68 @@ TEST(Orphans, Truncate) {
   EXPECT_EQ(0, builder[2]);
   EXPECT_EQ(0, builder[3]);
   EXPECT_EQ(0, builder[16]);
+}
+
+TEST(Orphans, ExtendData) {
+  MallocMessageBuilder message;
+  auto orphan = message.getOrphanage().newOrphan<Data>(17);
+  auto builder = orphan.get();
+  memset(builder.begin(), 123, builder.size());
+
+  EXPECT_EQ(4, message.getSegmentsForOutput()[0].size());
+  orphan.truncate(27);
+  EXPECT_EQ(5, message.getSegmentsForOutput()[0].size());
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(27, reader.size());
+  EXPECT_EQ(builder.begin(), reader.begin());
+
+  for (uint i = 0; i < 17; i++) {
+    EXPECT_EQ(123, reader[i]);
+  }
+  for (uint i = 17; i < 27; i++) {
+    EXPECT_EQ(0, reader[i]);
+  }
+}
+
+TEST(Orphans, ExtendDataCopy) {
+  MallocMessageBuilder message;
+  auto orphan = message.getOrphanage().newOrphan<Data>(17);
+  auto builder = orphan.get();
+  memset(builder.begin(), 123, builder.size());
+
+  auto orphan2 = message.getOrphanage().newOrphan<Data>(1);
+  orphan2.get()[0] = 32;
+
+  orphan.truncate(27);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(27, reader.size());
+  EXPECT_NE(builder.begin(), reader.begin());
+
+  for (uint i = 0; i < 17; i++) {
+    EXPECT_EQ(123, reader[i]);
+    EXPECT_EQ(0, builder[i]);
+  }
+  for (uint i = 17; i < 27; i++) {
+    EXPECT_EQ(0, reader[i]);
+  }
+
+  EXPECT_EQ(32, orphan2.getReader()[0]);
+}
+
+TEST(Orphans, ExtendDataFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownDataField();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ(0, reader[i]);
+  }
 }
 
 TEST(Orphans, TruncateText) {
@@ -1032,6 +1094,623 @@ TEST(Orphans, TruncateText) {
   EXPECT_EQ('\0', builder[2]);
   EXPECT_EQ('\0', builder[3]);
   EXPECT_EQ('\0', builder[16]);
+}
+
+TEST(Orphans, ExtendText) {
+  MallocMessageBuilder message;
+  auto orphan = message.getOrphanage().newOrphan<Text>(17);
+  auto builder = orphan.get();
+  memset(builder.begin(), 'a', builder.size());
+
+  EXPECT_EQ(4, message.getSegmentsForOutput()[0].size());
+  orphan.truncate(27);
+  EXPECT_EQ(5, message.getSegmentsForOutput()[0].size());
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(27, reader.size());
+  EXPECT_EQ(builder.begin(), reader.begin());
+
+  for (uint i = 0; i < 17; i++) {
+    EXPECT_EQ('a', reader[i]);
+  }
+  for (uint i = 17; i < 27; i++) {
+    EXPECT_EQ('\0', reader[i]);
+  }
+}
+
+TEST(Orphans, ExtendTextCopy) {
+  MallocMessageBuilder message;
+  auto orphan = message.getOrphanage().newOrphan<Text>(17);
+  auto builder = orphan.get();
+  memset(builder.begin(), 'a', builder.size());
+
+  auto orphan2 = message.getOrphanage().newOrphan<Data>(1);
+  orphan2.get()[0] = 32;
+
+  orphan.truncate(27);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(27, reader.size());
+  EXPECT_NE(builder.begin(), reader.begin());
+
+  for (uint i = 0; i < 17; i++) {
+    EXPECT_EQ('a', reader[i]);
+    EXPECT_EQ('\0', builder[i]);
+  }
+  for (uint i = 17; i < 27; i++) {
+    EXPECT_EQ('\0', reader[i]);
+  }
+
+  EXPECT_EQ(32, orphan2.getReader()[0]);
+}
+
+TEST(Orphans, ExtendTextFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownTextField();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ('\0', reader[i]);
+  }
+}
+
+TEST(Orphans, TruncatePrimitiveList) {
+  MallocMessageBuilder message;
+  auto orphan = message.getOrphanage().newOrphan<List<uint32_t>>(7);
+  auto builder = orphan.get();
+  for (uint i = 0; i < 7; i++) {
+    builder.set(i, 123456789 + i);
+  }
+
+  EXPECT_EQ(5, message.getSegmentsForOutput()[0].size());
+  orphan.truncate(3);
+  EXPECT_EQ(3, message.getSegmentsForOutput()[0].size());
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ(123456789 + i, builder[i]);
+    EXPECT_EQ(123456789 + i, reader[i]);
+  }
+  for (uint i = 3; i < 7; i++) {
+    EXPECT_EQ(0, builder[i]);
+  }
+
+  // Can't compare pointers directly, but we can check if builder modifications are visible using
+  // the reader.
+  builder.set(0, 321);
+  EXPECT_EQ(321, reader[0]);
+}
+
+TEST(Orphans, ExtendPrimitiveList) {
+  MallocMessageBuilder message;
+  auto orphan = message.getOrphanage().newOrphan<List<uint32_t>>(7);
+  auto builder = orphan.get();
+  for (uint i = 0; i < 7; i++) {
+    builder.set(i, 123456789 + i);
+  }
+
+  EXPECT_EQ(5, message.getSegmentsForOutput()[0].size());
+  orphan.truncate(11);
+  EXPECT_EQ(7, message.getSegmentsForOutput()[0].size());
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(11, reader.size());
+
+  for (uint i = 0; i < 7; i++) {
+    EXPECT_EQ(123456789 + i, reader[i]);
+    EXPECT_EQ(123456789 + i, builder[i]);
+  }
+  for (uint i = 7; i < 11; i++) {
+    EXPECT_EQ(0, reader[i]);
+  }
+
+  // Can't compare pointers directly, but we can check if builder modifications are visible using
+  // the reader.
+  builder.set(0, 321);
+  EXPECT_EQ(321, reader[0]);
+}
+
+TEST(Orphans, ExtendPrimitiveListCopy) {
+  MallocMessageBuilder message;
+  auto orphan = message.getOrphanage().newOrphan<List<uint32_t>>(7);
+  auto builder = orphan.get();
+  for (uint i = 0; i < 7; i++) {
+    builder.set(i, 123456789 + i);
+  }
+
+  auto orphan2 = message.getOrphanage().newOrphan<Data>(1);
+  orphan2.get()[0] = 32;
+
+  orphan.truncate(11);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(11, reader.size());
+
+  for (uint i = 0; i < 7; i++) {
+    EXPECT_EQ(123456789 + i, reader[i]);
+    EXPECT_EQ(0, builder[i]);
+  }
+  for (uint i = 7; i < 11; i++) {
+    EXPECT_EQ(0, reader[i]);
+  }
+
+  // Can't compare pointers directly, but we can check if builder modifications are visible using
+  // the reader.
+  builder.set(0, 321);
+  EXPECT_EQ(123456789, reader[0]);
+
+  EXPECT_EQ(32, orphan2.getReader()[0]);
+}
+
+TEST(Orphans, ExtendPointerListFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownUInt32List();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ(0, reader[i]);
+  }
+}
+
+TEST(Orphans, TruncatePointerList) {
+  MallocMessageBuilder message;
+
+  // Allocate data in advance so that the list itself is at the end of the segment.
+  kj::Vector<Orphan<Text>> pointers(7);
+  for (uint i = 0; i < 7; i++) {
+    pointers.add(message.getOrphanage().newOrphanCopy(Text::Reader(kj::str("foo", i))));
+  }
+  size_t sizeBeforeList = message.getSegmentsForOutput()[0].size();
+
+  auto orphan = message.getOrphanage().newOrphan<List<Text>>(7);
+  auto builder = orphan.get();
+  for (uint i = 0; i < 7; i++) {
+    builder.adopt(i, kj::mv(pointers[i]));
+  }
+
+  EXPECT_EQ(sizeBeforeList + 7, message.getSegmentsForOutput()[0].size());
+  orphan.truncate(3);
+  EXPECT_EQ(sizeBeforeList + 3, message.getSegmentsForOutput()[0].size());
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ(kj::str("foo", i), builder[i]);
+    EXPECT_EQ(kj::str("foo", i), reader[i]);
+  }
+  for (uint i = 3; i < 7; i++) {
+    EXPECT_TRUE(builder[i] == nullptr);
+  }
+
+  // Can't compare pointers directly, but we can check if builder modifications are visible using
+  // the reader.
+  builder.set(0, "bar");
+  EXPECT_EQ("bar", reader[0]);
+}
+
+TEST(Orphans, ExtendPointerList) {
+  MallocMessageBuilder message;
+
+  // Allocate data in advance so that the list itself is at the end of the segment.
+  kj::Vector<Orphan<Text>> pointers(7);
+  for (uint i = 0; i < 7; i++) {
+    pointers.add(message.getOrphanage().newOrphanCopy(Text::Reader(kj::str("foo", i))));
+  }
+  size_t sizeBeforeList = message.getSegmentsForOutput()[0].size();
+
+  auto orphan = message.getOrphanage().newOrphan<List<Text>>(7);
+  auto builder = orphan.get();
+  for (uint i = 0; i < 7; i++) {
+    builder.adopt(i, kj::mv(pointers[i]));
+  }
+
+  EXPECT_EQ(sizeBeforeList + 7, message.getSegmentsForOutput()[0].size());
+  orphan.truncate(11);
+  EXPECT_EQ(sizeBeforeList + 11, message.getSegmentsForOutput()[0].size());
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(11, reader.size());
+
+  for (uint i = 0; i < 7; i++) {
+    EXPECT_EQ(kj::str("foo", i), reader[i]);
+    EXPECT_EQ(kj::str("foo", i), builder[i]);
+  }
+  for (uint i = 7; i < 11; i++) {
+    EXPECT_TRUE(reader[i] == nullptr);
+  }
+
+  // Can't compare pointers directly, but we can check if builder modifications are visible using
+  // the reader.
+  builder.set(0, "bar");
+  EXPECT_EQ("bar", reader[0]);
+}
+
+TEST(Orphans, ExtendPointerListCopy) {
+  MallocMessageBuilder message;
+
+  // Allocate data in advance so that the list itself is at the end of the segment.
+  kj::Vector<Orphan<Text>> pointers(7);
+  for (uint i = 0; i < 7; i++) {
+    pointers.add(message.getOrphanage().newOrphanCopy(Text::Reader(kj::str("foo", i))));
+  }
+
+  auto orphan = message.getOrphanage().newOrphan<List<Text>>(7);
+  auto builder = orphan.get();
+  for (uint i = 0; i < 7; i++) {
+    builder.adopt(i, kj::mv(pointers[i]));
+  }
+
+  auto orphan2 = message.getOrphanage().newOrphan<Data>(1);
+  orphan2.get()[0] = 32;
+
+  orphan.truncate(11);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(11, reader.size());
+
+  for (uint i = 0; i < 7; i++) {
+    EXPECT_EQ(kj::str("foo", i), reader[i]);
+    EXPECT_TRUE(builder[i] == nullptr);
+  }
+  for (uint i = 7; i < 11; i++) {
+    EXPECT_TRUE(reader[i] == nullptr);
+  }
+
+  // Can't compare pointers directly, but we can check if builder modifications are visible using
+  // the reader.
+  builder.set(0, "bar");
+  EXPECT_EQ("foo0", reader[0]);
+
+  EXPECT_EQ(32, orphan2.getReader()[0]);
+}
+
+TEST(Orphans, ExtendPointerListFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownTextList();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ("", reader[i]);
+  }
+}
+
+TEST(Orphans, TruncateStructList) {
+  MallocMessageBuilder message;
+
+  // Allocate data in advance so that the list itself is at the end of the segment.
+  kj::Vector<Orphan<TestAllTypes>> pointers(7);
+  for (uint i = 0; i < 7; i++) {
+    auto o = message.getOrphanage().newOrphan<TestAllTypes>();
+    auto b = o.get();
+    b.setUInt32Field(123456789 + i);
+    b.setTextField(kj::str("foo", i));
+    b.setUInt8List({123, 45});
+    pointers.add(kj::mv(o));
+  }
+
+  auto orphan = message.getOrphanage().newOrphan<List<TestAllTypes>>(7);
+  auto builder = orphan.get();
+  for (uint i = 0; i < 7; i++) {
+    builder.adoptWithCaveats(i, kj::mv(pointers[i]));
+  }
+
+  size_t sizeBeforeTruncate = message.getSegmentsForOutput()[0].size();
+  orphan.truncate(3);
+  EXPECT_LT(message.getSegmentsForOutput()[0].size(), sizeBeforeTruncate);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    EXPECT_EQ(123456789 + i, reader[i].getUInt32Field());
+    EXPECT_EQ(kj::str("foo", i), reader[i].getTextField());
+    checkList(reader[i].getUInt8List(), {123, 45});
+
+    EXPECT_EQ(123456789 + i, builder[i].getUInt32Field());
+    EXPECT_EQ(kj::str("foo", i), builder[i].getTextField());
+    checkList(builder[i].getUInt8List(), {123, 45});
+  }
+  for (uint i = 3; i < 7; i++) {
+    checkTestMessageAllZero(builder[i]);
+  }
+
+  // Can't compare pointers directly, but we can check if builder modifications are visible using
+  // the reader.
+  builder[0].setUInt32Field(321);
+  EXPECT_EQ(321, reader[0].getUInt32Field());
+}
+
+TEST(Orphans, ExtendStructList) {
+  MallocMessageBuilder message;
+
+  // Allocate data in advance so that the list itself is at the end of the segment.
+  kj::Vector<Orphan<TestAllTypes>> pointers(7);
+  for (uint i = 0; i < 7; i++) {
+    auto o = message.getOrphanage().newOrphan<TestAllTypes>();
+    auto b = o.get();
+    b.setUInt32Field(123456789 + i);
+    b.setTextField(kj::str("foo", i));
+    b.setUInt8List({123, 45});
+    pointers.add(kj::mv(o));
+  }
+
+  auto orphan = message.getOrphanage().newOrphan<List<TestAllTypes>>(7);
+  auto builder = orphan.get();
+  for (uint i = 0; i < 7; i++) {
+    builder.adoptWithCaveats(i, kj::mv(pointers[i]));
+  }
+
+  orphan.truncate(11);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(11, reader.size());
+
+  for (uint i = 0; i < 7; i++) {
+    EXPECT_EQ(123456789 + i, reader[i].getUInt32Field());
+    EXPECT_EQ(kj::str("foo", i), reader[i].getTextField());
+    checkList(reader[i].getUInt8List(), {123, 45});
+
+    EXPECT_EQ(123456789 + i, builder[i].getUInt32Field());
+    EXPECT_EQ(kj::str("foo", i), builder[i].getTextField());
+    checkList(builder[i].getUInt8List(), {123, 45});
+  }
+  for (uint i = 7; i < 11; i++) {
+    checkTestMessageAllZero(reader[i]);
+  }
+
+  // Can't compare pointers directly, but we can check if builder modifications are visible using
+  // the reader.
+  builder[0].setUInt32Field(321);
+  EXPECT_EQ(321, reader[0].getUInt32Field());
+}
+
+TEST(Orphans, ExtendStructListCopy) {
+  MallocMessageBuilder message;
+
+  // Allocate data in advance so that the list itself is at the end of the segment.
+  kj::Vector<Orphan<TestAllTypes>> pointers(7);
+  for (uint i = 0; i < 7; i++) {
+    auto o = message.getOrphanage().newOrphan<TestAllTypes>();
+    auto b = o.get();
+    b.setUInt32Field(123456789 + i);
+    b.setTextField(kj::str("foo", i));
+    b.setUInt8List({123, 45});
+    pointers.add(kj::mv(o));
+  }
+
+  auto orphan = message.getOrphanage().newOrphan<List<TestAllTypes>>(7);
+  auto builder = orphan.get();
+  for (uint i = 0; i < 7; i++) {
+    builder.adoptWithCaveats(i, kj::mv(pointers[i]));
+  }
+
+  auto orphan2 = message.getOrphanage().newOrphan<Data>(1);
+  orphan2.get()[0] = 32;
+
+  orphan.truncate(11);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(11, reader.size());
+
+  for (uint i = 0; i < 7; i++) {
+    EXPECT_EQ(123456789 + i, reader[i].getUInt32Field());
+    EXPECT_EQ(kj::str("foo", i), reader[i].getTextField());
+    checkList(reader[i].getUInt8List(), {123, 45});
+
+    checkTestMessageAllZero(builder[i]);
+  }
+  for (uint i = 7; i < 11; i++) {
+    checkTestMessageAllZero(reader[i]);
+  }
+
+  // Can't compare pointers directly, but we can check if builder modifications are visible using
+  // the reader.
+  builder[0].setUInt32Field(321);
+  EXPECT_EQ(123456789, reader[0].getUInt32Field());
+
+  EXPECT_EQ(32, orphan2.getReader()[0]);
+}
+
+TEST(Orphans, ExtendStructListFromEmpty) {
+  MallocMessageBuilder message;
+
+  auto orphan = message.initRoot<TestAllTypes>().disownStructList();
+  orphan.truncate(3);
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(3, reader.size());
+
+  for (uint i = 0; i < 3; i++) {
+    checkTestMessageAllZero(reader[i]);
+  }
+}
+
+template <typename ListBuilder>
+void initList(ListBuilder builder,
+    std::initializer_list<ReaderFor<ListElementType<FromBuilder<ListBuilder>>>> values) {
+  KJ_ASSERT(builder.size() == values.size());
+  size_t i = 0;
+  for (auto& value: values) {
+    builder.set(i++, value);
+  }
+}
+
+TEST(Orphans, ConcatenatePrimitiveLists) {
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto list1 = orphanage.newOrphan<List<uint32_t>>(3);
+  initList(list1.get(), {12, 34, 56});
+
+  auto list2 = orphanage.newOrphan<List<uint32_t>>(2);
+  initList(list2.get(), {78, 90});
+
+  auto list3 = orphanage.newOrphan<List<uint32_t>>(4);
+  initList(list3.get(), {23, 45, 67, 89});
+
+  List<uint32_t>::Reader lists[] = { list1.getReader(), list2.getReader(), list3.getReader() };
+  kj::ArrayPtr<List<uint32_t>::Reader> array = lists;
+
+  auto cat = message.getOrphanage().newOrphanConcat(array);
+
+  checkList(cat.getReader(), {12, 34, 56, 78, 90, 23, 45, 67, 89});
+}
+
+TEST(Orphans, ConcatenateBitLists) {
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto list1 = orphanage.newOrphan<List<bool>>(3);
+  initList(list1.get(), {true, true, false});
+
+  auto list2 = orphanage.newOrphan<List<bool>>(2);
+  initList(list2.get(), {false, true});
+
+  auto list3 = orphanage.newOrphan<List<bool>>(4);
+  initList(list3.get(), {false, false, true, false});
+
+  List<bool>::Reader lists[] = { list1.getReader(), list2.getReader(), list3.getReader() };
+  kj::ArrayPtr<List<bool>::Reader> array = lists;
+
+  auto cat = message.getOrphanage().newOrphanConcat(array);
+
+  checkList(cat.getReader(), {true, true, false, false, true, false, false, true, false});
+}
+
+TEST(Orphans, ConcatenatePointerLists) {
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto list1 = orphanage.newOrphan<List<Text>>(3);
+  initList(list1.get(), {"foo", "bar", "baz"});
+
+  auto list2 = orphanage.newOrphan<List<Text>>(2);
+  initList(list2.get(), {"qux", "corge"});
+
+  auto list3 = orphanage.newOrphan<List<Text>>(4);
+  initList(list3.get(), {"grault", "garply", "waldo", "fred"});
+
+  List<Text>::Reader lists[] = { list1.getReader(), list2.getReader(), list3.getReader() };
+  kj::ArrayPtr<List<Text>::Reader> array = lists;
+
+  auto cat = message.getOrphanage().newOrphanConcat(array);
+
+  checkList(cat.getReader(), {
+      "foo", "bar", "baz", "qux", "corge", "grault", "garply", "waldo", "fred"});
+}
+
+TEST(Orphans, ConcatenateStructLists) {
+  // In this test, we not only concatenate two struct lists, but we concatenate in a list that
+  // contains a newer-than-expected version of the struct with extra fields, in order to verify
+  // that the new fields aren't lost.
+
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto orphan1 = orphanage.newOrphan<List<test::TestOldVersion>>(2);
+  auto list1 = orphan1.get();
+  list1[0].setOld1(12);
+  list1[0].setOld2("foo");
+  list1[1].setOld1(34);
+  list1[1].setOld2("bar");
+
+  auto orphan2 = orphanage.newOrphan<test::TestAnyPointer>();
+  auto list2 = orphan2.get().getAnyPointerField().initAs<List<test::TestNewVersion>>(2);
+  list2[0].setOld1(56);
+  list2[0].setOld2("baz");
+  list2[0].setNew1(123);
+  list2[0].setNew2("corge");
+  list2[1].setOld1(78);
+  list2[1].setOld2("qux");
+  list2[1].setNew1(456);
+  list2[1].setNew2("grault");
+
+  List<test::TestOldVersion>::Reader lists[] = {
+    orphan1.getReader(),
+    orphan2.getReader().getAnyPointerField().getAs<List<test::TestOldVersion>>()
+  };
+  kj::ArrayPtr<List<test::TestOldVersion>::Reader> array = lists;
+
+  auto orphan3 = orphanage.newOrphan<test::TestAnyPointer>();
+  orphan3.get().getAnyPointerField().adopt(message.getOrphanage().newOrphanConcat(array));
+
+  auto cat = orphan3.getReader().getAnyPointerField().getAs<List<test::TestNewVersion>>();
+  ASSERT_EQ(4, cat.size());
+
+  EXPECT_EQ(12, cat[0].getOld1());
+  EXPECT_EQ("foo", cat[0].getOld2());
+  EXPECT_EQ(987, cat[0].getNew1());
+  EXPECT_FALSE(cat[0].hasNew2());
+
+  EXPECT_EQ(34, cat[1].getOld1());
+  EXPECT_EQ("bar", cat[1].getOld2());
+  EXPECT_EQ(987, cat[1].getNew1());
+  EXPECT_FALSE(cat[1].hasNew2());
+
+  EXPECT_EQ(56, cat[2].getOld1());
+  EXPECT_EQ("baz", cat[2].getOld2());
+  EXPECT_EQ(123, cat[2].getNew1());
+  EXPECT_EQ("corge", cat[2].getNew2());
+
+  EXPECT_EQ(78, cat[3].getOld1());
+  EXPECT_EQ("qux", cat[3].getOld2());
+  EXPECT_EQ(456, cat[3].getNew1());
+  EXPECT_EQ("grault", cat[3].getNew2());
+}
+
+TEST(Orphans, ConcatenateStructListsUpgradeFromPrimitive) {
+  // Like above, but we're "upgrading" a primitive list to a struct list.
+
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  auto orphan1 = orphanage.newOrphan<List<test::TestOldVersion>>(2);
+  auto list1 = orphan1.get();
+  list1[0].setOld1(12);
+  list1[0].setOld2("foo");
+  list1[1].setOld1(34);
+  list1[1].setOld2("bar");
+
+  auto orphan2 = orphanage.newOrphan<test::TestAnyPointer>();
+  auto list2 = orphan2.get().getAnyPointerField().initAs<List<uint64_t>>(2);
+  initList(list2, {12345, 67890});
+
+  List<test::TestOldVersion>::Reader lists[] = {
+    orphan1.getReader(),
+    orphan2.getReader().getAnyPointerField().getAs<List<test::TestOldVersion>>()
+  };
+  kj::ArrayPtr<List<test::TestOldVersion>::Reader> array = lists;
+
+  auto orphan3 = message.getOrphanage().newOrphanConcat(array);
+  auto cat = orphan3.getReader();
+  ASSERT_EQ(4, cat.size());
+
+  EXPECT_EQ(12, cat[0].getOld1());
+  EXPECT_EQ("foo", cat[0].getOld2());
+
+  EXPECT_EQ(34, cat[1].getOld1());
+  EXPECT_EQ("bar", cat[1].getOld2());
+
+  EXPECT_EQ(12345, cat[2].getOld1());
+  EXPECT_FALSE(cat[2].hasOld2());
+
+  EXPECT_EQ(67890, cat[3].getOld1());
+  EXPECT_FALSE(cat[3].hasOld2());
 }
 
 }  // namespace

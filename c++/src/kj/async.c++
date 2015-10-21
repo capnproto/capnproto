@@ -557,8 +557,9 @@ void AttachmentPromiseNodeBase::dropDependency() {
 
 // -------------------------------------------------------------------
 
-TransformPromiseNodeBase::TransformPromiseNodeBase(Own<PromiseNode>&& dependencyParam)
-    : dependency(kj::mv(dependencyParam)) {
+TransformPromiseNodeBase::TransformPromiseNodeBase(
+    Own<PromiseNode>&& dependencyParam, void* continuationTracePtr)
+    : dependency(kj::mv(dependencyParam)), continuationTracePtr(continuationTracePtr) {
   dependency->setSelfPointer(&dependency);
 }
 
@@ -589,6 +590,10 @@ void TransformPromiseNodeBase::getDepResult(ExceptionOrValue& output) {
     dependency = nullptr;
   })) {
     output.addException(kj::mv(*exception));
+  }
+
+  KJ_IF_MAYBE(e, output.exception) {
+    e->addTrace(continuationTracePtr);
   }
 }
 
