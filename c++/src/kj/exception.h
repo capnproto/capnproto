@@ -211,7 +211,7 @@ KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint
 // returns, abort.
 
 KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignoreCount = 0);
-// Invoke the exception acllback to throw the given recoverable exception.  If the exception
+// Invoke the exception callback to throw the given recoverable exception.  If the exception
 // callback returns, return normally.
 
 // =======================================================================================
