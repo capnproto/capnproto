@@ -21,7 +21,9 @@
 
 #include "json.h"
 #include <capnp/test-util.h>
+#include <capnp/compat/json.capnp.h>
 #include <kj/debug.h>
+#include <kj/string.h>
 #include <kj/test.h>
 
 namespace capnp {
@@ -179,6 +181,194 @@ KJ_TEST("encode union") {
 
   root.setBar(321);
   KJ_EXPECT(json.encode(root) == "{\"before\":\"a\",\"middle\":44,\"bar\":321,\"after\":\"c\"}");
+}
+
+KJ_TEST("basic json decoding") {
+  // TODO(cleanup): this test is a mess!
+  // TODO(soon): add expected failing cases.
+  JsonCodec json;
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+    json.decodeRaw("null", root);
+
+    KJ_EXPECT(root.which() == JsonValue::NULL_);
+    KJ_EXPECT(root.getNull() == VOID);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("false", root);
+    KJ_EXPECT(root.which() == JsonValue::BOOLEAN);
+    KJ_EXPECT(root.getBoolean() == false);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("true", root);
+    KJ_EXPECT(root.which() == JsonValue::BOOLEAN);
+    KJ_EXPECT(root.getBoolean() == true);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("\"foo\"", root);
+    KJ_EXPECT(root.which() == JsonValue::STRING);
+    KJ_EXPECT(kj::str("foo") == root.getString());
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw(R"("\"")", root);
+    KJ_EXPECT(root.which() == JsonValue::STRING);
+    KJ_EXPECT(kj::str("\"") == root.getString());
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw(R"("\\abc\"d\\e")", root);
+    KJ_EXPECT(root.which() == JsonValue::STRING);
+    KJ_EXPECT(kj::str("\\abc\"d\\e") == root.getString());
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw(R"("\"\\\/\b\f\n\r\t\u0003abc\u0064\u0065f")", root);
+    KJ_EXPECT(root.which() == JsonValue::STRING);
+    KJ_EXPECT(kj::str("\"\\/\b\f\n\r\t\x03""abcdef") == root.getString(), root.getString());
+  }
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("[]", root);
+    KJ_EXPECT(root.which() == JsonValue::ARRAY, root.which());
+    KJ_EXPECT(root.getArray().size() == 0);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("[true]", root);
+    KJ_EXPECT(root.which() == JsonValue::ARRAY);
+    auto array = root.getArray();
+    KJ_EXPECT(array.size() == 1, array.size());
+    KJ_EXPECT(root.getArray()[0].which() == JsonValue::BOOLEAN);
+    KJ_EXPECT(root.getArray()[0].getBoolean() == true);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("  [  true  , false\t\n , null]", root);
+    KJ_EXPECT(root.which() == JsonValue::ARRAY);
+    auto array = root.getArray();
+    KJ_EXPECT(array.size() == 3);
+    KJ_EXPECT(array[0].which() == JsonValue::BOOLEAN);
+    KJ_EXPECT(array[0].getBoolean() == true);
+    KJ_EXPECT(array[1].which() == JsonValue::BOOLEAN);
+    KJ_EXPECT(array[1].getBoolean() == false);
+    KJ_EXPECT(array[2].which() == JsonValue::NULL_);
+    KJ_EXPECT(array[2].getNull() == VOID);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("{}", root);
+    KJ_EXPECT(root.which() == JsonValue::OBJECT, root.which());
+    KJ_EXPECT(root.getObject().size() == 0);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw(R"({"some": null})", root);
+    KJ_EXPECT(root.which() == JsonValue::OBJECT, root.which());
+    auto object = root.getObject();
+    KJ_EXPECT(object.size() == 1);
+    KJ_EXPECT(kj::str("some") == object[0].getName());
+    KJ_EXPECT(object[0].getValue().which() == JsonValue::NULL_);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw(R"({"foo\n\tbaz": "a val", "bar": ["a", -5.5e11,  { "z": {}}]})", root);
+    KJ_EXPECT(root.which() == JsonValue::OBJECT, root.which());
+    auto object = root.getObject();
+    KJ_EXPECT(object.size() == 2);
+    KJ_EXPECT(kj::str("foo\n\tbaz") == object[0].getName());
+    KJ_EXPECT(object[0].getValue().which() == JsonValue::STRING);
+    KJ_EXPECT(kj::str("a val") == object[0].getValue().getString());
+
+    KJ_EXPECT(kj::str("bar") == object[1].getName());
+    KJ_EXPECT(object[1].getValue().which() == JsonValue::ARRAY);
+    auto array = object[1].getValue().getArray();
+    KJ_EXPECT(array.size() == 3, array.size());
+    KJ_EXPECT(array[0].which() == JsonValue::STRING);
+    KJ_EXPECT(kj::str("a") == array[0].getString());
+    KJ_EXPECT(array[1].which() == JsonValue::NUMBER);
+    KJ_EXPECT(array[1].getNumber() == -5.5e11);
+    KJ_EXPECT(array[2].which() == JsonValue::OBJECT);
+    KJ_EXPECT(array[2].getObject().size() == 1);
+    KJ_EXPECT(array[2].getObject()[0].getValue().which() == JsonValue::OBJECT);
+    KJ_EXPECT(array[2].getObject()[0].getValue().getObject().size() == 0);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("123", root);
+    KJ_EXPECT(root.which() == JsonValue::NUMBER);
+    KJ_EXPECT(root.getNumber() == 123);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    // TODO(soon): this should fail, JSON doesn't allow leading +
+    json.decodeRaw("+123", root);
+    KJ_EXPECT(root.which() == JsonValue::NUMBER);
+    KJ_EXPECT(root.getNumber() == 123);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("-5", root);
+    KJ_EXPECT(root.which() == JsonValue::NUMBER);
+    KJ_EXPECT(root.getNumber() == -5);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw("-5.5", root);
+    KJ_EXPECT(root.which() == JsonValue::NUMBER);
+    KJ_EXPECT(root.getNumber() == -5.5);
+  }
 }
 
 class TestHandler: public JsonCodec::Handler<Text> {

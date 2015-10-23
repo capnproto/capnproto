@@ -20,8 +20,12 @@
 // THE SOFTWARE.
 
 #include "json.h"
+#include <cstdlib>  // std::strtod
 #include <unordered_map>
+#include <capnp/orphan.h>
 #include <kj/debug.h>
+#include <kj/function.h>
+#include <kj/vector.h>
 
 namespace capnp {
 
@@ -40,6 +44,12 @@ struct FieldHash {
 };
 
 }  // namespace
+
+namespace _ {  // private
+
+void parseJsonValue(kj::ArrayPtr<const char> input, JsonValue::Builder output);
+
+}  // namespace _ (private)
 
 struct JsonCodec::Impl {
   bool prettyPrint = false;
@@ -212,7 +222,7 @@ kj::String JsonCodec::encodeRaw(JsonValue::Reader value) const {
 }
 
 void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder output) const {
-  KJ_FAIL_ASSERT("JSON decode not implement yet. :(");
+  _::parseJsonValue(input, output);
 }
 
 void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const {
@@ -369,6 +379,251 @@ Orphan<DynamicValue> JsonCodec::decode(
     JsonValue::Reader input, Type type, Orphanage orphanage) const {
   KJ_FAIL_ASSERT("JSON decode not implement yet. :(");
 }
+
+// -----------------------------------------------------------------------------
+
+namespace _ {  // private
+
+class Parser {
+public:
+  Parser(kj::ArrayPtr<const char> input) : input_(input), remaining_(input_) {}
+  void parseValue(JsonValue::Builder &output) {
+    consumeWhitespace();
+    KJ_REQUIRE(remaining_.size() > 0, "JSON message ends prematurely.");
+
+    switch (nextChar()) {
+      case 'n': consume(NULL_); output.setNull();         break;
+      case 'f': consume(FALSE); output.setBoolean(false); break;
+      case 't': consume(TRUE);  output.setBoolean(true);  break;
+      case '"': parseString(output); break;
+      case '[': parseArray(output);  break;
+      case '{': parseObject(output); break;
+      // TODO(security): We could check for numbers more carefully instead of
+      // relying on strtod.
+      default: parseNumber(output); break;
+    }
+  }
+
+  void parseNumber(JsonValue::Builder &output) {
+    // TODO(someday): strtod allows leading +, while JSON grammar does not.
+    // strtod consumes leading whitespace, so we don't have to.
+    char *numEnd;
+    output.setNumber(std::strtod(remaining_.begin(), &numEnd));
+
+    advanceTo(numEnd);
+  }
+
+  void parseString(JsonValue::Builder &output) {
+    output.setString(consumeQuotedString());
+  }
+
+  void parseArray(JsonValue::Builder &output) {
+    // TODO(perf): Using orphans leaves holes in the message. It's expected
+    // that a JsonValue is used for interop, and won't be sent or written as a
+    // Cap'n Proto message.
+    kj::Vector<Orphan<JsonValue>> values;
+    auto orphanage = Orphanage::getForMessageContaining(output);
+
+    consume('[');
+    while (consumeWhitespace(), nextChar() != ']') {
+      auto orphan = orphanage.newOrphan<JsonValue>();
+      auto builder = orphan.get();
+      parseValue(builder);
+      values.add(kj::mv(orphan));
+
+      if (consumeWhitespace(), nextChar() != ']') {
+        // TODO(soon): This incorrectly allows a trailing comma.
+        consume(',');
+      }
+    }
+
+    output.initArray(values.size());
+    auto array = output.getArray();
+
+    for (size_t i = 0; i < values.size(); ++i) {
+      array.adoptWithCaveats(i, kj::mv(values[i]));
+    }
+
+    consume(']');
+  }
+
+  void parseObject(JsonValue::Builder &output) {
+    kj::Vector<Orphan<JsonValue::Field>> fields;
+    auto orphanage = Orphanage::getForMessageContaining(output);
+
+    consume('{');
+    while (consumeWhitespace(), nextChar() != '}') {
+      auto orphan = orphanage.newOrphan<JsonValue::Field>();
+      auto builder = orphan.get();
+
+      builder.setName(consumeQuotedString());
+
+      consumeWhitespace();
+      consume(':');
+      consumeWhitespace();
+
+      auto valueBuilder = builder.getValue();
+      parseValue(valueBuilder);
+
+      fields.add(kj::mv(orphan));
+
+      if (consumeWhitespace(), nextChar() != '}') {
+        // TODO(soon): This incorrectly allows a trailing comma.
+        consume(',');
+      }
+    }
+
+    output.initObject(fields.size());
+    auto object = output.getObject();
+
+    for (size_t i = 0; i < fields.size(); ++i) {
+      object.adoptWithCaveats(i, kj::mv(fields[i]));
+    }
+
+    consume('}');
+  }
+
+  char nextChar() {
+    return remaining_.front();
+  }
+
+  void advance(size_t numBytes = 1) {
+    KJ_REQUIRE(numBytes < remaining_.size(), "JSON message ends prematurely.");
+    remaining_ = kj::arrayPtr(remaining_.begin() + numBytes, remaining_.end());
+  }
+
+  void advanceTo(const char *newPos) {
+    KJ_REQUIRE(remaining_.begin() <= newPos && newPos < remaining_.end(),
+        "JSON message ends prematurely.");
+    remaining_ = kj::arrayPtr(newPos, remaining_.end());
+  }
+
+  void consume(char expected) {
+    char current = nextChar();
+    KJ_REQUIRE(current == expected, "Unexpected character in JSON message.");
+
+    advance();
+  }
+
+  void consume(kj::ArrayPtr<const char> expected) {
+    KJ_REQUIRE(remaining_.size() >= expected.size());
+
+    auto prefix = remaining_.slice(0, expected.size());
+    KJ_REQUIRE(prefix == expected, "Unexpected input in JSON message.");
+
+    advance(expected.size());
+  }
+
+  kj::ArrayPtr<const char> consumeWhile(kj::Function<bool(char)> predicate) {
+    auto originalPos = remaining_.begin();
+    while (predicate(nextChar())) { advance(); }
+
+    return kj::arrayPtr(originalPos, remaining_.begin());
+  }
+  
+  void consumeWhitespace() {
+    consumeWhile([](char chr) {
+      return (
+        chr == ' '  ||
+        chr == '\f' ||
+        chr == '\n' ||
+        chr == '\r' ||
+        chr == '\t' ||
+        chr == '\v'
+      );
+    });
+  }
+
+  kj::String consumeQuotedString() {
+    consume('"');
+    // TODO(perf): Avoid copy / alloc if no escapes encoutered.
+    // TODO(perf): Get statistics on string size and preallocate?
+    kj::Vector<char> decoded;
+
+    do {
+      auto stringValue = consumeWhile([](const char chr) {
+          return chr != '"' && chr != '\\';
+      });
+
+      decoded.addAll(stringValue);
+
+      if (nextChar() == '\\') {  // handle escapes.
+        advance();
+        switch(nextChar()) {
+          case '"' : decoded.add('"' ); advance(); break;
+          case '\\': decoded.add('\\'); advance(); break;
+          case '/' : decoded.add('/' ); advance(); break;
+          case 'b' : decoded.add('\b'); advance(); break;
+          case 'f' : decoded.add('\f'); advance(); break;
+          case 'n' : decoded.add('\n'); advance(); break;
+          case 'r' : decoded.add('\r'); advance(); break;
+          case 't' : decoded.add('\t'); advance(); break;
+          case 'u' :
+            advance();  // consume 'u'
+            unescapeAndAppend(kj::arrayPtr(remaining_.begin(), 4), decoded);
+            advance(4);
+            break;
+          default: KJ_FAIL_REQUIRE("invalid escape", nextChar()); break;
+        }
+      }
+
+    } while(nextChar() != '"');
+
+    consume('"');
+    decoded.add('\0');
+
+    // TODO(perf): This copy can be eliminated, but I can't find the kj::wayToDoIt();
+    return kj::String(decoded.releaseAsArray());
+  }
+
+  // TODO(someday): This "interface" is ugly, and won't work if/when surrogates are handled.
+  void unescapeAndAppend(kj::ArrayPtr<const char> hex, kj::Vector<char>& target) {
+    KJ_REQUIRE(hex.size() == 4);
+    int codePoint = 0;
+
+    for (int i = 0; i < 4; ++i) {
+      char c = hex[i];
+      codePoint <<= 4;
+
+      if ('0' <= c && c <= '9') {
+        codePoint |= c - '0';
+      } else if ('a' <= c && c <= 'f') {
+        codePoint |= c - 'a';
+      } else if ('A' <= c && c <= 'F') {
+        codePoint |= c - 'A';
+      } else {
+        KJ_FAIL_REQUIRE("invalid hex digit in unicode escape", c);
+      }
+    }
+
+    // TODO(soon): Support at least basic multi-lingual plane, ie ignore surrogates.
+    KJ_REQUIRE(codePoint < 128, "non-ASCII unicode escapes are not supported (yet!)");
+    target.add(0x7f & static_cast<char>(codePoint));
+  }
+
+private:
+  static const kj::ArrayPtr<const char> NULL_;
+  static const kj::ArrayPtr<const char> FALSE;
+  static const kj::ArrayPtr<const char> TRUE;
+
+  const kj::ArrayPtr<const char> input_;
+  kj::ArrayPtr<const char> remaining_;
+
+};  // class Parser
+
+// Array literal used instead of string literal to avoid null terminator.
+const kj::ArrayPtr<const char> Parser::NULL_ = kj::ArrayPtr<const char>({'n','u','l','l'});
+const kj::ArrayPtr<const char> Parser::FALSE = kj::ArrayPtr<const char>({'f','a','l','s','e'});
+const kj::ArrayPtr<const char> Parser::TRUE = kj::ArrayPtr<const char>({'t','r','u','e'});
+
+
+void parseJsonValue(kj::ArrayPtr<const char> input, JsonValue::Builder output) {
+  // TODO(security): should we check there are no non-whitespace characters left in input?
+  Parser parser(input);
+  parser.parseValue(output);
+}
+
+}  // namespace _ (private)
 
 // -----------------------------------------------------------------------------
 
