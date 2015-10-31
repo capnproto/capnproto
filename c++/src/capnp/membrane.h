@@ -71,7 +71,7 @@ public:
   // - Throw an exception to cause the call to fail with that exception.
   //
   // `target` is the underlying capability (*inside* the membrane) for which the call is destined.
-  // Generally, the only way you should use `target` is to wrap it in some capbaility which you
+  // Generally, the only way you should use `target` is to wrap it in some capability which you
   // return as a redirect. The redirect capability may modify the call in some way and send it to
   // `target`. Be careful to use `copyIntoMembrane()` and `copyOutOfMembrane()` as appropriate when
   // copying parameters or results across the membrane.
@@ -107,7 +107,7 @@ public:
 };
 
 Capability::Client membrane(Capability::Client inner, kj::Own<MembranePolicy> policy);
-// Wrap `inner` in a membrane specified by `filter`. `inner` is considered "inside" the membrane,
+// Wrap `inner` in a membrane specified by `policy`. `inner` is considered "inside" the membrane,
 // while the returned capability should only be called from outside the membrane.
 
 Capability::Client reverseMembrane(Capability::Client outer, kj::Own<MembranePolicy> policy);
