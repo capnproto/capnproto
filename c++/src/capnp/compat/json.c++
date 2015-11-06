@@ -440,7 +440,7 @@ public:
     output.initArray(values.size());
     auto array = output.getArray();
 
-    for (size_t i = 0; i < values.size(); ++i) {
+    for (auto i : kj::indices(values)) {
       array.adoptWithCaveats(i, kj::mv(values[i]));
     }
 
@@ -476,7 +476,7 @@ public:
     output.initObject(fields.size());
     auto object = output.getObject();
 
-    for (size_t i = 0; i < fields.size(); ++i) {
+    for (auto i : kj::indices(fields)) {
       object.adoptWithCaveats(i, kj::mv(fields[i]));
     }
 
