@@ -488,7 +488,7 @@ public:
   }
 
   void advance(size_t numBytes = 1) {
-    KJ_REQUIRE(numBytes < remaining_.size(), "JSON message ends prematurely.");
+    KJ_REQUIRE(numBytes <= remaining_.size(), "JSON message ends prematurely.");
     remaining_ = kj::arrayPtr(remaining_.begin() + numBytes, remaining_.end());
   }
 

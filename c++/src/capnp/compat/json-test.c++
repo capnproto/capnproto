@@ -199,6 +199,15 @@ KJ_TEST("basic json decoding") {
   {
     MallocMessageBuilder message;
     auto root = message.initRoot<JsonValue>();
+    json.decodeRaw(kj::str("null"), root);
+
+    KJ_EXPECT(root.which() == JsonValue::NULL_);
+    KJ_EXPECT(root.getNull() == VOID);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
 
     json.decodeRaw("false", root);
     KJ_EXPECT(root.which() == JsonValue::BOOLEAN);
