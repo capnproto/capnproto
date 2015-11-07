@@ -458,7 +458,7 @@ static siginfo_t toRegularSiginfo(const struct signalfd_siginfo& siginfo) {
         // we write the pointer, we'll end up with the right value for the int? Presumably the
         // two fields of signalfd_siginfo are actually extracted from one of these unions
         // originally, so actually contain redundant data? Better write some tests...
-        result.si_ptr = reinterpret_cast<void*>(static_cast<uintptr_t>(siginfo.ssi_ptr));
+        memcpy(&result.si_ptr, &siginfo.ssi_ptr, sizeof(result.si_ptr));
         break;
 
       case SI_TIMER:
