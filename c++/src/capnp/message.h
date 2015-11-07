@@ -221,7 +221,7 @@ public:
   Orphanage getOrphanage();
 
 private:
-  void* arenaSpace[21];
+  void* arenaSpace[22];
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
   // big STL headers.  We don't use a pointer to a BuilderArena because that would require an
