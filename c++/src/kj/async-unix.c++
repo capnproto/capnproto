@@ -458,7 +458,14 @@ static siginfo_t toRegularSiginfo(const struct signalfd_siginfo& siginfo) {
         // we write the pointer, we'll end up with the right value for the int? Presumably the
         // two fields of signalfd_siginfo are actually extracted from one of these unions
         // originally, so actually contain redundant data? Better write some tests...
-        result.si_ptr = reinterpret_cast<void*>(static_cast<uintptr_t>(siginfo.ssi_ptr));
+        //
+        // Making matters even stranger, siginfo.ssi_ptr is 64-bit even on 32-bit systems, and
+        // it appears that instead of doing the obvious thing by casting the pointer value to
+        // 64 bits, the kernel actually memcpy()s the 32-bit value into the 64-bit space. As
+        // a result, on big-endian 32-bit systems, the original pointer value ends up in the
+        // *upper* 32 bits of siginfo.ssi_ptr, which is totally weird. We play along and use
+        // a memcpy() on our end too, to get the right result on all platforms.
+        memcpy(&result.si_ptr, &siginfo.ssi_ptr, sizeof(result.si_ptr));
         break;
 
       case SI_TIMER:
