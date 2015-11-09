@@ -388,6 +388,8 @@ public:
 
   void parseValue(JsonValue::Builder& output) {
     consumeWhitespace();
+    KJ_DEFER(consumeWhitespace());
+
     KJ_REQUIRE(remaining_.size() > 0, "JSON message ends prematurely.");
 
     switch (nextChar()) {
@@ -496,6 +498,10 @@ public:
     consume('}');
   }
 
+  bool inputExhausted() {
+    return remaining_.size() == 0 || remaining_.front() == '\0';
+  }
+
   char nextChar() {
     KJ_REQUIRE(remaining_.size() > 0, "JSON message ends prematurely.");
     return remaining_.front();
@@ -531,7 +537,7 @@ public:
   template <typename Predicate>
   kj::ArrayPtr<const char> consumeWhile(Predicate&& predicate) {
     auto originalPos = remaining_.begin();
-    while (predicate(nextChar())) { advance(); }
+    while (!inputExhausted() && predicate(nextChar())) { advance(); }
 
     return kj::arrayPtr(originalPos, remaining_.begin());
   }
@@ -661,9 +667,10 @@ const kj::ArrayPtr<const char> Parser::TRUE = kj::ArrayPtr<const char>({'t','r',
 
 
 void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder output) const {
-  // TODO(security): should we check there are no non-whitespace characters left in input?
   Parser parser(impl->maxNestingDepth, input);
   parser.parseValue(output);
+
+  KJ_REQUIRE(parser.inputExhausted(), "Input remains after parsing JSON.");
 }
 
 // -----------------------------------------------------------------------------
