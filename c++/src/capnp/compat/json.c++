@@ -474,6 +474,7 @@ public:
   }
 
   char nextChar() {
+    KJ_REQUIRE(remaining_.size() > 0, "JSON message ends prematurely.");
     return remaining_.front();
   }
 
