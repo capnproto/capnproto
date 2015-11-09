@@ -185,21 +185,11 @@ KJ_TEST("encode union") {
 
 KJ_TEST("basic json decoding") {
   // TODO(cleanup): this test is a mess!
-  // TODO(soon): add expected failing cases.
   JsonCodec json;
   {
     MallocMessageBuilder message;
     auto root = message.initRoot<JsonValue>();
     json.decodeRaw("null", root);
-
-    KJ_EXPECT(root.which() == JsonValue::NULL_);
-    KJ_EXPECT(root.getNull() == VOID);
-  }
-
-  {
-    MallocMessageBuilder message;
-    auto root = message.initRoot<JsonValue>();
-    json.decodeRaw(kj::str("null"), root);
 
     KJ_EXPECT(root.which() == JsonValue::NULL_);
     KJ_EXPECT(root.getNull() == VOID);
@@ -411,6 +401,22 @@ KJ_TEST("basic json decoding") {
     json.decodeRaw("-5.5", root);
     KJ_EXPECT(root.which() == JsonValue::NUMBER);
     KJ_EXPECT(root.getNumber() == -5.5);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("a", root));
+    KJ_EXPECT_THROW_MESSAGE("ends prematurely", json.decodeRaw("[", root));
+    KJ_EXPECT_THROW_MESSAGE("ends prematurely", json.decodeRaw("{", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[}", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("{]", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[}]", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[1, , ]", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[,]", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[, 1]", root));
+    KJ_EXPECT_THROW_MESSAGE("Input remains", json.decodeRaw("11a", root));
   }
 }
 
