@@ -45,12 +45,6 @@ struct FieldHash {
 
 }  // namespace
 
-namespace _ {  // private
-
-void parseJsonValue(kj::ArrayPtr<const char> input, JsonValue::Builder output);
-
-}  // namespace _ (private)
-
 struct JsonCodec::Impl {
   bool prettyPrint = false;
 
@@ -221,10 +215,6 @@ kj::String JsonCodec::encodeRaw(JsonValue::Reader value) const {
   return impl->encodeRaw(value, 0, multiline, false).flatten();
 }
 
-void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder output) const {
-  _::parseJsonValue(input, output);
-}
-
 void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const {
   // TODO(soon): For interfaces, check for handlers on superclasses, per documentation...
   // TODO(soon): For branded types, should we check for handlers on the generic?
@@ -382,7 +372,7 @@ Orphan<DynamicValue> JsonCodec::decode(
 
 // -----------------------------------------------------------------------------
 
-namespace _ {  // private
+namespace {
 
 class Parser {
 public:
@@ -616,14 +606,14 @@ const kj::ArrayPtr<const char> Parser::NULL_ = kj::ArrayPtr<const char>({'n','u'
 const kj::ArrayPtr<const char> Parser::FALSE = kj::ArrayPtr<const char>({'f','a','l','s','e'});
 const kj::ArrayPtr<const char> Parser::TRUE = kj::ArrayPtr<const char>({'t','r','u','e'});
 
+}  // namespace
 
-void parseJsonValue(kj::ArrayPtr<const char> input, JsonValue::Builder output) {
+
+void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder output) const {
   // TODO(security): should we check there are no non-whitespace characters left in input?
   Parser parser(input);
   parser.parseValue(output);
 }
-
-}  // namespace _ (private)
 
 // -----------------------------------------------------------------------------
 
