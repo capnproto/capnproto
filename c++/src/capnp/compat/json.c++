@@ -520,7 +520,7 @@ public:
 
   void consume(char expected) {
     char current = nextChar();
-    KJ_REQUIRE(current == expected, "Unexpected character in JSON message.");
+    KJ_REQUIRE(current == expected, "Unexpected input in JSON message.");
 
     advance();
   }
