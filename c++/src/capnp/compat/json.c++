@@ -584,7 +584,7 @@ public:
             unescapeAndAppend(kj::arrayPtr(remaining_.begin(), 4), decoded);
             advance(4);
             break;
-          default: KJ_FAIL_REQUIRE("invalid escape", nextChar()); break;
+          default: KJ_FAIL_REQUIRE("Invalid escape in JSON string."); break;
         }
       }
 
@@ -637,7 +637,7 @@ public:
       } else if ('A' <= c && c <= 'F') {
         codePoint |= c - 'A';
       } else {
-        KJ_FAIL_REQUIRE("invalid hex digit in unicode escape", c);
+        KJ_FAIL_REQUIRE("Invalid hex digit in unicode escape.", c);
       }
     }
 
