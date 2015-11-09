@@ -377,7 +377,7 @@ namespace {
 class Parser {
 public:
   Parser(kj::ArrayPtr<const char> input) : input_(input), remaining_(input_) {}
-  void parseValue(JsonValue::Builder &output) {
+  void parseValue(JsonValue::Builder& output) {
     consumeWhitespace();
     KJ_REQUIRE(remaining_.size() > 0, "JSON message ends prematurely.");
 
@@ -394,7 +394,7 @@ public:
     }
   }
 
-  void parseNumber(JsonValue::Builder &output) {
+  void parseNumber(JsonValue::Builder& output) {
     // TODO(someday): strtod allows leading +, while JSON grammar does not.
     // strtod consumes leading whitespace, so we don't have to.
     char *numEnd;
@@ -403,11 +403,11 @@ public:
     advanceTo(numEnd);
   }
 
-  void parseString(JsonValue::Builder &output) {
+  void parseString(JsonValue::Builder& output) {
     output.setString(consumeQuotedString());
   }
 
-  void parseArray(JsonValue::Builder &output) {
+  void parseArray(JsonValue::Builder& output) {
     // TODO(perf): Using orphans leaves holes in the message. It's expected
     // that a JsonValue is used for interop, and won't be sent or written as a
     // Cap'n Proto message.
@@ -437,7 +437,7 @@ public:
     consume(']');
   }
 
-  void parseObject(JsonValue::Builder &output) {
+  void parseObject(JsonValue::Builder& output) {
     kj::Vector<Orphan<JsonValue::Field>> fields;
     auto orphanage = Orphanage::getForMessageContaining(output);
 
