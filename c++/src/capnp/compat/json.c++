@@ -504,7 +504,8 @@ public:
     advance(expected.size());
   }
 
-  kj::ArrayPtr<const char> consumeWhile(kj::Function<bool(char)> predicate) {
+  template <typename Predicate>
+  kj::ArrayPtr<const char> consumeWhile(Predicate&& predicate) {
     auto originalPos = remaining_.begin();
     while (predicate(nextChar())) { advance(); }
 
