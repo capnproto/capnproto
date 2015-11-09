@@ -21,6 +21,8 @@
 
 #include "json.h"
 #include <cstdlib>  // std::strtod
+#include <errno.h>  // for std::strtod errors
+#include <regex>  // for numbers
 #include <unordered_map>
 #include <capnp/orphan.h>
 #include <kj/debug.h>
@@ -395,19 +397,27 @@ public:
       case '"': parseString(output); break;
       case '[': parseArray(output);  break;
       case '{': parseObject(output); break;
-      // TODO(security): We could check for numbers more carefully instead of
-      // relying on strtod.
-      default: parseNumber(output); break;
+      case '-': case '0': case '1': case '2': case '3':
+      case '4': case '5': case '6': case '7': case '8':
+      case '9': parseNumber(output); break;
+      default: KJ_FAIL_REQUIRE("Unexpected input in JSON message.");
     }
   }
 
   void parseNumber(JsonValue::Builder& output) {
-    // TODO(someday): strtod allows leading +, while JSON grammar does not.
-    // strtod consumes leading whitespace, so we don't have to.
-    char *numEnd;
-    output.setNumber(std::strtod(remaining_.begin(), &numEnd));
+    auto numberStr = consumeNumber();
+    char *endPtr;
 
-    advanceTo(numEnd);
+    errno = 0;
+    double value = std::strtod(numberStr.begin(), &endPtr);
+
+    KJ_ASSERT(endPtr != numberStr.begin(), "strtod should not fail! Is consumeNumber wrong?");
+    KJ_REQUIRE((value != HUGE_VAL && value != -HUGE_VAL) || errno != ERANGE,
+        "Overflow in JSON number.");
+    KJ_REQUIRE(value != 0.0 || errno != ERANGE,
+        "Underflow in JSON number.");
+
+    output.setNumber(value);
   }
 
   void parseString(JsonValue::Builder& output) {
@@ -579,6 +589,30 @@ public:
 
     // TODO(perf): This copy can be eliminated, but I can't find the kj::wayToDoIt();
     return kj::String(decoded.releaseAsArray());
+  }
+
+  kj::String consumeNumber() {
+    // TODO(perf): <regex> could be eliminated.
+    static std::regex jsonNumber(
+        R"(-?(0|[1-9][0-9]*)(\.[0-9]+)?((e|E)([+-])?[0-9]+)?)");
+    // jsonNumber matches numbers as seen in railroad diagram at http://json.org/.
+
+    std::cmatch match;
+    bool foundNumber = std::regex_search(
+        remaining_.begin(),
+        remaining_.end(),
+        match, jsonNumber,
+        std::regex_constants::match_continuous);
+
+    KJ_REQUIRE(foundNumber, "Expected number in JSON input.");
+
+    kj::Vector<char> number;
+    number.addAll(match[0].first, match[0].second);
+    number.add('\0');
+
+    advanceTo(match.suffix().first);
+
+    return kj::String(number.releaseAsArray());
   }
 
   // TODO(someday): This "interface" is ugly, and won't work if/when surrogates are handled.

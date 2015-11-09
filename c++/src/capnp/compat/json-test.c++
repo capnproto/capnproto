@@ -355,10 +355,44 @@ KJ_TEST("basic json decoding") {
     MallocMessageBuilder message;
     auto root = message.initRoot<JsonValue>();
 
-    // TODO(soon): this should fail, JSON doesn't allow leading +
-    json.decodeRaw("+123", root);
-    KJ_EXPECT(root.which() == JsonValue::NUMBER);
-    KJ_EXPECT(root.getNumber() == 123);
+    KJ_EXPECT_THROW_MESSAGE("input", json.decodeRaw("z", root));
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    // Leading + not allowed in numbers.
+    KJ_EXPECT_THROW_MESSAGE("Unexpected", json.decodeRaw("+123", root));
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    KJ_EXPECT_THROW_MESSAGE("Overflow", json.decodeRaw("1e1024", root));
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    KJ_EXPECT_THROW_MESSAGE("Underflow", json.decodeRaw("1e-1023", root));
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    KJ_EXPECT_THROW_MESSAGE("Unexpected", json.decodeRaw("[00]", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected", json.decodeRaw("[01]", root));
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    KJ_EXPECT_THROW_MESSAGE("Expected number", json.decodeRaw("-", root));
   }
 
   {
