@@ -390,7 +390,7 @@ public:
     consumeWhitespace();
     KJ_DEFER(consumeWhitespace());
 
-    KJ_REQUIRE(remaining_.size() > 0, "JSON message ends prematurely.");
+    KJ_REQUIRE(!inputExhausted(), "JSON message ends prematurely.");
 
     switch (nextChar()) {
       case 'n': consume(NULL_); output.setNull();         break;
@@ -503,7 +503,7 @@ public:
   }
 
   char nextChar() {
-    KJ_REQUIRE(remaining_.size() > 0, "JSON message ends prematurely.");
+    KJ_REQUIRE(!inputExhausted(), "JSON message ends prematurely.");
     return remaining_.front();
   }
 
