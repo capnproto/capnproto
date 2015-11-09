@@ -422,7 +422,7 @@ public:
       values.add(kj::mv(orphan));
 
       if (consumeWhitespace(), nextChar() != ']') {
-        // TODO(soon): This incorrectly allows a trailing comma.
+        // TODO(someday): The JSON spec forbids a trailing comma, but we allow it.
         consume(',');
       }
     }
@@ -458,7 +458,7 @@ public:
       fields.add(kj::mv(orphan));
 
       if (consumeWhitespace(), nextChar() != '}') {
-        // TODO(soon): This incorrectly allows a trailing comma.
+        // TODO(someday): The JSON spec forbids a trailing comma, but we allow it.
         consume(',');
       }
     }
