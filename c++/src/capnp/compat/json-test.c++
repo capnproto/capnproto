@@ -380,6 +380,45 @@ KJ_TEST("basic json decoding") {
   }
 }
 
+KJ_TEST("maximum nesting depth") {
+  JsonCodec json;
+  auto input = kj::str(R"({"foo": "a", "bar": ["b", { "baz": [-5.5e11] }, [ [ 1 ], {  "z": 2 }]]})");
+  // `input` has a maximum nesting depth of 4, reached 3 times.
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw(input, root);
+  }
+
+  {
+    json.setMaxNestingDepth(0);
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    KJ_EXPECT_THROW_MESSAGE("nest",
+        json.decodeRaw(input, root));
+  }
+
+  {
+    json.setMaxNestingDepth(3);
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    KJ_EXPECT_THROW_MESSAGE("nest",
+        json.decodeRaw(input, root));
+  }
+
+  {
+    json.setMaxNestingDepth(4);
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw(input, root);
+  }
+}
+
 class TestHandler: public JsonCodec::Handler<Text> {
 public:
   void encode(const JsonCodec& codec, Text::Reader input,

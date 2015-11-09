@@ -47,6 +47,7 @@ struct FieldHash {
 
 struct JsonCodec::Impl {
   bool prettyPrint = false;
+  size_t maxNestingDepth = 64;
 
   std::unordered_map<Type, HandlerBase*, TypeHash> typeHandlers;
   std::unordered_map<StructSchema::Field, HandlerBase*, FieldHash> fieldHandlers;
@@ -187,6 +188,10 @@ JsonCodec::JsonCodec()
 JsonCodec::~JsonCodec() noexcept(false) {}
 
 void JsonCodec::setPrettyPrint(bool enabled) { impl->prettyPrint = enabled; }
+
+void JsonCodec::setMaxNestingDepth(size_t maxNestingDepth) {
+  impl->maxNestingDepth = maxNestingDepth;
+}
 
 kj::String JsonCodec::encode(DynamicValue::Reader value, Type type) const {
   MallocMessageBuilder message;
@@ -376,7 +381,9 @@ namespace {
 
 class Parser {
 public:
-  Parser(kj::ArrayPtr<const char> input) : input_(input), remaining_(input_) {}
+  Parser(size_t maxNestingDepth, kj::ArrayPtr<const char> input) :
+    maxNestingDepth_(maxNestingDepth), input_(input), remaining_(input_), nestingDepth_(0) {}
+
   void parseValue(JsonValue::Builder& output) {
     consumeWhitespace();
     KJ_REQUIRE(remaining_.size() > 0, "JSON message ends prematurely.");
@@ -415,6 +422,9 @@ public:
     auto orphanage = Orphanage::getForMessageContaining(output);
 
     consume('[');
+    KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.", nestingDepth_);
+    KJ_DEFER(--nestingDepth_);
+
     while (consumeWhitespace(), nextChar() != ']') {
       auto orphan = orphanage.newOrphan<JsonValue>();
       auto builder = orphan.get();
@@ -442,6 +452,9 @@ public:
     auto orphanage = Orphanage::getForMessageContaining(output);
 
     consume('{');
+    KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.", nestingDepth_);
+    KJ_DEFER(--nestingDepth_);
+
     while (consumeWhitespace(), nextChar() != '}') {
       auto orphan = orphanage.newOrphan<JsonValue::Field>();
       auto builder = orphan.get();
@@ -598,8 +611,10 @@ private:
   static const kj::ArrayPtr<const char> FALSE;
   static const kj::ArrayPtr<const char> TRUE;
 
+  const size_t maxNestingDepth_;
   const kj::ArrayPtr<const char> input_;
   kj::ArrayPtr<const char> remaining_;
+  size_t nestingDepth_;
 
 };  // class Parser
 
@@ -613,7 +628,7 @@ const kj::ArrayPtr<const char> Parser::TRUE = kj::ArrayPtr<const char>({'t','r',
 
 void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder output) const {
   // TODO(security): should we check there are no non-whitespace characters left in input?
-  Parser parser(input);
+  Parser parser(impl->maxNestingDepth, input);
   parser.parseValue(output);
 }
 
