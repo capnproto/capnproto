@@ -658,10 +658,21 @@ private:
 
 };  // class Parser
 
+// clang warns about these constructors running on program start. All they do is each set a pointer
+// and a size_t, so we politely ask clang to let it slide.
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+#endif
+
 // Array literal used instead of string literal to avoid null terminator.
 const kj::ArrayPtr<const char> Parser::NULL_ = kj::ArrayPtr<const char>({'n','u','l','l'});
 const kj::ArrayPtr<const char> Parser::FALSE = kj::ArrayPtr<const char>({'f','a','l','s','e'});
 const kj::ArrayPtr<const char> Parser::TRUE = kj::ArrayPtr<const char>({'t','r','u','e'});
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 }  // namespace
 
