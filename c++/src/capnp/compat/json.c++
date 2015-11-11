@@ -393,9 +393,9 @@ public:
     KJ_REQUIRE(!inputExhausted(), "JSON message ends prematurely.");
 
     switch (nextChar()) {
-      case 'n': consume(NULL_); output.setNull();         break;
-      case 'f': consume(FALSE); output.setBoolean(false); break;
-      case 't': consume(TRUE);  output.setBoolean(true);  break;
+      case 'n': consume(kj::StringPtr("null"));  output.setNull();         break;
+      case 'f': consume(kj::StringPtr("false")); output.setBoolean(false); break;
+      case 't': consume(kj::StringPtr("true"));  output.setBoolean(true);  break;
       case '"': parseString(output); break;
       case '[': parseArray(output);  break;
       case '{': parseObject(output); break;
@@ -647,32 +647,12 @@ public:
   }
 
 private:
-  static const kj::ArrayPtr<const char> NULL_;
-  static const kj::ArrayPtr<const char> FALSE;
-  static const kj::ArrayPtr<const char> TRUE;
-
   const size_t maxNestingDepth_;
   const kj::ArrayPtr<const char> input_;
   kj::ArrayPtr<const char> remaining_;
   size_t nestingDepth_;
 
 };  // class Parser
-
-// clang warns about these constructors running on program start. All they do is each set a pointer
-// and a size_t, so we politely ask clang to let it slide.
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wglobal-constructors"
-#endif
-
-// Array literal used instead of string literal to avoid null terminator.
-const kj::ArrayPtr<const char> Parser::NULL_ = kj::ArrayPtr<const char>({'n','u','l','l'});
-const kj::ArrayPtr<const char> Parser::FALSE = kj::ArrayPtr<const char>({'f','a','l','s','e'});
-const kj::ArrayPtr<const char> Parser::TRUE = kj::ArrayPtr<const char>({'t','r','u','e'});
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 }  // namespace
 
