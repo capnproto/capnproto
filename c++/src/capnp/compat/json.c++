@@ -20,9 +20,9 @@
 // THE SOFTWARE.
 
 #include "json.h"
+#include <cmath>    // for HUGEVAL to check for overflow in std::strtod
 #include <cstdlib>  // std::strtod
 #include <errno.h>  // for std::strtod errors
-#include <regex>  // for numbers
 #include <unordered_map>
 #include <capnp/orphan.h>
 #include <kj/debug.h>
@@ -543,6 +543,21 @@ public:
     advance(expected.size());
   }
 
+  bool tryConsume(char expected) {
+    bool found = !inputExhausted() && nextChar() == expected;
+    if (found) { advance(); }
+
+    return found;
+  }
+
+  template <typename Predicate>
+  void consumeOne(Predicate&& predicate) {
+    char current = nextChar();
+    KJ_REQUIRE(predicate(current), "Unexpected input in JSON message.");
+
+    advance();
+  }
+
   template <typename Predicate>
   kj::ArrayPtr<const char> consumeWhile(Predicate&& predicate) {
     auto originalPos = remaining_.begin();
@@ -607,25 +622,28 @@ public:
   }
 
   kj::String consumeNumber() {
-    // TODO(perf): <regex> could be eliminated.
-    static std::regex jsonNumber(
-        R"(-?(0|[1-9][0-9]*)(\.[0-9]+)?((e|E)([+-])?[0-9]+)?)");
-    // jsonNumber matches numbers as seen in railroad diagram at http://json.org/.
+    auto originalPos = remaining_.begin();
 
-    std::cmatch match;
-    bool foundNumber = std::regex_search(
-        remaining_.begin(),
-        remaining_.end(),
-        match, jsonNumber,
-        std::regex_constants::match_continuous);
+    tryConsume('-');
+    if (!tryConsume('0')) {
+      consumeOne([](char c) { return '1' <= c && c <= '9'; });
+      consumeWhile([](char c) { return '0' <= c && c <= '9'; });
+    }
 
-    KJ_REQUIRE(foundNumber, "Expected number in JSON input.");
+    if (tryConsume('.')) {
+      consumeWhile([](char c) { return '0' <= c && c <= '9'; });
+    }
+
+    if (tryConsume('e') || tryConsume('E')) {
+      tryConsume('+') || tryConsume('-');
+      consumeWhile([](char c) { return '0' <= c && c <= '9'; });
+    }
+
+    KJ_REQUIRE(remaining_.begin() != originalPos, "Expected number in JSON input.");
 
     kj::Vector<char> number;
-    number.addAll(match[0].first, match[0].second);
+    number.addAll(originalPos, remaining_.begin());
     number.add('\0');
-
-    advanceTo(match.suffix().first);
 
     return kj::String(number.releaseAsArray());
   }
