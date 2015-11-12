@@ -415,10 +415,12 @@ KJ_TEST("basic json decoding") {
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[}]", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[1, , ]", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[,]", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[true,]", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[, 1]", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[1\"\"]", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[1,, \"\"]", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("{\"a\"1: 0}", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw(R"({"some": null,})", root));
     KJ_EXPECT_THROW_MESSAGE("Input remains", json.decodeRaw("11a", root));
     KJ_EXPECT_THROW_MESSAGE("Invalid escape", json.decodeRaw(R"("\z")", root));
     KJ_EXPECT_THROW_MESSAGE("Invalid escape", json.decodeRaw(R"("\z")", root));

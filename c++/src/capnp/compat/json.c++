@@ -432,6 +432,7 @@ public:
     // Cap'n Proto message.  This also applies to parseObject below.
     kj::Vector<Orphan<JsonValue>> values;
     auto orphanage = Orphanage::getForMessageContaining(output);
+    bool expectComma = false;
 
     consume('[');
     KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.");
@@ -440,13 +441,17 @@ public:
     while (consumeWhitespace(), nextChar() != ']') {
       auto orphan = orphanage.newOrphan<JsonValue>();
       auto builder = orphan.get();
+
+      if (expectComma) {
+        consumeWhitespace();
+        consume(',');
+        consumeWhitespace();
+      }
+
       parseValue(builder);
       values.add(kj::mv(orphan));
 
-      if (consumeWhitespace(), nextChar() != ']') {
-        // TODO(someday): The JSON spec forbids a trailing comma, but we allow it.
-        consume(',');
-      }
+      expectComma = true;
     }
 
     output.initArray(values.size());
@@ -462,6 +467,7 @@ public:
   void parseObject(JsonValue::Builder& output) {
     kj::Vector<Orphan<JsonValue::Field>> fields;
     auto orphanage = Orphanage::getForMessageContaining(output);
+    bool expectComma = false;
 
     consume('{');
     KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.");
@@ -470,6 +476,12 @@ public:
     while (consumeWhitespace(), nextChar() != '}') {
       auto orphan = orphanage.newOrphan<JsonValue::Field>();
       auto builder = orphan.get();
+
+      if (expectComma) {
+        consumeWhitespace();
+        consume(',');
+        consumeWhitespace();
+      }
 
       builder.setName(consumeQuotedString());
 
@@ -482,10 +494,7 @@ public:
 
       fields.add(kj::mv(orphan));
 
-      if (consumeWhitespace(), nextChar() != '}') {
-        // TODO(someday): The JSON spec forbids a trailing comma, but we allow it.
-        consume(',');
-      }
+      expectComma = true;
     }
 
     output.initObject(fields.size());
