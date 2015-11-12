@@ -434,7 +434,7 @@ public:
     auto orphanage = Orphanage::getForMessageContaining(output);
 
     consume('[');
-    KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.", nestingDepth_);
+    KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.");
     KJ_DEFER(--nestingDepth_);
 
     while (consumeWhitespace(), nextChar() != ']') {
@@ -464,7 +464,7 @@ public:
     auto orphanage = Orphanage::getForMessageContaining(output);
 
     consume('{');
-    KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.", nestingDepth_);
+    KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.");
     KJ_DEFER(--nestingDepth_);
 
     while (consumeWhitespace(), nextChar() != '}') {
