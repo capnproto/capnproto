@@ -551,6 +551,9 @@ public:
   inline StructReader()
       : segment(nullptr), capTable(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
         pointerCount(0), nestingLimit(0x7fffffff) {}
+  inline StructReader(kj::ArrayPtr<const word> data)
+      : segment(nullptr), capTable(nullptr), data(data.begin()), pointers(nullptr),
+        dataSize(data.size() * WORDS * BITS_PER_WORD), pointerCount(0), nestingLimit(0x7fffffff) {}
 
   const void* getLocation() const { return data; }
 

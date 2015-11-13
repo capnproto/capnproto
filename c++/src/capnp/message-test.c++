@@ -151,6 +151,23 @@ TEST(Message, MessageBuilderInitSpaceAvailable) {
             kj::implicitCast<void*>(builder2.getRoot<TestAllTypes>().getTextField().begin()));
 }
 
+TEST(Message, ReadWriteDataStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<TestAllTypes>();
+
+  root.setUInt32Field(123);
+  root.setFloat64Field(1.5);
+  root.setTextField("foo");
+
+  auto copy = readDataStruct<TestAllTypes>(writeDataStruct(root));
+  EXPECT_EQ(123, copy.getUInt32Field());
+  EXPECT_EQ(1.5, copy.getFloat64Field());
+  EXPECT_FALSE(copy.hasTextField());
+
+  checkTestMessageAllZero(readDataStruct<TestAllTypes>(nullptr));
+  checkTestMessageAllZero(defaultValue<TestAllTypes>());
+}
+
 // TODO(test):  More tests.
 
 }  // namespace

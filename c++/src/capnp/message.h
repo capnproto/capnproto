@@ -271,6 +271,27 @@ void copyToUnchecked(Reader&& reader, kj::ArrayPtr<word> uncheckedBuffer);
 // readMessageUnchecked().  The buffer's size must be exactly reader.totalSizeInWords() + 1,
 // otherwise an exception will be thrown.  The buffer must be zero'd before calling.
 
+template <typename RootType>
+typename RootType::Reader readDataStruct(kj::ArrayPtr<const word> data);
+// Interprets the given data as a single, data-only struct. Only primitive fields (booleans,
+// numbers, and enums) will be readable; all pointers will be null. This is useful if you want
+// to use Cap'n Proto as a language/platform-neutral way to pack some bits.
+//
+// The input is a word array rather than a byte array to enforce alignment. If you have a byte
+// array which you know is word-aligned (or if your platform supports unaligned reads and you don't
+// mind the performance penalty), then you can use `reinterpret_cast` to convert a byte array into
+// a word array:
+//
+//     kj::arrayPtr(reinterpret_cast<const word*>(bytes.begin()),
+//                  reinterpret_cast<const word*>(bytes.end()))
+
+template <typename BuilderType>
+typename kj::ArrayPtr<const word> writeDataStruct(BuilderType builder);
+// Given a struct builder, get the underlying data section as a word array, suitable for passing
+// to `readDataStruct()`.
+//
+// Note that you may call `.toBytes()` on the returned value to convert to `ArrayPtr<const byte>`.
+
 template <typename Type>
 static typename Type::Reader defaultValue();
 // Get a default instance of the given struct or list type.
@@ -450,6 +471,24 @@ void copyToUnchecked(Reader&& reader, kj::ArrayPtr<word> uncheckedBuffer) {
   FlatMessageBuilder builder(uncheckedBuffer);
   builder.setRoot(kj::fwd<Reader>(reader));
   builder.requireFilled();
+}
+
+template <typename RootType>
+typename RootType::Reader readDataStruct(kj::ArrayPtr<const word> data) {
+  return typename RootType::Reader(_::StructReader(data));
+}
+
+template <typename BuilderType>
+typename kj::ArrayPtr<const word> writeDataStruct(BuilderType builder) {
+  auto bytes = _::PointerHelpers<FromBuilder<BuilderType>>::getInternalBuilder(kj::mv(builder))
+      .getDataSectionAsBlob();
+  return kj::arrayPtr(reinterpret_cast<word*>(bytes.begin()),
+                      reinterpret_cast<word*>(bytes.end()));
+}
+
+template <typename Type>
+static typename Type::Reader defaultValue() {
+  return typename Type::Reader(_::StructReader());
 }
 
 }  // namespace capnp
