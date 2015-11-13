@@ -1,4 +1,5 @@
 // Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
+// Copyright (c) 2015 Google Inc. (Jason Choy <jjwchoy@google.com>)
 // Licensed under the MIT License:
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,6 +22,9 @@
 
 #include "async-io.h"
 #include "async-unix.h"
+#ifdef __APPLE__
+#include "async-cocoa.h"
+#endif
 #include "debug.h"
 #include <kj/compat/gtest.h>
 #include <sys/types.h>
@@ -30,8 +34,19 @@
 namespace kj {
 namespace {
 
-TEST(AsyncIo, SimpleNetwork) {
-  auto ioContext = setupAsyncIo();
+#ifdef __APPLE__
+#define TEST_IO(Name) TEST(AsyncIo, Name) {\
+  test##Name(setupAsyncIo());\
+  test##Name(setupCocoaAsyncIo());\
+}
+#else
+#define TEST_IO(Name) TEST(AsyncIo, Name) {\
+  test##Name(setupAsyncIo());\
+}
+#endif
+    
+template <typename IoContext>
+void testSimpleNetwork(IoContext ioContext) {
   auto& network = ioContext.provider->getNetwork();
 
   Own<ConnectionReceiver> listener;
@@ -67,6 +82,8 @@ TEST(AsyncIo, SimpleNetwork) {
 
   EXPECT_EQ("foo", result);
 }
+    
+TEST_IO(SimpleNetwork);
 
 String tryParse(WaitScope& waitScope, Network& network, StringPtr text, uint portHint = 0) {
   return network.parseAddress(text, portHint).wait(waitScope)->toString();
@@ -85,8 +102,8 @@ bool hasIpv6() {
   }
 }
 
-TEST(AsyncIo, AddressParsing) {
-  auto ioContext = setupAsyncIo();
+template <typename IoContext>
+void testAddressParsing(IoContext ioContext) {
   auto& w = ioContext.waitScope;
   auto& network = ioContext.provider->getNetwork();
 
@@ -119,9 +136,10 @@ TEST(AsyncIo, AddressParsing) {
   // connect to "localhost" in a different test, though.
 }
 
-TEST(AsyncIo, OneWayPipe) {
-  auto ioContext = setupAsyncIo();
+TEST_IO(AddressParsing);
 
+template <typename IoContext>
+void testOneWayPipe(IoContext ioContext) {
   auto pipe = ioContext.provider->newOneWayPipe();
   char receiveBuffer[4];
 
@@ -137,9 +155,10 @@ TEST(AsyncIo, OneWayPipe) {
   EXPECT_EQ("foo", result);
 }
 
-TEST(AsyncIo, TwoWayPipe) {
-  auto ioContext = setupAsyncIo();
+TEST_IO(OneWayPipe);
 
+template <typename IoContext>
+void testTwoWayPipe(IoContext ioContext) {
   auto pipe = ioContext.provider->newTwoWayPipe();
   char receiveBuffer1[4];
   char receiveBuffer2[4];
@@ -163,10 +182,11 @@ TEST(AsyncIo, TwoWayPipe) {
   EXPECT_EQ("foo", result);
   EXPECT_EQ("bar", result2);
 }
+    
+TEST_IO(TwoWayPipe);
 
-TEST(AsyncIo, PipeThread) {
-  auto ioContext = setupAsyncIo();
-
+template <typename IoContext>
+void testPipeThread(IoContext ioContext) {
   auto pipeThread = ioContext.provider->newPipeThread(
       [](AsyncIoProvider& ioProvider, AsyncIoStream& stream, WaitScope& waitScope) {
     char buf[4];
@@ -184,10 +204,11 @@ TEST(AsyncIo, PipeThread) {
   EXPECT_EQ("foo", heapString(buf, 3));
 }
 
-TEST(AsyncIo, PipeThreadDisconnects) {
-  // Like above, but in this case we expect the main thread to detect the pipe thread disconnecting.
+TEST_IO(PipeThread);
 
-  auto ioContext = setupAsyncIo();
+template <typename IoContext>
+void testPipeThreadDisconnects(IoContext ioContext) {
+  // Like above, but in this case we expect the main thread to detect the pipe thread disconnecting.
 
   auto pipeThread = ioContext.provider->newPipeThread(
       [](AsyncIoProvider& ioProvider, AsyncIoStream& stream, WaitScope& waitScope) {
@@ -207,9 +228,11 @@ TEST(AsyncIo, PipeThreadDisconnects) {
   EXPECT_EQ(0, pipeThread.pipe->tryRead(buf, 1, 1).wait(ioContext.waitScope));
 }
 
+TEST_IO(PipeThreadDisconnects);
+
+// TODO convert to TEST_IO when timers are implemented for cocoa
 TEST(AsyncIo, Timeouts) {
   auto ioContext = setupAsyncIo();
-
   Timer& timer = ioContext.provider->getTimer();
 
   auto promise1 = timer.timeoutAfter(10 * MILLISECONDS, kj::Promise<void>(kj::NEVER_DONE));
@@ -220,9 +243,9 @@ TEST(AsyncIo, Timeouts) {
   EXPECT_EQ(123, promise2.wait(ioContext.waitScope));
 }
 
+// TODO convert to TEST_IO when datagram is implemented for cocoa
 TEST(AsyncIo, Udp) {
   auto ioContext = setupAsyncIo();
-
   auto addr = ioContext.provider->getNetwork().parseAddress("127.0.0.1").wait(ioContext.waitScope);
 
   auto port1 = addr->bindDatagramPort();
@@ -309,8 +332,8 @@ TEST(AsyncIo, Udp) {
       auto message = ancillary.value[0];
       EXPECT_EQ(IPPROTO_IP, message.getLevel());
       EXPECT_EQ(IP_PKTINFO, message.getType());
-      EXPECT_EQ(sizeof(struct in_pktinfo), message.asArray<byte>().size());
-      auto& pktinfo = KJ_ASSERT_NONNULL(message.as<struct in_pktinfo>());
+      EXPECT_EQ(sizeof(struct in_pktinfo), message.template asArray<byte>().size());
+      auto& pktinfo = KJ_ASSERT_NONNULL(message.template as<struct in_pktinfo>());
       EXPECT_EQ(htonl(0x7F000001), pktinfo.ipi_addr.s_addr);  // 127.0.0.1
     }
 
@@ -339,8 +362,8 @@ TEST(AsyncIo, Udp) {
         EXPECT_EQ(IPPROTO_IP, message.getLevel());
         EXPECT_EQ(IP_PKTINFO, message.getType());
 
-        EXPECT_TRUE(message.as<struct in_pktinfo>() == nullptr);
-        EXPECT_LT(message.asArray<byte>().size(), sizeof(struct in_pktinfo));
+        EXPECT_TRUE(message.template as<struct in_pktinfo>() == nullptr);
+        EXPECT_LT(message.template asArray<byte>().size(), sizeof(struct in_pktinfo));
       }
     }
 
