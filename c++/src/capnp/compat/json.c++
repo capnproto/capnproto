@@ -20,9 +20,9 @@
 // THE SOFTWARE.
 
 #include "json.h"
-#include <cmath>    // for HUGEVAL to check for overflow in std::strtod
-#include <cstdlib>  // std::strtod
-#include <cerrno>   // for std::strtod errors
+#include <math.h>    // for HUGEVAL to check for overflow in std::strtod
+#include <stdlib.h>  // std::strtod
+#include <errno.h>   // for std::strtod errors
 #include <unordered_map>
 #include <capnp/orphan.h>
 #include <kj/debug.h>
