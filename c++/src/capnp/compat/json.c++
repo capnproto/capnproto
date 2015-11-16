@@ -384,7 +384,7 @@ namespace {
 class Parser {
 public:
   Parser(size_t maxNestingDepth, kj::ArrayPtr<const char> input) :
-    maxNestingDepth_(maxNestingDepth), input_(input), remaining_(input_), nestingDepth_(0) {}
+    maxNestingDepth(maxNestingDepth), input(input), remaining(input), nestingDepth(0) {}
 
   void parseValue(JsonValue::Builder& output) {
     consumeWhitespace();
@@ -435,8 +435,8 @@ public:
     bool expectComma = false;
 
     consume('[');
-    KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.");
-    KJ_DEFER(--nestingDepth_);
+    KJ_REQUIRE(++nestingDepth <= maxNestingDepth, "JSON message nested too deeply.");
+    KJ_DEFER(--nestingDepth);
 
     while (consumeWhitespace(), nextChar() != ']') {
       auto orphan = orphanage.newOrphan<JsonValue>();
@@ -470,8 +470,8 @@ public:
     bool expectComma = false;
 
     consume('{');
-    KJ_REQUIRE(++nestingDepth_ <= maxNestingDepth_, "JSON message nested too deeply.");
-    KJ_DEFER(--nestingDepth_);
+    KJ_REQUIRE(++nestingDepth <= maxNestingDepth, "JSON message nested too deeply.");
+    KJ_DEFER(--nestingDepth);
 
     while (consumeWhitespace(), nextChar() != '}') {
       auto orphan = orphanage.newOrphan<JsonValue::Field>();
@@ -508,23 +508,23 @@ public:
   }
 
   bool inputExhausted() {
-    return remaining_.size() == 0 || remaining_.front() == '\0';
+    return remaining.size() == 0 || remaining.front() == '\0';
   }
 
   char nextChar() {
     KJ_REQUIRE(!inputExhausted(), "JSON message ends prematurely.");
-    return remaining_.front();
+    return remaining.front();
   }
 
   void advance(size_t numBytes = 1) {
-    KJ_REQUIRE(numBytes <= remaining_.size(), "JSON message ends prematurely.");
-    remaining_ = kj::arrayPtr(remaining_.begin() + numBytes, remaining_.end());
+    KJ_REQUIRE(numBytes <= remaining.size(), "JSON message ends prematurely.");
+    remaining = kj::arrayPtr(remaining.begin() + numBytes, remaining.end());
   }
 
   void advanceTo(const char *newPos) {
-    KJ_REQUIRE(remaining_.begin() <= newPos && newPos < remaining_.end(),
+    KJ_REQUIRE(remaining.begin() <= newPos && newPos < remaining.end(),
         "JSON message ends prematurely.");
-    remaining_ = kj::arrayPtr(newPos, remaining_.end());
+    remaining = kj::arrayPtr(newPos, remaining.end());
   }
 
   void consume(char expected) {
@@ -535,9 +535,9 @@ public:
   }
 
   void consume(kj::ArrayPtr<const char> expected) {
-    KJ_REQUIRE(remaining_.size() >= expected.size());
+    KJ_REQUIRE(remaining.size() >= expected.size());
 
-    auto prefix = remaining_.slice(0, expected.size());
+    auto prefix = remaining.slice(0, expected.size());
     KJ_REQUIRE(prefix == expected, "Unexpected input in JSON message.");
 
     advance(expected.size());
@@ -560,10 +560,10 @@ public:
 
   template <typename Predicate>
   kj::ArrayPtr<const char> consumeWhile(Predicate&& predicate) {
-    auto originalPos = remaining_.begin();
+    auto originalPos = remaining.begin();
     while (!inputExhausted() && predicate(nextChar())) { advance(); }
 
-    return kj::arrayPtr(originalPos, remaining_.begin());
+    return kj::arrayPtr(originalPos, remaining.begin());
   }
   
   void consumeWhitespace() {
@@ -605,7 +605,7 @@ public:
           case 't' : decoded.add('\t'); advance(); break;
           case 'u' :
             advance();  // consume 'u'
-            unescapeAndAppend(kj::arrayPtr(remaining_.begin(), 4), decoded);
+            unescapeAndAppend(kj::arrayPtr(remaining.begin(), 4), decoded);
             advance(4);
             break;
           default: KJ_FAIL_REQUIRE("Invalid escape in JSON string."); break;
@@ -622,7 +622,7 @@ public:
   }
 
   kj::String consumeNumber() {
-    auto originalPos = remaining_.begin();
+    auto originalPos = remaining.begin();
 
     tryConsume('-');
     if (!tryConsume('0')) {
@@ -639,10 +639,10 @@ public:
       consumeWhile([](char c) { return '0' <= c && c <= '9'; });
     }
 
-    KJ_REQUIRE(remaining_.begin() != originalPos, "Expected number in JSON input.");
+    KJ_REQUIRE(remaining.begin() != originalPos, "Expected number in JSON input.");
 
     kj::Vector<char> number;
-    number.addAll(originalPos, remaining_.begin());
+    number.addAll(originalPos, remaining.begin());
     number.add('\0');
 
     return kj::String(number.releaseAsArray());
@@ -674,10 +674,10 @@ public:
   }
 
 private:
-  const size_t maxNestingDepth_;
-  const kj::ArrayPtr<const char> input_;
-  kj::ArrayPtr<const char> remaining_;
-  size_t nestingDepth_;
+  const size_t maxNestingDepth;
+  const kj::ArrayPtr<const char> input;
+  kj::ArrayPtr<const char> remaining;
+  size_t nestingDepth;
 
 };  // class Parser
 
