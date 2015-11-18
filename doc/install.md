@@ -108,13 +108,10 @@ Note: These packages are not maintained by us and are sometimes not up to date w
 If you download directly from Git, you will need to have the GNU autotools --
 [autoconf](http://www.gnu.org/software/autoconf/),
 [automake](http://www.gnu.org/software/automake/), and
-[libtool](http://www.gnu.org/software/libtool/) -- installed.  You will also need Subversion
-installed (in addition to Git) in order to fetch the Google Test sources (done by
-`setup-autotools.sh`).
+[libtool](http://www.gnu.org/software/libtool/) -- installed.
 
     git clone https://github.com/sandstorm-io/capnproto.git
     cd capnproto/c++
-    ./setup-autotools.sh
     autoreconf -i
     ./configure
     make -j6 check

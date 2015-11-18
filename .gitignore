@@ -25,6 +25,9 @@
 # setup-ekam.sh
 /c++/.ekam
 
+# super-test.sh
+/tmp-staging
+
 # Jekyll-generated site
 /doc/_site
 

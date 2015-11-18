@@ -62,7 +62,6 @@ build_packages() {
   echo "Building C++ package..."
   echo "========================================================================="
   cd c++
-  doit ./setup-autotools.sh | tr = -
   doit autoreconf -i
   doit ./configure
   doit make -j6 distcheck
