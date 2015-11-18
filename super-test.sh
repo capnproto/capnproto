@@ -241,7 +241,6 @@ else
 fi
 
 cd c++
-doit ./setup-autotools.sh | tr = -
 doit autoreconf -i
 doit ./configure --prefix="$STAGING"
 doit make -j6 check
