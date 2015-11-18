@@ -492,7 +492,7 @@ struct Return {
   # must not send separate `Release` messages for them.  Level 0 implementations in particular
   # should always set this true.  This defaults true because if level 0 implementations forget to
   # set it they'll never notice (just silently leak caps), but if level >=1 implementations forget
-  # set it false they'll quickly get errors.
+  # to set it to false they'll quickly get errors.
 
   union {
     results @2 :Payload;
