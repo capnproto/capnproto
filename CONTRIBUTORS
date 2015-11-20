@@ -11,6 +11,7 @@ Bryan Borham <bjboreham@gmail.com>: Initial MSVC support
 Philip Quinn <p@partylemon.com>: cmake build and other assorted bits
 Brian Taylor <el.wubo@gmail.com>: emacs syntax highlighting
 Ben Laurie <ben@links.org>: discovered and responsibly disclosed security bugs
+Kamal Marhubi <kamal@marhubi.com>: JSON parser
 
 This file does not list people who maintain their own Cap'n Proto
 implementations as separate projects.  Those people are awesome too!  :)
