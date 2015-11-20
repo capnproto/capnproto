@@ -253,7 +253,7 @@ KJ_TEST("basic json decoding") {
     auto root = message.initRoot<JsonValue>();
 
     json.decodeRaw("[]", root);
-    KJ_EXPECT(root.which() == JsonValue::ARRAY, root.which());
+    KJ_EXPECT(root.which() == JsonValue::ARRAY, (uint)root.which());
     KJ_EXPECT(root.getArray().size() == 0);
   }
 
@@ -290,7 +290,7 @@ KJ_TEST("basic json decoding") {
     auto root = message.initRoot<JsonValue>();
 
     json.decodeRaw("{}", root);
-    KJ_EXPECT(root.which() == JsonValue::OBJECT, root.which());
+    KJ_EXPECT(root.which() == JsonValue::OBJECT, (uint)root.which());
     KJ_EXPECT(root.getObject().size() == 0);
   }
 
@@ -299,7 +299,7 @@ KJ_TEST("basic json decoding") {
     auto root = message.initRoot<JsonValue>();
 
     json.decodeRaw(R"({"some": null})", root);
-    KJ_EXPECT(root.which() == JsonValue::OBJECT, root.which());
+    KJ_EXPECT(root.which() == JsonValue::OBJECT, (uint)root.which());
     auto object = root.getObject();
     KJ_EXPECT(object.size() == 1);
     KJ_EXPECT(kj::str("some") == object[0].getName());
@@ -311,7 +311,7 @@ KJ_TEST("basic json decoding") {
     auto root = message.initRoot<JsonValue>();
 
     json.decodeRaw(R"({"foo\n\tbaz": "a val", "bar": ["a", -5.5e11,  { "z": {}}]})", root);
-    KJ_EXPECT(root.which() == JsonValue::OBJECT, root.which());
+    KJ_EXPECT(root.which() == JsonValue::OBJECT, (uint)root.which());
     auto object = root.getObject();
     KJ_EXPECT(object.size() == 2);
     KJ_EXPECT(kj::str("foo\n\tbaz") == object[0].getName());
