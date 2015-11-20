@@ -71,6 +71,10 @@ public:
   // Enable to insert newlines, indentation, and other extra spacing into the output. The default
   // is to use minimal whitespace.
 
+  void setMaxNestingDepth(size_t maxNestingDepth);
+  // Set maximum nesting depth when decoding JSON to prevent highly nested input from overflowing
+  // the call stack. The default is 64.
+
   template <typename T>
   kj::String encode(T&& value);
   // Encode any Cap'n Proto value to JSON, including primitives and
