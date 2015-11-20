@@ -237,9 +237,20 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
     case schema::Type::UINT8:
     case schema::Type::UINT16:
     case schema::Type::UINT32:
+      output.setNumber(input.as<double>());
+      break;
     case schema::Type::FLOAT32:
     case schema::Type::FLOAT64:
-      output.setNumber(input.as<double>());
+      {
+        double value = input.as<double>();
+        if (kj::inf() == value || -kj::inf() == value || kj::isNaN(value)) {
+          // These values are not allowed in the JSON spec. Setting the field as null matches the
+          // behavior of JSON.stringify in Firefox and Chrome.
+          output.setNull();
+        } else {
+          output.setNumber(value);
+        }
+      }
       break;
     case schema::Type::INT64:
       output.setString(kj::str(input.as<int64_t>()));
