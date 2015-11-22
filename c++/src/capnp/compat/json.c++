@@ -642,11 +642,13 @@ public:
     }
 
     if (tryConsume('.')) {
+      consumeOne([](char c) { return '0' <= c && c <= '9'; });
       consumeWhile([](char c) { return '0' <= c && c <= '9'; });
     }
 
     if (tryConsume('e') || tryConsume('E')) {
       tryConsume('+') || tryConsume('-');
+      consumeOne([](char c) { return '0' <= c && c <= '9'; });
       consumeWhile([](char c) { return '0' <= c && c <= '9'; });
     }
 
