@@ -602,11 +602,9 @@ body.narrow #menu {
   list-style-type: none;
   background-color: #212121;
 }
-#menu>ul>li>a>p, #menu>ul>li.selected {
+#menu>ul>li>a, #menu>ul>li.selected {
+  display: block;
   padding: 10px 15px 10px 15px;
-}
-#menu>ul>li>a>p {
-  text-indent: 0;
 }
 #menu>ul>li {
   border-right: 1px solid #111;
@@ -686,7 +684,7 @@ ul#toc {
   margin: 0;
   text-indent: -15px;
 }
-#menu #toc p:hover {
+#menu p:hover {
   background-color: #313131;
   cursor: pointer;
 }
