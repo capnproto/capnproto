@@ -410,7 +410,7 @@ KJ_TEST("basic json decoding") {
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("a", root));
     KJ_EXPECT_THROW_MESSAGE("ends prematurely", json.decodeRaw("[", root));
     KJ_EXPECT_THROW_MESSAGE("ends prematurely", json.decodeRaw("{", root));
-    KJ_EXPECT_THROW_MESSAGE("ends prematurely", json.decodeRaw("\"\\u", root));
+    KJ_EXPECT_THROW_MESSAGE("ends prematurely", json.decodeRaw("\"\\u\"", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[}", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("{]", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("[}]", root));
