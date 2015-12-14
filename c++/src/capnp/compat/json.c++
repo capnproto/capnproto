@@ -616,6 +616,7 @@ public:
           case 't' : decoded.add('\t'); advance(); break;
           case 'u' :
             advance();  // consume 'u'
+            KJ_REQUIRE(remaining.size() >= 4, "JSON message ends prematurely.");
             unescapeAndAppend(kj::arrayPtr(remaining.begin(), 4), decoded);
             advance(4);
             break;
