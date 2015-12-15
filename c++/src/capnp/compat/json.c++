@@ -581,11 +581,9 @@ public:
     consumeWhile([](char chr) {
       return (
         chr == ' '  ||
-        chr == '\f' ||
         chr == '\n' ||
         chr == '\r' ||
-        chr == '\t' ||
-        chr == '\v'
+        chr == '\t'
       );
     });
   }

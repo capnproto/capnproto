@@ -298,6 +298,15 @@ KJ_TEST("basic json decoding") {
     MallocMessageBuilder message;
     auto root = message.initRoot<JsonValue>();
 
+    json.decodeRaw("\r\n\t {\r\n\t }\r\n\t ", root);
+    KJ_EXPECT(root.which() == JsonValue::OBJECT, (uint)root.which());
+    KJ_EXPECT(root.getObject().size() == 0);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
     json.decodeRaw(R"({"some": null})", root);
     KJ_EXPECT(root.which() == JsonValue::OBJECT, (uint)root.which());
     auto object = root.getObject();
@@ -429,6 +438,8 @@ KJ_TEST("basic json decoding") {
     KJ_EXPECT_THROW_MESSAGE("Invalid hex", json.decodeRaw(R"("\u12zz")", root));
     KJ_EXPECT_THROW_MESSAGE("ends prematurely", json.decodeRaw("-", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("--", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("\f{}", root));
+    KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("{\v}", root));
   }
 }
 
