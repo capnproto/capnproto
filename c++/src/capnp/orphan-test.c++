@@ -48,6 +48,16 @@ TEST(Orphans, Structs) {
   checkTestMessage(root.asReader().getStructField());
 }
 
+TEST(Orphans, EmptyStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestAnyPointer>();
+  auto anyPointer = root.getAnyPointerField();
+  EXPECT_TRUE(anyPointer.isNull());
+  auto orphan = builder.getOrphanage().newOrphan<test::TestEmptyStruct>();
+  anyPointer.adopt(kj::mv(orphan));
+  EXPECT_FALSE(anyPointer.isNull());
+}
+
 TEST(Orphans, Lists) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestAllTypes>();
