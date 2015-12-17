@@ -896,10 +896,15 @@ struct WireHelpers {
 
     if (dstSegment == srcSegment) {
       // Same segment, so create a direct pointer.
-      dst->setKindAndTarget(srcTag->kind(), srcPtr, dstSegment);
 
-      // We can just copy the upper 32 bits.  (Use memcpy() to comply with aliasing rules.)
-      memcpy(&dst->upper32Bits, &srcTag->upper32Bits, sizeof(srcTag->upper32Bits));
+      if (srcTag->kind() == WirePointer::STRUCT && srcTag->structRef.wordSize() == 0) {
+        dst->setKindAndTargetForEmptyStruct();
+      } else {
+        dst->setKindAndTarget(srcTag->kind(), srcPtr, dstSegment);
+
+        // We can just copy the upper 32 bits.  (Use memcpy() to comply with aliasing rules.)
+        memcpy(&dst->upper32Bits, &srcTag->upper32Bits, sizeof(srcTag->upper32Bits));
+      }
     } else {
       // Need to create a far pointer.  Try to allocate it in the same segment as the source, so
       // that it doesn't need to be a double-far.
