@@ -928,7 +928,7 @@ private:
         message->send();
       }
 
-      cap = replacement->addRef();
+      cap = kj::mv(replacement);
       isResolved = true;
     }
   };
