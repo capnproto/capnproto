@@ -550,23 +550,31 @@ uint uncaughtExceptionCount() {
 
 #elif _MSC_VER
 
-#if 0
-// TODO(msvc): The below was copied from:
-//     https://github.com/panaseleus/stack_unwinding/blob/master/boost/exception/uncaught_exception_count.hpp
-//   Alas, it doesn not appera to work on MSVC2015. The linker claims _getptd() doesn't exist.
+#if _MSC_VER >= 1900
+// MSVC14 has a refactored CRT, so the appropriate runtime function and offsets changed.
+// See https://svn.boost.org/trac/boost/ticket/10158 for a brief discussion.
+extern "C" char *__cdecl __vcrt_getptd();
+
+uint uncaughtExceptionCount() {
+  return *reinterpret_cast<uint*>(__vcrt_getptd() + (sizeof(void*) == 8 ? 0x38 : 0x1c));
+}
+
+#elif _MSC_VER >= 1400
+// The below was copied from:
+// https://github.com/panaseleus/stack_unwinding/blob/master/boost/exception/uncaught_exception_count.hpp
 
 extern "C" char *__cdecl _getptd();
 
 uint uncaughtExceptionCount() {
   return *reinterpret_cast<uint*>(_getptd() + (sizeof(void*) == 8 ? 0x100 : 0x90));
 }
-#endif
-
+#else
 uint uncaughtExceptionCount() {
   // Since the above doesn't work, fall back to uncaught_exception(). This will produce incorrect
   // results in very obscure cases that Cap'n Proto doesn't really rely on anyway.
   return std::uncaught_exception();
 }
+#endif
 
 #else
 #error "This needs to be ported to your compiler / C++ ABI."
