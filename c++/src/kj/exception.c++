@@ -551,12 +551,12 @@ uint uncaughtExceptionCount() {
 #elif _MSC_VER
 
 #if _MSC_VER >= 1900
-// MSVC14 has a refactored CRT, so the appropriate runtime function and offsets changed.
+// MSVC14 has a refactored CRT which now provides a direct accessor for this value.
 // See https://svn.boost.org/trac/boost/ticket/10158 for a brief discussion.
-extern "C" char *__cdecl __vcrt_getptd();
+extern "C" int *__cdecl __processing_throw();
 
 uint uncaughtExceptionCount() {
-  return *reinterpret_cast<uint*>(__vcrt_getptd() + (sizeof(void*) == 8 ? 0x38 : 0x1c));
+  return static_cast<uint>(*__processing_throw());
 }
 
 #elif _MSC_VER >= 1400
