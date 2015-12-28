@@ -1275,7 +1275,7 @@ private:
           // If we're still awaiting a return, then this request is being canceled, and we're going
           // to ignore any capabilities in the return message, so set releaseResultCaps true. If we
           // already received the return, then we've already built local proxies for the caps and
-          // will send Release messages when those are destoryed.
+          // will send Release messages when those are destroyed.
           builder.setReleaseResultCaps(question.isAwaitingReturn);
           message->send();
         }

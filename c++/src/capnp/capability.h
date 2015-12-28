@@ -341,7 +341,7 @@ protected:
   // The effect of this method is undefined if:
   // - No capability client has been created pointing to this object. (This is always the case in
   //   the server's constructor.)
-  // - The capability client pointing at this object has been destoryed. (This is always the case
+  // - The capability client pointing at this object has been destroyed. (This is always the case
   //   in the server's destructor.)
   // - Multiple capability clients have been created around the same server (possible if the server
   //   is refcounted, which is not recommended since the client itself provides refcounting).
