@@ -2037,23 +2037,32 @@ private:
   void handleUnimplemented(const rpc::Message::Reader& message) {
     switch (message.which()) {
       case rpc::Message::RESOLVE: {
-        auto cap = message.getResolve().getCap();
-        switch (cap.which()) {
-          case rpc::CapDescriptor::NONE:
-            // Nothing to do (but this ought never to happen).
+        auto resolve = message.getResolve();
+        switch (resolve.which()) {
+          case rpc::Resolve::CAP: {
+            auto cap = resolve.getCap();
+            switch (cap.which()) {
+              case rpc::CapDescriptor::NONE:
+                // Nothing to do (but this ought never to happen).
+                break;
+              case rpc::CapDescriptor::SENDER_HOSTED:
+                releaseExport(cap.getSenderHosted(), 1);
+                break;
+              case rpc::CapDescriptor::SENDER_PROMISE:
+                releaseExport(cap.getSenderPromise(), 1);
+                break;
+              case rpc::CapDescriptor::RECEIVER_ANSWER:
+              case rpc::CapDescriptor::RECEIVER_HOSTED:
+                // Nothing to do.
+                break;
+              case rpc::CapDescriptor::THIRD_PARTY_HOSTED:
+                releaseExport(cap.getThirdPartyHosted().getVineId(), 1);
+                break;
+            }
             break;
-          case rpc::CapDescriptor::SENDER_HOSTED:
-            releaseExport(cap.getSenderHosted(), 1);
-            break;
-          case rpc::CapDescriptor::SENDER_PROMISE:
-            releaseExport(cap.getSenderPromise(), 1);
-            break;
-          case rpc::CapDescriptor::RECEIVER_ANSWER:
-          case rpc::CapDescriptor::RECEIVER_HOSTED:
+          }
+          case rpc::Resolve::EXCEPTION:
             // Nothing to do.
-            break;
-          case rpc::CapDescriptor::THIRD_PARTY_HOSTED:
-            releaseExport(cap.getThirdPartyHosted().getVineId(), 1);
             break;
         }
         break;
