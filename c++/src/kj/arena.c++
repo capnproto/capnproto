@@ -41,12 +41,32 @@ Arena::Arena(ArrayPtr<byte> scratch)
   }
 }
 
+Arena::Arena(Arena&& other) noexcept
+    : nextChunkSize(other.nextChunkSize), chunkList(other.chunkList),
+      objectList(other.objectList), currentChunk(other.currentChunk) {
+  other.chunkList = nullptr;
+  other.objectList = nullptr;
+  other.currentChunk = nullptr;
+}
+
 Arena::~Arena() noexcept(false) {
   // Run cleanup() explicitly, but if it throws an exception, make sure to run it again as part of
   // unwind.  The second call will not throw because destructors are required to guard against
   // exceptions when already unwinding.
   KJ_ON_SCOPE_FAILURE(cleanup());
   cleanup();
+}
+
+Arena& Arena::operator=(Arena&& other) {
+  cleanup();
+  nextChunkSize = other.nextChunkSize;
+  chunkList = other.chunkList;
+  objectList = other.objectList;
+  currentChunk = other.currentChunk;
+  other.chunkList = nullptr;
+  other.objectList = nullptr;
+  other.currentChunk = nullptr;
+  return *this;
 }
 
 void Arena::cleanup() {

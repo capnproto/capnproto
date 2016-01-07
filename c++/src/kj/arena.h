@@ -50,8 +50,12 @@ public:
   explicit Arena(ArrayPtr<byte> scratch);
   // Allocates from the given scratch space first, only resorting to the heap when it runs out.
 
+  Arena(Arena&& other) noexcept;
+
   KJ_DISALLOW_COPY(Arena);
   ~Arena() noexcept(false);
+
+  Arena& operator=(Arena&& other);
 
   template <typename T, typename... Params>
   T& allocate(Params&&... params);

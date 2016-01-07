@@ -286,6 +286,20 @@ TEST(Arena, Constructor) {
   EXPECT_EQ("foo", arena.allocate<StringPtr>("foo", 3));
 }
 
+TEST(Arena, MoveConstructor) {
+  TestObject::count = 0;
+
+  Arena arena1;
+  TestObject& obj1 = arena1.allocate<TestObject>();
+
+  {
+    Arena arena2(kj::mv(arena1));
+    EXPECT_EQ(1, TestObject::count);
+  }
+
+  EXPECT_EQ(0, TestObject::count);
+}
+
 TEST(Arena, Strings) {
   Arena arena;
 
