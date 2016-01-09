@@ -392,21 +392,117 @@ Orphan<DynamicValue> JsonCodec::decode(
 
 namespace {
 
+class Input {
+public:
+  Input(kj::ArrayPtr<const char> input) : wrapped(input) {}
+
+  bool exhausted() {
+    return wrapped.size() == 0 || wrapped.front() == '\0';
+  }
+
+  char nextChar() {
+    KJ_REQUIRE(!exhausted(), "JSON message ends prematurely.");
+    return wrapped.front();
+  }
+
+  void advance(size_t numBytes = 1) {
+    KJ_REQUIRE(numBytes <= wrapped.size(), "JSON message ends prematurely.");
+    wrapped = kj::arrayPtr(wrapped.begin() + numBytes, wrapped.end());
+  }
+
+  void advanceTo(const char *newPos) {
+    KJ_REQUIRE(wrapped.begin() <= newPos && newPos < wrapped.end(),
+        "JSON message ends prematurely.");
+    wrapped = kj::arrayPtr(newPos, wrapped.end());
+  }
+
+  kj::ArrayPtr<const char> consume(size_t numBytes = 1) {
+    auto originalPos = wrapped.begin();
+    advance(numBytes);
+
+    return kj::arrayPtr(originalPos, wrapped.begin());
+  }
+
+  void consume(char expected) {
+    char current = nextChar();
+    KJ_REQUIRE(current == expected, "Unexpected input in JSON message.");
+
+    advance();
+  }
+
+  void consume(kj::ArrayPtr<const char> expected) {
+    KJ_REQUIRE(wrapped.size() >= expected.size());
+
+    auto prefix = wrapped.slice(0, expected.size());
+    KJ_REQUIRE(prefix == expected, "Unexpected input in JSON message.");
+
+    advance(expected.size());
+  }
+
+  bool tryConsume(char expected) {
+    bool found = !exhausted() && nextChar() == expected;
+    if (found) { advance(); }
+
+    return found;
+  }
+
+  template <typename Predicate>
+  void consumeOne(Predicate&& predicate) {
+    char current = nextChar();
+    KJ_REQUIRE(predicate(current), "Unexpected input in JSON message.");
+
+    advance();
+  }
+
+  template <typename Predicate>
+  kj::ArrayPtr<const char> consumeWhile(Predicate&& predicate) {
+    auto originalPos = wrapped.begin();
+    while (!exhausted() && predicate(nextChar())) { advance(); }
+
+    return kj::arrayPtr(originalPos, wrapped.begin());
+  }
+
+  template <typename F>  // Function<void(Input&)>
+  kj::ArrayPtr<const char> consumeCustom(F&& f) {
+    // Allows consuming in a custom manner without exposing the wrapped ArrayPtr.
+    auto originalPos = wrapped.begin();
+    f(*this);
+
+    return kj::arrayPtr(originalPos, wrapped.begin());
+  }
+  
+  void consumeWhitespace() {
+    consumeWhile([](char chr) {
+      return (
+        chr == ' '  ||
+        chr == '\n' ||
+        chr == '\r' ||
+        chr == '\t'
+      );
+    });
+  }
+
+
+private:
+  kj::ArrayPtr<const char> wrapped;
+
+};  // class Input
+
 class Parser {
 public:
   Parser(size_t maxNestingDepth, kj::ArrayPtr<const char> input) :
-    maxNestingDepth(maxNestingDepth), input(input), remaining(input), nestingDepth(0) {}
+    maxNestingDepth(maxNestingDepth), input(input), nestingDepth(0) {}
 
   void parseValue(JsonValue::Builder& output) {
-    consumeWhitespace();
-    KJ_DEFER(consumeWhitespace());
+    input.consumeWhitespace();
+    KJ_DEFER(input.consumeWhitespace());
 
-    KJ_REQUIRE(!inputExhausted(), "JSON message ends prematurely.");
+    KJ_REQUIRE(!input.exhausted(), "JSON message ends prematurely.");
 
-    switch (nextChar()) {
-      case 'n': consume(kj::StringPtr("null"));  output.setNull();         break;
-      case 'f': consume(kj::StringPtr("false")); output.setBoolean(false); break;
-      case 't': consume(kj::StringPtr("true"));  output.setBoolean(true);  break;
+    switch (input.nextChar()) {
+      case 'n': input.consume(kj::StringPtr("null"));  output.setNull();         break;
+      case 'f': input.consume(kj::StringPtr("false")); output.setBoolean(false); break;
+      case 't': input.consume(kj::StringPtr("true"));  output.setBoolean(true);  break;
       case '"': parseString(output); break;
       case '[': parseArray(output);  break;
       case '{': parseObject(output); break;
@@ -445,18 +541,18 @@ public:
     auto orphanage = Orphanage::getForMessageContaining(output);
     bool expectComma = false;
 
-    consume('[');
+    input.consume('[');
     KJ_REQUIRE(++nestingDepth <= maxNestingDepth, "JSON message nested too deeply.");
     KJ_DEFER(--nestingDepth);
 
-    while (consumeWhitespace(), nextChar() != ']') {
+    while (input.consumeWhitespace(), input.nextChar() != ']') {
       auto orphan = orphanage.newOrphan<JsonValue>();
       auto builder = orphan.get();
 
       if (expectComma) {
-        consumeWhitespace();
-        consume(',');
-        consumeWhitespace();
+        input.consumeWhitespace();
+        input.consume(',');
+        input.consumeWhitespace();
       }
 
       parseValue(builder);
@@ -472,7 +568,7 @@ public:
       array.adoptWithCaveats(i, kj::mv(values[i]));
     }
 
-    consume(']');
+    input.consume(']');
   }
 
   void parseObject(JsonValue::Builder& output) {
@@ -480,25 +576,25 @@ public:
     auto orphanage = Orphanage::getForMessageContaining(output);
     bool expectComma = false;
 
-    consume('{');
+    input.consume('{');
     KJ_REQUIRE(++nestingDepth <= maxNestingDepth, "JSON message nested too deeply.");
     KJ_DEFER(--nestingDepth);
 
-    while (consumeWhitespace(), nextChar() != '}') {
+    while (input.consumeWhitespace(), input.nextChar() != '}') {
       auto orphan = orphanage.newOrphan<JsonValue::Field>();
       auto builder = orphan.get();
 
       if (expectComma) {
-        consumeWhitespace();
-        consume(',');
-        consumeWhitespace();
+        input.consumeWhitespace();
+        input.consume(',');
+        input.consumeWhitespace();
       }
 
       builder.setName(consumeQuotedString());
 
-      consumeWhitespace();
-      consume(':');
-      consumeWhitespace();
+      input.consumeWhitespace();
+      input.consume(':');
+      input.consumeWhitespace();
 
       auto valueBuilder = builder.getValue();
       parseValue(valueBuilder);
@@ -515,116 +611,47 @@ public:
       object.adoptWithCaveats(i, kj::mv(fields[i]));
     }
 
-    consume('}');
+    input.consume('}');
   }
 
-  bool inputExhausted() {
-    return remaining.size() == 0 || remaining.front() == '\0';
-  }
+  bool inputExhausted() { return input.exhausted(); }
 
-  char nextChar() {
-    KJ_REQUIRE(!inputExhausted(), "JSON message ends prematurely.");
-    return remaining.front();
-  }
-
-  void advance(size_t numBytes = 1) {
-    KJ_REQUIRE(numBytes <= remaining.size(), "JSON message ends prematurely.");
-    remaining = kj::arrayPtr(remaining.begin() + numBytes, remaining.end());
-  }
-
-  void advanceTo(const char *newPos) {
-    KJ_REQUIRE(remaining.begin() <= newPos && newPos < remaining.end(),
-        "JSON message ends prematurely.");
-    remaining = kj::arrayPtr(newPos, remaining.end());
-  }
-
-  void consume(char expected) {
-    char current = nextChar();
-    KJ_REQUIRE(current == expected, "Unexpected input in JSON message.");
-
-    advance();
-  }
-
-  void consume(kj::ArrayPtr<const char> expected) {
-    KJ_REQUIRE(remaining.size() >= expected.size());
-
-    auto prefix = remaining.slice(0, expected.size());
-    KJ_REQUIRE(prefix == expected, "Unexpected input in JSON message.");
-
-    advance(expected.size());
-  }
-
-  bool tryConsume(char expected) {
-    bool found = !inputExhausted() && nextChar() == expected;
-    if (found) { advance(); }
-
-    return found;
-  }
-
-  template <typename Predicate>
-  void consumeOne(Predicate&& predicate) {
-    char current = nextChar();
-    KJ_REQUIRE(predicate(current), "Unexpected input in JSON message.");
-
-    advance();
-  }
-
-  template <typename Predicate>
-  kj::ArrayPtr<const char> consumeWhile(Predicate&& predicate) {
-    auto originalPos = remaining.begin();
-    while (!inputExhausted() && predicate(nextChar())) { advance(); }
-
-    return kj::arrayPtr(originalPos, remaining.begin());
-  }
-  
-  void consumeWhitespace() {
-    consumeWhile([](char chr) {
-      return (
-        chr == ' '  ||
-        chr == '\n' ||
-        chr == '\r' ||
-        chr == '\t'
-      );
-    });
-  }
-
+private:
   kj::String consumeQuotedString() {
-    consume('"');
+    input.consume('"');
     // TODO(perf): Avoid copy / alloc if no escapes encoutered.
     // TODO(perf): Get statistics on string size and preallocate?
     kj::Vector<char> decoded;
 
     do {
-      auto stringValue = consumeWhile([](const char chr) {
+      auto stringValue = input.consumeWhile([](const char chr) {
           return chr != '"' && chr != '\\';
       });
 
       decoded.addAll(stringValue);
 
-      if (nextChar() == '\\') {  // handle escapes.
-        advance();
-        switch(nextChar()) {
-          case '"' : decoded.add('"' ); advance(); break;
-          case '\\': decoded.add('\\'); advance(); break;
-          case '/' : decoded.add('/' ); advance(); break;
-          case 'b' : decoded.add('\b'); advance(); break;
-          case 'f' : decoded.add('\f'); advance(); break;
-          case 'n' : decoded.add('\n'); advance(); break;
-          case 'r' : decoded.add('\r'); advance(); break;
-          case 't' : decoded.add('\t'); advance(); break;
+      if (input.nextChar() == '\\') {  // handle escapes.
+        input.advance();
+        switch(input.nextChar()) {
+          case '"' : decoded.add('"' ); input.advance(); break;
+          case '\\': decoded.add('\\'); input.advance(); break;
+          case '/' : decoded.add('/' ); input.advance(); break;
+          case 'b' : decoded.add('\b'); input.advance(); break;
+          case 'f' : decoded.add('\f'); input.advance(); break;
+          case 'n' : decoded.add('\n'); input.advance(); break;
+          case 'r' : decoded.add('\r'); input.advance(); break;
+          case 't' : decoded.add('\t'); input.advance(); break;
           case 'u' :
-            advance();  // consume 'u'
-            KJ_REQUIRE(remaining.size() >= 4, "JSON message ends prematurely.");
-            unescapeAndAppend(kj::arrayPtr(remaining.begin(), 4), decoded);
-            advance(4);
+            input.consume('u');
+            unescapeAndAppend(input.consume(size_t(4)), decoded);
             break;
           default: KJ_FAIL_REQUIRE("Invalid escape in JSON string."); break;
         }
       }
 
-    } while(nextChar() != '"');
+    } while(input.nextChar() != '"');
 
-    consume('"');
+    input.consume('"');
     decoded.add('\0');
 
     // TODO(perf): This copy can be eliminated, but I can't find the kj::wayToDoIt();
@@ -632,27 +659,27 @@ public:
   }
 
   kj::String consumeNumber() {
-    auto originalPos = remaining.begin();
+    auto numArrayPtr = input.consumeCustom([](Input& input) {
+      input.tryConsume('-');
+      if (!input.tryConsume('0')) {
+        input.consumeOne([](char c) { return '1' <= c && c <= '9'; });
+        input.consumeWhile([](char c) { return '0' <= c && c <= '9'; });
+      }
 
-    tryConsume('-');
-    if (!tryConsume('0')) {
-      consumeOne([](char c) { return '1' <= c && c <= '9'; });
-      consumeWhile([](char c) { return '0' <= c && c <= '9'; });
-    }
+      if (input.tryConsume('.')) {
+        input.consumeWhile([](char c) { return '0' <= c && c <= '9'; });
+      }
 
-    if (tryConsume('.')) {
-      consumeWhile([](char c) { return '0' <= c && c <= '9'; });
-    }
+      if (input.tryConsume('e') || input.tryConsume('E')) {
+        input.tryConsume('+') || input.tryConsume('-');
+        input.consumeWhile([](char c) { return '0' <= c && c <= '9'; });
+      }
+    });
 
-    if (tryConsume('e') || tryConsume('E')) {
-      tryConsume('+') || tryConsume('-');
-      consumeWhile([](char c) { return '0' <= c && c <= '9'; });
-    }
-
-    KJ_REQUIRE(remaining.begin() != originalPos, "Expected number in JSON input.");
+    KJ_REQUIRE(numArrayPtr.size() > 0, "Expected number in JSON input.");
 
     kj::Vector<char> number;
-    number.addAll(originalPos, remaining.begin());
+    number.addAll(numArrayPtr);
     number.add('\0');
 
     return kj::String(number.releaseAsArray());
@@ -683,11 +710,10 @@ public:
     target.add(0x7f & static_cast<char>(codePoint));
   }
 
-private:
   const size_t maxNestingDepth;
-  const kj::ArrayPtr<const char> input;
-  kj::ArrayPtr<const char> remaining;
+  Input input;
   size_t nestingDepth;
+
 
 };  // class Parser
 
