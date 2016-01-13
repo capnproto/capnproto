@@ -71,6 +71,17 @@ TEST(Orphans, EmptyStructOverwrite) {
   EXPECT_FALSE(anyPointer.isNull());
 }
 
+TEST(Orphans, AdoptNullStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestAnyPointer>();
+  auto anyPointer = root.getAnyPointerField();
+  EXPECT_TRUE(anyPointer.isNull());
+  anyPointer.initAs<TestAllTypes>();
+  anyPointer.adopt(Orphan<test::TestEmptyStruct>());
+  EXPECT_EQ(0, anyPointer.targetSize().wordCount);
+  EXPECT_TRUE(anyPointer.isNull());
+}
+
 TEST(Orphans, Lists) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestAllTypes>();
