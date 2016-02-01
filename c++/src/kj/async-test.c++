@@ -285,6 +285,24 @@ TEST(Async, DeepChain4) {
   promise.wait(waitScope);
 }
 
+TEST(Async, IgnoreResult) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  bool done = false;
+
+  Promise<void> promise = Promise<int>(123).then([&](int i) {
+    done = true;
+    return i + 321;
+  }).ignoreResult();
+
+  EXPECT_FALSE(done);
+
+  promise.wait(waitScope);
+
+  EXPECT_TRUE(done);
+}
+
 TEST(Async, SeparateFulfiller) {
   EventLoop loop;
   WaitScope waitScope(loop);
