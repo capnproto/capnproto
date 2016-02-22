@@ -2,8 +2,8 @@ prefix=@prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: Cap'n Proto
-Description: basic utility library called KJ
+Name: KJ Framework Library
+Description: Basic utility library called KJ
 Version: @VERSION@
 Libs: -L${libdir} -lkj @PTHREAD_CFLAGS@ @PTHREAD_LIBS@ @STDLIB_FLAG@
 Cflags: -I${includedir} @PTHREAD_CFLAGS@ @STDLIB_FLAG@ @CAPNP_LITE_FLAG@

@@ -2,8 +2,8 @@ prefix=@prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: Cap'n Proto
-Description: basic utility library called KJ (async part)
+Name: KJ Async Framework Library
+Description: Basic utility library called KJ (async part)
 Version: @VERSION@
 Libs: -L${libdir} -lkj-async @PTHREAD_CFLAGS@ @PTHREAD_LIBS@ @STDLIB_FLAG@
 Requires: kj = @VERSION@
