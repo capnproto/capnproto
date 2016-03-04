@@ -6,6 +6,6 @@ includedir=@includedir@
 Name: Cap'n Proto RPC
 Description: Fast object-oriented RPC system
 Version: @VERSION@
-Libs: -L${libdir} -lcapnp-rpc -lkj-async
-Requires: capnp = @VERSION@
+Libs: -L${libdir} -lcapnp-rpc
+Requires: capnp = @VERSION@ kj-async = @VERSION@
 Cflags: -I${includedir}
