@@ -219,6 +219,28 @@ private:
   byte* fillPos;
 };
 
+class VectorOutputStream: public BufferedOutputStream {
+public:
+  explicit VectorOutputStream(size_t initialCapacity = 4096);
+  KJ_DISALLOW_COPY(VectorOutputStream);
+  ~VectorOutputStream() noexcept(false);
+
+  ArrayPtr<byte> getArray() {
+    // Get the portion of the array which has been filled in.
+    return arrayPtr(vector.begin(), fillPos);
+  }
+
+  // implements BufferedInputStream ----------------------------------
+  ArrayPtr<byte> getWriteBuffer() override;
+  void write(const void* buffer, size_t size) override;
+
+private:
+  Array<byte> vector;
+  byte* fillPos;
+
+  void grow(size_t minSize);
+};
+
 // =======================================================================================
 // File descriptor I/O
 

@@ -62,5 +62,51 @@ KJ_TEST("stringify AutoCloseFd") {
   KJ_EXPECT(kj::str(in) == kj::str(fds[0]), in, fds[0]);
 }
 
+KJ_TEST("VectorOutputStream") {
+  VectorOutputStream output(16);
+  auto buf = output.getWriteBuffer();
+  KJ_ASSERT(buf.size() == 16);
+
+  for (auto i: kj::indices(buf)) {
+    buf[i] = 'a' + i;
+  }
+
+  output.write(buf.begin(), 4);
+  KJ_ASSERT(output.getArray().begin() == buf.begin());
+  KJ_ASSERT(output.getArray().size() == 4);
+
+  auto buf2 = output.getWriteBuffer();
+  KJ_ASSERT(buf2.end() == buf.end());
+  KJ_ASSERT(buf2.size() == 12);
+
+  output.write(buf2.begin(), buf2.size());
+  KJ_ASSERT(output.getArray().begin() == buf.begin());
+  KJ_ASSERT(output.getArray().size() == 16);
+
+  auto buf3 = output.getWriteBuffer();
+  KJ_ASSERT(buf3.size() == 16);
+  KJ_ASSERT(output.getArray().begin() != buf.begin());
+  KJ_ASSERT(output.getArray().end() == buf3.begin());
+  KJ_ASSERT(kj::str(output.getArray().asChars()) == "abcdefghijklmnop");
+
+  byte junk[24];
+  for (auto i: kj::indices(junk)) {
+    junk[i] = 'A' + i;
+  }
+
+  output.write(junk, 4);
+  KJ_ASSERT(output.getArray().begin() != buf.begin());
+  KJ_ASSERT(output.getArray().end() == buf3.begin() + 4);
+  KJ_ASSERT(kj::str(output.getArray().asChars()) == "abcdefghijklmnopABCD");
+
+  output.write(junk + 4, 20);
+  KJ_ASSERT(output.getArray().begin() != buf.begin());
+  KJ_ASSERT(output.getArray().end() != buf3.begin() + 24);
+  KJ_ASSERT(kj::str(output.getArray().asChars()) == "abcdefghijklmnopABCDEFGHIJKLMNOPQRSTUVWX");
+
+  KJ_ASSERT(output.getWriteBuffer().size() == 24);
+  KJ_ASSERT(output.getWriteBuffer().begin() == output.getArray().begin() + 40);
+}
+
 }  // namespace
 }  // namespace kj

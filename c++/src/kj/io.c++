@@ -222,6 +222,7 @@ ArrayPtr<byte> ArrayOutputStream::getWriteBuffer() {
 void ArrayOutputStream::write(const void* src, size_t size) {
   if (src == fillPos) {
     // Oh goody, the caller wrote directly into our buffer.
+    KJ_REQUIRE(size <= array.end() - fillPos);
     fillPos += size;
   } else {
     KJ_REQUIRE(size <= (size_t)(array.end() - fillPos),
@@ -229,6 +230,45 @@ void ArrayOutputStream::write(const void* src, size_t size) {
     memcpy(fillPos, src, size);
     fillPos += size;
   }
+}
+
+// -------------------------------------------------------------------
+
+VectorOutputStream::VectorOutputStream(size_t initialCapacity)
+    : vector(heapArray<byte>(initialCapacity)), fillPos(vector.begin()) {}
+VectorOutputStream::~VectorOutputStream() noexcept(false) {}
+
+ArrayPtr<byte> VectorOutputStream::getWriteBuffer() {
+  // Grow if needed.
+  if (fillPos == vector.end()) {
+    grow(vector.size() + 1);
+  }
+
+  return arrayPtr(fillPos, vector.end());
+}
+
+void VectorOutputStream::write(const void* src, size_t size) {
+  if (src == fillPos) {
+    // Oh goody, the caller wrote directly into our buffer.
+    KJ_REQUIRE(size <= vector.end() - fillPos);
+    fillPos += size;
+  } else {
+    if (vector.end() - fillPos < size) {
+      grow(fillPos - vector.begin() + size);
+    }
+
+    memcpy(fillPos, src, size);
+    fillPos += size;
+  }
+}
+
+void VectorOutputStream::grow(size_t minSize) {
+  size_t newSize = vector.size() * 2;
+  while (newSize < minSize) newSize *= 2;
+  auto newVector = heapArray<byte>(newSize);
+  memcpy(newVector.begin(), vector.begin(), fillPos - vector.begin());
+  fillPos = fillPos - vector.begin() + newVector.begin();
+  vector = kj::mv(newVector);
 }
 
 // =======================================================================================
