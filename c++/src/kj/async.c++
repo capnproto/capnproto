@@ -288,6 +288,10 @@ bool EventLoop::turn() {
   }
 }
 
+bool EventLoop::isRunnable() {
+  return head != nullptr;
+}
+
 void EventLoop::setRunnable(bool runnable) {
   if (runnable != lastRunnableState) {
     port.setRunnable(runnable);
