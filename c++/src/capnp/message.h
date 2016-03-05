@@ -22,6 +22,7 @@
 #include <kj/common.h>
 #include <kj/memory.h>
 #include <kj/mutex.h>
+#include <kj/debug.h>
 #include "common.h"
 #include "layout.h"
 #include "any.h"
@@ -118,6 +119,9 @@ public:
   // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
+  bool isCanonical();
+  // Returns whether the message encoded in the reader is in canonical form.
+
 private:
   ReaderOptions options;
 
@@ -195,6 +199,12 @@ public:
   void setRoot(Reader&& value);
   // Set the root struct to a deep copy of the given struct.
 
+  template <typename Reader>
+  void canonicalRoot(Reader&& value);
+  // Set the root to a canonical deep copy of the struct.
+  // will likely only work if the builder has not yet been used, and has
+  // been set up with an arena with a segment as big as value.targetSize();
+
   template <typename RootType>
   typename RootType::Builder getRoot();
   // Get the root struct of the message, interpreting it as the given struct type.
@@ -219,6 +229,9 @@ public:
   // Get the raw data that makes up the message.
 
   Orphanage getOrphanage();
+
+  bool isCanonical();
+  // Check whether the message builder is in canonical form
 
 private:
   void* arenaSpace[22];
@@ -459,6 +472,13 @@ typename RootType::Builder MessageBuilder::getRoot(SchemaType schema) {
 template <typename RootType, typename SchemaType>
 typename RootType::Builder MessageBuilder::initRoot(SchemaType schema) {
   return getRootInternal().initAs<RootType>(schema);
+}
+
+template <typename Reader>
+void MessageBuilder::canonicalRoot(Reader&& value) {
+  auto target = initRoot<AnyPointer>();
+  target.setCanonical(value);
+  KJ_ASSERT(isCanonical());
 }
 
 template <typename RootType>

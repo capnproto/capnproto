@@ -323,7 +323,8 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable, WordCount amount,
-      WirePointer::Kind kind, BuilderArena* orphanArena)) {
+      WirePointer::Kind kind, BuilderArena* orphanArena,
+      bool canonical = false)) {
     // Allocate space in the message for a new object, creating far pointers if necessary.
     //
     // * `ref` starts out being a reference to the pointer which shall be assigned to point at the
@@ -344,7 +345,8 @@ struct WireHelpers {
     //   segment belonging to the arena.  `ref` will be initialized as a non-far pointer, but its
     //   target offset will be set to zero.
 
-    if (orphanArena == nullptr) {
+    // Canonical messages can't be crafted from orphans, don't try
+    if ((orphanArena == nullptr) || canonical) {
       if (!ref->isNull()) zeroObject(segment, capTable, ref);
 
       if (amount == 0 * WORDS && kind == WirePointer::STRUCT) {
@@ -354,9 +356,14 @@ struct WireHelpers {
         return reinterpret_cast<word*>(ref);
       }
 
+      // Hope this generates sequential memory, validate with isCanonical
       word* ptr = segment->allocate(amount);
 
       if (ptr == nullptr) {
+        if (canonical) {
+          KJ_FAIL_REQUIRE("segment0 must hold entire canonical message");
+        }
+
         // Need to allocate in a new segment.  We'll need to allocate an extra pointer worth of
         // space to act as the landing pad for a far pointer.
 
@@ -1545,23 +1552,43 @@ struct WireHelpers {
 
   static SegmentAnd<word*> setStructPointer(
       SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref, StructReader value,
-      BuilderArena* orphanArena = nullptr) {
+      BuilderArena* orphanArena = nullptr, bool canonical = false) {
     WordCount dataSize = roundBitsUpToWords(value.dataSize);
-    WordCount totalSize = dataSize + value.pointerCount * WORDS_PER_POINTER;
+    WirePointerCount ptrCount = value.pointerCount;
 
-    word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::STRUCT, orphanArena);
-    ref->structRef.set(dataSize, value.pointerCount);
+
+    if (canonical) {
+      // Truncate the data section
+      while ((dataSize != 0) &&
+             (value.getDataField<uint64_t>(dataSize - 1) == 0)) {
+        dataSize--;
+      }
+      // Truncate pointer section
+      while ((ptrCount != 0) &&
+             value.getPointerField(ptrCount - 1).isNull()) {
+        ptrCount--;
+      }
+    }
+
+    WordCount totalSize = dataSize + ptrCount * WORDS_PER_POINTER;
+
+    word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::STRUCT, orphanArena, canonical);
+    ref->structRef.set(dataSize, ptrCount);
 
     if (value.dataSize == 1 * BITS) {
-      *reinterpret_cast<char*>(ptr) = value.getDataField<bool>(0 * ELEMENTS);
+      // Data size could be made 0 by truncation
+      if (dataSize != 0) {
+        *reinterpret_cast<char*>(ptr) = value.getDataField<bool>(0 * ELEMENTS);
+      }
     } else {
-      memcpy(ptr, value.data, value.dataSize / BITS_PER_BYTE / BYTES);
+      memcpy(ptr, value.data, dataSize * BYTES_PER_WORD);
     }
 
     WirePointer* pointerSection = reinterpret_cast<WirePointer*>(ptr + dataSize);
-    for (uint i = 0; i < value.pointerCount / POINTERS; i++) {
+    for (uint i = 0; i < ptrCount; i++) {
       copyPointer(segment, capTable, pointerSection + i,
-                  value.segment, value.capTable, value.pointers + i, value.nestingLimit);
+                  value.segment, value.capTable, value.pointers + i,
+                  value.nestingLimit, nullptr, canonical);
     }
 
     return { segment, ptr };
@@ -1584,12 +1611,12 @@ struct WireHelpers {
 
   static SegmentAnd<word*> setListPointer(
       SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref, ListReader value,
-      BuilderArena* orphanArena = nullptr) {
+      BuilderArena* orphanArena = nullptr, bool canonical = false) {
     WordCount totalSize = roundBitsUpToWords(value.elementCount * value.step);
 
     if (value.elementSize != ElementSize::INLINE_COMPOSITE) {
       // List of non-structs.
-      word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::LIST, orphanArena);
+      word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::LIST, orphanArena, canonical);
 
       if (value.elementSize == ElementSize::POINTER) {
         // List of pointers.
@@ -1598,7 +1625,7 @@ struct WireHelpers {
           copyPointer(segment, capTable, reinterpret_cast<WirePointer*>(ptr) + i,
                       value.segment, value.capTable,
                       reinterpret_cast<const WirePointer*>(value.ptr) + i,
-                      value.nestingLimit);
+                      value.nestingLimit, nullptr, canonical);
         }
       } else {
         // List of data.
@@ -1609,31 +1636,61 @@ struct WireHelpers {
       return { segment, ptr };
     } else {
       // List of structs.
-      word* ptr = allocate(ref, segment, capTable, totalSize + POINTER_SIZE_IN_WORDS,
-                           WirePointer::LIST, orphanArena);
-      ref->listRef.setInlineComposite(totalSize);
+      WordCount declDataSize = roundBitsUpToWords(value.structDataSize);
+      WirePointerCount declPointerCount = value.structPointerCount;
 
-      WordCount dataSize = roundBitsUpToWords(value.structDataSize);
-      WirePointerCount pointerCount = value.structPointerCount;
+      WordCount dataSize = 0 * WORDS;
+      WirePointerCount ptrCount = 0 * POINTERS;
+
+      if (canonical) {
+        for (auto ec = ElementCount(0); ec < value.elementCount; ec++) {
+          auto se = value.getStructElement(ec);
+          WordCount localDataSize = declDataSize;
+          while ((localDataSize != 0 * WORDS) &&
+                 (se.getDataField<uint64_t>(localDataSize - 1) == 0)) {
+            localDataSize--;
+          }
+          if (localDataSize > dataSize) {
+            dataSize = localDataSize;
+          }
+          WirePointerCount localPtrCount = declPointerCount;
+          while ((localPtrCount != 0 * POINTERS) &&
+                 se.getPointerField(localPtrCount - 1).isNull()) {
+            localPtrCount--;
+          }
+          if (localPtrCount > ptrCount) {
+            ptrCount = localPtrCount;
+          }
+        }
+        totalSize = (dataSize + ptrCount * WORDS_PER_POINTER) * value.elementCount;
+      } else {
+        dataSize = declDataSize;
+        ptrCount = declPointerCount;
+      }
+
+      word* ptr = allocate(ref, segment, capTable, totalSize + POINTER_SIZE_IN_WORDS,
+                           WirePointer::LIST, orphanArena, canonical);
+      ref->listRef.setInlineComposite(totalSize);
 
       WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
       tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, value.elementCount);
-      tag->structRef.set(dataSize, pointerCount);
+      tag->structRef.set(dataSize, ptrCount);
       word* dst = ptr + POINTER_SIZE_IN_WORDS;
 
       const word* src = reinterpret_cast<const word*>(value.ptr);
       for (uint i = 0; i < value.elementCount / ELEMENTS; i++) {
-        memcpy(dst, src, value.structDataSize / BITS_PER_BYTE / BYTES);
+        memcpy(dst, src, dataSize * BYTES_PER_WORD);
         dst += dataSize;
-        src += dataSize;
+        src += declDataSize;
 
-        for (uint j = 0; j < pointerCount / POINTERS; j++) {
+        for (uint j = 0; j < ptrCount / POINTERS; j++) {
           copyPointer(segment, capTable, reinterpret_cast<WirePointer*>(dst),
               value.segment, value.capTable, reinterpret_cast<const WirePointer*>(src),
-              value.nestingLimit);
+              value.nestingLimit, nullptr, canonical);
           dst += POINTER_SIZE_IN_WORDS;
           src += POINTER_SIZE_IN_WORDS;
         }
+        src += (declPointerCount - ptrCount) * POINTER_SIZE_IN_WORDS;
       }
 
       return { segment, ptr };
@@ -1643,16 +1700,18 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(SegmentAnd<word*> copyPointer(
       SegmentBuilder* dstSegment, CapTableBuilder* dstCapTable, WirePointer* dst,
       SegmentReader* srcSegment, CapTableReader* srcCapTable, const WirePointer* src,
-      int nestingLimit, BuilderArena* orphanArena = nullptr)) {
+      int nestingLimit, BuilderArena* orphanArena = nullptr,
+      bool canonical = false)) {
     return copyPointer(dstSegment, dstCapTable, dst,
                        srcSegment, srcCapTable, src, src->target(),
-                       nestingLimit, orphanArena);
+                       nestingLimit, orphanArena, canonical);
   }
 
   static SegmentAnd<word*> copyPointer(
       SegmentBuilder* dstSegment, CapTableBuilder* dstCapTable, WirePointer* dst,
       SegmentReader* srcSegment, CapTableReader* srcCapTable, const WirePointer* src,
-      const word* srcTarget, int nestingLimit, BuilderArena* orphanArena = nullptr) {
+      const word* srcTarget, int nestingLimit,
+      BuilderArena* orphanArena = nullptr, bool canonical = false) {
     // Deep-copy the object pointed to by src into dst.  It turns out we can't reuse
     // readStructPointer(), etc. because they do type checking whereas here we want to accept any
     // valid pointer.
@@ -1689,7 +1748,7 @@ struct WireHelpers {
                          src->structRef.dataSize.get() * BITS_PER_WORD,
                          src->structRef.ptrCount.get(),
                          nestingLimit - 1),
-            orphanArena);
+            orphanArena, canonical);
 
       case WirePointer::LIST: {
         ElementSize elementSize = src->listRef.elementSize();
@@ -1737,7 +1796,7 @@ struct WireHelpers {
                          tag->structRef.dataSize.get() * BITS_PER_WORD,
                          tag->structRef.ptrCount.get(), ElementSize::INLINE_COMPOSITE,
                          nestingLimit - 1),
-              orphanArena);
+              orphanArena, canonical);
         } else {
           BitCount dataSize = dataBitsPerElement(elementSize) * ELEMENTS;
           WirePointerCount pointerCount = pointersPerElement(elementSize) * ELEMENTS;
@@ -1762,7 +1821,7 @@ struct WireHelpers {
           return setListPointer(dstSegment, dstCapTable, dst,
               ListReader(srcSegment, srcCapTable, ptr, elementCount, step, dataSize, pointerCount,
                          elementSize, nestingLimit - 1),
-              orphanArena);
+              orphanArena, canonical);
         }
       }
 
@@ -1777,6 +1836,11 @@ struct WireHelpers {
         }
 
 #if !CAPNP_LITE
+        if (canonical) {
+          KJ_FAIL_REQUIRE("Cannot create a canonical message with a capability") {
+            goto useDefault;
+          }
+        }
         KJ_IF_MAYBE(cap, srcCapTable->extractCap(src->capRef.index.get())) {
           setCapabilityPointer(dstSegment, dstCapTable, dst, kj::mv(*cap));
           // Return dummy non-null pointer so OrphanBuilder doesn't end up null.
@@ -2258,7 +2322,7 @@ Text::Builder PointerBuilder::initBlob<Text>(ByteCount size) {
   return WireHelpers::initTextPointer(pointer, segment, capTable, size).value;
 }
 template <>
-void PointerBuilder::setBlob<Text>(Text::Reader value) {
+void PointerBuilder::setBlob<Text>(Text::Reader value, bool canonical) {
   WireHelpers::setTextPointer(pointer, segment, capTable, value);
 }
 template <>
@@ -2271,7 +2335,7 @@ Data::Builder PointerBuilder::initBlob<Data>(ByteCount size) {
   return WireHelpers::initDataPointer(pointer, segment, capTable, size).value;
 }
 template <>
-void PointerBuilder::setBlob<Data>(Data::Reader value) {
+void PointerBuilder::setBlob<Data>(Data::Reader value, bool canonical) {
   WireHelpers::setDataPointer(pointer, segment, capTable, value);
 }
 template <>
@@ -2279,12 +2343,12 @@ Data::Builder PointerBuilder::getBlob<Data>(const void* defaultValue, ByteCount 
   return WireHelpers::getWritableDataPointer(pointer, segment, capTable, defaultValue, defaultSize);
 }
 
-void PointerBuilder::setStruct(const StructReader& value) {
-  WireHelpers::setStructPointer(segment, capTable, pointer, value);
+void PointerBuilder::setStruct(const StructReader& value, bool canonical) {
+  WireHelpers::setStructPointer(segment, capTable, pointer, value, nullptr, canonical);
 }
 
-void PointerBuilder::setList(const ListReader& value) {
-  WireHelpers::setListPointer(segment, capTable, pointer, value);
+void PointerBuilder::setList(const ListReader& value, bool canonical) {
+  WireHelpers::setListPointer(segment, capTable, pointer, value, nullptr, canonical);
 }
 
 #if !CAPNP_LITE
@@ -2341,7 +2405,7 @@ void PointerBuilder::transferFrom(PointerBuilder other) {
   memset(other.pointer, 0, sizeof(*other.pointer));
 }
 
-void PointerBuilder::copyFrom(PointerReader other) {
+void PointerBuilder::copyFrom(PointerReader other, bool canonical) {
   if (other.pointer == nullptr) {
     if (!pointer->isNull()) {
       WireHelpers::zeroObject(segment, capTable, pointer);
@@ -2349,7 +2413,9 @@ void PointerBuilder::copyFrom(PointerReader other) {
     }
   } else {
     WireHelpers::copyPointer(segment, capTable, pointer,
-                             other.segment, other.capTable, other.pointer, other.nestingLimit);
+                             other.segment, other.capTable, other.pointer, other.nestingLimit,
+                             nullptr,
+                             canonical);
   }
 }
 
@@ -2466,6 +2532,36 @@ PointerReader PointerReader::imbue(CapTableReader* capTable) const {
   auto result = *this;
   result.capTable = capTable;
   return result;
+}
+
+bool PointerReader::isCanonical(const word **readHead) {
+  if (!this->pointer) {
+    // The pointer is null, so we are canonical and do not read
+    return true;
+  }
+
+  if (!this->pointer->isPositional()) {
+    // The pointer is a FAR or OTHER pointer, and is non-canonical
+    return false;
+  }
+
+  switch (this->getPointerType()) {
+    case PointerType::NULL_:
+      // The pointer is null, we are canonical and do not read
+      return true;
+    case PointerType::STRUCT:
+      bool dataTrunc, ptrTrunc;
+      return (this->getStruct(nullptr).isCanonical(readHead,
+                                                   readHead,
+                                                   &dataTrunc,
+                                                   &ptrTrunc)
+             && dataTrunc && ptrTrunc);
+    case PointerType::LIST:
+      return this->getListAnySize(nullptr).isCanonical(readHead);
+    case PointerType::CAPABILITY:
+      KJ_FAIL_ASSERT("Capabilities are not positional");
+  }
+  KJ_UNREACHABLE;
 }
 
 // =======================================================================================
@@ -2609,6 +2705,49 @@ StructReader StructReader::imbue(CapTableReader* capTable) const {
   return result;
 }
 
+bool StructReader::isCanonical(const word **readHead,
+                               const word **ptrHead,
+                               bool *dataTrunc,
+                               bool *ptrTrunc) {
+  if (this->getLocation() != *readHead) {
+    // Our target area is not at the readHead, preorder fails
+    return false;
+  }
+
+  if (this->getDataSectionSize() % BITS_PER_WORD != 0) {
+    // Using legacy non-word-size structs, reject
+    return false;
+  }
+  WordCount32 dataSize = this->getDataSectionSize() / BITS_PER_WORD;
+
+  // Mark whether the struct is properly truncated
+  if (dataSize != 0) {
+    *dataTrunc = this->getDataField<uint64_t>(dataSize - 1) != 0;
+  } else {
+    *dataTrunc = true;
+  }
+
+  if (this->pointerCount != 0) {
+    *ptrTrunc  = !this->getPointerField(this->pointerCount - 1).isNull();
+  } else {
+    *ptrTrunc = true;
+  }
+
+  // Advance the read head
+  *readHead += dataSize + this->pointerCount;
+
+  // Check each pointer field for canonicity
+  for (WirePointerCount16 ptrIndex = 0;
+       ptrIndex < this->pointerCount;
+       ptrIndex++) {
+    if (!this->getPointerField(ptrIndex).isCanonical(ptrHead)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // =======================================================================================
 // ListBuilder
 
@@ -2746,6 +2885,74 @@ ListReader ListReader::imbue(CapTableReader* capTable) const {
   auto result = *this;
   result.capTable = capTable;
   return result;
+}
+
+bool ListReader::isCanonical(const word **readHead) {
+  switch (this->getElementSize()) {
+    case ElementSize::INLINE_COMPOSITE: {
+      *readHead += 1;
+      if (reinterpret_cast<const word*>(this->ptr) != *readHead) {
+        // The next word to read is the tag word, but the pointer is in
+        // front of it, so our check is slightly different
+        return false;
+      }
+      if (this->structDataSize % BITS_PER_WORD != 0) {
+        return false;
+      }
+      auto structSize = (this->structDataSize / BITS_PER_WORD) +
+                        (this->structPointerCount * WORDS_PER_POINTER);
+      auto listEnd = *readHead + this->elementCount * structSize;
+      auto pointerHead = listEnd;
+      bool listDataTrunc = false;
+      bool listPtrTrunc = false;
+      for (ElementCount ec = ElementCount(0);
+           ec < this->elementCount;
+           ec++) {
+        bool dataTrunc, ptrTrunc;
+        if (!this->getStructElement(ec).isCanonical(readHead,
+                                                    &pointerHead,
+                                                    &dataTrunc,
+                                                    &ptrTrunc)) {
+          return false;
+        }
+        listDataTrunc |= dataTrunc;
+        listPtrTrunc  |= ptrTrunc;
+      }
+      KJ_REQUIRE(*readHead == listEnd, *readHead, listEnd);
+      *readHead = pointerHead;
+      return listDataTrunc && listPtrTrunc;
+    }
+    case ElementSize::POINTER: {
+      if (reinterpret_cast<const word*>(this->ptr) != *readHead) {
+        return false;
+      }
+      *readHead += this->elementCount;
+      for (ElementCount ec = ElementCount(0);
+           ec < this->elementCount;
+           ec++) {
+        if (!this->getPointerElement(ec).isCanonical(readHead)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    default: {
+      if (reinterpret_cast<const word*>(this->ptr) != *readHead) {
+        return false;
+      }
+
+      auto bitSize = this->elementCount *
+                     dataBitsPerElement(this->elementSize);
+      auto wordSize = bitSize / BITS_PER_WORD;
+      if (bitSize % BITS_PER_WORD != 0) {
+        wordSize++;
+      }
+
+      *readHead += wordSize;
+      return true;
+    }
+  }
+  KJ_UNREACHABLE;
 }
 
 // =======================================================================================

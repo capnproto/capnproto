@@ -339,9 +339,9 @@ public:
   // Init methods:  Initialize the pointer to a newly-allocated object, discarding the existing
   // object.
 
-  void setStruct(const StructReader& value);
-  void setList(const ListReader& value);
-  template <typename T> void setBlob(typename T::Reader value);
+  void setStruct(const StructReader& value, bool canonical = false);
+  void setList(const ListReader& value, bool canonical = false);
+  template <typename T> void setBlob(typename T::Reader value, bool canonical = false);
 #if !CAPNP_LITE
   void setCapability(kj::Own<ClientHook>&& cap);
 #endif  // !CAPNP_LITE
@@ -360,8 +360,10 @@ public:
   void transferFrom(PointerBuilder other);
   // Equivalent to `adopt(other.disown())`.
 
-  void copyFrom(PointerReader other);
+  void copyFrom(PointerReader other, bool canonical = false);
   // Equivalent to `set(other.get())`.
+  // If you set the canonical flag, it will attempt to lay the target out
+  // canonically, provided enough space is available.
 
   PointerReader asReader() const;
 
@@ -435,6 +437,13 @@ public:
 
   PointerReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
+
+  bool isCanonical(const word **readHead);
+  // Validate this pointer's canonicity, subject to the conditions:
+  // * All data to the left of readHead has been read thus far (for pointer
+  //   ordering)
+  // * All pointers in preorder have already been checked
+  // * This pointer is in the first and only segment of the message
 
 private:
   SegmentReader* segment;      // Memory segment in which the pointer resides.
@@ -594,6 +603,21 @@ public:
 
   StructReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
+
+  bool isCanonical(const word **readHead, const word **ptrHead,
+                   bool *dataTrunc, bool *ptrTrunc);
+  // Validate this pointer's canonicity, subject to the conditions:
+  // * All data to the left of readHead has been read thus far (for pointer
+  //   ordering)
+  // * All pointers in preorder have already been checked
+  // * This pointer is in the first and only segment of the message
+  //
+  // If this function returns false, the struct is non-canonical. If it
+  // returns true, then:
+  // * If it is a composite in a list, it is canonical if at least one struct
+  //   in the list outputs dataTrunc = 1, and at least one outputs ptrTrunc = 1
+  // * If it is derived from a struct pointer, it is canonical if
+  //   dataTrunc = 1 AND ptrTrunc = 1
 
 private:
   SegmentReader* segment;    // Memory segment in which the struct resides.
@@ -758,6 +782,13 @@ public:
   ListReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
 
+  bool isCanonical(const word **readHead);
+  // Validate this pointer's canonicity, subject to the conditions:
+  // * All data to the left of readHead has been read thus far (for pointer
+  //   ordering)
+  // * All pointers in preorder have already been checked
+  // * This pointer is in the first and only segment of the message
+
 private:
   SegmentReader* segment;    // Memory segment in which the list resides.
   CapTableReader* capTable;  // Table of capability indexes.
@@ -915,12 +946,12 @@ private:
 
 // These are defined in the source file.
 template <> typename Text::Builder PointerBuilder::initBlob<Text>(ByteCount size);
-template <> void PointerBuilder::setBlob<Text>(typename Text::Reader value);
+template <> void PointerBuilder::setBlob<Text>(typename Text::Reader value, bool canonical);
 template <> typename Text::Builder PointerBuilder::getBlob<Text>(const void* defaultValue, ByteCount defaultSize);
 template <> typename Text::Reader PointerReader::getBlob<Text>(const void* defaultValue, ByteCount defaultSize) const;
 
 template <> typename Data::Builder PointerBuilder::initBlob<Data>(ByteCount size);
-template <> void PointerBuilder::setBlob<Data>(typename Data::Reader value);
+template <> void PointerBuilder::setBlob<Data>(typename Data::Reader value, bool canonical);
 template <> typename Data::Builder PointerBuilder::getBlob<Data>(const void* defaultValue, ByteCount defaultSize);
 template <> typename Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount defaultSize) const;
 

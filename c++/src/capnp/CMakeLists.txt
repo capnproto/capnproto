@@ -200,6 +200,7 @@ if(BUILD_TESTING)
     orphan-test.c++
     serialize-test.c++
     serialize-packed-test.c++
+    canonicalize-test.c++
     fuzz-test.c++
     test-util.c++
     ${test_capnp_cpp_files}
