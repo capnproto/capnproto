@@ -23,7 +23,9 @@
 #include "md5.h"
 #include <capnp/dynamic.h>
 #include <kj/debug.h>
+#if !_MSC_VER
 #include <unistd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
