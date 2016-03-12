@@ -64,7 +64,8 @@ protected:
     if (params.getTailCall()) {
       return context.tailCall(kj::mv(req));
     } else {
-      return req.send().then([context](Response<test::TestMembrane::Result>&& result) mutable {
+      return req.send().then(
+          [KJ_CPCAP(context)](Response<test::TestMembrane::Result>&& result) mutable {
         context.setResults(result);
       });
     }
@@ -76,7 +77,8 @@ protected:
     if (params.getTailCall()) {
       return context.tailCall(kj::mv(req));
     } else {
-      return req.send().then([context](Response<test::TestMembrane::Result>&& result) mutable {
+      return req.send().then(
+          [KJ_CPCAP(context)](Response<test::TestMembrane::Result>&& result) mutable {
         context.setResults(result);
       });
     }

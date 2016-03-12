@@ -66,7 +66,7 @@ private:
 kj::Promise<bool> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
                                            kj::ArrayPtr<word> scratchSpace) {
   return inputStream.tryRead(firstWord, sizeof(firstWord), sizeof(firstWord))
-      .then([this,&inputStream,scratchSpace](size_t n) mutable -> kj::Promise<bool> {
+      .then([this,&inputStream,KJ_CPCAP(scratchSpace)](size_t n) mutable -> kj::Promise<bool> {
     if (n == 0) {
       return false;
     } else if (n < sizeof(firstWord)) {
@@ -95,7 +95,7 @@ kj::Promise<void> AsyncMessageReader::readAfterFirstWord(kj::AsyncInputStream& i
     // Read sizes for all segments except the first.  Include padding if necessary.
     moreSizes = kj::heapArray<_::WireValue<uint32_t>>(segmentCount() & ~1);
     return inputStream.read(moreSizes.begin(), moreSizes.size() * sizeof(moreSizes[0]))
-        .then([this,&inputStream,scratchSpace]() mutable {
+        .then([this,&inputStream,KJ_CPCAP(scratchSpace)]() mutable {
           return readSegments(inputStream, scratchSpace);
         });
   } else {

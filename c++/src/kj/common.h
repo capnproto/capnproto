@@ -373,6 +373,24 @@ struct DisallowConstCopy {
   DisallowConstCopy& operator=(DisallowConstCopy&&) = default;
 };
 
+#if _MSC_VER
+
+#define KJ_CPCAP(obj) obj=::kj::cp(obj)
+// TODO(msvc): MSVC refuses to invoke non-const versions of copy constructors in by-value lambda
+// captures. Wrap your captured object in this macro to force the compiler to perform a copy.
+// Example:
+//
+//   struct Foo: DisallowConstCopy {};
+//   Foo foo;
+//   auto lambda = [KJ_CPCAP(foo)] {};
+
+#else
+
+#define KJ_CPCAP(obj) obj
+// Clang and gcc both already perform copy capturing correctly with non-const copy constructors.
+
+#endif
+
 template <typename T>
 struct DisallowConstCopyIfNotConst: public DisallowConstCopy {
   // Inherit from this when implementing a template that contains a pointer to T and which should

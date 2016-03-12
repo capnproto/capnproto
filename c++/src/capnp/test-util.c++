@@ -943,7 +943,7 @@ kj::Promise<void> TestPipelineImpl::getCap(GetCapContext context) {
   request.setJ(true);
 
   return request.send().then(
-      [this,context](Response<test::TestInterface::FooResults>&& response) mutable {
+      [this,KJ_CPCAP(context)](Response<test::TestInterface::FooResults>&& response) mutable {
         EXPECT_EQ("foo", response.getX());
 
         auto result = context.getResults();
@@ -1005,7 +1005,7 @@ kj::Promise<void> TestMoreStuffImpl::callFoo(CallFooContext context) {
   request.setJ(true);
 
   return request.send().then(
-      [context](Response<test::TestInterface::FooResults>&& response) mutable {
+      [KJ_CPCAP(context)](Response<test::TestInterface::FooResults>&& response) mutable {
         EXPECT_EQ("foo", response.getX());
         context.getResults().setS("bar");
       });
@@ -1017,13 +1017,13 @@ kj::Promise<void> TestMoreStuffImpl::callFooWhenResolved(CallFooWhenResolvedCont
   auto params = context.getParams();
   auto cap = params.getCap();
 
-  return cap.whenResolved().then([cap,context]() mutable {
+  return cap.whenResolved().then([KJ_CPCAP(cap),KJ_CPCAP(context)]() mutable {
     auto request = cap.fooRequest();
     request.setI(123);
     request.setJ(true);
 
     return request.send().then(
-        [context](Response<test::TestInterface::FooResults>&& response) mutable {
+        [KJ_CPCAP(context)](Response<test::TestInterface::FooResults>&& response) mutable {
           EXPECT_EQ("foo", response.getX());
           context.getResults().setS("bar");
         });
@@ -1059,7 +1059,7 @@ kj::Promise<void> TestMoreStuffImpl::callHeld(CallHeldContext context) {
   request.setJ(true);
 
   return request.send().then(
-      [context](Response<test::TestInterface::FooResults>&& response) mutable {
+      [KJ_CPCAP(context)](Response<test::TestInterface::FooResults>&& response) mutable {
         EXPECT_EQ("foo", response.getX());
         context.getResults().setS("bar");
       });
@@ -1092,7 +1092,7 @@ kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Clien
     ADD_FAILURE() << "Looped too long, giving up.";
     return kj::READY_NOW;
   } else {
-    return kj::evalLater([=]() mutable {
+    return kj::evalLater([this,depth,KJ_CPCAP(cap),KJ_CPCAP(context)]() mutable {
       return loop(depth + 1, cap, context);
     });
   }
