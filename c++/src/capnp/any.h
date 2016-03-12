@@ -138,7 +138,7 @@ struct AnyPointer {
     friend struct AnyPointer;
     friend class Orphanage;
     friend class CapReaderContext;
-    friend class _::PointerHelpers<AnyPointer>;
+    friend struct _::PointerHelpers<AnyPointer>;
   };
 
   class Builder {
@@ -255,7 +255,7 @@ struct AnyPointer {
     _::PointerBuilder builder;
     friend class Orphanage;
     friend class CapBuilderContext;
-    friend class _::PointerHelpers<AnyPointer>;
+    friend struct _::PointerHelpers<AnyPointer>;
   };
 
 #if !CAPNP_LITE
