@@ -300,7 +300,7 @@ the shared memory segment.  Hence, the method implementation cannot just create 
 class DirectoryImpl final: public Directory::Server {
 public:
   kj::Promise<void> open(OpenContext context) override {
-    auto iter = files.find(context.getRequest().getName());
+    auto iter = files.find(context.getParams().getName());
 
     // Throw an exception if not found.
     KJ_REQUIRE(iter != files.end(), "File not found.");
