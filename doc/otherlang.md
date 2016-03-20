@@ -41,8 +41,8 @@ new languages.
 * [Common Test Framework](https://github.com/kaos/capnp_test) by [@kaos](https://github.com/kaos)
 * [Sublime Syntax Highlighting](https://github.com/joshuawarner32/capnproto-sublime) by
   [@joshuawarner32](https://github.com/joshuawarner32)
-* [Vim Syntax Highlighting](https://github.com/cstrahan/vim-capnp) by
-  [@cstrahan](https://github.com/cstrahan)
+* [Vim Syntax Highlighting](https://github.com/peter-edge/vim-capnp) by [@peter-edge](https://github.com/peter-edge)
+  (originally by [@cstrahan](https://github.com/cstrahan))
 * [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
 
 ## Contribute Your Own!
