@@ -207,6 +207,9 @@ public:
 
   ~EzRpcServer() noexcept(false);
 
+  void setMainInterface(Capability::Client cap);
+  // Set / replace main interface.
+
   void exportCap(kj::StringPtr name, Capability::Client cap);
   // Export a capability publicly under the given name, so that clients can import it.
   //
