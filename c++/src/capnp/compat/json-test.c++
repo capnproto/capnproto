@@ -183,6 +183,83 @@ KJ_TEST("encode union") {
   KJ_EXPECT(json.encode(root) == "{\"before\":\"a\",\"middle\":44,\"bar\":321,\"after\":\"c\"}");
 }
 
+KJ_TEST("decode all types") {
+  JsonCodec json;
+#define CASE(s, f) \
+  { \
+    MallocMessageBuilder decodedMessage; \
+    auto root = decodedMessage.initRoot<TestAllTypes>(); \
+    json.decode(s, root); \
+    KJ_EXPECT((f)) \
+  }
+
+  CASE(R"({})", root.getBoolField() == false);
+  CASE(R"({"unknownField":7})", root.getBoolField() == false);
+  CASE(R"({"boolField":null})", root.getBoolField() == false);
+  CASE(R"({"boolField":true})", root.getBoolField() == true);
+  CASE(R"({"int8Field":7})", root.getInt8Field() == 7);
+  CASE(R"({"int8Field":"7"})", root.getInt8Field() == 7);
+  CASE(R"({"int16Field":7})", root.getInt16Field() == 7);
+  CASE(R"({"int16Field":"7"})", root.getInt16Field() == 7);
+  CASE(R"({"int32Field":7})", root.getInt32Field() == 7);
+  CASE(R"({"int32Field":"7"})", root.getInt32Field() == 7);
+  CASE(R"({"int64Field":7})", root.getInt64Field() == 7);
+  CASE(R"({"int64Field":"7"})", root.getInt64Field() == 7);
+  CASE(R"({"uInt8Field":7})", root.getUInt8Field() == 7);
+  CASE(R"({"uInt8Field":"7"})", root.getUInt8Field() == 7);
+  CASE(R"({"uInt16Field":7})", root.getUInt16Field() == 7);
+  CASE(R"({"uInt16Field":"7"})", root.getUInt16Field() == 7);
+  CASE(R"({"uInt32Field":7})", root.getUInt32Field() == 7);
+  CASE(R"({"uInt32Field":"7"})", root.getUInt32Field() == 7);
+  CASE(R"({"uInt64Field":7})", root.getUInt64Field() == 7);
+  CASE(R"({"uInt64Field":"7"})", root.getUInt64Field() == 7);
+  CASE(R"({"textField":"hello"})", kj::str("hello") == root.getTextField());
+  CASE(R"({"dataField":[7,0,122]})",
+      kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataField());
+  CASE(R"({"structField":null})", root.hasStructField() == false);
+  CASE(R"({"structField":{}})", root.hasStructField() == true);
+  CASE(R"({"structField":{}})", root.getStructField().getBoolField() == false);
+  CASE(R"({"structField":{"boolField":false}})", root.getStructField().getBoolField() == false);
+  CASE(R"({"structField":{"boolField":true}})", root.getStructField().getBoolField() == true);
+  CASE(R"({"enumField":"bar"})", root.getEnumField() == TestEnum::BAR);
+
+  CASE(R"({})", root.hasBoolList() == false);
+  CASE(R"({"boolList":null})", root.hasBoolList() == false);
+  CASE(R"({"boolList":[]})", root.hasBoolList() == true);
+  CASE(R"({"boolList":[]})", root.getBoolList().size() == 0);
+  CASE(R"({"boolList":[null]})", root.getBoolList().size() == 1);
+  CASE(R"({"boolList":[null]})", root.getBoolList()[0] == false);
+  CASE(R"({"boolList":[false]})", root.getBoolList()[0] == false);
+  CASE(R"({"boolList":[true]})", root.getBoolList()[0] == true);
+  CASE(R"({"int8List":[7]})", root.getInt8List()[0] == 7);
+  CASE(R"({"int8List":["7"]})", root.getInt8List()[0] == 7);
+  CASE(R"({"int16List":[7]})", root.getInt16List()[0] == 7);
+  CASE(R"({"int16List":["7"]})", root.getInt16List()[0] == 7);
+  CASE(R"({"int32List":[7]})", root.getInt32List()[0] == 7);
+  CASE(R"({"int32List":["7"]})", root.getInt32List()[0] == 7);
+  CASE(R"({"int64List":[7]})", root.getInt64List()[0] == 7);
+  CASE(R"({"int64List":["7"]})", root.getInt64List()[0] == 7);
+  CASE(R"({"uInt8List":[7]})", root.getUInt8List()[0] == 7);
+  CASE(R"({"uInt8List":["7"]})", root.getUInt8List()[0] == 7);
+  CASE(R"({"uInt16List":[7]})", root.getUInt16List()[0] == 7);
+  CASE(R"({"uInt16List":["7"]})", root.getUInt16List()[0] == 7);
+  CASE(R"({"uInt32List":[7]})", root.getUInt32List()[0] == 7);
+  CASE(R"({"uInt32List":["7"]})", root.getUInt32List()[0] == 7);
+  CASE(R"({"uInt64List":[7]})", root.getUInt64List()[0] == 7);
+  CASE(R"({"uInt64List":["7"]})", root.getUInt64List()[0] == 7);
+  CASE(R"({"textList":["hello"]})", kj::str("hello") == root.getTextList()[0]);
+  CASE(R"({"dataList":[[7,0,122]]})",
+      kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataList()[0]);
+  CASE(R"({"structList":null})", root.hasStructList() == false);
+  CASE(R"({"structList":[null]})", root.hasStructList() == true);
+  CASE(R"({"structList":[null]})", root.getStructList()[0].getBoolField() == false);
+  CASE(R"({"structList":[{}]})", root.getStructList()[0].getBoolField() == false);
+  CASE(R"({"structList":[{"boolField":false}]})", root.getStructList()[0].getBoolField() == false);
+  CASE(R"({"structList":[{"boolField":true}]})", root.getStructList()[0].getBoolField() == true);
+  CASE(R"({"enumList":["bar"]})", root.getEnumList()[0] == TestEnum::BAR);
+#undef CASE
+}
+
 KJ_TEST("basic json decoding") {
   // TODO(cleanup): this test is a mess!
   JsonCodec json;

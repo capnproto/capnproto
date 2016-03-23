@@ -379,13 +379,119 @@ void JsonCodec::encodeField(StructSchema::Field field, DynamicValue::Reader inpu
   encode(input, field.getType(), output);
 }
 
+namespace {
+int64_t parseInt64(kj::StringPtr s)
+{
+  char *endPtr;
+  errno = 0;
+  int64_t value = std::strtoll(s.begin(), &endPtr, 10);
+  KJ_REQUIRE(endPtr == s.end() && errno != ERANGE, "String is not correct int64 number");
+  return value;
+}
+
+uint64_t parseUInt64(kj::StringPtr s)
+{
+  char *endPtr;
+  errno = 0;
+  uint64_t value = std::strtoull(s.begin(), &endPtr, 10);
+  KJ_ASSERT(endPtr == s.end() && errno != ERANGE, "String is not correct uint64 number");
+  return value;
+}
+
+template <typename Set, typename DecodeArray, typename DecodeObject>
+void decodeField(Type type, JsonValue::Reader value, Set set, DecodeArray decodeArray,
+    DecodeObject decodeObject) {
+  switch (value.which()) {
+    case JsonValue::NULL_:
+      break;
+    case JsonValue::BOOLEAN:
+      set(value.getBoolean());
+      break;
+    case JsonValue::NUMBER:
+      set(value.getNumber());
+      break;
+    case JsonValue::STRING:
+      if (type.isInt8() || type.isInt16() || type.isInt32() || type.isInt64()) {
+        set(parseInt64(value.getString()));
+      } else if (type.isUInt8() || type.isUInt16() || type.isUInt32() || type.isUInt64()) {
+        set(parseUInt64(value.getString()));
+      } else {
+        set(value.getString());
+      }
+      break;
+    case JsonValue::ARRAY: {
+      if (type.isData()) {
+        kj::Vector<byte> data;
+        for (auto arrayObject : value.getArray()) {
+          auto x = int(arrayObject.getNumber());
+          KJ_REQUIRE(x >= 0 && x <= 255, "Number in array of bytes out of range.");
+          data.add(byte(x));
+        }
+        set(Data::Reader(data.asPtr()));
+      } else {
+        decodeArray(value.getArray());
+      }
+      break;
+    }
+    case JsonValue::OBJECT:
+      decodeObject(value.getObject());
+      break;
+    case JsonValue::CALL:
+      //TODO(soon)
+      KJ_FAIL_ASSERT("JSON call decode not implemented yet. :(");
+      break;
+  }
+}
+} //namespace
+
+void JsonCodec::decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output) const {
+  KJ_ASSERT(input.size() == output.size(), "Builder must be initialized to input size");
+  auto type = output.getSchema().getElementType();
+  for (auto i = 0; i < input.size(); i++) {
+    decodeField(type, input[i],
+        [&](DynamicValue::Reader value) { output.set(i, value); },
+        [&](List<JsonValue>::Reader array) {
+          decodeArray(array, output.init(i, array.size()).as<DynamicList>());
+        },
+        [&](List<JsonValue::Field>::Reader object) {
+          decodeObject(object, output[i].as<DynamicStruct>());
+        });
+  }
+}
+
+void JsonCodec::decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct::Builder output)
+    const {
+  for (auto field : input) {
+    KJ_IF_MAYBE(fieldSchema, output.getSchema().findFieldByName(field.getName())) {
+      decodeField((*fieldSchema).getType(), field.getValue(),
+          [&](DynamicValue::Reader value) { output.set(*fieldSchema, value); },
+          [&](List<JsonValue>::Reader array) {
+            decodeArray(array, output.init(*fieldSchema, array.size()).as<DynamicList>());
+          },
+          [&](List<JsonValue::Field>::Reader object) {
+            decodeObject(object, output.init(*fieldSchema).as<DynamicStruct>());
+          });
+    } else {
+      //Unknown json fields are ignored to allow schema evolution
+    }
+  }
+}
+
 void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) const {
-  KJ_FAIL_ASSERT("JSON decode not implement yet. :(");
+  // TODO(soon): type and field handlers
+  switch (input.which()) {
+    case JsonValue::OBJECT:
+      decodeObject(input.getObject(), output);
+      break;
+    default:
+      KJ_FAIL_REQUIRE("Top level json value must be object");
+  };
 }
 
 Orphan<DynamicValue> JsonCodec::decode(
     JsonValue::Reader input, Type type, Orphanage orphanage) const {
-  KJ_FAIL_ASSERT("JSON decode not implement yet. :(");
+  //TODO(soon)
+  KJ_FAIL_ASSERT("JSON decode into orphanage not implement yet. :(");
 }
 
 // -----------------------------------------------------------------------------
