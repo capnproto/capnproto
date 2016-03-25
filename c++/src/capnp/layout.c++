@@ -323,8 +323,7 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable, WordCount amount,
-      WirePointer::Kind kind, BuilderArena* orphanArena,
-      bool canonical = false)) {
+      WirePointer::Kind kind, BuilderArena* orphanArena)) {
     // Allocate space in the message for a new object, creating far pointers if necessary.
     //
     // * `ref` starts out being a reference to the pointer which shall be assigned to point at the
@@ -345,8 +344,7 @@ struct WireHelpers {
     //   segment belonging to the arena.  `ref` will be initialized as a non-far pointer, but its
     //   target offset will be set to zero.
 
-    // Canonical messages can't be crafted from orphans, don't try
-    if ((orphanArena == nullptr) || canonical) {
+    if (orphanArena == nullptr) {
       if (!ref->isNull()) zeroObject(segment, capTable, ref);
 
       if (amount == 0 * WORDS && kind == WirePointer::STRUCT) {
@@ -356,13 +354,9 @@ struct WireHelpers {
         return reinterpret_cast<word*>(ref);
       }
 
-      // Hope this generates sequential memory, validate with isCanonical
       word* ptr = segment->allocate(amount);
 
       if (ptr == nullptr) {
-        if (canonical) {
-          KJ_FAIL_REQUIRE("segment0 must hold entire canonical message");
-        }
 
         // Need to allocate in a new segment.  We'll need to allocate an extra pointer worth of
         // space to act as the landing pad for a far pointer.
@@ -1599,7 +1593,7 @@ struct WireHelpers {
 
     WordCount totalSize = dataWords + ptrCount * WORDS_PER_POINTER;
 
-    word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::STRUCT, orphanArena, canonical);
+    word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::STRUCT, orphanArena);
     ref->structRef.set(dataWords, ptrCount);
 
     if (value.dataSize == 1 * BITS) {
@@ -1648,7 +1642,7 @@ struct WireHelpers {
 
     if (value.elementSize != ElementSize::INLINE_COMPOSITE) {
       // List of non-structs.
-      word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::LIST, orphanArena, canonical);
+      word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::LIST, orphanArena);
 
       if (value.elementSize == ElementSize::POINTER) {
         // List of pointers.
@@ -1701,7 +1695,7 @@ struct WireHelpers {
       }
 
       word* ptr = allocate(ref, segment, capTable, totalSize + POINTER_SIZE_IN_WORDS,
-                           WirePointer::LIST, orphanArena, canonical);
+                           WirePointer::LIST, orphanArena);
       ref->listRef.setInlineComposite(totalSize);
 
       WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
