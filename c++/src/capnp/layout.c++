@@ -1861,12 +1861,12 @@ struct WireHelpers {
           goto useDefault;
         }
 
-#if !CAPNP_LITE
         if (canonical) {
           KJ_FAIL_REQUIRE("Cannot create a canonical message with a capability") {
-            goto useDefault;
+            break;
           }
         }
+#if !CAPNP_LITE
         KJ_IF_MAYBE(cap, srcCapTable->extractCap(src->capRef.index.get())) {
           setCapabilityPointer(dstSegment, dstCapTable, dst, kj::mv(*cap));
           // Return dummy non-null pointer so OrphanBuilder doesn't end up null.
