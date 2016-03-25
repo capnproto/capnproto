@@ -1559,14 +1559,14 @@ struct WireHelpers {
 
     if (canonical) {
       // Truncate the data section
-      while ((dataSize != 0) &&
-             (value.getDataField<uint64_t>(dataSize - 1) == 0)) {
-        dataSize--;
+      while ((dataSize != 0 * WORDS) &&
+             (value.getDataField<uint64_t>(dataSize * (ELEMENTS / WORDS) - 1 * ELEMENTS) == 0)) {
+        dataSize -= 1 * WORDS;
       }
       // Truncate pointer section
-      while ((ptrCount != 0) &&
-             value.getPointerField(ptrCount - 1).isNull()) {
-        ptrCount--;
+      while ((ptrCount != 0 * POINTERS) &&
+             value.getPointerField(ptrCount - 1 * POINTERS).isNull()) {
+        ptrCount -= 1 * POINTERS;
       }
     }
 
@@ -1577,15 +1577,15 @@ struct WireHelpers {
 
     if (value.dataSize == 1 * BITS) {
       // Data size could be made 0 by truncation
-      if (dataSize != 0) {
+      if (dataSize != 0 * WORDS) {
         *reinterpret_cast<char*>(ptr) = value.getDataField<bool>(0 * ELEMENTS);
       }
     } else {
-      memcpy(ptr, value.data, dataSize * BYTES_PER_WORD);
+      memcpy(ptr, value.data, dataSize * BYTES_PER_WORD / BYTES);
     }
 
     WirePointer* pointerSection = reinterpret_cast<WirePointer*>(ptr + dataSize);
-    for (uint i = 0; i < ptrCount; i++) {
+    for (uint i = 0; i < ptrCount / POINTERS; i++) {
       copyPointer(segment, capTable, pointerSection + i,
                   value.segment, value.capTable, value.pointers + i,
                   value.nestingLimit, nullptr, canonical);
@@ -1643,26 +1643,26 @@ struct WireHelpers {
       WirePointerCount ptrCount = 0 * POINTERS;
 
       if (canonical) {
-        for (auto ec = ElementCount(0); ec < value.elementCount; ec++) {
+        for (auto ec = ElementCount(0); ec < value.elementCount; ec += 1 * ELEMENTS) {
           auto se = value.getStructElement(ec);
           WordCount localDataSize = declDataSize;
           while ((localDataSize != 0 * WORDS) &&
-                 (se.getDataField<uint64_t>(localDataSize - 1) == 0)) {
-            localDataSize--;
+                 (se.getDataField<uint64_t>((localDataSize - 1 * WORDS) / WORDS * ELEMENTS) == 0)) {
+            localDataSize -= WORDS;
           }
           if (localDataSize > dataSize) {
             dataSize = localDataSize;
           }
           WirePointerCount localPtrCount = declPointerCount;
           while ((localPtrCount != 0 * POINTERS) &&
-                 se.getPointerField(localPtrCount - 1).isNull()) {
-            localPtrCount--;
+                 se.getPointerField(localPtrCount - 1 * POINTERS).isNull()) {
+            localPtrCount -= 1 * POINTERS;
           }
           if (localPtrCount > ptrCount) {
             ptrCount = localPtrCount;
           }
         }
-        totalSize = (dataSize + ptrCount * WORDS_PER_POINTER) * value.elementCount;
+        totalSize = (dataSize + ptrCount * WORDS_PER_POINTER) / ELEMENTS * value.elementCount;
       } else {
         dataSize = declDataSize;
         ptrCount = declPointerCount;
@@ -1679,7 +1679,7 @@ struct WireHelpers {
 
       const word* src = reinterpret_cast<const word*>(value.ptr);
       for (uint i = 0; i < value.elementCount / ELEMENTS; i++) {
-        memcpy(dst, src, dataSize * BYTES_PER_WORD);
+        memcpy(dst, src, dataSize * BYTES_PER_WORD / BYTES);
         dst += dataSize;
         src += declDataSize;
 
@@ -1690,7 +1690,7 @@ struct WireHelpers {
           dst += POINTER_SIZE_IN_WORDS;
           src += POINTER_SIZE_IN_WORDS;
         }
-        src += (declPointerCount - ptrCount) * POINTER_SIZE_IN_WORDS;
+        src += ((declPointerCount - ptrCount) * WORDS_PER_POINTER) / WORDS;
       }
 
       return { segment, ptr };
@@ -2714,32 +2714,32 @@ bool StructReader::isCanonical(const word **readHead,
     return false;
   }
 
-  if (this->getDataSectionSize() % BITS_PER_WORD != 0) {
+  if (this->getDataSectionSize() % BITS_PER_WORD != 0 * BITS) {
     // Using legacy non-word-size structs, reject
     return false;
   }
   WordCount32 dataSize = this->getDataSectionSize() / BITS_PER_WORD;
 
   // Mark whether the struct is properly truncated
-  if (dataSize != 0) {
-    *dataTrunc = this->getDataField<uint64_t>(dataSize - 1) != 0;
+  if (dataSize != 0 * WORDS) {
+    *dataTrunc = this->getDataField<uint64_t>((dataSize - 1 * WORDS) / WORDS * ELEMENTS) != 0;
   } else {
     *dataTrunc = true;
   }
 
-  if (this->pointerCount != 0) {
-    *ptrTrunc  = !this->getPointerField(this->pointerCount - 1).isNull();
+  if (this->pointerCount != 0 * POINTERS) {
+    *ptrTrunc  = !this->getPointerField(this->pointerCount - 1 * POINTERS).isNull();
   } else {
     *ptrTrunc = true;
   }
 
   // Advance the read head
-  *readHead += dataSize + this->pointerCount;
+  *readHead += (dataSize + (this->pointerCount * WORDS_PER_POINTER)) / WORDS;
 
   // Check each pointer field for canonicity
-  for (WirePointerCount16 ptrIndex = 0;
+  for (WirePointerCount16 ptrIndex = 0 * POINTERS;
        ptrIndex < this->pointerCount;
-       ptrIndex++) {
+       ptrIndex += POINTERS) {
     if (!this->getPointerField(ptrIndex).isCanonical(ptrHead)) {
       return false;
     }
@@ -2896,18 +2896,18 @@ bool ListReader::isCanonical(const word **readHead) {
         // front of it, so our check is slightly different
         return false;
       }
-      if (this->structDataSize % BITS_PER_WORD != 0) {
+      if (this->structDataSize % BITS_PER_WORD != 0 * BITS) {
         return false;
       }
       auto structSize = (this->structDataSize / BITS_PER_WORD) +
                         (this->structPointerCount * WORDS_PER_POINTER);
-      auto listEnd = *readHead + this->elementCount * structSize;
+      auto listEnd = *readHead + (this->elementCount / ELEMENTS * structSize) / WORDS;
       auto pointerHead = listEnd;
       bool listDataTrunc = false;
       bool listPtrTrunc = false;
       for (ElementCount ec = ElementCount(0);
            ec < this->elementCount;
-           ec++) {
+           ec += 1 * ELEMENTS) {
         bool dataTrunc, ptrTrunc;
         if (!this->getStructElement(ec).isCanonical(readHead,
                                                     &pointerHead,
@@ -2926,10 +2926,10 @@ bool ListReader::isCanonical(const word **readHead) {
       if (reinterpret_cast<const word*>(this->ptr) != *readHead) {
         return false;
       }
-      *readHead += this->elementCount;
+      *readHead += this->elementCount * (POINTERS / ELEMENTS) * WORDS_PER_POINTER / WORDS;
       for (ElementCount ec = ElementCount(0);
            ec < this->elementCount;
-           ec++) {
+           ec += 1 * ELEMENTS) {
         if (!this->getPointerElement(ec).isCanonical(readHead)) {
           return false;
         }
@@ -2944,8 +2944,8 @@ bool ListReader::isCanonical(const word **readHead) {
       auto bitSize = this->elementCount *
                      dataBitsPerElement(this->elementSize);
       auto wordSize = bitSize / BITS_PER_WORD;
-      if (bitSize % BITS_PER_WORD != 0) {
-        wordSize++;
+      if (bitSize % BITS_PER_WORD != 0 * BITS) {
+        wordSize = wordSize + 1 * WORDS;
       }
 
       *readHead += wordSize;
