@@ -1553,15 +1553,40 @@ struct WireHelpers {
   static SegmentAnd<word*> setStructPointer(
       SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref, StructReader value,
       BuilderArena* orphanArena = nullptr, bool canonical = false) {
-    WordCount dataSize = roundBitsUpToWords(value.dataSize);
+    ByteCount dataSize = roundBitsUpToBytes(value.dataSize);
     WirePointerCount ptrCount = value.pointerCount;
 
-
     if (canonical) {
-      // Truncate the data section
-      while ((dataSize != 0 * WORDS) &&
-             (value.getDataField<uint64_t>(dataSize * (ELEMENTS / WORDS) - 1 * ELEMENTS) == 0)) {
-        dataSize -= 1 * WORDS;
+      // StructReaders should not have bitwidths other than 1, but let's be safe
+      KJ_REQUIRE((value.dataSize == 1 * BITS)
+                 || (value.dataSize % BITS_PER_BYTE == 0 * BITS));
+
+      // Handle the truncation case where it's a false in a 1-bit struct
+      if (value.dataSize == 1 * BITS) {
+        if (!value.getDataField<bool>(0 * ELEMENTS)) {
+          dataSize = 0 * BYTES;
+        }
+      } else {
+        // Truncate the data section
+        while (dataSize != 0 * BYTES) {
+          size_t end = (dataSize - 1 * BYTES) / BYTES;
+          ByteCount window = dataSize % BYTES_PER_WORD;
+          if (window == 0 * BYTES) {
+            window = BYTES_PER_WORD * WORDS;
+          }
+          size_t start = end + 1 - window / BYTES;
+          kj::ArrayPtr<const byte> lastWord = value.getDataSectionAsBlob().slice(start, end);
+          bool lastWordZero = true;
+          //TODO(MRM) once this is known to work, replace with fast memcmp
+          for (auto it = lastWord.begin(); it != lastWord.end(); it++) {
+            lastWordZero &= (*it == 0);
+          }
+          if (!lastWordZero) {
+            break;
+          } else {
+            dataSize -= window;
+          }
+        }
       }
       // Truncate pointer section
       while ((ptrCount != 0 * POINTERS) &&
@@ -1570,21 +1595,28 @@ struct WireHelpers {
       }
     }
 
-    WordCount totalSize = dataSize + ptrCount * WORDS_PER_POINTER;
+    WordCount dataWords = roundBytesUpToWords(dataSize);
+
+    WordCount totalSize = dataWords + ptrCount * WORDS_PER_POINTER;
 
     word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::STRUCT, orphanArena, canonical);
-    ref->structRef.set(dataSize, ptrCount);
+    ref->structRef.set(dataWords, ptrCount);
 
     if (value.dataSize == 1 * BITS) {
       // Data size could be made 0 by truncation
-      if (dataSize != 0 * WORDS) {
+      if (dataSize != 0 * BYTES) {
         *reinterpret_cast<char*>(ptr) = value.getDataField<bool>(0 * ELEMENTS);
       }
     } else {
-      memcpy(ptr, value.data, dataSize * BYTES_PER_WORD / BYTES);
+      memcpy(ptr, value.data, dataSize / BYTES);
+      if (dataSize % BYTES_PER_WORD != 0 * BYTES) {
+        //Zero-pad the data if it didn't use the entire last word
+        byte* padStart = reinterpret_cast<byte*>(ptr) + (dataSize / BYTES);
+        bzero(padStart, (BYTES_PER_WORD * WORDS - (dataSize % BYTES_PER_WORD)) / BYTES);
+      }
     }
 
-    WirePointer* pointerSection = reinterpret_cast<WirePointer*>(ptr + dataSize);
+    WirePointer* pointerSection = reinterpret_cast<WirePointer*>(ptr + dataWords);
     for (uint i = 0; i < ptrCount / POINTERS; i++) {
       copyPointer(segment, capTable, pointerSection + i,
                   value.segment, value.capTable, value.pointers + i,
