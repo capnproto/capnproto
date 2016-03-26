@@ -1609,6 +1609,7 @@ struct WireHelpers {
       return { segment, ptr };
     } else {
       // List of structs.
+      KJ_DASSERT(value.structDataSize % BITS_PER_WORD == 0 * BITS);
       word* ptr = allocate(ref, segment, capTable, totalSize + POINTER_SIZE_IN_WORDS,
                            WirePointer::LIST, orphanArena);
       ref->listRef.setInlineComposite(totalSize);
