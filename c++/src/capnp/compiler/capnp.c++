@@ -593,13 +593,11 @@ public:
   }
   kj::MainBuilder::Validity codeFlat() {
     if (binary) return "cannot be used with --binary";
-    if (packed) return "cannot be used with --packed";
     flat = true;
     return true;
   }
   kj::MainBuilder::Validity codePacked() {
     if (binary) return "cannot be used with --binary";
-    if (flat) return "cannot be used with --flat";
     packed = true;
     return true;
   }
@@ -683,12 +681,21 @@ public:
           input.skip(buffer.size());
         }
 
-        // Technically we don't know if the bytes are aligned so we'd better copy them to a new
-        // array.  Note that if we have a non-whole number of words we chop off the straggler bytes.
-        // This is fine because if those bytes are actually part of the message we will hit an error
-        // later and if they are not then who cares?
-        words = kj::heapArray<word>(allBytes.size() / sizeof(word));
-        memcpy(words.begin(), allBytes.begin(), words.size() * sizeof(word));
+        if (packed) {
+          words = kj::heapArray<word>(computeUnpackedSizeInWords(allBytes));
+          kj::ArrayInputStream input(allBytes);
+          capnp::_::PackedInputStream unpacker(input);
+          unpacker.read(words.asBytes().begin(), words.asBytes().size());
+          word dummy;
+          KJ_ASSERT(unpacker.tryRead(&dummy, sizeof(dummy), sizeof(dummy)) == 0);
+        } else {
+          // Technically we don't know if the bytes are aligned so we'd better copy them to a new
+          // array. Note that if we have a non-whole number of words we chop off the straggler
+          // bytes. This is fine because if those bytes are actually part of the message we will
+          // hit an error later and if they are not then who cares?
+          words = kj::heapArray<word>(allBytes.size() / sizeof(word));
+          memcpy(words.begin(), allBytes.begin(), words.size() * sizeof(word));
+        }
       }
 
       kj::ArrayPtr<const word> segments = words;
@@ -869,7 +876,8 @@ private:
     return isPlausiblyFlat(prefix.slice(segment0Offset, prefix.size()), segmentCount);
   }
 
-  Plausibility isPlausiblyPacked(kj::ArrayPtr<const byte> prefix) {
+  Plausibility isPlausiblyPacked(kj::ArrayPtr<const byte> prefix,
+      kj::Function<Plausibility(kj::ArrayPtr<const byte>)> checkUnpacked) {
     kj::Vector<byte> unpacked;
 
     // Try to unpack a prefix so that we can check it.
@@ -910,11 +918,93 @@ private:
       }
     }
 
-    return isPlausiblyBinary(unpacked);
+    return checkUnpacked(unpacked);
+  }
+
+  Plausibility isPlausiblyPacked(kj::ArrayPtr<const byte> prefix) {
+    return isPlausiblyPacked(prefix, KJ_BIND_METHOD(*this, isPlausiblyBinary));
+  }
+
+  Plausibility isPlausiblyPackedFlat(kj::ArrayPtr<const byte> prefix) {
+    return isPlausiblyPacked(prefix, [this](kj::ArrayPtr<const byte> prefix) {
+      return isPlausiblyFlat(prefix);
+    });
   }
 
   kj::MainBuilder::Validity checkPlausibility(kj::ArrayPtr<const byte> prefix) {
-    if (flat) {
+    if (flat && packed) {
+      switch (isPlausiblyPackedFlat(prefix)) {
+        case PLAUSIBLE:
+          break;
+        case IMPOSSIBLE:
+          if (plausibleOrWrongType(isPlausiblyPacked(prefix))) {
+            return "The input is not in --packed --flat format.  It looks like it is in --packed "
+                   "format.  Try removing --flat.";
+          } else if (plausibleOrWrongType(isPlausiblyFlat(prefix))) {
+            return "The input is not in --packed --flat format.  It looks like it is in --flat "
+                   "format.  Try removing --packed.";
+          } else if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
+            return "The input is not in --packed --flat format.  It looks like it is in regular "
+                   "binary format.  Try removing the --packed and --flat flags.";
+          } else {
+            return "The input is not a Cap'n Proto message.";
+          }
+        case IMPLAUSIBLE:
+          if (plausibleOrWrongType(isPlausiblyPacked(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in --packed --flat format.  It looks like\n"
+                "it may be in --packed format.  I'll try to parse it in --packed --flat format\n"
+                "as you requested, but if it doesn't work, try removing --flat.  Use --quiet to\n"
+                "suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else if (plausibleOrWrongType(isPlausiblyFlat(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in --packed --flat format.  It looks like\n"
+                "it may be in --flat format.  I'll try to parse it in --packed --flat format as\n"
+                "you requested, but if it doesn't work, try removing --packed.  Use --quiet to\n"
+                "suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in --packed --flat format.  It looks like\n"
+                "it may be in regular binary format.  I'll try to parse it in --packed --flat\n"
+                "format as you requested, but if it doesn't work, try removing --packed and\n"
+                "--flat.  Use --quiet to suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be a Cap'n Proto message in any known\n"
+                "binary format.  I'll try to parse it anyway, but if it doesn't work, please\n"
+                "check your input.  Use --quiet to suppress this warning.\n"
+                "*** END WARNING ***\n");
+          }
+          break;
+        case WRONG_TYPE:
+          if (plausibleOrWrongType(isPlausiblyPacked(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be the type that you specified.  I'll try\n"
+                "to parse it anyway, but if it doesn't look right, please verify that you\n"
+                "have the right type.  This could also be because the input is not in --flat\n"
+                "format; indeed, it looks like this input may be in regular --packed format,\n"
+                "so you might want to try removing --flat.  Use --quiet to suppress this\n"
+                "warning.\n"
+                "*** END WARNING ***\n");
+          } else {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be the type that you specified.  I'll try\n"
+                "to parse it anyway, but if it doesn't look right, please verify that you\n"
+                "have the right type.  Use --quiet to suppress this warning.\n"
+                "*** END WARNING ***\n");
+          }
+          break;
+      }
+    } else if (flat) {
       switch (isPlausiblyFlat(prefix)) {
         case PLAUSIBLE:
           break;
@@ -922,6 +1012,9 @@ private:
           if (plausibleOrWrongType(isPlausiblyPacked(prefix))) {
             return "The input is not in --flat format.  It looks like it is in --packed format.  "
                    "Try that instead.";
+          } else if (plausibleOrWrongType(isPlausiblyPackedFlat(prefix))) {
+            return "The input is not in --flat format.  It looks like it is in --packed --flat "
+                   "format.  Try adding --packed.";
           } else if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
             return "The input is not in --flat format.  It looks like it is in regular binary "
                    "format.  Try removing the --flat flag.";
@@ -935,6 +1028,14 @@ private:
                 "The input data does not appear to be in --flat format.  It looks like it may\n"
                 "be in --packed format.  I'll try to parse it in --flat format as you\n"
                 "requested, but if it doesn't work, try --packed instead.  Use --quiet to\n"
+                "suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else if (plausibleOrWrongType(isPlausiblyPackedFlat(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in --flat format.  It looks like it may\n"
+                "be in --packed --flat format.  I'll try to parse it in --flat format as you\n"
+                "requested, but if it doesn't work, try adding --packed.  Use --quiet to\n"
                 "suppress this warning.\n"
                 "*** END WARNING ***\n");
           } else if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
@@ -983,6 +1084,10 @@ private:
           if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
             return "The input is not in --packed format.  It looks like it is in regular binary "
                    "format.  Try removing the --packed flag.";
+          } else if (plausibleOrWrongType(isPlausiblyPackedFlat(prefix))) {
+            return "The input is not in --packed format, nor does it look like it is in regular "
+                   "binary format.  It looks like it could be in --packed --flat format, although "
+                   "that is unusual so I could be wrong.";
           } else if (plausibleOrWrongType(isPlausiblyFlat(prefix))) {
             return "The input is not in --packed format, nor does it look like it is in regular "
                    "binary format.  It looks like it could be in --flat format, although that "
@@ -991,7 +1096,15 @@ private:
             return "The input is not a Cap'n Proto message.";
           }
         case IMPLAUSIBLE:
-          if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
+          if (plausibleOrWrongType(isPlausiblyPackedFlat(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in --packed format.  It looks like it may\n"
+                "be in --packed --flat format.  I'll try to parse it in --packed format as you\n"
+                "requested, but if it doesn't work, try adding --flat.  Use --quiet to\n"
+                "suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
             context.warning(
                 "*** WARNING ***\n"
                 "The input data does not appear to be in --packed format.  It looks like it\n"
@@ -1039,6 +1152,10 @@ private:
             return "The input is not in regular binary format, nor does it look like it is in "
                    "--packed format.  It looks like it could be in --flat format, although that "
                    "is unusual so I could be wrong.";
+          } else if (plausibleOrWrongType(isPlausiblyPackedFlat(prefix))) {
+            return "The input is not in regular binary format, nor does it look like it is in "
+                   "--packed format.  It looks like it could be in --packed --flat format, "
+                   "although that is unusual so I could be wrong.";
           } else {
             return "The input is not a Cap'n Proto message.";
           }
@@ -1050,6 +1167,14 @@ private:
                 "it may be in --packed format.  I'll try to parse it in regular format as you\n"
                 "requested, but if it doesn't work, try adding --packed.  Use --quiet to\n"
                 "suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else if (plausibleOrWrongType(isPlausiblyPacked(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in regular binary format.  It looks like\n"
+                "it may be in --packed --flat format.  I'll try to parse it in regular format as\n"
+                "you requested, but if it doesn't work, try adding --packed --flat.  Use --quiet\n"
+                "to suppress this warning.\n"
                 "*** END WARNING ***\n");
           } else if (plausibleOrWrongType(isPlausiblyFlat(prefix))) {
             context.warning(
@@ -1313,7 +1438,10 @@ private:
     flatMessage.setRoot(value);
     flatMessage.requireFilled();
 
-    if (flat) {
+    if (flat && packed) {
+      capnp::_::PackedOutputStream packer(output);
+      packer.write(space.begin(), space.size() * sizeof(word));
+    } else if (flat) {
       output.write(space.begin(), space.size() * sizeof(word));
     } else if (packed) {
       writePackedMessage(output, flatMessage);

@@ -106,6 +106,10 @@ void writePackedMessageToFd(int fd, MessageBuilder& builder);
 void writePackedMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write a single packed message to the file descriptor.
 
+size_t computeUnpackedSizeInWords(kj::ArrayPtr<const byte> packedBytes);
+// Computes the number of words to which the given packed bytes will unpack. Not intended for use
+// in performance-sensitive situations.
+
 // =======================================================================================
 // inline stuff
 
