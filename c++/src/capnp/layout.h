@@ -643,7 +643,8 @@ class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline explicit ListBuilder(ElementSize elementSize)
       : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
-        step(0 * BITS / ELEMENTS), elementSize(elementSize) {}
+        step(0 * BITS / ELEMENTS), elementSize(elementSize), structDataSize(0 * BITS),
+        structPointerCount(0 * POINTERS) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder)
 
