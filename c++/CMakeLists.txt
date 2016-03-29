@@ -109,6 +109,9 @@ if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
 
     configure_file(capnp-rpc.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" @ONLY)
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+
+    configure_file(capnp-json.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-json.pc" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-json.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
   endif()
 
   unset(STDLIB_FLAG)
