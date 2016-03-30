@@ -77,6 +77,9 @@ struct Node {
   annotations @5 :List(Annotation);
   # Annotations applied to this node.
 
+  docComment @34 :Text;
+  # This line, but on a node not on a Field...
+
   union {
     # Info specific to each kind of node.
 
@@ -185,6 +188,9 @@ struct Field {
   # the other members of that union, so the maximum value there is count(union.members).
 
   annotations @2 :List(Annotation);
+
+  docComment @11 :Text;
+  # This line.
 
   const noDiscriminant :UInt16 = 0xffff;
 
