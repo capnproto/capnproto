@@ -187,32 +187,67 @@ KJ_TEST("decode all types") {
   JsonCodec json;
 #define CASE(s, f) \
   { \
-    MallocMessageBuilder decodedMessage; \
-    auto root = decodedMessage.initRoot<TestAllTypes>(); \
+    MallocMessageBuilder message; \
+    auto root = message.initRoot<TestAllTypes>(); \
     json.decode(s, root); \
     KJ_EXPECT((f)) \
+  }
+#define CASE_THROW(s, errorMessage) \
+  { \
+    MallocMessageBuilder message; \
+    auto root = message.initRoot<TestAllTypes>(); \
+    KJ_EXPECT_THROW_MESSAGE(errorMessage, json.decode(s, root)); \
   }
 
   CASE(R"({})", root.getBoolField() == false);
   CASE(R"({"unknownField":7})", root.getBoolField() == false);
-  CASE(R"({"boolField":null})", root.getBoolField() == false);
   CASE(R"({"boolField":true})", root.getBoolField() == true);
-  CASE(R"({"int8Field":7})", root.getInt8Field() == 7);
-  CASE(R"({"int8Field":"7"})", root.getInt8Field() == 7);
-  CASE(R"({"int16Field":7})", root.getInt16Field() == 7);
-  CASE(R"({"int16Field":"7"})", root.getInt16Field() == 7);
-  CASE(R"({"int32Field":7})", root.getInt32Field() == 7);
-  CASE(R"({"int32Field":"7"})", root.getInt32Field() == 7);
-  CASE(R"({"int64Field":7})", root.getInt64Field() == 7);
-  CASE(R"({"int64Field":"7"})", root.getInt64Field() == 7);
-  CASE(R"({"uInt8Field":7})", root.getUInt8Field() == 7);
-  CASE(R"({"uInt8Field":"7"})", root.getUInt8Field() == 7);
-  CASE(R"({"uInt16Field":7})", root.getUInt16Field() == 7);
-  CASE(R"({"uInt16Field":"7"})", root.getUInt16Field() == 7);
-  CASE(R"({"uInt32Field":7})", root.getUInt32Field() == 7);
-  CASE(R"({"uInt32Field":"7"})", root.getUInt32Field() == 7);
-  CASE(R"({"uInt64Field":7})", root.getUInt64Field() == 7);
-  CASE(R"({"uInt64Field":"7"})", root.getUInt64Field() == 7);
+  CASE(R"({"int8Field":-128})", root.getInt8Field() == -128);
+  CASE(R"({"int8Field":"127"})", root.getInt8Field() == 127);
+  CASE_THROW(R"({"int8Field":"-129"})", "Value out-of-range");
+  CASE_THROW(R"({"int8Field":128})", "Value out-of-range");
+  CASE(R"({"int16Field":-32768})", root.getInt16Field() == -32768);
+  CASE(R"({"int16Field":"32767"})", root.getInt16Field() == 32767);
+  CASE_THROW(R"({"int16Field":"-32769"})", "Value out-of-range");
+  CASE_THROW(R"({"int16Field":32768})", "Value out-of-range");
+  CASE(R"({"int32Field":-2147483648})", root.getInt32Field() == -2147483648);
+  CASE(R"({"int32Field":"2147483647"})", root.getInt32Field() == 2147483647);
+  CASE(R"({"int64Field":-9007199254740992})", root.getInt64Field() == -9007199254740992LL);
+  CASE(R"({"int64Field":9007199254740991})", root.getInt64Field() == 9007199254740991LL);
+  CASE(R"({"int64Field":"-9223372036854775808"})", root.getInt64Field() == -9223372036854775808LL);
+  CASE(R"({"int64Field":"9223372036854775807"})", root.getInt64Field() == 9223372036854775807LL);
+  CASE_THROW(R"({"int64Field":"-9223372036854775809"})", "Value out-of-range");
+  CASE_THROW(R"({"int64Field":"9223372036854775808"})", "Value out-of-range");
+  CASE(R"({"uInt8Field":255})", root.getUInt8Field() == 255);
+  CASE(R"({"uInt8Field":"0"})", root.getUInt8Field() == 0);
+  CASE_THROW(R"({"uInt8Field":"256"})", "Value out-of-range");
+  CASE_THROW(R"({"uInt8Field":-1})", "Value out-of-range");
+  CASE(R"({"uInt16Field":65535})", root.getUInt16Field() == 65535);
+  CASE(R"({"uInt16Field":"0"})", root.getUInt16Field() == 0);
+  CASE_THROW(R"({"uInt16Field":"655356"})", "Value out-of-range");
+  CASE_THROW(R"({"uInt16Field":-1})", "Value out-of-range");
+  CASE(R"({"uInt32Field":4294967295})", root.getUInt32Field() == 4294967295);
+  CASE(R"({"uInt32Field":"0"})", root.getUInt32Field() == 0);
+  CASE_THROW(R"({"uInt32Field":"42949672956"})", "Value out-of-range");
+  CASE_THROW(R"({"uInt32Field":-1})", "Value out-of-range");
+  CASE(R"({"uInt64Field":9007199254740991})", root.getUInt64Field() == 9007199254740991);
+  CASE(R"({"uInt64Field":"18446744073709551615"})", root.getUInt64Field() == 18446744073709551615);
+  CASE(R"({"uInt64Field":"0"})", root.getUInt64Field() == 0);
+  CASE_THROW(R"({"uInt64Field":"18446744073709551616"})", "Value out-of-range");
+  CASE(R"({"float32Field":0})", root.getFloat32Field() == 0);
+  CASE(R"({"float32Field":4.5})", root.getFloat32Field() == 4.5);
+  CASE(R"({"float32Field":null})", kj::isNaN(root.getFloat32Field()));
+  CASE(R"({"float32Field":"nan"})", kj::isNaN(root.getFloat32Field()));
+  CASE(R"({"float32Field":"nan"})", kj::isNaN(root.getFloat32Field()));
+  CASE(R"({"float32Field":"Infinity"})", root.getFloat32Field() == kj::inf());
+  CASE(R"({"float32Field":"-Infinity"})", root.getFloat32Field() == -kj::inf());
+  CASE(R"({"float64Field":0})", root.getFloat64Field() == 0);
+  CASE(R"({"float64Field":4.5})", root.getFloat64Field() == 4.5);
+  CASE(R"({"float64Field":null})", kj::isNaN(root.getFloat64Field()));
+  CASE(R"({"float64Field":"nan"})", kj::isNaN(root.getFloat64Field()));
+  CASE(R"({"float64Field":"nan"})", kj::isNaN(root.getFloat64Field()));
+  CASE(R"({"float64Field":"Infinity"})", root.getFloat64Field() == kj::inf());
+  CASE(R"({"float64Field":"-Infinity"})", root.getFloat64Field() == -kj::inf());
   CASE(R"({"textField":"hello"})", kj::str("hello") == root.getTextField());
   CASE(R"({"dataField":[7,0,122]})",
       kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataField());
@@ -223,12 +258,15 @@ KJ_TEST("decode all types") {
   CASE(R"({"structField":{"boolField":true}})", root.getStructField().getBoolField() == true);
   CASE(R"({"enumField":"bar"})", root.getEnumField() == TestEnum::BAR);
 
+  CASE_THROW(R"({"int64Field":"177a"})", "String does not contain valid");
+  CASE_THROW(R"({"uInt64Field":"177a"})", "String does not contain valid");
+  CASE_THROW(R"({"float64Field":"177a"})", "String does not contain valid");
+
   CASE(R"({})", root.hasBoolList() == false);
   CASE(R"({"boolList":null})", root.hasBoolList() == false);
   CASE(R"({"boolList":[]})", root.hasBoolList() == true);
   CASE(R"({"boolList":[]})", root.getBoolList().size() == 0);
-  CASE(R"({"boolList":[null]})", root.getBoolList().size() == 1);
-  CASE(R"({"boolList":[null]})", root.getBoolList()[0] == false);
+  CASE(R"({"boolList":[false]})", root.getBoolList().size() == 1);
   CASE(R"({"boolList":[false]})", root.getBoolList()[0] == false);
   CASE(R"({"boolList":[true]})", root.getBoolList()[0] == true);
   CASE(R"({"int8List":[7]})", root.getInt8List()[0] == 7);
@@ -247,6 +285,18 @@ KJ_TEST("decode all types") {
   CASE(R"({"uInt32List":["7"]})", root.getUInt32List()[0] == 7);
   CASE(R"({"uInt64List":[7]})", root.getUInt64List()[0] == 7);
   CASE(R"({"uInt64List":["7"]})", root.getUInt64List()[0] == 7);
+  CASE(R"({"float32List":[4.5]})", root.getFloat32List()[0] == 4.5);
+  CASE(R"({"float32List":["4.5"]})", root.getFloat32List()[0] == 4.5);
+  CASE(R"({"float32List":[null]})", kj::isNaN(root.getFloat32List()[0]));
+  CASE(R"({"float32List":["nan"]})", kj::isNaN(root.getFloat32List()[0]));
+  CASE(R"({"float32List":["infinity"]})", root.getFloat32List()[0] == kj::inf());
+  CASE(R"({"float32List":["-infinity"]})", root.getFloat32List()[0] == -kj::inf());
+  CASE(R"({"float64List":[4.5]})", root.getFloat64List()[0] == 4.5);
+  CASE(R"({"float64List":["4.5"]})", root.getFloat64List()[0] == 4.5);
+  CASE(R"({"float64List":[null]})", kj::isNaN(root.getFloat64List()[0]));
+  CASE(R"({"float64List":["nan"]})", kj::isNaN(root.getFloat64List()[0]));
+  CASE(R"({"float64List":["infinity"]})", root.getFloat64List()[0] == kj::inf());
+  CASE(R"({"float64List":["-infinity"]})", root.getFloat64List()[0] == -kj::inf());
   CASE(R"({"textList":["hello"]})", kj::str("hello") == root.getTextList()[0]);
   CASE(R"({"dataList":[[7,0,122]]})",
       kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataList()[0]);
@@ -258,6 +308,38 @@ KJ_TEST("decode all types") {
   CASE(R"({"structList":[{"boolField":true}]})", root.getStructList()[0].getBoolField() == true);
   CASE(R"({"enumList":["bar"]})", root.getEnumList()[0] == TestEnum::BAR);
 #undef CASE
+#undef CASE_THROW
+}
+
+KJ_TEST("decode test message") {
+  MallocMessageBuilder message;
+  auto root = message.getRoot<TestAllTypes>();
+  initTestMessage(root);
+
+  JsonCodec json;
+  auto encoded = json.encode(root);
+
+  MallocMessageBuilder decodedMessage;
+  auto decodedRoot = decodedMessage.initRoot<TestAllTypes>();
+  json.decode(encoded, decodedRoot);
+
+  //json encode serializes nan, inf and -inf as null.
+  auto float32List = decodedRoot.getFloat32List();
+  auto float64List = decodedRoot.getFloat64List();
+  KJ_EXPECT(kj::isNaN(float32List[1]));
+  KJ_EXPECT(kj::isNaN(float32List[2]));
+  KJ_EXPECT(kj::isNaN(float32List[3]));
+  KJ_EXPECT(kj::isNaN(float64List[1]));
+  KJ_EXPECT(kj::isNaN(float64List[2]));
+  KJ_EXPECT(kj::isNaN(float64List[3]));
+  float32List.set(1, kj::inf());
+  float32List.set(2, -kj::inf());
+  float32List.set(3, kj::nan());
+  float64List.set(1, kj::inf());
+  float64List.set(2, -kj::inf());
+  float64List.set(3, kj::nan());
+
+  KJ_EXPECT(root.toString().flatten() == decodedRoot.toString().flatten());
 }
 
 KJ_TEST("basic json decoding") {

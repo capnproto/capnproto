@@ -380,72 +380,135 @@ void JsonCodec::encodeField(StructSchema::Field field, DynamicValue::Reader inpu
 }
 
 namespace {
-int64_t parseInt64(kj::StringPtr s)
-{
+int64_t parseInt64(kj::StringPtr s) {
   char *endPtr;
   errno = 0;
   int64_t value = std::strtoll(s.begin(), &endPtr, 10);
-  KJ_REQUIRE(endPtr == s.end() && errno != ERANGE, "String is not correct int64 number");
+  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
+  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
   return value;
 }
 
-uint64_t parseUInt64(kj::StringPtr s)
-{
+uint64_t parseUInt64(kj::StringPtr s) {
   char *endPtr;
   errno = 0;
   uint64_t value = std::strtoull(s.begin(), &endPtr, 10);
-  KJ_ASSERT(endPtr == s.end() && errno != ERANGE, "String is not correct uint64 number");
+  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
+  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
   return value;
 }
 
-template <typename Set, typename DecodeArray, typename DecodeObject>
-void decodeField(Type type, JsonValue::Reader value, Set set, DecodeArray decodeArray,
-    DecodeObject decodeObject) {
-  switch (value.which()) {
-    case JsonValue::NULL_:
+double parseFloat64(kj::StringPtr s) {
+  char *endPtr;
+  errno = 0;
+  double value = std::strtod(s.begin(), &endPtr);
+  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid floating number", s);
+  return value;
+}
+
+template <typename SetFn, typename DecodeArrayFn, typename DecodeObjectFn>
+void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn decodeArrayFn,
+    DecodeObjectFn decodeObjectFn) {
+  //This code relies on conversions in DynamicValue::Reader::as<T>.
+  switch(type.which()) {
+    case schema::Type::VOID:
       break;
-    case JsonValue::BOOLEAN:
-      set(value.getBoolean());
-      break;
-    case JsonValue::NUMBER:
-      set(value.getNumber());
-      break;
-    case JsonValue::STRING:
-      if (type.isInt8() || type.isInt16() || type.isInt32() || type.isInt64()) {
-        set(parseInt64(value.getString()));
-      } else if (type.isUInt8() || type.isUInt16() || type.isUInt32() || type.isUInt64()) {
-        set(parseUInt64(value.getString()));
+    case schema::Type::BOOL:
+      if (value.isBoolean()) {
+        setFn(value.getBoolean());
       } else {
-        set(value.getString());
+        KJ_FAIL_REQUIRE("Expected boolean value");
       }
       break;
-    case JsonValue::ARRAY: {
-      if (type.isData()) {
-        kj::Vector<byte> data;
-        for (auto arrayObject : value.getArray()) {
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+      //Rellies on range check in DynamicValue::Reader::as<IntType>
+      if (value.isNumber()) {
+        setFn(value.getNumber());
+      } else if (value.isString()) {
+        setFn(parseInt64(value.getString()));
+      } else {
+        KJ_FAIL_REQUIRE("Expected numeric value");
+      }
+      break;
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+      //Rellies on range check in DynamicValue::Reader::as<IntType>
+      if (value.isNumber()) {
+        setFn(value.getNumber());
+      } else if (value.isString()) {
+        setFn(parseUInt64(value.getString()));
+      } else {
+        KJ_FAIL_REQUIRE("Expected numeric value");
+      }
+      break;
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+      if (value.isNull()) {
+        setFn(kj::nan());
+      } else if (value.isNumber()) {
+        setFn(value.getNumber());
+      } else if (value.isString()) {
+        setFn(parseFloat64(value.getString()));
+      } else {
+        KJ_FAIL_REQUIRE("Expected numeric value");
+      }
+      break;
+    case schema::Type::TEXT:
+      if (value.isString()) {
+        setFn(value.getString());
+      } else {
+        KJ_FAIL_REQUIRE("Expected string value");
+      }
+      break;
+    case schema::Type::DATA:
+      if (value.isArray()) {
+        auto array = value.getArray();
+        kj::Vector<byte> data(array.size());
+        for (auto arrayObject : array) {
           auto x = int(arrayObject.getNumber());
           KJ_REQUIRE(x >= 0 && x <= 255, "Number in array of bytes out of range.");
           data.add(byte(x));
         }
-        set(Data::Reader(data.asPtr()));
+        setFn(Data::Reader(data.asPtr()));
       } else {
-        decodeArray(value.getArray());
+        KJ_FAIL_REQUIRE("Expected string value");
+      }
+      break;
+    case schema::Type::LIST:
+      if (value.isNull()) {
+      } else if (value.isArray()) {
+        decodeArrayFn(value.getArray());
+      } else {
+        KJ_FAIL_REQUIRE("Expected array value");
+      }
+      break;
+    case schema::Type::ENUM:
+      if (value.isString()) {
+        setFn(value.getString());
+      } else {
+        KJ_FAIL_REQUIRE("Expected enum as string value");
+      }
+      break;
+    case schema::Type::STRUCT: {
+      if (value.isNull()) {
+      } else if (value.isObject()) {
+        decodeObjectFn(value.getObject());
+      } else {
+        KJ_FAIL_REQUIRE("Expected object value");
       }
       break;
     }
-    case JsonValue::OBJECT:
-      decodeObject(value.getObject());
-      break;
-    case JsonValue::CALL:
-      //TODO(soon)
-      KJ_FAIL_ASSERT("JSON call decode not implemented yet. :(");
-      break;
   }
 }
 } //namespace
 
 void JsonCodec::decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output) const {
-  KJ_ASSERT(input.size() == output.size(), "Builder must be initialized to input size");
+  KJ_ASSERT(input.size() == output.size(), "Builder was not initialized to input size");
   auto type = output.getSchema().getElementType();
   for (auto i = 0; i < input.size(); i++) {
     decodeField(type, input[i],
