@@ -511,9 +511,6 @@ TEST(AsyncUnixTest, UrgentObserver) {
   observer.whenUrgentDataAvailable().wait(waitScope);
   KJ_SYSCALL(recv(clientFd, &c, 1, MSG_OOB));
   EXPECT_EQ('o', c);
-
-  // Ensure that the in-band byte is still in the queue and makes the socket readable.
-  observer.whenBecomesReadable().wait(waitScope);
   KJ_SYSCALL(recv(clientFd, &c, 1, 0));
   EXPECT_EQ('i', c);
 
