@@ -22,7 +22,7 @@ project's documentation for details.
 
 ##### Serialization only
 
-* [C](https://github.com/jmckaskill/c-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
+* [C](https://github.com/opensourcerouting/c-capnproto) by [OpenSourceRouting](https://www.opensourcerouting.org/) / [@eqvinox](https://github.com/eqvinox) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [C#](https://github.com/mgravell/capnproto-net) by [@mgravell](https://github.com/mgravell)
 * [Go](https://github.com/glycerine/go-capnproto) by [@glycerine](https://github.com/glycerine) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [Java](https://github.com/dwrensha/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
@@ -41,8 +41,8 @@ new languages.
 * [Common Test Framework](https://github.com/kaos/capnp_test) by [@kaos](https://github.com/kaos)
 * [Sublime Syntax Highlighting](https://github.com/joshuawarner32/capnproto-sublime) by
   [@joshuawarner32](https://github.com/joshuawarner32)
-* [Vim Syntax Highlighting](https://github.com/cstrahan/vim-capnp) by
-  [@cstrahan](https://github.com/cstrahan)
+* [Vim Syntax Highlighting](https://github.com/peter-edge/vim-capnp) by [@peter-edge](https://github.com/peter-edge)
+  (originally by [@cstrahan](https://github.com/cstrahan))
 * [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
 
 ## Contribute Your Own!

@@ -1662,6 +1662,8 @@ struct WireHelpers {
       return { segment, ptr };
     } else {
       // List of structs.
+      KJ_DASSERT(value.structDataSize % BITS_PER_WORD == 0 * BITS);
+
       WordCount declDataSize = roundBitsUpToWords(value.structDataSize);
       WirePointerCount declPointerCount = value.structPointerCount;
 
