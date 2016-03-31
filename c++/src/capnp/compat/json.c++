@@ -250,10 +250,13 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
     case schema::Type::FLOAT64:
       {
         double value = input.as<double>();
-        if (kj::inf() == value || -kj::inf() == value || kj::isNaN(value)) {
-          // These values are not allowed in the JSON spec. Setting the field as null matches the
-          // behavior of JSON.stringify in Firefox and Chrome.
-          output.setNull();
+        // Inf, -inf and NaN are not allowed in the JSON spec. Storing into string.
+        if (kj::inf() == value) {
+          output.setString("Infinity");
+        } else if (-kj::inf() == value) {
+          output.setString("-Infinity");
+        } else if (kj::isNaN(value)) {
+          output.setString("NaN");
         } else {
           output.setNumber(value);
         }

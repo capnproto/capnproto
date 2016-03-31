@@ -129,8 +129,8 @@ const char ALL_TYPES_JSON[] =
     "  \"uInt16List\": [33333, 44444],\n"
     "  \"uInt32List\": [3333333333],\n"
     "  \"uInt64List\": [\"11111111111111111111\"],\n"
-    "  \"float32List\": [5555.5, null, null, null],\n"
-    "  \"float64List\": [7777.75, null, null, null],\n"
+    "  \"float32List\": [5555.5, \"Infinity\", \"-Infinity\", \"NaN\"],\n"
+    "  \"float64List\": [7777.75, \"Infinity\", \"-Infinity\", \"NaN\"],\n"
     "  \"textList\": [\"plugh\", \"xyzzy\", \"thud\"],\n"
     "  \"dataList\": [[111, 111, 112, 115], [101, 120, 104, 97, 117, 115, 116, 101, 100], [114, 102, 99, 51, 48, 57, 50]],\n"
     "  \"structList\": [\n"
@@ -322,22 +322,6 @@ KJ_TEST("decode test message") {
   MallocMessageBuilder decodedMessage;
   auto decodedRoot = decodedMessage.initRoot<TestAllTypes>();
   json.decode(encoded, decodedRoot);
-
-  // json encode serializes nan, inf and -inf as null.
-  auto float32List = decodedRoot.getFloat32List();
-  auto float64List = decodedRoot.getFloat64List();
-  KJ_EXPECT(kj::isNaN(float32List[1]));
-  KJ_EXPECT(kj::isNaN(float32List[2]));
-  KJ_EXPECT(kj::isNaN(float32List[3]));
-  KJ_EXPECT(kj::isNaN(float64List[1]));
-  KJ_EXPECT(kj::isNaN(float64List[2]));
-  KJ_EXPECT(kj::isNaN(float64List[3]));
-  float32List.set(1, kj::inf());
-  float32List.set(2, -kj::inf());
-  float32List.set(3, kj::nan());
-  float64List.set(1, kj::inf());
-  float64List.set(2, -kj::inf());
-  float64List.set(3, kj::nan());
 
   KJ_EXPECT(root.toString().flatten() == decodedRoot.toString().flatten());
 }
