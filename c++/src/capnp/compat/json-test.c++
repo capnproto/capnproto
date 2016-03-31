@@ -323,7 +323,7 @@ KJ_TEST("decode test message") {
   auto decodedRoot = decodedMessage.initRoot<TestAllTypes>();
   json.decode(encoded, decodedRoot);
 
-  //json encode serializes nan, inf and -inf as null.
+  // json encode serializes nan, inf and -inf as null.
   auto float32List = decodedRoot.getFloat32List();
   auto float64List = decodedRoot.getFloat64List();
   KJ_EXPECT(kj::isNaN(float32List[1]));

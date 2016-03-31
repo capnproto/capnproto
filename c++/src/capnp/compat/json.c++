@@ -409,103 +409,129 @@ double parseFloat64(kj::StringPtr s) {
 template <typename SetFn, typename DecodeArrayFn, typename DecodeObjectFn>
 void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn decodeArrayFn,
     DecodeObjectFn decodeObjectFn) {
-  //This code relies on conversions in DynamicValue::Reader::as<T>.
+  // This code relies on conversions in DynamicValue::Reader::as<T>.
   switch(type.which()) {
     case schema::Type::VOID:
       break;
     case schema::Type::BOOL:
-      if (value.isBoolean()) {
-        setFn(value.getBoolean());
-      } else {
-        KJ_FAIL_REQUIRE("Expected boolean value");
+      switch (value.which()) {
+        case JsonValue::BOOLEAN:
+          setFn(value.getBoolean());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected boolean value");
       }
       break;
     case schema::Type::INT8:
     case schema::Type::INT16:
     case schema::Type::INT32:
     case schema::Type::INT64:
-      //Rellies on range check in DynamicValue::Reader::as<IntType>
-      if (value.isNumber()) {
-        setFn(value.getNumber());
-      } else if (value.isString()) {
-        setFn(parseInt64(value.getString()));
-      } else {
-        KJ_FAIL_REQUIRE("Expected numeric value");
+      // Relies on range check in DynamicValue::Reader::as<IntType>
+      switch (value.which()) {
+        case JsonValue::NUMBER:
+          setFn(value.getNumber());
+          break;
+        case JsonValue::STRING:
+          setFn(parseInt64(value.getString()));
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected integer value");
       }
       break;
     case schema::Type::UINT8:
     case schema::Type::UINT16:
     case schema::Type::UINT32:
     case schema::Type::UINT64:
-      //Rellies on range check in DynamicValue::Reader::as<IntType>
-      if (value.isNumber()) {
-        setFn(value.getNumber());
-      } else if (value.isString()) {
-        setFn(parseUInt64(value.getString()));
-      } else {
-        KJ_FAIL_REQUIRE("Expected numeric value");
+      // Relies on range check in DynamicValue::Reader::as<IntType>
+      switch (value.which()) {
+        case JsonValue::NUMBER:
+          setFn(value.getNumber());
+          break;
+        case JsonValue::STRING:
+          setFn(parseUInt64(value.getString()));
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected integer value");
       }
       break;
     case schema::Type::FLOAT32:
     case schema::Type::FLOAT64:
-      if (value.isNull()) {
-        setFn(kj::nan());
-      } else if (value.isNumber()) {
-        setFn(value.getNumber());
-      } else if (value.isString()) {
-        setFn(parseFloat64(value.getString()));
-      } else {
-        KJ_FAIL_REQUIRE("Expected numeric value");
+      switch (value.which()) {
+        case JsonValue::NULL_:
+          setFn(kj::nan());
+          break;
+        case JsonValue::NUMBER:
+          setFn(value.getNumber());
+          break;
+        case JsonValue::STRING:
+          setFn(parseFloat64(value.getString()));
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected float value");
       }
       break;
     case schema::Type::TEXT:
-      if (value.isString()) {
-        setFn(value.getString());
-      } else {
-        KJ_FAIL_REQUIRE("Expected string value");
+      switch (value.which()) {
+        case JsonValue::STRING:
+          setFn(value.getString());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected text value");
       }
       break;
     case schema::Type::DATA:
-      if (value.isArray()) {
-        auto array = value.getArray();
-        kj::Vector<byte> data(array.size());
-        for (auto arrayObject : array) {
-          auto x = int(arrayObject.getNumber());
-          KJ_REQUIRE(x >= 0 && x <= 255, "Number in array of bytes out of range.");
-          data.add(byte(x));
+      switch (value.which()) {
+        case JsonValue::ARRAY: {
+          auto array = value.getArray();
+          kj::Vector<byte> data(array.size());
+          for (auto arrayObject : array) {
+            auto x = arrayObject.getNumber();
+            KJ_REQUIRE(byte(x) == x, "Number in array of bytes out of range.");
+            data.add(byte(x));
+          }
+          setFn(Data::Reader(data.asPtr()));
+          break;
         }
-        setFn(Data::Reader(data.asPtr()));
-      } else {
-        KJ_FAIL_REQUIRE("Expected string value");
+        default:
+          KJ_FAIL_REQUIRE("Expected data value");
       }
       break;
     case schema::Type::LIST:
-      if (value.isNull()) {
-      } else if (value.isArray()) {
-        decodeArrayFn(value.getArray());
-      } else {
-        KJ_FAIL_REQUIRE("Expected array value");
+      switch (value.which()) {
+        case JsonValue::NULL_:
+          // nothing to do
+          break;
+        case JsonValue::ARRAY:
+          decodeArrayFn(value.getArray());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected list value");
       }
       break;
     case schema::Type::ENUM:
-      if (value.isString()) {
-        setFn(value.getString());
-      } else {
-        KJ_FAIL_REQUIRE("Expected enum as string value");
+      switch (value.which()) {
+        case JsonValue::STRING:
+          setFn(value.getString());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected enum value");
       }
       break;
-    case schema::Type::STRUCT: {
-      if (value.isNull()) {
-      } else if (value.isObject()) {
-        decodeObjectFn(value.getObject());
-      } else {
-        KJ_FAIL_REQUIRE("Expected object value");
+    case schema::Type::STRUCT:
+      switch (value.which()) {
+        case JsonValue::NULL_:
+          // nothing to do
+          break;
+        case JsonValue::OBJECT:
+          decodeObjectFn(value.getObject());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected object value");
       }
       break;
-    }
   }
 }
-} //namespace
+} // namespace
 
 void JsonCodec::decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output) const {
   KJ_ASSERT(input.size() == output.size(), "Builder was not initialized to input size");
@@ -535,7 +561,7 @@ void JsonCodec::decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct
             decodeObject(object, output.init(*fieldSchema).as<DynamicStruct>());
           });
     } else {
-      //Unknown json fields are ignored to allow schema evolution
+      // Unknown json fields are ignored to allow schema evolution
     }
   }
 }
@@ -553,7 +579,7 @@ void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) c
 
 Orphan<DynamicValue> JsonCodec::decode(
     JsonValue::Reader input, Type type, Orphanage orphanage) const {
-  //TODO(soon)
+  // TODO(soon)
   KJ_FAIL_ASSERT("JSON decode into orphanage not implement yet. :(");
 }
 
