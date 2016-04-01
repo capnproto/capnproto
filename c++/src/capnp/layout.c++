@@ -1664,7 +1664,7 @@ struct WireHelpers {
       // List of structs.
       KJ_DASSERT(value.structDataSize % BITS_PER_WORD == 0 * BITS);
 
-      WordCount declDataSize = roundBitsUpToWords(value.structDataSize);
+      WordCount declDataSize = value.structDataSize / BITS_PER_WORD;
       WirePointerCount declPointerCount = value.structPointerCount;
 
       WordCount dataSize = 0 * WORDS;
@@ -1674,9 +1674,21 @@ struct WireHelpers {
         for (auto ec = ElementCount(0); ec < value.elementCount; ec += 1 * ELEMENTS) {
           auto se = value.getStructElement(ec);
           WordCount localDataSize = declDataSize;
-          while ((localDataSize != 0 * WORDS) &&
-                 (se.getDataField<uint64_t>((localDataSize - 1 * WORDS) / WORDS * ELEMENTS) == 0)) {
-            localDataSize -= WORDS;
+          while (localDataSize != 0 * WORDS) {
+            size_t end = (localDataSize * BYTES_PER_WORD - 1 * BYTES) / BYTES;
+            ByteCount window = BYTES_PER_WORD * WORDS;
+            size_t start = end + 1 - window / BYTES;
+            kj::ArrayPtr<const byte> lastWord = se.getDataSectionAsBlob().slice(start, end);
+            bool lastWordZero = true;
+            //TODO(MRM) once this is known to work, replace with fast memcmp
+            for (auto it = lastWord.begin(); it != lastWord.end(); it++) {
+              lastWordZero &= (*it == 0);
+            }
+            if (!lastWordZero) {
+              break;
+            } else {
+              localDataSize -= WORDS;
+            }
           }
           if (localDataSize > dataSize) {
             dataSize = localDataSize;
