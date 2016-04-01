@@ -2591,10 +2591,7 @@ bool PointerReader::isCanonical(const word **readHead) {
       return true;
     case PointerType::STRUCT:
       bool dataTrunc, ptrTrunc;
-      return (this->getStruct(nullptr).isCanonical(readHead,
-                                                   readHead,
-                                                   &dataTrunc,
-                                                   &ptrTrunc)
+      return (this->getStruct(nullptr).isCanonical(readHead, readHead, &dataTrunc, &ptrTrunc)
              && dataTrunc && ptrTrunc);
     case PointerType::LIST:
       return this->getListAnySize(nullptr).isCanonical(readHead);
