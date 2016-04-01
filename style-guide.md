@@ -323,16 +323,16 @@ In C++11, we can do better. Where before you would have declared a struct named 
 
 Example:
 
-    template <typename T> struct IsConst_ { constexpr bool value = false; }
-    template <typename T> struct IsConst_<const T> { constexpr bool value = true; }
+    template <typename T> struct IsConst_ { static constexpr bool value = false; };
+    template <typename T> struct IsConst_<const T> { static constexpr bool value = true; };
     template <typename T> constexpr bool isConst() { return IsConst_<T>::value; }
     // Return true if T is const.
 
 Or:
 
-    template <typename T> struct UnConst_ { typedef T Type; }
-    template <typename T> struct UnConst_<T> { typedef T Type; }
-    template <typename T> using UnConst = UnConst_<T>::Type;
+    template <typename T> struct UnConst_ { typedef T Type; };
+    template <typename T> struct UnConst_<const T> { typedef T Type; };
+    template <typename T> using UnConst = typename UnConst_<T>::Type;
     // If T is const, return the underlying non-const type.
     // Otherwise, just return T.
 
