@@ -28,7 +28,9 @@
 #include <exception>
 #include <new>
 #include <signal.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 #include "io.h"
 
 #if (__linux__ && !__ANDROID__) || __APPLE__
