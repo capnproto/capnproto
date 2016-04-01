@@ -29,7 +29,6 @@
 #include <string>
 #include <vector>
 #include <errno.h>
-#include <climits>
 
 namespace capnp {
 
@@ -173,8 +172,7 @@ bool MessageBuilder::isCanonical() {
   }
 
   const word* readHead = segment->getStartPtr() + 1;
-  return _::PointerReader::getRoot(segment, nullptr, segment->getStartPtr(),
-                                   INT_MAX)
+  return _::PointerReader::getRoot(segment, nullptr, segment->getStartPtr(), kj::maxValue)
                                   .isCanonical(&readHead);
 }
 
