@@ -499,6 +499,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
     KJ_SYSCALL(recv(clientFd, &c, 1, 0));
     EXPECT_EQ('q', c);
   });
+  KJ_DEFER({ shutdown(serverFd, SHUT_RDWR); serverFd = nullptr; });
 
   KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
   kj::AutoCloseFd clientFd(tmpFd);
