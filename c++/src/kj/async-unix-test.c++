@@ -518,6 +518,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
   // Allow server thread to let its clientFd go out of scope.
   c = 'q';
   KJ_SYSCALL(send(clientFd, &c, 1, 0));
+  KJ_SYSCALL(shutdown(clientFd, SHUT_RDWR));
 }
 
 TEST(AsyncUnixTest, SteadyTimers) {
