@@ -467,16 +467,15 @@ TEST(AsyncUnixTest, UrgentObserver) {
   int tmpFd;
   char c;
 
-  // Spawn a TCP server on localhost:44444
+  // Spawn a TCP server
   KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
   kj::AutoCloseFd serverFd(tmpFd);
   sockaddr_in saddr = {0};
   saddr.sin_family = AF_INET;
   saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  saddr.sin_port = htons(44444);
-  int optval = 1;
-  KJ_SYSCALL(setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)));
   KJ_SYSCALL(bind(serverFd, reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr)));
+  socklen_t saddrLen = sizeof(saddr);
+  KJ_SYSCALL(getsockname(serverFd, reinterpret_cast<sockaddr*>(&saddr), &saddrLen));
   KJ_SYSCALL(listen(serverFd, 1));
 
   // Accept one connection, send in-band and OOB byte, wait for a quit message
