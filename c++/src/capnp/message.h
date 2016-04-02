@@ -199,12 +199,6 @@ public:
   void setRoot(Reader&& value);
   // Set the root struct to a deep copy of the given struct.
 
-  template <typename Reader>
-  void canonicalRoot(Reader&& value);
-  // Set the root to a canonical deep copy of the struct.
-  // will likely only work if the builder has not yet been used, and has
-  // been set up with an arena with a segment as big as value.targetSize();
-
   template <typename RootType>
   typename RootType::Builder getRoot();
   // Get the root struct of the message, interpreting it as the given struct type.
@@ -427,6 +421,21 @@ private:
   bool allocated;
 };
 
+template <typename MR>
+kj::Array<word> canonicalize(MR&& reader) {
+  AnyPointer::Reader root = reader.template getRoot<AnyPointer>();
+  WordCount size = root.targetSize().wordCount * WORDS + POINTER_SIZE_IN_WORDS;
+  kj::Array<word> backing = kj::heapArray<word>(size / WORDS);
+  bzero(backing.begin(), backing.asBytes().size());
+  FlatMessageBuilder builder(backing);
+  builder.initRoot<AnyPointer>().setCanonical(root);
+  KJ_ASSERT(builder.isCanonical());
+  auto output = builder.getSegmentsForOutput()[0];
+  kj::Array<word> trunc = kj::heapArray<word>(output.size());
+  memcpy(trunc.begin(), output.begin(), output.asBytes().size());
+  return trunc;
+}
+
 // =======================================================================================
 // implementation details
 
@@ -472,13 +481,6 @@ typename RootType::Builder MessageBuilder::getRoot(SchemaType schema) {
 template <typename RootType, typename SchemaType>
 typename RootType::Builder MessageBuilder::initRoot(SchemaType schema) {
   return getRootInternal().initAs<RootType>(schema);
-}
-
-template <typename Reader>
-void MessageBuilder::canonicalRoot(Reader&& value) {
-  auto target = initRoot<AnyPointer>();
-  target.setCanonical(value);
-  KJ_ASSERT(isCanonical());
 }
 
 template <typename RootType>

@@ -35,9 +35,8 @@ KJ_TEST("canonicalize yields cannonical message") {
 
   initTestMessage(root);
 
-  MallocMessageBuilder canonicalMessage;
-  canonicalMessage.canonicalRoot(builder.getRoot<AnyPointer>().asReader());
-  KJ_ASSERT(canonicalMessage.isCanonical());
+  canonicalize(builder);
+  //Will assert if canonicalize failed to do so
 }
 
 KJ_TEST("isCanonical requires pointer preorder") {
@@ -119,8 +118,7 @@ KJ_TEST("isCanonical requires truncation of 0-valued struct fields") {
   KJ_ASSERT(!nonTruncated.isCanonical());
 }
 
-KJ_TEST("isCanonical requires truncation of 0-valued struct fields\
-          in all list members") {
+KJ_TEST("isCanonical requires truncation of 0-valued struct fields in all list members") {
   AlignedData<6> nonTruncatedList = {{
     //List pointer, composite,
     0x01, 0x00, 0x00, 0x00, 0x27, 0x00, 0x00, 0x00,
