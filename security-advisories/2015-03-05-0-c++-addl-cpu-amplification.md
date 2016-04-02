@@ -43,7 +43,7 @@ Details
 =======
 
 Advisory [2015-03-02-2][1] described a bug allowing a remote attacker to
-consume excessive CPU time or other resources usin a specially-crafted message.
+consume excessive CPU time or other resources using a specially-crafted message.
 The present advisory is simply another case of the same bug which was initially
 missed.
 

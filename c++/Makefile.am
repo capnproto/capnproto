@@ -74,7 +74,8 @@ public_capnpc_inputs =                                         \
   src/capnp/schema.capnp                                       \
   src/capnp/rpc.capnp                                          \
   src/capnp/rpc-twoparty.capnp                                 \
-  src/capnp/persistent.capnp
+  src/capnp/persistent.capnp                                   \
+  src/capnp/compat/json.capnp
 
 capnpc_inputs =                                                \
   $(public_capnpc_inputs)                                      \
@@ -92,12 +93,15 @@ capnpc_outputs =                                               \
   src/capnp/rpc-twoparty.capnp.h                               \
   src/capnp/persistent.capnp.c++                               \
   src/capnp/persistent.capnp.h                                 \
+  src/capnp/compat/json.capnp.h                                \
+  src/capnp/compat/json.capnp.c++                              \
   src/capnp/compiler/lexer.capnp.c++                           \
   src/capnp/compiler/lexer.capnp.h                             \
   src/capnp/compiler/grammar.capnp.c++                         \
   src/capnp/compiler/grammar.capnp.h
 
 includecapnpdir = $(includedir)/capnp
+includecapnpcompatdir = $(includecapnpdir)/compat
 includekjdir = $(includedir)/kj
 includekjparsedir = $(includekjdir)/parse
 includekjstddir = $(includekjdir)/std
@@ -106,7 +110,7 @@ includekjcompatdir = $(includekjdir)/compat
 dist_includecapnp_DATA = $(public_capnpc_inputs)
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = capnp.pc capnp-rpc.pc
+pkgconfig_DATA = capnp.pc capnp-rpc.pc kj.pc kj-async.pc
 
 noinst_HEADERS = \
   src/kj/miniposix.h
@@ -172,6 +176,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/serialize.h                                        \
   src/capnp/serialize-async.h                                  \
   src/capnp/serialize-packed.h                                 \
+  src/capnp/serialize-text.h                                   \
   src/capnp/pointer-helpers.h                                  \
   src/capnp/generated-header-support.h                         \
   src/capnp/rpc-prelude.h                                      \
@@ -182,10 +187,14 @@ includecapnp_HEADERS =                                         \
   src/capnp/persistent.capnp.h                                 \
   src/capnp/ez-rpc.h
 
+includecapnpcompat_HEADERS =                                   \
+  src/capnp/compat/json.h                                      \
+  src/capnp/compat/json.capnp.h
+
 if LITE_MODE
 lib_LTLIBRARIES = libkj.la libkj-test.la libcapnp.la
 else
-lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnpc.la
+lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
 endif
 
 # Don't include security release in soname -- we want to replace old binaries
@@ -265,6 +274,12 @@ libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/persistent.capnp.c++                               \
   src/capnp/ez-rpc.c++
 
+libcapnp_json_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(PTHREAD_LIBS)
+libcapnp_json_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
+libcapnp_json_la_SOURCES=                                      \
+  src/capnp/compat/json.c++                                    \
+  src/capnp/compat/json.capnp.c++
+
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 libcapnpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnpc_la_SOURCES=                                          \
@@ -284,7 +299,8 @@ libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/node-translator.c++                       \
   src/capnp/compiler/compiler.h                                \
   src/capnp/compiler/compiler.c++                              \
-  src/capnp/schema-parser.c++
+  src/capnp/schema-parser.c++                                  \
+  src/capnp/serialize-text.c++
 
 bin_PROGRAMS = capnp capnpc-capnp capnpc-c++
 
@@ -382,12 +398,20 @@ heavy_tests =                                                  \
   src/capnp/dynamic-test.c++                                   \
   src/capnp/stringify-test.c++                                 \
   src/capnp/serialize-async-test.c++                           \
+  src/capnp/serialize-text-test.c++                            \
   src/capnp/rpc-test.c++                                       \
   src/capnp/rpc-twoparty-test.c++                              \
   src/capnp/ez-rpc-test.c++                                    \
+  src/capnp/compat/json-test.c++                               \
   src/capnp/compiler/lexer-test.c++                            \
   src/capnp/compiler/md5-test.c++
-capnp_test_LDADD = libcapnpc.la libcapnp-rpc.la libcapnp.la libkj-async.la libkj-test.la libkj.la
+capnp_test_LDADD = libcapnpc.la                                \
+  libcapnp-rpc.la                                              \
+  libcapnp-json.la                                             \
+  libcapnp.la                                                  \
+  libkj-async.la                                               \
+  libkj-test.la                                                \
+  libkj.la
 
 endif !LITE_MODE
 

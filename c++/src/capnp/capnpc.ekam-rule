@@ -37,7 +37,8 @@ case "$INPUT" in
     *capnp/rpc-twoparty.capnp | \
     *capnp/persistent.capnp | \
     *capnp/compiler/lexer.capnp | \
-    *capnp/compiler/grammar.capnp )
+    *capnp/compiler/grammar.capnp | \
+    *capnp/compat/json.capnp )
         exit 0
         ;;
 esac

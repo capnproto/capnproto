@@ -253,7 +253,7 @@ void EventLoop::run(uint maxTurnCount) {
     }
   }
 
-  setRunnable(head != nullptr);
+  setRunnable(isRunnable());
 }
 
 bool EventLoop::turn() {
@@ -286,6 +286,10 @@ bool EventLoop::turn() {
     depthFirstInsertPoint = &head;
     return true;
   }
+}
+
+bool EventLoop::isRunnable() {
+  return head != nullptr;
 }
 
 void EventLoop::setRunnable(bool runnable) {
@@ -329,7 +333,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     }
   }
 
-  loop.setRunnable(loop.head != nullptr);
+  loop.setRunnable(loop.isRunnable());
 
   node->get(result);
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {

@@ -43,7 +43,7 @@ size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
   uint8_t* const outEnd = reinterpret_cast<uint8_t*>(dst) + maxBytes;
   uint8_t* const outMin = reinterpret_cast<uint8_t*>(dst) + minBytes;
 
-  kj::ArrayPtr<const byte> buffer = inner.getReadBuffer();
+  kj::ArrayPtr<const byte> buffer = inner.tryGetReadBuffer();
   if (buffer.size() == 0) {
     return 0;
   }
@@ -474,6 +474,34 @@ void writePackedMessage(kj::OutputStream& output,
 void writePackedMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   kj::FdOutputStream output(fd);
   writePackedMessage(output, segments);
+}
+
+size_t computeUnpackedSizeInWords(kj::ArrayPtr<const byte> packedBytes) {
+  const byte* ptr = packedBytes.begin();
+  const byte* end = packedBytes.end();
+
+  size_t total = 0;
+  while (ptr < end) {
+    uint tag = *ptr;
+    size_t count = __builtin_popcount(tag);
+    total += 1;
+    KJ_REQUIRE(end - ptr >= count, "invalid packed data");
+    ptr += count + 1;
+
+    if (tag == 0) {
+      KJ_REQUIRE(ptr < end, "invalid packed data");
+      total += *ptr++;
+    } else if (tag == 0xff) {
+      KJ_REQUIRE(ptr < end, "invalid packed data");
+      size_t words = *ptr++;
+      total += words;
+      size_t bytes = words * sizeof(word);
+      KJ_REQUIRE(end - ptr >= bytes, "invalid packed data");
+      ptr += bytes;
+    }
+  }
+
+  return total;
 }
 
 }  // namespace capnp

@@ -551,6 +551,9 @@ public:
   inline StructReader()
       : segment(nullptr), capTable(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
         pointerCount(0), nestingLimit(0x7fffffff) {}
+  inline StructReader(kj::ArrayPtr<const word> data)
+      : segment(nullptr), capTable(nullptr), data(data.begin()), pointers(nullptr),
+        dataSize(data.size() * WORDS * BITS_PER_WORD), pointerCount(0), nestingLimit(0x7fffffff) {}
 
   const void* getLocation() const { return data; }
 
@@ -640,7 +643,8 @@ class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline explicit ListBuilder(ElementSize elementSize)
       : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
-        step(0 * BITS / ELEMENTS), elementSize(elementSize) {}
+        step(0 * BITS / ELEMENTS), elementSize(elementSize), structDataSize(0 * BITS),
+        structPointerCount(0 * POINTERS) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder)
 

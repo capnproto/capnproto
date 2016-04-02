@@ -20,8 +20,14 @@
 // THE SOFTWARE.
 
 #include "json.h"
+#include <math.h>    // for HUGEVAL to check for overflow in std::strtod
+#include <stdlib.h>  // std::strtod
+#include <errno.h>   // for std::strtod errors
 #include <unordered_map>
+#include <capnp/orphan.h>
 #include <kj/debug.h>
+#include <kj/function.h>
+#include <kj/vector.h>
 
 namespace capnp {
 
@@ -43,6 +49,7 @@ struct FieldHash {
 
 struct JsonCodec::Impl {
   bool prettyPrint = false;
+  size_t maxNestingDepth = 64;
 
   std::unordered_map<Type, HandlerBase*, TypeHash> typeHandlers;
   std::unordered_map<StructSchema::Field, HandlerBase*, FieldHash> fieldHandlers;
@@ -120,7 +127,7 @@ struct JsonCodec::Impl {
         case '\r': escaped.addAll(kj::StringPtr("\\r")); break;
         case '\t': escaped.addAll(kj::StringPtr("\\t")); break;
         default:
-          if (c < 0x20) {
+          if (c >= 0 && c < 0x20) {
             escaped.addAll(kj::StringPtr("\\u00"));
             uint8_t c2 = c;
             escaped.add(HEXDIGITS[c2 / 16]);
@@ -184,6 +191,10 @@ JsonCodec::~JsonCodec() noexcept(false) {}
 
 void JsonCodec::setPrettyPrint(bool enabled) { impl->prettyPrint = enabled; }
 
+void JsonCodec::setMaxNestingDepth(size_t maxNestingDepth) {
+  impl->maxNestingDepth = maxNestingDepth;
+}
+
 kj::String JsonCodec::encode(DynamicValue::Reader value, Type type) const {
   MallocMessageBuilder message;
   auto json = message.getRoot<JsonValue>();
@@ -211,10 +222,6 @@ kj::String JsonCodec::encodeRaw(JsonValue::Reader value) const {
   return impl->encodeRaw(value, 0, multiline, false).flatten();
 }
 
-void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder output) const {
-  KJ_FAIL_ASSERT("JSON decode not implement yet. :(");
-}
-
 void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const {
   // TODO(soon): For interfaces, check for handlers on superclasses, per documentation...
   // TODO(soon): For branded types, should we check for handlers on the generic?
@@ -237,9 +244,20 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
     case schema::Type::UINT8:
     case schema::Type::UINT16:
     case schema::Type::UINT32:
+      output.setNumber(input.as<double>());
+      break;
     case schema::Type::FLOAT32:
     case schema::Type::FLOAT64:
-      output.setNumber(input.as<double>());
+      {
+        double value = input.as<double>();
+        if (kj::inf() == value || -kj::inf() == value || kj::isNaN(value)) {
+          // These values are not allowed in the JSON spec. Setting the field as null matches the
+          // behavior of JSON.stringify in Firefox and Chrome.
+          output.setNull();
+        } else {
+          output.setNumber(value);
+        }
+      }
       break;
     case schema::Type::INT64:
       output.setString(kj::str(input.as<int64_t>()));
@@ -368,6 +386,345 @@ void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) c
 Orphan<DynamicValue> JsonCodec::decode(
     JsonValue::Reader input, Type type, Orphanage orphanage) const {
   KJ_FAIL_ASSERT("JSON decode not implement yet. :(");
+}
+
+// -----------------------------------------------------------------------------
+
+namespace {
+
+class Input {
+public:
+  Input(kj::ArrayPtr<const char> input) : wrapped(input) {}
+
+  bool exhausted() {
+    return wrapped.size() == 0 || wrapped.front() == '\0';
+  }
+
+  char nextChar() {
+    KJ_REQUIRE(!exhausted(), "JSON message ends prematurely.");
+    return wrapped.front();
+  }
+
+  void advance(size_t numBytes = 1) {
+    KJ_REQUIRE(numBytes <= wrapped.size(), "JSON message ends prematurely.");
+    wrapped = kj::arrayPtr(wrapped.begin() + numBytes, wrapped.end());
+  }
+
+  void advanceTo(const char *newPos) {
+    KJ_REQUIRE(wrapped.begin() <= newPos && newPos < wrapped.end(),
+        "JSON message ends prematurely.");
+    wrapped = kj::arrayPtr(newPos, wrapped.end());
+  }
+
+  kj::ArrayPtr<const char> consume(size_t numBytes = 1) {
+    auto originalPos = wrapped.begin();
+    advance(numBytes);
+
+    return kj::arrayPtr(originalPos, wrapped.begin());
+  }
+
+  void consume(char expected) {
+    char current = nextChar();
+    KJ_REQUIRE(current == expected, "Unexpected input in JSON message.");
+
+    advance();
+  }
+
+  void consume(kj::ArrayPtr<const char> expected) {
+    KJ_REQUIRE(wrapped.size() >= expected.size());
+
+    auto prefix = wrapped.slice(0, expected.size());
+    KJ_REQUIRE(prefix == expected, "Unexpected input in JSON message.");
+
+    advance(expected.size());
+  }
+
+  bool tryConsume(char expected) {
+    bool found = !exhausted() && nextChar() == expected;
+    if (found) { advance(); }
+
+    return found;
+  }
+
+  template <typename Predicate>
+  void consumeOne(Predicate&& predicate) {
+    char current = nextChar();
+    KJ_REQUIRE(predicate(current), "Unexpected input in JSON message.");
+
+    advance();
+  }
+
+  template <typename Predicate>
+  kj::ArrayPtr<const char> consumeWhile(Predicate&& predicate) {
+    auto originalPos = wrapped.begin();
+    while (!exhausted() && predicate(nextChar())) { advance(); }
+
+    return kj::arrayPtr(originalPos, wrapped.begin());
+  }
+
+  template <typename F>  // Function<void(Input&)>
+  kj::ArrayPtr<const char> consumeCustom(F&& f) {
+    // Allows consuming in a custom manner without exposing the wrapped ArrayPtr.
+    auto originalPos = wrapped.begin();
+    f(*this);
+
+    return kj::arrayPtr(originalPos, wrapped.begin());
+  }
+  
+  void consumeWhitespace() {
+    consumeWhile([](char chr) {
+      return (
+        chr == ' '  ||
+        chr == '\n' ||
+        chr == '\r' ||
+        chr == '\t'
+      );
+    });
+  }
+
+
+private:
+  kj::ArrayPtr<const char> wrapped;
+
+};  // class Input
+
+class Parser {
+public:
+  Parser(size_t maxNestingDepth, kj::ArrayPtr<const char> input) :
+    maxNestingDepth(maxNestingDepth), input(input), nestingDepth(0) {}
+
+  void parseValue(JsonValue::Builder& output) {
+    input.consumeWhitespace();
+    KJ_DEFER(input.consumeWhitespace());
+
+    KJ_REQUIRE(!input.exhausted(), "JSON message ends prematurely.");
+
+    switch (input.nextChar()) {
+      case 'n': input.consume(kj::StringPtr("null"));  output.setNull();         break;
+      case 'f': input.consume(kj::StringPtr("false")); output.setBoolean(false); break;
+      case 't': input.consume(kj::StringPtr("true"));  output.setBoolean(true);  break;
+      case '"': parseString(output); break;
+      case '[': parseArray(output);  break;
+      case '{': parseObject(output); break;
+      case '-': case '0': case '1': case '2': case '3':
+      case '4': case '5': case '6': case '7': case '8':
+      case '9': parseNumber(output); break;
+      default: KJ_FAIL_REQUIRE("Unexpected input in JSON message.");
+    }
+  }
+
+  void parseNumber(JsonValue::Builder& output) {
+    auto numberStr = consumeNumber();
+    char *endPtr;
+
+    errno = 0;
+    double value = std::strtod(numberStr.begin(), &endPtr);
+
+    KJ_ASSERT(endPtr != numberStr.begin(), "strtod should not fail! Is consumeNumber wrong?");
+    KJ_REQUIRE((value != HUGE_VAL && value != -HUGE_VAL) || errno != ERANGE,
+        "Overflow in JSON number.");
+    KJ_REQUIRE(value != 0.0 || errno != ERANGE,
+        "Underflow in JSON number.");
+
+    output.setNumber(value);
+  }
+
+  void parseString(JsonValue::Builder& output) {
+    output.setString(consumeQuotedString());
+  }
+
+  void parseArray(JsonValue::Builder& output) {
+    // TODO(perf): Using orphans leaves holes in the message. It's expected
+    // that a JsonValue is used for interop, and won't be sent or written as a
+    // Cap'n Proto message.  This also applies to parseObject below.
+    kj::Vector<Orphan<JsonValue>> values;
+    auto orphanage = Orphanage::getForMessageContaining(output);
+    bool expectComma = false;
+
+    input.consume('[');
+    KJ_REQUIRE(++nestingDepth <= maxNestingDepth, "JSON message nested too deeply.");
+    KJ_DEFER(--nestingDepth);
+
+    while (input.consumeWhitespace(), input.nextChar() != ']') {
+      auto orphan = orphanage.newOrphan<JsonValue>();
+      auto builder = orphan.get();
+
+      if (expectComma) {
+        input.consumeWhitespace();
+        input.consume(',');
+        input.consumeWhitespace();
+      }
+
+      parseValue(builder);
+      values.add(kj::mv(orphan));
+
+      expectComma = true;
+    }
+
+    output.initArray(values.size());
+    auto array = output.getArray();
+
+    for (auto i : kj::indices(values)) {
+      array.adoptWithCaveats(i, kj::mv(values[i]));
+    }
+
+    input.consume(']');
+  }
+
+  void parseObject(JsonValue::Builder& output) {
+    kj::Vector<Orphan<JsonValue::Field>> fields;
+    auto orphanage = Orphanage::getForMessageContaining(output);
+    bool expectComma = false;
+
+    input.consume('{');
+    KJ_REQUIRE(++nestingDepth <= maxNestingDepth, "JSON message nested too deeply.");
+    KJ_DEFER(--nestingDepth);
+
+    while (input.consumeWhitespace(), input.nextChar() != '}') {
+      auto orphan = orphanage.newOrphan<JsonValue::Field>();
+      auto builder = orphan.get();
+
+      if (expectComma) {
+        input.consumeWhitespace();
+        input.consume(',');
+        input.consumeWhitespace();
+      }
+
+      builder.setName(consumeQuotedString());
+
+      input.consumeWhitespace();
+      input.consume(':');
+      input.consumeWhitespace();
+
+      auto valueBuilder = builder.getValue();
+      parseValue(valueBuilder);
+
+      fields.add(kj::mv(orphan));
+
+      expectComma = true;
+    }
+
+    output.initObject(fields.size());
+    auto object = output.getObject();
+
+    for (auto i : kj::indices(fields)) {
+      object.adoptWithCaveats(i, kj::mv(fields[i]));
+    }
+
+    input.consume('}');
+  }
+
+  bool inputExhausted() { return input.exhausted(); }
+
+private:
+  kj::String consumeQuotedString() {
+    input.consume('"');
+    // TODO(perf): Avoid copy / alloc if no escapes encoutered.
+    // TODO(perf): Get statistics on string size and preallocate?
+    kj::Vector<char> decoded;
+
+    do {
+      auto stringValue = input.consumeWhile([](const char chr) {
+          return chr != '"' && chr != '\\';
+      });
+
+      decoded.addAll(stringValue);
+
+      if (input.nextChar() == '\\') {  // handle escapes.
+        input.advance();
+        switch(input.nextChar()) {
+          case '"' : decoded.add('"' ); input.advance(); break;
+          case '\\': decoded.add('\\'); input.advance(); break;
+          case '/' : decoded.add('/' ); input.advance(); break;
+          case 'b' : decoded.add('\b'); input.advance(); break;
+          case 'f' : decoded.add('\f'); input.advance(); break;
+          case 'n' : decoded.add('\n'); input.advance(); break;
+          case 'r' : decoded.add('\r'); input.advance(); break;
+          case 't' : decoded.add('\t'); input.advance(); break;
+          case 'u' :
+            input.consume('u');
+            unescapeAndAppend(input.consume(size_t(4)), decoded);
+            break;
+          default: KJ_FAIL_REQUIRE("Invalid escape in JSON string."); break;
+        }
+      }
+
+    } while(input.nextChar() != '"');
+
+    input.consume('"');
+    decoded.add('\0');
+
+    // TODO(perf): This copy can be eliminated, but I can't find the kj::wayToDoIt();
+    return kj::String(decoded.releaseAsArray());
+  }
+
+  kj::String consumeNumber() {
+    auto numArrayPtr = input.consumeCustom([](Input& input) {
+      input.tryConsume('-');
+      if (!input.tryConsume('0')) {
+        input.consumeOne([](char c) { return '1' <= c && c <= '9'; });
+        input.consumeWhile([](char c) { return '0' <= c && c <= '9'; });
+      }
+
+      if (input.tryConsume('.')) {
+        input.consumeWhile([](char c) { return '0' <= c && c <= '9'; });
+      }
+
+      if (input.tryConsume('e') || input.tryConsume('E')) {
+        input.tryConsume('+') || input.tryConsume('-');
+        input.consumeWhile([](char c) { return '0' <= c && c <= '9'; });
+      }
+    });
+
+    KJ_REQUIRE(numArrayPtr.size() > 0, "Expected number in JSON input.");
+
+    kj::Vector<char> number;
+    number.addAll(numArrayPtr);
+    number.add('\0');
+
+    return kj::String(number.releaseAsArray());
+  }
+
+  // TODO(someday): This "interface" is ugly, and won't work if/when surrogates are handled.
+  void unescapeAndAppend(kj::ArrayPtr<const char> hex, kj::Vector<char>& target) {
+    KJ_REQUIRE(hex.size() == 4);
+    int codePoint = 0;
+
+    for (int i = 0; i < 4; ++i) {
+      char c = hex[i];
+      codePoint <<= 4;
+
+      if ('0' <= c && c <= '9') {
+        codePoint |= c - '0';
+      } else if ('a' <= c && c <= 'f') {
+        codePoint |= c - 'a';
+      } else if ('A' <= c && c <= 'F') {
+        codePoint |= c - 'A';
+      } else {
+        KJ_FAIL_REQUIRE("Invalid hex digit in unicode escape.", c);
+      }
+    }
+
+    // TODO(soon): Support at least basic multi-lingual plane, ie ignore surrogates.
+    KJ_REQUIRE(codePoint < 128, "non-ASCII unicode escapes are not supported (yet!)");
+    target.add(0x7f & static_cast<char>(codePoint));
+  }
+
+  const size_t maxNestingDepth;
+  Input input;
+  size_t nestingDepth;
+
+
+};  // class Parser
+
+}  // namespace
+
+
+void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder output) const {
+  Parser parser(impl->maxNestingDepth, input);
+  parser.parseValue(output);
+
+  KJ_REQUIRE(parser.inputExhausted(), "Input remains after parsing JSON.");
 }
 
 // -----------------------------------------------------------------------------

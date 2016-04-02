@@ -103,6 +103,22 @@ public:
     }
   }
 
+  inline void operator=(decltype(nullptr)) {
+    builder = nullptr;
+  }
+
+  inline void clear() {
+    while (builder.size() > 0) {
+      builder.removeLast();
+    }
+  }
+
+  inline void truncate(size_t size) {
+    while (builder.size() > size) {
+      builder.removeLast();
+    }
+  }
+
 private:
   ArrayBuilder<T> builder;
 
@@ -118,6 +134,11 @@ private:
     builder = kj::mv(newBuilder);
   }
 };
+
+template <typename T>
+inline auto KJ_STRINGIFY(const Vector<T>& v) -> decltype(toCharSequence(v.asPtr())) {
+  return toCharSequence(v.asPtr());
+}
 
 }  // namespace kj
 

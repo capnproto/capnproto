@@ -896,7 +896,12 @@ struct WireHelpers {
 
     if (dstSegment == srcSegment) {
       // Same segment, so create a direct pointer.
-      dst->setKindAndTarget(srcTag->kind(), srcPtr, dstSegment);
+
+      if (srcTag->kind() == WirePointer::STRUCT && srcTag->structRef.wordSize() == 0 * WORDS) {
+        dst->setKindAndTargetForEmptyStruct();
+      } else {
+        dst->setKindAndTarget(srcTag->kind(), srcPtr, dstSegment);
+      }
 
       // We can just copy the upper 32 bits.  (Use memcpy() to comply with aliasing rules.)
       memcpy(&dst->upper32Bits, &srcTag->upper32Bits, sizeof(srcTag->upper32Bits));
@@ -1604,6 +1609,7 @@ struct WireHelpers {
       return { segment, ptr };
     } else {
       // List of structs.
+      KJ_DASSERT(value.structDataSize % BITS_PER_WORD == 0 * BITS);
       word* ptr = allocate(ref, segment, capTable, totalSize + POINTER_SIZE_IN_WORDS,
                            WirePointer::LIST, orphanArena);
       ref->listRef.setInlineComposite(totalSize);

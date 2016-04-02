@@ -48,6 +48,40 @@ TEST(Orphans, Structs) {
   checkTestMessage(root.asReader().getStructField());
 }
 
+TEST(Orphans, EmptyStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestAnyPointer>();
+  auto anyPointer = root.getAnyPointerField();
+  EXPECT_TRUE(anyPointer.isNull());
+  auto orphan = builder.getOrphanage().newOrphan<test::TestEmptyStruct>();
+  anyPointer.adopt(kj::mv(orphan));
+  EXPECT_EQ(0, anyPointer.targetSize().wordCount);
+  EXPECT_FALSE(anyPointer.isNull());
+}
+
+TEST(Orphans, EmptyStructOverwrite) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestAnyPointer>();
+  auto anyPointer = root.getAnyPointerField();
+  EXPECT_TRUE(anyPointer.isNull());
+  anyPointer.initAs<TestAllTypes>();
+  auto orphan = builder.getOrphanage().newOrphan<test::TestEmptyStruct>();
+  anyPointer.adopt(kj::mv(orphan));
+  EXPECT_EQ(0, anyPointer.targetSize().wordCount);
+  EXPECT_FALSE(anyPointer.isNull());
+}
+
+TEST(Orphans, AdoptNullStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestAnyPointer>();
+  auto anyPointer = root.getAnyPointerField();
+  EXPECT_TRUE(anyPointer.isNull());
+  anyPointer.initAs<TestAllTypes>();
+  anyPointer.adopt(Orphan<test::TestEmptyStruct>());
+  EXPECT_EQ(0, anyPointer.targetSize().wordCount);
+  EXPECT_TRUE(anyPointer.isNull());
+}
+
 TEST(Orphans, Lists) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestAllTypes>();

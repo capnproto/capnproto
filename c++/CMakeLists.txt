@@ -97,12 +97,21 @@ if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
   set(PTHREAD_CFLAGS "-pthread")
   set(STDLIB_FLAG)  # TODO: Unsupported
 
+  configure_file(kj.pc.in "${CMAKE_CURRENT_BINARY_DIR}/kj.pc" @ONLY)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kj.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+
   configure_file(capnp.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" @ONLY)
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
 
   if(NOT CAPNP_LITE)
+    configure_file(kj-async.pc.in "${CMAKE_CURRENT_BINARY_DIR}/kj-async.pc" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kj-async.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+
     configure_file(capnp-rpc.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" @ONLY)
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
+
+    configure_file(capnp-json.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-json.pc" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-json.pc" DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
   endif()
 
   unset(STDLIB_FLAG)

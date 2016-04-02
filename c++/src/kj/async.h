@@ -194,6 +194,11 @@ public:
   // actual I/O.  To solve this, use `kj::evalLater()` to yield control; this way, all other events
   // in the queue will get a chance to run before your callback is executed.
 
+  Promise<void> ignoreResult() KJ_WARN_UNUSED_RESULT { return then([](T&&) {}); }
+  // Convenience method to convert the promise to a void promise by ignoring the return value.
+  //
+  // You must still wait on the returned promise if you want the task to execute.
+
   template <typename ErrorFunc>
   Promise<T> catch_(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
   // Equivalent to `.then(identityFunc, errorHandler)`, where `identifyFunc` is a function that

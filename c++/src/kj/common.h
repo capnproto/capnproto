@@ -594,6 +594,9 @@ float nan();
 #error "Not sure how to support your compiler."
 #endif
 
+inline constexpr bool isNaN(float f) { return f != f; }
+inline constexpr bool isNaN(double f) { return f != f; }
+
 // =======================================================================================
 // Useful fake containers
 

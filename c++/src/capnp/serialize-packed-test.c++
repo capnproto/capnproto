@@ -39,6 +39,11 @@ public:
   ~TestPipe() {}
 
   const std::string& getData() { return data; }
+
+  kj::ArrayPtr<const byte> getArray() {
+    return kj::arrayPtr(reinterpret_cast<const byte*>(data.data()), data.size());
+  }
+
   void resetRead(size_t preferredReadSize = kj::maxValue) {
     readPos = 0;
     this->preferredReadSize = preferredReadSize;
@@ -83,6 +88,8 @@ private:
 
 void expectPacksTo(kj::ArrayPtr<const byte> unpacked, kj::ArrayPtr<const byte> packed) {
   TestPipe pipe;
+
+  EXPECT_EQ(unpacked.size(), computeUnpackedSizeInWords(packed) * sizeof(word));
 
   // -----------------------------------------------------------------
   // write
@@ -244,6 +251,8 @@ TEST(Packed, RoundTrip) {
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
@@ -254,6 +263,8 @@ TEST(Packed, RoundTripScratchSpace) {
 
   TestPipe pipe;
   writePackedMessage(pipe, builder);
+
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
 
   word scratch[1024];
   PackedMessageReader reader(pipe, ReaderOptions(), kj::ArrayPtr<word>(scratch, 1024));
@@ -267,6 +278,8 @@ TEST(Packed, RoundTripLazy) {
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
@@ -277,6 +290,8 @@ TEST(Packed, RoundTripOddSegmentCount) {
 
   TestPipe pipe;
   writePackedMessage(pipe, builder);
+
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
 
   PackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
@@ -289,6 +304,8 @@ TEST(Packed, RoundTripOddSegmentCountLazy) {
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
@@ -300,6 +317,8 @@ TEST(Packed, RoundTripEvenSegmentCount) {
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
@@ -310,6 +329,8 @@ TEST(Packed, RoundTripEvenSegmentCountLazy) {
 
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
+
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
 
   PackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
@@ -325,6 +346,9 @@ TEST(Packed, RoundTripTwoMessages) {
   TestPipe pipe;
   writePackedMessage(pipe, builder);
   writePackedMessage(pipe, builder2);
+
+  EXPECT_EQ(computeSerializedSizeInWords(builder) + computeSerializedSizeInWords(builder2),
+            computeUnpackedSizeInWords(pipe.getArray()));
 
   {
     PackedMessageReader reader(pipe);
@@ -346,6 +370,8 @@ TEST(Packed, RoundTripAllZero) {
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   checkTestMessageAllZero(reader.getRoot<TestAllTypes>());
 
@@ -362,6 +388,8 @@ TEST(Packed, RoundTripAllZeroScratchSpace) {
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   word scratch[1024];
   PackedMessageReader reader(pipe, ReaderOptions(), kj::ArrayPtr<word>(scratch, 1024));
   checkTestMessageAllZero(reader.getRoot<TestAllTypes>());
@@ -374,6 +402,8 @@ TEST(Packed, RoundTripAllZeroLazy) {
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   checkTestMessageAllZero(reader.getRoot<TestAllTypes>());
 }
@@ -384,6 +414,8 @@ TEST(Packed, RoundTripAllZeroOddSegmentCount) {
 
   TestPipe pipe;
   writePackedMessage(pipe, builder);
+
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
 
   PackedMessageReader reader(pipe);
   checkTestMessageAllZero(reader.getRoot<TestAllTypes>());
@@ -396,6 +428,8 @@ TEST(Packed, RoundTripAllZeroOddSegmentCountLazy) {
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   checkTestMessageAllZero(reader.getRoot<TestAllTypes>());
 }
@@ -407,6 +441,8 @@ TEST(Packed, RoundTripAllZeroEvenSegmentCount) {
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   checkTestMessageAllZero(reader.getRoot<TestAllTypes>());
 }
@@ -417,6 +453,8 @@ TEST(Packed, RoundTripAllZeroEvenSegmentCountLazy) {
 
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
+
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
 
   PackedMessageReader reader(pipe);
   checkTestMessageAllZero(reader.getRoot<TestAllTypes>());
@@ -434,6 +472,8 @@ TEST(Packed, RoundTripHugeString) {
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
@@ -447,6 +487,8 @@ TEST(Packed, RoundTripHugeStringScratchSpace) {
 
   TestPipe pipe;
   writePackedMessage(pipe, builder);
+
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
 
   word scratch[1024];
   PackedMessageReader reader(pipe, ReaderOptions(), kj::ArrayPtr<word>(scratch, 1024));
@@ -463,6 +505,8 @@ TEST(Packed, RoundTripHugeStringLazy) {
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
@@ -476,6 +520,8 @@ TEST(Packed, RoundTripHugeStringOddSegmentCount) {
 
   TestPipe pipe;
   writePackedMessage(pipe, builder);
+
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
 
   PackedMessageReader reader(pipe);
   EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
@@ -491,6 +537,8 @@ TEST(Packed, RoundTripHugeStringOddSegmentCountLazy) {
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
@@ -505,6 +553,8 @@ TEST(Packed, RoundTripHugeStringEvenSegmentCount) {
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
+
   PackedMessageReader reader(pipe);
   EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
@@ -518,6 +568,8 @@ TEST(Packed, RoundTripHugeStringEvenSegmentCountLazy) {
 
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
+
+  EXPECT_EQ(computeSerializedSizeInWords(builder), computeUnpackedSizeInWords(pipe.getArray()));
 
   PackedMessageReader reader(pipe);
   EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);

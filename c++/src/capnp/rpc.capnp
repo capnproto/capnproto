@@ -431,7 +431,7 @@ struct Call {
     # Don't actually return the results to the sender.  Instead, hold on to them and await
     # instructions from the sender regarding what to do with them.  In particular, the sender
     # may subsequently send a `Return` for some other call (which the receiver had previously made
-    # to the sender) with `takeFromOtherAnswer` set.  The results from this call are then used
+    # to the sender) with `takeFromOtherQuestion` set.  The results from this call are then used
     # as the results of the other call.
     #
     # When `yourself` is used, the receiver must still send a `Return` for the call, but sets the
@@ -492,7 +492,7 @@ struct Return {
   # must not send separate `Release` messages for them.  Level 0 implementations in particular
   # should always set this true.  This defaults true because if level 0 implementations forget to
   # set it they'll never notice (just silently leak caps), but if level >=1 implementations forget
-  # set it false they'll quickly get errors.
+  # to set it to false they'll quickly get errors.
 
   union {
     results @2 :Payload;

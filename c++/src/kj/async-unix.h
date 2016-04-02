@@ -146,8 +146,8 @@ class UnixEventPort::FdObserver {
   // else, it means that read() (or recv()) will return data.
   //
   // The presence of out-of-band data should NOT fire this event. However, the event may
-  // occasionally fire spurriously (when there is actually no data to read), and one thing that can
-  // cause such spurrious events is the arrival of OOB data on certain platforms whose event
+  // occasionally fire spuriously (when there is actually no data to read), and one thing that can
+  // cause such spurious events is the arrival of OOB data on certain platforms whose event
   // interfaces fail to distinguish between regular and OOB data (e.g. Mac OSX).
   //
   // WARNING: The exact behavior of this class differs across systems, since event interfaces

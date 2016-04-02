@@ -63,6 +63,12 @@ private:
   uint desiredSegmentCount;
 };
 
+kj::Array<word> copyWords(kj::ArrayPtr<const word> input) {
+  auto result = kj::heapArray<word>(input.size());
+  memcpy(result.asBytes().begin(), input.asBytes().begin(), input.asBytes().size());
+  return result;
+}
+
 TEST(Serialize, FlatArray) {
   TestMessageBuilder builder(1);
   initTestMessage(builder.initRoot<TestAllTypes>());
@@ -99,6 +105,16 @@ TEST(Serialize, FlatArray) {
     EXPECT_EQ(serializedWithSuffix.end() - 5, remaining.begin());
     EXPECT_EQ(serializedWithSuffix.end(), remaining.end());
   }
+
+  {
+    // Test expectedSizeInWordsFromPrefix(). We pass in a copy of the slice so that valgrind can
+    // detect out-of-bounds access.
+    EXPECT_EQ(1, expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, 0))));
+    for (uint i = 1; i <= serialized.size(); i++) {
+      EXPECT_EQ(serialized.size(),
+          expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i))));
+    }
+  }
 }
 
 TEST(Serialize, FlatArrayOddSegmentCount) {
@@ -121,6 +137,23 @@ TEST(Serialize, FlatArrayOddSegmentCount) {
     checkTestMessage(reader.getRoot<TestAllTypes>());
     EXPECT_EQ(serializedWithSuffix.end() - 5, reader.getEnd());
   }
+
+  {
+    // Test expectedSizeInWordsFromPrefix(). We pass in a copy of the slice so that valgrind can
+    // detect out-of-bounds access.
+
+    // Segment table is 4 words, so with fewer words we'll have incomplete information.
+    for (uint i = 0; i < 4; i++) {
+      size_t expectedSize = expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i)));
+      EXPECT_LT(expectedSize, serialized.size());
+      EXPECT_GT(expectedSize, i);
+    }
+    // After that, we get the exact length.
+    for (uint i = 4; i <= serialized.size(); i++) {
+      EXPECT_EQ(serialized.size(),
+          expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i))));
+    }
+  }
 }
 
 TEST(Serialize, FlatArrayEvenSegmentCount) {
@@ -142,6 +175,23 @@ TEST(Serialize, FlatArrayEvenSegmentCount) {
     FlatArrayMessageReader reader(serializedWithSuffix.asPtr());
     checkTestMessage(reader.getRoot<TestAllTypes>());
     EXPECT_EQ(serializedWithSuffix.end() - 5, reader.getEnd());
+  }
+
+  {
+    // Test expectedSizeInWordsFromPrefix(). We pass in a copy of the slice so that valgrind can
+    // detect out-of-bounds access.
+
+    // Segment table is 6 words, so with fewer words we'll have incomplete information.
+    for (uint i = 0; i < 6; i++) {
+      size_t expectedSize = expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i)));
+      EXPECT_LT(expectedSize, serialized.size());
+      EXPECT_GT(expectedSize, i);
+    }
+    // After that, we get the exact length.
+    for (uint i = 6; i <= serialized.size(); i++) {
+      EXPECT_EQ(serialized.size(),
+          expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i))));
+    }
   }
 }
 

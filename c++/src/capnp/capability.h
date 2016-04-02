@@ -105,7 +105,7 @@ class Request: public Params::Builder {
   // structure with a method send() that actually sends it.
   //
   // Given a Cap'n Proto method `foo(a :A, b :B): C`, the generated client interface will have
-  // a method `Request<FooParams, C> startFoo()` (as well as a convenience method
+  // a method `Request<FooParams, C> fooRequest()` (as well as a convenience method
   // `RemotePromise<C> foo(A::Reader a, B::Reader b)`).
 
 public:
@@ -298,7 +298,7 @@ public:
   //
   // Keep in mind that asynchronous cancellation cannot occur while the method is synchronously
   // executing on a local thread.  The method must perform an asynchronous operation or call
-  // `EventLoop::current().runLater()` to yield control.
+  // `EventLoop::current().evalLater()` to yield control.
   //
   // Note:  You might think that we should offer `onCancel()` and/or `isCanceled()` methods that
   // provide notification when the caller cancels the request without forcefully killing off the
@@ -341,7 +341,7 @@ protected:
   // The effect of this method is undefined if:
   // - No capability client has been created pointing to this object. (This is always the case in
   //   the server's constructor.)
-  // - The capability client pointing at this object has been destoryed. (This is always the case
+  // - The capability client pointing at this object has been destroyed. (This is always the case
   //   in the server's destructor.)
   // - Multiple capability clients have been created around the same server (possible if the server
   //   is refcounted, which is not recommended since the client itself provides refcounting).

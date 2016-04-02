@@ -44,32 +44,17 @@ function initSidebar() {
     var href = link.href;
     if (href.lastIndexOf(filename) >= 0) {
       var parent = link.parentNode;
-      var p = document.createElement("p");
 
       while (link.childNodes.length > 0) {
         var child = link.childNodes[0];
         link.removeChild(child);
-        p.appendChild(child);
+        parent.appendChild(child);
       }
       parent.removeChild(link);
-      p.onclick = (function(url) {
-        return function(event) {
-          window.location.href = url;
-          event.stopPropagation();
-        }
-      })(href + "#");
-      parent.appendChild(p);
       items[i].className = "selected";
       toc = document.createElement("ul");
       toc.id = "toc";
       items[i].appendChild(toc);
-    } else {
-      items[i].onclick = (function(url) {
-        return function(event) {
-          window.location.href = url;
-          event.stopPropagation();
-        }
-      })(href);
     }
   }
 
@@ -117,21 +102,15 @@ function setupSidebar() {
       var item = document.createElement("li");
       var p = document.createElement("p");
       var link = document.createElement("a");
-      link.appendChild(document.createTextNode(headings[i].innerText || headings[i].textContent));
+      p.appendChild(document.createTextNode(headings[i].innerText || headings[i].textContent));
       var hlinks = headings[i].getElementsByTagName("a");
       if (hlinks.length == 1) {
         link.href = hlinks[0].href;
       } else {
         link.href = "#" + headings[i].id;
       }
-      p.appendChild(link);
-      p.onclick = (function(url) {
-        return function(event) {
-          window.location.href = url;
-          event.stopPropagation();
-        }
-      })(link.href);
-      item.appendChild(p);
+      link.appendChild(p);
+      item.appendChild(link);
       parent.appendChild(item);
     }
   }
@@ -144,16 +123,10 @@ function setupNewsSidebar(items) {
       var item = document.createElement("li");
       var p = document.createElement("p");
       var link = document.createElement("a");
-      link.appendChild(document.createTextNode(items[i].title));
+      p.appendChild(document.createTextNode(items[i].title));
       link.href = items[i].url;
-      p.appendChild(link);
-      p.onclick = (function(url) {
-        return function(event) {
-          window.location.href = url;
-          event.stopPropagation();
-        }
-      })(link.href);
-      item.appendChild(p);
+      link.appendChild(p);
+      item.appendChild(link);
       toc.appendChild(item);
     }
   }

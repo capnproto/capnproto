@@ -599,9 +599,12 @@ body.narrow #menu {
 
 #menu li {
   margin: 0;
-  padding: 10px 15px 10px 15px;
   list-style-type: none;
   background-color: #212121;
+}
+#menu>ul>li>a, #menu>ul>li.selected {
+  display: block;
+  padding: 10px 15px 10px 15px;
 }
 #menu>ul>li {
   border-right: 1px solid #111;

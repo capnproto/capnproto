@@ -447,6 +447,8 @@ struct List<AnyPointer, Kind::OTHER> {
 
 class AnyStruct::Reader {
 public:
+  typedef AnyStruct Reads;
+
   Reader() = default;
   inline Reader(_::StructReader reader): _reader(reader) {}
 
@@ -479,10 +481,13 @@ private:
 
   template <typename, Kind>
   friend struct _::PointerHelpers;
+  friend class Orphanage;
 };
 
 class AnyStruct::Builder {
 public:
+  typedef AnyStruct Builds;
+
   inline Builder(decltype(nullptr)) {}
   inline Builder(_::StructBuilder builder): _builder(builder) {}
 
@@ -604,6 +609,8 @@ private:
 
 class AnyList::Reader {
 public:
+  typedef AnyList Reads;
+
   inline Reader(): _reader(ElementSize::VOID) {}
   inline Reader(_::ListReader reader): _reader(reader) {}
 
@@ -633,10 +640,13 @@ private:
 
   template <typename, Kind>
   friend struct _::PointerHelpers;
+  friend class Orphanage;
 };
 
 class AnyList::Builder {
 public:
+  typedef AnyList Builds;
+
   inline Builder(decltype(nullptr)): _builder(ElementSize::VOID) {}
   inline Builder(_::ListBuilder builder): _builder(builder) {}
 
@@ -667,6 +677,8 @@ public:
 
 private:
   _::ListBuilder _builder;
+
+  friend class Orphanage;
 };
 
 // =======================================================================================
@@ -820,6 +832,34 @@ struct Orphanage::GetInnerBuilder<AnyPointer, Kind::OTHER> {
   }
 };
 
+template <>
+struct Orphanage::GetInnerReader<AnyStruct, Kind::OTHER> {
+  static inline _::StructReader apply(const AnyStruct::Reader& t) {
+    return t._reader;
+  }
+};
+
+template <>
+struct Orphanage::GetInnerBuilder<AnyStruct, Kind::OTHER> {
+  static inline _::StructBuilder apply(AnyStruct::Builder& t) {
+    return t._builder;
+  }
+};
+
+template <>
+struct Orphanage::GetInnerReader<AnyList, Kind::OTHER> {
+  static inline _::ListReader apply(const AnyList::Reader& t) {
+    return t._reader;
+  }
+};
+
+template <>
+struct Orphanage::GetInnerBuilder<AnyList, Kind::OTHER> {
+  static inline _::ListBuilder apply(AnyList::Builder& t) {
+    return t._builder;
+  }
+};
+
 template <typename T>
 inline BuilderFor<T> Orphan<AnyPointer>::getAs() {
   return _::OrphanGetImpl<T>::apply(builder);
@@ -950,6 +990,19 @@ struct PointerHelpers<AnyList, Kind::OTHER> {
   // TODO(soon): implement these
   static void adopt(PointerBuilder builder, Orphan<AnyList>&& value);
   static Orphan<AnyList> disown(PointerBuilder builder);
+};
+
+template <>
+struct OrphanGetImpl<AnyStruct, Kind::OTHER> {
+  static inline AnyStruct::Builder apply(_::OrphanBuilder& builder) {
+    return AnyStruct::Builder(builder.asStruct(_::StructSize(0 * WORDS, 0 * POINTERS)));
+  }
+  static inline AnyStruct::Reader applyReader(const _::OrphanBuilder& builder) {
+    return AnyStruct::Reader(builder.asStructReader(_::StructSize(0 * WORDS, 0 * POINTERS)));
+  }
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, _::StructSize(0 * WORDS, 0 * POINTERS));
+  }
 };
 
 }  // namespace _ (private)

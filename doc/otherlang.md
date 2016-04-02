@@ -15,19 +15,21 @@ project's documentation for details.
 
 * [C++](cxx.html) by [@kentonv](https://github.com/kentonv)
 * [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
+* [Go](https://github.com/zombiezen/go-capnproto2) by [@zombiezen](https://github.com/zombiezen) (forked from [@glycerine](https://github.com/glycerine)'s serialization-only version, below)
 * [Javascript (Node.js only)](https://github.com/kentonv/node-capnp) by [@kentonv](https://github.com/kentonv)
 * [Python](http://jparyani.github.io/pycapnp/) by [@jparyani](https://github.com/jparyani)
 * [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
 
 ##### Serialization only
 
-* [C](https://github.com/jmckaskill/c-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
+* [C](https://github.com/opensourcerouting/c-capnproto) by [OpenSourceRouting](https://www.opensourcerouting.org/) / [@eqvinox](https://github.com/eqvinox) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [C#](https://github.com/mgravell/capnproto-net) by [@mgravell](https://github.com/mgravell)
 * [Go](https://github.com/glycerine/go-capnproto) by [@glycerine](https://github.com/glycerine) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [Java](https://github.com/dwrensha/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
 * [Javascript](https://github.com/popham/capnp-js-base) by [@popham](https://github.com/popham)
 * [Javascript](https://github.com/jscheid/capnproto-js) (older, abandoned) by [@jscheid](https://github.com/jscheid)
 * [Lua](https://github.com/cloudflare/lua-capnproto) by [CloudFlare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
+* [Nim](https://github.com/zielmicha/capnp.nim) by [@zielmicha](https://github.com/zielmicha)
 * [OCaml](https://github.com/pelzlpj/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj)
 * [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
 
@@ -39,8 +41,8 @@ new languages.
 * [Common Test Framework](https://github.com/kaos/capnp_test) by [@kaos](https://github.com/kaos)
 * [Sublime Syntax Highlighting](https://github.com/joshuawarner32/capnproto-sublime) by
   [@joshuawarner32](https://github.com/joshuawarner32)
-* [Vim Syntax Highlighting](https://github.com/cstrahan/vim-capnp) by
-  [@cstrahan](https://github.com/cstrahan)
+* [Vim Syntax Highlighting](https://github.com/peter-edge/vim-capnp) by [@peter-edge](https://github.com/peter-edge)
+  (originally by [@cstrahan](https://github.com/cstrahan))
 * [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
 
 ## Contribute Your Own!

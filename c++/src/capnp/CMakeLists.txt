@@ -47,6 +47,7 @@ set(capnp_headers
   serialize.h
   serialize-async.h
   serialize-packed.h
+  serialize-text.h
   pointer-helpers.h
   generated-header-support.h
 )
@@ -93,6 +94,26 @@ if(NOT CAPNP_LITE)
   install(FILES ${capnp-rpc_headers} ${capnp-rpc_schemas} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp")
 endif()
 
+# capnp-json ========================================================================
+
+set(capnp-json_sources
+  compat/json.c++
+  compat/json.capnp.c++
+)
+set(capnp-json_headers
+  compat/json.h
+  compat/json.capnp.h
+)
+set(capnp-json_schemas
+  compat/json.capnp
+)
+if(NOT CAPNP_LITE)
+  add_library(capnp-json ${capnp-json_sources})
+  target_link_libraries(capnp-json capnp kj-async kj)
+  install(TARGETS capnp-json ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
+  install(FILES ${capnp-json_headers} ${capnp-json_schemas} DESTINATION "${INCLUDE_INSTALL_DIR}/capnp/compat")
+endif()
+
 # Tools/Compilers ==============================================================
 
 set(capnpc_sources
@@ -105,6 +126,7 @@ set(capnpc_sources
   compiler/node-translator.c++
   compiler/compiler.c++
   schema-parser.c++
+  serialize-text.c++
 )
 if(NOT CAPNP_LITE)
   add_library(capnpc ${capnpc_sources})
@@ -183,7 +205,7 @@ if(BUILD_TESTING)
   if(CAPNP_LITE)
     set(test_libraries capnp kj-test kj)
   else()
-    set(test_libraries capnp-rpc capnp capnpc kj-async kj-test kj)
+    set(test_libraries capnp-json capnp-rpc capnp capnpc kj-async kj-test kj)
   endif()
 
   add_executable(capnp-tests
@@ -218,12 +240,14 @@ if(BUILD_TESTING)
       dynamic-test.c++
       stringify-test.c++
       serialize-async-test.c++
+      serialize-text-test.c++
       rpc-test.c++
       rpc-twoparty-test.c++
       ez-rpc-test.c++
       compiler/lexer-test.c++
       compiler/md5-test.c++
       test-util.c++
+      compat/json-test.c++
       ${test_capnp_cpp_files}
       ${test_capnp_h_files}
     )

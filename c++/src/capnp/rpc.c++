@@ -928,7 +928,7 @@ private:
         message->send();
       }
 
-      cap = replacement->addRef();
+      cap = kj::mv(replacement);
       isResolved = true;
     }
   };
@@ -1275,7 +1275,7 @@ private:
           // If we're still awaiting a return, then this request is being canceled, and we're going
           // to ignore any capabilities in the return message, so set releaseResultCaps true. If we
           // already received the return, then we've already built local proxies for the caps and
-          // will send Release messages when those are destoryed.
+          // will send Release messages when those are destroyed.
           builder.setReleaseResultCaps(question.isAwaitingReturn);
           message->send();
         }
@@ -2037,23 +2037,32 @@ private:
   void handleUnimplemented(const rpc::Message::Reader& message) {
     switch (message.which()) {
       case rpc::Message::RESOLVE: {
-        auto cap = message.getResolve().getCap();
-        switch (cap.which()) {
-          case rpc::CapDescriptor::NONE:
-            // Nothing to do (but this ought never to happen).
+        auto resolve = message.getResolve();
+        switch (resolve.which()) {
+          case rpc::Resolve::CAP: {
+            auto cap = resolve.getCap();
+            switch (cap.which()) {
+              case rpc::CapDescriptor::NONE:
+                // Nothing to do (but this ought never to happen).
+                break;
+              case rpc::CapDescriptor::SENDER_HOSTED:
+                releaseExport(cap.getSenderHosted(), 1);
+                break;
+              case rpc::CapDescriptor::SENDER_PROMISE:
+                releaseExport(cap.getSenderPromise(), 1);
+                break;
+              case rpc::CapDescriptor::RECEIVER_ANSWER:
+              case rpc::CapDescriptor::RECEIVER_HOSTED:
+                // Nothing to do.
+                break;
+              case rpc::CapDescriptor::THIRD_PARTY_HOSTED:
+                releaseExport(cap.getThirdPartyHosted().getVineId(), 1);
+                break;
+            }
             break;
-          case rpc::CapDescriptor::SENDER_HOSTED:
-            releaseExport(cap.getSenderHosted(), 1);
-            break;
-          case rpc::CapDescriptor::SENDER_PROMISE:
-            releaseExport(cap.getSenderPromise(), 1);
-            break;
-          case rpc::CapDescriptor::RECEIVER_ANSWER:
-          case rpc::CapDescriptor::RECEIVER_HOSTED:
+          }
+          case rpc::Resolve::EXCEPTION:
             // Nothing to do.
-            break;
-          case rpc::CapDescriptor::THIRD_PARTY_HOSTED:
-            releaseExport(cap.getThirdPartyHosted().getVineId(), 1);
             break;
         }
         break;
@@ -2381,11 +2390,11 @@ private:
               KJ_IF_MAYBE(response, answer->redirectedResults) {
                 questionRef->fulfill(kj::mv(*response));
               } else {
-                KJ_FAIL_REQUIRE("`Return.takeFromOtherAnswer` referenced a call that did not "
+                KJ_FAIL_REQUIRE("`Return.takeFromOtherQuestion` referenced a call that did not "
                                 "use `sendResultsTo.yourself`.") { return; }
               }
             } else {
-              KJ_FAIL_REQUIRE("`Return.takeFromOtherAnswer` had invalid answer ID.") { return; }
+              KJ_FAIL_REQUIRE("`Return.takeFromOtherQuestion` had invalid answer ID.") { return; }
             }
 
             break;

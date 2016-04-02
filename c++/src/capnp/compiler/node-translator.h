@@ -287,6 +287,10 @@ public:
 
   kj::Maybe<Orphan<DynamicValue>> compileValue(Expression::Reader src, Type type);
 
+  void fillStructValue(DynamicStruct::Builder builder,
+                       List<Expression::Param>::Reader assignments);
+  // Interprets the given assignments and uses them to fill in the given struct builder.
+
 private:
   Resolver& resolver;
   ErrorReporter& errorReporter;
@@ -294,10 +298,6 @@ private:
 
   Orphan<DynamicValue> compileValueInner(Expression::Reader src, Type type);
   // Helper for compileValue().
-
-  void fillStructValue(DynamicStruct::Builder builder,
-                       List<Expression::Param>::Reader assignments);
-  // Interprets the given assignments and uses them to fill in the given struct builder.
 
   kj::String makeNodeName(Schema node);
   kj::String makeTypeName(Type type);
