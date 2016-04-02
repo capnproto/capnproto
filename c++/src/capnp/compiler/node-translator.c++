@@ -2271,7 +2271,7 @@ template <typename InitBrandFunc>
 uint64_t NodeTranslator::compileParamList(
     kj::StringPtr methodName, uint16_t ordinal, bool isResults,
     Declaration::ParamList::Reader paramList,
-    List<Declaration::BrandParameter>::Reader implicitParams,
+    typename List<Declaration::BrandParameter>::Reader implicitParams,
     InitBrandFunc&& initBrand) {
   switch (paramList.which()) {
     case Declaration::ParamList::NAMED_LIST: {
