@@ -1909,13 +1909,9 @@ private:
          structNode.getPointerCount(), ")\n");
 
     kj::StringTree defineText = kj::strTree(
-        "// ", fullName, "\n"
-        // TODO(msvc): MSVC doen't expect constexprs to have definitions. Remove #if once
-        //   MSVC catches up on constexpr.
-        "#ifndef _MSC_VER\n",
+        "// ", fullName, "\n",
         templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::dataWordSize;\n",
         templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::pointerCount;\n"
-        "#endif\n",
         "#if !CAPNP_LITE\n",
         templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
         templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
