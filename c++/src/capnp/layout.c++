@@ -2362,7 +2362,7 @@ Text::Builder PointerBuilder::initBlob<Text>(ByteCount size) {
   return WireHelpers::initTextPointer(pointer, segment, capTable, size).value;
 }
 template <>
-void PointerBuilder::setBlob<Text>(Text::Reader value, bool canonical) {
+void PointerBuilder::setBlob<Text>(Text::Reader value) {
   WireHelpers::setTextPointer(pointer, segment, capTable, value);
 }
 template <>
@@ -2375,7 +2375,7 @@ Data::Builder PointerBuilder::initBlob<Data>(ByteCount size) {
   return WireHelpers::initDataPointer(pointer, segment, capTable, size).value;
 }
 template <>
-void PointerBuilder::setBlob<Data>(Data::Reader value, bool canonical) {
+void PointerBuilder::setBlob<Data>(Data::Reader value) {
   WireHelpers::setDataPointer(pointer, segment, capTable, value);
 }
 template <>
