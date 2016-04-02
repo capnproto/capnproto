@@ -502,7 +502,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
 
   KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
   kj::AutoCloseFd clientFd(tmpFd);
-  KJ_SYSCALL(connect(clientFd, reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr)));
+  KJ_SYSCALL(connect(clientFd, reinterpret_cast<sockaddr*>(&saddr), saddrLen));
 
   UnixEventPort::FdObserver observer(port, clientFd,
       UnixEventPort::FdObserver::OBSERVE_READ | UnixEventPort::FdObserver::OBSERVE_URGENT);
