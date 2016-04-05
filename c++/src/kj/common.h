@@ -85,6 +85,10 @@
 #undef _GLIBCXX_HAVE_GETS
 #endif
 
+#if defined(_MSC_VER)
+#include <intrin.h>  // __popcnt
+#endif
+
 // =======================================================================================
 
 namespace kj {
@@ -596,6 +600,15 @@ float nan();
 
 inline constexpr bool isNaN(float f) { return f != f; }
 inline constexpr bool isNaN(double f) { return f != f; }
+
+inline int popCount(unsigned int x) {
+#if defined(_MSC_VER)
+  return __popcnt(x);
+  // Note: __popcnt returns unsigned int, but the value is clearly guaranteed to fit into an int
+#else
+  return __builtin_popcount(x);
+#endif
+}
 
 // =======================================================================================
 // Useful fake containers
