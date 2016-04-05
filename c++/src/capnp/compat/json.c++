@@ -20,9 +20,9 @@
 // THE SOFTWARE.
 
 #include "json.h"
-#include <math.h>    // for HUGEVAL to check for overflow in std::strtod
-#include <stdlib.h>  // std::strtod
-#include <errno.h>   // for std::strtod errors
+#include <math.h>    // for HUGEVAL to check for overflow in strtod
+#include <stdlib.h>  // strtod
+#include <errno.h>   // for strtod errors
 #include <unordered_map>
 #include <capnp/orphan.h>
 #include <kj/debug.h>
@@ -518,7 +518,7 @@ public:
     char *endPtr;
 
     errno = 0;
-    double value = std::strtod(numberStr.begin(), &endPtr);
+    double value = strtod(numberStr.begin(), &endPtr);
 
     KJ_ASSERT(endPtr != numberStr.begin(), "strtod should not fail! Is consumeNumber wrong?");
     KJ_REQUIRE((value != HUGE_VAL && value != -HUGE_VAL) || errno != ERANGE,
