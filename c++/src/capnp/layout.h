@@ -29,7 +29,7 @@
 #ifndef CAPNP_LAYOUT_H_
 #define CAPNP_LAYOUT_H_
 
-#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
 #endif
 
