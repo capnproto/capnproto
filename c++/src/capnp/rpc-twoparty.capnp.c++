@@ -351,10 +351,8 @@ namespace rpc {
 namespace twoparty {
 
 // VatId
-#ifndef _MSC_VER
 constexpr uint16_t VatId::_capnpPrivate::dataWordSize;
 constexpr uint16_t VatId::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind VatId::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* VatId::_capnpPrivate::schema;
@@ -362,10 +360,8 @@ constexpr ::capnp::_::RawBrandedSchema const* VatId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // ProvisionId
-#ifndef _MSC_VER
 constexpr uint16_t ProvisionId::_capnpPrivate::dataWordSize;
 constexpr uint16_t ProvisionId::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind ProvisionId::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* ProvisionId::_capnpPrivate::schema;
@@ -373,10 +369,8 @@ constexpr ::capnp::_::RawBrandedSchema const* ProvisionId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // RecipientId
-#ifndef _MSC_VER
 constexpr uint16_t RecipientId::_capnpPrivate::dataWordSize;
 constexpr uint16_t RecipientId::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind RecipientId::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* RecipientId::_capnpPrivate::schema;
@@ -384,10 +378,8 @@ constexpr ::capnp::_::RawBrandedSchema const* RecipientId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // ThirdPartyCapId
-#ifndef _MSC_VER
 constexpr uint16_t ThirdPartyCapId::_capnpPrivate::dataWordSize;
 constexpr uint16_t ThirdPartyCapId::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind ThirdPartyCapId::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* ThirdPartyCapId::_capnpPrivate::schema;
@@ -395,10 +387,8 @@ constexpr ::capnp::_::RawBrandedSchema const* ThirdPartyCapId::_capnpPrivate::br
 #endif  // !CAPNP_LITE
 
 // JoinKeyPart
-#ifndef _MSC_VER
 constexpr uint16_t JoinKeyPart::_capnpPrivate::dataWordSize;
 constexpr uint16_t JoinKeyPart::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind JoinKeyPart::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* JoinKeyPart::_capnpPrivate::schema;
@@ -406,10 +396,8 @@ constexpr ::capnp::_::RawBrandedSchema const* JoinKeyPart::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // JoinResult
-#ifndef _MSC_VER
 constexpr uint16_t JoinResult::_capnpPrivate::dataWordSize;
 constexpr uint16_t JoinResult::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind JoinResult::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* JoinResult::_capnpPrivate::schema;

@@ -765,12 +765,10 @@ inline ::capnp::Orphan<Owner> Persistent<SturdyRef, Owner>::SaveParams::Builder:
 }
 
 // Persistent<SturdyRef, Owner>::SaveParams
-#ifndef _MSC_VER
 template <typename SturdyRef, typename Owner>
 constexpr uint16_t Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::dataWordSize;
 template <typename SturdyRef, typename Owner>
 constexpr uint16_t Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::Kind Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::kind;
@@ -846,12 +844,10 @@ inline ::capnp::Orphan<SturdyRef> Persistent<SturdyRef, Owner>::SaveResults::Bui
 }
 
 // Persistent<SturdyRef, Owner>::SaveResults
-#ifndef _MSC_VER
 template <typename SturdyRef, typename Owner>
 constexpr uint16_t Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::dataWordSize;
 template <typename SturdyRef, typename Owner>
 constexpr uint16_t Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::Kind Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::kind;
@@ -1069,12 +1065,10 @@ inline ::capnp::Orphan<typename  ::capnp::Persistent<InternalRef, InternalOwner>
 }
 
 // RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams
-#ifndef _MSC_VER
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 constexpr uint16_t RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::dataWordSize;
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 constexpr uint16_t RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::kind;
@@ -1198,12 +1192,10 @@ inline ::capnp::Orphan<typename  ::capnp::Persistent<ExternalRef, ExternalOwner>
 }
 
 // RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams
-#ifndef _MSC_VER
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 constexpr uint16_t RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::dataWordSize;
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 constexpr uint16_t RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::kind;
