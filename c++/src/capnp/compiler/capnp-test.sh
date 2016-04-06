@@ -41,11 +41,13 @@ TESTDATA=`dirname "$0"`/../testdata
 $CAPNP encode $SCHEMA TestAllTypes < $TESTDATA/short.txt | cmp $TESTDATA/binary - || fail encode
 $CAPNP encode --flat $SCHEMA TestAllTypes < $TESTDATA/short.txt | cmp $TESTDATA/flat - || fail encode flat
 $CAPNP encode --packed $SCHEMA TestAllTypes < $TESTDATA/short.txt | cmp $TESTDATA/packed - || fail encode packed
+$CAPNP encode --packed --flat $SCHEMA TestAllTypes < $TESTDATA/short.txt | cmp $TESTDATA/packedflat - || fail encode packedflat
 $CAPNP encode $SCHEMA TestAllTypes < $TESTDATA/pretty.txt | cmp $TESTDATA/binary - || fail parse pretty
 
 $CAPNP decode $SCHEMA TestAllTypes < $TESTDATA/binary | cmp $TESTDATA/pretty.txt - || fail decode
 $CAPNP decode --flat $SCHEMA TestAllTypes < $TESTDATA/flat | cmp $TESTDATA/pretty.txt - || fail decode flat
 $CAPNP decode --packed $SCHEMA TestAllTypes < $TESTDATA/packed | cmp $TESTDATA/pretty.txt - || fail decode packed
+$CAPNP decode --packed --flat $SCHEMA TestAllTypes < $TESTDATA/packedflat | cmp $TESTDATA/pretty.txt - || fail decode packedflat
 $CAPNP decode --short $SCHEMA TestAllTypes < $TESTDATA/binary | cmp $TESTDATA/short.txt - || fail decode short
 
 $CAPNP decode $SCHEMA TestAllTypes < $TESTDATA/segmented | cmp $TESTDATA/pretty.txt - || fail decode segmented

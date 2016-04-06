@@ -101,5 +101,5 @@ AC_SUBST([STDLIB_FLAG])
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 
-AC_CONFIG_FILES([Makefile capnp.pc capnp-rpc.pc kj.pc kj-async.pc])
+AC_CONFIG_FILES([Makefile capnp.pc capnp-rpc.pc capnp-json.pc kj.pc kj-async.pc])
 AC_OUTPUT

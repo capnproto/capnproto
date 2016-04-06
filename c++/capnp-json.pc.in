@@ -1,0 +1,11 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: Cap'n Proto JSON
+Description: JSON encoder and decoder for Cap'n Proto objects
+Version: @VERSION@
+Libs: -L${libdir} -lcapnp-json
+Requires: capnp = @VERSION@ kj-async = @VERSION@
+Cflags: -I${includedir}

@@ -29,7 +29,7 @@
 #ifndef CAPNP_LAYOUT_H_
 #define CAPNP_LAYOUT_H_
 
-#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
 #endif
 
@@ -643,7 +643,8 @@ class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline explicit ListBuilder(ElementSize elementSize)
       : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
-        step(0 * BITS / ELEMENTS), elementSize(elementSize) {}
+        step(0 * BITS / ELEMENTS), elementSize(elementSize), structDataSize(0 * BITS),
+        structPointerCount(0 * POINTERS) {}
 
   MSVC_DEFAULT_ASSIGNMENT_WORKAROUND(, ListBuilder)
 

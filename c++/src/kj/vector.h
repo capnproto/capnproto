@@ -103,6 +103,22 @@ public:
     }
   }
 
+  inline void operator=(decltype(nullptr)) {
+    builder = nullptr;
+  }
+
+  inline void clear() {
+    while (builder.size() > 0) {
+      builder.removeLast();
+    }
+  }
+
+  inline void truncate(size_t size) {
+    while (builder.size() > size) {
+      builder.removeLast();
+    }
+  }
+
 private:
   ArrayBuilder<T> builder;
 
