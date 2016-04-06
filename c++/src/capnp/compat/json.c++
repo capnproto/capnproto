@@ -486,7 +486,7 @@ void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn 
           kj::Vector<byte> data(array.size());
           for (auto arrayObject : array) {
             auto x = arrayObject.getNumber();
-            KJ_REQUIRE(byte(x) == x, "Number in array of bytes out of range.");
+            KJ_REQUIRE(byte(x) == x, "Number in byte array is not an integer in [0, 255]");
             data.add(byte(x));
           }
           setFn(Data::Reader(data.asPtr()));
@@ -665,7 +665,7 @@ public:
 
     return kj::arrayPtr(originalPos, wrapped.begin());
   }
-  
+
   void consumeWhitespace() {
     consumeWhile([](char chr) {
       return (
