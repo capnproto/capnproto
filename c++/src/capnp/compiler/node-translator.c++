@@ -1428,6 +1428,9 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
   }
 
   builder.adoptAnnotations(compileAnnotationApplications(decl.getAnnotations(), targetsFlagName));
+
+  if (decl.hasDocComment())
+    builder.setDocComment(decl.getDocComment());
 }
 
 static kj::StringPtr getExpressionTargetName(Expression::Reader exp) {
@@ -1740,6 +1743,8 @@ private:
     // Information about the field declaration.  We don't use Declaration::Reader because it might
     // have come from a Declaration::Param instead.
 
+    kj::Maybe<::capnp::Text::Reader> docComment = nullptr;
+
     kj::Maybe<schema::Field::Builder> schema;
     // Schema for the field.  Initialized when getSchema() is first called.
 
@@ -1776,6 +1781,8 @@ private:
         hasDefaultValue = true;
         fieldDefaultValue = fieldDecl.getDefaultValue().getValue();
       }
+      if (decl.hasDocComment())
+        docComment = decl.getDocComment();
     }
     inline MemberInfo(MemberInfo& parent, uint codeOrder,
                       const Declaration::Param::Reader& decl,
@@ -1802,6 +1809,8 @@ private:
           startByte(decl.getStartByte()), endByte(decl.getEndByte()),
           node(node), unionScope(nullptr) {
       KJ_REQUIRE(decl.which() != Declaration::FIELD);
+      if (decl.hasDocComment())
+        docComment = decl.getDocComment();
     }
 
     schema::Field::Builder getSchema() {
@@ -1815,6 +1824,9 @@ private:
         }
         builder.setName(name);
         builder.setCodeOrder(codeOrder);
+        KJ_IF_MAYBE(docCommentReal, docComment) {
+          builder.setDocComment(*docCommentReal);
+        }
         schema = builder;
         return builder;
       }
