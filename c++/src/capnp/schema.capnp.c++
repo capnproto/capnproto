@@ -3311,10 +3311,8 @@ namespace capnp {
 namespace schema {
 
 // Node
-#ifndef _MSC_VER
 constexpr uint16_t Node::_capnpPrivate::dataWordSize;
 constexpr uint16_t Node::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Node::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Node::_capnpPrivate::schema;
@@ -3322,10 +3320,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Node::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Node::Parameter
-#ifndef _MSC_VER
 constexpr uint16_t Node::Parameter::_capnpPrivate::dataWordSize;
 constexpr uint16_t Node::Parameter::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Node::Parameter::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Node::Parameter::_capnpPrivate::schema;
@@ -3333,10 +3329,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Node::Parameter::_capnpPrivate::br
 #endif  // !CAPNP_LITE
 
 // Node::NestedNode
-#ifndef _MSC_VER
 constexpr uint16_t Node::NestedNode::_capnpPrivate::dataWordSize;
 constexpr uint16_t Node::NestedNode::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Node::NestedNode::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Node::NestedNode::_capnpPrivate::schema;
@@ -3344,10 +3338,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Node::NestedNode::_capnpPrivate::b
 #endif  // !CAPNP_LITE
 
 // Node::Struct
-#ifndef _MSC_VER
 constexpr uint16_t Node::Struct::_capnpPrivate::dataWordSize;
 constexpr uint16_t Node::Struct::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Node::Struct::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Node::Struct::_capnpPrivate::schema;
@@ -3355,10 +3347,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Node::Struct::_capnpPrivate::brand
 #endif  // !CAPNP_LITE
 
 // Node::Enum
-#ifndef _MSC_VER
 constexpr uint16_t Node::Enum::_capnpPrivate::dataWordSize;
 constexpr uint16_t Node::Enum::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Node::Enum::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Node::Enum::_capnpPrivate::schema;
@@ -3366,10 +3356,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Node::Enum::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Node::Interface
-#ifndef _MSC_VER
 constexpr uint16_t Node::Interface::_capnpPrivate::dataWordSize;
 constexpr uint16_t Node::Interface::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Node::Interface::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Node::Interface::_capnpPrivate::schema;
@@ -3377,10 +3365,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Node::Interface::_capnpPrivate::br
 #endif  // !CAPNP_LITE
 
 // Node::Const
-#ifndef _MSC_VER
 constexpr uint16_t Node::Const::_capnpPrivate::dataWordSize;
 constexpr uint16_t Node::Const::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Node::Const::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Node::Const::_capnpPrivate::schema;
@@ -3388,10 +3374,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Node::Const::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Node::Annotation
-#ifndef _MSC_VER
 constexpr uint16_t Node::Annotation::_capnpPrivate::dataWordSize;
 constexpr uint16_t Node::Annotation::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Node::Annotation::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Node::Annotation::_capnpPrivate::schema;
@@ -3399,10 +3383,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Node::Annotation::_capnpPrivate::b
 #endif  // !CAPNP_LITE
 
 // Field
-#ifndef _MSC_VER
 constexpr uint16_t Field::_capnpPrivate::dataWordSize;
 constexpr uint16_t Field::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Field::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Field::_capnpPrivate::schema;
@@ -3413,10 +3395,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Field::_capnpPrivate::brand;
 constexpr  ::uint16_t Field::NO_DISCRIMINANT;
 #endif
 // Field::Slot
-#ifndef _MSC_VER
 constexpr uint16_t Field::Slot::_capnpPrivate::dataWordSize;
 constexpr uint16_t Field::Slot::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Field::Slot::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Field::Slot::_capnpPrivate::schema;
@@ -3424,10 +3404,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Field::Slot::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Field::Group
-#ifndef _MSC_VER
 constexpr uint16_t Field::Group::_capnpPrivate::dataWordSize;
 constexpr uint16_t Field::Group::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Field::Group::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Field::Group::_capnpPrivate::schema;
@@ -3435,10 +3413,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Field::Group::_capnpPrivate::brand
 #endif  // !CAPNP_LITE
 
 // Field::Ordinal
-#ifndef _MSC_VER
 constexpr uint16_t Field::Ordinal::_capnpPrivate::dataWordSize;
 constexpr uint16_t Field::Ordinal::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Field::Ordinal::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Field::Ordinal::_capnpPrivate::schema;
@@ -3446,10 +3422,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Field::Ordinal::_capnpPrivate::bra
 #endif  // !CAPNP_LITE
 
 // Enumerant
-#ifndef _MSC_VER
 constexpr uint16_t Enumerant::_capnpPrivate::dataWordSize;
 constexpr uint16_t Enumerant::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Enumerant::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Enumerant::_capnpPrivate::schema;
@@ -3457,10 +3431,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Enumerant::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Superclass
-#ifndef _MSC_VER
 constexpr uint16_t Superclass::_capnpPrivate::dataWordSize;
 constexpr uint16_t Superclass::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Superclass::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Superclass::_capnpPrivate::schema;
@@ -3468,10 +3440,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Superclass::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Method
-#ifndef _MSC_VER
 constexpr uint16_t Method::_capnpPrivate::dataWordSize;
 constexpr uint16_t Method::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Method::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Method::_capnpPrivate::schema;
@@ -3479,10 +3449,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Method::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Type
-#ifndef _MSC_VER
 constexpr uint16_t Type::_capnpPrivate::dataWordSize;
 constexpr uint16_t Type::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Type::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Type::_capnpPrivate::schema;
@@ -3490,10 +3458,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Type::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Type::List
-#ifndef _MSC_VER
 constexpr uint16_t Type::List::_capnpPrivate::dataWordSize;
 constexpr uint16_t Type::List::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Type::List::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Type::List::_capnpPrivate::schema;
@@ -3501,10 +3467,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Type::List::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Type::Enum
-#ifndef _MSC_VER
 constexpr uint16_t Type::Enum::_capnpPrivate::dataWordSize;
 constexpr uint16_t Type::Enum::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Type::Enum::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Type::Enum::_capnpPrivate::schema;
@@ -3512,10 +3476,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Type::Enum::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Type::Struct
-#ifndef _MSC_VER
 constexpr uint16_t Type::Struct::_capnpPrivate::dataWordSize;
 constexpr uint16_t Type::Struct::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Type::Struct::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Type::Struct::_capnpPrivate::schema;
@@ -3523,10 +3485,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Type::Struct::_capnpPrivate::brand
 #endif  // !CAPNP_LITE
 
 // Type::Interface
-#ifndef _MSC_VER
 constexpr uint16_t Type::Interface::_capnpPrivate::dataWordSize;
 constexpr uint16_t Type::Interface::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Type::Interface::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Type::Interface::_capnpPrivate::schema;
@@ -3534,10 +3494,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Type::Interface::_capnpPrivate::br
 #endif  // !CAPNP_LITE
 
 // Type::AnyPointer
-#ifndef _MSC_VER
 constexpr uint16_t Type::AnyPointer::_capnpPrivate::dataWordSize;
 constexpr uint16_t Type::AnyPointer::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Type::AnyPointer::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Type::AnyPointer::_capnpPrivate::schema;
@@ -3545,10 +3503,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Type::AnyPointer::_capnpPrivate::b
 #endif  // !CAPNP_LITE
 
 // Type::AnyPointer::Unconstrained
-#ifndef _MSC_VER
 constexpr uint16_t Type::AnyPointer::Unconstrained::_capnpPrivate::dataWordSize;
 constexpr uint16_t Type::AnyPointer::Unconstrained::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Type::AnyPointer::Unconstrained::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Type::AnyPointer::Unconstrained::_capnpPrivate::schema;
@@ -3556,10 +3512,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Type::AnyPointer::Unconstrained::_
 #endif  // !CAPNP_LITE
 
 // Type::AnyPointer::Parameter
-#ifndef _MSC_VER
 constexpr uint16_t Type::AnyPointer::Parameter::_capnpPrivate::dataWordSize;
 constexpr uint16_t Type::AnyPointer::Parameter::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Type::AnyPointer::Parameter::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Type::AnyPointer::Parameter::_capnpPrivate::schema;
@@ -3567,10 +3521,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Type::AnyPointer::Parameter::_capn
 #endif  // !CAPNP_LITE
 
 // Type::AnyPointer::ImplicitMethodParameter
-#ifndef _MSC_VER
 constexpr uint16_t Type::AnyPointer::ImplicitMethodParameter::_capnpPrivate::dataWordSize;
 constexpr uint16_t Type::AnyPointer::ImplicitMethodParameter::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Type::AnyPointer::ImplicitMethodParameter::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Type::AnyPointer::ImplicitMethodParameter::_capnpPrivate::schema;
@@ -3578,10 +3530,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Type::AnyPointer::ImplicitMethodPa
 #endif  // !CAPNP_LITE
 
 // Brand
-#ifndef _MSC_VER
 constexpr uint16_t Brand::_capnpPrivate::dataWordSize;
 constexpr uint16_t Brand::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Brand::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Brand::_capnpPrivate::schema;
@@ -3589,10 +3539,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Brand::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Brand::Scope
-#ifndef _MSC_VER
 constexpr uint16_t Brand::Scope::_capnpPrivate::dataWordSize;
 constexpr uint16_t Brand::Scope::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Brand::Scope::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Brand::Scope::_capnpPrivate::schema;
@@ -3600,10 +3548,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Brand::Scope::_capnpPrivate::brand
 #endif  // !CAPNP_LITE
 
 // Brand::Binding
-#ifndef _MSC_VER
 constexpr uint16_t Brand::Binding::_capnpPrivate::dataWordSize;
 constexpr uint16_t Brand::Binding::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Brand::Binding::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Brand::Binding::_capnpPrivate::schema;
@@ -3611,10 +3557,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Brand::Binding::_capnpPrivate::bra
 #endif  // !CAPNP_LITE
 
 // Value
-#ifndef _MSC_VER
 constexpr uint16_t Value::_capnpPrivate::dataWordSize;
 constexpr uint16_t Value::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Value::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Value::_capnpPrivate::schema;
@@ -3622,10 +3566,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Value::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Annotation
-#ifndef _MSC_VER
 constexpr uint16_t Annotation::_capnpPrivate::dataWordSize;
 constexpr uint16_t Annotation::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Annotation::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Annotation::_capnpPrivate::schema;
@@ -3633,10 +3575,8 @@ constexpr ::capnp::_::RawBrandedSchema const* Annotation::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // CodeGeneratorRequest
-#ifndef _MSC_VER
 constexpr uint16_t CodeGeneratorRequest::_capnpPrivate::dataWordSize;
 constexpr uint16_t CodeGeneratorRequest::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind CodeGeneratorRequest::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* CodeGeneratorRequest::_capnpPrivate::schema;
@@ -3644,10 +3584,8 @@ constexpr ::capnp::_::RawBrandedSchema const* CodeGeneratorRequest::_capnpPrivat
 #endif  // !CAPNP_LITE
 
 // CodeGeneratorRequest::RequestedFile
-#ifndef _MSC_VER
 constexpr uint16_t CodeGeneratorRequest::RequestedFile::_capnpPrivate::dataWordSize;
 constexpr uint16_t CodeGeneratorRequest::RequestedFile::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind CodeGeneratorRequest::RequestedFile::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* CodeGeneratorRequest::RequestedFile::_capnpPrivate::schema;
@@ -3655,10 +3593,8 @@ constexpr ::capnp::_::RawBrandedSchema const* CodeGeneratorRequest::RequestedFil
 #endif  // !CAPNP_LITE
 
 // CodeGeneratorRequest::RequestedFile::Import
-#ifndef _MSC_VER
 constexpr uint16_t CodeGeneratorRequest::RequestedFile::Import::_capnpPrivate::dataWordSize;
 constexpr uint16_t CodeGeneratorRequest::RequestedFile::Import::_capnpPrivate::pointerCount;
-#endif
 #if !CAPNP_LITE
 constexpr ::capnp::Kind CodeGeneratorRequest::RequestedFile::Import::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* CodeGeneratorRequest::RequestedFile::Import::_capnpPrivate::schema;

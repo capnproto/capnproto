@@ -98,7 +98,7 @@ public:
     }
 
     void addHolesAtEnd(UIntType lgSize, UIntType offset,
-                       UIntType limitLgSize = sizeof(holes) / sizeof(holes[0])) {
+                       UIntType limitLgSize = sizeof(HoleSet::holes) / sizeof(HoleSet::holes[0])) {
       // Add new holes of progressively larger sizes in the range [lgSize, limitLgSize) starting
       // from the given offset.  The idea is that you just allocated an lgSize-sized field from
       // an limitLgSize-sized space, such as a newly-added word on the end of the data segment.
@@ -2271,7 +2271,7 @@ template <typename InitBrandFunc>
 uint64_t NodeTranslator::compileParamList(
     kj::StringPtr methodName, uint16_t ordinal, bool isResults,
     Declaration::ParamList::Reader paramList,
-    List<Declaration::BrandParameter>::Reader implicitParams,
+    typename List<Declaration::BrandParameter>::Reader implicitParams,
     InitBrandFunc&& initBrand) {
   switch (paramList.which()) {
     case Declaration::ParamList::NAMED_LIST: {

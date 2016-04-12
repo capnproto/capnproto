@@ -23,7 +23,9 @@
 #include "md5.h"
 #include <capnp/dynamic.h>
 #include <kj/debug.h>
+#if !_MSC_VER
 #include <unistd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -406,7 +408,7 @@ static Declaration::Builder initMemberDecl(
 }
 
 template <typename BuilderType>
-void initLocation(kj::parse::Span<List<Token>::Reader::Iterator> location,
+void initLocation(kj::parse::Span<typename List<Token>::Reader::Iterator> location,
                   BuilderType builder) {
   if (location.begin() < location.end()) {
     builder.setStartByte(location.begin()->getStartByte());

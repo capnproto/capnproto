@@ -138,7 +138,7 @@ struct AnyPointer {
     friend struct AnyPointer;
     friend class Orphanage;
     friend class CapReaderContext;
-    friend class _::PointerHelpers<AnyPointer>;
+    friend struct _::PointerHelpers<AnyPointer>;
   };
 
   class Builder {
@@ -255,7 +255,7 @@ struct AnyPointer {
     _::PointerBuilder builder;
     friend class Orphanage;
     friend class CapBuilderContext;
-    friend class _::PointerHelpers<AnyPointer>;
+    friend struct _::PointerHelpers<AnyPointer>;
   };
 
 #if !CAPNP_LITE
@@ -452,11 +452,9 @@ public:
   Reader() = default;
   inline Reader(_::StructReader reader): _reader(reader) {}
 
-#if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
   template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromReader<T>) == Kind::STRUCT>>
   inline Reader(T&& value)
       : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
-#endif
 
   kj::ArrayPtr<const byte> getDataSection() {
     return _reader.getDataSectionAsBlob();

@@ -160,7 +160,7 @@ private:
 
 template <typename Input, typename Output>
 template <typename ParserImpl>
-constexpr ParserRef<Input, Output>::WrapperImpl<ParserImpl>
+constexpr typename ParserRef<Input, Output>::template WrapperImpl<ParserImpl>
 ParserRef<Input, Output>::WrapperImplInstance<ParserImpl>::instance;
 
 template <typename Input, typename ParserImpl>

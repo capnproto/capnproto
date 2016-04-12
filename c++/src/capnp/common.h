@@ -63,7 +63,7 @@ struct Void {
   inline constexpr bool operator!=(Void other) const { return false; }
 };
 
-static KJ_CONSTEXPR(const) Void VOID = Void();
+static constexpr Void VOID = Void();
 // Constant value for `Void`,  which is an empty struct.
 
 inline kj::StringPtr KJ_STRINGIFY(Void) { return "void"; }
