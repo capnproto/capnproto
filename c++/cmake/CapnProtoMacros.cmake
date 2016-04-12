@@ -26,6 +26,14 @@ function(CAPNP_GENERATE_CPP SOURCES HEADERS)
   if(NOT ARGN)
     message(SEND_ERROR "CAPNP_GENERATE_CPP() called without any source files.")
   endif()
+  set(tool_depends ${EMPTY_STRING})
+  #Use cmake targets available
+  if(TARGET capnp_tool)
+    set(CAPNP_EXECUTABLE capnp_tool)
+    GET_TARGET_PROPERTY(CAPNPC_CXX_EXECUTABLE capnpc_cpp CAPNPC_CXX_EXECUTABLE)
+    GET_TARGET_PROPERTY(CAPNP_INCLUDE_DIRECTORY capnp_tool CAPNP_INCLUDE_DIRECTORY)
+    list(APPEND tool_depends capnp_tool capnpc_cpp)
+  endif()
   if(NOT CAPNP_EXECUTABLE)
     message(SEND_ERROR "Could not locate capnp executable (CAPNP_EXECUTABLE).")
   endif()
@@ -92,7 +100,7 @@ function(CAPNP_GENERATE_CPP SOURCES HEADERS)
           ${include_path}
           ${CAPNPC_FLAGS}
           ${file_path}
-      DEPENDS "${schema_file}"
+      DEPENDS "${schema_file}" ${tool_depends}
       COMMENT "Compiling Cap'n Proto schema ${schema_file}"
       VERBATIM
     )
