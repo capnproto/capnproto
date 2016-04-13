@@ -57,6 +57,7 @@ set(kj-std_headers
   std/iostream.h
 )
 add_library(kj ${kj_sources})
+add_library(CapnProto::kj ALIAS kj)
 if(UNIX)
   target_link_libraries(kj PUBLIC pthread)
 endif()
@@ -82,6 +83,7 @@ set(kj-test-compat_headers
   compat/gtest.h
 )
 add_library(kj-test ${kj-test_sources})
+add_library(CapnProto::kj-test ALIAS kj-test)
 target_link_libraries(kj-test kj)
 install(TARGETS kj-test ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${kj-test_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
@@ -103,6 +105,7 @@ set(kj-async_headers
 )
 if(NOT CAPNP_LITE)
   add_library(kj-async ${kj-async_sources})
+  add_library(CapnProto::kj-async ALIAS kj-async)
   target_link_libraries(kj-async kj)
   if(UNIX)
     # external clients of this library need to link to pthreads
