@@ -58,7 +58,10 @@ set(capnp_schemas
 add_library(capnp ${capnp_sources})
 target_link_libraries(capnp kj)
 #make sure external consumers don't need to manually set the include dirs
-target_include_directories(capnp INTERFACE $<INSTALL_INTERFACE:include>)
+target_include_directories(capnp INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+  $<INSTALL_INTERFACE:include>
+)
 install(TARGETS capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${capnp_headers} ${capnp_schemas} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp")
 

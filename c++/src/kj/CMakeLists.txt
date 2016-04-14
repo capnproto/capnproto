@@ -63,7 +63,10 @@ endif()
 #make sure the lite flag propagates to all users (internal + external) of this library
 target_compile_definitions(kj PUBLIC ${CAPNP_LITE_FLAG})
 #make sure external consumers don't need to manually set the include dirs
-target_include_directories(kj INTERFACE $<INSTALL_INTERFACE:include>)
+target_include_directories(kj INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+  $<INSTALL_INTERFACE:include>
+)
 install(TARGETS kj ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${kj_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 install(FILES ${kj-parse_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/parse")
