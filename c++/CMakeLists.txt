@@ -88,19 +88,19 @@ add_subdirectory(src)
 
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfigVersion.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfigVersion.cmake"
   VERSION ${VERSION}
   COMPATIBILITY AnyNewerVersion
 )
 set(CONFIG_PACKAGE_LOCATION ${CMAKE_INSTALL_LIBDIR}/cmake/CapnProto)
 
 configure_package_config_file(cmake/CapnProtoConfig.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfig.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfig.cmake
   INSTALL_DESTINATION ${CONFIG_PACKAGE_LOCATION}
   PATH_VARS CMAKE_INSTALL_FULL_INCLUDEDIR
 )
 export(EXPORT CapnProtoTargets
-  FILE "${CMAKE_CURRENT_BINARY_DIR}/CapnProtoTargets.cmake"
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoTargets.cmake"
   NAMESPACE CapnProto::
 )
 install(EXPORT CapnProtoTargets
@@ -110,12 +110,12 @@ install(EXPORT CapnProtoTargets
 )
 install(FILES
   cmake/CapnProtoMacros.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfig.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfigVersion.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfig.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfigVersion.cmake
   DESTINATION ${CONFIG_PACKAGE_LOCATION}
 )
 #install CapnProtoMacros for CapnProtoConfig.cmake build directory consumers
-configure_file(cmake/CapnProtoMacros.cmake CapnProtoMacros.cmake COPYONLY)
+configure_file(cmake/CapnProtoMacros.cmake cmake/CapnProtoMacros.cmake COPYONLY)
 
 if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
   # Variables for pkg-config files
