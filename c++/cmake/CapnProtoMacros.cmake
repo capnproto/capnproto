@@ -3,6 +3,7 @@
 # Example usage:
 #   find_package(CapnProto)
 #   capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS schema.capnp)
+#   include_directories(${CMAKE_CURRENT_BINARY_DIR})
 #   add_executable(foo main.cpp ${CAPNP_SRCS})
 #   target_link_libraries(foo CapnProto::capnp)
 #
