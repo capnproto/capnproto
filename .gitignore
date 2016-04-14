@@ -70,5 +70,8 @@
 /c++/m4/lt~obsolete.m4
 /c++/samples/addressbook
 
+#cmake artefacts
+/c++/build
+
 # editor artefacts
 *~
