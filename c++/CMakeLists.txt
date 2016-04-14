@@ -46,6 +46,10 @@ if(CAPNP_LITE AND BUILD_TOOLS)
   message(WARNING "Command-line tools will not be built with CAPNP_LITE.")
 endif()
 
+if(BUILD_TOOLS AND EXTERNAL_CAPNP)
+  message(SEND_ERROR "EXTERNAL_CAPNP cannot be set with BUILD_TOOLS.")
+endif()
+
 if(MSVC AND NOT CAPNP_LITE)
   message(SEND_ERROR "Building with MSVC is only supported with CAPNP_LITE.")
 endif()
