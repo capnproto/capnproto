@@ -93,7 +93,7 @@ set(capnp-rpc_schemas
 )
 if(NOT CAPNP_LITE)
   add_library(capnp-rpc ${capnp-rpc_sources})
-  target_link_libraries(capnp-rpc kj-async kj)
+  target_link_libraries(capnp-rpc capnp kj-async kj)
   install(TARGETS capnp-rpc ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${capnp-rpc_headers} ${capnp-rpc_schemas} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp")
 endif()
