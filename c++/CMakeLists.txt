@@ -114,6 +114,8 @@ install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/CapnProtoConfigVersion.cmake
   DESTINATION ${CONFIG_PACKAGE_LOCATION}
 )
+#install CapnProtoMacros for CapnProtoConfig.cmake build directory consumers
+configure_file(cmake/CapnProtoMacros.cmake CapnProtoMacros.cmake COPYONLY)
 
 if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
   # Variables for pkg-config files
