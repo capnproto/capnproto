@@ -285,9 +285,14 @@ class PtmfHelper {
 #undef BODY
 
   void* apply(void* obj) {
+#if defined(__arm__) || defined(__mips__) || defined(__aarch64__)
+    if (adj & 1) {
+      ptrdiff_t voff = (ptrdiff_t)ptr;
+#else
     ptrdiff_t voff = (ptrdiff_t)ptr;
     if (voff & 1) {
       voff &= ~1;
+#endif
       return *(void**)(*(char**)obj + voff);
     } else {
       return ptr;
