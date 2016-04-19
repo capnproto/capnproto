@@ -214,7 +214,7 @@ KJ_TEST("decode all types") {
   CASE(R"({"int32Field":"2147483647"})", root.getInt32Field() == 2147483647);
   CASE(R"({"int64Field":-9007199254740992})", root.getInt64Field() == -9007199254740992LL);
   CASE(R"({"int64Field":9007199254740991})", root.getInt64Field() == 9007199254740991LL);
-  CASE(R"({"int64Field":"-9223372036854775808"})", root.getInt64Field() == -9223372036854775808LL);
+  CASE(R"({"int64Field":"-9223372036854775808"})", root.getInt64Field() == -9223372036854775808ULL);
   CASE(R"({"int64Field":"9223372036854775807"})", root.getInt64Field() == 9223372036854775807LL);
   CASE_THROW(R"({"int64Field":"-9223372036854775809"})", "Value out-of-range");
   CASE_THROW(R"({"int64Field":"9223372036854775808"})", "Value out-of-range");
@@ -230,8 +230,8 @@ KJ_TEST("decode all types") {
   CASE(R"({"uInt32Field":"0"})", root.getUInt32Field() == 0);
   CASE_THROW(R"({"uInt32Field":"42949672956"})", "Value out-of-range");
   CASE_THROW(R"({"uInt32Field":-1})", "Value out-of-range");
-  CASE(R"({"uInt64Field":9007199254740991})", root.getUInt64Field() == 9007199254740991);
-  CASE(R"({"uInt64Field":"18446744073709551615"})", root.getUInt64Field() == 18446744073709551615);
+  CASE(R"({"uInt64Field":9007199254740991})", root.getUInt64Field() == 9007199254740991ULL);
+  CASE(R"({"uInt64Field":"18446744073709551615"})", root.getUInt64Field() == 18446744073709551615ULL);
   CASE(R"({"uInt64Field":"0"})", root.getUInt64Field() == 0);
   CASE_THROW(R"({"uInt64Field":"18446744073709551616"})", "Value out-of-range");
   CASE(R"({"float32Field":0})", root.getFloat32Field() == 0);

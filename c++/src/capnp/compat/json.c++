@@ -529,6 +529,12 @@ void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn 
           KJ_FAIL_REQUIRE("Expected object value");
       }
       break;
+    case schema::Type::INTERFACE:
+      KJ_FAIL_REQUIRE("don't know how to JSON-encode capabilities; "
+                      "JsonCodec::Handler not implemented yet :(");
+    case schema::Type::ANY_POINTER:
+      KJ_FAIL_REQUIRE("don't know how to JSON-encode AnyPointer; "
+                      "JsonCodec::Handler not implemented yet :(");
   }
 }
 } // namespace
