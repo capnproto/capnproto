@@ -26,6 +26,10 @@
 namespace kj {
 namespace {
 
+TEST(Async, GetFunctorStartAddress) {
+  EXPECT_TRUE(nullptr != _::GetFunctorStartAddress<>::apply([](){return 0;}));
+}
+
 TEST(Async, EvalVoid) {
   EventLoop loop;
   WaitScope waitScope(loop);

@@ -230,7 +230,7 @@ private:
   template <typename InitBrandFunc>
   uint64_t compileParamList(kj::StringPtr methodName, uint16_t ordinal, bool isResults,
                             Declaration::ParamList::Reader paramList,
-                            List<Declaration::BrandParameter>::Reader implicitParams,
+                            typename List<Declaration::BrandParameter>::Reader implicitParams,
                             InitBrandFunc&& initBrand);
   // Compile a param (or result) list and return the type ID of the struct type.
 

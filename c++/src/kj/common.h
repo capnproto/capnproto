@@ -85,6 +85,10 @@
 #undef _GLIBCXX_HAVE_GETS
 #endif
 
+#if defined(_MSC_VER)
+#include <intrin.h>  // __popcnt
+#endif
+
 // =======================================================================================
 
 namespace kj {
@@ -472,7 +476,7 @@ using MinType = typename MinType_<T, U, sizeof(T) <= sizeof(U)>::Type;
 // Resolves to the smaller of the two input types.
 
 template <typename T, typename U>
-inline KJ_CONSTEXPR() auto min(T&& a, U&& b) -> MinType<Decay<T>, Decay<U>> {
+inline constexpr auto min(T&& a, U&& b) -> MinType<Decay<T>, Decay<U>> {
   return a < b ? MinType<Decay<T>, Decay<U>>(a) : MinType<Decay<T>, Decay<U>>(b);
 }
 
@@ -485,7 +489,7 @@ using MaxType = typename MaxType_<T, U, sizeof(T) >= sizeof(U)>::Type;
 // Resolves to the larger of the two input types.
 
 template <typename T, typename U>
-inline KJ_CONSTEXPR() auto max(T&& a, U&& b) -> MaxType<Decay<T>, Decay<U>> {
+inline constexpr auto max(T&& a, U&& b) -> MaxType<Decay<T>, Decay<U>> {
   return a > b ? MaxType<Decay<T>, Decay<U>>(a) : MaxType<Decay<T>, Decay<U>>(b);
 }
 
@@ -596,6 +600,15 @@ float nan();
 
 inline constexpr bool isNaN(float f) { return f != f; }
 inline constexpr bool isNaN(double f) { return f != f; }
+
+inline int popCount(unsigned int x) {
+#if defined(_MSC_VER)
+  return __popcnt(x);
+  // Note: __popcnt returns unsigned int, but the value is clearly guaranteed to fit into an int
+#else
+  return __builtin_popcount(x);
+#endif
+}
 
 // =======================================================================================
 // Useful fake containers

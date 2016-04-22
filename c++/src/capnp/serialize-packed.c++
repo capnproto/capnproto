@@ -483,7 +483,7 @@ size_t computeUnpackedSizeInWords(kj::ArrayPtr<const byte> packedBytes) {
   size_t total = 0;
   while (ptr < end) {
     uint tag = *ptr;
-    size_t count = __builtin_popcount(tag);
+    size_t count = kj::popCount(tag);
     total += 1;
     KJ_REQUIRE(end - ptr >= count, "invalid packed data");
     ptr += count + 1;
