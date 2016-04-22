@@ -379,13 +379,214 @@ void JsonCodec::encodeField(StructSchema::Field field, DynamicValue::Reader inpu
   encode(input, field.getType(), output);
 }
 
+namespace {
+int64_t parseInt64(kj::StringPtr s) {
+  char *endPtr;
+  errno = 0;
+  int64_t value = std::strtoll(s.begin(), &endPtr, 10);
+  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
+  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
+  return value;
+}
+
+uint64_t parseUInt64(kj::StringPtr s) {
+  char *endPtr;
+  errno = 0;
+  uint64_t value = std::strtoull(s.begin(), &endPtr, 10);
+  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
+  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
+  return value;
+}
+
+double parseFloat64(kj::StringPtr s) {
+  char *endPtr;
+  errno = 0;
+  double value = std::strtod(s.begin(), &endPtr);
+  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid floating number", s);
+  return value;
+}
+
+template <typename SetFn, typename DecodeArrayFn, typename DecodeObjectFn>
+void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn decodeArrayFn,
+    DecodeObjectFn decodeObjectFn) {
+  // This code relies on conversions in DynamicValue::Reader::as<T>.
+  switch(type.which()) {
+    case schema::Type::VOID:
+      break;
+    case schema::Type::BOOL:
+      switch (value.which()) {
+        case JsonValue::BOOLEAN:
+          setFn(value.getBoolean());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected boolean value");
+      }
+      break;
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+      // Relies on range check in DynamicValue::Reader::as<IntType>
+      switch (value.which()) {
+        case JsonValue::NUMBER:
+          setFn(value.getNumber());
+          break;
+        case JsonValue::STRING:
+          setFn(parseInt64(value.getString()));
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected integer value");
+      }
+      break;
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+      // Relies on range check in DynamicValue::Reader::as<IntType>
+      switch (value.which()) {
+        case JsonValue::NUMBER:
+          setFn(value.getNumber());
+          break;
+        case JsonValue::STRING:
+          setFn(parseUInt64(value.getString()));
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected integer value");
+      }
+      break;
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+      switch (value.which()) {
+        case JsonValue::NULL_:
+          setFn(kj::nan());
+          break;
+        case JsonValue::NUMBER:
+          setFn(value.getNumber());
+          break;
+        case JsonValue::STRING:
+          setFn(parseFloat64(value.getString()));
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected float value");
+      }
+      break;
+    case schema::Type::TEXT:
+      switch (value.which()) {
+        case JsonValue::STRING:
+          setFn(value.getString());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected text value");
+      }
+      break;
+    case schema::Type::DATA:
+      switch (value.which()) {
+        case JsonValue::ARRAY: {
+          auto array = value.getArray();
+          kj::Vector<byte> data(array.size());
+          for (auto arrayObject : array) {
+            auto x = arrayObject.getNumber();
+            KJ_REQUIRE(byte(x) == x, "Number in byte array is not an integer in [0, 255]");
+            data.add(byte(x));
+          }
+          setFn(Data::Reader(data.asPtr()));
+          break;
+        }
+        default:
+          KJ_FAIL_REQUIRE("Expected data value");
+      }
+      break;
+    case schema::Type::LIST:
+      switch (value.which()) {
+        case JsonValue::NULL_:
+          // nothing to do
+          break;
+        case JsonValue::ARRAY:
+          decodeArrayFn(value.getArray());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected list value");
+      }
+      break;
+    case schema::Type::ENUM:
+      switch (value.which()) {
+        case JsonValue::STRING:
+          setFn(value.getString());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected enum value");
+      }
+      break;
+    case schema::Type::STRUCT:
+      switch (value.which()) {
+        case JsonValue::NULL_:
+          // nothing to do
+          break;
+        case JsonValue::OBJECT:
+          decodeObjectFn(value.getObject());
+          break;
+        default:
+          KJ_FAIL_REQUIRE("Expected object value");
+      }
+      break;
+    case schema::Type::INTERFACE:
+      KJ_FAIL_REQUIRE("don't know how to JSON-encode capabilities; "
+                      "JsonCodec::Handler not implemented yet :(");
+    case schema::Type::ANY_POINTER:
+      KJ_FAIL_REQUIRE("don't know how to JSON-encode AnyPointer; "
+                      "JsonCodec::Handler not implemented yet :(");
+  }
+}
+} // namespace
+
+void JsonCodec::decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output) const {
+  KJ_ASSERT(input.size() == output.size(), "Builder was not initialized to input size");
+  auto type = output.getSchema().getElementType();
+  for (auto i = 0; i < input.size(); i++) {
+    decodeField(type, input[i],
+        [&](DynamicValue::Reader value) { output.set(i, value); },
+        [&](List<JsonValue>::Reader array) {
+          decodeArray(array, output.init(i, array.size()).as<DynamicList>());
+        },
+        [&](List<JsonValue::Field>::Reader object) {
+          decodeObject(object, output[i].as<DynamicStruct>());
+        });
+  }
+}
+
+void JsonCodec::decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct::Builder output)
+    const {
+  for (auto field : input) {
+    KJ_IF_MAYBE(fieldSchema, output.getSchema().findFieldByName(field.getName())) {
+      decodeField((*fieldSchema).getType(), field.getValue(),
+          [&](DynamicValue::Reader value) { output.set(*fieldSchema, value); },
+          [&](List<JsonValue>::Reader array) {
+            decodeArray(array, output.init(*fieldSchema, array.size()).as<DynamicList>());
+          },
+          [&](List<JsonValue::Field>::Reader object) {
+            decodeObject(object, output.init(*fieldSchema).as<DynamicStruct>());
+          });
+    } else {
+      // Unknown json fields are ignored to allow schema evolution
+    }
+  }
+}
+
 void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) const {
-  KJ_FAIL_ASSERT("JSON decode not implement yet. :(");
+  // TODO(soon): type and field handlers
+  switch (input.which()) {
+    case JsonValue::OBJECT:
+      decodeObject(input.getObject(), output);
+      break;
+    default:
+      KJ_FAIL_REQUIRE("Top level json value must be object");
+  };
 }
 
 Orphan<DynamicValue> JsonCodec::decode(
     JsonValue::Reader input, Type type, Orphanage orphanage) const {
-  KJ_FAIL_ASSERT("JSON decode not implement yet. :(");
+  // TODO(soon)
+  KJ_FAIL_ASSERT("JSON decode into orphanage not implement yet. :(");
 }
 
 // -----------------------------------------------------------------------------
@@ -470,7 +671,7 @@ public:
 
     return kj::arrayPtr(originalPos, wrapped.begin());
   }
-  
+
   void consumeWhitespace() {
     consumeWhile([](char chr) {
       return (

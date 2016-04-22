@@ -14,6 +14,7 @@ Ben Laurie <ben@links.org>: discovered and responsibly disclosed security bugs
 Kamal Marhubi <kamal@marhubi.com>: JSON parser
 Oliver Kuckertz <oliver.kuckertz@mologie.de>: FdObserver POLLPRI support
 Harris Hancock <vortrab@gmail.com>: MSVC support
+Branislav Katreniak <branislav.katreniak@digitalstrom.com>: JSON decode
 
 This file does not list people who maintain their own Cap'n Proto
 implementations as separate projects.  Those people are awesome too!  :)
