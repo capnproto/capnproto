@@ -386,7 +386,7 @@ namespace {
 int64_t parseInt64(kj::StringPtr s) {
   char *endPtr;
   errno = 0;
-  int64_t value = std::strtoll(s.begin(), &endPtr, 10);
+  int64_t value = strtoll(s.begin(), &endPtr, 10);
   KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
   KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
   return value;
@@ -395,7 +395,7 @@ int64_t parseInt64(kj::StringPtr s) {
 uint64_t parseUInt64(kj::StringPtr s) {
   char *endPtr;
   errno = 0;
-  uint64_t value = std::strtoull(s.begin(), &endPtr, 10);
+  uint64_t value = strtoull(s.begin(), &endPtr, 10);
   KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
   KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
   return value;
@@ -404,7 +404,7 @@ uint64_t parseUInt64(kj::StringPtr s) {
 double parseFloat64(kj::StringPtr s) {
   char *endPtr;
   errno = 0;
-  double value = std::strtod(s.begin(), &endPtr);
+  double value = strtod(s.begin(), &endPtr);
   KJ_REQUIRE(endPtr == s.end(), "String does not contain valid floating number", s);
   return value;
 }
