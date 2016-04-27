@@ -142,7 +142,7 @@ if(NOT CAPNP_LITE)
   install(FILES ${capnpc_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp")
 endif()
 
-if(BUILD_TOOLS AND NOT CAPNP_LITE)
+if(NOT CAPNP_LITE)
   add_executable(capnp_tool
     compiler/module-loader.c++
     compiler/capnp.c++
@@ -174,7 +174,7 @@ if(BUILD_TOOLS AND NOT CAPNP_LITE)
 
   # Symlink capnpc -> capnp
   install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc\")")
-endif()  # BUILD_TOOLS AND NOT CAPNP_LITE
+endif()  # NOT CAPNP_LITE
 
 # Tests ========================================================================
 
