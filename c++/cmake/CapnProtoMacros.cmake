@@ -5,10 +5,10 @@
 #   capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS schema.capnp)
 #   include_directories(${CMAKE_CURRENT_BINARY_DIR})
 #   add_executable(foo main.cpp ${CAPNP_SRCS})
-#   target_link_libraries(foo CapnProto::capnp)
+#   target_link_libraries(foo CapnProto::capnp-rpc)
 #
-#  If you are using not using the RPC features you can remove
-#  'CapnProto::capnp-rpc' from the target_link_libraries call
+#  If you are using not using the RPC features you can use
+#  'CapnProto::capnp' in target_link_libraries call
 #
 # Configuration variables (optional):
 #   CAPNPC_OUTPUT_DIR

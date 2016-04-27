@@ -56,6 +56,7 @@ endif()
 
 if(CAPNP_LITE)
   set(CAPNP_LITE_FLAG "-DCAPNP_LITE")
+  # This flag is attached as PUBLIC target_compile_definition to kj target
 else()
   set(CAPNP_LITE_FLAG)
 endif()
