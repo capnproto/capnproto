@@ -2082,7 +2082,7 @@ Orphan<DynamicList> Orphan<DynamicValue>::releaseAs<DynamicList>() {
 
 template <>
 Orphan<DynamicValue> Orphanage::newOrphanCopy<DynamicValue::Reader>(
-    const DynamicValue::Reader& copyFrom) const {
+    DynamicValue::Reader copyFrom) const {
   switch (copyFrom.getType()) {
     case DynamicValue::UNKNOWN: return nullptr;
     case DynamicValue::VOID: return copyFrom.voidValue;

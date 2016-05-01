@@ -376,7 +376,7 @@ private:
   }
   Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
                                   Orphanage orphanage) const override final {
-    return decode(codec, input);
+    return orphanage.newOrphanCopy(decode(codec, input));
   }
   friend class JsonCodec;
 };

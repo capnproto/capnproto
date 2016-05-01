@@ -669,6 +669,28 @@ KJ_TEST("register field handler") {
   KJ_EXPECT(json.encode(root) == "{\"corge\":Frob(123,\"efg\"),\"baz\":\"abcd\"}");
 }
 
+class TestCapabilityHandler: public JsonCodec::Handler<test::TestInterface> {
+public:
+  void encode(const JsonCodec& codec, test::TestInterface::Client input,
+              JsonValue::Builder output) const override {
+    KJ_UNIMPLEMENTED("TestCapabilityHandler::encode");
+  }
+
+  test::TestInterface::Client decode(
+      const JsonCodec& codec, JsonValue::Reader input) const override {
+    return nullptr;
+  }
+};
+
+KJ_TEST("register capability handler") {
+  // This test currently only checks that this compiles, which at one point wasn't the caes.
+  // TODO(test): Actually run some code here.
+
+  TestCapabilityHandler handler;
+  JsonCodec json;
+  json.addTypeHandler(handler);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
