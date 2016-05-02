@@ -534,10 +534,10 @@ void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn 
       }
       break;
     case schema::Type::INTERFACE:
-      KJ_FAIL_REQUIRE("don't know how to JSON-encode capabilities; "
+      KJ_FAIL_REQUIRE("don't know how to JSON-decode capabilities; "
                       "JsonCodec::Handler not implemented yet :(");
     case schema::Type::ANY_POINTER:
-      KJ_FAIL_REQUIRE("don't know how to JSON-encode AnyPointer; "
+      KJ_FAIL_REQUIRE("don't know how to JSON-decode AnyPointer; "
                       "JsonCodec::Handler not implemented yet :(");
   }
 }
