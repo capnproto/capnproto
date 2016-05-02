@@ -190,11 +190,15 @@ typedef unsigned char byte;
 #if __clang__
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated(reason)))
+#define KJ_UNAVAILABLE(reason) \
+    __attribute__((unavailable(reason)))
 #elif __GNUC__
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated))
+#define KJ_UNAVAILABLE(reason)
 #else
 #define KJ_DEPRECATED(reason)
+#define KJ_UNAVAILABLE(reason)
 // TODO(msvc): Again, here, MSVC prefers a prefix, __declspec(deprecated).
 #endif
 

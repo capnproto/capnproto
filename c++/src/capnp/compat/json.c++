@@ -225,6 +225,7 @@ kj::String JsonCodec::encodeRaw(JsonValue::Reader value) const {
 void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const {
   // TODO(soon): For interfaces, check for handlers on superclasses, per documentation...
   // TODO(soon): For branded types, should we check for handlers on the generic?
+  // TODO(someday): Allow registering handlers for "all structs", "all lists", etc?
   auto iter = impl->typeHandlers.find(type);
   if (iter != impl->typeHandlers.end()) {
     iter->second->encodeBase(*this, input, output);
@@ -934,7 +935,7 @@ void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder out
 // -----------------------------------------------------------------------------
 
 Orphan<DynamicValue> JsonCodec::HandlerBase::decodeBase(
-    const JsonCodec& codec, JsonValue::Reader input, Orphanage orphanage) const {
+    const JsonCodec& codec, JsonValue::Reader input, Type type, Orphanage orphanage) const {
   KJ_FAIL_ASSERT("JSON decoder handler type / value type mismatch");
 }
 void JsonCodec::HandlerBase::decodeStructBase(
