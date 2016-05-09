@@ -227,9 +227,11 @@ kj::StringPtr trimSourceFilename(kj::StringPtr filename) {
   };
 
 retry:
+  const char* prefixLocation = nullptr;
   for (const char* prefix: PREFIXES) {
-    if (filename.startsWith(prefix)) {
-      filename = filename.slice(strlen(prefix));
+    if ((prefixLocation = strstr(filename.cStr(), prefix)) != nullptr) {
+      size_t prefixLength = (prefixLocation - filename.cStr()) + strlen(prefix);
+      filename = filename.slice(prefixLength);
       goto retry;
     }
   }
