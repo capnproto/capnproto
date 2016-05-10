@@ -149,7 +149,7 @@ public:
   inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
 
   inline bool operator==(Builder other) const { return asString() == other.asString(); }
-  inline bool operator!=(Builder other) const { return asString() == other.asString(); }
+  inline bool operator!=(Builder other) const { return asString() != other.asString(); }
   inline bool operator< (Builder other) const { return asString() <  other.asString(); }
   inline bool operator> (Builder other) const { return asString() >  other.asString(); }
   inline bool operator<=(Builder other) const { return asString() <= other.asString(); }
