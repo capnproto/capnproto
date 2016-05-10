@@ -470,6 +470,10 @@ public:
     return List<AnyPointer>::Reader(_reader.getPointerSectionAsList());
   }
 
+  kj::Array<word> canonicalize() {
+    return _reader.canonicalize();
+  }
+
   Equality equals(AnyStruct::Reader right);
   bool operator==(AnyStruct::Reader right);
   inline bool operator!=(AnyStruct::Reader right) {

@@ -27,7 +27,9 @@
 
 namespace capnp {
 namespace _ {  // private
+using test::TestLists;
 namespace {
+
 
 KJ_TEST("canonicalize yields cannonical message") {
   MallocMessageBuilder builder;
@@ -35,7 +37,7 @@ KJ_TEST("canonicalize yields cannonical message") {
 
   initTestMessage(root);
 
-  canonicalize(builder);
+  root.asReader().canonicalize();
   //Will assert if canonicalize failed to do so
 }
 
@@ -116,6 +118,30 @@ KJ_TEST("isCanonical requires truncation of 0-valued struct fields") {
   SegmentArrayMessageReader nonTruncated(kj::arrayPtr(segments, 1));
 
   KJ_ASSERT(!nonTruncated.isCanonical());
+}
+
+KJ_TEST("upgraded lists can be canonicalized") {
+  AlignedData<7> upgradedList = {{
+    //Struct pointer, data immediately follows, 4 pointer fields, no data
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00,
+    //Three words of default pointers to get to the int16 list
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    //List pointer, 3 int16s.
+    0x01, 0x00, 0x00, 0x00, 0x33, 0x00, 0x00, 0x00,
+    //First two elements
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x04, 0x05, 0x06,
+    //Last element
+    0x07, 0x08, 0x09, 0x10, 0x00, 0x00, 0x00, 0x00
+  }};
+  kj::ArrayPtr<const word> segments[1] = {
+    kj::arrayPtr(upgradedList.words, 7)
+  };
+  SegmentArrayMessageReader upgraded(kj::arrayPtr(segments, 1));
+
+  auto root = upgraded.getRoot<TestLists>();
+  root.canonicalize();
 }
 
 KJ_TEST("isCanonical requires truncation of 0-valued struct fields in all list members") {

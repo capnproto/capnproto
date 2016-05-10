@@ -571,6 +571,8 @@ public:
   inline kj::ArrayPtr<const byte> getDataSectionAsBlob();
   inline _::ListReader getPointerSectionAsList();
 
+  kj::Array<word> canonicalize();
+
   template <typename T>
   KJ_ALWAYS_INLINE(bool hasDataField(ElementCount offset) const);
   // Return true if the field is set to something other than its default value.

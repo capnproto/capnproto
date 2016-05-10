@@ -421,21 +421,6 @@ private:
   bool allocated;
 };
 
-template <typename MR>
-kj::Array<word> canonicalize(MR&& reader) {
-  AnyPointer::Reader root = reader.template getRoot<AnyPointer>();
-  WordCount size = root.targetSize().wordCount * WORDS + POINTER_SIZE_IN_WORDS;
-  kj::Array<word> backing = kj::heapArray<word>(size / WORDS);
-  bzero(backing.begin(), backing.asBytes().size());
-  FlatMessageBuilder builder(backing);
-  builder.initRoot<AnyPointer>().setCanonical(root);
-  KJ_ASSERT(builder.isCanonical());
-  auto output = builder.getSegmentsForOutput()[0];
-  kj::Array<word> trunc = kj::heapArray<word>(output.size());
-  memcpy(trunc.begin(), output.begin(), output.asBytes().size());
-  return trunc;
-}
-
 // =======================================================================================
 // implementation details
 

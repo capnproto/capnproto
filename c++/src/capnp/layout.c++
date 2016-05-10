@@ -2732,6 +2732,19 @@ MessageSizeCounts StructReader::totalSize() const {
   return result;
 }
 
+kj::Array<word> StructReader::canonicalize() {
+  WordCount size = totalSize().wordCount + POINTER_SIZE_IN_WORDS;
+  kj::Array<word> backing = kj::heapArray<word>(size / WORDS);
+  memset(backing.begin(), 0, backing.asBytes().size());
+  FlatMessageBuilder builder(backing);
+  _::PointerHelpers<AnyPointer>::getInternalBuilder(builder.initRoot<AnyPointer>()).setStruct(*this, true);
+  KJ_ASSERT(builder.isCanonical());
+  auto output = builder.getSegmentsForOutput()[0];
+  kj::Array<word> trunc = kj::heapArray<word>(output.size());
+  memcpy(trunc.begin(), output.begin(), output.asBytes().size());
+  return trunc;
+}
+
 CapTableReader* StructReader::getCapTable() {
   return capTable;
 }
