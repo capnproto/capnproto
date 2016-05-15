@@ -217,20 +217,36 @@ void printStackTraceOnCrash() {
 
 kj::StringPtr trimSourceFilename(kj::StringPtr filename) {
   // Removes noisy prefixes from source code file name.
+  //
+  // The goal here is to produce the "canonical" filename given the filename returned by e.g.
+  // addr2line. addr2line gives us the full path of the file as passed on the compiler
+  // command-line, which in turn is affected by build system and by whether and where we're
+  // performing an out-of-tree build.
+  //
+  // To deal with all this, we look for directory names in the path which we recognize to be
+  // locations that represent roots of the source tree. We strip said root and everything before
+  // it.
 
-  static constexpr const char* PREFIXES[] = {
-    "../",
-    "/ekam-provider/canonical/",
-    "/ekam-provider/c++header/",
-    "src/",
-    "tmp/"
+  static constexpr const char* ROOTS[] = {
+    "ekam-provider/canonical/",  // Ekam source file.
+    "ekam-provider/c++header/",  // Ekam include file.
+    "src/",                      // Non-Ekam source root.
+    "tmp/"                       // Non-Ekam generated code.
   };
 
 retry:
-  for (const char* prefix: PREFIXES) {
-    if (filename.startsWith(prefix)) {
-      filename = filename.slice(strlen(prefix));
-      goto retry;
+  for (size_t i: kj::indices(filename)) {
+    if (i == 0 || filename[i-1] == '/') {
+      // We're at the start of a directory name. Check for valid prefixes.
+      for (kj::StringPtr root: ROOTS) {
+        if (filename.slice(i).startsWith(root)) {
+          filename = filename.slice(i + root.size());
+
+          // We should keep searching to find the last instance of a root name. `i` is no longer
+          // a valid index for `filename` so start the loop over.
+          goto retry;
+        }
+      }
     }
   }
 
