@@ -77,9 +77,11 @@ using capnproto_test::capnp::test::TestInterface;
 static_assert(equalTypes<FromAny<int>, int>(), "");
 static_assert(equalTypes<FromAny<TestAllTypes::Reader>, TestAllTypes>(), "");
 static_assert(equalTypes<FromAny<TestAllTypes::Builder>, TestAllTypes>(), "");
+#if !CAPNP_LITE
 static_assert(equalTypes<FromAny<TestAllTypes::Pipeline>, TestAllTypes>(), "");
 static_assert(equalTypes<FromAny<TestInterface::Client>, TestInterface>(), "");
 static_assert(equalTypes<FromAny<kj::Own<TestInterface::Server>>, TestInterface>(), "");
+#endif
 
 }  // namespace
 }  // namespace capnp
