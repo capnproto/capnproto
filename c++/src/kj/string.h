@@ -112,6 +112,9 @@ public:
   inline Maybe<size_t> findFirst(char c) const;
   inline Maybe<size_t> findLast(char c) const;
 
+  template <typename T>
+  T parseAs() const;
+
 private:
   inline StringPtr(ArrayPtr<const char> content): content(content) {}
 
@@ -120,6 +123,20 @@ private:
 
 inline bool operator==(const char* a, const StringPtr& b) { return b == a; }
 inline bool operator!=(const char* a, const StringPtr& b) { return b != a; }
+
+template <> char StringPtr::parseAs<char>() const;
+template <> signed char StringPtr::parseAs<signed char>() const;
+template <> unsigned char StringPtr::parseAs<unsigned char>() const;
+template <> short StringPtr::parseAs<short>() const;
+template <> unsigned short StringPtr::parseAs<unsigned short>() const;
+template <> int StringPtr::parseAs<int>() const;
+template <> unsigned StringPtr::parseAs<unsigned>() const;
+template <> long StringPtr::parseAs<long>() const;
+template <> unsigned long StringPtr::parseAs<unsigned long>() const;
+template <> long long StringPtr::parseAs<long long>() const;
+template <> unsigned long long StringPtr::parseAs<unsigned long long>() const;
+template <> float StringPtr::parseAs<float>() const;
+template <> double StringPtr::parseAs<double>() const;
 
 // =======================================================================================
 // String -- A NUL-terminated Array<char> containing UTF-8 text.
@@ -181,6 +198,10 @@ public:
 
   inline Maybe<size_t> findFirst(char c) const { return StringPtr(*this).findFirst(c); }
   inline Maybe<size_t> findLast(char c) const { return StringPtr(*this).findLast(c); }
+
+  template <typename T>
+  T parseAs() const { return StringPtr(*this).parseAs<T>(); }
+  // Parse as number
 
 private:
   Array<char> content;
