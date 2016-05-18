@@ -340,6 +340,10 @@ template <bool b> using EnableIf = typename EnableIf_<b>::Type;
 //     template <typename T, typename = EnableIf<isValid<T>()>
 //     void func(T&& t);
 
+template <typename...> struct VoidSfinae_ { using Type = void; };
+template <typename... Ts> using VoidSfinae = typename VoidSfinae_<Ts...>::Type;
+// Note: VoidSfinae is std::void_t from C++17.
+
 template <typename T>
 T instance() noexcept;
 // Like std::declval, but doesn't transform T into an rvalue reference.  If you want that, specify
