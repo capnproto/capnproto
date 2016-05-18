@@ -30,7 +30,9 @@
 #include <limits.h>
 
 #if _WIN32
+#define NOMINMAX
 #include <windows.h>
+#undef NOMINMAX
 #else
 #include <sys/uio.h>
 #endif
