@@ -127,18 +127,7 @@ struct EnumInfo;
 
 namespace _ {  // private
 
-template <typename T, typename = typename T::_capnpPrivate::IsStruct> uint8_t kindSfinae(int);
-template <typename T, typename = typename T::_capnpPrivate::IsInterface> uint16_t kindSfinae(int);
-template <typename T, typename = typename schemas::EnumInfo<T>::IsEnum> uint32_t kindSfinae(int);
-template <typename T> uint64_t kindSfinae(...);
-
-template <typename T>
-struct MsvcWorkaround {
-  // TODO(msvc): Remove this once MSVC supports expression SFINAE.
-  enum { value = sizeof(kindSfinae<T>(0)) };
-};
-
-template <typename T, size_t s = MsvcWorkaround<T>::value> struct Kind_;
+template <typename T, typename = void> struct Kind_;
 
 template <> struct Kind_<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
 template <> struct Kind_<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
@@ -155,9 +144,15 @@ template <> struct Kind_<double> { static constexpr Kind kind = Kind::PRIMITIVE;
 template <> struct Kind_<Text> { static constexpr Kind kind = Kind::BLOB; };
 template <> struct Kind_<Data> { static constexpr Kind kind = Kind::BLOB; };
 
-template <typename T> struct Kind_<T, sizeof(uint8_t)> { static constexpr Kind kind = Kind::STRUCT; };
-template <typename T> struct Kind_<T, sizeof(uint16_t)> { static constexpr Kind kind = Kind::INTERFACE; };
-template <typename T> struct Kind_<T, sizeof(uint32_t)> { static constexpr Kind kind = Kind::ENUM; };
+template <typename T> struct Kind_<T, kj::VoidSfinae<typename T::_capnpPrivate::IsStruct>> {
+  static constexpr Kind kind = Kind::STRUCT;
+};
+template <typename T> struct Kind_<T, kj::VoidSfinae<typename T::_capnpPrivate::IsInterface>> {
+  static constexpr Kind kind = Kind::INTERFACE;
+};
+template <typename T> struct Kind_<T, kj::VoidSfinae<typename schemas::EnumInfo<T>::IsEnum>> {
+  static constexpr Kind kind = Kind::ENUM;
+};
 
 }  // namespace _ (private)
 
@@ -206,7 +201,7 @@ template <typename T> struct ListElementType_<List<T>> { typedef T Type; };
 template <typename T> using ListElementType = typename ListElementType_<T>::Type;
 
 namespace _ {  // private
-template <typename T, Kind k> struct Kind_<List<T, k>, sizeof(uint64_t)> {
+template <typename T, Kind k> struct Kind_<List<T, k>> {
   static constexpr Kind kind = Kind::LIST;
 };
 }  // namespace _ (private)
