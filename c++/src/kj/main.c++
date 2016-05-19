@@ -22,17 +22,15 @@
 #include "main.h"
 #include "debug.h"
 #include "arena.h"
+#include "miniposix.h"
 #include <map>
 #include <set>
 #include <stdlib.h>
-#include <unistd.h>
 #include <errno.h>
 #include <limits.h>
 
 #if _WIN32
 #include <windows.h>
-#include <io.h>
-#include <fcntl.h>
 #else
 #include <sys/uio.h>
 #endif

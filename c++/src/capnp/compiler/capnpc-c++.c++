@@ -30,7 +30,7 @@
 #include <kj/vector.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
-#include <unistd.h>
+#include <kj/miniposix.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <map>
@@ -48,10 +48,6 @@
 
 #ifndef VERSION
 #define VERSION "(unknown)"
-#endif
-
-#if _WIN32
-#define mkdir(path, mode) mkdir(path)
 #endif
 
 namespace capnp {
@@ -2917,7 +2913,7 @@ private:
       makeDirectory(kj::str(path.slice(0, *slashpos)));
     }
 
-    if (mkdir(path.cStr(), 0777) < 0) {
+    if (kj::miniposix::mkdir(path.cStr(), 0777) < 0) {
       int error = errno;
       if (error != EEXIST) {
         KJ_FAIL_SYSCALL("mkdir(path)", error, path);

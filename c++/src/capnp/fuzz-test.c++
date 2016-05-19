@@ -25,7 +25,7 @@
 #include "serialize.h"
 #include <kj/test.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <kj/miniposix.h>
 #include "test-util.h"
 
 namespace capnp {

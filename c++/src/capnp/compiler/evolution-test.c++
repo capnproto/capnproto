@@ -37,7 +37,7 @@
 #include <time.h>
 #include <kj/main.h>
 #include <kj/io.h>
-#include <unistd.h>
+#include <kj/miniposix.h>
 
 namespace capnp {
 namespace compiler {
