@@ -316,7 +316,7 @@ interface Node {
 }
 
 interface Directory extends(Node) {
-  list @0 () -> (list: List(Entry));
+  list @0 () -> (list :List(Entry));
   struct Entry {
     name @0 :Text;
     node @1 :Node;
@@ -330,9 +330,9 @@ interface Directory extends(Node) {
 }
 
 interface File extends(Node) {
-  size @0 () -> (size: UInt64);
+  size @0 () -> (size :UInt64);
   read @1 (startAt :UInt64 = 0, amount :UInt64 = 0xffffffffffffffff)
-       -> (data: Data);
+       -> (data :Data);
   # Default params = read entire file.
 
   write @2 (startAt :UInt64, data :Data);
