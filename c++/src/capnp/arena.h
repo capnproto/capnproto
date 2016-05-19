@@ -252,7 +252,6 @@ public:
   // portion of each segment, whereas tryGetSegment() returns something that includes
   // not-yet-allocated space.
 
-#if !CAPNP_LITE
   inline CapTableBuilder* getLocalCapTable() {
     // Return a CapTableBuilder that merely implements local loopback. That is, you can set
     // capabilities, then read the same capabilities back, but there is no intent ever to transmit
@@ -269,7 +268,6 @@ public:
 
     return &localCapTable;
   }
-#endif  // !CAPNP_LITE
 
   SegmentBuilder* getSegment(SegmentId id);
   // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
@@ -304,8 +302,8 @@ private:
   MessageBuilder* message;
   ReadLimiter dummyLimiter;
 
-#if !CAPNP_LITE
   class LocalCapTable: public CapTableBuilder {
+#if !CAPNP_LITE
   public:
     kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
     uint injectCap(kj::Own<ClientHook>&& cap) override;
@@ -313,10 +311,10 @@ private:
 
   private:
     kj::Vector<kj::Maybe<kj::Own<ClientHook>>> capTable;
+#endif // ! CAPNP_LITE
   };
 
   LocalCapTable localCapTable;
-#endif  // !CAPNP_LITE
 
   SegmentBuilder segment0;
   kj::ArrayPtr<const word> segment0ForOutput;
