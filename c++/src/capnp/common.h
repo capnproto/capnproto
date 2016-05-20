@@ -156,19 +156,19 @@ template <typename T> struct Kind_<T, kj::VoidSfinae<typename schemas::EnumInfo<
 
 }  // namespace _ (private)
 
-#if CAPNP_LITE
-
-#define CAPNP_KIND(T) ::capnp::_::Kind_<T>::kind
-// Avoid constexpr methods in lite mode (MSVC is bad at constexpr).
-
-#else  // CAPNP_LITE
-
 template <typename T, Kind k = _::Kind_<T>::kind>
 inline constexpr Kind kind() {
   // This overload of kind() matches types which have a Kind_ specialization.
 
   return k;
 }
+
+#if CAPNP_LITE
+
+#define CAPNP_KIND(T) ::capnp::_::Kind_<T>::kind
+// Avoid constexpr methods in lite mode (MSVC is bad at constexpr).
+
+#else  // CAPNP_LITE
 
 #define CAPNP_KIND(T) ::capnp::kind<T>()
 // Use this macro rather than kind<T>() in any code which must work in lite mode.
