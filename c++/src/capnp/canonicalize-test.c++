@@ -37,7 +37,7 @@ KJ_TEST("canonicalize yields cannonical message") {
 
   initTestMessage(root);
 
-  root.asReader().canonicalize();
+  canonicalize(root.asReader());
   //Will assert if canonicalize failed to do so
 }
 
@@ -141,7 +141,7 @@ KJ_TEST("upgraded lists can be canonicalized") {
   SegmentArrayMessageReader upgraded(kj::arrayPtr(segments, 1));
 
   auto root = upgraded.getRoot<TestLists>();
-  root.canonicalize();
+  canonicalize(root);
 }
 
 KJ_TEST("isCanonical requires truncation of 0-valued struct fields in all list members") {

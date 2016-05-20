@@ -498,6 +498,11 @@ static typename Type::Reader defaultValue() {
   return typename Type::Reader(_::StructReader());
 }
 
+template <typename T>
+kj::Array<word> canonicalize(T&& reader) {
+    return _::PointerHelpers<FromReader<T>>::getInternalReader(reader).canonicalize();
+}
+
 }  // namespace capnp
 
 #endif  // CAPNP_MESSAGE_H_
