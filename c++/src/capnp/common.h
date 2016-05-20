@@ -250,18 +250,42 @@ template <typename T>
 using FromServer = typename kj::Decay<T>::Serves;
 // FromBuilder<MyType::Server> = MyType (for any Cap'n Proto interface type).
 
-struct FromAny_ {
-  template <typename T, typename X = FromReader<T>> static X apply(T*, int);
-  template <typename T, typename X = FromBuilder<T>> static X apply(T*, char);
-  template <typename T, typename X = FromPipeline<T>> static X apply(T*, long);
-  // note that ::Client is covered by FromReader
-  template <typename T, typename X = FromServer<T>> static X apply(kj::Own<T>*, short);
-  template <typename T, typename = kj::EnableIf<style<T>() == Style::PRIMITIVE>>
-      static T apply(T*, unsigned int);
+template <typename T, typename = void>
+struct FromAny_;
+
+template <typename T>
+struct FromAny_<T, kj::VoidSfinae<FromReader<T>>> {
+  using Type = FromReader<T>;
 };
 
 template <typename T>
-using FromAny = kj::Decay<decltype(FromAny_::apply(kj::instance<T*>(), 0))>;
+struct FromAny_<T, kj::VoidSfinae<FromBuilder<T>>> {
+  using Type = FromBuilder<T>;
+};
+
+template <typename T>
+struct FromAny_<T, kj::VoidSfinae<FromPipeline<T>>> {
+  using Type = FromPipeline<T>;
+};
+
+// Note that T::Client is covered by FromReader
+
+template <typename T>
+struct FromAny_<kj::Own<T>, kj::VoidSfinae<FromServer<T>>> {
+  using Type = FromServer<T>;
+};
+
+template <typename T>
+struct FromAny_<T,
+    kj::EnableIf<_::Kind_<T>::kind == Kind::PRIMITIVE || _::Kind_<T>::kind == Kind::ENUM>> {
+  // TODO(msvc): Ideally the EnableIf condition would be `style<T>() == Style::PRIMITIVE`, but MSVC
+  // cannot yet use style<T>() in this constexpr context.
+
+  using Type = kj::Decay<T>;
+};
+
+template <typename T>
+using FromAny = typename FromAny_<T>::Type;
 // Given any Cap'n Proto value type as an input, return the Cap'n Proto base type. That is:
 //
 //     Foo::Reader -> Foo
