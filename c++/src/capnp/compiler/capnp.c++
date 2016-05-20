@@ -28,7 +28,7 @@
 #include <capnp/schema.capnp.h>
 #include <kj/vector.h>
 #include <kj/io.h>
-#include <unistd.h>
+#include <kj/miniposix.h>
 #include <kj/debug.h>
 #include "../message.h"
 #include <iostream>
@@ -43,9 +43,6 @@
 
 #if _WIN32
 #include <process.h>
-#include <io.h>
-#include <fcntl.h>
-#define pipe(fds) _pipe(fds, 8192, _O_BINARY)
 #else
 #include <sys/wait.h>
 #endif
@@ -447,7 +444,7 @@ public:
       }
 
       int pipeFds[2];
-      KJ_SYSCALL(pipe(pipeFds));
+      KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
 
       kj::String exeName;
       bool shouldSearchPath = true;

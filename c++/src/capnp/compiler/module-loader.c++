@@ -28,7 +28,7 @@
 #include <kj/io.h>
 #include <capnp/message.h>
 #include <map>
-#include <unistd.h>
+#include <kj/miniposix.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -99,7 +99,7 @@ kj::Array<const byte> mmapForRead(kj::StringPtr filename) {
 
     byte buffer[4096];
     for (;;) {
-      ssize_t n;
+      kj::miniposix::ssize_t n;
       KJ_SYSCALL(n = read(fd, buffer, sizeof(buffer)));
       if (n == 0) break;
       data.addAll(buffer, buffer + n);

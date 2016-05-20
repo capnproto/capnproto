@@ -11,13 +11,13 @@ set(kj_sources_lite
   mutex.c++
   string.c++
   thread.c++
+  main.c++
+  arena.c++
 )
 set(kj_sources_heavy
   units.c++
   refcount.c++
   string-tree.c++
-  arena.c++
-  main.c++
   parse/char.c++
 )
 if(NOT CAPNP_LITE)

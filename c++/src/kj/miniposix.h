@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_PORTABLE_FD_H_
-#define KJ_PORTABLE_FD_H_
+#ifndef KJ_MINIPOSIX_H_
+#define KJ_MINIPOSIX_H_
 
 // This header provides a small subset of the POSIX API which also happens to be available on
 // Windows under slightly-different names.
@@ -32,6 +32,7 @@
 #if _WIN32
 #include <io.h>
 #include <direct.h>
+#include <fcntl.h>  // _O_BINARY
 #else
 #include <limits.h>
 #include <errno.h>
@@ -61,6 +62,17 @@ inline int close(int fd) {
   return ::_close(fd);
 }
 
+#ifndef F_OK
+#define F_OK 0  // access() existence test
+#endif
+
+#ifndef S_ISREG
+#define S_ISREG(mode) (((mode) & S_IFMT) ==  S_IFREG)  // stat() regular file test
+#endif
+#ifndef S_ISDIR
+#define S_ISDIR(mode) (((mode) & S_IFMT) ==  S_IFDIR)  // stat() directory test
+#endif
+
 #ifndef STDIN_FILENO
 #define STDIN_FILENO 0
 #endif
@@ -85,7 +97,7 @@ using ::close;
 // We're on Windows, including MinGW. pipe() and mkdir() are non-standard even on MinGW.
 
 inline int pipe(int fds[2]) {
-  return ::_pipe(fds, 4096, false);
+  return ::_pipe(fds, 8192, _O_BINARY);
 }
 inline int mkdir(const char* path, int mode) {
   return ::_mkdir(path);
@@ -133,4 +145,4 @@ inline size_t iovMax(size_t count) {
 }  // namespace miniposix
 }  // namespace kj
 
-#endif  // KJ_WIN32_FD_H_
+#endif  // KJ_MINIPOSIX_H_

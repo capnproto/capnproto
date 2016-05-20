@@ -31,7 +31,7 @@
 #include <kj/vector.h>
 #include <kj/debug.h>
 #include <kj/io.h>
-#include <unistd.h>
+#include <kj/miniposix.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -400,7 +400,7 @@ kj::Array<const char> SchemaFile::DiskFileReader::read(kj::StringPtr path) const
 
     char buffer[4096];
     for (;;) {
-      ssize_t n;
+      kj::miniposix::ssize_t n;
       KJ_SYSCALL(n = ::read(fd, buffer, sizeof(buffer)));
       if (n == 0) break;
       data.addAll(buffer, buffer + n);

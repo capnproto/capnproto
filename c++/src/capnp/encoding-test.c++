@@ -1667,6 +1667,8 @@ TEST(Encoding, Embeds) {
     checkTestMessage(reader.getRoot<TestAllTypes>());
   }
 
+#if !CAPNP_LITE
+
   {
     MallocMessageBuilder builder;
     auto root = builder.getRoot<TestAllTypes>();
@@ -1674,6 +1676,8 @@ TEST(Encoding, Embeds) {
     kj::StringPtr text = test::EMBEDDED_TEXT;
     EXPECT_EQ(kj::str(root, '\n').size(), text.size());
   }
+
+#endif // CAPNP_LITE
 
   {
     checkTestMessage(test::EMBEDDED_STRUCT);

@@ -247,6 +247,8 @@ TEST(Any, AnyStructListCapInSchema) {
     checkList(anyList.as<List<int>>(), {123, 456, 789});
   }
 
+  #if !CAPNP_LITE
+  // This portion of the test relies on a Client, not present in lite-mode.
   {
     kj::EventLoop loop;
     kj::WaitScope waitScope(loop);
@@ -259,6 +261,7 @@ TEST(Any, AnyStructListCapInSchema) {
     req.send().wait(waitScope);
     EXPECT_EQ(1, callCount);
   }
+  #endif
 }
 
 
