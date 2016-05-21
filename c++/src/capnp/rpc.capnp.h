@@ -758,7 +758,7 @@ public:
   inline bool hasParams() const;
   inline  ::capnp::rpc::Payload::Reader getParams() const;
 
-  inline SendResultsTo::Reader getSendResultsTo() const;
+  inline typename SendResultsTo::Reader getSendResultsTo() const;
 
   inline bool getAllowThirdPartyTailCall() const;
 
@@ -813,8 +813,8 @@ public:
   inline void adoptParams(::capnp::Orphan< ::capnp::rpc::Payload>&& value);
   inline ::capnp::Orphan< ::capnp::rpc::Payload> disownParams();
 
-  inline SendResultsTo::Builder getSendResultsTo();
-  inline SendResultsTo::Builder initSendResultsTo();
+  inline typename SendResultsTo::Builder getSendResultsTo();
+  inline typename SendResultsTo::Builder initSendResultsTo();
 
   inline bool getAllowThirdPartyTailCall();
   inline void setAllowThirdPartyTailCall(bool value);
@@ -839,7 +839,7 @@ public:
 
   inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
   inline  ::capnp::rpc::Payload::Pipeline getParams();
-  inline SendResultsTo::Pipeline getSendResultsTo();
+  inline typename SendResultsTo::Pipeline getSendResultsTo();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -1365,7 +1365,7 @@ public:
   inline bool hasTarget() const;
   inline  ::capnp::rpc::MessageTarget::Reader getTarget() const;
 
-  inline Context::Reader getContext() const;
+  inline typename Context::Reader getContext() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1402,8 +1402,8 @@ public:
   inline void adoptTarget(::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value);
   inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> disownTarget();
 
-  inline Context::Builder getContext();
-  inline Context::Builder initContext();
+  inline typename Context::Builder getContext();
+  inline typename Context::Builder initContext();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1424,7 +1424,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
-  inline Context::Pipeline getContext();
+  inline typename Context::Pipeline getContext();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -3321,18 +3321,18 @@ inline ::capnp::Orphan< ::capnp::rpc::Payload> Call::Builder::disownParams() {
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-inline Call::SendResultsTo::Reader Call::Reader::getSendResultsTo() const {
+inline typename Call::SendResultsTo::Reader Call::Reader::getSendResultsTo() const {
   return Call::SendResultsTo::Reader(_reader);
 }
-inline Call::SendResultsTo::Builder Call::Builder::getSendResultsTo() {
+inline typename Call::SendResultsTo::Builder Call::Builder::getSendResultsTo() {
   return Call::SendResultsTo::Builder(_builder);
 }
 #if !CAPNP_LITE
-inline Call::SendResultsTo::Pipeline Call::Pipeline::getSendResultsTo() {
+inline typename Call::SendResultsTo::Pipeline Call::Pipeline::getSendResultsTo() {
   return Call::SendResultsTo::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
-inline Call::SendResultsTo::Builder Call::Builder::initSendResultsTo() {
+inline typename Call::SendResultsTo::Builder Call::Builder::initSendResultsTo() {
   _builder.setDataField< ::uint16_t>(3 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(2 * ::capnp::POINTERS).clear();
   return Call::SendResultsTo::Builder(_builder);
@@ -3915,18 +3915,18 @@ inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> Disembargo::Builder::disown
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline Disembargo::Context::Reader Disembargo::Reader::getContext() const {
+inline typename Disembargo::Context::Reader Disembargo::Reader::getContext() const {
   return Disembargo::Context::Reader(_reader);
 }
-inline Disembargo::Context::Builder Disembargo::Builder::getContext() {
+inline typename Disembargo::Context::Builder Disembargo::Builder::getContext() {
   return Disembargo::Context::Builder(_builder);
 }
 #if !CAPNP_LITE
-inline Disembargo::Context::Pipeline Disembargo::Pipeline::getContext() {
+inline typename Disembargo::Context::Pipeline Disembargo::Pipeline::getContext() {
   return Disembargo::Context::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
-inline Disembargo::Context::Builder Disembargo::Builder::initContext() {
+inline typename Disembargo::Context::Builder Disembargo::Builder::initContext() {
   _builder.setDataField< ::uint32_t>(0 * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint16_t>(2 * ::capnp::ELEMENTS, 0);
   return Disembargo::Context::Builder(_builder);
