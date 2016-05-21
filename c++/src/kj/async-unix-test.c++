@@ -26,7 +26,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <netinet/in.h>
 #include <kj/compat/gtest.h>
 #include <pthread.h>
 #include <algorithm>
@@ -451,6 +453,71 @@ TEST(AsyncUnixTest, WriteObserver) {
   loop.run();
 
   EXPECT_TRUE(writable);
+}
+
+TEST(AsyncUnixTest, UrgentObserver) {
+  // Verify that FdObserver correctly detects availability of out-of-band data.
+  // Availability of out-of-band data is implementation-specific.
+  // Linux's and OS X's TCP/IP stack supports out-of-band messages for TCP sockets, which is used
+  // for this test.
+
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+  int tmpFd;
+  char c;
+
+  // Spawn a TCP server
+  KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
+  kj::AutoCloseFd serverFd(tmpFd);
+  sockaddr_in saddr = {0};
+  saddr.sin_family = AF_INET;
+  saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  KJ_SYSCALL(bind(serverFd, reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr)));
+  socklen_t saddrLen = sizeof(saddr);
+  KJ_SYSCALL(getsockname(serverFd, reinterpret_cast<sockaddr*>(&saddr), &saddrLen));
+  KJ_SYSCALL(listen(serverFd, 1));
+
+  // Accept one connection, send in-band and OOB byte, wait for a quit message
+  Thread thread([&]() {
+    int tmpFd;
+    char c;
+
+    sockaddr_in caddr;
+    socklen_t caddrLen = sizeof(caddr);
+    KJ_SYSCALL(tmpFd = accept(serverFd, reinterpret_cast<sockaddr*>(&caddr), &caddrLen));
+    kj::AutoCloseFd clientFd(tmpFd);
+    delay();
+
+    // Workaround: OS X won't signal POLLPRI without POLLIN. Also enqueue some in-band data.
+    c = 'i';
+    KJ_SYSCALL(send(clientFd, &c, 1, 0));
+    c = 'o';
+    KJ_SYSCALL(send(clientFd, &c, 1, MSG_OOB));
+
+    KJ_SYSCALL(recv(clientFd, &c, 1, 0));
+    EXPECT_EQ('q', c);
+  });
+  KJ_DEFER({ shutdown(serverFd, SHUT_RDWR); serverFd = nullptr; });
+
+  KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
+  kj::AutoCloseFd clientFd(tmpFd);
+  KJ_SYSCALL(connect(clientFd, reinterpret_cast<sockaddr*>(&saddr), saddrLen));
+
+  UnixEventPort::FdObserver observer(port, clientFd,
+      UnixEventPort::FdObserver::OBSERVE_READ | UnixEventPort::FdObserver::OBSERVE_URGENT);
+
+  // Attempt to read the urgent byte prior to reading the in-band byte.
+  observer.whenUrgentDataAvailable().wait(waitScope);
+  KJ_SYSCALL(recv(clientFd, &c, 1, MSG_OOB));
+  EXPECT_EQ('o', c);
+  KJ_SYSCALL(recv(clientFd, &c, 1, 0));
+  EXPECT_EQ('i', c);
+
+  // Allow server thread to let its clientFd go out of scope.
+  c = 'q';
+  KJ_SYSCALL(send(clientFd, &c, 1, 0));
+  KJ_SYSCALL(shutdown(clientFd, SHUT_RDWR));
 }
 
 TEST(AsyncUnixTest, SteadyTimers) {

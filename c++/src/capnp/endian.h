@@ -22,7 +22,7 @@
 #ifndef CAPNP_ENDIAN_H_
 #define CAPNP_ENDIAN_H_
 
-#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
 #endif
 
@@ -185,9 +185,14 @@ using WireValue = SwappingWireValue<T>;
 // Unknown endianness.  Fall back to bit shifts.
 
 #if !CAPNP_DISABLE_ENDIAN_DETECTION
+#if _MSC_VER
+#pragma message("Couldn't detect endianness of your platform.  Using unoptimized fallback implementation.")
+#pragma message("Consider changing this code to detect your platform and send us a patch!")
+#else
 #warning "Couldn't detect endianness of your platform.  Using unoptimized fallback implementation."
 #warning "Consider changing this code to detect your platform and send us a patch!"
 #endif
+#endif  // !CAPNP_DISABLE_ENDIAN_DETECTION
 
 template <typename T, size_t size = sizeof(T)>
 class ShiftingWireValue;

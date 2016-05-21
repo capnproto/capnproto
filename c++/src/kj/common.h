@@ -85,6 +85,10 @@
 #undef _GLIBCXX_HAVE_GETS
 #endif
 
+#if defined(_MSC_VER)
+#include <intrin.h>  // __popcnt
+#endif
+
 // =======================================================================================
 
 namespace kj {
@@ -186,11 +190,15 @@ typedef unsigned char byte;
 #if __clang__
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated(reason)))
+#define KJ_UNAVAILABLE(reason) \
+    __attribute__((unavailable(reason)))
 #elif __GNUC__
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated))
+#define KJ_UNAVAILABLE(reason)
 #else
 #define KJ_DEPRECATED(reason)
+#define KJ_UNAVAILABLE(reason)
 // TODO(msvc): Again, here, MSVC prefers a prefix, __declspec(deprecated).
 #endif
 
@@ -332,6 +340,10 @@ template <bool b> using EnableIf = typename EnableIf_<b>::Type;
 //     template <typename T, typename = EnableIf<isValid<T>()>
 //     void func(T&& t);
 
+template <typename...> struct VoidSfinae_ { using Type = void; };
+template <typename... Ts> using VoidSfinae = typename VoidSfinae_<Ts...>::Type;
+// Note: VoidSfinae is std::void_t from C++17.
+
 template <typename T>
 T instance() noexcept;
 // Like std::declval, but doesn't transform T into an rvalue reference.  If you want that, specify
@@ -472,7 +484,7 @@ using MinType = typename MinType_<T, U, sizeof(T) <= sizeof(U)>::Type;
 // Resolves to the smaller of the two input types.
 
 template <typename T, typename U>
-inline KJ_CONSTEXPR() auto min(T&& a, U&& b) -> MinType<Decay<T>, Decay<U>> {
+inline constexpr auto min(T&& a, U&& b) -> MinType<Decay<T>, Decay<U>> {
   return a < b ? MinType<Decay<T>, Decay<U>>(a) : MinType<Decay<T>, Decay<U>>(b);
 }
 
@@ -485,7 +497,7 @@ using MaxType = typename MaxType_<T, U, sizeof(T) >= sizeof(U)>::Type;
 // Resolves to the larger of the two input types.
 
 template <typename T, typename U>
-inline KJ_CONSTEXPR() auto max(T&& a, U&& b) -> MaxType<Decay<T>, Decay<U>> {
+inline constexpr auto max(T&& a, U&& b) -> MaxType<Decay<T>, Decay<U>> {
   return a > b ? MaxType<Decay<T>, Decay<U>>(a) : MaxType<Decay<T>, Decay<U>>(b);
 }
 
@@ -596,6 +608,15 @@ float nan();
 
 inline constexpr bool isNaN(float f) { return f != f; }
 inline constexpr bool isNaN(double f) { return f != f; }
+
+inline int popCount(unsigned int x) {
+#if defined(_MSC_VER)
+  return __popcnt(x);
+  // Note: __popcnt returns unsigned int, but the value is clearly guaranteed to fit into an int
+#else
+  return __builtin_popcount(x);
+#endif
+}
 
 // =======================================================================================
 // Useful fake containers
@@ -773,6 +794,15 @@ class Maybe;
 
 namespace _ {  // private
 
+#if _MSC_VER
+  // TODO(msvc): MSVC barfs on noexcept(instance<T&>().~T()) where T = kj::Exception and
+  // kj::_::Void. It and every other factorization I've tried produces:
+  //   error C2325: 'kj::Blah' unexpected type to the right of '.~': expected 'void'
+#define MSVC_NOEXCEPT_DTOR_WORKAROUND(T) __is_nothrow_destructible(T)
+#else
+#define MSVC_NOEXCEPT_DTOR_WORKAROUND(T) noexcept(instance<T&>().~T())
+#endif
+
 template <typename T>
 class NullableValue {
   // Class whose interface behaves much like T*, but actually contains an instance of T and a
@@ -797,7 +827,7 @@ public:
       ctor(value, other.value);
     }
   }
-  inline ~NullableValue() noexcept(noexcept(instance<T&>().~T())) {
+  inline ~NullableValue() noexcept(MSVC_NOEXCEPT_DTOR_WORKAROUND(T)) {
     if (isSet) {
       dtor(value);
     }

@@ -22,7 +22,7 @@
 #ifndef CAPNP_COMPILER_NODE_TRANSLATOR_H_
 #define CAPNP_COMPILER_NODE_TRANSLATOR_H_
 
-#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
 #endif
 
@@ -230,7 +230,7 @@ private:
   template <typename InitBrandFunc>
   uint64_t compileParamList(kj::StringPtr methodName, uint16_t ordinal, bool isResults,
                             Declaration::ParamList::Reader paramList,
-                            List<Declaration::BrandParameter>::Reader implicitParams,
+                            typename List<Declaration::BrandParameter>::Reader implicitParams,
                             InitBrandFunc&& initBrand);
   // Compile a param (or result) list and return the type ID of the struct type.
 

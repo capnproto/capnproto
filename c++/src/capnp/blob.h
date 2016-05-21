@@ -22,7 +22,7 @@
 #ifndef CAPNP_BLOB_H_
 #define CAPNP_BLOB_H_
 
-#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
 #endif
 
@@ -149,7 +149,7 @@ public:
   inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
 
   inline bool operator==(Builder other) const { return asString() == other.asString(); }
-  inline bool operator!=(Builder other) const { return asString() == other.asString(); }
+  inline bool operator!=(Builder other) const { return asString() != other.asString(); }
   inline bool operator< (Builder other) const { return asString() <  other.asString(); }
   inline bool operator> (Builder other) const { return asString() >  other.asString(); }
   inline bool operator<=(Builder other) const { return asString() <= other.asString(); }

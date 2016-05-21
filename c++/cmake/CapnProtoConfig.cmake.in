@@ -1,0 +1,27 @@
+# Example usage:
+#   find_package(CapnProto)
+#   capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS schema.capnp)
+#   include_directories(${CMAKE_CURRENT_BINARY_DIR})
+#   add_executable(foo main.cpp ${CAPNP_SRCS})
+#   target_link_libraries(foo CapnProto::capnp)
+#
+#  If you are using RPC features, use 'CapnProto::capnp-rpc'
+#  in target_link_libraries call.
+#
+@PACKAGE_INIT@
+
+set(CapnProto_VERSION @VERSION@)
+
+set(CAPNP_EXECUTABLE $<TARGET_FILE:CapnProto::capnp_tool>)
+set(CAPNPC_CXX_EXECUTABLE $<TARGET_FILE:CapnProto::capnpc_cpp>)
+set(CAPNP_INCLUDE_DIRECTORY "@PACKAGE_CMAKE_INSTALL_FULL_INCLUDEDIR@")
+
+# work around http://public.kitware.com/Bug/view.php?id=15258
+if(NOT _IMPORT_PREFIX)
+  set(_IMPORT_PREFIX ${PACKAGE_PREFIX_DIR})
+endif()
+
+
+
+include("${CMAKE_CURRENT_LIST_DIR}/CapnProtoTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/CapnProtoMacros.cmake")

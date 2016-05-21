@@ -26,7 +26,7 @@
 #ifndef CAPNP_COMMON_H_
 #define CAPNP_COMMON_H_
 
-#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
 #endif
 
@@ -63,7 +63,7 @@ struct Void {
   inline constexpr bool operator!=(Void other) const { return false; }
 };
 
-static KJ_CONSTEXPR(const) Void VOID = Void();
+static constexpr Void VOID = Void();
 // Constant value for `Void`,  which is an empty struct.
 
 inline kj::StringPtr KJ_STRINGIFY(Void) { return "void"; }
@@ -127,18 +127,7 @@ struct EnumInfo;
 
 namespace _ {  // private
 
-template <typename T, typename = typename T::_capnpPrivate::IsStruct> uint8_t kindSfinae(int);
-template <typename T, typename = typename T::_capnpPrivate::IsInterface> uint16_t kindSfinae(int);
-template <typename T, typename = typename schemas::EnumInfo<T>::IsEnum> uint32_t kindSfinae(int);
-template <typename T> uint64_t kindSfinae(...);
-
-template <typename T>
-struct MsvcWorkaround {
-  // TODO(msvc): Remove this once MSVC supports expression SFINAE.
-  enum { value = sizeof(kindSfinae<T>(0)) };
-};
-
-template <typename T, size_t s = MsvcWorkaround<T>::value> struct Kind_;
+template <typename T, typename = void> struct Kind_;
 
 template <> struct Kind_<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
 template <> struct Kind_<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
@@ -155,18 +144,17 @@ template <> struct Kind_<double> { static constexpr Kind kind = Kind::PRIMITIVE;
 template <> struct Kind_<Text> { static constexpr Kind kind = Kind::BLOB; };
 template <> struct Kind_<Data> { static constexpr Kind kind = Kind::BLOB; };
 
-template <typename T> struct Kind_<T, sizeof(uint8_t)> { static constexpr Kind kind = Kind::STRUCT; };
-template <typename T> struct Kind_<T, sizeof(uint16_t)> { static constexpr Kind kind = Kind::INTERFACE; };
-template <typename T> struct Kind_<T, sizeof(uint32_t)> { static constexpr Kind kind = Kind::ENUM; };
+template <typename T> struct Kind_<T, kj::VoidSfinae<typename T::_capnpPrivate::IsStruct>> {
+  static constexpr Kind kind = Kind::STRUCT;
+};
+template <typename T> struct Kind_<T, kj::VoidSfinae<typename T::_capnpPrivate::IsInterface>> {
+  static constexpr Kind kind = Kind::INTERFACE;
+};
+template <typename T> struct Kind_<T, kj::VoidSfinae<typename schemas::EnumInfo<T>::IsEnum>> {
+  static constexpr Kind kind = Kind::ENUM;
+};
 
 }  // namespace _ (private)
-
-#if CAPNP_LITE
-
-#define CAPNP_KIND(T) ::capnp::_::Kind_<T>::kind
-// Avoid constexpr methods in lite mode (MSVC is bad at constexpr).
-
-#else  // CAPNP_LITE
 
 template <typename T, Kind k = _::Kind_<T>::kind>
 inline constexpr Kind kind() {
@@ -174,6 +162,13 @@ inline constexpr Kind kind() {
 
   return k;
 }
+
+#if CAPNP_LITE
+
+#define CAPNP_KIND(T) ::capnp::_::Kind_<T>::kind
+// Avoid constexpr methods in lite mode (MSVC is bad at constexpr).
+
+#else  // CAPNP_LITE
 
 #define CAPNP_KIND(T) ::capnp::kind<T>()
 // Use this macro rather than kind<T>() in any code which must work in lite mode.
@@ -206,7 +201,7 @@ template <typename T> struct ListElementType_<List<T>> { typedef T Type; };
 template <typename T> using ListElementType = typename ListElementType_<T>::Type;
 
 namespace _ {  // private
-template <typename T, Kind k> struct Kind_<List<T, k>, sizeof(uint64_t)> {
+template <typename T, Kind k> struct Kind_<List<T, k>> {
   static constexpr Kind kind = Kind::LIST;
 };
 }  // namespace _ (private)
@@ -255,18 +250,42 @@ template <typename T>
 using FromServer = typename kj::Decay<T>::Serves;
 // FromBuilder<MyType::Server> = MyType (for any Cap'n Proto interface type).
 
-struct FromAny_ {
-  template <typename T, typename X = FromReader<T>> static X apply(T*, int);
-  template <typename T, typename X = FromBuilder<T>> static X apply(T*, char);
-  template <typename T, typename X = FromPipeline<T>> static X apply(T*, long);
-  // note that ::Client is covered by FromReader
-  template <typename T, typename X = FromServer<T>> static X apply(kj::Own<T>*, short);
-  template <typename T, typename = kj::EnableIf<style<T>() == Style::PRIMITIVE>>
-      static T apply(T*, unsigned int);
+template <typename T, typename = void>
+struct FromAny_;
+
+template <typename T>
+struct FromAny_<T, kj::VoidSfinae<FromReader<T>>> {
+  using Type = FromReader<T>;
 };
 
 template <typename T>
-using FromAny = kj::Decay<decltype(FromAny_::apply(kj::instance<T*>(), 0))>;
+struct FromAny_<T, kj::VoidSfinae<FromBuilder<T>>> {
+  using Type = FromBuilder<T>;
+};
+
+template <typename T>
+struct FromAny_<T, kj::VoidSfinae<FromPipeline<T>>> {
+  using Type = FromPipeline<T>;
+};
+
+// Note that T::Client is covered by FromReader
+
+template <typename T>
+struct FromAny_<kj::Own<T>, kj::VoidSfinae<FromServer<T>>> {
+  using Type = FromServer<T>;
+};
+
+template <typename T>
+struct FromAny_<T,
+    kj::EnableIf<_::Kind_<T>::kind == Kind::PRIMITIVE || _::Kind_<T>::kind == Kind::ENUM>> {
+  // TODO(msvc): Ideally the EnableIf condition would be `style<T>() == Style::PRIMITIVE`, but MSVC
+  // cannot yet use style<T>() in this constexpr context.
+
+  using Type = kj::Decay<T>;
+};
+
+template <typename T>
+using FromAny = typename FromAny_<T>::Type;
 // Given any Cap'n Proto value type as an input, return the Cap'n Proto base type. That is:
 //
 //     Foo::Reader -> Foo

@@ -11,13 +11,13 @@ set(kj_sources_lite
   mutex.c++
   string.c++
   thread.c++
+  main.c++
+  arena.c++
 )
 set(kj_sources_heavy
   units.c++
   refcount.c++
   string-tree.c++
-  arena.c++
-  main.c++
   parse/char.c++
 )
 if(NOT CAPNP_LITE)
@@ -57,10 +57,21 @@ set(kj-std_headers
   std/iostream.h
 )
 add_library(kj ${kj_sources})
-install(TARGETS kj ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
-install(FILES ${kj_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
-install(FILES ${kj-parse_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/parse")
-install(FILES ${kj-std_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/std")
+add_library(CapnProto::kj ALIAS kj)
+if(UNIX)
+  target_link_libraries(kj PUBLIC pthread)
+endif()
+#make sure the lite flag propagates to all users (internal + external) of this library
+target_compile_definitions(kj PUBLIC ${CAPNP_LITE_FLAG})
+#make sure external consumers don't need to manually set the include dirs
+target_include_directories(kj INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+  $<INSTALL_INTERFACE:include>
+)
+install(TARGETS kj ${INSTALL_TARGETS_DEFAULT_ARGS})
+install(FILES ${kj_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
+install(FILES ${kj-parse_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/parse")
+install(FILES ${kj-std_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/std")
 
 set(kj-test_sources
   test.c++
@@ -72,10 +83,11 @@ set(kj-test-compat_headers
   compat/gtest.h
 )
 add_library(kj-test ${kj-test_sources})
+add_library(CapnProto::kj-test ALIAS kj-test)
 target_link_libraries(kj-test kj)
-install(TARGETS kj-test ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
-install(FILES ${kj-test_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
-install(FILES ${kj-test-compat_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj/compat")
+install(TARGETS kj-test ${INSTALL_TARGETS_DEFAULT_ARGS})
+install(FILES ${kj-test_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
+install(FILES ${kj-test-compat_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
 
 set(kj-async_sources
   async.c++
@@ -93,9 +105,14 @@ set(kj-async_headers
 )
 if(NOT CAPNP_LITE)
   add_library(kj-async ${kj-async_sources})
+  add_library(CapnProto::kj-async ALIAS kj-async)
   target_link_libraries(kj-async kj)
-  install(TARGETS kj-async ARCHIVE DESTINATION "${LIB_INSTALL_DIR}")
-  install(FILES ${kj-async_headers} DESTINATION "${INCLUDE_INSTALL_DIR}/kj")
+  if(UNIX)
+    # external clients of this library need to link to pthreads
+    target_compile_options(kj-async INTERFACE "-pthread")
+  endif()
+  install(TARGETS kj-async ${INSTALL_TARGETS_DEFAULT_ARGS})
+  install(FILES ${kj-async_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 endif()
 
 # Tests ========================================================================

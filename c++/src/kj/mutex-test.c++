@@ -25,7 +25,9 @@
 #include <kj/compat/gtest.h>
 
 #if _WIN32
+#define NOGDI  // NOGDI is needed to make EXPECT_EQ(123u, *lock) compile for some reason
 #include <windows.h>
+#undef NOGDI
 #else
 #include <pthread.h>
 #include <unistd.h>

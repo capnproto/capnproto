@@ -30,7 +30,7 @@
 #include <kj/vector.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
-#include <unistd.h>
+#include <kj/miniposix.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <map>
@@ -48,10 +48,6 @@
 
 #ifndef VERSION
 #define VERSION "(unknown)"
-#endif
-
-#if _WIN32
-#define mkdir(path, mode) mkdir(path)
 #endif
 
 namespace capnp {
@@ -1121,39 +1117,39 @@ private:
         return FieldText {
             kj::strTree(
                 kj::mv(unionDiscrim.readerIsDecl),
-                "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"
+                "  inline typename ", titleCase, "::Reader get", titleCase, "() const;\n"
                 "\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.builderIsDecl),
-                "  inline ", titleCase, "::Builder get", titleCase, "();\n"
-                "  inline ", titleCase, "::Builder init", titleCase, "();\n"
+                "  inline typename ", titleCase, "::Builder get", titleCase, "();\n"
+                "  inline typename ", titleCase, "::Builder init", titleCase, "();\n"
                 "\n"),
 
             hasDiscriminantValue(proto) ? kj::strTree() :
-                kj::strTree("  inline ", titleCase, "::Pipeline get", titleCase, "();\n"),
+                kj::strTree("  inline typename ", titleCase, "::Pipeline get", titleCase, "();\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.isDefs),
                 templateContext.allDecls(),
-                "inline ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
+                "inline typename ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Reader(_reader);\n"
                 "}\n",
                 templateContext.allDecls(),
-                "inline ", scope, titleCase, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
+                "inline typename ", scope, titleCase, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n",
                 hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
                   "#if !CAPNP_LITE\n",
                   templateContext.allDecls(),
-                  "inline ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
+                  "inline typename ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
                   "  return ", scope, titleCase, "::Pipeline(_typeless.noop());\n"
                   "}\n"
                   "#endif  // !CAPNP_LITE\n"),
                 templateContext.allDecls(),
-                "inline ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
+                "inline typename ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
                 KJ_MAP(slot, slots) {
                   switch (sectionFor(slot.whichType)) {
@@ -1909,13 +1905,9 @@ private:
          structNode.getPointerCount(), ")\n");
 
     kj::StringTree defineText = kj::strTree(
-        "// ", fullName, "\n"
-        // TODO(msvc): MSVC doen't expect constexprs to have definitions. Remove #if once
-        //   MSVC catches up on constexpr.
-        "#ifndef _MSC_VER\n",
+        "// ", fullName, "\n",
         templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::dataWordSize;\n",
         templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::pointerCount;\n"
-        "#endif\n",
         "#if !CAPNP_LITE\n",
         templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
         templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
@@ -2921,7 +2913,7 @@ private:
       makeDirectory(kj::str(path.slice(0, *slashpos)));
     }
 
-    if (mkdir(path.cStr(), 0777) < 0) {
+    if (kj::miniposix::mkdir(path.cStr(), 0777) < 0) {
       int error = errno;
       if (error != EEXIST) {
         KJ_FAIL_SYSCALL("mkdir(path)", error, path);

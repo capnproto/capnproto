@@ -201,6 +201,8 @@ private:
 
   void encodeField(StructSchema::Field field, DynamicValue::Reader input,
                    JsonValue::Builder output) const;
+  void decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output) const;
+  void decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct::Builder output) const;
   void addTypeHandlerImpl(Type type, HandlerBase& handler);
   void addFieldHandlerImpl(StructSchema::Field field, Type type, HandlerBase& handler);
 };
@@ -286,7 +288,7 @@ public:
   virtual void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
                           JsonValue::Builder output) const = 0;
   virtual Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
-                                          Orphanage orphanage) const;
+                                          Type type, Orphanage orphanage) const;
   virtual void decodeStructBase(const JsonCodec& codec, JsonValue::Reader input,
                                 DynamicStruct::Builder output) const;
 };
@@ -305,7 +307,7 @@ private:
     encode(codec, input.as<T>(), output);
   }
   Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
-                                  Orphanage orphanage) const override final {
+                                  Type type, Orphanage orphanage) const override final {
     return decode(codec, input, orphanage);
   }
   friend class JsonCodec;
@@ -332,12 +334,45 @@ private:
     encode(codec, input.as<T>(), output);
   }
   Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
-                                  Orphanage orphanage) const override final {
+                                  Type type, Orphanage orphanage) const override final {
     return decode(codec, input, orphanage);
   }
   void decodeStructBase(const JsonCodec& codec, JsonValue::Reader input,
                         DynamicStruct::Builder output) const override final {
     decode(codec, input, output.as<T>());
+  }
+  friend class JsonCodec;
+};
+
+template <>
+class JsonCodec::Handler<DynamicStruct>: private JsonCodec::HandlerBase {
+  // Almost identical to Style::STRUCT except that we pass the struct type to decode().
+
+public:
+  virtual void encode(const JsonCodec& codec, DynamicStruct::Reader input,
+                      JsonValue::Builder output) const = 0;
+  virtual void decode(const JsonCodec& codec, JsonValue::Reader input,
+                      DynamicStruct::Builder output) const = 0;
+  virtual Orphan<DynamicStruct> decode(const JsonCodec& codec, JsonValue::Reader input,
+                                       StructSchema type, Orphanage orphanage) const {
+    // If subclass does not override, fall back to regular version.
+    auto result = orphanage.newOrphan(type);
+    decode(codec, input, result.get());
+    return result;
+  }
+
+private:
+  void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
+                  JsonValue::Builder output) const override final {
+    encode(codec, input.as<DynamicStruct>(), output);
+  }
+  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
+                                  Type type, Orphanage orphanage) const override final {
+    return decode(codec, input, type.asStruct(), orphanage);
+  }
+  void decodeStructBase(const JsonCodec& codec, JsonValue::Reader input,
+                        DynamicStruct::Builder output) const override final {
+    decode(codec, input, output.as<DynamicStruct>());
   }
   friend class JsonCodec;
 };
@@ -354,7 +389,7 @@ private:
     encode(codec, input.as<T>(), output);
   }
   Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
-                                  Orphanage orphanage) const override final {
+                                  Type type, Orphanage orphanage) const override final {
     return decode(codec, input);
   }
   friend class JsonCodec;
@@ -373,8 +408,8 @@ private:
     encode(codec, input.as<T>(), output);
   }
   Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
-                                  Orphanage orphanage) const override final {
-    return decode(codec, input);
+                                  Type type, Orphanage orphanage) const override final {
+    return orphanage.newOrphanCopy(decode(codec, input));
   }
   friend class JsonCodec;
 };
@@ -403,6 +438,24 @@ template <typename T>
 inline void JsonCodec::addFieldHandler(StructSchema::Field field, Handler<T>& handler) {
   addFieldHandlerImpl(field, Type::from<T>(), handler);
 }
+
+template <> void JsonCodec::addTypeHandler(Handler<DynamicValue>& handler)
+    KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
+                   "try specifying a specific type schema as the first parameter");
+template <> void JsonCodec::addTypeHandler(Handler<DynamicEnum>& handler)
+    KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
+                   "try specifying a specific type schema as the first parameter");
+template <> void JsonCodec::addTypeHandler(Handler<DynamicStruct>& handler)
+    KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
+                   "try specifying a specific type schema as the first parameter");
+template <> void JsonCodec::addTypeHandler(Handler<DynamicList>& handler)
+    KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
+                   "try specifying a specific type schema as the first parameter");
+template <> void JsonCodec::addTypeHandler(Handler<DynamicCapability>& handler)
+    KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
+                   "try specifying a specific type schema as the first parameter");
+// TODO(someday): Implement support for registering handlers that cover thinsg like "all structs"
+//   or "all lists". Currently you can only target a specific struct or list type.
 
 } // namespace capnp
 

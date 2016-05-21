@@ -158,6 +158,7 @@ public:
   enum Flags {
     OBSERVE_READ = 1,
     OBSERVE_WRITE = 2,
+    OBSERVE_URGENT = 4,
     OBSERVE_READ_WRITE = OBSERVE_READ | OBSERVE_WRITE
   };
 
@@ -228,6 +229,15 @@ public:
   // It is an error to call `whenBecomesWritable()` again when the promise returned previously
   // has not yet resolved. If you do this, the previous promise may throw an exception.
 
+  Promise<void> whenUrgentDataAvailable();
+  // Resolves the next time the file descriptor's read buffer contains "urgent" data.
+  //
+  // The conditions for availability of urgent data are specific to the file descriptor's
+  // underlying implementation.
+  //
+  // It is an error to call `whenUrgentDataAvailable()` again when the promise returned previously
+  // has not yet resolved. If you do this, the previous promise may throw an exception.
+
 private:
   UnixEventPort& eventPort;
   int fd;
@@ -235,6 +245,7 @@ private:
 
   kj::Maybe<Own<PromiseFulfiller<void>>> readFulfiller;
   kj::Maybe<Own<PromiseFulfiller<void>>> writeFulfiller;
+  kj::Maybe<Own<PromiseFulfiller<void>>> urgentFulfiller;
   // Replaced each time `whenBecomesReadable()` or `whenBecomesWritable()` is called. Reverted to
   // null every time an event is fired.
 

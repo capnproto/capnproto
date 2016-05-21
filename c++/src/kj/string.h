@@ -39,7 +39,7 @@ class StringTree;   // string-tree.h
 
 // Our STL string SFINAE trick does not work with GCC 4.7, but it works with Clang and GCC 4.8, so
 // we'll just preprocess it out if not supported.
-#if __clang__ || __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)
+#if __clang__ || __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8) || _MSC_VER
 #define KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP 1
 #endif
 

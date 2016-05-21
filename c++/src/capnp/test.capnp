@@ -530,6 +530,13 @@ struct TestGenerics(Foo, Bar) {
   foo @0 :Foo;
   rev @1 :TestGenerics(Bar, Foo);
 
+  union {
+    uv @2:Void;
+    ug :group {
+      ugfoo @3:Int32;
+    }
+  }
+
   struct Inner {
     foo @0 :Foo;
     bar @1 :Bar;

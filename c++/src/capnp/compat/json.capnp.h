@@ -5,6 +5,9 @@
 #define CAPNP_INCLUDED_8ef99297a43a5e34_
 
 #include <capnp/generated-header-support.h>
+#if !CAPNP_LITE
+#include <capnp/capability.h>
+#endif  // !CAPNP_LITE
 
 #if CAPNP_VERSION != 6000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."

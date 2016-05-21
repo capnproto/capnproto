@@ -30,7 +30,7 @@
 #include <kj/vector.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
-#include <unistd.h>
+#include <kj/miniposix.h>
 #include <unordered_map>
 #include <kj/main.h>
 #include <algorithm>

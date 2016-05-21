@@ -153,7 +153,6 @@ class Tuple {
   // The actual Tuple class (used for tuples of size other than 1).
 
 public:
-  Tuple() = default;
   template <typename... U>
   constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
   template <typename... U>

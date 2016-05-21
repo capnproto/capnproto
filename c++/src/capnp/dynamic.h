@@ -33,7 +33,7 @@
 #ifndef CAPNP_DYNAMIC_H_
 #define CAPNP_DYNAMIC_H_
 
-#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
 #endif
 
@@ -1048,28 +1048,28 @@ struct Orphanage::GetInnerBuilder<DynamicList, Kind::OTHER> {
 
 template <>
 inline Orphan<DynamicStruct> Orphanage::newOrphanCopy<DynamicStruct::Reader>(
-    const DynamicStruct::Reader& copyFrom) const {
+    DynamicStruct::Reader copyFrom) const {
   return Orphan<DynamicStruct>(
       copyFrom.getSchema(), _::OrphanBuilder::copy(arena, capTable, copyFrom.reader));
 }
 
 template <>
 inline Orphan<DynamicList> Orphanage::newOrphanCopy<DynamicList::Reader>(
-    const DynamicList::Reader& copyFrom) const {
+    DynamicList::Reader copyFrom) const {
   return Orphan<DynamicList>(copyFrom.getSchema(),
       _::OrphanBuilder::copy(arena, capTable, copyFrom.reader));
 }
 
 template <>
 inline Orphan<DynamicCapability> Orphanage::newOrphanCopy<DynamicCapability::Client>(
-    DynamicCapability::Client& copyFrom) const {
+    DynamicCapability::Client copyFrom) const {
   return Orphan<DynamicCapability>(
       copyFrom.getSchema(), _::OrphanBuilder::copy(arena, capTable, copyFrom.hook->addRef()));
 }
 
 template <>
 Orphan<DynamicValue> Orphanage::newOrphanCopy<DynamicValue::Reader>(
-    const DynamicValue::Reader& copyFrom) const;
+    DynamicValue::Reader copyFrom) const;
 
 namespace _ {  // private
 
@@ -1397,7 +1397,7 @@ struct DynamicValue::Builder::AsImpl<T, Kind::LIST> {
 
 template <typename T>
 struct DynamicValue::Reader::AsImpl<T, Kind::INTERFACE> {
-  static typename T::Reader apply(const Reader& reader) {
+  static typename T::Client apply(const Reader& reader) {
     return reader.as<DynamicCapability>().as<T>();
   }
 };

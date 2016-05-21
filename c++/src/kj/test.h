@@ -62,10 +62,11 @@ private:
   void KJ_UNIQUE_NAME(TestCase)::run()
 
 #if _MSC_VER
+#define KJ_INDIRECT_EXPAND(m, vargs) m vargs
 #define KJ_FAIL_EXPECT(...) \
-  KJ_EXPAND(KJ_LOG(ERROR, __VA_ARGS__));
+  KJ_INDIRECT_EXPAND(KJ_LOG, (ERROR , __VA_ARGS__));
 #define KJ_EXPECT(cond, ...) \
-  if (cond); else KJ_EXPAND(KJ_FAIL_EXPECT("failed: expected " #cond, __VA_ARGS__))
+  if (cond); else KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("failed: expected " #cond , __VA_ARGS__))
 #else
 #define KJ_FAIL_EXPECT(...) \
   KJ_LOG(ERROR, ##__VA_ARGS__);

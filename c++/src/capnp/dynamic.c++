@@ -563,7 +563,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
                  .set(value.as<AnyPointer>());
           return;
 
-        case schema::Type::INTERFACE:
+        case schema::Type::INTERFACE: {
           auto interfaceType = type.asInterface();
           auto capability = value.as<DynamicCapability>();
           KJ_REQUIRE(capability.getSchema().extends(interfaceType), "Value type mismatch.") {
@@ -572,6 +572,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           builder.getPointerField(slot.getOffset() * POINTERS).setCapability(
               kj::mv(capability.hook));
           return;
+        }
       }
 
       KJ_UNREACHABLE;
@@ -742,7 +743,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           }
           break;
 
-        case schema::Type::INTERFACE:
+        case schema::Type::INTERFACE: {
           auto interfaceType = type.asInterface();
           KJ_REQUIRE(orphan.getType() == DynamicValue::CAPABILITY &&
                      orphan.interfaceSchema.extends(interfaceType),
@@ -750,6 +751,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
             return;
           }
           break;
+        }
       }
 
       builder.getPointerField(slot.getOffset() * POINTERS).adopt(kj::mv(orphan.builder));
@@ -2082,7 +2084,7 @@ Orphan<DynamicList> Orphan<DynamicValue>::releaseAs<DynamicList>() {
 
 template <>
 Orphan<DynamicValue> Orphanage::newOrphanCopy<DynamicValue::Reader>(
-    const DynamicValue::Reader& copyFrom) const {
+    DynamicValue::Reader copyFrom) const {
   switch (copyFrom.getType()) {
     case DynamicValue::UNKNOWN: return nullptr;
     case DynamicValue::VOID: return copyFrom.voidValue;

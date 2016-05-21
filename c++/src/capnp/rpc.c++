@@ -26,6 +26,7 @@
 #include <kj/async.h>
 #include <kj/one-of.h>
 #include <kj/function.h>
+#include <functional>  // std::greater
 #include <unordered_map>
 #include <map>
 #include <queue>

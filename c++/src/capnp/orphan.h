@@ -22,7 +22,7 @@
 #ifndef CAPNP_ORPHAN_H_
 #define CAPNP_ORPHAN_H_
 
-#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
 #endif
 
@@ -136,9 +136,7 @@ public:
   // to use this.
 
   template <typename Reader>
-  Orphan<FromReader<Reader>> newOrphanCopy(const Reader& copyFrom) const;
-  template <typename Reader>
-  Orphan<FromReader<Reader>> newOrphanCopy(Reader& copyFrom) const;
+  Orphan<FromReader<Reader>> newOrphanCopy(Reader copyFrom) const;
   // Allocate a new orphaned object (struct, list, or blob) and initialize it as a copy of the
   // given object.
 
@@ -408,13 +406,9 @@ struct Orphanage::GetInnerReader<T, Kind::BLOB> {
 };
 
 template <typename Reader>
-inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(const Reader& copyFrom) const {
+inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(Reader copyFrom) const {
   return Orphan<FromReader<Reader>>(_::OrphanBuilder::copy(
       arena, capTable, GetInnerReader<FromReader<Reader>>::apply(copyFrom)));
-}
-template <typename Reader>
-inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(Reader& copyFrom) const {
-  return newOrphanCopy(kj::implicitCast<const Reader&>(copyFrom));
 }
 
 template <typename T>

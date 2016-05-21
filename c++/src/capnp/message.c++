@@ -36,9 +36,11 @@ namespace {
 
 class DummyCapTableReader: public _::CapTableReader {
 public:
+#if !CAPNP_LITE
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override {
     return nullptr;
   }
+#endif
 };
 static constexpr DummyCapTableReader dummyCapTableReader = DummyCapTableReader();
 

@@ -26,7 +26,9 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 
 namespace kj {
 

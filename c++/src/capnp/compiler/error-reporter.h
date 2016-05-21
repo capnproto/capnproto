@@ -22,7 +22,7 @@
 #ifndef ERROR_REPORTER_H_
 #define ERROR_REPORTER_H_
 
-#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
 #endif
 

@@ -288,6 +288,9 @@ UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint fla
   if (flags & OBSERVE_WRITE) {
     event.events |= EPOLLOUT;
   }
+  if (flags & OBSERVE_URGENT) {
+    event.events |= EPOLLPRI;
+  }
   event.events |= EPOLLET;  // Set edge-triggered mode.
 
   event.data.ptr = this;
@@ -320,6 +323,13 @@ void UnixEventPort::FdObserver::fire(short events) {
       writeFulfiller = nullptr;
     }
   }
+
+  if (events & EPOLLPRI) {
+    KJ_IF_MAYBE(f, urgentFulfiller) {
+      f->get()->fulfill();
+      urgentFulfiller = nullptr;
+    }
+  }
 }
 
 Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
@@ -335,6 +345,15 @@ Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
 
   auto paf = newPromiseAndFulfiller<void>();
   writeFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
+  KJ_REQUIRE(flags & OBSERVE_URGENT,
+      "FdObserver was not set to observe availability of urgent data.");
+
+  auto paf = newPromiseAndFulfiller<void>();
+  urgentFulfiller = kj::mv(paf.fulfiller);
   return kj::mv(paf.promise);
 }
 
@@ -597,7 +616,14 @@ void UnixEventPort::FdObserver::fire(short events) {
     }
   }
 
-  if (readFulfiller == nullptr && writeFulfiller == nullptr) {
+  if (events & POLLPRI) {
+    KJ_IF_MAYBE(f, urgentFulfiller) {
+      f->get()->fulfill();
+      urgentFulfiller = nullptr;
+    }
+  }
+
+  if (readFulfiller == nullptr && writeFulfiller == nullptr && urgentFulfiller == nullptr) {
     // Remove from list.
     if (next == nullptr) {
       eventPort.observersTail = prev;
@@ -612,7 +638,8 @@ void UnixEventPort::FdObserver::fire(short events) {
 
 short UnixEventPort::FdObserver::getEventMask() {
   return (readFulfiller == nullptr ? 0 : (POLLIN | POLLRDHUP)) |
-         (writeFulfiller == nullptr ? 0 : POLLOUT);
+         (writeFulfiller == nullptr ? 0 : POLLOUT) |
+         (urgentFulfiller == nullptr ? 0 : POLLPRI);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
@@ -642,6 +669,22 @@ Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
 
   auto paf = newPromiseAndFulfiller<void>();
   writeFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
+  KJ_REQUIRE(flags & OBSERVE_URGENT,
+      "FdObserver was not set to observe availability of urgent data.");
+
+  if (prev == nullptr) {
+    KJ_DASSERT(next == nullptr);
+    prev = eventPort.observersTail;
+    *prev = this;
+    eventPort.observersTail = &next;
+  }
+
+  auto paf = newPromiseAndFulfiller<void>();
+  urgentFulfiller = kj::mv(paf.fulfiller);
   return kj::mv(paf.promise);
 }
 

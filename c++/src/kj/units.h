@@ -67,10 +67,6 @@ struct Id {
 // =======================================================================================
 // Quantity and UnitRatio -- implement unit analysis via the type system
 
-#if !_MSC_VER
-// TODO(msvc): MSVC has trouble with this intense templating. Luckily Cap'n Proto can deal with
-//   using regular integers in place of Quantity, so we can just skip all this.
-
 template <typename T> constexpr bool isIntegral() { return false; }
 template <> constexpr bool isIntegral<char>() { return true; }
 template <> constexpr bool isIntegral<signed char>() { return true; }
@@ -225,9 +221,12 @@ class Quantity {
 public:
   inline constexpr Quantity() {}
 
-  inline constexpr Quantity(decltype(maxValue)): value(maxValue) {}
-  inline constexpr Quantity(decltype(minValue)): value(minValue) {}
+  inline constexpr Quantity(MaxValue_): value(maxValue) {}
+  inline constexpr Quantity(MinValue_): value(minValue) {}
   // Allow initialization from maxValue and minValue.
+  // TODO(msvc): decltype(maxValue) and decltype(minValue) deduce unknown-type for these function
+  // parameters, causing the compiler to complain of a duplicate constructor definition, so we
+  // specify MaxValue_ and MinValue_ types explicitly.
 
   inline explicit constexpr Quantity(Number value): value(value) {}
   // This constructor was intended to be private, but GCC complains about it being private in a
@@ -354,14 +353,10 @@ private:
   friend inline constexpr T unit();
 };
 
-#endif  // !_MSC_VER
-
 template <typename T>
 inline constexpr T unit() { return T(1); }
 // unit<Quantity<T, U>>() returns a Quantity of value 1.  It also, intentionally, works on basic
 // numeric types.
-
-#if !_MSC_VER
 
 template <typename Number1, typename Number2, typename Unit>
 inline constexpr auto operator*(Number1 a, Quantity<Number2, Unit> b)
@@ -432,8 +427,6 @@ template <typename T>
 inline constexpr T origin() { return T(0 * unit<UnitOf<T>>()); }
 // origin<Absolute<T, U>>() returns an Absolute of value 0.  It also, intentionally, works on basic
 // numeric types.
-
-#endif  // !_MSC_VER
 
 }  // namespace kj
 
