@@ -1117,39 +1117,39 @@ private:
         return FieldText {
             kj::strTree(
                 kj::mv(unionDiscrim.readerIsDecl),
-                "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"
+                "  inline typename ", titleCase, "::Reader get", titleCase, "() const;\n"
                 "\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.builderIsDecl),
-                "  inline ", titleCase, "::Builder get", titleCase, "();\n"
-                "  inline ", titleCase, "::Builder init", titleCase, "();\n"
+                "  inline typename ", titleCase, "::Builder get", titleCase, "();\n"
+                "  inline typename ", titleCase, "::Builder init", titleCase, "();\n"
                 "\n"),
 
             hasDiscriminantValue(proto) ? kj::strTree() :
-                kj::strTree("  inline ", titleCase, "::Pipeline get", titleCase, "();\n"),
+                kj::strTree("  inline typename ", titleCase, "::Pipeline get", titleCase, "();\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.isDefs),
                 templateContext.allDecls(),
-                "inline ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
+                "inline typename ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Reader(_reader);\n"
                 "}\n",
                 templateContext.allDecls(),
-                "inline ", scope, titleCase, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
+                "inline typename ", scope, titleCase, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n",
                 hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
                   "#if !CAPNP_LITE\n",
                   templateContext.allDecls(),
-                  "inline ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
+                  "inline typename ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
                   "  return ", scope, titleCase, "::Pipeline(_typeless.noop());\n"
                   "}\n"
                   "#endif  // !CAPNP_LITE\n"),
                 templateContext.allDecls(),
-                "inline ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
+                "inline typename ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
                 KJ_MAP(slot, slots) {
                   switch (sectionFor(slot.whichType)) {
