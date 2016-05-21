@@ -34,11 +34,6 @@ if(CAPNP_LITE AND BUILD_TESTING AND NOT EXTERNAL_CAPNP)
   message(SEND_ERROR "You must set EXTERNAL_CAPNP when using CAPNP_LITE and BUILD_TESTING.")
 endif()
 
-
-if(MSVC AND NOT CAPNP_LITE)
-  message(SEND_ERROR "Building with MSVC is only supported with CAPNP_LITE.")
-endif()
-
 if(CAPNP_LITE)
   set(CAPNP_LITE_FLAG "-DCAPNP_LITE")
   # This flag is attached as PUBLIC target_compile_definition to kj target

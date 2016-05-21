@@ -63,9 +63,6 @@
 #elif defined(_MSC_VER)
   #if _MSC_VER < 1900
     #error "You need Visual Studio 2015 or better to compile this code."
-  #elif !CAPNP_LITE
-    // TODO(cleanup): This is KJ, but we're talking about Cap'n Proto.
-    #error "As of this writing, Cap'n Proto only supports Visual C++ in 'lite mode'; please #define CAPNP_LITE"
   #endif
 #else
   #warning "I don't recognize your compiler.  As of this writing, Clang and GCC are the only "\

@@ -44,11 +44,6 @@ namespace capnp {
 #define CAPNP_VERSION \
   (CAPNP_VERSION_MAJOR * 1000000 + CAPNP_VERSION_MINOR * 1000 + CAPNP_VERSION_MICRO)
 
-#ifdef _MSC_VER
-#define CAPNP_LITE 1
-// MSVC only supports "lite" mode for now, due to missing C++11 features.
-#endif
-
 #ifndef CAPNP_LITE
 #define CAPNP_LITE 0
 #endif
