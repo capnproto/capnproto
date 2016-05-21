@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
+// Copyright (c) 2013-2016 Sandstorm Development Group, Inc. and contributors
 // Licensed under the MIT License:
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -339,8 +339,8 @@ public:
   // Init methods:  Initialize the pointer to a newly-allocated object, discarding the existing
   // object.
 
-  void setStruct(const StructReader& value);
-  void setList(const ListReader& value);
+  void setStruct(const StructReader& value, bool canonical = false);
+  void setList(const ListReader& value, bool canonical = false);
   template <typename T> void setBlob(typename T::Reader value);
 #if !CAPNP_LITE
   void setCapability(kj::Own<ClientHook>&& cap);
@@ -360,8 +360,10 @@ public:
   void transferFrom(PointerBuilder other);
   // Equivalent to `adopt(other.disown())`.
 
-  void copyFrom(PointerReader other);
+  void copyFrom(PointerReader other, bool canonical = false);
   // Equivalent to `set(other.get())`.
+  // If you set the canonical flag, it will attempt to lay the target out
+  // canonically, provided enough space is available.
 
   PointerReader asReader() const;
 
@@ -435,6 +437,13 @@ public:
 
   PointerReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
+
+  bool isCanonical(const word **readHead);
+  // Validate this pointer's canonicity, subject to the conditions:
+  // * All data to the left of readHead has been read thus far (for pointer
+  //   ordering)
+  // * All pointers in preorder have already been checked
+  // * This pointer is in the first and only segment of the message
 
 private:
   SegmentReader* segment;      // Memory segment in which the pointer resides.
@@ -562,6 +571,8 @@ public:
   inline kj::ArrayPtr<const byte> getDataSectionAsBlob();
   inline _::ListReader getPointerSectionAsList();
 
+  kj::Array<word> canonicalize();
+
   template <typename T>
   KJ_ALWAYS_INLINE(bool hasDataField(ElementCount offset) const);
   // Return true if the field is set to something other than its default value.
@@ -594,6 +605,21 @@ public:
 
   StructReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
+
+  bool isCanonical(const word **readHead, const word **ptrHead,
+                   bool *dataTrunc, bool *ptrTrunc);
+  // Validate this pointer's canonicity, subject to the conditions:
+  // * All data to the left of readHead has been read thus far (for pointer
+  //   ordering)
+  // * All pointers in preorder have already been checked
+  // * This pointer is in the first and only segment of the message
+  //
+  // If this function returns false, the struct is non-canonical. If it
+  // returns true, then:
+  // * If it is a composite in a list, it is canonical if at least one struct
+  //   in the list outputs dataTrunc = 1, and at least one outputs ptrTrunc = 1
+  // * If it is derived from a struct pointer, it is canonical if
+  //   dataTrunc = 1 AND ptrTrunc = 1
 
 private:
   SegmentReader* segment;    // Memory segment in which the struct resides.
@@ -742,6 +768,13 @@ public:
 
   ListReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
+
+  bool isCanonical(const word **readHead);
+  // Validate this pointer's canonicity, subject to the conditions:
+  // * All data to the left of readHead has been read thus far (for pointer
+  //   ordering)
+  // * All pointers in preorder have already been checked
+  // * This pointer is in the first and only segment of the message
 
 private:
   SegmentReader* segment;    // Memory segment in which the list resides.

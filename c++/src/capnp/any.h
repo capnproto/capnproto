@@ -221,8 +221,13 @@ struct AnyPointer {
     inline void setAs(std::initializer_list<ReaderFor<ListElementType<T>>> list);
     // Valid for T = List<?>.
 
+    template <typename T>
+    inline void setCanonicalAs(ReaderFor<T> value);
+
     inline void set(Reader value) { builder.copyFrom(value.reader); }
     // Set to a copy of another AnyPointer.
+
+    inline void setCanonical(Reader value) { builder.copyFrom(value.reader, true); }
 
     template <typename T>
     inline void adopt(Orphan<T>&& orphan);
@@ -461,6 +466,10 @@ public:
   }
   List<AnyPointer>::Reader getPointerSection() {
     return List<AnyPointer>::Reader(_reader.getPointerSectionAsList());
+  }
+
+  kj::Array<word> canonicalize() {
+    return _reader.canonicalize();
   }
 
   Equality equals(AnyStruct::Reader right);
@@ -789,6 +798,11 @@ inline AnyStruct::Builder AnyPointer::Builder::initAsAnyStruct(uint dataWordCoun
 template <typename T>
 inline void AnyPointer::Builder::setAs(ReaderFor<T> value) {
   return _::PointerHelpers<T>::set(builder, value);
+}
+
+template <typename T>
+inline void AnyPointer::Builder::setCanonicalAs(ReaderFor<T> value) {
+  return _::PointerHelpers<T>::setCanonical(builder, value);
 }
 
 template <typename T>

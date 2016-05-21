@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
+// Copyright (c) 2013-2016 Sandstorm Development Group, Inc. and contributors
 // Licensed under the MIT License:
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,6 +22,7 @@
 #include <kj/common.h>
 #include <kj/memory.h>
 #include <kj/mutex.h>
+#include <kj/debug.h>
 #include "common.h"
 #include "layout.h"
 #include "any.h"
@@ -117,6 +118,9 @@ public:
   // Dynamically interpret the root struct of the message using the given schema (a StructSchema).
   // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
+
+  bool isCanonical();
+  // Returns whether the message encoded in the reader is in canonical form.
 
 private:
   ReaderOptions options;
@@ -219,6 +223,9 @@ public:
   // Get the raw data that makes up the message.
 
   Orphanage getOrphanage();
+
+  bool isCanonical();
+  // Check whether the message builder is in canonical form
 
 private:
   void* arenaSpace[22];
@@ -489,6 +496,11 @@ typename kj::ArrayPtr<const word> writeDataStruct(BuilderType builder) {
 template <typename Type>
 static typename Type::Reader defaultValue() {
   return typename Type::Reader(_::StructReader());
+}
+
+template <typename T>
+kj::Array<word> canonicalize(T&& reader) {
+    return _::PointerHelpers<FromReader<T>>::getInternalReader(reader).canonicalize();
 }
 
 }  // namespace capnp

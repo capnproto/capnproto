@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
+// Copyright (c) 2013-2016 Sandstorm Development Group, Inc. and contributors
 // Licensed under the MIT License:
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -52,6 +52,34 @@ MessageReader::~MessageReader() noexcept(false) {
     arena()->~ReaderArena();
   }
 }
+
+bool MessageReader::isCanonical() {
+  if (!allocatedArena) {
+    static_assert(sizeof(_::ReaderArena) <= sizeof(arenaSpace),
+        "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
+        "ABI compatibility.");
+    new(arena()) _::ReaderArena(this);
+    allocatedArena = true;
+  }
+
+  _::SegmentReader *segment = arena()->tryGetSegment(_::SegmentId(0));
+
+  if (segment == NULL) {
+    // The message has no segments
+    return false;
+  }
+
+  if (arena()->tryGetSegment(_::SegmentId(1))) {
+    // The message has more than one segment
+    return false;
+  }
+
+  const word* readHead = segment->getStartPtr() + 1;
+  return _::PointerReader::getRoot(segment, nullptr, segment->getStartPtr(),
+                                   this->getOptions().nestingLimit)
+                                  .isCanonical(&readHead);
+}
+
 
 AnyPointer::Reader MessageReader::getRootInternal() {
   if (!allocatedArena) {
@@ -130,6 +158,24 @@ Orphanage MessageBuilder::getOrphanage() {
   if (!allocatedArena) getRootSegment();
 
   return Orphanage(arena(), arena()->getLocalCapTable());
+}
+
+bool MessageBuilder::isCanonical() {
+  _::SegmentReader *segment = getRootSegment();
+
+  if (segment == NULL) {
+    // The message has no segments
+    return false;
+  }
+
+  if (arena()->tryGetSegment(_::SegmentId(1))) {
+    // The message has more than one segment
+    return false;
+  }
+
+  const word* readHead = segment->getStartPtr() + 1;
+  return _::PointerReader::getRoot(segment, nullptr, segment->getStartPtr(), kj::maxValue)
+                                  .isCanonical(&readHead);
 }
 
 // =======================================================================================

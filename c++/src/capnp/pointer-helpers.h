@@ -48,6 +48,9 @@ struct PointerHelpers<T, Kind::STRUCT> {
   static inline void set(PointerBuilder builder, typename T::Reader value) {
     builder.setStruct(value._reader);
   }
+  static inline void setCanonical(PointerBuilder builder, typename T::Reader value) {
+    builder.setStruct(value._reader, true);
+  }
   static inline typename T::Builder init(PointerBuilder builder) {
     return typename T::Builder(builder.initStruct(structSize<T>()));
   }
@@ -77,6 +80,9 @@ struct PointerHelpers<List<T>, Kind::LIST> {
   }
   static inline void set(PointerBuilder builder, typename List<T>::Reader value) {
     builder.setList(value.reader);
+  }
+  static inline void setCanonical(PointerBuilder builder, typename List<T>::Reader value) {
+    builder.setList(value.reader, true);
   }
   static void set(PointerBuilder builder, kj::ArrayPtr<const ReaderFor<T>> value) {
     auto l = init(builder, value.size());
@@ -115,6 +121,9 @@ struct PointerHelpers<T, Kind::BLOB> {
     return builder.getBlob<T>(defaultValue, defaultBytes * BYTES);
   }
   static inline void set(PointerBuilder builder, typename T::Reader value) {
+    builder.setBlob<T>(value);
+  }
+  static inline void setCanonical(PointerBuilder builder, typename T::Reader value) {
     builder.setBlob<T>(value);
   }
   static inline typename T::Builder init(PointerBuilder builder, uint size) {
