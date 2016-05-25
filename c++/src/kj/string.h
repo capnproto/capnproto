@@ -114,6 +114,11 @@ public:
 
   template <typename T>
   T parseAs() const;
+  // Parse string as template number type.
+  // Integer numbers prefixed by "0x" and "0X" are parsed in base 16 (like strtoi with base 0).
+  // Integer numbers prefixed by "0" are parsed in base 10 (unlike strtoi with base 0).
+  // Overflowed integer numbers throw exception.
+  // Overflowed floating numbers return inf.
 
 private:
   inline StringPtr(ArrayPtr<const char> content): content(content) {}

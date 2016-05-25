@@ -34,12 +34,16 @@ namespace kj {
 #endif
 
 namespace {
+bool isHex(const char *s) {
+  if (*s == '-') s++;
+  return s[0] == '0' && (s[1] == 'x' || s[1] == 'X');
+}
 
 long long parseSigned(const StringPtr& s, long long min, long long max) {
   KJ_REQUIRE(s != nullptr, "String does not contain valid number", s);
   char *endPtr;
   errno = 0;
-  auto value = strtoll(s.begin(), &endPtr, 10);
+  auto value = strtoll(s.begin(), &endPtr, isHex(s.cStr()) ? 16 : 10);
   KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
   KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
   KJ_REQUIRE(value >= min && value <= max, "Value out-of-range", value, min, max);
@@ -50,7 +54,7 @@ unsigned long long parseUnsigned(const StringPtr& s, unsigned long long max) {
   KJ_REQUIRE(s != nullptr, "String does not contain valid number", s);
   char *endPtr;
   errno = 0;
-  auto value = strtoull(s.begin(), &endPtr, 10);
+  auto value = strtoull(s.begin(), &endPtr, isHex(s.cStr()) ? 16 : 10);
   KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
   KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
   KJ_REQUIRE(value <= max, "Value out-of-range", value, max);

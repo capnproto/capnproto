@@ -102,6 +102,13 @@ TEST(String, parseAs) {
   KJ_EXPECT_THROW_MESSAGE("not contain valid", StringPtr("a").parseAs<int64_t>());
   KJ_EXPECT_THROW_MESSAGE("not contain valid", StringPtr("1a").parseAs<int64_t>());
   KJ_EXPECT_THROW_MESSAGE("not contain valid", StringPtr("+-1").parseAs<int64_t>());
+  EXPECT_EQ(StringPtr("010").parseAs<int64_t>(), 10);
+  EXPECT_EQ(StringPtr("0010").parseAs<int64_t>(), 10);
+  EXPECT_EQ(StringPtr("0x10").parseAs<int64_t>(), 16);
+  EXPECT_EQ(StringPtr("0X10").parseAs<int64_t>(), 16);
+  EXPECT_EQ(StringPtr("-010").parseAs<int64_t>(), -10);
+  EXPECT_EQ(StringPtr("-0x10").parseAs<int64_t>(), -16);
+  EXPECT_EQ(StringPtr("-0X10").parseAs<int64_t>(), -16);
 
   EXPECT_EQ(StringPtr("1").parseAs<uint64_t>(), 1);
   EXPECT_EQ(StringPtr("0").parseAs<uint64_t>(), 0);
