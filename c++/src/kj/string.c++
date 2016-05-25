@@ -25,7 +25,6 @@
 #include <float.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <limits>
 
 namespace kj {
 
@@ -61,12 +60,12 @@ unsigned long long parseUnsigned(const StringPtr& s, unsigned long long max) {
 
 template <typename T>
 T parseInteger(const StringPtr& s) {
-  if (std::numeric_limits<T>::is_signed) {
-    auto min = (long long) std::numeric_limits<T>::min();
-    auto max = (long long) std::numeric_limits<T>::max();
+  if (static_cast<T>(minValue) < 0) {
+    long long min = static_cast<T>(minValue);
+    long long max = static_cast<T>(maxValue);
     return static_cast<T>(parseSigned(s, min, max));
   } else {
-    auto max = (unsigned long long) std::numeric_limits<T>::max();
+    long long max = static_cast<T>(maxValue);
     return static_cast<T>(parseUnsigned(s, max));
   }
 }
