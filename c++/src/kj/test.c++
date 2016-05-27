@@ -346,6 +346,8 @@ public:
     if (passCount > 0) write(GREEN, kj::str(passCount, " test(s) passed"), "");
     if (failCount > 0) write(RED, kj::str(failCount, " test(s) failed"), "");
     context.exit();
+
+    return true;
   }
 
 private:
