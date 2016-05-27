@@ -384,31 +384,6 @@ void JsonCodec::encodeField(StructSchema::Field field, DynamicValue::Reader inpu
 }
 
 namespace {
-int64_t parseInt64(kj::StringPtr s) {
-  char *endPtr;
-  errno = 0;
-  int64_t value = strtoll(s.begin(), &endPtr, 10);
-  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
-  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
-  return value;
-}
-
-uint64_t parseUInt64(kj::StringPtr s) {
-  char *endPtr;
-  errno = 0;
-  uint64_t value = strtoull(s.begin(), &endPtr, 10);
-  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
-  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
-  return value;
-}
-
-double parseFloat64(kj::StringPtr s) {
-  char *endPtr;
-  errno = 0;
-  double value = strtod(s.begin(), &endPtr);
-  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid floating number", s);
-  return value;
-}
 
 template <typename SetFn, typename DecodeArrayFn, typename DecodeObjectFn>
 void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn decodeArrayFn,
@@ -436,7 +411,7 @@ void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn 
           setFn(value.getNumber());
           break;
         case JsonValue::STRING:
-          setFn(parseInt64(value.getString()));
+          setFn(value.getString().parseAs<int64_t>());
           break;
         default:
           KJ_FAIL_REQUIRE("Expected integer value");
@@ -452,7 +427,7 @@ void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn 
           setFn(value.getNumber());
           break;
         case JsonValue::STRING:
-          setFn(parseUInt64(value.getString()));
+          setFn(value.getString().parseAs<uint64_t>());
           break;
         default:
           KJ_FAIL_REQUIRE("Expected integer value");
@@ -468,7 +443,7 @@ void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn 
           setFn(value.getNumber());
           break;
         case JsonValue::STRING:
-          setFn(parseFloat64(value.getString()));
+          setFn(value.getString().parseAs<double>());
           break;
         default:
           KJ_FAIL_REQUIRE("Expected float value");
