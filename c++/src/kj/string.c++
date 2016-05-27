@@ -69,7 +69,7 @@ T parseInteger(const StringPtr& s) {
     long long max = static_cast<T>(maxValue);
     return static_cast<T>(parseSigned(s, min, max));
   } else {
-    long long max = static_cast<T>(maxValue);
+    unsigned long long max = static_cast<T>(maxValue);
     return static_cast<T>(parseUnsigned(s, max));
   }
 }
