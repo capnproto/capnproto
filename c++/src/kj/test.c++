@@ -347,7 +347,7 @@ public:
     if (failCount > 0) write(RED, kj::str(failCount, " test(s) failed"), "");
     context.exit();
 
-    return true;
+    KJ_UNREACHABLE;
   }
 
 private:
