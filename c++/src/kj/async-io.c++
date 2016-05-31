@@ -115,17 +115,6 @@ public:
         observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ_WRITE) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
-  Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tryReadInternal(buffer, minBytes, maxBytes, 0).then([=](size_t result) {
-      KJ_REQUIRE(result >= minBytes, "Premature EOF") {
-        // Pretend we read zeros from the input.
-        memset(reinterpret_cast<byte*>(buffer) + result, 0, minBytes - result);
-        return minBytes;
-      }
-      return result;
-    });
-  }
-
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return tryReadInternal(buffer, minBytes, maxBytes, 0);
   }
@@ -1352,6 +1341,16 @@ private:
 
 Promise<void> AsyncInputStream::read(void* buffer, size_t bytes) {
   return read(buffer, bytes, bytes).then([](size_t) {});
+}
+Promise<size_t> AsyncInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
+  return tryRead(buffer, minBytes, maxBytes).then([=](size_t result) {
+    KJ_REQUIRE(result >= minBytes, "Premature EOF") {
+      // Pretend we read zeros from the input.
+      memset(reinterpret_cast<byte*>(buffer) + result, 0, minBytes - result);
+      return minBytes;
+    }
+    return result;
+  });
 }
 
 void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length) {

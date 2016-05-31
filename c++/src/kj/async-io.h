@@ -45,7 +45,7 @@ class AsyncInputStream {
   // Asynchronous equivalent of InputStream (from io.h).
 
 public:
-  virtual Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) = 0;
+  virtual Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes);
   virtual Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;
 
   Promise<void> read(void* buffer, size_t bytes);
