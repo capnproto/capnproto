@@ -111,6 +111,7 @@ class Request: public Params::Builder {
 public:
   inline Request(typename Params::Builder builder, kj::Own<RequestHook>&& hook)
       : Params::Builder(builder), hook(kj::mv(hook)) {}
+  inline Request(decltype(nullptr)): Params::Builder(nullptr) {}
 
   RemotePromise<Results> send();
   // Send the call and return a promise for the results.
