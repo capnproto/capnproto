@@ -1851,6 +1851,28 @@ TEST(Encoding, GenericDefaults) {
       .getValue().getRev().getFoo().getInt16Field());
 }
 
+TEST(Encoding, UnionInGenerics) {
+  MallocMessageBuilder message;
+  auto builder = message.initRoot<test::TestGenerics<>>();
+  auto reader = builder.asReader();
+
+  //just call the methods to verify that generated code compiles
+  reader.which();
+  builder.which();
+
+  reader.isUv();
+  builder.isUv();
+  reader.getUv();
+  builder.getUv();
+  builder.setUv();
+
+  reader.isUg();
+  builder.isUg();
+  reader.getUg();
+  builder.getUg();
+  builder.initUg();
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

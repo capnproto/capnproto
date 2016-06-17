@@ -1134,18 +1134,18 @@ private:
                 templateContext.allDecls(),
                 "inline typename ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
                 unionDiscrim.check,
-                "  return ", scope, titleCase, "::Reader(_reader);\n"
+                "  return typename ", scope, titleCase, "::Reader(_reader);\n"
                 "}\n",
                 templateContext.allDecls(),
                 "inline typename ", scope, titleCase, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
                 unionDiscrim.check,
-                "  return ", scope, titleCase, "::Builder(_builder);\n"
+                "  return typename ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n",
                 hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
                   "#if !CAPNP_LITE\n",
                   templateContext.allDecls(),
                   "inline typename ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
-                  "  return ", scope, titleCase, "::Pipeline(_typeless.noop());\n"
+                  "  return typename ", scope, titleCase, "::Pipeline(_typeless.noop());\n"
                   "}\n"
                   "#endif  // !CAPNP_LITE\n"),
                 templateContext.allDecls(),
@@ -1166,7 +1166,7 @@ private:
                   }
                   KJ_UNREACHABLE;
                 },
-                "  return ", scope, titleCase, "::Builder(_builder);\n"
+                "  return typename ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n")
           };
       }
