@@ -1866,6 +1866,8 @@ TEST(Encoding, UnionInGenerics) {
   builder.getUv();
   builder.setUv();
 
+  builder.initUg();
+
   reader.isUg();
   builder.isUg();
   reader.getUg();

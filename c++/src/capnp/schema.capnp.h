@@ -4166,12 +4166,12 @@ inline bool Node::Builder::isStruct() {
 inline typename Node::Struct::Reader Node::Reader::getStruct() const {
   KJ_IREQUIRE((which() == Node::STRUCT),
               "Must check which() before get()ing a union member.");
-  return Node::Struct::Reader(_reader);
+  return typename Node::Struct::Reader(_reader);
 }
 inline typename Node::Struct::Builder Node::Builder::getStruct() {
   KJ_IREQUIRE((which() == Node::STRUCT),
               "Must check which() before get()ing a union member.");
-  return Node::Struct::Builder(_builder);
+  return typename Node::Struct::Builder(_builder);
 }
 inline typename Node::Struct::Builder Node::Builder::initStruct() {
   _builder.setDataField<Node::Which>(
@@ -4183,7 +4183,7 @@ inline typename Node::Struct::Builder Node::Builder::initStruct() {
   _builder.setDataField< ::uint16_t>(15 * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint32_t>(8 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(3 * ::capnp::POINTERS).clear();
-  return Node::Struct::Builder(_builder);
+  return typename Node::Struct::Builder(_builder);
 }
 inline bool Node::Reader::isEnum() const {
   return which() == Node::ENUM;
@@ -4194,18 +4194,18 @@ inline bool Node::Builder::isEnum() {
 inline typename Node::Enum::Reader Node::Reader::getEnum() const {
   KJ_IREQUIRE((which() == Node::ENUM),
               "Must check which() before get()ing a union member.");
-  return Node::Enum::Reader(_reader);
+  return typename Node::Enum::Reader(_reader);
 }
 inline typename Node::Enum::Builder Node::Builder::getEnum() {
   KJ_IREQUIRE((which() == Node::ENUM),
               "Must check which() before get()ing a union member.");
-  return Node::Enum::Builder(_builder);
+  return typename Node::Enum::Builder(_builder);
 }
 inline typename Node::Enum::Builder Node::Builder::initEnum() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::ENUM);
   _builder.getPointerField(3 * ::capnp::POINTERS).clear();
-  return Node::Enum::Builder(_builder);
+  return typename Node::Enum::Builder(_builder);
 }
 inline bool Node::Reader::isInterface() const {
   return which() == Node::INTERFACE;
@@ -4216,19 +4216,19 @@ inline bool Node::Builder::isInterface() {
 inline typename Node::Interface::Reader Node::Reader::getInterface() const {
   KJ_IREQUIRE((which() == Node::INTERFACE),
               "Must check which() before get()ing a union member.");
-  return Node::Interface::Reader(_reader);
+  return typename Node::Interface::Reader(_reader);
 }
 inline typename Node::Interface::Builder Node::Builder::getInterface() {
   KJ_IREQUIRE((which() == Node::INTERFACE),
               "Must check which() before get()ing a union member.");
-  return Node::Interface::Builder(_builder);
+  return typename Node::Interface::Builder(_builder);
 }
 inline typename Node::Interface::Builder Node::Builder::initInterface() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::INTERFACE);
   _builder.getPointerField(3 * ::capnp::POINTERS).clear();
   _builder.getPointerField(4 * ::capnp::POINTERS).clear();
-  return Node::Interface::Builder(_builder);
+  return typename Node::Interface::Builder(_builder);
 }
 inline bool Node::Reader::isConst() const {
   return which() == Node::CONST;
@@ -4239,19 +4239,19 @@ inline bool Node::Builder::isConst() {
 inline typename Node::Const::Reader Node::Reader::getConst() const {
   KJ_IREQUIRE((which() == Node::CONST),
               "Must check which() before get()ing a union member.");
-  return Node::Const::Reader(_reader);
+  return typename Node::Const::Reader(_reader);
 }
 inline typename Node::Const::Builder Node::Builder::getConst() {
   KJ_IREQUIRE((which() == Node::CONST),
               "Must check which() before get()ing a union member.");
-  return Node::Const::Builder(_builder);
+  return typename Node::Const::Builder(_builder);
 }
 inline typename Node::Const::Builder Node::Builder::initConst() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::CONST);
   _builder.getPointerField(3 * ::capnp::POINTERS).clear();
   _builder.getPointerField(4 * ::capnp::POINTERS).clear();
-  return Node::Const::Builder(_builder);
+  return typename Node::Const::Builder(_builder);
 }
 inline bool Node::Reader::isAnnotation() const {
   return which() == Node::ANNOTATION;
@@ -4262,12 +4262,12 @@ inline bool Node::Builder::isAnnotation() {
 inline typename Node::Annotation::Reader Node::Reader::getAnnotation() const {
   KJ_IREQUIRE((which() == Node::ANNOTATION),
               "Must check which() before get()ing a union member.");
-  return Node::Annotation::Reader(_reader);
+  return typename Node::Annotation::Reader(_reader);
 }
 inline typename Node::Annotation::Builder Node::Builder::getAnnotation() {
   KJ_IREQUIRE((which() == Node::ANNOTATION),
               "Must check which() before get()ing a union member.");
-  return Node::Annotation::Builder(_builder);
+  return typename Node::Annotation::Builder(_builder);
 }
 inline typename Node::Annotation::Builder Node::Builder::initAnnotation() {
   _builder.setDataField<Node::Which>(
@@ -4285,7 +4285,7 @@ inline typename Node::Annotation::Builder Node::Builder::initAnnotation() {
   _builder.setDataField<bool>(122 * ::capnp::ELEMENTS, 0);
   _builder.setDataField<bool>(123 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(3 * ::capnp::POINTERS).clear();
-  return Node::Annotation::Builder(_builder);
+  return typename Node::Annotation::Builder(_builder);
 }
 inline bool Node::Reader::hasParameters() const {
   return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
@@ -5010,12 +5010,12 @@ inline bool Field::Builder::isSlot() {
 inline typename Field::Slot::Reader Field::Reader::getSlot() const {
   KJ_IREQUIRE((which() == Field::SLOT),
               "Must check which() before get()ing a union member.");
-  return Field::Slot::Reader(_reader);
+  return typename Field::Slot::Reader(_reader);
 }
 inline typename Field::Slot::Builder Field::Builder::getSlot() {
   KJ_IREQUIRE((which() == Field::SLOT),
               "Must check which() before get()ing a union member.");
-  return Field::Slot::Builder(_builder);
+  return typename Field::Slot::Builder(_builder);
 }
 inline typename Field::Slot::Builder Field::Builder::initSlot() {
   _builder.setDataField<Field::Which>(
@@ -5024,7 +5024,7 @@ inline typename Field::Slot::Builder Field::Builder::initSlot() {
   _builder.setDataField<bool>(128 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(2 * ::capnp::POINTERS).clear();
   _builder.getPointerField(3 * ::capnp::POINTERS).clear();
-  return Field::Slot::Builder(_builder);
+  return typename Field::Slot::Builder(_builder);
 }
 inline bool Field::Reader::isGroup() const {
   return which() == Field::GROUP;
@@ -5035,34 +5035,34 @@ inline bool Field::Builder::isGroup() {
 inline typename Field::Group::Reader Field::Reader::getGroup() const {
   KJ_IREQUIRE((which() == Field::GROUP),
               "Must check which() before get()ing a union member.");
-  return Field::Group::Reader(_reader);
+  return typename Field::Group::Reader(_reader);
 }
 inline typename Field::Group::Builder Field::Builder::getGroup() {
   KJ_IREQUIRE((which() == Field::GROUP),
               "Must check which() before get()ing a union member.");
-  return Field::Group::Builder(_builder);
+  return typename Field::Group::Builder(_builder);
 }
 inline typename Field::Group::Builder Field::Builder::initGroup() {
   _builder.setDataField<Field::Which>(
       4 * ::capnp::ELEMENTS, Field::GROUP);
   _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
-  return Field::Group::Builder(_builder);
+  return typename Field::Group::Builder(_builder);
 }
 inline typename Field::Ordinal::Reader Field::Reader::getOrdinal() const {
-  return Field::Ordinal::Reader(_reader);
+  return typename Field::Ordinal::Reader(_reader);
 }
 inline typename Field::Ordinal::Builder Field::Builder::getOrdinal() {
-  return Field::Ordinal::Builder(_builder);
+  return typename Field::Ordinal::Builder(_builder);
 }
 #if !CAPNP_LITE
 inline typename Field::Ordinal::Pipeline Field::Pipeline::getOrdinal() {
-  return Field::Ordinal::Pipeline(_typeless.noop());
+  return typename Field::Ordinal::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
 inline typename Field::Ordinal::Builder Field::Builder::initOrdinal() {
   _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
-  return Field::Ordinal::Builder(_builder);
+  return typename Field::Ordinal::Builder(_builder);
 }
 inline  ::uint32_t Field::Slot::Reader::getOffset() const {
   return _reader.getDataField< ::uint32_t>(
@@ -5960,18 +5960,18 @@ inline bool Type::Builder::isList() {
 inline typename Type::List::Reader Type::Reader::getList() const {
   KJ_IREQUIRE((which() == Type::LIST),
               "Must check which() before get()ing a union member.");
-  return Type::List::Reader(_reader);
+  return typename Type::List::Reader(_reader);
 }
 inline typename Type::List::Builder Type::Builder::getList() {
   KJ_IREQUIRE((which() == Type::LIST),
               "Must check which() before get()ing a union member.");
-  return Type::List::Builder(_builder);
+  return typename Type::List::Builder(_builder);
 }
 inline typename Type::List::Builder Type::Builder::initList() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::LIST);
   _builder.getPointerField(0 * ::capnp::POINTERS).clear();
-  return Type::List::Builder(_builder);
+  return typename Type::List::Builder(_builder);
 }
 inline bool Type::Reader::isEnum() const {
   return which() == Type::ENUM;
@@ -5982,19 +5982,19 @@ inline bool Type::Builder::isEnum() {
 inline typename Type::Enum::Reader Type::Reader::getEnum() const {
   KJ_IREQUIRE((which() == Type::ENUM),
               "Must check which() before get()ing a union member.");
-  return Type::Enum::Reader(_reader);
+  return typename Type::Enum::Reader(_reader);
 }
 inline typename Type::Enum::Builder Type::Builder::getEnum() {
   KJ_IREQUIRE((which() == Type::ENUM),
               "Must check which() before get()ing a union member.");
-  return Type::Enum::Builder(_builder);
+  return typename Type::Enum::Builder(_builder);
 }
 inline typename Type::Enum::Builder Type::Builder::initEnum() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::ENUM);
   _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(0 * ::capnp::POINTERS).clear();
-  return Type::Enum::Builder(_builder);
+  return typename Type::Enum::Builder(_builder);
 }
 inline bool Type::Reader::isStruct() const {
   return which() == Type::STRUCT;
@@ -6005,19 +6005,19 @@ inline bool Type::Builder::isStruct() {
 inline typename Type::Struct::Reader Type::Reader::getStruct() const {
   KJ_IREQUIRE((which() == Type::STRUCT),
               "Must check which() before get()ing a union member.");
-  return Type::Struct::Reader(_reader);
+  return typename Type::Struct::Reader(_reader);
 }
 inline typename Type::Struct::Builder Type::Builder::getStruct() {
   KJ_IREQUIRE((which() == Type::STRUCT),
               "Must check which() before get()ing a union member.");
-  return Type::Struct::Builder(_builder);
+  return typename Type::Struct::Builder(_builder);
 }
 inline typename Type::Struct::Builder Type::Builder::initStruct() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::STRUCT);
   _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(0 * ::capnp::POINTERS).clear();
-  return Type::Struct::Builder(_builder);
+  return typename Type::Struct::Builder(_builder);
 }
 inline bool Type::Reader::isInterface() const {
   return which() == Type::INTERFACE;
@@ -6028,19 +6028,19 @@ inline bool Type::Builder::isInterface() {
 inline typename Type::Interface::Reader Type::Reader::getInterface() const {
   KJ_IREQUIRE((which() == Type::INTERFACE),
               "Must check which() before get()ing a union member.");
-  return Type::Interface::Reader(_reader);
+  return typename Type::Interface::Reader(_reader);
 }
 inline typename Type::Interface::Builder Type::Builder::getInterface() {
   KJ_IREQUIRE((which() == Type::INTERFACE),
               "Must check which() before get()ing a union member.");
-  return Type::Interface::Builder(_builder);
+  return typename Type::Interface::Builder(_builder);
 }
 inline typename Type::Interface::Builder Type::Builder::initInterface() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::INTERFACE);
   _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(0 * ::capnp::POINTERS).clear();
-  return Type::Interface::Builder(_builder);
+  return typename Type::Interface::Builder(_builder);
 }
 inline bool Type::Reader::isAnyPointer() const {
   return which() == Type::ANY_POINTER;
@@ -6051,12 +6051,12 @@ inline bool Type::Builder::isAnyPointer() {
 inline typename Type::AnyPointer::Reader Type::Reader::getAnyPointer() const {
   KJ_IREQUIRE((which() == Type::ANY_POINTER),
               "Must check which() before get()ing a union member.");
-  return Type::AnyPointer::Reader(_reader);
+  return typename Type::AnyPointer::Reader(_reader);
 }
 inline typename Type::AnyPointer::Builder Type::Builder::getAnyPointer() {
   KJ_IREQUIRE((which() == Type::ANY_POINTER),
               "Must check which() before get()ing a union member.");
-  return Type::AnyPointer::Builder(_builder);
+  return typename Type::AnyPointer::Builder(_builder);
 }
 inline typename Type::AnyPointer::Builder Type::Builder::initAnyPointer() {
   _builder.setDataField<Type::Which>(
@@ -6064,7 +6064,7 @@ inline typename Type::AnyPointer::Builder Type::Builder::initAnyPointer() {
   _builder.setDataField< ::uint16_t>(4 * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
-  return Type::AnyPointer::Builder(_builder);
+  return typename Type::AnyPointer::Builder(_builder);
 }
 inline bool Type::List::Reader::hasElementType() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
@@ -6272,18 +6272,18 @@ inline bool Type::AnyPointer::Builder::isUnconstrained() {
 inline typename Type::AnyPointer::Unconstrained::Reader Type::AnyPointer::Reader::getUnconstrained() const {
   KJ_IREQUIRE((which() == Type::AnyPointer::UNCONSTRAINED),
               "Must check which() before get()ing a union member.");
-  return Type::AnyPointer::Unconstrained::Reader(_reader);
+  return typename Type::AnyPointer::Unconstrained::Reader(_reader);
 }
 inline typename Type::AnyPointer::Unconstrained::Builder Type::AnyPointer::Builder::getUnconstrained() {
   KJ_IREQUIRE((which() == Type::AnyPointer::UNCONSTRAINED),
               "Must check which() before get()ing a union member.");
-  return Type::AnyPointer::Unconstrained::Builder(_builder);
+  return typename Type::AnyPointer::Unconstrained::Builder(_builder);
 }
 inline typename Type::AnyPointer::Unconstrained::Builder Type::AnyPointer::Builder::initUnconstrained() {
   _builder.setDataField<Type::AnyPointer::Which>(
       4 * ::capnp::ELEMENTS, Type::AnyPointer::UNCONSTRAINED);
   _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
-  return Type::AnyPointer::Unconstrained::Builder(_builder);
+  return typename Type::AnyPointer::Unconstrained::Builder(_builder);
 }
 inline bool Type::AnyPointer::Reader::isParameter() const {
   return which() == Type::AnyPointer::PARAMETER;
@@ -6294,19 +6294,19 @@ inline bool Type::AnyPointer::Builder::isParameter() {
 inline typename Type::AnyPointer::Parameter::Reader Type::AnyPointer::Reader::getParameter() const {
   KJ_IREQUIRE((which() == Type::AnyPointer::PARAMETER),
               "Must check which() before get()ing a union member.");
-  return Type::AnyPointer::Parameter::Reader(_reader);
+  return typename Type::AnyPointer::Parameter::Reader(_reader);
 }
 inline typename Type::AnyPointer::Parameter::Builder Type::AnyPointer::Builder::getParameter() {
   KJ_IREQUIRE((which() == Type::AnyPointer::PARAMETER),
               "Must check which() before get()ing a union member.");
-  return Type::AnyPointer::Parameter::Builder(_builder);
+  return typename Type::AnyPointer::Parameter::Builder(_builder);
 }
 inline typename Type::AnyPointer::Parameter::Builder Type::AnyPointer::Builder::initParameter() {
   _builder.setDataField<Type::AnyPointer::Which>(
       4 * ::capnp::ELEMENTS, Type::AnyPointer::PARAMETER);
   _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
-  return Type::AnyPointer::Parameter::Builder(_builder);
+  return typename Type::AnyPointer::Parameter::Builder(_builder);
 }
 inline bool Type::AnyPointer::Reader::isImplicitMethodParameter() const {
   return which() == Type::AnyPointer::IMPLICIT_METHOD_PARAMETER;
@@ -6317,18 +6317,18 @@ inline bool Type::AnyPointer::Builder::isImplicitMethodParameter() {
 inline typename Type::AnyPointer::ImplicitMethodParameter::Reader Type::AnyPointer::Reader::getImplicitMethodParameter() const {
   KJ_IREQUIRE((which() == Type::AnyPointer::IMPLICIT_METHOD_PARAMETER),
               "Must check which() before get()ing a union member.");
-  return Type::AnyPointer::ImplicitMethodParameter::Reader(_reader);
+  return typename Type::AnyPointer::ImplicitMethodParameter::Reader(_reader);
 }
 inline typename Type::AnyPointer::ImplicitMethodParameter::Builder Type::AnyPointer::Builder::getImplicitMethodParameter() {
   KJ_IREQUIRE((which() == Type::AnyPointer::IMPLICIT_METHOD_PARAMETER),
               "Must check which() before get()ing a union member.");
-  return Type::AnyPointer::ImplicitMethodParameter::Builder(_builder);
+  return typename Type::AnyPointer::ImplicitMethodParameter::Builder(_builder);
 }
 inline typename Type::AnyPointer::ImplicitMethodParameter::Builder Type::AnyPointer::Builder::initImplicitMethodParameter() {
   _builder.setDataField<Type::AnyPointer::Which>(
       4 * ::capnp::ELEMENTS, Type::AnyPointer::IMPLICIT_METHOD_PARAMETER);
   _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
-  return Type::AnyPointer::ImplicitMethodParameter::Builder(_builder);
+  return typename Type::AnyPointer::ImplicitMethodParameter::Builder(_builder);
 }
 inline  ::capnp::schema::Type::AnyPointer::Unconstrained::Which Type::AnyPointer::Unconstrained::Reader::which() const {
   return _reader.getDataField<Which>(5 * ::capnp::ELEMENTS);

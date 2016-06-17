@@ -3754,19 +3754,19 @@ inline bool Expression::Builder::isApplication() {
 inline typename Expression::Application::Reader Expression::Reader::getApplication() const {
   KJ_IREQUIRE((which() == Expression::APPLICATION),
               "Must check which() before get()ing a union member.");
-  return Expression::Application::Reader(_reader);
+  return typename Expression::Application::Reader(_reader);
 }
 inline typename Expression::Application::Builder Expression::Builder::getApplication() {
   KJ_IREQUIRE((which() == Expression::APPLICATION),
               "Must check which() before get()ing a union member.");
-  return Expression::Application::Builder(_builder);
+  return typename Expression::Application::Builder(_builder);
 }
 inline typename Expression::Application::Builder Expression::Builder::initApplication() {
   _builder.setDataField<Expression::Which>(
       0 * ::capnp::ELEMENTS, Expression::APPLICATION);
   _builder.getPointerField(0 * ::capnp::POINTERS).clear();
   _builder.getPointerField(1 * ::capnp::POINTERS).clear();
-  return Expression::Application::Builder(_builder);
+  return typename Expression::Application::Builder(_builder);
 }
 inline bool Expression::Reader::isMember() const {
   return which() == Expression::MEMBER;
@@ -3777,19 +3777,19 @@ inline bool Expression::Builder::isMember() {
 inline typename Expression::Member::Reader Expression::Reader::getMember() const {
   KJ_IREQUIRE((which() == Expression::MEMBER),
               "Must check which() before get()ing a union member.");
-  return Expression::Member::Reader(_reader);
+  return typename Expression::Member::Reader(_reader);
 }
 inline typename Expression::Member::Builder Expression::Builder::getMember() {
   KJ_IREQUIRE((which() == Expression::MEMBER),
               "Must check which() before get()ing a union member.");
-  return Expression::Member::Builder(_builder);
+  return typename Expression::Member::Builder(_builder);
 }
 inline typename Expression::Member::Builder Expression::Builder::initMember() {
   _builder.setDataField<Expression::Which>(
       0 * ::capnp::ELEMENTS, Expression::MEMBER);
   _builder.getPointerField(0 * ::capnp::POINTERS).clear();
   _builder.getPointerField(1 * ::capnp::POINTERS).clear();
-  return Expression::Member::Builder(_builder);
+  return typename Expression::Member::Builder(_builder);
 }
 inline bool Expression::Reader::isAbsoluteName() const {
   return which() == Expression::ABSOLUTE_NAME;
@@ -4257,20 +4257,20 @@ inline ::capnp::Orphan< ::capnp::compiler::LocatedText> Declaration::Builder::di
 }
 
 inline typename Declaration::Id::Reader Declaration::Reader::getId() const {
-  return Declaration::Id::Reader(_reader);
+  return typename Declaration::Id::Reader(_reader);
 }
 inline typename Declaration::Id::Builder Declaration::Builder::getId() {
-  return Declaration::Id::Builder(_builder);
+  return typename Declaration::Id::Builder(_builder);
 }
 #if !CAPNP_LITE
 inline typename Declaration::Id::Pipeline Declaration::Pipeline::getId() {
-  return Declaration::Id::Pipeline(_typeless.noop());
+  return typename Declaration::Id::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
 inline typename Declaration::Id::Builder Declaration::Builder::initId() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(1 * ::capnp::POINTERS).clear();
-  return Declaration::Id::Builder(_builder);
+  return typename Declaration::Id::Builder(_builder);
 }
 inline bool Declaration::Reader::hasNestedDecls() const {
   return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
@@ -4431,18 +4431,18 @@ inline bool Declaration::Builder::isUsing() {
 inline typename Declaration::Using::Reader Declaration::Reader::getUsing() const {
   KJ_IREQUIRE((which() == Declaration::USING),
               "Must check which() before get()ing a union member.");
-  return Declaration::Using::Reader(_reader);
+  return typename Declaration::Using::Reader(_reader);
 }
 inline typename Declaration::Using::Builder Declaration::Builder::getUsing() {
   KJ_IREQUIRE((which() == Declaration::USING),
               "Must check which() before get()ing a union member.");
-  return Declaration::Using::Builder(_builder);
+  return typename Declaration::Using::Builder(_builder);
 }
 inline typename Declaration::Using::Builder Declaration::Builder::initUsing() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::USING);
   _builder.getPointerField(5 * ::capnp::POINTERS).clear();
-  return Declaration::Using::Builder(_builder);
+  return typename Declaration::Using::Builder(_builder);
 }
 inline bool Declaration::Reader::isConst() const {
   return which() == Declaration::CONST;
@@ -4453,19 +4453,19 @@ inline bool Declaration::Builder::isConst() {
 inline typename Declaration::Const::Reader Declaration::Reader::getConst() const {
   KJ_IREQUIRE((which() == Declaration::CONST),
               "Must check which() before get()ing a union member.");
-  return Declaration::Const::Reader(_reader);
+  return typename Declaration::Const::Reader(_reader);
 }
 inline typename Declaration::Const::Builder Declaration::Builder::getConst() {
   KJ_IREQUIRE((which() == Declaration::CONST),
               "Must check which() before get()ing a union member.");
-  return Declaration::Const::Builder(_builder);
+  return typename Declaration::Const::Builder(_builder);
 }
 inline typename Declaration::Const::Builder Declaration::Builder::initConst() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::CONST);
   _builder.getPointerField(5 * ::capnp::POINTERS).clear();
   _builder.getPointerField(6 * ::capnp::POINTERS).clear();
-  return Declaration::Const::Builder(_builder);
+  return typename Declaration::Const::Builder(_builder);
 }
 inline bool Declaration::Reader::isEnum() const {
   return which() == Declaration::ENUM;
@@ -4554,12 +4554,12 @@ inline bool Declaration::Builder::isField() {
 inline typename Declaration::Field::Reader Declaration::Reader::getField() const {
   KJ_IREQUIRE((which() == Declaration::FIELD),
               "Must check which() before get()ing a union member.");
-  return Declaration::Field::Reader(_reader);
+  return typename Declaration::Field::Reader(_reader);
 }
 inline typename Declaration::Field::Builder Declaration::Builder::getField() {
   KJ_IREQUIRE((which() == Declaration::FIELD),
               "Must check which() before get()ing a union member.");
-  return Declaration::Field::Builder(_builder);
+  return typename Declaration::Field::Builder(_builder);
 }
 inline typename Declaration::Field::Builder Declaration::Builder::initField() {
   _builder.setDataField<Declaration::Which>(
@@ -4567,7 +4567,7 @@ inline typename Declaration::Field::Builder Declaration::Builder::initField() {
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(5 * ::capnp::POINTERS).clear();
   _builder.getPointerField(6 * ::capnp::POINTERS).clear();
-  return Declaration::Field::Builder(_builder);
+  return typename Declaration::Field::Builder(_builder);
 }
 inline bool Declaration::Reader::isUnion() const {
   return which() == Declaration::UNION;
@@ -4630,18 +4630,18 @@ inline bool Declaration::Builder::isInterface() {
 inline typename Declaration::Interface::Reader Declaration::Reader::getInterface() const {
   KJ_IREQUIRE((which() == Declaration::INTERFACE),
               "Must check which() before get()ing a union member.");
-  return Declaration::Interface::Reader(_reader);
+  return typename Declaration::Interface::Reader(_reader);
 }
 inline typename Declaration::Interface::Builder Declaration::Builder::getInterface() {
   KJ_IREQUIRE((which() == Declaration::INTERFACE),
               "Must check which() before get()ing a union member.");
-  return Declaration::Interface::Builder(_builder);
+  return typename Declaration::Interface::Builder(_builder);
 }
 inline typename Declaration::Interface::Builder Declaration::Builder::initInterface() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::INTERFACE);
   _builder.getPointerField(5 * ::capnp::POINTERS).clear();
-  return Declaration::Interface::Builder(_builder);
+  return typename Declaration::Interface::Builder(_builder);
 }
 inline bool Declaration::Reader::isMethod() const {
   return which() == Declaration::METHOD;
@@ -4652,12 +4652,12 @@ inline bool Declaration::Builder::isMethod() {
 inline typename Declaration::Method::Reader Declaration::Reader::getMethod() const {
   KJ_IREQUIRE((which() == Declaration::METHOD),
               "Must check which() before get()ing a union member.");
-  return Declaration::Method::Reader(_reader);
+  return typename Declaration::Method::Reader(_reader);
 }
 inline typename Declaration::Method::Builder Declaration::Builder::getMethod() {
   KJ_IREQUIRE((which() == Declaration::METHOD),
               "Must check which() before get()ing a union member.");
-  return Declaration::Method::Builder(_builder);
+  return typename Declaration::Method::Builder(_builder);
 }
 inline typename Declaration::Method::Builder Declaration::Builder::initMethod() {
   _builder.setDataField<Declaration::Which>(
@@ -4665,7 +4665,7 @@ inline typename Declaration::Method::Builder Declaration::Builder::initMethod() 
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(5 * ::capnp::POINTERS).clear();
   _builder.getPointerField(6 * ::capnp::POINTERS).clear();
-  return Declaration::Method::Builder(_builder);
+  return typename Declaration::Method::Builder(_builder);
 }
 inline bool Declaration::Reader::isAnnotation() const {
   return which() == Declaration::ANNOTATION;
@@ -4676,12 +4676,12 @@ inline bool Declaration::Builder::isAnnotation() {
 inline typename Declaration::Annotation::Reader Declaration::Reader::getAnnotation() const {
   KJ_IREQUIRE((which() == Declaration::ANNOTATION),
               "Must check which() before get()ing a union member.");
-  return Declaration::Annotation::Reader(_reader);
+  return typename Declaration::Annotation::Reader(_reader);
 }
 inline typename Declaration::Annotation::Builder Declaration::Builder::getAnnotation() {
   KJ_IREQUIRE((which() == Declaration::ANNOTATION),
               "Must check which() before get()ing a union member.");
-  return Declaration::Annotation::Builder(_builder);
+  return typename Declaration::Annotation::Builder(_builder);
 }
 inline typename Declaration::Annotation::Builder Declaration::Builder::initAnnotation() {
   _builder.setDataField<Declaration::Which>(
@@ -4699,7 +4699,7 @@ inline typename Declaration::Annotation::Builder Declaration::Builder::initAnnot
   _builder.setDataField<bool>(106 * ::capnp::ELEMENTS, 0);
   _builder.setDataField<bool>(107 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(5 * ::capnp::POINTERS).clear();
-  return Declaration::Annotation::Builder(_builder);
+  return typename Declaration::Annotation::Builder(_builder);
 }
 inline bool Declaration::Reader::isNakedId() const {
   return which() == Declaration::NAKED_ID;
@@ -5455,20 +5455,20 @@ inline ::capnp::Orphan< ::capnp::compiler::Expression> Declaration::AnnotationAp
 }
 
 inline typename Declaration::AnnotationApplication::Value::Reader Declaration::AnnotationApplication::Reader::getValue() const {
-  return Declaration::AnnotationApplication::Value::Reader(_reader);
+  return typename Declaration::AnnotationApplication::Value::Reader(_reader);
 }
 inline typename Declaration::AnnotationApplication::Value::Builder Declaration::AnnotationApplication::Builder::getValue() {
-  return Declaration::AnnotationApplication::Value::Builder(_builder);
+  return typename Declaration::AnnotationApplication::Value::Builder(_builder);
 }
 #if !CAPNP_LITE
 inline typename Declaration::AnnotationApplication::Value::Pipeline Declaration::AnnotationApplication::Pipeline::getValue() {
-  return Declaration::AnnotationApplication::Value::Pipeline(_typeless.noop());
+  return typename Declaration::AnnotationApplication::Value::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
 inline typename Declaration::AnnotationApplication::Value::Builder Declaration::AnnotationApplication::Builder::initValue() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(1 * ::capnp::POINTERS).clear();
-  return Declaration::AnnotationApplication::Value::Builder(_builder);
+  return typename Declaration::AnnotationApplication::Value::Builder(_builder);
 }
 inline  ::capnp::compiler::Declaration::AnnotationApplication::Value::Which Declaration::AnnotationApplication::Value::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
@@ -5801,20 +5801,20 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Annotatio
 }
 
 inline typename Declaration::Param::DefaultValue::Reader Declaration::Param::Reader::getDefaultValue() const {
-  return Declaration::Param::DefaultValue::Reader(_reader);
+  return typename Declaration::Param::DefaultValue::Reader(_reader);
 }
 inline typename Declaration::Param::DefaultValue::Builder Declaration::Param::Builder::getDefaultValue() {
-  return Declaration::Param::DefaultValue::Builder(_builder);
+  return typename Declaration::Param::DefaultValue::Builder(_builder);
 }
 #if !CAPNP_LITE
 inline typename Declaration::Param::DefaultValue::Pipeline Declaration::Param::Pipeline::getDefaultValue() {
-  return Declaration::Param::DefaultValue::Pipeline(_typeless.noop());
+  return typename Declaration::Param::DefaultValue::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
 inline typename Declaration::Param::DefaultValue::Builder Declaration::Param::Builder::initDefaultValue() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(3 * ::capnp::POINTERS).clear();
-  return Declaration::Param::DefaultValue::Builder(_builder);
+  return typename Declaration::Param::DefaultValue::Builder(_builder);
 }
 inline  ::uint32_t Declaration::Param::Reader::getStartByte() const {
   return _reader.getDataField< ::uint32_t>(
@@ -6215,20 +6215,20 @@ inline ::capnp::Orphan< ::capnp::compiler::Expression> Declaration::Field::Build
 }
 
 inline typename Declaration::Field::DefaultValue::Reader Declaration::Field::Reader::getDefaultValue() const {
-  return Declaration::Field::DefaultValue::Reader(_reader);
+  return typename Declaration::Field::DefaultValue::Reader(_reader);
 }
 inline typename Declaration::Field::DefaultValue::Builder Declaration::Field::Builder::getDefaultValue() {
-  return Declaration::Field::DefaultValue::Builder(_builder);
+  return typename Declaration::Field::DefaultValue::Builder(_builder);
 }
 #if !CAPNP_LITE
 inline typename Declaration::Field::DefaultValue::Pipeline Declaration::Field::Pipeline::getDefaultValue() {
-  return Declaration::Field::DefaultValue::Pipeline(_typeless.noop());
+  return typename Declaration::Field::DefaultValue::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
 inline typename Declaration::Field::DefaultValue::Builder Declaration::Field::Builder::initDefaultValue() {
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(6 * ::capnp::POINTERS).clear();
-  return Declaration::Field::DefaultValue::Builder(_builder);
+  return typename Declaration::Field::DefaultValue::Builder(_builder);
 }
 inline  ::capnp::compiler::Declaration::Field::DefaultValue::Which Declaration::Field::DefaultValue::Reader::which() const {
   return _reader.getDataField<Which>(6 * ::capnp::ELEMENTS);
@@ -6385,20 +6385,20 @@ inline ::capnp::Orphan< ::capnp::compiler::Declaration::ParamList> Declaration::
 }
 
 inline typename Declaration::Method::Results::Reader Declaration::Method::Reader::getResults() const {
-  return Declaration::Method::Results::Reader(_reader);
+  return typename Declaration::Method::Results::Reader(_reader);
 }
 inline typename Declaration::Method::Results::Builder Declaration::Method::Builder::getResults() {
-  return Declaration::Method::Results::Builder(_builder);
+  return typename Declaration::Method::Results::Builder(_builder);
 }
 #if !CAPNP_LITE
 inline typename Declaration::Method::Results::Pipeline Declaration::Method::Pipeline::getResults() {
-  return Declaration::Method::Results::Pipeline(_typeless.noop());
+  return typename Declaration::Method::Results::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
 inline typename Declaration::Method::Results::Builder Declaration::Method::Builder::initResults() {
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(6 * ::capnp::POINTERS).clear();
-  return Declaration::Method::Results::Builder(_builder);
+  return typename Declaration::Method::Results::Builder(_builder);
 }
 inline  ::capnp::compiler::Declaration::Method::Results::Which Declaration::Method::Results::Reader::which() const {
   return _reader.getDataField<Which>(6 * ::capnp::ELEMENTS);

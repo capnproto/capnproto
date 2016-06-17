@@ -3322,20 +3322,20 @@ inline ::capnp::Orphan< ::capnp::rpc::Payload> Call::Builder::disownParams() {
 }
 
 inline typename Call::SendResultsTo::Reader Call::Reader::getSendResultsTo() const {
-  return Call::SendResultsTo::Reader(_reader);
+  return typename Call::SendResultsTo::Reader(_reader);
 }
 inline typename Call::SendResultsTo::Builder Call::Builder::getSendResultsTo() {
-  return Call::SendResultsTo::Builder(_builder);
+  return typename Call::SendResultsTo::Builder(_builder);
 }
 #if !CAPNP_LITE
 inline typename Call::SendResultsTo::Pipeline Call::Pipeline::getSendResultsTo() {
-  return Call::SendResultsTo::Pipeline(_typeless.noop());
+  return typename Call::SendResultsTo::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
 inline typename Call::SendResultsTo::Builder Call::Builder::initSendResultsTo() {
   _builder.setDataField< ::uint16_t>(3 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(2 * ::capnp::POINTERS).clear();
-  return Call::SendResultsTo::Builder(_builder);
+  return typename Call::SendResultsTo::Builder(_builder);
 }
 inline bool Call::Reader::getAllowThirdPartyTailCall() const {
   return _reader.getDataField<bool>(
@@ -3916,20 +3916,20 @@ inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> Disembargo::Builder::disown
 }
 
 inline typename Disembargo::Context::Reader Disembargo::Reader::getContext() const {
-  return Disembargo::Context::Reader(_reader);
+  return typename Disembargo::Context::Reader(_reader);
 }
 inline typename Disembargo::Context::Builder Disembargo::Builder::getContext() {
-  return Disembargo::Context::Builder(_builder);
+  return typename Disembargo::Context::Builder(_builder);
 }
 #if !CAPNP_LITE
 inline typename Disembargo::Context::Pipeline Disembargo::Pipeline::getContext() {
-  return Disembargo::Context::Pipeline(_typeless.noop());
+  return typename Disembargo::Context::Pipeline(_typeless.noop());
 }
 #endif  // !CAPNP_LITE
 inline typename Disembargo::Context::Builder Disembargo::Builder::initContext() {
   _builder.setDataField< ::uint32_t>(0 * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint16_t>(2 * ::capnp::ELEMENTS, 0);
-  return Disembargo::Context::Builder(_builder);
+  return typename Disembargo::Context::Builder(_builder);
 }
 inline  ::capnp::rpc::Disembargo::Context::Which Disembargo::Context::Reader::which() const {
   return _reader.getDataField<Which>(2 * ::capnp::ELEMENTS);
