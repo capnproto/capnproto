@@ -94,6 +94,7 @@ private:
 
   Capability::Client baseBootstrap(AnyStruct::Reader vatId);
   Capability::Client baseRestore(AnyStruct::Reader vatId, AnyPointer::Reader objectId);
+  void baseSetFlowLimit(size_t words);
 
   template <typename>
   friend class capnp::RpcSystem;

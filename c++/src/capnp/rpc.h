@@ -111,6 +111,37 @@ public:
   // to using bootstrap(), which is equivalent to calling restore() with a null `objectId`.
   // You may emulate the old concept of object IDs by exporting a bootstrap interface which has
   // methods that can be used to obtain other capabilities by ID.
+
+  void setFlowLimit(size_t words);
+  // Sets the incoming call flow limit. If more than `words` worth of call messages have not yet
+  // received responses, the RpcSystem will not read further messages from the stream. This can be
+  // used as a crude way to prevent a resource exhaustion attack (or bug) in which a peer makes an
+  // excessive number of simultaneous calls that consume the receiver's RAM.
+  //
+  // There are some caveats. When over the flow limit, all messages are blocked, including returns.
+  // If the outstanding calls are themselves waiting on calls going in the opposite direction, the
+  // flow limit may prevent those calls from completing, leading to deadlock. However, a
+  // sufficiently high limit should make this unlikely.
+  //
+  // Note that a call's parameter size counts against the flow limit until the call returns, even
+  // if the recipient calls releaseParams() to free the parameter memory early. This is because
+  // releaseParams() may simply indicate that the parameters have been forwarded to another
+  // machine, but are still in-memory there. For illustration, say that Alice made a call to Bob
+  // who forwarded the call to Carol. Bob has imposed a flow limit on Alice. Alice's calls are
+  // being forwarded to Carol, so Bob never keeps the parameters in-memory for more than a brief
+  // period. However, the flow limit counts all calls that haven't returned, even if Bob has
+  // already freed the memory they consumed. You might argue that the right solution here is
+  // instead for Carol to impose her own flow limit on Bob. This has a serious problem, though:
+  // Bob might be forwarding requests to Carol on behalf of many different parties, not just Alice.
+  // If Alice can pump enough data to hit the Bob -> Carol flow limit, then those other parties
+  // will be disrupted. Thus, we can only really impose the limit on the Alice -> Bob link, which
+  // only affects Alice. We need that one flow limit to limit Alice's impact on the whole system,
+  // so it has to count all in-flight calls.
+  //
+  // In Sandstorm, flow limits are imposed by the supervisor on calls coming out of a grain, in
+  // order to prevent a grain from innundating the system with in-flight calls. In practice, the
+  // main time this happens is when a grain is pushing a large file download and doesn't implement
+  // proper cooperative flow control.
 };
 
 template <typename VatId, typename ProvisionId, typename RecipientId,
@@ -435,6 +466,11 @@ template <typename VatId>
 Capability::Client RpcSystem<VatId>::restore(
     typename VatId::Reader hostId, AnyPointer::Reader objectId) {
   return baseRestore(_::PointerHelpers<VatId>::getInternalReader(hostId), objectId);
+}
+
+template <typename VatId>
+inline void RpcSystem<VatId>::setFlowLimit(size_t words) {
+  baseSetFlowLimit(words);
 }
 
 template <typename VatId, typename ProvisionId, typename RecipientId,

@@ -249,9 +249,11 @@ public:
                      kj::Maybe<RealmGateway<>::Client> gateway,
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
-                     kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller)
+                     kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller,
+                     size_t flowLimit)
       : bootstrapFactory(bootstrapFactory), gateway(kj::mv(gateway)),
-        restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), tasks(*this) {
+        restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), flowLimit(flowLimit),
+        tasks(*this) {
     connection.init<Connected>(kj::mv(connectionParam));
     tasks.add(messageLoop());
   }
@@ -377,6 +379,11 @@ public:
         });
     disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
     connection.init<Disconnected>(kj::mv(networkException));
+  }
+
+  void setFlowLimit(size_t words) {
+    flowLimit = words;
+    maybeUnblockFlow();
   }
 
 private:
@@ -528,6 +535,13 @@ private:
   ExportTable<EmbargoId, Embargo> embargoes;
   // There are only four tables.  This definitely isn't a fifth table.  I don't know what you're
   // talking about.
+
+  size_t flowLimit;
+  size_t callWordsInFlight = 0;
+
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> flowWaiter;
+  // If non-null, we're currently blocking incoming messages waiting for callWordsInFlight to drop
+  // below flowLimit. Fulfill this to un-block.
 
   kj::TaskSet tasks;
 
@@ -1675,12 +1689,15 @@ private:
                    bool redirectResults, kj::Own<kj::PromiseFulfiller<void>>&& cancelFulfiller)
         : connectionState(kj::addRef(connectionState)),
           answerId(answerId),
+          requestSize(request->getBody().targetSize().wordCount),
           request(kj::mv(request)),
           paramsCapTable(kj::mv(capTableArray)),
           params(paramsCapTable.imbue(params)),
           returnMessage(nullptr),
           redirectResults(redirectResults),
-          cancelFulfiller(kj::mv(cancelFulfiller)) {}
+          cancelFulfiller(kj::mv(cancelFulfiller)) {
+      connectionState.callWordsInFlight += requestSize;
+    }
 
     ~RpcCallContext() noexcept(false) {
       if (isFirstResponder()) {
@@ -1891,6 +1908,7 @@ private:
 
     // Request ---------------------------------------------
 
+    size_t requestSize;  // for flow limit purposes
     kj::Maybe<kj::Own<IncomingRpcMessage>> request;
     ReaderCapabilityTable paramsCapTable;
     AnyPointer::Reader params;
@@ -1954,15 +1972,36 @@ private:
           answer.pipeline = nullptr;
         }
       }
+
+      // Also, this is the right time to stop counting the call against the flow limit.
+      connectionState->callWordsInFlight -= requestSize;
+      connectionState->maybeUnblockFlow();
     }
   };
 
   // =====================================================================================
   // Message handling
 
+  void maybeUnblockFlow() {
+    if (callWordsInFlight < flowLimit) {
+      KJ_IF_MAYBE(w, flowWaiter) {
+        w->get()->fulfill();
+        flowWaiter = nullptr;
+      }
+    }
+  }
+
   kj::Promise<void> messageLoop() {
     if (!connection.is<Connected>()) {
       return kj::READY_NOW;
+    }
+
+    if (callWordsInFlight > flowLimit) {
+      auto paf = kj::newPromiseAndFulfiller<void>();
+      flowWaiter = kj::mv(paf.fulfiller);
+      return paf.promise.then([this]() {
+        return messageLoop();
+      });
     }
 
     return connection.get<Connected>()->receiveIncomingMessage().then(
@@ -2667,12 +2706,21 @@ public:
     }
   }
 
+  void setFlowLimit(size_t words) {
+    flowLimit = words;
+
+    for (auto& conn: connections) {
+      conn.second->setFlowLimit(words);
+    }
+  }
+
 private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
   BootstrapFactoryBase& bootstrapFactory;
   kj::Maybe<RealmGateway<>::Client> gateway;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
+  size_t flowLimit = kj::maxValue;
   kj::TaskSet tasks;
 
   typedef std::unordered_map<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>
@@ -2693,7 +2741,7 @@ private:
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
           bootstrapFactory, gateway, restorer, kj::mv(connection),
-          kj::mv(onDisconnect.fulfiller));
+          kj::mv(onDisconnect.fulfiller), flowLimit);
       RpcConnectionState& result = *newState;
       connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
       return result;
@@ -2754,6 +2802,10 @@ Capability::Client RpcSystemBase::baseBootstrap(AnyStruct::Reader vatId) {
 Capability::Client RpcSystemBase::baseRestore(
     AnyStruct::Reader hostId, AnyPointer::Reader objectId) {
   return impl->restore(hostId, objectId);
+}
+
+void RpcSystemBase::baseSetFlowLimit(size_t words) {
+  return impl->setFlowLimit(words);
 }
 
 }  // namespace _ (private)
