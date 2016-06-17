@@ -322,11 +322,9 @@ void FdOutputStream::write(const void* buffer, size_t size) {
 void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
 #if _WIN32
   // Windows has no reasonable writev(). It has WriteFileGather, but this call has the unreasonable
-  // restriction that each segment must be page-aligned. So, fall back to write().
+  // restriction that each segment must be page-aligned. So, fall back to the default implementation
 
-  for (auto piece: pieces) {
-    write(piece.begin(), piece.size());
-  }
+  OutputStream::write(pieces);
 
 #else
   const size_t iovmax = miniposix::iovMax(pieces.size());

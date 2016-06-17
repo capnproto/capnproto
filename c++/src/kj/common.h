@@ -1329,7 +1329,7 @@ _::Deferred<Func> defer(Func&& func) {
   // you need to assign to an `auto` variable.
   //
   // The KJ_DEFER macro provides slightly more convenient syntax for the common case where you
-  // want some code to run at function exit.
+  // want some code to run at current scope exit.
 
   return _::Deferred<Func>(kj::fwd<Func>(func));
 }
