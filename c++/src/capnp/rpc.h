@@ -139,7 +139,7 @@ public:
   // so it has to count all in-flight calls.
   //
   // In Sandstorm, flow limits are imposed by the supervisor on calls coming out of a grain, in
-  // order to prevent a grain from innundating the system with in-flight calls. In practice, the
+  // order to prevent a grain from inundating the system with in-flight calls. In practice, the
   // main time this happens is when a grain is pushing a large file download and doesn't implement
   // proper cooperative flow control.
 };
