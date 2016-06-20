@@ -1821,6 +1821,22 @@ TEST(Encoding, Generics) {
   initTestMessage(root.initInner().initFoo());
   checkTestMessage(reader.getInner().getFoo());
 
+  {
+    auto typed = root.getInner();
+    test::TestGenerics<>::Inner::Reader generic = typed.asTestGenericsGeneric<>();
+    checkTestMessage(generic.getFoo().getAs<TestAllTypes>());
+    test::TestGenerics<TestAllTypes>::Inner::Reader halfGeneric = typed.asTestGenericsGeneric<TestAllTypes>();
+    checkTestMessage(halfGeneric.getFoo());
+  }
+
+  {
+    auto typed = root.getInner().asReader();
+    test::TestGenerics<>::Inner::Reader generic = typed.asTestGenericsGeneric<>();
+    checkTestMessage(generic.getFoo().getAs<TestAllTypes>());
+    test::TestGenerics<TestAllTypes>::Inner::Reader halfGeneric = typed.asTestGenericsGeneric<TestAllTypes>();
+    checkTestMessage(halfGeneric.getFoo());
+  }
+
   root.initInner2().setBaz("foo");
   EXPECT_EQ("foo", reader.getInner2().getBaz());
 

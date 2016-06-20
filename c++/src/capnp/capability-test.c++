@@ -805,6 +805,7 @@ TEST(Capability, Generics) {
   test::TestGenerics<TestAllTypes>::Interface<>::Client castClient = client.asGeneric<>();
   test::TestGenerics<TestAllTypes>::Interface<TestAllTypes>::Client castClient2 =
       client.asGeneric<TestAllTypes>();
+  test::TestGenerics<>::Interface<List<uint32_t>>::Client castClient3 = client.asTestGenericsGeneric<>();
 }
 
 TEST(Capability, Generics2) {
