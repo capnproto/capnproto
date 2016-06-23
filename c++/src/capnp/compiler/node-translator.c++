@@ -362,7 +362,7 @@ public:
           }
         } else {
           uint newSize = kj::max(lgSizeUsed, lgSize) + 1;
-          if (tryExpandUsage(group, location, newSize)) {
+          if (tryExpandUsage(group, location, newSize, true)) {
             uint result = KJ_ASSERT_NONNULL(holes.tryAllocate(lgSize));
             uint locationOffset = location.offset << (location.lgSize - lgSize);
             return locationOffset + result;
@@ -376,7 +376,7 @@ public:
                      uint oldLgSize, uint oldOffset, uint expansionFactor) {
         if (oldOffset == 0 && lgSizeUsed == oldLgSize) {
           // This location contains exactly the requested data, so just expand the whole thing.
-          return tryExpandUsage(group, location, oldLgSize + expansionFactor);
+          return tryExpandUsage(group, location, oldLgSize + expansionFactor, false);
         } else {
           // This location contains the requested data plus other stuff.  Therefore the data cannot
           // possibly expand past the end of the space we've already marked used without either
@@ -399,7 +399,8 @@ public:
       // HoleSet are relative to the beginning of this particular data location, not the beginning
       // of the struct.
 
-      bool tryExpandUsage(Group& group, Union::DataLocation& location, uint desiredUsage) {
+      bool tryExpandUsage(Group& group, Union::DataLocation& location, uint desiredUsage,
+                          bool newHoles) {
         if (desiredUsage > location.lgSize) {
           // Need to expand the underlying slot.
           if (!location.tryExpandTo(group.parent, desiredUsage)) {
@@ -408,7 +409,20 @@ public:
         }
 
         // Underlying slot is big enough, so expand our size and update holes.
-        holes.addHolesAtEnd(lgSizeUsed, 1, desiredUsage);
+        if (newHoles) {
+          holes.addHolesAtEnd(lgSizeUsed, 1, desiredUsage);
+        } else {
+          // Unfortunately, Cap'n Proto 0.5.x and below would always call addHolesAtEnd(), which
+          // was the wrong thing to do when called from tryExpand(), which itself is only called
+          // in cases involving unions nested in other unions. The bug could lead to multiple
+          // fields in a group incorrectly being assigned overlapping offsets. Although the bug
+          // is now fixed by adding the `newHoles` parameter, this silently breaks
+          // backwards-compatibilty with affected schemas. Therefore, for now, we throw an
+          // exception to alert developers of the problem.
+          //
+          // TODO(cleanup): Once sufficient time has elapsed, remove this assert.
+          KJ_FAIL_ASSERT("Bad news: Cap'n Proto 0.5.x and previous contained a bug which would cause this schema to be compiled incorrectly. Please see: https://github.com/sandstorm-io/capnproto/issues/344");
+        }
         lgSizeUsed = desiredUsage;
         return true;
       }
@@ -498,10 +512,21 @@ public:
     }
 
     bool tryExpandData(uint oldLgSize, uint oldOffset, uint expansionFactor) override {
+      bool mustFail = false;
       if (oldLgSize + expansionFactor > 6 ||
           (oldOffset & ((1 << expansionFactor) - 1)) != 0) {
         // Expansion is not possible because the new size is too large or the offset is not
         // properly-aligned.
+
+        // Unfortunately, Cap'n Proto 0.5.x and prior forgot to "return false" here, instead
+        // continuing to execute the rest of the method. In most cases, the method failed later
+        // on, causing no harm. But, in cases where the method later succeeded, it probably
+        // led to bogus layouts. We cannot simply add the return statement now as this would
+        // silently break backwards-compatibility with affected schemas. Instead, we detect the
+        // problem and throw an exception.
+        //
+        // TODO(cleanup): Once sufficient time has elapsed, switch to "return false;" here.
+        mustFail = true;
       }
 
       for (uint i = 0; i < parentDataLocationUsage.size(); i++) {
@@ -515,7 +540,12 @@ public:
           uint localOldOffset = oldOffset - (location.offset << (location.lgSize - oldLgSize));
 
           // Try to expand.
-          return usage.tryExpand(*this, location, oldLgSize, localOldOffset, expansionFactor);
+          bool result = usage.tryExpand(
+              *this, location, oldLgSize, localOldOffset, expansionFactor);
+          if (mustFail && result) {
+            KJ_FAIL_ASSERT("Bad news: Cap'n Proto 0.5.x and previous contained a bug which would cause this schema to be compiled incorrectly. Please see: https://github.com/sandstorm-io/capnproto/issues/344");
+          }
+          return result;
         }
       }
 
@@ -2045,6 +2075,10 @@ private:
     DuplicateOrdinalDetector dupDetector(errorReporter);
     for (auto& entry: membersByOrdinal) {
       MemberInfo& member = *entry.second;
+
+      // Make sure the exceptions added relating to
+      // https://github.com/sandstorm-io/capnproto/issues/344 identify the affected field.
+      KJ_CONTEXT(member.name);
 
       if (member.declId.isOrdinal()) {
         dupDetector.check(member.declId.getOrdinal());
