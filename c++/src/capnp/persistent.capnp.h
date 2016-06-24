@@ -232,8 +232,9 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-    typename SaveParams::Reader asGeneric() {
-    return typename SaveParams::Reader(_reader);
+  template <typename SturdyRef2 = ::capnp::AnyPointer, typename Owner2 = ::capnp::AnyPointer>
+  typename Persistent<SturdyRef2, Owner2>::SaveParams::Reader asPersistentGeneric() {
+    return typename Persistent<SturdyRef2, Owner2>::SaveParams::Reader(_reader);
   }
 
   inline bool hasSealFor() const;
@@ -268,8 +269,9 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-    typename SaveParams::Builder asGeneric() {
-    return typename SaveParams::Builder(_builder);
+  template <typename SturdyRef2 = ::capnp::AnyPointer, typename Owner2 = ::capnp::AnyPointer>
+  typename Persistent<SturdyRef2, Owner2>::SaveParams::Builder asPersistentGeneric() {
+    return typename Persistent<SturdyRef2, Owner2>::SaveParams::Builder(_builder);
   }
 
   inline bool hasSealFor();
@@ -326,8 +328,9 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-    typename SaveResults::Reader asGeneric() {
-    return typename SaveResults::Reader(_reader);
+  template <typename SturdyRef2 = ::capnp::AnyPointer, typename Owner2 = ::capnp::AnyPointer>
+  typename Persistent<SturdyRef2, Owner2>::SaveResults::Reader asPersistentGeneric() {
+    return typename Persistent<SturdyRef2, Owner2>::SaveResults::Reader(_reader);
   }
 
   inline bool hasSturdyRef() const;
@@ -362,8 +365,9 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-    typename SaveResults::Builder asGeneric() {
-    return typename SaveResults::Builder(_builder);
+  template <typename SturdyRef2 = ::capnp::AnyPointer, typename Owner2 = ::capnp::AnyPointer>
+  typename Persistent<SturdyRef2, Owner2>::SaveResults::Builder asPersistentGeneric() {
+    return typename Persistent<SturdyRef2, Owner2>::SaveResults::Builder(_builder);
   }
 
   inline bool hasSturdyRef();
@@ -482,8 +486,9 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-    typename ImportParams::Reader asGeneric() {
-    return typename ImportParams::Reader(_reader);
+  template <typename InternalRef2 = ::capnp::AnyPointer, typename ExternalRef2 = ::capnp::AnyPointer, typename InternalOwner2 = ::capnp::AnyPointer, typename ExternalOwner2 = ::capnp::AnyPointer>
+  typename RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>::ImportParams::Reader asRealmGatewayGeneric() {
+    return typename RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>::ImportParams::Reader(_reader);
   }
 
   inline bool hasCap() const;
@@ -523,8 +528,9 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-    typename ImportParams::Builder asGeneric() {
-    return typename ImportParams::Builder(_builder);
+  template <typename InternalRef2 = ::capnp::AnyPointer, typename ExternalRef2 = ::capnp::AnyPointer, typename InternalOwner2 = ::capnp::AnyPointer, typename ExternalOwner2 = ::capnp::AnyPointer>
+  typename RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>::ImportParams::Builder asRealmGatewayGeneric() {
+    return typename RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>::ImportParams::Builder(_builder);
   }
 
   inline bool hasCap();
@@ -590,8 +596,9 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-    typename ExportParams::Reader asGeneric() {
-    return typename ExportParams::Reader(_reader);
+  template <typename InternalRef2 = ::capnp::AnyPointer, typename ExternalRef2 = ::capnp::AnyPointer, typename InternalOwner2 = ::capnp::AnyPointer, typename ExternalOwner2 = ::capnp::AnyPointer>
+  typename RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>::ExportParams::Reader asRealmGatewayGeneric() {
+    return typename RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>::ExportParams::Reader(_reader);
   }
 
   inline bool hasCap() const;
@@ -631,8 +638,9 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-    typename ExportParams::Builder asGeneric() {
-    return typename ExportParams::Builder(_builder);
+  template <typename InternalRef2 = ::capnp::AnyPointer, typename ExternalRef2 = ::capnp::AnyPointer, typename InternalOwner2 = ::capnp::AnyPointer, typename ExternalOwner2 = ::capnp::AnyPointer>
+  typename RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>::ExportParams::Builder asRealmGatewayGeneric() {
+    return typename RealmGateway<InternalRef2, ExternalRef2, InternalOwner2, ExternalOwner2>::ExportParams::Builder(_builder);
   }
 
   inline bool hasCap();

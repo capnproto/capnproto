@@ -571,8 +571,8 @@ private:
     TemplateContext(): parent(nullptr) {}
     explicit TemplateContext(schema::Node::Reader node)
         : parent(nullptr), node(node) {}
-    TemplateContext(const TemplateContext& parent, schema::Node::Reader node)
-        : parent(parent), node(node) {}
+    TemplateContext(const TemplateContext& parent, kj::StringPtr name, schema::Node::Reader node)
+        : parent(parent), name(name), node(node) {}
 
     bool hasParams() const {
       return node.getParameters().size() > 0;
@@ -580,6 +580,10 @@ private:
     bool isGeneric() const {
       return node.getIsGeneric();
     }
+    kj::Maybe<const TemplateContext&> getParent() const {
+      return parent;
+    }
+    kj::StringPtr getName() const { return name; }
 
     kj::StringTree decl(bool withDefaults, kj::StringPtr suffix = nullptr) const {
       // "template <typename T, typename U>" for this type. Includes default assignments
@@ -665,6 +669,7 @@ private:
 
   private:
     kj::Maybe<const TemplateContext&> parent;
+    kj::StringPtr name;
     schema::Node::Reader node;
   };
 
@@ -1719,6 +1724,56 @@ private:
 
   // -----------------------------------------------------------------
 
+  enum class AsGenericRole { READER, BUILDER, CLIENT };
+
+  kj::StringTree makeAsGenericDef(AsGenericRole role, const TemplateContext& templateContext,
+                                  kj::StringPtr type, kj::String innerType = kj::String()) {
+    if (!templateContext.isGeneric()) {
+      return kj::StringTree();
+    }
+    kj::StringTree self, up;
+    if (templateContext.hasParams()) {
+      auto returnType = [&]() {
+        return kj::strTree(type, templateContext.args("2"), innerType);
+      };
+      kj::StringTree asGeneric = kj::strTree("as", innerType.size() ? type : "", "Generic()");
+      switch (role) {
+        case AsGenericRole::READER:
+          self = kj::strTree(
+              "  ", templateContext.decl(true, "2"),
+              "  typename ", returnType(), "::Reader ", kj::mv(asGeneric), " {\n"
+              "    return typename ", returnType(), "::Reader(_reader);\n"
+              "  }\n"
+              "\n");
+          break;
+        case AsGenericRole::BUILDER:
+          self = kj::strTree(
+              "  ", templateContext.decl(true, "2"),
+              "  typename ", returnType(), "::Builder ", kj::mv(asGeneric), " {\n"
+              "    return typename ", returnType(), "::Builder(_builder);\n"
+              "  }\n"
+              "\n");
+          break;
+        case AsGenericRole::CLIENT:
+          self = kj::strTree(
+              "  ", templateContext.decl(true, "2"),
+              "  typename ", returnType(), "::Client ", kj::mv(asGeneric), " {\n"
+              "    return castAs<", innerType.size() ? "typename " : "", returnType(), ">();\n"
+              "  }\n"
+              "\n");
+          break;
+      }
+    }
+    KJ_IF_MAYBE(p, templateContext.getParent()) {
+      up = makeAsGenericDef(role, *p, p->getName(), kj::strTree(
+          templateContext.hasParams() ? "::template " : "::", type,
+          templateContext.args()).flatten());
+    }
+    return kj::strTree(kj::mv(self), kj::mv(up));
+  }
+
+  // -----------------------------------------------------------------
+
   struct StructText {
     kj::StringTree outerTypeDecl;
     kj::StringTree outerTypeDef;
@@ -1749,13 +1804,7 @@ private:
         "  }\n"
         "#endif  // !CAPNP_LITE\n"
         "\n",
-        templateContext.isGeneric() ? kj::strTree(
-          "  ", templateContext.decl(true, "2"),
-          "  typename ", unqualifiedParentType, templateContext.args("2"), "::Reader asGeneric() {\n"
-          "    return typename ", unqualifiedParentType, templateContext.args("2"),
-                     "::Reader(_reader);\n"
-          "  }\n"
-          "\n") : kj::strTree(),
+        makeAsGenericDef(AsGenericRole::READER, templateContext, unqualifiedParentType),
         isUnion ? kj::strTree("  inline Which which() const;\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
@@ -1793,13 +1842,7 @@ private:
         "  inline ::kj::StringTree toString() const { return asReader().toString(); }\n"
         "#endif  // !CAPNP_LITE\n"
         "\n",
-        templateContext.isGeneric() ? kj::strTree(
-          "  ", templateContext.decl(true, "2"),
-          "  typename ", unqualifiedParentType, templateContext.args("2"), "::Builder asGeneric() {\n"
-          "    return typename ", unqualifiedParentType, templateContext.args("2"),
-                       "::Builder(_builder);\n"
-          "  }\n"
-          "\n") : kj::strTree(),
+        makeAsGenericDef(AsGenericRole::BUILDER, templateContext, unqualifiedParentType),
         isUnion ? kj::strTree("  inline Which which();\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
@@ -2251,12 +2294,7 @@ private:
           "  Client& operator=(Client& other);\n"
           "  Client& operator=(Client&& other);\n"
           "\n",
-          templateContext.isGeneric() ? kj::strTree(
-            "  ", templateContext.decl(true, "2"),
-            "  typename ", name, templateContext.args("2"), "::Client asGeneric() {\n"
-            "    return castAs<", name, templateContext.args("2"), ">();\n"
-            "  }\n"
-            "\n") : kj::strTree(),
+          makeAsGenericDef(AsGenericRole::CLIENT, templateContext, name),
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },
           "\n"
           "protected:\n"
@@ -2498,7 +2536,7 @@ private:
     }
     auto hexId = kj::hex(proto.getId());
 
-    TemplateContext templateContext(parentTemplateContext, proto);
+    TemplateContext templateContext(parentTemplateContext, name, proto);
 
     auto subScope = kj::str(scope, name, templateContext.args(), "::");
 
