@@ -324,7 +324,8 @@ private:
   // Map of parser modules to compiler modules.
 
   Workspace workspace;
-  // The temporary workspace.
+  // The temporary workspace. This field must be declared after `modules` because objects
+  // allocated in the workspace may hold references to the compiled modules in `modules`.
 
   std::unordered_map<uint64_t, Node*> nodesById;
   // Map of nodes by ID.
