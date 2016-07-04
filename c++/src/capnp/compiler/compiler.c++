@@ -320,11 +320,11 @@ private:
   kj::Arena nodeArena;
   // Arena used to allocate nodes and other permanent objects.
 
-  Workspace workspace;
-  // The temporary workspace.
-
   std::unordered_map<Module*, kj::Own<CompiledModule>> modules;
   // Map of parser modules to compiler modules.
+
+  Workspace workspace;
+  // The temporary workspace.
 
   std::unordered_map<uint64_t, Node*> nodesById;
   // Map of nodes by ID.
