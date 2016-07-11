@@ -1229,7 +1229,7 @@ public:
         // OK, we know the cmsghdr is valid, at least.
 
         // Find the start of the message payload.
-        const byte* begin = CMSG_DATA(cmsg);
+        const byte* begin = (const byte *)CMSG_DATA(cmsg);
 
         // Cap the message length to the available space.
         const byte* end = pos + kj::min(available, cmsg->cmsg_len);
