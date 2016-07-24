@@ -558,10 +558,41 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           return;
         }
 
-        case schema::Type::ANY_POINTER:
-          AnyPointer::Builder(builder.getPointerField(slot.getOffset() * POINTERS))
-                 .set(value.as<AnyPointer>());
-          return;
+        case schema::Type::ANY_POINTER: {
+          auto target = AnyPointer::Builder(builder.getPointerField(slot.getOffset() * POINTERS));
+
+          switch (value.getType()) {
+            case DynamicValue::Type::TEXT:
+              target.setAs<Text>(value.as<Text>());
+              return;
+            case DynamicValue::Type::DATA:
+              target.setAs<Data>(value.as<Data>());
+              return;
+            case DynamicValue::Type::LIST:
+              target.setAs<DynamicList>(value.as<DynamicList>());
+              return;
+            case DynamicValue::Type::STRUCT:
+              target.setAs<DynamicStruct>(value.as<DynamicStruct>());
+              return;
+            case DynamicValue::Type::CAPABILITY:
+              target.setAs<DynamicCapability>(value.as<DynamicCapability>());
+              return;
+            case DynamicValue::Type::ANY_POINTER:
+              target.set(value.as<AnyPointer>());
+              return;
+
+            case DynamicValue::Type::UNKNOWN:
+            case DynamicValue::Type::VOID:
+            case DynamicValue::Type::BOOL:
+            case DynamicValue::Type::INT:
+            case DynamicValue::Type::UINT:
+            case DynamicValue::Type::FLOAT:
+            case DynamicValue::Type::ENUM:
+              KJ_FAIL_ASSERT("Value type mismatch; expected AnyPointer");
+          }
+
+          KJ_UNREACHABLE;
+        }
 
         case schema::Type::INTERFACE: {
           auto interfaceType = type.asInterface();

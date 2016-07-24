@@ -158,6 +158,37 @@ TEST(DynamicApi, AnyPointers) {
     checkList<uint32_t>(root.getAnyPointerField().getAs<DynamicList>(
         Schema::from<List<uint32_t>>()), {123u, 456u, 789u, 123456789u});
   }
+
+  // Setting an AnyPointer to various types should work.
+  toDynamic(root).set("anyPointerField", capnp::Text::Reader("foo"));
+  EXPECT_EQ("foo", root.getAnyPointerField().getAs<Text>());
+
+  {
+    auto orphan = builder.getOrphanage().newOrphan<TestAllTypes>();
+    initTestMessage(orphan.get());
+    toDynamic(root).set("anyPointerField", orphan.getReader());
+    checkTestMessage(root.getAnyPointerField().getAs<TestAllTypes>());
+
+    toDynamic(root).adopt("anyPointerField", kj::mv(orphan));
+    checkTestMessage(root.getAnyPointerField().getAs<TestAllTypes>());
+  }
+
+  {
+    auto lorphan = builder.getOrphanage().newOrphan<List<uint32_t>>(3);
+    lorphan.get().set(0, 12);
+    lorphan.get().set(1, 34);
+    lorphan.get().set(2, 56);
+    toDynamic(root).set("anyPointerField", lorphan.getReader());
+    auto l = root.getAnyPointerField().getAs<List<uint32_t>>();
+    ASSERT_EQ(3, l.size());
+    EXPECT_EQ(12, l[0]);
+    EXPECT_EQ(34, l[1]);
+    EXPECT_EQ(56, l[2]);
+  }
+
+  // Just compile this one.
+  toDynamic(root).set("anyPointerField", Capability::Client(nullptr));
+  root.getAnyPointerField().getAs<Capability>();
 }
 
 TEST(DynamicApi, DynamicAnyPointers) {
