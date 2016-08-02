@@ -427,8 +427,8 @@ struct List<AnyPointer, Kind::OTHER> {
     inline Builder(decltype(nullptr)): builder(ElementSize::POINTER) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
-    inline operator Reader() { return Reader(builder.asReader()); }
-    inline Reader asReader() { return Reader(builder.asReader()); }
+    inline operator Reader() const { return Reader(builder.asReader()); }
+    inline Reader asReader() const { return Reader(builder.asReader()); }
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline AnyPointer::Builder operator[](uint index) {
@@ -592,8 +592,8 @@ public:
   inline Builder(decltype(nullptr)): builder(ElementSize::INLINE_COMPOSITE) {}
   inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
-  inline operator Reader() { return Reader(builder.asReader()); }
-  inline Reader asReader() { return Reader(builder.asReader()); }
+  inline operator Reader() const { return Reader(builder.asReader()); }
+  inline Reader asReader() const { return Reader(builder.asReader()); }
 
   inline uint size() const { return builder.size() / ELEMENTS; }
   inline AnyStruct::Builder operator[](uint index) {
