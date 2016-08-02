@@ -113,7 +113,7 @@ public:
       : Params::Builder(builder), hook(kj::mv(hook)) {}
   inline Request(decltype(nullptr)): Params::Builder(nullptr) {}
 
-  RemotePromise<Results> send();
+  RemotePromise<Results> send() KJ_WARN_UNUSED_RESULT;
   // Send the call and return a promise for the results.
 
 private:
