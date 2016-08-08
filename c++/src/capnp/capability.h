@@ -113,7 +113,7 @@ public:
       : Params::Builder(builder), hook(kj::mv(hook)) {}
   inline Request(decltype(nullptr)): Params::Builder(nullptr) {}
 
-  RemotePromise<Results> send();
+  RemotePromise<Results> send() KJ_WARN_UNUSED_RESULT;
   // Send the call and return a promise for the results.
 
 private:
@@ -678,8 +678,8 @@ struct List<T, Kind::INTERFACE> {
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
-    inline operator Reader() { return Reader(builder.asReader()); }
-    inline Reader asReader() { return Reader(builder.asReader()); }
+    inline operator Reader() const { return Reader(builder.asReader()); }
+    inline Reader asReader() const { return Reader(builder.asReader()); }
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename T::Client operator[](uint index) {

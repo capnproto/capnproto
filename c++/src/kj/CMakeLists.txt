@@ -58,7 +58,7 @@ set(kj-std_headers
 )
 add_library(kj ${kj_sources})
 add_library(CapnProto::kj ALIAS kj)
-if(UNIX)
+if(UNIX AND NOT ANDROID)
   target_link_libraries(kj PUBLIC pthread)
 endif()
 #make sure the lite flag propagates to all users (internal + external) of this library

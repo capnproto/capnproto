@@ -143,8 +143,8 @@ struct List<T, Kind::PRIMITIVE> {
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
-    inline operator Reader() { return Reader(builder.asReader()); }
-    inline Reader asReader() { return Reader(builder.asReader()); }
+    inline operator Reader() const { return Reader(builder.asReader()); }
+    inline Reader asReader() const { return Reader(builder.asReader()); }
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline T operator[](uint index) {
@@ -239,8 +239,8 @@ struct List<T, Kind::STRUCT> {
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
-    inline operator Reader() { return Reader(builder.asReader()); }
-    inline Reader asReader() { return Reader(builder.asReader()); }
+    inline operator Reader() const { return Reader(builder.asReader()); }
+    inline Reader asReader() const { return Reader(builder.asReader()); }
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) {
@@ -362,8 +362,8 @@ struct List<List<T>, Kind::LIST> {
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
-    inline operator Reader() { return Reader(builder.asReader()); }
-    inline Reader asReader() { return Reader(builder.asReader()); }
+    inline operator Reader() const { return Reader(builder.asReader()); }
+    inline Reader asReader() const { return Reader(builder.asReader()); }
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename List<T>::Builder operator[](uint index) {
@@ -470,8 +470,8 @@ struct List<T, Kind::BLOB> {
     inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
-    inline operator Reader() { return Reader(builder.asReader()); }
-    inline Reader asReader() { return Reader(builder.asReader()); }
+    inline operator Reader() const { return Reader(builder.asReader()); }
+    inline Reader asReader() const { return Reader(builder.asReader()); }
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) {

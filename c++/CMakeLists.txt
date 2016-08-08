@@ -63,7 +63,11 @@ else()
   #
   # We have to use -std=gnu++0x isntead of -std=c++11 because otherwise we lose
   # GNU extensions that we need.
-  add_compile_options(-std=gnu++0x -Wall -Wextra -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -pthread)
+  add_compile_options(-std=gnu++0x -Wall -Wextra -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter)
+
+  if (NOT ANDROID)
+    add_compile_options(-pthread)
+  endif()
 endif()
 
 # Source =======================================================================

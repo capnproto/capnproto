@@ -44,6 +44,10 @@
 #include <sys/types.h>
 #endif
 
+#if !_WIN32
+#include <sys/uio.h>
+#endif
+
 namespace kj {
 namespace miniposix {
 
