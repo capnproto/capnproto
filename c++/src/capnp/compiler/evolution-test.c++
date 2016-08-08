@@ -868,6 +868,18 @@ public:
   }
 
   kj::MainBuilder::Validity run() {
+    // https://github.com/sandstorm-io/capnproto/issues/344 describes an obscure bug in the layout
+    // algorithm, the fix for which breaks backwards-compatibility for any schema triggering the
+    // bug. In order to avoid silently breaking protocols, we are temporarily throwing an exception
+    // in cases where this bug would have occurred, so that people can decide what to do.
+    // However, the evolution test can occasionally trigger the bug (depending on the random path
+    // it takes). Rather than try to avoid it, we disable the exception-throwing, because the bug
+    // is actually fixed, and the exception is only there to raise awareness of the compatibility
+    // concerns.
+    //
+    // On Linux, seed 1467142714 (for example) will trigger the exception (without this env var).
+    setenv("CAPNP_IGNORE_ISSUE_344", "1", true);
+
     srand(seed);
 
     {

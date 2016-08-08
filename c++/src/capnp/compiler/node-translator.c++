@@ -30,6 +30,10 @@
 namespace capnp {
 namespace compiler {
 
+bool shouldDetectIssue344() {
+  return getenv("CAPNP_IGNORE_ISSUE_344") == nullptr;
+}
+
 class NodeTranslator::StructLayout {
   // Massive, disgusting class which implements the layout algorithm, which decides the offset
   // for each field.
@@ -411,7 +415,7 @@ public:
         // Underlying slot is big enough, so expand our size and update holes.
         if (newHoles) {
           holes.addHolesAtEnd(lgSizeUsed, 1, desiredUsage);
-        } else {
+        } else if (shouldDetectIssue344()) {
           // Unfortunately, Cap'n Proto 0.5.x and below would always call addHolesAtEnd(), which
           // was the wrong thing to do when called from tryExpand(), which itself is only called
           // in cases involving unions nested in other unions. The bug could lead to multiple
@@ -526,7 +530,11 @@ public:
         // problem and throw an exception.
         //
         // TODO(cleanup): Once sufficient time has elapsed, switch to "return false;" here.
-        mustFail = true;
+        if (shouldDetectIssue344()) {
+          mustFail = true;
+        } else {
+          return false;
+        }
       }
 
       for (uint i = 0; i < parentDataLocationUsage.size(); i++) {
