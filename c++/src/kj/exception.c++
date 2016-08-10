@@ -19,12 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include <stdlib.h>
 #include "exception.h"
 #include "string.h"
 #include "debug.h"
 #include "threadlocal.h"
 #include "miniposix.h"
-#include <stdlib.h>
 #include <exception>
 #include <new>
 #include <signal.h>
@@ -33,7 +33,7 @@
 #endif
 #include "io.h"
 
-#if (__linux__ && !__ANDROID__) || __APPLE__
+#if (__linux__ && __GLIBC__ && !__ANDROID__) || __APPLE__
 #define KJ_HAS_BACKTRACE 1
 #include <execinfo.h>
 #endif
