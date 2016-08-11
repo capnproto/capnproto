@@ -33,7 +33,7 @@
 #endif
 #include "io.h"
 
-#if (__linux__ && !__ANDROID__) || __APPLE__
+#if (__linux__ && __GLIBC__) || __APPLE__
 #define KJ_HAS_BACKTRACE 1
 #include <execinfo.h>
 #endif
