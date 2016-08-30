@@ -145,7 +145,7 @@ struct AnyPointer {
   public:
     typedef AnyPointer Builds;
 
-    Builder() = delete;
+    Builder() = default;
     inline Builder(decltype(nullptr)) {}
     inline Builder(_::PointerBuilder builder): builder(builder) {}
 
