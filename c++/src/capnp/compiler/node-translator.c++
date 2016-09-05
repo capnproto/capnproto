@@ -26,6 +26,7 @@
 #include <kj/arena.h>
 #include <set>
 #include <map>
+#include <stdlib.h>
 
 namespace capnp {
 namespace compiler {
