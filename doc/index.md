@@ -97,7 +97,7 @@ Note that I no longer work for Google. Cap'n Proto is not, and never has been, a
 To install Cap'n Proto, head over to the [installation page](install.html).  If you'd like to help
 hack on Cap'n Proto, such as by writing bindings in other languages, let us know on the
 [discussion group](https://groups.google.com/group/capnproto).  If you'd like to receive e-mail
-udpates about future releases, add yourself to the
+updates about future releases, add yourself to the
 [announcement list](https://groups.google.com/group/capnproto-announce).
 
 {% include buttons.html %}

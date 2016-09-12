@@ -123,7 +123,7 @@ public:
   // though no actual pointer was traversed. This is used e.g. when reading a struct list pointer
   // where the element sizes are zero -- the sender could set the list size arbitrarily high and
   // cause the receiver to iterate over this list even though the message itself is small, so we
-  // need to defend agaisnt DoS attacks based on this.
+  // need to defend against DoS attacks based on this.
 
   inline Arena* getArena();
   inline SegmentId getSegmentId();

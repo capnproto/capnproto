@@ -77,5 +77,5 @@ written as several separate files with a master file that imports the rest.
 
 Such a configuration should be compiled to binary format using `capnp eval` before deployment,
 in order to verify that there are no errors and to make deployment easier and faster.  While you
-could techincally ship the text configs to production and have the servers parse them directly
+could technically ship the text configs to production and have the servers parse them directly
 (e.g. with `capnp::SchemaParser`), encoding before deployment is more efficient and robust.

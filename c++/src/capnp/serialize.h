@@ -116,7 +116,7 @@ size_t expectedSizeInWordsFromPrefix(kj::ArrayPtr<const word> messagePrefix);
 // If the returned value is greater than `messagePrefix.size()`, then the message is not yet
 // complete and the app cannot parse it yet. If the returned value is less than or equal to
 // `messagePrefix.size()`, then the returned value is the exact total size of the message; any
-// remaining bytes are part of the next mesasge.
+// remaining bytes are part of the next message.
 //
 // This function is useful when reading messages from a stream in an asynchronous way, but when
 // using the full KJ async infrastructure would be too difficult. Each time bytes are received,
