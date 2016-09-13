@@ -60,7 +60,7 @@ SBE, however, as far as I can tell from reading the code, does not allow you to 
 
 The central thesis of all three competitors is that data should be structured the same way in-memory and on the wire, thus avoiding costly encode/decode steps.
 
-Protobufs reperesents the old way of thinking.
+Protobufs represents the old way of thinking.
 
 **Random-access reads**
 
@@ -136,7 +136,7 @@ SBE uses XML schemas, which are verbose.
 
 Protobuf generated classes have often been (ab)used as a convenient way to store an application's mutable internal state. There's mostly no problem with modifying a message gradually over time and then serializing it when needed.
 
-This usage pattern does not work well with any zero-copy serialization format because these formats must use arena-style allocation to make sure the message is built in contiguous memory. Arena allocation has the property that you cannot free any object unless you free the entire arena. Therefore, when objects are discarded, the memory ends up leaked until the message as a whole is destoryed. A long-lived message that is modified many times will thus leak memory.
+This usage pattern does not work well with any zero-copy serialization format because these formats must use arena-style allocation to make sure the message is built in contiguous memory. Arena allocation has the property that you cannot free any object unless you free the entire arena. Therefore, when objects are discarded, the memory ends up leaked until the message as a whole is destroyed. A long-lived message that is modified many times will thus leak memory.
 
 **Padding takes space on wire?**
 

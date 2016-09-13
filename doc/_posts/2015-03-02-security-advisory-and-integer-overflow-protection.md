@@ -37,7 +37,7 @@ It is our policy that any time a security problem is found, we will not only fix
 4. We will continue to require that all tests (including the new fuzz test) run
    cleanly under Valgrind before each release.
 5. We will commission a professional security review before any 1.0 release.
-   Until that time, we continue to recommend agaisnt using Cap'n Proto to
+   Until that time, we continue to recommend against using Cap'n Proto to
    interpret data from potentially-malicious sources.
 
 I am pleased to report that measures 1, 2, and 3 all detected both integer overflow/underflow problems, and AFL additionally detected the CPU amplification problem.

@@ -674,7 +674,7 @@ annotation qux @0xf8a1bedf44c89f00 (field) :Text;
 
 If you omit the ID for a type or annotation, one will be assigned automatically.  This default
 ID is derived by taking the first 8 bytes of the MD5 hash of the parent scope's ID concatenated
-with the declaration's name (where the "parent scope" is the file for top-level delarations, or
+with the declaration's name (where the "parent scope" is the file for top-level declarations, or
 the outer type for nested declarations).  You can see the automatically-generated IDs by "compiling"
 your file with the `-ocapnp` flag, which echos the schema back to the terminal annotated with
 extra information, e.g. `capnp compile -ocapnp myschema.capnp`.  In general, you would only specify
@@ -760,7 +760,7 @@ without changing the [canonical](encoding.html#canonicalization) encoding of a m
 
   (This rule applies analogously to generic methods.)
 
-The following changes are backwards-compatible but may change the canonical encoding of a mesasge.
+The following changes are backwards-compatible but may change the canonical encoding of a message.
 Apps that rely on canonicalization (such as some cryptographic protocols) should avoid changes in
 this list, but most apps can safely use them:
 
