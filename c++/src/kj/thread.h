@@ -55,13 +55,13 @@ public:
   //   the Thread object and the thread itself will need to share a refcounted object.
 
 private:
-  Function<void()> func;
+  struct Impl;
+  kj::Own<Impl> impl;
 #if _WIN32
   void* threadHandle;
 #else
   unsigned long long threadId;  // actually pthread_t
 #endif
-  kj::Maybe<kj::Exception> exception;
   bool detached = false;
 
 #if _WIN32
