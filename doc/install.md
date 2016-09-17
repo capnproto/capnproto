@@ -108,7 +108,9 @@ Note: These packages are not maintained by us and are sometimes not up to date w
 If you download directly from Git, you will need to have the GNU autotools --
 [autoconf](http://www.gnu.org/software/autoconf/),
 [automake](http://www.gnu.org/software/automake/), and
-[libtool](http://www.gnu.org/software/libtool/) -- installed.
+[libtool](http://www.gnu.org/software/libtool/) -- installed, unless you choose
+to use build or pull the Docker image which already has the dependencies
+installed.
 
     git clone https://github.com/sandstorm-io/capnproto.git
     cd capnproto/c++
@@ -116,6 +118,16 @@ If you download directly from Git, you will need to have the GNU autotools --
     ./configure
     make -j6 check
     sudo make install
+
+The Dockerfile delivered with the git repository provides a quick means for
+spawning a debian environment with all dependencies installed to build or run 
+`capnpro`. Run `docker build -t capnproto .` to produce the image and run
+`docker run --it capnproto` to spawn a container from the produced image.o
+
+In case you have files you need to work with, mount them into the container
+using to command `docker run --it capnproto -v $PATH_TO_SRC_DIR:/tmp/workdir`.
+Inside the container you may navigate to `/tmp/workdir` where you will find
+your source directory mounted.
 
 ## Installation: Windows
 
