@@ -24,10 +24,12 @@
 
 #if _WIN32
 #include <windows.h>
+#include "windows-sanity.h"
 #else
 #include <pthread.h>
 #include <signal.h>
 #endif
+
 
 namespace kj {
 
