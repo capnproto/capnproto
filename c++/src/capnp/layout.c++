@@ -1606,7 +1606,7 @@ struct WireHelpers {
       if (dataSize % BYTES_PER_WORD != 0 * BYTES) {
         //Zero-pad the data if it didn't use the entire last word
         byte* padStart = reinterpret_cast<byte*>(ptr) + (dataSize / BYTES);
-        bzero(padStart, (BYTES_PER_WORD * WORDS - (dataSize % BYTES_PER_WORD)) / BYTES);
+        memset(padStart, 0, (BYTES_PER_WORD * WORDS - (dataSize % BYTES_PER_WORD)) / BYTES);
       }
     }
 
