@@ -120,14 +120,21 @@ installed.
     sudo make install
 
 The Dockerfile delivered with the git repository provides a quick means for
-spawning a debian environment with all dependencies installed to build or run 
-`capnpro`. Run `docker build -t capnproto .` to produce the image and run
-`docker run --it capnproto` to spawn a container from the produced image.o
+spawning a debian environment with all dependencies installed to build, test
+and run `capnpro`. Run `docker build -t capnproto .` to produce the image and
+run `docker run --it capnproto` to spawn a container from the produced image.
 
 In case you have files you need to work with, mount them into the container
-using to command `docker run --it capnproto -v $PATH_TO_SRC_DIR:/tmp/workdir`.
-Inside the container you may navigate to `/tmp/workdir` where you will find
+to have them accessible within that environment. Mounting `$PATH_TO_SRC_DIR`
+into `/tmp/workdir` inside the container is simply done through the command
+`docker run --it capnproto -v $PATH_TO_SRC_DIR:/tmp/workdir`. Inside the
+container you may navigate to `/tmp/workdir` where you will find
 your source directory mounted.
+
+The `capnproto` repository is copied into the Docker container into the path
+`/tmp/capnproto`. Feel free to mount the path to the capnproto repository on
+your filesystem into this path in order to rebuild any changes you want to
+test.
 
 ## Installation: Windows
 
