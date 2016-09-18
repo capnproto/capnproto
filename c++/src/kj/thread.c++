@@ -30,7 +30,6 @@
 #include <signal.h>
 #endif
 
-
 namespace kj {
 
 #if _WIN32
@@ -128,7 +127,6 @@ void* Thread::runThread(void* ptr) {
 void Thread::ThreadState::unref() {
 #if _MSC_VER
   if (_InterlockedDecrement(&refcount)) {
-    _ReadBarrier();
 #else
   if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
