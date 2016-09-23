@@ -41,9 +41,13 @@ Thread::Thread(Function<void()> func): state(new ThreadState { kj::mv(func), nul
 
 Thread::~Thread() noexcept(false) {
   if (!detached) {
+    KJ_DEFER(state->unref());
+
     KJ_ASSERT(WaitForSingleObject(threadHandle, INFINITE) != WAIT_FAILED);
 
     KJ_IF_MAYBE(e, state->exception) {
+      Exception ecopy = kj::mv(*e);
+      state->exception = nullptr;  // don't complain of uncaught exception when deleting
       kj::throwRecoverableException(kj::mv(*e));
     }
   }
