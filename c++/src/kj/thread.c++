@@ -48,7 +48,7 @@ Thread::~Thread() noexcept(false) {
     KJ_IF_MAYBE(e, state->exception) {
       Exception ecopy = kj::mv(*e);
       state->exception = nullptr;  // don't complain of uncaught exception when deleting
-      kj::throwRecoverableException(kj::mv(*e));
+      kj::throwRecoverableException(kj::mv(ecopy));
     }
   }
 }
