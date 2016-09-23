@@ -59,7 +59,7 @@ private:
     Function<void()> func;
     kj::Maybe<kj::Exception> exception;
 
-    int refcount;
+    unsigned int refcount;
     // Owned by the parent thread and the child thread.
 
     void unref();

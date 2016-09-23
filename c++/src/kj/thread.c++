@@ -24,6 +24,7 @@
 
 #if _WIN32
 #include <windows.h>
+#include "windows-sanity.h"
 #else
 #include <pthread.h>
 #include <signal.h>
@@ -42,7 +43,7 @@ Thread::~Thread() noexcept(false) {
   if (!detached) {
     KJ_ASSERT(WaitForSingleObject(threadHandle, INFINITE) != WAIT_FAILED);
 
-    KJ_IF_MAYBE(e, exception) {
+    KJ_IF_MAYBE(e, state->exception) {
       kj::throwRecoverableException(kj::mv(*e));
     }
   }
@@ -125,8 +126,7 @@ void* Thread::runThread(void* ptr) {
 
 void Thread::ThreadState::unref() {
 #if _MSC_VER
-  if (_InterlockedDecrement_rel(&refcount)) {
-    _ReadBarrier();
+  if (_InterlockedDecrement(&refcount)) {
 #else
   if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
