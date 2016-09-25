@@ -74,10 +74,11 @@ public:
   }
 
   template <typename T, typename... Params>
-  void init(Params&&... params) {
+  T& init(Params&&... params) {
     if (tag != 0) destroy();
     ctor(*reinterpret_cast<T*>(space), kj::fwd<Params>(params)...);
     tag = typeIndex<T>();
+    return *reinterpret_cast<T*>(space);
   }
 
 private:
