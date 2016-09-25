@@ -61,6 +61,16 @@ using Date = Absolute<Duration, _::DateLabel>;
 constexpr Date UNIX_EPOCH = origin<Date>();
 // The `Date` representing Jan 1, 1970 00:00:00 UTC.
 
+class Clock {
+  // Interface to read the current date and time.
+public:
+  virtual Date now() = 0;
+};
+
+Clock& nullClock();
+// A clock which always returns UNIX_EPOCH as the current time. Useful when you don't care about
+// time.
+
 class Timer {
   // Interface to time and timer functionality.
   //
