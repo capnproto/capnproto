@@ -376,15 +376,54 @@ public:
 
   template <typename Container>
   void addAll(Container&& container) {
-    addAll(container.begin(), container.end());
+    addAll<decltype(container.begin()), !isReference<Container>()>(
+        container.begin(), container.end());
   }
 
-  template <typename Iterator>
+  template <typename Iterator, bool move = false>
   void addAll(Iterator start, Iterator end);
 
   void removeLast() {
     KJ_IREQUIRE(pos > ptr, "No elements present to remove.");
     kj::dtor(*--pos);
+  }
+
+  void truncate(size_t size) {
+    KJ_IREQUIRE(size <= this->size(), "can't use truncate() to expand");
+
+    T* target = ptr + size;
+    if (__has_trivial_destructor(T)) {
+      pos = target;
+    } else {
+      while (pos > target) {
+        kj::dtor(*--pos);
+      }
+    }
+  }
+
+  void resize(size_t size) {
+    KJ_IREQUIRE(size <= capacity(), "can't resize past capacity");
+
+    T* target = ptr + size;
+    if (target > pos) {
+      // expand
+      if (__has_trivial_constructor(T)) {
+        pos = target;
+      } else {
+        while (pos < target) {
+          kj::ctor(*pos++);
+        }
+      }
+    } else {
+      // truncate
+      if (__has_trivial_destructor(T)) {
+        pos = target;
+      } else {
+        while (pos > target) {
+          kj::dtor(*--pos);
+        }
+      }
+    }
   }
 
   Array<T> finish() {
@@ -615,11 +654,11 @@ T* HeapArrayDisposer::allocateUninitialized(size_t count) {
   return Allocate_<T, true, true>::allocate(0, count);
 }
 
-template <typename Element, typename Iterator, bool = canMemcpy<Element>()>
+template <typename Element, typename Iterator, bool move, bool = canMemcpy<Element>()>
 struct CopyConstructArray_;
 
-template <typename T>
-struct CopyConstructArray_<T, T*, true> {
+template <typename T, bool move>
+struct CopyConstructArray_<T, T*, move, true> {
   static inline T* apply(T* __restrict__ pos, T* start, T* end) {
     memcpy(pos, start, reinterpret_cast<byte*>(end) - reinterpret_cast<byte*>(start));
     return pos + (end - start);
@@ -627,15 +666,15 @@ struct CopyConstructArray_<T, T*, true> {
 };
 
 template <typename T>
-struct CopyConstructArray_<T, const T*, true> {
+struct CopyConstructArray_<T, const T*, false, true> {
   static inline T* apply(T* __restrict__ pos, const T* start, const T* end) {
     memcpy(pos, start, reinterpret_cast<const byte*>(end) - reinterpret_cast<const byte*>(start));
     return pos + (end - start);
   }
 };
 
-template <typename T, typename Iterator>
-struct CopyConstructArray_<T, Iterator, true> {
+template <typename T, typename Iterator, bool move>
+struct CopyConstructArray_<T, Iterator, move, true> {
   static inline T* apply(T* __restrict__ pos, Iterator start, Iterator end) {
     // Since both the copy constructor and assignment operator are trivial, we know that assignment
     // is equivalent to copy-constructing.  So we can make this case somewhat easier for the
@@ -648,7 +687,7 @@ struct CopyConstructArray_<T, Iterator, true> {
 };
 
 template <typename T, typename Iterator>
-struct CopyConstructArray_<T, Iterator, false> {
+struct CopyConstructArray_<T, Iterator, false, false> {
   struct ExceptionGuard {
     T* start;
     T* pos;
@@ -683,16 +722,48 @@ struct CopyConstructArray_<T, Iterator, false> {
 };
 
 template <typename T, typename Iterator>
-inline T* copyConstructArray(T* dst, Iterator start, Iterator end) {
-  return CopyConstructArray_<T, Decay<Iterator>>::apply(dst, start, end);
-}
+struct CopyConstructArray_<T, Iterator, true, false> {
+  // Actually move-construct.
+
+  struct ExceptionGuard {
+    T* start;
+    T* pos;
+    inline explicit ExceptionGuard(T* pos): start(pos), pos(pos) {}
+    ~ExceptionGuard() noexcept(false) {
+      while (pos > start) {
+        dtor(*--pos);
+      }
+    }
+  };
+
+  static T* apply(T* __restrict__ pos, Iterator start, Iterator end) {
+    // Verify that T can be *implicitly* constructed from the source values.
+    if (false) implicitCast<T>(kj::mv(*start));
+
+    if (noexcept(T(kj::mv(*start)))) {
+      while (start != end) {
+        ctor(*pos++, kj::mv(*start++));
+      }
+      return pos;
+    } else {
+      // Crap.  This is complicated.
+      ExceptionGuard guard(pos);
+      while (start != end) {
+        ctor(*guard.pos, kj::mv(*start++));
+        ++guard.pos;
+      }
+      guard.start = guard.pos;
+      return guard.pos;
+    }
+  }
+};
 
 }  // namespace _ (private)
 
 template <typename T>
-template <typename Iterator>
+template <typename Iterator, bool move>
 void ArrayBuilder<T>::addAll(Iterator start, Iterator end) {
-  pos = _::copyConstructArray(pos, start, end);
+  pos = _::CopyConstructArray_<RemoveConst<T>, Decay<Iterator>, move>::apply(pos, start, end);
 }
 
 template <typename T>
