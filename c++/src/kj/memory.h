@@ -239,6 +239,8 @@ public:
 
   template <typename U>
   inline Maybe(Maybe<Own<U>>&& other): ptr(mv(other.ptr)) {}
+  template <typename U>
+  inline Maybe(Own<U>&& other): ptr(mv(other)) {}
 
   inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
