@@ -1,0 +1,75 @@
+# Cap'n Proto AppVeyor configuration
+#
+# See https://www.appveyor.com/docs/appveyor-yml/ for configuration options.
+#
+# This script configures AppVeyor to:
+#   - Download and unzip MinGW-w64 4.8.5 for x86_64, the minimum gcc version Cap'n Proto advertises
+#     support for.
+#   - Use CMake to ...
+#       build Cap'n Proto with MinGW.
+#       build Cap'n Proto with VS2015 and the MinGW-built capnp tools.
+#       build the Cap'n Proto samples with VS2015 and the MinGW-built capnp tools.
+#   - Archive both Cap'n Proto builds in capnproto-c++-{mingw,vs2015}.zip artifacts.
+
+version: "{build}"
+
+image: Visual Studio 2017
+# AppVeyor build worker image (VM template).
+
+shallow_clone: true
+# Fetch repository as zip archive.
+
+cache:
+  - x86_64-4.8.5-release-win32-seh-rt_v4-rev0.7z
+
+environment:
+  MINGW_DIR: mingw64
+  MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/4.8.5/threads-win32/seh/x86_64-4.8.5-release-win32-seh-rt_v4-rev0.7z/download
+  MINGW_ARCHIVE: x86_64-4.8.5-release-win32-seh-rt_v4-rev0.7z
+  BUILD_TYPE: debug
+
+install:
+  - if not exist "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
+  - 7z x -y "%MINGW_ARCHIVE%" > nul
+  - ps: Get-Command sh.exe -All | Remove-Item
+  # CMake refuses to generate MinGW Makefiles if sh.exe is in the PATH
+
+before_build:
+  - set PATH=%CD%\%MINGW_DIR%\bin;%PATH%
+  - set INSTALL_PREFIX_MINGW=%CD%\capnproto-c++-mingw
+  - set INSTALL_PREFIX_VS2015=%CD%\capnproto-c++-vs2015
+  - cmake --version
+
+build_script:
+  - echo "Building Cap'n Proto with MinGW"
+  - >-
+      cmake -Hc++ -Bbuild-mingw -G "MinGW Makefiles"
+      -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+      -DCMAKE_INSTALL_PREFIX=%INSTALL_PREFIX_MINGW%
+  - cmake --build build-mingw --target install -- -j%NUMBER_OF_PROCESSORS%
+  - set PATH=%INSTALL_PREFIX_MINGW%\bin;%PATH%
+  - echo "Building Cap'n Proto with Visual Studio 2015"
+  - >-
+      cmake -Hc++ -Bbuild-vs2015 -G "Visual Studio 14 2015" -A x64
+      -DEXTERNAL_CAPNP=ON
+      -DCMAKE_INSTALL_PREFIX=%INSTALL_PREFIX_VS2015%
+  - cmake --build build-vs2015 --config %BUILD_TYPE% --target install
+  # TODO(someday): pass `-- /maxcpucount` for a parallel build. Right now it occasionally expresses
+  # a filesystem-related race: capnp-capnpc++ complains that it can't create test.capnp.h.
+  - >-
+      cmake -Hc++/samples -Bbuild-samples -G "Visual Studio 14 2015" -A x64
+      -DCMAKE_PREFIX_PATH=%INSTALL_PREFIX_VS2015%
+      -DCAPNP_EXECUTABLE=%INSTALL_PREFIX_MINGW%\bin\capnp.exe
+      -DCAPNPC_CXX_EXECUTABLE=%INSTALL_PREFIX_MINGW%\bin\capnpc-c++.exe
+  - cmake --build build-samples --config %BUILD_TYPE%
+
+# TODO(soon): Fix tests on Windows.
+#
+# Tests are not currently run, because until the tests start passing normally, it's more useful for
+# us to only be notified of build errors. When they start passing, uncomment the code below.
+#
+#test_script:
+#  - timeout /t 2
+#  # Sleep a little to prevent interleaving test output with build output.
+#  - cd build-msvc\src
+#  - ctest -V -C %BUILD_TYPE%
