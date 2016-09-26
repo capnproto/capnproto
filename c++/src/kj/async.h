@@ -507,6 +507,8 @@ public:
   // `loop` will be used to wait on promises.  `errorHandler` will be executed any time a task
   // throws an exception, and will execute within the given EventLoop.
 
+  TaskSet(TaskSet&& other);
+
   ~TaskSet() noexcept(false);
 
   void add(Promise<void>&& promise);

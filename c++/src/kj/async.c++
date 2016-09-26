@@ -480,6 +480,9 @@ TaskSet::TaskSet(ErrorHandler& errorHandler)
 
 TaskSet::~TaskSet() noexcept(false) {}
 
+TaskSet::TaskSet(TaskSet&& other)
+    : impl(kj::mv(other.impl)) {}
+
 void TaskSet::add(Promise<void>&& promise) {
   impl->add(kj::mv(promise));
 }
