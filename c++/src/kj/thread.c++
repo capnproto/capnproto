@@ -36,7 +36,10 @@ namespace kj {
 
 Thread::Thread(Function<void()> func): state(new ThreadState { kj::mv(func), nullptr, 2 }) {
   threadHandle = CreateThread(nullptr, 0, &runThread, state, 0, nullptr);
-  KJ_ASSERT(threadHandle != nullptr, "CreateThread failed.");
+  if (threadHandle == nullptr) {
+    state->unref();
+    KJ_FAIL_ASSERT("CreateThread failed.");
+  }
 }
 
 Thread::~Thread() noexcept(false) {
@@ -78,6 +81,7 @@ Thread::Thread(Function<void()> func): state(new ThreadState { kj::mv(func), nul
   int pthreadResult = pthread_create(reinterpret_cast<pthread_t*>(&threadId),
                                      nullptr, &runThread, state);
   if (pthreadResult != 0) {
+    state->unref();
     KJ_FAIL_SYSCALL("pthread_create", pthreadResult);
   }
 }
