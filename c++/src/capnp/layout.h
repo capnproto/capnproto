@@ -657,8 +657,8 @@ class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline explicit ListBuilder(ElementSize elementSize)
       : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
-        step(0 * BITS / ELEMENTS), elementSize(elementSize), structDataSize(0 * BITS),
-        structPointerCount(0 * POINTERS) {}
+        step(0 * BITS / ELEMENTS), structDataSize(0 * BITS), structPointerCount(0 * POINTERS),
+        elementSize(elementSize) {}
 
   inline word* getLocation() {
     // Get the object's location.
