@@ -585,7 +585,7 @@ private:
   uint countLeft;
   OnReadyEvent onReadyEvent;
 
-  class Branch: public Event {
+  class Branch final: public Event {
   public:
     Branch(ArrayJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependency,
            ExceptionOrValue& output);

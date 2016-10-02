@@ -51,7 +51,7 @@ private:
   bool initialized = false;
 };
 
-class Compiler::Node: public NodeTranslator::Resolver {
+class Compiler::Node final: public NodeTranslator::Resolver {
   // Passes through four states:
   // - Stub:  On initial construction, the Node is just a placeholder object.  Its ID has been
   //     determined, and it is placed in its parent's member table as well as the compiler's

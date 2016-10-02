@@ -34,12 +34,12 @@ typedef Quantity<int, Bytes> ByteCount;
 typedef Quantity<int, KiB> KiBCount;
 typedef Quantity<int, MiB> MiBCount;
 
-constexpr ByteCount BYTE = unit<ByteCount>();
+constexpr ByteCount BYTE KJ_UNUSED = unit<ByteCount>();
 constexpr KiBCount KIB = unit<KiBCount>();
 constexpr MiBCount MIB = unit<MiBCount>();
 
-constexpr UnitRatio<int, Bytes, KiB> BYTES_PER_KIB = 1024 * BYTE / KIB;
-constexpr UnitRatio<int, Bytes, MiB> BYTES_PER_MIB = 1024 * 1024 * BYTE / MIB;
+constexpr UnitRatio<int, Bytes, KiB> BYTES_PER_KIB KJ_UNUSED = 1024 * BYTE / KIB;
+constexpr UnitRatio<int, Bytes, MiB> BYTES_PER_MIB KJ_UNUSED = 1024 * 1024 * BYTE / MIB;
 constexpr auto KIB_PER_MIB = 1024 * KIB / MIB;
 
 template <typename T, typename U>

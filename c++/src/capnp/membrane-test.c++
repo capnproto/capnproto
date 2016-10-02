@@ -32,7 +32,7 @@ namespace {
 
 using Thing = test::TestMembrane::Thing;
 
-class ThingImpl: public Thing::Server {
+class ThingImpl final: public Thing::Server {
 public:
   ThingImpl(kj::StringPtr text): text(text) {}
 
@@ -51,7 +51,7 @@ private:
   kj::StringPtr text;
 };
 
-class TestMembraneImpl: public test::TestMembrane::Server {
+class TestMembraneImpl final: public test::TestMembrane::Server {
 protected:
   kj::Promise<void> makeThing(MakeThingContext context) override {
     context.getResults().setThing(kj::heap<ThingImpl>("inside"));
