@@ -270,7 +270,7 @@ public:
     }
   };
 
-  struct Group: public StructOrGroup {
+  struct Group final: public StructOrGroup {
   public:
     class DataLocationUsage {
     public:

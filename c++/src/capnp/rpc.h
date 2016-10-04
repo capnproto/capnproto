@@ -339,18 +339,18 @@ public:
     // authenticate this, so that the caller can be assured that they are really talking to the
     // identified vat and not an imposter.
 
-    virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
+    virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override = 0;
     // Allocate a new message to be sent on this connection.
     //
     // If `firstSegmentWordSize` is non-zero, it should be treated as a hint suggesting how large
     // to make the first segment.  This is entirely a hint and the connection may adjust it up or
     // down.  If it is zero, the connection should choose the size itself.
 
-    virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
+    virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override = 0;
     // Wait for a message to be received and return it.  If the read stream cleanly terminates,
     // return null.  If any other problem occurs, throw an exception.
 
-    virtual kj::Promise<void> shutdown() KJ_WARN_UNUSED_RESULT = 0;
+    virtual kj::Promise<void> shutdown() override KJ_WARN_UNUSED_RESULT = 0;
     // Waits until all outgoing messages have been sent, then shuts down the outgoing stream. The
     // returned promise resolves after shutdown is complete.
 
