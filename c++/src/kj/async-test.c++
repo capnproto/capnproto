@@ -492,6 +492,21 @@ TEST(Async, ForkRef) {
   EXPECT_EQ(789, branch2.wait(waitScope));
 }
 
+TEST(Async, Split) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<Tuple<int, String, Promise<int>>> promise = evalLater([&]() {
+    return kj::tuple(123, str("foo"), Promise<int>(321));
+  });
+
+  Tuple<Promise<int>, Promise<String>, Promise<int>> split = promise.split();
+
+  EXPECT_EQ(123, get<0>(split).wait(waitScope));
+  EXPECT_EQ("foo", get<1>(split).wait(waitScope));
+  EXPECT_EQ(321, get<2>(split).wait(waitScope));
+}
+
 TEST(Async, ExclusiveJoin) {
   {
     EventLoop loop;

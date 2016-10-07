@@ -26,6 +26,7 @@
 
 #ifndef KJ_ASYNC_H_
 #error "Do not include this directly; include kj/async.h."
+#include "async.h"  // help IDE parse this file
 #endif
 
 #ifndef KJ_ASYNC_INL_H_
@@ -444,6 +445,28 @@ public:
   }
 };
 
+template <typename T, size_t index>
+class SplitBranch final: public ForkBranchBase {
+  // A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
+  // a const reference.
+
+public:
+  SplitBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
+
+  typedef kj::Decay<decltype(kj::get<index>(kj::instance<T>()))> Element;
+
+  void get(ExceptionOrValue& output) noexcept override {
+    ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
+    KJ_IF_MAYBE(value, hubResult.value) {
+      output.as<Element>().value = kj::mv(kj::get<index>(*value));
+    } else {
+      output.as<Element>().value = nullptr;
+    }
+    output.exception = hubResult.exception;
+    releaseHub(output);
+  }
+};
+
 // -------------------------------------------------------------------
 
 class ForkHubBase: public Refcounted, protected Event {
@@ -479,8 +502,24 @@ public:
     return Promise<_::UnfixVoid<T>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
   }
 
+  _::SplitTuplePromise<T> split() {
+    return splitImpl(MakeIndexes<tupleSize<T>()>());
+  }
+
 private:
   ExceptionOr<T> result;
+
+  template <size_t... indexes>
+  _::SplitTuplePromise<T> splitImpl(Indexes<indexes...>) {
+    return kj::tuple(addSplit<indexes>()...);
+  }
+
+  template <size_t index>
+  Promise<JoinPromises<typename SplitBranch<T, index>::Element>> addSplit() {
+    return Promise<JoinPromises<typename SplitBranch<T, index>::Element>>(
+        false, maybeChain(kj::heap<SplitBranch<T, index>>(addRef(*this)),
+                          implicitCast<typename SplitBranch<T, index>::Element*>(nullptr)));
+  }
 };
 
 inline ExceptionOrValue& ForkBranchBase::getHubResultRef() {
@@ -831,6 +870,11 @@ ForkedPromise<T> Promise<T>::fork() {
 template <typename T>
 Promise<T> ForkedPromise<T>::addBranch() {
   return hub->addBranch();
+}
+
+template <typename T>
+_::SplitTuplePromise<T> Promise<T>::split() {
+  return refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(node))->split();
 }
 
 template <typename T>

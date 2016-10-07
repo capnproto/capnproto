@@ -350,6 +350,15 @@ inline auto apply(Func&& func, Params&&... params)
   return _::expandAndApply(kj::fwd<Func>(func), kj::fwd<Params>(params)...);
 }
 
+template <typename T> struct TupleSize_ { static constexpr size_t size = 1; };
+template <typename... T> struct TupleSize_<_::Tuple<T...>> {
+  static constexpr size_t size = sizeof...(T);
+};
+
+template <typename T>
+constexpr size_t tupleSize() { return TupleSize_<T>::size; }
+// Returns size of the tuple T.
+
 }  // namespace kj
 
 #endif  // KJ_TUPLE_H_
