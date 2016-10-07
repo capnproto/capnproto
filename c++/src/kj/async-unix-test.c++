@@ -455,6 +455,8 @@ TEST(AsyncUnixTest, WriteObserver) {
   EXPECT_TRUE(writable);
 }
 
+#if !__APPLE__
+// Disabled on macOS due to https://github.com/sandstorm-io/capnproto/issues/374.
 TEST(AsyncUnixTest, UrgentObserver) {
   // Verify that FdObserver correctly detects availability of out-of-band data.
   // Availability of out-of-band data is implementation-specific.
@@ -519,6 +521,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
   KJ_SYSCALL(send(clientFd, &c, 1, 0));
   KJ_SYSCALL(shutdown(clientFd, SHUT_RDWR));
 }
+#endif
 
 TEST(AsyncUnixTest, SteadyTimers) {
   captureSignals();

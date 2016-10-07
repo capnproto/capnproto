@@ -237,6 +237,9 @@ public:
   //
   // It is an error to call `whenUrgentDataAvailable()` again when the promise returned previously
   // has not yet resolved. If you do this, the previous promise may throw an exception.
+  //
+  // WARNING: This has some known weird behavior on macOS. See
+  //   https://github.com/sandstorm-io/capnproto/issues/374.
 
 private:
   UnixEventPort& eventPort;
