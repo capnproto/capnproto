@@ -1147,6 +1147,114 @@ TEST(Rpc, RealmGatewayExport) {
   EXPECT_EQ("exported-foo", response.getSturdyRef());
 }
 
+TEST(Rpc, RealmGatewayImportExport) {
+  // Test that a save request which leaves the realm, bounces through a promise capability, and
+  // then comes back into the realm, does not actually get translated both ways.
+
+  TestRealmGateway::Client gateway = kj::heap<TestGateway>();
+  Persistent<test::TestSturdyRef>::Client bootstrap = kj::heap<TestPersistent>("foo");
+
+  MallocMessageBuilder serverHostIdBuilder;
+  auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  serverHostId.setHost("server");
+
+  MallocMessageBuilder clientHostIdBuilder;
+  auto clientHostId = clientHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  clientHostId.setHost("client");
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  TestNetwork network;
+  TestRestorer restorer;
+  TestNetworkAdapter& clientNetwork = network.add("client");
+  TestNetworkAdapter& serverNetwork = network.add("server");
+  RpcSystem<test::TestSturdyRefHostId> rpcClient =
+      makeRpcServer(clientNetwork, bootstrap, gateway);
+  auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+  RpcSystem<test::TestSturdyRefHostId> rpcServer =
+      makeRpcServer(serverNetwork, kj::mv(paf.promise));
+
+  auto client = rpcClient.bootstrap(serverHostId).castAs<Persistent<test::TestSturdyRef>>();
+
+  bool responseReady = false;
+  auto responsePromise = client.saveRequest().send()
+      .then([&](Response<Persistent<test::TestSturdyRef>::SaveResults>&& response) {
+    responseReady = true;
+    return kj::mv(response);
+  }).eagerlyEvaluate(nullptr);
+
+  // Crank the event loop to give the message time to reach the server and block on the promise
+  // resolution.
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+
+  EXPECT_FALSE(responseReady);
+
+  paf.fulfiller->fulfill(rpcServer.bootstrap(clientHostId));
+
+  auto response = responsePromise.wait(waitScope);
+
+  // Should have the original value. If it went through export and re-import, though, then this
+  // will be "imported-exported-foo", which is wrong.
+  EXPECT_EQ("foo", response.getSturdyRef().getObjectId().getAs<Text>());
+}
+
+TEST(Rpc, RealmGatewayImportExport) {
+  // Test that a save request which enters the realm, bounces through a promise capability, and
+  // then goes back out of the realm, does not actually get translated both ways.
+
+  TestRealmGateway::Client gateway = kj::heap<TestGateway>();
+  Persistent<Text>::Client bootstrap = kj::heap<TestPersistentText>("foo");
+
+  MallocMessageBuilder serverHostIdBuilder;
+  auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  serverHostId.setHost("server");
+
+  MallocMessageBuilder clientHostIdBuilder;
+  auto clientHostId = clientHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  clientHostId.setHost("client");
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  TestNetwork network;
+  TestRestorer restorer;
+  TestNetworkAdapter& clientNetwork = network.add("client");
+  TestNetworkAdapter& serverNetwork = network.add("server");
+  RpcSystem<test::TestSturdyRefHostId> rpcClient =
+      makeRpcServer(clientNetwork, bootstrap);
+  auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+  RpcSystem<test::TestSturdyRefHostId> rpcServer =
+      makeRpcServer(serverNetwork, kj::mv(paf.promise), gateway);
+
+  auto client = rpcClient.bootstrap(serverHostId).castAs<Persistent<Text>>();
+
+  bool responseReady = false;
+  auto responsePromise = client.saveRequest().send()
+      .then([&](Response<Persistent<Text>::SaveResults>&& response) {
+    responseReady = true;
+    return kj::mv(response);
+  }).eagerlyEvaluate(nullptr);
+
+  // Crank the event loop to give the message time to reach the server and block on the promise
+  // resolution.
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+
+  EXPECT_FALSE(responseReady);
+
+  paf.fulfiller->fulfill(rpcServer.bootstrap(clientHostId));
+
+  auto response = responsePromise.wait(waitScope);
+
+  // Should have the original value. If it went through import and re-export, though, then this
+  // will be "exported-imported-foo", which is wrong.
+  EXPECT_EQ("foo", response.getSturdyRef());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

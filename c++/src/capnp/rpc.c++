@@ -663,7 +663,7 @@ private:
       // Implement call() by copying params and results messages.
 
       auto params = context->getParams();
-      auto request = newCall(interfaceId, methodId, params.targetSize());
+      auto request = newCallNoIntercept(interfaceId, methodId, params.targetSize());
 
       request.set(params);
       context->releaseParams();
@@ -865,12 +865,42 @@ private:
 
     Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+      if (!isResolved && interfaceId == typeId<Persistent<>>() && methodId == 0 &&
+          connectionState->gateway != nullptr) {
+        // This is a call to Persistent.save(), and we're not resolved yet, and the underlying
+        // remote capability will perform a gateway translation. This isn't right if the promise
+        // ultimately resolves to a local capability. Instead, we'll need to queue the call until
+        // the promise resolves.
+        return newLocalPromiseClient(fork.addBranch())
+            ->newCall(interfaceId, methodId, sizeHint);
+      }
+
       receivedCall = true;
       return cap->newCall(interfaceId, methodId, sizeHint);
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context) override {
+      if (!isResolved && interfaceId == typeId<Persistent<>>() && methodId == 0 &&
+          connectionState->gateway != nullptr) {
+        // This is a call to Persistent.save(), and we're not resolved yet, and the underlying
+        // remote capability will perform a gateway translation. This isn't right if the promise
+        // ultimately resolves to a local capability. Instead, we'll need to queue the call until
+        // the promise resolves.
+
+        auto vpapPromises = fork.addBranch().then(kj::mvCapture(context,
+            [interfaceId,methodId](kj::Own<CallContextHook>&& context,
+                                   kj::Own<ClientHook> resolvedCap) {
+          auto vpap = resolvedCap->call(interfaceId, methodId, kj::mv(context));
+          return kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline));
+        })).split();
+
+        return {
+          kj::mv(kj::get<0>(vpapPromises)),
+          newLocalPromisePipeline(kj::mv(kj::get<1>(vpapPromises))),
+        };
+      }
+
       receivedCall = true;
       return cap->call(interfaceId, methodId, kj::mv(context));
     }
@@ -2305,6 +2335,31 @@ private:
         // Wait, this is a call to Persistent.save() and we need to translate it through our
         // gateway.
 
+        KJ_IF_MAYBE(resolvedPromise, capability->whenMoreResolved()) {
+          // The plot thickens: We're looking at a promise capability. It could end up resolving
+          // to a capability outside the gateway, in which case we don't want to translate at all.
+
+          auto promises = resolvedPromise->then(kj::mvCapture(context,
+              [this,interfaceId,methodId](kj::Own<CallContextHook>&& context,
+                                          kj::Own<ClientHook> resolvedCap) {
+            auto vpap = startCall(interfaceId, methodId, kj::mv(resolvedCap), kj::mv(context));
+            return kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline));
+          })).attach(addRef(*this)).split();
+
+          return {
+            kj::mv(kj::get<0>(promises)),
+            newLocalPromisePipeline(kj::mv(kj::get<1>(promises))),
+          };
+        }
+
+        if (capability->getBrand() == this) {
+          // This capability is one of our own, pointing back out over the network. That means
+          // that it would be inappropriate to apply the gateway transformation. We just want to
+          // reflect the call back.
+          return kj::downcast<RpcClient>(*capability)
+              .callNoIntercept(interfaceId, methodId, kj::mv(context));
+        }
+
         auto params = context->getParams().getAs<Persistent<>::SaveParams>();
 
         auto requestSize = params.totalSize();
@@ -2321,7 +2376,7 @@ private:
       }
     }
 
-    return capability->call(interfaceId, methodId, context->addRef());
+    return capability->call(interfaceId, methodId, kj::mv(context));
   }
 
   kj::Maybe<kj::Own<ClientHook>> getMessageTarget(const rpc::MessageTarget::Reader& target) {
