@@ -758,7 +758,7 @@ public:
   inline Iterator end() const { return Iterator(value, count); }
 
   inline size_t size() const { return count; }
-  inline T operator[](ptrdiff_t) const { return value; }
+  inline const T& operator[](ptrdiff_t) const { return value; }
 
 private:
   T value;
