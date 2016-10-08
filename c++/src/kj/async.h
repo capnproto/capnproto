@@ -29,7 +29,6 @@
 #include "async-prelude.h"
 #include "exception.h"
 #include "refcount.h"
-#include "tuple.h"
 
 namespace kj {
 
@@ -241,6 +240,12 @@ public:
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
   // `Own<U>`, `U` must have a method `Own<U> addRef()` which returns a new reference to the same
   // (or an equivalent) object (probably implemented via reference counting).
+
+  _::SplitTuplePromise<T> split();
+  // Split a promise for a tuple into a tuple of promises.
+  //
+  // E.g. if you have `Promise<kj::Tuple<T, U>>`, `split()` returns
+  // `kj::Tuple<Promise<T>, Promise<U>>`.
 
   Promise<T> exclusiveJoin(Promise<T>&& other) KJ_WARN_UNUSED_RESULT;
   // Return a new promise that resolves when either the original promise resolves or `other`

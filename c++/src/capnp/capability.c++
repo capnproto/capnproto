@@ -545,6 +545,10 @@ kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& pro
   return kj::refcounted<QueuedClient>(kj::mv(promise));
 }
 
+kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>&& promise) {
+  return kj::refcounted<QueuedPipeline>(kj::mv(promise));
+}
+
 // =======================================================================================
 
 namespace {

@@ -30,6 +30,7 @@
 #endif
 
 #include "exception.h"
+#include "tuple.h"
 
 namespace kj {
 
@@ -85,6 +86,17 @@ template <typename Func, typename T>
 using ReturnType = typename ReturnType_<Func, T>::Type;
 // The return type of functor Func given a parameter of type T, with the special exception that if
 // T is void, this is the return type of Func called with no arguments.
+
+template <typename T> struct SplitTuplePromise_ { typedef Promise<T> Type; };
+template <typename... T>
+struct SplitTuplePromise_<kj::_::Tuple<T...>> {
+  typedef kj::Tuple<Promise<JoinPromises<T>>...> Type;
+};
+
+template <typename T>
+using SplitTuplePromise = typename SplitTuplePromise_<T>::Type;
+// T -> Promise<T>
+// Tuple<T> -> Tuple<Promise<T>>
 
 struct Void {};
 // Application code should NOT refer to this!  See `kj::READY_NOW` instead.

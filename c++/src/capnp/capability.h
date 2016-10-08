@@ -595,6 +595,10 @@ kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& pro
 // the new client.  This hook's `getResolved()` and `whenMoreResolved()` methods will reflect the
 // redirection to the eventual replacement client.
 
+kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>&& promise);
+// Returns a PipelineHook that queues up calls until `promise` resolves, then forwards them to
+// the new pipeline.
+
 kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason);
 kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason);
 // Helper function that creates a capability which simply throws exceptions when called.
