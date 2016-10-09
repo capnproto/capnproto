@@ -258,7 +258,7 @@ namespace kj {
 // That is, if the assert ever fails, it indicates that the immediate surrounding code is broken.
 
 #ifdef KJ_DEBUG
-#define KJ_DLOG LOG
+#define KJ_DLOG KJ_LOG
 #define KJ_DASSERT KJ_ASSERT
 #define KJ_DREQUIRE KJ_REQUIRE
 #else
