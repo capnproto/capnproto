@@ -592,6 +592,11 @@ static KJ_CONSTEXPR(const) MinValue_ minValue = MinValue_();
 //
 // `char` is not supported, but `signed char` and `unsigned char` are.
 
+template <typename T>
+inline bool operator==(T t, MaxValue_) { return t == Decay<T>(maxValue); }
+template <typename T>
+inline bool operator==(T t, MinValue_) { return t == Decay<T>(minValue); }
+
 template <uint bits>
 inline constexpr unsigned long long maxValueForBits() {
   // Get the maximum integer representable in the given number of bits.
