@@ -241,9 +241,11 @@ private:
 // L1). You can't do asynchronous RAM access so why asynchronous filesystem? The only way to
 // parallelize these is using threads.
 
-class OsHandle {
+class FsNode {
+  // Base class for filesystem node types.
+
 public:
-  Own<OsHandle> clone();
+  Own<FsNode> clone();
   // Creates a new object of exactly the same type as this one, pointing at exactly the same
   // external object.
   //
@@ -252,19 +254,6 @@ public:
   virtual Maybe<int> getFd() = 0;
   // Get the underlying file descriptor, if any. Returns nullptr if this object actually isn't
   // wrapping a file descriptor.
-  //
-  // TODO(now): Do we really want everything inheriting OsHandle or should people dynamic_cast to
-  //     it? What about people without RTTI?
-
-protected:
-  virtual Own<OsHandle> cloneOsHandle() = 0;
-  // Implements clone(). Required to return an object with exactly the same type as this one.
-  // Hence, every subclass must implement this.
-};
-
-class FsNode: public OsHandle {
-public:
-  Own<FsNode> clone();
 
   enum class Type {
     FILE,
@@ -310,6 +299,11 @@ public:
   // into the filesystem (*after* syncing the data), so than incomplete data is never visible to
   // other processes. (In practice this works by writing into a temporary file and then rename()ing
   // it.)
+
+protected:
+  virtual Own<FsNode> cloneFsNode() = 0;
+  // Implements clone(). Required to return an object with exactly the same type as this one.
+  // Hence, every subclass must implement this.
 };
 
 class ReadableFile: public FsNode {
@@ -888,17 +882,16 @@ inline PathPtr PathPtr::slice(size_t start, size_t end) const {
   return PathPtr(parts.slice(start, end));
 }
 
-inline Own<OsHandle> OsHandle::clone() { return cloneOsHandle(); }
-inline Own<FsNode> FsNode::clone() { return cloneOsHandle().downcast<FsNode>(); }
-inline Own<ReadableFile> ReadableFile::clone() { return cloneOsHandle().downcast<ReadableFile>(); }
+inline Own<FsNode> FsNode::clone() { return cloneFsNode().downcast<FsNode>(); }
+inline Own<ReadableFile> ReadableFile::clone() { return cloneFsNode().downcast<ReadableFile>(); }
 inline Own<AppendableFile> AppendableFile::clone() {
-  return cloneOsHandle().downcast<AppendableFile>();
+  return cloneFsNode().downcast<AppendableFile>();
 }
-inline Own<File> File::clone() { return cloneOsHandle().downcast<File>(); }
+inline Own<File> File::clone() { return cloneFsNode().downcast<File>(); }
 inline Own<ReadableDirectory> ReadableDirectory::clone() {
-  return cloneOsHandle().downcast<ReadableDirectory>();
+  return cloneFsNode().downcast<ReadableDirectory>();
 }
-inline Own<Directory> Directory::clone() { return cloneOsHandle().downcast<Directory>(); }
+inline Own<Directory> Directory::clone() { return cloneFsNode().downcast<Directory>(); }
 
 inline void Directory::transfer(
     PathPtr toPath, WriteMode toMode, PathPtr fromPath, TransferMode mode) {

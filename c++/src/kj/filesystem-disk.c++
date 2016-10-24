@@ -1398,7 +1398,7 @@ protected:
 #define FSNODE_METHODS(classname)                             \
   Maybe<int> getFd() override { return DiskHandle::getFd(); } \
                                                               \
-  Own<OsHandle> cloneOsHandle() override {                    \
+  Own<FsNode> cloneFsNode() override {                        \
     return heap<classname>(DiskHandle::clone());              \
   }                                                           \
                                                               \

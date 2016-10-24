@@ -704,7 +704,7 @@ class InMemoryFile final: public File, public Refcounted {
 public:
   InMemoryFile(Clock& clock): clock(clock), lastModified(clock.now()) {}
 
-  Own<OsHandle> cloneOsHandle() override {
+  Own<FsNode> cloneFsNode() override {
     return addRef(*this);
   }
 
@@ -892,7 +892,7 @@ public:
   InMemoryDirectory(Clock& clock)
       : clock(clock), lastModified(clock.now()) {}
 
-  Own<OsHandle> cloneOsHandle() override {
+  Own<FsNode> cloneFsNode() override {
     return addRef(*this);
   }
 
@@ -1555,7 +1555,7 @@ class AppendableFileImpl final: public AppendableFile {
 public:
   AppendableFileImpl(Own<File>&& fileParam): file(kj::mv(fileParam)) {}
 
-  Own<OsHandle> cloneOsHandle() override {
+  Own<FsNode> cloneFsNode() override {
     return heap<AppendableFileImpl>(file->clone());
   }
 
