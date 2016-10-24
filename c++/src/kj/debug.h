@@ -290,6 +290,25 @@ namespace kj {
 
 #endif
 
+#define KJ_SYSCALL_HANDLE_ERRORS(call) \
+  if (int _kjSyscallError = ::kj::_::Debug::syscallError([&](){return (call);}, false)) \
+    switch (int error = _kjSyscallError)
+// Like KJ_SYSCALL, but doesn't throw. Instead, the block after the macro is a switch block on the
+// error. Additionally, the int value `error` is defined within the block. So you can do:
+//
+//     KJ_SYSCALL_HANDLE_ERRORS(foo()) {
+//       case ENOENT:
+//         handleNoSuchFile();
+//         break;
+//       case EEXIST:
+//         handleExists();
+//         break;
+//       default:
+//         KJ_FAIL_SYSCALL("foo()", error);
+//     } else {
+//       handleSuccessCase();
+//     }
+
 #define KJ_ASSERT KJ_REQUIRE
 #define KJ_FAIL_ASSERT KJ_FAIL_REQUIRE
 #define KJ_ASSERT_NONNULL KJ_REQUIRE_NONNULL
@@ -377,6 +396,8 @@ public:
 
   template <typename Call>
   static SyscallResult syscall(Call&& call, bool nonblocking);
+  template <typename Call>
+  static int syscallError(Call&& call, bool nonblocking);
 
 #if _WIN32
   static bool isWin32Success(int boolean);
@@ -501,6 +522,20 @@ Debug::SyscallResult Debug::syscall(Call&& call, bool nonblocking) {
     }
   }
   return SyscallResult(0);
+}
+
+template <typename Call>
+int Debug::syscallError(Call&& call, bool nonblocking) {
+  while (call() < 0) {
+    int errorNum = getOsErrorNumber(nonblocking);
+    // getOsErrorNumber() returns -1 to indicate EINTR.
+    // Also, if nonblocking is true, then it returns 0 on EAGAIN, which will then be treated as a
+    // non-error.
+    if (errorNum != -1) {
+      return errorNum;
+    }
+  }
+  return 0;
 }
 
 template <typename... Params>
