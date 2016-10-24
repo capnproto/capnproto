@@ -775,25 +775,16 @@ private:
 class Filesystem {
 public:
   virtual Directory& getRoot() = 0;
-  // Get the filesystem's root directory.
-  //
-  // `getRoot()` returns a special directory for which `getFd()` throws. You may call
-  // `getRoot().openSubdir(nullptr)` to get a Directory representing the root which has a valid
-  // file descriptor (and which isn't affected by `chroot()`).
+  // Get the filesystem's root directory, as of the time the Filesystem object was created.
 
   virtual Directory& getCurrent() = 0;
-  // Get the filesystem's current directory.
-  //
-  // The returned Directory object is a special one for which a call to the `chdir()` syscall will
-  // change the Directory's target. We recommend against using `chdir()` in KJ code, but if you
-  // want a Directory that avoids this behavior, you can call `.openSubdir(nullptr)` on it to
-  // reopen itself. Additionally, `getCurrent()` returns a directory for which `getFd()` throws;
-  // `openSubdir(nullptr)` solves that problem as well.
+  // Get the filesystem's current directory, as of the time the Filesystem object was created.
 
-  virtual Path getCurrentPath() = 0;
-  // Get the path from the root to the current directory. Note that because a `Directory` does not
-  // provide access to its parent, if you want to follow `..` from the current directory, you must
-  // use `getCurrentPath().eval("..")` or `getCurrentPath().parent()`.
+  virtual PathPtr getCurrentPath() = 0;
+  // Get the path from the root to the current directory, as of the time the Filesystem object was
+  // created. Note that because a `Directory` does not provide access to its parent, if you want to
+  // follow `..` from the current directory, you must use `getCurrentPath().eval("..")` or
+  // `getCurrentPath().parent()`.
   //
   // This function attempts to determine the path as it appeared in the user's shell before this
   // program was started. That means, if the user had `cd`ed into a symlink, the path through that
@@ -837,8 +828,18 @@ Own<AppendableFile> newDiskAppendableFile(kj::AutoCloseFd fd);
 Own<File> newDiskFile(kj::AutoCloseFd fd);
 Own<ReadableDirectory> newDiskReadableDirectory(kj::AutoCloseFd fd);
 Own<Directory> newDiskDirectory(kj::AutoCloseFd fd);
+// Wrap a file descriptor as various filesystem types.
 
 Own<Filesystem> newDiskFilesystem();
+// Get at implementation of `Filesystem` representing the real filesystem.
+//
+// DO NOT CALL THIS except at the top level of your program, e.g. in main(). Anywhere else, you
+// should instead have your caller pass in a Filesystem object, or a specific Directory object,
+// or whatever it is that your code needs. This ensures that your code supports dependency
+// injection, which makes it more reusable and testable.
+//
+// newDiskFilesystem() reads the current working directory at the time it is called. The returned
+// object is not affected by subsequent calls to chdir().
 
 // =======================================================================================
 // inline implementation details

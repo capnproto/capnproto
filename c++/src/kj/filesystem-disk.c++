@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <syscall.h>
+#include <stdlib.h>
 #include "vector.h"
 #include "miniposix.h"
 
@@ -950,7 +951,7 @@ public:
 
           // Check for broken link.
           if (!has(mode, WriteMode::MODIFY) &&
-              faccessat(fd, path.toString().cStr(), F_OK, AT_SYMLINK_NOFOLLOW) >= 0) {
+              faccessat(fd, filename.cStr(), F_OK, AT_SYMLINK_NOFOLLOW) >= 0) {
             // Yep. We treat this as already-exists, which means in CREATE-only mode this is a
             // simple failure.
             return nullptr;
@@ -1542,6 +1543,91 @@ public:
   }
 };
 
+class DiskFilesystem final: public Filesystem {
+public:
+  DiskFilesystem()
+      : root(openDir("/")),
+        current(openDir(".")),
+        currentPath(computeCurrentPath()) {}
+
+  Directory& getRoot() override {
+    return root;
+  }
+
+  Directory& getCurrent() override {
+    return current;
+  }
+
+  PathPtr getCurrentPath() override {
+    return currentPath;
+  }
+
+private:
+  DiskDirectory root;
+  DiskDirectory current;
+  Path currentPath;
+
+  static AutoCloseFd openDir(const char* dir) {
+    int newFd;
+    KJ_SYSCALL(newFd = open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
+    AutoCloseFd result(newFd);
+#ifndef O_CLOEXEC
+    setCloexec(result);
+#endif
+    return result;
+  }
+
+  static Path computeCurrentPath() {
+    // If env var PWD is set and points to the current directory, use it. This captures the current
+    // path according to the user's shell, which may differ from the kernel's idea in the presence
+    // of symlinks.
+    const char* pwd = getenv("PWD");
+    if (pwd != nullptr) {
+      Path result = nullptr;
+      struct stat pwdStat, dotStat;
+      KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+        KJ_ASSERT(pwd[0] == '/') { return; }
+        result = Path::parse(pwd + 1);
+        KJ_SYSCALL(lstat(result.toString(true).cStr(), &pwdStat), result) { return; }
+        KJ_SYSCALL(lstat(".", &dotStat)) { return; }
+      })) {
+        // failed, give up on PWD
+        KJ_LOG(WARNING, "PWD environment variable seems invalid", pwd, *e);
+      } else {
+        if (pwdStat.st_ino == dotStat.st_ino &&
+            pwdStat.st_dev == dotStat.st_dev) {
+          return kj::mv(result);
+        } else {
+          KJ_LOG(WARNING, "PWD environment variable doesn't match current directory", pwd);
+        }
+      }
+    }
+
+    size_t size = 256;
+  retry:
+    KJ_STACK_ARRAY(char, buf, size, 256, 4096);
+    if (getcwd(buf.begin(), size) == nullptr) {
+      int error = errno;
+      if (error == ENAMETOOLONG) {
+        size *= 2;
+        goto retry;
+      } else {
+        KJ_FAIL_SYSCALL("getcwd()", error);
+      }
+    }
+
+    StringPtr path = buf.begin();
+
+    // On Linux, the path will start with "(unreachable)" if the working directory is not a subdir
+    // of the root directory, which is possible via chroot() or mount namespaces.
+    KJ_ASSERT(!path.startsWith("(unreachable)"),
+        "working directory is not reachable from root", path);
+    KJ_ASSERT(path.startsWith("/"), "current directory is not absolute", path);
+
+    return Path::parse(path.slice(1));
+  }
+};
+
 } // namespace
 
 Own<ReadableFile> newDiskReadableFile(kj::AutoCloseFd fd) {
@@ -1558,6 +1644,10 @@ Own<ReadableDirectory> newDiskReadableDirectory(kj::AutoCloseFd fd) {
 }
 Own<Directory> newDiskDirectory(kj::AutoCloseFd fd) {
   return heap<DiskDirectory>(kj::mv(fd));
+}
+
+Own<Filesystem> newDiskFilesystem() {
+  return heap<DiskFilesystem>();
 }
 
 } // namespace kj
