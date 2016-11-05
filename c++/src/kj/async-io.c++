@@ -893,28 +893,10 @@ public:
   UnixEventPort::FdObserver observer;
 };
 
-class TimerImpl final: public Timer {
-public:
-  TimerImpl(UnixEventPort& eventPort): eventPort(eventPort) {}
-
-  TimePoint now() override { return eventPort.steadyTime(); }
-
-  Promise<void> atTime(TimePoint time) override {
-    return eventPort.atSteadyTime(time);
-  }
-
-  Promise<void> afterDelay(Duration delay) override {
-    return eventPort.atSteadyTime(eventPort.steadyTime() + delay);
-  }
-
-private:
-  UnixEventPort& eventPort;
-};
-
 class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
 public:
   LowLevelAsyncIoProviderImpl()
-      : eventLoop(eventPort), timer(eventPort), waitScope(eventLoop) {}
+      : eventLoop(eventPort), waitScope(eventLoop) {}
 
   inline WaitScope& getWaitScope() { return waitScope; }
 
@@ -948,14 +930,13 @@ public:
     return heap<DatagramPortImpl>(*this, eventPort, fd, flags);
   }
 
-  Timer& getTimer() override { return timer; }
+  Timer& getTimer() override { return eventPort.getTimer(); }
 
   UnixEventPort& getEventPort() { return eventPort; }
 
 private:
   UnixEventPort eventPort;
   EventLoop eventLoop;
-  TimerImpl timer;
   WaitScope waitScope;
 };
 
