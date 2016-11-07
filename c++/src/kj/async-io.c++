@@ -463,7 +463,8 @@ public:
         char buffer[INET6_ADDRSTRLEN];
         if (inet_ntop(addr.inet4.sin_family, &addr.inet4.sin_addr,
                       buffer, sizeof(buffer)) == nullptr) {
-          KJ_FAIL_SYSCALL("inet_ntop", errno) { return heapString("(inet_ntop error)"); }
+          KJ_FAIL_SYSCALL("inet_ntop", errno) { break; }
+          return heapString("(inet_ntop error)");
         }
         return str(buffer, ':', ntohs(addr.inet4.sin_port));
       }
@@ -471,7 +472,8 @@ public:
         char buffer[INET6_ADDRSTRLEN];
         if (inet_ntop(addr.inet6.sin6_family, &addr.inet6.sin6_addr,
                       buffer, sizeof(buffer)) == nullptr) {
-          KJ_FAIL_SYSCALL("inet_ntop", errno) { return heapString("(inet_ntop error)"); }
+          KJ_FAIL_SYSCALL("inet_ntop", errno) { break; }
+          return heapString("(inet_ntop error)");
         }
         return str('[', buffer, "]:", ntohs(addr.inet6.sin6_port));
       }
