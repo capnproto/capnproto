@@ -293,12 +293,24 @@ void RemoveE0(char* buffer) {
   // Remove redundant leading 0's after an e, e.g. 1e012. Seems to appear on
   // Windows.
 
-  for (;;) {
-    buffer = strstr(buffer, "e0");
-    if (buffer == NULL || buffer[2] < '0' || buffer[2] > '9') {
-      return;
-    }
-    memmove(buffer + 1, buffer + 2, strlen(buffer + 2) + 1);
+  // Find and skip 'e'.
+  char* ptr = strchr(buffer, 'e');
+  if (ptr == nullptr) return;
+  ++ptr;
+
+  // Skip '-'.
+  if (*ptr == '-') ++ptr;
+
+  // Skip '0's.
+  char* ptr2 = ptr;
+  while (*ptr2 == '0') ++ptr2;
+
+  // If we went past the last digit, back up one.
+  if (*ptr2 < '0' || *ptr2 > '9') --ptr2;
+
+  // Move bytes backwards.
+  if (ptr2 > ptr) {
+    memmove(ptr, ptr2, strlen(ptr2) + 1);
   }
 }
 #endif
@@ -398,6 +410,9 @@ char* FloatToBuffer(float value, char* buffer) {
 
   DelocalizeRadix(buffer);
   RemovePlus(buffer);
+#if _WIN32
+  RemoveE0(buffer);
+#endif // _WIN32
   return buffer;
 }
 
