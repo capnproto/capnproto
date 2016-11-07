@@ -28,6 +28,12 @@
 #include <kj/miniposix.h>
 #include "test-util.h"
 
+#if !_WIN32
+// This test is super-slow on Windows seemingly due to generating exception stack traces being
+// expensive.
+//
+// TODO(perf): Maybe create an API to disable stack traces, and use it here.
+
 namespace capnp {
 namespace _ {  // private
 namespace {
@@ -257,3 +263,5 @@ KJ_TEST("fuzz-test double-far pointer") {
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
+
+#endif
