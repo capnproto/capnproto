@@ -326,6 +326,90 @@ private:
   AutoCloseFd autoclose;
 };
 
+// =======================================================================================
+// Win32 Handle I/O
+
+#ifdef _WIN32
+
+class AutoCloseHandle {
+  // A wrapper around a Win32 HANDLE which automatically closes the handle when destroyed.
+  // The wrapper supports move construction for transferring ownership of the handle.  If
+  // CloseHandle() returns an error, the destructor throws an exception, UNLESS the destructor is
+  // being called during unwind from another exception, in which case the close error is ignored.
+  //
+  // If your code is not exception-safe, you should not use AutoCloseHandle.  In this case you will
+  // have to call close() yourself and handle errors appropriately.
+
+public:
+  inline AutoCloseHandle(): handle((void*)-1) {}
+  inline AutoCloseHandle(decltype(nullptr)): handle((void*)-1) {}
+  inline explicit AutoCloseHandle(void* handle): handle(handle) {}
+  inline AutoCloseHandle(AutoCloseHandle&& other) noexcept: handle(other.handle) {
+    other.handle = (void*)-1;
+  }
+  KJ_DISALLOW_COPY(AutoCloseHandle);
+  ~AutoCloseHandle() noexcept(false);
+
+  inline AutoCloseHandle& operator=(AutoCloseHandle&& other) {
+    AutoCloseHandle old(kj::mv(*this));
+    handle = other.handle;
+    other.handle = (void*)-1;
+    return *this;
+  }
+
+  inline AutoCloseHandle& operator=(decltype(nullptr)) {
+    AutoCloseHandle old(kj::mv(*this));
+    return *this;
+  }
+
+  inline operator void*() const { return handle; }
+  inline void* get() const { return handle; }
+
+  operator bool() const = delete;
+  // Deleting this operator prevents accidental use in boolean contexts, which
+  // the void* conversion operator above would otherwise allow.
+
+  inline bool operator==(decltype(nullptr)) { return handle != (void*)-1; }
+  inline bool operator!=(decltype(nullptr)) { return handle == (void*)-1; }
+
+private:
+  void* handle;  // -1 (aka INVALID_HANDLE_VALUE) if not valid.
+};
+
+class HandleInputStream: public InputStream {
+  // An InputStream wrapping a Win32 HANDLE.
+
+public:
+  explicit HandleInputStream(void* handle): handle(handle) {}
+  explicit HandleInputStream(AutoCloseHandle handle): handle(handle), autoclose(mv(handle)) {}
+  KJ_DISALLOW_COPY(HandleInputStream);
+  ~HandleInputStream() noexcept(false);
+
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+
+private:
+  void* handle;
+  AutoCloseHandle autoclose;
+};
+
+class HandleOutputStream: public OutputStream {
+  // An OutputStream wrapping a Win32 HANDLE.
+
+public:
+  explicit HandleOutputStream(void* handle): handle(handle) {}
+  explicit HandleOutputStream(AutoCloseHandle handle): handle(handle), autoclose(mv(handle)) {}
+  KJ_DISALLOW_COPY(HandleOutputStream);
+  ~HandleOutputStream() noexcept(false);
+
+  void write(const void* buffer, size_t size) override;
+
+private:
+  void* handle;
+  AutoCloseHandle autoclose;
+};
+
+#endif  // _WIN32
+
 }  // namespace kj
 
 #endif  // KJ_IO_H_

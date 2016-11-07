@@ -25,7 +25,14 @@
 #include <algorithm>
 #include <errno.h>
 
-#if !_WIN32
+#if _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX 1
+#endif
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include "windows-sanity.h"
+#else
 #include <sys/uio.h>
 #endif
 
@@ -370,5 +377,50 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   }
 #endif
 }
+
+// =======================================================================================
+
+#if _WIN32
+
+AutoCloseHandle::~AutoCloseHandle() noexcept(false) {
+  if (handle != (void*)-1) {
+    KJ_WIN32(CloseHandle(handle));
+  }
+}
+
+HandleInputStream::~HandleInputStream() noexcept(false) {}
+
+size_t HandleInputStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
+  byte* pos = reinterpret_cast<byte*>(buffer);
+  byte* min = pos + minBytes;
+  byte* max = pos + maxBytes;
+
+  while (pos < min) {
+    DWORD n;
+    KJ_WIN32(ReadFile(handle, pos, kj::min(max - pos, DWORD(kj::maxValue)), &n, nullptr));
+    if (n == 0) {
+      break;
+    }
+    pos += n;
+  }
+
+  return pos - reinterpret_cast<byte*>(buffer);
+}
+
+HandleOutputStream::~HandleOutputStream() noexcept(false) {}
+
+void HandleOutputStream::write(const void* buffer, size_t size) {
+  const char* pos = reinterpret_cast<const char*>(buffer);
+
+  while (size > 0) {
+    DWORD n;
+    KJ_WIN32(WriteFile(handle, pos, kj::min(size, DWORD(kj::maxValue)), &n, nullptr));
+    KJ_ASSERT(n > 0, "write() returned zero.");
+    pos += n;
+    size -= n;
+  }
+}
+
+#endif  // _WIN32
 
 }  // namespace kj
