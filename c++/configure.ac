@@ -57,11 +57,15 @@ AS_CASE("${host_os}", *mingw*, [
     PTHREAD_CFLAGS="-mthreads"
     PTHREAD_LIBS=""
     PTHREAD_CC=""
+    ASYNC_LIBS="-lws2_32"
     AC_SUBST(PTHREAD_LIBS)
     AC_SUBST(PTHREAD_CFLAGS)
     AC_SUBST(PTHREAD_CC)
+    AC_SUBST(ASYNC_LIBS)
   ], *, [
     ACX_PTHREAD
+    ASYNC_LIBS=""
+    AC_SUBST(ASYNC_LIBS)
   ])
 
 LT_INIT
