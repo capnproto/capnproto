@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !_WIN32
+
 #include "async-unix.h"
 #include "thread.h"
 #include "debug.h"
@@ -34,6 +36,7 @@
 #include <algorithm>
 
 namespace kj {
+namespace {
 
 inline void delay() { usleep(10000); }
 
@@ -585,4 +588,7 @@ TEST(AsyncUnixTest, Wake) {
   EXPECT_TRUE(port.wait());
 }
 
+}  // namespace
 }  // namespace kj
+
+#endif  // !_WIN32

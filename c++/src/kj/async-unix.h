@@ -22,6 +22,10 @@
 #ifndef KJ_ASYNC_UNIX_H_
 #define KJ_ASYNC_UNIX_H_
 
+#if _WIN32
+#error "This file is Unix-specific. On Windows, include async-win32.h instead."
+#endif
+
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
 #endif

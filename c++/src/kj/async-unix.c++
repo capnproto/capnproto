@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !_WIN32
+
 #include "async-unix.h"
 #include "debug.h"
 #include "threadlocal.h"
@@ -872,3 +874,5 @@ void UnixEventPort::wake() const {
 #endif  // KJ_USE_EPOLL, else
 
 }  // namespace kj
+
+#endif  // !_WIN32
