@@ -19,6 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !_WIN32
+// For Win32 implementation, see async-io-win32.c++.
+
 #include "async-io.h"
 #include "async-unix.h"
 #include "debug.h"
@@ -1381,3 +1384,5 @@ AsyncIoContext setupAsyncIo() {
 }
 
 }  // namespace kj
+
+#endif  // !_WIN32

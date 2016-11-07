@@ -35,7 +35,12 @@ struct sockaddr;
 
 namespace kj {
 
+#if _WIN32
+class Win32EventPort;
+#else
 class UnixEventPort;
+#endif
+
 class NetworkAddress;
 
 // =======================================================================================
@@ -377,6 +382,7 @@ public:
     // If this flag is not used, then the file descriptor is not automatically closed and the
     // close-on-exec flag is not modified.
 
+#if !_WIN32
     ALREADY_CLOEXEC = 1 << 1,
     // Indicates that the close-on-exec flag is known already to be set, so need not be set again.
     // Only relevant when combined with TAKE_OWNERSHIP.
@@ -391,37 +397,56 @@ public:
     //
     // On Linux, all system calls which yield new file descriptors have flags or variants which
     // enable non-blocking mode immediately.  Unfortunately, other OS's do not.
+#endif
   };
 
-  virtual Own<AsyncInputStream> wrapInputFd(int fd, uint flags = 0) = 0;
+#if _WIN32
+  typedef uintptr_t Fd;
+  // On Windows, the `fd` parameter to each of these methods must be a SOCKET, and must have the
+  // flag WSA_FLAG_OVERLAPPED (which socket() uses by default, but WSASocket() wants you to specify
+  // explicitly).
+#else
+  typedef int Fd;
+  // On Unix, any arbitrary file descriptor is supported.
+#endif
+
+  virtual Own<AsyncInputStream> wrapInputFd(Fd fd, uint flags = 0) = 0;
   // Create an AsyncInputStream wrapping a file descriptor.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
-  virtual Own<AsyncOutputStream> wrapOutputFd(int fd, uint flags = 0) = 0;
+  virtual Own<AsyncOutputStream> wrapOutputFd(Fd fd, uint flags = 0) = 0;
   // Create an AsyncOutputStream wrapping a file descriptor.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
-  virtual Own<AsyncIoStream> wrapSocketFd(int fd, uint flags = 0) = 0;
+  virtual Own<AsyncIoStream> wrapSocketFd(Fd fd, uint flags = 0) = 0;
   // Create an AsyncIoStream wrapping a socket file descriptor.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
-  virtual Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(int fd, uint flags = 0) = 0;
+#if _WIN32
+  virtual Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
+      Fd fd, const struct sockaddr* addr, uint addrlen, uint flags = 0) = 0;
+#else
+  virtual Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(Fd fd, uint flags = 0) = 0;
+#endif
   // Create an AsyncIoStream wrapping a socket that is in the process of connecting.  The returned
   // promise should not resolve until connection has completed -- traditionally indicated by the
   // descriptor becoming writable.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
+  //
+  // On Windows, the callee initiates connect rather than the caller.
+  // TODO(now): Maybe on all systems?
 
-  virtual Own<ConnectionReceiver> wrapListenSocketFd(int fd, uint flags = 0) = 0;
+  virtual Own<ConnectionReceiver> wrapListenSocketFd(Fd fd, uint flags = 0) = 0;
   // Create an AsyncIoStream wrapping a listen socket file descriptor.  This socket should already
   // have had `bind()` and `listen()` called on it, so it's ready for `accept()`.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
-  virtual Own<DatagramPort> wrapDatagramSocketFd(int fd, uint flags = 0);
+  virtual Own<DatagramPort> wrapDatagramSocketFd(Fd fd, uint flags = 0);
 
   virtual Timer& getTimer() = 0;
   // Returns a `Timer` based on real time.  Time does not pass while event handlers are running --
@@ -440,9 +465,13 @@ struct AsyncIoContext {
   Own<AsyncIoProvider> provider;
   WaitScope& waitScope;
 
+#if _WIN32
+  Win32EventPort& win32EventPort;
+#else
   UnixEventPort& unixEventPort;
   // TEMPORARY: Direct access to underlying UnixEventPort, mainly for waiting on signals. This
   //   field will go away at some point when we have a chance to improve these interfaces.
+#endif
 };
 
 AsyncIoContext setupAsyncIo();

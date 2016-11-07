@@ -20,12 +20,15 @@
 // THE SOFTWARE.
 
 #include "async-io.h"
-#include "async-unix.h"
 #include "debug.h"
 #include <kj/compat/gtest.h>
 #include <sys/types.h>
-#include <sys/socket.h>
+#if _WIN32
+#include <ws2tcpip.h>
+#include "windows-sanity.h"
+#else
 #include <netdb.h>
+#endif
 
 namespace kj {
 namespace {
@@ -95,7 +98,9 @@ TEST(AsyncIo, AddressParsing) {
   EXPECT_EQ("0.0.0.0:0", tryParse(w, network, "0.0.0.0"));
   EXPECT_EQ("1.2.3.4:5678", tryParse(w, network, "1.2.3.4", 5678));
 
+#if !_WIN32
   EXPECT_EQ("unix:foo/bar/baz", tryParse(w, network, "unix:foo/bar/baz"));
+#endif
 
   // We can parse services by name...
 #if !__ANDROID__  // Service names not supported on Android for some reason?
@@ -219,6 +224,8 @@ TEST(AsyncIo, Timeouts) {
       .wait(ioContext.waitScope));
   EXPECT_EQ(123, promise2.wait(ioContext.waitScope));
 }
+
+#if !_WIN32  // datagrams not implemented on win32 yet
 
 TEST(AsyncIo, Udp) {
   auto ioContext = setupAsyncIo();
@@ -365,6 +372,8 @@ TEST(AsyncIo, Udp) {
 #endif
   }
 }
+
+#endif  // !_WIN32
 
 }  // namespace
 }  // namespace kj
