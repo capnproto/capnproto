@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// This file is included form all generated headers.
+// This file is included from all generated headers.
 
 #ifndef CAPNP_GENERATED_HEADER_SUPPORT_H_
 #define CAPNP_GENERATED_HEADER_SUPPORT_H_
