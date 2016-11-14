@@ -24,9 +24,7 @@
 #include <kj/debug.h>
 #include <kj/thread.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
+#include <kj/miniposix.h>
 #include "test-util.h"
 #include <kj/compat/gtest.h>
 
@@ -47,13 +45,19 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
+#if _WIN32
+inline void delay() { Sleep(5); }
+#else
+inline void delay() { usleep(5000); }
+#endif
+
 class FragmentingOutputStream: public kj::OutputStream {
 public:
   FragmentingOutputStream(kj::OutputStream& inner): inner(inner) {}
 
   void write(const void* buffer, size_t size) override {
     while (size > 0) {
-      usleep(5000);
+      delay();
       size_t n = rand() % size + 1;
       inner.write(buffer, n);
       buffer = reinterpret_cast<const byte*>(buffer) + n;
@@ -164,7 +168,7 @@ public:
   void write(const void* buffer, size_t size) override {
     const char* ptr = reinterpret_cast<const char*>(buffer);
     while (size > 0) {
-      ssize_t n;
+      kj::miniposix::ssize_t n;
       KJ_SOCKCALL(n = send(fd, ptr, size, 0));
       size -= n;
       ptr += n;
@@ -183,7 +187,7 @@ public:
     char* ptr = reinterpret_cast<char*>(buffer);
     size_t total = 0;
     while (total < minBytes) {
-      ssize_t n;
+      kj::miniposix::ssize_t n;
       KJ_SOCKCALL(n = recv(fd, ptr, maxBytes, 0));
       total += n;
       maxBytes -= n;
