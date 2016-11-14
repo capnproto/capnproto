@@ -96,6 +96,8 @@ install(FILES ${kj-test-compat_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}
 set(kj-async_sources
   async.c++
   async-unix.c++
+  async-win32.c++
+  async-io-win32.c++
   async-io.c++
   async-io-unix.c++
   time.c++
@@ -105,6 +107,7 @@ set(kj-async_headers
   async.h
   async-inl.h
   async-unix.h
+  async-win32.h
   async-io.h
   time.h
 )
@@ -115,6 +118,8 @@ if(NOT CAPNP_LITE)
   if(UNIX)
     # external clients of this library need to link to pthreads
     target_compile_options(kj-async INTERFACE "-pthread")
+  elseif(WIN32)
+    target_link_libraries(kj-async PUBLIC ws2_32)
   endif()
   install(TARGETS kj-async ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${kj-async_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
@@ -145,6 +150,7 @@ if(BUILD_TESTING)
     add_executable(kj-heavy-tests
       async-test.c++
       async-unix-test.c++
+      async-win32-test.c++
       async-io-test.c++
       refcount-test.c++
       string-tree-test.c++
