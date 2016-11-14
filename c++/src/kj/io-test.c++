@@ -56,7 +56,7 @@ TEST(Io, WriteVec) {
 
 KJ_TEST("stringify AutoCloseFd") {
   int fds[2];
-  miniposix::pipe(fds);
+  KJ_SYSCALL(miniposix::pipe(fds));
   AutoCloseFd in(fds[0]), out(fds[1]);
 
   KJ_EXPECT(kj::str(in) == kj::str(fds[0]), in, fds[0]);
