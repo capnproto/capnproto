@@ -134,7 +134,7 @@ void* Thread::runThread(void* ptr) {
 
 void Thread::ThreadState::unref() {
 #if _MSC_VER
-  if (_InterlockedDecrement(&refcount)) {
+  if (_InterlockedDecrement(&refcount) == 0) {
 #else
   if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
