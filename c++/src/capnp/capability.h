@@ -32,6 +32,7 @@
 
 #include <kj/async.h>
 #include <kj/vector.h>
+#include "raw-schema.h"
 #include "any.h"
 #include "pointer-helpers.h"
 
@@ -64,8 +65,6 @@ public:
 
 class LocalClient;
 namespace _ { // private
-struct RawSchema;
-struct RawBrandedSchema;
 extern const RawSchema NULL_INTERFACE_SCHEMA;  // defined in schema.c++
 class CapabilityServerSetBase;
 }  // namespace _ (private)

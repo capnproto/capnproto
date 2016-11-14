@@ -50,6 +50,7 @@ set(capnp_headers
   serialize-text.h
   pointer-helpers.h
   generated-header-support.h
+  raw-schema.h
 )
 set(capnp_schemas
   c++.capnp
