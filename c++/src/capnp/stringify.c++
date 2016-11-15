@@ -58,7 +58,8 @@ public:
     if (amount == 0 || canPrintAllInline(items, kind)) {
       return kj::StringTree(kj::mv(items), ", ");
     } else {
-      char delim[amount * 2 + 3];
+      KJ_STACK_ARRAY(char, delimArrayPtr, amount * 2 + 3, 32, 256);
+      auto delim = delimArrayPtr.begin();
       delim[0] = ',';
       delim[1] = '\n';
       memset(delim + 2, ' ', amount * 2);
