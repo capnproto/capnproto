@@ -86,6 +86,9 @@
 #endif
 
 #if defined(_MSC_VER)
+#ifndef NOMINMAX
+#define NOMINMAX 1
+#endif
 #include <intrin.h>  // __popcnt
 #endif
 
