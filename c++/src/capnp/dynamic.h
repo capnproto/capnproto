@@ -634,6 +634,7 @@ public:
   // - DynamicEnum:  Returns the corresponding type.
   // - DynamicStruct, DynamicList:  Returns the corresponding Reader.
   // - Any capability type, including DynamicCapability:  Returns the corresponding Client.
+  // - DynamicValue:  Returns an identical Reader. Useful to avoid special-casing in generic code.
   //   (TODO(perf):  On GCC 4.8 / Clang 3.3, provide rvalue-qualified version that avoids
   //   refcounting.)
   //
@@ -1405,6 +1406,19 @@ template <typename T>
 struct DynamicValue::Builder::AsImpl<T, Kind::INTERFACE> {
   static typename T::Client apply(Builder& builder) {
     return builder.as<DynamicCapability>().as<T>();
+  }
+};
+
+template <>
+struct DynamicValue::Reader::AsImpl<DynamicValue> {
+  static DynamicValue::Reader apply(const Reader& reader) {
+    return reader;
+  }
+};
+template <>
+struct DynamicValue::Builder::AsImpl<DynamicValue> {
+  static DynamicValue::Builder apply(Builder& builder) {
+    return builder;
   }
 };
 
