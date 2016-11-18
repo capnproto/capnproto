@@ -82,6 +82,17 @@ public:
   }
 
   void send() override {
+    size_t size = 0;
+    for (auto& segment: message.getSegmentsForOutput()) {
+      size += segment.size();
+    }
+    KJ_REQUIRE(size < ReaderOptions().traversalLimitInWords, size,
+               "Trying to send Cap'n Proto message larger than the single-message size limit. The "
+               "other side probably won't accept it and would abort the connection, so I won't "
+               "send it.") {
+      return;
+    }
+
     network.previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down")
         .then([&]() {
       // Note that if the write fails, all further writes will be skipped due to the exception.

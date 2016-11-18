@@ -824,6 +824,9 @@ interface TestMoreStuff extends(TestCallOrder) {
 
   getNull @10 () -> (nullCap :TestMoreStuff);
   # Always returns a null capability.
+
+  getEnormousString @11 () -> (str :Text);
+  # Attempts to return an 100MB string. Should always fail.
 }
 
 interface TestMembrane {

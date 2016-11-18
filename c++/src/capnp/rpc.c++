@@ -115,7 +115,26 @@ kj::Exception toException(const rpc::Exception::Reader& exception) {
 void fromException(const kj::Exception& exception, rpc::Exception::Builder builder) {
   // TODO(someday):  Indicate the remote server name as part of the stack trace.  Maybe even
   //   transmit stack traces?
-  builder.setReason(exception.getDescription());
+
+  kj::StringPtr description = exception.getDescription();
+
+  // Include context, if any.
+  kj::Vector<kj::String> contextLines;
+  for (auto context = exception.getContext();;) {
+    KJ_IF_MAYBE(c, context) {
+      contextLines.add(kj::str("context: ", c->file, ": ", c->line, ": ", c->description));
+      context = c->next;
+    } else {
+      break;
+    }
+  }
+  kj::String scratch;
+  if (contextLines.size() > 0) {
+    scratch = kj::str(description, '\n', kj::strArray(contextLines, "\n"));
+    description = scratch;
+  }
+
+  builder.setReason(description);
   builder.setType(static_cast<rpc::Exception::Type>(exception.getType()));
 
   if (exception.getType() == kj::Exception::Type::FAILED &&
@@ -1490,7 +1509,14 @@ private:
       if (isTailCall) {
         callBuilder.getSendResultsTo().setYourself();
       }
-      message->send();
+      KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+        KJ_CONTEXT("sending RPC call",
+           callBuilder.getInterfaceId(), callBuilder.getMethodId());
+        message->send();
+      })) {
+        KJ_LOG(WARNING, *exception);
+        kj::throwRecoverableException(kj::mv(*exception));
+      }
 
       // Make the result promise.
       SendInternalResult result;
@@ -1716,9 +1742,12 @@ private:
                    kj::Own<IncomingRpcMessage>&& request,
                    kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTableArray,
                    const AnyPointer::Reader& params,
-                   bool redirectResults, kj::Own<kj::PromiseFulfiller<void>>&& cancelFulfiller)
+                   bool redirectResults, kj::Own<kj::PromiseFulfiller<void>>&& cancelFulfiller,
+                   uint64_t interfaceId, uint16_t methodId)
         : connectionState(kj::addRef(connectionState)),
           answerId(answerId),
+          interfaceId(interfaceId),
+          methodId(methodId),
           requestSize(request->getBody().targetSize().wordCount),
           request(kj::mv(request)),
           paramsCapTable(kj::mv(capTableArray)),
@@ -1784,7 +1813,18 @@ private:
         returnMessage.setAnswerId(answerId);
         returnMessage.setReleaseParamCaps(false);
 
-        auto exports = kj::downcast<RpcServerResponseImpl>(*KJ_ASSERT_NONNULL(response)).send();
+        kj::Maybe<kj::Array<ExportId>> exports;
+        KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+          // Debug info incase send() fails due to overside message.
+          KJ_CONTEXT("returning from RPC call", interfaceId, methodId);
+          exports = kj::downcast<RpcServerResponseImpl>(*KJ_ASSERT_NONNULL(response)).send();
+        })) {
+          KJ_LOG(WARNING, *exception);
+          responseSent = false;
+          sendErrorReturn(kj::mv(*exception));
+          return;
+        }
+
         KJ_IF_MAYBE(e, exports) {
           // Caps were returned, so we can't free the pipeline yet.
           cleanupAnswerTable(kj::mv(*e), false);
@@ -1935,6 +1975,10 @@ private:
   private:
     kj::Own<RpcConnectionState> connectionState;
     AnswerId answerId;
+
+    uint64_t interfaceId;
+    uint16_t methodId;
+    // For debugging.
 
     // Request ---------------------------------------------
 
@@ -2265,7 +2309,8 @@ private:
 
     auto context = kj::refcounted<RpcCallContext>(
         *this, answerId, kj::mv(message), kj::mv(capTableArray), payload.getContent(),
-        redirectResults, kj::mv(cancelPaf.fulfiller));
+        redirectResults, kj::mv(cancelPaf.fulfiller),
+        call.getInterfaceId(), call.getMethodId());
 
     // No more using `call` after this point, as it now belongs to the context.
 
@@ -2317,7 +2362,7 @@ private:
               contextPtr->sendReturn();
             }, [contextPtr](kj::Exception&& exception) {
               contextPtr->sendErrorReturn(kj::mv(exception));
-            }).then([]() {}, [&](kj::Exception&& exception) {
+            }).catch_([&](kj::Exception&& exception) {
               // Handle exceptions that occur in sendReturn()/sendErrorReturn().
               taskFailed(kj::mv(exception));
             }).attach(kj::mv(context))

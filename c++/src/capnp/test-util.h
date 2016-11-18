@@ -286,6 +286,8 @@ public:
 
   kj::Promise<void> getNull(GetNullContext context) override;
 
+  kj::Promise<void> getEnormousString(GetEnormousStringContext context) override;
+
 private:
   int& callCount;
   int& handleCount;

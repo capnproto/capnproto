@@ -1116,6 +1116,11 @@ kj::Promise<void> TestMoreStuffImpl::getNull(GetNullContext context) {
   return kj::READY_NOW;
 }
 
+kj::Promise<void> TestMoreStuffImpl::getEnormousString(GetEnormousStringContext context) {
+  context.getResults().initStr(100000000);  // 100MB
+  return kj::READY_NOW;
+}
+
 #endif  // !CAPNP_LITE
 
 }  // namespace _ (private)
