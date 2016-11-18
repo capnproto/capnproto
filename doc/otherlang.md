@@ -32,6 +32,7 @@ project's documentation for details.
 * [Nim](https://github.com/zielmicha/capnp.nim) by [@zielmicha](https://github.com/zielmicha)
 * [OCaml](https://github.com/pelzlpj/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj)
 * [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
+* [Scala](https://github.com/katis/capnp-scala) by [@katis](https://github.com/katis)
 
 ##### Tools
 
