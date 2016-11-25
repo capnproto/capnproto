@@ -94,8 +94,12 @@ private:
   // TODO(someday):  Generalize the above template and make it common.  I tried, but C++ decided to
   //   be difficult so I cut my losses.
 
+  static constexpr auto spaceSize = maxSize(sizeof(Variants)...);
+  // TODO(msvc):  This constant could just as well go directly inside space's bracket's, where it's
+  // used, but MSVC suffers a parse error on `...`.
+
   union {
-    byte space[maxSize(sizeof(Variants)...)];
+    byte space[spaceSize];
 
     void* forceAligned;
     // TODO(someday):  Use C++11 alignas() once we require GCC 4.8 / Clang 3.3.

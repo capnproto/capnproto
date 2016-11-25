@@ -36,7 +36,7 @@ struct SkipTestHack {
   SkipTestHack() {
     if (getenv("CAPNP_SKIP_FUZZ_TEST") != nullptr) {
       char message[] = "Skipping test because CAPNP_SKIP_FUZZ_TEST is set in environment.\n";
-      write(STDOUT_FILENO, message, sizeof(message));
+      KJ_SYSCALL(write(STDOUT_FILENO, message, sizeof(message)));
       _exit(0);
     }
   }

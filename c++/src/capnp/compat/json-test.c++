@@ -577,7 +577,12 @@ KJ_TEST("basic json decoding") {
     KJ_EXPECT_THROW_MESSAGE("Input remains", json.decodeRaw("11a", root));
     KJ_EXPECT_THROW_MESSAGE("Invalid escape", json.decodeRaw(R"("\z")", root));
     KJ_EXPECT_THROW_MESSAGE("Invalid escape", json.decodeRaw(R"("\z")", root));
-    KJ_EXPECT_THROW_MESSAGE("ends prematurely", json.decodeRaw(R"(["\n\", 3])", root));
+    {
+      // TODO(msvc):  This raw string literal currently confuses MSVC's preprocessor, so I hoisted
+      // it outside the macro.
+      auto f = [&] { json.decodeRaw(R"(["\n\", 3])", root); };
+      KJ_EXPECT_THROW_MESSAGE("ends prematurely", f());
+    }
     KJ_EXPECT_THROW_MESSAGE("Invalid hex", json.decodeRaw(R"("\u12zz")", root));
     KJ_EXPECT_THROW_MESSAGE("ends prematurely", json.decodeRaw("-", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("--", root));
