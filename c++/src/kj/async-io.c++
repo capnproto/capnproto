@@ -19,6 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !_WIN32
+// For Win32 implementation, see async-io-win32.c++.
+
 #include "async-io.h"
 #include "async-unix.h"
 #include "debug.h"
@@ -452,7 +455,8 @@ public:
         char buffer[INET6_ADDRSTRLEN];
         if (inet_ntop(addr.inet4.sin_family, &addr.inet4.sin_addr,
                       buffer, sizeof(buffer)) == nullptr) {
-          KJ_FAIL_SYSCALL("inet_ntop", errno) { return heapString("(inet_ntop error)"); }
+          KJ_FAIL_SYSCALL("inet_ntop", errno) { break; }
+          return heapString("(inet_ntop error)");
         }
         return str(buffer, ':', ntohs(addr.inet4.sin_port));
       }
@@ -460,7 +464,8 @@ public:
         char buffer[INET6_ADDRSTRLEN];
         if (inet_ntop(addr.inet6.sin6_family, &addr.inet6.sin6_addr,
                       buffer, sizeof(buffer)) == nullptr) {
-          KJ_FAIL_SYSCALL("inet_ntop", errno) { return heapString("(inet_ntop error)"); }
+          KJ_FAIL_SYSCALL("inet_ntop", errno) { break; }
+          return heapString("(inet_ntop error)");
         }
         return str('[', buffer, "]:", ntohs(addr.inet6.sin6_port));
       }
@@ -880,28 +885,10 @@ public:
   UnixEventPort::FdObserver observer;
 };
 
-class TimerImpl final: public Timer {
-public:
-  TimerImpl(UnixEventPort& eventPort): eventPort(eventPort) {}
-
-  TimePoint now() override { return eventPort.steadyTime(); }
-
-  Promise<void> atTime(TimePoint time) override {
-    return eventPort.atSteadyTime(time);
-  }
-
-  Promise<void> afterDelay(Duration delay) override {
-    return eventPort.atSteadyTime(eventPort.steadyTime() + delay);
-  }
-
-private:
-  UnixEventPort& eventPort;
-};
-
 class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
 public:
   LowLevelAsyncIoProviderImpl()
-      : eventLoop(eventPort), timer(eventPort), waitScope(eventLoop) {}
+      : eventLoop(eventPort), waitScope(eventLoop) {}
 
   inline WaitScope& getWaitScope() { return waitScope; }
 
@@ -935,14 +922,13 @@ public:
     return heap<DatagramPortImpl>(*this, eventPort, fd, flags);
   }
 
-  Timer& getTimer() override { return timer; }
+  Timer& getTimer() override { return eventPort.getTimer(); }
 
   UnixEventPort& getEventPort() { return eventPort; }
 
 private:
   UnixEventPort eventPort;
   EventLoop eventLoop;
-  TimerImpl timer;
   WaitScope waitScope;
 };
 
@@ -1397,3 +1383,5 @@ AsyncIoContext setupAsyncIo() {
 }
 
 }  // namespace kj
+
+#endif  // !_WIN32

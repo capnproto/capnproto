@@ -38,6 +38,13 @@
 #include <execinfo.h>
 #endif
 
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include "windows-sanity.h"
+#include <dbghelp.h>
+#endif
+
 #if (__linux__ || __APPLE__) && defined(KJ_DEBUG)
 #include <stdio.h>
 #include <pthread.h>
@@ -57,19 +64,142 @@ StringPtr KJ_STRINGIFY(LogSeverity severity) {
   return SEVERITY_STRINGS[static_cast<uint>(severity)];
 }
 
+#if _WIN32 && _M_X64
+// Currently the Win32 stack-trace code only supports x86_64. We could easily extend it to support
+// i386 as well but it requires some code changes around how we read the context to start the
+// trace.
+
+namespace {
+
+struct Dbghelp {
+  // Load dbghelp.dll dynamically since we don't really need it, it's just for debugging.
+
+  HINSTANCE lib;
+
+  WINBOOL WINAPI (*symInitialize)(HANDLE hProcess,PCSTR UserSearchPath,WINBOOL fInvadeProcess);
+  WINBOOL WINAPI (*stackWalk64)(
+      DWORD MachineType,HANDLE hProcess,HANDLE hThread,
+      LPSTACKFRAME64 StackFrame,PVOID ContextRecord,
+      PREAD_PROCESS_MEMORY_ROUTINE64 ReadMemoryRoutine,
+      PFUNCTION_TABLE_ACCESS_ROUTINE64 FunctionTableAccessRoutine,
+      PGET_MODULE_BASE_ROUTINE64 GetModuleBaseRoutine,
+      PTRANSLATE_ADDRESS_ROUTINE64 TranslateAddress);
+  PVOID WINAPI (*symFunctionTableAccess64)(HANDLE hProcess,DWORD64 AddrBase);
+  DWORD64 WINAPI (*symGetModuleBase64)(HANDLE hProcess,DWORD64 qwAddr);
+  WINBOOL WINAPI (*symGetLineFromAddr64)(
+      HANDLE hProcess,DWORD64 qwAddr,PDWORD pdwDisplacement,PIMAGEHLP_LINE64 Line64);
+
+  Dbghelp()
+      : lib(LoadLibraryA("dbghelp.dll")),
+        symInitialize(lib == nullptr ? nullptr :
+            reinterpret_cast<decltype(symInitialize)>(
+                GetProcAddress(lib, "SymInitialize"))),
+        stackWalk64(symInitialize == nullptr ? nullptr :
+            reinterpret_cast<decltype(stackWalk64)>(
+                GetProcAddress(lib, "StackWalk64"))),
+        symFunctionTableAccess64(symInitialize == nullptr ? nullptr :
+            reinterpret_cast<decltype(symFunctionTableAccess64)>(
+                GetProcAddress(lib, "SymFunctionTableAccess64"))),
+        symGetModuleBase64(symInitialize == nullptr ? nullptr :
+            reinterpret_cast<decltype(symGetModuleBase64)>(
+                GetProcAddress(lib, "SymGetModuleBase64"))),
+        symGetLineFromAddr64(symInitialize == nullptr ? nullptr :
+            reinterpret_cast<decltype(symGetLineFromAddr64)>(
+                GetProcAddress(lib, "SymGetLineFromAddr64"))) {
+    if (symInitialize != nullptr) {
+      symInitialize(GetCurrentProcess(), NULL, TRUE);
+    }
+  }
+};
+
+const Dbghelp& getDbghelp() {
+  static Dbghelp dbghelp;
+  return dbghelp;
+}
+
+ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
+                                    HANDLE thread, CONTEXT& context) {
+  const Dbghelp& dbghelp = getDbghelp();
+  if (dbghelp.stackWalk64 == nullptr ||
+      dbghelp.symFunctionTableAccess64 == nullptr ||
+      dbghelp.symGetModuleBase64 == nullptr) {
+    return nullptr;
+  }
+
+  STACKFRAME64 frame;
+  memset(&frame, 0, sizeof(frame));
+
+  frame.AddrPC.Offset = context.Rip;
+  frame.AddrPC.Mode = AddrModeFlat;
+  frame.AddrStack.Offset = context.Rsp;
+  frame.AddrStack.Mode = AddrModeFlat;
+  frame.AddrFrame.Offset = context.Rbp;
+  frame.AddrFrame.Mode = AddrModeFlat;
+
+  HANDLE process = GetCurrentProcess();
+
+  uint count = 0;
+  for (; count < space.size(); count++) {
+    if (!dbghelp.stackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread,
+          &frame, &context, NULL, dbghelp.symFunctionTableAccess64,
+          dbghelp.symGetModuleBase64, NULL)){
+      break;
+    }
+
+    space[count] = reinterpret_cast<void*>(frame.AddrPC.Offset);
+  }
+
+  return space.slice(kj::min(ignoreCount, count), count);
+}
+
+}  // namespace
+#endif
+
 ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
-#ifndef KJ_HAS_BACKTRACE
-  return nullptr;
-#else
+#if _WIN32 && _M_X64
+  CONTEXT context;
+  RtlCaptureContext(&context);
+  return getStackTrace(space, ignoreCount, GetCurrentThread(), context);
+#elif KJ_HAS_BACKTRACE
   size_t size = backtrace(space.begin(), space.size());
   return space.slice(kj::min(ignoreCount + 1, size), size);
+#else
+  return nullptr;
 #endif
 }
 
 String stringifyStackTrace(ArrayPtr<void* const> trace) {
   if (trace.size() == 0) return nullptr;
 
-#if (__linux__ || __APPLE__) && !__ANDROID__ && defined(KJ_DEBUG)
+#ifndef KJ_DEBUG
+  return nullptr;
+
+#elif _WIN32 && _M_X64 && _MSC_VER
+
+  // Try to get file/line using SymGetLineFromAddr64(). We don't bother if we aren't on MSVC since
+  // this requires MSVC debug info.
+  //
+  // TODO(someday): We could perhaps shell out to addr2line on MinGW.
+
+  const Dbghelp& dbghelp = getDbghelp();
+  if (dbghelp.symGetLineFromAddr64 == nullptr) return nullptr;
+
+  HANDLE process = GetCurrentProcess();
+
+  KJ_STACK_ARRAY(String, lines, trace.size(), 32, 32);
+
+  for (auto i: kj::indices(trace)) {
+    IMAGEHLP_LINE64 lineInfo;
+    memset(&lineInfo, 0, sizeof(lineInfo));
+    lineInfo.SizeOfStruct = sizeof(lineInfo);
+    if (dbghelp.symGetLineFromAddr64(process, reinterpret_cast<DWORD64>(trace[i]), NULL, &lineInfo)) {
+      lines[i] = kj::str('\n', lineInfo.FileName, ':', lineInfo.LineNumber);
+    }
+  }
+
+  return strArray(lines, "");
+
+#elif (__linux__ || __APPLE__) && !__ANDROID__
   // We want to generate a human-readable stack trace.
 
   // TODO(someday):  It would be really great if we could avoid farming out to another process
@@ -144,12 +274,63 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   pclose(p);
 
   return strArray(arrayPtr(lines, i), "");
+
 #else
   return nullptr;
 #endif
 }
 
-#if KJ_HAS_BACKTRACE
+String getStackTrace() {
+  void* space[32];
+  auto trace = getStackTrace(space, 2);
+  return kj::str(kj::strArray(trace, " "), stringifyStackTrace(trace));
+}
+
+#if _WIN32 && _M_X64
+namespace {
+
+DWORD mainThreadId = 0;
+
+BOOL WINAPI breakHandler(DWORD type) {
+  switch (type) {
+    case CTRL_C_EVENT:
+    case CTRL_BREAK_EVENT: {
+      HANDLE thread = OpenThread(THREAD_ALL_ACCESS, FALSE, mainThreadId);
+      if (thread != NULL) {
+        if (SuspendThread(thread) != (DWORD)-1) {
+          CONTEXT context;
+          memset(&context, 0, sizeof(context));
+          context.ContextFlags = CONTEXT_FULL;
+          if (GetThreadContext(thread, &context)) {
+            void* traceSpace[32];
+            auto trace = getStackTrace(traceSpace, 2, thread, context);
+            ResumeThread(thread);
+            auto message = kj::str("*** Received CTRL+C. stack: ", strArray(trace, " "),
+                                   stringifyStackTrace(trace), '\n');
+            FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+          } else {
+            ResumeThread(thread);
+          }
+        }
+        CloseHandle(thread);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
+  return FALSE;  // still crash
+}
+
+}  // namespace
+
+void printStackTraceOnCrash() {
+  mainThreadId = GetCurrentThreadId();
+  KJ_WIN32(SetConsoleCtrlHandler(breakHandler, TRUE));
+}
+
+#elif KJ_HAS_BACKTRACE
 namespace {
 
 void crashHandler(int signo, siginfo_t* info, void* context) {

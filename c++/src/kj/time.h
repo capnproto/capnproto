@@ -97,6 +97,49 @@ private:
   static kj::Exception makeTimeoutException();
 };
 
+class TimerImpl final: public Timer {
+  // Implementation of Timer that expects an external caller -- usually, the EventPort
+  // implementation -- to tell it when time has advanced.
+
+public:
+  TimerImpl(TimePoint startTime);
+  ~TimerImpl() noexcept(false);
+
+  Maybe<TimePoint> nextEvent();
+  // Returns the time at which the next scheduled timer event will occur, or null if no timer
+  // events are scheduled.
+
+  Maybe<uint64_t> timeoutToNextEvent(TimePoint start, Duration unit, uint64_t max);
+  // Convenience method which computes a timeout value to pass to an event-waiting system call to
+  // cause it to time out when the next timer event occurs.
+  //
+  // `start` is the time at which the timeout starts counting. This is typically not the same as
+  // now() since some time may have passed since the last time advanceTo() was called.
+  //
+  // `unit` is the time unit in which the timeout is measured. This is often MILLISECONDS. Note
+  // that this method will fractional values *up*, to guarantee that the returned timeout waits
+  // until just *after* the time the event is scheduled.
+  //
+  // The timeout will be clamped to `max`. Use this to avoid an overflow if e.g. the OS wants a
+  // 32-bit value or a signed value.
+  //
+  // Returns nullptr if there are no future events.
+
+  void advanceTo(TimePoint newTime);
+  // Set the time to `time` and fire any at() events that have been passed.
+
+  // implements Timer ----------------------------------------------------------
+  TimePoint now() override;
+  Promise<void> atTime(TimePoint time) override;
+  Promise<void> afterDelay(Duration delay) override;
+
+private:
+  struct Impl;
+  class TimerPromiseAdapter;
+  TimePoint time;
+  Own<Impl> impl;
+};
+
 // =======================================================================================
 // inline implementation details
 
@@ -113,6 +156,8 @@ Promise<T> Timer::timeoutAfter(Duration delay, Promise<T>&& promise) {
     return makeTimeoutException();
   }));
 }
+
+inline TimePoint TimerImpl::now() { return time; }
 
 }  // namespace kj
 

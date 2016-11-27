@@ -22,6 +22,10 @@
 #ifndef KJ_ASYNC_UNIX_H_
 #define KJ_ASYNC_UNIX_H_
 
+#if _WIN32
+#error "This file is Unix-specific. On Windows, include async-win32.h instead."
+#endif
+
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
 #endif
@@ -93,8 +97,7 @@ public:
   // needs to use SIGUSR1, call this at startup (before any calls to `captureSignal()` and before
   // constructing an `UnixEventPort`) to offer a different signal.
 
-  TimePoint steadyTime() { return frozenSteadyTime; }
-  Promise<void> atSteadyTime(TimePoint time);
+  Timer& getTimer() { return timerImpl; }
 
   // implements EventPort ------------------------------------------------------
   bool wait() override;
@@ -106,14 +109,12 @@ private:
   class TimerPromiseAdapter;
   class SignalPromiseAdapter;
 
-  Own<TimerSet> timers;
-  TimePoint frozenSteadyTime;
+  TimerImpl timerImpl;
 
   SignalPromiseAdapter* signalHead = nullptr;
   SignalPromiseAdapter** signalTail = &signalHead;
 
-  TimePoint currentSteadyTime();
-  void processTimers();
+  TimePoint readClock();
   void gotSignal(const siginfo_t& siginfo);
 
   friend class TimerPromiseAdapter;

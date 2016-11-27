@@ -139,6 +139,7 @@ includekj_HEADERS =                                            \
   src/kj/async-inl.h                                           \
   src/kj/time.h                                                \
   src/kj/async-unix.h                                          \
+  src/kj/async-win32.h                                         \
   src/kj/async-io.h                                            \
   src/kj/main.h                                                \
   src/kj/test.h                                                \
@@ -225,12 +226,14 @@ libkj_test_la_LDFLAGS = -release $(VERSION) -no-undefined
 libkj_test_la_SOURCES = src/kj/test.c++
 
 if !LITE_MODE
-libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS)
+libkj_async_la_LIBADD = libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_async_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_async_la_SOURCES=                                        \
   src/kj/async.c++                                             \
   src/kj/async-unix.c++                                        \
+  src/kj/async-win32.c++                                       \
   src/kj/async-io.c++                                          \
+  src/kj/async-io-win32.c++                                    \
   src/kj/time.c++
 endif !LITE_MODE
 
@@ -260,7 +263,7 @@ libcapnp_la_SOURCES=                                           \
 
 if !LITE_MODE
 
-libcapnp_rpc_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(PTHREAD_LIBS)
+libcapnp_rpc_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libcapnp_rpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/serialize-async.c++                                \
@@ -386,6 +389,7 @@ check_PROGRAMS = capnp-test capnp-evolution-test
 heavy_tests =                                                  \
   src/kj/async-test.c++                                        \
   src/kj/async-unix-test.c++                                   \
+  src/kj/async-win32-test.c++                                  \
   src/kj/async-io-test.c++                                     \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \

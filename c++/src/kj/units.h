@@ -264,9 +264,9 @@ public:
     return value / other.value;
   }
   template <typename OtherNumber>
-  inline constexpr decltype(Number(1) % OtherNumber(1))
+  inline constexpr Quantity<decltype(Number(1) % OtherNumber(1)), Unit>
       operator%(const Quantity<OtherNumber, Unit>& other) const {
-    return value % other.value;
+    return Quantity<decltype(Number(1) % OtherNumber(1)), Unit>(value % other.value);
   }
 
   template <typename OtherNumber, typename OtherUnit>

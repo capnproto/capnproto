@@ -27,6 +27,13 @@
 
 #if _WIN32
 #define strerror_r(errno,buf,len) strerror_s(buf,len,errno)
+#define NOMINMAX 1
+#define WIN32_LEAN_AND_MEAN 1
+#define NOSERVICE 1
+#define NOMCX 1
+#define NOIME 1
+#include <windows.h>
+#include "windows-sanity.h"
 #endif
 
 namespace kj {
@@ -125,6 +132,38 @@ Exception::Type typeOfErrno(int error) {
   }
 }
 
+#if _WIN32
+
+Exception::Type typeOfWin32Error(DWORD error) {
+  switch (error) {
+    // TODO(now): This needs more work.
+
+    case WSAETIMEDOUT:
+      return Exception::Type::OVERLOADED;
+
+    case WSAENOTCONN:
+    case WSAECONNABORTED:
+    case WSAECONNREFUSED:
+    case WSAECONNRESET:
+    case WSAEHOSTDOWN:
+    case WSAEHOSTUNREACH:
+    case WSAENETDOWN:
+    case WSAENETRESET:
+    case WSAENETUNREACH:
+      return Exception::Type::DISCONNECTED;
+
+    case WSAEOPNOTSUPP:
+    case WSAENOPROTOOPT:
+    case WSAENOTSOCK:    // This is really saying "syscall not implemented for non-sockets".
+      return Exception::Type::UNIMPLEMENTED;
+
+    default:
+      return Exception::Type::FAILED;
+  }
+}
+
+#endif  // _WIN32
+
 enum DescriptionStyle {
   LOG,
   ASSERTION,
@@ -132,7 +171,8 @@ enum DescriptionStyle {
 };
 
 static String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
-                                  const char* macroArgs, ArrayPtr<String> argValues) {
+                                  const char* sysErrorString, const char* macroArgs,
+                                  ArrayPtr<String> argValues) {
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
   if (argValues.size() > 0) {
@@ -205,13 +245,21 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
 #if __USE_GNU
     char buffer[256];
     if (style == SYSCALL) {
-      sysErrorArray = strerror_r(errorNumber, buffer, sizeof(buffer));
+      if (sysErrorString == nullptr) {
+        sysErrorArray = strerror_r(errorNumber, buffer, sizeof(buffer));
+      } else {
+        sysErrorArray = sysErrorString;
+      }
     }
 #else
     char buffer[256];
     if (style == SYSCALL) {
-      strerror_r(errorNumber, buffer, sizeof(buffer));
-      sysErrorArray = buffer;
+      if (sysErrorString == nullptr) {
+        strerror_r(errorNumber, buffer, sizeof(buffer));
+        sysErrorArray = buffer;
+      } else {
+        sysErrorArray = sysErrorString;
+      }
     }
 #endif
 
@@ -250,6 +298,7 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         pos = _::fill(pos, codeArray, colon, sysErrorArray);
         break;
     }
+
     for (size_t i = 0; i < argValues.size(); i++) {
       if (i > 0 || style != LOG) {
         pos = _::fill(pos, delim);
@@ -269,7 +318,7 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                         ArrayPtr<String> argValues) {
   getExceptionCallback().logMessage(severity, trimSourceFilename(file).cStr(), line, 0,
-      makeDescriptionImpl(LOG, nullptr, 0, macroArgs, argValues));
+      makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues));
 }
 
 Debug::Fault::~Fault() noexcept(false) {
@@ -292,18 +341,46 @@ void Debug::Fault::init(
     const char* file, int line, Exception::Type type,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   exception = new Exception(type, file, line,
-      makeDescriptionImpl(ASSERTION, condition, 0, macroArgs, argValues));
+      makeDescriptionImpl(ASSERTION, condition, 0, nullptr, macroArgs, argValues));
 }
 
 void Debug::Fault::init(
     const char* file, int line, int osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   exception = new Exception(typeOfErrno(osErrorNumber), file, line,
-      makeDescriptionImpl(SYSCALL, condition, osErrorNumber, macroArgs, argValues));
+      makeDescriptionImpl(SYSCALL, condition, osErrorNumber, nullptr, macroArgs, argValues));
 }
 
+#if _WIN32
+void Debug::Fault::init(
+    const char* file, int line, Win32Error osErrorNumber,
+    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
+  LPVOID ptr;
+  // TODO(now): Use FormatMessageW() instead.
+  // TODO(now): Why doesn't this work for winsock errors?
+  DWORD result = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                                FORMAT_MESSAGE_FROM_SYSTEM |
+                                FORMAT_MESSAGE_IGNORE_INSERTS,
+                                NULL, osErrorNumber.number,
+                                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                                (LPTSTR) &ptr, 0, NULL);
+
+  if (result > 0) {
+    KJ_DEFER(LocalFree(ptr));
+    exception = new Exception(typeOfWin32Error(osErrorNumber.number), file, line,
+        makeDescriptionImpl(SYSCALL, condition, 0, reinterpret_cast<char*>(ptr),
+                            macroArgs, argValues));
+  } else {
+    auto message = kj::str("win32 error code: ", osErrorNumber.number);
+    exception = new Exception(typeOfWin32Error(osErrorNumber.number), file, line,
+        makeDescriptionImpl(SYSCALL, condition, 0, message.cStr(),
+                            macroArgs, argValues));
+  }
+}
+#endif
+
 String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
-  return makeDescriptionImpl(LOG, nullptr, 0, macroArgs, argValues);
+  return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues);
 }
 
 int Debug::getOsErrorNumber(bool nonblocking) {
@@ -315,6 +392,12 @@ int Debug::getOsErrorNumber(bool nonblocking) {
        : nonblocking && (result == EAGAIN || result == EWOULDBLOCK) ? 0
        : result;
 }
+
+#if _WIN32
+Debug::Win32Error Debug::getWin32Error() {
+  return Win32Error(::GetLastError());
+}
+#endif
 
 Debug::Context::Context(): logged(false) {}
 Debug::Context::~Context() noexcept(false) {}

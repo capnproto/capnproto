@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !_WIN32
+
 #include "async-unix.h"
 #include "thread.h"
 #include "debug.h"
@@ -34,6 +36,7 @@
 #include <algorithm>
 
 namespace kj {
+namespace {
 
 inline void delay() { usleep(10000); }
 
@@ -529,14 +532,16 @@ TEST(AsyncUnixTest, SteadyTimers) {
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
-  auto start = port.steadyTime();
+  auto& timer = port.getTimer();
+
+  auto start = timer.now();
   kj::Vector<TimePoint> expected;
   kj::Vector<TimePoint> actual;
 
   auto addTimer = [&](Duration delay) {
     expected.add(max(start + delay, start));
-    port.atSteadyTime(start + delay).then([&]() {
-      actual.add(port.steadyTime());
+    timer.atTime(start + delay).then([&]() {
+      actual.add(timer.now());
     }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
   };
 
@@ -547,7 +552,7 @@ TEST(AsyncUnixTest, SteadyTimers) {
   addTimer(-10 * MILLISECONDS);
 
   std::sort(expected.begin(), expected.end());
-  port.atSteadyTime(expected.back() + MILLISECONDS).wait(waitScope);
+  timer.atTime(expected.back() + MILLISECONDS).wait(waitScope);
 
   ASSERT_EQ(expected.size(), actual.size());
   for (int i = 0; i < expected.size(); ++i) {
@@ -571,7 +576,7 @@ TEST(AsyncUnixTest, Wake) {
   EXPECT_TRUE(port.wait());
 
   {
-    auto promise = port.atSteadyTime(port.steadyTime());
+    auto promise = port.getTimer().atTime(port.getTimer().now());
     EXPECT_FALSE(port.wait());
   }
 
@@ -585,4 +590,7 @@ TEST(AsyncUnixTest, Wake) {
   EXPECT_TRUE(port.wait());
 }
 
+}  // namespace
 }  // namespace kj
+
+#endif  // !_WIN32

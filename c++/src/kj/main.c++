@@ -30,9 +30,12 @@
 #include <limits.h>
 
 #if _WIN32
-#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX 1
+#endif
 #include <windows.h>
-#undef NOMINMAX
+#include "windows-sanity.h"
 #else
 #include <sys/uio.h>
 #endif
