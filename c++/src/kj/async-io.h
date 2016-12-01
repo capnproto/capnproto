@@ -425,20 +425,12 @@ public:
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
-#if _WIN32
   virtual Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
       Fd fd, const struct sockaddr* addr, uint addrlen, uint flags = 0) = 0;
-#else
-  virtual Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(Fd fd, uint flags = 0) = 0;
-#endif
-  // Create an AsyncIoStream wrapping a socket that is in the process of connecting.  The returned
-  // promise should not resolve until connection has completed -- traditionally indicated by the
-  // descriptor becoming writable.
+  // Create an AsyncIoStream wrapping a socket and initiate a connection to the given address.
+  // The returned promise does not resolve until connection has completed.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
-  //
-  // On Windows, the callee initiates connect rather than the caller.
-  // TODO(now): Maybe on all systems?
 
   virtual Own<ConnectionReceiver> wrapListenSocketFd(Fd fd, uint flags = 0) = 0;
   // Create an AsyncIoStream wrapping a listen socket file descriptor.  This socket should already

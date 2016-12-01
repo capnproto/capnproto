@@ -416,27 +416,6 @@ public:
     KJ_SYSCALL(::bind(sockfd, &addr.generic, addrlen), toString());
   }
 
-  void connect(int sockfd) const {
-    // Unfortunately connect() doesn't fit the mold of KJ_NONBLOCKING_SYSCALL, since it indicates
-    // non-blocking using EINPROGRESS.
-    for (;;) {
-      if (::connect(sockfd, &addr.generic, addrlen) < 0) {
-        int error = errno;
-        if (error == EINPROGRESS) {
-          return;
-        } else if (error != EINTR) {
-          KJ_FAIL_SYSCALL("connect()", error, toString()) {
-            // Recover by returning, since reads/writes will simply fail.
-            return;
-          }
-        }
-      } else {
-        // no error
-        return;
-      }
-    }
-  }
-
   uint getPort() const {
     switch (addr.generic.sa_family) {
       case AF_INET: return ntohs(addr.inet4.sin_port);
@@ -901,7 +880,26 @@ public:
   Own<AsyncIoStream> wrapSocketFd(int fd, uint flags = 0) override {
     return heap<AsyncStreamFd>(eventPort, fd, flags);
   }
-  Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(int fd, uint flags = 0) override {
+  Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
+      int fd, const struct sockaddr* addr, uint addrlen, uint flags = 0) override {
+    // Unfortunately connect() doesn't fit the mold of KJ_NONBLOCKING_SYSCALL, since it indicates
+    // non-blocking using EINPROGRESS.
+    for (;;) {
+      if (::connect(fd, addr, addrlen) < 0) {
+        int error = errno;
+        if (error == EINPROGRESS) {
+          // Fine.
+          break;
+        } else if (error != EINTR) {
+          KJ_FAIL_SYSCALL("connect()", error) { break; }
+          return Own<AsyncIoStream>();
+        }
+      } else {
+        // no error
+        break;
+      }
+    }
+
     auto result = heap<AsyncStreamFd>(eventPort, fd, flags);
 
     auto connected = result->waitConnected();
@@ -940,7 +938,9 @@ public:
       : lowLevel(lowLevel), addrs(kj::mv(addrs)) {}
 
   Promise<Own<AsyncIoStream>> connect() override {
-    return connectImpl(0);
+    auto addrsCopy = heapArray(addrs.asPtr());
+    auto promise = connectImpl(lowLevel, addrsCopy);
+    return promise.attach(kj::mv(addrsCopy));
   }
 
   Own<ConnectionReceiver> listen() override {
@@ -1010,34 +1010,23 @@ private:
   Array<SocketAddress> addrs;
   uint counter = 0;
 
-  Promise<Own<AsyncIoStream>> connectImpl(uint index) {
-    KJ_ASSERT(index < addrs.size());
+  static Promise<Own<AsyncIoStream>> connectImpl(
+      LowLevelAsyncIoProvider& lowLevel, ArrayPtr<SocketAddress> addrs) {
+    KJ_ASSERT(addrs.size() > 0);
 
-    int fd = addrs[index].socket(SOCK_STREAM);
+    int fd = addrs[0].socket(SOCK_STREAM);
 
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-      addrs[index].connect(fd);
-    })) {
-      // Connect failed.
-      close(fd);
-      if (index + 1 < addrs.size()) {
-        // Try the next address instead.
-        return connectImpl(index + 1);
-      } else {
-        // No more addresses to try, so propagate the exception.
-        return kj::mv(*exception);
-      }
-    }
-
-    return lowLevel.wrapConnectingSocketFd(fd, NEW_FD_FLAGS).then(
-        [](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
+    return kj::evalNow([&]() {
+      return lowLevel.wrapConnectingSocketFd(
+          fd, addrs[0].getRaw(), addrs[0].getRawSize(), NEW_FD_FLAGS);
+    }).then([](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
       // Success, pass along.
       return kj::mv(stream);
-    }, [this,index](Exception&& exception) -> Promise<Own<AsyncIoStream>> {
+    }, [&lowLevel,addrs](Exception&& exception) mutable -> Promise<Own<AsyncIoStream>> {
       // Connect failed.
-      if (index + 1 < addrs.size()) {
+      if (addrs.size() > 1) {
         // Try the next address instead.
-        return connectImpl(index + 1);
+        return connectImpl(lowLevel, addrs.slice(1, addrs.size()));
       } else {
         // No more addresses to try, so propagate the exception.
         return kj::mv(exception);
