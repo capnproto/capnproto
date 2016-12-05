@@ -1524,6 +1524,16 @@ inline DynamicList::Builder DynamicList::Builder::as<DynamicList>() {
   return *this;
 }
 
+template <>
+inline AnyList::Reader DynamicList::Reader::as<AnyList>() const {
+  return AnyList::Reader(reader);
+}
+
+template <>
+inline AnyList::Builder DynamicList::Builder::as<AnyList>() {
+  return AnyList::Builder(builder);
+}
+
 // -------------------------------------------------------------------
 
 template <typename T, typename>
