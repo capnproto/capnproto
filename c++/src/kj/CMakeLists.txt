@@ -18,12 +18,16 @@ set(kj_sources_heavy
   units.c++
   refcount.c++
   string-tree.c++
+)
+set(kj-parse_sources
   parse/char.c++
 )
+set(kj_sources ${kj_sources_lite})
 if(NOT CAPNP_LITE)
-  set(kj_sources ${kj_sources_lite} ${kj_sources_heavy})
-else()
-  set(kj_sources ${kj_sources_lite})
+  list(APPEND kj_sources ${kj_sources_heavy})
+endif()
+if(CAPNP_BUILD_TOOLS)
+  list(APPEND kj_sources ${kj-parse_sources})
 endif()
 
 set(kj_headers
@@ -107,7 +111,7 @@ set(kj-async_headers
 if(NOT CAPNP_LITE)
   add_library(kj-async ${kj-async_sources})
   add_library(CapnProto::kj-async ALIAS kj-async)
-  target_link_libraries(kj-async kj)
+  target_link_libraries(kj-async PUBLIC kj)
   if(UNIX)
     # external clients of this library need to link to pthreads
     target_compile_options(kj-async INTERFACE "-pthread")
@@ -150,11 +154,19 @@ if(BUILD_TESTING)
       one-of-test.c++
       function-test.c++
       threadlocal-pthread-test.c++
-      parse/common-test.c++
-      parse/char-test.c++
     )
     target_link_libraries(kj-heavy-tests kj-async kj-test kj)
     add_dependencies(check kj-heavy-tests)
     add_test(NAME kj-heavy-tests-run COMMAND kj-heavy-tests)
+
+    if(CAPNP_BUILD_TOOLS)
+      add_executable(kj-parse-tests
+        parse/common-test.c++
+        parse/char-test.c++
+      )
+      target_link_libraries(kj-parse-tests kj-test kj)
+      add_dependencies(check kj-parse-tests)
+      add_test(NAME kj-parse-tests-run COMMAND kj-parse-tests)
+    endif()  # CAPNP_BUILD_TOOLS
   endif()  # NOT CAPNP_LITE
 endif()  # BUILD_TESTING
