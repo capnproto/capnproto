@@ -28,6 +28,10 @@
 
 #include "common.h"  // for uint and friends
 
+#if _MSC_VER
+#include <atomic>
+#endif
+
 namespace capnp {
 namespace _ {  // private
 
@@ -144,7 +148,14 @@ struct RawBrandedSchema {
     // is required in particular when traversing the dependency list.  RawSchemas for compiled-in
     // types are always initialized; only dynamically-loaded schemas may be lazy.
 
+#if __GNUC__
     const Initializer* i = __atomic_load_n(&lazyInitializer, __ATOMIC_ACQUIRE);
+#elif _MSC_VER
+    const Initializer* i = *static_cast<Initializer const* const volatile*>(&lazyInitializer);
+    std::atomic_thread_fence(std::memory_order_acquire);
+#else
+#error "Platform not supported"
+#endif
     if (i != nullptr) i->init(this);
   }
 
@@ -203,7 +214,14 @@ struct RawSchema {
     // is required in particular when traversing the dependency list.  RawSchemas for compiled-in
     // types are always initialized; only dynamically-loaded schemas may be lazy.
 
+#if __GNUC__
     const Initializer* i = __atomic_load_n(&lazyInitializer, __ATOMIC_ACQUIRE);
+#elif _MSC_VER
+    const Initializer* i = *static_cast<Initializer const* const volatile*>(&lazyInitializer);
+    std::atomic_thread_fence(std::memory_order_acquire);
+#else
+#error "Platform not supported"
+#endif
     if (i != nullptr) i->init(this);
   }
 
