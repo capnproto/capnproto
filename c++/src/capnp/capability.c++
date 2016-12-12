@@ -32,9 +32,6 @@
 
 namespace capnp {
 
-const _::RawBrandedSchema* const Capability::_capnpPrivate::brand =
-    &_::NULL_INTERFACE_SCHEMA.defaultBrand;
-
 namespace _ {
 
 void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory);
