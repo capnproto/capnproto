@@ -743,6 +743,21 @@ const embeddedData :Data = embed "testdata/packed";
 const embeddedText :Text = embed "testdata/short.txt";
 const embeddedStruct :TestAllTypes = embed "testdata/binary";
 
+struct TestAnyPointerConstants {
+  anyKindAsStruct @0 :AnyPointer;
+  anyStructAsStruct @1 :AnyStruct;
+  anyKindAsList @2 :AnyPointer;
+  anyListAsList @3 :AnyList;
+
+}
+
+const anyPointerConstants :TestAnyPointerConstants = (
+  anyKindAsStruct = TestConstants.structConst,
+  anyStructAsStruct = TestConstants.structConst,
+  anyKindAsList = TestConstants.int32ListConst,
+  anyListAsList = TestConstants.int32ListConst,
+);
+
 interface TestInterface {
   foo @0 (i :UInt32, j :Bool) -> (x :Text);
   bar @1 () -> ();

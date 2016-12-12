@@ -1640,6 +1640,16 @@ TEST(Encoding, Constants) {
   checkList(*test::TestConstants::ENUM_LIST_CONST, {TestEnum::FOO, TestEnum::GARPLY});
 }
 
+TEST(Encoding, AnyPointerConstants) {
+  auto reader = test::ANY_POINTER_CONSTANTS.get();
+
+  EXPECT_EQ("baz", reader.getAnyKindAsStruct().getAs<TestAllTypes>().getTextField());
+  EXPECT_EQ("baz", reader.getAnyStructAsStruct().as<TestAllTypes>().getTextField());
+
+  EXPECT_EQ(111111111, reader.getAnyKindAsList().getAs<List<int32_t>>()[0]);
+  EXPECT_EQ(111111111, reader.getAnyListAsList().as<List<int32_t>>()[0]);
+}
+
 TEST(Encoding, GlobalConstants) {
   EXPECT_EQ(12345u, test::GLOBAL_INT);
   EXPECT_EQ("foobar", test::GLOBAL_TEXT.get());

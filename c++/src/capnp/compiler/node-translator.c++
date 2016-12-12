@@ -2726,6 +2726,15 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
         if (result.getReader().as<DynamicList>().getSchema() == type.asList()) {
           return kj::mv(result);
         }
+      } else if (type.isAnyPointer()) {
+        switch (type.whichAnyPointerKind()) {
+          case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
+          case schema::Type::AnyPointer::Unconstrained::LIST:
+            return kj::mv(result);
+          case schema::Type::AnyPointer::Unconstrained::STRUCT:
+          case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+            break;
+        }
       }
       break;
 
@@ -2741,6 +2750,15 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
       if (type.isStruct()) {
         if (result.getReader().as<DynamicStruct>().getSchema() == type.asStruct()) {
           return kj::mv(result);
+        }
+      } else if (type.isAnyPointer()) {
+        switch (type.whichAnyPointerKind()) {
+          case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
+          case schema::Type::AnyPointer::Unconstrained::STRUCT:
+            return kj::mv(result);
+          case schema::Type::AnyPointer::Unconstrained::LIST:
+          case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+            break;
         }
       }
       break;
