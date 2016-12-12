@@ -2589,10 +2589,16 @@ bool PointerReader::isCanonical(const word **readHead) {
     case PointerType::NULL_:
       // The pointer is null, we are canonical and do not read
       return true;
-    case PointerType::STRUCT:
+    case PointerType::STRUCT: {
       bool dataTrunc, ptrTrunc;
-      return (this->getStruct(nullptr).isCanonical(readHead, readHead, &dataTrunc, &ptrTrunc)
-             && dataTrunc && ptrTrunc);
+      auto structReader = this->getStruct(nullptr);
+      if (structReader.getDataSectionSize() == 0 * BITS &&
+          structReader.getPointerSectionSize() == 0 * POINTERS) {
+        return reinterpret_cast<const word*>(this->pointer) == structReader.getLocation();
+      } else {
+        return structReader.isCanonical(readHead, readHead, &dataTrunc, &ptrTrunc) && dataTrunc && ptrTrunc;
+      }
+    }
     case PointerType::LIST:
       return this->getListAnySize(nullptr).isCanonical(readHead);
     case PointerType::CAPABILITY:
