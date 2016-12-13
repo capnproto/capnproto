@@ -31,7 +31,7 @@ using test::TestLists;
 namespace {
 
 
-KJ_TEST("canonicalize yields cannonical message") {
+KJ_TEST("canonicalize yields canonical message") {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestAllTypes>();
 
@@ -41,12 +41,60 @@ KJ_TEST("canonicalize yields cannonical message") {
   //Will assert if canonicalize failed to do so
 }
 
+KJ_TEST("canonicalize succeeds on empty struct") {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  canonicalize(root.asReader());  // Throws an exception on canoncalization failure.
+}
+
+KJ_TEST("canonical non-null empty struct field") {
+  AlignedData<4> nonNullEmptyStruct = {{
+    // Struct pointer, body immediately follows, two pointer fields, no data.
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
+
+    // First pointer field, struct, offset of 1, data size 1, no pointers.
+    0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+
+    // Non-null pointer to empty struct.
+    0xfc, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00,
+
+    // Body of struct filled with non-zero data.
+    0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(nonNullEmptyStruct.words, 4)};
+  SegmentArrayMessageReader messageReader(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(messageReader.isCanonical());
+}
+
+KJ_TEST("for pointers to empty structs, preorder is not canonical") {
+  AlignedData<4> nonNullEmptyStruct = {{
+    // Struct pointer, body immediately follows, two pointer fields, no data.
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
+
+    // First pointer field, struct, offset of 1, data size 1, no pointers.
+    0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+
+    // Non-null pointer to empty struct. Offset puts it in "preorder". Would need to have
+    // an offset of -1 to be canonical.
+    0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+    // Body of struct filled with non-zero data.
+    0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(nonNullEmptyStruct.words, 4)};
+  SegmentArrayMessageReader messageReader(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(!messageReader.isCanonical());
+}
+
 KJ_TEST("isCanonical requires pointer preorder") {
   AlignedData<5> misorderedSegment = {{
     //Struct pointer, data immediately follows, two pointer fields, no data
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
     //Pointer field 1, pointing to the last entry, data size 1, no pointer
-    0x02, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
     //Pointer field 2, pointing to the next entry, data size 2, no pointer
     0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
     //Data for field 2
@@ -55,7 +103,7 @@ KJ_TEST("isCanonical requires pointer preorder") {
     0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00
   }};
   kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(misorderedSegment.words,
-                                                       3)};
+                                                       5)};
   SegmentArrayMessageReader outOfOrder(kj::arrayPtr(segments, 1));
 
   KJ_ASSERT(!outOfOrder.isCanonical());
