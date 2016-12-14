@@ -677,6 +677,14 @@ private:
     kj::StringTree scopes;
     kj::StringTree bindings;
     kj::StringTree dependencies;
+    size_t dependencyCount;
+    // TODO(msvc):  `dependencyCount` is the number of individual dependency definitions in
+    // `dependencies`. It's a hack to allow makeGenericDefinitions to hard-code the size of the
+    // `_capnpPrivate::brandDependencies` array into the definition of
+    // `_capnpPrivate::specificBrand::dependencyCount`. This is necessary because MSVC cannot deduce
+    // the size of `brandDependencies` if it is nested under a class template. It's probably this
+    // demoralizingly deferred bug:
+    // https://connect.microsoft.com/VisualStudio/feedback/details/759407/can-not-get-size-of-static-array-defined-in-class-template
   };
 
   BrandInitializerText makeBrandInitializers(
@@ -699,15 +707,20 @@ private:
       }
     }
 
+    auto depMap = makeBrandDepMap(templateContext, schema);
+    auto dependencyCount = depMap.size();
     return {
       kj::strTree("{\n", scopes.finish(), "}"),
       kj::strTree("{\n", bindings.releaseAsArray(), "}"),
-      makeBrandDepInitializers(templateContext, schema)
+      makeBrandDepInitializers(kj::mv(depMap)),
+      dependencyCount
     };
   }
 
-  kj::StringTree makeBrandDepInitializers(const TemplateContext& templateContext, Schema schema) {
-    // Build deps. Returns a braced initialiser list, or an empty string if there are no dependencies.
+  std::map<uint, kj::StringTree>
+  makeBrandDepMap(const TemplateContext& templateContext, Schema schema) {
+    // Build deps. This is separate from makeBrandDepInitializers to give calling code the
+    // opportunity to count the number of dependencies, to calculate array sizes.
     std::map<uint, kj::StringTree> depMap;
 
 #define ADD_DEP(kind, index, ...) \
@@ -749,7 +762,12 @@ private:
         break;
     }
 #undef ADD_DEP
+    return depMap;
+  }
 
+  kj::StringTree makeBrandDepInitializers(std::map<uint, kj::StringTree>&& depMap) {
+    // Process depMap. Returns a braced initialiser list, or an empty string if there are no
+    // dependencies.
     if (!depMap.size()) {
       return kj::strTree();
     }
@@ -1896,10 +1914,15 @@ private:
   }
 
   kj::StringTree makeGenericDefinitions(
-      kj::StringPtr templates, kj::StringPtr fullName, kj::StringPtr hexId,
+      const TemplateContext& templateContext, kj::StringPtr fullName, kj::StringPtr hexId,
       BrandInitializerText brandInitializers) {
     // Returns the definitions for the members from makeGenericDeclarations().
     bool hasBrandDependencies = (brandInitializers.dependencies.size() != 0);
+
+    auto scopeCount = templateContext.getScopeMap().size();
+    auto dependencyCount = brandInitializers.dependencyCount;
+
+    kj::String templates = kj::str(templateContext.allDecls());
 
     return kj::strTree(
         templates, "const ::capnp::_::RawBrandedSchema::Scope ", fullName,
@@ -1916,8 +1939,7 @@ private:
         templates, "const ::capnp::_::RawBrandedSchema ", fullName, "::_capnpPrivate::specificBrand = {\n",
         "  &::capnp::schemas::s_", hexId, ", brandScopes, ",
         (!hasBrandDependencies ? "nullptr" : "brandDependencies"), ",\n",
-        "  sizeof(brandScopes) / sizeof(brandScopes[0]), ",
-        (!hasBrandDependencies ? "0" : "sizeof(brandDependencies) / sizeof(brandDependencies[0])"),
+        "  ", scopeCount, ", ", dependencyCount,
         ", nullptr\n"
         "};\n");
   }
@@ -1965,7 +1987,8 @@ private:
           "    #endif  // !CAPNP_LITE\n");
 
       defineText = kj::strTree(kj::mv(defineText),
-          makeGenericDefinitions(templates, fullName, kj::str(hexId), kj::mv(brandInitializers)));
+          makeGenericDefinitions(
+              templateContext, fullName, kj::str(hexId), kj::mv(brandInitializers)));
     } else {
       declareText = kj::strTree(kj::mv(declareText),
           "    #if !CAPNP_LITE\n"
@@ -2237,7 +2260,8 @@ private:
           makeGenericDeclarations(templateContext, hasDeps));
 
       defineText = kj::strTree(kj::mv(defineText),
-          makeGenericDefinitions(templates, fullName, kj::str(hexId), kj::mv(brandInitializers)));
+          makeGenericDefinitions(
+              templateContext, fullName, kj::str(hexId), kj::mv(brandInitializers)));
     } else {
       declareText = kj::strTree(kj::mv(declareText),
         "    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }\n");
@@ -2619,7 +2643,8 @@ private:
         break;
     }
 
-    auto brandDeps = makeBrandDepInitializers(templateContext, schema.getGeneric());
+    auto brandDeps = makeBrandDepInitializers(
+        makeBrandDepMap(templateContext, schema.getGeneric()));
 
     auto schemaDef = kj::strTree(
         "static const ::capnp::_::AlignedData<", rawSchema.size(), "> b_", hexId, " = {\n"
