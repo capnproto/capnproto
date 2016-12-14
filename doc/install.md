@@ -49,7 +49,7 @@ new version of a well-supported compiler. The minimum versions are:
 
 * GCC 4.8
 * Clang 3.3
-* Visual C++ 2015 (lite mode only)
+* Visual C++ 2015
 
 If your system's default compiler is older that the above, you will need to install a newer
 compiler and set the `CXX` environment variable before trying to build Cap'n Proto. For example,
@@ -64,12 +64,13 @@ as well as on Windows. We test every Cap'n Proto release on the following platfo
 * Linux
 * Mac OS X
 * Windows - Cygwin
-* Windows - MinGW-w64 (lite mode and compiler binary only)
-* Windows - Visual C++ (lite mode only)
+* Windows - MinGW-w64
+* Windows - Visual C++
 
-**Windows users:** As of Visual Studio 2015, Visual C++ still does not support enough of C++11 to
-compile Cap'n Proto's reflection or RPC APIs. "Cap'n Proto Lite" omits these features from the
-library, giving you only the core serialization based on generated code.
+**Windows users:** Cap'n Proto requires Visual Studio 2015 Update 3 or newer. All runtime features
+of Cap'n Proto -- including serialization and RPC -- are now supported. (It is still not possible to
+compile the code generator tool, capnp.exe, using Visual Studio; however, a precompiled copy built
+with MinGW is provided in the release zip for your convenience.)
 
 **Mac OS X users:** You must use at least Xcode 5 with the Xcode command-line
 tools (Xcode menu > Preferences > Downloads).  Alternatively, the command-line tools
@@ -136,10 +137,10 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 1. Install [CMake](http://www.cmake.org/) version 3.1 or later.
 
 2. Use CMake to generate Visual Studio project files under `capnproto-c++-0.0.0` in the zip file.
-   You will need to enable the CMake project options `CAPNP_LITE` and `EXTERNAL_CAPNP`.
-   You can use the CMake UI for this or run this shell command:
+   You will need to enable the CMake project option `EXTERNAL_CAPNP`. You can use the CMake UI for
+   this or run this shell command:
 
-       cmake -G "Visual Studio 14 2015" -DCAPNP_LITE=1 -DEXTERNAL_CAPNP=1
+       cmake -G "Visual Studio 14 2015" -DEXTERNAL_CAPNP=1
 
     If the `capnp.exe` and `capnpc-c++.exe` tools are not on your `PATH`, then `CAPNP_EXECUTABLE`
     and `CAPNPC_CXX_EXECUTABLE` will need to be set to their respective locations.
@@ -157,8 +158,6 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
    `src/{capnp,kj}/{Debug,Release}` and place them somewhere where your project can link against them.
    Also add the `src` directory to your search path for `#include`s, or copy all the headers to your
    project's include directory.
-
-7. Add `#define CAPNP_LITE 1` to either your project's precompiled/shared header or compiler options.
 
 **From Git**
 
