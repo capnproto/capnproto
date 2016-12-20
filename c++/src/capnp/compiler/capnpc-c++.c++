@@ -2301,8 +2301,8 @@ private:
             return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Client");
           }, " {\n"
           "public:\n"
-          "  typedef ", fullName, " Calls;\n"
-          "  typedef ", fullName, " Reads;\n"
+          "  typedef ", name, " Calls;\n"
+          "  typedef ", name, " Reads;\n"
           "\n"
           "  Client(decltype(nullptr));\n"
           "  explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);\n"
@@ -2330,7 +2330,7 @@ private:
             return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Server");
           }, " {\n"
           "public:\n",
-          "  typedef ", fullName, " Serves;\n"
+          "  typedef ", name, " Serves;\n"
           "\n"
           "  ::kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,\n"
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)\n"
