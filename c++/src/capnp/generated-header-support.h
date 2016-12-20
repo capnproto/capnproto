@@ -328,6 +328,14 @@ inline constexpr uint sizeInWords() {
 #define CAPNP_NON_INT_CONSTEXPR_DEF_INIT(value)
 #endif
 
+#if _MSC_VER
+// TODO(msvc): A little hack to allow MSVC to use C++14 return type deduction in cases where the
+// explicit type exposes bugs in the compiler.
+#define CAPNP_AUTO_IF_MSVC(...) auto
+#else
+#define CAPNP_AUTO_IF_MSVC(...) __VA_ARGS__
+#endif
+
 #if CAPNP_LITE
 
 #define CAPNP_DECLARE_SCHEMA(id) \

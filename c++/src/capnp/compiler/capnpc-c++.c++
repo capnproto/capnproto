@@ -2145,10 +2145,22 @@ private:
     auto interfaceIdHex = kj::hex(interfaceId);
     uint16_t methodId = method.getIndex();
 
+    // TODO(msvc):  Notice that the return type of this method's request function is supposed to be
+    // `::capnp::Request<param, result>`. If the first template parameter to ::capnp::Request is a
+    // template instantiation, MSVC will sometimes complain that it's unspecialized and can't be
+    // used as a parameter in the return type (error C3203). It is not clear to me under what exact
+    // conditions this bug occurs, but it commonly crops up in test.capnp.h.
+    //
+    // The easiest (and only) workaround I found is to use C++14's return type deduction here, thus
+    // the `CAPNP_AUTO_IF_MSVC()` hackery in the return type declarations below. We're depending on
+    // the fact that that this function has an inline implementation for the deduction to work.
+
     auto requestMethodImpl = kj::strTree(
         templateContext.allDecls(),
         implicitParamsTemplateDecl,
-        "::capnp::Request<", paramType, ", ", resultType, ">\n",
+        templateContext.isGeneric() ? "CAPNP_AUTO_IF_MSVC(" : "",
+        "::capnp::Request<", paramType, ", ", resultType, ">",
+        templateContext.isGeneric() ? ")\n" : "\n",
         interfaceName, "::Client::", name, "Request(::kj::Maybe< ::capnp::MessageSize> sizeHint) {\n"
         "  return newCall<", paramType, ", ", resultType, ">(\n"
         "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
@@ -2157,7 +2169,10 @@ private:
     return MethodText {
       kj::strTree(
           implicitParamsTemplateDecl.size() == 0 ? "" : "  ", implicitParamsTemplateDecl,
-          "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request(\n"
+          templateContext.isGeneric() ? "  CAPNP_AUTO_IF_MSVC(" : "  ",
+          "::capnp::Request<", paramType, ", ", resultType, ">",
+          templateContext.isGeneric() ? ")" : "",
+          " ", name, "Request(\n"
           "      ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);\n"),
 
       kj::strTree(
