@@ -304,6 +304,8 @@ public:
 
   size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
+  inline int getFd() const { return fd; }
+
 private:
   int fd;
   AutoCloseFd autoclose;
@@ -320,6 +322,8 @@ public:
 
   void write(const void* buffer, size_t size) override;
   void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
+
+  inline int getFd() const { return fd; }
 
 private:
   int fd;
