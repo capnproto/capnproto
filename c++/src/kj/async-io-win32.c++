@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #if _WIN32
-// For Unix implementation, see async-io.c++.
+// For Unix implementation, see async-io-unix.c++.
 
 // Request Vista-level APIs.
 #define WINVER 0x0600

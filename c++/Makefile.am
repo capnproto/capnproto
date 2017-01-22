@@ -232,7 +232,7 @@ libkj_async_la_SOURCES=                                        \
   src/kj/async.c++                                             \
   src/kj/async-unix.c++                                        \
   src/kj/async-win32.c++                                       \
-  src/kj/async-io.c++                                          \
+  src/kj/async-io-unix.c++                                     \
   src/kj/async-io-win32.c++                                    \
   src/kj/time.c++
 endif !LITE_MODE
