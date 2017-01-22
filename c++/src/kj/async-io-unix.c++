@@ -1314,51 +1314,6 @@ private:
 
 }  // namespace
 
-Promise<void> AsyncInputStream::read(void* buffer, size_t bytes) {
-  return read(buffer, bytes, bytes).then([](size_t) {});
-}
-Promise<size_t> AsyncInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
-  return tryRead(buffer, minBytes, maxBytes).then([=](size_t result) {
-    KJ_REQUIRE(result >= minBytes, "Premature EOF") {
-      // Pretend we read zeros from the input.
-      memset(reinterpret_cast<byte*>(buffer) + result, 0, minBytes - result);
-      return minBytes;
-    }
-    return result;
-  });
-}
-
-void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
-}
-void AsyncIoStream::setsockopt(int level, int option, const void* value, uint length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
-}
-void AsyncIoStream::getsockname(struct sockaddr* addr, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
-}
-void AsyncIoStream::getpeername(struct sockaddr* addr, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
-}
-void ConnectionReceiver::getsockopt(int level, int option, void* value, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
-}
-void ConnectionReceiver::setsockopt(int level, int option, const void* value, uint length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
-}
-void DatagramPort::getsockopt(int level, int option, void* value, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
-}
-void DatagramPort::setsockopt(int level, int option, const void* value, uint length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
-}
-Own<DatagramPort> NetworkAddress::bindDatagramPort() {
-  KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
-}
-Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(int fd, uint flags) {
-  KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
-}
-
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel) {
   return kj::heap<AsyncIoProviderImpl>(lowLevel);
 }
