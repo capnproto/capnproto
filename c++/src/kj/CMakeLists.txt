@@ -92,6 +92,7 @@ install(FILES ${kj-test-compat_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}
 set(kj-async_sources
   async.c++
   async-unix.c++
+  async-io.c++
   async-io-unix.c++
   time.c++
 )
