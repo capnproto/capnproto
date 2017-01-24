@@ -107,11 +107,15 @@ public:
     return CharGroup_(~bits[0], ~bits[1], ~bits[2], ~bits[3]);
   }
 
+  constexpr inline bool contains(char c) const {
+    return (bits[c / 64] & (1ll << (c % 64))) != 0;
+  }
+
   template <typename Input>
   Maybe<char> operator()(Input& input) const {
     if (input.atEnd()) return nullptr;
     unsigned char c = input.current();
-    if ((bits[c / 64] & (1ll << (c % 64))) != 0) {
+    if (contains(c)) {
       input.next();
       return c;
     } else {
