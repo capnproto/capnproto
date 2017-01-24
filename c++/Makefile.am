@@ -180,6 +180,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/serialize-text.h                                   \
   src/capnp/pointer-helpers.h                                  \
   src/capnp/generated-header-support.h                         \
+  src/capnp/raw-schema.h                                       \
   src/capnp/rpc-prelude.h                                      \
   src/capnp/rpc.h                                              \
   src/capnp/rpc-twoparty.h                                     \

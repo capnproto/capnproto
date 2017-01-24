@@ -29,6 +29,7 @@
 #include "async.h"
 #include "time.h"
 #include "io.h"
+#include <atomic>
 #include <inttypes.h>
 
 // Include windows.h as lean as possible. (If you need more of the Windows API for your app,
@@ -200,7 +201,7 @@ private:
   AutoCloseHandle thread;
   Win32WaitObjectThreadPool waitThreads;
   TimerImpl timerImpl;
-  mutable bool sentWake = false;
+  mutable std::atomic<bool> sentWake {false};
 
   static TimePoint readClock();
 

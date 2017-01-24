@@ -63,9 +63,6 @@
 #elif defined(_MSC_VER)
   #if _MSC_VER < 1900
     #error "You need Visual Studio 2015 or better to compile this code."
-  #elif !CAPNP_LITE
-    // TODO(cleanup): This is KJ, but we're talking about Cap'n Proto.
-    #error "As of this writing, Cap'n Proto only supports Visual C++ in 'lite mode'; please #define CAPNP_LITE"
   #endif
 #else
   #warning "I don't recognize your compiler.  As of this writing, Clang and GCC are the only "\
@@ -375,6 +372,24 @@ struct DisallowConstCopy {
   DisallowConstCopy& operator=(DisallowConstCopy&) = default;
   DisallowConstCopy& operator=(DisallowConstCopy&&) = default;
 };
+
+#if _MSC_VER
+
+#define KJ_CPCAP(obj) obj=::kj::cp(obj)
+// TODO(msvc): MSVC refuses to invoke non-const versions of copy constructors in by-value lambda
+// captures. Wrap your captured object in this macro to force the compiler to perform a copy.
+// Example:
+//
+//   struct Foo: DisallowConstCopy {};
+//   Foo foo;
+//   auto lambda = [KJ_CPCAP(foo)] {};
+
+#else
+
+#define KJ_CPCAP(obj) obj
+// Clang and gcc both already perform copy capturing correctly with non-const copy constructors.
+
+#endif
 
 template <typename T>
 struct DisallowConstCopyIfNotConst: public DisallowConstCopy {

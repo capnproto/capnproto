@@ -27,6 +27,7 @@
 
 #include "async-win32.h"
 #include "debug.h"
+#include <atomic>
 #include <chrono>
 #include "refcount.h"
 
@@ -176,8 +177,8 @@ bool Win32IocpEventPort::poll() {
 }
 
 void Win32IocpEventPort::wake() const {
-  if (!__atomic_load_n(&sentWake, __ATOMIC_ACQUIRE)) {
-    __atomic_store_n(&sentWake, true, __ATOMIC_RELEASE);
+  if (!sentWake.load(std::memory_order_acquire)) {
+    sentWake.store(true, std::memory_order_release);
     KJ_WIN32(PostQueuedCompletionStatus(iocp, 0, 0, nullptr));
   }
 }
@@ -212,8 +213,8 @@ void Win32IocpEventPort::waitIocp(DWORD timeoutMs) {
 }
 
 bool Win32IocpEventPort::receivedWake() {
-  if (__atomic_load_n(&sentWake, __ATOMIC_ACQUIRE)) {
-    __atomic_store_n(&sentWake, false, __ATOMIC_RELEASE);
+  if (sentWake.load(std::memory_order_acquire)) {
+    sentWake.store(false, std::memory_order_release);
     return true;
   } else {
     return false;

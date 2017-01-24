@@ -32,6 +32,7 @@
 
 #include <kj/async.h>
 #include <kj/vector.h>
+#include "raw-schema.h"
 #include "any.h"
 #include "pointer-helpers.h"
 
@@ -64,8 +65,6 @@ public:
 
 class LocalClient;
 namespace _ { // private
-struct RawSchema;
-struct RawBrandedSchema;
 extern const RawSchema NULL_INTERFACE_SCHEMA;  // defined in schema.c++
 class CapabilityServerSetBase;
 }  // namespace _ (private)
@@ -83,11 +82,9 @@ struct Capability {
     static constexpr Kind kind = Kind::INTERFACE;
     static constexpr _::RawSchema const* schema = &_::NULL_INTERFACE_SCHEMA;
 
-    static const _::RawBrandedSchema* const brand;
-    // Can't quite declare this one inline without including generated-header-support.h. Avoiding
-    // for now by declaring out-of-line.
-    // TODO(cleanup): Split RawSchema stuff into its own header that can be included here, or
-    //   something.
+    static const _::RawBrandedSchema* brand() {
+      return &_::NULL_INTERFACE_SCHEMA.defaultBrand;
+    }
   };
 };
 

@@ -334,7 +334,7 @@ private:
     }
 
     return op->onComplete()
-        .then([this,bufs,minBytes,alreadyRead](Win32IocpEventPort::IoResult result) mutable
+        .then([this,KJ_CPCAP(bufs),minBytes,alreadyRead](Win32IocpEventPort::IoResult result) mutable
               -> Promise<size_t> {
       if (result.errorCode != ERROR_SUCCESS) {
         if (alreadyRead > 0) {
@@ -386,7 +386,7 @@ private:
     }
 
     return op->onComplete()
-        .then([this,bufs](Win32IocpEventPort::IoResult result) mutable -> Promise<void> {
+        .then([this,KJ_CPCAP(bufs)](Win32IocpEventPort::IoResult result) mutable -> Promise<void> {
       if (result.errorCode != ERROR_SUCCESS) {
         KJ_FAIL_WIN32("WSASend()", result.errorCode) { break; }
         return kj::READY_NOW;
@@ -1015,7 +1015,7 @@ private:
     }).then([](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
       // Success, pass along.
       return kj::mv(stream);
-    }, [&lowLevel,addrs](Exception&& exception) mutable -> Promise<Own<AsyncIoStream>> {
+    }, [&lowLevel,KJ_CPCAP(addrs)](Exception&& exception) mutable -> Promise<Own<AsyncIoStream>> {
       // Connect failed.
       if (addrs.size() > 1) {
         // Try the next address instead.

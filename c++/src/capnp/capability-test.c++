@@ -499,7 +499,7 @@ public:
       request.set("j", true);
 
       return request.send().then(
-          [this,context](capnp::Response<DynamicStruct>&& response) mutable {
+          [this,KJ_CPCAP(context)](capnp::Response<DynamicStruct>&& response) mutable {
             EXPECT_EQ("foo", response.get("x").as<Text>());
 
             auto result = context.getResults();

@@ -76,17 +76,17 @@ struct Dbghelp {
 
   HINSTANCE lib;
 
-  WINBOOL WINAPI (*symInitialize)(HANDLE hProcess,PCSTR UserSearchPath,WINBOOL fInvadeProcess);
-  WINBOOL WINAPI (*stackWalk64)(
+  BOOL (WINAPI *symInitialize)(HANDLE hProcess,PCSTR UserSearchPath,BOOL fInvadeProcess);
+  BOOL (WINAPI *stackWalk64)(
       DWORD MachineType,HANDLE hProcess,HANDLE hThread,
       LPSTACKFRAME64 StackFrame,PVOID ContextRecord,
       PREAD_PROCESS_MEMORY_ROUTINE64 ReadMemoryRoutine,
       PFUNCTION_TABLE_ACCESS_ROUTINE64 FunctionTableAccessRoutine,
       PGET_MODULE_BASE_ROUTINE64 GetModuleBaseRoutine,
       PTRANSLATE_ADDRESS_ROUTINE64 TranslateAddress);
-  PVOID WINAPI (*symFunctionTableAccess64)(HANDLE hProcess,DWORD64 AddrBase);
-  DWORD64 WINAPI (*symGetModuleBase64)(HANDLE hProcess,DWORD64 qwAddr);
-  WINBOOL WINAPI (*symGetLineFromAddr64)(
+  PVOID (WINAPI *symFunctionTableAccess64)(HANDLE hProcess,DWORD64 AddrBase);
+  DWORD64 (WINAPI *symGetModuleBase64)(HANDLE hProcess,DWORD64 qwAddr);
+  BOOL (WINAPI *symGetLineFromAddr64)(
       HANDLE hProcess,DWORD64 qwAddr,PDWORD pdwDisplacement,PIMAGEHLP_LINE64 Line64);
 
   Dbghelp()

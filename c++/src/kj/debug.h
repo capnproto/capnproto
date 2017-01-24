@@ -187,12 +187,15 @@ namespace kj {
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::UNIMPLEMENTED, \
                                nullptr, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
+// TODO(msvc):  MSVC mis-deduces `ContextImpl<decltype(func)>` as `ContextImpl<int>` in some edge
+// cases, such as inside nested lambdas inside member functions. Wrapping the type in
+// `decltype(instance<...>())` helps it deduce the context function's type correctly.
 #define KJ_CONTEXT(...) \
   auto KJ_UNIQUE_NAME(_kjContextFunc) = [&]() -> ::kj::_::Debug::Context::Value { \
         return ::kj::_::Debug::Context::Value(__FILE__, __LINE__, \
             ::kj::_::Debug::makeDescription("" #__VA_ARGS__, __VA_ARGS__)); \
       }; \
-  ::kj::_::Debug::ContextImpl<decltype(KJ_UNIQUE_NAME(_kjContextFunc))> \
+  decltype(::kj::instance<::kj::_::Debug::ContextImpl<decltype(KJ_UNIQUE_NAME(_kjContextFunc))>>()) \
       KJ_UNIQUE_NAME(_kjContext)(KJ_UNIQUE_NAME(_kjContextFunc))
 
 #define KJ_REQUIRE_NONNULL(value, ...) \

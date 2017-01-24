@@ -553,6 +553,11 @@ struct TestGenerics(Foo, Bar) {
       bar @1 :Bar;
       baz @2 :Baz;
       qux @3 :Qux;
+
+      interface DeepNestInterface(Quux) {
+        # At one time this failed to compile.
+        call @0 () -> ();
+      }
     }
   }
 

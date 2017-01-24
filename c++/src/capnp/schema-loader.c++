@@ -32,6 +32,10 @@
 #include <kj/vector.h>
 #include <algorithm>
 
+#if _MSC_VER
+#include <atomic>
+#endif
+
 namespace capnp {
 
 namespace {
@@ -1308,8 +1312,17 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
     // If this schema is not newly-allocated, it may already be in the wild, specifically in the
     // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
     // a release-store here.
+#if __GNUC__
     __atomic_store_n(&slot->lazyInitializer, nullptr, __ATOMIC_RELEASE);
     __atomic_store_n(&slot->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
+#elif _MSC_VER
+    std::atomic_thread_fence(std::memory_order_release);
+    *static_cast<_::RawSchema::Initializer const* volatile*>(&slot->lazyInitializer) = nullptr;
+    *static_cast<_::RawBrandedSchema::Initializer const* volatile*>(
+        &slot->defaultBrand.lazyInitializer) = nullptr;
+#else
+#error "Platform not supported"
+#endif
   }
 
   return slot;
@@ -1399,8 +1412,17 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     // If this schema is not newly-allocated, it may already be in the wild, specifically in the
     // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
     // a release-store here.
+#if __GNUC__
     __atomic_store_n(&result->lazyInitializer, nullptr, __ATOMIC_RELEASE);
     __atomic_store_n(&result->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
+#elif _MSC_VER
+    std::atomic_thread_fence(std::memory_order_release);
+    *static_cast<_::RawSchema::Initializer const* volatile*>(&result->lazyInitializer) = nullptr;
+    *static_cast<_::RawBrandedSchema::Initializer const* volatile*>(
+        &result->defaultBrand.lazyInitializer) = nullptr;
+#else
+#error "Platform not supported"
+#endif
   }
 
   return result;
@@ -1910,8 +1932,18 @@ void SchemaLoader::InitializerImpl::init(const _::RawSchema* schema) const {
               "A schema not belonging to this loader used its initializer.");
 
     // Disable the initializer.
+#if __GNUC__
     __atomic_store_n(&mutableSchema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
     __atomic_store_n(&mutableSchema->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
+#elif _MSC_VER
+    std::atomic_thread_fence(std::memory_order_release);
+    *static_cast<_::RawSchema::Initializer const* volatile*>(
+        &mutableSchema->lazyInitializer) = nullptr;
+    *static_cast<_::RawBrandedSchema::Initializer const* volatile*>(
+        &mutableSchema->defaultBrand.lazyInitializer) = nullptr;
+#else
+#error "Platform not supported"
+#endif
   }
 }
 
@@ -1939,7 +1971,15 @@ void SchemaLoader::BrandedInitializerImpl::init(const _::RawBrandedSchema* schem
   mutableSchema->dependencyCount = deps.size();
 
   // It's initialized now, so disable the initializer.
+#if __GNUC__
   __atomic_store_n(&mutableSchema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
+#elif _MSC_VER
+  std::atomic_thread_fence(std::memory_order_release);
+  *static_cast<_::RawBrandedSchema::Initializer const* volatile*>(
+      &mutableSchema->lazyInitializer) = nullptr;
+#else
+#error "Platform not supported"
+#endif
 }
 
 // =======================================================================================

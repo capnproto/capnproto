@@ -677,6 +677,14 @@ private:
     kj::StringTree scopes;
     kj::StringTree bindings;
     kj::StringTree dependencies;
+    size_t dependencyCount;
+    // TODO(msvc):  `dependencyCount` is the number of individual dependency definitions in
+    // `dependencies`. It's a hack to allow makeGenericDefinitions to hard-code the size of the
+    // `_capnpPrivate::brandDependencies` array into the definition of
+    // `_capnpPrivate::specificBrand::dependencyCount`. This is necessary because MSVC cannot deduce
+    // the size of `brandDependencies` if it is nested under a class template. It's probably this
+    // demoralizingly deferred bug:
+    // https://connect.microsoft.com/VisualStudio/feedback/details/759407/can-not-get-size-of-static-array-defined-in-class-template
   };
 
   BrandInitializerText makeBrandInitializers(
@@ -699,15 +707,20 @@ private:
       }
     }
 
+    auto depMap = makeBrandDepMap(templateContext, schema);
+    auto dependencyCount = depMap.size();
     return {
       kj::strTree("{\n", scopes.finish(), "}"),
       kj::strTree("{\n", bindings.releaseAsArray(), "}"),
-      makeBrandDepInitializers(templateContext, schema)
+      makeBrandDepInitializers(kj::mv(depMap)),
+      dependencyCount
     };
   }
 
-  kj::StringTree makeBrandDepInitializers(const TemplateContext& templateContext, Schema schema) {
-    // Build deps. Returns a braced initialiser list, or an empty string if there are no dependencies.
+  std::map<uint, kj::StringTree>
+  makeBrandDepMap(const TemplateContext& templateContext, Schema schema) {
+    // Build deps. This is separate from makeBrandDepInitializers to give calling code the
+    // opportunity to count the number of dependencies, to calculate array sizes.
     std::map<uint, kj::StringTree> depMap;
 
 #define ADD_DEP(kind, index, ...) \
@@ -749,7 +762,12 @@ private:
         break;
     }
 #undef ADD_DEP
+    return depMap;
+  }
 
+  kj::StringTree makeBrandDepInitializers(std::map<uint, kj::StringTree>&& depMap) {
+    // Process depMap. Returns a braced initialiser list, or an empty string if there are no
+    // dependencies.
     if (!depMap.size()) {
       return kj::strTree();
     }
@@ -792,7 +810,7 @@ private:
     if (type.isBranded()) {
       name.addMemberType("_capnpPrivate");
       name.addMemberValue("brand");
-      return kj::strTree(name);
+      return kj::strTree(name, "()");
     } else {
       return nullptr;
     }
@@ -1800,7 +1818,7 @@ private:
         "\n"
         "#if !CAPNP_LITE\n"
         "  inline ::kj::StringTree toString() const {\n"
-        "    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);\n"
+        "    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());\n"
         "  }\n"
         "#endif  // !CAPNP_LITE\n"
         "\n",
@@ -1891,15 +1909,20 @@ private:
         (!hasBrandDependencies ? "" :
             "    static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];\n"),
         "    static const ::capnp::_::RawBrandedSchema specificBrand;\n"
-        "    static constexpr ::capnp::_::RawBrandedSchema const* brand = "
-        "::capnp::_::ChooseBrand<_capnpPrivate, ", templateContext.allArgs(), ">::brand;\n");
+        "    static constexpr ::capnp::_::RawBrandedSchema const* brand() { "
+        "return ::capnp::_::ChooseBrand<_capnpPrivate, ", templateContext.allArgs(), ">::brand(); }\n");
   }
 
   kj::StringTree makeGenericDefinitions(
-      kj::StringPtr templates, kj::StringPtr fullName, kj::StringPtr hexId,
+      const TemplateContext& templateContext, kj::StringPtr fullName, kj::StringPtr hexId,
       BrandInitializerText brandInitializers) {
     // Returns the definitions for the members from makeGenericDeclarations().
     bool hasBrandDependencies = (brandInitializers.dependencies.size() != 0);
+
+    auto scopeCount = templateContext.getScopeMap().size();
+    auto dependencyCount = brandInitializers.dependencyCount;
+
+    kj::String templates = kj::str(templateContext.allDecls());
 
     return kj::strTree(
         templates, "const ::capnp::_::RawBrandedSchema::Scope ", fullName,
@@ -1916,8 +1939,7 @@ private:
         templates, "const ::capnp::_::RawBrandedSchema ", fullName, "::_capnpPrivate::specificBrand = {\n",
         "  &::capnp::schemas::s_", hexId, ", brandScopes, ",
         (!hasBrandDependencies ? "nullptr" : "brandDependencies"), ",\n",
-        "  sizeof(brandScopes) / sizeof(brandScopes[0]), ",
-        (!hasBrandDependencies ? "0" : "sizeof(brandDependencies) / sizeof(brandDependencies[0])"),
+        "  ", scopeCount, ", ", dependencyCount,
         ", nullptr\n"
         "};\n");
   }
@@ -1953,8 +1975,7 @@ private:
         templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::pointerCount;\n"
         "#if !CAPNP_LITE\n",
         templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
-        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
-        templates, "constexpr ::capnp::_::RawBrandedSchema const* ", fullName, "::_capnpPrivate::brand;\n");
+        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n");
 
     if (templateContext.isGeneric()) {
       auto brandInitializers = makeBrandInitializers(templateContext, schema);
@@ -1966,11 +1987,12 @@ private:
           "    #endif  // !CAPNP_LITE\n");
 
       defineText = kj::strTree(kj::mv(defineText),
-          makeGenericDefinitions(templates, fullName, kj::str(hexId), kj::mv(brandInitializers)));
+          makeGenericDefinitions(
+              templateContext, fullName, kj::str(hexId), kj::mv(brandInitializers)));
     } else {
       declareText = kj::strTree(kj::mv(declareText),
           "    #if !CAPNP_LITE\n"
-          "    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;\n"
+          "    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }\n"
           "    #endif  // !CAPNP_LITE\n");
     }
 
@@ -2123,10 +2145,22 @@ private:
     auto interfaceIdHex = kj::hex(interfaceId);
     uint16_t methodId = method.getIndex();
 
+    // TODO(msvc):  Notice that the return type of this method's request function is supposed to be
+    // `::capnp::Request<param, result>`. If the first template parameter to ::capnp::Request is a
+    // template instantiation, MSVC will sometimes complain that it's unspecialized and can't be
+    // used as a parameter in the return type (error C3203). It is not clear to me under what exact
+    // conditions this bug occurs, but it commonly crops up in test.capnp.h.
+    //
+    // The easiest (and only) workaround I found is to use C++14's return type deduction here, thus
+    // the `CAPNP_AUTO_IF_MSVC()` hackery in the return type declarations below. We're depending on
+    // the fact that that this function has an inline implementation for the deduction to work.
+
     auto requestMethodImpl = kj::strTree(
         templateContext.allDecls(),
         implicitParamsTemplateDecl,
-        "::capnp::Request<", paramType, ", ", resultType, ">\n",
+        templateContext.isGeneric() ? "CAPNP_AUTO_IF_MSVC(" : "",
+        "::capnp::Request<", paramType, ", ", resultType, ">",
+        templateContext.isGeneric() ? ")\n" : "\n",
         interfaceName, "::Client::", name, "Request(::kj::Maybe< ::capnp::MessageSize> sizeHint) {\n"
         "  return newCall<", paramType, ", ", resultType, ">(\n"
         "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
@@ -2135,7 +2169,10 @@ private:
     return MethodText {
       kj::strTree(
           implicitParamsTemplateDecl.size() == 0 ? "" : "  ", implicitParamsTemplateDecl,
-          "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request(\n"
+          templateContext.isGeneric() ? "  CAPNP_AUTO_IF_MSVC(" : "  ",
+          "::capnp::Request<", paramType, ", ", resultType, ">",
+          templateContext.isGeneric() ? ")" : "",
+          " ", name, "Request(\n"
           "      ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);\n"),
 
       kj::strTree(
@@ -2228,8 +2265,7 @@ private:
         "// ", fullName, "\n",
         "#if !CAPNP_LITE\n",
         templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
-        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
-        templates, "constexpr ::capnp::_::RawBrandedSchema const* ", fullName, "::_capnpPrivate::brand;\n");
+        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n");
 
     if (templateContext.isGeneric()) {
       auto brandInitializers = makeBrandInitializers(templateContext, schema);
@@ -2239,10 +2275,11 @@ private:
           makeGenericDeclarations(templateContext, hasDeps));
 
       defineText = kj::strTree(kj::mv(defineText),
-          makeGenericDefinitions(templates, fullName, kj::str(hexId), kj::mv(brandInitializers)));
+          makeGenericDefinitions(
+              templateContext, fullName, kj::str(hexId), kj::mv(brandInitializers)));
     } else {
       declareText = kj::strTree(kj::mv(declareText),
-        "    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;\n");
+        "    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }\n");
     }
 
     declareText = kj::strTree(kj::mv(declareText), "  };\n  #endif  // !CAPNP_LITE");
@@ -2279,8 +2316,8 @@ private:
             return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Client");
           }, " {\n"
           "public:\n"
-          "  typedef ", fullName, " Calls;\n"
-          "  typedef ", fullName, " Reads;\n"
+          "  typedef ", name, " Calls;\n"
+          "  typedef ", name, " Reads;\n"
           "\n"
           "  Client(decltype(nullptr));\n"
           "  explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);\n"
@@ -2308,7 +2345,7 @@ private:
             return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Server");
           }, " {\n"
           "public:\n",
-          "  typedef ", fullName, " Serves;\n"
+          "  typedef ", name, " Serves;\n"
           "\n"
           "  ::kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,\n"
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)\n"
@@ -2621,7 +2658,8 @@ private:
         break;
     }
 
-    auto brandDeps = makeBrandDepInitializers(templateContext, schema.getGeneric());
+    auto brandDeps = makeBrandDepInitializers(
+        makeBrandDepMap(templateContext, schema.getGeneric()));
 
     auto schemaDef = kj::strTree(
         "static const ::capnp::_::AlignedData<", rawSchema.size(), "> b_", hexId, " = {\n"
@@ -2644,7 +2682,8 @@ private:
             kj::StringTree(KJ_MAP(index, membersByDiscrim) { return kj::strTree(index); }, ", "),
             "};\n"),
         brandDeps.size() == 0 ? kj::strTree() : kj::strTree(
-            "const ::capnp::_::RawBrandedSchema::Dependency bd_", hexId, "[] = ", kj::mv(brandDeps), ";\n"),
+            "KJ_CONSTEXPR(const) ::capnp::_::RawBrandedSchema::Dependency bd_", hexId, "[] = ",
+            kj::mv(brandDeps), ";\n"),
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
         "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", ",
         deps.size() == 0 ? kj::strTree("nullptr") : kj::strTree("d_", hexId), ", ",

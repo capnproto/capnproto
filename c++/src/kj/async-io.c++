@@ -65,7 +65,7 @@ void DatagramPort::setsockopt(int level, int option, const void* value, uint len
 Own<DatagramPort> NetworkAddress::bindDatagramPort() {
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
 }
-Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(int fd, uint flags) {
+Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(Fd fd, uint flags) {
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
 }
 
