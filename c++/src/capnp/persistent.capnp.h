@@ -794,7 +794,7 @@ const ::capnp::_::RawBrandedSchema::Binding Persistent<SturdyRef, Owner>::SavePa
 template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::specificBrand = {
   &::capnp::schemas::s_f76fba59183073a5, brandScopes, nullptr,
-  sizeof(brandScopes) / sizeof(brandScopes[0]), 0, nullptr
+  1, 0, nullptr
 };
 #endif  // !CAPNP_LITE
 
@@ -871,7 +871,7 @@ const ::capnp::_::RawBrandedSchema::Binding Persistent<SturdyRef, Owner>::SaveRe
 template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::specificBrand = {
   &::capnp::schemas::s_b76848c18c40efbf, brandScopes, nullptr,
-  sizeof(brandScopes) / sizeof(brandScopes[0]), 0, nullptr
+  1, 0, nullptr
 };
 #endif  // !CAPNP_LITE
 
@@ -939,7 +939,7 @@ const ::capnp::_::RawBrandedSchema::Dependency Persistent<SturdyRef, Owner>::_ca
 template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema Persistent<SturdyRef, Owner>::_capnpPrivate::specificBrand = {
   &::capnp::schemas::s_c8cb212fcd9f5691, brandScopes, brandDependencies,
-  sizeof(brandScopes) / sizeof(brandScopes[0]), sizeof(brandDependencies) / sizeof(brandDependencies[0]), nullptr
+  1, 2, nullptr
 };
 #endif  // !CAPNP_LITE
 
@@ -1095,7 +1095,7 @@ const ::capnp::_::RawBrandedSchema::Dependency RealmGateway<InternalRef, Externa
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::specificBrand = {
   &::capnp::schemas::s_f0c2cc1d3909574d, brandScopes, brandDependencies,
-  sizeof(brandScopes) / sizeof(brandScopes[0]), sizeof(brandDependencies) / sizeof(brandDependencies[0]), nullptr
+  1, 2, nullptr
 };
 #endif  // !CAPNP_LITE
 
@@ -1220,7 +1220,7 @@ const ::capnp::_::RawBrandedSchema::Dependency RealmGateway<InternalRef, Externa
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::specificBrand = {
   &::capnp::schemas::s_ecafa18b482da3aa, brandScopes, brandDependencies,
-  sizeof(brandScopes) / sizeof(brandScopes[0]), sizeof(brandDependencies) / sizeof(brandDependencies[0]), nullptr
+  1, 2, nullptr
 };
 #endif  // !CAPNP_LITE
 
@@ -1307,7 +1307,7 @@ const ::capnp::_::RawBrandedSchema::Dependency RealmGateway<InternalRef, Externa
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::_capnpPrivate::specificBrand = {
   &::capnp::schemas::s_84ff286cd00a3ed4, brandScopes, brandDependencies,
-  sizeof(brandScopes) / sizeof(brandScopes[0]), sizeof(brandDependencies) / sizeof(brandDependencies[0]), nullptr
+  1, 4, nullptr
 };
 #endif  // !CAPNP_LITE
 
