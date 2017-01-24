@@ -1895,7 +1895,6 @@ constexpr uint16_t Message::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Message::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Message::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Message::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Bootstrap
@@ -1904,7 +1903,6 @@ constexpr uint16_t Bootstrap::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Bootstrap::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Bootstrap::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Bootstrap::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Call
@@ -1913,7 +1911,6 @@ constexpr uint16_t Call::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Call::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Call::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Call::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Call::SendResultsTo
@@ -1922,7 +1919,6 @@ constexpr uint16_t Call::SendResultsTo::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Call::SendResultsTo::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Call::SendResultsTo::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Call::SendResultsTo::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Return
@@ -1931,7 +1927,6 @@ constexpr uint16_t Return::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Return::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Return::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Return::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Finish
@@ -1940,7 +1935,6 @@ constexpr uint16_t Finish::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Finish::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Finish::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Finish::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Resolve
@@ -1949,7 +1943,6 @@ constexpr uint16_t Resolve::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Resolve::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Resolve::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Resolve::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Release
@@ -1958,7 +1951,6 @@ constexpr uint16_t Release::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Release::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Release::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Release::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Disembargo
@@ -1967,7 +1959,6 @@ constexpr uint16_t Disembargo::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Disembargo::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Disembargo::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Disembargo::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Disembargo::Context
@@ -1976,7 +1967,6 @@ constexpr uint16_t Disembargo::Context::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Disembargo::Context::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Disembargo::Context::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Disembargo::Context::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Provide
@@ -1985,7 +1975,6 @@ constexpr uint16_t Provide::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Provide::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Provide::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Provide::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Accept
@@ -1994,7 +1983,6 @@ constexpr uint16_t Accept::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Accept::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Accept::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Accept::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Join
@@ -2003,7 +1991,6 @@ constexpr uint16_t Join::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Join::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Join::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Join::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // MessageTarget
@@ -2012,7 +1999,6 @@ constexpr uint16_t MessageTarget::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind MessageTarget::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* MessageTarget::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* MessageTarget::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Payload
@@ -2021,7 +2007,6 @@ constexpr uint16_t Payload::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Payload::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Payload::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Payload::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // CapDescriptor
@@ -2030,7 +2015,6 @@ constexpr uint16_t CapDescriptor::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind CapDescriptor::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* CapDescriptor::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* CapDescriptor::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // PromisedAnswer
@@ -2039,7 +2023,6 @@ constexpr uint16_t PromisedAnswer::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind PromisedAnswer::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* PromisedAnswer::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* PromisedAnswer::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // PromisedAnswer::Op
@@ -2048,7 +2031,6 @@ constexpr uint16_t PromisedAnswer::Op::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind PromisedAnswer::Op::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* PromisedAnswer::Op::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* PromisedAnswer::Op::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // ThirdPartyCapDescriptor
@@ -2057,7 +2039,6 @@ constexpr uint16_t ThirdPartyCapDescriptor::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind ThirdPartyCapDescriptor::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* ThirdPartyCapDescriptor::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* ThirdPartyCapDescriptor::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Exception
@@ -2066,7 +2047,6 @@ constexpr uint16_t Exception::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Exception::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Exception::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Exception::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 

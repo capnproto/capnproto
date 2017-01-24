@@ -356,7 +356,6 @@ constexpr uint16_t VatId::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind VatId::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* VatId::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* VatId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // ProvisionId
@@ -365,7 +364,6 @@ constexpr uint16_t ProvisionId::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind ProvisionId::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* ProvisionId::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* ProvisionId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // RecipientId
@@ -374,7 +372,6 @@ constexpr uint16_t RecipientId::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind RecipientId::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* RecipientId::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* RecipientId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // ThirdPartyCapId
@@ -383,7 +380,6 @@ constexpr uint16_t ThirdPartyCapId::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind ThirdPartyCapId::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* ThirdPartyCapId::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* ThirdPartyCapId::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // JoinKeyPart
@@ -392,7 +388,6 @@ constexpr uint16_t JoinKeyPart::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind JoinKeyPart::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* JoinKeyPart::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* JoinKeyPart::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // JoinResult
@@ -401,7 +396,6 @@ constexpr uint16_t JoinResult::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind JoinResult::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* JoinResult::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* JoinResult::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 

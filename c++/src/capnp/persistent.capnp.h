@@ -49,7 +49,7 @@ struct Persistent {
     static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
     static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];
     static const ::capnp::_::RawBrandedSchema specificBrand;
-    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef, Owner>::brand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef, Owner>::brand(); }
   };
   #endif  // !CAPNP_LITE
 };
@@ -68,7 +68,7 @@ struct Persistent<SturdyRef, Owner>::SaveParams {
     static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
     static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
     static const ::capnp::_::RawBrandedSchema specificBrand;
-    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef, Owner>::brand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef, Owner>::brand(); }
     #endif  // !CAPNP_LITE
   };
 };
@@ -87,7 +87,7 @@ struct Persistent<SturdyRef, Owner>::SaveResults {
     static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
     static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
     static const ::capnp::_::RawBrandedSchema specificBrand;
-    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef, Owner>::brand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef, Owner>::brand(); }
     #endif  // !CAPNP_LITE
   };
 };
@@ -111,7 +111,7 @@ struct RealmGateway {
     static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
     static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];
     static const ::capnp::_::RawBrandedSchema specificBrand;
-    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, InternalRef, ExternalRef, InternalOwner, ExternalOwner>::brand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return ::capnp::_::ChooseBrand<_capnpPrivate, InternalRef, ExternalRef, InternalOwner, ExternalOwner>::brand(); }
   };
   #endif  // !CAPNP_LITE
 };
@@ -131,7 +131,7 @@ struct RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Imp
     static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
     static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];
     static const ::capnp::_::RawBrandedSchema specificBrand;
-    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, InternalRef, ExternalRef, InternalOwner, ExternalOwner>::brand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return ::capnp::_::ChooseBrand<_capnpPrivate, InternalRef, ExternalRef, InternalOwner, ExternalOwner>::brand(); }
     #endif  // !CAPNP_LITE
   };
 };
@@ -151,7 +151,7 @@ struct RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Exp
     static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
     static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];
     static const ::capnp::_::RawBrandedSchema specificBrand;
-    static constexpr ::capnp::_::RawBrandedSchema const* brand = ::capnp::_::ChooseBrand<_capnpPrivate, InternalRef, ExternalRef, InternalOwner, ExternalOwner>::brand;
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return ::capnp::_::ChooseBrand<_capnpPrivate, InternalRef, ExternalRef, InternalOwner, ExternalOwner>::brand(); }
     #endif  // !CAPNP_LITE
   };
 };
@@ -228,7 +228,7 @@ public:
 
 #if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
-    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
   }
 #endif  // !CAPNP_LITE
 
@@ -324,7 +324,7 @@ public:
 
 #if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
-    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
   }
 #endif  // !CAPNP_LITE
 
@@ -482,7 +482,7 @@ public:
 
 #if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
-    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
   }
 #endif  // !CAPNP_LITE
 
@@ -592,7 +592,7 @@ public:
 
 #if !CAPNP_LITE
   inline ::kj::StringTree toString() const {
-    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
   }
 #endif  // !CAPNP_LITE
 
@@ -783,8 +783,6 @@ constexpr ::capnp::Kind Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate:
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::_::RawSchema const* Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::schema;
 template <typename SturdyRef, typename Owner>
-constexpr ::capnp::_::RawBrandedSchema const* Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::brand;
-template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema::Scope Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::brandScopes[] = {
   { 0xc8cb212fcd9f5691, brandBindings + 0, 2, false},
 };
@@ -862,8 +860,6 @@ constexpr ::capnp::Kind Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::_::RawSchema const* Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::schema;
 template <typename SturdyRef, typename Owner>
-constexpr ::capnp::_::RawBrandedSchema const* Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::brand;
-template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema::Scope Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::brandScopes[] = {
   { 0xc8cb212fcd9f5691, brandBindings + 0, 2, false},
 };
@@ -927,8 +923,6 @@ constexpr ::capnp::Kind Persistent<SturdyRef, Owner>::_capnpPrivate::kind;
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::_::RawSchema const* Persistent<SturdyRef, Owner>::_capnpPrivate::schema;
 template <typename SturdyRef, typename Owner>
-constexpr ::capnp::_::RawBrandedSchema const* Persistent<SturdyRef, Owner>::_capnpPrivate::brand;
-template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema::Scope Persistent<SturdyRef, Owner>::_capnpPrivate::brandScopes[] = {
   { 0xc8cb212fcd9f5691, brandBindings + 0, 2, false},
 };
@@ -939,8 +933,8 @@ const ::capnp::_::RawBrandedSchema::Binding Persistent<SturdyRef, Owner>::_capnp
 };
 template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema::Dependency Persistent<SturdyRef, Owner>::_capnpPrivate::brandDependencies[] = {
-  { 33554432,  ::capnp::Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::brand },
-  { 50331648,  ::capnp::Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::brand },
+  { 33554432,  ::capnp::Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::brand() },
+  { 50331648,  ::capnp::Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::brand() },
 };
 template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema Persistent<SturdyRef, Owner>::_capnpPrivate::specificBrand = {
@@ -1083,8 +1077,6 @@ constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef, InternalOwner, Ex
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 constexpr ::capnp::_::RawSchema const* RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::schema;
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
-constexpr ::capnp::_::RawBrandedSchema const* RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::brand;
-template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema::Scope RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::brandScopes[] = {
   { 0x84ff286cd00a3ed4, brandBindings + 0, 4, false},
 };
@@ -1097,8 +1089,8 @@ const ::capnp::_::RawBrandedSchema::Binding RealmGateway<InternalRef, ExternalRe
 };
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema::Dependency RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::brandDependencies[] = {
-  { 16777216,  ::capnp::Persistent<ExternalRef, ExternalOwner>::_capnpPrivate::brand },
-  { 16777217,  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams::_capnpPrivate::brand },
+  { 16777216,  ::capnp::Persistent<ExternalRef, ExternalOwner>::_capnpPrivate::brand() },
+  { 16777217,  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams::_capnpPrivate::brand() },
 };
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::specificBrand = {
@@ -1210,8 +1202,6 @@ constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef, InternalOwner, Ex
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 constexpr ::capnp::_::RawSchema const* RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::schema;
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
-constexpr ::capnp::_::RawBrandedSchema const* RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::brand;
-template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema::Scope RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::brandScopes[] = {
   { 0x84ff286cd00a3ed4, brandBindings + 0, 4, false},
 };
@@ -1224,8 +1214,8 @@ const ::capnp::_::RawBrandedSchema::Binding RealmGateway<InternalRef, ExternalRe
 };
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema::Dependency RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::brandDependencies[] = {
-  { 16777216,  ::capnp::Persistent<InternalRef, InternalOwner>::_capnpPrivate::brand },
-  { 16777217,  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams::_capnpPrivate::brand },
+  { 16777216,  ::capnp::Persistent<InternalRef, InternalOwner>::_capnpPrivate::brand() },
+  { 16777217,  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams::_capnpPrivate::brand() },
 };
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::specificBrand = {
@@ -1297,8 +1287,6 @@ constexpr ::capnp::Kind RealmGateway<InternalRef, ExternalRef, InternalOwner, Ex
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 constexpr ::capnp::_::RawSchema const* RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::_capnpPrivate::schema;
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
-constexpr ::capnp::_::RawBrandedSchema const* RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::_capnpPrivate::brand;
-template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema::Scope RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::_capnpPrivate::brandScopes[] = {
   { 0x84ff286cd00a3ed4, brandBindings + 0, 4, false},
 };
@@ -1311,10 +1299,10 @@ const ::capnp::_::RawBrandedSchema::Binding RealmGateway<InternalRef, ExternalRe
 };
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema::Dependency RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::_capnpPrivate::brandDependencies[] = {
-  { 33554432,  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::brand },
-  { 33554433,  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::brand },
-  { 50331648,  ::capnp::Persistent<InternalRef, InternalOwner>::SaveResults::_capnpPrivate::brand },
-  { 50331649,  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveResults::_capnpPrivate::brand },
+  { 33554432,  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::_capnpPrivate::brand() },
+  { 33554433,  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::_capnpPrivate::brand() },
+  { 50331648,  ::capnp::Persistent<InternalRef, InternalOwner>::SaveResults::_capnpPrivate::brand() },
+  { 50331649,  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveResults::_capnpPrivate::brand() },
 };
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::_capnpPrivate::specificBrand = {

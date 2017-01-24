@@ -468,7 +468,6 @@ constexpr uint16_t Token::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Token::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Token::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Token::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // Statement
@@ -477,7 +476,6 @@ constexpr uint16_t Statement::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind Statement::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Statement::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* Statement::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // LexedTokens
@@ -486,7 +484,6 @@ constexpr uint16_t LexedTokens::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind LexedTokens::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* LexedTokens::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* LexedTokens::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 // LexedStatements
@@ -495,7 +492,6 @@ constexpr uint16_t LexedStatements::_capnpPrivate::pointerCount;
 #if !CAPNP_LITE
 constexpr ::capnp::Kind LexedStatements::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* LexedStatements::_capnpPrivate::schema;
-constexpr ::capnp::_::RawBrandedSchema const* LexedStatements::_capnpPrivate::brand;
 #endif  // !CAPNP_LITE
 
 
