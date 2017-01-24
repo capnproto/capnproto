@@ -163,8 +163,8 @@ template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::Client
     : public virtual ::capnp::Capability::Client {
 public:
-  typedef Persistent<SturdyRef, Owner> Calls;
-  typedef Persistent<SturdyRef, Owner> Reads;
+  typedef Persistent Calls;
+  typedef Persistent Reads;
 
   Client(decltype(nullptr));
   explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);
@@ -194,7 +194,7 @@ template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::Server
     : public virtual ::capnp::Capability::Server {
 public:
-  typedef Persistent<SturdyRef, Owner> Serves;
+  typedef Persistent Serves;
 
   ::kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
       ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)
@@ -411,8 +411,8 @@ template <typename InternalRef, typename ExternalRef, typename InternalOwner, ty
 class RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Client
     : public virtual ::capnp::Capability::Client {
 public:
-  typedef RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner> Calls;
-  typedef RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner> Reads;
+  typedef RealmGateway Calls;
+  typedef RealmGateway Reads;
 
   Client(decltype(nullptr));
   explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);
@@ -444,7 +444,7 @@ template <typename InternalRef, typename ExternalRef, typename InternalOwner, ty
 class RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Server
     : public virtual ::capnp::Capability::Server {
 public:
-  typedef RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner> Serves;
+  typedef RealmGateway Serves;
 
   ::kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
       ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)
