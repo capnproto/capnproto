@@ -54,6 +54,10 @@ public:
   virtual Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;
 
   Promise<void> read(void* buffer, size_t bytes);
+
+  Promise<Array<byte>> readAllBytes();
+  Promise<String> readAllText();
+  // Read until EOF and return as one big byte array or string.
 };
 
 class AsyncOutputStream {
