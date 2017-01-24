@@ -40,6 +40,56 @@ Promise<size_t> AsyncInputStream::read(void* buffer, size_t minBytes, size_t max
   });
 }
 
+Maybe<uint64_t> AsyncInputStream::tryGetLength() { return nullptr; }
+
+namespace {
+
+class AsyncPump {
+public:
+  AsyncPump(AsyncInputStream& input, AsyncOutputStream& output, uint64_t limit)
+      : input(input), output(output), limit(limit) {}
+
+  Promise<uint64_t> pump() {
+    // TODO(perf): This could be more efficient by reading half a buffer at a time and then
+    //   starting the next read concurrent with writing the data from the previous read.
+
+    uint64_t n = kj::min(limit - doneSoFar, sizeof(buffer));
+    if (n == 0) return doneSoFar;
+
+    return input.tryRead(buffer, 1, sizeof(buffer))
+        .then([this](size_t amount) -> Promise<uint64_t> {
+      if (amount == 0) return doneSoFar;  // EOF
+      doneSoFar += amount;
+      return output.write(buffer, amount)
+          .then([this]() {
+        return pump();
+      });
+    });
+  }
+
+private:
+  AsyncInputStream& input;
+  AsyncOutputStream& output;
+  uint64_t limit;
+  uint64_t doneSoFar = 0;
+  byte buffer[4096];
+};
+
+}  // namespace
+
+Promise<uint64_t> AsyncInputStream::pumpTo(
+    AsyncOutputStream& output, uint64_t amount) {
+  // See if output wants to dispatch on us.
+  KJ_IF_MAYBE(result, output.tryPumpFrom(*this, amount)) {
+    return kj::mv(*result);
+  }
+
+  // OK, fall back to naive approach.
+  auto pump = heap<AsyncPump>(*this, output, amount);
+  auto promise = pump->pump();
+  return promise.attach(kj::mv(pump));
+}
+
 namespace {
 
 class AllReader {
@@ -104,6 +154,11 @@ Promise<String> AsyncInputStream::readAllText() {
   auto reader = kj::heap<AllReader>(*this);
   auto promise = reader->readAllText();
   return promise.attach(kj::mv(reader));
+}
+
+Maybe<Promise<uint64_t>> AsyncOutputStream::tryPumpFrom(
+    AsyncInputStream& input, uint64_t amount) {
+  return nullptr;
 }
 
 void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length) {
