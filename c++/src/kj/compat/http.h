@@ -382,8 +382,9 @@ public:
   struct Response {
     uint statusCode;
     kj::StringPtr statusText;
-    const HttpHeaders* headers;           // pointer valid until `body` is dropped
+    const HttpHeaders* headers;
     kj::Own<kj::AsyncInputStream> body;
+    // `statusText` and `headers` remain valid until `body` is dropped.
   };
 
   struct Request {
@@ -404,7 +405,8 @@ public:
   // `url` may be a full URL (with protocol and host) or it may be only the path part of the URL,
   // depending on whether the client is a proxy client or a host client.
   //
-  // `url` and `headers` must remain vaild at least until the `response` promise is received.
+  // `url` and `headers` need only remain valid until `request()` returns (they can be
+  // stack-allocated).
   //
   // `expectedBodySize`, if provided, must be exactly the number of bytes that will be written to
   // the body. This will trigger use of the `Content-Length` connection header. Otherwise,
@@ -415,8 +417,7 @@ public:
     kj::StringPtr statusText;
     const HttpHeaders* headers;
     kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> upstreamOrBody;
-    // Once you start reading from `body` or drop it, strings and objects pointed to by the other
-    // members may be invalidated.
+    // `statusText` and `headers` remain valid until `upstreamOrBody` is dropped.
   };
   virtual kj::Promise<WebSocketResponse> openWebSocket(
       kj::StringPtr url, const HttpHeaders& headers, kj::Own<WebSocket> downstream);
@@ -450,6 +451,10 @@ public:
     virtual kj::Own<kj::AsyncOutputStream> send(
         uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
         kj::Maybe<size_t> expectedBodySize = nullptr) = 0;
+    // Begin the response.
+    //
+    // `statusText` and `headers` need only remain valid until send() returns (they can be
+    // stack-allocated).
   };
 
   virtual kj::Promise<void> request(
@@ -468,6 +473,10 @@ public:
     kj::Own<WebSocket> startWebSocket(
         uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
         WebSocket& upstream);
+    // Begin the response.
+    //
+    // `statusText` and `headers` need only remain valid until startWebSocket() returns (they can
+    // be stack-allocated).
   };
 
   virtual kj::Promise<void> openWebSocket(
