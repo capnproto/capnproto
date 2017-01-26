@@ -736,15 +736,29 @@ public:
     // Waits until more data is available, but doesn't consume it. Only meant for server-side use,
     // after a request is handled, to check for pipelined requests. Returns false on EOF.
 
-    if (leftover != nullptr) {
+    // Slightly-crappy code to snarf the expected line break. This will actually eat the leading
+    // regex /\r*\n?/.
+    while (lineBreakBeforeNextHeader && leftover.size() > 0) {
+      if (leftover[0] == '\r') {
+        leftover = leftover.slice(1, leftover.size());
+      } else if (leftover[0] == '\n') {
+        leftover = leftover.slice(1, leftover.size());
+        lineBreakBeforeNextHeader = false;
+      } else {
+        // Err, missing line break, whatever.
+        lineBreakBeforeNextHeader = false;
+      }
+    }
+
+    if (!lineBreakBeforeNextHeader && leftover != nullptr) {
       return true;
     }
 
     return inner.tryRead(headerBuffer.begin(), 1, headerBuffer.size())
-        .then([this](size_t amount) {
+        .then([this](size_t amount) -> kj::Promise<bool> {
       if (amount > 0) {
         leftover = headerBuffer.slice(0, amount);
-        return true;
+        return awaitNextMessage();
       } else {
         return false;
       }
@@ -1616,12 +1630,22 @@ public:
         auto body = httpInput.getEntityBody(
             HttpInputStream::REQUEST, req->method, 0, req->connectionHeaders);
 
+        // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
+        //   prevent permanent deadlock. It's slightly weird in that arguably the client should
+        //   be able to shutdown the upstream but still wait on the downstream, but I believe many
+        //   other HTTP servers do similar things.
+
         auto promise = server.service.request(
             req->method, req->url, httpInput.getHeaders(), *body, *this);
         return promise.attach(kj::mv(body))
             .then([this]() { return httpOutput.flush(); })
             .then([this]() -> kj::Promise<void> {
           // Response done. Await next request.
+
+          if (currentMethod != nullptr) {
+            return sendError(500, "Internal Server Error", kj::str(
+                "ERROR: The HttpService did not generate a response."));
+          }
 
           if (server.draining) {
             // Never mind, drain time.
@@ -1649,12 +1673,29 @@ public:
         return sendError(400, "Bad Request", kj::str(
             "ERROR: The headers sent by your client were not valid."));
       }
-    }).catch_([this](kj::Exception&& e) {
+    }).catch_([this](kj::Exception&& e) -> kj::Promise<void> {
       // Exception; report 500.
+
+      if (currentMethod == nullptr) {
+        // Dang, already sent a partial response. Can't do anything else.
+        KJ_LOG(ERROR, "HttpService threw exception after generating a partial response",
+                      "too late to report error to client", e);
+        return kj::READY_NOW;
+      }
 
       if (e.getType() == kj::Exception::Type::OVERLOADED) {
         return sendError(503, "Service Unavailable", kj::str(
             "ERROR: The server is temporarily unable to handle your request. Details:\n\n", e));
+      } else if (e.getType() == kj::Exception::Type::UNIMPLEMENTED) {
+        return sendError(501, "Not Implemented", kj::str(
+            "ERROR: The server does not implement this operation. Details:\n\n", e));
+      } else if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+        // How do we tell an HTTP client that there was a transient network error, and it should
+        // try again immediately? There's no HTTP status code for this (503 is meant for "try
+        // again later, not now"). Here's an idea: Don't send any response; just close the
+        // connection, so that it looks like the connection between the HTTP client and server
+        // was dropped. A good client should treat this exactly the way we want.
+        return kj::READY_NOW;
       } else {
         return sendError(500, "Internal Server Error", kj::str(
             "ERROR: The server threw an exception. Details:\n\n", e));

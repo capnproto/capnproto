@@ -345,8 +345,12 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
 
   auto buffer = kj::heapArray<char>(expected.size());
 
-  auto promise = in.read(buffer.begin(), 1, buffer.size());
+  auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
   return promise.then(kj::mvCapture(buffer, [&in,expected](kj::Array<char> buffer, size_t amount) {
+    if (amount == 0) {
+      KJ_FAIL_ASSERT("expected data never sent", expected);
+    }
+
     auto actual = buffer.slice(0, amount);
     if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
       KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
@@ -1100,6 +1104,170 @@ KJ_TEST("HttpServer pipeline timeout") {
 
   // In this case, no data is sent back.
   KJ_EXPECT(pipe.ends[1]->readAllText().wait(io.waitScope) == "");
+}
+
+class BrokenHttpService final: public HttpService {
+  // HttpService that doesn't send a response.
+public:
+  BrokenHttpService() = default;
+  explicit BrokenHttpService(kj::Exception&& exception): exception(kj::mv(exception)) {}
+
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& responseSender) override {
+    return requestBody.readAllBytes().then([this](kj::Array<byte>&&) -> kj::Promise<void> {
+      KJ_IF_MAYBE(e, exception) {
+        return kj::cp(*e);
+      } else {
+        return kj::READY_NOW;
+      }
+    });
+  }
+
+private:
+  kj::Maybe<kj::Exception> exception;
+};
+
+KJ_TEST("HttpServer no response") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(io.provider->getTimer(), table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(io.waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+
+  KJ_EXPECT(text ==
+      "HTTP/1.1 500 Internal Server Error\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 51\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "ERROR: The HttpService did not generate a response.", text);
+}
+
+KJ_TEST("HttpServer disconnected") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  HttpHeaderTable table;
+  BrokenHttpService service(KJ_EXCEPTION(DISCONNECTED, "disconnected"));
+  HttpServer server(io.provider->getTimer(), table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(io.waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+
+  KJ_EXPECT(text == "", text);
+}
+
+KJ_TEST("HttpServer overloaded") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  HttpHeaderTable table;
+  BrokenHttpService service(KJ_EXCEPTION(OVERLOADED, "overloaded"));
+  HttpServer server(io.provider->getTimer(), table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(io.waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+
+  KJ_EXPECT(text.startsWith("HTTP/1.1 503 Service Unavailable"), text);
+}
+
+KJ_TEST("HttpServer unimplemented") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  HttpHeaderTable table;
+  BrokenHttpService service(KJ_EXCEPTION(UNIMPLEMENTED, "unimplemented"));
+  HttpServer server(io.provider->getTimer(), table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(io.waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+
+  KJ_EXPECT(text.startsWith("HTTP/1.1 501 Not Implemented"), text);
+}
+
+KJ_TEST("HttpServer threw exception") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  HttpHeaderTable table;
+  BrokenHttpService service(KJ_EXCEPTION(FAILED, "failed"));
+  HttpServer server(io.provider->getTimer(), table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(io.waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+
+  KJ_EXPECT(text.startsWith("HTTP/1.1 500 Internal Server Error"), text);
+}
+
+class PartialResponseService final: public HttpService {
+  // HttpService that sends a partial response then throws.
+public:
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    return requestBody.readAllBytes()
+        .then([this,&response](kj::Array<byte>&&) -> kj::Promise<void> {
+      HttpHeaders headers(table);
+      auto body = response.send(200, "OK", headers, 32);
+      auto promise = body->write("foo", 3);
+      return promise.attach(kj::mv(body)).then([]() -> kj::Promise<void> {
+        return KJ_EXCEPTION(FAILED, "failed");
+      });
+    });
+  }
+
+private:
+  kj::Maybe<kj::Exception> exception;
+  HttpHeaderTable table;
+};
+
+KJ_TEST("HttpServer threw exception after starting response") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  HttpHeaderTable table;
+  PartialResponseService service;
+  HttpServer server(io.provider->getTimer(), table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  KJ_EXPECT_LOG(ERROR, "HttpService threw exception after generating a partial response");
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(io.waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+
+  KJ_EXPECT(text ==
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 32\r\n"
+      "\r\n"
+      "foo", text);
 }
 
 // -----------------------------------------------------------------------------
