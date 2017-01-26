@@ -249,7 +249,7 @@ public:
   // Read a header.
 
   template <typename Func>
-  void forEach(Func&& func);
+  void forEach(Func&& func) const;
   // Calls `func(name, value)` for each header in the set -- including headers that aren't mapped
   // to IDs in the header table. Both inputs are of type kj::StringPtr.
 
@@ -601,7 +601,7 @@ inline void HttpHeaders::unset(HttpHeaderId id) {
 }
 
 template <typename Func>
-inline void HttpHeaders::forEach(Func&& func) {
+inline void HttpHeaders::forEach(Func&& func) const {
   for (auto i: kj::indices(indexedHeaders)) {
     if (indexedHeaders[i] != nullptr) {
       func(table->idToString(HttpHeaderId(table, i)), indexedHeaders[i]);
