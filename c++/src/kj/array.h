@@ -294,7 +294,7 @@ template <typename T> Array<T> heapArray(std::initializer_list<T> init);
 // Allocate a heap array containing a copy of the given content.
 
 template <typename T, typename Container>
-Array<T> heapArrayFromIterable(Container&& a) { return heapArray(a.begin(), a.end()); }
+Array<T> heapArrayFromIterable(Container&& a) { return heapArray<T>(a.begin(), a.end()); }
 template <typename T>
 Array<T> heapArrayFromIterable(Array<T>&& a) { return mv(a); }
 
