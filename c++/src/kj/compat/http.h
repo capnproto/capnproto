@@ -254,15 +254,22 @@ public:
   // to IDs in the header table. Both inputs are of type kj::StringPtr.
 
   void set(HttpHeaderId id, kj::StringPtr value);
+  void set(HttpHeaderId id, kj::String&& value);
   // Sets a header value, overwriting the existing value.
+  //
+  // The String&& version is equivalent to calling the other version followed by takeOwnership().
   //
   // WARNING: It is the caller's responsibility to ensure that `value` remains valid until the
   //   HttpHeaders object is destroyed. This allows string literals to be passed without making a
   //   copy, but complicates the use of dynamic values. Hint: Consider using `takeOwnership()`.
 
   void add(kj::StringPtr name, kj::StringPtr value);
+  void add(kj::StringPtr name, kj::String&& value);
+  void add(kj::String&& name, kj::String&& value);
   // Append a header. `name` will be looked up in the header table, but if it's not mapped, the
   // header will be added to the list of unmapped headers.
+  //
+  // The String&& versions are equivalent to calling the other version followed by takeOwnership().
   //
   // WARNING: It is the caller's responsibility to ensure that `name` and `value` remain valid
   //   until the HttpHeaders object is destroyed. This allows string literals to be passed without
@@ -280,8 +287,6 @@ public:
   void takeOwnership(HttpHeaders&& otherHeaders);
   // Takes overship of a string so that it lives until the HttpHeaders object is destroyed. Useful
   // when you've passed a dynamic value to set() or add() or parse*().
-  //
-  // TODO(soon): Is takeOwnership() actually needed?
 
   struct ConnectionHeaders {
     // These headers govern details of the specific HTTP connection or framing of the content.

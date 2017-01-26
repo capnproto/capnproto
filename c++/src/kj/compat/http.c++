@@ -328,12 +328,28 @@ void HttpHeaders::set(HttpHeaderId id, kj::StringPtr value) {
   indexedHeaders[id.id] = value;
 }
 
+void HttpHeaders::set(HttpHeaderId id, kj::String&& value) {
+  set(id, kj::StringPtr(value));
+  takeOwnership(kj::mv(value));
+}
+
 void HttpHeaders::add(kj::StringPtr name, kj::StringPtr value) {
   requireValidHeaderName(name);
   requireValidHeaderValue(value);
 
   KJ_REQUIRE(addNoCheck(name, value) == nullptr,
       "can't set connection-level headers on HttpHeaders", name, value) { break; }
+}
+
+void HttpHeaders::add(kj::StringPtr name, kj::String&& value) {
+  add(name, kj::StringPtr(value));
+  takeOwnership(kj::mv(value));
+}
+
+void HttpHeaders::add(kj::String&& name, kj::String&& value) {
+  add(kj::StringPtr(name), kj::StringPtr(value));
+  takeOwnership(kj::mv(name));
+  takeOwnership(kj::mv(value));
 }
 
 kj::Maybe<uint> HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
