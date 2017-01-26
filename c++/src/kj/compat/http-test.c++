@@ -619,21 +619,6 @@ static const HttpRequestTestCase REQUEST_TEST_CASES[] {
   },
 
   {
-    "POST /foo/bar HTTP/1.1\r\n"
-    "Host: example.com\r\n"
-    "Connection: close\r\n"
-    "\r\n"
-    "baz qux corge grault",
-
-    HttpMethod::POST,
-    "/foo/bar",
-    {{HttpHeaderId::HOST, "example.com"}},
-    nullptr, { "baz qux corge grault" },
-
-    SERVER_ONLY,  // Client never sends connection: close
-  },
-
-  {
     HUGE_REQUEST,
 
     HttpMethod::GET,

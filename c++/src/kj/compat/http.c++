@@ -1183,9 +1183,8 @@ static_assert(!fastCaseCmp<'f','O','o','B','1','a'>("FooB1"), "");
 kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
     RequestOrResponse type, HttpMethod method, uint statusCode,
     HttpHeaders::ConnectionHeaders& connectionHeaders) {
-  if (method == HttpMethod::HEAD ||
-      (type == REQUEST && method == HttpMethod::GET) ||
-      (type == RESPONSE && (statusCode == 204 || statusCode == 205 || statusCode == 304))) {
+  if (type == RESPONSE && (method == HttpMethod::HEAD ||
+      statusCode == 204 || statusCode == 205 || statusCode == 304)) {
     // No body.
     return kj::heap<HttpNullEntityReader>(*this);
   }
@@ -1203,6 +1202,11 @@ kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
   if (connectionHeaders.contentLength != nullptr) {
     return kj::heap<HttpFixedLengthEntityReader>(*this,
         strtoull(connectionHeaders.contentLength.cStr(), nullptr, 10));
+  }
+
+  if (type == REQUEST) {
+    // Lack of a Content-Length or Transfer-Encoding means no body for requests.
+    return kj::heap<HttpNullEntityReader>(*this);
   }
 
   if (connectionHeaders.connection != nullptr) {
