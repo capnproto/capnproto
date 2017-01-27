@@ -294,7 +294,7 @@ template <typename T> Array<T> heapArray(std::initializer_list<T> init);
 // Allocate a heap array containing a copy of the given content.
 
 template <typename T, typename Container>
-Array<T> heapArrayFromIterable(Container&& a) { return heapArray(a.begin(), a.end()); }
+Array<T> heapArrayFromIterable(Container&& a) { return heapArray<T>(a.begin(), a.end()); }
 template <typename T>
 Array<T> heapArrayFromIterable(Array<T>&& a) { return mv(a); }
 
@@ -501,7 +501,8 @@ private:
 // KJ_MAP
 
 #define KJ_MAP(elementName, array) \
-  ::kj::_::Mapper<KJ_DECLTYPE_REF(array)>(array) * [&](decltype(*(array).begin()) elementName)
+  ::kj::_::Mapper<KJ_DECLTYPE_REF(array)>(array) * \
+  [&](typename ::kj::_::Mapper<KJ_DECLTYPE_REF(array)>::Element elementName)
 // Applies some function to every element of an array, returning an Array of the results,  with
 // nice syntax.  Example:
 //
@@ -523,6 +524,22 @@ struct Mapper {
     }
     return builder.finish();
   }
+  typedef decltype(*(array).begin()) Element;
+};
+
+template <typename T, size_t s>
+struct Mapper<T(&)[s]> {
+  T* array;
+  Mapper(T* array): array(array) {}
+  template <typename Func>
+  auto operator*(Func&& func) -> Array<decltype(func(*array))> {
+    auto builder = heapArrayBuilder<decltype(func(*array))>(s);
+    for (size_t i = 0; i < s; i++) {
+      builder.add(func(array[i]));
+    }
+    return builder.finish();
+  }
+  typedef decltype(*array)& Element;
 };
 
 }  // namespace _ (private)

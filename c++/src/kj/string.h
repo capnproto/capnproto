@@ -170,6 +170,10 @@ public:
   inline ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
+  inline Array<char> releaseArray() { return kj::mv(content); }
+  // Disowns the backing array (which includes the NUL terminator) and returns it. The String value
+  // is clobbered (as if moved away).
+
   inline const char* cStr() const;
 
   inline size_t size() const;

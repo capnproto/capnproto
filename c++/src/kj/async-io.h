@@ -42,6 +42,7 @@ class UnixEventPort;
 #endif
 
 class NetworkAddress;
+class AsyncOutputStream;
 
 // =======================================================================================
 // Streaming I/O
@@ -54,6 +55,31 @@ public:
   virtual Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;
 
   Promise<void> read(void* buffer, size_t bytes);
+
+  virtual Maybe<uint64_t> tryGetLength();
+  // Get the remaining number of bytes that will be produced by this stream, if known.
+  //
+  // This is used e.g. to fill in the Content-Length header of an HTTP message. If unknown, the
+  // HTTP implementation may need to fall back to Transfer-Encoding: chunked.
+  //
+  // The default implementation always returns null.
+
+  virtual Promise<uint64_t> pumpTo(
+      AsyncOutputStream& output, uint64_t amount = kj::maxValue);
+  // Read `amount` bytes from this stream (or to EOF) and write them to `output`, returning the
+  // total bytes actually pumped (which is only less than `amount` if EOF was reached).
+  //
+  // Override this if your stream type knows how to pump itself to certain kinds of output
+  // streams more efficiently than via the naive approach. You can use
+  // kj::dynamicDowncastIfAvailable() to test for stream types you recognize, and if none match,
+  // delegate to the default implementation.
+  //
+  // The default implementation first tries calling output.tryPumpFrom(), but if that fails, it
+  // performs a naive pump by allocating a buffer and reading to it / writing from it in a loop.
+
+  Promise<Array<byte>> readAllBytes();
+  Promise<String> readAllText();
+  // Read until EOF and return as one big byte array or string.
 };
 
 class AsyncOutputStream {
@@ -62,6 +88,17 @@ class AsyncOutputStream {
 public:
   virtual Promise<void> write(const void* buffer, size_t size) = 0;
   virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) = 0;
+
+  virtual Maybe<Promise<uint64_t>> tryPumpFrom(
+      AsyncInputStream& input, uint64_t amount = kj::maxValue);
+  // Implements double-dispatch for AsyncInputStream::pumpTo().
+  //
+  // This method should only be called from within an implementation of pumpTo().
+  //
+  // This method examines the type of `input` to find optimized ways to pump data from it to this
+  // output stream. If it finds one, it performs the pump. Otherwise, it returns null.
+  //
+  // The default implementation always returns null.
 };
 
 class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
