@@ -140,7 +140,7 @@ struct List<T, Kind::PRIMITIVE> {
     typedef List<T> Builds;
 
     inline Builder(): builder(_::elementSizeForType<T>()) {}
-    inline Builder(decltype(nullptr)) {}
+    inline Builder(decltype(nullptr)): Builder() {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() const { return Reader(builder.asReader()); }
@@ -236,7 +236,7 @@ struct List<T, Kind::STRUCT> {
     typedef List<T> Builds;
 
     inline Builder(): builder(ElementSize::INLINE_COMPOSITE) {}
-    inline Builder(decltype(nullptr)) {}
+    inline Builder(decltype(nullptr)): Builder() {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() const { return Reader(builder.asReader()); }
@@ -359,7 +359,7 @@ struct List<List<T>, Kind::LIST> {
     typedef List<List<T>> Builds;
 
     inline Builder(): builder(ElementSize::POINTER) {}
-    inline Builder(decltype(nullptr)) {}
+    inline Builder(decltype(nullptr)): Builder() {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() const { return Reader(builder.asReader()); }
@@ -467,7 +467,7 @@ struct List<T, Kind::BLOB> {
     typedef List<T> Builds;
 
     inline Builder(): builder(ElementSize::POINTER) {}
-    inline Builder(decltype(nullptr)) {}
+    inline Builder(decltype(nullptr)): Builder() {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() const { return Reader(builder.asReader()); }

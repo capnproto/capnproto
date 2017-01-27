@@ -1901,6 +1901,15 @@ TEST(Encoding, UnionInGenerics) {
   builder.initUg();
 }
 
+TEST(Encoding, DefaultListBuilder) {
+  // At one point, this wouldn't compile.
+
+  List<int>::Builder(nullptr);
+  List<TestAllTypes>::Builder(nullptr);
+  List<List<int>>::Builder(nullptr);
+  List<Text>::Builder(nullptr);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
