@@ -196,6 +196,14 @@ public:
     HttpHeaderId add(kj::StringPtr name);
     Own<HttpHeaderTable> build();
 
+    HttpHeaderTable& getFutureTable();
+    // Get the still-unbuilt header table. You cannot actually use it until build() has been
+    // called.
+    //
+    // This method exists to help when building a shared header table -- the Builder may be passed
+    // to several components, each of which will register the headers they need and get a reference
+    // to the future table.
+
   private:
     kj::Own<HttpHeaderTable> table;
   };
@@ -590,6 +598,7 @@ inline void HttpHeaderId::requireFrom(HttpHeaderTable& table) const {
 }
 
 inline kj::Own<HttpHeaderTable> HttpHeaderTable::Builder::build() { return kj::mv(table); }
+inline HttpHeaderTable& HttpHeaderTable::Builder::getFutureTable() { return *table; }
 
 inline uint HttpHeaderTable::idCount() { return namesById.size(); }
 
