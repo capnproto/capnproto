@@ -524,7 +524,7 @@ struct Mapper {
     }
     return builder.finish();
   }
-  typedef decltype(*(array).begin()) Element;
+  typedef decltype(*kj::instance<T>().begin()) Element;
 };
 
 template <typename T, size_t s>
