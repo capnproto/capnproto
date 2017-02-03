@@ -122,7 +122,7 @@ private:
     auto partPtr = part.asPtr();
     parts.add(kj::mv(part));
     return input.tryRead(partPtr.begin(), partPtr.size(), partPtr.size())
-        .then([this,partPtr,total](size_t amount) -> Promise<uint64_t> {
+        .then([this,KJ_CPCAP(partPtr),total](size_t amount) -> Promise<uint64_t> {
       uint64_t newTotal = total + amount;
       if (amount < partPtr.size()) {
         return newTotal;
