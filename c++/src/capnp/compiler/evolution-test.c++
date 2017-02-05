@@ -878,7 +878,11 @@ public:
     // concerns.
     //
     // On Linux, seed 1467142714 (for example) will trigger the exception (without this env var).
+#if defined(__MINGW32__) || defined(_MSC_VER)
+    putenv("CAPNP_IGNORE_ISSUE_344=1");
+#else
     setenv("CAPNP_IGNORE_ISSUE_344", "1", true);
+#endif
 
     srand(seed);
 
