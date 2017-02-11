@@ -74,7 +74,7 @@ kj::Promise<double> evaluateImpl(
           kj::joinPromises(kj::mv(paramPromises));
 
       // When the parameters are complete, call the function.
-      return joinedParams.then([func](kj::Array<double>&& paramValues) mutable {
+      return joinedParams.then([KJ_CPCAP(func)](kj::Array<double>&& paramValues) mutable {
         auto request = func.callRequest();
         request.setParams(paramValues);
         return request.send().then(
@@ -120,7 +120,7 @@ public:
     KJ_REQUIRE(params.size() == paramCount, "Wrong number of parameters.");
 
     return evaluateImpl(body.getRoot<Calculator::Expression>(), params)
-        .then([context](double value) mutable {
+        .then([KJ_CPCAP(context)](double value) mutable {
       context.getResults().setValue(value);
     });
   }
@@ -168,7 +168,7 @@ class CalculatorImpl final: public Calculator::Server {
 public:
   kj::Promise<void> evaluate(EvaluateContext context) override {
     return evaluateImpl(context.getParams().getExpression())
-        .then([context](double value) mutable {
+        .then([KJ_CPCAP(context)](double value) mutable {
       context.getResults().setValue(kj::heap<ValueImpl>(value));
     });
   }
