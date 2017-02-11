@@ -41,7 +41,7 @@ class DateLabel;
 }  // namespace _ (private)
 
 using Duration = Quantity<int64_t, _::NanosecondLabel>;
-// A time value, in microseconds.
+// A time value, in nanoseconds.
 
 constexpr Duration NANOSECONDS = unit<Duration>();
 constexpr Duration MICROSECONDS = 1000 * NANOSECONDS;
