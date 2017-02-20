@@ -748,6 +748,8 @@ const embeddedData :Data = embed "testdata/packed";
 const embeddedText :Text = embed "testdata/short.txt";
 const embeddedStruct :TestAllTypes = embed "testdata/binary";
 
+const nonAsciiText :Text = "♫ é ✓";
+
 struct TestAnyPointerConstants {
   anyKindAsStruct @0 :AnyPointer;
   anyStructAsStruct @1 :AnyStruct;

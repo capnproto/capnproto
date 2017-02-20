@@ -107,7 +107,7 @@ public:
     return CharGroup_(~bits[0], ~bits[1], ~bits[2], ~bits[3]);
   }
 
-  constexpr inline bool contains(char c) const {
+  constexpr inline bool contains(unsigned char c) const {
     return (bits[c / 64] & (1ll << (c % 64))) != 0;
   }
 
