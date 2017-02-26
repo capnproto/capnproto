@@ -1872,7 +1872,7 @@ struct WireHelpers {
       }
 
       case WirePointer::FAR:
-        KJ_FAIL_ASSERT("Far pointer should have been handled above.") {
+        KJ_FAIL_ASSERT("Unexpected FAR pointer.") {
           goto useDefault;
         }
 
