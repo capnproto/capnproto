@@ -1361,7 +1361,8 @@ struct WireHelpers {
 
       // Zero out old location.  See explanation in getWritableStructPointer().
       // Make sure to include the tag word.
-      memset(oldPtr - 1, 0, (1 + oldStep * elementCount) * BYTES_PER_WORD / BYTES);
+      memset(oldPtr - POINTER_SIZE_IN_WORDS, 0,
+             (POINTER_SIZE_IN_WORDS + oldStep * elementCount) * BYTES_PER_WORD / BYTES);
 
       return ListBuilder(origSegment, capTable, newPtr, newStep * BITS_PER_WORD, elementCount,
                          newDataSize * BITS_PER_WORD, newPointerCount, ElementSize::INLINE_COMPOSITE);
