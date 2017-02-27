@@ -738,7 +738,7 @@ struct WireHelpers {
         break;
       }
       case WirePointer::FAR:
-        KJ_FAIL_ASSERT("Unexpected FAR pointer.") {
+        KJ_FAIL_REQUIRE("Unexpected FAR pointer.") {
           break;
         }
         break;
@@ -1872,7 +1872,7 @@ struct WireHelpers {
       }
 
       case WirePointer::FAR:
-        KJ_FAIL_ASSERT("Unexpected FAR pointer.") {
+        KJ_FAIL_REQUIRE("Unexpected FAR pointer.") {
           goto useDefault;
         }
 
