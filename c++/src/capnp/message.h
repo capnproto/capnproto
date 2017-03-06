@@ -375,6 +375,8 @@ public:
   // firstSegment MUST be zero-initialized.  MallocMessageBuilder's destructor will write new zeros
   // over any space that was used so that it can be reused.
 
+  MallocMessageBuilder(MallocMessageBuilder && other) = default;
+
   KJ_DISALLOW_COPY(MallocMessageBuilder);
   virtual ~MallocMessageBuilder() noexcept(false);
 
