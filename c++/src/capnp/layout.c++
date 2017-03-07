@@ -2965,6 +2965,9 @@ bool ListReader::isCanonical(const word **readHead) {
       }
       auto structSize = (this->structDataSize / BITS_PER_WORD) +
                         (this->structPointerCount * WORDS_PER_POINTER);
+      if (structSize == 0 * WORDS) {
+        return true;
+      }
       auto listEnd = *readHead + (this->elementCount / ELEMENTS * structSize) / WORDS;
       auto pointerHead = listEnd;
       bool listDataTrunc = false;
