@@ -168,6 +168,23 @@ KJ_TEST("isCanonical requires truncation of 0-valued struct fields") {
   KJ_ASSERT(!nonTruncated.isCanonical());
 }
 
+KJ_TEST("isCanonical rejects unused trailing words") {
+   AlignedData<3> segment = {{
+    // Struct pointer, data in next word
+    0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+
+    // Data section of struct
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+
+    // Trailing zero word
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(segment.words, 3)};
+  SegmentArrayMessageReader message(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(!message.isCanonical());
+}
+
 KJ_TEST("upgraded lists can be canonicalized") {
   AlignedData<7> upgradedList = {{
     //Struct pointer, data immediately follows, 4 pointer fields, no data
