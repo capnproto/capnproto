@@ -2608,7 +2608,7 @@ bool PointerReader::isCanonical(const word **readHead) {
       }
     }
     case PointerType::LIST:
-      return this->getListAnySize(nullptr).isCanonical(readHead);
+      return this->getListAnySize(nullptr).isCanonical(readHead, pointer);
     case PointerType::CAPABILITY:
       KJ_FAIL_ASSERT("Capabilities are not positional");
   }
@@ -2951,7 +2951,7 @@ ListReader ListReader::imbue(CapTableReader* capTable) const {
   return result;
 }
 
-bool ListReader::isCanonical(const word **readHead) {
+  bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
   switch (this->getElementSize()) {
     case ElementSize::INLINE_COMPOSITE: {
       *readHead += 1;
@@ -2965,6 +2965,9 @@ bool ListReader::isCanonical(const word **readHead) {
       }
       auto structSize = (this->structDataSize / BITS_PER_WORD) +
                         (this->structPointerCount * WORDS_PER_POINTER);
+      if (structSize * this->elementCount != ref->listRef.inlineCompositeWordCount()) {
+        return false;
+      }
       if (structSize == 0 * WORDS) {
         return true;
       }
