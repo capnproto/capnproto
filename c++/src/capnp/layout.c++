@@ -1571,12 +1571,12 @@ struct WireHelpers {
       } else {
         // Truncate the data section
         while (dataSize != 0 * BYTES) {
-          size_t end = (dataSize - 1 * BYTES) / BYTES;
+          size_t end = dataSize / BYTES;
           ByteCount window = dataSize % BYTES_PER_WORD;
           if (window == 0 * BYTES) {
             window = BYTES_PER_WORD * WORDS;
           }
-          size_t start = end + 1 - window / BYTES;
+          size_t start = end - window / BYTES;
           kj::ArrayPtr<const byte> lastWord = value.getDataSectionAsBlob().slice(start, end);
           bool lastWordZero = true;
           //TODO(MRM) once this is known to work, replace with fast memcmp
@@ -1683,9 +1683,9 @@ struct WireHelpers {
           auto se = value.getStructElement(ec);
           WordCount localDataSize = declDataSize;
           while (localDataSize != 0 * WORDS) {
-            size_t end = (localDataSize * BYTES_PER_WORD - 1 * BYTES) / BYTES;
+            size_t end = (localDataSize * BYTES_PER_WORD * BYTES) / BYTES;
             ByteCount window = BYTES_PER_WORD * WORDS;
-            size_t start = end + 1 - window / BYTES;
+            size_t start = end - window / BYTES;
             kj::ArrayPtr<const byte> lastWord = se.getDataSectionAsBlob().slice(start, end);
             bool lastWordZero = true;
             //TODO(MRM) once this is known to work, replace with fast memcmp
