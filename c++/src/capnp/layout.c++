@@ -2428,7 +2428,8 @@ PointerType PointerBuilder::getPointerType() {
     return PointerType::NULL_;
   } else {
     WirePointer* ptr = pointer;
-    WireHelpers::followFars(ptr, ptr->target(), segment);
+    SegmentBuilder* sgmt = segment;
+    WireHelpers::followFars(ptr, ptr->target(), sgmt);
     switch(ptr->kind()) {
       case WirePointer::FAR:
         KJ_FAIL_ASSERT("far pointer not followed?");
