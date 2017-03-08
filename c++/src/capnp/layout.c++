@@ -2423,7 +2423,7 @@ void PointerBuilder::clear() {
   memset(pointer, 0, sizeof(WirePointer));
 }
 
-PointerType PointerBuilder::getPointerType() {
+PointerType PointerBuilder::getPointerType() const {
   if(pointer->isNull()) {
     return PointerType::NULL_;
   } else {

@@ -318,7 +318,7 @@ public:
   // location.
 
   inline bool isNull() { return getPointerType() == PointerType::NULL_; }
-  PointerType getPointerType();
+  PointerType getPointerType() const;
 
   StructBuilder getStruct(StructSize size, const word* defaultValue);
   ListBuilder getList(ElementSize elementSize, const word* defaultValue);
