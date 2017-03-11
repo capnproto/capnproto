@@ -264,7 +264,27 @@ TEST(Any, AnyStructListCapInSchema) {
   #endif
 }
 
+KJ_TEST("Builder::isStruct() does not corrupt segment pointer") {
+  MallocMessageBuilder builder(1); // small first segment
+  auto root = builder.getRoot<AnyPointer>();
 
+  // Do a lot of allocations so that there is likely a segment with a decent
+  // amount of free space.
+  initTestMessage(root.initAs<test::TestAllTypes>());
+
+  // This will probably get allocated in a segment that still has room for the
+  // Data allocation below.
+  root.initAs<test::TestAllTypes>();
+
+  // At one point, this caused root.builder.segment to point to the segment
+  // where the struct is allocated, rather than segment where the root pointer
+  // lives, i.e. segment zero.
+  EXPECT_TRUE(root.isStruct());
+
+  // If root.builder.segment points to the wrong segment and that segment has free
+  // space, then this triggers a DREQUIRE failure in WirePointer::setKindAndTarget().
+  root.initAs<Data>(1);
+}
 
 TEST(Any, Equals) {
   MallocMessageBuilder builderA;
