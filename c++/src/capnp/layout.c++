@@ -2951,7 +2951,7 @@ ListReader ListReader::imbue(CapTableReader* capTable) const {
   return result;
 }
 
-  bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
+bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
   switch (this->getElementSize()) {
     case ElementSize::INLINE_COMPOSITE: {
       *readHead += 1;
