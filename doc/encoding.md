@@ -356,7 +356,7 @@ A canonical Cap'n Proto message must adhere to the following rules:
 
 Note that Cap'n Proto 0.5 introduced the rule that struct lists must always be encoded using
 C = 7 in the [list pointer](#lists). Prior versions of Cap'n Proto allowed struct lists to be
-encoded using any element size, so that small structs could be compacted to take less that a word
+encoded using any element size, so that small structs could be compacted to take less than a word
 per element, and many encoders in fact implemented this. Unfortunately, this "optimization" made
 canonicalization impossible without knowing the schema, which is a significant obstacle. Therefore,
 the rules have been changed in 0.5, but data written by previous versions may not be possible to
