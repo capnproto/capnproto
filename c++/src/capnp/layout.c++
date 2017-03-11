@@ -2129,9 +2129,9 @@ struct WireHelpers {
 
       if (checkElementSize) {
         // If a struct list was not expected, then presumably a non-struct list was upgraded to a
-        // struct list.  We need to manipulate the pointer to point at the first field of the
-        // struct.  Together with the "stepBits", this will allow the struct list to be accessed as
-        // if it were a primitive list without branching.
+        // struct list. We need to manipulate the pointer to point at the first field of the
+        // struct. Together with the `step` field, this will allow the struct list to be accessed
+        // as if it were a primitive list without branching.
 
         // Check whether the size is compatible.
         switch (expectedElementSize) {
