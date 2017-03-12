@@ -37,8 +37,14 @@ KJ_TEST("canonicalize yields canonical message") {
 
   initTestMessage(root);
 
-  canonicalize(root.asReader());
-  //Will assert if canonicalize failed to do so
+  auto canonicalWords = canonicalize(root.asReader());
+  // Throws an exception on canonicalization failure.
+
+  kj::ArrayPtr<const capnp::word> canonicalSegments[1] = {canonicalWords.asPtr()};
+  capnp::SegmentArrayMessageReader canonicalReader(kj::arrayPtr(canonicalSegments, 1));
+
+  KJ_ASSERT(AnyStruct::Reader(root.asReader()) ==
+            AnyStruct::Reader(canonicalReader.getRoot<TestAllTypes>()));
 }
 
 KJ_TEST("canonicalize succeeds on empty struct") {
@@ -46,6 +52,56 @@ KJ_TEST("canonicalize succeeds on empty struct") {
   auto root = builder.initRoot<TestAllTypes>();
 
   canonicalize(root.asReader());  // Throws an exception on canoncalization failure.
+}
+
+KJ_TEST("data word with only its most significant bit set does not get truncated") {
+  AlignedData<3> segment = {{
+    // Struct pointer, body immediately follows, two data words
+    0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+
+    // First data word
+    0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+
+    // Second data word, all zero except most significant bit
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(segment.words, 3)};
+  SegmentArrayMessageReader messageReader(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(messageReader.isCanonical());
+  auto canonicalWords = canonicalize(messageReader.getRoot<TestAllTypes>());
+
+  // At one point this failed because an off-by-one bug in canonicalization
+  // caused the second word of the data section to be truncated.
+  ASSERT_EQ(canonicalWords.asBytes(), kj::arrayPtr(segment.bytes, 3 * 8));
+}
+
+KJ_TEST("INLINE_COMPOSITE data word with only its most significant bit set does not get truncated") {
+  AlignedData<5> segment = {{
+    // Struct pointer, body immediately follows, one pointer
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+
+    // List pointer, no offset, inline composite, two words long
+    0x01, 0x00, 0x00, 0x00, 0x17, 0x00, 0x00, 0x00,
+
+    // Tag word, list has one element with two data words and no pointers
+    0x04, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+
+    // First data word
+    0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22,
+
+    // Second data word, all zero except most significant bit
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(segment.words, 5)};
+  SegmentArrayMessageReader messageReader(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(messageReader.isCanonical());
+  auto canonicalWords = canonicalize(messageReader.getRoot<TestLists>());
+
+  // At one point this failed because an off-by-one bug in canonicalization
+  // caused the second word of the data section to be truncated.
+  ASSERT_EQ(canonicalWords.asBytes(), kj::arrayPtr(segment.bytes, 5 * 8));
 }
 
 KJ_TEST("canonical non-null empty struct field") {
@@ -166,6 +222,68 @@ KJ_TEST("isCanonical requires truncation of 0-valued struct fields") {
   SegmentArrayMessageReader nonTruncated(kj::arrayPtr(segments, 1));
 
   KJ_ASSERT(!nonTruncated.isCanonical());
+}
+
+KJ_TEST("isCanonical rejects unused trailing words") {
+   AlignedData<3> segment = {{
+    // Struct pointer, data in next word
+    0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+
+    // Data section of struct
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+
+    // Trailing zero word
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(segment.words, 3)};
+  SegmentArrayMessageReader message(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(!message.isCanonical());
+}
+
+KJ_TEST("isCanonical accepts empty inline composite list of zero-sized structs") {
+   AlignedData<3> segment = {{
+    // Struct pointer, pointer in next word
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+
+    // List pointer, inline composite, zero words long
+    0x01, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
+
+    // Tag word
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(segment.words, 3)};
+  SegmentArrayMessageReader message(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(message.isCanonical());
+}
+
+KJ_TEST("isCanonical rejects inline composite list with inaccurate word-length") {
+   AlignedData<6> segment = {{
+    // Struct pointer, no offset, pointer section has two entries
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
+
+    // List pointer, offset of one, inline composite, two words long
+    // (The list only needs to be one word long to hold its actual elements;
+    // therefore this message is not canonical.)
+    0x05, 0x00, 0x00, 0x00, 0x17, 0x00, 0x00, 0x00,
+
+    // Struct pointer, offset two, data section has one word
+    0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+
+    // Tag word, struct, one element, one word data section
+    0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+
+    // Data section of struct element of list
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+
+    // Data section of struct field in top-level struct
+    0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(segment.words, 6)};
+  SegmentArrayMessageReader message(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(!message.isCanonical());
 }
 
 KJ_TEST("upgraded lists can be canonicalized") {

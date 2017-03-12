@@ -1571,12 +1571,12 @@ struct WireHelpers {
       } else {
         // Truncate the data section
         while (dataSize != 0 * BYTES) {
-          size_t end = (dataSize - 1 * BYTES) / BYTES;
+          size_t end = dataSize / BYTES;
           ByteCount window = dataSize % BYTES_PER_WORD;
           if (window == 0 * BYTES) {
             window = BYTES_PER_WORD * WORDS;
           }
-          size_t start = end + 1 - window / BYTES;
+          size_t start = end - window / BYTES;
           kj::ArrayPtr<const byte> lastWord = value.getDataSectionAsBlob().slice(start, end);
           bool lastWordZero = true;
           //TODO(MRM) once this is known to work, replace with fast memcmp
@@ -1683,9 +1683,9 @@ struct WireHelpers {
           auto se = value.getStructElement(ec);
           WordCount localDataSize = declDataSize;
           while (localDataSize != 0 * WORDS) {
-            size_t end = (localDataSize * BYTES_PER_WORD - 1 * BYTES) / BYTES;
+            size_t end = (localDataSize * BYTES_PER_WORD * BYTES) / BYTES;
             ByteCount window = BYTES_PER_WORD * WORDS;
-            size_t start = end + 1 - window / BYTES;
+            size_t start = end - window / BYTES;
             kj::ArrayPtr<const byte> lastWord = se.getDataSectionAsBlob().slice(start, end);
             bool lastWordZero = true;
             //TODO(MRM) once this is known to work, replace with fast memcmp
@@ -2609,7 +2609,7 @@ bool PointerReader::isCanonical(const word **readHead) {
       }
     }
     case PointerType::LIST:
-      return this->getListAnySize(nullptr).isCanonical(readHead);
+      return this->getListAnySize(nullptr).isCanonical(readHead, pointer);
     case PointerType::CAPABILITY:
       KJ_FAIL_ASSERT("Capabilities are not positional");
   }
@@ -2952,7 +2952,7 @@ ListReader ListReader::imbue(CapTableReader* capTable) const {
   return result;
 }
 
-bool ListReader::isCanonical(const word **readHead) {
+bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
   switch (this->getElementSize()) {
     case ElementSize::INLINE_COMPOSITE: {
       *readHead += 1;
@@ -2966,6 +2966,12 @@ bool ListReader::isCanonical(const word **readHead) {
       }
       auto structSize = (this->structDataSize / BITS_PER_WORD) +
                         (this->structPointerCount * WORDS_PER_POINTER);
+      if (structSize * this->elementCount != ref->listRef.inlineCompositeWordCount()) {
+        return false;
+      }
+      if (structSize == 0 * WORDS) {
+        return true;
+      }
       auto listEnd = *readHead + (this->elementCount / ELEMENTS * structSize) / WORDS;
       auto pointerHead = listEnd;
       bool listDataTrunc = false;

@@ -769,7 +769,7 @@ public:
   ListReader imbue(CapTableReader* capTable) const;
   // Return a copy of this reader except using the given capability context.
 
-  bool isCanonical(const word **readHead);
+  bool isCanonical(const word **readHead, const WirePointer* ref);
   // Validate this pointer's canonicity, subject to the conditions:
   // * All data to the left of readHead has been read thus far (for pointer
   //   ordering)

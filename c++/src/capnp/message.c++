@@ -75,9 +75,12 @@ bool MessageReader::isCanonical() {
   }
 
   const word* readHead = segment->getStartPtr() + 1;
-  return _::PointerReader::getRoot(segment, nullptr, segment->getStartPtr(),
-                                   this->getOptions().nestingLimit)
-                                  .isCanonical(&readHead);
+  bool rootIsCanonical = _::PointerReader::getRoot(segment, nullptr,
+                                                   segment->getStartPtr(),
+                                                   this->getOptions().nestingLimit)
+                                                  .isCanonical(&readHead);
+  bool allWordsConsumed = segment->getOffsetTo(readHead) == segment->getSize();
+  return rootIsCanonical && allWordsConsumed;
 }
 
 
