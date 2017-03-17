@@ -7,5 +7,5 @@ Name: Cap'n Proto JSON
 Description: JSON encoder and decoder for Cap'n Proto objects
 Version: @VERSION@
 Libs: -L${libdir} -lcapnp-json
-Requires: capnp = @VERSION@ kj-async = @VERSION@
+Requires: capnp = @VERSION@ kj = @VERSION@
 Cflags: -I${includedir}
