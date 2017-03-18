@@ -279,7 +279,7 @@ libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/persistent.capnp.c++                               \
   src/capnp/ez-rpc.c++
 
-libcapnp_json_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(PTHREAD_LIBS)
+libcapnp_json_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 libcapnp_json_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnp_json_la_SOURCES=                                      \
   src/capnp/compat/json.c++                                    \
