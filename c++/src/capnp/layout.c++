@@ -1678,7 +1678,7 @@ struct WireHelpers {
           auto se = value.getStructElement(ec);
           WordCount localDataSize = declDataSize;
           while (localDataSize != 0 * WORDS) {
-            size_t end = (localDataSize * BYTES_PER_WORD * BYTES) / BYTES;
+            size_t end = localDataSize * BYTES_PER_WORD / BYTES;
             ByteCount window = BYTES_PER_WORD * WORDS;
             size_t start = end - window / BYTES;
             kj::ArrayPtr<const byte> lastWord = se.getDataSectionAsBlob().slice(start, end);
@@ -2959,15 +2959,15 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
       if (this->structDataSize % BITS_PER_WORD != 0 * BITS) {
         return false;
       }
-      auto structSize = (this->structDataSize / BITS_PER_WORD) +
-                        (this->structPointerCount * WORDS_PER_POINTER);
-      if (structSize * this->elementCount != ref->listRef.inlineCompositeWordCount()) {
+      auto elementSize = (this->structDataSize / BITS_PER_WORD +
+                          this->structPointerCount * WORDS_PER_POINTER) / ELEMENTS;
+      if (elementSize * this->elementCount != ref->listRef.inlineCompositeWordCount()) {
         return false;
       }
-      if (structSize == 0 * WORDS) {
+      if (elementSize == 0 * WORDS / ELEMENTS) {
         return true;
       }
-      auto listEnd = *readHead + (this->elementCount / ELEMENTS * structSize) / WORDS;
+      auto listEnd = *readHead + (this->elementCount * elementSize) / WORDS;
       auto pointerHead = listEnd;
       bool listDataTrunc = false;
       bool listPtrTrunc = false;
