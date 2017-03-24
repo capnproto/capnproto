@@ -643,6 +643,7 @@ template <typename T>
 class Range {
 public:
   inline constexpr Range(const T& begin, const T& end): begin_(begin), end_(end) {}
+  inline explicit constexpr Range(const T& end): begin_(0), end_(end) {}
 
   class Iterator {
   public:
@@ -689,6 +690,14 @@ inline constexpr Range<Decay<T>> range(T begin, T end) { return Range<Decay<T>>(
 //
 //     // Prints 1, 2, 3, 4, 5, 6, 7, 8, 9.
 //     for (int i: kj::range(1, 10)) { print(i); }
+
+template <typename T>
+inline constexpr Range<Decay<T>> zeroTo(T end) { return Range<Decay<T>>(end); }
+// Returns a fake iterable container containing all values of T from zero (inclusive) to `end`
+// (exclusive).  Example:
+//
+//     // Prints 0, 1, 2, 3, 4, 5, 6, 7, 8, 9.
+//     for (int i: kj::zeroTo(10)) { print(i); }
 
 template <typename T>
 inline constexpr Range<size_t> indices(T&& container) {
