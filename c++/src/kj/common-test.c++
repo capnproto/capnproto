@@ -445,5 +445,19 @@ TEST(Common, ArrayAsBytes) {
   }
 }
 
+KJ_TEST("kj::range()") {
+  uint expected = 5;
+  for (uint i: range(5, 10)) {
+    KJ_EXPECT(i == expected++);
+  }
+  KJ_EXPECT(expected == 10);
+
+  expected = 0;
+  for (uint i: range(0, 8)) {
+    KJ_EXPECT(i == expected++);
+  }
+  KJ_EXPECT(expected == 8);
+}
+
 }  // namespace
 }  // namespace kj
