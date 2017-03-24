@@ -149,13 +149,13 @@ typedef unsigned char byte;
 #endif
 
 #if defined(KJ_DEBUG) || __NO_INLINE__
-#define KJ_ALWAYS_INLINE(prototype) inline prototype
+#define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__
 // Don't force inline in debug mode.
 #else
 #if defined(_MSC_VER)
-#define KJ_ALWAYS_INLINE(prototype) __forceinline prototype
+#define KJ_ALWAYS_INLINE(...) __forceinline __VA_ARGS__
 #else
-#define KJ_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
+#define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__ __attribute__((always_inline))
 #endif
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #endif
