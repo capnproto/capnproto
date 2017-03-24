@@ -42,7 +42,7 @@ void ReadLimiter::unread(WordCount64 amount) {
   // the limit value was not updated correctly for one or more reads, and therefore unread() could
   // overflow it even if it is only unreading bytes that were actually read.
   uint64_t oldValue = limit;
-  uint64_t newValue = oldValue + amount / WORDS;
+  uint64_t newValue = oldValue + unguard(amount / WORDS);
   if (newValue > oldValue) {
     limit = newValue;
   }
@@ -57,10 +57,24 @@ void SegmentBuilder::throwNotWritable() {
 
 // =======================================================================================
 
-ReaderArena::ReaderArena(MessageReader* message)
+static SegmentWordCount verifySegmentSize(size_t size) {
+  auto gsize = guarded(size) * WORDS;
+  return assertMaxBits<SEGMENT_WORD_COUNT_BITS>(gsize, [&]() {
+    KJ_FAIL_REQUIRE("segment is too large", size);
+  });
+}
+
+inline ReaderArena::ReaderArena(MessageReader* message, const word* firstSegment,
+                                SegmentWordCount firstSegmentSize)
     : message(message),
-      readLimiter(message->getOptions().traversalLimitInWords * WORDS),
-      segment0(this, SegmentId(0), message->getSegment(0), &readLimiter) {}
+      readLimiter(guarded(message->getOptions().traversalLimitInWords) * WORDS),
+      segment0(this, SegmentId(0), firstSegment, firstSegmentSize, &readLimiter) {}
+
+inline ReaderArena::ReaderArena(MessageReader* message, kj::ArrayPtr<const word> firstSegment)
+    : ReaderArena(message, firstSegment.begin(), verifySegmentSize(firstSegment.size())) {}
+
+ReaderArena::ReaderArena(MessageReader* message)
+    : ReaderArena(message, message->getSegment(0)) {}
 
 ReaderArena::~ReaderArena() noexcept(false) {}
 
@@ -89,6 +103,8 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
     return nullptr;
   }
 
+  SegmentWordCount newSegmentSize = verifySegmentSize(newSegment.size());
+
   if (*lock == nullptr) {
     // OK, the segment exists, so allocate the map.
     auto s = kj::heap<SegmentMap>();
@@ -96,7 +112,8 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
     *lock = kj::mv(s);
   }
 
-  auto segment = kj::heap<SegmentReader>(this, id, newSegment, &readLimiter);
+  auto segment = kj::heap<SegmentReader>(
+      this, id, newSegment.begin(), newSegmentSize, &readLimiter);
   SegmentReader* result = segment;
   segments->insert(std::make_pair(id.value, mv(segment)));
   return result;
@@ -116,14 +133,17 @@ BuilderArena::BuilderArena(MessageBuilder* message)
 BuilderArena::BuilderArena(MessageBuilder* message,
                            kj::ArrayPtr<MessageBuilder::SegmentInit> segments)
     : message(message),
-      segment0(this, SegmentId(0), segments[0].space, &this->dummyLimiter, segments[0].wordsUsed) {
+      segment0(this, SegmentId(0), segments[0].space.begin(),
+               verifySegmentSize(segments[0].space.size()),
+               &this->dummyLimiter, verifySegmentSize(segments[0].wordsUsed)) {
   if (segments.size() > 1) {
     kj::Vector<kj::Own<SegmentBuilder>> builders(segments.size() - 1);
 
     uint i = 1;
     for (auto& segment: segments.slice(1, segments.size())) {
       builders.add(kj::heap<SegmentBuilder>(
-          this, SegmentId(i++), segment.space, &this->dummyLimiter, segment.wordsUsed));
+          this, SegmentId(i++), segment.space.begin(), verifySegmentSize(segment.space.size()),
+          &this->dummyLimiter, verifySegmentSize(segment.wordsUsed)));
     }
 
     kj::Vector<kj::ArrayPtr<const word>> forOutput;
@@ -155,15 +175,16 @@ SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
   }
 }
 
-BuilderArena::AllocateResult BuilderArena::allocate(WordCount amount) {
+BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
   if (segment0.getArena() == nullptr) {
     // We're allocating the first segment.
-    kj::ArrayPtr<word> ptr = message->allocateSegment(amount / WORDS);
+    kj::ArrayPtr<word> ptr = message->allocateSegment(unguard(amount / WORDS));
+    auto actualSize = verifySegmentSize(ptr.size());
 
     // Re-allocate segment0 in-place.  This is a bit of a hack, but we have not returned any
     // pointers to this segment yet, so it should be fine.
     kj::dtor(segment0);
-    kj::ctor(segment0, this, SegmentId(0), ptr, &this->dummyLimiter);
+    kj::ctor(segment0, this, SegmentId(0), ptr.begin(), actualSize, &this->dummyLimiter);
 
     segmentWithSpace = &segment0;
     return AllocateResult { &segment0, segment0.allocate(amount) };
@@ -183,7 +204,7 @@ BuilderArena::AllocateResult BuilderArena::allocate(WordCount amount) {
     }
 
     // Need to allocate a new segment.
-    SegmentBuilder* result = addSegmentInternal(message->allocateSegment(amount / WORDS));
+    SegmentBuilder* result = addSegmentInternal(message->allocateSegment(unguard(amount / WORDS)));
 
     // Check this new segment first the next time we need to allocate.
     segmentWithSpace = result;
@@ -204,6 +225,8 @@ SegmentBuilder* BuilderArena::addSegmentInternal(kj::ArrayPtr<T> content) {
   KJ_REQUIRE(segment0.getArena() != nullptr,
       "Can't allocate external segments before allocating the root segment.");
 
+  auto contentSize = verifySegmentSize(content.size());
+
   MultiSegmentState* segmentState;
   KJ_IF_MAYBE(s, moreSegments) {
     segmentState = *s;
@@ -214,7 +237,8 @@ SegmentBuilder* BuilderArena::addSegmentInternal(kj::ArrayPtr<T> content) {
   }
 
   kj::Own<SegmentBuilder> newBuilder = kj::heap<SegmentBuilder>(
-      this, SegmentId(segmentState->builders.size() + 1), content, &this->dummyLimiter);
+      this, SegmentId(segmentState->builders.size() + 1),
+      content.begin(), contentSize, &this->dummyLimiter);
   SegmentBuilder* result = newBuilder.get();
   segmentState->builders.add(kj::mv(newBuilder));
 
