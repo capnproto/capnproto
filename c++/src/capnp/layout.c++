@@ -358,6 +358,15 @@ struct WireHelpers {
     memset(ptr, 0, unguard(count * BYTES_PER_POINTER / BYTES));
   }
 
+  static KJ_ALWAYS_INLINE(void zeroMemory(WirePointer* ptr)) {
+    memset(ptr, 0, sizeof(*ptr));
+  }
+
+  template <typename T>
+  static KJ_ALWAYS_INLINE(void zeroMemory(kj::ArrayPtr<T> array)) {
+    memset(array.begin(), 0, array.size() * sizeof(array[0]));
+  }
+
   static KJ_ALWAYS_INLINE(void copyMemory(byte* to, const byte* from, ByteCount32 count)) {
     memcpy(to, from, unguard(count / BYTES));
   }
@@ -369,6 +378,24 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(void copyMemory(WirePointer* to, const WirePointer* from,
                                           WirePointerCountN<29> count)) {
     memcpy(to, from, unguard(count * BYTES_PER_POINTER  / BYTES));
+  }
+
+  template <typename T>
+  static KJ_ALWAYS_INLINE(void copyMemory(T* to, const T* from)) {
+    memcpy(to, from, sizeof(*from));
+  }
+
+  // TODO(cleanup): Turn these into a .copyTo() method of ArrayPtr?
+  template <typename T>
+  static KJ_ALWAYS_INLINE(void copyMemory(T* to, kj::ArrayPtr<T> from)) {
+    memcpy(to, from.begin(), from.size() * sizeof(from[0]));
+  }
+  template <typename T>
+  static KJ_ALWAYS_INLINE(void copyMemory(T* to, kj::ArrayPtr<const T> from)) {
+    memcpy(to, from.begin(), from.size() * sizeof(from[0]));
+  }
+  static KJ_ALWAYS_INLINE(void copyMemory(char* to, kj::StringPtr from)) {
+    memcpy(to, from.begin(), from.size() * sizeof(from[0]));
   }
 
   static KJ_ALWAYS_INLINE(bool boundsCheck(
@@ -564,7 +591,7 @@ struct WireHelpers {
             zeroMemory(pad, G(2) * POINTERS);
           } else {
             zeroObject(segment, capTable, pad);
-            zeroMemory(pad, ONE * POINTERS);
+            zeroMemory(pad);
           }
         }
         break;
@@ -675,11 +702,17 @@ struct WireHelpers {
     if (ref->kind() == WirePointer::FAR) {
       SegmentBuilder* padSegment = segment->getArena()->getSegment(ref->farRef.segmentId.get());
       if (padSegment->isWritable()) {  // Don't zero external data.
-        word* pad = padSegment->getPtrUnchecked(ref->farPositionInSegment());
-        memset(pad, 0, sizeof(WirePointer) * (1 + ref->isDoubleFar()));
+        WirePointer* pad = reinterpret_cast<WirePointer*>(
+            padSegment->getPtrUnchecked(ref->farPositionInSegment()));
+        if (ref->isDoubleFar()) {
+          zeroMemory(pad, G(2) * POINTERS);
+        } else {
+          zeroMemory(pad);
+        }
       }
     }
-    memset(ref, 0, sizeof(*ref));
+
+    zeroMemory(ref);
   }
 
 
@@ -843,7 +876,7 @@ struct WireHelpers {
     switch (src->kind()) {
       case WirePointer::STRUCT: {
         if (src->isNull()) {
-          memset(dst, 0, sizeof(WirePointer));
+          zeroMemory(dst);
           return nullptr;
         } else {
           const word* srcPtr = src->target();
@@ -904,7 +937,7 @@ struct WireHelpers {
             dst->listRef.setInlineComposite(src->listRef.inlineCompositeWordCount());
 
             const WirePointer* srcTag = reinterpret_cast<const WirePointer*>(srcPtr);
-            memcpy(dstPtr, srcTag, sizeof(WirePointer));
+            copyMemory(reinterpret_cast<WirePointer*>(dstPtr), srcTag);
 
             const word* srcElement = srcPtr + POINTER_SIZE_IN_WORDS;
             word* dstElement = dstPtr + POINTER_SIZE_IN_WORDS;
@@ -948,12 +981,12 @@ struct WireHelpers {
     // We expect the caller to ensure the target is already null so won't leak.
 
     if (src->isNull()) {
-      memset(dst, 0, sizeof(WirePointer));
+      zeroMemory(dst);
     } else if (src->isPositional()) {
       transferPointer(dstSegment, dst, srcSegment, src, src->target());
     } else {
       // Far and other pointers are position-independent, so we can just copy.
-      memcpy(dst, src, sizeof(WirePointer));
+      copyMemory(dst, src);
     }
   }
 
@@ -973,7 +1006,7 @@ struct WireHelpers {
       }
 
       // We can just copy the upper 32 bits.  (Use memcpy() to comply with aliasing rules.)
-      memcpy(&dst->upper32Bits, &srcTag->upper32Bits, sizeof(srcTag->upper32Bits));
+      copyMemory(&dst->upper32Bits, &srcTag->upper32Bits);
     } else {
       // Need to create a far pointer.  Try to allocate it in the same segment as the source, so
       // that it doesn't need to be a double-far.
@@ -990,14 +1023,14 @@ struct WireHelpers {
         landingPad[0].farRef.segmentId.set(srcSegment->getSegmentId());
 
         landingPad[1].setKindWithZeroOffset(srcTag->kind());
-        memcpy(&landingPad[1].upper32Bits, &srcTag->upper32Bits, sizeof(srcTag->upper32Bits));
+        copyMemory(&landingPad[1].upper32Bits, &srcTag->upper32Bits);
 
         dst->setFar(true, farSegment->getOffsetTo(reinterpret_cast<word*>(landingPad)));
         dst->farRef.set(farSegment->getSegmentId());
       } else {
         // Simple landing pad is just a pointer.
         landingPad->setKindAndTarget(srcTag->kind(), srcPtr, srcSegment);
-        memcpy(&landingPad->upper32Bits, &srcTag->upper32Bits, sizeof(srcTag->upper32Bits));
+        copyMemory(&landingPad->upper32Bits, &srcTag->upper32Bits);
 
         dst->setFar(false, srcSegment->getOffsetTo(reinterpret_cast<word*>(landingPad)));
         dst->farRef.set(srcSegment->getSegmentId());
@@ -1549,7 +1582,7 @@ struct WireHelpers {
         []() { KJ_FAIL_REQUIRE("text blob too big"); }) * BYTES;
 
     auto allocation = initTextPointer(ref, segment, capTable, size, orphanArena);
-    memcpy(allocation.value.begin(), value.begin(), value.size());
+    copyMemory(allocation.value.begin(), value);
     return allocation;
   }
 
@@ -1612,7 +1645,7 @@ struct WireHelpers {
         []() { KJ_FAIL_REQUIRE("text blob too big"); }) * BYTES;
 
     auto allocation = initDataPointer(ref, segment, capTable, size, orphanArena);
-    memcpy(allocation.value.begin(), value.begin(), value.size());
+    copyMemory(allocation.value.begin(), value);
     return allocation;
   }
 
@@ -1728,7 +1761,7 @@ struct WireHelpers {
       zeroObject(segment, capTable, ref);
     }
     if (cap->isNull()) {
-      memset(ref, 0, sizeof(*ref));
+      zeroMemory(ref);
     } else {
       ref->setCap(capTable->injectCap(kj::mv(cap)));
     }
@@ -1862,7 +1895,7 @@ struct WireHelpers {
     useDefault:
       if (!dst->isNull()) {
         zeroObject(dstSegment, dstCapTable, dst);
-        memset(dst, 0, sizeof(*dst));
+        zeroMemory(dst);
       }
       return { dstSegment, nullptr };
     }
@@ -2012,16 +2045,16 @@ struct WireHelpers {
 
     if (value == nullptr) {
       // Set null.
-      memset(ref, 0, sizeof(*ref));
+      zeroMemory(ref);
     } else if (value.tagAsPtr()->isPositional()) {
       WireHelpers::transferPointer(segment, ref, value.segment, value.tagAsPtr(), value.location);
     } else {
       // FAR and OTHER pointers are position-independent, so we can just copy.
-      memcpy(ref, value.tagAsPtr(), sizeof(WirePointer));
+      copyMemory(ref, value.tagAsPtr());
     }
 
     // Take ownership away from the OrphanBuilder.
-    memset(value.tagAsPtr(), 0, sizeof(WirePointer));
+    zeroMemory(value.tagAsPtr());
     value.location = nullptr;
     value.segment = nullptr;
   }
@@ -2047,7 +2080,7 @@ struct WireHelpers {
     }
 
     // Zero out the pointer that was disowned.
-    memset(ref, 0, sizeof(*ref));
+    zeroMemory(ref);
 
     return result;
   }
@@ -2509,7 +2542,7 @@ OrphanBuilder PointerBuilder::disown() {
 
 void PointerBuilder::clear() {
   WireHelpers::zeroObject(segment, capTable, pointer);
-  memset(pointer, 0, sizeof(WirePointer));
+  WireHelpers::zeroMemory(pointer);
 }
 
 PointerType PointerBuilder::getPointerType() const {
@@ -2537,17 +2570,17 @@ PointerType PointerBuilder::getPointerType() const {
 void PointerBuilder::transferFrom(PointerBuilder other) {
   if (!pointer->isNull()) {
     WireHelpers::zeroObject(segment, capTable, pointer);
-    memset(pointer, 0, sizeof(*pointer));
+    WireHelpers::zeroMemory(pointer);
   }
   WireHelpers::transferPointer(segment, pointer, other.segment, other.pointer);
-  memset(other.pointer, 0, sizeof(*other.pointer));
+  WireHelpers::zeroMemory(other.pointer);
 }
 
 void PointerBuilder::copyFrom(PointerReader other, bool canonical) {
   if (other.pointer == nullptr) {
     if (!pointer->isNull()) {
       WireHelpers::zeroObject(segment, capTable, pointer);
-      memset(pointer, 0, sizeof(*pointer));
+      WireHelpers::zeroMemory(pointer);
     }
   } else {
     WireHelpers::copyPointer(segment, capTable, pointer,
@@ -2847,13 +2880,13 @@ MessageSizeCounts StructReader::totalSize() const {
 kj::Array<word> StructReader::canonicalize() {
   WordCount size = totalSize().wordCount + POINTER_SIZE_IN_WORDS;
   kj::Array<word> backing = kj::heapArray<word>(size / WORDS);
-  memset(backing.begin(), 0, backing.asBytes().size());
+  WireHelpers::zeroMemory(backing.begin());
   FlatMessageBuilder builder(backing);
   _::PointerHelpers<AnyPointer>::getInternalBuilder(builder.initRoot<AnyPointer>()).setStruct(*this, true);
   KJ_ASSERT(builder.isCanonical());
   auto output = builder.getSegmentsForOutput()[0];
   kj::Array<word> trunc = kj::heapArray<word>(output.size());
-  memcpy(trunc.begin(), output.begin(), output.asBytes().size());
+  WireHelpers::copyMemory(trunc.begin(), output);
   return trunc;
 }
 
@@ -3322,8 +3355,8 @@ OrphanBuilder OrphanBuilder::concat(
       auto step = builder.step / BITS_PER_BYTE;
       for (auto& list: lists) {
         auto count = step * list.size();
-        memcpy(target, list.ptr, count / BYTES);
-        target += count / BYTES;
+        WireHelpers::copyMemory(target, list.ptr, count);
+        target += count;
       }
       break;
     }
@@ -3443,6 +3476,8 @@ Data::Reader OrphanBuilder::asDataReader() const {
 }
 
 bool OrphanBuilder::truncate(ElementCount size, bool isText) {
+  // TODO(now): Method may have been damaged by merge conflicts.
+
   WirePointer* ref = tagAsPtr();
   SegmentBuilder* segment = this->segment;
 
@@ -3491,7 +3526,7 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
       // with us.
       word* expectedEnd = target + oldSize * (elementWordCount / ELEMENTS);
       KJ_ASSERT(newEndWord >= expectedEnd);
-      memset(expectedEnd, 0, (newEndWord - expectedEnd) * sizeof(word));
+      WireHelpers::zeroMemory(expectedEnd, newEndWord - expectedEnd);
       tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
     } else {
       if (segment->tryExtend(oldEndWord, newEndWord)) {
@@ -3558,7 +3593,7 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
       byte* newEndByte = begin + WireHelpers::roundBitsUpToBytes(size * step) - isText;
       byte* oldEndByte = reinterpret_cast<byte*>(oldEndWord);
 
-      memset(newEndByte, 0, oldEndByte - newEndByte);
+      WireHelpers::zeroMemory(newEndByte, intervalLength(newEndByte, oldEndByte));
       ref->listRef.set(elementSize, size);
       segment->tryTruncate(oldEndWord, newEndWord);
     } else {
@@ -3571,7 +3606,7 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
         OrphanBuilder replacement = initList(segment->getArena(), capTable, size, elementSize);
         ListBuilder newList = replacement.asList(elementSize);
         auto words = WireHelpers::roundBitsUpToWords(dataBitsPerElement(elementSize) * oldSize);
-        memcpy(newList.ptr, target, words * BYTES_PER_WORD / BYTES);
+        WireHelpers::copyMemory(newList.ptr, target, words);
         *this = kj::mv(replacement);
       }
     }
@@ -3608,7 +3643,7 @@ void OrphanBuilder::euthanize() {
       WireHelpers::zeroObject(segment, capTable, tagAsPtr());
     }
 
-    memset(&tag, 0, sizeof(tag));
+    WireHelpers::zeroMemory(&tag, ONE * WORDS);
     segment = nullptr;
     location = nullptr;
   });
