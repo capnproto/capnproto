@@ -37,6 +37,14 @@ KJ_TEST("kj::size() on native arrays") {
   KJ_EXPECT(expected == 4u);
 }
 
+struct ImplicitToInt {
+  int i;
+
+  operator int() const {
+    return i;
+  }
+};
+
 TEST(Common, Maybe) {
   {
     Maybe<int> m = 123;
@@ -164,6 +172,23 @@ TEST(Common, Maybe) {
     KJ_IF_MAYBE(v, mv(m)) {
       ADD_FAILURE();
       EXPECT_EQ(0, *v);  // avoid unused warning
+    }
+  }
+
+  {
+    // Test a case where an implicit conversion didn't used to happen correctly.
+    Maybe<ImplicitToInt> m(ImplicitToInt { 123 });
+    Maybe<uint> m2(m);
+    Maybe<uint> m3(kj::mv(m));
+    KJ_IF_MAYBE(v, m2) {
+      EXPECT_EQ(123, *v);
+    } else {
+      ADD_FAILURE();
+    }
+    KJ_IF_MAYBE(v, m3) {
+      EXPECT_EQ(123, *v);
+    } else {
+      ADD_FAILURE();
     }
   }
 }

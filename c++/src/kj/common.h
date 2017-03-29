@@ -1031,13 +1031,13 @@ public:
   template <typename U>
   Maybe(Maybe<U>&& other) noexcept(noexcept(T(instance<U&&>()))) {
     KJ_IF_MAYBE(val, kj::mv(other)) {
-      ptr = *val;
+      ptr.emplace(kj::mv(*val));
     }
   }
   template <typename U>
   Maybe(const Maybe<U>& other) {
     KJ_IF_MAYBE(val, other) {
-      ptr = *val;
+      ptr.emplace(*val);
     }
   }
 
