@@ -367,7 +367,7 @@ struct WireHelpers {
   }
 
   template <typename T>
-  static KJ_ALWAYS_INLINE(void zeroMemory(kj::ArrayPtr<T> array)) {
+  static inline void zeroMemory(kj::ArrayPtr<T> array) {
     memset(array.begin(), 0, array.size() * sizeof(array[0]));
   }
 
@@ -385,17 +385,17 @@ struct WireHelpers {
   }
 
   template <typename T>
-  static KJ_ALWAYS_INLINE(void copyMemory(T* to, const T* from)) {
+  static inline void copyMemory(T* to, const T* from) {
     memcpy(to, from, sizeof(*from));
   }
 
   // TODO(cleanup): Turn these into a .copyTo() method of ArrayPtr?
   template <typename T>
-  static KJ_ALWAYS_INLINE(void copyMemory(T* to, kj::ArrayPtr<T> from)) {
+  static inline void copyMemory(T* to, kj::ArrayPtr<T> from) {
     memcpy(to, from.begin(), from.size() * sizeof(from[0]));
   }
   template <typename T>
-  static KJ_ALWAYS_INLINE(void copyMemory(T* to, kj::ArrayPtr<const T> from)) {
+  static inline void copyMemory(T* to, kj::ArrayPtr<const T> from) {
     memcpy(to, from.begin(), from.size() * sizeof(from[0]));
   }
   static KJ_ALWAYS_INLINE(void copyMemory(char* to, kj::StringPtr from)) {

@@ -724,21 +724,6 @@ private:
 
   template <uint64_t, typename>
   friend class Bounded;
-
-  template <uint64_t aN, uint64_t bN, typename A, typename B>
-  friend constexpr Bounded<kj::min(aN, bN), WiderType<A, B>>
-  min(Bounded<aN, A> a, Bounded<bN, B> b);
-  template <uint64_t aN, uint b, typename A>
-  friend constexpr Bounded<kj::min(aN, b), A> min(Bounded<aN, A> a, BoundedConst<b>);
-  template <uint64_t aN, uint b, typename A>
-  friend constexpr Bounded<kj::min(aN, b), A> min(BoundedConst<b>, Bounded<aN, A> a);
-  template <uint64_t aN, uint64_t bN, typename A, typename B>
-  friend constexpr Bounded<kj::max(aN, bN), WiderType<A, B>>
-  max(Bounded<aN, A> a, Bounded<bN, B> b);
-  template <uint64_t aN, uint b, typename A>
-  friend constexpr Bounded<kj::max(aN, b), A> max(Bounded<aN, A> a, BoundedConst<b>);
-  template <uint64_t aN, uint b, typename A>
-  friend constexpr Bounded<kj::max(aN, b), A> max(BoundedConst<b>, Bounded<aN, A> a);
 };
 
 template <typename Number>
@@ -893,12 +878,12 @@ inline auto trySubtract(Quantity<T, Unit> value, Quantity<U, Unit> other)
 template <uint64_t aN, uint64_t bN, typename A, typename B>
 inline constexpr Bounded<kj::min(aN, bN), WiderType<A, B>>
 min(Bounded<aN, A> a, Bounded<bN, B> b) {
-  return Bounded<kj::min(aN, bN), WiderType<A, B>>(kj::min(a.value, b.value), unsafe);
+  return Bounded<kj::min(aN, bN), WiderType<A, B>>(kj::min(a.unwrap(), b.unwrap()), unsafe);
 }
 template <uint64_t aN, uint64_t bN, typename A, typename B>
 inline constexpr Bounded<kj::max(aN, bN), WiderType<A, B>>
 max(Bounded<aN, A> a, Bounded<bN, B> b) {
-  return Bounded<kj::max(aN, bN), WiderType<A, B>>(kj::max(a.value, b.value), unsafe);
+  return Bounded<kj::max(aN, bN), WiderType<A, B>>(kj::max(a.unwrap(), b.unwrap()), unsafe);
 }
 // We need to override min() and max() because:
 // 1) WiderType<> might not choose the correct bounds.
@@ -982,19 +967,19 @@ inline constexpr Bounded<cvalue, decltype(uint() - T())>
 
 template <uint64_t aN, uint b, typename A>
 inline constexpr Bounded<kj::min(aN, b), A> min(Bounded<aN, A> a, BoundedConst<b>) {
-  return Bounded<kj::min(aN, b), A>(kj::min(b, a.value), unsafe);
+  return Bounded<kj::min(aN, b), A>(kj::min(b, a.unwrap()), unsafe);
 }
 template <uint64_t aN, uint b, typename A>
 inline constexpr Bounded<kj::min(aN, b), A> min(BoundedConst<b>, Bounded<aN, A> a) {
-  return Bounded<kj::min(aN, b), A>(kj::min(a.value, b), unsafe);
+  return Bounded<kj::min(aN, b), A>(kj::min(a.unwrap(), b), unsafe);
 }
 template <uint64_t aN, uint b, typename A>
 inline constexpr Bounded<kj::max(aN, b), A> max(Bounded<aN, A> a, BoundedConst<b>) {
-  return Bounded<kj::max(aN, b), A>(kj::max(b, a.value), unsafe);
+  return Bounded<kj::max(aN, b), A>(kj::max(b, a.unwrap()), unsafe);
 }
 template <uint64_t aN, uint b, typename A>
 inline constexpr Bounded<kj::max(aN, b), A> max(BoundedConst<b>, Bounded<aN, A> a) {
-  return Bounded<kj::max(aN, b), A>(kj::max(a.value, b), unsafe);
+  return Bounded<kj::max(aN, b), A>(kj::max(a.unwrap(), b), unsafe);
 }
 // We need to override min() between a Bounded and a constant since:
 // 1) WiderType<> might choose BoundedConst over a 1-byte Bounded, which is wrong.
