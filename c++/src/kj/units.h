@@ -514,10 +514,6 @@ class GuardedConst {
 public:
   GuardedConst() = default;
 
-  inline constexpr GuardedConst(decltype(kj::maxValue)) {}
-  inline constexpr GuardedConst(decltype(kj::minValue)) {}
-  // These aren't directly useful but cause kj::max()/kj::min() to choose types correctly.
-
   inline constexpr uint unwrap() const { return value; }
 
 #define OP(op, check) \
@@ -608,8 +604,6 @@ public:
   static_assert(maxN <= T(kj::maxValue), "possible overflow detected");
 
   Guarded() = default;
-  inline constexpr Guarded(decltype(kj::maxValue)): value(maxN) {}
-  inline constexpr Guarded(decltype(kj::minValue)): value(0) {}
 
   Guarded(const Guarded& other) = default;
   template <typename OtherInt, typename = EnableIf<isIntegral<OtherInt>()>>
