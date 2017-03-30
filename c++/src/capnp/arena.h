@@ -370,7 +370,8 @@ inline bool SegmentReader::containsInterval(const void* from, const void* to) {
   return from >= this->ptr.begin() && to <= this->ptr.end() && from <= to &&
       readLimiter->canRead(
           intervalLength(reinterpret_cast<const byte*>(from),
-                         reinterpret_cast<const byte*>(to))
+                         reinterpret_cast<const byte*>(to),
+                         MAX_SEGMENT_WORDS * BYTES_PER_WORD)
               / BYTES_PER_WORD,
           arena);
 }
@@ -383,8 +384,8 @@ inline Arena* SegmentReader::getArena() { return arena; }
 inline SegmentId SegmentReader::getSegmentId() { return id; }
 inline const word* SegmentReader::getStartPtr() { return ptr.begin(); }
 inline SegmentWordCount SegmentReader::getOffsetTo(const word* ptr) {
-  KJ_IREQUIRE(this->ptr.begin() <= ptr && ptr < this->ptr.end());
-  return assumeBits<SEGMENT_WORD_COUNT_BITS>(intervalLength(this->ptr.begin(), ptr));
+  KJ_IREQUIRE(this->ptr.begin() <= ptr && ptr <= this->ptr.end());
+  return intervalLength(this->ptr.begin(), ptr, MAX_SEGMENT_WORDS);
 }
 inline SegmentWordCount SegmentReader::getSize() {
   return assumeBits<SEGMENT_WORD_COUNT_BITS>(ptr.size()) * WORDS;
@@ -412,7 +413,7 @@ inline SegmentBuilder::SegmentBuilder(BuilderArena* arena, SegmentId id, decltyp
       pos(nullptr), readOnly(false) {}
 
 inline word* SegmentBuilder::allocate(SegmentWordCount amount) {
-  if (intervalLength(pos, ptr.end()) < amount) {
+  if (intervalLength(pos, ptr.end(), MAX_SEGMENT_WORDS) < amount) {
     // Not enough space in the segment for this allocation.
     return nullptr;
   } else {

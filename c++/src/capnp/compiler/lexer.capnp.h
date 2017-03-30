@@ -559,10 +559,12 @@ private:
 // =======================================================================================
 
 inline  ::capnp::compiler::Token::Which Token::Reader::which() const {
-  return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
+  return _reader.getDataField<Which>(
+      ::kj::guarded<0>() * ::capnp::ELEMENTS);
 }
 inline  ::capnp::compiler::Token::Which Token::Builder::which() {
-  return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
+  return _builder.getDataField<Which>(
+      ::kj::guarded<0>() * ::capnp::ELEMENTS);
 }
 
 inline bool Token::Reader::isIdentifier() const {
@@ -573,48 +575,50 @@ inline bool Token::Builder::isIdentifier() {
 }
 inline bool Token::Reader::hasIdentifier() const {
   if (which() != Token::IDENTIFIER) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasIdentifier() {
   if (which() != Token::IDENTIFIER) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Token::Reader::getIdentifier() const {
   KJ_IREQUIRE((which() == Token::IDENTIFIER),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Token::Builder::getIdentifier() {
   KJ_IREQUIRE((which() == Token::IDENTIFIER),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline void Token::Builder::setIdentifier( ::capnp::Text::Reader value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::IDENTIFIER);
-  ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::IDENTIFIER);
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Token::Builder::initIdentifier(unsigned int size) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::IDENTIFIER);
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::IDENTIFIER);
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), size);
 }
 inline void Token::Builder::adoptIdentifier(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::IDENTIFIER);
-  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::IDENTIFIER);
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Token::Builder::disownIdentifier() {
   KJ_IREQUIRE((which() == Token::IDENTIFIER),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 
 inline bool Token::Reader::isStringLiteral() const {
@@ -625,48 +629,50 @@ inline bool Token::Builder::isStringLiteral() {
 }
 inline bool Token::Reader::hasStringLiteral() const {
   if (which() != Token::STRING_LITERAL) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasStringLiteral() {
   if (which() != Token::STRING_LITERAL) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Token::Reader::getStringLiteral() const {
   KJ_IREQUIRE((which() == Token::STRING_LITERAL),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Token::Builder::getStringLiteral() {
   KJ_IREQUIRE((which() == Token::STRING_LITERAL),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline void Token::Builder::setStringLiteral( ::capnp::Text::Reader value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::STRING_LITERAL);
-  ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::STRING_LITERAL);
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Token::Builder::initStringLiteral(unsigned int size) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::STRING_LITERAL);
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::STRING_LITERAL);
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), size);
 }
 inline void Token::Builder::adoptStringLiteral(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::STRING_LITERAL);
-  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::STRING_LITERAL);
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Token::Builder::disownStringLiteral() {
   KJ_IREQUIRE((which() == Token::STRING_LITERAL),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 
 inline bool Token::Reader::isIntegerLiteral() const {
@@ -679,20 +685,20 @@ inline  ::uint64_t Token::Reader::getIntegerLiteral() const {
   KJ_IREQUIRE((which() == Token::INTEGER_LITERAL),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint64_t Token::Builder::getIntegerLiteral() {
   KJ_IREQUIRE((which() == Token::INTEGER_LITERAL),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS);
 }
 inline void Token::Builder::setIntegerLiteral( ::uint64_t value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::INTEGER_LITERAL);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::INTEGER_LITERAL);
   _builder.setDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS, value);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS, value);
 }
 
 inline bool Token::Reader::isFloatLiteral() const {
@@ -705,20 +711,20 @@ inline double Token::Reader::getFloatLiteral() const {
   KJ_IREQUIRE((which() == Token::FLOAT_LITERAL),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField<double>(
-      1 * ::capnp::ELEMENTS);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS);
 }
 
 inline double Token::Builder::getFloatLiteral() {
   KJ_IREQUIRE((which() == Token::FLOAT_LITERAL),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField<double>(
-      1 * ::capnp::ELEMENTS);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS);
 }
 inline void Token::Builder::setFloatLiteral(double value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::FLOAT_LITERAL);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::FLOAT_LITERAL);
   _builder.setDataField<double>(
-      1 * ::capnp::ELEMENTS, value);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS, value);
 }
 
 inline bool Token::Reader::isOperator() const {
@@ -729,48 +735,50 @@ inline bool Token::Builder::isOperator() {
 }
 inline bool Token::Reader::hasOperator() const {
   if (which() != Token::OPERATOR) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasOperator() {
   if (which() != Token::OPERATOR) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Token::Reader::getOperator() const {
   KJ_IREQUIRE((which() == Token::OPERATOR),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Token::Builder::getOperator() {
   KJ_IREQUIRE((which() == Token::OPERATOR),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline void Token::Builder::setOperator( ::capnp::Text::Reader value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::OPERATOR);
-  ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::OPERATOR);
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Token::Builder::initOperator(unsigned int size) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::OPERATOR);
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::OPERATOR);
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), size);
 }
 inline void Token::Builder::adoptOperator(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::OPERATOR);
-  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::OPERATOR);
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Token::Builder::disownOperator() {
   KJ_IREQUIRE((which() == Token::OPERATOR),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 
 inline bool Token::Reader::isParenthesizedList() const {
@@ -781,54 +789,56 @@ inline bool Token::Builder::isParenthesizedList() {
 }
 inline bool Token::Reader::hasParenthesizedList() const {
   if (which() != Token::PARENTHESIZED_LIST) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasParenthesizedList() {
   if (which() != Token::PARENTHESIZED_LIST) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Reader Token::Reader::getParenthesizedList() const {
   KJ_IREQUIRE((which() == Token::PARENTHESIZED_LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::get(_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Builder Token::Builder::getParenthesizedList() {
   KJ_IREQUIRE((which() == Token::PARENTHESIZED_LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::get(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline void Token::Builder::setParenthesizedList( ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Reader value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::PARENTHESIZED_LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::PARENTHESIZED_LIST);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline void Token::Builder::setParenthesizedList(::kj::ArrayPtr<const  ::capnp::List< ::capnp::compiler::Token>::Reader> value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::PARENTHESIZED_LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::PARENTHESIZED_LIST);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Builder Token::Builder::initParenthesizedList(unsigned int size) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::PARENTHESIZED_LIST);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::PARENTHESIZED_LIST);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::init(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), size);
 }
 inline void Token::Builder::adoptParenthesizedList(
     ::capnp::Orphan< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>&& value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::PARENTHESIZED_LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::PARENTHESIZED_LIST);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::adopt(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>> Token::Builder::disownParenthesizedList() {
   KJ_IREQUIRE((which() == Token::PARENTHESIZED_LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::disown(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 
 inline bool Token::Reader::isBracketedList() const {
@@ -839,82 +849,84 @@ inline bool Token::Builder::isBracketedList() {
 }
 inline bool Token::Reader::hasBracketedList() const {
   if (which() != Token::BRACKETED_LIST) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasBracketedList() {
   if (which() != Token::BRACKETED_LIST) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Reader Token::Reader::getBracketedList() const {
   KJ_IREQUIRE((which() == Token::BRACKETED_LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::get(_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Builder Token::Builder::getBracketedList() {
   KJ_IREQUIRE((which() == Token::BRACKETED_LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::get(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline void Token::Builder::setBracketedList( ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Reader value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::BRACKETED_LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::BRACKETED_LIST);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline void Token::Builder::setBracketedList(::kj::ArrayPtr<const  ::capnp::List< ::capnp::compiler::Token>::Reader> value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::BRACKETED_LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::BRACKETED_LIST);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Builder Token::Builder::initBracketedList(unsigned int size) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::BRACKETED_LIST);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::BRACKETED_LIST);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::init(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), size);
 }
 inline void Token::Builder::adoptBracketedList(
     ::capnp::Orphan< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>&& value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::BRACKETED_LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::BRACKETED_LIST);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::adopt(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>> Token::Builder::disownBracketedList() {
   KJ_IREQUIRE((which() == Token::BRACKETED_LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::disown(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 
 inline  ::uint32_t Token::Reader::getStartByte() const {
   return _reader.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Token::Builder::getStartByte() {
   return _builder.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS);
 }
 inline void Token::Builder::setStartByte( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS, value);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint32_t Token::Reader::getEndByte() const {
   return _reader.getDataField< ::uint32_t>(
-      4 * ::capnp::ELEMENTS);
+      ::kj::guarded<4>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Token::Builder::getEndByte() {
   return _builder.getDataField< ::uint32_t>(
-      4 * ::capnp::ELEMENTS);
+      ::kj::guarded<4>() * ::capnp::ELEMENTS);
 }
 inline void Token::Builder::setEndByte( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      4 * ::capnp::ELEMENTS, value);
+      ::kj::guarded<4>() * ::capnp::ELEMENTS, value);
 }
 
 inline bool Token::Reader::isBinaryLiteral() const {
@@ -925,87 +937,93 @@ inline bool Token::Builder::isBinaryLiteral() {
 }
 inline bool Token::Reader::hasBinaryLiteral() const {
   if (which() != Token::BINARY_LITERAL) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasBinaryLiteral() {
   if (which() != Token::BINARY_LITERAL) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Data::Reader Token::Reader::getBinaryLiteral() const {
   KJ_IREQUIRE((which() == Token::BINARY_LITERAL),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline  ::capnp::Data::Builder Token::Builder::getBinaryLiteral() {
   KJ_IREQUIRE((which() == Token::BINARY_LITERAL),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline void Token::Builder::setBinaryLiteral( ::capnp::Data::Reader value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::BINARY_LITERAL);
-  ::capnp::_::PointerHelpers< ::capnp::Data>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::BINARY_LITERAL);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Data::Builder Token::Builder::initBinaryLiteral(unsigned int size) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::BINARY_LITERAL);
-  return ::capnp::_::PointerHelpers< ::capnp::Data>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::BINARY_LITERAL);
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::init(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), size);
 }
 inline void Token::Builder::adoptBinaryLiteral(
     ::capnp::Orphan< ::capnp::Data>&& value) {
   _builder.setDataField<Token::Which>(
-      0 * ::capnp::ELEMENTS, Token::BINARY_LITERAL);
-  ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Token::BINARY_LITERAL);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Data> Token::Builder::disownBinaryLiteral() {
   KJ_IREQUIRE((which() == Token::BINARY_LITERAL),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 
 inline  ::capnp::compiler::Statement::Which Statement::Reader::which() const {
-  return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
+  return _reader.getDataField<Which>(
+      ::kj::guarded<0>() * ::capnp::ELEMENTS);
 }
 inline  ::capnp::compiler::Statement::Which Statement::Builder::which() {
-  return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
+  return _builder.getDataField<Which>(
+      ::kj::guarded<0>() * ::capnp::ELEMENTS);
 }
 
 inline bool Statement::Reader::hasTokens() const {
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool Statement::Builder::hasTokens() {
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Token>::Reader Statement::Reader::getTokens() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::compiler::Token>::Builder Statement::Builder::getTokens() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline void Statement::Builder::setTokens( ::capnp::List< ::capnp::compiler::Token>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::compiler::Token>::Builder Statement::Builder::initTokens(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::init(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), size);
 }
 inline void Statement::Builder::adoptTokens(
     ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Token>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::adopt(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Token>> Statement::Builder::disownTokens() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::disown(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 
 inline bool Statement::Reader::isLine() const {
@@ -1018,20 +1036,20 @@ inline  ::capnp::Void Statement::Reader::getLine() const {
   KJ_IREQUIRE((which() == Statement::LINE),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::Void Statement::Builder::getLine() {
   KJ_IREQUIRE((which() == Statement::LINE),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS);
 }
 inline void Statement::Builder::setLine( ::capnp::Void value) {
   _builder.setDataField<Statement::Which>(
-      0 * ::capnp::ELEMENTS, Statement::LINE);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Statement::LINE);
   _builder.setDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS, value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, value);
 }
 
 inline bool Statement::Reader::isBlock() const {
@@ -1042,172 +1060,180 @@ inline bool Statement::Builder::isBlock() {
 }
 inline bool Statement::Reader::hasBlock() const {
   if (which() != Statement::BLOCK) return false;
-  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<1>() * ::capnp::POINTERS).isNull();
 }
 inline bool Statement::Builder::hasBlock() {
   if (which() != Statement::BLOCK) return false;
-  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<1>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Statement>::Reader Statement::Reader::getBlock() const {
   KJ_IREQUIRE((which() == Statement::BLOCK),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::get(
-      _reader.getPointerField(1 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::get(_reader.getPointerField(
+      ::kj::guarded<1>() * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::compiler::Statement>::Builder Statement::Builder::getBlock() {
   KJ_IREQUIRE((which() == Statement::BLOCK),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::get(
-      _builder.getPointerField(1 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::get(_builder.getPointerField(
+      ::kj::guarded<1>() * ::capnp::POINTERS));
 }
 inline void Statement::Builder::setBlock( ::capnp::List< ::capnp::compiler::Statement>::Reader value) {
   _builder.setDataField<Statement::Which>(
-      0 * ::capnp::ELEMENTS, Statement::BLOCK);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::set(
-      _builder.getPointerField(1 * ::capnp::POINTERS), value);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Statement::BLOCK);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::set(_builder.getPointerField(
+      ::kj::guarded<1>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::compiler::Statement>::Builder Statement::Builder::initBlock(unsigned int size) {
   _builder.setDataField<Statement::Which>(
-      0 * ::capnp::ELEMENTS, Statement::BLOCK);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::init(
-      _builder.getPointerField(1 * ::capnp::POINTERS), size);
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Statement::BLOCK);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::init(_builder.getPointerField(
+      ::kj::guarded<1>() * ::capnp::POINTERS), size);
 }
 inline void Statement::Builder::adoptBlock(
     ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Statement>>&& value) {
   _builder.setDataField<Statement::Which>(
-      0 * ::capnp::ELEMENTS, Statement::BLOCK);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::adopt(
-      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
+      ::kj::guarded<0>() * ::capnp::ELEMENTS, Statement::BLOCK);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::adopt(_builder.getPointerField(
+      ::kj::guarded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Statement>> Statement::Builder::disownBlock() {
   KJ_IREQUIRE((which() == Statement::BLOCK),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::disown(
-      _builder.getPointerField(1 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::disown(_builder.getPointerField(
+      ::kj::guarded<1>() * ::capnp::POINTERS));
 }
 
 inline bool Statement::Reader::hasDocComment() const {
-  return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<2>() * ::capnp::POINTERS).isNull();
 }
 inline bool Statement::Builder::hasDocComment() {
-  return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<2>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Statement::Reader::getDocComment() const {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader.getPointerField(2 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::kj::guarded<2>() * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Statement::Builder::getDocComment() {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder.getPointerField(2 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::kj::guarded<2>() * ::capnp::POINTERS));
 }
 inline void Statement::Builder::setDocComment( ::capnp::Text::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder.getPointerField(2 * ::capnp::POINTERS), value);
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::kj::guarded<2>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Statement::Builder::initDocComment(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder.getPointerField(2 * ::capnp::POINTERS), size);
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::kj::guarded<2>() * ::capnp::POINTERS), size);
 }
 inline void Statement::Builder::adoptDocComment(
     ::capnp::Orphan< ::capnp::Text>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::kj::guarded<2>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Statement::Builder::disownDocComment() {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder.getPointerField(2 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::kj::guarded<2>() * ::capnp::POINTERS));
 }
 
 inline  ::uint32_t Statement::Reader::getStartByte() const {
   return _reader.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Statement::Builder::getStartByte() {
   return _builder.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS);
 }
 inline void Statement::Builder::setStartByte( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS, value);
+      ::kj::guarded<1>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint32_t Statement::Reader::getEndByte() const {
   return _reader.getDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS);
+      ::kj::guarded<2>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Statement::Builder::getEndByte() {
   return _builder.getDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS);
+      ::kj::guarded<2>() * ::capnp::ELEMENTS);
 }
 inline void Statement::Builder::setEndByte( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS, value);
+      ::kj::guarded<2>() * ::capnp::ELEMENTS, value);
 }
 
 inline bool LexedTokens::Reader::hasTokens() const {
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool LexedTokens::Builder::hasTokens() {
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Token>::Reader LexedTokens::Reader::getTokens() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::compiler::Token>::Builder LexedTokens::Builder::getTokens() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline void LexedTokens::Builder::setTokens( ::capnp::List< ::capnp::compiler::Token>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::compiler::Token>::Builder LexedTokens::Builder::initTokens(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::init(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), size);
 }
 inline void LexedTokens::Builder::adoptTokens(
     ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Token>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::adopt(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Token>> LexedTokens::Builder::disownTokens() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::disown(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 
 inline bool LexedStatements::Reader::hasStatements() const {
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool LexedStatements::Builder::hasStatements() {
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Statement>::Reader LexedStatements::Reader::getStatements() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::get(_reader.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::compiler::Statement>::Builder LexedStatements::Builder::getStatements() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::get(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 inline void LexedStatements::Builder::setStatements( ::capnp::List< ::capnp::compiler::Statement>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::set(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::compiler::Statement>::Builder LexedStatements::Builder::initStatements(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::init(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), size);
 }
 inline void LexedStatements::Builder::adoptStatements(
     ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Statement>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::adopt(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Statement>> LexedStatements::Builder::disownStatements() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::disown(_builder.getPointerField(
+      ::kj::guarded<0>() * ::capnp::POINTERS));
 }
 
 }  // namespace

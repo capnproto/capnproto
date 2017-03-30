@@ -208,7 +208,8 @@ struct StructSize {
 
 template <typename T, typename CapnpPrivate = typename T::_capnpPrivate>
 inline constexpr StructSize structSize() {
-  return StructSize(CapnpPrivate::dataWordSize * WORDS, CapnpPrivate::pointerCount * POINTERS);
+  return StructSize(guarded(CapnpPrivate::dataWordSize) * WORDS,
+                    guarded(CapnpPrivate::pointerCount) * POINTERS);
 }
 
 template <typename T, typename CapnpPrivate = typename T::_capnpPrivate,
@@ -217,7 +218,8 @@ inline constexpr StructSize minStructSizeForElement() {
   // If T is a struct, return its struct size. Otherwise return the minimum struct size big enough
   // to hold a T.
 
-  return StructSize(CapnpPrivate::dataWordSize * WORDS, CapnpPrivate::pointerCount * POINTERS);
+  return StructSize(guarded(CapnpPrivate::dataWordSize) * WORDS,
+                    guarded(CapnpPrivate::pointerCount) * POINTERS);
 }
 
 template <typename T, typename = kj::EnableIf<CAPNP_KIND(T) != Kind::STRUCT>>
@@ -226,7 +228,8 @@ inline constexpr StructSize minStructSizeForElement() {
   // to hold a T.
 
   return StructSize(
-      dataBitsPerElement(elementSizeForType<T>()) * ELEMENTS > 0 * BITS ? 1 * WORDS : 0 * WORDS,
+      dataBitsPerElement(elementSizeForType<T>()) * ELEMENTS > ZERO * BITS
+          ? StructDataWordCount(ONE * WORDS) : StructDataWordCount(ZERO * WORDS),
       pointersPerElement(elementSizeForType<T>()) * ELEMENTS);
 }
 
@@ -509,30 +512,30 @@ public:
   inline _::ListBuilder getPointerSectionAsList();
 
   template <typename T>
-  KJ_ALWAYS_INLINE(bool hasDataField(StructDataElementOffset offset));
+  KJ_ALWAYS_INLINE(bool hasDataField(StructDataOffset offset));
   // Return true if the field is set to something other than its default value.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataField(StructDataElementOffset offset));
+  KJ_ALWAYS_INLINE(T getDataField(StructDataOffset offset));
   // Gets the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataField(StructDataElementOffset offset, Mask<T> mask));
+  KJ_ALWAYS_INLINE(T getDataField(StructDataOffset offset, Mask<T> mask));
   // Like getDataField() but applies the given XOR mask to the data on load.  Used for reading
   // fields with non-zero default values.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(void setDataField(StructDataElementOffset offset, kj::NoInfer<T> value));
+  KJ_ALWAYS_INLINE(void setDataField(StructDataOffset offset, kj::NoInfer<T> value));
   // Sets the data field value at the given offset.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(void setDataField(StructDataElementOffset offset,
+  KJ_ALWAYS_INLINE(void setDataField(StructDataOffset offset,
                                      kj::NoInfer<T> value, Mask<T> mask));
   // Like setDataField() but applies the given XOR mask before storing.  Used for writing fields
   // with non-zero default values.
 
-  KJ_ALWAYS_INLINE(PointerBuilder getPointerField(StructPointerCount ptrIndex));
+  KJ_ALWAYS_INLINE(PointerBuilder getPointerField(StructPointerOffset ptrIndex));
   // Get a builder for a pointer field given the index within the pointer section.
 
   void clearAll();
@@ -590,8 +593,8 @@ public:
         dataSize(ZERO * BITS), pointerCount(ZERO * POINTERS), nestingLimit(0x7fffffff) {}
   inline StructReader(kj::ArrayPtr<const word> data)
       : segment(nullptr), capTable(nullptr), data(data.begin()), pointers(nullptr),
-        dataSize(data.size() * WORDS * BITS_PER_WORD), pointerCount(ZERO * POINTERS),
-        nestingLimit(0x7fffffff) {}
+        dataSize(assumeBits<STRUCT_DATA_WORD_COUNT_BITS>(data.size()) * WORDS * BITS_PER_WORD),
+        pointerCount(ZERO * POINTERS), nestingLimit(0x7fffffff) {}
 
   const void* getLocation() const { return data; }
 
@@ -603,21 +606,21 @@ public:
   kj::Array<word> canonicalize();
 
   template <typename T>
-  KJ_ALWAYS_INLINE(bool hasDataField(StructDataElementOffset offset) const);
+  KJ_ALWAYS_INLINE(bool hasDataField(StructDataOffset offset) const);
   // Return true if the field is set to something other than its default value.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataField(StructDataElementOffset offset) const);
+  KJ_ALWAYS_INLINE(T getDataField(StructDataOffset offset) const);
   // Get the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.  Returns zero if the offset is past the
   // end of the struct's data section.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataField(StructDataElementOffset offset, Mask<T> mask) const);
+  KJ_ALWAYS_INLINE(T getDataField(StructDataOffset offset, Mask<T> mask) const);
   // Like getDataField(offset), but applies the given XOR mask to the result.  Used for reading
   // fields with non-zero default values.
 
-  KJ_ALWAYS_INLINE(PointerReader getPointerField(StructPointerCount ptrIndex) const);
+  KJ_ALWAYS_INLINE(PointerReader getPointerField(StructPointerOffset ptrIndex) const);
   // Get a reader for a pointer field given the index within the pointer section.  If the index
   // is out-of-bounds, returns a null pointer.
 
@@ -685,8 +688,8 @@ private:
 class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline explicit ListBuilder(ElementSize elementSize)
-      : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
-        step(ZERO * BITS / ELEMENTS), structDataSize(0 * BITS),
+      : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(ZERO * ELEMENTS),
+        step(ZERO * BITS / ELEMENTS), structDataSize(ZERO * BITS),
         structPointerCount(ZERO * POINTERS), elementSize(elementSize) {}
 
   inline word* getLocation() {
@@ -754,7 +757,7 @@ private:
   // from other types when the overall size is exactly zero or one words.
 
   inline ListBuilder(SegmentBuilder* segment, CapTableBuilder* capTable, void* ptr,
-                     decltype(BITS / ELEMENTS) step, ElementCount size,
+                     BitsPerElementN<23> step, ListElementCount size,
                      StructDataBitCount structDataSize, StructPointerCount structPointerCount,
                      ElementSize elementSize)
       : segment(segment), capTable(capTable), ptr(reinterpret_cast<byte*>(ptr)),
@@ -831,7 +834,7 @@ private:
   // Once this reaches zero, further pointers will be pruned.
 
   inline ListReader(SegmentReader* segment, CapTableReader* capTable, const void* ptr,
-                    ElementCount elementCount, BitsPerElementN<23> step,
+                    ListElementCount elementCount, BitsPerElementN<23> step,
                     StructDataBitCount structDataSize, StructPointerCount structPointerCount,
                     ElementSize elementSize, int nestingLimit)
       : segment(segment), capTable(capTable), ptr(reinterpret_cast<const byte*>(ptr)),
@@ -1000,57 +1003,57 @@ inline _::ListBuilder StructBuilder::getPointerSectionAsList() {
 }
 
 template <typename T>
-inline bool StructBuilder::hasDataField(StructDataElementOffset offset) {
+inline bool StructBuilder::hasDataField(StructDataOffset offset) {
   return getDataField<Mask<T>>(offset) != 0;
 }
 
 template <>
-inline bool StructBuilder::hasDataField<Void>(StructDataElementOffset offset) {
+inline bool StructBuilder::hasDataField<Void>(StructDataOffset offset) {
   return false;
 }
 
 template <typename T>
-inline T StructBuilder::getDataField(StructDataElementOffset offset) {
-  return reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].get();
+inline T StructBuilder::getDataField(StructDataOffset offset) {
+  return reinterpret_cast<WireValue<T>*>(data)[unguard(offset / ELEMENTS)].get();
 }
 
 template <>
-inline bool StructBuilder::getDataField<bool>(StructDataElementOffset offset) {
-  BitCountN<22> boffset = offset * (ONE * BITS / ELEMENTS);
+inline bool StructBuilder::getDataField<bool>(StructDataOffset offset) {
+  BitCount32 boffset = offset * (ONE * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) &
       unguard(ONE << (boffset % BITS_PER_BYTE / BITS))) != 0;
 }
 
 template <>
-inline Void StructBuilder::getDataField<Void>(StructDataElementOffset offset) {
+inline Void StructBuilder::getDataField<Void>(StructDataOffset offset) {
   return VOID;
 }
 
 template <typename T>
-inline T StructBuilder::getDataField(StructDataElementOffset offset, Mask<T> mask) {
+inline T StructBuilder::getDataField(StructDataOffset offset, Mask<T> mask) {
   return unmask<T>(getDataField<Mask<T> >(offset), mask);
 }
 
 template <typename T>
-inline void StructBuilder::setDataField(StructDataElementOffset offset, kj::NoInfer<T> value) {
-  reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].set(value);
+inline void StructBuilder::setDataField(StructDataOffset offset, kj::NoInfer<T> value) {
+  reinterpret_cast<WireValue<T>*>(data)[unguard(offset / ELEMENTS)].set(value);
 }
 
 #if CAPNP_CANONICALIZE_NAN
 // Use mask() on floats and doubles to make sure we canonicalize NaNs.
 template <>
-inline void StructBuilder::setDataField<float>(StructDataElementOffset offset, float value) {
+inline void StructBuilder::setDataField<float>(StructDataOffset offset, float value) {
   setDataField<uint32_t>(offset, mask<float>(value, 0));
 }
 template <>
-inline void StructBuilder::setDataField<double>(StructDataElementOffset offset, double value) {
+inline void StructBuilder::setDataField<double>(StructDataOffset offset, double value) {
   setDataField<uint64_t>(offset, mask<double>(value, 0));
 }
 #endif
 
 template <>
-inline void StructBuilder::setDataField<bool>(StructDataElementOffset offset, bool value) {
+inline void StructBuilder::setDataField<bool>(StructDataOffset offset, bool value) {
   auto boffset = offset * (ONE * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   uint bitnum = unguardMaxBits<3>(boffset % BITS_PER_BYTE / BITS);
@@ -1059,15 +1062,15 @@ inline void StructBuilder::setDataField<bool>(StructDataElementOffset offset, bo
 }
 
 template <>
-inline void StructBuilder::setDataField<Void>(StructDataElementOffset offset, Void value) {}
+inline void StructBuilder::setDataField<Void>(StructDataOffset offset, Void value) {}
 
 template <typename T>
-inline void StructBuilder::setDataField(StructDataElementOffset offset,
+inline void StructBuilder::setDataField(StructDataOffset offset,
                                         kj::NoInfer<T> value, Mask<T> m) {
   setDataField<Mask<T> >(offset, mask<T>(value, m));
 }
 
-inline PointerBuilder StructBuilder::getPointerField(StructPointerCount ptrIndex) {
+inline PointerBuilder StructBuilder::getPointerField(StructPointerOffset ptrIndex) {
   // Hacky because WirePointer is defined in the .c++ file (so is incomplete here).
   return PointerBuilder(segment, capTable, reinterpret_cast<WirePointer*>(
       reinterpret_cast<word*>(pointers) + ptrIndex * WORDS_PER_POINTER));
@@ -1087,26 +1090,26 @@ inline _::ListReader StructReader::getPointerSectionAsList() {
 }
 
 template <typename T>
-inline bool StructReader::hasDataField(StructDataElementOffset offset) const {
+inline bool StructReader::hasDataField(StructDataOffset offset) const {
   return getDataField<Mask<T>>(offset) != 0;
 }
 
 template <>
-inline bool StructReader::hasDataField<Void>(StructDataElementOffset offset) const {
+inline bool StructReader::hasDataField<Void>(StructDataOffset offset) const {
   return false;
 }
 
 template <typename T>
-inline T StructReader::getDataField(StructDataElementOffset offset) const {
+inline T StructReader::getDataField(StructDataOffset offset) const {
   if ((offset + ONE * ELEMENTS) * capnp::bitsPerElement<T>() <= dataSize) {
-    return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
+    return reinterpret_cast<const WireValue<T>*>(data)[unguard(offset / ELEMENTS)].get();
   } else {
     return static_cast<T>(0);
   }
 }
 
 template <>
-inline bool StructReader::getDataField<bool>(StructDataElementOffset offset) const {
+inline bool StructReader::getDataField<bool>(StructDataOffset offset) const {
   auto boffset = offset * (ONE * BITS / ELEMENTS);
   if (boffset < dataSize) {
     const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
@@ -1118,16 +1121,16 @@ inline bool StructReader::getDataField<bool>(StructDataElementOffset offset) con
 }
 
 template <>
-inline Void StructReader::getDataField<Void>(StructDataElementOffset offset) const {
+inline Void StructReader::getDataField<Void>(StructDataOffset offset) const {
   return VOID;
 }
 
 template <typename T>
-T StructReader::getDataField(StructDataElementOffset offset, Mask<T> mask) const {
+T StructReader::getDataField(StructDataOffset offset, Mask<T> mask) const {
   return unmask<T>(getDataField<Mask<T> >(offset), mask);
 }
 
-inline PointerReader StructReader::getPointerField(StructPointerCount ptrIndex) const {
+inline PointerReader StructReader::getPointerField(StructPointerOffset ptrIndex) const {
   if (ptrIndex < pointerCount) {
     // Hacky because WirePointer is defined in the .c++ file (so is incomplete here).
     return PointerReader(segment, capTable, reinterpret_cast<const WirePointer*>(

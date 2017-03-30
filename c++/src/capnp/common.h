@@ -405,6 +405,7 @@ using kj::assertMaxBits;
 using kj::upgradeGuard;
 using kj::ThrowOverflow;
 using kj::assumeBits;
+using kj::assumeMax;
 using kj::subtractChecked;
 
 template <typename T, typename U>
@@ -480,33 +481,51 @@ constexpr auto MAX_LIST_ELEMENTS =
 constexpr auto MAX_STUCT_DATA_WORDS =
     guarded<kj::maxValueForBits<STRUCT_DATA_WORD_COUNT_BITS>()>() * WORDS;
 constexpr auto MAX_STRUCT_POINTER_COUNT =
-    guarded<kj::maxValueForBits<STRUCT_POINTER_COUNT_BITS>()>() *POINTERS;
+    guarded<kj::maxValueForBits<STRUCT_POINTER_COUNT_BITS>()>() * POINTERS;
 
 using StructDataBitCount = decltype(WordCountN<STRUCT_POINTER_COUNT_BITS>() * BITS_PER_WORD);
-using StructDataElementOffset = decltype(StructDataBitCount() * (ONE * ELEMENTS / BITS));
 // Number of bits in a Struct data segment (should come out to BitCountN<22>).
+
+using StructDataOffset = decltype(StructDataBitCount() * (ONE * ELEMENTS / BITS));
+using StructPointerOffset = StructPointerCount;
+// Type of a field offset.
+
+inline StructDataOffset assumeDataOffset(uint32_t offset) {
+  return assumeMax(MAX_STUCT_DATA_WORDS * BITS_PER_WORD * (ONE * ELEMENTS / BITS),
+                   guarded(offset) * ELEMENTS);
+}
+
+inline StructPointerOffset assumePointerOffset(uint32_t offset) {
+  return assumeMax(MAX_STRUCT_POINTER_COUNT, guarded(offset) * POINTERS);
+}
 
 constexpr uint MAX_TEXT_SIZE = kj::maxValueForBits<BLOB_SIZE_BITS>() - 1;
 typedef kj::Quantity<kj::Guarded<MAX_TEXT_SIZE, uint>, byte> TextSize;
 // Not including NUL terminator.
 
 template <typename T>
-inline KJ_CONSTEXPR() decltype(BYTES / ELEMENTS) bytesPerElement() {
+inline KJ_CONSTEXPR() decltype(guarded<sizeof(T)>() * BYTES / ELEMENTS) bytesPerElement() {
   return guarded<sizeof(T)>() * BYTES / ELEMENTS;
 }
 
 template <typename T>
-inline KJ_CONSTEXPR() decltype(BITS / ELEMENTS) bitsPerElement() {
-  return guarded<sizeof(T)>() * 8 * BITS / ELEMENTS;
+inline KJ_CONSTEXPR() decltype(guarded<sizeof(T) * 8>() * BITS / ELEMENTS) bitsPerElement() {
+  return guarded<sizeof(T) * 8>() * BITS / ELEMENTS;
 }
 
-inline constexpr ByteCountN<sizeof(size_t) * 8, size_t>
-    intervalLength(const byte* a, const byte* b) {
-  return kj::guarded(b - a) * BYTES;
+template <typename T, uint maxN>
+inline constexpr kj::Quantity<kj::Guarded<maxN, size_t>, T>
+intervalLength(const T* a, const T* b, kj::Quantity<kj::GuardedConst<maxN>, T>) {
+  return kj::assumeMax<maxN>(b - a) * kj::unit<kj::Quantity<kj::GuardedConst<1u>, T>>();
 }
-inline constexpr WordCountN<sizeof(size_t) * 8, size_t>
-    intervalLength(const word* a, const word* b) {
-  return kj::guarded(b - a) * WORDS;
+
+template <typename T, typename U>
+inline constexpr kj::ArrayPtr<const U> arrayPtr(const U* ptr, kj::Quantity<T, U> size) {
+  return kj::ArrayPtr<const U>(ptr, unguard(size / kj::unit<kj::Quantity<T, U>>()));
+}
+template <typename T, typename U>
+inline constexpr kj::ArrayPtr<U> arrayPtr(U* ptr, kj::Quantity<T, U> size) {
+  return kj::ArrayPtr<U>(ptr, unguard(size / kj::unit<kj::Quantity<T, U>>()));
 }
 
 #else

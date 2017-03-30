@@ -1014,13 +1014,13 @@ struct PointerHelpers<AnyList, Kind::OTHER> {
 template <>
 struct OrphanGetImpl<AnyStruct, Kind::OTHER> {
   static inline AnyStruct::Builder apply(_::OrphanBuilder& builder) {
-    return AnyStruct::Builder(builder.asStruct(_::StructSize(0 * WORDS, 0 * POINTERS)));
+    return AnyStruct::Builder(builder.asStruct(_::StructSize(ZERO * WORDS, ZERO * POINTERS)));
   }
   static inline AnyStruct::Reader applyReader(const _::OrphanBuilder& builder) {
-    return AnyStruct::Reader(builder.asStructReader(_::StructSize(0 * WORDS, 0 * POINTERS)));
+    return AnyStruct::Reader(builder.asStructReader(_::StructSize(ZERO * WORDS, ZERO * POINTERS)));
   }
   static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
-    builder.truncate(size, _::StructSize(0 * WORDS, 0 * POINTERS));
+    builder.truncate(size, _::StructSize(ZERO * WORDS, ZERO * POINTERS));
   }
 };
 

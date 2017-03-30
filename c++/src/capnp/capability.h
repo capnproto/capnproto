@@ -650,7 +650,7 @@ struct List<T, Kind::INTERFACE> {
     Reader() = default;
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
-    inline uint size() const { return reader.size() / ELEMENTS; }
+    inline uint size() const { return unguard(reader.size() / ELEMENTS); }
     inline typename T::Client operator[](uint index) const {
       KJ_IREQUIRE(index < size());
       return typename T::Client(reader.getPointerElement(
@@ -683,7 +683,7 @@ struct List<T, Kind::INTERFACE> {
     inline operator Reader() const { return Reader(builder.asReader()); }
     inline Reader asReader() const { return Reader(builder.asReader()); }
 
-    inline uint size() const { return builder.size() / ELEMENTS; }
+    inline uint size() const { return unguard(builder.size() / ELEMENTS); }
     inline typename T::Client operator[](uint index) {
       KJ_IREQUIRE(index < size());
       return typename T::Client(builder.getPointerElement(

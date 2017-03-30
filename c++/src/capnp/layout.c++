@@ -658,7 +658,7 @@ struct WireHelpers {
             WirePointerCount pointerCount = elementTag->structRef.ptrCount.get();
 
             auto count = elementTag->inlineCompositeListElementCount();
-            if (pointerCount > 0 * POINTERS) {
+            if (pointerCount > ZERO * POINTERS) {
               word* pos = ptr + POINTER_SIZE_IN_WORDS;
               for (auto i KJ_UNUSED: kj::zeroTo(count)) {
                 pos += dataSize;
@@ -815,7 +815,7 @@ struct WireHelpers {
             WordCount dataSize = elementTag->structRef.dataSize.get();
             WirePointerCount pointerCount = elementTag->structRef.ptrCount.get();
 
-            if (pointerCount > 0 * POINTERS) {
+            if (pointerCount > ZERO * POINTERS) {
               const word* pos = ptr + POINTER_SIZE_IN_WORDS;
               for (auto i KJ_UNUSED: kj::zeroTo(count)) {
                 pos += dataSize;
@@ -999,7 +999,7 @@ struct WireHelpers {
     if (dstSegment == srcSegment) {
       // Same segment, so create a direct pointer.
 
-      if (srcTag->kind() == WirePointer::STRUCT && srcTag->structRef.wordSize() == 0 * WORDS) {
+      if (srcTag->kind() == WirePointer::STRUCT && srcTag->structRef.wordSize() == ZERO * WORDS) {
         dst->setKindAndTargetForEmptyStruct();
       } else {
         dst->setKindAndTarget(srcTag->kind(), srcPtr, dstSegment);
@@ -1682,52 +1682,36 @@ struct WireHelpers {
   static SegmentAnd<word*> setStructPointer(
       SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref, StructReader value,
       BuilderArena* orphanArena = nullptr, bool canonical = false) {
-    // TODO(now): Function may have been damaged in merge conflict resolution.
     auto dataSize = roundBitsUpToBytes(value.dataSize);
     auto ptrCount = value.pointerCount;
 
     if (canonical) {
       // StructReaders should not have bitwidths other than 1, but let's be safe
-      KJ_REQUIRE((value.dataSize == 1 * BITS)
-                 || (value.dataSize % BITS_PER_BYTE == 0 * BITS));
+      KJ_REQUIRE((value.dataSize == ONE * BITS)
+                 || (value.dataSize % BITS_PER_BYTE == ZERO * BITS));
 
-      // Handle the truncation case where it's a false in a 1-bit struct
-      if (value.dataSize == 1 * BITS) {
-        if (!value.getDataField<bool>(0 * ELEMENTS)) {
-          dataSize = 0 * BYTES;
+      if (value.dataSize == ONE * BITS) {
+        // Handle the truncation case where it's a false in a 1-bit struct
+        if (!value.getDataField<bool>(ZERO * ELEMENTS)) {
+          dataSize = ZERO * BYTES;
         }
       } else {
         // Truncate the data section
-        while (dataSize != 0 * BYTES) {
-          size_t end = dataSize / BYTES;
-          ByteCount window = dataSize % BYTES_PER_WORD;
-          if (window == 0 * BYTES) {
-            window = BYTES_PER_WORD * WORDS;
-          }
-          size_t start = end - window / BYTES;
-          kj::ArrayPtr<const byte> lastWord = value.getDataSectionAsBlob().slice(start, end);
-          bool lastWordZero = true;
-          //TODO(MRM) once this is known to work, replace with fast memcmp
-          for (auto it = lastWord.begin(); it != lastWord.end(); it++) {
-            lastWordZero &= (*it == 0);
-          }
-          if (!lastWordZero) {
-            break;
-          } else {
-            dataSize -= window;
-          }
-        }
+        auto data = value.getDataSectionAsBlob();
+        auto end = data.end();
+        while (end > data.begin() && end[-1] == 0) --end;
+        dataSize = intervalLength(data.begin(), end, MAX_STUCT_DATA_WORDS * BYTES_PER_WORD);
       }
+
       // Truncate pointer section
-      while ((ptrCount != 0 * POINTERS) &&
-             value.getPointerField(ptrCount - 1 * POINTERS).isNull()) {
-        ptrCount -= 1 * POINTERS;
-      }
+      const WirePointer* ptr = value.pointers + ptrCount;
+      while (ptr > value.pointers && ptr[-1].isNull()) --ptr;
+      ptrCount = intervalLength(value.pointers, ptr, MAX_STRUCT_POINTER_COUNT);
     }
 
-    WordCount dataWords = roundBytesUpToWords(dataSize);
+    auto dataWords = roundBytesUpToWords(dataSize);
 
-    WordCount totalSize = dataWords + ptrCount * WORDS_PER_POINTER;
+    auto totalSize = dataWords + ptrCount * WORDS_PER_POINTER;
 
     word* ptr = allocate(ref, segment, capTable, totalSize, WirePointer::STRUCT, orphanArena);
     ref->structRef.set(dataWords, ptrCount);
@@ -1771,7 +1755,6 @@ struct WireHelpers {
   static SegmentAnd<word*> setListPointer(
       SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref, ListReader value,
       BuilderArena* orphanArena = nullptr, bool canonical = false) {
-    // TODO(now): Function may have been damaged in merge conflict resolution.
     auto totalSize = assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(
         roundBitsUpToWords(upgradeGuard<uint64_t>(value.elementCount) * value.step),
         []() { KJ_FAIL_ASSERT("encountered impossibly long struct list ListReader"); });
@@ -1798,51 +1781,39 @@ struct WireHelpers {
       return { segment, ptr };
     } else {
       // List of structs.
-      WordCount declDataSize = value.structDataSize / BITS_PER_WORD;
-      WirePointerCount declPointerCount = value.structPointerCount;
+      StructDataWordCount declDataSize = value.structDataSize / BITS_PER_WORD;
+      StructPointerCount declPointerCount = value.structPointerCount;
 
-      WordCount dataSize = 0 * WORDS;
-      WirePointerCount ptrCount = 0 * POINTERS;
+      StructDataWordCount dataSize = ZERO * WORDS;
+      StructPointerCount ptrCount = ZERO * POINTERS;
 
       if (canonical) {
-        for (auto ec = ElementCount(0); ec < value.elementCount; ec += 1 * ELEMENTS) {
-          auto se = value.getStructElement(ec);
-          WordCount localDataSize = declDataSize;
-          while (localDataSize != 0 * WORDS) {
-            size_t end = localDataSize * BYTES_PER_WORD / BYTES;
-            ByteCount window = BYTES_PER_WORD * WORDS;
-            size_t start = end - window / BYTES;
-            kj::ArrayPtr<const byte> lastWord = se.getDataSectionAsBlob().slice(start, end);
-            bool lastWordZero = true;
-            //TODO(MRM) once this is known to work, replace with fast memcmp
-            for (auto it = lastWord.begin(); it != lastWord.end(); it++) {
-              lastWordZero &= (*it == 0);
-            }
-            if (!lastWordZero) {
-              break;
-            } else {
-              localDataSize -= WORDS;
-            }
-          }
-          if (localDataSize > dataSize) {
-            dataSize = localDataSize;
-          }
-          WirePointerCount localPtrCount = declPointerCount;
-          while ((localPtrCount != 0 * POINTERS) &&
-                 se.getPointerField(localPtrCount - 1 * POINTERS).isNull()) {
-            localPtrCount -= 1 * POINTERS;
-          }
-          if (localPtrCount > ptrCount) {
-            ptrCount = localPtrCount;
-          }
+        for (auto i: kj::zeroTo(value.elementCount)) {
+          auto element = value.getStructElement(i);
+
+          // Truncate the data section
+          auto data = element.getDataSectionAsBlob();
+          auto end = data.end();
+          while (end > data.begin() && end[-1] == 0) --end;
+          dataSize = kj::max(dataSize, roundBytesUpToWords(
+              intervalLength(data.begin(), end, MAX_STUCT_DATA_WORDS * BYTES_PER_WORD)));
+
+          // Truncate pointer section
+          const WirePointer* ptr = element.pointers + element.pointerCount;
+          while (ptr > element.pointers && ptr[-1].isNull()) --ptr;
+          ptrCount = kj::max(ptrCount,
+              intervalLength(element.pointers, ptr, MAX_STRUCT_POINTER_COUNT));
         }
-        totalSize = (dataSize + ptrCount * WORDS_PER_POINTER) / ELEMENTS * value.elementCount;
+        auto newTotalSize = (dataSize + upgradeGuard<uint64_t>(ptrCount) * WORDS_PER_POINTER)
+            / ELEMENTS * value.elementCount;
+        KJ_ASSERT(newTotalSize <= totalSize);  // we've only removed data!
+        totalSize = kj::assumeMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(newTotalSize);
       } else {
         dataSize = declDataSize;
         ptrCount = declPointerCount;
       }
 
-      KJ_DASSERT(value.structDataSize % BITS_PER_WORD == 0 * BITS);
+      KJ_DASSERT(value.structDataSize % BITS_PER_WORD == ZERO * BITS);
       word* ptr = allocate(ref, segment, capTable, totalSize + POINTER_SIZE_IN_WORDS,
                            WirePointer::LIST, orphanArena);
       ref->listRef.setInlineComposite(totalSize);
@@ -1858,14 +1829,13 @@ struct WireHelpers {
         dst += dataSize;
         src += declDataSize;
 
-        for (auto j KJ_UNUSED: kj::zeroTo(ptrCount)) {
-          copyPointer(segment, capTable, reinterpret_cast<WirePointer*>(dst),
-              value.segment, value.capTable, reinterpret_cast<const WirePointer*>(src),
+        for (auto j: kj::zeroTo(ptrCount)) {
+          copyPointer(segment, capTable, reinterpret_cast<WirePointer*>(dst) + j,
+              value.segment, value.capTable, reinterpret_cast<const WirePointer*>(src) + j,
               value.nestingLimit, nullptr, canonical);
-          dst += POINTER_SIZE_IN_WORDS;
-          src += POINTER_SIZE_IN_WORDS;
         }
-        src += ((declPointerCount - ptrCount) * WORDS_PER_POINTER) / WORDS;
+        dst += ptrCount * WORDS_PER_POINTER;
+        src += declPointerCount * WORDS_PER_POINTER;
       }
 
       return { segment, ptr };
@@ -1956,10 +1926,10 @@ struct WireHelpers {
             goto useDefault;
           }
 
-          if (wordsPerElement * (1 * ELEMENTS) == 0 * WORDS) {
+          if (wordsPerElement * (ONE * ELEMENTS) == ZERO * WORDS) {
             // Watch out for lists of zero-sized structs, which can claim to be arbitrarily large
             // without having sent actual data.
-            KJ_REQUIRE(amplifiedRead(srcSegment, elementCount * (1 * WORDS / ELEMENTS)),
+            KJ_REQUIRE(amplifiedRead(srcSegment, elementCount * (ONE * WORDS / ELEMENTS)),
                        "Message contains amplified list pointer.") {
               goto useDefault;
             }
@@ -1987,7 +1957,7 @@ struct WireHelpers {
           if (elementSize == ElementSize::VOID) {
             // Watch out for lists of void, which can claim to be arbitrarily large without having
             // sent actual data.
-            KJ_REQUIRE(amplifiedRead(srcSegment, elementCount * (1 * WORDS / ELEMENTS)),
+            KJ_REQUIRE(amplifiedRead(srcSegment, elementCount * (ONE * WORDS / ELEMENTS)),
                        "Message contains amplified list pointer.") {
               goto useDefault;
             }
@@ -2724,8 +2694,8 @@ bool PointerReader::isCanonical(const word **readHead) {
     case PointerType::STRUCT: {
       bool dataTrunc, ptrTrunc;
       auto structReader = this->getStruct(nullptr);
-      if (structReader.getDataSectionSize() == 0 * BITS &&
-          structReader.getPointerSectionSize() == 0 * POINTERS) {
+      if (structReader.getDataSectionSize() == ZERO * BITS &&
+          structReader.getPointerSectionSize() == ZERO * POINTERS) {
         return reinterpret_cast<const word*>(this->pointer) == structReader.getLocation();
       } else {
         return structReader.isCanonical(readHead, readHead, &dataTrunc, &ptrTrunc) && dataTrunc && ptrTrunc;
@@ -2878,9 +2848,9 @@ MessageSizeCounts StructReader::totalSize() const {
 }
 
 kj::Array<word> StructReader::canonicalize() {
-  WordCount size = totalSize().wordCount + POINTER_SIZE_IN_WORDS;
-  kj::Array<word> backing = kj::heapArray<word>(size / WORDS);
-  WireHelpers::zeroMemory(backing.begin());
+  auto size = totalSize().wordCount + POINTER_SIZE_IN_WORDS;
+  kj::Array<word> backing = kj::heapArray<word>(unguard(size / WORDS));
+  WireHelpers::zeroMemory(backing.asPtr());
   FlatMessageBuilder builder(backing);
   _::PointerHelpers<AnyPointer>::getInternalBuilder(builder.initRoot<AnyPointer>()).setStruct(*this, true);
   KJ_ASSERT(builder.isCanonical());
@@ -2909,32 +2879,31 @@ bool StructReader::isCanonical(const word **readHead,
     return false;
   }
 
-  if (this->getDataSectionSize() % BITS_PER_WORD != 0 * BITS) {
+  if (this->getDataSectionSize() % BITS_PER_WORD != ZERO * BITS) {
     // Using legacy non-word-size structs, reject
     return false;
   }
-  WordCount32 dataSize = this->getDataSectionSize() / BITS_PER_WORD;
+  auto dataSize = this->getDataSectionSize() / BITS_PER_WORD;
 
   // Mark whether the struct is properly truncated
-  if (dataSize != 0 * WORDS) {
-    *dataTrunc = this->getDataField<uint64_t>((dataSize - 1 * WORDS) / WORDS * ELEMENTS) != 0;
+  KJ_IF_MAYBE(diff, kj::trySubtract(dataSize, ONE * WORDS)) {
+    *dataTrunc = this->getDataField<uint64_t>(*diff / WORDS * ELEMENTS) != 0;
   } else {
+    // Data segment empty.
     *dataTrunc = true;
   }
 
-  if (this->pointerCount != 0 * POINTERS) {
-    *ptrTrunc  = !this->getPointerField(this->pointerCount - 1 * POINTERS).isNull();
+  KJ_IF_MAYBE(diff, kj::trySubtract(this->pointerCount, ONE * POINTERS)) {
+    *ptrTrunc  = !this->getPointerField(*diff).isNull();
   } else {
     *ptrTrunc = true;
   }
 
   // Advance the read head
-  *readHead += (dataSize + (this->pointerCount * WORDS_PER_POINTER)) / WORDS;
+  *readHead += (dataSize + (this->pointerCount * WORDS_PER_POINTER));
 
   // Check each pointer field for canonicity
-  for (WirePointerCount16 ptrIndex = 0 * POINTERS;
-       ptrIndex < this->pointerCount;
-       ptrIndex += POINTERS) {
+  for (auto ptrIndex: kj::zeroTo(this->pointerCount)) {
     if (!this->getPointerField(ptrIndex).isCanonical(ptrHead)) {
       return false;
     }
@@ -3040,13 +3009,14 @@ Data::Reader ListReader::asData() {
 }
 
 kj::ArrayPtr<const byte> ListReader::asRawBytes() {
-  KJ_REQUIRE(structPointerCount == 0 * POINTERS,
+  KJ_REQUIRE(structPointerCount == ZERO * POINTERS,
              "Expected data only, got pointers.") {
     return kj::ArrayPtr<const byte>();
   }
 
-  return kj::ArrayPtr<const byte>(reinterpret_cast<const byte*>(ptr),
-      WireHelpers::roundBitsUpToBytes(elementCount * (structDataSize / ELEMENTS)) / BYTES);
+  return arrayPtr(reinterpret_cast<const byte*>(ptr),
+      WireHelpers::roundBitsUpToBytes(
+          upgradeGuard<uint64_t>(elementCount) * (structDataSize / ELEMENTS)));
 }
 
 StructReader ListReader::getStructElement(ElementCount index) const {
@@ -3091,24 +3061,23 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
         // front of it, so our check is slightly different
         return false;
       }
-      if (this->structDataSize % BITS_PER_WORD != 0 * BITS) {
+      if (this->structDataSize % BITS_PER_WORD != ZERO * BITS) {
         return false;
       }
-      auto elementSize = (this->structDataSize / BITS_PER_WORD +
-                          this->structPointerCount * WORDS_PER_POINTER) / ELEMENTS;
-      if (elementSize * this->elementCount != ref->listRef.inlineCompositeWordCount()) {
+      auto elementSize = StructSize(this->structDataSize / BITS_PER_WORD,
+                                    this->structPointerCount).total() / ELEMENTS;
+      auto totalSize = upgradeGuard<uint64_t>(this->elementCount) * elementSize;
+      if (totalSize != ref->listRef.inlineCompositeWordCount()) {
         return false;
       }
-      if (elementSize == 0 * WORDS / ELEMENTS) {
+      if (elementSize == ZERO * WORDS / ELEMENTS) {
         return true;
       }
-      auto listEnd = *readHead + (this->elementCount * elementSize) / WORDS;
+      auto listEnd = *readHead + totalSize;
       auto pointerHead = listEnd;
       bool listDataTrunc = false;
       bool listPtrTrunc = false;
-      for (ElementCount ec = ElementCount(0);
-           ec < this->elementCount;
-           ec += 1 * ELEMENTS) {
+      for (auto ec: kj::zeroTo(this->elementCount)) {
         bool dataTrunc, ptrTrunc;
         if (!this->getStructElement(ec).isCanonical(readHead,
                                                     &pointerHead,
@@ -3127,10 +3096,8 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
       if (reinterpret_cast<const word*>(this->ptr) != *readHead) {
         return false;
       }
-      *readHead += this->elementCount * (POINTERS / ELEMENTS) * WORDS_PER_POINTER / WORDS;
-      for (ElementCount ec = ElementCount(0);
-           ec < this->elementCount;
-           ec += 1 * ELEMENTS) {
+      *readHead += this->elementCount * (POINTERS / ELEMENTS) * WORDS_PER_POINTER;
+      for (auto ec: kj::zeroTo(this->elementCount)) {
         if (!this->getPointerElement(ec).isCanonical(readHead)) {
           return false;
         }
@@ -3142,14 +3109,9 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
         return false;
       }
 
-      auto bitSize = this->elementCount *
+      auto bitSize = upgradeGuard<uint64_t>(this->elementCount) *
                      dataBitsPerElement(this->elementSize);
-      auto wordSize = bitSize / BITS_PER_WORD;
-      if (bitSize % BITS_PER_WORD != 0 * BITS) {
-        wordSize = wordSize + 1 * WORDS;
-      }
-
-      *readHead += wordSize;
+      *readHead += WireHelpers::roundBitsUpToWords(bitSize);
       return true;
     }
   }
@@ -3291,9 +3253,10 @@ OrphanBuilder OrphanBuilder::concat(
   KJ_REQUIRE(lists.size() > 0, "Can't concat empty list ");
 
   // Find the overall element count and size.
-  ElementCount elementCount = 0 * ELEMENTS;
+  ListElementCount elementCount = ZERO * ELEMENTS;
   for (auto& list: lists) {
-    elementCount += list.elementCount;
+    elementCount = assertMaxBits<LIST_ELEMENT_COUNT_BITS>(elementCount + list.elementCount,
+        []() { KJ_FAIL_REQUIRE("concatenated list exceeds list size limit"); });
     if (list.elementSize != elementSize) {
       // If element sizes don't all match, upgrade to struct list.
       KJ_REQUIRE(list.elementSize != ElementSize::BIT && elementSize != ElementSize::BIT,
@@ -3316,21 +3279,23 @@ OrphanBuilder OrphanBuilder::concat(
   // Copy elements.
   switch (elementSize) {
     case ElementSize::INLINE_COMPOSITE: {
-      ElementCount pos = 0 * ELEMENTS;
+      ListElementCount pos = ZERO * ELEMENTS;
       for (auto& list: lists) {
-        for (ElementCount i = 0 * ELEMENTS; i < list.size(); i += 1 * ELEMENTS) {
+        for (auto i: kj::zeroTo(list.size())) {
           builder.getStructElement(pos).copyContentFrom(list.getStructElement(i));
-          pos += 1 * ELEMENTS;
+          // assumeBits() safe because we checked total size earlier.
+          pos = assumeBits<LIST_ELEMENT_COUNT_BITS>(pos + ONE * ELEMENTS);
         }
       }
       break;
     }
     case ElementSize::POINTER: {
-      ElementCount pos = 0 * ELEMENTS;
+      ListElementCount pos = ZERO * ELEMENTS;
       for (auto& list: lists) {
-        for (ElementCount i = 0 * ELEMENTS; i < list.size(); i += 1 * ELEMENTS) {
+        for (auto i: kj::zeroTo(list.size())) {
           builder.getPointerElement(pos).copyFrom(list.getPointerElement(i));
-          pos += 1 * ELEMENTS;
+          // assumeBits() safe because we checked total size earlier.
+          pos = assumeBits<LIST_ELEMENT_COUNT_BITS>(pos + ONE * ELEMENTS);
         }
       }
       break;
@@ -3338,24 +3303,25 @@ OrphanBuilder OrphanBuilder::concat(
     case ElementSize::BIT: {
       // It's difficult to memcpy() bits since a list could start or end mid-byte. For now we
       // do a slow, naive loop. Probably no one will ever care.
-      ElementCount pos = 0 * ELEMENTS;
+      ListElementCount pos = ZERO * ELEMENTS;
       for (auto& list: lists) {
-        for (ElementCount i = 0 * ELEMENTS; i < list.size(); i += 1 * ELEMENTS) {
+        for (auto i: kj::zeroTo(list.size())) {
           builder.setDataElement<bool>(pos, list.getDataElement<bool>(i));
-          pos += 1 * ELEMENTS;
+          // assumeBits() safe because we checked total size earlier.
+          pos = assumeBits<LIST_ELEMENT_COUNT_BITS>(pos + ONE * ELEMENTS);
         }
       }
       break;
     }
     default: {
-      // We know all the inputs had identical size because otherwise we would have chosen
-      // INLINE_COMPOSITE. Therefore, we can safely use memcpy() here instead of copying each
-      // element manually.
+      // We know all the inputs are primitives with identical size because otherwise we would have
+      // chosen INLINE_COMPOSITE. Therefore, we can safely use memcpy() here instead of copying
+      // each element manually.
       byte* target = builder.ptr;
       auto step = builder.step / BITS_PER_BYTE;
       for (auto& list: lists) {
-        auto count = step * list.size();
-        WireHelpers::copyMemory(target, list.ptr, count);
+        auto count = step * upgradeGuard<uint64_t>(list.size());
+        WireHelpers::copyMemory(target, list.ptr, assumeBits<SEGMENT_WORD_COUNT_BITS>(count));
         target += count;
       }
       break;
@@ -3475,8 +3441,9 @@ Data::Reader OrphanBuilder::asDataReader() const {
   return WireHelpers::readDataPointer(segment, tagAsPtr(), location, nullptr, ZERO * BYTES);
 }
 
-bool OrphanBuilder::truncate(ElementCount size, bool isText) {
-  // TODO(now): Method may have been damaged by merge conflicts.
+bool OrphanBuilder::truncate(ElementCount uncheckedSize, bool isText) {
+  ListElementCount size = assertMaxBits<LIST_ELEMENT_COUNT_BITS>(uncheckedSize,
+      []() { KJ_FAIL_REQUIRE("requested list size is too large"); });
 
   WirePointer* ref = tagAsPtr();
   SegmentBuilder* segment = this->segment;
@@ -3485,19 +3452,23 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
 
   if (ref->isNull()) {
     // We don't know the right element size, so we can't resize this list.
-    return size == 0 * ELEMENTS;
+    return size == ZERO * ELEMENTS;
   }
 
   KJ_REQUIRE(ref->kind() == WirePointer::LIST, "Can't truncate non-list.") {
     return false;
   }
 
-  if (isText) size += 1 * ELEMENTS;
+  if (isText) {
+    // Add space for the NUL terminator.
+    size = assertMaxBits<LIST_ELEMENT_COUNT_BITS>(size + ONE * ELEMENTS,
+        []() { KJ_FAIL_REQUIRE("requested list size is too large"); });
+  }
 
-  ElementSize elementSize = ref->listRef.elementSize();
+  auto elementSize = ref->listRef.elementSize();
 
   if (elementSize == ElementSize::INLINE_COMPOSITE) {
-    WordCount oldWordCount = ref->listRef.inlineCompositeWordCount();
+    auto oldWordCount = ref->listRef.inlineCompositeWordCount();
 
     WirePointer* tag = reinterpret_cast<WirePointer*>(target);
     ++target;
@@ -3506,54 +3477,72 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
       return false;
     }
     StructSize structSize(tag->structRef.dataSize.get(), tag->structRef.ptrCount.get());
-    WordCount elementWordCount = structSize.total();
+    auto elementStep = structSize.total() / ELEMENTS;
 
-    ElementCount oldSize = tag->inlineCompositeListElementCount();
-    word* newEndWord = target + size * (elementWordCount / ELEMENTS);
+    auto oldSize = tag->inlineCompositeListElementCount();
+
+    SegmentWordCount sizeWords = assertMaxBits<SEGMENT_WORD_COUNT_BITS>(
+        upgradeGuard<uint64_t>(size) * elementStep,
+        []() { KJ_FAIL_ASSERT("requested list size too large to fit in message segment"); });
+    SegmentWordCount oldSizeWords = assertMaxBits<SEGMENT_WORD_COUNT_BITS>(
+        upgradeGuard<uint64_t>(oldSize) * elementStep,
+        []() { KJ_FAIL_ASSERT("prior to truncate, list is larger than max segment size?"); });
+
+    word* newEndWord = target + sizeWords;
     word* oldEndWord = target + oldWordCount;
 
     if (size <= oldSize) {
       // Zero the trailing elements.
-      for (uint i = size / ELEMENTS; i < oldSize / ELEMENTS; i++) {
-        WireHelpers::zeroObject(segment, capTable, tag, target + i * elementWordCount);
+      for (auto i: kj::range(size, oldSize)) {
+        // assumeBits() safe because we checked that both sizeWords and oldSizeWords are in-range
+        // above.
+        WireHelpers::zeroObject(segment, capTable, tag, target +
+            assumeBits<SEGMENT_WORD_COUNT_BITS>(upgradeGuard<uint64_t>(i) * elementStep));
       }
-      ref->listRef.setInlineComposite(size * (elementWordCount / ELEMENTS));
+      ref->listRef.setInlineComposite(sizeWords);
       tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
       segment->tryTruncate(oldEndWord, newEndWord);
     } else if (newEndWord <= oldEndWord) {
       // Apparently the old list was over-allocated? The word count is more than needed to store
       // the elements. This is "valid" but shouldn't happen in practice unless someone is toying
       // with us.
-      word* expectedEnd = target + oldSize * (elementWordCount / ELEMENTS);
+      word* expectedEnd = target + oldSizeWords;
       KJ_ASSERT(newEndWord >= expectedEnd);
-      WireHelpers::zeroMemory(expectedEnd, newEndWord - expectedEnd);
+      WireHelpers::zeroMemory(expectedEnd,
+          intervalLength(expectedEnd, newEndWord, MAX_SEGMENT_WORDS));
       tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
     } else {
       if (segment->tryExtend(oldEndWord, newEndWord)) {
         // Done in-place. Nothing else to do now; the new memory is already zero'd.
-        ref->listRef.setInlineComposite(size * (elementWordCount / ELEMENTS));
+        ref->listRef.setInlineComposite(sizeWords);
         tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
       } else {
         // Need to re-allocate and transfer.
         OrphanBuilder replacement = initStructList(segment->getArena(), capTable, size, structSize);
 
         ListBuilder newList = replacement.asStructList(structSize);
-        word* element = target;
-        for (uint i = 0; i < oldSize / ELEMENTS; i++) {
-          newList.getStructElement(i * ELEMENTS).transferContentFrom(
+        for (auto i: kj::zeroTo(oldSize)) {
+          // assumeBits() safe because we checked that both sizeWords and oldSizeWords are in-range
+          // above.
+          word* element = target +
+              assumeBits<SEGMENT_WORD_COUNT_BITS>(upgradeGuard<uint64_t>(i) * elementStep);
+          newList.getStructElement(i).transferContentFrom(
               StructBuilder(segment, capTable, element,
                             reinterpret_cast<WirePointer*>(element + structSize.data),
                             structSize.data * BITS_PER_WORD, structSize.pointers));
-          element += elementWordCount;
         }
 
         *this = kj::mv(replacement);
       }
     }
   } else if (elementSize == ElementSize::POINTER) {
+    // TODO(cleanup): GCC won't let me declare this constexpr, claiming POINTERS is not constexpr,
+    //   but it is?
+    const auto POINTERS_PER_ELEMENT = ONE * POINTERS / ELEMENTS;
+
     auto oldSize = ref->listRef.elementCount();
-    word* newEndWord = target + size * (POINTER_SIZE_IN_WORDS / ELEMENTS);
-    word* oldEndWord = target + oldSize * (POINTER_SIZE_IN_WORDS / ELEMENTS);
+    word* newEndWord = target + size * POINTERS_PER_ELEMENT * WORDS_PER_POINTER;
+    word* oldEndWord = target + oldSize * POINTERS_PER_ELEMENT * WORDS_PER_POINTER;
 
     if (size <= oldSize) {
       // Zero the trailing elements.
@@ -3573,9 +3562,9 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
             segment->getArena(), capTable, size, ElementSize::POINTER);
         ListBuilder newList = replacement.asList(ElementSize::POINTER);
         WirePointer* oldPointers = reinterpret_cast<WirePointer*>(target);
-        for (uint i = 0; i < oldSize / ELEMENTS; i++) {
-          newList.getPointerElement(i * ELEMENTS).transferFrom(
-              PointerBuilder(segment, capTable, oldPointers + i));
+        for (auto i: kj::zeroTo(oldSize)) {
+          newList.getPointerElement(i).transferFrom(
+              PointerBuilder(segment, capTable, oldPointers + i * POINTERS_PER_ELEMENT));
         }
         *this = kj::mv(replacement);
       }
@@ -3583,17 +3572,22 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
   } else {
     auto oldSize = ref->listRef.elementCount();
     auto step = dataBitsPerElement(elementSize);
-    word* newEndWord = target + WireHelpers::roundBitsUpToWords(size * step);
-    word* oldEndWord = target + WireHelpers::roundBitsUpToWords(oldSize * step);
+    const auto MAX_STEP_BYTES = ONE * WORDS / ELEMENTS * BYTES_PER_WORD;
+    word* newEndWord = target + WireHelpers::roundBitsUpToWords(
+        upgradeGuard<uint64_t>(size) * step);
+    word* oldEndWord = target + WireHelpers::roundBitsUpToWords(
+        upgradeGuard<uint64_t>(oldSize) * step);
 
     if (size <= oldSize) {
       // When truncating text, we want to set the null terminator as well, so we'll do our zeroing
       // at the byte level.
       byte* begin = reinterpret_cast<byte*>(target);
-      byte* newEndByte = begin + WireHelpers::roundBitsUpToBytes(size * step) - isText;
+      byte* newEndByte = begin + WireHelpers::roundBitsUpToBytes(
+          upgradeGuard<uint64_t>(size) * step) - isText;
       byte* oldEndByte = reinterpret_cast<byte*>(oldEndWord);
 
-      WireHelpers::zeroMemory(newEndByte, intervalLength(newEndByte, oldEndByte));
+      WireHelpers::zeroMemory(newEndByte,
+          intervalLength(newEndByte, oldEndByte, MAX_LIST_ELEMENTS * MAX_STEP_BYTES));
       ref->listRef.set(elementSize, size);
       segment->tryTruncate(oldEndWord, newEndWord);
     } else {
@@ -3605,8 +3599,9 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
         // Need to re-allocate and transfer.
         OrphanBuilder replacement = initList(segment->getArena(), capTable, size, elementSize);
         ListBuilder newList = replacement.asList(elementSize);
-        auto words = WireHelpers::roundBitsUpToWords(dataBitsPerElement(elementSize) * oldSize);
-        WireHelpers::copyMemory(newList.ptr, target, words);
+        auto words = WireHelpers::roundBitsUpToWords(
+            dataBitsPerElement(elementSize) * upgradeGuard<uint64_t>(oldSize));
+        WireHelpers::copyMemory(reinterpret_cast<word*>(newList.ptr), target, words);
         *this = kj::mv(replacement);
       }
     }
@@ -3617,19 +3612,25 @@ bool OrphanBuilder::truncate(ElementCount size, bool isText) {
 
 void OrphanBuilder::truncate(ElementCount size, ElementSize elementSize) {
   if (!truncate(size, false)) {
-    *this = initList(segment->getArena(), capTable, size, elementSize);
+    // assumeBits() safe since it's checked inside truncate()
+    *this = initList(segment->getArena(), capTable,
+        assumeBits<LIST_ELEMENT_COUNT_BITS>(size), elementSize);
   }
 }
 
 void OrphanBuilder::truncate(ElementCount size, StructSize elementSize) {
   if (!truncate(size, false)) {
-    *this = initStructList(segment->getArena(), capTable, size, elementSize);
+    // assumeBits() safe since it's checked inside truncate()
+    *this = initStructList(segment->getArena(), capTable,
+        assumeBits<LIST_ELEMENT_COUNT_BITS>(size), elementSize);
   }
 }
 
 void OrphanBuilder::truncateText(ElementCount size) {
   if (!truncate(size, true)) {
-    *this = initText(segment->getArena(), capTable, size * (1 * BYTES / ELEMENTS));
+    // assumeBits() safe since it's checked inside truncate()
+    *this = initText(segment->getArena(), capTable,
+        assumeBits<LIST_ELEMENT_COUNT_BITS>(size) * (ONE * BYTES / ELEMENTS));
   }
 }
 

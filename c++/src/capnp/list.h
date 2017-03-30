@@ -114,7 +114,7 @@ struct List<T, Kind::PRIMITIVE> {
     inline Reader(): reader(_::elementSizeForType<T>()) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
-    inline uint size() const { return reader.size() / ELEMENTS; }
+    inline uint size() const { return unguard(reader.size() / ELEMENTS); }
     inline T operator[](uint index) const {
       KJ_IREQUIRE(index < size());
       return reader.template getDataElement<T>(guarded(index) * ELEMENTS);
@@ -146,7 +146,7 @@ struct List<T, Kind::PRIMITIVE> {
     inline operator Reader() const { return Reader(builder.asReader()); }
     inline Reader asReader() const { return Reader(builder.asReader()); }
 
-    inline uint size() const { return builder.size() / ELEMENTS; }
+    inline uint size() const { return unguard(builder.size() / ELEMENTS); }
     inline T operator[](uint index) {
       KJ_IREQUIRE(index < size());
       return builder.template getDataElement<T>(guarded(index) * ELEMENTS);
@@ -210,7 +210,7 @@ struct List<T, Kind::STRUCT> {
     inline Reader(): reader(ElementSize::INLINE_COMPOSITE) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
-    inline uint size() const { return reader.size() / ELEMENTS; }
+    inline uint size() const { return unguard(reader.size() / ELEMENTS); }
     inline typename T::Reader operator[](uint index) const {
       KJ_IREQUIRE(index < size());
       return typename T::Reader(reader.getStructElement(guarded(index) * ELEMENTS));
@@ -242,7 +242,7 @@ struct List<T, Kind::STRUCT> {
     inline operator Reader() const { return Reader(builder.asReader()); }
     inline Reader asReader() const { return Reader(builder.asReader()); }
 
-    inline uint size() const { return builder.size() / ELEMENTS; }
+    inline uint size() const { return unguard(builder.size() / ELEMENTS); }
     inline typename T::Builder operator[](uint index) {
       KJ_IREQUIRE(index < size());
       return typename T::Builder(builder.getStructElement(guarded(index) * ELEMENTS));
@@ -332,7 +332,7 @@ struct List<List<T>, Kind::LIST> {
     inline Reader(): reader(ElementSize::POINTER) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
-    inline uint size() const { return reader.size() / ELEMENTS; }
+    inline uint size() const { return unguard(reader.size() / ELEMENTS); }
     inline typename List<T>::Reader operator[](uint index) const {
       KJ_IREQUIRE(index < size());
       return typename List<T>::Reader(_::PointerHelpers<List<T>>::get(
@@ -365,7 +365,7 @@ struct List<List<T>, Kind::LIST> {
     inline operator Reader() const { return Reader(builder.asReader()); }
     inline Reader asReader() const { return Reader(builder.asReader()); }
 
-    inline uint size() const { return builder.size() / ELEMENTS; }
+    inline uint size() const { return unguard(builder.size() / ELEMENTS); }
     inline typename List<T>::Builder operator[](uint index) {
       KJ_IREQUIRE(index < size());
       return typename List<T>::Builder(_::PointerHelpers<List<T>>::get(
@@ -441,7 +441,7 @@ struct List<T, Kind::BLOB> {
     inline Reader(): reader(ElementSize::POINTER) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
-    inline uint size() const { return reader.size() / ELEMENTS; }
+    inline uint size() const { return unguard(reader.size() / ELEMENTS); }
     inline typename T::Reader operator[](uint index) const {
       KJ_IREQUIRE(index < size());
       return reader.getPointerElement(guarded(index) * ELEMENTS)
@@ -474,7 +474,7 @@ struct List<T, Kind::BLOB> {
     inline operator Reader() const { return Reader(builder.asReader()); }
     inline Reader asReader() const { return Reader(builder.asReader()); }
 
-    inline uint size() const { return builder.size() / ELEMENTS; }
+    inline uint size() const { return unguard(builder.size() / ELEMENTS); }
     inline typename T::Builder operator[](uint index) {
       KJ_IREQUIRE(index < size());
       return builder.getPointerElement(guarded(index) * ELEMENTS)
