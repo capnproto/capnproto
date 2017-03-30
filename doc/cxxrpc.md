@@ -154,6 +154,18 @@ callbacks simply won't be executed.  If you need explicit notification when a pr
 you can use its `attach()` method to attach an object with a destructor -- the destructor will be
 called when the promise either completes or is canceled.
 
+### Lazy Execution
+
+Callbacks registered with `.then()` which aren't themselves asynchronous (i.e. they return a value,
+not a promise) won't be executed by default. There are several ways to force a promise to execute
+eagerly:
+
+* `.wait()` on it.
+* `.detach()` it.
+* Add it to a `kj::TaskSet` (this is a lot like `detach()`, except that you can cancel all tasks in
+  the set by destroying the set).
+* Call `.eagerlyEvaluate()` on it.
+
 ### Other Features
 
 KJ supports a number of primitive operations that can be performed on promises.  The complete API
