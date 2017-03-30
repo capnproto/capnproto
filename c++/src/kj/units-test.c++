@@ -144,9 +144,9 @@ TEST(UnitMeasure, GuardedConst) {
   // COMPILE ERROR: guardedLShift<0x10, 60>();
 }
 
-template <uint value>
-constexpr Guarded<value, uint> guardedValue() {
-  return Guarded<value, uint>(value, unsafe);
+template <uint value, typename T = uint>
+constexpr Guarded<value, T> guardedValue(NoInfer<T> runtimeValue = value) {
+  return Guarded<value, T>(runtimeValue, unsafe);
 }
 
 TEST(UnitMeasure, Guarded) {
@@ -205,8 +205,8 @@ TEST(UnitMeasure, Guarded) {
   bar = guardedValue<3>() * guardedValue<4>();
   // COMPILE ERROR: bar = guardedValue<2>() * guardedValue<7>();
 
-  foo.subtractChecked(guardedValue<122>(), []() { KJ_FAIL_EXPECT(); });
-  foo.subtractChecked(guardedValue<123>(), []() { KJ_FAIL_EXPECT(); });
+  foo.subtractChecked(guardedValue<122>(), []() { KJ_FAIL_EXPECT(""); });
+  foo.subtractChecked(guardedValue<123>(), []() { KJ_FAIL_EXPECT(""); });
   caught = false;
   foo.subtractChecked(guardedValue<124>(), [&]() { caught = true; });
   KJ_EXPECT(caught);
@@ -310,6 +310,43 @@ TEST(UnitMeasure, GuardedQuantity) {
     KJ_EXPECT(unguard(value / BYTES) == expected++);
   }
   KJ_EXPECT(expected == 10);
+}
+
+template <typename T>
+void assertTypeAndValue(T a, T b) { KJ_EXPECT(a == b); }
+
+TEST(UnitMeasure, GuardedMinMax) {
+  assertTypeAndValue(guarded<5>(), kj::max(guarded<4>(), guarded<5>()));
+  assertTypeAndValue(guarded<5>(), kj::max(guarded<5>(), guarded<4>()));
+  assertTypeAndValue(guarded<4>(), kj::max(guarded<4>(), guarded<4>()));
+
+  assertTypeAndValue(guarded<4>(), kj::min(guarded<4>(), guarded<5>()));
+  assertTypeAndValue(guarded<4>(), kj::min(guarded<5>(), guarded<4>()));
+  assertTypeAndValue(guarded<4>(), kj::min(guarded<4>(), guarded<4>()));
+
+  typedef uint8_t t1;
+  typedef uint16_t t2;
+
+  assertTypeAndValue(guardedValue<5,t2>(3), kj::max(guardedValue<4,t2>(3), guardedValue<5,t1>(2)));
+  assertTypeAndValue(guardedValue<5,t2>(3), kj::max(guardedValue<5,t1>(2), guardedValue<4,t2>(3)));
+  assertTypeAndValue(guardedValue<4,t2>(3), kj::max(guardedValue<4,t2>(3), guardedValue<4,t2>(3)));
+
+  assertTypeAndValue(guardedValue<4,t2>(2), kj::min(guardedValue<4,t2>(3), guardedValue<5,t1>(2)));
+  assertTypeAndValue(guardedValue<4,t2>(2), kj::min(guardedValue<5,t1>(2), guardedValue<4,t2>(3)));
+  assertTypeAndValue(guardedValue<4,t2>(3), kj::min(guardedValue<4,t2>(3), guardedValue<4,t2>(3)));
+
+  assertTypeAndValue(guardedValue<5,t1>(4), kj::max(guarded<4>(), guardedValue<5,t1>(2)));
+  assertTypeAndValue(guardedValue<5,t1>(4), kj::max(guardedValue<5,t1>(2), guarded<4>()));
+
+  assertTypeAndValue(guardedValue<4,t1>(2), kj::min(guarded<4>(), guardedValue<5,t1>(2)));
+  assertTypeAndValue(guardedValue<4,t1>(2), kj::min(guardedValue<5,t1>(2), guarded<4>()));
+
+  // These two are degenerate cases. Currently they fail to compile but meybe they shouldn't?
+//  assertTypeAndValue(guarded<5>(), kj::max(guardedValue<4,t2>(3), guarded<5>()));
+//  assertTypeAndValue(guarded<5>(), kj::max(guarded<5>(), guardedValue<4,t2>(3)));
+
+  assertTypeAndValue(guardedValue<4,t2>(3), kj::min(guardedValue<4,t2>(3), guarded<5>()));
+  assertTypeAndValue(guardedValue<4,t2>(3), kj::min(guarded<5>(), guardedValue<4,t2>(3)));
 }
 
 }  // namespace

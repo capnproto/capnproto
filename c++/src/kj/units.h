@@ -182,12 +182,13 @@ private:
   template <typename OtherNumber, typename OtherUnit1, typename OtherUnit2>
   friend class UnitRatio;
 
-  template <typename N1, typename N2, typename U1, typename U2>
+  template <typename N1, typename N2, typename U1, typename U2, typename>
   friend inline constexpr UnitRatio<decltype(N1() * N2()), U1, U2>
       operator*(N1, UnitRatio<N2, U1, U2>);
 };
 
-template <typename N1, typename N2, typename U1, typename U2>
+template <typename N1, typename N2, typename U1, typename U2,
+          typename = EnableIf<isIntegralOrGuarded<N1>() && isIntegralOrGuarded<N2>()>>
 inline constexpr UnitRatio<decltype(N1() * N2()), U1, U2>
     operator*(N1 n, UnitRatio<N2, U1, U2> r) {
   return UnitRatio<decltype(N1() * N2()), U1, U2>(n * r.unit1PerUnit2, unsafe);
@@ -297,25 +298,25 @@ public:
 
   template <typename OtherNumber, typename OtherUnit>
   inline constexpr Quantity<decltype(Number() * OtherNumber()), OtherUnit>
-      operator*(const UnitRatio<OtherNumber, OtherUnit, Unit>& ratio) const {
+      operator*(UnitRatio<OtherNumber, OtherUnit, Unit> ratio) const {
     return Quantity<decltype(Number() * OtherNumber()), OtherUnit>(
         value * ratio.unit1PerUnit2, unsafe);
   }
   template <typename OtherNumber, typename OtherUnit>
   inline constexpr Quantity<decltype(Number() / OtherNumber()), OtherUnit>
-      operator/(const UnitRatio<OtherNumber, Unit, OtherUnit>& ratio) const {
+      operator/(UnitRatio<OtherNumber, Unit, OtherUnit> ratio) const {
     return Quantity<decltype(Number() / OtherNumber()), OtherUnit>(
         value / ratio.unit1PerUnit2, unsafe);
   }
   template <typename OtherNumber, typename OtherUnit>
   inline constexpr Quantity<decltype(Number() % OtherNumber()), Unit>
-      operator%(const UnitRatio<OtherNumber, Unit, OtherUnit>& ratio) const {
+      operator%(UnitRatio<OtherNumber, Unit, OtherUnit> ratio) const {
     return Quantity<decltype(Number() % OtherNumber()), Unit>(
         value % ratio.unit1PerUnit2, unsafe);
   }
   template <typename OtherNumber, typename OtherUnit>
   inline constexpr UnitRatio<decltype(Number() / OtherNumber()), Unit, OtherUnit>
-      operator/(const Quantity<OtherNumber, OtherUnit>& other) const {
+      operator/(Quantity<OtherNumber, OtherUnit> other) const {
     return UnitRatio<decltype(Number() / OtherNumber()), Unit, OtherUnit>(
         value / other.value, unsafe);
   }
@@ -511,6 +512,12 @@ class GuardedConst {
   // A constant integer value on which we can do bit size analysis.
 
 public:
+  GuardedConst() = default;
+
+  inline constexpr GuardedConst(decltype(kj::maxValue)) {}
+  inline constexpr GuardedConst(decltype(kj::minValue)) {}
+  // These aren't directly useful but cause kj::max()/kj::min() to choose types correctly.
+
   inline constexpr uint unwrap() const { return value; }
 
 #define OP(op, check) \
@@ -581,6 +588,17 @@ static constexpr uint64_t guardedLShift() {
   static_assert(a << b >= a, "possible overflow detected");
   return a << b;
 }
+
+template <uint a, uint b>
+inline constexpr GuardedConst<kj::min(a, b)> min(GuardedConst<a>, GuardedConst<b>) {
+  return guarded<kj::min(a, b)>();
+}
+template <uint a, uint b>
+inline constexpr GuardedConst<kj::max(a, b)> max(GuardedConst<a>, GuardedConst<b>) {
+  return guarded<kj::max(a, b)>();
+}
+// We need to override min() and max() between constants because the ternary operator in the
+// default implementation would complain.
 
 // -------------------------------------------------------------------
 
@@ -686,6 +704,27 @@ public:
     return Guarded<maxN - otherValue, T>(value - otherValue, unsafe);
   }
 
+  template <uint64_t otherMax, typename OtherT>
+  inline Maybe<Guarded<maxN, decltype(T() - OtherT())>> trySubtract(
+      const Guarded<otherMax, OtherT>& other) const {
+    // Subtract a number, calling func() if the result would underflow.
+    if (value < other.value) {
+      return nullptr;
+    } else {
+      return Guarded<maxN, decltype(T() - OtherT())>(value - other.value, unsafe);
+    }
+  }
+
+  template <uint otherValue>
+  inline Maybe<Guarded<maxN - otherValue, T>> trySubtract(GuardedConst<otherValue>) const {
+    // Subtract a number, calling func() if the result would underflow.
+    if (value < otherValue) {
+      return nullptr;
+    } else {
+      return Guarded<maxN - otherValue, T>(value - otherValue, unsafe);
+    }
+  }
+
   inline constexpr Guarded(T value, decltype(unsafe)): value(value) {}
   template <uint64_t otherMax, typename OtherT>
   inline constexpr Guarded(Guarded<otherMax, OtherT> value, decltype(unsafe))
@@ -699,6 +738,21 @@ private:
 
   template <uint64_t, typename>
   friend class Guarded;
+
+  template <uint64_t aN, uint64_t bN, typename A, typename B>
+  friend constexpr Guarded<kj::min(aN, bN), WiderType<A, B>>
+  min(Guarded<aN, A> a, Guarded<bN, B> b);
+  template <uint64_t aN, uint b, typename A>
+  friend constexpr Guarded<kj::min(aN, b), A> min(Guarded<aN, A> a, GuardedConst<b>);
+  template <uint64_t aN, uint b, typename A>
+  friend constexpr Guarded<kj::min(aN, b), A> min(GuardedConst<b>, Guarded<aN, A> a);
+  template <uint64_t aN, uint64_t bN, typename A, typename B>
+  friend constexpr Guarded<kj::max(aN, bN), WiderType<A, B>>
+  max(Guarded<aN, A> a, Guarded<bN, B> b);
+  template <uint64_t aN, uint b, typename A>
+  friend constexpr Guarded<kj::max(aN, b), A> max(Guarded<aN, A> a, GuardedConst<b>);
+  template <uint64_t aN, uint b, typename A>
+  friend constexpr Guarded<kj::max(aN, b), A> max(GuardedConst<b>, Guarded<aN, A> a);
 };
 
 template <typename Number>
@@ -727,6 +781,39 @@ inline constexpr auto assumeBits(Quantity<Number, Unit> value)
       assumeBits<bits>(value / unit<Quantity<Number, Unit>>()), unsafe);
 }
 
+template <uint64_t maxN, typename Number>
+inline constexpr Guarded<maxN, Number> assumeMax(Number value) {
+  return Guarded<maxN, Number>(value, unsafe);
+}
+
+template <uint64_t newMaxN, uint64_t maxN, typename T>
+inline constexpr Guarded<newMaxN, T> assumeMax(Guarded<maxN, T> value) {
+  return Guarded<newMaxN, T>(value, unsafe);
+}
+
+template <uint64_t maxN, typename Number, typename Unit>
+inline constexpr auto assumeMax(Quantity<Number, Unit> value)
+    -> Quantity<decltype(assumeMax<maxN>(value / unit<Quantity<Number, Unit>>())), Unit> {
+  return Quantity<decltype(assumeMax<maxN>(value / unit<Quantity<Number, Unit>>())), Unit>(
+      assumeMax<maxN>(value / unit<Quantity<Number, Unit>>()), unsafe);
+}
+
+template <uint maxN, typename Number>
+inline constexpr Guarded<maxN, Number> assumeMax(GuardedConst<maxN>, Number value) {
+  return assumeMax<maxN>(value);
+}
+
+template <uint newMaxN, uint64_t maxN, typename T>
+inline constexpr Guarded<newMaxN, T> assumeMax(GuardedConst<maxN>, Guarded<maxN, T> value) {
+  return assumeMax<maxN>(value);
+}
+
+template <uint maxN, typename Number, typename Unit>
+inline constexpr auto assumeMax(Quantity<GuardedConst<maxN>, Unit>, Quantity<Number, Unit> value)
+    -> decltype(assumeMax<maxN>(value)) {
+  return assumeMax<maxN>(value);
+}
+
 struct ThrowOverflow {
   void operator()() const;
 };
@@ -747,6 +834,19 @@ inline constexpr Quantity<Guarded<newMax, T>, Unit> assertMax(
   static_assert(newMax < maxN, "this guarded size assertion is redundant");
   return (value / unit<decltype(value)>()).template assertMax<newMax>(
       kj::fwd<ErrorFunc>(errorFunc)) * unit<decltype(value)>();
+}
+
+template <uint newMax, uint64_t maxN, typename T, typename ErrorFunc>
+inline constexpr Guarded<newMax, T> assertMax(
+    GuardedConst<newMax>, Guarded<maxN, T> value, ErrorFunc&& errorFunc) {
+  return assertMax<newMax>(value, kj::mv(errorFunc));
+}
+
+template <uint newMax, uint64_t maxN, typename T, typename Unit, typename ErrorFunc>
+inline constexpr Quantity<Guarded<newMax, T>, Unit> assertMax(
+    Quantity<GuardedConst<newMax>, Unit>,
+    Quantity<Guarded<maxN, T>, Unit> value, ErrorFunc&& errorFunc) {
+  return assertMax<newMax>(value, kj::mv(errorFunc));
 }
 
 template <uint64_t newBits, uint64_t maxN, typename T, typename ErrorFunc = ThrowOverflow>
@@ -791,6 +891,37 @@ inline auto subtractChecked(Quantity<T, Unit> value, Quantity<U, Unit> other, Er
                          kj::fwd<ErrorFunc>(errorFunc))
       * unit<Quantity<T, Unit>>();
 }
+
+template <uint64_t maxN, typename T, typename Other>
+inline auto trySubtract(Guarded<maxN, T> value, Other other)
+    -> decltype(value.trySubtract(other)) {
+  return value.trySubtract(other);
+}
+
+template <typename T, typename U, typename Unit>
+inline auto trySubtract(Quantity<T, Unit> value, Quantity<U, Unit> other)
+    -> Maybe<Quantity<decltype(subtractChecked(T(), U(), int())), Unit>> {
+  return trySubtract(value / unit<Quantity<T, Unit>>(),
+                     other / unit<Quantity<U, Unit>>())
+      .map([](decltype(subtractChecked(T(), U(), int())) x) {
+    return x * unit<Quantity<T, Unit>>();
+  });
+}
+
+template <uint64_t aN, uint64_t bN, typename A, typename B>
+inline constexpr Guarded<kj::min(aN, bN), WiderType<A, B>>
+min(Guarded<aN, A> a, Guarded<bN, B> b) {
+  return Guarded<kj::min(aN, bN), WiderType<A, B>>(kj::min(a.value, b.value), unsafe);
+}
+template <uint64_t aN, uint64_t bN, typename A, typename B>
+inline constexpr Guarded<kj::max(aN, bN), WiderType<A, B>>
+max(Guarded<aN, A> a, Guarded<bN, B> b) {
+  return Guarded<kj::max(aN, bN), WiderType<A, B>>(kj::max(a.value, b.value), unsafe);
+}
+// We need to override min() and max() because:
+// 1) WiderType<> might not choose the correct bounds.
+// 2) One of the two sides of the ternary operator in the default implementation would fail to
+//    typecheck even though it is OK in practice.
 
 // -------------------------------------------------------------------
 // Operators between Guarded and GuardedConst
@@ -866,6 +997,27 @@ inline constexpr Guarded<cvalue, decltype(uint() - T())>
   static_assert(cvalue >= maxN, "possible underflow detected");
   return Guarded<cvalue, decltype(uint() - T())>(cvalue - value.unwrap(), unsafe);
 }
+
+template <uint64_t aN, uint b, typename A>
+inline constexpr Guarded<kj::min(aN, b), A> min(Guarded<aN, A> a, GuardedConst<b>) {
+  return Guarded<kj::min(aN, b), A>(kj::min(b, a.value), unsafe);
+}
+template <uint64_t aN, uint b, typename A>
+inline constexpr Guarded<kj::min(aN, b), A> min(GuardedConst<b>, Guarded<aN, A> a) {
+  return Guarded<kj::min(aN, b), A>(kj::min(a.value, b), unsafe);
+}
+template <uint64_t aN, uint b, typename A>
+inline constexpr Guarded<kj::max(aN, b), A> max(Guarded<aN, A> a, GuardedConst<b>) {
+  return Guarded<kj::max(aN, b), A>(kj::max(b, a.value), unsafe);
+}
+template <uint64_t aN, uint b, typename A>
+inline constexpr Guarded<kj::max(aN, b), A> max(GuardedConst<b>, Guarded<aN, A> a) {
+  return Guarded<kj::max(aN, b), A>(kj::max(a.value, b), unsafe);
+}
+// We need to override min() between a Guarded and a constant since:
+// 1) WiderType<> might choose GuardedConst over a 1-byte Guarded, which is wrong.
+// 2) To clamp the bounds of the output type.
+// 3) Same ternary operator typechecking issues.
 
 // -------------------------------------------------------------------
 
