@@ -724,22 +724,22 @@ inline typename  ::capnp::Persistent<SturdyRef, Owner>::Client& Persistent<Sturd
 template <typename SturdyRef, typename Owner>
 inline bool Persistent<SturdyRef, Owner>::SaveParams::Reader::hasSealFor() const {
   return !_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 template <typename SturdyRef, typename Owner>
 inline bool Persistent<SturdyRef, Owner>::SaveParams::Builder::hasSealFor() {
   return !_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 template <typename SturdyRef, typename Owner>
 inline  ::capnp::ReaderFor<Owner> Persistent<SturdyRef, Owner>::SaveParams::Reader::getSealFor() const {
   return ::capnp::_::PointerHelpers<Owner>::get(_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 template <typename SturdyRef, typename Owner>
 inline  ::capnp::BuilderFor<Owner> Persistent<SturdyRef, Owner>::SaveParams::Builder::getSealFor() {
   return ::capnp::_::PointerHelpers<Owner>::get(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
 template <typename SturdyRef, typename Owner>
@@ -750,28 +750,28 @@ inline  ::capnp::PipelineFor<Owner> Persistent<SturdyRef, Owner>::SaveParams::Pi
 template <typename SturdyRef, typename Owner>
 inline void Persistent<SturdyRef, Owner>::SaveParams::Builder::setSealFor( ::capnp::ReaderFor<Owner> value) {
   ::capnp::_::PointerHelpers<Owner>::set(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), value);
+      ::capnp::guarded<0>() * ::capnp::POINTERS), value);
 }
 template <typename SturdyRef, typename Owner>
 inline  ::capnp::BuilderFor<Owner> Persistent<SturdyRef, Owner>::SaveParams::Builder::initSealFor() {
   return ::capnp::_::PointerHelpers<Owner>::init(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 template <typename SturdyRef, typename Owner>
 inline  ::capnp::BuilderFor<Owner> Persistent<SturdyRef, Owner>::SaveParams::Builder::initSealFor(unsigned int size) {
   return ::capnp::_::PointerHelpers<Owner>::init(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), size);
+      ::capnp::guarded<0>() * ::capnp::POINTERS), size);
 }
 template <typename SturdyRef, typename Owner>
 inline void Persistent<SturdyRef, Owner>::SaveParams::Builder::adoptSealFor(
     ::capnp::Orphan<Owner>&& value) {
   ::capnp::_::PointerHelpers<Owner>::adopt(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
+      ::capnp::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 template <typename SturdyRef, typename Owner>
 inline ::capnp::Orphan<Owner> Persistent<SturdyRef, Owner>::SaveParams::Builder::disownSealFor() {
   return ::capnp::_::PointerHelpers<Owner>::disown(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 
 // Persistent<SturdyRef, Owner>::SaveParams
@@ -803,22 +803,22 @@ const ::capnp::_::RawBrandedSchema Persistent<SturdyRef, Owner>::SaveParams::_ca
 template <typename SturdyRef, typename Owner>
 inline bool Persistent<SturdyRef, Owner>::SaveResults::Reader::hasSturdyRef() const {
   return !_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 template <typename SturdyRef, typename Owner>
 inline bool Persistent<SturdyRef, Owner>::SaveResults::Builder::hasSturdyRef() {
   return !_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 template <typename SturdyRef, typename Owner>
 inline  ::capnp::ReaderFor<SturdyRef> Persistent<SturdyRef, Owner>::SaveResults::Reader::getSturdyRef() const {
   return ::capnp::_::PointerHelpers<SturdyRef>::get(_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 template <typename SturdyRef, typename Owner>
 inline  ::capnp::BuilderFor<SturdyRef> Persistent<SturdyRef, Owner>::SaveResults::Builder::getSturdyRef() {
   return ::capnp::_::PointerHelpers<SturdyRef>::get(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
 template <typename SturdyRef, typename Owner>
@@ -829,28 +829,28 @@ inline  ::capnp::PipelineFor<SturdyRef> Persistent<SturdyRef, Owner>::SaveResult
 template <typename SturdyRef, typename Owner>
 inline void Persistent<SturdyRef, Owner>::SaveResults::Builder::setSturdyRef( ::capnp::ReaderFor<SturdyRef> value) {
   ::capnp::_::PointerHelpers<SturdyRef>::set(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), value);
+      ::capnp::guarded<0>() * ::capnp::POINTERS), value);
 }
 template <typename SturdyRef, typename Owner>
 inline  ::capnp::BuilderFor<SturdyRef> Persistent<SturdyRef, Owner>::SaveResults::Builder::initSturdyRef() {
   return ::capnp::_::PointerHelpers<SturdyRef>::init(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 template <typename SturdyRef, typename Owner>
 inline  ::capnp::BuilderFor<SturdyRef> Persistent<SturdyRef, Owner>::SaveResults::Builder::initSturdyRef(unsigned int size) {
   return ::capnp::_::PointerHelpers<SturdyRef>::init(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), size);
+      ::capnp::guarded<0>() * ::capnp::POINTERS), size);
 }
 template <typename SturdyRef, typename Owner>
 inline void Persistent<SturdyRef, Owner>::SaveResults::Builder::adoptSturdyRef(
     ::capnp::Orphan<SturdyRef>&& value) {
   ::capnp::_::PointerHelpers<SturdyRef>::adopt(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
+      ::capnp::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 template <typename SturdyRef, typename Owner>
 inline ::capnp::Orphan<SturdyRef> Persistent<SturdyRef, Owner>::SaveResults::Builder::disownSturdyRef() {
   return ::capnp::_::PointerHelpers<SturdyRef>::disown(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 
 // Persistent<SturdyRef, Owner>::SaveResults
@@ -981,23 +981,23 @@ inline typename  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, 
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline bool RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Reader::hasCap() const {
   return !_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline bool RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::hasCap() {
   return !_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::Client RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Reader::getCap() const {
   return ::capnp::_::PointerHelpers< ::capnp::Persistent<ExternalRef, ExternalOwner>>::get(_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::Client RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::getCap() {
   return ::capnp::_::PointerHelpers< ::capnp::Persistent<ExternalRef, ExternalOwner>>::get(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::Client RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Pipeline::getCap() {
@@ -1006,45 +1006,45 @@ inline typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::Client RealmGa
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::setCap(typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::Client&& cap) {
   ::capnp::_::PointerHelpers< ::capnp::Persistent<ExternalRef, ExternalOwner>>::set(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(cap));
+      ::capnp::guarded<0>() * ::capnp::POINTERS), kj::mv(cap));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::setCap(typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::Client& cap) {
   ::capnp::_::PointerHelpers< ::capnp::Persistent<ExternalRef, ExternalOwner>>::set(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), cap);
+      ::capnp::guarded<0>() * ::capnp::POINTERS), cap);
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::adoptCap(
     ::capnp::Orphan< ::capnp::Persistent<ExternalRef, ExternalOwner>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Persistent<ExternalRef, ExternalOwner>>::adopt(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
+      ::capnp::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline ::capnp::Orphan< ::capnp::Persistent<ExternalRef, ExternalOwner>> RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::disownCap() {
   return ::capnp::_::PointerHelpers< ::capnp::Persistent<ExternalRef, ExternalOwner>>::disown(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 #endif  // !CAPNP_LITE
 
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline bool RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Reader::hasParams() const {
   return !_reader.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<1>() * ::capnp::POINTERS).isNull();
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline bool RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::hasParams() {
   return !_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<1>() * ::capnp::POINTERS).isNull();
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams::Reader RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Reader::getParams() const {
   return ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams>::get(_reader.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS));
+      ::capnp::guarded<1>() * ::capnp::POINTERS));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams::Builder RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::getParams() {
   return ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams>::get(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS));
+      ::capnp::guarded<1>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
@@ -1055,23 +1055,23 @@ inline typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams::Pi
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::setParams(typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams::Reader value) {
   ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams>::set(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS), value);
+      ::capnp::guarded<1>() * ::capnp::POINTERS), value);
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams::Builder RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::initParams() {
   return ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams>::init(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS));
+      ::capnp::guarded<1>() * ::capnp::POINTERS));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::adoptParams(
     ::capnp::Orphan<typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams>&& value) {
   ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams>::adopt(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS), kj::mv(value));
+      ::capnp::guarded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline ::capnp::Orphan<typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams> RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams::Builder::disownParams() {
   return ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveParams>::disown(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS));
+      ::capnp::guarded<1>() * ::capnp::POINTERS));
 }
 
 // RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams
@@ -1110,23 +1110,23 @@ const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef, Intern
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline bool RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Reader::hasCap() const {
   return !_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline bool RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::hasCap() {
   return !_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<InternalRef, InternalOwner>::Client RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Reader::getCap() const {
   return ::capnp::_::PointerHelpers< ::capnp::Persistent<InternalRef, InternalOwner>>::get(_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<InternalRef, InternalOwner>::Client RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::getCap() {
   return ::capnp::_::PointerHelpers< ::capnp::Persistent<InternalRef, InternalOwner>>::get(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<InternalRef, InternalOwner>::Client RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Pipeline::getCap() {
@@ -1135,45 +1135,45 @@ inline typename  ::capnp::Persistent<InternalRef, InternalOwner>::Client RealmGa
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::setCap(typename  ::capnp::Persistent<InternalRef, InternalOwner>::Client&& cap) {
   ::capnp::_::PointerHelpers< ::capnp::Persistent<InternalRef, InternalOwner>>::set(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(cap));
+      ::capnp::guarded<0>() * ::capnp::POINTERS), kj::mv(cap));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::setCap(typename  ::capnp::Persistent<InternalRef, InternalOwner>::Client& cap) {
   ::capnp::_::PointerHelpers< ::capnp::Persistent<InternalRef, InternalOwner>>::set(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), cap);
+      ::capnp::guarded<0>() * ::capnp::POINTERS), cap);
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::adoptCap(
     ::capnp::Orphan< ::capnp::Persistent<InternalRef, InternalOwner>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Persistent<InternalRef, InternalOwner>>::adopt(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
+      ::capnp::guarded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline ::capnp::Orphan< ::capnp::Persistent<InternalRef, InternalOwner>> RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::disownCap() {
   return ::capnp::_::PointerHelpers< ::capnp::Persistent<InternalRef, InternalOwner>>::disown(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 #endif  // !CAPNP_LITE
 
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline bool RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Reader::hasParams() const {
   return !_reader.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<1>() * ::capnp::POINTERS).isNull();
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline bool RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::hasParams() {
   return !_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<1>() * ::capnp::POINTERS).isNull();
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams::Reader RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Reader::getParams() const {
   return ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams>::get(_reader.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS));
+      ::capnp::guarded<1>() * ::capnp::POINTERS));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams::Builder RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::getParams() {
   return ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams>::get(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS));
+      ::capnp::guarded<1>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
@@ -1184,23 +1184,23 @@ inline typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams::Pi
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::setParams(typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams::Reader value) {
   ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams>::set(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS), value);
+      ::capnp::guarded<1>() * ::capnp::POINTERS), value);
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams::Builder RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::initParams() {
   return ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams>::init(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS));
+      ::capnp::guarded<1>() * ::capnp::POINTERS));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline void RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::adoptParams(
     ::capnp::Orphan<typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams>&& value) {
   ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams>::adopt(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS), kj::mv(value));
+      ::capnp::guarded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
 inline ::capnp::Orphan<typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams> RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams::Builder::disownParams() {
   return ::capnp::_::PointerHelpers<typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveParams>::disown(_builder.getPointerField(
-      ::kj::guarded<1>() * ::capnp::POINTERS));
+      ::capnp::guarded<1>() * ::capnp::POINTERS));
 }
 
 // RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams

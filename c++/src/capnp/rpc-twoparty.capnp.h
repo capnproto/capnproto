@@ -600,121 +600,121 @@ private:
 
 inline  ::capnp::rpc::twoparty::Side VatId::Reader::getSide() const {
   return _reader.getDataField< ::capnp::rpc::twoparty::Side>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::rpc::twoparty::Side VatId::Builder::getSide() {
   return _builder.getDataField< ::capnp::rpc::twoparty::Side>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS);
 }
 inline void VatId::Builder::setSide( ::capnp::rpc::twoparty::Side value) {
   _builder.setDataField< ::capnp::rpc::twoparty::Side>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS, value);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint32_t ProvisionId::Reader::getJoinId() const {
   return _reader.getDataField< ::uint32_t>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t ProvisionId::Builder::getJoinId() {
   return _builder.getDataField< ::uint32_t>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS);
 }
 inline void ProvisionId::Builder::setJoinId( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS, value);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint32_t JoinKeyPart::Reader::getJoinId() const {
   return _reader.getDataField< ::uint32_t>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t JoinKeyPart::Builder::getJoinId() {
   return _builder.getDataField< ::uint32_t>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS);
 }
 inline void JoinKeyPart::Builder::setJoinId( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS, value);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint16_t JoinKeyPart::Reader::getPartCount() const {
   return _reader.getDataField< ::uint16_t>(
-      ::kj::guarded<2>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<2>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint16_t JoinKeyPart::Builder::getPartCount() {
   return _builder.getDataField< ::uint16_t>(
-      ::kj::guarded<2>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<2>() * ::capnp::ELEMENTS);
 }
 inline void JoinKeyPart::Builder::setPartCount( ::uint16_t value) {
   _builder.setDataField< ::uint16_t>(
-      ::kj::guarded<2>() * ::capnp::ELEMENTS, value);
+      ::capnp::guarded<2>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint16_t JoinKeyPart::Reader::getPartNum() const {
   return _reader.getDataField< ::uint16_t>(
-      ::kj::guarded<3>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<3>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint16_t JoinKeyPart::Builder::getPartNum() {
   return _builder.getDataField< ::uint16_t>(
-      ::kj::guarded<3>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<3>() * ::capnp::ELEMENTS);
 }
 inline void JoinKeyPart::Builder::setPartNum( ::uint16_t value) {
   _builder.setDataField< ::uint16_t>(
-      ::kj::guarded<3>() * ::capnp::ELEMENTS, value);
+      ::capnp::guarded<3>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint32_t JoinResult::Reader::getJoinId() const {
   return _reader.getDataField< ::uint32_t>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t JoinResult::Builder::getJoinId() {
   return _builder.getDataField< ::uint32_t>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS);
 }
 inline void JoinResult::Builder::setJoinId( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      ::kj::guarded<0>() * ::capnp::ELEMENTS, value);
+      ::capnp::guarded<0>() * ::capnp::ELEMENTS, value);
 }
 
 inline bool JoinResult::Reader::getSucceeded() const {
   return _reader.getDataField<bool>(
-      ::kj::guarded<32>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<32>() * ::capnp::ELEMENTS);
 }
 
 inline bool JoinResult::Builder::getSucceeded() {
   return _builder.getDataField<bool>(
-      ::kj::guarded<32>() * ::capnp::ELEMENTS);
+      ::capnp::guarded<32>() * ::capnp::ELEMENTS);
 }
 inline void JoinResult::Builder::setSucceeded(bool value) {
   _builder.setDataField<bool>(
-      ::kj::guarded<32>() * ::capnp::ELEMENTS, value);
+      ::capnp::guarded<32>() * ::capnp::ELEMENTS, value);
 }
 
 inline bool JoinResult::Reader::hasCap() const {
   return !_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline bool JoinResult::Builder::hasCap() {
   return !_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS).isNull();
+      ::capnp::guarded<0>() * ::capnp::POINTERS).isNull();
 }
 inline ::capnp::AnyPointer::Reader JoinResult::Reader::getCap() const {
   return ::capnp::AnyPointer::Reader(_reader.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 inline ::capnp::AnyPointer::Builder JoinResult::Builder::getCap() {
   return ::capnp::AnyPointer::Builder(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
 }
 inline ::capnp::AnyPointer::Builder JoinResult::Builder::initCap() {
   auto result = ::capnp::AnyPointer::Builder(_builder.getPointerField(
-      ::kj::guarded<0>() * ::capnp::POINTERS));
+      ::capnp::guarded<0>() * ::capnp::POINTERS));
   result.clear();
   return result;
 }

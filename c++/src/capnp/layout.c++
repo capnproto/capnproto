@@ -59,7 +59,11 @@ namespace _ {  // private
 
 #endif  // !CAPNP_LITE
 
+#if CAPNP_DEBUG_TYPES
 #define G(n) guarded<n>()
+#else
+#define G(n) n
+#endif
 
 // =======================================================================================
 
@@ -1766,7 +1770,7 @@ struct WireHelpers {
       if (value.elementSize == ElementSize::POINTER) {
         // List of pointers.
         ref->listRef.set(ElementSize::POINTER, value.elementCount);
-        for (auto i: zeroTo(value.elementCount * (ONE * POINTERS / ELEMENTS))) {
+        for (auto i: kj::zeroTo(value.elementCount * (ONE * POINTERS / ELEMENTS))) {
           copyPointer(segment, capTable, reinterpret_cast<WirePointer*>(ptr) + i,
                       value.segment, value.capTable,
                       reinterpret_cast<const WirePointer*>(value.ptr) + i,
@@ -1807,7 +1811,7 @@ struct WireHelpers {
         auto newTotalSize = (dataSize + upgradeGuard<uint64_t>(ptrCount) * WORDS_PER_POINTER)
             / ELEMENTS * value.elementCount;
         KJ_ASSERT(newTotalSize <= totalSize);  // we've only removed data!
-        totalSize = kj::assumeMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(newTotalSize);
+        totalSize = assumeMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(newTotalSize);
       } else {
         dataSize = declDataSize;
         ptrCount = declPointerCount;
@@ -2886,14 +2890,14 @@ bool StructReader::isCanonical(const word **readHead,
   auto dataSize = this->getDataSectionSize() / BITS_PER_WORD;
 
   // Mark whether the struct is properly truncated
-  KJ_IF_MAYBE(diff, kj::trySubtract(dataSize, ONE * WORDS)) {
+  KJ_IF_MAYBE(diff, trySubtract(dataSize, ONE * WORDS)) {
     *dataTrunc = this->getDataField<uint64_t>(*diff / WORDS * ELEMENTS) != 0;
   } else {
     // Data segment empty.
     *dataTrunc = true;
   }
 
-  KJ_IF_MAYBE(diff, kj::trySubtract(this->pointerCount, ONE * POINTERS)) {
+  KJ_IF_MAYBE(diff, trySubtract(this->pointerCount, ONE * POINTERS)) {
     *ptrTrunc  = !this->getPointerField(*diff).isNull();
   } else {
     *ptrTrunc = true;
