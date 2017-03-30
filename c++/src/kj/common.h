@@ -493,30 +493,22 @@ template<typename T> constexpr T cp(T& t) noexcept { return t; }
 template<typename T> constexpr T cp(const T& t) noexcept { return t; }
 // Useful to force a copy, particularly to pass into a function that expects T&&.
 
-template <typename T, typename U, bool takeT> struct MinType_;
-template <typename T, typename U> struct MinType_<T, U, true> { typedef T Type; };
-template <typename T, typename U> struct MinType_<T, U, false> { typedef U Type; };
+template <typename T, typename U, bool takeT, bool uOK = true> struct ChooseType_;
+template <typename T, typename U> struct ChooseType_<T, U, true, true> { typedef T Type; };
+template <typename T, typename U> struct ChooseType_<T, U, true, false> { typedef T Type; };
+template <typename T, typename U> struct ChooseType_<T, U, false, true> { typedef U Type; };
 
 template <typename T, typename U>
-using MinType = typename MinType_<T, U, sizeof(T) <= sizeof(U)>::Type;
-// Resolves to the smaller of the two input types.
+using WiderType = typename ChooseType_<T, U, sizeof(T) >= sizeof(U)>::Type;
 
 template <typename T, typename U>
-inline constexpr auto min(T&& a, U&& b) -> MinType<Decay<T>, Decay<U>> {
-  return a < b ? MinType<Decay<T>, Decay<U>>(a) : MinType<Decay<T>, Decay<U>>(b);
+inline constexpr auto min(T&& a, U&& b) -> WiderType<Decay<T>, Decay<U>> {
+  return a < b ? WiderType<Decay<T>, Decay<U>>(a) : WiderType<Decay<T>, Decay<U>>(b);
 }
 
-template <typename T, typename U, bool takeT> struct MaxType_;
-template <typename T, typename U> struct MaxType_<T, U, true> { typedef T Type; };
-template <typename T, typename U> struct MaxType_<T, U, false> { typedef U Type; };
-
 template <typename T, typename U>
-using MaxType = typename MaxType_<T, U, sizeof(T) >= sizeof(U)>::Type;
-// Resolves to the larger of the two input types.
-
-template <typename T, typename U>
-inline constexpr auto max(T&& a, U&& b) -> MaxType<Decay<T>, Decay<U>> {
-  return a > b ? MaxType<Decay<T>, Decay<U>>(a) : MaxType<Decay<T>, Decay<U>>(b);
+inline constexpr auto max(T&& a, U&& b) -> WiderType<Decay<T>, Decay<U>> {
+  return a > b ? WiderType<Decay<T>, Decay<U>>(a) : WiderType<Decay<T>, Decay<U>>(b);
 }
 
 template <typename T, size_t s>
@@ -682,6 +674,11 @@ private:
   T begin_;
   T end_;
 };
+
+template <typename T, typename U>
+inline constexpr Range<WiderType<Decay<T>, Decay<U>>> range(T begin, U end) {
+  return Range<WiderType<Decay<T>, Decay<U>>>(begin, end);
+}
 
 template <typename T>
 inline constexpr Range<Decay<T>> range(T begin, T end) { return Range<Decay<T>>(begin, end); }
