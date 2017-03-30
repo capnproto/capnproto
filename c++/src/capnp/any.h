@@ -398,10 +398,10 @@ struct List<AnyPointer, Kind::OTHER> {
     inline Reader(): reader(ElementSize::POINTER) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
-    inline uint size() const { return unguard(reader.size() / ELEMENTS); }
+    inline uint size() const { return unbound(reader.size() / ELEMENTS); }
     inline AnyPointer::Reader operator[](uint index) const {
       KJ_IREQUIRE(index < size());
-      return AnyPointer::Reader(reader.getPointerElement(guarded(index) * ELEMENTS));
+      return AnyPointer::Reader(reader.getPointerElement(bounded(index) * ELEMENTS));
     }
 
     typedef _::IndexingIterator<const Reader, typename AnyPointer::Reader> Iterator;
@@ -430,10 +430,10 @@ struct List<AnyPointer, Kind::OTHER> {
     inline operator Reader() const { return Reader(builder.asReader()); }
     inline Reader asReader() const { return Reader(builder.asReader()); }
 
-    inline uint size() const { return unguard(builder.size() / ELEMENTS); }
+    inline uint size() const { return unbound(builder.size() / ELEMENTS); }
     inline AnyPointer::Builder operator[](uint index) {
       KJ_IREQUIRE(index < size());
-      return AnyPointer::Builder(builder.getPointerElement(guarded(index) * ELEMENTS));
+      return AnyPointer::Builder(builder.getPointerElement(bounded(index) * ELEMENTS));
     }
 
     typedef _::IndexingIterator<Builder, typename AnyPointer::Builder> Iterator;
@@ -563,10 +563,10 @@ public:
   inline Reader(): reader(ElementSize::INLINE_COMPOSITE) {}
   inline explicit Reader(_::ListReader reader): reader(reader) {}
 
-  inline uint size() const { return unguard(reader.size() / ELEMENTS); }
+  inline uint size() const { return unbound(reader.size() / ELEMENTS); }
   inline AnyStruct::Reader operator[](uint index) const {
     KJ_IREQUIRE(index < size());
-    return AnyStruct::Reader(reader.getStructElement(guarded(index) * ELEMENTS));
+    return AnyStruct::Reader(reader.getStructElement(bounded(index) * ELEMENTS));
   }
 
   typedef _::IndexingIterator<const Reader, typename AnyStruct::Reader> Iterator;
@@ -595,10 +595,10 @@ public:
   inline operator Reader() const { return Reader(builder.asReader()); }
   inline Reader asReader() const { return Reader(builder.asReader()); }
 
-  inline uint size() const { return unguard(builder.size() / ELEMENTS); }
+  inline uint size() const { return unbound(builder.size() / ELEMENTS); }
   inline AnyStruct::Builder operator[](uint index) {
     KJ_IREQUIRE(index < size());
-    return AnyStruct::Builder(builder.getStructElement(guarded(index) * ELEMENTS));
+    return AnyStruct::Builder(builder.getStructElement(bounded(index) * ELEMENTS));
   }
 
   typedef _::IndexingIterator<Builder, typename AnyStruct::Builder> Iterator;
@@ -628,7 +628,7 @@ public:
 #endif
 
   inline ElementSize getElementSize() { return _reader.getElementSize(); }
-  inline uint size() { return unguard(_reader.size() / ELEMENTS); }
+  inline uint size() { return unbound(_reader.size() / ELEMENTS); }
 
   inline kj::ArrayPtr<const byte> getRawBytes() { return _reader.asRawBytes(); }
 
@@ -664,7 +664,7 @@ public:
 #endif
 
   inline ElementSize getElementSize() { return _builder.getElementSize(); }
-  inline uint size() { return unguard(_builder.size() / ELEMENTS); }
+  inline uint size() { return unbound(_builder.size() / ELEMENTS); }
 
   Equality equals(AnyList::Reader right);
   inline bool operator==(AnyList::Reader right) {
@@ -781,21 +781,21 @@ inline BuilderFor<T> AnyPointer::Builder::initAs(uint elementCount) {
 
 inline AnyList::Builder AnyPointer::Builder::initAsAnyList(
     ElementSize elementSize, uint elementCount) {
-  return AnyList::Builder(builder.initList(elementSize, guarded(elementCount) * ELEMENTS));
+  return AnyList::Builder(builder.initList(elementSize, bounded(elementCount) * ELEMENTS));
 }
 
 inline List<AnyStruct>::Builder AnyPointer::Builder::initAsListOfAnyStruct(
     uint16_t dataWordCount, uint16_t pointerCount, uint elementCount) {
-  return List<AnyStruct>::Builder(builder.initStructList(guarded(elementCount) * ELEMENTS,
-      _::StructSize(guarded(dataWordCount) * WORDS,
-                    guarded(pointerCount) * POINTERS)));
+  return List<AnyStruct>::Builder(builder.initStructList(bounded(elementCount) * ELEMENTS,
+      _::StructSize(bounded(dataWordCount) * WORDS,
+                    bounded(pointerCount) * POINTERS)));
 }
 
 inline AnyStruct::Builder AnyPointer::Builder::initAsAnyStruct(
     uint16_t dataWordCount, uint16_t pointerCount) {
   return AnyStruct::Builder(builder.initStruct(
-      _::StructSize(guarded(dataWordCount) * WORDS,
-                    guarded(pointerCount) * POINTERS)));
+      _::StructSize(bounded(dataWordCount) * WORDS,
+                    bounded(pointerCount) * POINTERS)));
 }
 
 template <typename T>
@@ -971,8 +971,8 @@ struct PointerHelpers<AnyStruct, Kind::OTHER> {
   static inline AnyStruct::Builder init(
       PointerBuilder builder, uint16_t dataWordCount, uint16_t pointerCount) {
     return AnyStruct::Builder(builder.initStruct(
-        StructSize(guarded(dataWordCount) * WORDS,
-                   guarded(pointerCount) * POINTERS)));
+        StructSize(bounded(dataWordCount) * WORDS,
+                   bounded(pointerCount) * POINTERS)));
   }
 
   // TODO(soon): implement these
@@ -996,14 +996,14 @@ struct PointerHelpers<AnyList, Kind::OTHER> {
   static inline AnyList::Builder init(
       PointerBuilder builder, ElementSize elementSize, uint elementCount) {
     return AnyList::Builder(builder.initList(
-        elementSize, guarded(elementCount) * ELEMENTS));
+        elementSize, bounded(elementCount) * ELEMENTS));
   }
   static inline AnyList::Builder init(
       PointerBuilder builder, uint16_t dataWordCount, uint16_t pointerCount, uint elementCount) {
     return AnyList::Builder(builder.initStructList(
-        guarded(elementCount) * ELEMENTS,
-        StructSize(guarded(dataWordCount) * WORDS,
-                   guarded(pointerCount) * POINTERS)));
+        bounded(elementCount) * ELEMENTS,
+        StructSize(bounded(dataWordCount) * WORDS,
+                   bounded(pointerCount) * POINTERS)));
   }
 
   // TODO(soon): implement these

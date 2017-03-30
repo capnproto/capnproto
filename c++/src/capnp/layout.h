@@ -83,20 +83,20 @@ class BuilderArena;
 // =============================================================================
 
 #if CAPNP_DEBUG_TYPES
-typedef kj::UnitRatio<kj::Guarded<64, uint>, BitLabel, ElementLabel> BitsPerElementTableType;
+typedef kj::UnitRatio<kj::Bounded<64, uint>, BitLabel, ElementLabel> BitsPerElementTableType;
 #else
 typedef uint BitsPerElementTableType;
 #endif
 
 static constexpr BitsPerElementTableType BITS_PER_ELEMENT_TABLE[8] = {
-  guarded< 0>() * BITS / ELEMENTS,
-  guarded< 1>() * BITS / ELEMENTS,
-  guarded< 8>() * BITS / ELEMENTS,
-  guarded<16>() * BITS / ELEMENTS,
-  guarded<32>() * BITS / ELEMENTS,
-  guarded<64>() * BITS / ELEMENTS,
-  guarded< 0>() * BITS / ELEMENTS,
-  guarded< 0>() * BITS / ELEMENTS
+  bounded< 0>() * BITS / ELEMENTS,
+  bounded< 1>() * BITS / ELEMENTS,
+  bounded< 8>() * BITS / ELEMENTS,
+  bounded<16>() * BITS / ELEMENTS,
+  bounded<32>() * BITS / ELEMENTS,
+  bounded<64>() * BITS / ELEMENTS,
+  bounded< 0>() * BITS / ELEMENTS,
+  bounded< 0>() * BITS / ELEMENTS
 };
 
 inline KJ_CONSTEXPR() BitsPerElementTableType dataBitsPerElement(ElementSize size) {
@@ -112,14 +112,14 @@ inline constexpr PointersPerElementN<1> pointersPerElement(ElementSize size) {
 }
 
 static constexpr BitsPerElementTableType BITS_PER_ELEMENT_INCLUDING_PONITERS_TABLE[8] = {
-  guarded< 0>() * BITS / ELEMENTS,
-  guarded< 1>() * BITS / ELEMENTS,
-  guarded< 8>() * BITS / ELEMENTS,
-  guarded<16>() * BITS / ELEMENTS,
-  guarded<32>() * BITS / ELEMENTS,
-  guarded<64>() * BITS / ELEMENTS,
-  guarded<64>() * BITS / ELEMENTS,
-  guarded< 0>() * BITS / ELEMENTS
+  bounded< 0>() * BITS / ELEMENTS,
+  bounded< 1>() * BITS / ELEMENTS,
+  bounded< 8>() * BITS / ELEMENTS,
+  bounded<16>() * BITS / ELEMENTS,
+  bounded<32>() * BITS / ELEMENTS,
+  bounded<64>() * BITS / ELEMENTS,
+  bounded<64>() * BITS / ELEMENTS,
+  bounded< 0>() * BITS / ELEMENTS
 };
 
 inline KJ_CONSTEXPR() BitsPerElementTableType bitsPerElementIncludingPointers(ElementSize size) {
@@ -180,7 +180,7 @@ struct MessageSizeCounts {
   }
 
   MessageSize asPublic() {
-    return MessageSize { unguard(wordCount / WORDS), capCount };
+    return MessageSize { unbound(wordCount / WORDS), capCount };
   }
 };
 
@@ -208,8 +208,8 @@ struct StructSize {
 
 template <typename T, typename CapnpPrivate = typename T::_capnpPrivate>
 inline constexpr StructSize structSize() {
-  return StructSize(guarded(CapnpPrivate::dataWordSize) * WORDS,
-                    guarded(CapnpPrivate::pointerCount) * POINTERS);
+  return StructSize(bounded(CapnpPrivate::dataWordSize) * WORDS,
+                    bounded(CapnpPrivate::pointerCount) * POINTERS);
 }
 
 template <typename T, typename CapnpPrivate = typename T::_capnpPrivate,
@@ -218,8 +218,8 @@ inline constexpr StructSize minStructSizeForElement() {
   // If T is a struct, return its struct size. Otherwise return the minimum struct size big enough
   // to hold a T.
 
-  return StructSize(guarded(CapnpPrivate::dataWordSize) * WORDS,
-                    guarded(CapnpPrivate::pointerCount) * POINTERS);
+  return StructSize(bounded(CapnpPrivate::dataWordSize) * WORDS,
+                    bounded(CapnpPrivate::pointerCount) * POINTERS);
 }
 
 template <typename T, typename = kj::EnableIf<CAPNP_KIND(T) != Kind::STRUCT>>
@@ -993,7 +993,7 @@ inline PointerReader PointerReader::getRootUnchecked(const word* location) {
 
 inline kj::ArrayPtr<byte> StructBuilder::getDataSectionAsBlob() {
   return kj::ArrayPtr<byte>(reinterpret_cast<byte*>(data),
-      unguard(dataSize / BITS_PER_BYTE / BYTES));
+      unbound(dataSize / BITS_PER_BYTE / BYTES));
 }
 
 inline _::ListBuilder StructBuilder::getPointerSectionAsList() {
@@ -1014,7 +1014,7 @@ inline bool StructBuilder::hasDataField<Void>(StructDataOffset offset) {
 
 template <typename T>
 inline T StructBuilder::getDataField(StructDataOffset offset) {
-  return reinterpret_cast<WireValue<T>*>(data)[unguard(offset / ELEMENTS)].get();
+  return reinterpret_cast<WireValue<T>*>(data)[unbound(offset / ELEMENTS)].get();
 }
 
 template <>
@@ -1022,7 +1022,7 @@ inline bool StructBuilder::getDataField<bool>(StructDataOffset offset) {
   BitCount32 boffset = offset * (ONE * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) &
-      unguard(ONE << (boffset % BITS_PER_BYTE / BITS))) != 0;
+      unbound(ONE << (boffset % BITS_PER_BYTE / BITS))) != 0;
 }
 
 template <>
@@ -1037,7 +1037,7 @@ inline T StructBuilder::getDataField(StructDataOffset offset, Mask<T> mask) {
 
 template <typename T>
 inline void StructBuilder::setDataField(StructDataOffset offset, kj::NoInfer<T> value) {
-  reinterpret_cast<WireValue<T>*>(data)[unguard(offset / ELEMENTS)].set(value);
+  reinterpret_cast<WireValue<T>*>(data)[unbound(offset / ELEMENTS)].set(value);
 }
 
 #if CAPNP_CANONICALIZE_NAN
@@ -1056,7 +1056,7 @@ template <>
 inline void StructBuilder::setDataField<bool>(StructDataOffset offset, bool value) {
   auto boffset = offset * (ONE * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
-  uint bitnum = unguardMaxBits<3>(boffset % BITS_PER_BYTE / BITS);
+  uint bitnum = unboundMaxBits<3>(boffset % BITS_PER_BYTE / BITS);
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
                                  | (static_cast<uint8_t>(value) << bitnum);
 }
@@ -1080,7 +1080,7 @@ inline PointerBuilder StructBuilder::getPointerField(StructPointerOffset ptrInde
 
 inline kj::ArrayPtr<const byte> StructReader::getDataSectionAsBlob() {
   return kj::ArrayPtr<const byte>(reinterpret_cast<const byte*>(data),
-      unguard(dataSize / BITS_PER_BYTE / BYTES));
+      unbound(dataSize / BITS_PER_BYTE / BYTES));
 }
 
 inline _::ListReader StructReader::getPointerSectionAsList() {
@@ -1102,7 +1102,7 @@ inline bool StructReader::hasDataField<Void>(StructDataOffset offset) const {
 template <typename T>
 inline T StructReader::getDataField(StructDataOffset offset) const {
   if ((offset + ONE * ELEMENTS) * capnp::bitsPerElement<T>() <= dataSize) {
-    return reinterpret_cast<const WireValue<T>*>(data)[unguard(offset / ELEMENTS)].get();
+    return reinterpret_cast<const WireValue<T>*>(data)[unbound(offset / ELEMENTS)].get();
   } else {
     return static_cast<T>(0);
   }
@@ -1114,7 +1114,7 @@ inline bool StructReader::getDataField<bool>(StructDataOffset offset) const {
   if (boffset < dataSize) {
     const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
     return (*reinterpret_cast<const uint8_t*>(b) &
-        unguard(ONE << (boffset % BITS_PER_BYTE / BITS))) != 0;
+        unbound(ONE << (boffset % BITS_PER_BYTE / BITS))) != 0;
   } else {
     return false;
   }
@@ -1147,7 +1147,7 @@ inline ListElementCount ListBuilder::size() const { return elementCount; }
 template <typename T>
 inline T ListBuilder::getDataElement(ElementCount index) {
   return reinterpret_cast<WireValue<T>*>(
-      ptr + upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE)->get();
+      ptr + upgradeBound<uint64_t>(index) * step / BITS_PER_BYTE)->get();
 
   // TODO(perf):  Benchmark this alternate implementation, which I suspect may make better use of
   //   the x86 SIB byte.  Also use it for all the other getData/setData implementations below, and
@@ -1163,7 +1163,7 @@ inline bool ListBuilder::getDataElement<bool>(ElementCount index) {
   auto bindex = index * (ONE * BITS / ELEMENTS);
   byte* b = ptr + bindex / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) &
-      unguard(ONE << (bindex % BITS_PER_BYTE / BITS))) != 0;
+      unbound(ONE << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
 
 template <>
@@ -1174,7 +1174,7 @@ inline Void ListBuilder::getDataElement<Void>(ElementCount index) {
 template <typename T>
 inline void ListBuilder::setDataElement(ElementCount index, kj::NoInfer<T> value) {
   reinterpret_cast<WireValue<T>*>(
-      ptr + upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE)->set(value);
+      ptr + upgradeBound<uint64_t>(index) * step / BITS_PER_BYTE)->set(value);
 }
 
 #if CAPNP_CANONICALIZE_NAN
@@ -1195,8 +1195,8 @@ inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) {
   auto bindex = index * (ONE * BITS / ELEMENTS);
   byte* b = ptr + bindex / BITS_PER_BYTE;
   auto bitnum = bindex % BITS_PER_BYTE / BITS;
-  *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << unguard(bitnum)))
-                                 | (static_cast<uint8_t>(value) << unguard(bitnum));
+  *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << unbound(bitnum)))
+                                 | (static_cast<uint8_t>(value) << unbound(bitnum));
 }
 
 template <>
@@ -1204,7 +1204,7 @@ inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) {}
 
 inline PointerBuilder ListBuilder::getPointerElement(ElementCount index) {
   return PointerBuilder(segment, capTable, reinterpret_cast<WirePointer*>(ptr +
-      upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE));
+      upgradeBound<uint64_t>(index) * step / BITS_PER_BYTE));
 }
 
 // -------------------------------------------------------------------
@@ -1214,7 +1214,7 @@ inline ListElementCount ListReader::size() const { return elementCount; }
 template <typename T>
 inline T ListReader::getDataElement(ElementCount index) const {
   return reinterpret_cast<const WireValue<T>*>(
-      ptr + upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE)->get();
+      ptr + upgradeBound<uint64_t>(index) * step / BITS_PER_BYTE)->get();
 }
 
 template <>
@@ -1223,7 +1223,7 @@ inline bool ListReader::getDataElement<bool>(ElementCount index) const {
   auto bindex = index * (ONE * BITS / ELEMENTS);
   const byte* b = ptr + bindex / BITS_PER_BYTE;
   return (*reinterpret_cast<const uint8_t*>(b) &
-      unguard(ONE << (bindex % BITS_PER_BYTE / BITS))) != 0;
+      unbound(ONE << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
 
 template <>
@@ -1233,7 +1233,7 @@ inline Void ListReader::getDataElement<Void>(ElementCount index) const {
 
 inline PointerReader ListReader::getPointerElement(ElementCount index) const {
   return PointerReader(segment, capTable, reinterpret_cast<const WirePointer*>(
-      ptr + upgradeGuard<uint64_t>(index) * step / BITS_PER_BYTE), nestingLimit);
+      ptr + upgradeBound<uint64_t>(index) * step / BITS_PER_BYTE), nestingLimit);
 }
 
 // -------------------------------------------------------------------

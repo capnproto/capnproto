@@ -29,17 +29,17 @@
 namespace kj {
   template <typename T, typename U>
   String KJ_STRINGIFY(kj::Quantity<T, U> value) {
-    return kj::str(unguardAs<uint64_t>(value / kj::unit<kj::Quantity<T, U>>()));
+    return kj::str(unboundAs<uint64_t>(value / kj::unit<kj::Quantity<T, U>>()));
   }
 
   // Hack: Allow direct comparisons and multiplications so that we don't have to rewrite the code
   //   below.
   template <uint64_t maxN, typename T>
-  inline constexpr Guarded<65535, T> operator*(uint a, Guarded<maxN, T> b) {
-    return assumeBits<16>(a * unguard(b));
+  inline constexpr Bounded<65535, T> operator*(uint a, Bounded<maxN, T> b) {
+    return assumeBits<16>(a * unbound(b));
   }
   template <uint b>
-  inline constexpr Guarded<65535, uint> operator*(uint a, GuardedConst<b>) {
+  inline constexpr Bounded<65535, uint> operator*(uint a, BoundedConst<b>) {
     return assumeBits<16>(a * b);
   }
 }

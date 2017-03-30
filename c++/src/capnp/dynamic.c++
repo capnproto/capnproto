@@ -98,8 +98,8 @@ ElementSize elementSizeFor(schema::Type::Which elementType) {
 inline _::StructSize structSizeFromSchema(StructSchema schema) {
   auto node = schema.getProto().getStruct();
   return _::StructSize(
-      guarded(node.getDataWordCount()) * WORDS,
-      guarded(node.getPointerCount()) * POINTERS);
+      bounded(node.getDataWordCount()) * WORDS,
+      bounded(node.getPointerCount()) * POINTERS);
 }
 
 }  // namespace
@@ -692,21 +692,21 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
           if (listType.whichElementType() == schema::Type::STRUCT) {
             return DynamicList::Builder(listType,
                 builder.getPointerField(assumePointerOffset(slot.getOffset()))
-                       .initStructList(guarded(size) * ELEMENTS,
+                       .initStructList(bounded(size) * ELEMENTS,
                                        structSizeFromSchema(listType.getStructElementType())));
           } else {
             return DynamicList::Builder(listType,
                 builder.getPointerField(assumePointerOffset(slot.getOffset()))
                        .initList(elementSizeFor(listType.whichElementType()),
-                                 guarded(size) * ELEMENTS));
+                                 bounded(size) * ELEMENTS));
           }
         }
         case schema::Type::TEXT:
           return builder.getPointerField(assumePointerOffset(slot.getOffset()))
-                        .initBlob<Text>(guarded(size) * BYTES);
+                        .initBlob<Text>(bounded(size) * BYTES);
         case schema::Type::DATA:
           return builder.getPointerField(assumePointerOffset(slot.getOffset()))
-                        .initBlob<Data>(guarded(size) * BYTES);
+                        .initBlob<Data>(bounded(size) * BYTES);
         default:
           KJ_FAIL_REQUIRE(
               "init() with size is only valid for list, text, or data fields.",
@@ -1014,7 +1014,7 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
     case schema::Type::discrim: \
-      return reader.getDataElement<typeName>(guarded(index) * ELEMENTS);
+      return reader.getDataElement<typeName>(bounded(index) * ELEMENTS);
 
     HANDLE_TYPE(void, VOID, Void)
     HANDLE_TYPE(bool, BOOL, bool)
@@ -1031,33 +1031,33 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
 #undef HANDLE_TYPE
 
     case schema::Type::TEXT:
-      return reader.getPointerElement(guarded(index) * ELEMENTS)
+      return reader.getPointerElement(bounded(index) * ELEMENTS)
                    .getBlob<Text>(nullptr, ZERO * BYTES);
     case schema::Type::DATA:
-      return reader.getPointerElement(guarded(index) * ELEMENTS)
+      return reader.getPointerElement(bounded(index) * ELEMENTS)
                    .getBlob<Data>(nullptr, ZERO * BYTES);
 
     case schema::Type::LIST: {
       auto elementType = schema.getListElementType();
       return DynamicList::Reader(elementType,
-          reader.getPointerElement(guarded(index) * ELEMENTS)
+          reader.getPointerElement(bounded(index) * ELEMENTS)
                 .getList(elementSizeFor(elementType.whichElementType()), nullptr));
     }
 
     case schema::Type::STRUCT:
       return DynamicStruct::Reader(schema.getStructElementType(),
-                                   reader.getStructElement(guarded(index) * ELEMENTS));
+                                   reader.getStructElement(bounded(index) * ELEMENTS));
 
     case schema::Type::ENUM:
       return DynamicEnum(schema.getEnumElementType(),
-                         reader.getDataElement<uint16_t>(guarded(index) * ELEMENTS));
+                         reader.getDataElement<uint16_t>(bounded(index) * ELEMENTS));
 
     case schema::Type::ANY_POINTER:
-      return AnyPointer::Reader(reader.getPointerElement(guarded(index) * ELEMENTS));
+      return AnyPointer::Reader(reader.getPointerElement(bounded(index) * ELEMENTS));
 
     case schema::Type::INTERFACE:
       return DynamicCapability::Client(schema.getInterfaceElementType(),
-                                       reader.getPointerElement(guarded(index) * ELEMENTS)
+                                       reader.getPointerElement(bounded(index) * ELEMENTS)
                                              .getCapability());
   }
 
@@ -1070,7 +1070,7 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
     case schema::Type::discrim: \
-      return builder.getDataElement<typeName>(guarded(index) * ELEMENTS);
+      return builder.getDataElement<typeName>(bounded(index) * ELEMENTS);
 
     HANDLE_TYPE(void, VOID, Void)
     HANDLE_TYPE(bool, BOOL, bool)
@@ -1087,33 +1087,33 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
 #undef HANDLE_TYPE
 
     case schema::Type::TEXT:
-      return builder.getPointerElement(guarded(index) * ELEMENTS)
+      return builder.getPointerElement(bounded(index) * ELEMENTS)
                     .getBlob<Text>(nullptr, ZERO * BYTES);
     case schema::Type::DATA:
-      return builder.getPointerElement(guarded(index) * ELEMENTS)
+      return builder.getPointerElement(bounded(index) * ELEMENTS)
                     .getBlob<Data>(nullptr, ZERO * BYTES);
 
     case schema::Type::LIST: {
       ListSchema elementType = schema.getListElementType();
       if (elementType.whichElementType() == schema::Type::STRUCT) {
         return DynamicList::Builder(elementType,
-            builder.getPointerElement(guarded(index) * ELEMENTS)
+            builder.getPointerElement(bounded(index) * ELEMENTS)
                    .getStructList(structSizeFromSchema(elementType.getStructElementType()),
                                   nullptr));
       } else {
         return DynamicList::Builder(elementType,
-            builder.getPointerElement(guarded(index) * ELEMENTS)
+            builder.getPointerElement(bounded(index) * ELEMENTS)
                    .getList(elementSizeFor(elementType.whichElementType()), nullptr));
       }
     }
 
     case schema::Type::STRUCT:
       return DynamicStruct::Builder(schema.getStructElementType(),
-                                    builder.getStructElement(guarded(index) * ELEMENTS));
+                                    builder.getStructElement(bounded(index) * ELEMENTS));
 
     case schema::Type::ENUM:
       return DynamicEnum(schema.getEnumElementType(),
-                         builder.getDataElement<uint16_t>(guarded(index) * ELEMENTS));
+                         builder.getDataElement<uint16_t>(bounded(index) * ELEMENTS));
 
     case schema::Type::ANY_POINTER:
       KJ_FAIL_ASSERT("List(AnyPointer) not supported.");
@@ -1121,7 +1121,7 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
 
     case schema::Type::INTERFACE:
       return DynamicCapability::Client(schema.getInterfaceElementType(),
-                                       builder.getPointerElement(guarded(index) * ELEMENTS)
+                                       builder.getPointerElement(bounded(index) * ELEMENTS)
                                               .getCapability());
   }
 
@@ -1136,7 +1136,7 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
     case schema::Type::discrim: \
-      builder.setDataElement<typeName>(guarded(index) * ELEMENTS, value.as<typeName>()); \
+      builder.setDataElement<typeName>(bounded(index) * ELEMENTS, value.as<typeName>()); \
       return;
 
     HANDLE_TYPE(void, VOID, Void)
@@ -1154,10 +1154,10 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
 #undef HANDLE_TYPE
 
     case schema::Type::TEXT:
-      builder.getPointerElement(guarded(index) * ELEMENTS).setBlob<Text>(value.as<Text>());
+      builder.getPointerElement(bounded(index) * ELEMENTS).setBlob<Text>(value.as<Text>());
       return;
     case schema::Type::DATA:
-      builder.getPointerElement(guarded(index) * ELEMENTS).setBlob<Data>(value.as<Data>());
+      builder.getPointerElement(bounded(index) * ELEMENTS).setBlob<Data>(value.as<Data>());
       return;
 
     case schema::Type::LIST: {
@@ -1165,7 +1165,7 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
       KJ_REQUIRE(listValue.getSchema() == schema.getListElementType(), "Value type mismatch.") {
         return;
       }
-      builder.getPointerElement(guarded(index) * ELEMENTS).setList(listValue.reader);
+      builder.getPointerElement(bounded(index) * ELEMENTS).setList(listValue.reader);
       return;
     }
 
@@ -1174,7 +1174,7 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
       KJ_REQUIRE(structValue.getSchema() == schema.getStructElementType(), "Value type mismatch.") {
         return;
       }
-      builder.getStructElement(guarded(index) * ELEMENTS).copyContentFrom(structValue.reader);
+      builder.getStructElement(bounded(index) * ELEMENTS).copyContentFrom(structValue.reader);
       return;
     }
 
@@ -1191,7 +1191,7 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
         }
         rawValue = enumValue.getRaw();
       }
-      builder.setDataElement<uint16_t>(guarded(index) * ELEMENTS, rawValue);
+      builder.setDataElement<uint16_t>(bounded(index) * ELEMENTS, rawValue);
       return;
     }
 
@@ -1206,7 +1206,7 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
                  "Value type mismatch.") {
         return;
       }
-      builder.getPointerElement(guarded(index) * ELEMENTS).setCapability(kj::mv(capValue.hook));
+      builder.getPointerElement(bounded(index) * ELEMENTS).setCapability(kj::mv(capValue.hook));
       return;
     }
   }
@@ -1239,26 +1239,26 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
       return nullptr;
 
     case schema::Type::TEXT:
-      return builder.getPointerElement(guarded(index) * ELEMENTS)
-                    .initBlob<Text>(guarded(size) * BYTES);
+      return builder.getPointerElement(bounded(index) * ELEMENTS)
+                    .initBlob<Text>(bounded(size) * BYTES);
 
     case schema::Type::DATA:
-      return builder.getPointerElement(guarded(index) * ELEMENTS)
-                    .initBlob<Data>(guarded(size) * BYTES);
+      return builder.getPointerElement(bounded(index) * ELEMENTS)
+                    .initBlob<Data>(bounded(size) * BYTES);
 
     case schema::Type::LIST: {
       auto elementType = schema.getListElementType();
 
       if (elementType.whichElementType() == schema::Type::STRUCT) {
         return DynamicList::Builder(elementType,
-            builder.getPointerElement(guarded(index) * ELEMENTS)
-                   .initStructList(guarded(size) * ELEMENTS,
+            builder.getPointerElement(bounded(index) * ELEMENTS)
+                   .initStructList(bounded(size) * ELEMENTS,
                                    structSizeFromSchema(elementType.getStructElementType())));
       } else {
         return DynamicList::Builder(elementType,
-            builder.getPointerElement(guarded(index) * ELEMENTS)
+            builder.getPointerElement(bounded(index) * ELEMENTS)
                    .initList(elementSizeFor(elementType.whichElementType()),
-                             guarded(size) * ELEMENTS));
+                             bounded(size) * ELEMENTS));
       }
     }
 
@@ -1291,19 +1291,19 @@ void DynamicList::Builder::adopt(uint index, Orphan<DynamicValue>&& orphan) {
 
     case schema::Type::TEXT:
       KJ_REQUIRE(orphan.getType() == DynamicValue::TEXT, "Value type mismatch.");
-      builder.getPointerElement(guarded(index) * ELEMENTS).adopt(kj::mv(orphan.builder));
+      builder.getPointerElement(bounded(index) * ELEMENTS).adopt(kj::mv(orphan.builder));
       return;
 
     case schema::Type::DATA:
       KJ_REQUIRE(orphan.getType() == DynamicValue::DATA, "Value type mismatch.");
-      builder.getPointerElement(guarded(index) * ELEMENTS).adopt(kj::mv(orphan.builder));
+      builder.getPointerElement(bounded(index) * ELEMENTS).adopt(kj::mv(orphan.builder));
       return;
 
     case schema::Type::LIST: {
       ListSchema elementType = schema.getListElementType();
       KJ_REQUIRE(orphan.getType() == DynamicValue::LIST && orphan.listSchema == elementType,
                  "Value type mismatch.");
-      builder.getPointerElement(guarded(index) * ELEMENTS).adopt(kj::mv(orphan.builder));
+      builder.getPointerElement(bounded(index) * ELEMENTS).adopt(kj::mv(orphan.builder));
       return;
     }
 
@@ -1311,7 +1311,7 @@ void DynamicList::Builder::adopt(uint index, Orphan<DynamicValue>&& orphan) {
       auto elementType = schema.getStructElementType();
       KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT && orphan.structSchema == elementType,
                  "Value type mismatch.");
-      builder.getStructElement(guarded(index) * ELEMENTS).transferContentFrom(
+      builder.getStructElement(bounded(index) * ELEMENTS).transferContentFrom(
           orphan.builder.asStruct(structSizeFromSchema(elementType)));
       return;
     }
@@ -1324,7 +1324,7 @@ void DynamicList::Builder::adopt(uint index, Orphan<DynamicValue>&& orphan) {
       KJ_REQUIRE(orphan.getType() == DynamicValue::CAPABILITY &&
                  orphan.interfaceSchema.extends(elementType),
                  "Value type mismatch.");
-      builder.getPointerElement(guarded(index) * ELEMENTS).adopt(kj::mv(orphan.builder));
+      builder.getPointerElement(bounded(index) * ELEMENTS).adopt(kj::mv(orphan.builder));
       return;
     }
   }
@@ -1350,11 +1350,11 @@ Orphan<DynamicValue> DynamicList::Builder::disown(uint index) {
       auto result = Orphan<DynamicValue>(operator[](index), _::OrphanBuilder());
       switch (elementSizeFor(schema.whichElementType())) {
         case ElementSize::VOID: break;
-        case ElementSize::BIT: builder.setDataElement<bool>(guarded(index) * ELEMENTS, false); break;
-        case ElementSize::BYTE: builder.setDataElement<uint8_t>(guarded(index) * ELEMENTS, 0); break;
-        case ElementSize::TWO_BYTES: builder.setDataElement<uint16_t>(guarded(index) * ELEMENTS, 0); break;
-        case ElementSize::FOUR_BYTES: builder.setDataElement<uint32_t>(guarded(index) * ELEMENTS, 0); break;
-        case ElementSize::EIGHT_BYTES: builder.setDataElement<uint64_t>(guarded(index) * ELEMENTS, 0);break;
+        case ElementSize::BIT: builder.setDataElement<bool>(bounded(index) * ELEMENTS, false); break;
+        case ElementSize::BYTE: builder.setDataElement<uint8_t>(bounded(index) * ELEMENTS, 0); break;
+        case ElementSize::TWO_BYTES: builder.setDataElement<uint16_t>(bounded(index) * ELEMENTS, 0); break;
+        case ElementSize::FOUR_BYTES: builder.setDataElement<uint32_t>(bounded(index) * ELEMENTS, 0); break;
+        case ElementSize::EIGHT_BYTES: builder.setDataElement<uint64_t>(bounded(index) * ELEMENTS, 0);break;
 
         case ElementSize::POINTER:
         case ElementSize::INLINE_COMPOSITE:
@@ -1369,14 +1369,14 @@ Orphan<DynamicValue> DynamicList::Builder::disown(uint index) {
     case schema::Type::ANY_POINTER:
     case schema::Type::INTERFACE: {
       auto value = operator[](index);
-      return Orphan<DynamicValue>(value, builder.getPointerElement(guarded(index) * ELEMENTS).disown());
+      return Orphan<DynamicValue>(value, builder.getPointerElement(bounded(index) * ELEMENTS).disown());
     }
 
     case schema::Type::STRUCT: {
       // We have to make a copy.
       Orphan<DynamicStruct> result =
           Orphanage::getForMessageContaining(*this).newOrphan(schema.getStructElementType());
-      auto element = builder.getStructElement(guarded(index) * ELEMENTS);
+      auto element = builder.getStructElement(bounded(index) * ELEMENTS);
       result.get().builder.transferContentFrom(element);
       element.clearAll();
       return kj::mv(result);
@@ -1893,11 +1893,11 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::OTHER>::init(
     PointerBuilder builder, ListSchema schema, uint size) {
   if (schema.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(schema,
-        builder.initStructList(guarded(size) * ELEMENTS,
+        builder.initStructList(bounded(size) * ELEMENTS,
             structSizeFromSchema(schema.getStructElementType())));
   } else {
     return DynamicList::Builder(schema,
-        builder.initList(elementSizeFor(schema.whichElementType()), guarded(size) * ELEMENTS));
+        builder.initList(elementSizeFor(schema.whichElementType()), bounded(size) * ELEMENTS));
   }
 }
 
@@ -2000,11 +2000,11 @@ Orphan<DynamicStruct> Orphanage::newOrphan(StructSchema schema) const {
 Orphan<DynamicList> Orphanage::newOrphan(ListSchema schema, uint size) const {
   if (schema.whichElementType() == schema::Type::STRUCT) {
     return Orphan<DynamicList>(schema, _::OrphanBuilder::initStructList(
-        arena, capTable, guarded(size) * ELEMENTS,
+        arena, capTable, bounded(size) * ELEMENTS,
         structSizeFromSchema(schema.getStructElementType())));
   } else {
     return Orphan<DynamicList>(schema, _::OrphanBuilder::initList(
-        arena, capTable, guarded(size) * ELEMENTS,
+        arena, capTable, bounded(size) * ELEMENTS,
         elementSizeFor(schema.whichElementType())));
   }
 }

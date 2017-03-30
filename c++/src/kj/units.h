@@ -73,9 +73,9 @@ constexpr Unsafe_ unsafe = Unsafe_();
 // Use as a parameter to constructors that are unsafe to indicate that you really do mean it.
 
 template <uint64_t maxN, typename T>
-class Guarded;
+class Bounded;
 template <uint value>
-class GuardedConst;
+class BoundedConst;
 
 template <typename T> constexpr bool isIntegral() { return false; }
 template <> constexpr bool isIntegral<char>() { return true; }
@@ -91,14 +91,14 @@ template <> constexpr bool isIntegral<unsigned long>() { return true; }
 template <> constexpr bool isIntegral<unsigned long long>() { return true; }
 
 template <typename T>
-struct IsIntegralOrGuarded_ { static constexpr bool value = isIntegral<T>(); };
+struct IsIntegralOrBounded_ { static constexpr bool value = isIntegral<T>(); };
 template <uint64_t m, typename T>
-struct IsIntegralOrGuarded_<Guarded<m, T>> { static constexpr bool value = true; };
+struct IsIntegralOrBounded_<Bounded<m, T>> { static constexpr bool value = true; };
 template <uint v>
-struct IsIntegralOrGuarded_<GuardedConst<v>> { static constexpr bool value = true; };
+struct IsIntegralOrBounded_<BoundedConst<v>> { static constexpr bool value = true; };
 
 template <typename T>
-inline constexpr bool isIntegralOrGuarded() { return IsIntegralOrGuarded_<T>::value; }
+inline constexpr bool isIntegralOrBounded() { return IsIntegralOrBounded_<T>::value; }
 
 template <typename Number, typename Unit1, typename Unit2>
 class UnitRatio {
@@ -108,7 +108,7 @@ class UnitRatio {
   // Construct this type by dividing one Quantity by another of a different unit.  Use this type
   // by multiplying it by a Quantity, or dividing a Quantity by it.
 
-  static_assert(isIntegralOrGuarded<Number>(),
+  static_assert(isIntegralOrBounded<Number>(),
       "Underlying type for UnitRatio must be integer.");
 
 public:
@@ -188,7 +188,7 @@ private:
 };
 
 template <typename N1, typename N2, typename U1, typename U2,
-          typename = EnableIf<isIntegralOrGuarded<N1>() && isIntegralOrGuarded<N2>()>>
+          typename = EnableIf<isIntegralOrBounded<N1>() && isIntegralOrBounded<N2>()>>
 inline constexpr UnitRatio<decltype(N1() * N2()), U1, U2>
     operator*(N1 n, UnitRatio<N2, U1, U2> r) {
   return UnitRatio<decltype(N1() * N2()), U1, U2>(n * r.unit1PerUnit2, unsafe);
@@ -238,7 +238,7 @@ class Quantity {
   //     waitFor(3 * MINUTES);
   //   }
 
-  static_assert(isIntegralOrGuarded<Number>(),
+  static_assert(isIntegralOrBounded<Number>(),
       "Underlying type for Quantity must be integer.");
 
 public:
@@ -275,12 +275,12 @@ public:
       operator-(const Quantity<OtherNumber, Unit>& other) const {
     return Quantity<decltype(Number() - OtherNumber()), Unit>(value - other.value, unsafe);
   }
-  template <typename OtherNumber, typename = EnableIf<isIntegralOrGuarded<OtherNumber>()>>
+  template <typename OtherNumber, typename = EnableIf<isIntegralOrBounded<OtherNumber>()>>
   inline constexpr Quantity<decltype(Number() * OtherNumber()), Unit>
       operator*(OtherNumber other) const {
     return Quantity<decltype(Number() * other), Unit>(value * other, unsafe);
   }
-  template <typename OtherNumber, typename = EnableIf<isIntegralOrGuarded<OtherNumber>()>>
+  template <typename OtherNumber, typename = EnableIf<isIntegralOrBounded<OtherNumber>()>>
   inline constexpr Quantity<decltype(Number() / OtherNumber()), Unit>
       operator/(OtherNumber other) const {
     return Quantity<decltype(Number() / other), Unit>(value / other, unsafe);
@@ -508,24 +508,24 @@ inline constexpr uint64_t maxValueForBits() {
 // -------------------------------------------------------------------
 
 template <uint value>
-class GuardedConst {
+class BoundedConst {
   // A constant integer value on which we can do bit size analysis.
 
 public:
-  GuardedConst() = default;
+  BoundedConst() = default;
 
   inline constexpr uint unwrap() const { return value; }
 
 #define OP(op, check) \
   template <uint other> \
-  inline constexpr GuardedConst<(value op other)> \
-      operator op(GuardedConst<other>) const { \
-    static_assert(check, "overflow in GuardedConst arithmetic"); \
-    return GuardedConst<(value op other)>(); \
+  inline constexpr BoundedConst<(value op other)> \
+      operator op(BoundedConst<other>) const { \
+    static_assert(check, "overflow in BoundedConst arithmetic"); \
+    return BoundedConst<(value op other)>(); \
   }
 #define COMPARE_OP(op) \
   template <uint other> \
-  inline constexpr bool operator op(GuardedConst<other>) const { \
+  inline constexpr bool operator op(BoundedConst<other>) const { \
     return value op other; \
   }
 
@@ -550,48 +550,48 @@ public:
 };
 
 template <uint64_t m, typename T>
-struct Unit_<Guarded<m, T>> {
-  static inline constexpr GuardedConst<1> get() { return GuardedConst<1>(); }
+struct Unit_<Bounded<m, T>> {
+  static inline constexpr BoundedConst<1> get() { return BoundedConst<1>(); }
 };
 
 template <uint value>
-struct Unit_<GuardedConst<value>> {
-  static inline constexpr GuardedConst<1> get() { return GuardedConst<1>(); }
+struct Unit_<BoundedConst<value>> {
+  static inline constexpr BoundedConst<1> get() { return BoundedConst<1>(); }
 };
 
 template <uint value>
-inline constexpr GuardedConst<value> guarded() {
-  return GuardedConst<value>();
+inline constexpr BoundedConst<value> bounded() {
+  return BoundedConst<value>();
 }
 
 template <uint64_t a, uint64_t b>
-static constexpr uint64_t guardedAdd() {
+static constexpr uint64_t boundedAdd() {
   static_assert(a + b >= a, "possible overflow detected");
   return a + b;
 }
 template <uint64_t a, uint64_t b>
-static constexpr uint64_t guardedSub() {
+static constexpr uint64_t boundedSub() {
   static_assert(a - b <= a, "possible underflow detected");
   return a - b;
 }
 template <uint64_t a, uint64_t b>
-static constexpr uint64_t guardedMul() {
+static constexpr uint64_t boundedMul() {
   static_assert(a * b / b == a, "possible overflow detected");
   return a * b;
 }
 template <uint64_t a, uint64_t b>
-static constexpr uint64_t guardedLShift() {
+static constexpr uint64_t boundedLShift() {
   static_assert(a << b >= a, "possible overflow detected");
   return a << b;
 }
 
 template <uint a, uint b>
-inline constexpr GuardedConst<kj::min(a, b)> min(GuardedConst<a>, GuardedConst<b>) {
-  return guarded<kj::min(a, b)>();
+inline constexpr BoundedConst<kj::min(a, b)> min(BoundedConst<a>, BoundedConst<b>) {
+  return bounded<kj::min(a, b)>();
 }
 template <uint a, uint b>
-inline constexpr GuardedConst<kj::max(a, b)> max(GuardedConst<a>, GuardedConst<b>) {
-  return guarded<kj::max(a, b)>();
+inline constexpr BoundedConst<kj::max(a, b)> max(BoundedConst<a>, BoundedConst<b>) {
+  return bounded<kj::max(a, b)>();
 }
 // We need to override min() and max() between constants because the ternary operator in the
 // default implementation would complain.
@@ -599,43 +599,43 @@ inline constexpr GuardedConst<kj::max(a, b)> max(GuardedConst<a>, GuardedConst<b
 // -------------------------------------------------------------------
 
 template <uint64_t maxN, typename T>
-class Guarded {
+class Bounded {
 public:
   static_assert(maxN <= T(kj::maxValue), "possible overflow detected");
 
-  Guarded() = default;
+  Bounded() = default;
 
-  Guarded(const Guarded& other) = default;
+  Bounded(const Bounded& other) = default;
   template <typename OtherInt, typename = EnableIf<isIntegral<OtherInt>()>>
-  inline constexpr Guarded(OtherInt value): value(value) {
+  inline constexpr Bounded(OtherInt value): value(value) {
     static_assert(OtherInt(maxValue) <= maxN, "possible overflow detected");
   }
   template <uint64_t otherMax, typename OtherT>
-  inline constexpr Guarded(const Guarded<otherMax, OtherT>& other)
+  inline constexpr Bounded(const Bounded<otherMax, OtherT>& other)
       : value(other.value) {
     static_assert(otherMax <= maxN, "possible overflow detected");
   }
   template <uint otherValue>
-  inline constexpr Guarded(GuardedConst<otherValue>)
+  inline constexpr Bounded(BoundedConst<otherValue>)
       : value(otherValue) {
     static_assert(otherValue <= maxN, "overflow detected");
   }
 
-  Guarded& operator=(const Guarded& other) = default;
+  Bounded& operator=(const Bounded& other) = default;
   template <typename OtherInt, typename = EnableIf<isIntegral<OtherInt>()>>
-  Guarded& operator=(OtherInt other) {
+  Bounded& operator=(OtherInt other) {
     static_assert(OtherInt(maxValue) <= maxN, "possible overflow detected");
     value = other;
     return *this;
   }
   template <uint64_t otherMax, typename OtherT>
-  inline Guarded& operator=(const Guarded<otherMax, OtherT>& other) {
+  inline Bounded& operator=(const Bounded<otherMax, OtherT>& other) {
     static_assert(otherMax <= maxN, "possible overflow detected");
     value = other.value;
     return *this;
   }
   template <uint otherValue>
-  inline Guarded& operator=(GuardedConst<otherValue>) {
+  inline Bounded& operator=(BoundedConst<otherValue>) {
     static_assert(otherValue <= maxN, "overflow detected");
     value = otherValue;
     return *this;
@@ -645,18 +645,18 @@ public:
 
 #define OP(op, newMax) \
   template <uint64_t otherMax, typename otherT> \
-  inline constexpr Guarded<newMax, decltype(T() op otherT())> \
-      operator op(const Guarded<otherMax, otherT>& other) const { \
-    return Guarded<newMax, decltype(T() op otherT())>(value op other.value, unsafe); \
+  inline constexpr Bounded<newMax, decltype(T() op otherT())> \
+      operator op(const Bounded<otherMax, otherT>& other) const { \
+    return Bounded<newMax, decltype(T() op otherT())>(value op other.value, unsafe); \
   }
 #define COMPARE_OP(op) \
   template <uint64_t otherMax, typename OtherT> \
-  inline constexpr bool operator op(const Guarded<otherMax, OtherT>& other) const { \
+  inline constexpr bool operator op(const Bounded<otherMax, OtherT>& other) const { \
     return value op other.value; \
   }
 
-  OP(+, (guardedAdd<maxN, otherMax>()))
-  OP(*, (guardedMul<maxN, otherMax>()))
+  OP(+, (boundedAdd<maxN, otherMax>()))
+  OP(*, (boundedMul<maxN, otherMax>()))
   OP(/, maxN)
   OP(%, otherMax - 1)
 
@@ -674,54 +674,54 @@ public:
 #undef COMPARE_OP
 
   template <uint64_t newMax, typename ErrorFunc>
-  inline Guarded<newMax, T> assertMax(ErrorFunc&& func) const {
+  inline Bounded<newMax, T> assertMax(ErrorFunc&& func) const {
     // Assert that the number is no more than `newMax`. Otherwise, call `func`.
-    static_assert(newMax < maxN, "this guarded size assertion is redundant");
+    static_assert(newMax < maxN, "this bounded size assertion is redundant");
     if (KJ_UNLIKELY(value > newMax)) func();
-    return Guarded<newMax, T>(value, unsafe);
+    return Bounded<newMax, T>(value, unsafe);
   }
 
   template <uint64_t otherMax, typename OtherT, typename ErrorFunc>
-  inline Guarded<maxN, decltype(T() - OtherT())> subtractChecked(
-      const Guarded<otherMax, OtherT>& other, ErrorFunc&& func) const {
+  inline Bounded<maxN, decltype(T() - OtherT())> subtractChecked(
+      const Bounded<otherMax, OtherT>& other, ErrorFunc&& func) const {
     // Subtract a number, calling func() if the result would underflow.
     if (KJ_UNLIKELY(value < other.value)) func();
-    return Guarded<maxN, decltype(T() - OtherT())>(value - other.value, unsafe);
+    return Bounded<maxN, decltype(T() - OtherT())>(value - other.value, unsafe);
   }
 
   template <uint otherValue, typename ErrorFunc>
-  inline Guarded<maxN - otherValue, T> subtractChecked(
-      GuardedConst<otherValue>, ErrorFunc&& func) const {
+  inline Bounded<maxN - otherValue, T> subtractChecked(
+      BoundedConst<otherValue>, ErrorFunc&& func) const {
     // Subtract a number, calling func() if the result would underflow.
     static_assert(otherValue <= maxN, "underflow detected");
     if (KJ_UNLIKELY(value < otherValue)) func();
-    return Guarded<maxN - otherValue, T>(value - otherValue, unsafe);
+    return Bounded<maxN - otherValue, T>(value - otherValue, unsafe);
   }
 
   template <uint64_t otherMax, typename OtherT>
-  inline Maybe<Guarded<maxN, decltype(T() - OtherT())>> trySubtract(
-      const Guarded<otherMax, OtherT>& other) const {
+  inline Maybe<Bounded<maxN, decltype(T() - OtherT())>> trySubtract(
+      const Bounded<otherMax, OtherT>& other) const {
     // Subtract a number, calling func() if the result would underflow.
     if (value < other.value) {
       return nullptr;
     } else {
-      return Guarded<maxN, decltype(T() - OtherT())>(value - other.value, unsafe);
+      return Bounded<maxN, decltype(T() - OtherT())>(value - other.value, unsafe);
     }
   }
 
   template <uint otherValue>
-  inline Maybe<Guarded<maxN - otherValue, T>> trySubtract(GuardedConst<otherValue>) const {
+  inline Maybe<Bounded<maxN - otherValue, T>> trySubtract(BoundedConst<otherValue>) const {
     // Subtract a number, calling func() if the result would underflow.
     if (value < otherValue) {
       return nullptr;
     } else {
-      return Guarded<maxN - otherValue, T>(value - otherValue, unsafe);
+      return Bounded<maxN - otherValue, T>(value - otherValue, unsafe);
     }
   }
 
-  inline constexpr Guarded(T value, decltype(unsafe)): value(value) {}
+  inline constexpr Bounded(T value, decltype(unsafe)): value(value) {}
   template <uint64_t otherMax, typename OtherT>
-  inline constexpr Guarded(Guarded<otherMax, OtherT> value, decltype(unsafe))
+  inline constexpr Bounded(Bounded<otherMax, OtherT> value, decltype(unsafe))
       : value(value.value) {}
   // Mainly for internal use.
   //
@@ -731,41 +731,41 @@ private:
   T value;
 
   template <uint64_t, typename>
-  friend class Guarded;
+  friend class Bounded;
 
   template <uint64_t aN, uint64_t bN, typename A, typename B>
-  friend constexpr Guarded<kj::min(aN, bN), WiderType<A, B>>
-  min(Guarded<aN, A> a, Guarded<bN, B> b);
+  friend constexpr Bounded<kj::min(aN, bN), WiderType<A, B>>
+  min(Bounded<aN, A> a, Bounded<bN, B> b);
   template <uint64_t aN, uint b, typename A>
-  friend constexpr Guarded<kj::min(aN, b), A> min(Guarded<aN, A> a, GuardedConst<b>);
+  friend constexpr Bounded<kj::min(aN, b), A> min(Bounded<aN, A> a, BoundedConst<b>);
   template <uint64_t aN, uint b, typename A>
-  friend constexpr Guarded<kj::min(aN, b), A> min(GuardedConst<b>, Guarded<aN, A> a);
+  friend constexpr Bounded<kj::min(aN, b), A> min(BoundedConst<b>, Bounded<aN, A> a);
   template <uint64_t aN, uint64_t bN, typename A, typename B>
-  friend constexpr Guarded<kj::max(aN, bN), WiderType<A, B>>
-  max(Guarded<aN, A> a, Guarded<bN, B> b);
+  friend constexpr Bounded<kj::max(aN, bN), WiderType<A, B>>
+  max(Bounded<aN, A> a, Bounded<bN, B> b);
   template <uint64_t aN, uint b, typename A>
-  friend constexpr Guarded<kj::max(aN, b), A> max(Guarded<aN, A> a, GuardedConst<b>);
+  friend constexpr Bounded<kj::max(aN, b), A> max(Bounded<aN, A> a, BoundedConst<b>);
   template <uint64_t aN, uint b, typename A>
-  friend constexpr Guarded<kj::max(aN, b), A> max(GuardedConst<b>, Guarded<aN, A> a);
+  friend constexpr Bounded<kj::max(aN, b), A> max(BoundedConst<b>, Bounded<aN, A> a);
 };
 
 template <typename Number>
-inline constexpr Guarded<Number(kj::maxValue), Number> guarded(Number value) {
-  return Guarded<Number(kj::maxValue), Number>(value, unsafe);
+inline constexpr Bounded<Number(kj::maxValue), Number> bounded(Number value) {
+  return Bounded<Number(kj::maxValue), Number>(value, unsafe);
 }
 
-inline constexpr Guarded<1, uint8_t> guarded(bool value) {
-  return Guarded<1, uint8_t>(value, unsafe);
+inline constexpr Bounded<1, uint8_t> bounded(bool value) {
+  return Bounded<1, uint8_t>(value, unsafe);
 }
 
 template <uint bits, typename Number>
-inline constexpr Guarded<maxValueForBits<bits>(), Number> assumeBits(Number value) {
-  return Guarded<maxValueForBits<bits>(), Number>(value, unsafe);
+inline constexpr Bounded<maxValueForBits<bits>(), Number> assumeBits(Number value) {
+  return Bounded<maxValueForBits<bits>(), Number>(value, unsafe);
 }
 
 template <uint bits, uint64_t maxN, typename T>
-inline constexpr Guarded<maxValueForBits<bits>(), T> assumeBits(Guarded<maxN, T> value) {
-  return Guarded<maxValueForBits<bits>(), T>(value, unsafe);
+inline constexpr Bounded<maxValueForBits<bits>(), T> assumeBits(Bounded<maxN, T> value) {
+  return Bounded<maxValueForBits<bits>(), T>(value, unsafe);
 }
 
 template <uint bits, typename Number, typename Unit>
@@ -776,13 +776,13 @@ inline constexpr auto assumeBits(Quantity<Number, Unit> value)
 }
 
 template <uint64_t maxN, typename Number>
-inline constexpr Guarded<maxN, Number> assumeMax(Number value) {
-  return Guarded<maxN, Number>(value, unsafe);
+inline constexpr Bounded<maxN, Number> assumeMax(Number value) {
+  return Bounded<maxN, Number>(value, unsafe);
 }
 
 template <uint64_t newMaxN, uint64_t maxN, typename T>
-inline constexpr Guarded<newMaxN, T> assumeMax(Guarded<maxN, T> value) {
-  return Guarded<newMaxN, T>(value, unsafe);
+inline constexpr Bounded<newMaxN, T> assumeMax(Bounded<maxN, T> value) {
+  return Bounded<newMaxN, T>(value, unsafe);
 }
 
 template <uint64_t maxN, typename Number, typename Unit>
@@ -793,17 +793,17 @@ inline constexpr auto assumeMax(Quantity<Number, Unit> value)
 }
 
 template <uint maxN, typename Number>
-inline constexpr Guarded<maxN, Number> assumeMax(GuardedConst<maxN>, Number value) {
+inline constexpr Bounded<maxN, Number> assumeMax(BoundedConst<maxN>, Number value) {
   return assumeMax<maxN>(value);
 }
 
 template <uint newMaxN, uint64_t maxN, typename T>
-inline constexpr Guarded<newMaxN, T> assumeMax(GuardedConst<maxN>, Guarded<maxN, T> value) {
+inline constexpr Bounded<newMaxN, T> assumeMax(BoundedConst<maxN>, Bounded<maxN, T> value) {
   return assumeMax<maxN>(value);
 }
 
 template <uint maxN, typename Number, typename Unit>
-inline constexpr auto assumeMax(Quantity<GuardedConst<maxN>, Unit>, Quantity<Number, Unit> value)
+inline constexpr auto assumeMax(Quantity<BoundedConst<maxN>, Unit>, Quantity<Number, Unit> value)
     -> decltype(assumeMax<maxN>(value)) {
   return assumeMax<maxN>(value);
 }
@@ -813,66 +813,66 @@ struct ThrowOverflow {
 };
 
 template <uint64_t newMax, uint64_t maxN, typename T, typename ErrorFunc>
-inline constexpr Guarded<newMax, T> assertMax(Guarded<maxN, T> value, ErrorFunc&& errorFunc) {
-  // Assert that the guarded value is less than or equal to the given maximum, calling errorFunc()
+inline constexpr Bounded<newMax, T> assertMax(Bounded<maxN, T> value, ErrorFunc&& errorFunc) {
+  // Assert that the bounded value is less than or equal to the given maximum, calling errorFunc()
   // if not.
-  static_assert(newMax < maxN, "this guarded size assertion is redundant");
+  static_assert(newMax < maxN, "this bounded size assertion is redundant");
   return value.template assertMax<newMax>(kj::fwd<ErrorFunc>(errorFunc));
 }
 
 template <uint64_t newMax, uint64_t maxN, typename T, typename Unit, typename ErrorFunc>
-inline constexpr Quantity<Guarded<newMax, T>, Unit> assertMax(
-    Quantity<Guarded<maxN, T>, Unit> value, ErrorFunc&& errorFunc) {
-  // Assert that the guarded value is less than or equal to the given maximum, calling errorFunc()
+inline constexpr Quantity<Bounded<newMax, T>, Unit> assertMax(
+    Quantity<Bounded<maxN, T>, Unit> value, ErrorFunc&& errorFunc) {
+  // Assert that the bounded value is less than or equal to the given maximum, calling errorFunc()
   // if not.
-  static_assert(newMax < maxN, "this guarded size assertion is redundant");
+  static_assert(newMax < maxN, "this bounded size assertion is redundant");
   return (value / unit<decltype(value)>()).template assertMax<newMax>(
       kj::fwd<ErrorFunc>(errorFunc)) * unit<decltype(value)>();
 }
 
 template <uint newMax, uint64_t maxN, typename T, typename ErrorFunc>
-inline constexpr Guarded<newMax, T> assertMax(
-    GuardedConst<newMax>, Guarded<maxN, T> value, ErrorFunc&& errorFunc) {
+inline constexpr Bounded<newMax, T> assertMax(
+    BoundedConst<newMax>, Bounded<maxN, T> value, ErrorFunc&& errorFunc) {
   return assertMax<newMax>(value, kj::mv(errorFunc));
 }
 
 template <uint newMax, uint64_t maxN, typename T, typename Unit, typename ErrorFunc>
-inline constexpr Quantity<Guarded<newMax, T>, Unit> assertMax(
-    Quantity<GuardedConst<newMax>, Unit>,
-    Quantity<Guarded<maxN, T>, Unit> value, ErrorFunc&& errorFunc) {
+inline constexpr Quantity<Bounded<newMax, T>, Unit> assertMax(
+    Quantity<BoundedConst<newMax>, Unit>,
+    Quantity<Bounded<maxN, T>, Unit> value, ErrorFunc&& errorFunc) {
   return assertMax<newMax>(value, kj::mv(errorFunc));
 }
 
 template <uint64_t newBits, uint64_t maxN, typename T, typename ErrorFunc = ThrowOverflow>
-inline constexpr Guarded<maxValueForBits<newBits>(), T> assertMaxBits(
-    Guarded<maxN, T> value, ErrorFunc&& errorFunc = ErrorFunc()) {
-  // Assert that the guarded value requires no more than the given number of bits, calling
+inline constexpr Bounded<maxValueForBits<newBits>(), T> assertMaxBits(
+    Bounded<maxN, T> value, ErrorFunc&& errorFunc = ErrorFunc()) {
+  // Assert that the bounded value requires no more than the given number of bits, calling
   // errorFunc() if not.
   return assertMax<maxValueForBits<newBits>()>(value, kj::fwd<ErrorFunc>(errorFunc));
 }
 
 template <uint64_t newBits, uint64_t maxN, typename T, typename Unit,
           typename ErrorFunc = ThrowOverflow>
-inline constexpr Quantity<Guarded<maxValueForBits<newBits>(), T>, Unit> assertMaxBits(
-    Quantity<Guarded<maxN, T>, Unit> value, ErrorFunc&& errorFunc = ErrorFunc()) {
-  // Assert that the guarded value requires no more than the given number of bits, calling
+inline constexpr Quantity<Bounded<maxValueForBits<newBits>(), T>, Unit> assertMaxBits(
+    Quantity<Bounded<maxN, T>, Unit> value, ErrorFunc&& errorFunc = ErrorFunc()) {
+  // Assert that the bounded value requires no more than the given number of bits, calling
   // errorFunc() if not.
   return assertMax<maxValueForBits<newBits>()>(value, kj::fwd<ErrorFunc>(errorFunc));
 }
 
 template <typename newT, uint64_t maxN, typename T>
-inline constexpr Guarded<maxN, newT> upgradeGuard(Guarded<maxN, T> value) {
+inline constexpr Bounded<maxN, newT> upgradeBound(Bounded<maxN, T> value) {
   return value;
 }
 
 template <typename newT, uint64_t maxN, typename T, typename Unit>
-inline constexpr Quantity<Guarded<maxN, newT>, Unit> upgradeGuard(
-    Quantity<Guarded<maxN, T>, Unit> value) {
+inline constexpr Quantity<Bounded<maxN, newT>, Unit> upgradeBound(
+    Quantity<Bounded<maxN, T>, Unit> value) {
   return value;
 }
 
 template <uint64_t maxN, typename T, typename Other, typename ErrorFunc>
-inline auto subtractChecked(Guarded<maxN, T> value, Other other, ErrorFunc&& errorFunc)
+inline auto subtractChecked(Bounded<maxN, T> value, Other other, ErrorFunc&& errorFunc)
     -> decltype(value.subtractChecked(other, kj::fwd<ErrorFunc>(errorFunc))) {
   return value.subtractChecked(other, kj::fwd<ErrorFunc>(errorFunc));
 }
@@ -887,7 +887,7 @@ inline auto subtractChecked(Quantity<T, Unit> value, Quantity<U, Unit> other, Er
 }
 
 template <uint64_t maxN, typename T, typename Other>
-inline auto trySubtract(Guarded<maxN, T> value, Other other)
+inline auto trySubtract(Bounded<maxN, T> value, Other other)
     -> decltype(value.trySubtract(other)) {
   return value.trySubtract(other);
 }
@@ -903,14 +903,14 @@ inline auto trySubtract(Quantity<T, Unit> value, Quantity<U, Unit> other)
 }
 
 template <uint64_t aN, uint64_t bN, typename A, typename B>
-inline constexpr Guarded<kj::min(aN, bN), WiderType<A, B>>
-min(Guarded<aN, A> a, Guarded<bN, B> b) {
-  return Guarded<kj::min(aN, bN), WiderType<A, B>>(kj::min(a.value, b.value), unsafe);
+inline constexpr Bounded<kj::min(aN, bN), WiderType<A, B>>
+min(Bounded<aN, A> a, Bounded<bN, B> b) {
+  return Bounded<kj::min(aN, bN), WiderType<A, B>>(kj::min(a.value, b.value), unsafe);
 }
 template <uint64_t aN, uint64_t bN, typename A, typename B>
-inline constexpr Guarded<kj::max(aN, bN), WiderType<A, B>>
-max(Guarded<aN, A> a, Guarded<bN, B> b) {
-  return Guarded<kj::max(aN, bN), WiderType<A, B>>(kj::max(a.value, b.value), unsafe);
+inline constexpr Bounded<kj::max(aN, bN), WiderType<A, B>>
+max(Bounded<aN, A> a, Bounded<bN, B> b) {
+  return Bounded<kj::max(aN, bN), WiderType<A, B>>(kj::max(a.value, b.value), unsafe);
 }
 // We need to override min() and max() because:
 // 1) WiderType<> might not choose the correct bounds.
@@ -918,37 +918,37 @@ max(Guarded<aN, A> a, Guarded<bN, B> b) {
 //    typecheck even though it is OK in practice.
 
 // -------------------------------------------------------------------
-// Operators between Guarded and GuardedConst
+// Operators between Bounded and BoundedConst
 
 #define OP(op, newMax) \
 template <uint64_t maxN, uint cvalue, typename T> \
-inline constexpr Guarded<(newMax), decltype(T() op uint())> operator op( \
-    Guarded<maxN, T> value, GuardedConst<cvalue>) { \
-  return Guarded<(newMax), decltype(T() op uint())>(value.unwrap() op cvalue, unsafe); \
+inline constexpr Bounded<(newMax), decltype(T() op uint())> operator op( \
+    Bounded<maxN, T> value, BoundedConst<cvalue>) { \
+  return Bounded<(newMax), decltype(T() op uint())>(value.unwrap() op cvalue, unsafe); \
 }
 
 #define REVERSE_OP(op, newMax) \
 template <uint64_t maxN, uint cvalue, typename T> \
-inline constexpr Guarded<(newMax), decltype(uint() op T())> operator op( \
-    GuardedConst<cvalue>, Guarded<maxN, T> value) { \
-  return Guarded<(newMax), decltype(uint() op T())>(cvalue op value.unwrap(), unsafe); \
+inline constexpr Bounded<(newMax), decltype(uint() op T())> operator op( \
+    BoundedConst<cvalue>, Bounded<maxN, T> value) { \
+  return Bounded<(newMax), decltype(uint() op T())>(cvalue op value.unwrap(), unsafe); \
 }
 
 #define COMPARE_OP(op) \
 template <uint64_t maxN, uint cvalue, typename T> \
-inline constexpr bool operator op(Guarded<maxN, T> value, GuardedConst<cvalue>) { \
+inline constexpr bool operator op(Bounded<maxN, T> value, BoundedConst<cvalue>) { \
   return value.unwrap() op cvalue; \
 } \
 template <uint64_t maxN, uint cvalue, typename T> \
-inline constexpr bool operator op(GuardedConst<cvalue>, Guarded<maxN, T> value) { \
+inline constexpr bool operator op(BoundedConst<cvalue>, Bounded<maxN, T> value) { \
   return cvalue op value.unwrap(); \
 }
 
-OP(+, (guardedAdd<maxN, cvalue>()))
-REVERSE_OP(+, (guardedAdd<maxN, cvalue>()))
+OP(+, (boundedAdd<maxN, cvalue>()))
+REVERSE_OP(+, (boundedAdd<maxN, cvalue>()))
 
-OP(*, (guardedMul<maxN, cvalue>()))
-REVERSE_OP(*, (guardedAdd<maxN, cvalue>()))
+OP(*, (boundedMul<maxN, cvalue>()))
+REVERSE_OP(*, (boundedAdd<maxN, cvalue>()))
 
 OP(/, maxN / cvalue)
 REVERSE_OP(/, cvalue)  // denominator could be 1
@@ -956,8 +956,8 @@ REVERSE_OP(/, cvalue)  // denominator could be 1
 OP(%, cvalue - 1)
 REVERSE_OP(%, maxN - 1)
 
-OP(<<, (guardedLShift<maxN, cvalue>()))
-REVERSE_OP(<<, (guardedLShift<cvalue, maxN>()))
+OP(<<, (boundedLShift<maxN, cvalue>()))
+REVERSE_OP(<<, (boundedLShift<cvalue, maxN>()))
 
 OP(>>, maxN >> cvalue)
 REVERSE_OP(>>, cvalue >> maxN)
@@ -980,8 +980,8 @@ COMPARE_OP(>=)
 #undef COMPARE_OP
 
 template <uint64_t maxN, uint cvalue, typename T>
-inline constexpr Guarded<cvalue, decltype(uint() - T())>
-    operator-(GuardedConst<cvalue>, Guarded<maxN, T> value) {
+inline constexpr Bounded<cvalue, decltype(uint() - T())>
+    operator-(BoundedConst<cvalue>, Bounded<maxN, T> value) {
   // We allow subtraction of a variable from a constant only if the constant is greater than or
   // equal to the maximum possible value of the variable. Since the variable could be zero, the
   // result can be as large as the constant.
@@ -989,27 +989,27 @@ inline constexpr Guarded<cvalue, decltype(uint() - T())>
   // We do not allow subtraction of a constant from a variable because there's never a guarantee it
   // won't underflow (unless the constant is zero, which is silly).
   static_assert(cvalue >= maxN, "possible underflow detected");
-  return Guarded<cvalue, decltype(uint() - T())>(cvalue - value.unwrap(), unsafe);
+  return Bounded<cvalue, decltype(uint() - T())>(cvalue - value.unwrap(), unsafe);
 }
 
 template <uint64_t aN, uint b, typename A>
-inline constexpr Guarded<kj::min(aN, b), A> min(Guarded<aN, A> a, GuardedConst<b>) {
-  return Guarded<kj::min(aN, b), A>(kj::min(b, a.value), unsafe);
+inline constexpr Bounded<kj::min(aN, b), A> min(Bounded<aN, A> a, BoundedConst<b>) {
+  return Bounded<kj::min(aN, b), A>(kj::min(b, a.value), unsafe);
 }
 template <uint64_t aN, uint b, typename A>
-inline constexpr Guarded<kj::min(aN, b), A> min(GuardedConst<b>, Guarded<aN, A> a) {
-  return Guarded<kj::min(aN, b), A>(kj::min(a.value, b), unsafe);
+inline constexpr Bounded<kj::min(aN, b), A> min(BoundedConst<b>, Bounded<aN, A> a) {
+  return Bounded<kj::min(aN, b), A>(kj::min(a.value, b), unsafe);
 }
 template <uint64_t aN, uint b, typename A>
-inline constexpr Guarded<kj::max(aN, b), A> max(Guarded<aN, A> a, GuardedConst<b>) {
-  return Guarded<kj::max(aN, b), A>(kj::max(b, a.value), unsafe);
+inline constexpr Bounded<kj::max(aN, b), A> max(Bounded<aN, A> a, BoundedConst<b>) {
+  return Bounded<kj::max(aN, b), A>(kj::max(b, a.value), unsafe);
 }
 template <uint64_t aN, uint b, typename A>
-inline constexpr Guarded<kj::max(aN, b), A> max(GuardedConst<b>, Guarded<aN, A> a) {
-  return Guarded<kj::max(aN, b), A>(kj::max(a.value, b), unsafe);
+inline constexpr Bounded<kj::max(aN, b), A> max(BoundedConst<b>, Bounded<aN, A> a) {
+  return Bounded<kj::max(aN, b), A>(kj::max(a.value, b), unsafe);
 }
-// We need to override min() between a Guarded and a constant since:
-// 1) WiderType<> might choose GuardedConst over a 1-byte Guarded, which is wrong.
+// We need to override min() between a Bounded and a constant since:
+// 1) WiderType<> might choose BoundedConst over a 1-byte Bounded, which is wrong.
 // 2) To clamp the bounds of the output type.
 // 3) Same ternary operator typechecking issues.
 
@@ -1018,7 +1018,7 @@ inline constexpr Guarded<kj::max(aN, b), A> max(GuardedConst<b>, Guarded<aN, A> 
 template <uint64_t maxN, typename T>
 class SafeUnwrapper {
 public:
-  inline explicit constexpr SafeUnwrapper(Guarded<maxN, T> value): value(value.unwrap()) {}
+  inline explicit constexpr SafeUnwrapper(Bounded<maxN, T> value): value(value.unwrap()) {}
 
   template <typename U, typename = EnableIf<isIntegral<U>()>>
   inline constexpr operator U() {
@@ -1036,10 +1036,10 @@ private:
 };
 
 template <uint64_t maxN, typename T>
-inline constexpr SafeUnwrapper<maxN, T> unguard(Guarded<maxN, T> guarded) {
-  // Unwraps the guarded value, returning a value that can be implicitly cast to any integer type.
+inline constexpr SafeUnwrapper<maxN, T> unbound(Bounded<maxN, T> bounded) {
+  // Unwraps the bounded value, returning a value that can be implicitly cast to any integer type.
   // If this implicit cast could truncate, a compile-time error will be raised.
-  return SafeUnwrapper<maxN, T>(guarded);
+  return SafeUnwrapper<maxN, T>(bounded);
 }
 
 template <uint64_t value>
@@ -1058,34 +1058,34 @@ public:
 };
 
 template <uint value>
-inline constexpr SafeConstUnwrapper<value> unguard(GuardedConst<value>) {
+inline constexpr SafeConstUnwrapper<value> unbound(BoundedConst<value>) {
   return SafeConstUnwrapper<value>();
 }
 
 template <typename T, typename U>
-inline constexpr T unguardAs(U value) {
-  return unguard(value);
+inline constexpr T unboundAs(U value) {
+  return unbound(value);
 }
 
 template <uint64_t requestedMax, uint64_t maxN, typename T>
-inline constexpr T unguardMax(Guarded<maxN, T> value) {
+inline constexpr T unboundMax(Bounded<maxN, T> value) {
   // Explicitly ungaurd expecting a value that is at most `maxN`.
   static_assert(maxN <= requestedMax, "possible overflow detected");
   return value.unwrap();
 }
 
 template <uint64_t requestedMax, uint value>
-inline constexpr uint unguardMax(GuardedConst<value>) {
+inline constexpr uint unboundMax(BoundedConst<value>) {
   // Explicitly ungaurd expecting a value that is at most `maxN`.
   static_assert(value <= requestedMax, "overflow detected");
   return value;
 }
 
 template <uint bits, typename T>
-inline constexpr auto unguardMaxBits(T value) ->
-    decltype(unguardMax<maxValueForBits<bits>()>(value)) {
+inline constexpr auto unboundMaxBits(T value) ->
+    decltype(unboundMax<maxValueForBits<bits>()>(value)) {
   // Explicitly ungaurd expecting a value that fits into `bits` bits.
-  return unguardMax<maxValueForBits<bits>()>(value);
+  return unboundMax<maxValueForBits<bits>()>(value);
 }
 
 #define OP(op) \
@@ -1127,19 +1127,19 @@ OP(>)
 // -------------------------------------------------------------------
 
 template <uint64_t maxN, typename T>
-class Range<Guarded<maxN, T>> {
+class Range<Bounded<maxN, T>> {
 public:
-  inline constexpr Range(Guarded<maxN, T> begin, Guarded<maxN, T> end)
-      : inner(unguard(begin), unguard(end)) {}
-  inline explicit constexpr Range(Guarded<maxN, T> end)
-      : inner(unguard(end)) {}
+  inline constexpr Range(Bounded<maxN, T> begin, Bounded<maxN, T> end)
+      : inner(unbound(begin), unbound(end)) {}
+  inline explicit constexpr Range(Bounded<maxN, T> end)
+      : inner(unbound(end)) {}
 
   class Iterator {
   public:
     Iterator() = default;
     inline explicit Iterator(typename Range<T>::Iterator inner): inner(inner) {}
 
-    inline Guarded<maxN, T> operator* () const { return Guarded<maxN, T>(*inner, unsafe); }
+    inline Bounded<maxN, T> operator* () const { return Bounded<maxN, T>(*inner, unsafe); }
     inline Iterator& operator++() { ++inner; return *this; }
 
     inline bool operator==(const Iterator& other) const { return inner == other.inner; }
@@ -1187,14 +1187,14 @@ private:
 };
 
 template <uint value>
-inline constexpr Range<Guarded<value, uint>> zeroTo(GuardedConst<value> end) {
-  return Range<Guarded<value, uint>>(end);
+inline constexpr Range<Bounded<value, uint>> zeroTo(BoundedConst<value> end) {
+  return Range<Bounded<value, uint>>(end);
 }
 
 template <uint value, typename Unit>
-inline constexpr Range<Quantity<Guarded<value, uint>, Unit>>
-    zeroTo(Quantity<GuardedConst<value>, Unit> end) {
-  return Range<Quantity<Guarded<value, uint>, Unit>>(end);
+inline constexpr Range<Quantity<Bounded<value, uint>, Unit>>
+    zeroTo(Quantity<BoundedConst<value>, Unit> end) {
+  return Range<Quantity<Bounded<value, uint>, Unit>>(end);
 }
 
 }  // namespace kj

@@ -342,19 +342,19 @@ private:
 inline ReadLimiter::ReadLimiter()
     : limit(kj::maxValue) {}
 
-inline ReadLimiter::ReadLimiter(WordCount64 limit): limit(unguard(limit / WORDS)) {}
+inline ReadLimiter::ReadLimiter(WordCount64 limit): limit(unbound(limit / WORDS)) {}
 
-inline void ReadLimiter::reset(WordCount64 limit) { this->limit = unguard(limit / WORDS); }
+inline void ReadLimiter::reset(WordCount64 limit) { this->limit = unbound(limit / WORDS); }
 
 inline bool ReadLimiter::canRead(WordCount64 amount, Arena* arena) {
   // Be careful not to store an underflowed value into `limit`, even if multiple threads are
   // decrementing it.
   uint64_t current = limit;
-  if (KJ_UNLIKELY(unguard(amount / WORDS) > current)) {
+  if (KJ_UNLIKELY(unbound(amount / WORDS) > current)) {
     arena->reportReadLimitReached();
     return false;
   } else {
-    limit = current - unguard(amount / WORDS);
+    limit = current - unbound(amount / WORDS);
     return true;
   }
 }
@@ -363,7 +363,7 @@ inline bool ReadLimiter::canRead(WordCount64 amount, Arena* arena) {
 
 inline SegmentReader::SegmentReader(Arena* arena, SegmentId id, const word* ptr,
                                     SegmentWordCount size, ReadLimiter* readLimiter)
-    : arena(arena), id(id), ptr(kj::arrayPtr(ptr, unguard(size / WORDS))),
+    : arena(arena), id(id), ptr(kj::arrayPtr(ptr, unbound(size / WORDS))),
       readLimiter(readLimiter) {}
 
 inline bool SegmentReader::containsInterval(const void* from, const void* to) {

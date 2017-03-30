@@ -307,17 +307,17 @@ inline ReaderFor<T> Orphan<T>::getReader() const {
 
 template <typename T>
 inline void Orphan<T>::truncate(uint size) {
-  _::OrphanGetImpl<ListElementType<T>>::truncateListOf(builder, guarded(size) * ELEMENTS);
+  _::OrphanGetImpl<ListElementType<T>>::truncateListOf(builder, bounded(size) * ELEMENTS);
 }
 
 template <>
 inline void Orphan<Text>::truncate(uint size) {
-  builder.truncateText(guarded(size) * ELEMENTS);
+  builder.truncateText(bounded(size) * ELEMENTS);
 }
 
 template <>
 inline void Orphan<Data>::truncate(uint size) {
-  builder.truncate(guarded(size) * ELEMENTS, ElementSize::BYTE);
+  builder.truncate(bounded(size) * ELEMENTS, ElementSize::BYTE);
 }
 
 template <typename T>
@@ -350,7 +350,7 @@ struct Orphanage::NewOrphanListImpl<List<T, k>> {
   static inline _::OrphanBuilder apply(
       _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
     return _::OrphanBuilder::initList(
-        arena, capTable, guarded(size) * ELEMENTS, _::ElementSizeForType<T>::value);
+        arena, capTable, bounded(size) * ELEMENTS, _::ElementSizeForType<T>::value);
   }
 };
 
@@ -359,7 +359,7 @@ struct Orphanage::NewOrphanListImpl<List<T, Kind::STRUCT>> {
   static inline _::OrphanBuilder apply(
       _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
     return _::OrphanBuilder::initStructList(
-        arena, capTable, guarded(size) * ELEMENTS, _::structSize<T>());
+        arena, capTable, bounded(size) * ELEMENTS, _::structSize<T>());
   }
 };
 
@@ -367,7 +367,7 @@ template <>
 struct Orphanage::NewOrphanListImpl<Text> {
   static inline _::OrphanBuilder apply(
       _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
-    return _::OrphanBuilder::initText(arena, capTable, guarded(size) * BYTES);
+    return _::OrphanBuilder::initText(arena, capTable, bounded(size) * BYTES);
   }
 };
 
@@ -375,7 +375,7 @@ template <>
 struct Orphanage::NewOrphanListImpl<Data> {
   static inline _::OrphanBuilder apply(
       _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
-    return _::OrphanBuilder::initData(arena, capTable, guarded(size) * BYTES);
+    return _::OrphanBuilder::initData(arena, capTable, bounded(size) * BYTES);
   }
 };
 

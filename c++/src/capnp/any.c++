@@ -45,7 +45,7 @@ kj::Own<ClientHook> AnyPointer::Reader::getPipelinedCap(
         break;
 
       case PipelineOp::Type::GET_POINTER_FIELD:
-        pointer = pointer.getStruct(nullptr).getPointerField(guarded(op.pointerIndex) * POINTERS);
+        pointer = pointer.getStruct(nullptr).getPointerField(bounded(op.pointerIndex) * POINTERS);
         break;
     }
   }

@@ -42,7 +42,7 @@ void ReadLimiter::unread(WordCount64 amount) {
   // the limit value was not updated correctly for one or more reads, and therefore unread() could
   // overflow it even if it is only unreading bytes that were actually read.
   uint64_t oldValue = limit;
-  uint64_t newValue = oldValue + unguard(amount / WORDS);
+  uint64_t newValue = oldValue + unbound(amount / WORDS);
   if (newValue > oldValue) {
     limit = newValue;
   }
@@ -58,7 +58,7 @@ void SegmentBuilder::throwNotWritable() {
 // =======================================================================================
 
 static SegmentWordCount verifySegmentSize(size_t size) {
-  auto gsize = guarded(size) * WORDS;
+  auto gsize = bounded(size) * WORDS;
   return assertMaxBits<SEGMENT_WORD_COUNT_BITS>(gsize, [&]() {
     KJ_FAIL_REQUIRE("segment is too large", size);
   });
@@ -67,7 +67,7 @@ static SegmentWordCount verifySegmentSize(size_t size) {
 inline ReaderArena::ReaderArena(MessageReader* message, const word* firstSegment,
                                 SegmentWordCount firstSegmentSize)
     : message(message),
-      readLimiter(guarded(message->getOptions().traversalLimitInWords) * WORDS),
+      readLimiter(bounded(message->getOptions().traversalLimitInWords) * WORDS),
       segment0(this, SegmentId(0), firstSegment, firstSegmentSize, &readLimiter) {}
 
 inline ReaderArena::ReaderArena(MessageReader* message, kj::ArrayPtr<const word> firstSegment)
@@ -178,7 +178,7 @@ SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
 BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
   if (segment0.getArena() == nullptr) {
     // We're allocating the first segment.
-    kj::ArrayPtr<word> ptr = message->allocateSegment(unguard(amount / WORDS));
+    kj::ArrayPtr<word> ptr = message->allocateSegment(unbound(amount / WORDS));
     auto actualSize = verifySegmentSize(ptr.size());
 
     // Re-allocate segment0 in-place.  This is a bit of a hack, but we have not returned any
@@ -204,7 +204,7 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
     }
 
     // Need to allocate a new segment.
-    SegmentBuilder* result = addSegmentInternal(message->allocateSegment(unguard(amount / WORDS)));
+    SegmentBuilder* result = addSegmentInternal(message->allocateSegment(unbound(amount / WORDS)));
 
     // Check this new segment first the next time we need to allocate.
     segmentWithSpace = result;

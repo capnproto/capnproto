@@ -650,11 +650,11 @@ struct List<T, Kind::INTERFACE> {
     Reader() = default;
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
-    inline uint size() const { return unguard(reader.size() / ELEMENTS); }
+    inline uint size() const { return unbound(reader.size() / ELEMENTS); }
     inline typename T::Client operator[](uint index) const {
       KJ_IREQUIRE(index < size());
       return typename T::Client(reader.getPointerElement(
-          guarded(index) * ELEMENTS).getCapability());
+          bounded(index) * ELEMENTS).getCapability());
     }
 
     typedef _::IndexingIterator<const Reader, typename T::Client> Iterator;
@@ -683,23 +683,23 @@ struct List<T, Kind::INTERFACE> {
     inline operator Reader() const { return Reader(builder.asReader()); }
     inline Reader asReader() const { return Reader(builder.asReader()); }
 
-    inline uint size() const { return unguard(builder.size() / ELEMENTS); }
+    inline uint size() const { return unbound(builder.size() / ELEMENTS); }
     inline typename T::Client operator[](uint index) {
       KJ_IREQUIRE(index < size());
       return typename T::Client(builder.getPointerElement(
-          guarded(index) * ELEMENTS).getCapability());
+          bounded(index) * ELEMENTS).getCapability());
     }
     inline void set(uint index, typename T::Client value) {
       KJ_IREQUIRE(index < size());
-      builder.getPointerElement(guarded(index) * ELEMENTS).setCapability(kj::mv(value.hook));
+      builder.getPointerElement(bounded(index) * ELEMENTS).setCapability(kj::mv(value.hook));
     }
     inline void adopt(uint index, Orphan<T>&& value) {
       KJ_IREQUIRE(index < size());
-      builder.getPointerElement(guarded(index) * ELEMENTS).adopt(kj::mv(value));
+      builder.getPointerElement(bounded(index) * ELEMENTS).adopt(kj::mv(value));
     }
     inline Orphan<T> disown(uint index) {
       KJ_IREQUIRE(index < size());
-      return Orphan<T>(builder.getPointerElement(guarded(index) * ELEMENTS).disown());
+      return Orphan<T>(builder.getPointerElement(bounded(index) * ELEMENTS).disown());
     }
 
     typedef _::IndexingIterator<Builder, typename T::Client> Iterator;
@@ -715,7 +715,7 @@ struct List<T, Kind::INTERFACE> {
 
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
-    return builder.initList(ElementSize::POINTER, guarded(size) * ELEMENTS);
+    return builder.initList(ElementSize::POINTER, bounded(size) * ELEMENTS);
   }
   inline static _::ListBuilder getFromPointer(_::PointerBuilder builder, const word* defaultValue) {
     return builder.getList(ElementSize::POINTER, defaultValue);

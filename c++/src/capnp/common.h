@@ -346,15 +346,15 @@ static_assert(sizeof(word) == 8, "uint64_t is not 8 bytes?");
 namespace _ { class BitLabel; class ElementLabel; struct WirePointer; }
 
 template <uint width, typename T = uint>
-using BitCountN = kj::Quantity<kj::Guarded<kj::maxValueForBits<width>(), T>, _::BitLabel>;
+using BitCountN = kj::Quantity<kj::Bounded<kj::maxValueForBits<width>(), T>, _::BitLabel>;
 template <uint width, typename T = uint>
-using ByteCountN = kj::Quantity<kj::Guarded<kj::maxValueForBits<width>(), T>, byte>;
+using ByteCountN = kj::Quantity<kj::Bounded<kj::maxValueForBits<width>(), T>, byte>;
 template <uint width, typename T = uint>
-using WordCountN = kj::Quantity<kj::Guarded<kj::maxValueForBits<width>(), T>, word>;
+using WordCountN = kj::Quantity<kj::Bounded<kj::maxValueForBits<width>(), T>, word>;
 template <uint width, typename T = uint>
-using ElementCountN = kj::Quantity<kj::Guarded<kj::maxValueForBits<width>(), T>, _::ElementLabel>;
+using ElementCountN = kj::Quantity<kj::Bounded<kj::maxValueForBits<width>(), T>, _::ElementLabel>;
 template <uint width, typename T = uint>
-using WirePointerCountN = kj::Quantity<kj::Guarded<kj::maxValueForBits<width>(), T>, _::WirePointer>;
+using WirePointerCountN = kj::Quantity<kj::Bounded<kj::maxValueForBits<width>(), T>, _::WirePointer>;
 
 typedef BitCountN<8, uint8_t> BitCount8;
 typedef BitCountN<16, uint16_t> BitCount16;
@@ -395,14 +395,14 @@ using WordsPerElementN = decltype(WordCountN<width>() / ElementCountN<width>());
 template <uint width>
 using PointersPerElementN = decltype(WirePointerCountN<width>() / ElementCountN<width>());
 
-using kj::guarded;
-using kj::unguard;
-using kj::unguardAs;
-using kj::unguardMax;
-using kj::unguardMaxBits;
+using kj::bounded;
+using kj::unbound;
+using kj::unboundAs;
+using kj::unboundMax;
+using kj::unboundMaxBits;
 using kj::assertMax;
 using kj::assertMaxBits;
-using kj::upgradeGuard;
+using kj::upgradeBound;
 using kj::ThrowOverflow;
 using kj::assumeBits;
 using kj::assumeMax;
@@ -411,36 +411,36 @@ using kj::trySubtract;
 
 template <typename T, typename U>
 inline constexpr U* operator+(U* ptr, kj::Quantity<T, U> offset) {
-  return ptr + unguard(offset / kj::unit<kj::Quantity<T, U>>());
+  return ptr + unbound(offset / kj::unit<kj::Quantity<T, U>>());
 }
 template <typename T, typename U>
 inline constexpr const U* operator+(const U* ptr, kj::Quantity<T, U> offset) {
-  return ptr + unguard(offset / kj::unit<kj::Quantity<T, U>>());
+  return ptr + unbound(offset / kj::unit<kj::Quantity<T, U>>());
 }
 template <typename T, typename U>
 inline constexpr U* operator+=(U*& ptr, kj::Quantity<T, U> offset) {
-  return ptr = ptr + unguard(offset / kj::unit<kj::Quantity<T, U>>());
+  return ptr = ptr + unbound(offset / kj::unit<kj::Quantity<T, U>>());
 }
 template <typename T, typename U>
 inline constexpr const U* operator+=(const U*& ptr, kj::Quantity<T, U> offset) {
-  return ptr = ptr + unguard(offset / kj::unit<kj::Quantity<T, U>>());
+  return ptr = ptr + unbound(offset / kj::unit<kj::Quantity<T, U>>());
 }
 
 template <typename T, typename U>
 inline constexpr U* operator-(U* ptr, kj::Quantity<T, U> offset) {
-  return ptr - unguard(offset / kj::unit<kj::Quantity<T, U>>());
+  return ptr - unbound(offset / kj::unit<kj::Quantity<T, U>>());
 }
 template <typename T, typename U>
 inline constexpr const U* operator-(const U* ptr, kj::Quantity<T, U> offset) {
-  return ptr - unguard(offset / kj::unit<kj::Quantity<T, U>>());
+  return ptr - unbound(offset / kj::unit<kj::Quantity<T, U>>());
 }
 template <typename T, typename U>
 inline constexpr U* operator-=(U*& ptr, kj::Quantity<T, U> offset) {
-  return ptr = ptr - unguard(offset / kj::unit<kj::Quantity<T, U>>());
+  return ptr = ptr - unbound(offset / kj::unit<kj::Quantity<T, U>>());
 }
 template <typename T, typename U>
 inline constexpr const U* operator-=(const U*& ptr, kj::Quantity<T, U> offset) {
-  return ptr = ptr - unguard(offset / kj::unit<kj::Quantity<T, U>>());
+  return ptr = ptr - unbound(offset / kj::unit<kj::Quantity<T, U>>());
 }
 
 constexpr auto BITS = kj::unit<BitCountN<1>>();
@@ -449,16 +449,16 @@ constexpr auto WORDS = kj::unit<WordCountN<1>>();
 constexpr auto ELEMENTS = kj::unit<ElementCountN<1>>();
 constexpr auto POINTERS = kj::unit<WirePointerCountN<1>>();
 
-constexpr auto ZERO = kj::guarded<0>();
-constexpr auto ONE = kj::guarded<1>();
+constexpr auto ZERO = kj::bounded<0>();
+constexpr auto ONE = kj::bounded<1>();
 
 // GCC 4.7 actually gives unused warnings on these constants in opt mode...
-constexpr auto BITS_PER_BYTE KJ_UNUSED = guarded<8>() * BITS / BYTES;
-constexpr auto BITS_PER_WORD KJ_UNUSED = guarded<64>() * BITS / WORDS;
-constexpr auto BYTES_PER_WORD KJ_UNUSED = guarded<8>() * BYTES / WORDS;
+constexpr auto BITS_PER_BYTE KJ_UNUSED = bounded<8>() * BITS / BYTES;
+constexpr auto BITS_PER_WORD KJ_UNUSED = bounded<64>() * BITS / WORDS;
+constexpr auto BYTES_PER_WORD KJ_UNUSED = bounded<8>() * BYTES / WORDS;
 
-constexpr auto BITS_PER_POINTER KJ_UNUSED = guarded<64>() * BITS / POINTERS;
-constexpr auto BYTES_PER_POINTER KJ_UNUSED = guarded<8>() * BYTES / POINTERS;
+constexpr auto BITS_PER_POINTER KJ_UNUSED = bounded<64>() * BITS / POINTERS;
+constexpr auto BYTES_PER_POINTER KJ_UNUSED = bounded<8>() * BYTES / POINTERS;
 constexpr auto WORDS_PER_POINTER KJ_UNUSED = ONE * WORDS / POINTERS;
 
 constexpr auto POINTER_SIZE_IN_WORDS = ONE * POINTERS * WORDS_PER_POINTER;
@@ -476,13 +476,13 @@ typedef WirePointerCountN<STRUCT_POINTER_COUNT_BITS, uint16_t> StructPointerCoun
 typedef ByteCountN<BLOB_SIZE_BITS> BlobSize;
 
 constexpr auto MAX_SEGMENT_WORDS =
-    guarded<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>()>() * WORDS;
+    bounded<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>()>() * WORDS;
 constexpr auto MAX_LIST_ELEMENTS =
-    guarded<kj::maxValueForBits<LIST_ELEMENT_COUNT_BITS>()>() * ELEMENTS;
+    bounded<kj::maxValueForBits<LIST_ELEMENT_COUNT_BITS>()>() * ELEMENTS;
 constexpr auto MAX_STUCT_DATA_WORDS =
-    guarded<kj::maxValueForBits<STRUCT_DATA_WORD_COUNT_BITS>()>() * WORDS;
+    bounded<kj::maxValueForBits<STRUCT_DATA_WORD_COUNT_BITS>()>() * WORDS;
 constexpr auto MAX_STRUCT_POINTER_COUNT =
-    guarded<kj::maxValueForBits<STRUCT_POINTER_COUNT_BITS>()>() * POINTERS;
+    bounded<kj::maxValueForBits<STRUCT_POINTER_COUNT_BITS>()>() * POINTERS;
 
 using StructDataBitCount = decltype(WordCountN<STRUCT_POINTER_COUNT_BITS>() * BITS_PER_WORD);
 // Number of bits in a Struct data segment (should come out to BitCountN<22>).
@@ -493,40 +493,40 @@ using StructPointerOffset = StructPointerCount;
 
 inline StructDataOffset assumeDataOffset(uint32_t offset) {
   return assumeMax(MAX_STUCT_DATA_WORDS * BITS_PER_WORD * (ONE * ELEMENTS / BITS),
-                   guarded(offset) * ELEMENTS);
+                   bounded(offset) * ELEMENTS);
 }
 
 inline StructPointerOffset assumePointerOffset(uint32_t offset) {
-  return assumeMax(MAX_STRUCT_POINTER_COUNT, guarded(offset) * POINTERS);
+  return assumeMax(MAX_STRUCT_POINTER_COUNT, bounded(offset) * POINTERS);
 }
 
 constexpr uint MAX_TEXT_SIZE = kj::maxValueForBits<BLOB_SIZE_BITS>() - 1;
-typedef kj::Quantity<kj::Guarded<MAX_TEXT_SIZE, uint>, byte> TextSize;
+typedef kj::Quantity<kj::Bounded<MAX_TEXT_SIZE, uint>, byte> TextSize;
 // Not including NUL terminator.
 
 template <typename T>
-inline KJ_CONSTEXPR() decltype(guarded<sizeof(T)>() * BYTES / ELEMENTS) bytesPerElement() {
-  return guarded<sizeof(T)>() * BYTES / ELEMENTS;
+inline KJ_CONSTEXPR() decltype(bounded<sizeof(T)>() * BYTES / ELEMENTS) bytesPerElement() {
+  return bounded<sizeof(T)>() * BYTES / ELEMENTS;
 }
 
 template <typename T>
-inline KJ_CONSTEXPR() decltype(guarded<sizeof(T) * 8>() * BITS / ELEMENTS) bitsPerElement() {
-  return guarded<sizeof(T) * 8>() * BITS / ELEMENTS;
+inline KJ_CONSTEXPR() decltype(bounded<sizeof(T) * 8>() * BITS / ELEMENTS) bitsPerElement() {
+  return bounded<sizeof(T) * 8>() * BITS / ELEMENTS;
 }
 
 template <typename T, uint maxN>
-inline constexpr kj::Quantity<kj::Guarded<maxN, size_t>, T>
-intervalLength(const T* a, const T* b, kj::Quantity<kj::GuardedConst<maxN>, T>) {
-  return kj::assumeMax<maxN>(b - a) * kj::unit<kj::Quantity<kj::GuardedConst<1u>, T>>();
+inline constexpr kj::Quantity<kj::Bounded<maxN, size_t>, T>
+intervalLength(const T* a, const T* b, kj::Quantity<kj::BoundedConst<maxN>, T>) {
+  return kj::assumeMax<maxN>(b - a) * kj::unit<kj::Quantity<kj::BoundedConst<1u>, T>>();
 }
 
 template <typename T, typename U>
 inline constexpr kj::ArrayPtr<const U> arrayPtr(const U* ptr, kj::Quantity<T, U> size) {
-  return kj::ArrayPtr<const U>(ptr, unguard(size / kj::unit<kj::Quantity<T, U>>()));
+  return kj::ArrayPtr<const U>(ptr, unbound(size / kj::unit<kj::Quantity<T, U>>()));
 }
 template <typename T, typename U>
 inline constexpr kj::ArrayPtr<U> arrayPtr(U* ptr, kj::Quantity<T, U> size) {
-  return kj::ArrayPtr<U>(ptr, unguard(size / kj::unit<kj::Quantity<T, U>>()));
+  return kj::ArrayPtr<U>(ptr, unbound(size / kj::unit<kj::Quantity<T, U>>()));
 }
 
 #else
@@ -586,14 +586,14 @@ using PointersPerElementN = decltype(WirePointerCountN<width>() / ElementCountN<
 using kj::ThrowOverflow;
 // YYY
 
-template <uint i> inline constexpr uint guarded() { return i; }
-template <typename T> inline constexpr T guarded(T i) { return i; }
-template <typename T> inline constexpr T unguard(T i) { return i; }
+template <uint i> inline constexpr uint bounded() { return i; }
+template <typename T> inline constexpr T bounded(T i) { return i; }
+template <typename T> inline constexpr T unbound(T i) { return i; }
 
-template <typename T, typename U> inline constexpr T unguardAs(U i) { return i; }
+template <typename T, typename U> inline constexpr T unboundAs(U i) { return i; }
 
-template <uint64_t requestedMax, typename T> inline constexpr uint unguardMax(T i) { return i; }
-template <uint bits, typename T> inline constexpr uint unguardMaxBits(T i) { return i; }
+template <uint64_t requestedMax, typename T> inline constexpr uint unboundMax(T i) { return i; }
+template <uint bits, typename T> inline constexpr uint unboundMaxBits(T i) { return i; }
 
 template <uint newMax, typename T, typename ErrorFunc>
 inline constexpr T assertMax(T value, ErrorFunc&& func) {
@@ -619,7 +619,7 @@ inline constexpr T assertMaxBits(uint bits, T value, ErrorFunc&& func = ErrorFun
   return value;
 }
 
-template <typename T, typename U> inline constexpr T upgradeGuard(U i) { return i; }
+template <typename T, typename U> inline constexpr T upgradeBound(U i) { return i; }
 
 template <uint bits, typename T> inline constexpr T assumeBits(T i) { return i; }
 template <uint64_t max, typename T> inline constexpr T assumeMax(T i) { return i; }

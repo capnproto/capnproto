@@ -60,7 +60,7 @@ namespace _ {  // private
 #endif  // !CAPNP_LITE
 
 #if CAPNP_DEBUG_TYPES
-#define G(n) guarded<n>()
+#define G(n) bounded<n>()
 #else
 #define G(n) n
 #endif
@@ -166,26 +166,26 @@ struct WirePointer {
   }
 
   KJ_ALWAYS_INLINE(ListElementCount inlineCompositeListElementCount() const) {
-    return ((guarded(offsetAndKind.get()) >> G(2))
+    return ((bounded(offsetAndKind.get()) >> G(2))
             & G(kj::maxValueForBits<LIST_ELEMENT_COUNT_BITS>())) * ELEMENTS;
   }
   KJ_ALWAYS_INLINE(void setKindAndInlineCompositeListElementCount(
       Kind kind, ListElementCount elementCount)) {
-    offsetAndKind.set(unguardAs<uint32_t>((elementCount / ELEMENTS) << G(2)) | kind);
+    offsetAndKind.set(unboundAs<uint32_t>((elementCount / ELEMENTS) << G(2)) | kind);
   }
 
   KJ_ALWAYS_INLINE(SegmentWordCount farPositionInSegment() const) {
     KJ_DREQUIRE(kind() == FAR,
         "positionInSegment() should only be called on FAR pointers.");
-    return (guarded(offsetAndKind.get()) >> G(3)) * WORDS;
+    return (bounded(offsetAndKind.get()) >> G(3)) * WORDS;
   }
   KJ_ALWAYS_INLINE(bool isDoubleFar() const) {
     KJ_DREQUIRE(kind() == FAR,
         "isDoubleFar() should only be called on FAR pointers.");
-    return unguard((guarded(offsetAndKind.get()) >> G(2)) & G(1));
+    return unbound((bounded(offsetAndKind.get()) >> G(2)) & G(1));
   }
   KJ_ALWAYS_INLINE(void setFar(bool isDoubleFar, WordCountN<29> pos)) {
-    offsetAndKind.set(unguardAs<uint32_t>((pos / WORDS) << G(3)) |
+    offsetAndKind.set(unboundAs<uint32_t>((pos / WORDS) << G(3)) |
                       (static_cast<uint32_t>(isDoubleFar) << 2) |
                       static_cast<uint32_t>(Kind::FAR));
   }
@@ -205,7 +205,7 @@ struct WirePointer {
     WireValue<WirePointerCount16> ptrCount;
 
     inline WordCountN<17> wordSize() const {
-      return upgradeGuard<uint32_t>(dataSize.get()) + ptrCount.get() * WORDS_PER_POINTER;
+      return upgradeBound<uint32_t>(dataSize.get()) + ptrCount.get() * WORDS_PER_POINTER;
     }
 
     KJ_ALWAYS_INLINE(void set(WordCount16 ds, WirePointerCount16 rc)) {
@@ -225,19 +225,19 @@ struct WirePointer {
       return static_cast<ElementSize>(elementSizeAndCount.get() & 7);
     }
     KJ_ALWAYS_INLINE(ElementCountN<29> elementCount() const) {
-      return (guarded(elementSizeAndCount.get()) >> G(3)) * ELEMENTS;
+      return (bounded(elementSizeAndCount.get()) >> G(3)) * ELEMENTS;
     }
     KJ_ALWAYS_INLINE(WordCountN<29> inlineCompositeWordCount() const) {
       return elementCount() * (ONE * WORDS / ELEMENTS);
     }
 
     KJ_ALWAYS_INLINE(void set(ElementSize es, ElementCountN<29> ec)) {
-      elementSizeAndCount.set(unguardAs<uint32_t>((ec / ELEMENTS) << G(3)) |
+      elementSizeAndCount.set(unboundAs<uint32_t>((ec / ELEMENTS) << G(3)) |
                               static_cast<int>(es));
     }
 
     KJ_ALWAYS_INLINE(void setInlineComposite(WordCountN<29> wc)) {
-      elementSizeAndCount.set(unguardAs<uint32_t>((wc / WORDS) << G(3)) |
+      elementSizeAndCount.set(unboundAs<uint32_t>((wc / WORDS) << G(3)) |
                               static_cast<int>(ElementSize::INLINE_COMPOSITE));
     }
   };
@@ -276,19 +276,19 @@ struct WirePointer {
 };
 static_assert(sizeof(WirePointer) == sizeof(word),
     "capnp::WirePointer is not exactly one word.  This will probably break everything.");
-static_assert(unguardAs<size_t>(POINTERS * WORDS_PER_POINTER * BYTES_PER_WORD / BYTES) ==
+static_assert(unboundAs<size_t>(POINTERS * WORDS_PER_POINTER * BYTES_PER_WORD / BYTES) ==
               sizeof(WirePointer),
     "WORDS_PER_POINTER is wrong.");
-static_assert(unguardAs<size_t>(POINTERS * BYTES_PER_POINTER / BYTES) == sizeof(WirePointer),
+static_assert(unboundAs<size_t>(POINTERS * BYTES_PER_POINTER / BYTES) == sizeof(WirePointer),
     "BYTES_PER_POINTER is wrong.");
-static_assert(unguardAs<size_t>(POINTERS * BITS_PER_POINTER / BITS_PER_BYTE / BYTES) ==
+static_assert(unboundAs<size_t>(POINTERS * BITS_PER_POINTER / BITS_PER_BYTE / BYTES) ==
               sizeof(WirePointer),
     "BITS_PER_POINTER is wrong.");
 
 namespace {
 
 static const union {
-  AlignedData<unguard(POINTER_SIZE_IN_WORDS / WORDS)> word;
+  AlignedData<unbound(POINTER_SIZE_IN_WORDS / WORDS)> word;
   WirePointer pointer;
 } zero = {{{0}}};
 
@@ -310,23 +310,23 @@ struct WireHelpers {
 #if CAPNP_DEBUG_TYPES
   template <uint64_t maxN, typename T>
   static KJ_ALWAYS_INLINE(
-      kj::Quantity<kj::Guarded<(maxN + 7) / 8, T>, word> roundBytesUpToWords(
-          kj::Quantity<kj::Guarded<maxN, T>, byte> bytes)) {
+      kj::Quantity<kj::Bounded<(maxN + 7) / 8, T>, word> roundBytesUpToWords(
+          kj::Quantity<kj::Bounded<maxN, T>, byte> bytes)) {
     static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
     return (bytes + G(7) * BYTES) / BYTES_PER_WORD;
   }
 
   template <uint64_t maxN, typename T>
   static KJ_ALWAYS_INLINE(
-      kj::Quantity<kj::Guarded<(maxN + 7) / 8, T>, byte> roundBitsUpToBytes(
-          kj::Quantity<kj::Guarded<maxN, T>, BitLabel> bits)) {
+      kj::Quantity<kj::Bounded<(maxN + 7) / 8, T>, byte> roundBitsUpToBytes(
+          kj::Quantity<kj::Bounded<maxN, T>, BitLabel> bits)) {
     return (bits + G(7) * BITS) / BITS_PER_BYTE;
   }
 
   template <uint64_t maxN, typename T>
   static KJ_ALWAYS_INLINE(
-      kj::Quantity<kj::Guarded<(maxN + 63) / 64, T>, word> roundBitsUpToWords(
-          kj::Quantity<kj::Guarded<maxN, T>, BitLabel> bits)) {
+      kj::Quantity<kj::Bounded<(maxN + 63) / 64, T>, word> roundBitsUpToWords(
+          kj::Quantity<kj::Bounded<maxN, T>, BitLabel> bits)) {
     static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
     return (bits + G(63) * BITS) / BITS_PER_WORD;
   }
@@ -351,15 +351,15 @@ struct WireHelpers {
 #endif
 
   static KJ_ALWAYS_INLINE(void zeroMemory(byte* ptr, ByteCount32 count)) {
-    memset(ptr, 0, unguard(count / BYTES));
+    memset(ptr, 0, unbound(count / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(word* ptr, WordCountN<29> count)) {
-    memset(ptr, 0, unguard(count * BYTES_PER_WORD / BYTES));
+    memset(ptr, 0, unbound(count * BYTES_PER_WORD / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(WirePointer* ptr, WirePointerCountN<29> count)) {
-    memset(ptr, 0, unguard(count * BYTES_PER_POINTER / BYTES));
+    memset(ptr, 0, unbound(count * BYTES_PER_POINTER / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(WirePointer* ptr)) {
@@ -372,16 +372,16 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(byte* to, const byte* from, ByteCount32 count)) {
-    memcpy(to, from, unguard(count / BYTES));
+    memcpy(to, from, unbound(count / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(word* to, const word* from, WordCountN<29> count)) {
-    memcpy(to, from, unguard(count * BYTES_PER_WORD / BYTES));
+    memcpy(to, from, unbound(count * BYTES_PER_WORD / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(WirePointer* to, const WirePointer* from,
                                           WirePointerCountN<29> count)) {
-    memcpy(to, from, unguard(count * BYTES_PER_POINTER  / BYTES));
+    memcpy(to, from, unbound(count * BYTES_PER_POINTER  / BYTES));
   }
 
   template <typename T>
@@ -537,7 +537,7 @@ struct WireHelpers {
 
       // Find the landing pad and check that it is within bounds.
       const word* ptr = segment->getStartPtr() + ref->farPositionInSegment();
-      WordCount padWords = guarded(1 + ref->isDoubleFar()) * POINTER_SIZE_IN_WORDS;
+      WordCount padWords = bounded(1 + ref->isDoubleFar()) * POINTER_SIZE_IN_WORDS;
       KJ_REQUIRE(boundsCheck(segment, ptr, ptr + padWords),
                  "Message contains out-of-bounds far pointer.") {
         return nullptr;
@@ -640,7 +640,7 @@ struct WireHelpers {
           case ElementSize::FOUR_BYTES:
           case ElementSize::EIGHT_BYTES: {
             zeroMemory(ptr, roundBitsUpToWords(
-                upgradeGuard<uint64_t>(tag->listRef.elementCount()) *
+                upgradeBound<uint64_t>(tag->listRef.elementCount()) *
                 dataBitsPerElement(tag->listRef.elementSize())));
             break;
           }
@@ -676,7 +676,7 @@ struct WireHelpers {
 
             auto wordsPerElement = elementTag->structRef.wordSize() / ELEMENTS;
             zeroMemory(ptr, assertMaxBits<SEGMENT_WORD_COUNT_BITS>(POINTER_SIZE_IN_WORDS +
-                upgradeGuard<uint64_t>(count) * wordsPerElement, []() {
+                upgradeBound<uint64_t>(count) * wordsPerElement, []() {
                   KJ_FAIL_ASSERT("encountered list pointer in builder which is too large to "
                       "possibly fit in a segment. Bug in builder code?");
                 }));
@@ -765,7 +765,7 @@ struct WireHelpers {
           case ElementSize::FOUR_BYTES:
           case ElementSize::EIGHT_BYTES: {
             auto totalWords = roundBitsUpToWords(
-                upgradeGuard<uint64_t>(ref->listRef.elementCount()) *
+                upgradeBound<uint64_t>(ref->listRef.elementCount()) *
                 dataBitsPerElement(ref->listRef.elementSize()));
             KJ_REQUIRE(boundsCheck(segment, ptr, ptr + totalWords),
                        "Message contained out-of-bounds list pointer.") {
@@ -806,7 +806,7 @@ struct WireHelpers {
             }
 
             auto actualSize = elementTag->structRef.wordSize() / ELEMENTS *
-                              upgradeGuard<uint64_t>(count);
+                              upgradeBound<uint64_t>(count);
             KJ_REQUIRE(actualSize <= wordCount,
                        "Struct list pointer's elements overran size.") {
               return result;
@@ -903,7 +903,7 @@ struct WireHelpers {
           case ElementSize::FOUR_BYTES:
           case ElementSize::EIGHT_BYTES: {
             auto wordCount = roundBitsUpToWords(
-                upgradeGuard<uint64_t>(src->listRef.elementCount()) *
+                upgradeBound<uint64_t>(src->listRef.elementCount()) *
                 dataBitsPerElement(src->listRef.elementSize()));
             const word* srcPtr = src->target();
             word* dstPtr = allocate(dst, segment, capTable, wordCount, WirePointer::LIST, nullptr);
@@ -1146,7 +1146,7 @@ struct WireHelpers {
     KJ_DASSERT(step * ELEMENTS == (dataSize + pointerCount * BITS_PER_POINTER));
 
     // Calculate size of the list.
-    auto wordCount = roundBitsUpToWords(upgradeGuard<uint64_t>(checkedElementCount) * step);
+    auto wordCount = roundBitsUpToWords(upgradeBound<uint64_t>(checkedElementCount) * step);
 
     // Allocate the list.
     word* ptr = allocate(ref, segment, capTable, wordCount, WirePointer::LIST, orphanArena);
@@ -1169,7 +1169,7 @@ struct WireHelpers {
 
     // Allocate the list, prefixed by a single WirePointer.
     auto wordCount = assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(
-        upgradeGuard<uint64_t>(checkedElementCount) * wordsPerElement,
+        upgradeBound<uint64_t>(checkedElementCount) * wordsPerElement,
         []() { KJ_FAIL_REQUIRE("total size of struct list is larger than max segment size"); });
     word* ptr = allocate(ref, segment, capTable, POINTER_SIZE_IN_WORDS + wordCount,
                          WirePointer::LIST, orphanArena);
@@ -1438,7 +1438,7 @@ struct WireHelpers {
       auto newStep = (newDataSize + newPointerCount * WORDS_PER_POINTER) / ELEMENTS;
 
       auto totalSize = assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(
-            newStep * upgradeGuard<uint64_t>(elementCount),
+            newStep * upgradeBound<uint64_t>(elementCount),
             []() { KJ_FAIL_REQUIRE("total size of struct list is larger than max segment size"); });
 
       // Don't let allocate() zero out the object just yet.
@@ -1471,7 +1471,7 @@ struct WireHelpers {
       }
 
       auto oldSize = assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(
-            oldStep * upgradeGuard<uint64_t>(elementCount),
+            oldStep * upgradeBound<uint64_t>(elementCount),
             []() { KJ_FAIL_ASSERT("old size overflows but new size doesn't?"); });
 
       // Zero out old location.  See explanation in getWritableStructPointer().
@@ -1513,7 +1513,7 @@ struct WireHelpers {
 
         auto newStep = (newDataSize + newPointerCount * WORDS_PER_POINTER) / ELEMENTS;
         auto totalWords = assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(
-              newStep * upgradeGuard<uint64_t>(elementCount),
+              newStep * upgradeBound<uint64_t>(elementCount),
               []() {KJ_FAIL_REQUIRE("total size of struct list is larger than max segment size");});
 
         // Don't let allocate() zero out the object just yet.
@@ -1549,7 +1549,7 @@ struct WireHelpers {
         }
 
         auto oldSize = assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(
-              roundBitsUpToWords(oldStep * upgradeGuard<uint64_t>(elementCount)),
+              roundBitsUpToWords(oldStep * upgradeBound<uint64_t>(elementCount)),
               []() { KJ_FAIL_ASSERT("old size overflows but new size doesn't?"); });
 
         // Zero out old location.  See explanation in getWritableStructPointer().
@@ -1576,13 +1576,13 @@ struct WireHelpers {
     ref->listRef.set(ElementSize::BYTE, byteSize * (ONE * ELEMENTS / BYTES));
 
     // Build the Text::Builder.  This will initialize the NUL terminator.
-    return { segment, Text::Builder(reinterpret_cast<char*>(ptr), unguard(size / BYTES)) };
+    return { segment, Text::Builder(reinterpret_cast<char*>(ptr), unbound(size / BYTES)) };
   }
 
   static KJ_ALWAYS_INLINE(SegmentAnd<Text::Builder> setTextPointer(
       WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, Text::Reader value,
       BuilderArena* orphanArena = nullptr)) {
-    TextSize size = assertMax<MAX_TEXT_SIZE>(guarded(value.size()),
+    TextSize size = assertMax<MAX_TEXT_SIZE>(bounded(value.size()),
         []() { KJ_FAIL_REQUIRE("text blob too big"); }) * BYTES;
 
     auto allocation = initTextPointer(ref, segment, capTable, size, orphanArena);
@@ -1618,7 +1618,7 @@ struct WireHelpers {
       KJ_REQUIRE(ref->listRef.elementSize() == ElementSize::BYTE,
           "Called getText{Field,Element}() but existing list pointer is not byte-sized.");
 
-      size_t size = unguard(subtractChecked(ref->listRef.elementCount() / ELEMENTS, ONE,
+      size_t size = unbound(subtractChecked(ref->listRef.elementCount() / ELEMENTS, ONE,
           []() { KJ_FAIL_REQUIRE("zero-size blob can't be text (need NUL terminator)"); }));
       KJ_REQUIRE(cptr[size] == '\0', "Text blob missing NUL terminator.") {
         goto useDefault;
@@ -1639,13 +1639,13 @@ struct WireHelpers {
     ref->listRef.set(ElementSize::BYTE, size * (ONE * ELEMENTS / BYTES));
 
     // Build the Data::Builder.
-    return { segment, Data::Builder(reinterpret_cast<byte*>(ptr), unguard(size / BYTES)) };
+    return { segment, Data::Builder(reinterpret_cast<byte*>(ptr), unbound(size / BYTES)) };
   }
 
   static KJ_ALWAYS_INLINE(SegmentAnd<Data::Builder> setDataPointer(
       WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, Data::Reader value,
       BuilderArena* orphanArena = nullptr)) {
-    BlobSize size = assertMaxBits<BLOB_SIZE_BITS>(guarded(value.size()),
+    BlobSize size = assertMaxBits<BLOB_SIZE_BITS>(bounded(value.size()),
         []() { KJ_FAIL_REQUIRE("text blob too big"); }) * BYTES;
 
     auto allocation = initDataPointer(ref, segment, capTable, size, orphanArena);
@@ -1679,7 +1679,7 @@ struct WireHelpers {
           "Called getData{Field,Element}() but existing list pointer is not byte-sized.");
 
       return Data::Builder(reinterpret_cast<byte*>(ptr),
-          unguard(ref->listRef.elementCount() / ELEMENTS));
+          unbound(ref->listRef.elementCount() / ELEMENTS));
     }
   }
 
@@ -1760,7 +1760,7 @@ struct WireHelpers {
       SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref, ListReader value,
       BuilderArena* orphanArena = nullptr, bool canonical = false) {
     auto totalSize = assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(
-        roundBitsUpToWords(upgradeGuard<uint64_t>(value.elementCount) * value.step),
+        roundBitsUpToWords(upgradeBound<uint64_t>(value.elementCount) * value.step),
         []() { KJ_FAIL_ASSERT("encountered impossibly long struct list ListReader"); });
 
     if (value.elementSize != ElementSize::INLINE_COMPOSITE) {
@@ -1808,7 +1808,7 @@ struct WireHelpers {
           ptrCount = kj::max(ptrCount,
               intervalLength(element.pointers, ptr, MAX_STRUCT_POINTER_COUNT));
         }
-        auto newTotalSize = (dataSize + upgradeGuard<uint64_t>(ptrCount) * WORDS_PER_POINTER)
+        auto newTotalSize = (dataSize + upgradeBound<uint64_t>(ptrCount) * WORDS_PER_POINTER)
             / ELEMENTS * value.elementCount;
         KJ_ASSERT(newTotalSize <= totalSize);  // we've only removed data!
         totalSize = assumeMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>() - 1>(newTotalSize);
@@ -1925,7 +1925,7 @@ struct WireHelpers {
           auto elementCount = tag->inlineCompositeListElementCount();
           auto wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
-          KJ_REQUIRE(wordsPerElement * upgradeGuard<uint64_t>(elementCount) <= wordCount,
+          KJ_REQUIRE(wordsPerElement * upgradeBound<uint64_t>(elementCount) <= wordCount,
                      "INLINE_COMPOSITE list's elements overrun its word count.") {
             goto useDefault;
           }
@@ -1951,7 +1951,7 @@ struct WireHelpers {
           auto pointerCount = pointersPerElement(elementSize) * ELEMENTS;
           auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
           auto elementCount = src->listRef.elementCount();
-          auto wordCount = roundBitsUpToWords(upgradeGuard<uint64_t>(elementCount) * step);
+          auto wordCount = roundBitsUpToWords(upgradeBound<uint64_t>(elementCount) * step);
 
           KJ_REQUIRE(boundsCheck(srcSegment, ptr, ptr + wordCount),
                      "Message contains out-of-bounds list pointer.") {
@@ -2206,7 +2206,7 @@ struct WireHelpers {
       auto size = tag->inlineCompositeListElementCount();
       auto wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
-      KJ_REQUIRE(upgradeGuard<uint64_t>(size) * wordsPerElement <= wordCount,
+      KJ_REQUIRE(upgradeBound<uint64_t>(size) * wordsPerElement <= wordCount,
                  "INLINE_COMPOSITE list's elements overrun its word count.") {
         goto useDefault;
       }
@@ -2279,7 +2279,7 @@ struct WireHelpers {
       auto elementCount = ref->listRef.elementCount();
       auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
 
-      auto wordCount = roundBitsUpToWords(upgradeGuard<uint64_t>(elementCount) * step);
+      auto wordCount = roundBitsUpToWords(upgradeBound<uint64_t>(elementCount) * step);
       KJ_REQUIRE(boundsCheck(segment, ptr, ptr + wordCount),
             "Message contains out-of-bounds list pointer.") {
         goto useDefault;
@@ -2341,7 +2341,7 @@ struct WireHelpers {
     useDefault:
       if (defaultValue == nullptr) defaultValue = "";
       return Text::Reader(reinterpret_cast<const char*>(defaultValue),
-          unguard(defaultSize / BYTES));
+          unbound(defaultSize / BYTES));
     } else {
       const word* ptr = followFars(ref, refTarget, segment);
 
@@ -2372,13 +2372,13 @@ struct WireHelpers {
       }
 
       const char* cptr = reinterpret_cast<const char*>(ptr);
-      uint unguardedSize = unguard(size / BYTES) - 1;
+      uint unboundedSize = unbound(size / BYTES) - 1;
 
-      KJ_REQUIRE(cptr[unguardedSize] == '\0', "Message contains text that is not NUL-terminated.") {
+      KJ_REQUIRE(cptr[unboundedSize] == '\0', "Message contains text that is not NUL-terminated.") {
         goto useDefault;
       }
 
-      return Text::Reader(cptr, unguardedSize);
+      return Text::Reader(cptr, unboundedSize);
     }
   }
 
@@ -2394,7 +2394,7 @@ struct WireHelpers {
     if (ref->isNull()) {
     useDefault:
       return Data::Reader(reinterpret_cast<const byte*>(defaultValue),
-          unguard(defaultSize / BYTES));
+          unbound(defaultSize / BYTES));
     } else {
       const word* ptr = followFars(ref, refTarget, segment);
 
@@ -2420,7 +2420,7 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      return Data::Reader(reinterpret_cast<const byte*>(ptr), unguard(size / BYTES));
+      return Data::Reader(reinterpret_cast<const byte*>(ptr), unbound(size / BYTES));
     }
   }
 };
@@ -2853,7 +2853,7 @@ MessageSizeCounts StructReader::totalSize() const {
 
 kj::Array<word> StructReader::canonicalize() {
   auto size = totalSize().wordCount + POINTER_SIZE_IN_WORDS;
-  kj::Array<word> backing = kj::heapArray<word>(unguard(size / WORDS));
+  kj::Array<word> backing = kj::heapArray<word>(unbound(size / WORDS));
   WireHelpers::zeroMemory(backing.asPtr());
   FlatMessageBuilder builder(backing);
   _::PointerHelpers<AnyPointer>::getInternalBuilder(builder.initRoot<AnyPointer>()).setStruct(*this, true);
@@ -2925,7 +2925,7 @@ Text::Builder ListBuilder::asText() {
     return Text::Builder();
   }
 
-  size_t size = unguard(elementCount / ELEMENTS);
+  size_t size = unbound(elementCount / ELEMENTS);
 
   KJ_REQUIRE(size > 0, "Message contains text that is not NUL-terminated.") {
     return Text::Builder();
@@ -2947,11 +2947,11 @@ Data::Builder ListBuilder::asData() {
     return Data::Builder();
   }
 
-  return Data::Builder(reinterpret_cast<byte*>(ptr), unguard(elementCount / ELEMENTS));
+  return Data::Builder(reinterpret_cast<byte*>(ptr), unbound(elementCount / ELEMENTS));
 }
 
 StructBuilder ListBuilder::getStructElement(ElementCount index) {
-  auto indexBit = upgradeGuard<uint64_t>(index) * step;
+  auto indexBit = upgradeBound<uint64_t>(index) * step;
   byte* structData = ptr + indexBit / BITS_PER_BYTE;
   KJ_DASSERT(indexBit % BITS_PER_BYTE == ZERO * BITS);
   return StructBuilder(segment, capTable, structData,
@@ -2987,7 +2987,7 @@ Text::Reader ListReader::asText() {
     return Text::Reader();
   }
 
-  size_t size = unguard(elementCount / ELEMENTS);
+  size_t size = unbound(elementCount / ELEMENTS);
 
   KJ_REQUIRE(size > 0, "Message contains text that is not NUL-terminated.") {
     return Text::Reader();
@@ -3009,7 +3009,7 @@ Data::Reader ListReader::asData() {
     return Data::Reader();
   }
 
-  return Data::Reader(reinterpret_cast<const byte*>(ptr), unguard(elementCount / ELEMENTS));
+  return Data::Reader(reinterpret_cast<const byte*>(ptr), unbound(elementCount / ELEMENTS));
 }
 
 kj::ArrayPtr<const byte> ListReader::asRawBytes() {
@@ -3020,7 +3020,7 @@ kj::ArrayPtr<const byte> ListReader::asRawBytes() {
 
   return arrayPtr(reinterpret_cast<const byte*>(ptr),
       WireHelpers::roundBitsUpToBytes(
-          upgradeGuard<uint64_t>(elementCount) * (structDataSize / ELEMENTS)));
+          upgradeBound<uint64_t>(elementCount) * (structDataSize / ELEMENTS)));
 }
 
 StructReader ListReader::getStructElement(ElementCount index) const {
@@ -3029,7 +3029,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
     return StructReader();
   }
 
-  auto indexBit = upgradeGuard<uint64_t>(index) * step;
+  auto indexBit = upgradeBound<uint64_t>(index) * step;
   const byte* structData = ptr + indexBit / BITS_PER_BYTE;
   const WirePointer* structPointers =
       reinterpret_cast<const WirePointer*>(structData + structDataSize / BITS_PER_BYTE);
@@ -3070,7 +3070,7 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
       }
       auto elementSize = StructSize(this->structDataSize / BITS_PER_WORD,
                                     this->structPointerCount).total() / ELEMENTS;
-      auto totalSize = upgradeGuard<uint64_t>(this->elementCount) * elementSize;
+      auto totalSize = upgradeBound<uint64_t>(this->elementCount) * elementSize;
       if (totalSize != ref->listRef.inlineCompositeWordCount()) {
         return false;
       }
@@ -3113,7 +3113,7 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
         return false;
       }
 
-      auto bitSize = upgradeGuard<uint64_t>(this->elementCount) *
+      auto bitSize = upgradeBound<uint64_t>(this->elementCount) *
                      dataBitsPerElement(this->elementSize);
       *readHead += WireHelpers::roundBitsUpToWords(bitSize);
       return true;
@@ -3324,7 +3324,7 @@ OrphanBuilder OrphanBuilder::concat(
       byte* target = builder.ptr;
       auto step = builder.step / BITS_PER_BYTE;
       for (auto& list: lists) {
-        auto count = step * upgradeGuard<uint64_t>(list.size());
+        auto count = step * upgradeBound<uint64_t>(list.size());
         WireHelpers::copyMemory(target, list.ptr, assumeBits<SEGMENT_WORD_COUNT_BITS>(count));
         target += count;
       }
@@ -3343,10 +3343,10 @@ OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Re
   KJ_REQUIRE(reinterpret_cast<uintptr_t>(data.begin()) % sizeof(void*) == 0,
              "Cannot referenceExternalData() that is not aligned.");
 
-  auto checkedSize = assertMaxBits<BLOB_SIZE_BITS>(guarded(data.size()));
+  auto checkedSize = assertMaxBits<BLOB_SIZE_BITS>(bounded(data.size()));
   auto wordCount = WireHelpers::roundBytesUpToWords(checkedSize * BYTES);
   kj::ArrayPtr<const word> words(reinterpret_cast<const word*>(data.begin()),
-                                 unguard(wordCount / WORDS));
+                                 unbound(wordCount / WORDS));
 
   OrphanBuilder result;
   result.tagAsPtr()->setKindForOrphan(WirePointer::LIST);
@@ -3486,10 +3486,10 @@ bool OrphanBuilder::truncate(ElementCount uncheckedSize, bool isText) {
     auto oldSize = tag->inlineCompositeListElementCount();
 
     SegmentWordCount sizeWords = assertMaxBits<SEGMENT_WORD_COUNT_BITS>(
-        upgradeGuard<uint64_t>(size) * elementStep,
+        upgradeBound<uint64_t>(size) * elementStep,
         []() { KJ_FAIL_ASSERT("requested list size too large to fit in message segment"); });
     SegmentWordCount oldSizeWords = assertMaxBits<SEGMENT_WORD_COUNT_BITS>(
-        upgradeGuard<uint64_t>(oldSize) * elementStep,
+        upgradeBound<uint64_t>(oldSize) * elementStep,
         []() { KJ_FAIL_ASSERT("prior to truncate, list is larger than max segment size?"); });
 
     word* newEndWord = target + sizeWords;
@@ -3501,7 +3501,7 @@ bool OrphanBuilder::truncate(ElementCount uncheckedSize, bool isText) {
         // assumeBits() safe because we checked that both sizeWords and oldSizeWords are in-range
         // above.
         WireHelpers::zeroObject(segment, capTable, tag, target +
-            assumeBits<SEGMENT_WORD_COUNT_BITS>(upgradeGuard<uint64_t>(i) * elementStep));
+            assumeBits<SEGMENT_WORD_COUNT_BITS>(upgradeBound<uint64_t>(i) * elementStep));
       }
       ref->listRef.setInlineComposite(sizeWords);
       tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, size);
@@ -3529,7 +3529,7 @@ bool OrphanBuilder::truncate(ElementCount uncheckedSize, bool isText) {
           // assumeBits() safe because we checked that both sizeWords and oldSizeWords are in-range
           // above.
           word* element = target +
-              assumeBits<SEGMENT_WORD_COUNT_BITS>(upgradeGuard<uint64_t>(i) * elementStep);
+              assumeBits<SEGMENT_WORD_COUNT_BITS>(upgradeBound<uint64_t>(i) * elementStep);
           newList.getStructElement(i).transferContentFrom(
               StructBuilder(segment, capTable, element,
                             reinterpret_cast<WirePointer*>(element + structSize.data),
@@ -3578,16 +3578,16 @@ bool OrphanBuilder::truncate(ElementCount uncheckedSize, bool isText) {
     auto step = dataBitsPerElement(elementSize);
     const auto MAX_STEP_BYTES = ONE * WORDS / ELEMENTS * BYTES_PER_WORD;
     word* newEndWord = target + WireHelpers::roundBitsUpToWords(
-        upgradeGuard<uint64_t>(size) * step);
+        upgradeBound<uint64_t>(size) * step);
     word* oldEndWord = target + WireHelpers::roundBitsUpToWords(
-        upgradeGuard<uint64_t>(oldSize) * step);
+        upgradeBound<uint64_t>(oldSize) * step);
 
     if (size <= oldSize) {
       // When truncating text, we want to set the null terminator as well, so we'll do our zeroing
       // at the byte level.
       byte* begin = reinterpret_cast<byte*>(target);
       byte* newEndByte = begin + WireHelpers::roundBitsUpToBytes(
-          upgradeGuard<uint64_t>(size) * step) - isText;
+          upgradeBound<uint64_t>(size) * step) - isText;
       byte* oldEndByte = reinterpret_cast<byte*>(oldEndWord);
 
       WireHelpers::zeroMemory(newEndByte,
@@ -3604,7 +3604,7 @@ bool OrphanBuilder::truncate(ElementCount uncheckedSize, bool isText) {
         OrphanBuilder replacement = initList(segment->getArena(), capTable, size, elementSize);
         ListBuilder newList = replacement.asList(elementSize);
         auto words = WireHelpers::roundBitsUpToWords(
-            dataBitsPerElement(elementSize) * upgradeGuard<uint64_t>(oldSize));
+            dataBitsPerElement(elementSize) * upgradeBound<uint64_t>(oldSize));
         WireHelpers::copyMemory(reinterpret_cast<word*>(newList.ptr), target, words);
         *this = kj::mv(replacement);
       }

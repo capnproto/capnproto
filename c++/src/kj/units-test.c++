@@ -96,92 +96,92 @@ TEST(UnitMeasure, AtLeastUInt) {
   // COMPILE ERROR: assertSameType<uint64_t, AtLeastUInt<65>>();
 }
 
-TEST(UnitMeasure, GuardedConst) {
+TEST(UnitMeasure, BoundedConst) {
   // TODO(someday): Some script should attempt to compile this test once with each "COMPILE ERROR"
   //   line restored to verify that they actually error out.
 
-  KJ_EXPECT((guarded<456>() + guarded<123>()).unwrap() == 456 + 123);
-  KJ_EXPECT((guarded<456>() - guarded<123>()).unwrap() == 456 - 123);
-  KJ_EXPECT((guarded<456>() * guarded<123>()).unwrap() == 456 * 123);
-  KJ_EXPECT((guarded<456>() / guarded<123>()).unwrap() == 456 / 123);
-  KJ_EXPECT((guarded<456>() % guarded<123>()).unwrap() == 456 % 123);
-  KJ_EXPECT((guarded<456>() << guarded<5>()).unwrap() == 456 << 5);
-  KJ_EXPECT((guarded<456>() >> guarded<2>()).unwrap() == 456 >> 2);
+  KJ_EXPECT((bounded<456>() + bounded<123>()).unwrap() == 456 + 123);
+  KJ_EXPECT((bounded<456>() - bounded<123>()).unwrap() == 456 - 123);
+  KJ_EXPECT((bounded<456>() * bounded<123>()).unwrap() == 456 * 123);
+  KJ_EXPECT((bounded<456>() / bounded<123>()).unwrap() == 456 / 123);
+  KJ_EXPECT((bounded<456>() % bounded<123>()).unwrap() == 456 % 123);
+  KJ_EXPECT((bounded<456>() << bounded<5>()).unwrap() == 456 << 5);
+  KJ_EXPECT((bounded<456>() >> bounded<2>()).unwrap() == 456 >> 2);
 
-  KJ_EXPECT(guarded<123>() == guarded<123>());
-  KJ_EXPECT(guarded<123>() != guarded<456>());
-  KJ_EXPECT(guarded<123>() <  guarded<456>());
-  KJ_EXPECT(guarded<456>() >  guarded<123>());
-  KJ_EXPECT(guarded<123>() <= guarded<456>());
-  KJ_EXPECT(guarded<456>() >= guarded<123>());
+  KJ_EXPECT(bounded<123>() == bounded<123>());
+  KJ_EXPECT(bounded<123>() != bounded<456>());
+  KJ_EXPECT(bounded<123>() <  bounded<456>());
+  KJ_EXPECT(bounded<456>() >  bounded<123>());
+  KJ_EXPECT(bounded<123>() <= bounded<456>());
+  KJ_EXPECT(bounded<456>() >= bounded<123>());
 
-  KJ_EXPECT(!(guarded<123>() == guarded<456>()));
-  KJ_EXPECT(!(guarded<123>() != guarded<123>()));
-  KJ_EXPECT(!(guarded<456>() <  guarded<123>()));
-  KJ_EXPECT(!(guarded<123>() >  guarded<456>()));
-  KJ_EXPECT(!(guarded<456>() <= guarded<123>()));
-  KJ_EXPECT(!(guarded<123>() >= guarded<456>()));
+  KJ_EXPECT(!(bounded<123>() == bounded<456>()));
+  KJ_EXPECT(!(bounded<123>() != bounded<123>()));
+  KJ_EXPECT(!(bounded<456>() <  bounded<123>()));
+  KJ_EXPECT(!(bounded<123>() >  bounded<456>()));
+  KJ_EXPECT(!(bounded<456>() <= bounded<123>()));
+  KJ_EXPECT(!(bounded<123>() >= bounded<456>()));
 
   {
-    uint16_t succ = unguard(guarded<12345>());
+    uint16_t succ = unbound(bounded<12345>());
     KJ_EXPECT(succ == 12345);
 
-    // COMPILE ERROR: uint8_t err KJ_UNUSED = unguard(guarded<12345>());
+    // COMPILE ERROR: uint8_t err KJ_UNUSED = unbound(bounded<12345>());
   }
 
-  // COMPILE ERROR: auto err1 KJ_UNUSED = guarded<(0xffffffffffffffffull)>() + guarded<1>();
-  // COMPILE ERROR: auto err2 KJ_UNUSED = guarded<1>() - guarded<2>();
-  // COMPILE ERROR: auto err3 KJ_UNUSED = guarded<(1ull << 60)>() * guarded<(1ull << 60)>();
-  // COMPILE ERROR: auto err4 KJ_UNUSED = guarded<1>() / guarded<0>();
-  // COMPILE ERROR: auto err5 KJ_UNUSED = guarded<1>() % guarded<0>();
-  // COMPILE ERROR: auto err6 KJ_UNUSED = guarded<1>() << guarded<64>();
-  // COMPILE ERROR: auto err7 KJ_UNUSED = guarded<(1ull << 60)>() << guarded<4>();
-  // COMPILE ERROR: auto err8 KJ_UNUSED = guarded<1>() >> guarded<64>();
+  // COMPILE ERROR: auto err1 KJ_UNUSED = bounded<(0xffffffffffffffffull)>() + bounded<1>();
+  // COMPILE ERROR: auto err2 KJ_UNUSED = bounded<1>() - bounded<2>();
+  // COMPILE ERROR: auto err3 KJ_UNUSED = bounded<(1ull << 60)>() * bounded<(1ull << 60)>();
+  // COMPILE ERROR: auto err4 KJ_UNUSED = bounded<1>() / bounded<0>();
+  // COMPILE ERROR: auto err5 KJ_UNUSED = bounded<1>() % bounded<0>();
+  // COMPILE ERROR: auto err6 KJ_UNUSED = bounded<1>() << bounded<64>();
+  // COMPILE ERROR: auto err7 KJ_UNUSED = bounded<(1ull << 60)>() << bounded<4>();
+  // COMPILE ERROR: auto err8 KJ_UNUSED = bounded<1>() >> bounded<64>();
 
-  // COMPILE ERROR: guardedAdd<0xffffffffffffffffull, 1>();
-  // COMPILE ERROR: guardedSub<1, 2>();
-  // COMPILE ERROR: guardedMul<0x100000000, 0x100000000>();
-  // COMPILE ERROR: guardedLShift<0x10, 60>();
+  // COMPILE ERROR: boundedAdd<0xffffffffffffffffull, 1>();
+  // COMPILE ERROR: boundedSub<1, 2>();
+  // COMPILE ERROR: boundedMul<0x100000000, 0x100000000>();
+  // COMPILE ERROR: boundedLShift<0x10, 60>();
 }
 
 template <uint value, typename T = uint>
-constexpr Guarded<value, T> guardedValue(NoInfer<T> runtimeValue = value) {
-  return Guarded<value, T>(runtimeValue, unsafe);
+constexpr Bounded<value, T> boundedValue(NoInfer<T> runtimeValue = value) {
+  return Bounded<value, T>(runtimeValue, unsafe);
 }
 
-TEST(UnitMeasure, Guarded) {
+TEST(UnitMeasure, Bounded) {
   // TODO(someday): Some script should attempt to compile this test once with each "COMPILE ERROR"
   //   line restored to verify that they actually error out.
 
-  KJ_EXPECT((guardedValue<456>() + guardedValue<123>()).unwrap() == 456 + 123);
-  KJ_EXPECT(guardedValue<456>().subtractChecked(guardedValue<123>(), [](){}).unwrap() == 456 - 123);
-  KJ_EXPECT((guardedValue<456>() * guardedValue<123>()).unwrap() == 456 * 123);
-  KJ_EXPECT((guardedValue<456>() / guardedValue<123>()).unwrap() == 456 / 123);
-  KJ_EXPECT((guardedValue<456>() % guardedValue<123>()).unwrap() == 456 % 123);
+  KJ_EXPECT((boundedValue<456>() + boundedValue<123>()).unwrap() == 456 + 123);
+  KJ_EXPECT(boundedValue<456>().subtractChecked(boundedValue<123>(), [](){}).unwrap() == 456 - 123);
+  KJ_EXPECT((boundedValue<456>() * boundedValue<123>()).unwrap() == 456 * 123);
+  KJ_EXPECT((boundedValue<456>() / boundedValue<123>()).unwrap() == 456 / 123);
+  KJ_EXPECT((boundedValue<456>() % boundedValue<123>()).unwrap() == 456 % 123);
 
 
   {
-    Guarded<123, uint8_t> succ KJ_UNUSED;
-    // COMPILE ERROR: Guarded<1234, uint8_t> err KJ_UNUSED;
-    // COMPILE ERROR: auto err KJ_UNUSED = guardedValue<0xffffffffull>() + guardedValue<1>();
+    Bounded<123, uint8_t> succ KJ_UNUSED;
+    // COMPILE ERROR: Bounded<1234, uint8_t> err KJ_UNUSED;
+    // COMPILE ERROR: auto err KJ_UNUSED = boundedValue<0xffffffffull>() + boundedValue<1>();
   }
 
   {
-    Guarded<123, uint8_t> succ1 KJ_UNUSED = guardedValue<123>();
-    Guarded<123, uint8_t> succ2 KJ_UNUSED = guardedValue<122>();
-    Guarded<123, uint8_t> succ3 KJ_UNUSED = guardedValue<0>();
-    // COMPILE ERROR: Guarded<123, uint8_t> err KJ_UNUSED = guardedValue<124>();
-    // COMPILE ERROR: Guarded<123, uint8_t> err KJ_UNUSED = guardedValue<125>();
-    // COMPILE ERROR: Guarded<123, uint8_t> err KJ_UNUSED = guardedValue<123456>();
+    Bounded<123, uint8_t> succ1 KJ_UNUSED = boundedValue<123>();
+    Bounded<123, uint8_t> succ2 KJ_UNUSED = boundedValue<122>();
+    Bounded<123, uint8_t> succ3 KJ_UNUSED = boundedValue<0>();
+    // COMPILE ERROR: Bounded<123, uint8_t> err KJ_UNUSED = boundedValue<124>();
+    // COMPILE ERROR: Bounded<123, uint8_t> err KJ_UNUSED = boundedValue<125>();
+    // COMPILE ERROR: Bounded<123, uint8_t> err KJ_UNUSED = boundedValue<123456>();
   }
 
-  Guarded<123, uint8_t> foo;
-  foo = guardedValue<123>();
-  foo = guardedValue<122>();
-  foo = guardedValue<0>();
-  // COMPILE ERROR: foo = guardedValue<124>();
-  // COMPILE ERROR: foo = guardedValue<125>();
-  // COMPILE ERROR: foo = guardedValue<123456>();
+  Bounded<123, uint8_t> foo;
+  foo = boundedValue<123>();
+  foo = boundedValue<122>();
+  foo = boundedValue<0>();
+  // COMPILE ERROR: foo = boundedValue<124>();
+  // COMPILE ERROR: foo = boundedValue<125>();
+  // COMPILE ERROR: foo = boundedValue<123456>();
 
   assertMax<122>(foo, []() {});
   // COMPILE ERROR: assertMax<123>(foo, []() {});
@@ -191,29 +191,29 @@ TEST(UnitMeasure, Guarded) {
   // COMPILE ERROR: assertMaxBits<7>(foo, []() {});
   // COMPILE ERROR: assertMaxBits<8>(foo, []() {});
 
-  Guarded<12, uint8_t> bar;
+  Bounded<12, uint8_t> bar;
   // COMPILE ERROR: bar = foo;
   // COMPILE ERROR: bar = foo.assertMax<13>([]() {});
   bool caught = false;
-  foo = guardedValue<13>();
+  foo = boundedValue<13>();
   bar = foo.assertMax<12>([&]() { caught = true; });
   KJ_EXPECT(caught);
 
-  foo = guardedValue<100>() + guardedValue<23>();
-  // COMPILE ERROR: foo = guardedValue<100>() + guardedValue<24>();
+  foo = boundedValue<100>() + boundedValue<23>();
+  // COMPILE ERROR: foo = boundedValue<100>() + boundedValue<24>();
 
-  bar = guardedValue<3>() * guardedValue<4>();
-  // COMPILE ERROR: bar = guardedValue<2>() * guardedValue<7>();
+  bar = boundedValue<3>() * boundedValue<4>();
+  // COMPILE ERROR: bar = boundedValue<2>() * boundedValue<7>();
 
-  foo.subtractChecked(guardedValue<122>(), []() { KJ_FAIL_EXPECT(""); });
-  foo.subtractChecked(guardedValue<123>(), []() { KJ_FAIL_EXPECT(""); });
+  foo.subtractChecked(boundedValue<122>(), []() { KJ_FAIL_EXPECT(""); });
+  foo.subtractChecked(boundedValue<123>(), []() { KJ_FAIL_EXPECT(""); });
   caught = false;
-  foo.subtractChecked(guardedValue<124>(), [&]() { caught = true; });
+  foo.subtractChecked(boundedValue<124>(), [&]() { caught = true; });
   KJ_EXPECT(caught);
 
   {
-    Guarded<65535, uint16_t> succ1 KJ_UNUSED = guarded((uint16_t)123);
-    // COMPILE ERROR: Guarded<65534, uint16_t> err KJ_UNUSED = guarded((uint16_t)123);
+    Bounded<65535, uint16_t> succ1 KJ_UNUSED = bounded((uint16_t)123);
+    // COMPILE ERROR: Bounded<65534, uint16_t> err KJ_UNUSED = bounded((uint16_t)123);
   }
 
   uint old = foo.unwrap();
@@ -221,93 +221,93 @@ TEST(UnitMeasure, Guarded) {
   KJ_EXPECT(foo.unwrap() == old);
 
   {
-    Guarded<1234, uint16_t> x = guarded<123>();
-    uint16_t succ = unguard(x);
+    Bounded<1234, uint16_t> x = bounded<123>();
+    uint16_t succ = unbound(x);
     KJ_EXPECT(succ == 123);
 
-    // COMPILE ERROR: uint8_t err KJ_UNUSED = unguard(x);
+    // COMPILE ERROR: uint8_t err KJ_UNUSED = unbound(x);
   }
 }
 
-TEST(UnitMeasure, GuardedVsGuardedConst) {
+TEST(UnitMeasure, BoundedVsGuardedConst) {
   // TODO(someday): Some script should attempt to compile this test once with each "COMPILE ERROR"
   //   line restored to verify that they actually error out.
 
-  KJ_EXPECT((guardedValue<456>() + guarded<123>()).unwrap() == 456 + 123);
-  KJ_EXPECT(guardedValue<456>().subtractChecked(guarded<123>(), [](){}).unwrap() == 456 - 123);
-  KJ_EXPECT((guardedValue<456>() * guarded<123>()).unwrap() == 456 * 123);
-  KJ_EXPECT((guardedValue<456>() / guarded<123>()).unwrap() == 456 / 123);
-  KJ_EXPECT((guardedValue<456>() % guarded<123>()).unwrap() == 456 % 123);
+  KJ_EXPECT((boundedValue<456>() + bounded<123>()).unwrap() == 456 + 123);
+  KJ_EXPECT(boundedValue<456>().subtractChecked(bounded<123>(), [](){}).unwrap() == 456 - 123);
+  KJ_EXPECT((boundedValue<456>() * bounded<123>()).unwrap() == 456 * 123);
+  KJ_EXPECT((boundedValue<456>() / bounded<123>()).unwrap() == 456 / 123);
+  KJ_EXPECT((boundedValue<456>() % bounded<123>()).unwrap() == 456 % 123);
 
   {
-    Guarded<123, uint8_t> succ1 KJ_UNUSED = guarded<123>();
-    Guarded<123, uint8_t> succ2 KJ_UNUSED = guarded<122>();
-    Guarded<123, uint8_t> succ3 KJ_UNUSED = guarded<0>();
-    // COMPILE ERROR: Guarded<123, uint8_t> err KJ_UNUSED = guarded<124>();
-    // COMPILE ERROR: Guarded<123, uint8_t> err KJ_UNUSED = guarded<125>();
-    // COMPILE ERROR: Guarded<123, uint8_t> err KJ_UNUSED = guarded<123456>();
+    Bounded<123, uint8_t> succ1 KJ_UNUSED = bounded<123>();
+    Bounded<123, uint8_t> succ2 KJ_UNUSED = bounded<122>();
+    Bounded<123, uint8_t> succ3 KJ_UNUSED = bounded<0>();
+    // COMPILE ERROR: Bounded<123, uint8_t> err KJ_UNUSED = bounded<124>();
+    // COMPILE ERROR: Bounded<123, uint8_t> err KJ_UNUSED = bounded<125>();
+    // COMPILE ERROR: Bounded<123, uint8_t> err KJ_UNUSED = bounded<123456>();
   }
 
-  Guarded<123, uint8_t> foo;
-  foo = guarded<123>();
-  foo = guarded<122>();
-  foo = guarded<0>();
-  // COMPILE ERROR: foo = guarded<124>();
-  // COMPILE ERROR: foo = guarded<125>();
-  // COMPILE ERROR: foo = guarded<123456>();
+  Bounded<123, uint8_t> foo;
+  foo = bounded<123>();
+  foo = bounded<122>();
+  foo = bounded<0>();
+  // COMPILE ERROR: foo = bounded<124>();
+  // COMPILE ERROR: foo = bounded<125>();
+  // COMPILE ERROR: foo = bounded<123456>();
 
-  Guarded<16, uint8_t> bar;
-  // COMPILE ERROR: bar = foo >> guarded<2>();
-  bar = foo >> guarded<3>();
+  Bounded<16, uint8_t> bar;
+  // COMPILE ERROR: bar = foo >> bounded<2>();
+  bar = foo >> bounded<3>();
 
-  // COMPILE ERROR: foo = bar << guarded<3>();
-  foo = bar << guarded<2>();
+  // COMPILE ERROR: foo = bar << bounded<3>();
+  foo = bar << bounded<2>();
 }
 
-TEST(UnitMeasure, GuardedRange) {
+TEST(UnitMeasure, BoundedRange) {
   uint expected = 0;
-  for (auto i: zeroTo(guarded<10>())) {
-    Guarded<10, uint8_t> value = i;
-    KJ_EXPECT(unguard(value) == expected++);
+  for (auto i: zeroTo(bounded<10>())) {
+    Bounded<10, uint8_t> value = i;
+    KJ_EXPECT(unbound(value) == expected++);
   }
   KJ_EXPECT(expected == 10);
 
   expected = 0;
-  for (auto i: zeroTo(guarded((uint8_t)10))) {
-    Guarded<255, uint8_t> value = i;
-    KJ_EXPECT(unguard(value) == expected++);
+  for (auto i: zeroTo(bounded((uint8_t)10))) {
+    Bounded<255, uint8_t> value = i;
+    KJ_EXPECT(unbound(value) == expected++);
   }
   KJ_EXPECT(expected == 10);
 
   expected = 3;
-  for (auto i: range(guarded((uint8_t)3), guarded((uint8_t)10))) {
-    Guarded<255, uint8_t> value = i;
-    KJ_EXPECT(unguard(value) == expected++);
+  for (auto i: range(bounded((uint8_t)3), bounded((uint8_t)10))) {
+    Bounded<255, uint8_t> value = i;
+    KJ_EXPECT(unbound(value) == expected++);
   }
   KJ_EXPECT(expected == 10);
 }
 
-TEST(UnitMeasure, GuardedQuantity) {
-  auto BYTES = unit<Quantity<Guarded<12345, uint16_t>, byte>>();
+TEST(UnitMeasure, BoundedQuantity) {
+  auto BYTES = unit<Quantity<Bounded<12345, uint16_t>, byte>>();
 
   uint expected = 0;
-  for (auto i: zeroTo(guarded<10>() * BYTES)) {
-    Quantity<Guarded<10, uint8_t>, byte> value = i;
-    KJ_EXPECT(unguard(value / BYTES) == expected++);
+  for (auto i: zeroTo(bounded<10>() * BYTES)) {
+    Quantity<Bounded<10, uint8_t>, byte> value = i;
+    KJ_EXPECT(unbound(value / BYTES) == expected++);
   }
   KJ_EXPECT(expected == 10);
 
   expected = 0;
-  for (auto i: zeroTo(guarded((uint8_t)10) * BYTES)) {
-    Quantity<Guarded<255, uint8_t>, byte> value = i;
-    KJ_EXPECT(unguard(value / BYTES) == expected++);
+  for (auto i: zeroTo(bounded((uint8_t)10) * BYTES)) {
+    Quantity<Bounded<255, uint8_t>, byte> value = i;
+    KJ_EXPECT(unbound(value / BYTES) == expected++);
   }
   KJ_EXPECT(expected == 10);
 
   expected = 3;
-  for (auto i: range(guarded((uint8_t)3) * BYTES, guarded((uint8_t)10) * BYTES)) {
-    Quantity<Guarded<255, uint8_t>, byte> value = i;
-    KJ_EXPECT(unguard(value / BYTES) == expected++);
+  for (auto i: range(bounded((uint8_t)3) * BYTES, bounded((uint8_t)10) * BYTES)) {
+    Quantity<Bounded<255, uint8_t>, byte> value = i;
+    KJ_EXPECT(unbound(value / BYTES) == expected++);
   }
   KJ_EXPECT(expected == 10);
 }
@@ -315,38 +315,38 @@ TEST(UnitMeasure, GuardedQuantity) {
 template <typename T>
 void assertTypeAndValue(T a, T b) { KJ_EXPECT(a == b); }
 
-TEST(UnitMeasure, GuardedMinMax) {
-  assertTypeAndValue(guarded<5>(), kj::max(guarded<4>(), guarded<5>()));
-  assertTypeAndValue(guarded<5>(), kj::max(guarded<5>(), guarded<4>()));
-  assertTypeAndValue(guarded<4>(), kj::max(guarded<4>(), guarded<4>()));
+TEST(UnitMeasure, BoundedMinMax) {
+  assertTypeAndValue(bounded<5>(), kj::max(bounded<4>(), bounded<5>()));
+  assertTypeAndValue(bounded<5>(), kj::max(bounded<5>(), bounded<4>()));
+  assertTypeAndValue(bounded<4>(), kj::max(bounded<4>(), bounded<4>()));
 
-  assertTypeAndValue(guarded<4>(), kj::min(guarded<4>(), guarded<5>()));
-  assertTypeAndValue(guarded<4>(), kj::min(guarded<5>(), guarded<4>()));
-  assertTypeAndValue(guarded<4>(), kj::min(guarded<4>(), guarded<4>()));
+  assertTypeAndValue(bounded<4>(), kj::min(bounded<4>(), bounded<5>()));
+  assertTypeAndValue(bounded<4>(), kj::min(bounded<5>(), bounded<4>()));
+  assertTypeAndValue(bounded<4>(), kj::min(bounded<4>(), bounded<4>()));
 
   typedef uint8_t t1;
   typedef uint16_t t2;
 
-  assertTypeAndValue(guardedValue<5,t2>(3), kj::max(guardedValue<4,t2>(3), guardedValue<5,t1>(2)));
-  assertTypeAndValue(guardedValue<5,t2>(3), kj::max(guardedValue<5,t1>(2), guardedValue<4,t2>(3)));
-  assertTypeAndValue(guardedValue<4,t2>(3), kj::max(guardedValue<4,t2>(3), guardedValue<4,t2>(3)));
+  assertTypeAndValue(boundedValue<5,t2>(3), kj::max(boundedValue<4,t2>(3), boundedValue<5,t1>(2)));
+  assertTypeAndValue(boundedValue<5,t2>(3), kj::max(boundedValue<5,t1>(2), boundedValue<4,t2>(3)));
+  assertTypeAndValue(boundedValue<4,t2>(3), kj::max(boundedValue<4,t2>(3), boundedValue<4,t2>(3)));
 
-  assertTypeAndValue(guardedValue<4,t2>(2), kj::min(guardedValue<4,t2>(3), guardedValue<5,t1>(2)));
-  assertTypeAndValue(guardedValue<4,t2>(2), kj::min(guardedValue<5,t1>(2), guardedValue<4,t2>(3)));
-  assertTypeAndValue(guardedValue<4,t2>(3), kj::min(guardedValue<4,t2>(3), guardedValue<4,t2>(3)));
+  assertTypeAndValue(boundedValue<4,t2>(2), kj::min(boundedValue<4,t2>(3), boundedValue<5,t1>(2)));
+  assertTypeAndValue(boundedValue<4,t2>(2), kj::min(boundedValue<5,t1>(2), boundedValue<4,t2>(3)));
+  assertTypeAndValue(boundedValue<4,t2>(3), kj::min(boundedValue<4,t2>(3), boundedValue<4,t2>(3)));
 
-  assertTypeAndValue(guardedValue<5,t1>(4), kj::max(guarded<4>(), guardedValue<5,t1>(2)));
-  assertTypeAndValue(guardedValue<5,t1>(4), kj::max(guardedValue<5,t1>(2), guarded<4>()));
+  assertTypeAndValue(boundedValue<5,t1>(4), kj::max(bounded<4>(), boundedValue<5,t1>(2)));
+  assertTypeAndValue(boundedValue<5,t1>(4), kj::max(boundedValue<5,t1>(2), bounded<4>()));
 
-  assertTypeAndValue(guardedValue<4,t1>(2), kj::min(guarded<4>(), guardedValue<5,t1>(2)));
-  assertTypeAndValue(guardedValue<4,t1>(2), kj::min(guardedValue<5,t1>(2), guarded<4>()));
+  assertTypeAndValue(boundedValue<4,t1>(2), kj::min(bounded<4>(), boundedValue<5,t1>(2)));
+  assertTypeAndValue(boundedValue<4,t1>(2), kj::min(boundedValue<5,t1>(2), bounded<4>()));
 
   // These two are degenerate cases. Currently they fail to compile but meybe they shouldn't?
-//  assertTypeAndValue(guarded<5>(), kj::max(guardedValue<4,t2>(3), guarded<5>()));
-//  assertTypeAndValue(guarded<5>(), kj::max(guarded<5>(), guardedValue<4,t2>(3)));
+//  assertTypeAndValue(bounded<5>(), kj::max(boundedValue<4,t2>(3), bounded<5>()));
+//  assertTypeAndValue(bounded<5>(), kj::max(bounded<5>(), boundedValue<4,t2>(3)));
 
-  assertTypeAndValue(guardedValue<4,t2>(3), kj::min(guardedValue<4,t2>(3), guarded<5>()));
-  assertTypeAndValue(guardedValue<4,t2>(3), kj::min(guarded<5>(), guardedValue<4,t2>(3)));
+  assertTypeAndValue(boundedValue<4,t2>(3), kj::min(boundedValue<4,t2>(3), bounded<5>()));
+  assertTypeAndValue(boundedValue<4,t2>(3), kj::min(bounded<5>(), boundedValue<4,t2>(3)));
 }
 
 }  // namespace
