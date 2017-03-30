@@ -497,14 +497,6 @@ template <uint bits>
 using AtLeastUInt = typename AtLeastUInt_<bitCount<max(bits, 1) - 1>()>::Type;
 // AtLeastUInt<n> is an unsigned integer of at least n bits. E.g. AtLeastUInt<12> is uint16_t.
 
-template <uint bits>
-inline constexpr uint64_t maxValueForBits() {
-  // Get the maximum integer representable in the given number of bits.
-
-  // 1ull << 64 is unfortunately undefined.
-  return (bits == 64 ? 0 : (1ull << bits)) - 1;
-}
-
 // -------------------------------------------------------------------
 
 template <uint value>
@@ -807,10 +799,6 @@ inline constexpr auto assumeMax(Quantity<BoundedConst<maxN>, Unit>, Quantity<Num
     -> decltype(assumeMax<maxN>(value)) {
   return assumeMax<maxN>(value);
 }
-
-struct ThrowOverflow {
-  void operator()() const;
-};
 
 template <uint64_t newMax, uint64_t maxN, typename T, typename ErrorFunc>
 inline constexpr Bounded<newMax, T> assertMax(Bounded<maxN, T> value, ErrorFunc&& errorFunc) {

@@ -592,6 +592,21 @@ static KJ_CONSTEXPR(const) MinValue_ minValue = MinValue_();
 //
 // `char` is not supported, but `signed char` and `unsigned char` are.
 
+template <uint bits>
+inline constexpr unsigned long long maxValueForBits() {
+  // Get the maximum integer representable in the given number of bits.
+
+  // 1ull << 64 is unfortunately undefined.
+  return (bits == 64 ? 0 : (1ull << bits)) - 1;
+}
+
+struct ThrowOverflow {
+  // Functor which throws an exception complaining about integer overflow. Usually this is used
+  // with the interfaces in units.h, but is defined here because Cap'n Proto wants to avoid
+  // including units.h when not using CAPNP_DEBUG_TYPES.
+  void operator()() const;
+};
+
 #if __GNUC__
 inline constexpr float inf() { return __builtin_huge_valf(); }
 inline constexpr float nan() { return __builtin_nanf(""); }

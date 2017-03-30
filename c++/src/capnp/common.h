@@ -30,10 +30,13 @@
 #pragma GCC system_header
 #endif
 
-#include <kj/units.h>
 #include <inttypes.h>
 #include <kj/string.h>
 #include <kj/memory.h>
+
+#if CAPNP_DEBUG_TYPES
+#include <kj/units.h>
+#endif
 
 namespace capnp {
 
