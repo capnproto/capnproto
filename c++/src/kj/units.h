@@ -376,9 +376,6 @@ private:
   template <typename Number1, typename Number2, typename Unit2>
   friend inline constexpr auto operator*(Number1 a, Quantity<Number2, Unit2> b)
       -> Quantity<decltype(Number1() * Number2()), Unit2>;
-
-  template <typename T>
-  friend inline constexpr T unit();
 };
 
 template <typename T> struct Unit_ {
