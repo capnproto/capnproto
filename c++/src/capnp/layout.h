@@ -104,11 +104,7 @@ inline KJ_CONSTEXPR() BitsPerElementTableType dataBitsPerElement(ElementSize siz
 }
 
 inline constexpr PointersPerElementN<1> pointersPerElement(ElementSize size) {
-  if (size == ElementSize::POINTER) {
-    return ONE * POINTERS / ELEMENTS;
-  } else {
-    return ZERO * POINTERS / ELEMENTS;
-  }
+  return size == ElementSize::POINTER ? ONE * POINTERS / ELEMENTS : ZERO * POINTERS / ELEMENTS;
 }
 
 static constexpr BitsPerElementTableType BITS_PER_ELEMENT_INCLUDING_PONITERS_TABLE[8] = {

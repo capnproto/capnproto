@@ -786,7 +786,7 @@ inline constexpr auto assumeMax(Quantity<BoundedConst<maxN>, Unit>, Quantity<Num
 }
 
 template <uint64_t newMax, uint64_t maxN, typename T, typename ErrorFunc>
-inline constexpr Bounded<newMax, T> assertMax(Bounded<maxN, T> value, ErrorFunc&& errorFunc) {
+inline Bounded<newMax, T> assertMax(Bounded<maxN, T> value, ErrorFunc&& errorFunc) {
   // Assert that the bounded value is less than or equal to the given maximum, calling errorFunc()
   // if not.
   static_assert(newMax < maxN, "this bounded size assertion is redundant");
@@ -794,7 +794,7 @@ inline constexpr Bounded<newMax, T> assertMax(Bounded<maxN, T> value, ErrorFunc&
 }
 
 template <uint64_t newMax, uint64_t maxN, typename T, typename Unit, typename ErrorFunc>
-inline constexpr Quantity<Bounded<newMax, T>, Unit> assertMax(
+inline Quantity<Bounded<newMax, T>, Unit> assertMax(
     Quantity<Bounded<maxN, T>, Unit> value, ErrorFunc&& errorFunc) {
   // Assert that the bounded value is less than or equal to the given maximum, calling errorFunc()
   // if not.
@@ -804,20 +804,20 @@ inline constexpr Quantity<Bounded<newMax, T>, Unit> assertMax(
 }
 
 template <uint newMax, uint64_t maxN, typename T, typename ErrorFunc>
-inline constexpr Bounded<newMax, T> assertMax(
+inline Bounded<newMax, T> assertMax(
     BoundedConst<newMax>, Bounded<maxN, T> value, ErrorFunc&& errorFunc) {
   return assertMax<newMax>(value, kj::mv(errorFunc));
 }
 
 template <uint newMax, uint64_t maxN, typename T, typename Unit, typename ErrorFunc>
-inline constexpr Quantity<Bounded<newMax, T>, Unit> assertMax(
+inline Quantity<Bounded<newMax, T>, Unit> assertMax(
     Quantity<BoundedConst<newMax>, Unit>,
     Quantity<Bounded<maxN, T>, Unit> value, ErrorFunc&& errorFunc) {
   return assertMax<newMax>(value, kj::mv(errorFunc));
 }
 
 template <uint64_t newBits, uint64_t maxN, typename T, typename ErrorFunc = ThrowOverflow>
-inline constexpr Bounded<maxValueForBits<newBits>(), T> assertMaxBits(
+inline Bounded<maxValueForBits<newBits>(), T> assertMaxBits(
     Bounded<maxN, T> value, ErrorFunc&& errorFunc = ErrorFunc()) {
   // Assert that the bounded value requires no more than the given number of bits, calling
   // errorFunc() if not.
@@ -826,7 +826,7 @@ inline constexpr Bounded<maxValueForBits<newBits>(), T> assertMaxBits(
 
 template <uint64_t newBits, uint64_t maxN, typename T, typename Unit,
           typename ErrorFunc = ThrowOverflow>
-inline constexpr Quantity<Bounded<maxValueForBits<newBits>(), T>, Unit> assertMaxBits(
+inline Quantity<Bounded<maxValueForBits<newBits>(), T>, Unit> assertMaxBits(
     Quantity<Bounded<maxN, T>, Unit> value, ErrorFunc&& errorFunc = ErrorFunc()) {
   // Assert that the bounded value requires no more than the given number of bits, calling
   // errorFunc() if not.
@@ -994,12 +994,12 @@ public:
   inline explicit constexpr SafeUnwrapper(Bounded<maxN, T> value): value(value.unwrap()) {}
 
   template <typename U, typename = EnableIf<isIntegral<U>()>>
-  inline constexpr operator U() {
+  inline constexpr operator U() const {
     static_assert(maxN <= U(maxValue), "possible truncation detected");
     return value;
   }
 
-  inline constexpr operator bool() {
+  inline constexpr operator bool() const {
     static_assert(maxN <= 1, "possible truncation detected");
     return value;
   }
@@ -1019,12 +1019,12 @@ template <uint64_t value>
 class SafeConstUnwrapper {
 public:
   template <typename T, typename = EnableIf<isIntegral<T>()>>
-  inline constexpr operator T() {
+  inline constexpr operator T() const {
     static_assert(value <= T(maxValue), "this operation will truncate");
     return value;
   }
 
-  inline constexpr operator bool() {
+  inline constexpr operator bool() const {
     static_assert(value <= 1, "this operation will truncate");
     return value;
   }

@@ -599,25 +599,25 @@ template <uint64_t requestedMax, typename T> inline constexpr uint unboundMax(T 
 template <uint bits, typename T> inline constexpr uint unboundMaxBits(T i) { return i; }
 
 template <uint newMax, typename T, typename ErrorFunc>
-inline constexpr T assertMax(T value, ErrorFunc&& func) {
+inline T assertMax(T value, ErrorFunc&& func) {
   if (KJ_UNLIKELY(value > newMax)) func();
   return value;
 }
 
 template <typename T, typename ErrorFunc>
-inline constexpr T assertMax(uint newMax, T value, ErrorFunc&& func) {
+inline T assertMax(uint newMax, T value, ErrorFunc&& func) {
   if (KJ_UNLIKELY(value > newMax)) func();
   return value;
 }
 
 template <uint bits, typename T, typename ErrorFunc = ThrowOverflow>
-inline constexpr T assertMaxBits(T value, ErrorFunc&& func = ErrorFunc()) {
+inline T assertMaxBits(T value, ErrorFunc&& func = ErrorFunc()) {
   if (KJ_UNLIKELY(value > kj::maxValueForBits<bits>())) func();
   return value;
 }
 
 template <typename T, typename ErrorFunc = ThrowOverflow>
-inline constexpr T assertMaxBits(uint bits, T value, ErrorFunc&& func = ErrorFunc()) {
+inline T assertMaxBits(uint bits, T value, ErrorFunc&& func = ErrorFunc()) {
   if (KJ_UNLIKELY(value > (1ull << bits) - 1)) func();
   return value;
 }
