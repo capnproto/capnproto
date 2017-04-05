@@ -16,6 +16,7 @@ Oliver Kuckertz <oliver.kuckertz@mologie.de>: FdObserver POLLPRI support
 Harris Hancock <vortrab@gmail.com>: MSVC support
 Branislav Katreniak <branislav.katreniak@digitalstrom.com>: JSON decode
 Matthew Maurer <matthew.r.maurer@gmail.com>: Canonicalization Support
+David Renshaw <david@sandstorm.io>: bugfixes and miscellaneous maintenance
 
 This file does not list people who maintain their own Cap'n Proto
 implementations as separate projects.  Those people are awesome too!  :)
