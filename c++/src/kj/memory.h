@@ -89,7 +89,7 @@ class NullDisposer: public Disposer {
 public:
   static const NullDisposer instance;
 
-  void disposeImpl(void* pointer) const override {}
+  void disposeImpl(void* pointer) const override { (void)pointer; }
 };
 
 // =======================================================================================

@@ -971,6 +971,7 @@ inline bool StructBuilder::hasDataField(ElementCount offset) {
 
 template <>
 inline bool StructBuilder::hasDataField<Void>(ElementCount offset) {
+  (void)offset;
   return false;
 }
 
@@ -988,6 +989,7 @@ inline bool StructBuilder::getDataField<bool>(ElementCount offset) {
 
 template <>
 inline Void StructBuilder::getDataField<Void>(ElementCount offset) {
+  (void)offset;
   return VOID;
 }
 
@@ -1023,7 +1025,9 @@ inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) {
 }
 
 template <>
-inline void StructBuilder::setDataField<Void>(ElementCount offset, Void value) {}
+inline void StructBuilder::setDataField<Void>(ElementCount offset, Void value) {
+  (void)offset, (void)value;
+}
 
 template <typename T>
 inline void StructBuilder::setDataField(ElementCount offset, kj::NoInfer<T> value, Mask<T> m) {
@@ -1055,6 +1059,7 @@ inline bool StructReader::hasDataField(ElementCount offset) const {
 
 template <>
 inline bool StructReader::hasDataField<Void>(ElementCount offset) const {
+  (void)offset;
   return false;
 }
 
@@ -1080,6 +1085,7 @@ inline bool StructReader::getDataField<bool>(ElementCount offset) const {
 
 template <>
 inline Void StructReader::getDataField<Void>(ElementCount offset) const {
+  (void)offset;
   return VOID;
 }
 
@@ -1124,6 +1130,7 @@ inline bool ListBuilder::getDataElement<bool>(ElementCount index) {
 
 template <>
 inline Void ListBuilder::getDataElement<Void>(ElementCount index) {
+  (void)index;
   return VOID;
 }
 
@@ -1155,7 +1162,9 @@ inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) {
 }
 
 template <>
-inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) {}
+inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) {
+  (void)index, (void)value;
+}
 
 inline PointerBuilder ListBuilder::getPointerElement(ElementCount index) {
   return PointerBuilder(segment, capTable,
@@ -1181,6 +1190,7 @@ inline bool ListReader::getDataElement<bool>(ElementCount index) const {
 
 template <>
 inline Void ListReader::getDataElement<Void>(ElementCount index) const {
+  (void)index;
   return VOID;
 }
 
