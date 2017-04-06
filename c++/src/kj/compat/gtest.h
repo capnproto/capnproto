@@ -98,8 +98,22 @@ private:
 
 #define ADD_FAILURE() ::kj::AddFailureAdapter(__FILE__, __LINE__)
 
+#if KJ_NO_EXCEPTIONS
+#define EXPECT_ANY_THROW(code) \
+    KJ_EXPECT(::kj::_::expectFatalThrow(nullptr, nullptr, [&]() { code; }))
+#else
 #define EXPECT_ANY_THROW(code) \
     KJ_EXPECT(::kj::runCatchingExceptions([&]() { code; }) != nullptr)
+#endif
+
+#define EXPECT_NONFATAL_FAILURE(code) \
+  EXPECT_TRUE(kj::runCatchingExceptions([&]() { code; }) != nullptr);
+
+#ifdef KJ_DEBUG
+#define EXPECT_DEBUG_ANY_THROW EXPECT_ANY_THROW
+#else
+#define EXPECT_DEBUG_ANY_THROW(EXP)
+#endif
 
 #define TEST(x, y) KJ_TEST("legacy test: " #x "/" #y)
 
