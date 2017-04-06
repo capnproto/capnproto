@@ -107,19 +107,19 @@ void traverseCatchingExceptions(kj::ArrayPtr<const word> data) {
   // Try traversing through Checker.
   kj::runCatchingExceptions([&]() {
     FlatArrayMessageReader reader(data);
-    KJ_ASSERT(Checker::check(reader) != 0);
+    KJ_ASSERT(Checker::check(reader) != 0) { break; }
   });
 
   // Try traversing through AnyPointer.
   kj::runCatchingExceptions([&]() {
     FlatArrayMessageReader reader(data);
-    KJ_ASSERT(traverse(reader.getRoot<AnyPointer>()) != 0);
+    KJ_ASSERT(traverse(reader.getRoot<AnyPointer>()) != 0) { break; }
   });
 
   // Try counting the size..
   kj::runCatchingExceptions([&]() {
     FlatArrayMessageReader reader(data);
-    KJ_ASSERT(reader.getRoot<AnyPointer>().targetSize().wordCount != 0);
+    KJ_ASSERT(reader.getRoot<AnyPointer>().targetSize().wordCount != 0) { break; }
   });
 
   // Try copying into a builder, and if that works, traversing it with Checker.
@@ -128,7 +128,7 @@ void traverseCatchingExceptions(kj::ArrayPtr<const word> data) {
     FlatArrayMessageReader reader(data);
     MallocMessageBuilder copyBuilder(buffer);
     copyBuilder.setRoot(reader.getRoot<AnyPointer>());
-    KJ_ASSERT(Checker::check(copyBuilder) != 0);
+    KJ_ASSERT(Checker::check(copyBuilder) != 0) { break; }
   });
 }
 

@@ -555,11 +555,17 @@ struct WireHelpers {
       // object.
       ref = pad + 1;
 
-      segment = segment->getArena()->tryGetSegment(pad->farRef.segmentId.get());
-      KJ_REQUIRE(segment != nullptr, "Message contains double-far pointer to unknown segment.") {
+      SegmentReader* newSegment = segment->getArena()->tryGetSegment(pad->farRef.segmentId.get());
+      KJ_REQUIRE(newSegment != nullptr,
+          "Message contains double-far pointer to unknown segment.") {
+        return nullptr;
+      }
+      KJ_REQUIRE(pad->kind() == WirePointer::FAR,
+          "Second word of double-far pad must be far pointer.") {
         return nullptr;
       }
 
+      segment = newSegment;
       return segment->getStartPtr() + pad->farPositionInSegment();
     } else {
       return refTarget;
@@ -1614,9 +1620,13 @@ struct WireHelpers {
       char* cptr = reinterpret_cast<char*>(ptr);
 
       KJ_REQUIRE(ref->kind() == WirePointer::LIST,
-          "Called getText{Field,Element}() but existing pointer is not a list.");
+          "Called getText{Field,Element}() but existing pointer is not a list.") {
+        goto useDefault;
+      }
       KJ_REQUIRE(ref->listRef.elementSize() == ElementSize::BYTE,
-          "Called getText{Field,Element}() but existing list pointer is not byte-sized.");
+          "Called getText{Field,Element}() but existing list pointer is not byte-sized.") {
+        goto useDefault;
+      }
 
       size_t size = unbound(subtractChecked(ref->listRef.elementCount() / ELEMENTS, ONE,
           []() { KJ_FAIL_REQUIRE("zero-size blob can't be text (need NUL terminator)"); }));
@@ -1663,6 +1673,7 @@ struct WireHelpers {
       WirePointer* ref, word* refTarget, SegmentBuilder* segment, CapTableBuilder* capTable,
       const void* defaultValue, BlobSize defaultSize)) {
     if (ref->isNull()) {
+    useDefault:
       if (defaultSize == ZERO * BYTES) {
         return nullptr;
       } else {
@@ -1674,9 +1685,13 @@ struct WireHelpers {
       word* ptr = followFars(ref, refTarget, segment);
 
       KJ_REQUIRE(ref->kind() == WirePointer::LIST,
-          "Called getData{Field,Element}() but existing pointer is not a list.");
+          "Called getData{Field,Element}() but existing pointer is not a list.") {
+        goto useDefault;
+      }
       KJ_REQUIRE(ref->listRef.elementSize() == ElementSize::BYTE,
-          "Called getData{Field,Element}() but existing list pointer is not byte-sized.");
+          "Called getData{Field,Element}() but existing list pointer is not byte-sized.") {
+        goto useDefault;
+      }
 
       return Data::Builder(reinterpret_cast<byte*>(ptr),
           unbound(ref->listRef.elementCount() / ELEMENTS));
@@ -2653,13 +2668,13 @@ PointerType PointerReader::getPointerType() const {
     WireHelpers::followFars(ptr, refTarget, sgmt);
     switch(ptr->kind()) {
       case WirePointer::FAR:
-        KJ_FAIL_ASSERT("far pointer not followed?");
+        KJ_FAIL_ASSERT("far pointer not followed?") { return PointerType::NULL_; }
       case WirePointer::STRUCT:
         return PointerType::STRUCT;
       case WirePointer::LIST:
         return PointerType::LIST;
       case WirePointer::OTHER:
-        KJ_REQUIRE(ptr->isCapability(), "unknown pointer type");
+        KJ_REQUIRE(ptr->isCapability(), "unknown pointer type") { return PointerType::NULL_; }
         return PointerType::CAPABILITY;
     }
     KJ_UNREACHABLE;
