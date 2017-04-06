@@ -869,6 +869,26 @@ T Promise<T>::wait(WaitScope& waitScope) {
   }
 }
 
+template <>
+inline void Promise<void>::wait(WaitScope& waitScope) {
+  // Override <void> case to use throwRecoverableException().
+
+  _::ExceptionOr<_::Void> result;
+
+  waitImpl(kj::mv(node), result, waitScope);
+
+  if (result.value != nullptr) {
+    KJ_IF_MAYBE(exception, result.exception) {
+      throwRecoverableException(kj::mv(*exception));
+    }
+  } else KJ_IF_MAYBE(exception, result.exception) {
+    throwRecoverableException(kj::mv(*exception));
+  } else {
+    // Result contained neither a value nor an exception?
+    KJ_UNREACHABLE;
+  }
+}
+
 template <typename T>
 ForkedPromise<T> Promise<T>::fork() {
   return ForkedPromise<T>(false, refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(node)));

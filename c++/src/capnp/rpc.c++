@@ -448,6 +448,9 @@ private:
     bool isTailCall = false;
     // Is this a tail call?  If so, we don't expect to receive results in the `Return`.
 
+    bool skipFinish = false;
+    // If true, don't send a Finish message.
+
     inline bool operator==(decltype(nullptr)) const {
       return !isAwaitingReturn && selfRef == nullptr;
     }
@@ -1331,7 +1334,7 @@ private:
             connectionState->questions.find(id), "Question ID no longer on table?");
 
         // Send the "Finish" message (if the connection is not already broken).
-        if (connectionState->connection.is<Connected>()) {
+        if (connectionState->connection.is<Connected>() && !question.skipFinish) {
           auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
               messageSizeHint<rpc::Finish>());
           auto builder = message->getBody().getAs<rpc::Message>().initFinish();
@@ -1504,6 +1507,14 @@ private:
       question.paramExports = kj::mv(exports);
       question.isTailCall = isTailCall;
 
+      // Make the QuentionRef and result promise.
+      SendInternalResult result;
+      auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
+      result.questionRef = kj::refcounted<QuestionRef>(
+          *connectionState, questionId, kj::mv(paf.fulfiller));
+      question.selfRef = *result.questionRef;
+      result.promise = paf.promise.attach(kj::addRef(*result.questionRef));
+
       // Finish and send.
       callBuilder.setQuestionId(questionId);
       if (isTailCall) {
@@ -1514,17 +1525,12 @@ private:
            callBuilder.getInterfaceId(), callBuilder.getMethodId());
         message->send();
       })) {
-        KJ_LOG(WARNING, *exception);
-        kj::throwRecoverableException(kj::mv(*exception));
+        // We can't safely throw the exception from here since we've already modified the question
+        // table state. We'll have to reject the promise instead.
+        question.isAwaitingReturn = false;
+        question.skipFinish = true;
+        result.questionRef->reject(kj::mv(*exception));
       }
-
-      // Make the result promise.
-      SendInternalResult result;
-      auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
-      result.questionRef = kj::refcounted<QuestionRef>(
-          *connectionState, questionId, kj::mv(paf.fulfiller));
-      question.selfRef = *result.questionRef;
-      result.promise = paf.promise.attach(kj::addRef(*result.questionRef));
 
       // Send and return.
       return kj::mv(result);
@@ -1819,7 +1825,6 @@ private:
           KJ_CONTEXT("returning from RPC call", interfaceId, methodId);
           exports = kj::downcast<RpcServerResponseImpl>(*KJ_ASSERT_NONNULL(response)).send();
         })) {
-          KJ_LOG(WARNING, *exception);
           responseSent = false;
           sendErrorReturn(kj::mv(*exception));
           return;
@@ -2268,7 +2273,7 @@ private:
 
     // Add the answer to the answer table for pipelining and send the response.
     auto& answer = answers[answerId];
-    KJ_REQUIRE(!answer.active, "questionId is already in use") {
+    KJ_REQUIRE(!answer.active, "questionId is already in use", answerId) {
       return;
     }
 
