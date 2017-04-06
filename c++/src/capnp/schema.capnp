@@ -322,7 +322,7 @@ struct Type {
       unconstrained :union {
         # A regular AnyPointer.
         #
-        # The name "unconstained" means as opposed to constraining it to match a type parameter.
+        # The name "unconstrained" means as opposed to constraining it to match a type parameter.
         # In retrospect this name is probably a poor choice given that it may still be constrained
         # to be a struct, list, or capability.
 
