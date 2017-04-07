@@ -29,6 +29,8 @@ EXTRA_DIST =                                                                 \
   src/capnp/testdata/segmented                                               \
   src/capnp/testdata/packed                                                  \
   src/capnp/testdata/pretty.txt                                              \
+  src/capnp/testdata/lists.binary                                            \
+  src/capnp/testdata/packedflat                                              \
   CMakeLists.txt                                                             \
   cmake/FindCapnProto.cmake                                                  \
   cmake/CapnProtoConfig.cmake.in                                             \
