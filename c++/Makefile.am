@@ -389,7 +389,13 @@ capnp_test_LDADD = libcapnp.la libkj-test.la libkj.la
 
 else !LITE_MODE
 
-check_PROGRAMS = capnp-test capnp-evolution-test
+check_LIBRARIES = libcapnp-test.a
+libcapnp_test_a_SOURCES =                                      \
+  src/capnp/test-util.c++                                      \
+  src/capnp/test-util.h
+nodist_libcapnp_test_a_SOURCES = $(test_capnpc_outputs)
+
+check_PROGRAMS = capnp-test capnp-evolution-test capnp-afl-testcase
 heavy_tests =                                                  \
   src/kj/async-test.c++                                        \
   src/kj/async-unix-test.c++                                   \
@@ -414,7 +420,9 @@ heavy_tests =                                                  \
   src/capnp/compat/json-test.c++                               \
   src/capnp/compiler/lexer-test.c++                            \
   src/capnp/compiler/md5-test.c++
-capnp_test_LDADD = libcapnpc.la                                \
+capnp_test_LDADD =                                             \
+  libcapnp-test.a                                              \
+  libcapnpc.la                                                 \
   libcapnp-rpc.la                                              \
   libcapnp-json.la                                             \
   libcapnp.la                                                  \
@@ -457,14 +465,14 @@ capnp_test_SOURCES =                                           \
   src/capnp/serialize-test.c++                                 \
   src/capnp/serialize-packed-test.c++                          \
   src/capnp/fuzz-test.c++                                      \
-  src/capnp/test-util.c++                                      \
-  src/capnp/test-util.h                                        \
   $(heavy_tests)
-nodist_capnp_test_SOURCES = $(test_capnpc_outputs)
 
 if !LITE_MODE
 capnp_evolution_test_LDADD = libcapnpc.la libcapnp.la libkj.la
 capnp_evolution_test_SOURCES = src/capnp/compiler/evolution-test.c++
+
+capnp_afl_testcase_LDADD = libcapnp-test.a libcapnp-rpc.la libcapnp.la libkj.la libkj-async.la
+capnp_afl_testcase_SOURCES = src/capnp/afl-testcase.c++
 endif !LITE_MODE
 
 if LITE_MODE
