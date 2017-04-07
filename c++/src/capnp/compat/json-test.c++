@@ -222,8 +222,8 @@ KJ_TEST("decode all types") {
   CASE(R"({"int64Field":9007199254740991})", root.getInt64Field() == 9007199254740991LL);
   CASE(R"({"int64Field":"-9223372036854775808"})", root.getInt64Field() == -9223372036854775808ULL);
   CASE(R"({"int64Field":"9223372036854775807"})", root.getInt64Field() == 9223372036854775807LL);
-  CASE_THROW(R"({"int64Field":"-9223372036854775809"})", "Value out-of-range");
-  CASE_THROW(R"({"int64Field":"9223372036854775808"})", "Value out-of-range");
+  CASE_THROW_RECOVERABLE(R"({"int64Field":"-9223372036854775809"})", "Value out-of-range");
+  CASE_THROW_RECOVERABLE(R"({"int64Field":"9223372036854775808"})", "Value out-of-range");
   CASE(R"({"uInt8Field":255})", root.getUInt8Field() == 255);
   CASE(R"({"uInt8Field":"0"})", root.getUInt8Field() == 0);
   CASE_THROW_RECOVERABLE(R"({"uInt8Field":"256"})", "Value out-of-range");
@@ -239,7 +239,7 @@ KJ_TEST("decode all types") {
   CASE(R"({"uInt64Field":9007199254740991})", root.getUInt64Field() == 9007199254740991ULL);
   CASE(R"({"uInt64Field":"18446744073709551615"})", root.getUInt64Field() == 18446744073709551615ULL);
   CASE(R"({"uInt64Field":"0"})", root.getUInt64Field() == 0);
-  CASE_THROW(R"({"uInt64Field":"18446744073709551616"})", "Value out-of-range");
+  CASE_THROW_RECOVERABLE(R"({"uInt64Field":"18446744073709551616"})", "Value out-of-range");
   CASE(R"({"float32Field":0})", root.getFloat32Field() == 0);
   CASE(R"({"float32Field":4.5})", root.getFloat32Field() == 4.5);
   CASE(R"({"float32Field":null})", kj::isNaN(root.getFloat32Field()));
@@ -264,9 +264,9 @@ KJ_TEST("decode all types") {
   CASE(R"({"structField":{"boolField":true}})", root.getStructField().getBoolField() == true);
   CASE(R"({"enumField":"bar"})", root.getEnumField() == TestEnum::BAR);
 
-  CASE_THROW(R"({"int64Field":"177a"})", "String does not contain valid");
-  CASE_THROW(R"({"uInt64Field":"177a"})", "String does not contain valid");
-  CASE_THROW(R"({"float64Field":"177a"})", "String does not contain valid");
+  CASE_THROW_RECOVERABLE(R"({"int64Field":"177a"})", "String does not contain valid");
+  CASE_THROW_RECOVERABLE(R"({"uInt64Field":"177a"})", "String does not contain valid");
+  CASE_THROW_RECOVERABLE(R"({"float64Field":"177a"})", "String does not contain valid");
 
   CASE(R"({})", root.hasBoolList() == false);
   CASE(R"({"boolList":null})", root.hasBoolList() == false);
@@ -315,6 +315,7 @@ KJ_TEST("decode all types") {
   CASE(R"({"enumList":["bar"]})", root.getEnumList()[0] == TestEnum::BAR);
 #undef CASE
 #undef CASE_THROW
+#undef CASE_THROW_RECOVERABLE
 }
 
 KJ_TEST("decode test message") {
