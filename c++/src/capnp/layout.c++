@@ -1617,7 +1617,7 @@ struct WireHelpers {
       }
     } else {
       word* ptr = followFars(ref, refTarget, segment);
-      char* cptr = reinterpret_cast<char*>(ptr);
+      byte* bptr = reinterpret_cast<byte*>(ptr);
 
       KJ_REQUIRE(ref->kind() == WirePointer::LIST,
           "Called getText{Field,Element}() but existing pointer is not a list.") {
@@ -1628,13 +1628,19 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      size_t size = unbound(subtractChecked(ref->listRef.elementCount() / ELEMENTS, ONE,
-          []() { KJ_FAIL_REQUIRE("zero-size blob can't be text (need NUL terminator)"); }));
-      KJ_REQUIRE(cptr[size] == '\0', "Text blob missing NUL terminator.") {
-        goto useDefault;
-      }
+      auto maybeSize = trySubtract(ref->listRef.elementCount() * (ONE * BYTES / ELEMENTS),
+                                   ONE * BYTES);
+      KJ_IF_MAYBE(size, maybeSize) {
+        KJ_REQUIRE(*(bptr + *size) == '\0', "Text blob missing NUL terminator.") {
+          goto useDefault;
+        }
 
-      return Text::Builder(cptr, size);
+        return Text::Builder(reinterpret_cast<char*>(bptr), unbound(*size / BYTES));
+      } else {
+        KJ_FAIL_REQUIRE("zero-size blob can't be text (need NUL terminator)") {
+          goto useDefault;
+        };
+      }
     }
   }
 
