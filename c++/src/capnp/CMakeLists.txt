@@ -264,6 +264,11 @@ if(BUILD_TESTING)
         ${test_capnp_h_files}
       )
       target_link_libraries(capnp-parse-tests ${test_libraries})
+      if(NOT MSVC)
+        set_target_properties(capnp-parse-tests
+          PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations"
+        )
+      endif()
       add_dependencies(check capnp-parse-tests)
       add_test(NAME capnp-parse-tests-run COMMAND capnp-parse-tests)
 
