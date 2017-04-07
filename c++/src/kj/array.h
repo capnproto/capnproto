@@ -251,6 +251,8 @@ private:
   friend class Array;
 };
 
+static_assert(!canMemcpy<Array<char>>(), "canMemcpy<>() is broken");
+
 namespace _ {  // private
 
 class HeapArrayDisposer final: public ArrayDisposer {

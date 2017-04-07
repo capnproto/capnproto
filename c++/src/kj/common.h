@@ -455,17 +455,19 @@ constexpr bool canConvert() {
   return sizeof(CanConvert_<U>::sfinae(instance<T>())) == sizeof(int);
 }
 
-#if __clang__
+#if __GNUC__ && !__clang__ && __GNUC__ < 5
 template <typename T>
 constexpr bool canMemcpy() {
   // Returns true if T can be copied using memcpy instead of using the copy constructor or
   // assignment operator.
 
-  // Clang unhelpfully defines __has_trivial_{copy,assign}(T) to be true if the copy constructor /
-  // assign operator are deleted, on the basis that a strict reading of the definition of "trivial"
-  // according to the standard says that deleted functions are in fact trivial.  Meanwhile Clang
-  // provides these admittedly-better intrinsics, but GCC does not.
-  return __is_trivially_constructible(T, const T&) && __is_trivially_assignable(T, const T&);
+  // GCC 4 does not have __is_trivially_constructible and friends, but it does have these older
+  // intrinsics. Annoyingly, GCC 5+ and Clang define __has_trivial_copy() to be true if the copy
+  // constructor has been deleted, on the basis t hat a strict reading of the definition of
+  // "trivial" according to the standard says that deleted functions are in fact trivial, thus
+  // making the intrinsics essentially worthless. GCC 4, however, happens to define them the way
+  // we want.
+  return __has_trivial_copy(T) && __has_trivial_assign(T);
 }
 #else
 template <typename T>
@@ -473,8 +475,7 @@ constexpr bool canMemcpy() {
   // Returns true if T can be copied using memcpy instead of using the copy constructor or
   // assignment operator.
 
-  // GCC defines these to mean what we want them to mean.
-  return __has_trivial_copy(T) && __has_trivial_assign(T);
+  return __is_trivially_constructible(T, const T&) && __is_trivially_assignable(T, const T&);
 }
 #endif
 
