@@ -31,6 +31,8 @@ EXTRA_DIST =                                                                 \
   src/capnp/testdata/pretty.txt                                              \
   CMakeLists.txt                                                             \
   cmake/FindCapnProto.cmake                                                  \
+  cmake/CapnProtoConfig.cmake.in                                             \
+  cmake/CapnProtoMacros.cmake                                                \
   src/CMakeLists.txt                                                         \
   src/kj/CMakeLists.txt                                                      \
   src/capnp/CMakeLists.txt
