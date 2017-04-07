@@ -311,8 +311,8 @@ inline constexpr uint sizeInWords() {
   // Return the size, in words, of a Struct type, if allocated free-standing (not in a list).
   // May be useful for pre-computing space needed in order to precisely allocate messages.
 
-  return (WordCount32(_::structSize<T>().data) +
-      _::structSize<T>().pointers * WORDS_PER_POINTER) / WORDS;
+  return unbound((upgradeBound<uint>(_::structSize<T>().data) +
+      _::structSize<T>().pointers * WORDS_PER_POINTER) / WORDS);
 }
 
 }  // namespace capnp

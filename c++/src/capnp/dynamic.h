@@ -369,7 +369,7 @@ public:
 
   inline ListSchema getSchema() const { return schema; }
 
-  inline uint size() const { return reader.size() / ELEMENTS; }
+  inline uint size() const { return unbound(reader.size() / ELEMENTS); }
   DynamicValue::Reader operator[](uint index) const;
 
   typedef _::IndexingIterator<const Reader, DynamicValue::Reader> Iterator;
@@ -411,7 +411,7 @@ public:
 
   inline ListSchema getSchema() const { return schema; }
 
-  inline uint size() const { return builder.size() / ELEMENTS; }
+  inline uint size() const { return unbound(builder.size() / ELEMENTS); }
   DynamicValue::Builder operator[](uint index);
   void set(uint index, const DynamicValue::Reader& value);
   DynamicValue::Builder init(uint index, uint size);

@@ -20,7 +20,12 @@
 // THE SOFTWARE.
 
 #include "units.h"
+#include "debug.h"
 
 namespace kj {
+
+void ThrowOverflow::operator()() const {
+  KJ_FAIL_REQUIRE("integer overflow");
+}
 
 }  // namespace kj

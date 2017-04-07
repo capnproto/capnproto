@@ -149,13 +149,13 @@ typedef unsigned char byte;
 #endif
 
 #if defined(KJ_DEBUG) || __NO_INLINE__
-#define KJ_ALWAYS_INLINE(prototype) inline prototype
+#define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__
 // Don't force inline in debug mode.
 #else
 #if defined(_MSC_VER)
-#define KJ_ALWAYS_INLINE(prototype) __forceinline prototype
+#define KJ_ALWAYS_INLINE(...) __forceinline __VA_ARGS__
 #else
-#define KJ_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
+#define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__ __attribute__((always_inline))
 #endif
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #endif
@@ -493,30 +493,22 @@ template<typename T> constexpr T cp(T& t) noexcept { return t; }
 template<typename T> constexpr T cp(const T& t) noexcept { return t; }
 // Useful to force a copy, particularly to pass into a function that expects T&&.
 
-template <typename T, typename U, bool takeT> struct MinType_;
-template <typename T, typename U> struct MinType_<T, U, true> { typedef T Type; };
-template <typename T, typename U> struct MinType_<T, U, false> { typedef U Type; };
+template <typename T, typename U, bool takeT, bool uOK = true> struct ChooseType_;
+template <typename T, typename U> struct ChooseType_<T, U, true, true> { typedef T Type; };
+template <typename T, typename U> struct ChooseType_<T, U, true, false> { typedef T Type; };
+template <typename T, typename U> struct ChooseType_<T, U, false, true> { typedef U Type; };
 
 template <typename T, typename U>
-using MinType = typename MinType_<T, U, sizeof(T) <= sizeof(U)>::Type;
-// Resolves to the smaller of the two input types.
+using WiderType = typename ChooseType_<T, U, sizeof(T) >= sizeof(U)>::Type;
 
 template <typename T, typename U>
-inline constexpr auto min(T&& a, U&& b) -> MinType<Decay<T>, Decay<U>> {
-  return a < b ? MinType<Decay<T>, Decay<U>>(a) : MinType<Decay<T>, Decay<U>>(b);
+inline constexpr auto min(T&& a, U&& b) -> WiderType<Decay<T>, Decay<U>> {
+  return a < b ? WiderType<Decay<T>, Decay<U>>(a) : WiderType<Decay<T>, Decay<U>>(b);
 }
 
-template <typename T, typename U, bool takeT> struct MaxType_;
-template <typename T, typename U> struct MaxType_<T, U, true> { typedef T Type; };
-template <typename T, typename U> struct MaxType_<T, U, false> { typedef U Type; };
-
 template <typename T, typename U>
-using MaxType = typename MaxType_<T, U, sizeof(T) >= sizeof(U)>::Type;
-// Resolves to the larger of the two input types.
-
-template <typename T, typename U>
-inline constexpr auto max(T&& a, U&& b) -> MaxType<Decay<T>, Decay<U>> {
-  return a > b ? MaxType<Decay<T>, Decay<U>>(a) : MaxType<Decay<T>, Decay<U>>(b);
+inline constexpr auto max(T&& a, U&& b) -> WiderType<Decay<T>, Decay<U>> {
+  return a > b ? WiderType<Decay<T>, Decay<U>>(a) : WiderType<Decay<T>, Decay<U>>(b);
 }
 
 template <typename T, size_t s>
@@ -600,6 +592,21 @@ static KJ_CONSTEXPR(const) MinValue_ minValue = MinValue_();
 //
 // `char` is not supported, but `signed char` and `unsigned char` are.
 
+template <uint bits>
+inline constexpr unsigned long long maxValueForBits() {
+  // Get the maximum integer representable in the given number of bits.
+
+  // 1ull << 64 is unfortunately undefined.
+  return (bits == 64 ? 0 : (1ull << bits)) - 1;
+}
+
+struct ThrowOverflow {
+  // Functor which throws an exception complaining about integer overflow. Usually this is used
+  // with the interfaces in units.h, but is defined here because Cap'n Proto wants to avoid
+  // including units.h when not using CAPNP_DEBUG_TYPES.
+  void operator()() const;
+};
+
 #if __GNUC__
 inline constexpr float inf() { return __builtin_huge_valf(); }
 inline constexpr float nan() { return __builtin_nanf(""); }
@@ -643,6 +650,7 @@ template <typename T>
 class Range {
 public:
   inline constexpr Range(const T& begin, const T& end): begin_(begin), end_(end) {}
+  inline explicit constexpr Range(const T& end): begin_(0), end_(end) {}
 
   class Iterator {
   public:
@@ -682,6 +690,11 @@ private:
   T end_;
 };
 
+template <typename T, typename U>
+inline constexpr Range<WiderType<Decay<T>, Decay<U>>> range(T begin, U end) {
+  return Range<WiderType<Decay<T>, Decay<U>>>(begin, end);
+}
+
 template <typename T>
 inline constexpr Range<Decay<T>> range(T begin, T end) { return Range<Decay<T>>(begin, end); }
 // Returns a fake iterable container containing all values of T from `begin` (inclusive) to `end`
@@ -689,6 +702,14 @@ inline constexpr Range<Decay<T>> range(T begin, T end) { return Range<Decay<T>>(
 //
 //     // Prints 1, 2, 3, 4, 5, 6, 7, 8, 9.
 //     for (int i: kj::range(1, 10)) { print(i); }
+
+template <typename T>
+inline constexpr Range<Decay<T>> zeroTo(T end) { return Range<Decay<T>>(end); }
+// Returns a fake iterable container containing all values of T from zero (inclusive) to `end`
+// (exclusive).  Example:
+//
+//     // Prints 0, 1, 2, 3, 4, 5, 6, 7, 8, 9.
+//     for (int i: kj::zeroTo(10)) { print(i); }
 
 template <typename T>
 inline constexpr Range<size_t> indices(T&& container) {
@@ -1022,13 +1043,13 @@ public:
   template <typename U>
   Maybe(Maybe<U>&& other) noexcept(noexcept(T(instance<U&&>()))) {
     KJ_IF_MAYBE(val, kj::mv(other)) {
-      ptr = *val;
+      ptr.emplace(kj::mv(*val));
     }
   }
   template <typename U>
   Maybe(const Maybe<U>& other) {
     KJ_IF_MAYBE(val, other) {
-      ptr = *val;
+      ptr.emplace(*val);
     }
   }
 

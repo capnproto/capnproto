@@ -158,7 +158,7 @@ private:
 
 template <typename T>
 class Locked {
-  // Return type for `MutexGuarded<T>::lock()`.  `Locked<T>` provides access to the guarded object
+  // Return type for `MutexGuarded<T>::lock()`.  `Locked<T>` provides access to the bounded object
   // and unlocks the mutex when it goes out of scope.
 
 public:
@@ -208,7 +208,7 @@ private:
 
 template <typename T>
 class MutexGuarded {
-  // An object of type T, guarded by a mutex.  In order to access the object, you must lock it.
+  // An object of type T, bounded by a mutex.  In order to access the object, you must lock it.
   //
   // Write locks are not "recursive" -- trying to lock again in a thread that already holds a lock
   // will deadlock.  Recursive write locks are usually a sign of bad design.
@@ -223,7 +223,7 @@ class MutexGuarded {
 public:
   template <typename... Params>
   explicit MutexGuarded(Params&&... params);
-  // Initialize the mutex-guarded object by passing the given parameters to its constructor.
+  // Initialize the mutex-bounded object by passing the given parameters to its constructor.
 
   Locked<T> lockExclusive() const;
   // Exclusively locks the object and returns it.  The returned `Locked<T>` can be passed by

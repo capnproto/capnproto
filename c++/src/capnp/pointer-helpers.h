@@ -113,12 +113,12 @@ struct PointerHelpers<T, Kind::BLOB> {
   static inline typename T::Reader get(PointerReader reader,
                                        const void* defaultValue = nullptr,
                                        uint defaultBytes = 0) {
-    return reader.getBlob<T>(defaultValue, defaultBytes * BYTES);
+    return reader.getBlob<T>(defaultValue, bounded(defaultBytes) * BYTES);
   }
   static inline typename T::Builder get(PointerBuilder builder,
                                         const void* defaultValue = nullptr,
                                         uint defaultBytes = 0) {
-    return builder.getBlob<T>(defaultValue, defaultBytes * BYTES);
+    return builder.getBlob<T>(defaultValue, bounded(defaultBytes) * BYTES);
   }
   static inline void set(PointerBuilder builder, typename T::Reader value) {
     builder.setBlob<T>(value);
@@ -127,7 +127,7 @@ struct PointerHelpers<T, Kind::BLOB> {
     builder.setBlob<T>(value);
   }
   static inline typename T::Builder init(PointerBuilder builder, uint size) {
-    return builder.initBlob<T>(size * BYTES);
+    return builder.initBlob<T>(bounded(size) * BYTES);
   }
   static inline void adopt(PointerBuilder builder, Orphan<T>&& value) {
     builder.adopt(kj::mv(value.builder));
