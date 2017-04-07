@@ -63,7 +63,7 @@ public:
     })) {
       KJ_LOG(ERROR, "str threw");
     }
-    context.exit();
+    return true;
   }
 
   kj::MainBuilder::Validity runLists() {
@@ -73,7 +73,7 @@ public:
     })) {
       KJ_LOG(ERROR, "threw");
     }
-    context.exit();
+    return true;
   }
 
   kj::MainBuilder::Validity canonicalize() {
@@ -129,7 +129,7 @@ public:
       KJ_ASSERT(b1[idx] == b2[idx], idx, b1.size());
     }
 
-    context.exit();
+    return true;
   }
 
 private:
