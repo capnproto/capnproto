@@ -357,11 +357,6 @@ TEST(Async, SeparateFulfillerChained) {
   EXPECT_EQ(123, pair.promise.wait(waitScope));
 }
 
-#if KJ_NO_EXCEPTIONS
-#undef EXPECT_ANY_THROW
-#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
-#endif
-
 TEST(Async, SeparateFulfillerDiscarded) {
   EventLoop loop;
   WaitScope waitScope(loop);

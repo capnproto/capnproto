@@ -28,6 +28,7 @@
 
 #include "debug.h"
 #include "vector.h"
+#include "function.h"
 
 namespace kj {
 
@@ -74,7 +75,7 @@ private:
   if (cond); else KJ_FAIL_EXPECT("failed: expected " #cond, ##__VA_ARGS__)
 #endif
 
-#define KJ_EXPECT_THROW(type, code) \
+#define KJ_EXPECT_THROW_RECOVERABLE(type, code) \
   do { \
     KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
       KJ_EXPECT(e->getType() == ::kj::Exception::Type::type, \
@@ -84,7 +85,7 @@ private:
     } \
   } while (false)
 
-#define KJ_EXPECT_THROW_MESSAGE(message, code) \
+#define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code) \
   do { \
     KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
       KJ_EXPECT(::kj::_::hasSubstring(e->getDescription(), message), \
@@ -93,6 +94,20 @@ private:
       KJ_FAIL_EXPECT("code did not throw: " #code); \
     } \
   } while (false)
+
+#if KJ_NO_EXCEPTIONS
+#define KJ_EXPECT_THROW(type, code) \
+  do { \
+    KJ_EXPECT(::kj::_::expectFatalThrow(type, nullptr, [&]() { code; })); \
+  } while (false)
+#define KJ_EXPECT_THROW_MESSAGE(message, code) \
+  do { \
+    KJ_EXPECT(::kj::_::expectFatalThrow(nullptr, kj::StringPtr(message), [&]() { code; })); \
+  } while (false)
+#else
+#define KJ_EXPECT_THROW KJ_EXPECT_THROW_RECOVERABLE
+#define KJ_EXPECT_THROW_MESSAGE KJ_EXPECT_THROW_RECOVERABLE_MESSAGE
+#endif
 
 #define KJ_EXPECT_LOG(level, substring) \
   ::kj::_::LogExpectation KJ_UNIQUE_NAME(_kjLogExpectation)(::kj::LogSeverity::level, substring)
@@ -104,6 +119,14 @@ private:
 namespace _ {  // private
 
 bool hasSubstring(kj::StringPtr haystack, kj::StringPtr needle);
+
+#if KJ_NO_EXCEPTIONS
+bool expectFatalThrow(Maybe<Exception::Type> type, Maybe<StringPtr> message,
+                      Function<void()> code);
+// Expects that the given code will throw a fatal exception matching the given type and/or message.
+// Since exceptions are disabled, the test will fork() and run in a subprocess. On Windows, where
+// fork() is not available, this always returns true.
+#endif
 
 class LogExpectation: public ExceptionCallback {
 public:
