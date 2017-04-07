@@ -1181,13 +1181,12 @@ struct FastCaseCmp;
 template <char first, char... rest>
 struct FastCaseCmp<first, rest...> {
   static constexpr bool apply(const char* actual) {
-    if ('a' <= first && first <= 'z') {
-      return (*actual | 0x20) == first && FastCaseCmp<rest...>::apply(actual + 1);
-    } else if ('A' <= first && first <= 'Z') {
-      return (*actual & ~0x20) == first && FastCaseCmp<rest...>::apply(actual + 1);
-    } else {
-      return *actual == first && FastCaseCmp<rest...>::apply(actual + 1);
-    }
+    return
+      'a' <= first && first <= 'z'
+        ? (*actual | 0x20) == first && FastCaseCmp<rest...>::apply(actual + 1)
+      : 'A' <= first && first <= 'Z'
+        ? (*actual & ~0x20) == first && FastCaseCmp<rest...>::apply(actual + 1)
+        : *actual == first && FastCaseCmp<rest...>::apply(actual + 1);
   }
 };
 
