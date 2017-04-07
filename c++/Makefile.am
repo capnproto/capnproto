@@ -383,19 +383,19 @@ $(test_capnpc_outputs): test_capnpc_middleman
 
 BUILT_SOURCES = $(test_capnpc_outputs)
 
-if LITE_MODE
-
-check_PROGRAMS = capnp-test
-compiler_tests =
-capnp_test_LDADD = libcapnp.la libkj-test.la libkj.la
-
-else !LITE_MODE
-
 check_LIBRARIES = libcapnp-test.a
 libcapnp_test_a_SOURCES =                                      \
   src/capnp/test-util.c++                                      \
   src/capnp/test-util.h
 nodist_libcapnp_test_a_SOURCES = $(test_capnpc_outputs)
+
+if LITE_MODE
+
+check_PROGRAMS = capnp-test
+compiler_tests =
+capnp_test_LDADD = libcapnp-test.a libcapnp.la libkj-test.la libkj.la
+
+else !LITE_MODE
 
 check_PROGRAMS = capnp-test capnp-evolution-test capnp-afl-testcase
 heavy_tests =                                                  \
