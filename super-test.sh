@@ -398,7 +398,10 @@ if [ "x`uname`" != xDarwin ] && which valgrind > /dev/null; then
   doit ./configure --disable-shared CXXFLAGS="-g"
   doit make -j6
   doit make -j6 capnp-test
-  doit valgrind --leak-check=full --track-fds=yes --error-exitcode=1 ./capnp-test
+  # Running the fuzz tests under Valgrind is a great thing to do -- but it takes
+  # some 40 minutes. So, it needs to be done as a separate step of the release
+  # process, perhaps along with the AFL tests.
+  doit CAPNP_SKIP_FUZZ_TEST=1 valgrind --leak-check=full --track-fds=yes --error-exitcode=1 ./capnp-test
 fi
 
 doit make maintainer-clean
