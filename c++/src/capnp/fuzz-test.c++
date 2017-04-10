@@ -38,15 +38,14 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
-struct SkipTestHack {
-  SkipTestHack() {
-    if (getenv("CAPNP_SKIP_FUZZ_TEST") != nullptr) {
-      char message[] = "Skipping test because CAPNP_SKIP_FUZZ_TEST is set in environment.\n";
-      KJ_SYSCALL(write(STDOUT_FILENO, message, sizeof(message)));
-      _exit(0);
-    }
+bool skipFuzzTest() {
+  if (getenv("CAPNP_SKIP_FUZZ_TEST") != nullptr) {
+    KJ_LOG(WARNING, "Skipping test because CAPNP_SKIP_FUZZ_TEST is set in environment.");
+    return true;
+  } else {
+    return false;
   }
-} skipTestHack;
+}
 
 uint64_t traverse(AnyPointer::Reader reader);
 uint64_t traverse(AnyStruct::Reader reader);
@@ -163,6 +162,8 @@ struct StructChecker {
 };
 
 KJ_TEST("fuzz-test struct pointer") {
+  if (skipFuzzTest()) return;
+
   MallocMessageBuilder builder;
   builder.getRoot<TestAllTypes>().setTextField("foo");
   KJ_ASSERT(builder.getSegmentsForOutput().size() == 1);
@@ -181,6 +182,8 @@ struct ListChecker {
 };
 
 KJ_TEST("fuzz-test list pointer") {
+  if (skipFuzzTest()) return;
+
   MallocMessageBuilder builder;
   auto list = builder.getRoot<AnyPointer>().initAs<List<uint32_t>>(2);
   list.set(0, 12345);
@@ -203,6 +206,8 @@ struct StructListChecker {
 };
 
 KJ_TEST("fuzz-test struct list pointer") {
+  if (skipFuzzTest()) return;
+
   MallocMessageBuilder builder;
   auto list = builder.getRoot<AnyPointer>().initAs<List<test::TestAllTypes>>(2);
   list[0].setTextField("foo");
@@ -224,12 +229,16 @@ struct TextChecker {
 };
 
 KJ_TEST("fuzz-test text pointer") {
+  if (skipFuzzTest()) return;
+
   MallocMessageBuilder builder;
   builder.template getRoot<AnyPointer>().setAs<Text>("foo");
   fuzz<TextChecker>(messageToFlatArray(builder), 2, 64, 192);
 }
 
 KJ_TEST("fuzz-test far pointer") {
+  if (skipFuzzTest()) return;
+
   MallocMessageBuilder builder(1, AllocationStrategy::FIXED_SIZE);
   initTestMessage(builder.getRoot<TestAllTypes>());
 
@@ -241,6 +250,8 @@ KJ_TEST("fuzz-test far pointer") {
 }
 
 KJ_TEST("fuzz-test double-far pointer") {
+  if (skipFuzzTest()) return;
+
   MallocMessageBuilder builder(1, AllocationStrategy::FIXED_SIZE);
 
   // Carefully arrange for a double-far pointer to be created.
