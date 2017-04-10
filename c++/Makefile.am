@@ -223,6 +223,7 @@ libkj_la_SOURCES=                                              \
   src/kj/io.c++                                                \
   src/kj/mutex.c++                                             \
   src/kj/thread.c++                                            \
+  src/kj/test-helpers.c++                                      \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
 

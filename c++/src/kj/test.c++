@@ -28,9 +28,6 @@
 #include <string.h>
 #ifndef _WIN32
 #include <sys/mman.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #endif
 
 namespace kj {
@@ -61,111 +58,6 @@ TestCase::~TestCase() {
 // =======================================================================================
 
 namespace _ {  // private
-
-bool hasSubstring(StringPtr haystack, StringPtr needle) {
-  // TODO(perf): This is not the best algorithm for substring matching.
-  if (needle.size() <= haystack.size()) {
-    for (size_t i = 0; i <= haystack.size() - needle.size(); i++) {
-      if (haystack.slice(i).startsWith(needle)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-LogExpectation::LogExpectation(LogSeverity severity, StringPtr substring)
-    : severity(severity), substring(substring), seen(false) {}
-LogExpectation::~LogExpectation() {
-  if (!unwindDetector.isUnwinding()) {
-    KJ_ASSERT(seen, "expected log message not seen", severity, substring);
-  }
-}
-
-void LogExpectation::logMessage(
-    LogSeverity severity, const char* file, int line, int contextDepth,
-    String&& text) {
-  if (!seen && severity == this->severity) {
-    if (hasSubstring(text, substring)) {
-      // Match. Ignore it.
-      seen = true;
-      return;
-    }
-  }
-
-  // Pass up the chain.
-  ExceptionCallback::logMessage(severity, file, line, contextDepth, kj::mv(text));
-}
-
-// =======================================================================================
-
-namespace {
-
-class FatalThrowExpectation: public ExceptionCallback {
-public:
-  FatalThrowExpectation(Maybe<Exception::Type> type,
-                        Maybe<StringPtr> message)
-      : type(type), message(message) {}
-
-  virtual void onFatalException(Exception&& exception) {
-    KJ_IF_MAYBE(expectedType, type) {
-      if (exception.getType() != *expectedType) {
-        KJ_LOG(ERROR, "threw exception of wrong type", exception, *expectedType);
-        _exit(1);
-      }
-    }
-    KJ_IF_MAYBE(expectedSubstring, message) {
-      if (!hasSubstring(exception.getDescription(), *expectedSubstring)) {
-        KJ_LOG(ERROR, "threw exception with wrong message", exception, *expectedSubstring);
-        _exit(1);
-      }
-    }
-    _exit(0);
-  }
-
-private:
-  Maybe<Exception::Type> type;
-  Maybe<StringPtr> message;
-};
-
-}  // namespace
-
-bool expectFatalThrow(kj::Maybe<Exception::Type> type, kj::Maybe<StringPtr> message,
-                      Function<void()> code) {
-#if _WIN32
-  // We don't support death tests on Windows due to lack of efficient fork.
-  return true;
-#else
-  pid_t child;
-  KJ_SYSCALL(child = fork());
-  if (child == 0) {
-    KJ_DEFER(_exit(1));
-    FatalThrowExpectation expectation(type, message);
-    KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
-      code();
-    })) {
-      KJ_LOG(ERROR, "a non-fatal exception was thrown, but we expected fatal", *e);
-    } else {
-      KJ_LOG(ERROR, "no fatal exception was thrown");
-    }
-  }
-
-  int status;
-  KJ_SYSCALL(waitpid(child, &status, 0));
-
-  if (WIFEXITED(status)) {
-    return WEXITSTATUS(status) == 0;
-  } else if (WIFSIGNALED(status)) {
-    KJ_FAIL_EXPECT("subprocess crashed without throwing exception", WTERMSIG(status));
-    return false;
-  } else {
-    KJ_FAIL_EXPECT("subprocess neiter excited nor crashed?", status);
-    return false;
-  }
-#endif
-}
-
-// =======================================================================================
 
 GlobFilter::GlobFilter(const char* pattern): pattern(heapString(pattern)) {}
 GlobFilter::GlobFilter(ArrayPtr<const char> pattern): pattern(heapString(pattern)) {}
