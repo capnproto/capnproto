@@ -168,12 +168,15 @@ class CppTypeName {
   // because we must add the "typename" and "template" disambiguator keywords as needed.
 
 public:
-  inline CppTypeName(): isArgDependent(false), needsTypename(false) {}
+  inline CppTypeName(): isArgDependent(false), needsTypename(false),
+                        hasInterfaces_(false), hasDisambiguatedTemplate_(false) {}
   CppTypeName(CppTypeName&& other) = default;
   CppTypeName(const CppTypeName& other)
       : name(kj::strTree(other.name.flatten())),
         isArgDependent(other.isArgDependent),
-        needsTypename(other.needsTypename) {}
+        needsTypename(other.needsTypename),
+        hasInterfaces_(other.hasInterfaces_),
+        hasDisambiguatedTemplate_(other.hasDisambiguatedTemplate_) {}
 
   CppTypeName& operator=(CppTypeName&& other) = default;
   CppTypeName& operator=(const CppTypeName& other) {
