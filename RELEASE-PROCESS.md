@@ -1,17 +1,33 @@
 How to release
 ==============
 
+**Developing**
+
 * First, develop some new features to release!  As you do, make sure to keep the documentation
   up-to-date.
+
+**Testing**
 
 * Run `super-test.sh` on as many platforms as you have available.  Remember that you can easily run
   on any machine available through ssh using `./super-test.sh remote [hostname]`.  Also run in
   Clang mode.  (If you are Kenton and running from Kenton's home machine and network, use
-  `./super-test.sh kenton` to run on all supported compilers and platforms.)
+  `./mega-test.py mega-test.cfg` to run on all supported compilers and platforms.)
+
+* Manually test Windows/MSVC -- unfortunately this can't be automated by super-test.sh.
+
+* Manually run the pointer fuzz tests under Valgrind. This will take 40-80 minutes.
+
+      valgrind ./capnp-test -fcapnp/fuzz-test.c++
+
+* Manually run the AFL fuzz tests by running `afl-fuzz.sh`. There are three test cases, and ideally each should run for 24 hours or more.
+
+**Documenting**
 
 * Write a blog post discussing what is new, placing it in doc/_posts.
 
 * Run jekyll locally and review the blog post and docs.
+
+**Releasing**
 
 * Check out the master branch in a fresh directory.  Do NOT use your regular repo, as the release
   script commits changes and if anything goes wrong you'll probably want to trash the whole thing
