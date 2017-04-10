@@ -461,13 +461,12 @@ constexpr bool canMemcpy() {
   // Returns true if T can be copied using memcpy instead of using the copy constructor or
   // assignment operator.
 
-  // GCC 4 does not have __is_trivially_constructible and friends, but it does have these older
-  // intrinsics. Annoyingly, GCC 5+ and Clang define __has_trivial_copy() to be true if the copy
-  // constructor has been deleted, on the basis t hat a strict reading of the definition of
-  // "trivial" according to the standard says that deleted functions are in fact trivial, thus
-  // making the intrinsics essentially worthless. GCC 4, however, happens to define them the way
-  // we want.
-  return __has_trivial_copy(T) && __has_trivial_assign(T);
+  // GCC 4 does not have __is_trivially_constructible and friends, and there doesn't seem to be
+  // any reliable alternative. __has_trivial_copy() and __has_trivial_assign() return the right
+  // thing at one point but later on they changed such that a deleted copy constructor was
+  // considered "trivial" (apparently technically correct, though useless). So, on GCC 4 we give up
+  // and assume we can't memcpy() at all, and must explicitly copy-construct everything.
+  return false;
 }
 #else
 template <typename T>
