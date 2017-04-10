@@ -227,8 +227,10 @@ echo "========================================================================="
 # Apple now aliases gcc to clang, so probe to find out what compiler we're really using.
 if (${CXX:-g++} -dM -E -x c++ /dev/null 2>&1 | grep -q '__clang__'); then
   IS_CLANG=yes
+  DISABLE_OPTIMIZATION_IF_GCC=
 else
   IS_CLANG=no
+  DISABLE_OPTIMIZATION_IF_GCC=-O0
 fi
 
 if [ $IS_CLANG = yes ]; then
@@ -369,13 +371,18 @@ echo "========================================================================="
 echo "Testing with -fno-rtti and -fno-exceptions"
 echo "========================================================================="
 
+# GCC miscompiles capnpc-c++ when -fno-exceptions and -O2 are specified together. The
+# miscompilation happens in one specific inlined call site of Array::dispose(), but this method
+# is inlined in hundreds of other places without issue, so I have no idea how to narrow down the
+# bug. Clang works fine. So, for now, we disable optimizations on GCC for -fno-exceptions tests.
+
 doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti"
 doit make -j6 check
 doit make distclean
-doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-exceptions"
+doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-exceptions $DISABLE_OPTIMIZATION_IF_GCC"
 doit make -j6 check
 doit make distclean
-doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti -fno-exceptions"
+doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti -fno-exceptions $DISABLE_OPTIMIZATION_IF_GCC"
 doit make -j6 check
 
 # Valgrind is currently "experimental and mostly broken" on OSX and fails to run the full test
