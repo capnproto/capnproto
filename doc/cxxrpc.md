@@ -157,14 +157,22 @@ called when the promise either completes or is canceled.
 ### Lazy Execution
 
 Callbacks registered with `.then()` which aren't themselves asynchronous (i.e. they return a value,
-not a promise) won't be executed by default. There are several ways to force a promise to execute
-eagerly:
+not a promise) by default won't execute unless the result is actually used -- they are executed
+"lazily". This allows the runtime to optimize by combining a series of .then() callbacks into one.
 
-* `.wait()` on it.
-* `.detach()` it.
-* Add it to a `kj::TaskSet` (this is a lot like `detach()`, except that you can cancel all tasks in
-  the set by destroying the set).
-* Call `.eagerlyEvaluate()` on it.
+To force a `.then()` callback to execute as soon as its input is available, do one of the
+following:
+
+* Add it to a `kj::TaskSet` -- this is usually the best choice. You can cancel all tasks in the set
+  by destroying the `TaskSet`.
+* `.wait()` on it -- but this only works in a top-level wait scope, typically your program's main
+  function.
+* Call `.eagerlyEvaluate()` on it. This returns a new `Promise`. You can cancel the task by
+  destroying this `Promise` (without otherwise consuming it).
+* `.detach()` it. **WARNING:** `.detach()` is dangerous because there is no way to cancel a promise
+  once it has been detached. This can make it impossible to safely tear down the execution
+  environment, e.g. if the callback has captured references to other objects. It is therefore
+  recommended to avoid `.detach()` except in carefully-controlled circumstances.
 
 ### Other Features
 
