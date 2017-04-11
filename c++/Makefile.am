@@ -157,7 +157,8 @@ includekjstd_HEADERS =                                         \
   src/kj/std/iostream.h
 
 includekjcompat_HEADERS =                                      \
-  src/kj/compat/gtest.h
+  src/kj/compat/gtest.h                                        \
+  src/kj/compat/http.h
 
 includecapnp_HEADERS =                                         \
   src/capnp/c++.capnp.h                                        \
@@ -200,7 +201,7 @@ includecapnpcompat_HEADERS =                                   \
 if LITE_MODE
 lib_LTLIBRARIES = libkj.la libkj-test.la libcapnp.la
 else
-lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
+lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
 endif
 
 # Don't include security release in soname -- we want to replace old binaries
@@ -242,6 +243,11 @@ libkj_async_la_SOURCES=                                        \
   src/kj/async-io-unix.c++                                     \
   src/kj/async-io-win32.c++                                    \
   src/kj/time.c++
+
+libkj_http_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
+libkj_http_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
+libkj_http_la_SOURCES=                                         \
+  src/kj/compat/http.c++
 endif !LITE_MODE
 
 if !LITE_MODE
@@ -407,6 +413,7 @@ heavy_tests =                                                  \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/kj/std/iostream-test.c++                                 \
+  src/kj/compat/http-test.c++                                  \
   src/capnp/canonicalize-test.c++                              \
   src/capnp/capability-test.c++                                \
   src/capnp/membrane-test.c++                                  \
@@ -429,6 +436,7 @@ capnp_test_LDADD =                                             \
   libcapnp-rpc.la                                              \
   libcapnp-json.la                                             \
   libcapnp.la                                                  \
+  libkj-http.la                                                \
   libkj-async.la                                               \
   libkj-test.la                                                \
   libkj.la
