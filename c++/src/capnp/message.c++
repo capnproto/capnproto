@@ -242,6 +242,8 @@ MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
 }
 
 kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
+  KJ_REQUIRE(minimumSize <= MAX_SEGMENT_WORDS, "MallocMessageBuilder asked to allocate segment above maximum serializable size.");
+
   if (!returnedFirstSegment && !ownFirstSegment) {
     kj::ArrayPtr<word> result = kj::arrayPtr(reinterpret_cast<word*>(firstSegment), nextSize);
     if (result.size() >= minimumSize) {
@@ -254,7 +256,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
     ownFirstSegment = true;
   }
 
-  uint size = kj::max(minimumSize, nextSize);
+  uint size = kj::max(minimumSize, kj::min(MAX_SEGMENT_WORDS, nextSize));
 
   void* result = calloc(size, sizeof(word));
   if (result == nullptr) {
