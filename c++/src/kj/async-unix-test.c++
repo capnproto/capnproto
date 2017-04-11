@@ -475,7 +475,8 @@ TEST(AsyncUnixTest, UrgentObserver) {
   // Spawn a TCP server
   KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
   kj::AutoCloseFd serverFd(tmpFd);
-  sockaddr_in saddr = {};
+  sockaddr_in saddr;
+  memset(&saddr, 0, sizeof(saddr));
   saddr.sin_family = AF_INET;
   saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   KJ_SYSCALL(bind(serverFd, reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr)));
