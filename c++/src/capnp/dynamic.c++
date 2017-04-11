@@ -1453,13 +1453,12 @@ DynamicValue::Reader::Reader(const Reader& other) {
     case ENUM:
     case STRUCT:
     case ANY_POINTER:
-      static_assert(kj::canMemcpy<Text::Reader>() &&
-                    kj::canMemcpy<Data::Reader>() &&
-                    kj::canMemcpy<DynamicList::Reader>() &&
-                    kj::canMemcpy<DynamicEnum>() &&
-                    kj::canMemcpy<DynamicStruct::Reader>() &&
-                    kj::canMemcpy<AnyPointer::Reader>(),
-                    "Assumptions here don't hold.");
+      KJ_ASSERT_CAN_MEMCPY(Text::Reader);
+      KJ_ASSERT_CAN_MEMCPY(Data::Reader);
+      KJ_ASSERT_CAN_MEMCPY(DynamicList::Reader);
+      KJ_ASSERT_CAN_MEMCPY(DynamicEnum);
+      KJ_ASSERT_CAN_MEMCPY(DynamicStruct::Reader);
+      KJ_ASSERT_CAN_MEMCPY(AnyPointer::Reader);
       break;
 
     case CAPABILITY:
@@ -1484,13 +1483,12 @@ DynamicValue::Reader::Reader(Reader&& other) noexcept {
     case ENUM:
     case STRUCT:
     case ANY_POINTER:
-      static_assert(kj::canMemcpy<Text::Reader>() &&
-                    kj::canMemcpy<Data::Reader>() &&
-                    kj::canMemcpy<DynamicList::Reader>() &&
-                    kj::canMemcpy<DynamicEnum>() &&
-                    kj::canMemcpy<DynamicStruct::Reader>() &&
-                    kj::canMemcpy<AnyPointer::Reader>(),
-                    "Assumptions here don't hold.");
+      KJ_ASSERT_CAN_MEMCPY(Text::Reader);
+      KJ_ASSERT_CAN_MEMCPY(Data::Reader);
+      KJ_ASSERT_CAN_MEMCPY(DynamicList::Reader);
+      KJ_ASSERT_CAN_MEMCPY(DynamicEnum);
+      KJ_ASSERT_CAN_MEMCPY(DynamicStruct::Reader);
+      KJ_ASSERT_CAN_MEMCPY(AnyPointer::Reader);
       break;
 
     case CAPABILITY:

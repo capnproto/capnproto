@@ -782,7 +782,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
           addr.addrlen = cur->ai_addrlen;
           memcpy(&addr.addr.generic, cur->ai_addr, cur->ai_addrlen);
         }
-        static_assert(canMemcpy<SocketAddress>(), "Can't write() SocketAddress...");
+        KJ_ASSERT_CAN_MEMCPY(SocketAddress);
 
         const char* data = reinterpret_cast<const char*>(&addr);
         size_t size = sizeof(addr);

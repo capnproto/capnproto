@@ -468,6 +468,7 @@ constexpr bool canMemcpy() {
   // and assume we can't memcpy() at all, and must explicitly copy-construct everything.
   return false;
 }
+#define KJ_ASSERT_CAN_MEMCPY(T)
 #else
 template <typename T>
 constexpr bool canMemcpy() {
@@ -476,6 +477,8 @@ constexpr bool canMemcpy() {
 
   return __is_trivially_constructible(T, const T&) && __is_trivially_assignable(T, const T&);
 }
+#define KJ_ASSERT_CAN_MEMCPY(T) \
+  static_assert(kj::canMemcpy<T>(), "this code expects this type to be memcpy()-able");
 #endif
 
 // =======================================================================================
