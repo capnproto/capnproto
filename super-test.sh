@@ -238,8 +238,9 @@ if [ $IS_CLANG = yes ]; then
   export CXXFLAGS="$CXXFLAGS -Wno-error=unused-command-line-argument"
 else
   # GCC emits uninitialized warnings all over and they seem bogus. We use valgrind to test for
-  # uninitialized memory usage later on.
-  CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized"
+  # uninitialized memory usage later on. GCC 4 also emits strange bogus warnings with
+  # -Wstrict-overflow, so we disable it.
+  CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized -Wno-strict-overflow"
 fi
 
 cd c++
