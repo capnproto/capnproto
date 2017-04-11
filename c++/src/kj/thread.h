@@ -50,9 +50,6 @@ public:
 
   void detach();
   // Don't join the thread in ~Thread().
-  //
-  // TODO(soon): Currently broken: the thread uses the Thread objects during its execution; instead
-  //   the Thread object and the thread itself will need to share a refcounted object.
 
 private:
   struct ThreadState {
