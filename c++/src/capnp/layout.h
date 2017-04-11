@@ -897,12 +897,16 @@ public:
   ListBuilder asStructList(StructSize elementSize);
   // Interpret as a struct list, or throw an exception if not a list.
 
+  ListBuilder asListAnySize();
+  // For AnyList.
+
   Text::Builder asText();
   Data::Builder asData();
   // Interpret as a blob, or throw an exception if not a blob.
 
   StructReader asStructReader(StructSize size) const;
   ListReader asListReader(ElementSize elementSize) const;
+  ListReader asListReaderAnySize() const;
 #if !CAPNP_LITE
   kj::Own<ClientHook> asCapability() const;
 #endif  // !CAPNP_LITE

@@ -235,6 +235,15 @@ TEST(Any, AnyStructListCapInSchema) {
     AnyStruct::Builder anyStruct = root.getAnyStructField();
     checkTestMessage(anyStruct.as<TestAllTypes>());
     checkTestMessage(anyStruct.asReader().as<TestAllTypes>());
+
+    EXPECT_TRUE(root.hasAnyStructField());
+    auto orphan = root.disownAnyStructField();
+    checkTestMessage(orphan.getReader().as<TestAllTypes>());
+    EXPECT_FALSE(root.hasAnyStructField());
+
+    root.adoptAnyStructField(kj::mv(orphan));
+    EXPECT_TRUE(root.hasAnyStructField());
+    checkTestMessage(root.getAnyStructField().as<TestAllTypes>());
   }
 
   {
@@ -245,9 +254,18 @@ TEST(Any, AnyStructListCapInSchema) {
 
     AnyList::Builder anyList = root.getAnyListField();
     checkList(anyList.as<List<int>>(), {123, 456, 789});
+
+    EXPECT_TRUE(root.hasAnyListField());
+    auto orphan = root.disownAnyListField();
+    checkList(orphan.getReader().as<List<int>>(), {123, 456, 789});
+    EXPECT_FALSE(root.hasAnyListField());
+
+    root.adoptAnyListField(kj::mv(orphan));
+    EXPECT_TRUE(root.hasAnyListField());
+    checkList(root.getAnyListField().as<List<int>>(), {123, 456, 789});
   }
 
-  #if !CAPNP_LITE
+#if !CAPNP_LITE
   // This portion of the test relies on a Client, not present in lite-mode.
   {
     kj::EventLoop loop;
@@ -261,7 +279,7 @@ TEST(Any, AnyStructListCapInSchema) {
     req.send().wait(waitScope);
     EXPECT_EQ(1, callCount);
   }
-  #endif
+#endif
 }
 
 KJ_TEST("Builder::isStruct() does not corrupt segment pointer") {

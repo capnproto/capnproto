@@ -975,9 +975,12 @@ struct PointerHelpers<AnyStruct, Kind::OTHER> {
                    bounded(pointerCount) * POINTERS)));
   }
 
-  // TODO(soon): implement these
-  static void adopt(PointerBuilder builder, Orphan<AnyStruct>&& value);
-  static Orphan<AnyStruct> disown(PointerBuilder builder);
+  static void adopt(PointerBuilder builder, Orphan<AnyStruct>&& value) {
+    builder.adopt(kj::mv(value.builder));
+  }
+  static Orphan<AnyStruct> disown(PointerBuilder builder) {
+    return Orphan<AnyStruct>(builder.disown());
+  }
 };
 
 template <>
@@ -1006,9 +1009,12 @@ struct PointerHelpers<AnyList, Kind::OTHER> {
                    bounded(pointerCount) * POINTERS)));
   }
 
-  // TODO(soon): implement these
-  static void adopt(PointerBuilder builder, Orphan<AnyList>&& value);
-  static Orphan<AnyList> disown(PointerBuilder builder);
+  static void adopt(PointerBuilder builder, Orphan<AnyList>&& value) {
+    builder.adopt(kj::mv(value.builder));
+  }
+  static Orphan<AnyList> disown(PointerBuilder builder) {
+    return Orphan<AnyList>(builder.disown());
+  }
 };
 
 template <>
@@ -1021,6 +1027,19 @@ struct OrphanGetImpl<AnyStruct, Kind::OTHER> {
   }
   static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
     builder.truncate(size, _::StructSize(ZERO * WORDS, ZERO * POINTERS));
+  }
+};
+
+template <>
+struct OrphanGetImpl<AnyList, Kind::OTHER> {
+  static inline AnyList::Builder apply(_::OrphanBuilder& builder) {
+    return AnyList::Builder(builder.asListAnySize());
+  }
+  static inline AnyList::Reader applyReader(const _::OrphanBuilder& builder) {
+    return AnyList::Reader(builder.asListReaderAnySize());
+  }
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, ElementSize::POINTER);
   }
 };
 

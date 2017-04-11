@@ -3422,6 +3422,18 @@ ListBuilder OrphanBuilder::asStructList(StructSize elementSize) {
   return result;
 }
 
+ListBuilder OrphanBuilder::asListAnySize() {
+  KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
+
+  ListBuilder result = WireHelpers::getWritableListPointerAnySize(
+      tagAsPtr(), location, segment, capTable, nullptr, segment->getArena());
+
+  // Watch out, the pointer could have been updated if the object had to be relocated.
+  location = result.getLocation();
+
+  return result;
+}
+
 Text::Builder OrphanBuilder::asText() {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
 
@@ -3448,6 +3460,13 @@ ListReader OrphanBuilder::asListReader(ElementSize elementSize) const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readListPointer(
       segment, capTable, tagAsPtr(), location, nullptr, elementSize, kj::maxValue);
+}
+
+ListReader OrphanBuilder::asListReaderAnySize() const {
+  KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
+  return WireHelpers::readListPointer(
+      segment, capTable, tagAsPtr(), location, nullptr, ElementSize::VOID /* dummy */,
+      kj::maxValue);
 }
 
 #if !CAPNP_LITE
