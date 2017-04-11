@@ -510,14 +510,6 @@ public:
             // Too lazy to write a whole separate test for each of these cases...  so just make
             // sure they both compile here, and only actually test the latter.
             box.set("cap", kj::heap<TestExtendsDynamicImpl>(callCount));
-#if __GNUG__ && !__clang__
-            // The last line in this block tickles a bug in Debian G++ 4.9.2:
-            //     https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=781060
-            // For the moment, we can get away with skipping it as the previous line will set
-            // things up in a way that allows the test to complete successfully.
-            // TODO(soon): Remove this #if block when the bug is fixed.
-            return;
-#endif
             box.set("cap", kj::heap<TestExtendsImpl>(callCount));
           });
     } else {
