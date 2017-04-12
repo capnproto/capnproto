@@ -244,7 +244,7 @@ libkj_async_la_SOURCES=                                        \
   src/kj/async-io-win32.c++                                    \
   src/kj/time.c++
 
-libkj_http_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
+libkj_http_la_LIBADD = libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_http_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_http_la_SOURCES=                                         \
   src/kj/compat/http.c++
