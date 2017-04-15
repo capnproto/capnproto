@@ -167,7 +167,7 @@ enum class BuiltinHeaderIndices {
 #undef HEADER_ID
 };
 
-static constexpr size_t CONNECTION_HEADER_COUNT = 0
+static constexpr size_t CONNECTION_HEADER_COUNT KJ_UNUSED = 0
 #define COUNT_HEADER(id, name) + 1
   KJ_HTTP_FOR_EACH_CONNECTION_HEADER(COUNT_HEADER)
 #undef COUNT_HEADER
@@ -1483,7 +1483,7 @@ private:
 
 // =======================================================================================
 
-class HttpClientImpl: public HttpClient {
+class HttpClientImpl final: public HttpClient {
 public:
   HttpClientImpl(HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& rawStream)
       : httpInput(rawStream, responseHeaderTable),
@@ -1587,7 +1587,7 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> HttpService::connect(kj::String host) {
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpService");
 }
 
-class HttpServer::Connection: private HttpService::Response {
+class HttpServer::Connection final: private HttpService::Response {
 public:
   Connection(HttpServer& server, kj::AsyncIoStream& stream)
       : server(server),
