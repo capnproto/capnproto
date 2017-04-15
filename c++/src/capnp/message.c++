@@ -242,6 +242,9 @@ MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
 }
 
 kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
+  KJ_REQUIRE(minimumSize <= MAX_SEGMENT_WORDS, "MallocMessageBuilder asked to allocate segment above maximum serializable size.");
+  KJ_ASSERT(nextSize <= MAX_SEGMENT_WORDS, "MallocMessageBuilder nextSize out of bounds.");
+
   if (!returnedFirstSegment && !ownFirstSegment) {
     kj::ArrayPtr<word> result = kj::arrayPtr(reinterpret_cast<word*>(firstSegment), nextSize);
     if (result.size() >= minimumSize) {
@@ -277,7 +280,11 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
       moreSegments = mv(newSegments);
     }
     segments->segments.push_back(result);
-    if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) nextSize += size;
+    if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) {
+      // set nextSize = min(nextSize+size, MAX_SEGMENT_WORDS)
+      // while protecting against possible overflow of (nextSize+size)
+      nextSize = (size <= MAX_SEGMENT_WORDS-nextSize) ? nextSize+size : MAX_SEGMENT_WORDS;
+    }
   }
 
   return kj::arrayPtr(reinterpret_cast<word*>(result), size);
