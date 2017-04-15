@@ -23,6 +23,7 @@
 #include <kj/debug.h>
 #include <kj/parse/char.h>
 #include <unordered_map>
+#include <stdlib.h>
 
 namespace kj {
 
@@ -1458,7 +1459,7 @@ public:
       inner.writeBodyData(kj::str(*length, "\r\n"));
       auto lengthValue = *length;
       return inner.pumpBodyFrom(input, *length)
-          .then([this,lengthValue](size_t actual) {
+          .then([this,lengthValue](uint64_t actual) {
         if (actual < lengthValue) {
           inner.abortBody();
           KJ_FAIL_REQUIRE(
