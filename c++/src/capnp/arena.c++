@@ -27,6 +27,7 @@
 #include <vector>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #if !CAPNP_LITE
 #include "capability.h"
@@ -46,6 +47,12 @@ void ReadLimiter::unread(WordCount64 amount) {
   if (newValue > oldValue) {
     limit = newValue;
   }
+}
+
+void SegmentReader::abortCheckObjectFault() {
+  KJ_LOG(FATAL, "checkObject()'s parameter is not in-range; this would segfault in opt mode",
+                "this is a serious bug in Cap'n Proto; please notify security@sandstorm.io");
+  abort();
 }
 
 void SegmentBuilder::throwNotWritable() {

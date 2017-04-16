@@ -95,7 +95,7 @@ AnyPointer::Reader MessageReader::getRootInternal() {
 
   _::SegmentReader* segment = arena()->tryGetSegment(_::SegmentId(0));
   KJ_REQUIRE(segment != nullptr &&
-             segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1),
+             segment->checkObject(segment->getStartPtr(), ONE * WORDS),
              "Message did not contain a root pointer.") {
     return AnyPointer::Reader();
   }

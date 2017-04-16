@@ -117,7 +117,20 @@ public:
   inline SegmentReader(Arena* arena, SegmentId id, const word* ptr, SegmentWordCount size,
                        ReadLimiter* readLimiter);
 
-  KJ_ALWAYS_INLINE(bool containsInterval(const void* from, const void* to));
+  KJ_ALWAYS_INLINE(const word* checkOffset(const word* from, ptrdiff_t offset));
+  // Adds the given offset to the given pointer, checks that it is still within the bounds of the
+  // segment, then returns it. Note that the "end" pointer of the segment (which technically points
+  // to the word after the last in the segment) is considered in-bounds for this purpose, so you
+  // can't necessarily dereference it. You must call checkObject() next to check that the object
+  // you want to read is entirely in-bounds.
+  //
+  // If `from + offset` is out-of-range, this returns a pointer to the end of the segment. Thus,
+  // any non-zero-sized object will fail `checkObject()`. We do this instead of throwing to save
+  // some code footprint.
+
+  KJ_ALWAYS_INLINE(bool checkObject(const word* start, WordCountN<31> size));
+  // Assuming that `start` is in-bounds for this segment (probably checked using `checkOffset()`),
+  // check that `start + size` is also in-bounds, and hence the whole area in-between is valid.
 
   KJ_ALWAYS_INLINE(bool amplifiedRead(WordCount virtualAmount));
   // Indicates that the reader should pretend that `virtualAmount` additional data was read even
@@ -147,6 +160,9 @@ private:
   KJ_DISALLOW_COPY(SegmentReader);
 
   friend class SegmentBuilder;
+
+  static void abortCheckObjectFault();
+  // Called in debug mode in cases that would segfault in opt mode. (Should be impossible!)
 };
 
 class SegmentBuilder: public SegmentReader {
@@ -367,18 +383,25 @@ inline SegmentReader::SegmentReader(Arena* arena, SegmentId id, const word* ptr,
     : arena(arena), id(id), ptr(kj::arrayPtr(ptr, unbound(size / WORDS))),
       readLimiter(readLimiter) {}
 
-inline bool SegmentReader::containsInterval(const void* from, const void* to) {
-  uintptr_t start = reinterpret_cast<uintptr_t>(from) - reinterpret_cast<uintptr_t>(ptr.begin());
-  uintptr_t end = reinterpret_cast<uintptr_t>(to) - reinterpret_cast<uintptr_t>(ptr.begin());
-  uintptr_t bound = ptr.size() * sizeof(capnp::word);
+inline const word* SegmentReader::checkOffset(const word* from, ptrdiff_t offset) {
+  ptrdiff_t min = ptr.begin() - from;
+  ptrdiff_t max = ptr.end() - from;
+  if (offset >= min && offset <= max) {
+    return from + offset;
+  } else {
+    return ptr.end();
+  }
+}
 
-  return start <= bound && end <= bound && start <= end &&
-      readLimiter->canRead(
-          intervalLength(reinterpret_cast<const byte*>(from),
-                         reinterpret_cast<const byte*>(to),
-                         MAX_SEGMENT_WORDS * BYTES_PER_WORD)
-              / BYTES_PER_WORD,
-          arena);
+inline bool SegmentReader::checkObject(const word* start, WordCountN<31> size) {
+  auto startOffset = intervalLength(ptr.begin(), start, MAX_SEGMENT_WORDS);
+#ifdef KJ_DEBUG
+  if (startOffset > bounded(ptr.size()) * WORDS) {
+    abortCheckObjectFault();
+  }
+#endif
+  return startOffset + size <= bounded(ptr.size()) * WORDS &&
+      readLimiter->canRead(size, arena);
 }
 
 inline bool SegmentReader::amplifiedRead(WordCount virtualAmount) {
