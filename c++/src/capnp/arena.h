@@ -367,7 +367,11 @@ inline SegmentReader::SegmentReader(Arena* arena, SegmentId id, kj::ArrayPtr<con
     : arena(arena), id(id), ptr(ptr), readLimiter(readLimiter) {}
 
 inline bool SegmentReader::containsInterval(const void* from, const void* to) {
-  return from >= this->ptr.begin() && to <= this->ptr.end() && from <= to &&
+  uintptr_t start = reinterpret_cast<uintptr_t>(from) - reinterpret_cast<uintptr_t>(ptr.begin());
+  uintptr_t end = reinterpret_cast<uintptr_t>(to) - reinterpret_cast<uintptr_t>(ptr.begin());
+  uintptr_t bound = ptr.size() * sizeof(capnp::word);
+
+  return start <= bound && end <= bound && start <= end &&
       readLimiter->canRead(
           intervalLength(reinterpret_cast<const byte*>(from),
                          reinterpret_cast<const byte*>(to)) / BYTES_PER_WORD,
