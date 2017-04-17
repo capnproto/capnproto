@@ -12,8 +12,10 @@
 
 set(CapnProto_VERSION @VERSION@)
 
-set(CAPNP_EXECUTABLE $<TARGET_FILE:CapnProto::capnp_tool>)
-set(CAPNPC_CXX_EXECUTABLE $<TARGET_FILE:CapnProto::capnpc_cpp>)
+if(@CAPNP_BUILD_TOOLS@)
+  set(CAPNP_EXECUTABLE $<TARGET_FILE:CapnProto::capnp_tool>)
+  set(CAPNPC_CXX_EXECUTABLE $<TARGET_FILE:CapnProto::capnpc_cpp>)
+endif()
 set(CAPNP_INCLUDE_DIRECTORY "@PACKAGE_CMAKE_INSTALL_FULL_INCLUDEDIR@")
 
 # work around http://public.kitware.com/Bug/view.php?id=15258
