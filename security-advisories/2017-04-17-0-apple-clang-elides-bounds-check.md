@@ -80,7 +80,7 @@ out, pointer arithmetic that overflows is undefined behavior under the C
 standard. As a result, the compiler is allowed to assume that the addition on
 the first line never overflows. Since `farPointer.offset` is an unsigned
 number, the compiler is able to conclude that `target < segmentStart` always
-evaluates true. Thus, the compiler removes this part of the check.
+evaluates false. Thus, the compiler removes this part of the check.
 Unfortunately, in the case of overflow, this is exactly the part of the check
 that we need.
 
