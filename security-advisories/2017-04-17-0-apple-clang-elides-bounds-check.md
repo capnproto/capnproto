@@ -20,7 +20,7 @@ Announced
 CVE
 ===
 
-(none assigned yet)
+CVE-2017-7892
 
 Impact
 ======
