@@ -13,8 +13,8 @@ if(BUILD_TESTING)
   # Setup googletest build and library targets (gtest and gtest_main)
   include(ExternalProject)
   ExternalProject_Add(gtest_build
-    URL http://googletest.googlecode.com/files/gtest-1.7.0.zip
-    URL_MD5 2d6ec8ccdf5c46b05ba54a9fd1d130d7
+    URL https://github.com/google/googletest/archive/release-1.7.0.zip
+    URL_MD5 ef5e700c8a0f3ee123e2e0209b8b4961
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -Dgtest_force_shared_crt=1
     INSTALL_COMMAND ""  # Disable install
   )
