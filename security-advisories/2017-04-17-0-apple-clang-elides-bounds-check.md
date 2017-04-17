@@ -38,8 +38,8 @@ Fixed in
 
 - git commit [52bc956459a5e83d7c31be95763ff6399e064ae4][0]
 - release 0.5.3.1:
-  - Unix: https://capnproto.org/capnproto-c++-0.5.1.1.tar.gz
-  - Windows: https://capnproto.org/capnproto-c++-win32-0.5.1.1.zip
+  - Unix: https://capnproto.org/capnproto-c++-0.5.3.1.tar.gz
+  - Windows: https://capnproto.org/capnproto-c++-win32-0.5.3.1.zip
 - release 0.6 (future)
 
 [0]: https://github.com/sandstorm-io/capnproto/commit/52bc956459a5e83d7c31be95763ff6399e064ae4
