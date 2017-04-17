@@ -6,7 +6,7 @@ if [ ! -e gtest ]; then
   echo "================================================================================"
   echo "Fetching Google Test code..."
   echo "================================================================================"
-  svn checkout http://googletest.googlecode.com/svn/tags/release-1.7.0 gtest
+  git clone -b release-1.7.0 git@github.com:google/googletest.git gtest
 fi
 
 echo "================================================================================"
