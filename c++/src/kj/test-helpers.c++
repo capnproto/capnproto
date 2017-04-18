@@ -24,6 +24,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#else
+#include <process.h>
 #endif
 
 namespace kj {
