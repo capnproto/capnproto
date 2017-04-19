@@ -354,6 +354,29 @@ TEST(Any, Equals) {
   EXPECT_EQ(Equality::EQUAL, anyA.equals(anyB));
 }
 
+KJ_TEST("Bit list with nonzero pad bits") {
+  AlignedData<2> segment1 = {{
+      0x01, 0x00, 0x00, 0x00, 0x59, 0x00, 0x00, 0x00, // eleven bit-sized elements
+      0xee, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // twelfth bit is set!
+  }};
+  kj::ArrayPtr<const word> segments1[1] = {
+    kj::arrayPtr(segment1.words, 2)
+  };
+  SegmentArrayMessageReader message1(kj::arrayPtr(segments1, 1));
+
+  AlignedData<2> segment2 = {{
+      0x01, 0x00, 0x00, 0x00, 0x59, 0x00, 0x00, 0x00, // eleven bit-sized elements
+      0xee, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // twelfth bit is not set
+  }};
+  kj::ArrayPtr<const word> segments2[1] = {
+    kj::arrayPtr(segment2.words, 2)
+  };
+  SegmentArrayMessageReader message2(kj::arrayPtr(segments2, 1));
+
+  // Should be equal, despite nonzero padding.
+  KJ_ASSERT(message1.getRoot<AnyList>() == message2.getRoot<AnyList>());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
