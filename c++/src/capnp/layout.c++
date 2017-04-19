@@ -1811,7 +1811,15 @@ struct WireHelpers {
       } else {
         // List of data.
         ref->listRef.set(value.elementSize, value.elementCount);
-        copyMemory(ptr, reinterpret_cast<const word*>(value.ptr), totalSize);
+
+        auto wholeByteSize = value.elementCount * value.step / BITS_PER_BYTE;
+        copyMemory(reinterpret_cast<byte*>(ptr), value.ptr, wholeByteSize);
+        auto leftoverBits = value.elementCount * value.step % BITS_PER_BYTE;
+        if (leftoverBits > 0) {
+          // We need to copy a partial byte.
+          uint8_t mask = (1 << leftoverBits) - 1;
+          (reinterpret_cast<byte*>(ptr))[wholeByteSize] = mask & value.ptr[wholeByteSize];
+        }
       }
 
       return { segment, ptr };
@@ -3150,7 +3158,27 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
 
       auto bitSize = upgradeBound<uint64_t>(this->elementCount) *
                      dataBitsPerElement(this->elementSize);
-      *readHead += WireHelpers::roundBitsUpToWords(bitSize);
+      auto truncatedByteSize = bitSize / BITS_PER_BYTE;
+      auto byteReadHead = reinterpret_cast<const uint8_t*>(*readHead) + truncatedByteSize;
+      auto readHeadEnd = *readHead + WireHelpers::roundBitsUpToWords(bitSize);
+
+      auto leftoverBits = bitSize % 8;
+      if (leftoverBits > 0) {
+        uint8_t mask = ~((1 << leftoverBits) - 1);
+        if (mask & *byteReadHead) {
+          return false;
+        }
+        byteReadHead += 1;
+      }
+
+      while (byteReadHead != reinterpret_cast<const uint8_t*>(readHeadEnd)) {
+        if (*byteReadHead != 0) {
+          return false;
+        }
+        byteReadHead += 1;
+      }
+
+      *readHead = readHeadEnd;
       return true;
     }
   }
