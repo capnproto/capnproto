@@ -1812,7 +1812,10 @@ struct WireHelpers {
         // List of data.
         ref->listRef.set(value.elementSize, value.elementCount);
 
-        auto wholeByteSize = upgradeBound<uint64_t>(value.elementCount) * value.step / BITS_PER_BYTE;
+        auto wholeByteSize =
+          assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS + 3>() - 1>(
+            upgradeBound<uint64_t>(value.elementCount) * value.step / BITS_PER_BYTE,
+            []() { KJ_FAIL_ASSERT("encountered impossibly long data ListReader"); });
         copyMemory(reinterpret_cast<byte*>(ptr), value.ptr, wholeByteSize);
         auto leftoverBits =
           (upgradeBound<uint64_t>(value.elementCount) * value.step) % (BYTES * BITS_PER_BYTE);
