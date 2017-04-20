@@ -1818,7 +1818,7 @@ struct WireHelpers {
           (upgradeBound<uint64_t>(value.elementCount) * value.step) % (BYTES * BITS_PER_BYTE);
         if (leftoverBits > ZERO * BITS) {
           // We need to copy a partial byte.
-          uint8_t mask = (1 << leftoverBits / BITS) - 1;
+          uint8_t mask = (1 << unboundAs<uint8_t>(leftoverBits / BITS)) - 1;
           *((reinterpret_cast<byte*>(ptr)) + wholeByteSize) = mask & *(value.ptr + wholeByteSize);
         }
       }
@@ -3165,7 +3165,7 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
 
       auto leftoverBits = bitSize % (BYTES * BITS_PER_BYTE);
       if (leftoverBits > ZERO * BITS) {
-        auto mask = ~((1 << (leftoverBits / BITS)) - 1);
+        auto mask = ~((1 << unboundAs<uint8_t>(leftoverBits / BITS)) - 1);
 
         if (mask & *byteReadHead) {
           return false;
