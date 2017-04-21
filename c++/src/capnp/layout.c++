@@ -1811,7 +1811,19 @@ struct WireHelpers {
       } else {
         // List of data.
         ref->listRef.set(value.elementSize, value.elementCount);
-        copyMemory(ptr, reinterpret_cast<const word*>(value.ptr), totalSize);
+
+        auto wholeByteSize =
+          assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS + 3>() - 1>(
+            upgradeBound<uint64_t>(value.elementCount) * value.step / BITS_PER_BYTE,
+            []() { KJ_FAIL_ASSERT("encountered impossibly long data ListReader"); });
+        copyMemory(reinterpret_cast<byte*>(ptr), value.ptr, wholeByteSize);
+        auto leftoverBits =
+          (upgradeBound<uint64_t>(value.elementCount) * value.step) % (BYTES * BITS_PER_BYTE);
+        if (leftoverBits > ZERO * BITS) {
+          // We need to copy a partial byte.
+          uint8_t mask = (1 << unboundAs<uint8_t>(leftoverBits / BITS)) - 1;
+          *((reinterpret_cast<byte*>(ptr)) + wholeByteSize) = mask & *(value.ptr + wholeByteSize);
+        }
       }
 
       return { segment, ptr };
@@ -3150,7 +3162,28 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
 
       auto bitSize = upgradeBound<uint64_t>(this->elementCount) *
                      dataBitsPerElement(this->elementSize);
-      *readHead += WireHelpers::roundBitsUpToWords(bitSize);
+      auto truncatedByteSize = bitSize / BITS_PER_BYTE;
+      auto byteReadHead = reinterpret_cast<const uint8_t*>(*readHead) + truncatedByteSize;
+      auto readHeadEnd = *readHead + WireHelpers::roundBitsUpToWords(bitSize);
+
+      auto leftoverBits = bitSize % (BYTES * BITS_PER_BYTE);
+      if (leftoverBits > ZERO * BITS) {
+        auto mask = ~((1 << unboundAs<uint8_t>(leftoverBits / BITS)) - 1);
+
+        if (mask & *byteReadHead) {
+          return false;
+        }
+        byteReadHead += 1;
+      }
+
+      while (byteReadHead != reinterpret_cast<const uint8_t*>(readHeadEnd)) {
+        if (*byteReadHead != 0) {
+          return false;
+        }
+        byteReadHead += 1;
+      }
+
+      *readHead = readHeadEnd;
       return true;
     }
   }

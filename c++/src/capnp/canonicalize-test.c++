@@ -332,6 +332,61 @@ KJ_TEST("isCanonical requires truncation of 0-valued struct fields in all list m
 
   KJ_ASSERT(!nonTruncated.isCanonical());
 }
+
+KJ_TEST("primitive list with nonzero padding") {
+   AlignedData<3> segment = {{
+     // Struct, one pointer field.
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+
+     // List of three byte-sized elements.
+     0x01, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00,
+
+     // Fourth byte is non-zero!
+     0x01, 0x02, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(segment.words, 3)};
+  SegmentArrayMessageReader message(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(!message.isCanonical());
+
+  auto canonicalWords = canonicalize(message.getRoot<test::TestAnyPointer>());
+
+  AlignedData<3> canonicalSegment = {{
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00,
+    0x01, 0x02, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+  }};
+
+  ASSERT_EQ(canonicalWords.asBytes(), kj::arrayPtr(canonicalSegment.bytes, 3 * 8));
+}
+
+KJ_TEST("bit list with nonzero padding") {
+   AlignedData<3> segment = {{
+     // Struct, one pointer field.
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+
+     // List of eleven bit-sized elements.
+     0x01, 0x00, 0x00, 0x00, 0x59, 0x00, 0x00, 0x00,
+
+     // Twelfth bit is non-zero!
+     0xee, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  }};
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(segment.words, 3)};
+  SegmentArrayMessageReader message(kj::arrayPtr(segments, 1));
+
+  KJ_ASSERT(!message.isCanonical());
+
+  auto canonicalWords = canonicalize(message.getRoot<test::TestAnyPointer>());
+
+  AlignedData<3> canonicalSegment = {{
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x59, 0x00, 0x00, 0x00,
+    0xee, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  }};
+
+  ASSERT_EQ(canonicalWords.asBytes(), kj::arrayPtr(canonicalSegment.bytes, 3 * 8));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
