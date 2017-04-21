@@ -64,6 +64,14 @@ while [ $# -gt 0 ]; do
       ssh $HOST "cd tmp-test-capnp && git checkout test"
       exec ssh $HOST "cd tmp-test-capnp && ./super-test.sh $@ && cd .. && rm -rf tmp-test-capnp"
       ;;
+    compiler )
+      if [ "$#" -lt 2 ]; then
+        echo "usage: $0 compiler CXX_NAME" >&2
+        exit 1
+      fi
+      export CXX="$2"
+      shift
+      ;;
     clang )
       export CXX=clang++
       ;;
@@ -101,6 +109,11 @@ while [ $# -gt 0 ]; do
       exit 0
       ;;
     android )
+      # To install Android SDK:
+      # - Download command-line tools: https://developer.android.com/studio/index.html#command-tools
+      # - Run $SDK_HOME/tools/bin/sdkmanager platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
+      # - Run $SDK_HOME/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
+      # - Run $SDK_HOME/ndk-bundle/build/tools/make_standalone_toolchain.py --arch arm --api 24 --install-dir $TOOLCHAIN_HOME
       if [ "$#" -ne 4 ]; then
         echo "usage: $0 android SDK_HOME TOOLCHAIN_HOME CROSS_HOST" >&2
         exit 1
@@ -127,12 +140,16 @@ while [ $# -gt 0 ]; do
 
       echo "Starting emulator..."
       trap 'kill $(jobs -p)' EXIT
-      $SDK_HOME/tools/emulator -avd n6 -no-window &
-      $SDK_HOME/platform-tools/adb wait-for-device
+      # TODO(soon): Speed up with KVM?
+      $SDK_HOME/emulator/emulator -avd capnp -no-window &
+      $SDK_HOME/platform-tools/adb 'wait-for-device'
       echo "Waiting for localhost to be resolvable..."
-      $SDK_HOME/platform-tools/adb shell 'while ! ping -c 1 localhost > /dev/null 2>&1; do sleep 1; done'
-      doit $SDK_HOME/platform-tools/adb push capnp-test /data/capnp-test
-      doit $SDK_HOME/platform-tools/adb shell 'cd /data && /data/capnp-test && echo ANDROID_""TESTS_PASSED' | tee android-test.log
+      doit $SDK_HOME/platform-tools/adb shell 'while ! ping -c 1 localhost > /dev/null 2>&1; do sleep 1; done'
+      # TODO(cleanup): With 'adb shell' I find I cannot put files anywhere, so I'm using 'su' a
+      #   lot here. There is probably a better way.
+      doit $SDK_HOME/platform-tools/adb shell 'su 0 tee /data/capnp-test > /dev/null' < capnp-test
+      doit $SDK_HOME/platform-tools/adb shell 'su 0 chmod a+rx /data/capnp-test'
+      doit $SDK_HOME/platform-tools/adb shell 'cd /data && su 0 /data/capnp-test && echo ANDROID_""TESTS_PASSED' | tee android-test.log
       grep -q ANDROID_TESTS_PASSED android-test.log
 
       doit make distclean
@@ -160,7 +177,7 @@ while [ $# -gt 0 ]; do
       echo "========================================================================="
       echo "Android"
       echo "========================================================================="
-      "$0" android /home/kenton/android/android-sdk-linux /home/kenton/android/android-16 arm-linux-androideabi
+      "$0" android /home/kenton/android-sdk-linux /home/kenton/android-24 arm-linux-androideabi
       echo "========================================================================="
       echo "CMake"
       echo "========================================================================="

@@ -441,7 +441,7 @@ void testHttpClientResponse(kj::AsyncIoContext& io, const HttpResponseTestCase& 
   auto client = newHttpClient(table, fragmenter);
 
   HttpHeaders headers(table);
-  auto request = client->request(testCase.method, "/", headers, size_t(0));
+  auto request = client->request(testCase.method, "/", headers, uint64_t(0));
   request.body = nullptr;
   auto clientTask = request.response
       .then([&](HttpClient::Response&& response) {
