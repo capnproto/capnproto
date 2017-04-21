@@ -193,6 +193,7 @@ public:
       maxBytes -= n;
       ptr += n;
     }
+    return total;
   }
 
 private:
