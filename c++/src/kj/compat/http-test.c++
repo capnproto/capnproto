@@ -887,14 +887,15 @@ KJ_TEST("HttpClient pipeline") {
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
-  auto readRequestsPromise = pipe.ends[1]->readAllText();
-
-  auto allRequestText =
-      kj::strArray(KJ_MAP(testCase, PIPELINE_TESTS) { return testCase.request.raw; }, "");
-  auto allResponseText =
-      kj::strArray(KJ_MAP(testCase, PIPELINE_TESTS) { return testCase.response.raw; }, "");
-
-  auto writeResponsesPromise = pipe.ends[1]->write(allResponseText.begin(), allResponseText.size());
+  kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
+  for (auto& testCase: PIPELINE_TESTS) {
+    writeResponsesPromise = writeResponsesPromise
+        .then([&]() {
+      return expectRead(*pipe.ends[1], testCase.request.raw);
+    }).then([&]() {
+      return pipe.ends[1]->write(testCase.response.raw.begin(), testCase.response.raw.size());
+    });
+  }
 
   HttpHeaderTable table;
   auto client = newHttpClient(table, *pipe.ends[0]);
@@ -928,9 +929,6 @@ KJ_TEST("HttpClient pipeline") {
   client = nullptr;
   pipe.ends[0]->shutdownWrite();
 
-  auto requests = readRequestsPromise.wait(io.waitScope);
-  KJ_EXPECT(requests == allRequestText, requests);
-
   writeResponsesPromise.wait(io.waitScope);
 }
 
@@ -938,14 +936,15 @@ KJ_TEST("HttpClient parallel pipeline") {
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
-  auto readRequestsPromise = pipe.ends[1]->readAllText();
-
-  auto allRequestText =
-      kj::strArray(KJ_MAP(testCase, PIPELINE_TESTS) { return testCase.request.raw; }, "");
-  auto allResponseText =
-      kj::strArray(KJ_MAP(testCase, PIPELINE_TESTS) { return testCase.response.raw; }, "");
-
-  auto writeResponsesPromise = pipe.ends[1]->write(allResponseText.begin(), allResponseText.size());
+  kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
+  for (auto& testCase: PIPELINE_TESTS) {
+    writeResponsesPromise = writeResponsesPromise
+        .then([&]() {
+      return expectRead(*pipe.ends[1], testCase.request.raw);
+    }).then([&]() {
+      return pipe.ends[1]->write(testCase.response.raw.begin(), testCase.response.raw.size());
+    });
+  }
 
   HttpHeaderTable table;
   auto client = newHttpClient(table, *pipe.ends[0]);
@@ -982,9 +981,6 @@ KJ_TEST("HttpClient parallel pipeline") {
 
   client = nullptr;
   pipe.ends[0]->shutdownWrite();
-
-  auto requests = readRequestsPromise.wait(io.waitScope);
-  KJ_EXPECT(requests == allRequestText, requests);
 
   writeResponsesPromise.wait(io.waitScope);
 }
