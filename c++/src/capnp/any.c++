@@ -141,6 +141,11 @@ Equality AnyList::Reader::equals(AnyList::Reader right) {
   if(size() != right.size()) {
     return Equality::NOT_EQUAL;
   }
+
+  if (getElementSize() != right.getElementSize()) {
+    return Equality::NOT_EQUAL;
+  }
+
   auto eqResult = Equality::EQUAL;
   switch(getElementSize()) {
     case ElementSize::VOID:
@@ -149,10 +154,6 @@ Equality AnyList::Reader::equals(AnyList::Reader right) {
     case ElementSize::TWO_BYTES:
     case ElementSize::FOUR_BYTES:
     case ElementSize::EIGHT_BYTES: {
-      if (getElementSize() != right.getElementSize()) {
-        return Equality::NOT_EQUAL;
-      }
-
       size_t cmpSize = getRawBytes().size();
 
       if (getElementSize() == ElementSize::BIT && size() % 8 != 0) {
