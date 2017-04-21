@@ -735,7 +735,7 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
 
   KJ_IF_MAYBE(exception, intermediate.exception) {
     // There is an exception.  If there is also a value, delete it.
-    kj::runCatchingExceptions([&,this]() { intermediate.value = nullptr; });
+    kj::runCatchingExceptions([&]() { intermediate.value = nullptr; });
     // Now set step2 to a rejected promise.
     inner = heap<ImmediateBrokenPromiseNode>(kj::mv(*exception));
   } else KJ_IF_MAYBE(value, intermediate.value) {

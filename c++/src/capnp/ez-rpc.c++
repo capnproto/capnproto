@@ -126,7 +126,7 @@ struct EzRpcClient::Impl {
       : context(EzRpcContext::getThreadLocal()),
         setupPromise(context->getIoProvider().getNetwork()
             .parseAddress(serverAddress, defaultPort)
-            .then([readerOpts](kj::Own<kj::NetworkAddress>&& addr) {
+            .then([](kj::Own<kj::NetworkAddress>&& addr) {
               return connectAttach(kj::mv(addr));
             }).then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
               clientContext = kj::heap<ClientContext>(kj::mv(stream),

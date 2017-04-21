@@ -161,13 +161,13 @@ template <typename ServerType>
 typename ServerType::Serves::Client membrane(
     kj::Own<ServerType> inner, kj::Own<MembranePolicy> policy) {
   return membrane(Capability::Client(kj::mv(inner)), kj::mv(policy))
-      .castAs<typename ServerType::Serves::Client>();
+      .castAs<typename ServerType::Serves>();
 }
 template <typename ServerType>
 typename ServerType::Serves::Client reverseMembrane(
     kj::Own<ServerType> inner, kj::Own<MembranePolicy> policy) {
   return reverseMembrane(Capability::Client(kj::mv(inner)), kj::mv(policy))
-      .castAs<typename ServerType::Serves::Client>();
+      .castAs<typename ServerType::Serves>();
 }
 
 namespace _ {  // private

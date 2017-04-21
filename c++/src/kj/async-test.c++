@@ -167,7 +167,7 @@ TEST(Async, Chain) {
   Promise<int> promise2 = evalLater([&]() -> int { return 321; });
 
   auto promise3 = promise.then([&](int i) {
-    return promise2.then([&loop,i](int j) {
+    return promise2.then([i](int j) {
       return i + j;
     });
   });

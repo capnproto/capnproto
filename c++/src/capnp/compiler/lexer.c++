@@ -152,7 +152,7 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
 
   auto& commaDelimitedList = arena.copy(p::transform(
       p::sequence(tokenSequence, p::many(p::sequence(p::exactChar<','>(), tokenSequence))),
-      [this](kj::Array<Orphan<Token>>&& first, kj::Array<kj::Array<Orphan<Token>>>&& rest)
+      [](kj::Array<Orphan<Token>>&& first, kj::Array<kj::Array<Orphan<Token>>>&& rest)
           -> kj::Array<kj::Array<Orphan<Token>>> {
         if (first == nullptr && rest == nullptr) {
           // Completely empty list.
@@ -231,7 +231,7 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
           p::oneOf(sequence(p::exactChar<'\xff'>(), p::exactChar<'\xfe'>()),
                    sequence(p::exactChar<'\xfe'>(), p::exactChar<'\xff'>()),
                    sequence(p::exactChar<'\x00'>())),
-          [this, &errorReporter](Location loc) -> kj::Maybe<Orphan<Token>> {
+          [&errorReporter](Location loc) -> kj::Maybe<Orphan<Token>> {
             errorReporter.addError(loc.begin(), loc.end(),
                 "Non-UTF-8 input detected. Cap'n Proto schema files must be UTF-8 text.");
             return nullptr;
@@ -275,7 +275,7 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
       ));
 
   auto& statement = arena.copy(p::transformWithLocation(p::sequence(tokenSequence, statementEnd),
-      [this](Location loc, kj::Array<Orphan<Token>>&& tokens, Orphan<Statement>&& statement) {
+      [](Location loc, kj::Array<Orphan<Token>>&& tokens, Orphan<Statement>&& statement) {
         auto builder = statement.get();
         auto tokensBuilder = builder.initTokens(tokens.size());
         for (uint i = 0; i < tokens.size(); i++) {

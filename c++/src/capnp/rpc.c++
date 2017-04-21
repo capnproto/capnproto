@@ -983,7 +983,7 @@ private:
 
         // Make a promise which resolves to `replacement` as soon as the `Disembargo` comes back.
         auto embargoPromise = paf.promise.then(
-            kj::mvCapture(replacement, [this](kj::Own<ClientHook>&& replacement) {
+            kj::mvCapture(replacement, [](kj::Own<ClientHook>&& replacement) {
               return kj::mv(replacement);
             }));
 

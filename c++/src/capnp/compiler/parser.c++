@@ -599,7 +599,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                     builder.initApplication().adoptParams(kj::mv(params.value));
                     return result;
                   })))),
-      [this](Orphan<Expression>&& base, kj::Array<Orphan<Expression>>&& suffixes)
+      [](Orphan<Expression>&& base, kj::Array<Orphan<Expression>>&& suffixes)
           -> Orphan<Expression> {
         // Apply all the suffixes to the base expression.
         uint startByte = base.getReader().getStartByte();
@@ -773,7 +773,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
   // Parse an ordinal followed by an optional colon, or no ordinal but require a colon.
   auto& ordinalOrColon = arena.copy(p::oneOf(
       p::transform(p::sequence(parsers.ordinal, p::optional(op("!")), p::optional(op(":"))),
-          [this](Orphan<LocatedInteger>&& ordinal,
+          [](Orphan<LocatedInteger>&& ordinal,
                  kj::Maybe<kj::Tuple<>> exclamation,
                  kj::Maybe<kj::Tuple<>> colon)
                    -> kj::Tuple<kj::Maybe<Orphan<LocatedInteger>>, bool, bool> {
@@ -966,7 +966,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
   auto& annotationTarget = arena.copy(p::oneOf(
       identifier,
       p::transformWithLocation(op("*"),
-          [this](kj::parse::Span<List<Token>::Reader::Iterator> location) {
+          [](kj::parse::Span<List<Token>::Reader::Iterator> location) {
             // Hacky...
             return Located<Text::Reader>("*",
                 location.begin()->getStartByte(),

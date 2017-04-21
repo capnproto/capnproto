@@ -1653,7 +1653,7 @@ public:
           }
 
           auto timeoutPromise = server.timer.afterDelay(server.settings.pipelineTimeout)
-              .then([this]() { return false; });
+              .then([]() { return false; });
           auto awaitPromise = httpInput.awaitNextMessage();
 
           return timeoutPromise.exclusiveJoin(kj::mv(awaitPromise))
