@@ -49,6 +49,20 @@ namespace kj {
 
 namespace _ {  // private
 
+struct WinsockInitializer {
+  WinsockInitializer() {
+    WSADATA dontcare;
+    int result = WSAStartup(MAKEWORD(2, 2), &dontcare);
+    if (result != 0) {
+      KJ_FAIL_WIN32("WSAStartup()", result);
+    }
+  }
+};
+
+void initWinsockOnce() {
+  static WinsockInitializer initializer;
+}
+
 int win32Socketpair(SOCKET socks[2]) {
   // This function from: https://github.com/ncm/selectable-socketpair/blob/master/socketpair.c
   //
@@ -83,6 +97,8 @@ int win32Socketpair(SOCKET socks[2]) {
   //   header declaration.
   // TODO(cleanup): Consider putting this somewhere public? Note that since it depends on Winsock,
   //   it needs to be in the kj-async library.
+
+  initWinsockOnce();
 
   union {
     struct sockaddr_in inaddr;
@@ -1116,11 +1132,7 @@ Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel) {
 }
 
 AsyncIoContext setupAsyncIo() {
-  WSADATA dontcare;
-  int result = WSAStartup(MAKEWORD(2, 2), &dontcare);
-  if (result != 0) {
-    KJ_FAIL_WIN32("WSAStartup()", result);
-  }
+  _::initWinsockOnce();
 
   auto lowLevel = heap<LowLevelAsyncIoProviderImpl>();
   auto ioProvider = kj::heap<AsyncIoProviderImpl>(*lowLevel);
