@@ -38,6 +38,7 @@
 #include <ws2ipdef.h>
 #include <ws2tcpip.h>
 #include <mswsock.h>
+#include <stdlib.h>
 
 #ifndef IPV6_V6ONLY
 // MinGW's headers are missing this.
@@ -179,7 +180,6 @@ public:
     if (flags & LowLevelAsyncIoProvider::TAKE_OWNERSHIP) {
       KJ_WINSOCK(closesocket(fd)) { break; }
     }
-    static_assert(sizeof(SOCKET) == 8, "nope");
   }
 
 protected:
