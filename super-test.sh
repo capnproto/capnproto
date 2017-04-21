@@ -94,16 +94,12 @@ while [ $# -gt 0 ]; do
       cd c++
       test -e configure || doit autoreconf -i
       test ! -e Makefile || (echo "ERROR: Directory unclean!" >&2 && false)
+
+      export WINEPATH='Z:\usr\'"$CROSS_HOST"'\lib;Z:\usr\lib\gcc\'"$CROSS_HOST"'\6.3-win32;Z:'"$PWD"'\.libs'
+
       doit ./configure --host="$CROSS_HOST" --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
-      doit make -j$(PARALLEL) capnp.exe capnpc-c++.exe
 
-      cp capnp.exe capnp-mingw.exe
-      cp capnpc-c++.exe capnpc-c++-mingw.exe
-
-      doit make distclean
-      doit ./configure --host="$CROSS_HOST" --with-external-capnp --disable-shared --disable-reflection CXXFLAGS='-static-libgcc -static-libstdc++' CAPNP=./capnp-mingw.exe CAPNPC_CXX=./capnpc-c++-mingw.exe
-
-      doit make -j$(PARALLEL) check
+      doit make -j$PARALLEL check
       doit make distclean
       rm -f *-mingw.exe
       exit 0
@@ -126,7 +122,7 @@ while [ $# -gt 0 ]; do
       test -e configure || doit autoreconf -i
       test ! -e Makefile || (echo "ERROR: Directory unclean!" >&2 && false)
       doit ./configure --disable-shared
-      doit make -j$(PARALLEL) capnp capnpc-c++
+      doit make -j$PARALLEL capnp capnpc-c++
 
       cp capnp capnp-host
       cp capnpc-c++ capnpc-c++-host
@@ -135,8 +131,8 @@ while [ $# -gt 0 ]; do
       doit make distclean
       doit ./configure --host="$CROSS_HOST" --with-external-capnp --disable-shared CXXFLAGS='-pie -fPIE' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
 
-      doit make -j$(PARALLEL)
-      doit make -j$(PARALLEL) capnp-test
+      doit make -j$PARALLEL
+      doit make -j$PARALLEL capnp-test
 
       echo "Starting emulator..."
       trap 'kill $(jobs -p)' EXIT
@@ -162,7 +158,7 @@ while [ $# -gt 0 ]; do
       mkdir cmake-build
       cd cmake-build
       doit cmake -G "Unix Makefiles" ..
-      doit make -j$(PARALLEL) check
+      doit make -j$PARALLEL check
       exit 0
       ;;
     exotic )
@@ -265,7 +261,7 @@ fi
 cd c++
 doit autoreconf -i
 doit ./configure --prefix="$STAGING"
-doit make -j$(PARALLEL) check
+doit make -j$PARALLEL check
 
 if [ $IS_CLANG = no ]; then
   # Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
@@ -321,7 +317,7 @@ echo "========================================================================="
 doit make distclean
 doit ./configure --prefix="$STAGING" --disable-shared \
     --with-external-capnp CAPNP=$STAGING/bin/capnp
-doit make -j$(PARALLEL) check
+doit make -j$PARALLEL check
 
 echo "========================================================================="
 echo "Testing --disable-reflection"
@@ -330,7 +326,7 @@ echo "========================================================================="
 doit make distclean
 doit ./configure --prefix="$STAGING" --disable-shared --disable-reflection \
     --with-external-capnp CAPNP=$STAGING/bin/capnp
-doit make -j$(PARALLEL) check
+doit make -j$PARALLEL check
 doit make distclean
 
 # Test 32-bit build now while we have $STAGING available for cross-compiling.
@@ -345,8 +341,8 @@ if [ "x`uname -m`" = "xx86_64" ]; then
     # Build as if we are cross-compiling, using the capnp we installed to $STAGING.
     doit ./configure --prefix="$STAGING" --disable-shared --host=i686-pc-cygwin \
         --with-external-capnp CAPNP=$STAGING/bin/capnp
-    doit make -j$(PARALLEL)
-    doit make -j$(PARALLEL) capnp-test.exe
+    doit make -j$PARALLEL
+    doit make -j$PARALLEL capnp-test.exe
 
     # Expect a cygwin32 sshd to be listening at localhost port 2222, and use it
     # to run the tests.
@@ -357,7 +353,7 @@ if [ "x`uname -m`" = "xx86_64" ]; then
 
   elif [ "x${CXX:-g++}" != "xg++-4.8" ]; then
     doit ./configure CXX="${CXX:-g++} -m32" --disable-shared
-    doit make -j$(PARALLEL) check
+    doit make -j$PARALLEL check
     doit make distclean
   fi
 fi
@@ -373,7 +369,7 @@ echo "========================================================================="
 echo "Testing c++ dist"
 echo "========================================================================="
 
-doit make -j$(PARALLEL) distcheck
+doit make -j$PARALLEL distcheck
 doit make distclean
 rm capnproto-*.tar.gz
 
@@ -383,7 +379,7 @@ if [ "x`uname`" = xLinux ]; then
   echo "========================================================================="
 
   doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -DKJ_USE_FUTEX=0 -DKJ_USE_EPOLL=0"
-  doit make -j$(PARALLEL) check
+  doit make -j$PARALLEL check
   doit make distclean
 fi
 
@@ -397,13 +393,13 @@ echo "========================================================================="
 # bug. Clang works fine. So, for now, we disable optimizations on GCC for -fno-exceptions tests.
 
 doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti"
-doit make -j$(PARALLEL) check
+doit make -j$PARALLEL check
 doit make distclean
 doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-exceptions $DISABLE_OPTIMIZATION_IF_GCC"
-doit make -j$(PARALLEL) check
+doit make -j$PARALLEL check
 doit make distclean
 doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti -fno-exceptions $DISABLE_OPTIMIZATION_IF_GCC"
-doit make -j$(PARALLEL) check
+doit make -j$PARALLEL check
 
 # Valgrind is currently "experimental and mostly broken" on OSX and fails to run the full test
 # suite, but I have it installed because it did manage to help me track down a bug or two.  Anyway,
@@ -416,8 +412,8 @@ if [ "x`uname`" != xDarwin ] && which valgrind > /dev/null; then
   echo "========================================================================="
 
   doit ./configure --disable-shared CXXFLAGS="-g"
-  doit make -j$(PARALLEL)
-  doit make -j$(PARALLEL) capnp-test
+  doit make -j$PARALLEL
+  doit make -j$PARALLEL capnp-test
   # Running the fuzz tests under Valgrind is a great thing to do -- but it takes
   # some 40 minutes. So, it needs to be done as a separate step of the release
   # process, perhaps along with the AFL tests.
