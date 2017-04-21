@@ -1813,15 +1813,15 @@ struct WireHelpers {
         ref->listRef.set(value.elementSize, value.elementCount);
 
         auto wholeByteSize =
-          assertMax<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS + 3>() - 1>(
+          assertMax(MAX_SEGMENT_WORDS * BYTES_PER_WORD,
             upgradeBound<uint64_t>(value.elementCount) * value.step / BITS_PER_BYTE,
             []() { KJ_FAIL_ASSERT("encountered impossibly long data ListReader"); });
         copyMemory(reinterpret_cast<byte*>(ptr), value.ptr, wholeByteSize);
         auto leftoverBits =
-          (upgradeBound<uint64_t>(value.elementCount) * value.step) % (BYTES * BITS_PER_BYTE);
+          (upgradeBound<uint64_t>(value.elementCount) * value.step) % BITS_PER_BYTE;
         if (leftoverBits > ZERO * BITS) {
           // We need to copy a partial byte.
-          uint8_t mask = (1 << unboundAs<uint8_t>(leftoverBits / BITS)) - 1;
+          uint8_t mask = (1 << unbound(leftoverBits / BITS)) - 1;
           *((reinterpret_cast<byte*>(ptr)) + wholeByteSize) = mask & *(value.ptr + wholeByteSize);
         }
       }
@@ -3166,9 +3166,9 @@ bool ListReader::isCanonical(const word **readHead, const WirePointer *ref) {
       auto byteReadHead = reinterpret_cast<const uint8_t*>(*readHead) + truncatedByteSize;
       auto readHeadEnd = *readHead + WireHelpers::roundBitsUpToWords(bitSize);
 
-      auto leftoverBits = bitSize % (BYTES * BITS_PER_BYTE);
+      auto leftoverBits = bitSize % BITS_PER_BYTE;
       if (leftoverBits > ZERO * BITS) {
-        auto mask = ~((1 << unboundAs<uint8_t>(leftoverBits / BITS)) - 1);
+        auto mask = ~((1 << unbound(leftoverBits / BITS)) - 1);
 
         if (mask & *byteReadHead) {
           return false;
