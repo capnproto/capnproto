@@ -136,7 +136,7 @@ while [ $# -gt 0 ]; do
 
       echo "Starting emulator..."
       trap 'kill $(jobs -p)' EXIT
-      # TODO(soon): Speed up with KVM?
+      # TODO(someday): Speed up with KVM? Then maybe we won't have to skip fuzz tests?
       $SDK_HOME/emulator/emulator -avd capnp -no-window &
       $SDK_HOME/platform-tools/adb 'wait-for-device'
       echo "Waiting for localhost to be resolvable..."
@@ -145,7 +145,7 @@ while [ $# -gt 0 ]; do
       #   lot here. There is probably a better way.
       doit $SDK_HOME/platform-tools/adb shell 'su 0 tee /data/capnp-test > /dev/null' < capnp-test
       doit $SDK_HOME/platform-tools/adb shell 'su 0 chmod a+rx /data/capnp-test'
-      doit $SDK_HOME/platform-tools/adb shell 'cd /data && su 0 /data/capnp-test && echo ANDROID_""TESTS_PASSED' | tee android-test.log
+      doit $SDK_HOME/platform-tools/adb shell 'cd /data && CAPNP_SKIP_FUZZ_TEST=1 su 0 /data/capnp-test && echo ANDROID_""TESTS_PASSED' | tee android-test.log
       grep -q ANDROID_TESTS_PASSED android-test.log
 
       doit make distclean
