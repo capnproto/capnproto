@@ -377,6 +377,31 @@ KJ_TEST("Bit list with nonzero pad bits") {
   KJ_ASSERT(message1.getRoot<AnyList>() == message2.getRoot<AnyList>());
 }
 
+KJ_TEST("Pointer list unequal to struct list") {
+  AlignedData<2> segment1 = {{
+      // list with zero pointer-sized elements
+      0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+  }};
+  kj::ArrayPtr<const word> segments1[1] = {
+    kj::arrayPtr(segment1.words, 2)
+  };
+  SegmentArrayMessageReader message1(kj::arrayPtr(segments1, 1));
+
+  AlignedData<2> segment2 = {{
+      // struct list of length zero
+      0x01, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
+
+      // struct list tag, zero elements
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  }};
+  kj::ArrayPtr<const word> segments2[1] = {
+    kj::arrayPtr(segment2.words, 2)
+  };
+  SegmentArrayMessageReader message2(kj::arrayPtr(segments2, 1));
+
+  EXPECT_EQ(Equality::NOT_EQUAL, message1.getRoot<AnyList>().equals(message2.getRoot<AnyList>()));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
