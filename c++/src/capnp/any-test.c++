@@ -402,6 +402,38 @@ KJ_TEST("Pointer list unequal to struct list") {
   EXPECT_EQ(Equality::NOT_EQUAL, message1.getRoot<AnyList>().equals(message2.getRoot<AnyList>()));
 }
 
+KJ_TEST("Truncating non-null pointer fields does not preserve equality") {
+  AlignedData<3> segment1 = {{
+      // list with one data word and one pointer field
+      0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+
+      // data word
+      0xab, 0xab, 0xab, 0xab, 0xab, 0xab, 0xab, 0xab,
+
+      // non-null pointer to zero-sized struct
+      0xfc, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00,
+  }};
+  kj::ArrayPtr<const word> segments1[1] = {
+    kj::arrayPtr(segment1.words, 3)
+  };
+  SegmentArrayMessageReader message1(kj::arrayPtr(segments1, 1));
+
+  AlignedData<2> segment2 = {{
+      // list with one data word and zero pointers
+      0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+
+      // data word
+      0xab, 0xab, 0xab, 0xab, 0xab, 0xab, 0xab, 0xab,
+  }};
+  kj::ArrayPtr<const word> segments2[1] = {
+    kj::arrayPtr(segment2.words, 2)
+  };
+  SegmentArrayMessageReader message2(kj::arrayPtr(segments2, 1));
+
+  EXPECT_EQ(Equality::NOT_EQUAL,
+            message1.getRoot<AnyPointer>().equals(message2.getRoot<AnyPointer>()));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
