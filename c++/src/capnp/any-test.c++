@@ -378,12 +378,12 @@ KJ_TEST("Bit list with nonzero pad bits") {
 }
 
 KJ_TEST("Pointer list unequal to struct list") {
-  AlignedData<2> segment1 = {{
+  AlignedData<1> segment1 = {{
       // list with zero pointer-sized elements
       0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
   }};
   kj::ArrayPtr<const word> segments1[1] = {
-    kj::arrayPtr(segment1.words, 2)
+    kj::arrayPtr(segment1.words, 1)
   };
   SegmentArrayMessageReader message1(kj::arrayPtr(segments1, 1));
 
