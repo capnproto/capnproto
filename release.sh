@@ -61,22 +61,30 @@ build_packages() {
   echo "========================================================================="
   echo "Building C++ package..."
   echo "========================================================================="
+
+  # make dist tarball and move into ..
   cd c++
   doit autoreconf -i
   doit ./configure
   doit make -j6 distcheck
-  doit make dist-zip
   doit mv capnproto-c++-$VERSION.tar.gz ..
-  doit mv capnproto-c++-$VERSION.zip ../capnproto-c++-win32-$VERSION.zip
   doit make distclean
+
+  # build windows executables
   doit ./configure --host=i686-w64-mingw32 --with-external-capnp \
       --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
   doit make -j6 capnp.exe capnpc-c++.exe capnpc-capnp.exe
   doit i686-w64-mingw32-strip capnp.exe capnpc-c++.exe capnpc-capnp.exe
   doit mkdir capnproto-tools-win32-$VERSION
   doit mv capnp.exe capnpc-c++.exe capnpc-capnp.exe capnproto-tools-win32-$VERSION
-  doit zip -r ../capnproto-c++-win32-$VERSION.zip capnproto-tools-win32-$VERSION
   doit make maintainer-clean
+
+  # repack dist tarball and win32 tools into win32 zip, with DOS line endings
+  doit tar zxf ../capnproto-c++-$VERSION.tar.gz
+  find capnproto-c++-$VERSION -name '*.c++' -o -name '*.h' -o -name '*.capnp' -o -name '*.md' -o -name '*.txt' | grep -v testdata | doit xargs unix2dos
+  doit zip -r ../capnproto-c++-win32-$VERSION.zip capnproto-c++-$VERSION capnproto-tools-win32-$VERSION
+
+  rm -rf capnproto-c++-$VERSION capnproto-tools-win32-$VERSION
   cd ..
 }
 
