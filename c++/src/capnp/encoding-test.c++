@@ -591,6 +591,25 @@ TEST(Encoding, SetListToEmpty) {
 #undef CHECK_EMPTY_NONNULL
 }
 
+#if CAPNP_EXPENSIVE_TESTS
+TEST(Encoding, LongList) {
+  // This test allocates 512MB of contiguous memory and takes several seconds, so we usually don't
+  // run it. It is run before release, though.
+
+  MallocMessageBuilder builder;
+
+  auto root = builder.initRoot<TestAllTypes>();
+  uint length = 1 << 27;
+  auto list = root.initUInt64List(length);
+  for (uint ii = 0; ii < length; ++ii) {
+    list.set(ii, ii);
+  }
+  for (uint ii = 0; ii < length; ++ii) {
+    ASSERT_EQ(list[ii], ii);
+  }
+}
+#endif
+
 // =======================================================================================
 
 TEST(Encoding, ListUpgrade) {
