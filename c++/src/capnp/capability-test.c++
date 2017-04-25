@@ -338,6 +338,49 @@ TEST(Capability, DynamicClientPipelining) {
   EXPECT_EQ(1, chainedCallCount);
 }
 
+TEST(Capability, DynamicClientPipelineAnyCap) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0;
+  int chainedCallCount = 0;
+  DynamicCapability::Client client =
+      test::TestPipeline::Client(kj::heap<TestPipelineImpl>(callCount));
+
+  auto request = client.newRequest("getAnyCap");
+  request.set("n", 234);
+  request.set("inCap", test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
+
+  auto promise = request.send();
+
+  auto outAnyCap = promise.get("outBox").releaseAs<DynamicStruct>()
+                          .get("cap").releaseAs<DynamicCapability>();
+
+  EXPECT_EQ(Schema::from<Capability>(), outAnyCap.getSchema());
+  auto outCap = outAnyCap.castAs<DynamicCapability>(Schema::from<test::TestInterface>());
+
+  auto pipelineRequest = outCap.newRequest("foo");
+  pipelineRequest.set("i", 321);
+  auto pipelinePromise = pipelineRequest.send();
+
+  auto pipelineRequest2 = outCap.castAs<test::TestExtends>().graultRequest();
+  auto pipelinePromise2 = pipelineRequest2.send();
+
+  promise = nullptr;  // Just to be annoying, drop the original promise.
+
+  EXPECT_EQ(0, callCount);
+  EXPECT_EQ(0, chainedCallCount);
+
+  auto response = pipelinePromise.wait(waitScope);
+  EXPECT_EQ("bar", response.get("x").as<Text>());
+
+  auto response2 = pipelinePromise2.wait(waitScope);
+  checkTestMessage(response2);
+
+  EXPECT_EQ(3, callCount);
+  EXPECT_EQ(1, chainedCallCount);
+}
+
 // =======================================================================================
 
 class TestInterfaceDynamicImpl final: public DynamicCapability::Server {

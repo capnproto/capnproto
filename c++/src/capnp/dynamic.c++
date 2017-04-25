@@ -388,6 +388,18 @@ DynamicValue::Pipeline DynamicStruct::Pipeline::get(StructSchema::Field field) {
           return DynamicCapability::Client(type.asInterface(),
               typeless.getPointerField(slot.getOffset()).asCap());
 
+        case schema::Type::ANY_POINTER:
+          switch (type.whichAnyPointerKind()) {
+            case schema::Type::AnyPointer::Unconstrained::STRUCT:
+              return DynamicStruct::Pipeline(StructSchema(),
+                  typeless.getPointerField(slot.getOffset()));
+            case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+              return DynamicCapability::Client(Capability::Client(
+                  typeless.getPointerField(slot.getOffset()).asCap()));
+            default:
+              KJ_FAIL_REQUIRE("Can only pipeline on struct and interface fields.");
+          }
+
         default:
           KJ_FAIL_REQUIRE("Can only pipeline on struct and interface fields.");
       }
