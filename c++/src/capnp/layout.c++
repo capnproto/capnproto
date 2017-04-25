@@ -1219,7 +1219,7 @@ struct WireHelpers {
       SegmentBuilder* origSegment, CapTableBuilder* capTable, ElementSize elementSize,
       const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
     KJ_DREQUIRE(elementSize != ElementSize::INLINE_COMPOSITE,
-             "Use getStructList{Element,Field}() for structs.");
+             "Use getWritableStructListPointer() for struct lists.");
 
     if (origRef->isNull()) {
     useDefault:
@@ -1242,7 +1242,7 @@ struct WireHelpers {
     word* ptr = followFars(ref, origRefTarget, segment);
 
     KJ_REQUIRE(ref->kind() == WirePointer::LIST,
-        "Called getList{Field,Element}() but existing pointer is not a list.") {
+        "Called getWritableListPointer() but existing pointer is not a list.") {
       goto useDefault;
     }
 
@@ -1362,7 +1362,7 @@ struct WireHelpers {
     word* ptr = followFars(ref, origRefTarget, segment);
 
     KJ_REQUIRE(ref->kind() == WirePointer::LIST,
-        "Called getList{Field,Element}() but existing pointer is not a list.") {
+        "Called getWritableListPointerAnySize() but existing pointer is not a list.") {
       goto useDefault;
     }
 
