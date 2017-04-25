@@ -152,3 +152,6 @@ struct UseGeneric {
 
 const embedBadType :UInt32 = embed "binary";
 const embedNoSuchFile :Data = embed "no-such-file";
+
+using Baz = import "nosuchfile-unused.capnp".Baz;
+# Check that an import in an unused `using` still reports error.
