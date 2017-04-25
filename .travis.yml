@@ -1,0 +1,17 @@
+language: cpp
+os:
+  - linux
+  - osx
+dist: trusty
+sudo: false
+addons:
+  apt:
+    packages:
+      - automake
+      - autoconf
+      - libtool
+      - pkg-config
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install automake autoconf libtool; fi
+script: ./super-test.sh -j2 quick  # limit parallelism due to limited memory on Travis
