@@ -694,7 +694,7 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
 }
 
 kj::String HttpHeaders::toString() const {
-  return serialize(nullptr, nullptr, nullptr, {});
+  return serialize(nullptr, nullptr, nullptr, ConnectionHeaders());
 }
 
 // =======================================================================================
@@ -1528,7 +1528,7 @@ public:
         };
       } else {
         KJ_FAIL_REQUIRE("received invalid HTTP response") { break; }
-        return {};
+        return HttpClient::Response();
       }
     });
 
