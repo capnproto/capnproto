@@ -52,7 +52,7 @@ esac
 
 if [ -e Makefile ]; then
   if ! grep -q '^CXX *= *'"$CXX" Makefile; then
-    # Wrong complier used.
+    # Wrong compiler used.
     make distclean
     $(dirname $0)/configure --disable-shared
   fi
