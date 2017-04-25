@@ -137,6 +137,31 @@ KJ_TEST("Win32IocpEventPort timer") {
   KJ_EXPECT(port.getTimer().now() - start >= 10 * MILLISECONDS);
 }
 
+VOID CALLBACK testApcProc(ULONG_PTR dwParam) {
+  reinterpret_cast<kj::PromiseFulfiller<void>*>(dwParam)->fulfill();
+}
+
+KJ_TEST("Win32IocpEventPort APC") {
+  if (GetProcAddress(GetModuleHandle("ntdll.dll"), "wine_get_version") != nullptr) {
+    // TODO(cleanup): Periodically check if Wine supports this yet.
+    KJ_LOG(WARNING, "detected that we're running under wine and this test won't work; skipping");
+    return;
+  }
+
+  Win32IocpEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  port.allowApc();
+
+  auto paf = kj::newPromiseAndFulfiller<void>();
+
+  KJ_WIN32(QueueUserAPC(&testApcProc, GetCurrentThread(),
+      reinterpret_cast<ULONG_PTR>(paf.fulfiller.get())));
+
+  paf.promise.wait(waitScope);
+}
+
 }  // namespace
 }  // namespace kj
 
