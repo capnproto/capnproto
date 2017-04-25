@@ -13,6 +13,11 @@
 
 version: "{build}"
 
+branches:
+  only:
+    - master
+# Don't build non-master branches (unless they open a pull request).
+
 image: Visual Studio 2017
 # AppVeyor build worker image (VM template).
 
