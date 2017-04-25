@@ -13,6 +13,9 @@ PARALLEL=$(nproc 2>/dev/null || echo 1)
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    -j* )
+      PARALLEL=${1#-j}
+      ;;
     test )
       ;;  # nothing
     quick )
