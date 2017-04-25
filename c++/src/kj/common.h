@@ -366,11 +366,22 @@ struct DisallowConstCopy {
   // type that contains or inherits from a type that disallows const copies will also automatically
   // disallow const copies.  Hey, cool, that's exactly what we want.
 
+#if CAPNP_DEBUG_TYPES
+  // Alas! Declaring a defaulted non-const copy constructor tickles a bug which causes GCC and
+  // Clang to disagree on ABI, using different calling conventions to pass this type, leading to
+  // immediate segfaults. See:
+  //     https://bugs.llvm.org/show_bug.cgi?id=23764
+  //     https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58074
+  //
+  // Because of this, we can't use this technique. We guard it by CAPNP_DEBUG_TYPES so that it
+  // still applies to the Cap'n Proto developers during internal testing.
+
   DisallowConstCopy() = default;
   DisallowConstCopy(DisallowConstCopy&) = default;
   DisallowConstCopy(DisallowConstCopy&&) = default;
   DisallowConstCopy& operator=(DisallowConstCopy&) = default;
   DisallowConstCopy& operator=(DisallowConstCopy&&) = default;
+#endif
 };
 
 #if _MSC_VER
@@ -383,6 +394,9 @@ struct DisallowConstCopy {
 //   struct Foo: DisallowConstCopy {};
 //   Foo foo;
 //   auto lambda = [KJ_CPCAP(foo)] {};
+//
+// TODO(soon): Can we remove this since DisallowConstCopy no longer does anything except when
+//   CAPNP_DEBUG_TYPES is defined?
 
 #else
 
