@@ -101,12 +101,25 @@ Equality AnyStruct::Reader::equals(AnyStruct::Reader right) {
   }
 
   auto ptrsL = getPointerSection();
+  size_t ptrsSizeL = ptrsL.size();
+  while (ptrsSizeL > 0 && ptrsL[ptrsSizeL - 1].isNull()) {
+    -- ptrsSizeL;
+  }
+
   auto ptrsR = right.getPointerSection();
+  size_t ptrsSizeR = ptrsR.size();
+  while (ptrsSizeR > 0 && ptrsR[ptrsSizeR - 1].isNull()) {
+    -- ptrsSizeR;
+  }
+
+  if(ptrsSizeL != ptrsSizeR) {
+    return Equality::NOT_EQUAL;
+  }
 
   size_t i = 0;
 
   auto eqResult = Equality::EQUAL;
-  for(; i < kj::min(ptrsL.size(), ptrsR.size()); i++) {
+  for (; i < ptrsSizeL; i++) {
     auto l = ptrsL[i];
     auto r = ptrsR[i];
     switch(l.equals(r)) {
