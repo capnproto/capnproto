@@ -681,6 +681,11 @@ void Compiler::Node::traverse(uint eagerness, std::unordered_map<Node*, uint>& s
       for (auto& child: content->orderedNestedNodes) {
         child->traverse(eagerness, seen, finalLoader);
       }
+
+      // Also traverse `using` declarations.
+      for (auto& child: content->aliases) {
+        child.second->compile();
+      }
     }
   }
 }

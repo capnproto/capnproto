@@ -952,6 +952,29 @@ kj::Promise<void> TestPipelineImpl::getCap(GetCapContext context) {
       });
 }
 
+kj::Promise<void> TestPipelineImpl::getAnyCap(GetAnyCapContext context) {
+  ++callCount;
+
+  auto params = context.getParams();
+  EXPECT_EQ(234, params.getN());
+
+  auto cap = params.getInCap();
+  context.releaseParams();
+
+  auto request = cap.castAs<test::TestInterface>().fooRequest();
+  request.setI(123);
+  request.setJ(true);
+
+  return request.send().then(
+      [this,KJ_CPCAP(context)](Response<test::TestInterface::FooResults>&& response) mutable {
+        EXPECT_EQ("foo", response.getX());
+
+        auto result = context.getResults();
+        result.setS("bar");
+        result.initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
+      });
+}
+
 kj::Promise<void> TestCallOrderImpl::getCallSequence(GetCallSequenceContext context) {
   auto result = context.getResults();
   result.setN(count++);

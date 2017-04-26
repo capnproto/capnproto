@@ -2102,8 +2102,28 @@ private:
           auto typeBuilder = slot.initType();
           if (translator.compileType(member.fieldType, typeBuilder, implicitMethodParams)) {
             if (member.hasDefaultValue) {
-              translator.compileBootstrapValue(member.fieldDefaultValue,
-                                               typeBuilder, slot.initDefaultValue());
+              if (member.isParam &&
+                  member.fieldDefaultValue.isRelativeName() &&
+                  member.fieldDefaultValue.getRelativeName().getValue() == "null") {
+                // special case: parameter set null
+                switch (typeBuilder.which()) {
+                  case schema::Type::TEXT:
+                  case schema::Type::DATA:
+                  case schema::Type::LIST:
+                  case schema::Type::STRUCT:
+                  case schema::Type::INTERFACE:
+                  case schema::Type::ANY_POINTER:
+                    break;
+                  default:
+                    errorReporter.addErrorOn(member.fieldDefaultValue.getRelativeName(),
+                        "Only pointer parameters can declare their default as 'null'.");
+                    break;
+                }
+                translator.compileDefaultDefaultValue(typeBuilder, slot.initDefaultValue());
+              } else {
+                translator.compileBootstrapValue(member.fieldDefaultValue,
+                                                 typeBuilder, slot.initDefaultValue());
+              }
               slot.setHadExplicitDefault(true);
             } else {
               translator.compileDefaultDefaultValue(typeBuilder, slot.initDefaultValue());

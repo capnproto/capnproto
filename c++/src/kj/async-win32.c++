@@ -30,6 +30,8 @@
 #include <atomic>
 #include <chrono>
 #include "refcount.h"
+#include <ntsecapi.h>  // NTSTATUS
+#include <ntstatus.h>  // STATUS_SUCCESS
 
 #undef ERROR  // dammit windows.h
 
@@ -184,31 +186,59 @@ void Win32IocpEventPort::wake() const {
 }
 
 void Win32IocpEventPort::waitIocp(DWORD timeoutMs) {
-  DWORD bytesTransferred;
-  ULONG_PTR completionKey;
-  LPOVERLAPPED overlapped = nullptr;
+  if (isAllowApc) {
+    ULONG countReceived = 0;
+    OVERLAPPED_ENTRY entry;
+    memset(&entry, 0, sizeof(entry));
 
-  // TODO(someday): Should we use GetQueuedCompletionStatusEx()? It would allow us to read multiple
-  //   events in one call and would let us wait in an alertable state, which would allow users to
-  //   use APCs. However, it currently isn't implemented on Wine (as of 1.9.22).
+    if (GetQueuedCompletionStatusEx(iocp, &entry, 1, &countReceived, timeoutMs, TRUE)) {
+      KJ_ASSERT(countReceived == 1);
 
-  BOOL success = GetQueuedCompletionStatus(
-      iocp, &bytesTransferred, &completionKey, &overlapped, timeoutMs);
-
-  if (overlapped == nullptr) {
-    if (success) {
-      // wake() called in another thread.
-    } else {
-      DWORD error = GetLastError();
-      if (error == WAIT_TIMEOUT) {
-        // Great, nothing to do. (Why this is WAIT_TIMEOUT and not ERROR_TIMEOUT I'm not sure.)
+      if (entry.lpOverlapped == nullptr) {
+        // wake() called in another thread, or APC queued.
       } else {
-        KJ_FAIL_WIN32("GetQueuedCompletionStatus()", error, error, overlapped);
+        DWORD error = ERROR_SUCCESS;
+        if (entry.lpOverlapped->Internal != STATUS_SUCCESS) {
+          error = LsaNtStatusToWinError(entry.lpOverlapped->Internal);
+        }
+        static_cast<IoPromiseAdapter*>(entry.lpOverlapped)
+            ->done(IoResult { error, entry.dwNumberOfBytesTransferred });
+      }
+    } else {
+      // Call failed.
+      DWORD error = GetLastError();
+      if (error == WAIT_TIMEOUT || error == WAIT_IO_COMPLETION) {
+        // WAIT_TIMEOUT = timed out (dunno why this isn't ERROR_TIMEOUT??)
+        // WAIT_IO_COMPLETION = APC queued
+        // Either way, nothing to do.
+        return;
+      } else {
+        KJ_FAIL_WIN32("GetQueuedCompletionStatusEx()", error, error, entry.lpOverlapped);
       }
     }
   } else {
-    DWORD error = success ? ERROR_SUCCESS : GetLastError();
-    static_cast<IoPromiseAdapter*>(overlapped)->done(IoResult { error, bytesTransferred });
+    DWORD bytesTransferred;
+    ULONG_PTR completionKey;
+    LPOVERLAPPED overlapped = nullptr;
+
+    BOOL success = GetQueuedCompletionStatus(
+        iocp, &bytesTransferred, &completionKey, &overlapped, timeoutMs);
+
+    if (overlapped == nullptr) {
+      if (success) {
+        // wake() called in another thread.
+      } else {
+        DWORD error = GetLastError();
+        if (error == WAIT_TIMEOUT) {
+          // Great, nothing to do. (Why this is WAIT_TIMEOUT and not ERROR_TIMEOUT I'm not sure.)
+        } else {
+          KJ_FAIL_WIN32("GetQueuedCompletionStatus()", error, error, overlapped);
+        }
+      }
+    } else {
+      DWORD error = success ? ERROR_SUCCESS : GetLastError();
+      static_cast<IoPromiseAdapter*>(overlapped)->done(IoResult { error, bytesTransferred });
+    }
   }
 }
 
