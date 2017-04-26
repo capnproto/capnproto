@@ -169,6 +169,36 @@ struct Node {
       targetsAnnotation @30 :Bool;
     }
   }
+
+  struct SourceInfo {
+    # Information gathered about the original source code from which this node was compiled.
+    #
+    # SourceInfo is delivered separately from the nodes themselves in order to make sure it is not
+    # accidentally included in cases where it is not needed. SourceInfo can be very big and is not
+    # generally used at runtime. Instead of educating everyone on how to remove it when not needed,
+    # we choose to deliver it out-of-band such that use cases that *do* need SourceInfo can request
+    # it explicitly. For example, `CodeGeneratorRequest` delivers a list of `SourceInfo`s in
+    # parallel with the list of `Node`s.
+
+    id @0 :UInt64;
+    # ID of the node we're describing.
+
+    docComment @1 :Text;
+    # Doc comment attached to the node.
+
+    members @2 :List(Member);
+    # Member info. Corresponds to the Node's fields, enumerants, or methods list, depending on the
+    # kind.
+
+    struct Member {
+      docComment @0 :Text;
+      # Doc comment attached to the member declaration.
+
+      # TODO(someday): Embed source code location of this declaration.
+    }
+
+    # TODO(someday): Embed source code location of this declaration.
+  }
 }
 
 struct Field {
@@ -453,6 +483,16 @@ struct CodeGeneratorRequest {
   nodes @0 :List(Node);
   # All nodes parsed by the compiler, including for the files on the command line and their
   # imports.
+
+  sourceInfo @2 :List(Node.SourceInfo);
+  # Source code information -- such as doc comments, line numbers, etc. -- for Nodes.
+  # This is delivered separately because Nodes are often embedded into the complied code in order
+  # to facilitate runtime type information, but SourceInfo usually should *not* be embedded as it
+  # is rarely useful at runtime.
+  #
+  # The `sourceInfo` list is NOT necessarily in the same order as the `nodes` list. It is its own
+  # map; you must look up types by ID. Not all types are necessarily present in the map; a missing
+  # type should be treated as having no source info.
 
   requestedFiles @1 :List(RequestedFile);
   # Files which were listed on the command line.

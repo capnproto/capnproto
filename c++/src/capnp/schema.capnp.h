@@ -17,6 +17,8 @@ namespace schemas {
 CAPNP_DECLARE_SCHEMA(e682ab4cf923a417);
 CAPNP_DECLARE_SCHEMA(b9521bccf10fa3b1);
 CAPNP_DECLARE_SCHEMA(debf55bbfa0fc242);
+CAPNP_DECLARE_SCHEMA(f38e1de3041357ae);
+CAPNP_DECLARE_SCHEMA(c2ba9038898e1fa2);
 CAPNP_DECLARE_SCHEMA(9ea0b19b37fb4435);
 CAPNP_DECLARE_SCHEMA(b54ab3364333f598);
 CAPNP_DECLARE_SCHEMA(e82753cff0c2218f);
@@ -82,6 +84,7 @@ struct Node {
   };
   struct Parameter;
   struct NestedNode;
+  struct SourceInfo;
   struct Struct;
   struct Enum;
   struct Interface;
@@ -122,6 +125,37 @@ struct Node::NestedNode {
     CAPNP_DECLARE_STRUCT_HEADER(debf55bbfa0fc242, 1, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct Node::SourceInfo {
+  SourceInfo() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  struct Member;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(f38e1de3041357ae, 1, 2)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct Node::SourceInfo::Member {
+  Member() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(c2ba9038898e1fa2, 0, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
   };
 };
@@ -610,7 +644,7 @@ struct CodeGeneratorRequest {
   struct RequestedFile;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(bfc546f6210ad7ce, 0, 2)
+    CAPNP_DECLARE_STRUCT_HEADER(bfc546f6210ad7ce, 0, 3)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -979,6 +1013,183 @@ private:
 class Node::NestedNode::Pipeline {
 public:
   typedef NestedNode Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class Node::SourceInfo::Reader {
+public:
+  typedef SourceInfo Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint64_t getId() const;
+
+  inline bool hasDocComment() const;
+  inline  ::capnp::Text::Reader getDocComment() const;
+
+  inline bool hasMembers() const;
+  inline  ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>::Reader getMembers() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class Node::SourceInfo::Builder {
+public:
+  typedef SourceInfo Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint64_t getId();
+  inline void setId( ::uint64_t value);
+
+  inline bool hasDocComment();
+  inline  ::capnp::Text::Builder getDocComment();
+  inline void setDocComment( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initDocComment(unsigned int size);
+  inline void adoptDocComment(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownDocComment();
+
+  inline bool hasMembers();
+  inline  ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>::Builder getMembers();
+  inline void setMembers( ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>::Builder initMembers(unsigned int size);
+  inline void adoptMembers(::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>> disownMembers();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class Node::SourceInfo::Pipeline {
+public:
+  typedef SourceInfo Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class Node::SourceInfo::Member::Reader {
+public:
+  typedef Member Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+#endif  // !CAPNP_LITE
+
+  inline bool hasDocComment() const;
+  inline  ::capnp::Text::Reader getDocComment() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class Node::SourceInfo::Member::Builder {
+public:
+  typedef Member Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline bool hasDocComment();
+  inline  ::capnp::Text::Builder getDocComment();
+  inline void setDocComment( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initDocComment(unsigned int size);
+  inline void adoptDocComment(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownDocComment();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class Node::SourceInfo::Member::Pipeline {
+public:
+  typedef Member Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -3734,6 +3945,9 @@ public:
   inline bool hasRequestedFiles() const;
   inline  ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>::Reader getRequestedFiles() const;
 
+  inline bool hasSourceInfo() const;
+  inline  ::capnp::List< ::capnp::schema::Node::SourceInfo>::Reader getSourceInfo() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -3775,6 +3989,13 @@ public:
   inline  ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>::Builder initRequestedFiles(unsigned int size);
   inline void adoptRequestedFiles(::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>> disownRequestedFiles();
+
+  inline bool hasSourceInfo();
+  inline  ::capnp::List< ::capnp::schema::Node::SourceInfo>::Builder getSourceInfo();
+  inline void setSourceInfo( ::capnp::List< ::capnp::schema::Node::SourceInfo>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Node::SourceInfo>::Builder initSourceInfo(unsigned int size);
+  inline void adoptSourceInfo(::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::SourceInfo>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::SourceInfo>> disownSourceInfo();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -4423,6 +4644,116 @@ inline  ::uint64_t Node::NestedNode::Builder::getId() {
 inline void Node::NestedNode::Builder::setId( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint64_t Node::SourceInfo::Reader::getId() const {
+  return _reader.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Node::SourceInfo::Builder::getId() {
+  return _builder.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Node::SourceInfo::Builder::setId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Node::SourceInfo::Reader::hasDocComment() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Node::SourceInfo::Builder::hasDocComment() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader Node::SourceInfo::Reader::getDocComment() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder Node::SourceInfo::Builder::getDocComment() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Node::SourceInfo::Builder::setDocComment( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder Node::SourceInfo::Builder::initDocComment(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+}
+inline void Node::SourceInfo::Builder::adoptDocComment(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> Node::SourceInfo::Builder::disownDocComment() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
+inline bool Node::SourceInfo::Reader::hasMembers() const {
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
+}
+inline bool Node::SourceInfo::Builder::hasMembers() {
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>::Reader Node::SourceInfo::Reader::getMembers() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>>::get(
+      _reader.getPointerField(1 * ::capnp::POINTERS));
+}
+inline  ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>::Builder Node::SourceInfo::Builder::getMembers() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>>::get(
+      _builder.getPointerField(1 * ::capnp::POINTERS));
+}
+inline void Node::SourceInfo::Builder::setMembers( ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>>::set(
+      _builder.getPointerField(1 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>::Builder Node::SourceInfo::Builder::initMembers(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>>::init(
+      _builder.getPointerField(1 * ::capnp::POINTERS), size);
+}
+inline void Node::SourceInfo::Builder::adoptMembers(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>>::adopt(
+      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>> Node::SourceInfo::Builder::disownMembers() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo::Member>>::disown(
+      _builder.getPointerField(1 * ::capnp::POINTERS));
+}
+
+inline bool Node::SourceInfo::Member::Reader::hasDocComment() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Node::SourceInfo::Member::Builder::hasDocComment() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader Node::SourceInfo::Member::Reader::getDocComment() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder Node::SourceInfo::Member::Builder::getDocComment() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Node::SourceInfo::Member::Builder::setDocComment( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder Node::SourceInfo::Member::Builder::initDocComment(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+}
+inline void Node::SourceInfo::Member::Builder::adoptDocComment(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> Node::SourceInfo::Member::Builder::disownDocComment() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline  ::uint16_t Node::Struct::Reader::getDataWordCount() const {
@@ -7529,6 +7860,38 @@ inline void CodeGeneratorRequest::Builder::adoptRequestedFiles(
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>> CodeGeneratorRequest::Builder::disownRequestedFiles() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+
+inline bool CodeGeneratorRequest::Reader::hasSourceInfo() const {
+  return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
+}
+inline bool CodeGeneratorRequest::Builder::hasSourceInfo() {
+  return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::List< ::capnp::schema::Node::SourceInfo>::Reader CodeGeneratorRequest::Reader::getSourceInfo() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo>>::get(
+      _reader.getPointerField(2 * ::capnp::POINTERS));
+}
+inline  ::capnp::List< ::capnp::schema::Node::SourceInfo>::Builder CodeGeneratorRequest::Builder::getSourceInfo() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo>>::get(
+      _builder.getPointerField(2 * ::capnp::POINTERS));
+}
+inline void CodeGeneratorRequest::Builder::setSourceInfo( ::capnp::List< ::capnp::schema::Node::SourceInfo>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo>>::set(
+      _builder.getPointerField(2 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::List< ::capnp::schema::Node::SourceInfo>::Builder CodeGeneratorRequest::Builder::initSourceInfo(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo>>::init(
+      _builder.getPointerField(2 * ::capnp::POINTERS), size);
+}
+inline void CodeGeneratorRequest::Builder::adoptSourceInfo(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::SourceInfo>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo>>::adopt(
+      _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::SourceInfo>> CodeGeneratorRequest::Builder::disownSourceInfo() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::SourceInfo>>::disown(
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 
 inline  ::uint64_t CodeGeneratorRequest::RequestedFile::Reader::getId() const {
