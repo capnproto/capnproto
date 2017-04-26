@@ -31,6 +31,8 @@ fail() {
 
 if test -f ./capnp; then
   CAPNP=${CAPNP:-./capnp}
+elif test -f ./capnp.exe; then
+  CAPNP=${CAPNP:-./capnp.exe}
 else
   CAPNP=${CAPNP:-capnp}
 fi
@@ -54,7 +56,7 @@ $CAPNP decode $SCHEMA TestAllTypes < $TESTDATA/segmented | cmp $TESTDATA/pretty.
 $CAPNP decode --packed $SCHEMA TestAllTypes < $TESTDATA/segmented-packed | cmp $TESTDATA/pretty.txt - || fail decode segmented-packed
 
 test_eval() {
-  test "x`$CAPNP eval $SCHEMA $1`" = "x$2" || fail eval "$1 == $2"
+  test "x`$CAPNP eval $SCHEMA $1 | tr -d '\r'`" = "x$2" || fail eval "$1 == $2"
 }
 
 test_eval TestDefaults.uInt32Field 3456789012
@@ -65,5 +67,5 @@ test_eval globalPrintableStruct '(someText = "foo")'
 test_eval TestConstants.enumConst corge
 test_eval 'TestListDefaults.lists.int32ListList[2][0]' 12341234
 
-$CAPNP compile -ofoo $TESTDATA/errors.capnp.nobuild 2>&1 | sed -e "s,^.*/errors[.]capnp[.]nobuild,file,g" |
+$CAPNP compile -ofoo $TESTDATA/errors.capnp.nobuild 2>&1 | sed -e "s,^.*/errors[.]capnp[.]nobuild,file,g" | tr -d '\r' |
     cmp $TESTDATA/errors.txt - || fail error output
