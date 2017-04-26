@@ -537,8 +537,9 @@ struct WireHelpers {
     return result;
   }
 
-  static KJ_ALWAYS_INLINE(const word* followFars(
-      const WirePointer*& ref, const word* refTarget, SegmentReader*& segment)) {
+  static KJ_ALWAYS_INLINE(kj::Maybe<const word&> followFars(
+      const WirePointer*& ref, const word* refTarget, SegmentReader*& segment))
+      KJ_WARN_UNUSED_RESULT {
     // Like the other followFars() but operates on readers.
 
     // If the segment is null, this is an unchecked message, so there are no FAR pointers.
@@ -582,6 +583,7 @@ struct WireHelpers {
       segment = newSegment;
       return pad->farTarget(segment);
     } else {
+      KJ_DASSERT(refTarget != nullptr);
       return refTarget;
     }
   }
@@ -754,7 +756,12 @@ struct WireHelpers {
     }
     --nestingLimit;
 
-    const word* ptr = followFars(ref, ref->target(segment), segment);
+    const word* ptr;
+    KJ_IF_MAYBE(p, followFars(ref, ref->target(segment), segment)) {
+      ptr = p;
+    } else {
+      return result;
+    }
 
     switch (ref->kind()) {
       case WirePointer::STRUCT: {
@@ -1918,9 +1925,10 @@ struct WireHelpers {
       return { dstSegment, nullptr };
     }
 
-    const word* ptr = WireHelpers::followFars(src, srcTarget, srcSegment);
-    if (KJ_UNLIKELY(ptr == nullptr)) {
-      // Already reported the error.
+    const word* ptr;
+    KJ_IF_MAYBE(p, WireHelpers::followFars(src, srcTarget, srcSegment)) {
+      ptr = p;
+    } else {
       goto useDefault;
     }
 
@@ -2135,9 +2143,10 @@ struct WireHelpers {
       goto useDefault;
     }
 
-    const word* ptr = followFars(ref, refTarget, segment);
-    if (KJ_UNLIKELY(ptr == nullptr)) {
-      // Already reported the error.
+    const word* ptr;
+    KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
+      ptr = p;
+    } else {
       goto useDefault;
     }
 
@@ -2220,9 +2229,10 @@ struct WireHelpers {
       goto useDefault;
     }
 
-    const word* ptr = followFars(ref, refTarget, segment);
-    if (KJ_UNLIKELY(ptr == nullptr)) {
-      // Already reported error.
+    const word* ptr;
+    KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
+      ptr = p;
+    } else {
       goto useDefault;
     }
 
@@ -2390,10 +2400,10 @@ struct WireHelpers {
       return Text::Reader(reinterpret_cast<const char*>(defaultValue),
           unbound(defaultSize / BYTES));
     } else {
-      const word* ptr = followFars(ref, refTarget, segment);
-
-      if (KJ_UNLIKELY(ptr == nullptr)) {
-        // Already reported error.
+      const word* ptr;
+      KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
+        ptr = p;
+      } else {
         goto useDefault;
       }
 
@@ -2443,7 +2453,12 @@ struct WireHelpers {
       return Data::Reader(reinterpret_cast<const byte*>(defaultValue),
           unbound(defaultSize / BYTES));
     } else {
-      const word* ptr = followFars(ref, refTarget, segment);
+      const word* ptr;
+      KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
+        ptr = p;
+      } else {
+        goto useDefault;
+      }
 
       if (KJ_UNLIKELY(ptr == nullptr)) {
         // Already reported error.
@@ -2694,10 +2709,10 @@ PointerType PointerReader::getPointerType() const {
   if(pointer == nullptr || pointer->isNull()) {
     return PointerType::NULL_;
   } else {
-    word* refTarget = nullptr;
     const WirePointer* ptr = pointer;
+    const word* refTarget = ptr->target(segment);
     SegmentReader* sgmt = segment;
-    WireHelpers::followFars(ptr, refTarget, sgmt);
+    if (WireHelpers::followFars(ptr, refTarget, sgmt) == nullptr) return PointerType::NULL_;
     switch(ptr->kind()) {
       case WirePointer::FAR:
         KJ_FAIL_ASSERT("far pointer not followed?") { return PointerType::NULL_; }
