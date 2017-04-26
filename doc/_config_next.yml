@@ -2,3 +2,4 @@ safe: true
 permalink: /news/:year-:month-:day-:title.html
 baseurl: /next/
 is_next: true
+highlighter: pygments

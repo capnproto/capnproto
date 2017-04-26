@@ -5,11 +5,11 @@ This directory contains the "source code" for the Cap'n Proto web site.
 The site is built with [Jekyll](http://jekyllrb.com/), which depends on Ruby. 
 Start by installing ruby1.9.1-dev. On Debian-based operating systems:
 
-    sudo apt-get install ruby1.9.1-dev
+    sudo apt-get install ruby-dev
 
 Then install Jekyll:
 
-    sudo gem install jekyll
+    sudo gem install jekyll pygments.rb
 
 Now install Pygments and SetupTools to be able to install the CapnProto lexer.
 On Debian based operating systems:
@@ -24,7 +24,7 @@ Next, install the custom Pygments syntax highlighter:
 
 Now you can launch a local server:
 
-    jekyll serve highlighter --watch
+    jekyll serve --watch
 
 Edit, test, commit.
 
