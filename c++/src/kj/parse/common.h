@@ -298,11 +298,15 @@ public:
   explicit constexpr Sequence_(T&& firstSubParser, U&&... rest)
       : first(kj::fwd<T>(firstSubParser)), rest(kj::fwd<U>(rest)...) {}
 
+  // TODO(msvc): MSVC ICEs on the return types of operator() and parseNext() unless SubParsers is
+  //   wrapped in `decltype(instance<SubParsers>())`. This is similar to the workaround in
+  //   KJ_CONTEXT().
+
   template <typename Input>
   auto operator()(Input& input) const ->
       Maybe<decltype(tuple(
           instance<OutputType<FirstSubParser, Input>>(),
-          instance<OutputType<SubParsers, Input>>()...))> {
+          instance<OutputType<decltype(instance<SubParsers>()), Input>>()...))> {
     return parseNext(input);
   }
 
@@ -311,7 +315,7 @@ public:
       Maybe<decltype(tuple(
           kj::fwd<InitialParams>(initialParams)...,
           instance<OutputType<FirstSubParser, Input>>(),
-          instance<OutputType<SubParsers, Input>>()...))> {
+          instance<OutputType<decltype(instance<SubParsers>()), Input>>()...))> {
     KJ_IF_MAYBE(firstResult, first(input)) {
       return rest.parseNext(input, kj::fwd<InitialParams>(initialParams)...,
                             kj::mv(*firstResult));
