@@ -126,6 +126,22 @@ if(NOT CAPNP_LITE)
   install(FILES ${kj-async_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 endif()
 
+# kj-http ======================================================================
+
+set(kj-http_sources
+  compat/http.c++
+)
+set(kj-http_headers
+  compat/http.h
+)
+if(NOT CAPNP_LITE)
+  add_library(kj-http ${kj-http_sources})
+  add_library(CapnProto::kj-http ALIAS kj-http)
+  target_link_libraries(kj-http kj-async kj)
+  install(TARGETS kj-http ${INSTALL_TARGETS_DEFAULT_ARGS})
+  install(FILES ${kj-http_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
+endif()
+
 # Tests ========================================================================
 
 if(BUILD_TESTING)
@@ -161,8 +177,9 @@ if(BUILD_TESTING)
       one-of-test.c++
       function-test.c++
       threadlocal-pthread-test.c++
+      compat/http-test.c++
     )
-    target_link_libraries(kj-heavy-tests kj-async kj-test kj)
+    target_link_libraries(kj-heavy-tests kj-http kj-async kj-test kj)
     add_dependencies(check kj-heavy-tests)
     add_test(NAME kj-heavy-tests-run COMMAND kj-heavy-tests)
 
