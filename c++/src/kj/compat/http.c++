@@ -215,7 +215,11 @@ struct HeaderNameHash {
     // TODO(perf): I wonder if we can beat strcasecmp() by masking bit 0x20 from each byte. We'd
     //   need to prohibit one of the technically-legal characters '^' or '~' from header names
     //   since they'd otherwise be ambiguous, but otherwise there is no ambiguity.
+#if _MSC_VER
+    return _stricmp(a.cStr(), b.cStr()) == 0;
+#else
     return strcasecmp(a.cStr(), b.cStr()) == 0;
+#endif
   }
 };
 
