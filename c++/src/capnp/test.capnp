@@ -782,9 +782,13 @@ interface TestExtends2 extends(TestExtends) {}
 interface TestPipeline {
   getCap @0 (n: UInt32, inCap :TestInterface) -> (s: Text, outBox :Box);
   testPointers @1 (cap :TestInterface, obj :AnyPointer, list :List(TestInterface)) -> ();
+  getAnyCap @2 (n: UInt32, inCap :Capability) -> (s: Text, outBox :AnyBox);
 
   struct Box {
     cap @0 :TestInterface;
+  }
+  struct AnyBox {
+    cap @0 :Capability;
   }
 }
 
@@ -839,6 +843,8 @@ interface TestMoreStuff extends(TestCallOrder) {
   # evalLater()-loops forever, holding `cap`.  Must be canceled.
 
   methodWithDefaults @8 (a :Text, b :UInt32 = 123, c :Text = "foo") -> (d :Text, e :Text = "bar");
+
+  methodWithNullDefault @12 (a :Text, b :TestInterface = null);
 
   getHandle @9 () -> (handle :TestHandle);
   # Get a new handle. Tests have an out-of-band way to check the current number of live handles, so

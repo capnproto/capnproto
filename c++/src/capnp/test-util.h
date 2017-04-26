@@ -213,6 +213,7 @@ public:
   TestPipelineImpl(int& callCount);
 
   kj::Promise<void> getCap(GetCapContext context) override;
+  kj::Promise<void> getAnyCap(GetAnyCapContext context) override;
 
 private:
   int& callCount;

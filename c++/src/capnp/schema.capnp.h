@@ -56,6 +56,7 @@ enum class ElementSize_d1958f7dba521926: uint16_t {
   INLINE_COMPOSITE,
 };
 CAPNP_DECLARE_ENUM(ElementSize, d1958f7dba521926);
+CAPNP_DECLARE_SCHEMA(d85d305b7d839963);
 CAPNP_DECLARE_SCHEMA(bfc546f6210ad7ce);
 CAPNP_DECLARE_SCHEMA(cfea0eb02e810062);
 CAPNP_DECLARE_SCHEMA(ae504193122357e5);
@@ -601,6 +602,21 @@ struct Annotation {
 
 typedef ::capnp::schemas::ElementSize_d1958f7dba521926 ElementSize;
 
+struct CapnpVersion {
+  CapnpVersion() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(d85d305b7d839963, 1, 0)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
 struct CodeGeneratorRequest {
   CodeGeneratorRequest() = delete;
 
@@ -610,7 +626,7 @@ struct CodeGeneratorRequest {
   struct RequestedFile;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(bfc546f6210ad7ce, 0, 2)
+    CAPNP_DECLARE_STRUCT_HEADER(bfc546f6210ad7ce, 0, 3)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -3711,6 +3727,92 @@ private:
 };
 #endif  // !CAPNP_LITE
 
+class CapnpVersion::Reader {
+public:
+  typedef CapnpVersion Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint16_t getMajor() const;
+
+  inline  ::uint8_t getMinor() const;
+
+  inline  ::uint8_t getMicro() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class CapnpVersion::Builder {
+public:
+  typedef CapnpVersion Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint16_t getMajor();
+  inline void setMajor( ::uint16_t value);
+
+  inline  ::uint8_t getMinor();
+  inline void setMinor( ::uint8_t value);
+
+  inline  ::uint8_t getMicro();
+  inline void setMicro( ::uint8_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class CapnpVersion::Pipeline {
+public:
+  typedef CapnpVersion Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
 class CodeGeneratorRequest::Reader {
 public:
   typedef CodeGeneratorRequest Reads;
@@ -3733,6 +3835,9 @@ public:
 
   inline bool hasRequestedFiles() const;
   inline  ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>::Reader getRequestedFiles() const;
+
+  inline bool hasCapnpVersion() const;
+  inline  ::capnp::schema::CapnpVersion::Reader getCapnpVersion() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -3776,6 +3881,13 @@ public:
   inline void adoptRequestedFiles(::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>> disownRequestedFiles();
 
+  inline bool hasCapnpVersion();
+  inline  ::capnp::schema::CapnpVersion::Builder getCapnpVersion();
+  inline void setCapnpVersion( ::capnp::schema::CapnpVersion::Reader value);
+  inline  ::capnp::schema::CapnpVersion::Builder initCapnpVersion();
+  inline void adoptCapnpVersion(::capnp::Orphan< ::capnp::schema::CapnpVersion>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::CapnpVersion> disownCapnpVersion();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
@@ -3794,6 +3906,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
+  inline  ::capnp::schema::CapnpVersion::Pipeline getCapnpVersion();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -7463,6 +7576,48 @@ inline ::capnp::Orphan< ::capnp::schema::Brand> Annotation::Builder::disownBrand
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
+inline  ::uint16_t CapnpVersion::Reader::getMajor() const {
+  return _reader.getDataField< ::uint16_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint16_t CapnpVersion::Builder::getMajor() {
+  return _builder.getDataField< ::uint16_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+inline void CapnpVersion::Builder::setMajor( ::uint16_t value) {
+  _builder.setDataField< ::uint16_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint8_t CapnpVersion::Reader::getMinor() const {
+  return _reader.getDataField< ::uint8_t>(
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint8_t CapnpVersion::Builder::getMinor() {
+  return _builder.getDataField< ::uint8_t>(
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
+}
+inline void CapnpVersion::Builder::setMinor( ::uint8_t value) {
+  _builder.setDataField< ::uint8_t>(
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint8_t CapnpVersion::Reader::getMicro() const {
+  return _reader.getDataField< ::uint8_t>(
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint8_t CapnpVersion::Builder::getMicro() {
+  return _builder.getDataField< ::uint8_t>(
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+}
+inline void CapnpVersion::Builder::setMicro( ::uint8_t value) {
+  _builder.setDataField< ::uint8_t>(
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS, value);
+}
+
 inline bool CodeGeneratorRequest::Reader::hasNodes() const {
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
@@ -7529,6 +7684,45 @@ inline void CodeGeneratorRequest::Builder::adoptRequestedFiles(
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>> CodeGeneratorRequest::Builder::disownRequestedFiles() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+
+inline bool CodeGeneratorRequest::Reader::hasCapnpVersion() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
+}
+inline bool CodeGeneratorRequest::Builder::hasCapnpVersion() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::CapnpVersion::Reader CodeGeneratorRequest::Reader::getCapnpVersion() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::CapnpVersion>::get(_reader.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::CapnpVersion::Builder CodeGeneratorRequest::Builder::getCapnpVersion() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::CapnpVersion>::get(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
+}
+#if !CAPNP_LITE
+inline  ::capnp::schema::CapnpVersion::Pipeline CodeGeneratorRequest::Pipeline::getCapnpVersion() {
+  return  ::capnp::schema::CapnpVersion::Pipeline(_typeless.getPointerField(2));
+}
+#endif  // !CAPNP_LITE
+inline void CodeGeneratorRequest::Builder::setCapnpVersion( ::capnp::schema::CapnpVersion::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::CapnpVersion>::set(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::CapnpVersion::Builder CodeGeneratorRequest::Builder::initCapnpVersion() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::CapnpVersion>::init(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
+}
+inline void CodeGeneratorRequest::Builder::adoptCapnpVersion(
+    ::capnp::Orphan< ::capnp::schema::CapnpVersion>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::CapnpVersion>::adopt(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::CapnpVersion> CodeGeneratorRequest::Builder::disownCapnpVersion() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::CapnpVersion>::disown(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 
 inline  ::uint64_t CodeGeneratorRequest::RequestedFile::Reader::getId() const {

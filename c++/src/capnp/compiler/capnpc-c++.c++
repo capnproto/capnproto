@@ -3033,6 +3033,27 @@ private:
     StreamFdMessageReader reader(STDIN_FILENO, options);
     auto request = reader.getRoot<schema::CodeGeneratorRequest>();
 
+    auto capnpVersion = request.getCapnpVersion();
+
+    if (capnpVersion.getMajor() != CAPNP_VERSION_MAJOR ||
+        capnpVersion.getMinor() != CAPNP_VERSION_MINOR ||
+        capnpVersion.getMicro() != CAPNP_VERSION_MICRO) {
+      auto compilerVersion = request.hasCapnpVersion()
+          ? kj::str(capnpVersion.getMajor(), '.', capnpVersion.getMinor(), '.',
+                    capnpVersion.getMicro())
+          : kj::str("pre-0.6");  // pre-0.6 didn't send the version.
+      auto generatorVersion = kj::str(
+          CAPNP_VERSION_MAJOR, '.', CAPNP_VERSION_MINOR, '.', CAPNP_VERSION_MICRO);
+
+      KJ_LOG(WARNING,
+          "You appear to be using different versions of 'capnp' (the compiler) and "
+          "'capnpc-c++' (the code generator). This can happen, for example, if you built "
+          "a custom version of 'capnp' but then ran it with '-oc++', which invokes "
+          "'capnpc-c++' from your PATH (i.e. the installed version). To specify an alternate "
+          "'capnpc-c++' executable, try something like '-o/path/to/capnpc-c++' instead.",
+          compilerVersion, generatorVersion);
+    }
+
     for (auto node: request.getNodes()) {
       schemaLoader.load(node);
     }

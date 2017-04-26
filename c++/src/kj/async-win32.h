@@ -137,6 +137,18 @@ public:
   // return an object that can wait for this state using the EventPort.
 
   // ---------------------------------------------------------------------------
+  // APCs
+
+  virtual void allowApc() = 0;
+  // If this is ever called, the Win32EventPort will switch modes so that APCs can be scheduled
+  // on the thread, e.g. through the Win32 QueueUserAPC() call. In the future, this may be enabled
+  // by default. However, as of this writing, Wine does not support the necessary
+  // GetQueuedCompletionStatusEx() call, thus allowApc() breaks Wine support. (Tested on Wine
+  // 1.8.7.)
+  //
+  // If the event port implementation can't support APCs for some reason, this throws.
+
+  // ---------------------------------------------------------------------------
   // time
 
   virtual Timer& getTimer() = 0;
@@ -191,6 +203,7 @@ public:
   Own<IoObserver> observeIo(HANDLE handle) override;
   Own<SignalObserver> observeSignalState(HANDLE handle) override;
   Timer& getTimer() override { return timerImpl; }
+  void allowApc() override { isAllowApc = true; }
 
 private:
   class IoPromiseAdapter;
@@ -202,6 +215,7 @@ private:
   Win32WaitObjectThreadPool waitThreads;
   TimerImpl timerImpl;
   mutable std::atomic<bool> sentWake {false};
+  bool isAllowApc = false;
 
   static TimePoint readClock();
 

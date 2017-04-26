@@ -422,6 +422,11 @@ public:
     MallocMessageBuilder message;
     auto request = message.initRoot<schema::CodeGeneratorRequest>();
 
+    auto version = request.getCapnpVersion();
+    version.setMajor(CAPNP_VERSION_MAJOR);
+    version.setMinor(CAPNP_VERSION_MINOR);
+    version.setMicro(CAPNP_VERSION_MICRO);
+
     auto schemas = compiler->getLoader().getAllLoaded();
     auto nodes = request.initNodes(schemas.size());
     for (size_t i = 0; i < schemas.size(); i++) {

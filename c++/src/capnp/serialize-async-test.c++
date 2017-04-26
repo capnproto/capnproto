@@ -128,11 +128,14 @@ public:
     //   chains.
     // - Cygwin will apparently actually use a buffer size of 0 and therefore block forever waiting
     //   for buffer space.
+    // - GNU HURD throws ENOPROTOOPT for SO_RCVBUF. Apparently, technically, a Unix domain socket
+    //   has only one buffer, and it's controlled via SO_SNDBUF on the other end. OK, we'll ignore
+    //   errors on SO_RCVBUF, then.
     //
     // Anyway, we now use 127 to avoid these issues (but also to screw around with non-word-boundary
     // writes).
     uint small = 127;
-    KJ_SOCKCALL(setsockopt(fds[0], SOL_SOCKET, SO_RCVBUF, (const char*)&small, sizeof(small)));
+    setsockopt(fds[0], SOL_SOCKET, SO_RCVBUF, (const char*)&small, sizeof(small));
     KJ_SOCKCALL(setsockopt(fds[1], SOL_SOCKET, SO_SNDBUF, (const char*)&small, sizeof(small)));
   }
   ~PipeWithSmallBuffer() {

@@ -172,11 +172,17 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
   }
 
   if (fileDecl.getId().which() != Declaration::Id::UID) {
+    // We didn't see an ID. Generate one randomly for now.
     uint64_t id = generateRandomId();
     fileDecl.getId().initUid().setValue(id);
-    errorReporter.addError(0, 0,
-        kj::str("File does not declare an ID.  I've generated one for you.  Add this line to your "
-                "file: @0x", kj::hex(id), ";"));
+
+    // Don't report missing ID if there was a parse error, because quite often the parse error
+    // prevents us from parsing the ID even though it is actually there.
+    if (!errorReporter.hadErrors()) {
+      errorReporter.addError(0, 0,
+          kj::str("File does not declare an ID.  I've generated one for you.  Add this line to "
+                  "your file: @0x", kj::hex(id), ";"));
+    }
   }
 
   auto declsBuilder = fileDecl.initNestedDecls(decls.size());

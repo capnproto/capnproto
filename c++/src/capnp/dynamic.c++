@@ -388,6 +388,18 @@ DynamicValue::Pipeline DynamicStruct::Pipeline::get(StructSchema::Field field) {
           return DynamicCapability::Client(type.asInterface(),
               typeless.getPointerField(slot.getOffset()).asCap());
 
+        case schema::Type::ANY_POINTER:
+          switch (type.whichAnyPointerKind()) {
+            case schema::Type::AnyPointer::Unconstrained::STRUCT:
+              return DynamicStruct::Pipeline(StructSchema(),
+                  typeless.getPointerField(slot.getOffset()));
+            case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+              return DynamicCapability::Client(Capability::Client(
+                  typeless.getPointerField(slot.getOffset()).asCap()));
+            default:
+              KJ_FAIL_REQUIRE("Can only pipeline on struct and interface fields.");
+          }
+
         default:
           KJ_FAIL_REQUIRE("Can only pipeline on struct and interface fields.");
       }
@@ -1941,52 +1953,17 @@ void AnyPointer::Builder::adopt<DynamicValue>(Orphan<DynamicValue>&& orphan) {
   }
 }
 
-template <>
-DynamicStruct::Builder Orphan<AnyPointer>::getAs<DynamicStruct>(StructSchema schema) {
-  return DynamicStruct::Builder(schema, builder.asStruct(structSizeFromSchema(schema)));
-}
-template <>
-DynamicStruct::Reader Orphan<AnyPointer>::getAsReader<DynamicStruct>(StructSchema schema) const {
-  return DynamicStruct::Reader(schema, builder.asStructReader(structSizeFromSchema(schema)));
-}
-template <>
-Orphan<DynamicStruct> Orphan<AnyPointer>::releaseAs<DynamicStruct>(StructSchema schema) {
-  return Orphan<DynamicStruct>(schema, kj::mv(builder));
-}
+DynamicStruct::Reader::Reader(StructSchema schema, const _::OrphanBuilder& orphan)
+    : schema(schema), reader(orphan.asStructReader(structSizeFromSchema(schema))) {}
+DynamicStruct::Builder::Builder(StructSchema schema, _::OrphanBuilder& orphan)
+    : schema(schema), builder(orphan.asStruct(structSizeFromSchema(schema))) {}
 
-template <>
-DynamicList::Builder Orphan<AnyPointer>::getAs<DynamicList>(ListSchema schema) {
-  if (schema.whichElementType() == schema::Type::STRUCT) {
-    return DynamicList::Builder(schema, builder.asStructList(
-        structSizeFromSchema(schema.getStructElementType())));
-  } else {
-    return DynamicList::Builder(schema, builder.asList(elementSizeFor(schema.whichElementType())));
-  }
-}
-template <>
-DynamicList::Reader Orphan<AnyPointer>::getAsReader<DynamicList>(ListSchema schema) const {
-  return DynamicList::Reader(schema, builder.asListReader(
-      elementSizeFor(schema.whichElementType())));
-}
-template <>
-Orphan<DynamicList> Orphan<AnyPointer>::releaseAs<DynamicList>(ListSchema schema) {
-  return Orphan<DynamicList>(schema, kj::mv(builder));
-}
-
-template <>
-DynamicCapability::Client Orphan<AnyPointer>::getAs<DynamicCapability>(InterfaceSchema schema) {
-  return DynamicCapability::Client(schema, builder.asCapability());
-}
-template <>
-DynamicCapability::Client Orphan<AnyPointer>::getAsReader<DynamicCapability>(
-    InterfaceSchema schema) const {
-  return DynamicCapability::Client(schema, builder.asCapability());
-}
-template <>
-Orphan<DynamicCapability> Orphan<AnyPointer>::releaseAs<DynamicCapability>(
-    InterfaceSchema schema) {
-  return Orphan<DynamicCapability>(schema, kj::mv(builder));
-}
+DynamicList::Reader::Reader(ListSchema schema, const _::OrphanBuilder& orphan)
+    : schema(schema), reader(orphan.asListReader(elementSizeFor(schema.whichElementType()))) {}
+DynamicList::Builder::Builder(ListSchema schema, _::OrphanBuilder& orphan)
+    : schema(schema), builder(schema.whichElementType() == schema::Type::STRUCT
+        ? orphan.asStructList(structSizeFromSchema(schema.getStructElementType()))
+        : orphan.asList(elementSizeFor(schema.whichElementType()))) {}
 
 // -------------------------------------------------------------------
 
