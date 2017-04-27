@@ -41,7 +41,7 @@ static kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr) {
   char* p = ptr;
 
 #define EXPECT_REST(prefix, suffix) \
-  if (memcmp(p, #suffix, sizeof(#suffix)-1) == 0) { \
+  if (strncmp(p, #suffix, sizeof(#suffix)-1) == 0) { \
     ptr = p + (sizeof(#suffix)-1); \
     return HttpMethod::prefix##suffix; \
   } else { \
