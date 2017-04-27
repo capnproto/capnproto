@@ -513,12 +513,23 @@ TEST(AsyncUnixTest, UrgentObserver) {
   UnixEventPort::FdObserver observer(port, clientFd,
       UnixEventPort::FdObserver::OBSERVE_READ | UnixEventPort::FdObserver::OBSERVE_URGENT);
 
-  // Attempt to read the urgent byte prior to reading the in-band byte.
   observer.whenUrgentDataAvailable().wait(waitScope);
+
+#if __CYGWIN__
+  // On Cygwin, reading the urgent byte first causes the subsequent regular read to block until
+  // such a time as the connection closes -- and then the byte is successfully returned. This
+  // seems to be a cygwin bug.
+  KJ_SYSCALL(recv(clientFd, &c, 1, 0));
+  EXPECT_EQ('i', c);
+  KJ_SYSCALL(recv(clientFd, &c, 1, MSG_OOB));
+  EXPECT_EQ('o', c);
+#else
+  // Attempt to read the urgent byte prior to reading the in-band byte.
   KJ_SYSCALL(recv(clientFd, &c, 1, MSG_OOB));
   EXPECT_EQ('o', c);
   KJ_SYSCALL(recv(clientFd, &c, 1, 0));
   EXPECT_EQ('i', c);
+#endif
 
   // Allow server thread to let its clientFd go out of scope.
   c = 'q';

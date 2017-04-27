@@ -294,8 +294,10 @@ TEST(AsyncIo, Udp) {
       EXPECT_FALSE(ancillary.isTruncated);
     }
 
-#ifdef IP_PKTINFO
+#if defined(IP_PKTINFO) && !__CYGWIN__
     // Set IP_PKTINFO header and try to receive it.
+    // Doesn't work on Cygwin; see: https://cygwin.com/ml/cygwin/2009-01/msg00350.html
+    // TODO(someday): Might work on more-recent Cygwin; I'm still testing against 1.7.
     int one = 1;
     port1->setsockopt(IPPROTO_IP, IP_PKTINFO, &one, sizeof(one));
 
