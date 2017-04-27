@@ -1717,7 +1717,7 @@ private:
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
-      kj::Maybe<size_t> expectedBodySize) override {
+      kj::Maybe<uint64_t> expectedBodySize) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called startResponse()");
     currentMethod = nullptr;
 

@@ -458,7 +458,7 @@ public:
   public:
     virtual kj::Own<kj::AsyncOutputStream> send(
         uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
-        kj::Maybe<size_t> expectedBodySize = nullptr) = 0;
+        kj::Maybe<uint64_t> expectedBodySize = nullptr) = 0;
     // Begin the response.
     //
     // `statusText` and `headers` need only remain valid until send() returns (they can be
