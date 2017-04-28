@@ -162,7 +162,13 @@ private:
   };
   template <typename ParserImpl>
   struct WrapperImplInstance {
+#if _MSC_VER
+    // TODO(msvc): MSVC currently fails to initialize vtable pointers for constexpr values so
+	//   we have to make this just const instead.
+    static const WrapperImpl<ParserImpl> instance;
+#else
     static constexpr WrapperImpl<ParserImpl> instance = WrapperImpl<ParserImpl>();
+#endif
   };
 
   const void* parser;
@@ -171,8 +177,13 @@ private:
 
 template <typename Input, typename Output>
 template <typename ParserImpl>
+#if _MSC_VER
+const typename ParserRef<Input, Output>::template WrapperImpl<ParserImpl>
+ParserRef<Input, Output>::WrapperImplInstance<ParserImpl>::instance = WrapperImpl<ParserImpl>();
+#else
 constexpr typename ParserRef<Input, Output>::template WrapperImpl<ParserImpl>
 ParserRef<Input, Output>::WrapperImplInstance<ParserImpl>::instance;
+#endif
 
 template <typename Input, typename ParserImpl>
 constexpr ParserRef<Input, OutputType<ParserImpl, Input>> ref(ParserImpl& impl) {
