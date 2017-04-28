@@ -1703,7 +1703,7 @@ TEST(Encoding, Embeds) {
     auto root = builder.getRoot<TestAllTypes>();
     initTestMessage(root);
     kj::StringPtr text = test::EMBEDDED_TEXT;
-    EXPECT_EQ(kj::str(root, '\n').size(), text.size());
+    EXPECT_EQ(kj::str(root, text.endsWith("\r\n") ? "\r\n" : "\n"), text);
   }
 
 #endif // CAPNP_LITE

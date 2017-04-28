@@ -193,6 +193,29 @@ public:
   //
   // The global default implementation writes the text to stderr.
 
+  enum class StackTraceMode {
+    FULL,
+    // Stringifying a stack trace will attempt to determine source file and line numbers. This may
+    // be expensive. For example, on Linux, this shells out to `addr2line`.
+    //
+    // This is the default in debug builds.
+
+    ADDRESS_ONLY,
+    // Stringifying a stack trace will only generate a list of code addresses.
+    //
+    // This is the default in release builds.
+
+    NONE
+    // Generating a stack trace will always return an empty array.
+    //
+    // This avoids ever unwinding the stack. On Windows in particular, the stack unwinding library
+    // has been observed to be pretty slow, so exception-heavy code might benefit significantly
+    // from this setting. (But exceptions should be rare...)
+  };
+
+  virtual StackTraceMode stackTraceMode();
+  // Returns the current preferred stack trace mode.
+
 protected:
   ExceptionCallback& next;
 

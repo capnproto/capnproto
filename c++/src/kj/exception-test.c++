@@ -28,6 +28,9 @@ namespace _ {  // private
 namespace {
 
 TEST(Exception, TrimSourceFilename) {
+#if _WIN32
+  if (trimSourceFilename(__FILE__) != "kj\\exception-test.c++")
+#endif
   EXPECT_EQ(trimSourceFilename(__FILE__), "kj/exception-test.c++");
 }
 

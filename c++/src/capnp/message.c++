@@ -42,7 +42,7 @@ public:
   }
 #endif
 };
-static constexpr DummyCapTableReader dummyCapTableReader = DummyCapTableReader();
+static KJ_CONSTEXPR(const) DummyCapTableReader dummyCapTableReader = DummyCapTableReader();
 
 }  // namespace
 

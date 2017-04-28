@@ -28,12 +28,6 @@
 #include <kj/miniposix.h>
 #include "test-util.h"
 
-#if !_WIN32
-// This test is super-slow on Windows seemingly due to generating exception stack traces being
-// expensive.
-//
-// TODO(perf): Maybe create an API to disable stack traces, and use it here.
-
 namespace capnp {
 namespace _ {  // private
 namespace {
@@ -46,6 +40,16 @@ bool skipFuzzTest() {
     return false;
   }
 }
+
+class DisableStackTraces: public kj::ExceptionCallback {
+  // This test generates a lot of exceptions. Performing a backtrace on each one can be slow,
+  // especially on Windows (where it is very, very slow). So, disable them.
+
+public:
+  StackTraceMode stackTraceMode() override {
+    return StackTraceMode::NONE;
+  }
+};
 
 uint64_t traverse(AnyPointer::Reader reader);
 uint64_t traverse(AnyStruct::Reader reader);
@@ -163,6 +167,7 @@ struct StructChecker {
 
 KJ_TEST("fuzz-test struct pointer") {
   if (skipFuzzTest()) return;
+  DisableStackTraces disableStackTraces;
 
   MallocMessageBuilder builder;
   builder.getRoot<TestAllTypes>().setTextField("foo");
@@ -183,6 +188,7 @@ struct ListChecker {
 
 KJ_TEST("fuzz-test list pointer") {
   if (skipFuzzTest()) return;
+  DisableStackTraces disableStackTraces;
 
   MallocMessageBuilder builder;
   auto list = builder.getRoot<AnyPointer>().initAs<List<uint32_t>>(2);
@@ -207,6 +213,7 @@ struct StructListChecker {
 
 KJ_TEST("fuzz-test struct list pointer") {
   if (skipFuzzTest()) return;
+  DisableStackTraces disableStackTraces;
 
   MallocMessageBuilder builder;
   auto list = builder.getRoot<AnyPointer>().initAs<List<test::TestAllTypes>>(2);
@@ -230,6 +237,7 @@ struct TextChecker {
 
 KJ_TEST("fuzz-test text pointer") {
   if (skipFuzzTest()) return;
+  DisableStackTraces disableStackTraces;
 
   MallocMessageBuilder builder;
   builder.template getRoot<AnyPointer>().setAs<Text>("foo");
@@ -238,6 +246,7 @@ KJ_TEST("fuzz-test text pointer") {
 
 KJ_TEST("fuzz-test far pointer") {
   if (skipFuzzTest()) return;
+  DisableStackTraces disableStackTraces;
 
   MallocMessageBuilder builder(1, AllocationStrategy::FIXED_SIZE);
   initTestMessage(builder.getRoot<TestAllTypes>());
@@ -251,6 +260,7 @@ KJ_TEST("fuzz-test far pointer") {
 
 KJ_TEST("fuzz-test double-far pointer") {
   if (skipFuzzTest()) return;
+  DisableStackTraces disableStackTraces;
 
   MallocMessageBuilder builder(1, AllocationStrategy::FIXED_SIZE);
 
@@ -274,5 +284,3 @@ KJ_TEST("fuzz-test double-far pointer") {
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
-
-#endif

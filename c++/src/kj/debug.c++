@@ -150,6 +150,7 @@ Exception::Type typeOfWin32Error(DWORD error) {
     case WSAENETDOWN:
     case WSAENETRESET:
     case WSAENETUNREACH:
+    case WSAESHUTDOWN:
       return Exception::Type::DISCONNECTED;
 
     case WSAEOPNOTSUPP:

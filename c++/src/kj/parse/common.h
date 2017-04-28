@@ -45,6 +45,9 @@
 #include "../array.h"
 #include "../tuple.h"
 #include "../vector.h"
+#if _MSC_VER
+#include <type_traits>  // result_of_t
+#endif
 
 namespace kj {
 namespace parse {
@@ -100,7 +103,15 @@ private:
 template <typename T> struct OutputType_;
 template <typename T> struct OutputType_<Maybe<T>> { typedef T Type; };
 template <typename Parser, typename Input>
-using OutputType = typename OutputType_<decltype(instance<Parser&>()(instance<Input&>()))>::Type;
+using OutputType = typename OutputType_<
+#if _MSC_VER
+    std::result_of_t<Parser(Input)>
+    // The instance<T&>() based version below results in:
+    //   C2064: term does not evaluate to a function taking 1 arguments
+#else
+    decltype(instance<Parser&>()(instance<Input&>()))
+#endif
+    >::Type;
 // Synonym for the output type of a parser, given the parser type and the input type.
 
 // =======================================================================================
@@ -122,12 +133,12 @@ public:
   template <typename Other>
   constexpr ParserRef(Other&& other)
       : parser(&other), wrapper(&WrapperImplInstance<Decay<Other>>::instance) {
-    static_assert(kj::isReference<Other>(), "ParseRef should not be assigned to a temporary.");
+    static_assert(kj::isReference<Other>(), "ParserRef should not be assigned to a temporary.");
   }
 
   template <typename Other>
   inline ParserRef& operator=(Other&& other) {
-    static_assert(kj::isReference<Other>(), "ParseRef should not be assigned to a temporary.");
+    static_assert(kj::isReference<Other>(), "ParserRef should not be assigned to a temporary.");
     parser = &other;
     wrapper = &WrapperImplInstance<Decay<Other>>::instance;
     return *this;
@@ -151,7 +162,13 @@ private:
   };
   template <typename ParserImpl>
   struct WrapperImplInstance {
+#if _MSC_VER
+    // TODO(msvc): MSVC currently fails to initialize vtable pointers for constexpr values so
+	//   we have to make this just const instead.
+    static const WrapperImpl<ParserImpl> instance;
+#else
     static constexpr WrapperImpl<ParserImpl> instance = WrapperImpl<ParserImpl>();
+#endif
   };
 
   const void* parser;
@@ -160,8 +177,13 @@ private:
 
 template <typename Input, typename Output>
 template <typename ParserImpl>
+#if _MSC_VER
+const typename ParserRef<Input, Output>::template WrapperImpl<ParserImpl>
+ParserRef<Input, Output>::WrapperImplInstance<ParserImpl>::instance = WrapperImpl<ParserImpl>();
+#else
 constexpr typename ParserRef<Input, Output>::template WrapperImpl<ParserImpl>
 ParserRef<Input, Output>::WrapperImplInstance<ParserImpl>::instance;
+#endif
 
 template <typename Input, typename ParserImpl>
 constexpr ParserRef<Input, OutputType<ParserImpl, Input>> ref(ParserImpl& impl) {
@@ -298,29 +320,46 @@ public:
   explicit constexpr Sequence_(T&& firstSubParser, U&&... rest)
       : first(kj::fwd<T>(firstSubParser)), rest(kj::fwd<U>(rest)...) {}
 
-  // TODO(msvc): MSVC ICEs on the return types of operator() and parseNext() unless SubParsers is
-  //   wrapped in `decltype(instance<SubParsers>())`. This is similar to the workaround in
-  //   KJ_CONTEXT().
+  // TODO(msvc): The trailing return types on `operator()` and `parseNext()` expose at least two
+  //   bugs in MSVC:
+  //
+  //     1. An ICE.
+  //     2. 'error C2672: 'operator __surrogate_func': no matching overloaded function found)',
+  //        which crops up in numerous places when trying to build the capnp command line tools.
+  //
+  //   The only workaround I found for both bugs is to omit the trailing return types and instead
+  //   rely on C++14's return type deduction.
 
   template <typename Input>
-  auto operator()(Input& input) const ->
-      Maybe<decltype(tuple(
+  auto operator()(Input& input) const
+#ifndef _MSC_VER
+      -> Maybe<decltype(tuple(
           instance<OutputType<FirstSubParser, Input>>(),
-          instance<OutputType<decltype(instance<SubParsers>()), Input>>()...))> {
+          instance<OutputType<SubParsers, Input>>()...))>
+#endif
+  {
     return parseNext(input);
   }
 
   template <typename Input, typename... InitialParams>
-  auto parseNext(Input& input, InitialParams&&... initialParams) const ->
-      Maybe<decltype(tuple(
+  auto parseNext(Input& input, InitialParams&&... initialParams) const
+#ifndef _MSC_VER
+      -> Maybe<decltype(tuple(
           kj::fwd<InitialParams>(initialParams)...,
           instance<OutputType<FirstSubParser, Input>>(),
-          instance<OutputType<decltype(instance<SubParsers>()), Input>>()...))> {
+          instance<OutputType<SubParsers, Input>>()...))>
+#endif
+  {
     KJ_IF_MAYBE(firstResult, first(input)) {
       return rest.parseNext(input, kj::fwd<InitialParams>(initialParams)...,
                             kj::mv(*firstResult));
     } else {
-      return nullptr;
+      // TODO(msvc): MSVC depends on return type deduction to compile this function, so we need to
+      //   help it deduce the right type on this code path.
+      return Maybe<decltype(tuple(
+          kj::fwd<InitialParams>(initialParams)...,
+          instance<OutputType<FirstSubParser, Input>>(),
+          instance<OutputType<SubParsers, Input>>()...))>{nullptr};
     }
   }
 

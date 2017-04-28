@@ -19,6 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !_MSC_VER
+// (MSVC targets only little-endian platforms and so we haven't implemented any byte swapping
+// intrinsics for it. So, this test would fail there.)
+
 // Test that the code for the opposite endianness of our CPU works.  E.g. on x86 this will test
 // the bswap-based code.
 #define CAPNP_REVERSE_ENDIAN 1
@@ -104,3 +108,5 @@ TEST(EndianReverse, EightBytes) {
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
+
+#endif  // !_MSC_VER
