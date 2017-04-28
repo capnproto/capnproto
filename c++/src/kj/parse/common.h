@@ -133,12 +133,12 @@ public:
   template <typename Other>
   constexpr ParserRef(Other&& other)
       : parser(&other), wrapper(&wrapperImplInstance<Decay<Other>>()) {
-    static_assert(kj::isReference<Other>(), "ParseRef should not be assigned to a temporary.");
+    static_assert(kj::isReference<Other>(), "ParserRef should not be assigned to a temporary.");
   }
 
   template <typename Other>
   inline ParserRef& operator=(Other&& other) {
-    static_assert(kj::isReference<Other>(), "ParseRef should not be assigned to a temporary.");
+    static_assert(kj::isReference<Other>(), "ParserRef should not be assigned to a temporary.");
     parser = &other;
     wrapper = &wrapperImplInstance<Decay<Other>>();
     return *this;
