@@ -45,6 +45,9 @@
 #include "../array.h"
 #include "../tuple.h"
 #include "../vector.h"
+#if _MSC_VER
+#include <type_traits>  // result_of_t
+#endif
 
 namespace kj {
 namespace parse {
@@ -100,7 +103,15 @@ private:
 template <typename T> struct OutputType_;
 template <typename T> struct OutputType_<Maybe<T>> { typedef T Type; };
 template <typename Parser, typename Input>
-using OutputType = typename OutputType_<decltype(instance<Parser&>()(instance<Input&>()))>::Type;
+using OutputType = typename OutputType_<
+#if _MSC_VER
+    std::result_of_t<Parser(Input)>
+    // The instance<T&>() based version below results in:
+    //   C2064: term does not evaluate to a function taking 1 arguments
+#else
+    decltype(instance<Parser&>()(instance<Input&>()))
+#endif
+    >::Type;
 // Synonym for the output type of a parser, given the parser type and the input type.
 
 // =======================================================================================
