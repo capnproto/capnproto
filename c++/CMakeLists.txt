@@ -1,5 +1,5 @@
 project("Cap'n Proto" CXX)
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.1)
 set(VERSION 0.7-dev)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -63,10 +63,11 @@ else()
   #   recognize as safe.
   # * sign-compare: Low S/N ratio.
   # * unused-parameter: Low S/N ratio.
-  #
-  # We have to use -std=gnu++0x isntead of -std=c++11 because otherwise we lose
-  # GNU extensions that we need.
-  add_compile_options(-std=gnu++0x -Wall -Wextra -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter)
+  add_compile_options(-Wall -Wextra -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter)
+
+  if(DEFINED CMAKE_CXX_EXTENSIONS AND NOT CMAKE_CXX_EXTENSIONS)
+    message(SEND_ERROR "Cap'n Proto requires compiler-specific extensions (e.g., -std=gnu++11). Please leave CMAKE_CXX_EXTENSIONS undefined or ON.")
+  endif()
 
   if (NOT ANDROID)
     add_compile_options(-pthread)
