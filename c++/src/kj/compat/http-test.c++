@@ -555,167 +555,175 @@ void testHttpServerRequest(kj::AsyncIoContext& io,
   KJ_EXPECT(service.getRequestCount() == 1);
 }
 
-auto HUGE_STRING = kj::strArray(kj::repeat("abcdefgh", 4096), "");
-auto HUGE_REQUEST = kj::str(
-    "GET / HTTP/1.1\r\n"
-    "Host: ", HUGE_STRING, "\r\n"
-    "\r\n");
+kj::ArrayPtr<const HttpRequestTestCase> requestTestCases() {
+  static const auto HUGE_STRING = kj::strArray(kj::repeat("abcdefgh", 4096), "");
+  static const auto HUGE_REQUEST = kj::str(
+      "GET / HTTP/1.1\r\n"
+      "Host: ", HUGE_STRING, "\r\n"
+      "\r\n");
 
-static const HttpRequestTestCase REQUEST_TEST_CASES[] {
-  {
-    "GET /foo/bar HTTP/1.1\r\n"
-    "Host: example.com\r\n"
-    "\r\n",
-
-    HttpMethod::GET,
-    "/foo/bar",
-    {{HttpHeaderId::HOST, "example.com"}},
-    nullptr, {},
-  },
-
-  {
-    "HEAD /foo/bar HTTP/1.1\r\n"
-    "Host: example.com\r\n"
-    "\r\n",
-
-    HttpMethod::HEAD,
-    "/foo/bar",
-    {{HttpHeaderId::HOST, "example.com"}},
-    nullptr, {},
-  },
-
-  {
-    "POST / HTTP/1.1\r\n"
-    "Content-Length: 9\r\n"
-    "Host: example.com\r\n"
-    "Content-Type: text/plain\r\n"
-    "\r\n"
-    "foobarbaz",
-
-    HttpMethod::POST,
-    "/",
+  static const HttpRequestTestCase REQUEST_TEST_CASES[] {
     {
-      {HttpHeaderId::HOST, "example.com"},
-      {HttpHeaderId::CONTENT_TYPE, "text/plain"},
+      "GET /foo/bar HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n",
+
+      HttpMethod::GET,
+      "/foo/bar",
+      {{HttpHeaderId::HOST, "example.com"}},
+      nullptr, {},
     },
-    9, { "foo", "bar", "baz" },
-  },
 
-  {
-    "POST / HTTP/1.1\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "Host: example.com\r\n"
-    "Content-Type: text/plain\r\n"
-    "\r\n"
-    "3\r\n"
-    "foo\r\n"
-    "6\r\n"
-    "barbaz\r\n"
-    "0\r\n"
-    "\r\n",
-
-    HttpMethod::POST,
-    "/",
     {
-      {HttpHeaderId::HOST, "example.com"},
-      {HttpHeaderId::CONTENT_TYPE, "text/plain"},
+      "HEAD /foo/bar HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n",
+
+      HttpMethod::HEAD,
+      "/foo/bar",
+      {{HttpHeaderId::HOST, "example.com"}},
+      nullptr, {},
     },
-    nullptr, { "foo", "barbaz" },
-  },
 
-  {
-    "POST / HTTP/1.1\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "Host: example.com\r\n"
-    "Content-Type: text/plain\r\n"
-    "\r\n"
-    "1d\r\n"
-    "0123456789abcdef0123456789abc\r\n"
-    "0\r\n"
-    "\r\n",
-
-    HttpMethod::POST,
-    "/",
     {
-      {HttpHeaderId::HOST, "example.com"},
-      {HttpHeaderId::CONTENT_TYPE, "text/plain"},
+      "POST / HTTP/1.1\r\n"
+      "Content-Length: 9\r\n"
+      "Host: example.com\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "foobarbaz",
+
+      HttpMethod::POST,
+      "/",
+      {
+        {HttpHeaderId::HOST, "example.com"},
+        {HttpHeaderId::CONTENT_TYPE, "text/plain"},
+      },
+      9, { "foo", "bar", "baz" },
     },
-    nullptr, { "0123456789abcdef0123456789abc" },
-  },
 
-  {
-    HUGE_REQUEST,
+    {
+      "POST / HTTP/1.1\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "Host: example.com\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "3\r\n"
+      "foo\r\n"
+      "6\r\n"
+      "barbaz\r\n"
+      "0\r\n"
+      "\r\n",
 
-    HttpMethod::GET,
-    "/",
-    {{HttpHeaderId::HOST, HUGE_STRING}},
-    nullptr, {}
-  },
-};
+      HttpMethod::POST,
+      "/",
+      {
+        {HttpHeaderId::HOST, "example.com"},
+        {HttpHeaderId::CONTENT_TYPE, "text/plain"},
+      },
+      nullptr, { "foo", "barbaz" },
+    },
 
-static const HttpResponseTestCase RESPONSE_TEST_CASES[] {
-  {
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: text/plain\r\n"
-    "Connection: close\r\n"
-    "\r\n"
-    "baz qux",
+    {
+      "POST / HTTP/1.1\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "Host: example.com\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "1d\r\n"
+      "0123456789abcdef0123456789abc\r\n"
+      "0\r\n"
+      "\r\n",
 
-    200, "OK",
-    {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
-    nullptr, {"baz qux"},
+      HttpMethod::POST,
+      "/",
+      {
+        {HttpHeaderId::HOST, "example.com"},
+        {HttpHeaderId::CONTENT_TYPE, "text/plain"},
+      },
+      nullptr, { "0123456789abcdef0123456789abc" },
+    },
 
-    HttpMethod::GET,
-    CLIENT_ONLY,   // Server never sends connection: close
-  },
+    {
+      HUGE_REQUEST,
 
-  {
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Length: 123\r\n"
-    "Content-Type: text/plain\r\n"
-    "\r\n",
+      HttpMethod::GET,
+      "/",
+      {{HttpHeaderId::HOST, HUGE_STRING}},
+      nullptr, {}
+    },
+  };
 
-    200, "OK",
-    {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
-    123, {},
+  return REQUEST_TEST_CASES;
+}
 
-    HttpMethod::HEAD,
-  },
+kj::ArrayPtr<const HttpResponseTestCase> responseTestCases() {
+  static const HttpResponseTestCase RESPONSE_TEST_CASES[] {
+    {
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Type: text/plain\r\n"
+      "Connection: close\r\n"
+      "\r\n"
+      "baz qux",
 
-  {
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Length: 8\r\n"
-    "Content-Type: text/plain\r\n"
-    "\r\n"
-    "quxcorge",
+      200, "OK",
+      {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
+      nullptr, {"baz qux"},
 
-    200, "OK",
-    {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
-    8, { "qux", "corge" }
-  },
+      HttpMethod::GET,
+      CLIENT_ONLY,   // Server never sends connection: close
+    },
 
-  {
-    "HTTP/1.1 200 OK\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "Content-Type: text/plain\r\n"
-    "\r\n"
-    "3\r\n"
-    "qux\r\n"
-    "5\r\n"
-    "corge\r\n"
-    "0\r\n"
-    "\r\n",
+    {
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 123\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n",
 
-    200, "OK",
-    {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
-    nullptr, { "qux", "corge" }
-  },
-};
+      200, "OK",
+      {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
+      123, {},
+
+      HttpMethod::HEAD,
+    },
+
+    {
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 8\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "quxcorge",
+
+      200, "OK",
+      {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
+      8, { "qux", "corge" }
+    },
+
+    {
+      "HTTP/1.1 200 OK\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "3\r\n"
+      "qux\r\n"
+      "5\r\n"
+      "corge\r\n"
+      "0\r\n"
+      "\r\n",
+
+      200, "OK",
+      {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
+      nullptr, { "qux", "corge" }
+    },
+  };
+
+  return RESPONSE_TEST_CASES;
+}
 
 KJ_TEST("HttpClient requests") {
   auto io = kj::setupAsyncIo();
 
-  for (auto& testCase: REQUEST_TEST_CASES) {
+  for (auto& testCase: requestTestCases()) {
     if (testCase.side == SERVER_ONLY) continue;
     KJ_CONTEXT(testCase.raw);
     testHttpClientRequest(io, testCase);
@@ -726,7 +734,7 @@ KJ_TEST("HttpClient responses") {
   auto io = kj::setupAsyncIo();
   size_t FRAGMENT_SIZES[] = { 1, 2, 3, 4, 5, 6, 7, 8, 16, 31, kj::maxValue };
 
-  for (auto& testCase: RESPONSE_TEST_CASES) {
+  for (auto& testCase: responseTestCases()) {
     if (testCase.side == SERVER_ONLY) continue;
     for (size_t fragmentSize: FRAGMENT_SIZES) {
       KJ_CONTEXT(testCase.raw, fragmentSize);
@@ -759,7 +767,7 @@ KJ_TEST("HttpServer requests") {
 
   auto io = kj::setupAsyncIo();
 
-  for (auto& testCase: REQUEST_TEST_CASES) {
+  for (auto& testCase: requestTestCases()) {
     if (testCase.side == CLIENT_ONLY) continue;
     KJ_CONTEXT(testCase.raw);
     testHttpServerRequest(io, testCase,
@@ -790,7 +798,7 @@ KJ_TEST("HttpServer responses") {
 
   auto io = kj::setupAsyncIo();
 
-  for (auto& testCase: RESPONSE_TEST_CASES) {
+  for (auto& testCase: responseTestCases()) {
     if (testCase.side == CLIENT_ONLY) continue;
     KJ_CONTEXT(testCase.raw);
     testHttpServerRequest(io,
@@ -800,90 +808,96 @@ KJ_TEST("HttpServer responses") {
 
 // -----------------------------------------------------------------------------
 
-static const HttpTestCase PIPELINE_TESTS[] = {
-  {
+kj::ArrayPtr<const HttpTestCase> pipelineTestCases() {
+  static const HttpTestCase PIPELINE_TESTS[] = {
     {
-      "GET / HTTP/1.1\r\n"
-      "\r\n",
+      {
+        "GET / HTTP/1.1\r\n"
+        "\r\n",
 
-      HttpMethod::GET, "/", {}, nullptr, {},
+        HttpMethod::GET, "/", {}, nullptr, {},
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 7\r\n"
+        "\r\n"
+        "foo bar",
+
+        200, "OK", {}, 7, { "foo bar" }
+      },
     },
+
     {
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Length: 7\r\n"
-      "\r\n"
-      "foo bar",
+      {
+        "POST /foo HTTP/1.1\r\n"
+        "Content-Length: 6\r\n"
+        "\r\n"
+        "grault",
 
-      200, "OK", {}, 7, { "foo bar" }
+        HttpMethod::POST, "/foo", {}, 6, { "grault" },
+      },
+      {
+        "HTTP/1.1 404 Not Found\r\n"
+        "Content-Length: 13\r\n"
+        "\r\n"
+        "baz qux corge",
+
+        404, "Not Found", {}, 13, { "baz qux corge" }
+      },
     },
-  },
 
-  {
     {
-      "POST /foo HTTP/1.1\r\n"
-      "Content-Length: 6\r\n"
-      "\r\n"
-      "grault",
+      {
+        "POST /bar HTTP/1.1\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "6\r\n"
+        "garply\r\n"
+        "5\r\n"
+        "waldo\r\n"
+        "0\r\n"
+        "\r\n",
 
-      HttpMethod::POST, "/foo", {}, 6, { "grault" },
+        HttpMethod::POST, "/bar", {}, nullptr, { "garply", "waldo" },
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "4\r\n"
+        "fred\r\n"
+        "5\r\n"
+        "plugh\r\n"
+        "0\r\n"
+        "\r\n",
+
+        200, "OK", {}, nullptr, { "fred", "plugh" }
+      },
     },
+
     {
-      "HTTP/1.1 404 Not Found\r\n"
-      "Content-Length: 13\r\n"
-      "\r\n"
-      "baz qux corge",
+      {
+        "HEAD / HTTP/1.1\r\n"
+        "\r\n",
 
-      404, "Not Found", {}, 13, { "baz qux corge" }
+        HttpMethod::HEAD, "/", {}, nullptr, {},
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 7\r\n"
+        "\r\n",
+
+        200, "OK", {}, 7, { "foo bar" }
+      },
     },
-  },
+  };
 
-  {
-    {
-      "POST /bar HTTP/1.1\r\n"
-      "Transfer-Encoding: chunked\r\n"
-      "\r\n"
-      "6\r\n"
-      "garply\r\n"
-      "5\r\n"
-      "waldo\r\n"
-      "0\r\n"
-      "\r\n",
-
-      HttpMethod::POST, "/bar", {}, nullptr, { "garply", "waldo" },
-    },
-    {
-      "HTTP/1.1 200 OK\r\n"
-      "Transfer-Encoding: chunked\r\n"
-      "\r\n"
-      "4\r\n"
-      "fred\r\n"
-      "5\r\n"
-      "plugh\r\n"
-      "0\r\n"
-      "\r\n",
-
-      200, "OK", {}, nullptr, { "fred", "plugh" }
-    },
-  },
-
-  {
-    {
-      "HEAD / HTTP/1.1\r\n"
-      "\r\n",
-
-      HttpMethod::HEAD, "/", {}, nullptr, {},
-    },
-    {
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Length: 7\r\n"
-      "\r\n",
-
-      200, "OK", {}, 7, { "foo bar" }
-    },
-  },
-};
+  return PIPELINE_TESTS;
+}
 
 KJ_TEST("HttpClient pipeline") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -933,6 +947,8 @@ KJ_TEST("HttpClient pipeline") {
 }
 
 KJ_TEST("HttpClient parallel pipeline") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -986,6 +1002,8 @@ KJ_TEST("HttpClient parallel pipeline") {
 }
 
 KJ_TEST("HttpServer pipeline") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1011,6 +1029,8 @@ KJ_TEST("HttpServer pipeline") {
 }
 
 KJ_TEST("HttpServer parallel pipeline") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1037,6 +1057,8 @@ KJ_TEST("HttpServer parallel pipeline") {
 }
 
 KJ_TEST("HttpClient <-> HttpServer") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1082,6 +1104,8 @@ KJ_TEST("HttpClient <-> HttpServer") {
 // -----------------------------------------------------------------------------
 
 KJ_TEST("HttpServer request timeout") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1100,6 +1124,8 @@ KJ_TEST("HttpServer request timeout") {
 }
 
 KJ_TEST("HttpServer pipeline timeout") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1146,6 +1172,8 @@ private:
 };
 
 KJ_TEST("HttpServer no response") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1170,6 +1198,8 @@ KJ_TEST("HttpServer no response") {
 }
 
 KJ_TEST("HttpServer disconnected") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1188,6 +1218,8 @@ KJ_TEST("HttpServer disconnected") {
 }
 
 KJ_TEST("HttpServer overloaded") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1206,6 +1238,8 @@ KJ_TEST("HttpServer overloaded") {
 }
 
 KJ_TEST("HttpServer unimplemented") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1224,6 +1258,8 @@ KJ_TEST("HttpServer unimplemented") {
 }
 
 KJ_TEST("HttpServer threw exception") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1264,6 +1300,8 @@ private:
 };
 
 KJ_TEST("HttpServer threw exception after starting response") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
