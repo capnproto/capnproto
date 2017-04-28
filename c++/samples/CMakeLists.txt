@@ -7,7 +7,6 @@
 #      cd capnproto/build
 #      cmake ../c++ -DCMAKE_INSTALL_PREFIX=$PREFIX
 #      cmake --build . --target install
-#      export PATH=$PREFIX/bin:$PATH
 #
 #   2. Ensure Cap'n Proto's executables are on the PATH, then build the sample project:
 #
@@ -16,26 +15,9 @@
 #      cd ../build-samples
 #      cmake ../c++/samples
 #      cmake --build .
-#
-# Caveat for MSVC:
-#
-#   MSVC cannot yet build the Cap'n Proto executables, so there won't be any `$PREFIX/bin` directory
-#   to put on the PATH. To work around this, you can use CMAKE_PREFIX_PATH or CMAKE_MODULE_PATH to
-#   find the installed MSVC-built Cap'n Proto package, and set CAPNP_EXECUTABLE and
-#   CAPNPC_CXX_EXECUTABLE to the MinGW-built executables manually.
-#
-#   Here's an example step 2, assuming a MinGW-built Cap'n Proto is installed at $PREFIX_MINGW and
-#   an MSVC-built Cap'n Proto is installed at $PREFIX_MSVC:
-#
-#      mkdir ../build-samples
-#      cd ../build-samples
-#      cmake ../c++/samples -DCMAKE_PREFIX_PATH=$PREFIX_MSVC \
-#          -DCAPNP_EXECUTABLE=$PREFIX_MINGW/bin/capnp.exe \
-#          -DCAPNPC_CXX_EXECUTABLE=$PREFIX_MINGW/bin/capnpc-c++.exe
-#      cmake --build .
 
 project("Cap'n Proto Samples" CXX)
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.1)
 
 find_package(CapnProto CONFIG REQUIRED)
 
