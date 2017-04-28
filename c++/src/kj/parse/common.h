@@ -132,7 +132,7 @@ public:
 
   template <typename Other>
   constexpr ParserRef(Other&& other)
-      : parser(&other), wrapper(&WrapperImplInstance<Decay<Other>>::instance) {
+      : parser(&other), wrapper(&wrapperImplInstance<Decay<Other>>()) {
     static_assert(kj::isReference<Other>(), "ParseRef should not be assigned to a temporary.");
   }
 
@@ -140,7 +140,7 @@ public:
   inline ParserRef& operator=(Other&& other) {
     static_assert(kj::isReference<Other>(), "ParseRef should not be assigned to a temporary.");
     parser = &other;
-    wrapper = &WrapperImplInstance<Decay<Other>>::instance;
+    wrapper = &wrapperImplInstance<Decay<Other>>();
     return *this;
   }
 
@@ -161,18 +161,16 @@ private:
     }
   };
   template <typename ParserImpl>
-  struct WrapperImplInstance {
-    static constexpr WrapperImpl<ParserImpl> instance = WrapperImpl<ParserImpl>();
-  };
+  static const WrapperImpl<ParserImpl>& wrapperImplInstance() {
+    // TODO(msvc): Replace this function with just a constexpr variable (inside a struct template)
+    //   when MSVC initializes constexpr vtable pointers correctly.
+    static WrapperImpl<ParserImpl> wrapperImpl;
+    return wrapperImpl;
+  }
 
   const void* parser;
   const Wrapper* wrapper;
 };
-
-template <typename Input, typename Output>
-template <typename ParserImpl>
-constexpr typename ParserRef<Input, Output>::template WrapperImpl<ParserImpl>
-ParserRef<Input, Output>::WrapperImplInstance<ParserImpl>::instance;
 
 template <typename Input, typename ParserImpl>
 constexpr ParserRef<Input, OutputType<ParserImpl, Input>> ref(ParserImpl& impl) {
