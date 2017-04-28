@@ -261,8 +261,12 @@ public:
   static T* allocate(size_t count);
   template <typename T>
   static T* allocateUninitialized(size_t count);
-
-  static const HeapArrayDisposer instance;
+  static const HeapArrayDisposer& instance() {
+    // TODO(msvc): Replace this function with just a constexpr variable when MSVC initializes
+    //   constexpr vtable pointers correctly.
+    static HeapArrayDisposer disposer;
+    return disposer;
+  }
 
 private:
   static void* allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
@@ -285,7 +289,7 @@ inline Array<T> heapArray(size_t size) {
   // Much like `heap<T>()` from memory.h, allocates a new array on the heap.
 
   return Array<T>(_::HeapArrayDisposer::allocate<T>(size), size,
-                  _::HeapArrayDisposer::instance);
+                  _::HeapArrayDisposer::instance());
 }
 
 template <typename T> Array<T> heapArray(const T* content, size_t size);
@@ -474,7 +478,7 @@ inline ArrayBuilder<T> heapArrayBuilder(size_t size) {
   // manually by calling `add()`.
 
   return ArrayBuilder<T>(_::HeapArrayDisposer::allocateUninitialized<RemoveConst<T>>(size),
-                         size, _::HeapArrayDisposer::instance);
+                         size, _::HeapArrayDisposer::instance());
 }
 
 // =======================================================================================
