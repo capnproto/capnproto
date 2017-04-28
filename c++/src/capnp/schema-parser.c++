@@ -242,7 +242,7 @@ protected:
   }
 };
 
-constexpr MmapDisposer mmapDisposer = MmapDisposer();
+KJ_CONSTEXPR(static const) MmapDisposer mmapDisposer = MmapDisposer();
 
 static char* canonicalizePath(char* path) {
   // Taken from some old C code of mine.
