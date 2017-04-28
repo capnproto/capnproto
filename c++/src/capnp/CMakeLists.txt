@@ -124,60 +124,58 @@ endif()
 
 # Tools/Compilers ==============================================================
 
-if(CAPNP_BUILD_TOOLS)
-  set(capnpc_sources
-    compiler/md5.c++
-    compiler/error-reporter.c++
-    compiler/lexer.capnp.c++
-    compiler/lexer.c++
-    compiler/grammar.capnp.c++
-    compiler/parser.c++
-    compiler/node-translator.c++
-    compiler/compiler.c++
-    schema-parser.c++
-    serialize-text.c++
+set(capnpc_sources
+  compiler/md5.c++
+  compiler/error-reporter.c++
+  compiler/lexer.capnp.c++
+  compiler/lexer.c++
+  compiler/grammar.capnp.c++
+  compiler/parser.c++
+  compiler/node-translator.c++
+  compiler/compiler.c++
+  schema-parser.c++
+  serialize-text.c++
+)
+if(NOT CAPNP_LITE)
+  add_library(capnpc ${capnpc_sources})
+  target_link_libraries(capnpc capnp kj)
+  install(TARGETS capnpc ${INSTALL_TARGETS_DEFAULT_ARGS})
+  install(FILES ${capnpc_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp")
+endif()
+
+if(NOT CAPNP_LITE)
+  add_executable(capnp_tool
+    compiler/module-loader.c++
+    compiler/capnp.c++
   )
-  if(NOT CAPNP_LITE)
-    add_library(capnpc ${capnpc_sources})
-    target_link_libraries(capnpc capnp kj)
-    install(TARGETS capnpc ${INSTALL_TARGETS_DEFAULT_ARGS})
-    install(FILES ${capnpc_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp")
-  endif()
+  target_link_libraries(capnp_tool capnpc capnp kj)
+  set_target_properties(capnp_tool PROPERTIES OUTPUT_NAME capnp)
+  set_target_properties(capnp_tool PROPERTIES CAPNP_INCLUDE_DIRECTORY
+    $<JOIN:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>,$<INSTALL_INTERFACE:${CMAKE_INSTALL_BINDIR}/..>>
+  )
 
-  if(NOT CAPNP_LITE)
-    add_executable(capnp_tool
-      compiler/module-loader.c++
-      compiler/capnp.c++
-    )
-    target_link_libraries(capnp_tool capnpc capnp kj)
-    set_target_properties(capnp_tool PROPERTIES OUTPUT_NAME capnp)
-    set_target_properties(capnp_tool PROPERTIES CAPNP_INCLUDE_DIRECTORY
-      $<JOIN:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>,$<INSTALL_INTERFACE:${CMAKE_INSTALL_BINDIR}/..>>
-    )
+  add_executable(capnpc_cpp
+    compiler/capnpc-c++.c++
+  )
+  target_link_libraries(capnpc_cpp capnp kj)
+  set_target_properties(capnpc_cpp PROPERTIES OUTPUT_NAME capnpc-c++)
+  #Capnp tool needs capnpc_cpp location. But cmake deprecated LOCATION property.
+  #So we use custom property to pass location
+  set_target_properties(capnpc_cpp PROPERTIES CAPNPC_CXX_EXECUTABLE
+    $<TARGET_FILE:capnpc_cpp>
+  )
 
-    add_executable(capnpc_cpp
-      compiler/capnpc-c++.c++
-    )
-    target_link_libraries(capnpc_cpp capnp kj)
-    set_target_properties(capnpc_cpp PROPERTIES OUTPUT_NAME capnpc-c++)
-    #Capnp tool needs capnpc_cpp location. But cmake deprecated LOCATION property.
-    #So we use custom property to pass location
-    set_target_properties(capnpc_cpp PROPERTIES CAPNPC_CXX_EXECUTABLE
-      $<JOIN:$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/capnpc-c++>,$<INSTALL_INTERFACE:${CMAKE_INSTALL_BINDIR}/capnpc-c++>>
-    )
+  add_executable(capnpc_capnp
+    compiler/capnpc-capnp.c++
+  )
+  target_link_libraries(capnpc_capnp capnp kj)
+  set_target_properties(capnpc_capnp PROPERTIES OUTPUT_NAME capnpc-capnp)
 
-    add_executable(capnpc_capnp
-      compiler/capnpc-capnp.c++
-    )
-    target_link_libraries(capnpc_capnp capnp kj)
-    set_target_properties(capnpc_capnp PROPERTIES OUTPUT_NAME capnpc-capnp)
+  install(TARGETS capnp_tool capnpc_cpp capnpc_capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
 
-    install(TARGETS capnp_tool capnpc_cpp capnpc_capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
-
-    # Symlink capnpc -> capnp
-    install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc\")")
-  endif()  # NOT CAPNP_LITE
-endif()  # CAPNP_BUILD_TOOLS
+  # Symlink capnpc -> capnp
+  install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc\")")
+endif()  # NOT CAPNP_LITE
 
 # Tests ========================================================================
 
@@ -195,12 +193,10 @@ if(BUILD_TESTING)
 
   capnp_generate_cpp(test_capnp_cpp_files test_capnp_h_files ${test_capnp_files})
 
-  set(test_libraries capnp kj-test kj)
-  if(NOT CAPNP_LITE)
-    list(APPEND test_libraries capnp-json capnp-rpc kj-async)
-  endif()
-  if(CAPNP_BUILD_TOOLS)
-    list(APPEND test_libraries capnpc)
+  if(CAPNP_LITE)
+    set(test_libraries capnp kj-test kj)
+  else()
+    set(test_libraries capnp-json capnp-rpc capnp capnpc kj-async kj-test kj)
   endif()
 
   add_executable(capnp-tests
@@ -232,12 +228,16 @@ if(BUILD_TESTING)
       membrane-test.c++
       schema-test.c++
       schema-loader-test.c++
+      schema-parser-test.c++
       dynamic-test.c++
       stringify-test.c++
       serialize-async-test.c++
+      serialize-text-test.c++
       rpc-test.c++
       rpc-twoparty-test.c++
       ez-rpc-test.c++
+      compiler/lexer-test.c++
+      compiler/md5-test.c++
       test-util.c++
       compat/json-test.c++
       ${test_capnp_cpp_files}
@@ -253,29 +253,9 @@ if(BUILD_TESTING)
     add_dependencies(check capnp-heavy-tests)
     add_test(NAME capnp-heavy-tests-run COMMAND capnp-heavy-tests)
 
-    if(CAPNP_BUILD_TOOLS)
-      add_executable(capnp-parse-tests
-        schema-parser-test.c++
-        serialize-text-test.c++
-        compiler/md5-test.c++
-        compiler/lexer-test.c++
-        test-util.c++
-        ${test_capnp_cpp_files}
-        ${test_capnp_h_files}
-      )
-      target_link_libraries(capnp-parse-tests ${test_libraries})
-      if(NOT MSVC)
-        set_target_properties(capnp-parse-tests
-          PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations"
-        )
-      endif()
-      add_dependencies(check capnp-parse-tests)
-      add_test(NAME capnp-parse-tests-run COMMAND capnp-parse-tests)
-
-      add_executable(capnp-evolution-tests compiler/evolution-test.c++)
-      target_link_libraries(capnp-evolution-tests capnpc capnp kj)
-      add_dependencies(check capnp-evolution-tests)
-      add_test(NAME capnp-evolution-tests-run COMMAND capnp-evolution-tests)
-    endif()  # CAPNP_BUILD_TOOLS
+    add_executable(capnp-evolution-tests compiler/evolution-test.c++)
+    target_link_libraries(capnp-evolution-tests capnpc capnp kj)
+    add_dependencies(check capnp-evolution-tests)
+    add_test(NAME capnp-evolution-tests-run COMMAND capnp-evolution-tests)
   endif()  # NOT CAPNP_LITE
 endif()  # BUILD_TESTING

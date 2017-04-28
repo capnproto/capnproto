@@ -103,7 +103,5 @@ void HeapArrayDisposer::disposeImpl(
   }
 }
 
-const HeapArrayDisposer HeapArrayDisposer::instance = HeapArrayDisposer();
-
 }  // namespace _ (private)
 }  // namespace kj

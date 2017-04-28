@@ -7,9 +7,8 @@
 #     support for.
 #   - Use CMake to ...
 #       build Cap'n Proto with MinGW.
-#       build Cap'n Proto with VS2015 and the MinGW-built capnp tools.
-#       build the Cap'n Proto samples with VS2015 and the MinGW-built capnp tools.
-#   - Archive both Cap'n Proto builds in capnproto-c++-{mingw,vs2015}.zip artifacts.
+#       build Cap'n Proto with VS2015.
+#       build Cap'n Proto samples with VS2015.
 
 version: "{build}"
 
@@ -52,21 +51,20 @@ build_script:
       -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
       -DCMAKE_INSTALL_PREFIX=%INSTALL_PREFIX_MINGW%
   - cmake --build build-mingw --target install -- -j%NUMBER_OF_PROCESSORS%
-  - set PATH=%INSTALL_PREFIX_MINGW%\bin;%PATH%
+
   - echo "Building Cap'n Proto with Visual Studio 2015"
   - >-
       cmake -Hc++ -Bbuild-vs2015 -G "Visual Studio 14 2015" -A x64
-      -DEXTERNAL_CAPNP=ON
       -DCMAKE_INSTALL_PREFIX=%INSTALL_PREFIX_VS2015%
   - cmake --build build-vs2015 --config %BUILD_TYPE% --target install
   # TODO(someday): pass `-- /maxcpucount` for a parallel build. Right now it occasionally expresses
   # a filesystem-related race: capnp-capnpc++ complains that it can't create test.capnp.h.
+
+  - echo "Building Cap'n Proto samples with Visual Studio 2015"
   - >-
-      cmake -Hc++/samples -Bbuild-samples -G "Visual Studio 14 2015" -A x64
+      cmake -Hc++/samples -Bbuild-vs2015-samples -G "Visual Studio 14 2015" -A x64
       -DCMAKE_PREFIX_PATH=%INSTALL_PREFIX_VS2015%
-      -DCAPNP_EXECUTABLE=%INSTALL_PREFIX_MINGW%\bin\capnp.exe
-      -DCAPNPC_CXX_EXECUTABLE=%INSTALL_PREFIX_MINGW%\bin\capnpc-c++.exe
-  - cmake --build build-samples --config %BUILD_TYPE%
+  - cmake --build build-vs2015-samples --config %BUILD_TYPE%
 
 # TODO(soon): Fix tests on Windows.
 #
