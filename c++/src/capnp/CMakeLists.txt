@@ -163,7 +163,7 @@ if(CAPNP_BUILD_TOOLS)
     #Capnp tool needs capnpc_cpp location. But cmake deprecated LOCATION property.
     #So we use custom property to pass location
     set_target_properties(capnpc_cpp PROPERTIES CAPNPC_CXX_EXECUTABLE
-      $<JOIN:$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/capnpc-c++>,$<INSTALL_INTERFACE:${CMAKE_INSTALL_BINDIR}/capnpc-c++>>
+      $<TARGET_FILE:capnpc_cpp>
     )
 
     add_executable(capnpc_capnp
