@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <string.h>
 #include <exception>
+#include <stdlib.h>
 
 #include "miniposix.h"
 
