@@ -26,9 +26,12 @@
 namespace kj {
 namespace {
 
+#if !_MSC_VER
+// TODO(msvc): GetFunctorStartAddress is not supported on MSVC currently, so skip the test.
 TEST(Async, GetFunctorStartAddress) {
   EXPECT_TRUE(nullptr != _::GetFunctorStartAddress<>::apply([](){return 0;}));
 }
+#endif
 
 TEST(Async, EvalVoid) {
   EventLoop loop;
