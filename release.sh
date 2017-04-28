@@ -2,14 +2,16 @@
 
 set -euo pipefail
 
-if (grep -r KJ_DBG c++/src | egrep -v '/debug(-test)?[.]'); then
-  echo '*** Error:  There are instances of KJ_DBG in the code.' >&2
-  exit 1
-fi
+if [ "$1" != "package" ]; then
+  if (grep -r KJ_DBG c++/src | egrep -v '/debug(-test)?[.]' | grep -v 'See KJ_DBG\.$'); then
+    echo '*** Error:  There are instances of KJ_DBG in the code.' >&2
+    exit 1
+  fi
 
-if (egrep -r 'TODO\((now|soon)\)' *); then
-  echo '*** Error:  There are release-blocking TODOs in the code.' >&2
-  exit 1
+  if (egrep -r 'TODO\((now|soon)\)' *); then
+    echo '*** Error:  There are release-blocking TODOs in the code.' >&2
+    exit 1
+  fi
 fi
 
 doit() {
@@ -317,6 +319,12 @@ case "${1-}:$BRANCH" in
       doit git tag v$OLD_VERSION
       done_banner $OLD_VERSION "v$OLD_VERSION release-$OLD_VERSION" no
     fi
+    ;;
+
+  # ======================================================================================
+  package:* )
+    echo "Just building a package."
+    build_packages $(get_version '.*')
     ;;
 
   # ======================================================================================
