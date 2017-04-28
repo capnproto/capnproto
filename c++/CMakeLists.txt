@@ -29,29 +29,9 @@ option(BUILD_TESTING "Build unit tests and enable CTest 'check' target." ON)
 option(EXTERNAL_CAPNP "Use the system capnp binary, or the one specified in $CAPNP, instead of using the compiled one." OFF)
 option(CAPNP_LITE "Compile Cap'n Proto in 'lite mode', in which all reflection APIs (schema.h, dynamic.h, etc.) are not included. Produces a smaller library at the cost of features. All programs built against the library must be compiled with -DCAPNP_LITE. Requires EXTERNAL_CAPNP." OFF)
 
-if(MSVC)
-  option(CAPNP_BUILD_TOOLS "Build Cap'n Proto tools" OFF)
-else()
-  option(CAPNP_BUILD_TOOLS "Build Cap'n Proto tools" ON)
-endif()
-mark_as_advanced(CAPNP_BUILD_TOOLS)
-# TODO(msvc):  This option exists purely to ease the MSVC port. As of this writing, the latest
-# stable version of Visual C++ (VS2015U3) cannot build the Cap'n Proto tools, so this option
-# defaults to OFF in that case. In all other cases it defaults to ON.
-
 # Check for invalid combinations of build options
 if(CAPNP_LITE AND BUILD_TESTING AND NOT EXTERNAL_CAPNP)
   message(SEND_ERROR "You must set EXTERNAL_CAPNP when using CAPNP_LITE and BUILD_TESTING.")
-endif()
-
-if(NOT CAPNP_BUILD_TOOLS AND BUILD_TESTING AND NOT EXTERNAL_CAPNP)
-  message(SEND_ERROR "You must set EXTERNAL_CAPNP when using BUILD_TESTING but not CAPNP_BUILD_TOOLS")
-  if(MSVC)
-    message(SEND_ERROR "Note: CAPNP_BUILD_TOOLS is off because you are using MSVC, which cannot build the tools")
-    # If we're using MSVC, then we know the reason why CAPNP_BUILD_TOOLS is off and should help the
-    # user out. If we're NOT using MSVC, then the user must have explicitly set CAPNP_BUILD_TOOLS
-    # off, so they're on their own.
-  endif()
 endif()
 
 if(CAPNP_LITE)
