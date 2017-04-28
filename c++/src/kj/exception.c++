@@ -407,17 +407,29 @@ kj::StringPtr trimSourceFilename(kj::StringPtr filename) {
   // To deal with all this, we look for directory names in the path which we recognize to be
   // locations that represent roots of the source tree. We strip said root and everything before
   // it.
+  //
+  // On Windows, we often get filenames containing backslashes. Since we aren't allowed to allocate
+  // a new string here, we can't do much about this, so our returned "canonical" name will
+  // unfortunately end up with backslashes.
 
   static constexpr const char* ROOTS[] = {
     "ekam-provider/canonical/",  // Ekam source file.
     "ekam-provider/c++header/",  // Ekam include file.
     "src/",                      // Non-Ekam source root.
-    "tmp/"                       // Non-Ekam generated code.
+    "tmp/",                      // Non-Ekam generated code.
+#if _WIN32
+    "src\\",                     // Win32 source root.
+    "tmp\\",                     // Win32 generated code.
+#endif
   };
 
 retry:
   for (size_t i: kj::indices(filename)) {
-    if (i == 0 || filename[i-1] == '/') {
+    if (i == 0 || filename[i-1] == '/'
+#if _WIN32
+               || filename[i-1] == '\\'
+#endif
+        ) {
       // We're at the start of a directory name. Check for valid prefixes.
       for (kj::StringPtr root: ROOTS) {
         if (filename.slice(i).startsWith(root)) {
