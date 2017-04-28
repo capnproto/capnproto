@@ -45,7 +45,7 @@
 #include <dbghelp.h>
 #endif
 
-#if (__linux__ || __APPLE__) && defined(KJ_DEBUG)
+#if (__linux__ || __APPLE__)
 #include <stdio.h>
 #include <pthread.h>
 #endif
@@ -156,6 +156,10 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
 #endif
 
 ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
+  if (getExceptionCallback().stackTraceMode() == ExceptionCallback::StackTraceMode::NONE) {
+    return nullptr;
+  }
+
 #if _WIN32 && _M_X64
   CONTEXT context;
   RtlCaptureContext(&context);
@@ -170,11 +174,11 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
 
 String stringifyStackTrace(ArrayPtr<void* const> trace) {
   if (trace.size() == 0) return nullptr;
+  if (getExceptionCallback().stackTraceMode() != ExceptionCallback::StackTraceMode::FULL) {
+    return nullptr;
+  }
 
-#ifndef KJ_DEBUG
-  return nullptr;
-
-#elif _WIN32 && _M_X64 && _MSC_VER
+#if _WIN32 && _M_X64 && _MSC_VER
 
   // Try to get file/line using SymGetLineFromAddr64(). We don't bother if we aren't on MSVC since
   // this requires MSVC debug info.
@@ -641,6 +645,10 @@ void ExceptionCallback::logMessage(
   next.logMessage(severity, file, line, contextDepth, mv(text));
 }
 
+ExceptionCallback::StackTraceMode ExceptionCallback::stackTraceMode() {
+  return next.stackTraceMode();
+}
+
 class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
 public:
   RootExceptionCallback(): ExceptionCallback(*this) {}
@@ -685,6 +693,14 @@ public:
       }
       textPtr = textPtr.slice(n);
     }
+  }
+
+  StackTraceMode stackTraceMode() override {
+#ifdef KJ_DEBUG
+    return StackTraceMode::FULL;
+#else
+    return StackTraceMode::ADDRESS_ONLY;
+#endif
   }
 
 private:
