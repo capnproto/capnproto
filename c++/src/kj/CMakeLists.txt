@@ -19,16 +19,12 @@ set(kj_sources_heavy
   units.c++
   refcount.c++
   string-tree.c++
-)
-set(kj-parse_sources
   parse/char.c++
 )
-set(kj_sources ${kj_sources_lite})
 if(NOT CAPNP_LITE)
-  list(APPEND kj_sources ${kj_sources_heavy})
-endif()
-if(CAPNP_BUILD_TOOLS)
-  list(APPEND kj_sources ${kj-parse_sources})
+  set(kj_sources ${kj_sources_lite} ${kj_sources_heavy})
+else()
+  set(kj_sources ${kj_sources_lite})
 endif()
 
 set(kj_headers
@@ -177,20 +173,12 @@ if(BUILD_TESTING)
       one-of-test.c++
       function-test.c++
       threadlocal-pthread-test.c++
+      parse/common-test.c++
+      parse/char-test.c++
       compat/http-test.c++
     )
     target_link_libraries(kj-heavy-tests kj-http kj-async kj-test kj)
     add_dependencies(check kj-heavy-tests)
     add_test(NAME kj-heavy-tests-run COMMAND kj-heavy-tests)
-
-    if(CAPNP_BUILD_TOOLS)
-      add_executable(kj-parse-tests
-        parse/common-test.c++
-        parse/char-test.c++
-      )
-      target_link_libraries(kj-parse-tests kj-test kj)
-      add_dependencies(check kj-parse-tests)
-      add_test(NAME kj-parse-tests-run COMMAND kj-parse-tests)
-    endif()  # CAPNP_BUILD_TOOLS
   endif()  # NOT CAPNP_LITE
 endif()  # BUILD_TESTING
