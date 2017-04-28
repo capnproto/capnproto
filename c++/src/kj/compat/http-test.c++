@@ -654,7 +654,9 @@ kj::ArrayPtr<const HttpRequestTestCase> requestTestCases() {
     },
   };
 
-  return REQUEST_TEST_CASES;
+  // TODO(cleanup): A bug in GCC 4.8, fixed in 4.9, prevents REQUEST_TEST_CASES from implicitly
+  //   casting to our return type.
+  return kj::arrayPtr(REQUEST_TEST_CASES, kj::size(REQUEST_TEST_CASES));
 }
 
 kj::ArrayPtr<const HttpResponseTestCase> responseTestCases() {
@@ -717,7 +719,9 @@ kj::ArrayPtr<const HttpResponseTestCase> responseTestCases() {
     },
   };
 
-  return RESPONSE_TEST_CASES;
+  // TODO(cleanup): A bug in GCC 4.8, fixed in 4.9, prevents RESPONSE_TEST_CASES from implicitly
+  //   casting to our return type.
+  return kj::arrayPtr(RESPONSE_TEST_CASES, kj::size(RESPONSE_TEST_CASES));
 }
 
 KJ_TEST("HttpClient requests") {
@@ -892,7 +896,9 @@ kj::ArrayPtr<const HttpTestCase> pipelineTestCases() {
     },
   };
 
-  return PIPELINE_TESTS;
+  // TODO(cleanup): A bug in GCC 4.8, fixed in 4.9, prevents RESPONSE_TEST_CASES from implicitly
+  //   casting to our return type.
+  return kj::arrayPtr(PIPELINE_TESTS, kj::size(PIPELINE_TESTS));
 }
 
 KJ_TEST("HttpClient pipeline") {
