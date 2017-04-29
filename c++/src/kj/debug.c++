@@ -136,7 +136,7 @@ Exception::Type typeOfErrno(int error) {
 
 Exception::Type typeOfWin32Error(DWORD error) {
   switch (error) {
-    // TODO(0.7): This needs more work.
+    // TODO(soon): This needs more work.
 
     case WSAETIMEDOUT:
       return Exception::Type::OVERLOADED;
@@ -357,8 +357,8 @@ void Debug::Fault::init(
     const char* file, int line, Win32Error osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   LPVOID ptr;
-  // TODO(0.7): Use FormatMessageW() instead.
-  // TODO(0.7): Why doesn't this work for winsock errors?
+  // TODO(soon): Use FormatMessageW() instead.
+  // TODO(soon): Why doesn't this work for winsock errors?
   DWORD result = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
                                 FORMAT_MESSAGE_FROM_SYSTEM |
                                 FORMAT_MESSAGE_IGNORE_INSERTS,
