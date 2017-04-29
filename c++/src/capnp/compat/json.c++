@@ -223,8 +223,8 @@ kj::String JsonCodec::encodeRaw(JsonValue::Reader value) const {
 }
 
 void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const {
-  // TODO(soon): For interfaces, check for handlers on superclasses, per documentation...
-  // TODO(soon): For branded types, should we check for handlers on the generic?
+  // TODO(0.7): For interfaces, check for handlers on superclasses, per documentation...
+  // TODO(0.7): For branded types, should we check for handlers on the generic?
   // TODO(someday): Allow registering handlers for "all structs", "all lists", etc?
   auto iter = impl->typeHandlers.find(type);
   if (iter != impl->typeHandlers.end()) {
@@ -552,7 +552,7 @@ void JsonCodec::decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct
 }
 
 void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) const {
-  // TODO(soon): type and field handlers
+  // TODO(0.7): type and field handlers
   switch (input.which()) {
     case JsonValue::OBJECT:
       decodeObject(input.getObject(), output);
@@ -564,7 +564,7 @@ void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) c
 
 Orphan<DynamicValue> JsonCodec::decode(
     JsonValue::Reader input, Type type, Orphanage orphanage) const {
-  // TODO(soon)
+  // TODO(0.7)
   KJ_FAIL_ASSERT("JSON decode into orphanage not implement yet. :(");
 }
 
@@ -885,7 +885,7 @@ private:
       }
     }
 
-    // TODO(soon): Support at least basic multi-lingual plane, ie ignore surrogates.
+    // TODO(0.7): Support at least basic multi-lingual plane, ie ignore surrogates.
     KJ_REQUIRE(codePoint < 128, "non-ASCII unicode escapes are not supported (yet!)");
     target.add(0x7f & static_cast<char>(codePoint));
   }
