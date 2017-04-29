@@ -853,15 +853,6 @@ class Maybe;
 
 namespace _ {  // private
 
-#if _MSC_VER
-  // TODO(msvc): MSVC barfs on noexcept(instance<T&>().~T()) where T = kj::Exception and
-  // kj::_::Void. It and every other factorization I've tried produces:
-  //   error C2325: 'kj::Blah' unexpected type to the right of '.~': expected 'void'
-#define MSVC_NOEXCEPT_DTOR_WORKAROUND(T) __is_nothrow_destructible(T)
-#else
-#define MSVC_NOEXCEPT_DTOR_WORKAROUND(T) noexcept(instance<T&>().~T())
-#endif
-
 template <typename T>
 class NullableValue {
   // Class whose interface behaves much like T*, but actually contains an instance of T and a
@@ -886,7 +877,15 @@ public:
       ctor(value, other.value);
     }
   }
-  inline ~NullableValue() noexcept(MSVC_NOEXCEPT_DTOR_WORKAROUND(T)) {
+  inline ~NullableValue()
+#if _MSC_VER
+      // TODO(msvc): MSVC has a hard time with noexcept specifier expressions that are more complex
+      //   than `true` or `false`. We had a workaround for VS2015, but VS2017 regressed.
+      noexcept(false)
+#else
+      noexcept(noexcept(instance<T&>().~T()))
+#endif
+  {
     if (isSet) {
       dtor(value);
     }
