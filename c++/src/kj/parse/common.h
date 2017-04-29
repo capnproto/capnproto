@@ -164,7 +164,7 @@ private:
   struct WrapperImplInstance {
 #if _MSC_VER
     // TODO(msvc): MSVC currently fails to initialize vtable pointers for constexpr values so
-	//   we have to make this just const instead.
+    //   we have to make this just const instead.
     static const WrapperImpl<ParserImpl> instance;
 #else
     static constexpr WrapperImpl<ParserImpl> instance = WrapperImpl<ParserImpl>();
