@@ -394,9 +394,6 @@ struct DisallowConstCopy {
 //   struct Foo: DisallowConstCopy {};
 //   Foo foo;
 //   auto lambda = [KJ_CPCAP(foo)] {};
-//
-// TODO(soon): Can we remove this since DisallowConstCopy no longer does anything except when
-//   CAPNP_DEBUG_TYPES is defined?
 
 #else
 
