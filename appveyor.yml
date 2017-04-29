@@ -7,8 +7,8 @@
 #     support for.
 #   - Use CMake to ...
 #       build Cap'n Proto with MinGW.
-#       build Cap'n Proto with VS2015.
-#       build Cap'n Proto samples with VS2015.
+#       build Cap'n Proto with VS2015 and VS2017.
+#       build Cap'n Proto samples with VS2015 and VS2017.
 
 version: "{build}"
 
@@ -32,6 +32,23 @@ environment:
   MINGW_ARCHIVE: x86_64-4.8.5-release-win32-seh-rt_v4-rev0.7z
   BUILD_TYPE: debug
 
+  matrix:
+    # TODO(someday): Add MSVC x64 builds, MinGW x86 build?
+
+    - CMAKE_GENERATOR: Visual Studio 15 2017
+      BUILD_NAME: vs2017
+      EXTRA_BUILD_FLAGS: # /maxcpucount
+      # TODO(someday): Right now /maxcpucount occasionally expresses a filesystem-related race:
+      #   capnp-capnpc++ complains that it can't create test.capnp.h.
+
+    - CMAKE_GENERATOR: Visual Studio 14 2015
+      BUILD_NAME: vs2015
+      EXTRA_BUILD_FLAGS: # /maxcpucount
+
+    - CMAKE_GENERATOR: MinGW Makefiles
+      BUILD_NAME: mingw
+      EXTRA_BUILD_FLAGS: -j2
+
 install:
   - if not exist "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
   - 7z x -y "%MINGW_ARCHIVE%" > nul
@@ -40,34 +57,30 @@ install:
 
 before_build:
   - set PATH=%CD%\%MINGW_DIR%\bin;%PATH%
-  - set INSTALL_PREFIX_MINGW=%CD%\capnproto-c++-mingw
-  - set INSTALL_PREFIX_VS2015=%CD%\capnproto-c++-vs2015
+  - set BUILD_DIR=build-%BUILD_NAME%
+  - set INSTALL_PREFIX=%CD%\capnproto-c++-%BUILD_NAME%
   - cmake --version
 
 build_script:
-  - echo "Building Cap'n Proto with MinGW"
+  - echo "Building Cap'n Proto with %CMAKE_GENERATOR%"
   - >-
-      cmake -Hc++ -Bbuild-mingw -G "MinGW Makefiles"
+      cmake -Hc++ -B%BUILD_DIR% -G "%CMAKE_GENERATOR%"
       -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
-      -DCMAKE_INSTALL_PREFIX=%INSTALL_PREFIX_MINGW%
-  - cmake --build build-mingw --target install -- -j%NUMBER_OF_PROCESSORS%
+      -DCMAKE_INSTALL_PREFIX=%INSTALL_PREFIX%
+  - cmake --build %BUILD_DIR% --config %BUILD_TYPE% --target install -- %EXTRA_BUILD_FLAGS%
+  # MinGW wants the build type at configure-time while MSVC wants the build type at build-time. We
+  # can satisfy both by passing the build type to both cmake invocations. We have to suffer a
+  # warning, but both generators will work.
 
-  - echo "Building Cap'n Proto with Visual Studio 2015"
+  - echo "Building Cap'n Proto samples with %CMAKE_GENERATOR%"
   - >-
-      cmake -Hc++ -Bbuild-vs2015 -G "Visual Studio 14 2015" -A x64
-      -DCMAKE_INSTALL_PREFIX=%INSTALL_PREFIX_VS2015%
-  - cmake --build build-vs2015 --config %BUILD_TYPE% --target install
-  # TODO(someday): pass `-- /maxcpucount` for a parallel build. Right now it occasionally expresses
-  # a filesystem-related race: capnp-capnpc++ complains that it can't create test.capnp.h.
-
-  - echo "Building Cap'n Proto samples with Visual Studio 2015"
-  - >-
-      cmake -Hc++/samples -Bbuild-vs2015-samples -G "Visual Studio 14 2015" -A x64
-      -DCMAKE_PREFIX_PATH=%INSTALL_PREFIX_VS2015%
-  - cmake --build build-vs2015-samples --config %BUILD_TYPE%
+      cmake -Hc++/samples -B%BUILD_DIR%-samples -G "%CMAKE_GENERATOR%"
+      -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+      -DCMAKE_PREFIX_PATH=%INSTALL_PREFIX%
+  - cmake --build %BUILD_DIR%-samples --config %BUILD_TYPE%
 
 test_script:
   - timeout /t 2
   # Sleep a little to prevent interleaving test output with build output.
-  - cd build-vs2015\src
+  - cd %BUILD_DIR%\src
   - ctest -V -C %BUILD_TYPE%
