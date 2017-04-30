@@ -58,7 +58,7 @@ set(capnp_schemas
 )
 add_library(capnp ${capnp_sources})
 add_library(CapnProto::capnp ALIAS capnp)
-target_link_libraries(capnp kj)
+target_link_libraries(capnp PUBLIC kj)
 #make sure external consumers don't need to manually set the include dirs
 target_include_directories(capnp INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
@@ -96,7 +96,7 @@ set(capnp-rpc_schemas
 if(NOT CAPNP_LITE)
   add_library(capnp-rpc ${capnp-rpc_sources})
   add_library(CapnProto::capnp-rpc ALIAS capnp-rpc)
-  target_link_libraries(capnp-rpc capnp kj-async kj)
+  target_link_libraries(capnp-rpc PUBLIC capnp kj-async kj)
   install(TARGETS capnp-rpc ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${capnp-rpc_headers} ${capnp-rpc_schemas} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp")
 endif()
@@ -117,7 +117,7 @@ set(capnp-json_schemas
 if(NOT CAPNP_LITE)
   add_library(capnp-json ${capnp-json_sources})
   add_library(CapnProto::capnp-json ALIAS capnp-json)
-  target_link_libraries(capnp-json capnp kj-async kj)
+  target_link_libraries(capnp-json PUBLIC capnp kj-async kj)
   install(TARGETS capnp-json ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${capnp-json_headers} ${capnp-json_schemas} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp/compat")
 endif()
@@ -138,7 +138,7 @@ set(capnpc_sources
 )
 if(NOT CAPNP_LITE)
   add_library(capnpc ${capnpc_sources})
-  target_link_libraries(capnpc capnp kj)
+  target_link_libraries(capnpc PUBLIC capnp kj)
   install(TARGETS capnpc ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${capnpc_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp")
 endif()
