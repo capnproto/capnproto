@@ -5,6 +5,9 @@ language: cpp
 os:
   - linux
   - osx
+compiler:
+  - gcc
+  - clang
 dist: trusty
 sudo: false
 addons:
