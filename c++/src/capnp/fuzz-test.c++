@@ -27,6 +27,18 @@
 #include <stdlib.h>
 #include <kj/miniposix.h>
 #include "test-util.h"
+#include <time.h>
+
+#if _WIN32
+#define NOMINMAX 1
+#define WIN32_LEAN_AND_MEAN 1
+#define NOSERVICE 1
+#define NOMCX 1
+#define NOIME 1
+#include <windows.h>
+#include <kj/windows-sanity.h>
+#undef VOID
+#endif
 
 namespace capnp {
 namespace _ {  // private
@@ -105,34 +117,72 @@ uint64_t traverse(AnyPointer::Reader reader) {
   }
 }
 
+uint64_t getCpuTimeNs() {
+  // Get the current thread's CPU time in nanoseconds.
+
+#if _WIN32
+  // It looks like GetThreadTimes() returns CPU time with only 10ms precision. We could use one of
+  // the high-precision timers instead, but they appear to measure only wall time, not CPU time,
+  // which could lead to flaky results on heavily-loaded machines, e.g. CI.
+  FILETIME creation, exit, kernel, user;
+  KJ_WIN32(GetThreadTimes(GetCurrentThread(), &creation, &exit, &kernel, &user));
+  return ((static_cast<uint64_t>(user.dwHighDateTime) << 32) +
+           static_cast<uint64_t>(user.dwLowDateTime)) * 100ull;
+#elif defined(CLOCK_THREAD_CPUTIME_ID)
+  struct timespec ts;
+  KJ_SYSCALL(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts));
+  return ts.tv_sec * 1000000000ull + ts.tv_nsec;
+#else
+  // TODO(someday): Use appropriate clock syscalls for other platforms.
+  return 0;
+#endif
+}
+constexpr uint64_t TOO_LONG = 100000000ull;
+// If a test case takes more than 100ms to complete, it may indicate that some sort of CPU
+// amplification has been triggered.
+
 template <typename Checker>
 void traverseCatchingExceptions(kj::ArrayPtr<const word> data) {
+  uint64_t start = getCpuTimeNs();
+
+  // By reducing the traversal limit, we can speed up the test, by making amplification defense
+  // kick in sooner than in otherwise would.
+  //
+  // TODO(soon): Consider whether traversal limit should automatically scale to the message size,
+  //   rather than be set at 64MiB.
+  ReaderOptions options;
+  options.traversalLimitInWords = 8192;
+
   // Try traversing through Checker.
   kj::runCatchingExceptions([&]() {
-    FlatArrayMessageReader reader(data);
+    FlatArrayMessageReader reader(data, options);
     KJ_ASSERT(Checker::check(reader) != 0) { break; }
   });
 
   // Try traversing through AnyPointer.
   kj::runCatchingExceptions([&]() {
-    FlatArrayMessageReader reader(data);
+    FlatArrayMessageReader reader(data, options);
     KJ_ASSERT(traverse(reader.getRoot<AnyPointer>()) != 0) { break; }
   });
 
   // Try counting the size..
   kj::runCatchingExceptions([&]() {
-    FlatArrayMessageReader reader(data);
+    FlatArrayMessageReader reader(data, options);
     KJ_ASSERT(reader.getRoot<AnyPointer>().targetSize().wordCount != 0) { break; }
   });
 
   // Try copying into a builder, and if that works, traversing it with Checker.
   static word buffer[8192];
   kj::runCatchingExceptions([&]() {
-    FlatArrayMessageReader reader(data);
+    FlatArrayMessageReader reader(data, options);
     MallocMessageBuilder copyBuilder(buffer);
     copyBuilder.setRoot(reader.getRoot<AnyPointer>());
     KJ_ASSERT(Checker::check(copyBuilder) != 0) { break; }
   });
+
+  uint64_t duration = getCpuTimeNs() - start;
+  KJ_EXPECT(duration < TOO_LONG, duration, TOO_LONG,
+      "possible CPU amplification detected -- or maybe your CPU is just really slow?");
 }
 
 template <typename Checker>
