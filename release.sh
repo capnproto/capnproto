@@ -109,8 +109,8 @@ done_banner() {
   case "$YESNO" in
     y | Y )
       doit git push origin $PUSH
-      doit gcutil push fe capnproto-c++-$VERSION.tar.gz capnproto-c++-win32-$VERSION.zip \
-          /var/www/capnproto.org
+      doit gce-ss copy-files capnproto-c++-$VERSION.tar.gz capnproto-c++-win32-$VERSION.zip \
+          fe:/var/www/capnproto.org
 
       if [ "$FINAL" = yes ]; then
         echo "========================================================================="
