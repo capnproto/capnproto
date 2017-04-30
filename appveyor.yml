@@ -15,6 +15,7 @@ version: "{build}"
 branches:
   only:
     - master
+    - /release-.*/
 # Don't build non-master branches (unless they open a pull request).
 
 image: Visual Studio 2017
