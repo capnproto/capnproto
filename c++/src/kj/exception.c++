@@ -290,6 +290,16 @@ String getStackTrace() {
   return kj::str(kj::strArray(trace, " "), stringifyStackTrace(trace));
 }
 
+class EnableFullStackTraceForCrashDump: public kj::ExceptionCallback {
+  // Disabling stack traces is useful for speeding up runtime exceptions, but on a crash we should
+  // always try to get a full trace, so we re-enable them.
+
+public:
+  StackTraceMode stackTraceMode() override {
+    return StackTraceMode::FULL;
+  }
+};
+
 #if _WIN32 && _M_X64
 namespace {
 
@@ -306,6 +316,7 @@ BOOL WINAPI breakHandler(DWORD type) {
           memset(&context, 0, sizeof(context));
           context.ContextFlags = CONTEXT_FULL;
           if (GetThreadContext(thread, &context)) {
+            EnableFullStackTraceForCrashDump enableTrace;
             void* traceSpace[32];
             auto trace = getStackTrace(traceSpace, 2, thread, context);
             ResumeThread(thread);
@@ -338,6 +349,7 @@ void printStackTraceOnCrash() {
 namespace {
 
 void crashHandler(int signo, siginfo_t* info, void* context) {
+  EnableFullStackTraceForCrashDump enableTrace;
   void* traceSpace[32];
 
   // ignoreCount = 2 to ignore crashHandler() and signal trampoline.
