@@ -1,6 +1,7 @@
 branches:
   only:
   - master
+  - /release-.*/
 language: cpp
 os:
   - linux
