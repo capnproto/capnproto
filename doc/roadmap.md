@@ -8,7 +8,7 @@ title: Road Map
 This is a list of big ideas we'd like to implement in Cap'n Proto. We don't know in what order
 these will actually happen; as always, real work is driven by real-world needs.
 
-### Language Features
+## Language Features
 
 * **Inline lists:**  Lets you define a field composed of a fixed number of elements of the same
   type, and have those elements be stored directly within the struct rather than as a separate
@@ -25,7 +25,7 @@ these will actually happen; as always, real work is driven by real-world needs.
   nicer interface which encapsulates the type's inner state.
 * **Maps:**  Based on encapsulated and parameterized types.
 
-### RPC Protocol Features
+## RPC Protocol Features
 
 * **Dynamic schema transmission:**  Allow e.g. Python applications to obtain schemas directly from
   the RPC server so that they need not have a local copy.  Great for interactive debugging.
@@ -44,7 +44,7 @@ these will actually happen; as always, real work is driven by real-world needs.
   [libsodium](https://github.com/jedisct1/libsodium) and the
   [Noise Protocol Framework](http://noiseprotocol.org/) as much as possible.
 
-### C++ Cap'n Proto API Features
+## C++ Cap'n Proto API Features
 
 * **Plain Old C Structs:** The code generator should also generate a POCS type corresponding
   to each struct type. The POCS type would use traditional memory allocation, thus would not
@@ -66,7 +66,7 @@ these will actually happen; as always, real work is driven by real-world needs.
 * **Annotations API:**  For each annotation definition, generate code which assists in extracting
   that annotation from schema objects in a type-safe way.
 
-### C++ KJ API Features
+## C++ KJ API Features
 
 KJ is a framework library that is bundled with Cap'n Proto, but is broadly applicable to C++
 applications even if they don't use Cap'n Proto serialization.
@@ -84,7 +84,7 @@ applications even if they don't use Cap'n Proto serialization.
   loop libraries, such as libuv, libev, libevent, boost::asio, and others, so that it's easier
   to use Cap'n Proto RPC in applications that already use another event framework.
 
-### Storage
+## Storage
 
 * **ORM interface:**  Define a standard interface for capabilities that represent remotely-stored
   objects, with get, put, publish, and subscribe methods.  Ideally, parameterize this interface
@@ -94,7 +94,7 @@ applications even if they don't use Cap'n Proto serialization.
   is only useful for read-only structures.)  Possibly based on the ORM interface, updates only
   possible at the granularity of a whole ORM entry.
 
-### Tools
+## Tools
 
 * **Schema compatibility checker:**  Add a `capnp` command which, given two schemas, verifies
   that the latter is a compatible upgrade from the former.  This could be used as a git hook
@@ -102,7 +102,7 @@ applications even if they don't use Cap'n Proto serialization.
 * **RPC debugger:**  Add a `capnp` command which sends an RPC from the command line and prints
   the result.  Useful for debugging RPC servers.
 
-### Quality Assurance
+## Quality Assurance
 
 These things absolutely must happen before any 1.0 release.  Note that it's not yet decided when
 a 1.0 release would happen nor how many 0.x releases might precede it.
@@ -114,7 +114,7 @@ a 1.0 release would happen nor how many 0.x releases might precede it.
 * **Security review:**  We need a careful security review to make sure malicious input cannot
   crash an application or corrupt memory.
 
-### Infrastructure
+## Infrastructure
 
 Note:  These are very large projects.
 
