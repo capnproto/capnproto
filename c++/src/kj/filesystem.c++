@@ -1287,7 +1287,11 @@ private:
   };
 
   Clock& clock;
+
   std::map<StringPtr, EntryImpl> entries;
+  // Note: If this changes to a non-sorted map, listNames() and listEntries() must be updated to
+  //   sort their results.
+
   Date lastModified;
 
   template <typename T>

@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include "vector.h"
 #include "miniposix.h"
+#include <algorithm>
 
 #if __linux__
 #include <linux/fs.h>
@@ -599,7 +600,8 @@ public:
     }
 
     KJ_DEFER(closedir(dir));
-    kj::Vector<Decay<decltype(func(instance<StringPtr>(), instance<FsNode::Type>()))>> entries;
+    typedef Decay<decltype(func(instance<StringPtr>(), instance<FsNode::Type>()))> Entry;
+    kj::Vector<Entry> entries;
 
     for (;;) {
       errno = 0;
@@ -634,7 +636,9 @@ public:
       }
     }
 
-    return entries.releaseAsArray();
+    auto result = entries.releaseAsArray();
+    std::sort(result.begin(), result.end());
+    return result;
   }
 
   Array<String> listNames() {
