@@ -426,6 +426,12 @@ public:
   struct Entry {
     FsNode::Type type;
     String name;
+
+    inline bool operator< (const Entry& other) const { return name <  other.name; }
+    inline bool operator> (const Entry& other) const { return name >  other.name; }
+    inline bool operator<=(const Entry& other) const { return name <= other.name; }
+    inline bool operator>=(const Entry& other) const { return name >= other.name; }
+    // Convenience comparison operators to sort entries by name.
   };
 
   virtual Array<Entry> listEntries() = 0;
