@@ -16,6 +16,7 @@ function initSidebar() {
     if (window.innerWidth < 900) {
       document.body.className = "narrow";
       menu.className = "";
+      document.getElementById("main_content").style.minHeight = "0";
     } else {
       if (document.body.clientWidth < 1340) {
         document.body.className = "normal";
@@ -31,6 +32,10 @@ function initSidebar() {
       } else {
         menu.className = "floating";
       }
+
+      setTimeout(function () {
+        document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
+      }, 10);
     }
   };
   setMenuLayout();
@@ -58,12 +63,15 @@ function initSidebar() {
     }
   }
 
-  document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
-
   return toc;
 }
 
 function setupSidebar() {
+  if (window.CAPNP_NEWS_SIDEBAR) {
+    setupNewsSidebar(CAPNP_NEWS_SIDEBAR);
+    return;
+  }
+
   var filename = document.location.pathname;
 
   if (filename.slice(0, 5) == "/next") {

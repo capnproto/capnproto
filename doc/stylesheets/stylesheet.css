@@ -596,7 +596,7 @@ body.narrow #menu {
   position: relative;
   max-width: 640px;
   padding: 50px 10px 0px 10px;
-  margin: 0 auto;
+  margin: 0 auto 1em;
 }
 
 @media screen and (max-width: 480px) {
