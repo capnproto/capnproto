@@ -376,6 +376,20 @@ body.normal #main_content.inner {
   border-bottom-right-radius: 2px;
 }
 
+.block_link {
+  display: inline-block;
+  z-index: 10;
+  padding: 10px;
+  margin: 5px;
+  color: #fff;
+  background-color: #0090ff;
+  font-weight: 700;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
+}
+
 #header_wrap {
   background: #C42727;
 }

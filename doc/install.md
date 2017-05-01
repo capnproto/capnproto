@@ -134,16 +134,18 @@ provided by projects implementing Cap'n Proto in other languages.
 
 If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 
-1. Install [CMake](http://www.cmake.org/) version 3.1 or later.
+1. Make sure that you are using Visual Studio 2015 or newer, with all updates installed. Cap'n
+   Proto uses C++11 language features that did not work in previous versions of Visual Studio,
+   and the updates include many bug fixes that Cap'n Proto requires.
 
-2. Use CMake to generate Visual Studio project files under `capnproto-c++-0.0.0` in the zip file.
-   You will need to enable the CMake project option `EXTERNAL_CAPNP`. You can use the CMake UI for
-   this or run this shell command:
+2. Install [CMake](http://www.cmake.org/) version 3.1 or later.
 
-       cmake -G "Visual Studio 14 2015" -DEXTERNAL_CAPNP=1
+3. Use CMake to generate Visual Studio project files under `capnproto-c++-0.0.0` in the zip file.
+   You can use the CMake UI for this or run this shell command:
 
-    If the `capnp.exe` and `capnpc-c++.exe` tools are not on your `PATH`, then `CAPNP_EXECUTABLE`
-    and `CAPNPC_CXX_EXECUTABLE` will need to be set to their respective locations.
+       cmake -G "Visual Studio 14 2015"
+
+    (For VS2017, you can use "Visual Studio 15 2017" as the generator name.)
 
 3. Open the "Cap'n Proto" solution in Visual Studio.
 
@@ -152,27 +154,18 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 
 5. Build the solution (`ALL_BUILD`).
 
-6. Build the `INSTALL` project to copy the compiled libraries and header files into `CMAKE_INSTALL_PREFIX`.
+6. Build the `INSTALL` project to copy the compiled libraries, tools, and header files into
+   `CMAKE_INSTALL_PREFIX`.
 
    Alternatively, find the compiled `.lib` files in the build directory under
    `src/{capnp,kj}/{Debug,Release}` and place them somewhere where your project can link against them.
    Also add the `src` directory to your search path for `#include`s, or copy all the headers to your
    project's include directory.
 
+Cap'n Proto can also be built with MinGW or Cygwin, using the Unix/autotools build instructions.
+
 **From Git**
 
-If you download directly from Git, you'll need to compile the Cap'n Proto tools (the `.exe`s) using
-MinGW-w64. This is easiest to do in Cygwin or on Linux. For example, on Debian or Ubuntu, you can
-install MinGW like so:
+The C++ sources are located under `c++` directory in the git repository. The build instructions are
+otherwise the same as for the release zip.
 
-    sudo apt-get install mingw-w64
-
-You'll first need to install Cap'n Proto on the host system (using the Unix installation
-instructions, above). Then, do:
-
-    make distclean
-    ./configure --host=i686-w64-mingw32 --with-external-capnp \
-      --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
-    make -j6 capnp.exe capnpc-c++.exe capnpc-capnp.exe
-
-Now that you have the `exe`s, you can proceed with the usual Windows compilation instructions.
