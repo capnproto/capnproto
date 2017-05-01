@@ -810,7 +810,7 @@ public:
     // be called again with a new path.
     //
     // Returns the temporary path that succeeded. Only returns nullptr if there was an exception
-    // but we're complied with -fno-exceptions.
+    // but we're compiled with -fno-exceptions.
 
     if (finalName.size() == 0) {
       KJ_FAIL_REQUIRE("can't replace self") { break; }

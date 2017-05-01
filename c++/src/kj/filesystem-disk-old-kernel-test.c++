@@ -27,7 +27,7 @@
     __has_include(<sys/ptrace.h>)
 // This test re-runs filesystem-disk-test.c++ with newfangled Linux kernel features disabled.
 //
-// This test must be complied as a separate program, since it alters the calling process by
+// This test must be compiled as a separate program, since it alters the calling process by
 // enabling seccomp to disable the kernel features.
 
 #include <syscall.h>

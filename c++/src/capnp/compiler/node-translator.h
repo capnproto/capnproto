@@ -217,7 +217,7 @@ private:
 
     uint64_t scopeId;
     // If zero, then any reference to an implciit param in this context should be compiled to a
-    // `implicitMethodParam` AnyPointer. If non-zero, it should be complied to a `parameter`
+    // `implicitMethodParam` AnyPointer. If non-zero, it should be compiled to a `parameter`
     // AnyPointer.
 
     List<Declaration::BrandParameter>::Reader params;
