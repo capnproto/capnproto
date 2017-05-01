@@ -11,9 +11,9 @@ href="https://groups.google.com/group/capnproto-announce">Get Email Updates</a> 
   on <span class="date">{{ page.date | date_to_string }}</span>
 </p>
 {{ content }}
-<script type="text/javascript">setupNewsSidebar([
+<script type="text/javascript">var CAPNP_NEWS_SIDEBAR = [
     {% for post in site.posts %}
       { title: "{{ post.title }}", url: "{{ site.baseurl }}.{{ post.url }}" },
     {% endfor %}
-    ]);</script>
+    ];</script>
 {% include footer.html %}
