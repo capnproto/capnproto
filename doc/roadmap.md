@@ -102,7 +102,7 @@ applications even if they don't use Cap'n Proto serialization.
 * **RPC debugger:**  Add a `capnp` command which sends an RPC from the command line and prints
   the result.  Useful for debugging RPC servers.
 
-## Quality Assurance
+### Quality Assurance
 
 These things absolutely must happen before any 1.0 release.  Note that it's not yet decided when
 a 1.0 release would happen nor how many 0.x releases might precede it.
