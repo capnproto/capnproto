@@ -850,6 +850,47 @@ kj::ArrayPtr<const HttpTestCase> pipelineTestCases() {
       },
     },
 
+    // Throw a zero-size request/response into the pipeline to check for a bug that existed with
+    // them previously.
+    {
+      {
+        "POST /foo HTTP/1.1\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n",
+
+        HttpMethod::POST, "/foo", {}, uint64_t(0), {},
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n",
+
+        200, "OK", {}, uint64_t(0), {}
+      },
+    },
+
+    // Also a zero-size chunked request/response.
+    {
+      {
+        "POST /foo HTTP/1.1\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "0\r\n"
+        "\r\n",
+
+        HttpMethod::POST, "/foo", {}, nullptr, {},
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "0\r\n"
+        "\r\n",
+
+        200, "OK", {}, nullptr, {}
+      },
+    },
+
     {
       {
         "POST /bar HTTP/1.1\r\n"

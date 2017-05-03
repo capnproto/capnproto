@@ -1369,12 +1369,15 @@ public:
 class HttpFixedLengthEntityWriter final: public kj::AsyncOutputStream {
 public:
   HttpFixedLengthEntityWriter(HttpOutputStream& inner, uint64_t length)
-      : inner(inner), length(length) {}
+      : inner(inner), length(length) {
+    if (length == 0) inner.finishBody();
+  }
   ~HttpFixedLengthEntityWriter() noexcept(false) {
     if (length > 0) inner.abortBody();
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
+    if (size == 0) return kj::READY_NOW;
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
 
@@ -1384,6 +1387,7 @@ public:
     uint64_t size = 0;
     for (auto& piece: pieces) size += piece.size();
 
+    if (size == 0) return kj::READY_NOW;
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
 
@@ -1391,6 +1395,7 @@ public:
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+    if (amount == 0) return Promise<uint64_t>(uint64_t(0));
     KJ_REQUIRE(amount <= length, "overwrote Content-Length");
     length -= amount;
 
