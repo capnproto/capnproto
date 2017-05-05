@@ -1619,19 +1619,69 @@ public:
     }
   }
 
-  kj::Promise<void> loop() {
-    // If the timeout promise finishes before the headers do, we kill the connection.
-    auto timeoutPromise = server.timer.afterDelay(server.settings.headerTimeout)
-        .then([this]() -> kj::Maybe<HttpHeaders::Request> {
-      timedOut = true;
-      return nullptr;
+  kj::Promise<void> loop(bool firstRequest) {
+    auto firstByte = httpInput.awaitNextMessage();
+
+    if (!firstRequest) {
+      // For requests after the first, require that the first byte arrive before the pipeline
+      // timeout, otherwise treat it like the connection was simply closed.
+      firstByte = firstByte.exclusiveJoin(
+          server.timer.afterDelay(server.settings.pipelineTimeout)
+          .then([this]() -> bool {
+        timedOut = true;
+        return false;
+      }));
+    }
+
+    auto receivedHeaders = firstByte
+        .then([this,firstRequest](bool hasData)-> kj::Promise<kj::Maybe<HttpHeaders::Request>> {
+      if (hasData) {
+        auto readHeaders = httpInput.readRequestHeaders();
+        if (!firstRequest) {
+          // On requests other than the first, the header timeout starts ticking when we receive
+          // the first byte of a pipeline response.
+          readHeaders = readHeaders.exclusiveJoin(
+              server.timer.afterDelay(server.settings.headerTimeout)
+              .then([this]() -> kj::Maybe<HttpHeaders::Request> {
+            timedOut = true;
+            return nullptr;
+          }));
+        }
+        return kj::mv(readHeaders);
+      } else {
+        // Client closed connection or pipeline timed out with no bytes received. This is not an
+        // error, so don't report one.
+        this->closed = true;
+        return kj::Maybe<HttpHeaders::Request>(nullptr);
+      }
     });
 
-    return httpInput.readRequestHeaders().exclusiveJoin(kj::mv(timeoutPromise))
-        .then([this](kj::Maybe<HttpHeaders::Request>&& request) -> kj::Promise<void> {
+    if (firstRequest) {
+      // On the first request, the header timeout starts ticking immediately upon request opening.
+      receivedHeaders = receivedHeaders.exclusiveJoin(
+          server.timer.afterDelay(server.settings.headerTimeout)
+          .then([this]() -> kj::Maybe<HttpHeaders::Request> {
+        timedOut = true;
+        return nullptr;
+      }));
+    }
+
+    return receivedHeaders
+        .then([this,firstRequest](kj::Maybe<HttpHeaders::Request>&& request) -> kj::Promise<void> {
+      if (closed) {
+        // Client closed connection. Close our end too.
+        return httpOutput.flush();
+      }
       if (timedOut) {
-        return sendError(408, "Request Timeout", kj::str(
-            "ERROR: Your client took too long to send HTTP headers."));
+        if (firstRequest) {
+          return sendError(408, "Request Timeout", kj::str(
+              "ERROR: Your client took too long to send HTTP headers."));
+        } else {
+          // After the first request, we just close the connection if the client takes too long,
+          // on the assumption that the client is intentionally trying to keep the connection
+          // around for reuse (not necessarily an error).
+          return httpOutput.flush();
+        }
       }
 
       KJ_IF_MAYBE(req, request) {
@@ -1658,23 +1708,10 @@ public:
 
           if (server.draining) {
             // Never mind, drain time.
-            return kj::READY_NOW;
+            return httpOutput.flush();
           }
 
-          auto timeoutPromise = server.timer.afterDelay(server.settings.pipelineTimeout)
-              .then([]() { return false; });
-          auto awaitPromise = httpInput.awaitNextMessage();
-
-          return timeoutPromise.exclusiveJoin(kj::mv(awaitPromise))
-              .then([this](bool hasMore) -> kj::Promise<void> {
-            if (hasMore) {
-              return loop();
-            } else {
-              // In this case we assume the client has no more requests, so we simply close the
-              // connection.
-              return kj::READY_NOW;
-            }
-          });
+          return loop(false);
         });
       } else {
         // Bad request.
@@ -1719,6 +1756,7 @@ private:
   kj::Own<kj::AsyncIoStream> ownStream;
   kj::Maybe<HttpMethod> currentMethod;
   bool timedOut = false;
+  bool closed = false;
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
@@ -1817,7 +1855,7 @@ kj::Promise<void> HttpServer::listenLoop(kj::ConnectionReceiver& port) {
 
 kj::Promise<void> HttpServer::listenHttp(kj::Own<kj::AsyncIoStream> connection) {
   auto obj = heap<Connection>(*this, kj::mv(connection));
-  auto promise = obj->loop();
+  auto promise = obj->loop(true);
 
   // Eagerly evaluate so that we drop the connection when the promise resolves, even if the caller
   // doesn't eagerly evaluate.
