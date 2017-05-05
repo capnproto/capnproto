@@ -1089,18 +1089,32 @@ public:
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
-  T& orDefault(T& defaultValue) {
+  T& orDefault(T& defaultValue) & {
     if (ptr == nullptr) {
       return defaultValue;
     } else {
       return *ptr;
     }
   }
-  const T& orDefault(const T& defaultValue) const {
+  const T& orDefault(const T& defaultValue) const & {
     if (ptr == nullptr) {
       return defaultValue;
     } else {
       return *ptr;
+    }
+  }
+  T&& orDefault(T&& defaultValue) && {
+    if (ptr == nullptr) {
+      return kj::mv(defaultValue);
+    } else {
+      return kj::mv(*ptr);
+    }
+  }
+  const T&& orDefault(const T&& defaultValue) const && {
+    if (ptr == nullptr) {
+      return kj::mv(defaultValue);
+    } else {
+      return kj::mv(*ptr);
     }
   }
 

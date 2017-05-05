@@ -144,6 +144,13 @@ TEST(Common, Maybe) {
   }
 
   {
+    // Verify orDefault() works with move-only types.
+    Maybe<kj::String> m = nullptr;
+    kj::String s = kj::mv(m).orDefault(kj::str("foo"));
+    EXPECT_EQ("foo", s);
+  }
+
+  {
     Maybe<int> m = &i;
     EXPECT_FALSE(m == nullptr);
     EXPECT_TRUE(m != nullptr);
