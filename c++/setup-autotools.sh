@@ -6,7 +6,7 @@ if [ ! -e gtest ]; then
   echo "================================================================================"
   echo "Fetching Google Test code..."
   echo "================================================================================"
-  git clone -b release-1.7.0 git@github.com:google/googletest.git gtest
+  git clone -b release-1.7.0 https://github.com/google/googletest.git gtest
 fi
 
 echo "================================================================================"
