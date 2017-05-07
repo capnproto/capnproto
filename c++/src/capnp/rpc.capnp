@@ -233,11 +233,11 @@ struct Message {
 
     abort @1 :Exception;
     # Sent when a connection is being aborted due to an unrecoverable error.  This could be e.g.
-    # because the sender received an invalid or nonsensical message (`isCallersFault` is true) or
-    # because the sender had an internal error (`isCallersFault` is false).  The sender will shut
-    # down the outgoing half of the connection after `abort` and will completely close the
-    # connection shortly thereafter (it's up to the sender how much of a time buffer they want to
-    # offer for the client to receive the `abort` before the connection is reset).
+    # because the sender received an invalid or nonsensical message or because the sender had an
+    # internal error.  The sender will shut down the outgoing half of the connection after `abort`
+    # and will completely close the connection shortly thereafter (it's up to the sender how much
+    # of a time buffer they want to offer for the client to receive the `abort` before the
+    # connection is reset).
 
     # Level 0 features -----------------------------------------------
 
