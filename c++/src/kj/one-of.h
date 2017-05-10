@@ -81,6 +81,25 @@ public:
     return *reinterpret_cast<T*>(space);
   }
 
+  template <typename T>
+  Maybe<T&> tryGet() {
+    if (is<T>()) {
+      return *reinterpret_cast<T*>(space);
+    } else {
+      return nullptr;
+    }
+  }
+
+  template <uint i>
+  KJ_NORETURN(void allHandled()) {
+    // After a series of if/else blocks handling each variant of the OneOf, have the final else
+    // block call allHandled<n>() where n is the number of variants. This will fail to compile
+    // if new variants are added in the future.
+
+    static_assert(i == sizeof...(Variants), "new OneOf variants need to be handled here");
+    KJ_UNREACHABLE;
+  }
+
 private:
   uint tag;
 

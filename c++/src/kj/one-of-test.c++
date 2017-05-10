@@ -31,6 +31,9 @@ TEST(OneOf, Basic) {
   EXPECT_FALSE(var.is<int>());
   EXPECT_FALSE(var.is<float>());
   EXPECT_FALSE(var.is<String>());
+  EXPECT_TRUE(var.tryGet<int>() == nullptr);
+  EXPECT_TRUE(var.tryGet<float>() == nullptr);
+  EXPECT_TRUE(var.tryGet<String>() == nullptr);
 
   var.init<int>(123);
 
@@ -44,6 +47,10 @@ TEST(OneOf, Basic) {
   EXPECT_ANY_THROW(var.get<String>());
 #endif
 
+  EXPECT_EQ(123, KJ_ASSERT_NONNULL(var.tryGet<int>()));
+  EXPECT_TRUE(var.tryGet<float>() == nullptr);
+  EXPECT_TRUE(var.tryGet<String>() == nullptr);
+
   var.init<String>(kj::str("foo"));
 
   EXPECT_FALSE(var.is<int>());
@@ -52,6 +59,10 @@ TEST(OneOf, Basic) {
 
   EXPECT_EQ("foo", var.get<String>());
 
+  EXPECT_TRUE(var.tryGet<int>() == nullptr);
+  EXPECT_TRUE(var.tryGet<float>() == nullptr);
+  EXPECT_EQ("foo", KJ_ASSERT_NONNULL(var.tryGet<String>()));
+
   OneOf<int, float, String> var2 = kj::mv(var);
   EXPECT_EQ("", var.get<String>());
   EXPECT_EQ("foo", var2.get<String>());
@@ -59,6 +70,11 @@ TEST(OneOf, Basic) {
   var = kj::mv(var2);
   EXPECT_EQ("foo", var.get<String>());
   EXPECT_EQ("", var2.get<String>());
+
+  if (false) {
+    var.allHandled<3>();
+    // var.allHandled<2>();  // doesn't compile
+  }
 }
 
 TEST(OneOf, Copy) {
