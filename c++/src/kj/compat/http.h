@@ -96,7 +96,7 @@ enum class HttpMethod {
 
 #define DECLARE_METHOD(id) id,
 KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
-#undef DECALRE_METHOD
+#undef DECLARE_METHOD
 };
 
 kj::StringPtr KJ_STRINGIFY(HttpMethod method);
