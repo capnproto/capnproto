@@ -91,14 +91,10 @@ public:
   }
 
   template <uint i>
-  KJ_NORETURN(void allHandled()) {
-    // After a series of if/else blocks handling each variant of the OneOf, have the final else
-    // block call allHandled<n>() where n is the number of variants. This will fail to compile
-    // if new variants are added in the future.
-
-    static_assert(i == sizeof...(Variants), "new OneOf variants need to be handled here");
-    KJ_UNREACHABLE;
-  }
+  KJ_NORETURN(void allHandled());
+  // After a series of if/else blocks handling each variant of the OneOf, have the final else
+  // block call allHandled<n>() where n is the number of variants. This will fail to compile
+  // if new variants are added in the future.
 
 private:
   uint tag;
@@ -168,6 +164,17 @@ private:
     doAll(moveVariantFrom<Variants>(other)...);
   }
 };
+
+template <typename... Variants>
+template <uint i>
+void OneOf<Variants...>::allHandled() {
+  // After a series of if/else blocks handling each variant of the OneOf, have the final else
+  // block call allHandled<n>() where n is the number of variants. This will fail to compile
+  // if new variants are added in the future.
+
+  static_assert(i == sizeof...(Variants), "new OneOf variants need to be handled here");
+  KJ_UNREACHABLE;
+}
 
 }  // namespace kj
 
