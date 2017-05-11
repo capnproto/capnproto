@@ -1396,15 +1396,50 @@ public:
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
     if (amount == 0) return Promise<uint64_t>(uint64_t(0));
-    KJ_REQUIRE(amount <= length, "overwrote Content-Length");
+
+    bool overshot = amount > length;
+    if (overshot) {
+      // Hmm, the requested amount was too large, but it's common to specify kj::max as the amount
+      // to pump, in which case we pump to EOF. Let's try to verify whether EOF is where we
+      // expect it to be.
+      KJ_IF_MAYBE(available, input.tryGetLength()) {
+        // Great, the stream knows how large it is. If it's indeed larger than the space available
+        // then let's abort.
+        KJ_REQUIRE(*available <= length, "overwrote Content-Length");
+      } else {
+        // OK, we have no idea how large the input is, so we'll have to check later.
+      }
+    }
+
+    amount = kj::min(amount, length);
     length -= amount;
 
-    return inner.pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
+    auto promise = inner.pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
       // Adjust for bytes not written.
       length += amount - actual;
       if (length == 0) inner.finishBody();
       return actual;
     });
+
+    if (overshot) {
+      promise = promise.then([this,amount,&input](uint64_t actual) -> kj::Promise<uint64_t> {
+        if (actual == amount) {
+          // We read exactly the amount expected. In order to detect an overshoot, we have to
+          // try reading one more byte. Ugh.
+          static byte junk;
+          return input.tryRead(&junk, 1, 1).then([actual](size_t extra) {
+            KJ_REQUIRE(extra == 0, "overwrote Content-Length");
+            return actual;
+          });
+        } else {
+          // We actually read less data than requested so we couldn't have overshot. In fact, we
+          // undershot.
+          return actual;
+        }
+      });
+    }
+
+    return kj::mv(promise);
   }
 
 private:
@@ -1462,14 +1497,14 @@ public:
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-    KJ_IF_MAYBE(length, input.tryGetLength()) {
+    KJ_IF_MAYBE(l, input.tryGetLength()) {
       // Hey, we know exactly how large the input is, so we can write just one chunk.
 
-      inner.writeBodyData(kj::str(*length, "\r\n"));
-      auto lengthValue = *length;
-      return inner.pumpBodyFrom(input, *length)
-          .then([this,lengthValue](uint64_t actual) {
-        if (actual < lengthValue) {
+      uint64_t length = kj::min(amount, *l);
+      inner.writeBodyData(kj::str(length, "\r\n"));
+      return inner.pumpBodyFrom(input, length)
+          .then([this,length](uint64_t actual) {
+        if (actual < length) {
           inner.abortBody();
           KJ_FAIL_REQUIRE(
               "value returned by input.tryGetLength() was greater than actual bytes transferred") {

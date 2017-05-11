@@ -1372,6 +1372,76 @@ KJ_TEST("HttpServer threw exception after starting response") {
       "foo", text);
 }
 
+class SimpleInputStream final: public kj::AsyncInputStream {
+  // An InputStream that returns bytes out of a static string.
+
+public:
+  SimpleInputStream(kj::StringPtr text)
+      : unread(text.asBytes()) {}
+
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    size_t amount = kj::min(maxBytes, unread.size());
+    memcpy(buffer, unread.begin(), amount);
+    unread = unread.slice(amount, unread.size());
+    return amount;
+  }
+
+private:
+  kj::ArrayPtr<const byte> unread;
+};
+
+class PumpResponseService final: public HttpService {
+  // HttpService that uses pumpTo() to write a response, without carefully specifying how much to
+  // pump, but the stream happens to be the right size.
+public:
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    return requestBody.readAllBytes()
+        .then([this,&response](kj::Array<byte>&&) -> kj::Promise<void> {
+      HttpHeaders headers(table);
+      kj::StringPtr text = "Hello, World!";
+      auto body = response.send(200, "OK", headers, text.size());
+
+      auto stream = kj::heap<SimpleInputStream>(text);
+      auto promise = stream->pumpTo(*body);
+      return promise.attach(kj::mv(body), kj::mv(stream))
+          .then([text](uint64_t amount) {
+        KJ_EXPECT(amount == text.size());
+      });
+    });
+  }
+
+private:
+  kj::Maybe<kj::Exception> exception;
+  HttpHeaderTable table;
+};
+
+KJ_TEST("HttpFixedLengthEntityWriter correctly implements tryPumpFrom") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  HttpHeaderTable table;
+  PumpResponseService service;
+  HttpServer server(io.provider->getTimer(), table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(io.waitScope);
+  pipe.ends[1]->shutdownWrite();
+  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+
+  KJ_EXPECT(text ==
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 13\r\n"
+      "\r\n"
+      "Hello, World!", text);
+}
+
 // -----------------------------------------------------------------------------
 
 KJ_TEST("HttpClient to capnproto.org") {
