@@ -104,14 +104,14 @@ public:
       throwOpensslError();
     }
 
-    BIO* bio = BIO_new(const_cast<BIO_METHOD*>(&bioVtable));
+    BIO* bio = BIO_new(const_cast<BIO_METHOD*>(getBioVtable()));
     if (bio == nullptr) {
       SSL_free(ssl);
       throwOpensslError();
     }
 
-    bio->ptr = this;
-    bio->init = 1;
+    BIO_set_data(bio, this);
+    BIO_set_init(bio, 1);
     SSL_set_bio(ssl, bio, bio);
   }
 
@@ -288,7 +288,7 @@ private:
 
   static int bioRead(BIO* b, char* out, int outl) {
     BIO_clear_retry_flags(b);
-    KJ_IF_MAYBE(n, reinterpret_cast<TlsConnection*>(b->ptr)->readBuffer
+    KJ_IF_MAYBE(n, reinterpret_cast<TlsConnection*>(BIO_get_data(b))->readBuffer
         .read(kj::arrayPtr(out, outl).asBytes())) {
       return *n;
     } else {
@@ -299,7 +299,7 @@ private:
 
   static int bioWrite(BIO* b, const char* in, int inl) {
     BIO_clear_retry_flags(b);
-    KJ_IF_MAYBE(n, reinterpret_cast<TlsConnection*>(b->ptr)->writeBuffer
+    KJ_IF_MAYBE(n, reinterpret_cast<TlsConnection*>(BIO_get_data(b))->writeBuffer
         .write(kj::arrayPtr(in, inl).asBytes())) {
       return *n;
     } else {
@@ -323,7 +323,7 @@ private:
   }
 
   static int bioCreate(BIO* b) {
-    b->ptr = nullptr;
+    BIO_set_data(b, nullptr);
     return 1;
   }
 
@@ -332,20 +332,19 @@ private:
     return 1;
   }
 
-  static const BIO_METHOD bioVtable;
-};
-
-const BIO_METHOD TlsConnection::bioVtable = {
-  BIO_TYPE_SOURCE_SINK,
-  "KJ stream",
-  TlsConnection::bioWrite,
-  TlsConnection::bioRead,
-  nullptr,  // puts
-  nullptr,  // gets
-  TlsConnection::bioCtrl,
-  TlsConnection::bioCreate,
-  TlsConnection::bioDestroy,
-  nullptr
+  static BIO_METHOD* getBioVtable() {
+    static BIO_METHOD* vtable = makeBioVtable();
+    return vtable;
+  }
+  static BIO_METHOD* makeBioVtable() {
+    BIO_METHOD* vtable = BIO_meth_new(BIO_TYPE_SOURCE_SINK, "KJ stream");
+    BIO_meth_set_write(vtable, TlsConnection::bioWrite);
+    BIO_meth_set_read(vtable, TlsConnection::bioRead);
+    BIO_meth_set_ctrl(vtable, TlsConnection::bioCtrl);
+    BIO_meth_set_create(vtable, TlsConnection::bioCreate);
+    BIO_meth_set_destroy(vtable, TlsConnection::bioDestroy);
+    return vtable;
+  }
 };
 
 // =======================================================================================
