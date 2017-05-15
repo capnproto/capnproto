@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if KJ_HAS_OPENSSL
+
 #include "tls.h"
 #include "readiness-io.h"
 #include <openssl/bio.h>
@@ -767,3 +769,4 @@ TlsCertificate::~TlsCertificate() noexcept(false) {
 
 }  // namespace kj
 
+#endif  // KJ_HAS_OPENSSL

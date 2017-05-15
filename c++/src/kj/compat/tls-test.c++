@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if KJ_HAS_OPENSSL
+
 #include "tls.h"
 #include <kj/test.h>
 #include <kj/async-io.h>
@@ -438,3 +440,5 @@ KJ_TEST("TLS to capnproto.org") {
 
 }  // namespace
 }  // namespace kj
+
+#endif  // KJ_HAS_OPENSSL
