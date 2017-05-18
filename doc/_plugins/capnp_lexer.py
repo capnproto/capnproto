@@ -15,7 +15,7 @@ class CapnpLexer(RegexLexer):
             (r'=', Literal, 'expression'),
             (r':', Name.Class, 'type'),
             (r'\$', Name.Attribute, 'annotation'),
-            (r'(struct|enum|interface|union|import|using|const|annotation|extends|in|of|on|as|with|from|fixed)\b',
+            (r'(struct|enum|interface|union|import|using|const|annotation|extends|in|of|on|as|with|from|fixed|bulk|realtime)\b',
                 Token.Keyword),
             (r'[a-zA-Z0-9_.]+', Token.Name),
             (r'[^#@=:$a-zA-Z0-9_]+', Text),
