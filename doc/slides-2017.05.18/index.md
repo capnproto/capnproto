@@ -336,16 +336,16 @@ Header parsing is zero-copy.
 
 <section markdown="1" data-title="Designated Initializers">
 
-Old and busted:
+Ugly imperative code:
 
 {% highlight c++ %}
 capnp::MallocMessageBuilder message;
 
 auto root = message.initRoot<MyStruct>();
-root.setInt32Field(123);
-root.setTextField("foo");
-auto inner = root.initStructField();
-inner.setBoolField(true);
+root.setFoo(123);
+root.setBar("foo");
+auto inner = root.initBaz();
+inner.setQux(true);
 
 capnp::writeMessageToFd(fd, message);
 {% endhighlight %}
@@ -356,17 +356,17 @@ capnp::writeMessageToFd(fd, message);
 
 <section markdown="1" data-title="Designated Initializers">
 
-New hotness:
+Nice declarative code:
 
 {% highlight c++ %}
 using namespace capnp::init;
 
 capnp::MallocMessageBuilder message;
 message.initRoot<MyStruct>(
-  $int32Field = 123,
-  $textField = "foo",
-  $structField(
-    $boolField = true
+  $foo = 123,
+  $bar = "foo",
+  $baz(
+    $qux = true
   )
 );
 capnp::writeMessageToFd(fd, message);
@@ -384,10 +384,10 @@ Even better:
 using namespace capnp::init;
 
 capnp::writeMessageToFd<MyStruct>(fd,
-  $int32Field = 123,
-  $textField = "foo",
-  $structField(
-    $boolField = true
+  $foo = 123,
+  $bar = "foo",
+  $baz(
+    $qux = true
   )
 );
 {% endhighlight %}
@@ -404,7 +404,7 @@ struct {
   struct Setter {
     T value;
     template <typename U> void operator()(U& target) {
-      target.setInt32Field(kj::fwd<T>(value));
+      target.setFoo(kj::fwd<T>(value));
     }
   };
 
@@ -412,7 +412,7 @@ struct {
   Setter<T> operator=(T&& value) {
     return { kj::fwd<T>(value) };
   }
-} $int32Field;
+} $foo;
 {% endhighlight %}
 
 </section>
@@ -421,16 +421,16 @@ struct {
 
 <section markdown="1" data-title="POCS">
 
-Kind of painful:
+Not idiomatic:
 
 {% highlight c++ %}
 capnp::MallocMessageBuilder message;
 
 MyStruct::Builder root = message.initRoot<MyStruct>();
-root.setInt32Field(123);
-root.setTextField("foo");
-InnerStruct::Builder inner = root.initStructField();
-inner.setBoolField(true);
+root.setFoo(123);
+root.setBar("foo");
+InnerStruct::Builder inner = root.initBaz();
+inner.setQux(true);
 
 capnp::writeMessageToFd(fd, message);
 {% endhighlight %}
@@ -445,11 +445,11 @@ Plain Old C++ Structs?
 
 {% highlight c++ %}
 MyStruct root;
-root.int32Field = 123;
-root.textField = "foo";
+root.foo = 123;
+root.bar = "foo";
 InnerStruct inner;
-inner.boolField = true;
-root.structField = kj::mv(inner);
+inner.qux = true;
+root.baz = kj::mv(inner);
 
 capnp::writeMessageToFd(fd, message);
 {% endhighlight %}
@@ -578,87 +578,3 @@ interface AddressBookService {
 Questions?
 
 </section>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
