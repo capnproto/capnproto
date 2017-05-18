@@ -709,3 +709,147 @@ table.pass-fail td.pass { background-color: #8f8; }
 table.pass-fail td.fail { background-color: #f88; }
 table.pass-fail td.warn { background-color: #ff8; }
 
+/*******************************************************************************
+Slides
+*******************************************************************************/
+
+body.slides * {
+  box-sizing: border-box;
+}
+
+body.slides header {
+  background: #C42727;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 20%;
+}
+
+body.slides header>img {
+  float: right;
+  height: 20vh;
+  padding: 2vh;
+  width: auto;
+}
+body.slides header>.title {
+  color: white;
+  font-size: 8vh;
+  text-align: left;
+  line-height: 20vh;
+  padding-left: 5vh;
+}
+
+body.slides main {
+  font-size: 4vh;
+}
+
+body.slides main section {
+  border-top: 1px solid #111;
+  border-bottom: 1px solid #111;
+
+  position: fixed;
+  top: 20%;
+  left: 0;
+  width: 100%;
+  bottom: 10%;
+
+  background-color: #f2f2f2;
+  position: absolute;
+  z-index: -1;
+
+  padding: 5vh;
+}
+
+body.slides main section.current {
+  z-index: 1;
+}
+
+body.slides main section#slides-cover {
+  background: url(/images/logo.png) center/75% no-repeat #C42727;
+  top: 0;
+  border-top: none;
+}
+
+body.slides main section#slides-cover p {
+  color: white;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 6vh;
+  font-weight: bold;
+}
+
+body.slides main img.ph3 {
+  background-color: white;
+  padding: 4vh;
+  height: 60vh;
+  width: auto;
+  box-shadow: 0 0 10px rgba(0,0,0,.1);
+  float: left;
+  margin-right: 2vh;
+}
+
+body.slides pre {
+  margin: 0 0 2em;
+}
+
+body.slides pre code {
+  font-size: 3vh;
+}
+
+body.slides footer {
+  background: #212121;
+  position: fixed;
+  width: 100%;
+  height: 10%;
+  left: 0;
+  bottom: 0;
+
+  color: white;
+  text-align: right;
+  padding: 2vh;
+}
+
+body.slides footer h2 {
+  font-size: 4vh;
+  height: 4vh;
+  margin: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  line-height: 4vh;
+}
+
+body.slides footer p {
+  font-size: 2vh;
+  height: 2vh;
+  line-height: 2vh;
+  margin: 0;
+}
+
+body.slides footer p.url {
+  position: absolute;
+  left: 5vh;
+  top: 0;
+  bottom: 0;
+  font-size: 4vh;
+  line-height: 10vh;
+  margin: 0;
+}
+
+body.slides footer button {
+  width: 5vh;
+  height: 5vh;
+  font-size: 4vh;
+  padding: 0 0 0.5vh 0;
+  border: none;
+  border-radius: 0.5vh;
+  background-color: white;
+}
+
+body.slides footer button:last-of-type {
+  margin-right: 1vh;
+}
