@@ -494,18 +494,6 @@ capnp::writeMessageCopy(output, root);
 
 <!--===================================================================================-->
 
-<section markdown="1" data-title="Threads">
-
-Cap'n Proto RPC between threads!
-
-Actor model!
-
-... that's all I have to say about that.
-
-</section>
-
-<!--===================================================================================-->
-
 <section markdown="1" data-title="JSON-HTTP Bridge">
 
 {% highlight capnp %}
