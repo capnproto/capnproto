@@ -139,3 +139,62 @@ function setupNewsSidebar(items) {
     }
   }
 }
+
+function setupSlides() {
+  var slides = document.querySelectorAll("body.slides main section");
+  var headerTitle = document.querySelector("body.slides header .title");
+  var slideNum = document.querySelector("#slide-num");
+
+  var current = 0;
+  var hash = document.location.hash;
+  if (hash) {
+    current = parseInt(hash.slice(1)) - 1;
+  }
+  slides[current].className = "current";
+  headerTitle.textContent = slides[current].dataset.title || "";
+  slideNum.textContent = window.location.hash;
+
+  function navSlide(diff) {
+    slides[current].className = "";
+    current = Math.min(slides.length - 1, Math.max(0, current + diff));
+    slides[current].className = "current";
+
+    headerTitle.textContent = slides[current].dataset.title || "";
+    if (current) {
+      history.replaceState({}, "", "#" + (current + 1));
+      slideNum.textContent = "#" + (current + 1);
+    } else {
+      history.replaceState({}, "", window.location.pathname);
+      slideNum.textContent = "";
+    }
+  }
+
+  document.body.addEventListener("keydown", event => {
+    if (event.keyCode == 39) {
+      navSlide(1);
+    } else if (event.keyCode == 37) {
+      navSlide(-1);
+    }
+  });
+
+  document.querySelector("body.slides footer button.back").addEventListener("click", event => {
+    navSlide(-1);
+  });
+  document.querySelector("body.slides footer button.forward").addEventListener("click", event => {
+    navSlide(1);
+  });
+
+  if (document.location.hostname === "localhost") {
+    var lastModified = new Date(document.lastModified);
+    setInterval(function () {
+      var req = new Request(".", {headers: {
+          "If-Modified-Since": lastModified.toUTCString()}});
+      fetch(req).then(response => {
+        if (response.status == 200 &&
+            new Date(response.headers.get("Last-Modified")) > lastModified) {
+          document.location.reload();
+        }
+      });
+    }, 1000);
+  }
+}
