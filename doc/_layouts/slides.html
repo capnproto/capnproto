@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="viewport" content="width=480">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="{{ site.baseurl }}stylesheets/stylesheet.css">
+    <link rel="alternate" type="application/rss+xml" title="Cap'n Proto News" href="{{site.baseurl}}feed.xml">
+
+    <title>Cap'n Proto: {{ page.title }}</title>
+
+    <script type="text/javascript" src="{{ site.baseurl }}javascripts/main.js"></script>
+  </head>
+
+  <body class="slides">
+
+    <header>
+      <img src="{{ site.baseurl }}images/logo.png">
+      <h1 class="title"></h1>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main>
+      {{ content }}
+    </main>
+
+    <!-- FOOTER  -->
+    <footer>
+      <p class="url">
+        <button class="back">&#9664;</button>
+        <button class="forward">&#9654;</button>
+        https://capnproto.org{{ page.url }}<span id="slide-num"></span>
+      </p>
+      <h2>Kenton Varda</h2>
+      <p>May 18, 2017</p>
+    </footer>
+
+    <script type="text/javascript">setupSlides();</script>
+
+    <!-- Google Analytics. -->
+    <script type="text/javascript">
+      var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+      document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+    </script>
+    <script type="text/javascript">
+      try {
+        var pageTracker = _gat._getTracker("UA-39711112-1");
+        pageTracker._trackPageview();
+      } catch(err) {}
+    </script>
+  </body>
+</html>
