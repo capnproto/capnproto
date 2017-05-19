@@ -139,6 +139,8 @@ public:
   const _::RawBrandedSchema* getUnbound(const _::RawSchema* schema);
 
   kj::Array<Schema> getAllLoaded() const;
+  kj::Array<schema::NodeDoc::Reader> getAllDocs() const;
+  void loadDoc(schema::NodeDoc::Reader docReader);
 
   void requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount);
   // Require any struct nodes loaded with this ID -- in the past and in the future -- to have at
@@ -157,6 +159,7 @@ private:
   std::unordered_map<uint64_t, _::RawSchema*> schemas;
   std::unordered_map<SchemaBindingsPair, _::RawBrandedSchema*, SchemaBindingsPairHash> brands;
   std::unordered_map<const _::RawSchema*, _::RawBrandedSchema*> unboundBrands;
+  std::unordered_map<uint64_t, schema::NodeDoc::Reader> docs;
 
   struct RequiredSize {
     uint16_t dataWordCount;
@@ -1846,6 +1849,25 @@ kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
   return result;
 }
 
+kj::Array<schema::NodeDoc::Reader> SchemaLoader::Impl::getAllDocs() const {
+  size_t count = 0;
+  for (auto& doc: docs) {
+    ++count;
+  }
+
+  kj::Array<schema::NodeDoc::Reader> result = kj::heapArray<schema::NodeDoc::Reader>(count);
+  size_t i = 0;
+  for (auto& doc: docs) {
+    result[i++] = doc.second;
+  }
+  return result;
+}
+
+void SchemaLoader::Impl::loadDoc(schema::NodeDoc::Reader docReader)
+{
+  docs[docReader.getId()] = docReader;
+}
+
 void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount) {
   auto& slot = structSizeRequirements[id];
   slot.dataWordCount = kj::max(slot.dataWordCount, dataWordCount);
@@ -2103,6 +2125,14 @@ Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
 
 kj::Array<Schema> SchemaLoader::getAllLoaded() const {
   return impl.lockShared()->get()->getAllLoaded();
+}
+
+kj::Array<schema::NodeDoc::Reader> SchemaLoader::getAllDocs() const {
+  return impl.lockShared()->get()->getAllDocs();
+}
+
+void SchemaLoader::loadDoc(schema::NodeDoc::Reader docReader) const {
+  return impl.lockExclusive()->get()->loadDoc(docReader);
 }
 
 void SchemaLoader::loadNative(const _::RawSchema* nativeSchema) {

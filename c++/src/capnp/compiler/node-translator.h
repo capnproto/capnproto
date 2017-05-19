@@ -33,6 +33,7 @@
 #include <kj/vector.h>
 #include <kj/one-of.h>
 #include "error-reporter.h"
+#include <map>
 
 namespace capnp {
 namespace compiler {
@@ -160,6 +161,9 @@ public:
   // `brandBuilder` may be used to construct a message which will fill in ResolvedDecl::brand in
   // the result.
 
+  kj::Maybe<Orphan<schema::NodeDoc>>& getDoc() { return wipNodeDoc; };
+  void addFieldDoc(uint codeOrder, ::capnp::Text::Reader docComment);
+
 private:
   class DuplicateNameDetector;
   class DuplicateOrdinalDetector;
@@ -175,7 +179,9 @@ private:
   kj::Own<BrandScope> localBrand;
 
   Orphan<schema::Node> wipNode;
-  // The work-in-progress schema node.
+  kj::Maybe<Orphan<schema::NodeDoc>> wipNodeDoc;
+  // The work-in-progress schema node and its docstring
+  kj::Vector<std::pair<uint, ::capnp::Text::Reader>> fieldDocs;
 
   kj::Vector<Orphan<schema::Node>> groups;
   // If this is a struct node and it contains groups, these are the nodes for those groups,  which
