@@ -368,6 +368,44 @@ TEST(TwoPartyNetwork, HugeMessage) {
   }
 }
 
+TEST(TwoPartyNetwork, HugeMessageDifferentLimits) {
+  auto ioContext = kj::setupAsyncIo();
+  int callCount = 0;
+  int handleCount = 0;
+
+  auto serverThread = runServer(*ioContext.provider, callCount, handleCount);
+  ReaderOptions options = ReaderOptions();
+  // Set an 8 MiB traversal limit on just the client, less than the 10MB
+  // LargeStringResponse. The server keeps its 64MiB limit.
+  options.traversalLimitInWords = 1024 * 1024;
+  TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT, options);
+  auto rpcClient = makeRpcClient(network);
+
+  auto client = getPersistentCap(rpcClient, rpc::twoparty::Side::SERVER,
+      test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF).castAs<test::TestMoreStuff>();
+
+  // This tiny request/response works.
+  {
+    auto req = client.getCallSequenceRequest();
+    req.setExpected(0);
+    KJ_EXPECT(req.send().wait(ioContext.waitScope).getN() == 0);
+  }
+
+  // Oversized response fails on the receive side, but the server sends it
+  // unlike in the above HugeMessage test. This test passes without this call.
+  KJ_EXPECT_THROW_MESSAGE("To increase the limit on the receiving end",
+      client.getLargeStringRequest().send().wait(ioContext.waitScope));
+
+  // Connection should still be up and able to handle the same tiny response
+  // it handled before, but the previous failure has made this connection
+  // unable to accept responses.
+  {
+    auto req = client.getCallSequenceRequest();
+    req.setExpected(1);
+    KJ_EXPECT(req.send().wait(ioContext.waitScope).getN() == 1);
+  }
+}
+
 class TestAuthenticatedBootstrapImpl final
     : public test::TestAuthenticatedBootstrap<rpc::twoparty::VatId>::Server {
 public:

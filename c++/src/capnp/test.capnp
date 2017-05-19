@@ -855,6 +855,9 @@ interface TestMoreStuff extends(TestCallOrder) {
 
   getEnormousString @11 () -> (str :Text);
   # Attempts to return an 100MB string. Should always fail.
+
+  getLargeString @12 () -> (str :Text);
+  # Attempts to return a 10MB string. Should fail if the client has reduced its traversal limit.
 }
 
 interface TestMembrane {
