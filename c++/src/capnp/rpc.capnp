@@ -1234,8 +1234,8 @@ using ProvisionId = AnyPointer;
 # The information that must be sent in an `Accept` message to identify the object being accepted.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
-# fingerprint of the provider vat along with the question ID used in the `Provide` message sent from
-# that provider.
+# fingerprint of the provider vat along with a nonce matching the one in the `RecipientId` used
+# in the `Provide` message sent from that provider.
 
 using RecipientId = AnyPointer;
 # **(level 3)**
@@ -1244,8 +1244,7 @@ using RecipientId = AnyPointer;
 # capability.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
-# fingerprint of the recipient.  (CapTP also calls for a nonce to identify the object.  In our
-# case, the `Provide` message's `questionId` can serve as the nonce.)
+# fingerprint of the recipient along with a nonce matching the one in the `ProvisionId`.
 
 using ThirdPartyCapId = AnyPointer;
 # **(level 3)**
@@ -1254,8 +1253,8 @@ using ThirdPartyCapId = AnyPointer;
 #
 # In a network where each vat has a public/private key pair, this could be a combination of the
 # third party's public key fingerprint, hints on how to connect to the third party (e.g. an IP
-# address), and the question ID used in the corresponding `Provide` message sent to that third party
-# (used to identify which capability to pick up).
+# address), and the nonce used in the corresponding `Provide` message's `RecipientId` as sent
+# to that third party (used to identify which capability to pick up).
 
 using JoinKeyPart = AnyPointer;
 # **(level 4)**
