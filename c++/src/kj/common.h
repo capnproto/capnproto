@@ -455,6 +455,10 @@ T refIfLvalue(T&&);
 //     KJ_DECLTYPE_REF(i) i3(i);                  // i3 has type int&.
 //     KJ_DECLTYPE_REF(kj::mv(i)) i4(kj::mv(i));  // i4 has type int.
 
+template <typename T, typename U> struct IsSameType_ { static constexpr bool value = false; };
+template <typename T> struct IsSameType_<T, T> { static constexpr bool value = true; };
+template <typename T, typename U> constexpr bool isSameType() { return IsSameType_<T, U>::value; }
+
 template <typename T>
 struct CanConvert_ {
   static int sfinae(T);
@@ -1244,8 +1248,31 @@ public:
       : ptr(init.begin()), size_(init.size()) {}
 
   template <size_t size>
-  inline constexpr ArrayPtr(T (&native)[size]): ptr(native), size_(size) {}
-  // Construct an ArrayPtr from a native C-style array.
+  inline constexpr ArrayPtr(T (&native)[size]): ptr(native), size_(size) {
+    // Construct an ArrayPtr from a native C-style array.
+    //
+    // We disable this constructor for const char arrays because otherwise you would be able to
+    // implicitly convert a character literal to ArrayPtr<const char>, which sounds really great,
+    // except that the NUL terminator would be included, which probably isn't what you intended.
+    //
+    // TODO(someday): Maybe we should support character literals but explicitly chop off the NUL
+    //   terminator. This could do the wrong thing if someone tries to construct an
+    //   ArrayPtr<const char> from a non-NUL-terminated char array, but evidence suggests that all
+    //   real use cases are in fact intending to remove the NUL terminator. It's convenient to be
+    //   able to specify ArrayPtr<const char> as a parameter type and be able to accept strings
+    //   as input in addition to arrays. Currently, you'll need overloading to support string
+    //   literals in this case, but if you overload StringPtr, then you'll find that several
+    //   conversions (e.g. from String and from a literal char array) become ambiguous! You end up
+    //   having to overload for literal char arrays specifically which is cumbersome.
+
+    static_assert(!isSameType<T, const char>(),
+        "Can't implicitly convert literal char array to ArrayPtr because we don't know if "
+        "you meant to include the NUL terminator. We may change this in the future to "
+        "automatically drop the NUL terminator. For now, try explicitly converting to StringPtr, "
+        "which can in turn implicitly convert to ArrayPtr<const char>.");
+    static_assert(!isSameType<T, const char16_t>(), "see above");
+    static_assert(!isSameType<T, const char32_t>(), "see above");
+  }
 
   inline operator ArrayPtr<const T>() const {
     return ArrayPtr<const T>(ptr, size_);
