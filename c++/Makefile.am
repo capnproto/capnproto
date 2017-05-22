@@ -128,6 +128,7 @@ includekj_HEADERS =                                            \
   src/kj/vector.h                                              \
   src/kj/string.h                                              \
   src/kj/string-tree.h                                         \
+  src/kj/encoding.h                                            \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
   src/kj/arena.h                                               \
@@ -218,6 +219,7 @@ libkj_la_SOURCES=                                              \
   src/kj/array.c++                                             \
   src/kj/string.c++                                            \
   src/kj/string-tree.c++                                       \
+  src/kj/encoding.c++                                          \
   src/kj/exception.c++                                         \
   src/kj/debug.c++                                             \
   src/kj/arena.c++                                             \
@@ -451,6 +453,7 @@ capnp_test_SOURCES =                                           \
   src/kj/array-test.c++                                        \
   src/kj/string-test.c++                                       \
   src/kj/string-tree-test.c++                                  \
+  src/kj/encoding-test.c++                                     \
   src/kj/exception-test.c++                                    \
   src/kj/debug-test.c++                                        \
   src/kj/arena-test.c++                                        \

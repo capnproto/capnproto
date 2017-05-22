@@ -19,6 +19,7 @@ set(kj_sources_heavy
   units.c++
   refcount.c++
   string-tree.c++
+  encoding.c++
   parse/char.c++
 )
 if(NOT CAPNP_LITE)
@@ -36,6 +37,7 @@ set(kj_headers
   vector.h
   string.h
   string-tree.h
+  encoding.h
   exception.h
   debug.h
   arena.h
@@ -170,6 +172,7 @@ if(BUILD_TESTING)
       async-io-test.c++
       refcount-test.c++
       string-tree-test.c++
+      encoding-test.c++
       arena-test.c++
       units-test.c++
       tuple-test.c++
