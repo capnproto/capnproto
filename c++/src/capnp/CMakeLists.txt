@@ -125,7 +125,7 @@ endif()
 # Tools/Compilers ==============================================================
 
 set(capnpc_sources
-  compiler/md5.c++
+  compiler/type-id.c++
   compiler/error-reporter.c++
   compiler/lexer.capnp.c++
   compiler/lexer.c++
@@ -237,7 +237,7 @@ if(BUILD_TESTING)
       rpc-twoparty-test.c++
       ez-rpc-test.c++
       compiler/lexer-test.c++
-      compiler/md5-test.c++
+      compiler/type-id-test.c++
       test-util.c++
       compat/json-test.c++
       ${test_capnp_cpp_files}

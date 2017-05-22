@@ -30,7 +30,6 @@
 #include <set>
 #include <unordered_map>
 #include "node-translator.h"
-#include "md5.h"
 
 namespace capnp {
 namespace compiler {

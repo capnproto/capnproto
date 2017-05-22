@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
+// Copyright (c) 2017 Sandstorm Development Group, Inc. and contributors
 // Licensed under the MIT License:
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,43 +19,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include "md5.h"
-#include <kj/compat/gtest.h>
+#include "type-id.h"
+#include <capnp/schema.capnp.h>
+#include <kj/test.h>
 
 namespace capnp {
 namespace compiler {
 namespace {
 
-static kj::String doMd5(kj::StringPtr text) {
-  Md5 md5;
-  md5.update(text);
-  return kj::str(md5.finishAsHex().cStr());
-}
+KJ_TEST("type ID generation hasn't changed") {
+  KJ_EXPECT(generateChildId(0xa93fc509624c72d9ull, "Node") == 0xe682ab4cf923a417ull);
+  KJ_EXPECT(generateChildId(0xe682ab4cf923a417ull, "NestedNode") == 0xdebf55bbfa0fc242ull);
+  KJ_EXPECT(generateGroupId(0xe682ab4cf923a417ull, 7) == 0x9ea0b19b37fb4435ull);
 
-TEST(Md5, Sum) {
-  EXPECT_STREQ("acbd18db4cc2f85cedef654fccc4a4d8", doMd5("foo").cStr());
-  EXPECT_STREQ("37b51d194a7513e45b56f6524f2d51f2", doMd5("bar").cStr());
-  EXPECT_STREQ("3858f62230ac3c915f300c664312c63f", doMd5("foobar").cStr());
+  KJ_EXPECT(typeId<schema::Node>() == 0xe682ab4cf923a417ull);
+  KJ_EXPECT(typeId<schema::Node::NestedNode>() == 0xdebf55bbfa0fc242ull);
+  KJ_EXPECT(typeId<schema::Node::Struct>() == 0x9ea0b19b37fb4435ull);
 
-  {
-    Md5 md5;
-    md5.update("foo");
-    md5.update("bar");
-    EXPECT_STREQ("3858f62230ac3c915f300c664312c63f", md5.finishAsHex().cStr());
-  }
-
-  EXPECT_STREQ("ebf2442d167a30ca4453f99abd8cddf4", doMd5(
-      "Hello, this is a long string that is more than 64 bytes because the md5 code uses a "
-      "buffer of 64 bytes.").cStr());
-
-  {
-    Md5 md5;
-    md5.update("Hello, this is a long string ");
-    md5.update("that is more than 64 bytes ");
-    md5.update("because the md5 code uses a ");
-    md5.update("buffer of 64 bytes.");
-    EXPECT_STREQ("ebf2442d167a30ca4453f99abd8cddf4", md5.finishAsHex().cStr());
-  }
+  // Methods of TestInterface.
+  KJ_EXPECT(generateMethodParamsId(0x88eb12a0e0af92b2ull, 0, false) == 0xb874edc0d559b391ull);
+  KJ_EXPECT(generateMethodParamsId(0x88eb12a0e0af92b2ull, 0, true) == 0xb04fcaddab714ba4ull);
+  KJ_EXPECT(generateMethodParamsId(0x88eb12a0e0af92b2ull, 1, false) == 0xd044893357b42568ull);
+  KJ_EXPECT(generateMethodParamsId(0x88eb12a0e0af92b2ull, 1, true) == 0x9bf141df4247d52full);
 }
 
 }  // namespace

@@ -1,5 +1,142 @@
-// This file was modified by Kenton Varda from code placed in the public domain.
-// The code, which was originally C, was modified to give it a C++ interface.
+// Copyright (c) 2013-2017 Sandstorm Development Group, Inc. and contributors
+// Licensed under the MIT License:
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+#include "type-id.h"
+#include <kj/debug.h>
+#include <string.h>
+
+namespace capnp {
+namespace compiler {
+
+class TypeIdGenerator {
+  // A non-cryptographic deterministic random number generator used to generate type IDs when the
+  // developer did not specify one themselves.
+  //
+  // The underlying algorithm is MD5. MD5 is safe to use here because this is not intended to be a
+  // cryptographic random number generator. In retrospect it would have been nice to use something
+  // else just to avoid people freaking out about it, but changing the algorithm now would break
+  // backwards-compatibility.
+
+public:
+  TypeIdGenerator();
+
+  void update(kj::ArrayPtr<const kj::byte> data);
+  inline void update(kj::ArrayPtr<const char> data) {
+    return update(data.asBytes());
+  }
+  inline void update(kj::StringPtr data) {
+    return update(data.asArray());
+  }
+
+  kj::ArrayPtr<const kj::byte> finish();
+
+private:
+  bool finished = false;
+
+  struct {
+    uint lo, hi;
+    uint a, b, c, d;
+    kj::byte buffer[64];
+    uint block[16];
+  } ctx;
+
+  const kj::byte* body(const kj::byte* ptr, size_t size);
+};
+
+uint64_t generateChildId(uint64_t parentId, kj::StringPtr childName) {
+  // Compute ID by hashing the concatenation of the parent ID and the declaration name, and
+  // then taking the first 8 bytes.
+
+  kj::byte parentIdBytes[sizeof(uint64_t)];
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    parentIdBytes[i] = (parentId >> (i * 8)) & 0xff;
+  }
+
+  TypeIdGenerator generator;
+  generator.update(kj::arrayPtr(parentIdBytes, kj::size(parentIdBytes)));
+  generator.update(childName);
+
+  kj::ArrayPtr<const kj::byte> resultBytes = generator.finish();
+
+  uint64_t result = 0;
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    result = (result << 8) | resultBytes[i];
+  }
+
+  return result | (1ull << 63);
+}
+
+uint64_t generateGroupId(uint64_t parentId, uint16_t groupIndex) {
+  // Compute ID by hashing the concatenation of the parent ID and the group index, and
+  // then taking the first 8 bytes.
+
+  kj::byte bytes[sizeof(uint64_t) + sizeof(uint16_t)];
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    bytes[i] = (parentId >> (i * 8)) & 0xff;
+  }
+  for (uint i = 0; i < sizeof(uint16_t); i++) {
+    bytes[sizeof(uint64_t) + i] = (groupIndex >> (i * 8)) & 0xff;
+  }
+
+  TypeIdGenerator generator;
+  generator.update(bytes);
+
+  kj::ArrayPtr<const kj::byte> resultBytes = generator.finish();
+
+  uint64_t result = 0;
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    result = (result << 8) | resultBytes[i];
+  }
+
+  return result | (1ull << 63);
+}
+
+uint64_t generateMethodParamsId(uint64_t parentId, uint16_t methodOrdinal, bool isResults) {
+  // Compute ID by hashing the concatenation of the parent ID, the method ordinal, and a
+  // boolean indicating whether this is the params or the results, and then taking the first 8
+  // bytes.
+
+  kj::byte bytes[sizeof(uint64_t) + sizeof(uint16_t) + 1];
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    bytes[i] = (parentId >> (i * 8)) & 0xff;
+  }
+  for (uint i = 0; i < sizeof(uint16_t); i++) {
+    bytes[sizeof(uint64_t) + i] = (methodOrdinal >> (i * 8)) & 0xff;
+  }
+  bytes[sizeof(bytes) - 1] = isResults;
+
+  TypeIdGenerator generator;
+  generator.update(bytes);
+
+  kj::ArrayPtr<const kj::byte> resultBytes = generator.finish();
+
+  uint64_t result = 0;
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    result = (result << 8) | resultBytes[i];
+  }
+
+  return result | (1ull << 63);
+}
+
+// The remainder of this file was derived from code placed in the public domain.
 // The original code bore the following notice:
 
 /*
@@ -39,13 +176,6 @@
  * compile-time configuration.
  */
 
-#include "md5.h"
-#include <kj/debug.h>
-#include <string.h>
-
-namespace capnp {
-namespace compiler {
-
 /*
  * The basic MD5 functions.
  *
@@ -76,16 +206,16 @@ namespace compiler {
  */
 #if defined(__i386__) || defined(__x86_64__) || defined(__vax__)
 #define SET(n) \
-  (*(MD5_u32plus *)&ptr[(n) * 4])
+  (*(uint *)&ptr[(n) * 4])
 #define GET(n) \
   SET(n)
 #else
 #define SET(n) \
   (ctx.block[(n)] = \
-  (MD5_u32plus)ptr[(n) * 4] | \
-  ((MD5_u32plus)ptr[(n) * 4 + 1] << 8) | \
-  ((MD5_u32plus)ptr[(n) * 4 + 2] << 16) | \
-  ((MD5_u32plus)ptr[(n) * 4 + 3] << 24))
+  (uint)ptr[(n) * 4] | \
+  ((uint)ptr[(n) * 4 + 1] << 8) | \
+  ((uint)ptr[(n) * 4 + 2] << 16) | \
+  ((uint)ptr[(n) * 4 + 3] << 24))
 #define GET(n) \
   (ctx.block[(n)])
 #endif
@@ -94,10 +224,10 @@ namespace compiler {
  * This processes one or more 64-byte data blocks, but does NOT update
  * the bit counters.  There are no alignment requirements.
  */
-const kj::byte* Md5::body(const kj::byte* ptr, size_t size)
+const kj::byte* TypeIdGenerator::body(const kj::byte* ptr, size_t size)
 {
-  MD5_u32plus a, b, c, d;
-  MD5_u32plus saved_a, saved_b, saved_c, saved_d;
+  uint a, b, c, d;
+  uint saved_a, saved_b, saved_c, saved_d;
 
   a = ctx.a;
   b = ctx.b;
@@ -198,7 +328,7 @@ const kj::byte* Md5::body(const kj::byte* ptr, size_t size)
   return ptr;
 }
 
-Md5::Md5()
+TypeIdGenerator::TypeIdGenerator()
 {
   ctx.a = 0x67452301;
   ctx.b = 0xefcdab89;
@@ -209,14 +339,14 @@ Md5::Md5()
   ctx.hi = 0;
 }
 
-void Md5::update(kj::ArrayPtr<const kj::byte> dataArray)
+void TypeIdGenerator::update(kj::ArrayPtr<const kj::byte> dataArray)
 {
-  KJ_REQUIRE(!finished, "already called Md5::finish()");
+  KJ_REQUIRE(!finished, "already called TypeIdGenerator::finish()");
 
   const kj::byte* data = dataArray.begin();
   unsigned long size = dataArray.size();
 
-  MD5_u32plus saved_lo;
+  uint saved_lo;
   unsigned long used, free;
 
   saved_lo = ctx.lo;
@@ -248,7 +378,7 @@ void Md5::update(kj::ArrayPtr<const kj::byte> dataArray)
   memcpy(ctx.buffer, data, size);
 }
 
-kj::ArrayPtr<const kj::byte> Md5::finish()
+kj::ArrayPtr<const kj::byte> TypeIdGenerator::finish()
 {
   if (!finished) {
     unsigned long used, free;
@@ -304,21 +434,6 @@ kj::ArrayPtr<const kj::byte> Md5::finish()
   return kj::arrayPtr(ctx.buffer, 16);
 }
 
-kj::StringPtr Md5::finishAsHex() {
-  static const char hexDigits[] = "0123456789abcdef";
-
-  kj::ArrayPtr<const kj::byte> bytes = finish();
-
-  char* chars = reinterpret_cast<char*>(ctx.buffer + 16);
-  char* pos = chars;
-  for (auto byte: bytes) {
-    *pos++ = hexDigits[byte / 16];
-    *pos++ = hexDigits[byte % 16];
-  }
-  *pos++ = '\0';
-
-  return kj::StringPtr(chars, 32);
-}
 
 }  // namespace compiler
 }  // namespace capnp

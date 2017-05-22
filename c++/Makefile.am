@@ -299,8 +299,8 @@ libcapnp_json_la_SOURCES=                                      \
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 libcapnpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnpc_la_SOURCES=                                          \
-  src/capnp/compiler/md5.h                                     \
-  src/capnp/compiler/md5.c++                                   \
+  src/capnp/compiler/type-id.h                                 \
+  src/capnp/compiler/type-id.c++                               \
   src/capnp/compiler/error-reporter.h                          \
   src/capnp/compiler/error-reporter.c++                        \
   src/capnp/compiler/lexer.capnp.h                             \
@@ -429,7 +429,7 @@ heavy_tests =                                                  \
   src/capnp/ez-rpc-test.c++                                    \
   src/capnp/compat/json-test.c++                               \
   src/capnp/compiler/lexer-test.c++                            \
-  src/capnp/compiler/md5-test.c++
+  src/capnp/compiler/type-id-test.c++
 capnp_test_LDADD =                                             \
   libcapnp-test.a                                              \
   libcapnpc.la                                                 \
