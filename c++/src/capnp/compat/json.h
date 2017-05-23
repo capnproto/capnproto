@@ -193,6 +193,20 @@ public:
   void addFieldHandler(StructSchema::Field field, Handler<T>& handler);
   // Matches only the specific field. T can be a dynamic type. T must match the field's type.
 
+  // ---------------------------------------------------------------------------
+  // Hack to support string literal parameters
+
+  template <size_t size, typename... Params>
+  auto decode(const char (&input)[size], Params&&... params) const
+      -> decltype(decode(kj::arrayPtr(input, size), kj::fwd<Params>(params)...)) {
+    return decode(kj::arrayPtr(input, size - 1), kj::fwd<Params>(params)...);
+  }
+  template <size_t size, typename... Params>
+  auto decodeRaw(const char (&input)[size], Params&&... params) const
+      -> decltype(decodeRaw(kj::arrayPtr(input, size), kj::fwd<Params>(params)...)) {
+    return decodeRaw(kj::arrayPtr(input, size - 1), kj::fwd<Params>(params)...);
+  }
+
 private:
   class HandlerBase;
   struct Impl;
