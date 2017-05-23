@@ -34,10 +34,10 @@ CappedArray<char, sizeof(char32_t) * 2 + 1> hex(char32_t i) { return kj::hex((ui
 //
 // TODO(cleanup): Should this go into string.h with the other definitions of hex()?
 
-template <typename T>
+template <typename T, typename U>
 void expectResImpl(EncodingResult<T> result,
-               ArrayPtr<const Decay<decltype(result[0])>> expected,
-               bool errors = false) {
+                   ArrayPtr<const U> expected,
+                   bool errors = false) {
   if (errors) {
     KJ_EXPECT(result.hadErrors);
   } else {
@@ -50,9 +50,9 @@ void expectResImpl(EncodingResult<T> result,
   }
 }
 
-template <typename T, size_t s>
+template <typename T, typename U, size_t s>
 void expectRes(EncodingResult<T> result,
-               const Decay<decltype(result[0])> (&expected)[s],
+               const U (&expected)[s],
                bool errors = false) {
   expectResImpl(kj::mv(result), arrayPtr(expected, s - 1), errors);
 }
@@ -61,7 +61,7 @@ template <typename T, size_t s>
 void expectRes(EncodingResult<T> result,
                byte (&expected)[s],
                bool errors = false) {
-  expectResImpl(kj::mv(result), arrayPtr(expected, s), errors);
+  expectResImpl(kj::mv(result), arrayPtr<const byte>(expected, s), errors);
 }
 
 KJ_TEST("encode UTF-8 to UTF-16") {
