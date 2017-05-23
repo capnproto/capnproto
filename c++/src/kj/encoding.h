@@ -88,6 +88,11 @@ Array<byte> decodeBinaryUriComponent(ArrayPtr<const char> text, bool nulTerminat
 String decodeUriComponent(ArrayPtr<const char> text);
 // Encode/decode URI components using % escapes. See Javascript's encodeURIComponent().
 
+String encodeCEscape(ArrayPtr<const byte> bytes);
+String encodeCEscape(ArrayPtr<const char> bytes);
+UtfResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool nulTerminate = false);
+UtfResult<String> decodeCEscape(ArrayPtr<const char> text);
+
 String encodeBase64(ArrayPtr<const byte> bytes, bool breakLines = false);
 // Encode the given bytes as base64 text. If `breakLines` is true, line breaks will be inserted
 // into the output every 72 characters (e.g. for encoding e-mail bodies).
@@ -103,6 +108,14 @@ inline String encodeUriComponent(ArrayPtr<const char> text) {
 }
 inline String decodeUriComponent(ArrayPtr<const char> text) {
   return String(decodeBinaryUriComponent(text, true).releaseAsChars());
+}
+
+inline String encodeCEscape(ArrayPtr<const char> text) {
+  return encodeCEscape(text.asBytes());
+}
+inline UtfResult<String> decodeCEscape(ArrayPtr<const char> text) {
+  auto result = decodeBinaryCEscape(text, true);
+  return { String(result.releaseAsChars()), result.hadErrors };
 }
 
 // If you pass a string literal to a function taking ArrayPtr<const char>, it'll include the NUL
@@ -156,6 +169,19 @@ inline Array<byte> decodeBinaryUriComponent(const char (&text)[s]) {
 template <size_t s>
 inline String decodeUriComponent(const char (&text)[s]) {
   return String(decodeBinaryUriComponent(arrayPtr(text, s - 1), true).releaseAsChars());
+}
+template <size_t s>
+inline String encodeCEscape(const char (&text)[s]) {
+  return encodeCEscape(arrayPtr(text, s - 1));
+}
+template <size_t s>
+inline UtfResult<Array<byte>> decodeBinaryCEscape(const char (&text)[s]) {
+  return decodeBinaryCEscape(arrayPtr(text, s - 1));
+}
+template <size_t s>
+inline UtfResult<String> decodeCEscape(const char (&text)[s]) {
+  auto result = decodeBinaryCEscape(arrayPtr(text, s - 1), true);
+  return { String(result.releaseAsChars()), result.hadErrors };
 }
 template <size_t s>
 Array<byte> decodeBase64(const char (&text)[s]) {

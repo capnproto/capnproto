@@ -339,6 +339,180 @@ Array<byte> decodeBinaryUriComponent(ArrayPtr<const char> text, bool nulTerminat
 }
 
 // =======================================================================================
+
+String encodeCEscape(ArrayPtr<const byte> bytes) {
+  Vector<char> escaped(bytes.size());
+
+  for (byte b: bytes) {
+    switch (b) {
+      case '\a': escaped.addAll(StringPtr("\\a")); break;
+      case '\b': escaped.addAll(StringPtr("\\b")); break;
+      case '\f': escaped.addAll(StringPtr("\\f")); break;
+      case '\n': escaped.addAll(StringPtr("\\n")); break;
+      case '\r': escaped.addAll(StringPtr("\\r")); break;
+      case '\t': escaped.addAll(StringPtr("\\t")); break;
+      case '\v': escaped.addAll(StringPtr("\\v")); break;
+      case '\'': escaped.addAll(StringPtr("\\\'")); break;
+      case '\"': escaped.addAll(StringPtr("\\\"")); break;
+      case '\\': escaped.addAll(StringPtr("\\\\")); break;
+      default:
+        if (b < 0x20 || b == 0x7f) {
+          // Use octal escape, not hex, because hex escapes technically have no length limit and
+          // so can create ambiguity with subsequent characters.
+          escaped.add('\\');
+          escaped.add(HEX_DIGITS[b / 64]);
+          escaped.add(HEX_DIGITS[(b / 8) % 8]);
+          escaped.add(HEX_DIGITS[b % 8]);
+        } else {
+          escaped.add(b);
+        }
+        break;
+    }
+  }
+
+  escaped.add(0);
+  return String(escaped.releaseAsArray());
+}
+
+namespace {
+
+static Maybe<uint> tryFromHexDigit(char c) {
+  if ('0' <= c && c <= '9') {
+    return c - '0';
+  } else if ('a' <= c && c <= 'f') {
+    return c - ('a' - 10);
+  } else if ('A' <= c && c <= 'F') {
+    return c - ('A' - 10);
+  } else {
+    return nullptr;
+  }
+}
+
+static Maybe<uint> tryFromOctDigit(char c) {
+  if ('0' <= c && c <= '7') {
+    return c - '0';
+  } else {
+    return nullptr;
+  }
+}
+
+}  // namespace
+
+UtfResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool nulTerminate) {
+  Vector<byte> result(text.size() + nulTerminate);
+  bool hadErrors = false;
+
+  size_t i = 0;
+  while (i < text.size()) {
+    char c = text[i++];
+    if (c == '\\') {
+      if (i == text.size()) {
+        hadErrors = true;
+        continue;
+      }
+      char c2 = text[i++];
+      switch (c2) {
+        case 'a' : result.add('\a'); break;
+        case 'b' : result.add('\b'); break;
+        case 'f' : result.add('\f'); break;
+        case 'n' : result.add('\n'); break;
+        case 'r' : result.add('\r'); break;
+        case 't' : result.add('\t'); break;
+        case 'v' : result.add('\v'); break;
+        case '\'': result.add('\''); break;
+        case '\"': result.add('\"'); break;
+        case '\\': result.add('\\'); break;
+
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7': {
+          uint value = c2 - '0';
+          for (uint j = 0; j < 2 && i < text.size(); j++) {
+            KJ_IF_MAYBE(d, tryFromOctDigit(text[i])) {
+              ++i;
+              value = (value << 3) | *d;
+            } else {
+              break;
+            }
+          }
+          if (value >= 0x100) hadErrors = true;
+          result.add(value);
+          break;
+        }
+
+        case 'x': {
+          uint value = 0;
+          while (i < text.size()) {
+            KJ_IF_MAYBE(d, tryFromHexDigit(text[i])) {
+              ++i;
+              value = (value << 4) | *d;
+            } else {
+              break;
+            }
+          }
+          if (value >= 0x100) hadErrors = true;
+          result.add(value);
+          break;
+        }
+
+        case 'u': {
+          char16_t value = 0;
+          for (uint j = 0; j < 4; j++) {
+            if (i == text.size()) {
+              hadErrors = true;
+              break;
+            } else KJ_IF_MAYBE(d, tryFromHexDigit(text[i])) {
+              ++i;
+              value = (value << 4) | *d;
+            } else {
+              hadErrors = true;
+              break;
+            }
+          }
+          auto utf = decodeUtf16(arrayPtr(&value, 1));
+          if (utf.hadErrors) hadErrors = true;
+          result.addAll(utf.asBytes());
+          break;
+        }
+
+        case 'U': {
+          char32_t value = 0;
+          for (uint j = 0; j < 8; j++) {
+            if (i == text.size()) {
+              hadErrors = true;
+              break;
+            } else KJ_IF_MAYBE(d, tryFromHexDigit(text[i])) {
+              ++i;
+              value = (value << 4) | *d;
+            } else {
+              hadErrors = true;
+              break;
+            }
+          }
+          auto utf = decodeUtf32(arrayPtr(&value, 1));
+          if (utf.hadErrors) hadErrors = true;
+          result.addAll(utf.asBytes());
+          break;
+        }
+
+        default:
+          result.add(c2);
+      }
+    } else {
+      result.add(c);
+    }
+  }
+
+  if (nulTerminate) result.add(0);
+  return { result.releaseAsArray(), hadErrors };
+}
+
+// =======================================================================================
 // This code is derived from libb64 which has been placed in the public domain.
 // For details, see http://sourceforge.net/projects/libb64
 

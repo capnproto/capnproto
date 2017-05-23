@@ -24,6 +24,7 @@
 #include <capnp/serialize.h>
 #include <kj/debug.h>
 #include <kj/arena.h>
+#include <kj/encoding.h>
 #include <set>
 #include <map>
 #include <stdlib.h>
@@ -2408,36 +2409,7 @@ uint64_t NodeTranslator::compileParamList(
 static const char HEXDIGITS[] = "0123456789abcdef";
 
 static kj::StringTree stringLiteral(kj::StringPtr chars) {
-  // TODO(cleanup): This code keeps coming up. Put somewhere common?
-
-  kj::Vector<char> escaped(chars.size());
-
-  for (char c: chars) {
-    switch (c) {
-      case '\a': escaped.addAll(kj::StringPtr("\\a")); break;
-      case '\b': escaped.addAll(kj::StringPtr("\\b")); break;
-      case '\f': escaped.addAll(kj::StringPtr("\\f")); break;
-      case '\n': escaped.addAll(kj::StringPtr("\\n")); break;
-      case '\r': escaped.addAll(kj::StringPtr("\\r")); break;
-      case '\t': escaped.addAll(kj::StringPtr("\\t")); break;
-      case '\v': escaped.addAll(kj::StringPtr("\\v")); break;
-      case '\'': escaped.addAll(kj::StringPtr("\\\'")); break;
-      case '\"': escaped.addAll(kj::StringPtr("\\\"")); break;
-      case '\\': escaped.addAll(kj::StringPtr("\\\\")); break;
-      default:
-        if (c < 0x20) {
-          escaped.add('\\');
-          escaped.add('x');
-          uint8_t c2 = c;
-          escaped.add(HEXDIGITS[c2 / 16]);
-          escaped.add(HEXDIGITS[c2 % 16]);
-        } else {
-          escaped.add(c);
-        }
-        break;
-    }
-  }
-  return kj::strTree('"', escaped, '"');
+  return kj::strTree('"', kj::encodeCEscape(chars), '"');
 }
 
 static kj::StringTree binaryLiteral(Data::Reader data) {

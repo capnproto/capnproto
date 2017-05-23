@@ -215,6 +215,31 @@ KJ_TEST("URI encoding/decoding") {
   KJ_EXPECT(decodeBinaryUriComponent(encodeUriComponent(bytes)).asPtr() == bytes);
 }
 
+KJ_TEST("C escape encoding/decoding") {
+  KJ_EXPECT(encodeCEscape("fooo\a\b\f\n\r\t\v\'\"\\bar") ==
+      "fooo\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\\bar");
+  KJ_EXPECT(encodeCEscape("foo\x01\x7fxxx") ==
+      "foo\\001\\177xxx");
+
+  expectUtf(decodeCEscape("fooo\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\\bar"),
+      "fooo\a\b\f\n\r\t\v\'\"\\bar");
+  expectUtf(decodeCEscape("foo\\x01\\x7fxxx"), "foo\x01\x7fxxx");
+  expectUtf(decodeCEscape("foo\\001\\177234"), "foo\001\177234");
+  expectUtf(decodeCEscape("foo\\x1"), "foo\x1");
+  expectUtf(decodeCEscape("foo\\1"), "foo\1");
+
+  expectUtf(decodeCEscape("foo\\u1234bar"), u8"foo\u1234bar");
+  expectUtf(decodeCEscape("foo\\U00045678bar"), u8"foo\U00045678bar");
+
+  // Error cases.
+  expectUtf(decodeCEscape("foo\\"), "foo", true);
+  expectUtf(decodeCEscape("foo\\x123x"), u8"foo\x23x", true);
+  expectUtf(decodeCEscape("foo\\u12"), u8"foo\u0012", true);
+  expectUtf(decodeCEscape("foo\\u12xxx"), u8"foo\u0012xxx", true);
+  expectUtf(decodeCEscape("foo\\U12"), u8"foo\u0012", true);
+  expectUtf(decodeCEscape("foo\\U12xxxxxxxx"), u8"foo\u0012xxxxxxxx", true);
+}
+
 KJ_TEST("base64 encoding/decoding") {
   {
     auto encoded = encodeBase64(StringPtr("foo").asBytes(), false);
