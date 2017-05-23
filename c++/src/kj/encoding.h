@@ -36,24 +36,24 @@
 namespace kj {
 
 template <typename ResultType>
-struct UtfResult: public ResultType {
+struct EncodingResult: public ResultType {
   // Equivalent to ResultType (a String or wide-char array) for all intents and purposes, except
-  // that the bool `hadErrors` can be inspected to see if any errors were encountered in the input,
-  // resulting in instances of the replacement character (U+FFFD) in the output.
+  // that the bool `hadErrors` can be inspected to see if any errors were encountered in the input.
+  // Each encoding/decoding function that returns this type will "work around" errors in some way,
+  // so an application doesn't strictly have to check for errors. E.g. the Unicode functions
+  // replace errors with U+FFFD in the output.
+  //
+  // Through magic, KJ_IF_MAYBE() and KJ_{REQUIRE,ASSERT}_NONNULL() work on EncodingResult<T>
+  // exactly if it were a Maybe<T> that is null in case of errors.
 
-  inline UtfResult(ResultType&& result, bool hadErrors)
+  inline EncodingResult(ResultType&& result, bool hadErrors)
       : ResultType(kj::mv(result)), hadErrors(hadErrors) {}
 
   const bool hadErrors;
-  // If true, then invalid sequences were detected in the input and were replaced with the Unicode
-  // replacement character (U+FFFD) in the output. Many applications will chose to ignore this
-  // boolean and continue on with the damaged data.
 };
 
-UtfResult<Array<char16_t>> encodeUtf16(ArrayPtr<const char> text, bool nulTerminate = false);
-UtfResult<Array<char32_t>> encodeUtf32(ArrayPtr<const char> text, bool nulTerminate = false);
-Maybe<Array<char16_t>> tryEncodeUtf16(ArrayPtr<const char> text, bool nulTerminate = false);
-Maybe<Array<char32_t>> tryEncodeUtf32(ArrayPtr<const char> text, bool nulTerminate = false);
+EncodingResult<Array<char16_t>> encodeUtf16(ArrayPtr<const char> text, bool nulTerminate = false);
+EncodingResult<Array<char32_t>> encodeUtf32(ArrayPtr<const char> text, bool nulTerminate = false);
 // Convert UTF-8 text (which KJ strings use) to UTF-16 or UTF-32.
 //
 // If `nulTerminate` is true, an extra NUL character will be added to the end of the output.
@@ -64,10 +64,8 @@ Maybe<Array<char32_t>> tryEncodeUtf32(ArrayPtr<const char> text, bool nulTermina
 // The returned arrays are in platform-native endianness (otherwise they wouldn't really be
 // char16_t / char32_t).
 
-UtfResult<String> decodeUtf16(ArrayPtr<const char16_t> utf16);
-UtfResult<String> decodeUtf32(ArrayPtr<const char32_t> utf32);
-Maybe<String> tryDecodeUtf16(ArrayPtr<const char16_t> utf16);
-Maybe<String> tryDecodeUtf32(ArrayPtr<const char32_t> utf32);
+EncodingResult<String> decodeUtf16(ArrayPtr<const char16_t> utf16);
+EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf32);
 // Convert UTF-16 or UTF-32 to UTF-8 (which KJ strings use).
 //
 // The input should NOT include a NUL terminator; any NUL characters in the input array will be
@@ -79,41 +77,76 @@ Maybe<String> tryDecodeUtf32(ArrayPtr<const char32_t> utf32);
 // The input must be in platform-native endianness. BOMs are NOT recognized by these functions.
 
 String encodeHex(ArrayPtr<const byte> bytes);
-Array<byte> decodeHex(ArrayPtr<const char> text);
+EncodingResult<Array<byte>> decodeHex(ArrayPtr<const char> text);
 // Encode/decode bytes as hex strings.
 
 String encodeUriComponent(ArrayPtr<const byte> bytes);
 String encodeUriComponent(ArrayPtr<const char> bytes);
-Array<byte> decodeBinaryUriComponent(ArrayPtr<const char> text, bool nulTerminate = false);
-String decodeUriComponent(ArrayPtr<const char> text);
+EncodingResult<Array<byte>> decodeBinaryUriComponent(
+    ArrayPtr<const char> text, bool nulTerminate = false);
+EncodingResult<String> decodeUriComponent(ArrayPtr<const char> text);
 // Encode/decode URI components using % escapes. See Javascript's encodeURIComponent().
 
 String encodeCEscape(ArrayPtr<const byte> bytes);
 String encodeCEscape(ArrayPtr<const char> bytes);
-UtfResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool nulTerminate = false);
-UtfResult<String> decodeCEscape(ArrayPtr<const char> text);
+EncodingResult<Array<byte>> decodeBinaryCEscape(
+    ArrayPtr<const char> text, bool nulTerminate = false);
+EncodingResult<String> decodeCEscape(ArrayPtr<const char> text);
 
 String encodeBase64(ArrayPtr<const byte> bytes, bool breakLines = false);
 // Encode the given bytes as base64 text. If `breakLines` is true, line breaks will be inserted
 // into the output every 72 characters (e.g. for encoding e-mail bodies).
 
 Array<byte> decodeBase64(ArrayPtr<const char> text);
-// Decode base64 text. Non-base64 characters are ignored.
+// Decode base64 text. Non-base64 characters are ignored and padding characters are not requried;
+// as such, this function never fails.
 
 // =======================================================================================
 // inline implementation details
 
+namespace _ {  // private
+
+template <typename T>
+NullableValue<T> readMaybe(EncodingResult<T>&& value) {
+  if (value.hadErrors) {
+    return nullptr;
+  } else {
+    return kj::mv(value);
+  }
+}
+
+template <typename T>
+T* readMaybe(EncodingResult<T>& value) {
+  if (value.hadErrors) {
+    return nullptr;
+  } else {
+    return &value;
+  }
+}
+
+template <typename T>
+const T* readMaybe(const EncodingResult<T>& value) {
+  if (value.hadErrors) {
+    return nullptr;
+  } else {
+    return &value;
+  }
+}
+
+}  // namespace _ (private)
+
 inline String encodeUriComponent(ArrayPtr<const char> text) {
   return encodeUriComponent(text.asBytes());
 }
-inline String decodeUriComponent(ArrayPtr<const char> text) {
-  return String(decodeBinaryUriComponent(text, true).releaseAsChars());
+inline EncodingResult<String> decodeUriComponent(ArrayPtr<const char> text) {
+  auto result = decodeBinaryUriComponent(text, true);
+  return { String(result.releaseAsChars()), result.hadErrors };
 }
 
 inline String encodeCEscape(ArrayPtr<const char> text) {
   return encodeCEscape(text.asBytes());
 }
-inline UtfResult<String> decodeCEscape(ArrayPtr<const char> text) {
+inline EncodingResult<String> decodeCEscape(ArrayPtr<const char> text) {
   auto result = decodeBinaryCEscape(text, true);
   return { String(result.releaseAsChars()), result.hadErrors };
 }
@@ -123,39 +156,23 @@ inline UtfResult<String> decodeCEscape(ArrayPtr<const char> text) {
 // only even matters for encoding-test.c++.
 
 template <size_t s>
-inline UtfResult<Array<char16_t>> encodeUtf16(const char (&text)[s], bool nulTerminate = false) {
+inline EncodingResult<Array<char16_t>> encodeUtf16(const char (&text)[s], bool nulTerminate=false) {
   return encodeUtf16(arrayPtr(text, s - 1), nulTerminate);
 }
 template <size_t s>
-inline UtfResult<Array<char32_t>> encodeUtf32(const char (&text)[s], bool nulTerminate = false) {
+inline EncodingResult<Array<char32_t>> encodeUtf32(const char (&text)[s], bool nulTerminate=false) {
   return encodeUtf32(arrayPtr(text, s - 1), nulTerminate);
 }
 template <size_t s>
-inline Maybe<Array<char16_t>> tryEncodeUtf16(const char (&text)[s], bool nulTerminate = false) {
-  return tryEncodeUtf16(arrayPtr(text, s - 1), nulTerminate);
-}
-template <size_t s>
-inline Maybe<Array<char32_t>> tryEncodeUtf32(const char (&text)[s], bool nulTerminate = false) {
-  return tryEncodeUtf32(arrayPtr(text, s - 1), nulTerminate);
-}
-template <size_t s>
-inline UtfResult<String> decodeUtf16(const char16_t (&utf16)[s]) {
+inline EncodingResult<String> decodeUtf16(const char16_t (&utf16)[s]) {
   return decodeUtf16(arrayPtr(utf16, s - 1));
 }
 template <size_t s>
-inline UtfResult<String> decodeUtf32(const char32_t (&utf32)[s]) {
+inline EncodingResult<String> decodeUtf32(const char32_t (&utf32)[s]) {
   return decodeUtf32(arrayPtr(utf32, s - 1));
 }
 template <size_t s>
-inline Maybe<String> tryDecodeUtf16(const char16_t (&utf16)[s]) {
-  return tryDecodeUtf16(arrayPtr(utf16, s - 1));
-}
-template <size_t s>
-inline Maybe<String> tryDecodeUtf32(const char32_t (&utf32)[s]) {
-  return tryDecodeUtf32(arrayPtr(utf32, s - 1));
-}
-template <size_t s>
-inline Array<byte> decodeHex(const char (&text)[s]) {
+inline EncodingResult<Array<byte>> decodeHex(const char (&text)[s]) {
   return decodeHex(arrayPtr(text, s - 1));
 }
 template <size_t s>
@@ -167,21 +184,20 @@ inline Array<byte> decodeBinaryUriComponent(const char (&text)[s]) {
   return decodeBinaryUriComponent(arrayPtr(text, s - 1));
 }
 template <size_t s>
-inline String decodeUriComponent(const char (&text)[s]) {
-  return String(decodeBinaryUriComponent(arrayPtr(text, s - 1), true).releaseAsChars());
+inline EncodingResult<String> decodeUriComponent(const char (&text)[s]) {
+  return decodeUriComponent(arrayPtr(text, s-1));
 }
 template <size_t s>
 inline String encodeCEscape(const char (&text)[s]) {
   return encodeCEscape(arrayPtr(text, s - 1));
 }
 template <size_t s>
-inline UtfResult<Array<byte>> decodeBinaryCEscape(const char (&text)[s]) {
+inline EncodingResult<Array<byte>> decodeBinaryCEscape(const char (&text)[s]) {
   return decodeBinaryCEscape(arrayPtr(text, s - 1));
 }
 template <size_t s>
-inline UtfResult<String> decodeCEscape(const char (&text)[s]) {
-  auto result = decodeBinaryCEscape(arrayPtr(text, s - 1), true);
-  return { String(result.releaseAsChars()), result.hadErrors };
+inline EncodingResult<String> decodeCEscape(const char (&text)[s]) {
+  return decodeCEscape(arrayPtr(text, s-1));
 }
 template <size_t s>
 Array<byte> decodeBase64(const char (&text)[s]) {

@@ -915,7 +915,6 @@ public:
     return value;
   }
 
-private:  // internal interface used by friends only
   inline NullableValue() noexcept: isSet(false) {}
   inline NullableValue(T&& t) noexcept(noexcept(T(instance<T&&>())))
       : isSet(true) {

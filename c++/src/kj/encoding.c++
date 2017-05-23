@@ -41,7 +41,7 @@ inline void addChar32(Vector<char32_t>& vec, char32_t u) {
 }
 
 template <typename T>
-UtfResult<Array<T>> encodeUtf(ArrayPtr<const char> text, bool nulTerminate) {
+EncodingResult<Array<T>> encodeUtf(ArrayPtr<const char> text, bool nulTerminate) {
   Vector<T> result(text.size() + nulTerminate);
   bool hadErrors = false;
 
@@ -125,33 +125,15 @@ UtfResult<Array<T>> encodeUtf(ArrayPtr<const char> text, bool nulTerminate) {
 
 }  // namespace
 
-UtfResult<Array<char16_t>> encodeUtf16(ArrayPtr<const char> text, bool nulTerminate) {
+EncodingResult<Array<char16_t>> encodeUtf16(ArrayPtr<const char> text, bool nulTerminate) {
   return encodeUtf<char16_t>(text, nulTerminate);
 }
 
-UtfResult<Array<char32_t>> encodeUtf32(ArrayPtr<const char> text, bool nulTerminate) {
+EncodingResult<Array<char32_t>> encodeUtf32(ArrayPtr<const char> text, bool nulTerminate) {
   return encodeUtf<char32_t>(text, nulTerminate);
 }
 
-Maybe<Array<char16_t>> tryEncodeUtf16(ArrayPtr<const char> text, bool nulTerminate) {
-  auto result = encodeUtf16(text, nulTerminate);
-  if (result.hadErrors) {
-    return nullptr;
-  } else {
-    return kj::mv(result);
-  }
-}
-
-Maybe<Array<char32_t>> tryEncodeUtf32(ArrayPtr<const char> text, bool nulTerminate) {
-  auto result = encodeUtf32(text, nulTerminate);
-  if (result.hadErrors) {
-    return nullptr;
-  } else {
-    return kj::mv(result);
-  }
-}
-
-UtfResult<String> decodeUtf16(ArrayPtr<const char16_t> utf16) {
+EncodingResult<String> decodeUtf16(ArrayPtr<const char16_t> utf16) {
   Vector<char> result(utf16.size() + 1);
   bool hadErrors = false;
 
@@ -202,7 +184,7 @@ UtfResult<String> decodeUtf16(ArrayPtr<const char16_t> utf16) {
   return { String(result.releaseAsArray()), hadErrors };
 }
 
-UtfResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
+EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
   Vector<char> result(utf16.size() + 1);
   bool hadErrors = false;
 
@@ -247,28 +229,33 @@ UtfResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
   return { String(result.releaseAsArray()), hadErrors };
 }
 
-Maybe<String> tryDecodeUtf16(ArrayPtr<const char16_t> utf16) {
-  auto result = decodeUtf16(utf16);
-  if (result.hadErrors) {
-    return nullptr;
-  } else {
-    return kj::mv(result);
-  }
-}
-Maybe<String> tryDecodeUtf32(ArrayPtr<const char32_t> utf32) {
-  auto result = decodeUtf32(utf32);
-  if (result.hadErrors) {
-    return nullptr;
-  } else {
-    return kj::mv(result);
-  }
-}
-
 // =======================================================================================
 
 namespace {
-  const char HEX_DIGITS[] = "0123456789abcdef";
+
+const char HEX_DIGITS[] = "0123456789abcdef";
+
+static Maybe<uint> tryFromHexDigit(char c) {
+  if ('0' <= c && c <= '9') {
+    return c - '0';
+  } else if ('a' <= c && c <= 'f') {
+    return c - ('a' - 10);
+  } else if ('A' <= c && c <= 'F') {
+    return c - ('A' - 10);
+  } else {
+    return nullptr;
+  }
 }
+
+static Maybe<uint> tryFromOctDigit(char c) {
+  if ('0' <= c && c <= '7') {
+    return c - '0';
+  } else {
+    return nullptr;
+  }
+}
+
+}  // namespace
 
 String encodeHex(ArrayPtr<const byte> input) {
   return strArray(KJ_MAP(b, input) {
@@ -276,27 +263,26 @@ String encodeHex(ArrayPtr<const byte> input) {
   }, "");
 }
 
-static uint fromDigit(char c) {
-  if ('0' <= c && c <= '9') {
-    return c - '0';
-  } else if ('a' <= c && c <= 'z') {
-    return c - ('a' - 10);
-  } else if ('A' <= c && c <= 'Z') {
-    return c - ('A' - 10);
-  } else {
-    return 0;
-  }
-}
-
-Array<byte> decodeHex(ArrayPtr<const char> text) {
+EncodingResult<Array<byte>> decodeHex(ArrayPtr<const char> text) {
   auto result = heapArray<byte>(text.size() / 2);
+  bool hadErrors = text.size() % 2;
 
   for (auto i: kj::indices(result)) {
-    result[i] = (fromDigit(text[i*2]) << 4)
-              | (fromDigit(text[i*2+1]));
+    byte b = 0;
+    KJ_IF_MAYBE(d1, tryFromHexDigit(text[i*2])) {
+      b = *d1 << 4;
+    } else {
+      hadErrors = true;
+    }
+    KJ_IF_MAYBE(d2, tryFromHexDigit(text[i*2+1])) {
+      b |= *d2;
+    } else {
+      hadErrors = true;
+    }
+    result[i] = b;
   }
 
-  return result;
+  return { kj::mv(result), hadErrors };
 }
 
 String encodeUriComponent(ArrayPtr<const byte> bytes) {
@@ -316,26 +302,41 @@ String encodeUriComponent(ArrayPtr<const byte> bytes) {
   return String(result.releaseAsArray());
 }
 
-Array<byte> decodeBinaryUriComponent(ArrayPtr<const char> text, bool nulTerminate) {
+EncodingResult<Array<byte>> decodeBinaryUriComponent(
+    ArrayPtr<const char> text, bool nulTerminate) {
   Vector<byte> result(text.size() + nulTerminate);
+  bool hadErrors = false;
 
   const char* ptr = text.begin();
   const char* end = text.end();
   while (ptr < end) {
     if (*ptr == '%') {
       ++ptr;
-      if (ptr == end) break;
-      byte b = fromDigit(*ptr++) << 4;
-      if (ptr == end) break;
-      b |= fromDigit(*ptr++);
-      result.add(b);
+
+      if (ptr == end) {
+        hadErrors = true;
+      } else KJ_IF_MAYBE(d1, tryFromHexDigit(*ptr)) {
+        byte b = *d1;
+        ++ptr;
+        if (ptr == end) {
+          hadErrors = true;
+        } else KJ_IF_MAYBE(d2, tryFromHexDigit(*ptr)) {
+          b = (b << 4) | *d2;
+          ++ptr;
+        } else {
+          hadErrors = true;
+        }
+        result.add(b);
+      } else {
+        hadErrors = true;
+      }
     } else {
       result.add(*ptr++);
     }
   }
 
   if (nulTerminate) result.add(0);
-  return result.releaseAsArray();
+  return { result.releaseAsArray(), hadErrors };
 }
 
 // =======================================================================================
@@ -374,31 +375,7 @@ String encodeCEscape(ArrayPtr<const byte> bytes) {
   return String(escaped.releaseAsArray());
 }
 
-namespace {
-
-static Maybe<uint> tryFromHexDigit(char c) {
-  if ('0' <= c && c <= '9') {
-    return c - '0';
-  } else if ('a' <= c && c <= 'f') {
-    return c - ('a' - 10);
-  } else if ('A' <= c && c <= 'F') {
-    return c - ('A' - 10);
-  } else {
-    return nullptr;
-  }
-}
-
-static Maybe<uint> tryFromOctDigit(char c) {
-  if ('0' <= c && c <= '7') {
-    return c - '0';
-  } else {
-    return nullptr;
-  }
-}
-
-}  // namespace
-
-UtfResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool nulTerminate) {
+EncodingResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool nulTerminate) {
   Vector<byte> result(text.size() + nulTerminate);
   bool hadErrors = false;
 
