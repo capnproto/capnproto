@@ -35,7 +35,7 @@ CappedArray<char, sizeof(char32_t) * 2 + 1> hex(char32_t i) { return kj::hex((ui
 // TODO(cleanup): Should this go into string.h with the other definitions of hex()?
 
 template <typename T>
-void expectRes(EncodingResult<T> result,
+void expectResImpl(EncodingResult<T> result,
                ArrayPtr<const Decay<decltype(result[0])>> expected,
                bool errors = false) {
   if (errors) {
@@ -54,14 +54,14 @@ template <typename T, size_t s>
 void expectRes(EncodingResult<T> result,
                const Decay<decltype(result[0])> (&expected)[s],
                bool errors = false) {
-  expectRes(kj::mv(result), arrayPtr(expected, s - 1), errors);
+  expectResImpl(kj::mv(result), arrayPtr(expected, s - 1), errors);
 }
 
 template <typename T, size_t s>
 void expectRes(EncodingResult<T> result,
                byte (&expected)[s],
                bool errors = false) {
-  expectRes(kj::mv(result), arrayPtr(expected, s), errors);
+  expectResImpl(kj::mv(result), arrayPtr(expected, s), errors);
 }
 
 KJ_TEST("encode UTF-8 to UTF-16") {
@@ -94,7 +94,13 @@ KJ_TEST("invalid UTF-8 to UTF-16") {
   expectRes(encodeUtf16("\xe0\x80\x80"), u"\ufffd", true);
   expectRes(encodeUtf16("\xe0\x9f\xbf"), u"\ufffd", true);
   expectRes(encodeUtf16("\xe0\xa0\x80"), u"\u0800", false);
-  expectRes(encodeUtf16("\xef\xbf\xbf"), u"\uffff", false);
+  expectRes(encodeUtf16("\xef\xbf\xbe"), u"\ufffe", false);
+
+  // Due to a classic off-by-one error, GCC 4.x rather hilariously encodes '\uffff' as the
+  // "surrogate pair" 0xd7ff, 0xdfff: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=41698
+  if (kj::size(u"\uffff") == 2) {
+    expectRes(encodeUtf16("\xef\xbf\xbf"), u"\uffff", false);
+  }
 
   expectRes(encodeUtf16("\xf0\x80\x80\x80"), u"\ufffd", true);
   expectRes(encodeUtf16("\xf0\x8f\xbf\xbf"), u"\ufffd", true);

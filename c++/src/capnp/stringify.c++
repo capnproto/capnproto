@@ -28,8 +28,6 @@ namespace capnp {
 
 namespace {
 
-static const char HEXDIGITS[] = "0123456789abcdef";
-
 enum PrintMode {
   BARE,
   // The value is planned to be printed on its own line, unless it is very short and contains
