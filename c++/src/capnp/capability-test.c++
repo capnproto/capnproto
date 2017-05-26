@@ -553,6 +553,17 @@ public:
             // Too lazy to write a whole separate test for each of these cases...  so just make
             // sure they both compile here, and only actually test the latter.
             box.set("cap", kj::heap<TestExtendsDynamicImpl>(callCount));
+#if __GNUG__ && !__clang__ && __GNUG__ == 4 && __GNUC_MINOR__ == 9
+            // The last line in this block tickles a bug in Debian G++ 4.9.2 that is not present
+            // in 4.8.x nor in 4.9.4:
+            //     https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=781060
+            //
+            // Unfortunatley 4.9.2 is present on many Debian Jessie systems..
+            //
+            // For the moment, we can get away with skipping the last line as the previous line
+            // will set things up in a way that allows the test to complete successfully.
+            return;
+#endif
             box.set("cap", kj::heap<TestExtendsImpl>(callCount));
           });
     } else {
