@@ -571,7 +571,7 @@ kj::ArrayPtr<const HttpRequestTestCase> requestTestCases() {
       HttpMethod::GET,
       "/foo/bar",
       {{HttpHeaderId::HOST, "example.com"}},
-      nullptr, {},
+      uint64_t(0), {},
     },
 
     {
@@ -582,7 +582,7 @@ kj::ArrayPtr<const HttpRequestTestCase> requestTestCases() {
       HttpMethod::HEAD,
       "/foo/bar",
       {{HttpHeaderId::HOST, "example.com"}},
-      nullptr, {},
+      uint64_t(0), {},
     },
 
     {
@@ -650,7 +650,7 @@ kj::ArrayPtr<const HttpRequestTestCase> requestTestCases() {
       HttpMethod::GET,
       "/",
       {{HttpHeaderId::HOST, HUGE_STRING}},
-      nullptr, {}
+      uint64_t(0), {}
     },
   };
 
@@ -787,7 +787,7 @@ KJ_TEST("HttpServer responses") {
     HttpMethod::GET,
     "/",
     {},
-    nullptr, {},
+    uint64_t(0), {},
   };
 
   HttpRequestTestCase HEAD_REQUEST = {
@@ -797,7 +797,7 @@ KJ_TEST("HttpServer responses") {
     HttpMethod::HEAD,
     "/",
     {},
-    nullptr, {},
+    uint64_t(0), {},
   };
 
   auto io = kj::setupAsyncIo();
@@ -819,7 +819,7 @@ kj::ArrayPtr<const HttpTestCase> pipelineTestCases() {
         "GET / HTTP/1.1\r\n"
         "\r\n",
 
-        HttpMethod::GET, "/", {}, nullptr, {},
+        HttpMethod::GET, "/", {}, uint64_t(0), {},
       },
       {
         "HTTP/1.1 200 OK\r\n"
@@ -925,7 +925,7 @@ kj::ArrayPtr<const HttpTestCase> pipelineTestCases() {
         "HEAD / HTTP/1.1\r\n"
         "\r\n",
 
-        HttpMethod::HEAD, "/", {}, nullptr, {},
+        HttpMethod::HEAD, "/", {}, uint64_t(0), {},
       },
       {
         "HTTP/1.1 200 OK\r\n"
@@ -1440,6 +1440,49 @@ KJ_TEST("HttpFixedLengthEntityWriter correctly implements tryPumpFrom") {
       "Content-Length: 13\r\n"
       "\r\n"
       "Hello, World!", text);
+}
+
+// -----------------------------------------------------------------------------
+
+KJ_TEST("newHttpService from HttpClient") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
+  auto io = kj::setupAsyncIo();
+  auto frontPipe = io.provider->newTwoWayPipe();
+  auto backPipe = io.provider->newTwoWayPipe();
+
+  kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
+  for (auto& testCase: PIPELINE_TESTS) {
+    writeResponsesPromise = writeResponsesPromise
+        .then([&]() {
+      return expectRead(*backPipe.ends[1], testCase.request.raw);
+    }).then([&]() {
+      return backPipe.ends[1]->write(testCase.response.raw.begin(), testCase.response.raw.size());
+    });
+  }
+
+  {
+    HttpHeaderTable table;
+    auto backClient = newHttpClient(table, *backPipe.ends[0]);
+    auto frontService = newHttpService(*backClient);
+    HttpServer frontServer(io.provider->getTimer(), table, *frontService);
+    auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
+
+    for (auto& testCase: PIPELINE_TESTS) {
+      KJ_CONTEXT(testCase.request.raw, testCase.response.raw);
+
+      frontPipe.ends[0]->write(testCase.request.raw.begin(), testCase.request.raw.size())
+               .wait(io.waitScope);
+
+      expectRead(*frontPipe.ends[0], testCase.response.raw).wait(io.waitScope);
+    }
+
+    frontPipe.ends[0]->shutdownWrite();
+    listenTask.wait(io.waitScope);
+  }
+
+  backPipe.ends[0]->shutdownWrite();
+  writeResponsesPromise.wait(io.waitScope);
 }
 
 // -----------------------------------------------------------------------------

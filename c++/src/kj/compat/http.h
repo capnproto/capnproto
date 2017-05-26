@@ -433,7 +433,7 @@ public:
   //
   // `url` and `headers` are invalidated when the returned promise resolves.
 
-  virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::String host);
+  virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host);
   // Handles CONNECT requests. Only relevant for proxy clients. Default implementation throws
   // UNIMPLEMENTED.
 };
@@ -494,7 +494,7 @@ public:
   //
   // `url` and `headers` are invalidated when the returned promise resolves.
 
-  virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::String host);
+  virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host);
   // Handles CONNECT requests. Only relevant for proxy services. Default implementation throws
   // UNIMPLEMENTED.
 };

@@ -1066,14 +1066,23 @@ class HttpNullEntityReader final: public HttpEntityBodyReader {
   // Stream which reads until EOF.
 
 public:
-  HttpNullEntityReader(HttpInputStream& inner)
-      : HttpEntityBodyReader(inner) {
+  HttpNullEntityReader(HttpInputStream& inner, kj::Maybe<uint64_t> length)
+      : HttpEntityBodyReader(inner), length(length) {
+    // `length` is what to return from tryGetLength(). For a response to a HEAD request, this may
+    // be non-zero.
     doneReading();
   }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return size_t(0);
   }
+
+  Maybe<uint64_t> tryGetLength() override {
+    return length;
+  }
+
+private:
+  kj::Maybe<uint64_t> length;
 };
 
 class HttpConnectionCloseEntityReader final: public HttpEntityBodyReader {
@@ -1217,10 +1226,18 @@ static_assert(!fastCaseCmp<'f','O','o','B','1','a'>("FooB1"), "");
 kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
     RequestOrResponse type, HttpMethod method, uint statusCode,
     HttpHeaders::ConnectionHeaders& connectionHeaders) {
-  if (type == RESPONSE && (method == HttpMethod::HEAD ||
-      statusCode == 204 || statusCode == 205 || statusCode == 304)) {
-    // No body.
-    return kj::heap<HttpNullEntityReader>(*this);
+  if (type == RESPONSE) {
+    if (method == HttpMethod::HEAD) {
+      // Body elided.
+      kj::Maybe<uint64_t> length;
+      if (connectionHeaders.contentLength != nullptr) {
+        length = strtoull(connectionHeaders.contentLength.cStr(), nullptr, 10);
+      }
+      return kj::heap<HttpNullEntityReader>(*this, length);
+    } else if (statusCode == 204 || statusCode == 205 || statusCode == 304) {
+      // No body.
+      return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
+    }
   }
 
   if (connectionHeaders.transferEncoding != nullptr) {
@@ -1240,7 +1257,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
 
   if (type == REQUEST) {
     // Lack of a Content-Length or Transfer-Encoding means no body for requests.
-    return kj::heap<HttpNullEntityReader>(*this);
+    return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
   }
 
   if (connectionHeaders.connection != nullptr) {
@@ -1252,7 +1269,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
   }
 
   KJ_FAIL_REQUIRE("don't know how HTTP body is delimited", headers);
-  return kj::heap<HttpNullEntityReader>(*this);
+  return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
 }
 
 // =======================================================================================
@@ -1414,7 +1431,9 @@ public:
     amount = kj::min(amount, length);
     length -= amount;
 
-    auto promise = inner.pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
+    auto promise = amount == 0
+        ? kj::Promise<uint64_t>(amount)
+        : inner.pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
       // Adjust for bytes not written.
       length += amount - actual;
       if (length == 0) inner.finishBody();
@@ -1602,13 +1621,58 @@ kj::Promise<HttpClient::WebSocketResponse> HttpClient::openWebSocket(
   });
 }
 
-kj::Promise<kj::Own<kj::AsyncIoStream>> HttpClient::connect(kj::String host) {
+kj::Promise<kj::Own<kj::AsyncIoStream>> HttpClient::connect(kj::StringPtr host) {
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpClient");
 }
 
 kj::Own<HttpClient> newHttpClient(
     HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream) {
   return kj::heap<HttpClientImpl>(responseHeaderTable, stream);
+}
+
+// =======================================================================================
+
+namespace {
+
+class HttpServiceAdapter: public HttpService {
+public:
+  HttpServiceAdapter(HttpClient& client): client(client) {}
+
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    auto innerReq = client.request(method, url, headers, requestBody.tryGetLength());
+
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+    promises.add(requestBody.pumpTo(*innerReq.body).ignoreResult()
+        .attach(kj::mv(innerReq.body)).eagerlyEvaluate(nullptr));
+
+    promises.add(innerReq.response
+        .then([&response](HttpClient::Response&& innerResponse) {
+      auto out = response.send(
+          innerResponse.statusCode, innerResponse.statusText, *innerResponse.headers,
+          innerResponse.body->tryGetLength());
+      auto promise = innerResponse.body->pumpTo(*out);
+      return promise.ignoreResult().attach(kj::mv(out), kj::mv(innerResponse.body));
+    }));
+
+    return kj::joinPromises(promises.finish());
+  }
+
+  kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host) override {
+    return client.connect(kj::mv(host));
+  }
+
+  // TODO(soon): other methods
+
+private:
+  HttpClient& client;
+};
+
+}  // namespace
+
+kj::Own<HttpService> newHttpService(HttpClient& client) {
+  return kj::heap<HttpServiceAdapter>(client);
 }
 
 // =======================================================================================
@@ -1627,7 +1691,7 @@ kj::Promise<void> HttpService::openWebSocket(
   return promise.attach(kj::mv(requestBody));
 }
 
-kj::Promise<kj::Own<kj::AsyncIoStream>> HttpService::connect(kj::String host) {
+kj::Promise<kj::Own<kj::AsyncIoStream>> HttpService::connect(kj::StringPtr host) {
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpService");
 }
 
@@ -1759,8 +1823,13 @@ public:
 
       if (currentMethod == nullptr) {
         // Dang, already sent a partial response. Can't do anything else.
-        KJ_LOG(ERROR, "HttpService threw exception after generating a partial response",
-                      "too late to report error to client", e);
+        //
+        // If it's a DISCONNECTED exception, it's probably that the client disconnected, which is
+        // not really worth logging.
+        if (e.getType() != kj::Exception::Type::DISCONNECTED) {
+          KJ_LOG(ERROR, "HttpService threw exception after generating a partial response",
+                        "too late to report error to client", e);
+        }
         return kj::READY_NOW;
       }
 
