@@ -34,6 +34,12 @@
 #include <kj/debug.h>
 #include <kj/vector.h>
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#define BIO_set_init(x,v)          (x->init=v)
+#define BIO_get_data(x)            (x->ptr)
+#define BIO_set_data(x,v)          (x->ptr=v)
+#endif
+
 namespace kj {
 namespace {
 
@@ -333,11 +339,28 @@ private:
     return 1;
   }
 
-  static BIO_METHOD* getBioVtable() {
-    static BIO_METHOD* vtable = makeBioVtable();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  static const BIO_METHOD* getBioVtable() {
+    static const BIO_METHOD VTABLE {
+      BIO_TYPE_SOURCE_SINK,
+      "KJ stream",
+      TlsConnection::bioWrite,
+      TlsConnection::bioRead,
+      nullptr,  // puts
+      nullptr,  // gets
+      TlsConnection::bioCtrl,
+      TlsConnection::bioCreate,
+      TlsConnection::bioDestroy,
+      nullptr
+    };
+    return &VTABLE;
+  }
+#else
+  static const BIO_METHOD* getBioVtable() {
+    static const BIO_METHOD* const vtable = makeBioVtable();
     return vtable;
   }
-  static BIO_METHOD* makeBioVtable() {
+  static const BIO_METHOD* makeBioVtable() {
     BIO_METHOD* vtable = BIO_meth_new(BIO_TYPE_SOURCE_SINK, "KJ stream");
     BIO_meth_set_write(vtable, TlsConnection::bioWrite);
     BIO_meth_set_read(vtable, TlsConnection::bioRead);
@@ -346,6 +369,7 @@ private:
     BIO_meth_set_destroy(vtable, TlsConnection::bioDestroy);
     return vtable;
   }
+#endif
 };
 
 // =======================================================================================
