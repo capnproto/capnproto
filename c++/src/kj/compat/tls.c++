@@ -132,8 +132,7 @@ public:
       throwOpensslError();
     }
 
-    return sslCall([this]() { return SSL_connect(ssl); })
-        .then([this,expectedServerHostname](size_t) {
+    return sslCall([this]() { return SSL_connect(ssl); }).then([this](size_t) {
       X509* cert = SSL_get_peer_certificate(ssl);
       KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate");
       X509_free(cert);
@@ -386,9 +385,15 @@ public:
       : tls(tls), hostname(kj::mv(hostname)), inner(kj::mv(inner)) {}
 
   Promise<Own<AsyncIoStream>> connect() override {
-    return inner->connect().then([this](Own<AsyncIoStream>&& stream) {
-      return tls.wrapClient(kj::mv(stream), hostname);
-    });
+    // Note: It's unfortunately pretty common for people to assume they can drop the NetworkAddress
+    //   as soon as connect() returns, and this works with the native network implementation.
+    //   So, we make some copies here.
+    auto& tlsRef = tls;
+    auto hostnameCopy = kj::str(hostname);
+    return inner->connect().then(kj::mvCapture(hostnameCopy,
+        [&tlsRef](kj::String&& hostname, Own<AsyncIoStream>&& stream) {
+      return tlsRef.wrapClient(kj::mv(stream), hostname);
+    }));
   }
 
   Own<ConnectionReceiver> listen() override {
