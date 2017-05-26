@@ -377,12 +377,14 @@ test_capnpc_outputs =                                          \
 if USE_EXTERNAL_CAPNP
 
 test_capnpc_middleman: $(test_capnpc_inputs)
+	@mkdir -p src
 	$(CAPNP) compile --src-prefix=$(srcdir)/src -o$(CAPNPC_CXX):src -I$(srcdir)/src $^
 	touch test_capnpc_middleman
 
 else
 
 test_capnpc_middleman: capnp$(EXEEXT) capnpc-c++$(EXEEXT) $(test_capnpc_inputs)
+	@mkdir -p src
 	echo $^ | (read CAPNP CAPNPC_CXX SOURCES && ./$$CAPNP compile --src-prefix=$(srcdir)/src -o./$$CAPNPC_CXX:src -I$(srcdir)/src $$SOURCES)
 	touch test_capnpc_middleman
 
