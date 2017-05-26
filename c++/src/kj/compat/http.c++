@@ -1634,7 +1634,7 @@ kj::Own<HttpClient> newHttpClient(
 
 namespace {
 
-class HttpServiceAdapter: public HttpService {
+class HttpServiceAdapter final: public HttpService {
 public:
   HttpServiceAdapter(HttpClient& client): client(client) {}
 
