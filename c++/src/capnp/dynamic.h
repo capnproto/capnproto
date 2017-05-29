@@ -205,6 +205,12 @@ public:
   // newer version of the protocol and is using a field of the union that you don't know about yet.
 
   DynamicValue::Reader get(kj::StringPtr name) const;
+
+  template <typename T>
+  typename T::Reader getAs(StructSchema::Field field) const;
+  template <typename T>
+  typename T::Reader getAs(kj::StringPtr name) const;
+
   bool has(kj::StringPtr name) const;
   // Shortcuts to access fields by name.  These throw exceptions if no such field exists.
 
@@ -286,6 +292,11 @@ public:
   void clear(StructSchema::Field field);
   // Clear a field, setting it to its default value.  For pointer fields, this actually makes the
   // field null.
+
+  template <typename T>
+  typename T::Builder getAs(StructSchema::Field field);
+  template <typename T>
+  typename T::Builder getAs(kj::StringPtr name);
 
   DynamicValue::Builder get(kj::StringPtr name);
   bool has(kj::StringPtr name);
@@ -1486,11 +1497,112 @@ typename T::Reader DynamicStruct::Reader::as() const {
 }
 
 template <typename T>
+typename T::Reader DynamicStruct::Reader::getAs(StructSchema::Field field) const {
+  KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
+  verifySetInUnion(field);
+
+  auto type = field.getType();
+  auto proto = field.getProto();
+  switch (proto.which()) {
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+
+      switch (type.which()) {
+        case schema::Type::VOID:
+        case schema::Type::BOOL:
+        case schema::Type::INT8:
+        case schema::Type::INT16:
+        case schema::Type::INT32:
+        case schema::Type::INT64:
+        case schema::Type::UINT8:
+        case schema::Type::UINT16:
+        case schema::Type::UINT32:
+        case schema::Type::UINT64:
+        case schema::Type::FLOAT32:
+        case schema::Type::FLOAT64:
+        case schema::Type::ENUM:
+          return reader.getPointerField(slot.getOffset() * ELEMENTS);
+
+        case schema::Type::TEXT:
+        case schema::Type::DATA:
+        case schema::Type::LIST:
+        case schema::Type::STRUCT:
+        case schema::Type::ANY_POINTER:
+        case schema::Type::INTERFACE:
+          return reader.getPointerField(slot.getOffset() * POINTERS);
+      }
+
+      KJ_UNREACHABLE;
+    }
+
+    case schema::Field::GROUP:
+      return reader.getPointerField(0);
+  }
+
+  KJ_UNREACHABLE;
+}
+
+template <typename T>
+typename T::Reader DynamicStruct::Reader::getAs(kj::StringPtr name) const {
+    return getAs<T>(schema.getFieldByName(name));
+}
+
+template <typename T>
 typename T::Builder DynamicStruct::Builder::as() {
   static_assert(kind<T>() == Kind::STRUCT,
                 "DynamicStruct::Builder::as<T>() can only convert to struct types.");
   schema.requireUsableAs<T>();
   return typename T::Builder(builder);
+}
+
+template <typename T>
+typename T::Builder DynamicStruct::Builder::getAs(StructSchema::Field field) {
+  KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
+
+  auto type = field.getType();
+  auto proto = field.getProto();
+  switch (proto.which()) {
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+
+      switch (type.which()) {
+        case schema::Type::VOID:
+        case schema::Type::BOOL:
+        case schema::Type::INT8:
+        case schema::Type::INT16:
+        case schema::Type::INT32:
+        case schema::Type::INT64:
+        case schema::Type::UINT8:
+        case schema::Type::UINT16:
+        case schema::Type::UINT32:
+        case schema::Type::UINT64:
+        case schema::Type::FLOAT32:
+        case schema::Type::FLOAT64:
+        case schema::Type::ENUM:
+          return builder.getPointerField(slot.getOffset() * ELEMENTS);
+
+        case schema::Type::TEXT:
+        case schema::Type::DATA:
+        case schema::Type::LIST:
+        case schema::Type::STRUCT:
+        case schema::Type::ANY_POINTER:
+        case schema::Type::INTERFACE:
+          return builder.getPointerField(slot.getOffset() * POINTERS);
+      }
+
+      KJ_UNREACHABLE;
+    }
+
+    case schema::Field::GROUP:
+      return builder.getPointerField(0);
+  }
+
+  KJ_UNREACHABLE;
+}
+
+template <typename T>
+typename T::Builder DynamicStruct::Builder::getAs(kj::StringPtr name) {
+  return getAs<T>(schema.getFieldByName(name));
 }
 
 template <>
