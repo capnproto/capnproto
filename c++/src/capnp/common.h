@@ -161,15 +161,19 @@ inline constexpr Kind kind() {
   return k;
 }
 
-#if CAPNP_LITE
+#if _MSC_VER
 
 #define CAPNP_KIND(T) ::capnp::_::Kind_<T>::kind
-// Avoid constexpr methods in lite mode (MSVC is bad at constexpr).
+// Avoid constexpr methods in MSVC (it remains buggy in many situations).
 
-#else  // CAPNP_LITE
+#else  // _MSC_VER
 
 #define CAPNP_KIND(T) ::capnp::kind<T>()
-// Use this macro rather than kind<T>() in any code which must work in lite mode.
+// Use this macro rather than kind<T>() in any code which must work in MSVC.
+
+#endif  // _MSC_VER, else
+
+#if !CAPNP_LITE
 
 template <typename T, Kind k = kind<T>()>
 inline constexpr Style style() {
@@ -178,7 +182,7 @@ inline constexpr Style style() {
        : k == Kind::INTERFACE ? Style::CAPABILITY : Style::POINTER;
 }
 
-#endif  // CAPNP_LITE, else
+#endif  // !CAPNP_LITE
 
 template <typename T, Kind k = CAPNP_KIND(T)>
 struct List;
