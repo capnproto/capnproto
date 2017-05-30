@@ -234,6 +234,11 @@ EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
 namespace {
 
 const char HEX_DIGITS[] = "0123456789abcdef";
+// Maps integer in the range [0,16) to a hex digit.
+
+const char HEX_DIGITS_URI[] = "0123456789ABCDEF";
+// RFC 3986 section 2.1 says "For consistency, URI producers and normalizers should use uppercase
+// hexadecimal digits for all percent-encodings.
 
 static Maybe<uint> tryFromHexDigit(char c) {
   if ('0' <= c && c <= '9') {
@@ -294,8 +299,8 @@ String encodeUriComponent(ArrayPtr<const byte> bytes) {
       result.add(b);
     } else {
       result.add('%');
-      result.add(HEX_DIGITS[b/16]);
-      result.add(HEX_DIGITS[b%16]);
+      result.add(HEX_DIGITS_URI[b/16]);
+      result.add(HEX_DIGITS_URI[b%16]);
     }
   }
   result.add('\0');

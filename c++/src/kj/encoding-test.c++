@@ -227,7 +227,7 @@ KJ_TEST("hex encoding/decoding") {
 KJ_TEST("URI encoding/decoding") {
   KJ_EXPECT(encodeUriComponent("foo") == "foo");
   KJ_EXPECT(encodeUriComponent("foo bar") == "foo%20bar");
-  KJ_EXPECT(encodeUriComponent("\xab\xba") == "%ab%ba");
+  KJ_EXPECT(encodeUriComponent("\xab\xba") == "%AB%BA");
   KJ_EXPECT(encodeUriComponent(StringPtr("foo\0bar", 7)) == "foo%00bar");
 
   expectRes(decodeUriComponent("foo%20bar"), "foo bar");
