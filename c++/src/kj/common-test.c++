@@ -471,6 +471,27 @@ TEST(Common, ArrayAsBytes) {
   }
 }
 
+KJ_TEST("ArrayPtr operator ==") {
+  KJ_EXPECT(ArrayPtr<const int>({123, 456}) == ArrayPtr<const int>({123, 456}));
+  KJ_EXPECT(!(ArrayPtr<const int>({123, 456}) != ArrayPtr<const int>({123, 456})));
+  KJ_EXPECT(ArrayPtr<const int>({123, 456}) != ArrayPtr<const int>({123, 321}));
+  KJ_EXPECT(ArrayPtr<const int>({123, 456}) != ArrayPtr<const int>({123}));
+
+  KJ_EXPECT(ArrayPtr<const int>({123, 456}) == ArrayPtr<const short>({123, 456}));
+  KJ_EXPECT(!(ArrayPtr<const int>({123, 456}) != ArrayPtr<const short>({123, 456})));
+  KJ_EXPECT(ArrayPtr<const int>({123, 456}) != ArrayPtr<const short>({123, 321}));
+  KJ_EXPECT(ArrayPtr<const int>({123, 456}) != ArrayPtr<const short>({123}));
+
+  KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) ==
+             ArrayPtr<const char* const>({"foo", "bar"})));
+  KJ_EXPECT(!(ArrayPtr<const StringPtr>({"foo", "bar"}) !=
+             ArrayPtr<const char* const>({"foo", "bar"})));
+  KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) !=
+             ArrayPtr<const char* const>({"foo", "baz"})));
+  KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) !=
+             ArrayPtr<const char* const>({"foo"})));
+}
+
 KJ_TEST("kj::range()") {
   uint expected = 5;
   for (uint i: range(5, 10)) {
