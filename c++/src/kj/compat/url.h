@@ -28,6 +28,10 @@
 namespace kj {
 
 struct Url {
+  // Represents a URL (or, more accurately, a URI, but whatever).
+  //
+  // Can be parsed from a string and composed back into a string.
+
   String scheme;
   // E.g. "http", "https".
 
@@ -65,12 +69,21 @@ struct Url {
   Url() = default;
   Url(Url&&) = default;
   ~Url() noexcept(false);
+  Url& operator=(Url&&) = default;
+
+  inline Url(String&& scheme, Maybe<UserInfo>&& userInfo, String&& host, Array<String>&& path,
+             bool hasTrailingSlash, Array<QueryParam>&& query, Maybe<String>&& fragment)
+      : scheme(kj::mv(scheme)), userInfo(kj::mv(userInfo)), host(kj::mv(host)), path(kj::mv(path)),
+        hasTrailingSlash(hasTrailingSlash), query(kj::mv(query)), fragment(kj::mv(fragment)) {}
+  // TODO(cleanup): This constructor is only here to support brace initialization in C++11. It
+  //   should be removed once we upgrade to C++14.
 
   Url clone() const;
 
   enum Context {
-    GENERAL,
-    // The full URL.
+    REMOTE_HREF,
+    // A link to a remote resource. Requires an authority (hostname) section, hence this will
+    // reject things like "mailto:" and "data:". This is the default context.
 
     HTTP_PROXY_REQUEST,
     // The URL to place in the first line of an HTTP proxy request. This includes scheme, host,
@@ -80,13 +93,16 @@ struct Url {
     HTTP_REQUEST
     // The path to place in the first line of a regular HTTP request. This includes only the path
     // and query. Scheme, user, host, and fragment are omitted.
+
+    // TODO(someday): Add context(s) that supports things like "mailto:", "data:", "blob:". These
+    //   don't have an authority section.
   };
 
-  kj::String toString(Context context = GENERAL) const;
+  kj::String toString(Context context = REMOTE_HREF) const;
   // Convert the URL to a string.
 
-  static Url parse(StringPtr text, Context context = GENERAL);
-  static Maybe<Url> tryParse(StringPtr text, Context context = GENERAL);
+  static Url parse(StringPtr text, Context context = REMOTE_HREF);
+  static Maybe<Url> tryParse(StringPtr text, Context context = REMOTE_HREF);
   // Parse an absolute URL.
 
   Url parseRelative(StringPtr relative) const;

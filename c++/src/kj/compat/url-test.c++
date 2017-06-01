@@ -272,14 +272,15 @@ KJ_TEST("URL relative paths") {
 KJ_TEST("URL for HTTP request") {
   {
     Url url = Url::parse("https://bob:1234@capnproto.org/foo/bar?baz=qux#corge");
-    KJ_EXPECT(url.toString(Url::GENERAL) == "https://bob:1234@capnproto.org/foo/bar?baz=qux#corge");
+    KJ_EXPECT(url.toString(Url::REMOTE_HREF) ==
+        "https://bob:1234@capnproto.org/foo/bar?baz=qux#corge");
     KJ_EXPECT(url.toString(Url::HTTP_PROXY_REQUEST) == "https://capnproto.org/foo/bar?baz=qux");
     KJ_EXPECT(url.toString(Url::HTTP_REQUEST) == "/foo/bar?baz=qux");
   }
 
   {
     Url url = Url::parse("https://capnproto.org");
-    KJ_EXPECT(url.toString(Url::GENERAL) == "https://capnproto.org");
+    KJ_EXPECT(url.toString(Url::REMOTE_HREF) == "https://capnproto.org");
     KJ_EXPECT(url.toString(Url::HTTP_PROXY_REQUEST) == "https://capnproto.org");
     KJ_EXPECT(url.toString(Url::HTTP_REQUEST) == "/");
   }
