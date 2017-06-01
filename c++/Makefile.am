@@ -159,6 +159,7 @@ includekjstd_HEADERS =                                         \
 
 includekjcompat_HEADERS =                                      \
   src/kj/compat/gtest.h                                        \
+  src/kj/compat/url.h                                          \
   src/kj/compat/http.h
 
 includecapnp_HEADERS =                                         \
@@ -249,6 +250,7 @@ libkj_async_la_SOURCES=                                        \
 libkj_http_la_LIBADD = libkj-async.la libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_http_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_http_la_SOURCES=                                         \
+  src/kj/compat/url.c++                                        \
   src/kj/compat/http.c++
 endif !LITE_MODE
 
@@ -417,6 +419,7 @@ heavy_tests =                                                  \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/kj/std/iostream-test.c++                                 \
+  src/kj/compat/url-test.c++                                   \
   src/kj/compat/http-test.c++                                  \
   src/capnp/canonicalize-test.c++                              \
   src/capnp/capability-test.c++                                \

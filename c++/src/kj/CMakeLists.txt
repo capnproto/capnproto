@@ -130,9 +130,11 @@ endif()
 # kj-http ======================================================================
 
 set(kj-http_sources
+  compat/url.c++
   compat/http.c++
 )
 set(kj-http_headers
+  compat/url.h
   compat/http.h
 )
 if(NOT CAPNP_LITE)
@@ -181,6 +183,7 @@ if(BUILD_TESTING)
       threadlocal-pthread-test.c++
       parse/common-test.c++
       parse/char-test.c++
+      compat/url-test.c++
       compat/http-test.c++
     )
     target_link_libraries(kj-heavy-tests kj-http kj-async kj-test kj)
