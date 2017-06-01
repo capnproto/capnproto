@@ -148,7 +148,7 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context) {
       auto authority = split(text, END_AUTHORITY);
 
       KJ_IF_MAYBE(userpass, trySplit(authority, '@')) {
-        if (context != GENERAL) {
+        if (context != REMOTE_HREF) {
           // No user/pass allowed here.
           return nullptr;
         }
@@ -210,7 +210,7 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context) {
   }
 
   if (text.startsWith("#")) {
-    if (context != GENERAL) {
+    if (context != REMOTE_HREF) {
       // No fragment allowed here.
       return nullptr;
     }
@@ -376,7 +376,7 @@ String Url::toString(Context context) const {
     chars.addAll(scheme);
     chars.addAll(StringPtr("://"));
 
-    if (context == GENERAL) {
+    if (context == REMOTE_HREF) {
       KJ_IF_MAYBE(user, userInfo) {
         chars.addAll(encodeUriComponent(user->username));
         KJ_IF_MAYBE(pass, user->password) {
@@ -422,7 +422,7 @@ String Url::toString(Context context) const {
     }
   }
 
-  if (context == GENERAL) {
+  if (context == REMOTE_HREF) {
     KJ_IF_MAYBE(f, fragment) {
       chars.add('#');
       chars.addAll(encodeUriComponent(*f));
