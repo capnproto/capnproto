@@ -1331,6 +1331,17 @@ public:
   }
   inline bool operator!=(const ArrayPtr& other) const { return !(*this == other); }
 
+  template <typename U>
+  inline bool operator==(const ArrayPtr<U>& other) const {
+    if (size_ != other.size()) return false;
+    for (size_t i = 0; i < size_; i++) {
+      if (ptr[i] != other[i]) return false;
+    }
+    return true;
+  }
+  template <typename U>
+  inline bool operator!=(const ArrayPtr<U>& other) const { return !(*this == other); }
+
 private:
   T* ptr;
   size_t size_;

@@ -111,6 +111,13 @@ public:
     return (bits[c / 64] & (1ll << (c % 64))) != 0;
   }
 
+  inline bool containsAll(ArrayPtr<const char> text) const {
+    for (char c: text) {
+      if (!contains(c)) return false;
+    }
+    return true;
+  }
+
   template <typename Input>
   Maybe<char> operator()(Input& input) const {
     if (input.atEnd()) return nullptr;
