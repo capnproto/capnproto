@@ -69,6 +69,7 @@ struct Url {
   Url() = default;
   Url(Url&&) = default;
   ~Url() noexcept(false);
+  Url& operator=(Url&&) = default;
 
   inline Url(String&& scheme, Maybe<UserInfo>&& userInfo, String&& host, Array<String>&& path,
              bool hasTrailingSlash, Array<QueryParam>&& query, Maybe<String>&& fragment)
