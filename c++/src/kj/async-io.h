@@ -86,8 +86,9 @@ class AsyncOutputStream {
   // Asynchronous equivalent of OutputStream (from io.h).
 
 public:
-  virtual Promise<void> write(const void* buffer, size_t size) = 0;
-  virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) = 0;
+  virtual Promise<void> write(const void* buffer, size_t size) KJ_WARN_UNUSED_RESULT = 0;
+  virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces)
+      KJ_WARN_UNUSED_RESULT = 0;
 
   virtual Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount = kj::maxValue);

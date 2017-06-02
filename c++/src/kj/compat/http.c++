@@ -1280,7 +1280,7 @@ public:
     KJ_REQUIRE(inBody) { return kj::READY_NOW; }
 
     auto fork = writeQueue.then([this,buffer,size]() {
-      inner.write(buffer, size);
+      return inner.write(buffer, size);
     }).fork();
 
     writeQueue = fork.addBranch();
@@ -1291,7 +1291,7 @@ public:
     KJ_REQUIRE(inBody) { return kj::READY_NOW; }
 
     auto fork = writeQueue.then([this,pieces]() {
-      inner.write(pieces);
+      return inner.write(pieces);
     }).fork();
 
     writeQueue = fork.addBranch();
