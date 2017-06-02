@@ -822,6 +822,15 @@ inline Array<T> heapArray(std::initializer_list<T> init) {
   return heapArray<T>(init.begin(), init.end());
 }
 
+#if __cplusplus > 201402L
+template <typename T, typename... Params>
+inline Array<Decay<T>> arr(T&& param1, Params&&... params) {
+  ArrayBuilder<Decay<T>> builder = heapArrayBuilder<Decay<T>>(sizeof...(params) + 1);
+  (builder.add(kj::fwd<T>(param1)), ... , builder.add(kj::fwd<Params>(params)));
+  return builder.finish();
+}
+#endif
+
 }  // namespace kj
 
 #endif  // KJ_ARRAY_H_
