@@ -43,6 +43,7 @@ class Vector {
 public:
   inline Vector() = default;
   inline explicit Vector(size_t capacity): builder(heapArrayBuilder<T>(capacity)) {}
+  inline Vector(Array<T>&& array): builder(kj::mv(array)) {}
 
   inline operator ArrayPtr<T>() { return builder; }
   inline operator ArrayPtr<const T>() const { return builder; }
@@ -69,6 +70,18 @@ public:
       setCapacity(size());
     }
     return builder.finish();
+  }
+
+  template <typename U>
+  inline bool operator==(const U& other) const { return asPtr() == other; }
+  template <typename U>
+  inline bool operator!=(const U& other) const { return asPtr() != other; }
+
+  inline ArrayPtr<T> slice(size_t start, size_t end) {
+    return asPtr().slice(start, end);
+  }
+  inline ArrayPtr<const T> slice(size_t start, size_t end) const {
+    return asPtr().slice(start, end);
   }
 
   template <typename... Params>
