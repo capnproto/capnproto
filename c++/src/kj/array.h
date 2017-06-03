@@ -177,6 +177,11 @@ public:
   inline T& front() { return *ptr; }
   inline T& back() { return *(ptr + size_ - 1); }
 
+  template <typename U>
+  inline bool operator==(const U& other) const { return asPtr() == other; }
+  template <typename U>
+  inline bool operator!=(const U& other) const { return asPtr() != other; }
+
   inline ArrayPtr<T> slice(size_t start, size_t end) {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<T>(ptr + start, end - start);
@@ -249,6 +254,8 @@ private:
 
   template <typename U>
   friend class Array;
+  template <typename U>
+  friend class ArrayBuilder;
 };
 
 static_assert(!canMemcpy<Array<char>>(), "canMemcpy<>() is broken");
@@ -320,6 +327,13 @@ public:
     other.ptr = nullptr;
     other.pos = nullptr;
     other.endPtr = nullptr;
+  }
+  ArrayBuilder(Array<T>&& other)
+      : ptr(other.ptr), pos(other.ptr + other.size_), endPtr(pos), disposer(other.disposer) {
+    // Create an already-full ArrayBuilder from an Array of the same type. This constructor
+    // primarily exists to enable Vector<T> to be constructed from Array<T>.
+    other.ptr = nullptr;
+    other.size_ = 0;
   }
   KJ_DISALLOW_COPY(ArrayBuilder);
   inline ~ArrayBuilder() noexcept(false) { dispose(); }
@@ -807,6 +821,15 @@ template <typename T>
 inline Array<T> heapArray(std::initializer_list<T> init) {
   return heapArray<T>(init.begin(), init.end());
 }
+
+#if __cplusplus > 201402L
+template <typename T, typename... Params>
+inline Array<Decay<T>> arr(T&& param1, Params&&... params) {
+  ArrayBuilder<Decay<T>> builder = heapArrayBuilder<Decay<T>>(sizeof...(params) + 1);
+  (builder.add(kj::fwd<T>(param1)), ... , builder.add(kj::fwd<Params>(params)));
+  return builder.finish();
+}
+#endif
 
 }  // namespace kj
 

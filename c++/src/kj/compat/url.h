@@ -23,6 +23,7 @@
 #define KJ_COMPAT_URL_H_
 
 #include <kj/string.h>
+#include <kj/vector.h>
 #include <inttypes.h>
 
 namespace kj {
@@ -48,16 +49,20 @@ struct Url {
   // network address parsing functions already accept addresses containing port numbers, and
   // because most web standards don't actually want to separate host and port.
 
-  Array<String> path;
+  Vector<String> path;
   bool hasTrailingSlash = false;
   // Path, split on '/' characters. Note that the individual components of `path` could contain
   // '/' characters if they were percent-encoded in the original URL.
+  //
+  // No component of the path is allowed to be "", ".", nor ".."; if such components are present,
+  // toString() will throw. Note that parse() and parseRelative() automatically resolve such
+  // components.
 
   struct QueryParam {
     String name;
     String value;
   };
-  Array<QueryParam> query;
+  Vector<QueryParam> query;
   // Query, e.g. from "?key=value&key2=value2". If a component of the query contains no '=' sign,
   // it will be parsed as a key with an empty value.
 
@@ -71,12 +76,14 @@ struct Url {
   ~Url() noexcept(false);
   Url& operator=(Url&&) = default;
 
-  inline Url(String&& scheme, Maybe<UserInfo>&& userInfo, String&& host, Array<String>&& path,
-             bool hasTrailingSlash, Array<QueryParam>&& query, Maybe<String>&& fragment)
+#if __cplusplus < 201402L
+  inline Url(String&& scheme, Maybe<UserInfo>&& userInfo, String&& host, Vector<String>&& path,
+             bool hasTrailingSlash, Vector<QueryParam>&& query, Maybe<String>&& fragment)
       : scheme(kj::mv(scheme)), userInfo(kj::mv(userInfo)), host(kj::mv(host)), path(kj::mv(path)),
         hasTrailingSlash(hasTrailingSlash), query(kj::mv(query)), fragment(kj::mv(fragment)) {}
   // TODO(cleanup): This constructor is only here to support brace initialization in C++11. It
   //   should be removed once we upgrade to C++14.
+#endif
 
   Url clone() const;
 

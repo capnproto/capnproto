@@ -171,42 +171,36 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context) {
     }
   }
 
-  {
-    Vector<String> path;
-    while (text.startsWith("/")) {
-      text = text.slice(1);
-      auto part = split(text, END_PATH_PART);
-      if (part.size() == 2 && part[0] == '.' && part[1] == '.') {
-        if (path.size() != 0) {
-          path.removeLast();
-        }
-        result.hasTrailingSlash = true;
-      } else if (part.size() == 0 || (part.size() == 1 && part[0] == '.')) {
-        // Collapse consecutive slashes and "/./".
-        result.hasTrailingSlash = true;
-      } else {
-        path.add(percentDecode(part, err));
-        result.hasTrailingSlash = false;
+  while (text.startsWith("/")) {
+    text = text.slice(1);
+    auto part = split(text, END_PATH_PART);
+    if (part.size() == 2 && part[0] == '.' && part[1] == '.') {
+      if (result.path.size() != 0) {
+        result.path.removeLast();
       }
+      result.hasTrailingSlash = true;
+    } else if (part.size() == 0 || (part.size() == 1 && part[0] == '.')) {
+      // Collapse consecutive slashes and "/./".
+      result.hasTrailingSlash = true;
+    } else {
+      result.path.add(percentDecode(part, err));
+      result.hasTrailingSlash = false;
     }
-    result.path = path.releaseAsArray();
   }
 
   if (text.startsWith("?")) {
-    Vector<QueryParam> params;
     do {
       text = text.slice(1);
       auto part = split(text, END_QUERY_PART);
 
       if (part.size() > 0) {
         KJ_IF_MAYBE(key, trySplit(part, '=')) {
-          params.add(QueryParam { percentDecode(*key, err), percentDecode(part, err) });
+          result.query.add(QueryParam { percentDecode(*key, err), percentDecode(part, err) });
         } else {
-          params.add(QueryParam { percentDecode(part, err), nullptr });
+          result.query.add(QueryParam { percentDecode(part, err), nullptr });
         }
       }
     } while (text.startsWith("&"));
-    result.query = params.releaseAsArray();
   }
 
   if (text.startsWith("#")) {
@@ -293,7 +287,6 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
   bool hadNewPath = text.size() > 0 && text[0] != '?' && text[0] != '#';
   if (hadNewPath) {
     // There's a new path.
-    Vector<String> path(this->path.size());
 
     if (text[0] == '/') {
       // New path is absolute, so don't copy the old path.
@@ -303,9 +296,7 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
       // New path is relative, so start from the old path, dropping everything after the last
       // slash.
       auto slice = this->path.slice(0, this->path.size() - (this->hasTrailingSlash ? 0 : 1));
-      for (auto& part: slice) {
-        path.add(kj::str(part));
-      }
+      result.path = KJ_MAP(part, slice) { return kj::str(part); };
       result.hasTrailingSlash = true;
     }
 
@@ -313,22 +304,20 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
       auto part = split(text, END_PATH_PART);
       if (part.size() == 2 && part[0] == '.' && part[1] == '.') {
         if (path.size() != 0) {
-          path.removeLast();
+          result.path.removeLast();
         }
         result.hasTrailingSlash = true;
       } else if (part.size() == 0 || (part.size() == 1 && part[0] == '.')) {
         // Collapse consecutive slashes and "/./".
         result.hasTrailingSlash = true;
       } else {
-        path.add(percentDecode(part, err));
+        result.path.add(percentDecode(part, err));
         result.hasTrailingSlash = false;
       }
 
       if (!text.startsWith("/")) break;
       text = text.slice(1);
     }
-
-    result.path = path.releaseAsArray();
   } else if (!hadNewAuthority) {
     // copy path
     result.path = KJ_MAP(part, this->path) { return kj::str(part); };
@@ -336,20 +325,18 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
   }
 
   if (text.startsWith("?")) {
-    Vector<QueryParam> params;
     do {
       text = text.slice(1);
       auto part = split(text, END_QUERY_PART);
 
       if (part.size() > 0) {
         KJ_IF_MAYBE(key, trySplit(part, '=')) {
-          params.add(QueryParam { percentDecode(*key, err), percentDecode(part, err) });
+          result.query.add(QueryParam { percentDecode(*key, err), percentDecode(part, err) });
         } else {
-          params.add(QueryParam { percentDecode(part, err), nullptr });
+          result.query.add(QueryParam { percentDecode(part, err), nullptr });
         }
       }
     } while (text.startsWith("&"));
-    result.query = params.releaseAsArray();
   } else if (!hadNewAuthority && !hadNewPath) {
     // copy query
     result.query = KJ_MAP(param, this->query) {
@@ -404,6 +391,11 @@ String Url::toString(Context context) const {
   }
 
   for (auto& pathPart: path) {
+    // Protect against path injection.
+    KJ_REQUIRE(pathPart != "" && pathPart != "." && pathPart != "..",
+               "invalid name in URL path", *this) {
+      continue;
+    }
     chars.add('/');
     chars.addAll(encodeUriComponent(pathPart));
   }
