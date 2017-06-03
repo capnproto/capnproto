@@ -330,7 +330,7 @@ public:
   }
   ArrayBuilder(Array<T>&& other)
       : ptr(other.ptr), pos(other.ptr + other.size_), endPtr(pos), disposer(other.disposer) {
-    // Create an already-full ArrayBulider from an Arary of the same type. This constructor
+    // Create an already-full ArrayBuilder from an Array of the same type. This constructor
     // primarily exists to enable Vector<T> to be constructed from Array<T>.
     other.ptr = nullptr;
     other.size_ = 0;
