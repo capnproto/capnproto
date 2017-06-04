@@ -494,7 +494,7 @@ private:
             case schema::Type::AnyPointer::Unconstrained::LIST:
               return CppTypeName::makePrimitive(" ::capnp::AnyList");
             case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
-              hasInterfaces = true;  // Probably need to #inculde <capnp/capability.h>.
+              hasInterfaces = true;  // Probably need to #include <capnp/capability.h>.
               return CppTypeName::makePrimitive(" ::capnp::Capability");
           }
           KJ_UNREACHABLE;
@@ -682,12 +682,12 @@ private:
     kj::StringTree dependencies;
     size_t dependencyCount;
     // TODO(msvc):  `dependencyCount` is the number of individual dependency definitions in
-    // `dependencies`. It's a hack to allow makeGenericDefinitions to hard-code the size of the
-    // `_capnpPrivate::brandDependencies` array into the definition of
-    // `_capnpPrivate::specificBrand::dependencyCount`. This is necessary because MSVC cannot deduce
-    // the size of `brandDependencies` if it is nested under a class template. It's probably this
-    // demoralizingly deferred bug:
-    // https://connect.microsoft.com/VisualStudio/feedback/details/759407/can-not-get-size-of-static-array-defined-in-class-template
+    //   `dependencies`. It's a hack to allow makeGenericDefinitions to hard-code the size of the
+    //   `_capnpPrivate::brandDependencies` array into the definition of
+    //   `_capnpPrivate::specificBrand::dependencyCount`. This is necessary because MSVC cannot
+    //   deduce the size of `brandDependencies` if it is nested under a class template. It's
+    //   probably this demoralizingly deferred bug:
+    //   https://connect.microsoft.com/VisualStudio/feedback/details/759407/can-not-get-size-of-static-array-defined-in-class-template
   };
 
   BrandInitializerText makeBrandInitializers(

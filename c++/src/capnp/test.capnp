@@ -537,6 +537,9 @@ struct TestGenerics(Foo, Bar) {
     }
   }
 
+  list @4 :List(Inner);
+  # At one time this failed to compile with MSVC due to poor expression SFINAE support.
+
   struct Inner {
     foo @0 :Foo;
     bar @1 :Bar;
