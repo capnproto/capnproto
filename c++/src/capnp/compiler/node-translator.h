@@ -181,7 +181,9 @@ private:
   Orphan<schema::Node> wipNode;
   kj::Maybe<Orphan<schema::NodeDoc>> wipNodeDoc;
   // The work-in-progress schema node and its docstring
+
   kj::Vector<std::pair<uint, ::capnp::Text::Reader>> fieldDocs;
+  // TODO(now): Don't use std::pair.
 
   kj::Vector<Orphan<schema::Node>> groups;
   // If this is a struct node and it contains groups, these are the nodes for those groups,  which

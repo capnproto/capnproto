@@ -1383,8 +1383,7 @@ NodeTranslator::NodeTranslator(
   compileNode(decl, wipNode.get());
 }
 
-void NodeTranslator::addFieldDoc(uint codeOrder, ::capnp::Text::Reader docComment)
-{
+void NodeTranslator::addFieldDoc(uint codeOrder, ::capnp::Text::Reader docComment) {
   fieldDocs.add(std::make_pair(codeOrder, docComment));
 }
 
@@ -1478,8 +1477,9 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
   if (decl.hasDocComment() || !fieldDocs.empty()) {
     Orphan<schema::NodeDoc> doc = orphanage.newOrphan<schema::NodeDoc>();
     doc.get().setId(wipNode.getReader().getId());
-    if (decl.hasDocComment())
+    if (decl.hasDocComment()) {
       doc.get().setDocComment(decl.getDocComment());
+    }
     if (!fieldDocs.empty()) {
       auto fdocs = doc.get().initFieldDocs(fieldDocs.size());
 
@@ -1841,8 +1841,9 @@ private:
         hasDefaultValue = true;
         fieldDefaultValue = fieldDecl.getDefaultValue().getValue();
       }
-      if (decl.hasDocComment())
+      if (decl.hasDocComment()) {
         docComment = decl.getDocComment();
+      }
     }
     inline MemberInfo(MemberInfo& parent, uint codeOrder,
                       const Declaration::Param::Reader& decl,
@@ -1869,8 +1870,9 @@ private:
           startByte(decl.getStartByte()), endByte(decl.getEndByte()),
           node(node), unionScope(nullptr) {
       KJ_REQUIRE(decl.which() != Declaration::FIELD);
-      if (decl.hasDocComment())
+      if (decl.hasDocComment()) {
         docComment = decl.getDocComment();
+      }
     }
 
     schema::Field::Builder getSchema() {

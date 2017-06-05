@@ -1863,8 +1863,7 @@ kj::Array<schema::NodeDoc::Reader> SchemaLoader::Impl::getAllDocs() const {
   return result;
 }
 
-void SchemaLoader::Impl::loadDoc(schema::NodeDoc::Reader docReader)
-{
+void SchemaLoader::Impl::loadDoc(schema::NodeDoc::Reader docReader) {
   docs[docReader.getId()] = docReader;
 }
 
