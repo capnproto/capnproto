@@ -77,6 +77,11 @@ public:
   // normally.  In this case, the result is a best-effort attempt to compile the schema, but it
   // may be invalid or corrupt, and using it for anything may cause exceptions to be thrown.
 
+  kj::Maybe<schema::Node::SourceInfo::Reader> getSourceInfo(Schema schema) const;
+  // Look up source info (e.g. doc comments) for the given schema, which must have come from this
+  // SchemaParser. Note that this will also work for implicit group and param types that don't have
+  // a type name hence don't have a `ParsedSchema`.
+
   template <typename T>
   inline void loadCompiledTypeAndDependencies() {
     // See SchemaLoader::loadCompiledTypeAndDependencies().
@@ -109,6 +114,9 @@ public:
   ParsedSchema getNested(kj::StringPtr name) const;
   // Gets the nested node with the given name, or throws an exception if there is no such nested
   // declaration.
+
+  schema::Node::SourceInfo::Reader getSourceInfo() const;
+  // Get the source info for this schema.
 
 private:
   inline ParsedSchema(Schema inner, const SchemaParser& parser): Schema(inner), parser(&parser) {}

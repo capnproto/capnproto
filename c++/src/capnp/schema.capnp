@@ -169,19 +169,33 @@ struct Node {
       targetsAnnotation @30 :Bool;
     }
   }
-}
 
-struct NodeDoc {
-  # separate carrier for documentation comments on Nodes,
-  # to keep them out of the binary descriptors
+  struct SourceInfo {
+    # Additional information about a node which is not needed at runtime, but may be useful for
+    # documentation or debugging purposes. This is kept in a separate struct to make sure it
+    # doesn't accidentally get included in contexts where it is not needed. The
+    # `CodeGeneratorRequest` includes this information in a separate array.
 
-  id @0 :Id;
-  # ID should exist as Node in the same request
+    id @0 :Id;
+    # ID of the Node which this info describes.
 
-  docComment @1 :Text;
+    docComment @1 :Text;
+    # The top-level doc comment for the Node.
 
-  fieldDocs @2 :List(FieldDoc);
-  # valid only if Node is a "struct"
+    members @2 :List(Member);
+    # Information about each member -- i.e. fields (for structs), enumerants (for enums), or
+    # methods (for interfaces).
+    #
+    # This list is the same length and order as the corresponding list in the Node, i.e.
+    # Node.struct.fields, Node.enum.enumerants, or Node.interface.methods.
+
+    struct Member {
+      docComment @0 :Text;
+      # Doc comment on the member.
+    }
+
+    # TODO(someday): Record location of the declaration in the original source code.
+  }
 }
 
 struct Field {
@@ -240,13 +254,6 @@ struct Field {
     # The ordinal is given here mainly just so that the original schema text can be reproduced given
     # the compiled version -- i.e. so that `capnp compile -ocapnp` can do its job.
   }
-}
-
-struct FieldDoc {
-  # separate container to carry field docstrings
-
-  codeOrder @0 :UInt16;
-  docComment @1 :Text;
 }
 
 struct Enumerant {
@@ -488,8 +495,9 @@ struct CodeGeneratorRequest {
   # All nodes parsed by the compiler, including for the files on the command line and their
   # imports.
 
-  nodeDocs @3 :List(NodeDoc);
-  # documentation comments for nodes, where present
+  sourceInfo @3 :List(Node.SourceInfo);
+  # Information about the original source code for each node, where available. This array may be
+  # omitted or may be missing some nodes if no info is available for them.
 
   requestedFiles @1 :List(RequestedFile);
   # Files which were listed on the command line.

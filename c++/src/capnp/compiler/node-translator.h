@@ -137,6 +137,9 @@ public:
     // Auxiliary nodes that were produced when translating this node and should be loaded along
     // with it.  In particular, structs that contain groups (or named unions) spawn extra nodes
     // representing those, and interfaces spawn struct nodes representing method params/results.
+
+    kj::Array<schema::Node::SourceInfo::Reader> sourceInfo;
+    // The SourceInfo for the node and all aux nodes.
   };
 
   NodeSet getBootstrapNode();
@@ -161,9 +164,6 @@ public:
   // `brandBuilder` may be used to construct a message which will fill in ResolvedDecl::brand in
   // the result.
 
-  kj::Maybe<Orphan<schema::NodeDoc>>& getDoc() { return wipNodeDoc; };
-  void addFieldDoc(uint codeOrder, ::capnp::Text::Reader docComment);
-
 private:
   class DuplicateNameDetector;
   class DuplicateOrdinalDetector;
@@ -179,17 +179,21 @@ private:
   kj::Own<BrandScope> localBrand;
 
   Orphan<schema::Node> wipNode;
-  kj::Maybe<Orphan<schema::NodeDoc>> wipNodeDoc;
-  // The work-in-progress schema node and its docstring
+  // The work-in-progress schema node.
 
-  kj::Vector<std::pair<uint, ::capnp::Text::Reader>> fieldDocs;
-  // TODO(now): Don't use std::pair.
+  Orphan<schema::Node::SourceInfo> sourceInfo;
+  // Doc comments and other source info for this node.
 
-  kj::Vector<Orphan<schema::Node>> groups;
+  struct AuxNode {
+    Orphan<schema::Node> node;
+    Orphan<schema::Node::SourceInfo> sourceInfo;
+  };
+
+  kj::Vector<AuxNode> groups;
   // If this is a struct node and it contains groups, these are the nodes for those groups,  which
   // must be loaded together with the top-level node.
 
-  kj::Vector<Orphan<schema::Node>> paramStructs;
+  kj::Vector<AuxNode> paramStructs;
   // If this is an interface, these are the auto-generated structs representing params and results.
 
   struct UnfinishedValue {

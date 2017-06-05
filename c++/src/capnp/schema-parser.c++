@@ -196,6 +196,10 @@ ParsedSchema SchemaParser::parseFile(kj::Own<SchemaFile>&& file) const {
   return ParsedSchema(impl->compiler.getLoader().get(id), *this);
 }
 
+kj::Maybe<schema::Node::SourceInfo::Reader> SchemaParser::getSourceInfo(Schema schema) const {
+  return impl->compiler.getSourceInfo(schema.getProto().getId());
+}
+
 SchemaParser::ModuleImpl& SchemaParser::getModuleImpl(kj::Own<SchemaFile>&& file) const {
   auto lock = impl->fileMap.lockExclusive();
 
@@ -224,6 +228,10 @@ ParsedSchema ParsedSchema::getNested(kj::StringPtr nestedName) const {
   } else {
     KJ_FAIL_REQUIRE("no such nested declaration", getProto().getDisplayName(), nestedName);
   }
+}
+
+schema::Node::SourceInfo::Reader ParsedSchema::getSourceInfo() const {
+  return KJ_ASSERT_NONNULL(parser->getSourceInfo(*this));
 }
 
 // =======================================================================================

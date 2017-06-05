@@ -91,9 +91,15 @@ public:
   // exception if the parent ID is not recognized; returns null if the parent has no child of the
   // given name.  Neither the parent nor the child schema node is actually compiled.
 
+  kj::Maybe<schema::Node::SourceInfo::Reader> getSourceInfo(uint64_t id) const;
+  // Get the SourceInfo for the given type ID, if available.
+
   Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
       getFileImportTable(Module& module, Orphanage orphanage) const;
   // Build the import table for the CodeGeneratorRequest for the given module.
+
+  Orphan<List<schema::Node::SourceInfo>> getAllSourceInfo(Orphanage orphanage) const;
+  // Gets the SourceInfo structs for all nodes parsed by the compiler.
 
   enum Eagerness: uint32_t {
     // Flags specifying how eager to be about compilation.  These are intended to be bitwise OR'd.

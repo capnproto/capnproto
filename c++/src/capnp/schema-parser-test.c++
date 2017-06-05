@@ -181,5 +181,81 @@ TEST(SchemaParser, Constants) {
   EXPECT_EQ("text", genericConst.get("value").as<Text>());
 }
 
+void expectSourceInfo(schema::Node::SourceInfo::Reader sourceInfo,
+                   uint64_t expectedId, kj::StringPtr expectedComment,
+                   std::initializer_list<const kj::StringPtr> expectedMembers) {
+  KJ_EXPECT(sourceInfo.getId() == expectedId, sourceInfo, expectedId);
+  KJ_EXPECT(sourceInfo.getDocComment() == expectedComment, sourceInfo, expectedComment);
+
+  auto members = sourceInfo.getMembers();
+  KJ_ASSERT(members.size() == expectedMembers.size());
+  for (auto i: kj::indices(expectedMembers)) {
+    KJ_EXPECT(members[i].getDocComment() == expectedMembers.begin()[i],
+              members[i], expectedMembers.begin()[i]);
+  }
+}
+
+TEST(SchemaParser, SourceInfo) {
+  SchemaParser parser;
+  FakeFileReader reader;
+
+  reader.add("foo.capnp",
+      "@0x84a2c6051e1061ed;\n"
+      "# file doc comment\n"
+      "\n"
+      "struct Foo @0xc6527d0a670dc4c3 {\n"
+      "  # struct doc comment\n"
+      "  # second line\n"
+      "\n"
+      "  bar @0 :UInt32;\n"
+      "  # field doc comment\n"
+      "  baz :group {\n"
+      "    # group doc comment\n"
+      "    qux @1 :Text;\n"
+      "    # group field doc comment\n"
+      "  }\n"
+      "}\n"
+      "\n"
+      "enum Corge @0xae08878f1a016f14 {\n"
+      "  # enum doc comment\n"
+      "  grault @0;\n"
+      "  # enumerant doc comment\n"
+      "  garply @1;\n"
+      "}\n"
+      "\n"
+      "interface Waldo @0xc0f1b0aff62b761e {\n"
+      "  # interface doc comment\n"
+      "  fred @0 (plugh :Int32) -> (xyzzy :Text);\n"
+      "  # method doc comment\n"
+      "}\n"
+      "\n"
+      "struct Thud @0xcca9972702b730b4 {}\n"
+      "# post-comment\n");
+
+  ParsedSchema file = parser.parseFile(SchemaFile::newDiskFile(
+      "foo.capnp", "foo.capnp", nullptr, reader));
+  ParsedSchema foo = file.getNested("Foo");
+
+  expectSourceInfo(file.getSourceInfo(), 0x84a2c6051e1061edull, "file doc comment\n", {});
+
+  expectSourceInfo(foo.getSourceInfo(), 0xc6527d0a670dc4c3ull, "struct doc comment\nsecond line\n",
+      { "field doc comment\n", "group doc comment\n" });
+
+  auto group = foo.asStruct().getFieldByName("baz").getType().asStruct();
+  expectSourceInfo(KJ_ASSERT_NONNULL(parser.getSourceInfo(group)),
+      group.getProto().getId(), "group doc comment\n", { "group field doc comment\n" });
+
+  ParsedSchema corge = file.getNested("Corge");
+  expectSourceInfo(corge.getSourceInfo(), 0xae08878f1a016f14, "enum doc comment\n",
+      { "enumerant doc comment\n", "" });
+
+  ParsedSchema waldo = file.getNested("Waldo");
+  expectSourceInfo(waldo.getSourceInfo(), 0xc0f1b0aff62b761e, "interface doc comment\n",
+      { "method doc comment\n" });
+
+  ParsedSchema thud = file.getNested("Thud");
+  expectSourceInfo(thud.getSourceInfo(), 0xcca9972702b730b4, "post-comment\n", {});
+}
+
 }  // namespace
 }  // namespace capnp
