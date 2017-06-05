@@ -171,6 +171,19 @@ struct Node {
   }
 }
 
+struct NodeDoc {
+  # separate carrier for documentation comments on Nodes,
+  # to keep them out of the binary descriptors
+
+  id @0 :Id;
+  # ID should exist as Node in the same request
+
+  docComment @1 :Text;
+
+  fieldDocs @2 :List(FieldDoc);
+  # valid only if Node is a "struct"
+}
+
 struct Field {
   # Schema for a field of a struct.
 
@@ -227,6 +240,13 @@ struct Field {
     # The ordinal is given here mainly just so that the original schema text can be reproduced given
     # the compiled version -- i.e. so that `capnp compile -ocapnp` can do its job.
   }
+}
+
+struct FieldDoc {
+  # separate container to carry field docstrings
+
+  codeOrder @0 :UInt16;
+  docComment @1 :Text;
 }
 
 struct Enumerant {
@@ -467,6 +487,9 @@ struct CodeGeneratorRequest {
   nodes @0 :List(Node);
   # All nodes parsed by the compiler, including for the files on the command line and their
   # imports.
+
+  nodeDocs @3 :List(NodeDoc);
+  # documentation comments for nodes, where present
 
   requestedFiles @1 :List(RequestedFile);
   # Files which were listed on the command line.

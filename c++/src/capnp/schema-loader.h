@@ -152,6 +152,9 @@ public:
   // loadCompiledTypeAndDependencies<T>() in order to get a flat list of all of T's transitive
   // dependencies.
 
+  kj::Array<schema::NodeDoc::Reader> getAllDocs() const;
+  void loadDoc(schema::NodeDoc::Reader docReader) const;
+
 private:
   class Validator;
   class CompatibilityChecker;

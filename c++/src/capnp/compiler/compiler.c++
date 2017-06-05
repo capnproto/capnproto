@@ -667,6 +667,9 @@ void Compiler::Node::traverse(uint eagerness, std::unordered_map<Node*, uint>& s
         }
       }
     }
+    KJ_IF_MAYBE(doc, content->translator->getDoc()) {
+      finalLoader.loadDoc(doc->getReader());
+    }
   }
 
   if (eagerness & PARENTS) {

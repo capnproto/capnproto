@@ -1378,8 +1378,14 @@ NodeTranslator::NodeTranslator(
       localBrand(kj::refcounted<BrandScope>(
           errorReporter, wipNodeParam.getReader().getId(),
           decl.getParameters().size(), resolver)),
-      wipNode(kj::mv(wipNodeParam)) {
+      wipNode(kj::mv(wipNodeParam)),
+      wipNodeDoc() {
   compileNode(decl, wipNode.get());
+}
+
+void NodeTranslator::addFieldDoc(uint codeOrder, ::capnp::Text::Reader docComment)
+{
+  fieldDocs.add(std::make_pair(codeOrder, docComment));
 }
 
 NodeTranslator::~NodeTranslator() noexcept(false) {}
@@ -1468,6 +1474,23 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
   }
 
   builder.adoptAnnotations(compileAnnotationApplications(decl.getAnnotations(), targetsFlagName));
+
+  if (decl.hasDocComment() || !fieldDocs.empty()) {
+    Orphan<schema::NodeDoc> doc = orphanage.newOrphan<schema::NodeDoc>();
+    doc.get().setId(wipNode.getReader().getId());
+    if (decl.hasDocComment())
+      doc.get().setDocComment(decl.getDocComment());
+    if (!fieldDocs.empty()) {
+      auto fdocs = doc.get().initFieldDocs(fieldDocs.size());
+
+      for (size_t i = 0; i < fieldDocs.size(); i++) {
+        auto fdoc = fdocs[i];
+        fdoc.setCodeOrder(fieldDocs[i].first);
+        fdoc.setDocComment(fieldDocs[i].second);
+      }
+    }
+    wipNodeDoc = kj::mv(doc);
+  }
 }
 
 static kj::StringPtr getExpressionTargetName(Expression::Reader exp) {
@@ -1780,6 +1803,8 @@ private:
     // Information about the field declaration.  We don't use Declaration::Reader because it might
     // have come from a Declaration::Param instead.
 
+    kj::Maybe<::capnp::Text::Reader> docComment = nullptr;
+
     kj::Maybe<schema::Field::Builder> schema;
     // Schema for the field.  Initialized when getSchema() is first called.
 
@@ -1816,6 +1841,8 @@ private:
         hasDefaultValue = true;
         fieldDefaultValue = fieldDecl.getDefaultValue().getValue();
       }
+      if (decl.hasDocComment())
+        docComment = decl.getDocComment();
     }
     inline MemberInfo(MemberInfo& parent, uint codeOrder,
                       const Declaration::Param::Reader& decl,
@@ -1842,6 +1869,8 @@ private:
           startByte(decl.getStartByte()), endByte(decl.getEndByte()),
           node(node), unionScope(nullptr) {
       KJ_REQUIRE(decl.which() != Declaration::FIELD);
+      if (decl.hasDocComment())
+        docComment = decl.getDocComment();
     }
 
     schema::Field::Builder getSchema() {
@@ -2043,6 +2072,11 @@ private:
         default:
           // Ignore others.
           break;
+      }
+      if (memberInfo) {
+        KJ_IF_MAYBE(mydoc, memberInfo->docComment) {
+          translator.addFieldDoc(memberInfo->codeOrder, *mydoc);
+        }
       }
 
       KJ_IF_MAYBE(o, ordinal) {

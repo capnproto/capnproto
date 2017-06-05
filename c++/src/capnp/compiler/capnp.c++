@@ -433,6 +433,12 @@ public:
       nodes.setWithCaveats(i, schemas[i].getProto());
     }
 
+    auto docs = compiler->getLoader().getAllDocs();
+    auto docnodes = request.initNodeDocs(docs.size());
+    for (size_t i = 0; i < docs.size(); i++) {
+      docnodes.setWithCaveats(i, docs[i]);
+    }
+
     auto requestedFiles = request.initRequestedFiles(sourceFiles.size());
     for (size_t i = 0; i < sourceFiles.size(); i++) {
       auto requestedFile = requestedFiles[i];
