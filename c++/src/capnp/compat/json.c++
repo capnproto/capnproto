@@ -21,7 +21,7 @@
 
 #include "json.h"
 #include <math.h>    // for HUGEVAL to check for overflow in strtod
-#include <stdlib.h>  // strtod
+#include <cstdlib>  // strtod
 #include <errno.h>   // for strtod errors
 #include <unordered_map>
 #include <capnp/orphan.h>
