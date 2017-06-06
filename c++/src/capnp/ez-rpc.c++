@@ -334,6 +334,10 @@ EzRpcServer::EzRpcServer(int socketFd, uint port, ReaderOptions readerOpts)
 
 EzRpcServer::~EzRpcServer() noexcept(false) {}
 
+void EzRpcServer::setMainInterface(Capability::Client cap) {
+  impl->mainInterface = kj::mv(cap);
+}
+
 void EzRpcServer::exportCap(kj::StringPtr name, Capability::Client cap) {
   Impl::ExportedCap entry(kj::heapString(name), cap);
   impl->exportMap[entry.name] = kj::mv(entry);
