@@ -710,6 +710,10 @@ public:
   // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
 
   template <typename T>
+  KJ_ALWAYS_INLINE(kj::ArrayPtr<T> asPtr());
+  // Pointer to the list's data.  Throws an exception if T is not the same width as the list elements.
+
+  template <typename T>
   KJ_ALWAYS_INLINE(T getDataElement(ElementCount index));
   // Get the element of the given type at the given index.
 
@@ -784,6 +788,10 @@ public:
   // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
 
   kj::ArrayPtr<const byte> asRawBytes();
+
+  template <typename T>
+  KJ_ALWAYS_INLINE(kj::ArrayPtr<const T> asPtr() const);
+  // Pointer to the list's data.  Throws an exception if T is not the same width as the list elements.
 
   template <typename T>
   KJ_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
@@ -1147,6 +1155,12 @@ inline PointerReader StructReader::getPointerField(StructPointerOffset ptrIndex)
 inline ListElementCount ListBuilder::size() const { return elementCount; }
 
 template <typename T>
+inline kj::ArrayPtr<T> ListBuilder::asPtr() {
+  KJ_IREQUIRE(sizeof(T) == step / BITS_PER_BYTE, "T must be the same width as the list elements");
+  return kj::ArrayPtr<T>(reinterpret_cast<T*>(ptr), size());
+}
+
+template <typename T>
 inline T ListBuilder::getDataElement(ElementCount index) {
   return reinterpret_cast<WireValue<T>*>(
       ptr + upgradeBound<uint64_t>(index) * step / BITS_PER_BYTE)->get();
@@ -1212,6 +1226,12 @@ inline PointerBuilder ListBuilder::getPointerElement(ElementCount index) {
 // -------------------------------------------------------------------
 
 inline ListElementCount ListReader::size() const { return elementCount; }
+
+template <typename T>
+inline kj::ArrayPtr<const T> ListReader::asPtr() const {
+  KJ_IREQUIRE(sizeof(T) == step / BITS_PER_BYTE, "T must be the same width as the list elements");
+  return kj::ArrayPtr<const T>(reinterpret_cast<const T*>(ptr), size());
+}
 
 template <typename T>
 inline T ListReader::getDataElement(ElementCount index) const {
