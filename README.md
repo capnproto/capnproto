@@ -7,3 +7,4 @@ JSON, except binary. Or think [Protocol Buffers](http://protobuf.googlecode.com)
 In fact, in benchmarks, Cap'n Proto is INFINITY TIMES faster than Protocol Buffers.
 
 [Read more...](http://kentonv.github.com/capnproto/)
+test
