@@ -10,6 +10,8 @@
 #       build Cap'n Proto with VS2015 and VS2017.
 #       build Cap'n Proto samples with VS2015 and VS2017.
 
+# dummy comment to force rebuild
+
 version: "{build}"
 
 branches:
