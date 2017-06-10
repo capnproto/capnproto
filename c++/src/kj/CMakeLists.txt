@@ -74,6 +74,8 @@ target_include_directories(kj INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
   $<INSTALL_INTERFACE:include>
 )
+# Ensure the library has a version set to match autotools build
+set_target_properties(kj PROPERTIES VERSION ${VERSION})
 install(TARGETS kj ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${kj_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 install(FILES ${kj-parse_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/parse")
@@ -91,6 +93,8 @@ set(kj-test-compat_headers
 add_library(kj-test ${kj-test_sources})
 add_library(CapnProto::kj-test ALIAS kj-test)
 target_link_libraries(kj-test PUBLIC kj)
+# Ensure the library has a version set to match autotools build
+set_target_properties(kj-test PROPERTIES VERSION ${VERSION})
 install(TARGETS kj-test ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${kj-test_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 install(FILES ${kj-test-compat_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
@@ -123,6 +127,8 @@ if(NOT CAPNP_LITE)
   elseif(WIN32)
     target_link_libraries(kj-async PUBLIC ws2_32)
   endif()
+  # Ensure the library has a version set to match autotools build
+  set_target_properties(kj-async PROPERTIES VERSION ${VERSION})
   install(TARGETS kj-async ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${kj-async_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 endif()
@@ -141,6 +147,8 @@ if(NOT CAPNP_LITE)
   add_library(kj-http ${kj-http_sources})
   add_library(CapnProto::kj-http ALIAS kj-http)
   target_link_libraries(kj-http PUBLIC kj-async kj)
+  # Ensure the library has a version set to match autotools build
+  set_target_properties(kj-http PROPERTIES VERSION ${VERSION})
   install(TARGETS kj-http ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${kj-http_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
 endif()
