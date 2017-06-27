@@ -1063,7 +1063,8 @@ private:
 };
 
 class HttpNullEntityReader final: public HttpEntityBodyReader {
-  // Stream which reads until EOF.
+  // Stream for an entity-body which is not present. Always returns EOF on read, but tryGetLength()
+  // may indicate non-zero in the special case of a response to a HEAD request.
 
 public:
   HttpNullEntityReader(HttpInputStream& inner, kj::Maybe<uint64_t> length)
