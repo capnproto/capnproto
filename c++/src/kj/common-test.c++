@@ -129,6 +129,24 @@ TEST(Common, Maybe) {
   }
 
   {
+    const Maybe<int&> m2 = &i;
+    Maybe<const int&> m = m2;
+    EXPECT_FALSE(m == nullptr);
+    EXPECT_TRUE(m != nullptr);
+    KJ_IF_MAYBE(v, m) {
+      EXPECT_EQ(&i, v);
+    } else {
+      ADD_FAILURE();
+    }
+    KJ_IF_MAYBE(v, mv(m)) {
+      EXPECT_EQ(&i, v);
+    } else {
+      ADD_FAILURE();
+    }
+    EXPECT_EQ(234, m.orDefault(456));
+  }
+
+  {
     Maybe<int&> m = implicitCast<int*>(nullptr);
     EXPECT_TRUE(m == nullptr);
     EXPECT_FALSE(m != nullptr);
