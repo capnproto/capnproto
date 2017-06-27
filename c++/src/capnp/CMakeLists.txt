@@ -156,7 +156,7 @@ if(NOT CAPNP_LITE)
     compiler/module-loader.c++
     compiler/capnp.c++
   )
-  target_link_libraries(capnp_tool capnpc capnp kj)
+  target_link_libraries(capnp_tool capnp-json capnpc capnp kj)
   set_target_properties(capnp_tool PROPERTIES OUTPUT_NAME capnp)
   set_target_properties(capnp_tool PROPERTIES CAPNP_INCLUDE_DIRECTORY
     $<JOIN:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>,$<INSTALL_INTERFACE:${CMAKE_INSTALL_BINDIR}/..>>

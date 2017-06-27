@@ -330,7 +330,7 @@ capnp_SOURCES =                                                \
   src/capnp/compiler/module-loader.c++                         \
   src/capnp/compiler/capnp.c++
 
-capnpc_capnp_LDADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
+capnpc_capnp_LDADD = libcapnp-json.la libcapnp.la libkj.la $(PTHREAD_LIBS)
 capnpc_capnp_SOURCES = src/capnp/compiler/capnpc-capnp.c++
 
 capnpc_c___LDADD = libcapnp.la libkj.la $(PTHREAD_LIBS)

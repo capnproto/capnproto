@@ -40,6 +40,7 @@
 #include <capnp/serialize-packed.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <capnp/compat/json.h>
 
 #if _WIN32
 #include <process.h>
@@ -137,6 +138,8 @@ public:
                       "Do not print warning messages about the input being in the wrong format.  "
                       "Use this if you find the warnings are wrong (but also let us know so "
                       "we can improve them).")
+           .addOption({"json"}, KJ_BIND_METHOD(*this, setJson),
+                      "Print in json format.")
            .expectArg("<schema-file>", KJ_BIND_METHOD(*this, addSource))
            .expectArg("<type>", KJ_BIND_METHOD(*this, setRootType))
            .callAfterParsing(KJ_BIND_METHOD(*this, decode));
@@ -171,6 +174,8 @@ public:
                       "deflates zero-valued bytes.  (This writes messages using "
                       "capnp::writePackedMessage() from <capnp/serialize-packed.h>.  Without "
                       "this, capnp::writeMessage() from <capnp/serialize.h> is used.)")
+           .addOption({"json"}, KJ_BIND_METHOD(*this, setJson),
+                      "Expect in json format.")
            .addOptionWithArg({"segment-size"}, KJ_BIND_METHOD(*this, setSegmentSize), "<n>",
                              "Sets the preferred segment size on the MallocMessageBuilder to <n> "
                              "words and turns off heuristic growth.  This flag is mainly useful "
@@ -613,6 +618,10 @@ public:
     quiet = true;
     return true;
   }
+  kj::MainBuilder::Validity setJson() {
+    json = true;
+    return true;
+  }
   kj::MainBuilder::Validity setSegmentSize(kj::StringPtr size) {
     if (flat) return "cannot be used with --flat";
     char* end;
@@ -743,7 +752,12 @@ private:
     kj::String text;
     kj::Maybe<kj::Exception> exception;
 
-    {
+    if (json) {
+      auto root = reader.template getRoot<DynamicStruct>(rootType);
+      JsonCodec codec;
+      codec.setPrettyPrint(pretty);
+      text = codec.encode(root, rootType);
+    } else {
       ParseErrorCatcher catcher;
       auto root = reader.template getRoot<DynamicStruct>(rootType);
       if (pretty) {
@@ -1234,6 +1248,21 @@ public:
     EncoderErrorReporter errorReporter(*this, allText);
     MallocMessageBuilder arena;
 
+    if (json) {
+      DynamicStruct::Builder builder = arena.initRoot<DynamicStruct>(rootType);
+      JsonCodec codec;
+      codec.decode(allText, builder);
+      kj::FdOutputStream rawOutput(STDOUT_FILENO);
+      kj::BufferedOutputStreamWrapper output(rawOutput);
+      if (packed) {
+        writePackedMessage(output, arena);
+      } else {
+        writeMessage(output, arena);
+      }
+      return true;
+    }
+
+
     // Lex the input.
     auto lexedTokens = arena.initRoot<LexedTokens>();
     lex(allText, lexedTokens, errorReporter);
@@ -1549,6 +1578,7 @@ private:
   bool packed = false;
   bool pretty = true;
   bool quiet = false;
+  bool json = false;
   uint segmentSize = 0;
   StructSchema rootType;
   // For the "decode" and "encode" commands.
