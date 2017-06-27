@@ -116,9 +116,7 @@ public:
   }
 
   inline void clear() {
-    while (builder.size() > 0) {
-      builder.removeLast();
-    }
+    builder.resize(0);
   }
 
   inline void truncate(size_t size) {
