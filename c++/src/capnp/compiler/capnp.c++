@@ -153,7 +153,7 @@ public:
     kj::MainBuilder builder(context, VERSION_STRING,
           "Encodes one or more textual Cap'n Proto messages to binary.  The messages have root "
           "type <type> defined in <schema-file>.  Messages are read from standard input.  Each "
-          "mesage is a parenthesized struct literal, like the format used to specify constants "
+          "message is a parenthesized struct literal, like the format used to specify constants "
           "and default values of struct type in the schema language.  For example:\n"
           "    (foo = 123, bar = \"hello\", baz = [true, false, true])\n"
           "The input may contain any number of such values; each will be encoded as a separate "
