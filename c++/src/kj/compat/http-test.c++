@@ -1165,9 +1165,8 @@ KJ_TEST("HttpServer request timeout") {
   // Shouldn't hang! Should time out.
   server.listenHttp(kj::mv(pipe.ends[0])).wait(io.waitScope);
 
-  // Sends back 408 Request Timeout.
-  KJ_EXPECT(pipe.ends[1]->readAllText().wait(io.waitScope)
-      .startsWith("HTTP/1.1 408 Request Timeout"));
+  // Closes the connection without sending anything.
+  KJ_EXPECT(pipe.ends[1]->readAllText().wait(io.waitScope) == "");
 }
 
 KJ_TEST("HttpServer pipeline timeout") {

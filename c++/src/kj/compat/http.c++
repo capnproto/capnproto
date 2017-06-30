@@ -1773,15 +1773,17 @@ public:
         return httpOutput.flush();
       }
       if (timedOut) {
-        if (firstRequest) {
-          return sendError(408, "Request Timeout", kj::str(
-              "ERROR: Your client took too long to send HTTP headers."));
-        } else {
-          // After the first request, we just close the connection if the client takes too long,
-          // on the assumption that the client is intentionally trying to keep the connection
-          // around for reuse (not necessarily an error).
-          return httpOutput.flush();
-        }
+        // Client took too long to send anything, so we're going to close the connection. In
+        // theory, we should send back an HTTP 408 error -- it is designed exactly for this
+        // purpose. Alas, in practice, Google Chrome does not have any special handling for 408
+        // errors -- it will assume the error is a response to the next request it tries to send,
+        // and will happily serve the error to the user. OTOH, if we simply close the connection,
+        // Chrome does the "right thing", apparently. (Though I'm not sure what happens if a
+        // request is in-flight when we close... if it's a GET, the browser should retry. But if
+        // it's a POST, retrying may be dangerous. This is why 408 exists -- it unambiguously
+        // tells the client that it should retry.)
+
+        return httpOutput.flush();
       }
 
       KJ_IF_MAYBE(req, request) {
