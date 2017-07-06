@@ -19,7 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if HAVE_CONFIG_H
 #include "config.h"
+#endif
+
 #include "exception.h"
 #include "string.h"
 #include "debug.h"
