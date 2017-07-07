@@ -55,6 +55,10 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
 const uint ClientHook::NULL_CAPABILITY_BRAND = 0;
 // Defined here rather than capability.c++ so that we can safely call isNull() in this file.
 
+void* ClientHook::getLocalServer(_::CapabilityServerSetBase& capServerSet) {
+  return nullptr;
+}
+
 namespace _ {  // private
 
 #endif  // !CAPNP_LITE

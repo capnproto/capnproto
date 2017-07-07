@@ -61,10 +61,6 @@ ClientHook::ClientHook() {
   setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
 }
 
-void* ClientHook::getLocalServer(_::CapabilityServerSetBase& capServerSet) {
-  return nullptr;
-}
-
 // =======================================================================================
 
 Capability::Client::Client(decltype(nullptr))
