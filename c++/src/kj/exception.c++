@@ -19,10 +19,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#if HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include "exception.h"
 #include "string.h"
 #include "debug.h"
@@ -37,7 +33,7 @@
 #endif
 #include "io.h"
 
-#if HAVE_EXECINFO_H
+#if ((__linux__ && __GLIBC__) || __APPLE__) && not defined(__UCLIBC__)
 #define KJ_HAS_BACKTRACE 1
 #include <execinfo.h>
 #endif

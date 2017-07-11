@@ -52,8 +52,6 @@ AC_PROG_CXX
 AC_LANG([C++])
 AX_CXX_COMPILE_STDCXX_11
 
-AC_CHECK_HEADERS(execinfo.h)
-
 AS_CASE("${host_os}", *mingw*, [
     # We don't use pthreads on MinGW.
     PTHREAD_CFLAGS="-mthreads"
