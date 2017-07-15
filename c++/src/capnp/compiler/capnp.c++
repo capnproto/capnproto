@@ -1251,6 +1251,7 @@ public:
     if (json) {
       DynamicStruct::Builder builder = arena.initRoot<DynamicStruct>(rootType);
       JsonCodec codec;
+      codec.setStrictDecode(true);
       codec.decode(allText, builder);
       kj::FdOutputStream rawOutput(STDOUT_FILENO);
       kj::BufferedOutputStreamWrapper output(rawOutput);
