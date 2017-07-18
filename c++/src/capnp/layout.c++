@@ -56,6 +56,7 @@ const uint ClientHook::NULL_CAPABILITY_BRAND = 0;
 // Defined here rather than capability.c++ so that we can safely call isNull() in this file.
 
 void* ClientHook::getLocalServer(_::CapabilityServerSetBase& capServerSet) {
+  // Defined here rather than capability.c++ because otherwise building with -fsanitize=vptr fails.
   return nullptr;
 }
 
