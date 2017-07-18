@@ -138,11 +138,11 @@ struct Person {
   # ...
 
   employment :union {
+    # We assume that a person is only one of these.
     unemployed @4 :Void;
     employer @5 :Company;
     school @6 :School;
     selfEmployed @7 :Void;
-    # We assume that a person is only one of these.
   }
 }
 {% endhighlight %}
@@ -222,9 +222,9 @@ A group is a set of fields that are encapsulated in their own scope.
 struct Person {
   # ...
 
-  # Note:  This is a terrible way to use groups, and meant
-  #   only to demonstrate the syntax.
   address :group {
+    # Note:  This is a terrible way to use groups, and meant
+    #        only to demonstrate the syntax.
     houseNumber @8 :UInt32;
     street @9 :Text;
     city @10 :Text;
@@ -542,8 +542,8 @@ An `import` expression names the scope of some other file:
 
 {% highlight capnp %}
 struct Foo {
-  # Use type "Baz" defined in bar.capnp.
   baz @0 :import "bar.capnp".Baz;
+  # Use type "Baz" defined in bar.capnp.
 }
 {% endhighlight %}
 
@@ -553,8 +553,8 @@ Of course, typically it's more readable to define an alias:
 using Bar = import "bar.capnp";
 
 struct Foo {
-  # Use type "Baz" defined in bar.capnp.
   baz @0 :Bar.Baz;
+  # Use type "Baz" defined in bar.capnp.
 }
 {% endhighlight %}
 
@@ -565,6 +565,7 @@ using import "bar.capnp".Baz;
 
 struct Foo {
   baz @0 :Baz;
+  # Use type "Baz" defined in bar.capnp.
 }
 {% endhighlight %}
 
@@ -584,11 +585,12 @@ removes all of these hidden fields.
 You may declare annotations and use them like so:
 
 {% highlight capnp %}
-# Declare an annotation 'foo' which applies to struct and enum types.
 annotation foo(struct, enum) :Text;
+# Declare an annotation 'foo' which applies to struct and enum types.
 
-# Apply 'foo' to to MyType.
 struct MyType $foo("bar") {
+  # Apply 'foo' to to MyType.
+
   # ...
 }
 {% endhighlight %}
@@ -598,8 +600,8 @@ The possible targets for an annotation are: `file`, `struct`, `field`, `union`, 
 all.
 
 {% highlight capnp %}
-# 'baz' can annotate anything!
 annotation baz(*) :Int32;
+# 'baz' can annotate anything!
 
 $baz(1);  # Annotate the file.
 
@@ -654,8 +656,8 @@ A Cap'n Proto file must have a unique 64-bit ID, and each type and annotation de
 also have an ID.  Use `capnp id` to generate a new ID randomly.  ID specifications begin with `@`:
 
 {% highlight capnp %}
-# file ID
 @0xdbb9ad1f14bf0b36;
+# file ID
 
 struct Foo @0x8db435604d0d3723 {
   # ...

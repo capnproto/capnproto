@@ -114,7 +114,7 @@ includekjcompatdir = $(includekjdir)/compat
 dist_includecapnp_DATA = $(public_capnpc_inputs)
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = capnp.pc capnp-rpc.pc kj.pc kj-async.pc
+pkgconfig_DATA = capnp.pc capnp-rpc.pc capnp-json.pc kj.pc kj-async.pc
 
 noinst_HEADERS = \
   src/kj/miniposix.h
