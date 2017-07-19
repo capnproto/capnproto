@@ -266,7 +266,7 @@ public:
 
 #if KJ_USE_FUTEX    // TODO(soon): Implement on pthread & win32
   template <typename Cond, typename Func>
-  auto when(Cond&& condition, Func&& callback) -> decltype(callback(instance<T&>())) {
+  auto when(Cond&& condition, Func&& callback) const -> decltype(callback(instance<T&>())) {
     // Waits until condition(state) returns true, then calls callback(state) under lock.
     //
     // `condition`, when called, receives as its parameter a const reference to the state, which is
