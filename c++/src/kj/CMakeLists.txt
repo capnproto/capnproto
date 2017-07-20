@@ -41,7 +41,6 @@ set(kj_headers
   exception.h
   debug.h
   arena.h
-  miniposix.h
   io.h
   tuple.h
   one-of.h
