@@ -105,10 +105,40 @@ void Mutex::lock(Exclusivity exclusivity) {
   }
 }
 
+struct Mutex::Waiter {
+  kj::Maybe<Waiter&> next;
+  kj::Maybe<Waiter&>* prev;
+  Predicate& predicate;
+  uint futex;
+};
+
 void Mutex::unlock(Exclusivity exclusivity) {
   switch (exclusivity) {
     case EXCLUSIVE: {
       KJ_DASSERT(futex & EXCLUSIVE_HELD, "Unlocked a mutex that wasn't locked.");
+
+      // First check if there are any conditional waiters. Note we only do this when unlocking an
+      // exclusive lock since under a shared lock the state couldn't have changed.
+      auto nextWaiter = waitersHead;
+      for (;;) {
+        KJ_IF_MAYBE(waiter, nextWaiter) {
+          nextWaiter = waiter->next;
+
+          if (waiter->predicate.check()) {
+            // This waiter's predicate now evaluates true, so wake it up.
+            __atomic_store_n(&waiter->futex, 1, __ATOMIC_RELEASE);
+            syscall(SYS_futex, &waiter->futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+
+            // We transferred ownership of the lock to this waiter, so we're done now.
+            return;
+          }
+        } else {
+          // No more waiters.
+          break;
+        }
+      }
+
+      // Didn't wake any waiters, so wake normally.
       uint oldState = __atomic_fetch_and(
           &futex, ~(EXCLUSIVE_HELD | EXCLUSIVE_REQUESTED), __ATOMIC_RELEASE);
 
@@ -151,6 +181,40 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
       KJ_ASSERT(futex & SHARED_COUNT_MASK,
                 "Tried to call getAlreadyLocked*() but lock is not held.");
       break;
+  }
+}
+
+void Mutex::lockWhen(Predicate& predicate) {
+  lock(EXCLUSIVE);
+
+  // Add waiter to list.
+  Waiter waiter { nullptr, waitersTail, predicate, 0 };
+  *waitersTail = waiter;
+  waitersTail = &waiter.next;
+
+  KJ_DEFER({
+    // Remove from list.
+    *waiter.prev = waiter.next;
+    KJ_IF_MAYBE(next, waiter.next) {
+      next->prev = waiter.prev;
+    } else {
+      KJ_DASSERT(waitersTail == &waiter.next);
+      waitersTail = waiter.prev;
+    }
+  });
+
+  if (!predicate.check()) {
+    unlock(EXCLUSIVE);
+
+    // Wait for someone to set out futex to 1.
+    while (__atomic_load_n(&waiter.futex, __ATOMIC_ACQUIRE) == 0) {
+      syscall(SYS_futex, &waiter.futex, FUTEX_WAIT_PRIVATE, 0, NULL, NULL, 0);
+    }
+
+    // Ownership of an exclusive lock was transferred to us. We can continue.
+#ifdef KJ_DEBUG
+    assertLockedByCaller(EXCLUSIVE);
+#endif
   }
 }
 

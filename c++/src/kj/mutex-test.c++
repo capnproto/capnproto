@@ -23,6 +23,7 @@
 #include "debug.h"
 #include "thread.h"
 #include <kj/compat/gtest.h>
+#include <stdlib.h>
 
 #if _WIN32
 #define NOGDI  // NOGDI is needed to make EXPECT_EQ(123u, *lock) compile for some reason
@@ -117,6 +118,59 @@ TEST(Mutex, MutexGuarded) {
 #endif
   EXPECT_EQ(321u, value.getWithoutLock());
 }
+
+#if KJ_USE_FUTEX    // TODO(soon): Implement on pthread & win32
+TEST(Mutex, When) {
+  MutexGuarded<uint> value(123);
+
+  {
+    uint m = value.when([](uint n) { return n < 200; }, [](uint& n) {
+      ++n;
+      return n + 2;
+    });
+    KJ_EXPECT(m == 126);
+
+    KJ_EXPECT(*value.lockShared() == 124);
+  }
+
+  {
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 321;
+    });
+
+    uint m = value.when([](uint n) { return n > 200; }, [](uint& n) {
+      ++n;
+      return n + 2;
+    });
+    KJ_EXPECT(m == 324);
+
+    KJ_EXPECT(*value.lockShared() == 322);
+  }
+
+  {
+    // Stress test. 100 threads each wait for a value and then set the next value.
+    *value.lockExclusive() = 0;
+
+    auto threads = kj::heapArrayBuilder<kj::Own<kj::Thread>>(100);
+    for (auto i: kj::zeroTo(100)) {
+      threads.add(kj::heap<kj::Thread>([i,&value]() {
+        if (i % 2 == 0) delay();
+        uint m = value.when([i](const uint& n) { return n == i; },
+            [i](uint& n) { return n++; });
+        KJ_ASSERT(m == i);
+      }));
+    }
+
+    uint m = value.when([](uint n) { return n == 100; }, [](uint& n) {
+      return n++;
+    });
+    KJ_EXPECT(m == 100);
+
+    KJ_EXPECT(*value.lockShared() == 101);
+  }
+}
+#endif
 
 TEST(Mutex, Lazy) {
   Lazy<uint> lazy;

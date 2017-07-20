@@ -67,6 +67,16 @@ public:
   // non-trivial, assert that the mutex is locked (which should be good enough to catch problems
   // in unit tests).  In non-debug builds, do nothing.
 
+#if KJ_USE_FUTEX    // TODO(soon): Implement on pthread & win32
+  class Predicate {
+  public:
+    virtual bool check() = 0;
+  };
+
+  void lockWhen(Predicate& predicate);
+  // Lock (exclusively) when predicate.check() returns true.
+#endif
+
 private:
 #if KJ_USE_FUTEX
   uint futex;
@@ -79,6 +89,11 @@ private:
   static constexpr uint EXCLUSIVE_HELD = 1u << 31;
   static constexpr uint EXCLUSIVE_REQUESTED = 1u << 30;
   static constexpr uint SHARED_COUNT_MASK = EXCLUSIVE_REQUESTED - 1;
+
+  struct Waiter;
+  kj::Maybe<Waiter&> waitersHead = nullptr;
+  kj::Maybe<Waiter&>* waitersTail = &waitersHead;
+  // linked list of waitUntil()s; can only modify under lock
 
 #elif _WIN32
   uintptr_t srwLock;  // Actually an SRWLOCK, but don't want to #include <windows.h> in header.
@@ -248,6 +263,39 @@ public:
   inline T& getAlreadyLockedShared();
   inline T& getAlreadyLockedExclusive() const;
   // Like `getWithoutLock()`, but asserts that the lock is already held by the calling thread.
+
+#if KJ_USE_FUTEX    // TODO(soon): Implement on pthread & win32
+  template <typename Cond, typename Func>
+  auto when(Cond&& condition, Func&& callback) const -> decltype(callback(instance<T&>())) {
+    // Waits until condition(state) returns true, then calls callback(state) under lock.
+    //
+    // `condition`, when called, receives as its parameter a const reference to the state, which is
+    // locked (either shared or exclusive). `callback` returns a mutable reference, which is
+    // exclusively locked.
+    //
+    // `condition()` may be called multiple times, from multiple threads, while waiting for the
+    // condition to become true. It may even return true once, but then be called more times.
+    // It is guaranteed, though, that at the time `callback()` is finally called, `condition()`
+    // would currently return true (assuming it is a pure function of the guarded data).
+
+    struct PredicateImpl final: public _::Mutex::Predicate {
+      bool check() override {
+        return condition(value);
+      }
+
+      Cond&& condition;
+      const T& value;
+
+      PredicateImpl(Cond&& condition, const T& value)
+          : condition(kj::fwd<Cond>(condition)), value(value) {}
+    };
+
+    PredicateImpl impl(kj::fwd<Cond>(condition), value);
+    mutex.lockWhen(impl);
+    KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
+    return callback(value);
+  }
+#endif
 
 private:
   mutable _::Mutex mutex;
