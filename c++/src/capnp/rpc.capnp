@@ -453,15 +453,14 @@ struct Call {
     # - Vat B dutifully forwards the bar() call to Carol.  Let us call this forwarded call bar'().
     #   Notice that bar() and bar'() are travelling in opposite directions on the same network
     #   link.
-    # - The `Call` for bar'() has `sendResultsTo` set to `yourself`, with the value being the
-    #   question ID originally assigned to the bar() call.
+    # - The `Call` for bar'() has `sendResultsTo` set to `yourself`.
     # - Vat A receives bar'() and delivers it to Carol.
-    # - When bar'() returns, Vat A immediately takes the results and returns them from bar().
-    # - Meanwhile, Vat A sends a `Return` for bar'() to Vat B, with `resultsSentElsewhere` set in
-    #   place of results.
-    # - Vat A sends a `Finish` for that call to Vat B.
+    # - When bar'() returns, Vat A sends a `Return` for bar'() to Vat B, with `resultsSentElsewhere`
+    #   set in place of results.
     # - Vat B receives the `Return` for bar'() and sends a `Return` for bar(), with
-    #   `receivedFromYourself` set in place of the results.
+    #   `takeFromOtherQuestion` set in place of the results, with the value set to the question ID
+    #   of bar'().
+    # - Vat A sends a `Finish` for the bar() call to Vat B.
     # - Vat B receives the `Finish` for bar() and sends a `Finish` to bar'().
 
     thirdParty @7 :RecipientId;
@@ -781,7 +780,7 @@ struct Accept {
   # Message type sent to pick up a capability hosted by the receiving vat and provided by a third
   # party.  The third party previously designated the capability using `Provide`.
   #
-  # This message is also used to pick up a redirected return -- see `Return.redirect`.
+  # This message is also used to pick up a redirected return -- see `Return.acceptFromThirdParty`.
 
   questionId @0 :QuestionId;
   # A new question ID identifying this accept message, which will eventually receive a Return
@@ -951,8 +950,8 @@ struct CapDescriptor {
     # Hopefully this is unusual.
 
     senderHosted @1 :ExportId;
-    # A capability newly exported by the sender.  This is the ID of the new capability in the
-    # sender's export table (receiver's import table).
+    # A capability exported by the sender.  This may or may not be a new ID in the sender's export
+    # table (receiver's import table).
 
     senderPromise @2 :ExportId;
     # A promise that the sender will resolve later.  The sender will send exactly one Resolve
