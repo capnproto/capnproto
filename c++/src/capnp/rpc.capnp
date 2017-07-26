@@ -517,7 +517,7 @@ struct Return {
     takeFromOtherQuestion @6 :QuestionId;
     # The sender has also sent (before this message) a `Call` with the given question ID and with
     # `sendResultsTo.yourself` set, and the results of that other call should be used as the
-    # results here.
+    # results here.  `takeFromOtherQuestion` can only used once per question.
 
     acceptFromThirdParty @7 :ThirdPartyCapId;
     # **(level 3)**
