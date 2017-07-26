@@ -446,23 +446,22 @@ struct Call {
     # in the calls so that the results need not pass back through Vat B.
     #
     # For example:
-    # - Alice, in Vat A, call foo() on Bob in Vat B.
+    # - Alice, in Vat A, calls foo() on Bob in Vat B.
     # - Alice makes a pipelined call bar() on the promise returned by foo().
     # - Later on, Bob resolves the promise from foo() to point at Carol, who lives in Vat A (next
     #   to Alice).
     # - Vat B dutifully forwards the bar() call to Carol.  Let us call this forwarded call bar'().
     #   Notice that bar() and bar'() are travelling in opposite directions on the same network
     #   link.
-    # - The `Call` for bar'() has `sendResultsTo` set to `yourself`, with the value being the
-    #   question ID originally assigned to the bar() call.
+    # - The `Call` for bar'() has `sendResultsTo` set to `yourself`.
+    # - Vat B sends a `Return` for bar() with `takeFromOtherQuestion` set in place of the results,
+    #   with the value set to the question ID of bar'().  Vat B does not wait for bar'() to return,
+    #   as doing so would introduce unnecessary round trip latency.
     # - Vat A receives bar'() and delivers it to Carol.
-    # - When bar'() returns, Vat A immediately takes the results and returns them from bar().
-    # - Meanwhile, Vat A sends a `Return` for bar'() to Vat B, with `resultsSentElsewhere` set in
-    #   place of results.
-    # - Vat A sends a `Finish` for that call to Vat B.
-    # - Vat B receives the `Return` for bar'() and sends a `Return` for bar(), with
-    #   `receivedFromYourself` set in place of the results.
-    # - Vat B receives the `Finish` for bar() and sends a `Finish` to bar'().
+    # - When bar'() returns, Vat A sends a `Return` for bar'() to Vat B, with `resultsSentElsewhere`
+    #   set in place of results.
+    # - Vat A sends a `Finish` for the bar() call to Vat B.
+    # - Vat B receives the `Finish` for bar() and sends a `Finish` for bar'().
 
     thirdParty @7 :RecipientId;
     # **(level 3)**
@@ -518,7 +517,7 @@ struct Return {
     takeFromOtherQuestion @6 :QuestionId;
     # The sender has also sent (before this message) a `Call` with the given question ID and with
     # `sendResultsTo.yourself` set, and the results of that other call should be used as the
-    # results here.
+    # results here.  `takeFromOtherQuestion` can only used once per question.
 
     acceptFromThirdParty @7 :ThirdPartyCapId;
     # **(level 3)**
@@ -781,7 +780,7 @@ struct Accept {
   # Message type sent to pick up a capability hosted by the receiving vat and provided by a third
   # party.  The third party previously designated the capability using `Provide`.
   #
-  # This message is also used to pick up a redirected return -- see `Return.redirect`.
+  # This message is also used to pick up a redirected return -- see `Return.acceptFromThirdParty`.
 
   questionId @0 :QuestionId;
   # A new question ID identifying this accept message, which will eventually receive a Return
@@ -951,8 +950,8 @@ struct CapDescriptor {
     # Hopefully this is unusual.
 
     senderHosted @1 :ExportId;
-    # A capability newly exported by the sender.  This is the ID of the new capability in the
-    # sender's export table (receiver's import table).
+    # The ID of a capability in the sender's export table (receiver's import table).  It may be a
+    # newly allocated table entry, or an existing entry (increments the reference count).
 
     senderPromise @2 :ExportId;
     # A promise that the sender will resolve later.  The sender will send exactly one Resolve
