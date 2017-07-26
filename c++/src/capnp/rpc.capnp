@@ -446,7 +446,7 @@ struct Call {
     # in the calls so that the results need not pass back through Vat B.
     #
     # For example:
-    # - Alice, in Vat A, call foo() on Bob in Vat B.
+    # - Alice, in Vat A, calls foo() on Bob in Vat B.
     # - Alice makes a pipelined call bar() on the promise returned by foo().
     # - Later on, Bob resolves the promise from foo() to point at Carol, who lives in Vat A (next
     #   to Alice).
@@ -454,14 +454,14 @@ struct Call {
     #   Notice that bar() and bar'() are travelling in opposite directions on the same network
     #   link.
     # - The `Call` for bar'() has `sendResultsTo` set to `yourself`.
+    # - Vat B sends a `Return` for bar() with `takeFromOtherQuestion` set in place of the results,
+    #   with the value set to the question ID of bar'().  Vat B does not wait for bar'() to return,
+    #   as doing so would introduce unnecessary round trip latency.
     # - Vat A receives bar'() and delivers it to Carol.
     # - When bar'() returns, Vat A sends a `Return` for bar'() to Vat B, with `resultsSentElsewhere`
     #   set in place of results.
-    # - Vat B receives the `Return` for bar'() and sends a `Return` for bar(), with
-    #   `takeFromOtherQuestion` set in place of the results, with the value set to the question ID
-    #   of bar'().
     # - Vat A sends a `Finish` for the bar() call to Vat B.
-    # - Vat B receives the `Finish` for bar() and sends a `Finish` to bar'().
+    # - Vat B receives the `Finish` for bar() and sends a `Finish` for bar'().
 
     thirdParty @7 :RecipientId;
     # **(level 3)**
