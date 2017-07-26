@@ -950,8 +950,8 @@ struct CapDescriptor {
     # Hopefully this is unusual.
 
     senderHosted @1 :ExportId;
-    # A capability exported by the sender.  This may or may not be a new ID in the sender's export
-    # table (receiver's import table).
+    # The ID of a capability in the sender's export table (receiver's import table).  It may be a
+    # newly allocated table entry, or an existing entry (increments the reference count).
 
     senderPromise @2 :ExportId;
     # A promise that the sender will resolve later.  The sender will send exactly one Resolve
