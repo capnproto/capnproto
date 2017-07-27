@@ -34,7 +34,7 @@ namespace kj {
 
 #if _WIN32
 
-Thread::Thread(Function<void()> func): state(new ThreadState { kj::mv(func), nullptr, 2 }) {
+Thread::Thread(Function<void()> func): state(new ThreadState(kj::mv(func))) {
   threadHandle = CreateThread(nullptr, 0, &runThread, state, 0, nullptr);
   if (threadHandle == nullptr) {
     state->unref();
@@ -61,20 +61,9 @@ void Thread::detach() {
   detached = true;
 }
 
-DWORD Thread::runThread(void* ptr) {
-  ThreadState* state = reinterpret_cast<ThreadState*>(ptr);
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    state->func();
-  })) {
-    state->exception = kj::mv(*exception);
-  }
-  state->unref();
-  return 0;
-}
-
 #else  // _WIN32
 
-Thread::Thread(Function<void()> func): state(new ThreadState { kj::mv(func), nullptr, 2 }) {
+Thread::Thread(Function<void()> func): state(new ThreadState(kj::mv(func))) {
   static_assert(sizeof(threadId) >= sizeof(pthread_t),
                 "pthread_t is larger than a long long on your platform.  Please port.");
 
@@ -119,18 +108,13 @@ void Thread::detach() {
   state->unref();
 }
 
-void* Thread::runThread(void* ptr) {
-  ThreadState* state = reinterpret_cast<ThreadState*>(ptr);
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    state->func();
-  })) {
-    state->exception = kj::mv(*exception);
-  }
-  state->unref();
-  return nullptr;
-}
-
 #endif  // _WIN32, else
+
+Thread::ThreadState::ThreadState(Function<void()> func)
+    : func(kj::mv(func)),
+      initializer(getExceptionCallback().getThreadInitializer()),
+      exception(nullptr),
+      refcount(2) {}
 
 void Thread::ThreadState::unref() {
 #if _MSC_VER
@@ -146,6 +130,21 @@ void Thread::ThreadState::unref() {
 
     delete this;
   }
+}
+
+#if _WIN32
+DWORD Thread::runThread(void* ptr) {
+#else
+void* Thread::runThread(void* ptr) {
+#endif
+  ThreadState* state = reinterpret_cast<ThreadState*>(ptr);
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    state->initializer(kj::mv(state->func));
+  })) {
+    state->exception = kj::mv(*exception);
+  }
+  state->unref();
+  return 0;
 }
 
 }  // namespace kj

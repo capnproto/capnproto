@@ -53,7 +53,10 @@ public:
 
 private:
   struct ThreadState {
+    ThreadState(Function<void()> func);
+
     Function<void()> func;
+    Function<void(Function<void()>)> initializer;
     kj::Maybe<kj::Exception> exception;
 
     unsigned int refcount;

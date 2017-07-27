@@ -24,6 +24,7 @@
 #include "debug.h"
 #include "threadlocal.h"
 #include "miniposix.h"
+#include "function.h"
 #include <stdlib.h>
 #include <exception>
 #include <new>
@@ -649,6 +650,10 @@ ExceptionCallback::StackTraceMode ExceptionCallback::stackTraceMode() {
   return next.stackTraceMode();
 }
 
+Function<void(Function<void()>)> ExceptionCallback::getThreadInitializer() {
+  return next.getThreadInitializer();
+}
+
 class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
 public:
   RootExceptionCallback(): ExceptionCallback(*this) {}
@@ -701,6 +706,14 @@ public:
 #else
     return StackTraceMode::ADDRESS_ONLY;
 #endif
+  }
+
+  Function<void(Function<void()>)> getThreadInitializer() override {
+    return [](Function<void()> func) {
+      // No initialization needed since RootExceptionCallback is automatically the root callback
+      // for new threads.
+      func();
+    };
   }
 
 private:

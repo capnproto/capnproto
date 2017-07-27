@@ -86,5 +86,39 @@ KJ_TEST("detaching thread doesn't delete function") {
   }
 }
 
+class CapturingExceptionCallback final: public ExceptionCallback {
+public:
+  CapturingExceptionCallback(String& target): target(target) {}
+
+  void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                  String&& text) {
+    target = kj::mv(text);
+  }
+
+private:
+  String& target;
+};
+
+class ThreadedExceptionCallback final: public ExceptionCallback {
+public:
+  Function<void(Function<void()>)> getThreadInitializer() override {
+    return [this](Function<void()> func) {
+      CapturingExceptionCallback context(captured);
+      func();
+    };
+  }
+
+  String captured;
+};
+
+KJ_TEST("threads pick up exception callback initializer") {
+  ThreadedExceptionCallback context;
+  KJ_EXPECT(context.captured != "foobar");
+  Thread([]() {
+    KJ_LOG(ERROR, "foobar");
+  });
+  KJ_EXPECT(context.captured == "foobar", context.captured);
+}
+
 }  // namespace
 }  // namespace kj
