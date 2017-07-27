@@ -53,6 +53,8 @@ public:
 
 private:
   struct ThreadState {
+    ThreadState(Function<void()> func);
+
     Function<void()> func;
     kj::Maybe<kj::Exception> exception;
 
