@@ -112,6 +112,7 @@ void Thread::detach() {
 
 Thread::ThreadState::ThreadState(Function<void()> func)
     : func(kj::mv(func)),
+      initializer(getExceptionCallback().getThreadInitializer()),
       exception(nullptr),
       refcount(2) {}
 
@@ -138,7 +139,7 @@ void* Thread::runThread(void* ptr) {
 #endif
   ThreadState* state = reinterpret_cast<ThreadState*>(ptr);
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    state->func();
+    state->initializer(kj::mv(state->func));
   })) {
     state->exception = kj::mv(*exception);
   }

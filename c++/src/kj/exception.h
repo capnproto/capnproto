@@ -33,6 +33,7 @@
 namespace kj {
 
 class ExceptionImpl;
+template <typename T> class Function;
 
 class Exception {
   // Exception thrown in case of fatal errors.
@@ -216,6 +217,11 @@ public:
   virtual StackTraceMode stackTraceMode();
   // Returns the current preferred stack trace mode.
 
+  virtual Function<void(Function<void()>)> getThreadInitializer();
+  // Called just before a new thread is spawned using kj::Thread. Returns a function which should
+  // be invoked inside the new thread to initialize the thread's ExceptionCallback. The initializer
+  // function itself receives, as its parameter, the thread's main function, which it must call.
+
 protected:
   ExceptionCallback& next;
 
@@ -224,6 +230,8 @@ private:
 
   class RootExceptionCallback;
   friend ExceptionCallback& getExceptionCallback();
+
+  friend class Thread;
 };
 
 ExceptionCallback& getExceptionCallback();
