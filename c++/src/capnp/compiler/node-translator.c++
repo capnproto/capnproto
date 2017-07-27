@@ -1069,7 +1069,7 @@ kj::String NodeTranslator::BrandedDecl::toString() {
 kj::String NodeTranslator::BrandedDecl::toDebugString() {
   if (body.is<Resolver::ResolvedParameter>()) {
     auto variable = body.get<Resolver::ResolvedParameter>();
-    return kj::str("varibale(", variable.id, ", ", variable.index, ")");
+    return kj::str("variable(", variable.id, ", ", variable.index, ")");
   } else {
     auto decl = body.get<Resolver::ResolvedDecl>();
     return kj::str("decl(", decl.id, ", ", (uint)decl.kind, "')");
