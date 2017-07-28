@@ -179,6 +179,8 @@ public:
   template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::STRUCT>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
 
+  inline operator AnyStruct::Reader() const { return AnyStruct::Reader(reader); }
+
   inline MessageSize totalSize() const { return reader.totalSize().asPublic(); }
 
   template <typename T>
@@ -234,6 +236,7 @@ private:
   friend class Orphan<DynamicStruct>;
   friend class Orphan<DynamicValue>;
   friend class Orphan<AnyPointer>;
+  friend class AnyStruct::Reader;
 };
 
 class DynamicStruct::Builder {
@@ -245,6 +248,8 @@ public:
 
   template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::STRUCT>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
+
+  inline operator AnyStruct::Reader() { return AnyStruct::Builder(builder); }
 
   inline MessageSize totalSize() const { return asReader().totalSize(); }
 
@@ -323,6 +328,7 @@ private:
   friend class Orphan<DynamicStruct>;
   friend class Orphan<DynamicValue>;
   friend class Orphan<AnyPointer>;
+  friend class AnyStruct::Builder;
 };
 
 class DynamicStruct::Pipeline {
@@ -363,6 +369,8 @@ public:
 
   template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::LIST>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
+
+  inline operator AnyList::Reader() const { return AnyList::Reader(reader); }
 
   template <typename T>
   typename T::Reader as() const;
@@ -406,6 +414,8 @@ public:
 
   template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::LIST>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
+
+  inline operator AnyList::Builder() { return AnyList::Builder(builder); }
 
   template <typename T>
   typename T::Builder as();
@@ -1514,6 +1524,16 @@ inline AnyStruct::Reader DynamicStruct::Reader::as<AnyStruct>() const {
 template <>
 inline AnyStruct::Builder DynamicStruct::Builder::as<AnyStruct>() {
   return AnyStruct::Builder(builder);
+}
+
+template <>
+inline DynamicStruct::Reader AnyStruct::Reader::as<DynamicStruct>(StructSchema schema) const {
+  return DynamicStruct::Reader(schema, _reader);
+}
+
+template <>
+inline DynamicStruct::Builder AnyStruct::Builder::as<DynamicStruct>(StructSchema schema) {
+  return DynamicStruct::Builder(schema, _builder);
 }
 
 template <typename T>
