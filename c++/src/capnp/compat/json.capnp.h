@@ -5,9 +5,6 @@
 #define CAPNP_INCLUDED_8ef99297a43a5e34_
 
 #include <capnp/generated-header-support.h>
-#if !CAPNP_LITE
-#include <capnp/capability.h>
-#endif  // !CAPNP_LITE
 
 #if CAPNP_VERSION != 7000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
@@ -20,6 +17,7 @@ namespace schemas {
 CAPNP_DECLARE_SCHEMA(8825ffaa852cda72);
 CAPNP_DECLARE_SCHEMA(c27855d853a937cc);
 CAPNP_DECLARE_SCHEMA(9bbf84153dd4bb60);
+CAPNP_DECLARE_SCHEMA(ca0ae4e689b0c9d9);
 
 }  // namespace schemas
 }  // namespace capnp
@@ -43,9 +41,10 @@ struct JsonValue {
   };
   struct Field;
   struct Call;
+  struct SourceInfo;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(8825ffaa852cda72, 2, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(8825ffaa852cda72, 2, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -76,6 +75,21 @@ struct JsonValue::Call {
 
   struct _capnpPrivate {
     CAPNP_DECLARE_STRUCT_HEADER(9bbf84153dd4bb60, 0, 2)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct JsonValue::SourceInfo {
+  SourceInfo() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(ca0ae4e689b0c9d9, 1, 0)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -126,6 +140,9 @@ public:
   inline bool isCall() const;
   inline bool hasCall() const;
   inline  ::capnp::JsonValue::Call::Reader getCall() const;
+
+  inline bool hasSource() const;
+  inline  ::capnp::JsonValue::SourceInfo::Reader getSource() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -200,6 +217,13 @@ public:
   inline void adoptCall(::capnp::Orphan< ::capnp::JsonValue::Call>&& value);
   inline ::capnp::Orphan< ::capnp::JsonValue::Call> disownCall();
 
+  inline bool hasSource();
+  inline  ::capnp::JsonValue::SourceInfo::Builder getSource();
+  inline void setSource( ::capnp::JsonValue::SourceInfo::Reader value);
+  inline  ::capnp::JsonValue::SourceInfo::Builder initSource();
+  inline void adoptSource(::capnp::Orphan< ::capnp::JsonValue::SourceInfo>&& value);
+  inline ::capnp::Orphan< ::capnp::JsonValue::SourceInfo> disownSource();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
@@ -218,6 +242,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
+  inline  ::capnp::JsonValue::SourceInfo::Pipeline getSource();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -396,6 +421,87 @@ private:
 class JsonValue::Call::Pipeline {
 public:
   typedef Call Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class JsonValue::SourceInfo::Reader {
+public:
+  typedef SourceInfo Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline  ::int32_t getLine() const;
+
+  inline  ::int32_t getColumn() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class JsonValue::SourceInfo::Builder {
+public:
+  typedef SourceInfo Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline  ::int32_t getLine();
+  inline void setLine( ::int32_t value);
+
+  inline  ::int32_t getColumn();
+  inline void setColumn( ::int32_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class JsonValue::SourceInfo::Pipeline {
+public:
+  typedef SourceInfo Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -714,6 +820,45 @@ inline ::capnp::Orphan< ::capnp::JsonValue::Call> JsonValue::Builder::disownCall
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
+inline bool JsonValue::Reader::hasSource() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline bool JsonValue::Builder::hasSource() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::JsonValue::SourceInfo::Reader JsonValue::Reader::getSource() const {
+  return ::capnp::_::PointerHelpers< ::capnp::JsonValue::SourceInfo>::get(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline  ::capnp::JsonValue::SourceInfo::Builder JsonValue::Builder::getSource() {
+  return ::capnp::_::PointerHelpers< ::capnp::JsonValue::SourceInfo>::get(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+#if !CAPNP_LITE
+inline  ::capnp::JsonValue::SourceInfo::Pipeline JsonValue::Pipeline::getSource() {
+  return  ::capnp::JsonValue::SourceInfo::Pipeline(_typeless.getPointerField(1));
+}
+#endif  // !CAPNP_LITE
+inline void JsonValue::Builder::setSource( ::capnp::JsonValue::SourceInfo::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::JsonValue::SourceInfo>::set(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::JsonValue::SourceInfo::Builder JsonValue::Builder::initSource() {
+  return ::capnp::_::PointerHelpers< ::capnp::JsonValue::SourceInfo>::init(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline void JsonValue::Builder::adoptSource(
+    ::capnp::Orphan< ::capnp::JsonValue::SourceInfo>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::JsonValue::SourceInfo>::adopt(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::JsonValue::SourceInfo> JsonValue::Builder::disownSource() {
+  return ::capnp::_::PointerHelpers< ::capnp::JsonValue::SourceInfo>::disown(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+
 inline bool JsonValue::Field::Reader::hasName() const {
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
@@ -853,6 +998,34 @@ inline void JsonValue::Call::Builder::adoptParams(
 inline ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue>> JsonValue::Call::Builder::disownParams() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue>>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+
+inline  ::int32_t JsonValue::SourceInfo::Reader::getLine() const {
+  return _reader.getDataField< ::int32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+
+inline  ::int32_t JsonValue::SourceInfo::Builder::getLine() {
+  return _builder.getDataField< ::int32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+inline void JsonValue::SourceInfo::Builder::setLine( ::int32_t value) {
+  _builder.setDataField< ::int32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline  ::int32_t JsonValue::SourceInfo::Reader::getColumn() const {
+  return _reader.getDataField< ::int32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+
+inline  ::int32_t JsonValue::SourceInfo::Builder::getColumn() {
+  return _builder.getDataField< ::int32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+inline void JsonValue::SourceInfo::Builder::setColumn( ::int32_t value) {
+  _builder.setDataField< ::int32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
 }  // namespace
