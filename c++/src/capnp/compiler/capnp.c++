@@ -1452,6 +1452,7 @@ private:
       case Format::TEXT       : return isPlausiblyText      (prefix);
       case Format::JSON       : return isPlausiblyJson      (prefix);
     }
+    KJ_UNREACHABLE;
   }
 
   kj::Maybe<Format> guessFormat(kj::ArrayPtr<const byte> prefix) {
