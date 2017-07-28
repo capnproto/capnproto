@@ -324,7 +324,7 @@ libcapnpc_la_SOURCES=                                          \
 
 bin_PROGRAMS = capnp capnpc-capnp capnpc-c++
 
-capnp_LDADD = libcapnpc.la libcapnp.la libkj.la $(PTHREAD_LIBS)
+capnp_LDADD = libcapnpc.la libcapnp-json.la libcapnp.la libkj.la $(PTHREAD_LIBS)
 capnp_SOURCES =                                                \
   src/capnp/compiler/module-loader.h                           \
   src/capnp/compiler/module-loader.c++                         \

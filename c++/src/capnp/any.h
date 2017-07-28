@@ -461,6 +461,8 @@ public:
   inline Reader(T&& value)
       : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
 
+  inline MessageSize totalSize() const { return _reader.totalSize().asPublic(); }
+
   kj::ArrayPtr<const byte> getDataSection() {
     return _reader.getDataSectionAsBlob();
   }
@@ -483,6 +485,11 @@ public:
     // T must be a struct type.
     return typename T::Reader(_reader);
   }
+
+  template <typename T>
+  ReaderFor<T> as(StructSchema schema) const;
+  // T must be DynamicStruct. Defined in dynamic.h.
+
 private:
   _::StructReader _reader;
 
@@ -529,6 +536,11 @@ public:
     // T must be a struct type.
     return typename T::Builder(_builder);
   }
+
+  template <typename T>
+  BuilderFor<T> as(StructSchema schema);
+  // T must be DynamicStruct. Defined in dynamic.h.
+
 private:
   _::StructBuilder _builder;
   friend class Orphanage;

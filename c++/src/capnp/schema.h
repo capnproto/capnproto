@@ -599,6 +599,8 @@ public:
 
   template <typename T>
   inline static Type from();
+  template <typename T>
+  inline static Type from(T&& value);
 
   inline schema::Type::Which which() const;
 
@@ -679,6 +681,9 @@ private:
   }
 
   void requireUsableAs(Type expected) const;
+
+  template <typename T, Kind k>
+  struct FromValueImpl;
 
   friend class ListSchema;  // only for requireUsableAs()
 };
@@ -898,6 +903,29 @@ inline schema::Type::AnyPointer::Unconstrained::Which Type::whichAnyPointerKind(
 
 template <typename T>
 inline Type Type::from() { return Type(Schema::from<T>()); }
+
+template <typename T, Kind k>
+struct Type::FromValueImpl {
+  template <typename U>
+  static inline Type type(U&& value) {
+    return Type::from<T>();
+  }
+};
+
+template <typename T>
+struct Type::FromValueImpl<T, Kind::OTHER> {
+  template <typename U>
+  static inline Type type(U&& value) {
+    // All dynamic types have getSchema().
+    return value.getSchema();
+  }
+};
+
+template <typename T>
+inline Type Type::from(T&& value) {
+  typedef FromAny<kj::Decay<T>> Base;
+  return Type::FromValueImpl<Base, kind<Base>()>::type(kj::fwd<T>(value));
+}
 
 inline bool Type::isVoid   () const { return baseType == schema::Type::VOID     && listDepth == 0; }
 inline bool Type::isBool   () const { return baseType == schema::Type::BOOL     && listDepth == 0; }

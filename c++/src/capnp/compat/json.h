@@ -224,10 +224,14 @@ private:
 // =======================================================================================
 // inline implementation details
 
+template <bool isDynamic>
+struct EncodeImpl;
+
 template <typename T>
 kj::String JsonCodec::encode(T&& value) {
+  Type type = Type::from(value);
   typedef FromAny<kj::Decay<T>> Base;
-  return encode(DynamicValue::Reader(ReaderFor<Base>(kj::fwd<T>(value))), Type::from<Base>());
+  return encode(DynamicValue::Reader(ReaderFor<Base>(kj::fwd<T>(value))), type);
 }
 
 template <typename T>
