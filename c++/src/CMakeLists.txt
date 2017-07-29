@@ -43,6 +43,67 @@ if(BUILD_TESTING)
   add_custom_target(check "${CMAKE_CTEST_COMMAND}" -V)
 endif()  # BUILD_TESTING
 
+# CMake support functions ======================================================
+
+function(kj_add_library target)
+  # Wrapper around `add_library()` to implement certain boilerplate practices:
+  #
+  #   1. The project version is appended to the library's output name (if it's a shared library).
+  #   2. The library gets an ALIAS target in the CapnProto:: namespace.
+  #   3. The library is install()ed using the value of INSTALL_TARGETS_DEFAULT_ARGS as arguments.
+  #   4. The installed library is copied to a convenience library without the name mangling from
+  #      (1) (if it's a shared library).
+  #
+  # You should use this function as you would `add_library()`.
+  #
+  # DETAILS
+  #
+  # The Cap'n Proto C++ ABI stability policy assumes no two versions are ABI-compatible. To prevent
+  # accidental dynamic linkage to an ABI-incompatible version of the library, the project version
+  # (-dev metadata and all) is appended to the library target's output name. For example, target
+  # `kj` produces a library whose filename and soname are `libkj-0.7-dev.so`. Additionally, the
+  # autotools build produces a `libkj.so` convenience file (but with the full soname).
+  #
+  # The autotools build implements this name mangling with `libtool -release`. The CMake build can
+  # emulate its behavior by manually setting the OUTPUT_NAME property. Copying the file to a
+  # filename without the version appendage is accomplished with a technique I learned from reading
+  # the Xerces-C++ project's CMakeLists.txt, by Roger Leigh:
+  # http://svn.apache.org/viewvc/xerces/c/trunk/src/CMakeLists.txt?revision=1800911&view=markup#l1269
+
+  add_library(${target} ${ARGN})
+  # Forward all arguments directly to add_library.
+
+  add_library(CapnProto::${target} ALIAS ${target})
+
+  install(TARGETS ${target} ${INSTALL_TARGETS_DEFAULT_ARGS})
+  # This install line must precede the shared library copy script install line below to ensure the
+  # library is installed before the script is executed.
+
+  get_target_property(target_type ${target} TYPE)
+  if(target_type STREQUAL "SHARED_LIBRARY")
+    # The autotools build only mangles shared library names.
+    set_target_properties(${target}
+        PROPERTIES
+          OUTPUT_NAME ${target}-${VERSION}
+          INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}"
+          # The autotools build sets the rpath this way on all libraries with dependencies
+    )
+    # Mangle shared library output names the same way the autotools build does.
+
+    file(GENERATE
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/install-${target}-copy.cmake"
+        CONTENT "execute_process(COMMAND ${CMAKE_COMMAND} -E copy \
+\"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_LIBDIR}/$<TARGET_FILE_NAME:${target}>\" \
+\"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_LIBDIR}/${CMAKE_SHARED_LIBRARY_PREFIX}${target}${CMAKE_SHARED_LIBRARY_SUFFIX}\")")
+    # This says: copy the installed target filename to lib${target}.so.
+
+    install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/install-${target}-copy.cmake")
+    # We have to create a script file because we can't use generator expressions inside
+    # install(CODE). This is a requested feature of CMake:
+    #   https://gitlab.kitware.com/cmake/cmake/issues/15785
+  endif()
+endfunction()
+
 # kj ===========================================================================
 
 add_subdirectory(kj)
