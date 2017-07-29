@@ -105,5 +105,16 @@ AC_SUBST([STDLIB_FLAG])
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 
-AC_CONFIG_FILES([Makefile capnp.pc capnp-rpc.pc capnp-json.pc kj.pc kj-async.pc])
+AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
+  pkgconfig/capnp.pc \
+  pkgconfig/capnp-rpc.pc \
+  pkgconfig/capnp-json.pc \
+  pkgconfig/kj.pc \
+  pkgconfig/kj-async.pc \
+  pkgconfig/kj-http.pc \
+  pkgconfig/kj-test.pc \
+])
+[CAPNP_PKG_CONFIG_FILES]="CAPNP_PKG_CONFIG_FILES"
+AC_SUBST([CAPNP_PKG_CONFIG_FILES])
+AC_CONFIG_FILES([Makefile] CAPNP_PKG_CONFIG_FILES)
 AC_OUTPUT
