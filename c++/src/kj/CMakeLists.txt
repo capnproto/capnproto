@@ -58,8 +58,7 @@ set(kj-parse_headers
 set(kj-std_headers
   std/iostream.h
 )
-add_library(kj ${kj_sources})
-add_library(CapnProto::kj ALIAS kj)
+kj_add_library(kj ${kj_sources})
 target_compile_features(kj PUBLIC cxx_constexpr)
 # Requiring the cxx_std_11 metafeature would be preferable, but that doesn't exist until CMake 3.8.
 
@@ -73,9 +72,6 @@ target_include_directories(kj INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
   $<INSTALL_INTERFACE:include>
 )
-# Ensure the library has a version set to match autotools build
-set_target_properties(kj PROPERTIES VERSION ${VERSION})
-install(TARGETS kj ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${kj_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 install(FILES ${kj-parse_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/parse")
 install(FILES ${kj-std_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/std")
@@ -89,12 +85,8 @@ set(kj-test_headers
 set(kj-test-compat_headers
   compat/gtest.h
 )
-add_library(kj-test ${kj-test_sources})
-add_library(CapnProto::kj-test ALIAS kj-test)
+kj_add_library(kj-test ${kj-test_sources})
 target_link_libraries(kj-test PUBLIC kj)
-# Ensure the library has a version set to match autotools build
-set_target_properties(kj-test PROPERTIES VERSION ${VERSION})
-install(TARGETS kj-test ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${kj-test_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 install(FILES ${kj-test-compat_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
 
@@ -117,8 +109,7 @@ set(kj-async_headers
   time.h
 )
 if(NOT CAPNP_LITE)
-  add_library(kj-async ${kj-async_sources})
-  add_library(CapnProto::kj-async ALIAS kj-async)
+  kj_add_library(kj-async ${kj-async_sources})
   target_link_libraries(kj-async PUBLIC kj)
   if(UNIX)
     # external clients of this library need to link to pthreads
@@ -126,9 +117,6 @@ if(NOT CAPNP_LITE)
   elseif(WIN32)
     target_link_libraries(kj-async PUBLIC ws2_32)
   endif()
-  # Ensure the library has a version set to match autotools build
-  set_target_properties(kj-async PROPERTIES VERSION ${VERSION})
-  install(TARGETS kj-async ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${kj-async_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 endif()
 
@@ -143,12 +131,8 @@ set(kj-http_headers
   compat/http.h
 )
 if(NOT CAPNP_LITE)
-  add_library(kj-http ${kj-http_sources})
-  add_library(CapnProto::kj-http ALIAS kj-http)
+  kj_add_library(kj-http ${kj-http_sources})
   target_link_libraries(kj-http PUBLIC kj-async kj)
-  # Ensure the library has a version set to match autotools build
-  set_target_properties(kj-http PROPERTIES VERSION ${VERSION})
-  install(TARGETS kj-http ${INSTALL_TARGETS_DEFAULT_ARGS})
   install(FILES ${kj-http_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
 endif()
 
