@@ -33,8 +33,6 @@ EXTRA_DIST =                                                                 \
   src/capnp/testdata/packedflat                                              \
   CMakeLists.txt                                                             \
   cmake/FindCapnProto.cmake                                                  \
-  cmake/CapnProtoConfig.cmake.in                                             \
-  cmake/CapnProtoMacros.cmake                                                \
   src/CMakeLists.txt                                                         \
   src/kj/CMakeLists.txt                                                      \
   src/capnp/CMakeLists.txt
@@ -115,6 +113,9 @@ dist_includecapnp_DATA = $(public_capnpc_inputs)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = $(CAPNP_PKG_CONFIG_FILES)
+
+cmakeconfigdir = $(libdir)/cmake/CapnProto
+cmakeconfig_DATA = $(CAPNP_CMAKE_CONFIG_FILES) cmake/CapnProtoMacros.cmake
 
 noinst_HEADERS = \
   src/kj/miniposix.h
