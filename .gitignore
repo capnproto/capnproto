@@ -56,7 +56,7 @@
 /c++/build-aux/
 /c++/capnp
 /c++/capnp-evolution-test
-/c++/*.pc
+/c++/pkgconfig/*.pc
 /c++/capnp-test
 /c++/capnpc-c++
 /c++/capnpc-capnp
