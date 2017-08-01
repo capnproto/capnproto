@@ -115,7 +115,9 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = $(CAPNP_PKG_CONFIG_FILES)
 
 cmakeconfigdir = $(libdir)/cmake/CapnProto
-cmakeconfig_DATA = $(CAPNP_CMAKE_CONFIG_FILES) cmake/CapnProtoMacros.cmake
+cmakeconfig_DATA = $(CAPNP_CMAKE_CONFIG_FILES)                 \
+  cmake/CapnProtoMacros.cmake                                  \
+  cmake/CapnProtoTargets.cmake
 
 noinst_HEADERS = \
   src/kj/miniposix.h
