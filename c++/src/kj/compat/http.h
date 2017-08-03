@@ -369,12 +369,56 @@ private:
 };
 
 class WebSocket {
-public:
-  WebSocket(kj::Own<kj::AsyncIoStream> stream);
-  // Create a WebSocket wrapping the given I/O stream.
+  // Interface representincg an open WebSocket session.
+  //
+  // Each side can send and receive data and "close" messages.
+  //
+  // Ping/Pong and message fragmentation are not exposed through this interface. These features of
+  // the underlying WebSocket protocol are not exposed by the browser-level Javascript API either,
+  // and thus applications typically need to implement these features at the applicaiton protocol
+  // level instead. The implementation is, however, expected to reply to Ping messages it receives.
 
-  kj::Promise<void> send(kj::ArrayPtr<const byte> message);
-  kj::Promise<void> send(kj::ArrayPtr<const char> message);
+public:
+  virtual kj::Promise<void> send(kj::ArrayPtr<const byte> message) = 0;
+  virtual kj::Promise<void> send(kj::ArrayPtr<const char> message) = 0;
+  // Send a message (binary or text). The underlying buffer must remain valid, and you must not
+  // call send() again, until the returned promise resolves.
+
+  virtual kj::Promise<void> close(uint16_t code, kj::StringPtr reason) = 0;
+  // Send a Close message.
+  //
+  // Note that the returned Promise resolves once the message has been sent -- it does NOT wait
+  // for the other end to send a Close reply. The application should await a reply before dropping
+  // the WebSocket object.
+
+  struct Close {
+    uint16_t code;
+    kj::String reason;
+  };
+
+  typedef kj::OneOf<kj::String, kj::Array<byte>, Close> Message;
+
+  virtual kj::Promise<Message> receive() = 0;
+  // Read one message from the WebSocket and return it. Can only call once at a time. Do not call
+  // again after EndOfStream is received.
+
+  class MaskKeyGenerator {
+    // Class for generating WebSocket packet masks keys. See RFC6455 to understand how masking is
+    // used in WebSockets.
+    //
+    // The RFC insists that mask keys must be crypto-random, but it is not crypto -- it's just a
+    // value to be XOR'd with each four bytes of the data, and the mask itself is transmitted in
+    // plaintext ahead of the message. Apparently the WebSocket designers imagined that a random
+    // mask would make mass surveillance via string matching more difficult, but in practice this
+    // seems like no more than a minor speedbump. The other purpose of the mask is to prevent dumb
+    // proxies and captive portals from getting confused, but even a global constant mask could
+    // accomplish that.
+    //
+    // KJ leaves it up to the application to decide how to generate masks.
+
+  public:
+    virtual void next(byte (&bytes)[4]) = 0;
+  };
 };
 
 class HttpClient {
@@ -428,10 +472,11 @@ public:
     // `statusText` and `headers` remain valid until `upstreamOrBody` is dropped.
   };
   virtual kj::Promise<WebSocketResponse> openWebSocket(
-      kj::StringPtr url, const HttpHeaders& headers, kj::Own<WebSocket> downstream);
+      kj::StringPtr url, const HttpHeaders& headers);
   // Tries to open a WebSocket. Default implementation calls send() and never returns a WebSocket.
   //
-  // `url` and `headers` are invalidated when the returned promise resolves.
+  // `url` and `headers` need only remain valid until `openWebSocket()` returns (they can be
+  // stack-allocated).
 
   virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host);
   // Handles CONNECT requests. Only relevant for proxy clients. Default implementation throws
@@ -478,12 +523,11 @@ public:
 
   class WebSocketResponse: public Response {
   public:
-    kj::Own<WebSocket> startWebSocket(
-        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
-        WebSocket& upstream);
-    // Begin the response.
+    kj::Own<WebSocket> acceptWebSocket(
+        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers);
+    // Accept and open the WebSocket.
     //
-    // `statusText` and `headers` need only remain valid until startWebSocket() returns (they can
+    // `statusText` and `headers` need only remain valid until acceptWebSocket() returns (they can
     // be stack-allocated).
   };
 
@@ -522,6 +566,15 @@ kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Asyn
 kj::Own<HttpClient> newHttpClient(HttpService& service);
 kj::Own<HttpService> newHttpService(HttpClient& client);
 // Adapts an HttpClient to an HttpService and vice versa.
+
+kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
+                                kj::Maybe<WebSocket::MaskKeyGenerator&> maskKeyGenerator = nullptr);
+// Create a new WebSocket on top of the given stream. It is assumed that the HTTP -> WebSocket
+// upgrade handshake has already occurred (or is not needed), and messages can immediately be
+// sent and received on the stream. Normally applications would not call this directly.
+//
+// `maskKeyGenerator` is optional, but if omitted, the WebSocket frames will not be masked. Refer
+// to RFC6455 to understand when masking is required.
 
 struct HttpServerSettings {
   kj::Duration headerTimeout = 15 * kj::SECONDS;

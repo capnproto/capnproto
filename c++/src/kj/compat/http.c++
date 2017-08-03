@@ -1547,6 +1547,466 @@ private:
 
 // =======================================================================================
 
+class WebSocketImpl final: public WebSocket {
+public:
+  WebSocketImpl(kj::Own<kj::AsyncIoStream> stream,
+                kj::Maybe<WebSocket::MaskKeyGenerator&> maskKeyGenerator,
+                kj::Array<byte> buffer = kj::heapArray<byte>(4096),
+                size_t bytesAlreadyAvailable = 0)
+      : stream(kj::mv(stream)), maskKeyGenerator(maskKeyGenerator),
+        recvAvail(bytesAlreadyAvailable), recvBuffer(kj::mv(buffer)) {}
+
+  kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+    return sendImpl(OPCODE_BINARY, message);
+  }
+
+  kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+    return sendImpl(OPCODE_TEXT, message.asBytes());
+  }
+
+  kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+    kj::Array<byte> payload;
+    if (code == 1005) {
+      KJ_REQUIRE(reason.size() == 0, "WebSocket close code 1005 cannot have a reason");
+
+      // code 1005 -- leave payload empty
+    } else {
+      payload = heapArray<byte>(reason.size() + 2);
+      payload[0] = code >> 8;
+      payload[1] = code;
+      memcpy(payload.begin() + 2, reason.begin(), reason.size());
+    }
+
+    auto promise = sendImpl(OPCODE_CLOSE, payload);
+    return promise.attach(kj::mv(payload));
+  }
+
+  kj::Promise<Message> receive() override {
+    auto& recvHeader = *reinterpret_cast<Header*>(recvBuffer.begin());
+    size_t headerSize = recvHeader.headerSize(recvAvail);
+
+    if (headerSize > recvAvail) {
+      return stream->tryRead(recvBuffer.begin() + recvAvail, 1, recvBuffer.size() - recvAvail)
+          .then([this](size_t actual) -> kj::Promise<Message> {
+        if (actual == 0) {
+          if (recvAvail) {
+            return KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in frame header");
+          } else {
+            // It's incorrect for the WebSocket to disconnect without sending `Close`.
+            return KJ_EXCEPTION(DISCONNECTED,
+                "WebSocket disconnected between frames without sending `Close`.");
+          }
+        }
+
+        recvAvail += actual;
+        return receive();
+      });
+    }
+
+    size_t payloadLen = recvHeader.getPayloadLen();
+
+    auto opcode = recvHeader.getOpcode();
+    bool isData = opcode < OPCODE_FIRST_CONTROL;
+    if (opcode == OPCODE_CONTINUATION) {
+      KJ_REQUIRE(!fragments.empty(), "unexpected continuation frame in WebSocket");
+
+      opcode = fragmentOpcode;
+    } else if (isData) {
+      KJ_REQUIRE(fragments.empty(), "expected continuation frame in WebSocket");
+    }
+
+    bool isFin = recvHeader.isFin();
+
+    kj::Array<byte> message;           // space to allocate
+    byte* payloadTarget;               // location into which to read payload (size is payloadLen)
+    if (isFin) {
+      // Add space for NUL terminator when allocating text message.
+      size_t amountToAllocate = payloadLen + (opcode == OPCODE_TEXT && isFin);
+
+      if (isData && !fragments.empty()) {
+        // Final frame of a fragmented message. Gather the fragments.
+        size_t offset = 0;
+        for (auto& fragment: fragments) offset += fragment.size();
+        message = kj::heapArray<byte>(offset + amountToAllocate);
+
+        offset = 0;
+        for (auto& fragment: fragments) {
+          memcpy(message.begin() + offset, fragment.begin(), fragment.size());
+          offset += fragment.size();
+        }
+        payloadTarget = message.begin() + offset;
+
+        fragments.clear();
+        fragmentOpcode = 0;
+      } else {
+        // Single-frame message.
+        message = kj::heapArray<byte>(amountToAllocate);
+        payloadTarget = message.begin();
+      }
+    } else {
+      // Fragmented message, and this isn't the final fragment.
+      KJ_REQUIRE(isData, "WebSocket control frame cannot be fragmented");
+
+      message = kj::heapArray<byte>(payloadLen);
+      payloadTarget = message.begin();
+      if (fragments.empty()) {
+        // This is the first fragment, so set the opcode.
+        fragmentOpcode = opcode;
+      }
+    }
+
+    Mask mask = recvHeader.getMask();
+
+    auto handleMessage = kj::mvCapture(message,
+        [this,opcode,payloadTarget,payloadLen,mask,isFin]
+        (kj::Array<byte>&& message) -> kj::Promise<Message> {
+      if (!mask.isZero()) {
+        mask.apply(kj::arrayPtr(payloadTarget, payloadLen));
+      }
+
+      if (!isFin) {
+        // Add fragment to the list and loop.
+        fragments.add(kj::mv(message));
+        return receive();
+      }
+
+      switch (opcode) {
+        case OPCODE_CONTINUATION:
+          // Shouldn't get here; handled above.
+          KJ_UNREACHABLE;
+        case OPCODE_TEXT:
+          message.back() = '\0';
+          return Message(kj::String(message.releaseAsChars()));
+        case OPCODE_BINARY:
+          return Message(message.releaseAsBytes());
+        case OPCODE_CLOSE:
+          if (message.size() < 2) {
+            return Message(Close { 1005, nullptr });
+          } else {
+            uint16_t status = (static_cast<uint16_t>(message[0]) << 8)
+                            | (static_cast<uint16_t>(message[1])     );
+            return Message(Close {
+              status, kj::heapString(message.slice(2, message.size()).asChars())
+            });
+          }
+        case OPCODE_PING:
+          // Send back a pong.
+          queuePong(kj::mv(message));
+          return receive();
+        case OPCODE_PONG:
+          // Unsolicited pong. Ignore.
+          return receive();
+        default:
+          KJ_FAIL_REQUIRE("unknown WebSocket opcode", opcode);
+      }
+    });
+
+    if (headerSize + payloadLen <= recvAvail) {
+      // All data already received.
+      memcpy(payloadTarget, recvBuffer.begin() + headerSize, payloadLen);
+      size_t consumed = headerSize + payloadLen;
+      size_t remaining = recvAvail - consumed;
+      memmove(recvBuffer.begin(), recvBuffer.begin() + consumed, remaining);
+      recvAvail = remaining;
+      return handleMessage();
+    } else {
+      // Need to read more data.
+      size_t consumed = recvAvail - headerSize;
+      memcpy(payloadTarget, recvBuffer.begin() + headerSize, consumed);
+      recvAvail = 0;
+      size_t remaining = payloadLen - consumed;
+      auto promise = stream->tryRead(payloadTarget + consumed, remaining, remaining)
+          .then([remaining](size_t amount) {
+        if (amount < remaining) {
+          kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in message"));
+        }
+      });
+      return promise.then(kj::mv(handleMessage));
+    }
+  }
+
+private:
+  class Mask {
+  public:
+    Mask(): maskBytes { 0, 0, 0, 0 } {}
+    Mask(const byte* ptr) { memcpy(maskBytes, ptr, 4); }
+
+    Mask(kj::Maybe<WebSocket::MaskKeyGenerator&> generator) {
+      KJ_IF_MAYBE(g, generator) {
+        g->next(maskBytes);
+      } else {
+        memset(maskBytes, 0, 4);
+      }
+    }
+
+    void apply(kj::ArrayPtr<byte> bytes) const {
+      apply(bytes.begin(), bytes.size());
+    }
+
+    void copyTo(byte* output) const {
+      memcpy(output, maskBytes, 4);
+    }
+
+    bool isZero() const {
+      return (maskBytes[0] | maskBytes[1] | maskBytes[2] | maskBytes[3]) == 0;
+    }
+
+  private:
+    byte maskBytes[4];
+
+    void apply(byte* __restrict__ bytes, size_t size) const {
+      for (size_t i = 0; i < size; i++) {
+        bytes[i] ^= maskBytes[i % 4];
+      }
+    }
+  };
+
+  class Header {
+  public:
+    kj::ArrayPtr<const byte> compose(bool fin, byte opcode, uint64_t payloadLen, Mask mask) {
+      bytes[0] = (fin ? FIN_MASK : 0) | opcode;
+      bool hasMask = !mask.isZero();
+
+      size_t fill;
+
+      if (payloadLen < 126) {
+        bytes[1] = (hasMask ? USE_MASK_MASK : 0) | payloadLen;
+        if (hasMask) {
+          mask.copyTo(bytes + 2);
+          fill = 6;
+        } else {
+          fill = 2;
+        }
+      } else if (payloadLen < 65536) {
+        bytes[1] = (hasMask ? USE_MASK_MASK : 0) | 126;
+        bytes[2] = static_cast<byte>(payloadLen >> 8);
+        bytes[3] = static_cast<byte>(payloadLen     );
+        if (hasMask) {
+          mask.copyTo(bytes + 4);
+          fill = 8;
+        } else {
+          fill = 4;
+        }
+      } else {
+        bytes[1] = (hasMask ? USE_MASK_MASK : 0) | 127;
+        bytes[2] = static_cast<byte>(payloadLen >> 56);
+        bytes[3] = static_cast<byte>(payloadLen >> 48);
+        bytes[4] = static_cast<byte>(payloadLen >> 40);
+        bytes[5] = static_cast<byte>(payloadLen >> 42);
+        bytes[6] = static_cast<byte>(payloadLen >> 24);
+        bytes[7] = static_cast<byte>(payloadLen >> 16);
+        bytes[8] = static_cast<byte>(payloadLen >>  8);
+        bytes[9] = static_cast<byte>(payloadLen      );
+        if (hasMask) {
+          mask.copyTo(bytes + 10);
+          fill = 14;
+        } else {
+          fill = 10;
+        }
+      }
+
+      return arrayPtr(bytes, fill);
+    }
+
+    bool isFin() const {
+      return bytes[0] & FIN_MASK;
+    }
+
+    bool hasRsv() const {
+      return bytes[0] & RSV_MASK;
+    }
+
+    byte getOpcode() const {
+      return bytes[0] & OPCODE_MASK;
+    }
+
+    uint64_t getPayloadLen() const {
+      byte payloadLen = bytes[1] & PAYLOAD_MASK;
+      if (payloadLen == 127) {
+        return (static_cast<uint64_t>(bytes[2]) << 56)
+             | (static_cast<uint64_t>(bytes[3]) << 48)
+             | (static_cast<uint64_t>(bytes[4]) << 40)
+             | (static_cast<uint64_t>(bytes[5]) << 32)
+             | (static_cast<uint64_t>(bytes[6]) << 24)
+             | (static_cast<uint64_t>(bytes[7]) << 16)
+             | (static_cast<uint64_t>(bytes[8]) <<  8)
+             | (static_cast<uint64_t>(bytes[9])      );
+      } else if (payloadLen == 126) {
+        return (static_cast<uint64_t>(bytes[2]) <<  8)
+             | (static_cast<uint64_t>(bytes[3])      );
+      } else {
+        return payloadLen;
+      }
+    }
+
+    Mask getMask() const {
+      if (bytes[1] & USE_MASK_MASK) {
+        byte payloadLen = bytes[1] & PAYLOAD_MASK;
+        if (payloadLen == 128) {
+          return Mask(bytes + 10);
+        } else if (payloadLen == 127) {
+          return Mask(bytes + 4);
+        } else {
+          return Mask(bytes + 2);
+        }
+      } else {
+        return Mask();
+      }
+    }
+
+    size_t headerSize(size_t sizeSoFar) {
+      if (sizeSoFar < 2) return 2;
+
+      size_t required = 2;
+
+      if (bytes[1] & USE_MASK_MASK) {
+        required += 4;
+      }
+
+      byte payloadLen = bytes[1] & PAYLOAD_MASK;
+      if (payloadLen == 127) {
+        required += 8;
+      } else if (payloadLen == 126) {
+        required += 2;
+      }
+
+      return required;
+    }
+
+  private:
+    byte bytes[14];
+
+    static constexpr byte FIN_MASK = 0x80;
+    static constexpr byte RSV_MASK = 0x70;
+    static constexpr byte OPCODE_MASK = 0x0f;
+
+    static constexpr byte USE_MASK_MASK = 0x80;
+    static constexpr byte PAYLOAD_MASK = 0x7f;
+  };
+
+  static constexpr byte OPCODE_CONTINUATION = 0;
+  static constexpr byte OPCODE_TEXT         = 1;
+  static constexpr byte OPCODE_BINARY       = 2;
+  static constexpr byte OPCODE_CLOSE        = 8;
+  static constexpr byte OPCODE_PING         = 9;
+  static constexpr byte OPCODE_PONG         = 10;
+
+  static constexpr byte OPCODE_FIRST_CONTROL = 8;
+
+  // ---------------------------------------------------------------------------
+
+  kj::Own<kj::AsyncIoStream> stream;
+  kj::Maybe<WebSocket::MaskKeyGenerator&> maskKeyGenerator;
+
+  bool sendClosed = false;
+  bool currentlySending = false;
+  Header sendHeader;
+  kj::ArrayPtr<const byte> sendParts[2];
+
+  kj::Maybe<kj::Array<byte>> queuedPong;
+  // If a Ping is received while currentlySending is true, then queuedPong is set to the body of
+  // a pong message that should be sent once the current send is complete.
+
+  kj::Maybe<kj::Promise<void>> sendingPong;
+  // If a Pong is being sent asynchronously in response to a Ping, this is a promise for the
+  // completion of that send.
+
+  uint fragmentOpcode = 0;
+  kj::Vector<kj::Array<byte>> fragments;
+  // If `fragments` is non-empty, we've already received some fragments of a message.
+  // `fragmentOpcode` is the original opcode.
+
+  uint recvAvail = 0;
+  kj::Array<byte> recvBuffer;
+
+  kj::Promise<void> sendImpl(byte opcode, kj::ArrayPtr<const byte> message) {
+    KJ_REQUIRE(!sendClosed, "WebSocket already closed");
+    KJ_REQUIRE(!currentlySending, "another message send is already in progress");
+
+    currentlySending = true;
+
+    KJ_IF_MAYBE(p, sendingPong) {
+      // We recently sent a pong, make sure it's finished before proceeding.
+      auto promise = p->then([this, opcode, message]() {
+        currentlySending = false;
+        return sendImpl(opcode, message);
+      });
+      sendingPong = nullptr;
+      return promise;
+    }
+
+    sendClosed = opcode == OPCODE_CLOSE;
+
+    Mask mask(maskKeyGenerator);
+
+    kj::Array<byte> ownMessage;
+    if (!mask.isZero()) {
+      // Sadness, we have to make a copy to apply the mask.
+      ownMessage = kj::heapArray(message);
+      mask.apply(ownMessage);
+      message = ownMessage;
+    }
+
+    sendParts[0] = sendHeader.compose(true, opcode, message.size(), mask);
+    sendParts[1] = message;
+
+    auto promise = stream->write(sendParts);
+    if (!mask.isZero()) {
+      promise = promise.attach(kj::mv(ownMessage));
+    }
+    return promise.then([this]() {
+      currentlySending = false;
+
+      // Send queued pong if needed.
+      KJ_IF_MAYBE(q, queuedPong) {
+        kj::Array<byte> payload = kj::mv(*q);
+        queuedPong = nullptr;
+        queuePong(kj::mv(payload));
+      }
+    });
+  }
+
+  void queuePong(kj::Array<byte> payload) {
+    if (currentlySending) {
+      // There is a message-send in progress, so we cannot write to the stream now.
+      //
+      // Note: According to spec, if the server receives a second ping before responding to the
+      //   previous one, it can opt to respond only to the last ping. So we don't have to check if
+      //   queuedPong is already non-null.
+      queuedPong = kj::mv(payload);
+    } else KJ_IF_MAYBE(promise, sendingPong) {
+      // We're still sending a previous pong. Wait for it to finish before sending ours.
+      sendingPong = promise->then(kj::mvCapture(payload, [this](kj::Array<byte> payload) mutable {
+        return sendPong(kj::mv(payload));
+      }));
+    } else {
+      // We're not sending any pong currently.
+      sendingPong = sendPong(kj::mv(payload));
+    }
+  }
+
+  kj::Promise<void> sendPong(kj::Array<byte> payload) {
+    if (sendClosed) {
+      return kj::READY_NOW;
+    }
+
+    sendParts[0] = sendHeader.compose(true, OPCODE_PONG, payload.size(), Mask(maskKeyGenerator));
+    sendParts[1] = payload;
+    return stream->write(sendParts);
+  }
+};
+
+}  // namespace
+
+kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
+                                kj::Maybe<WebSocket::MaskKeyGenerator&> maskKeyGenerator) {
+  return kj::heap<WebSocketImpl>(kj::mv(stream), maskKeyGenerator);
+}
+
+// =======================================================================================
+
+namespace {
+
 class HttpClientImpl final: public HttpClient {
 public:
   HttpClientImpl(HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& rawStream)
@@ -1607,7 +2067,7 @@ private:
 }  // namespace
 
 kj::Promise<HttpClient::WebSocketResponse> HttpClient::openWebSocket(
-    kj::StringPtr url, const HttpHeaders& headers, kj::Own<WebSocket> downstream) {
+    kj::StringPtr url, const HttpHeaders& headers) {
   return request(HttpMethod::GET, url, headers, nullptr)
       .response.then([](HttpClient::Response&& response) -> WebSocketResponse {
     kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> body;

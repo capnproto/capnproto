@@ -381,6 +381,26 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
   }));
 }
 
+kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::ArrayPtr<const byte> expected) {
+  if (expected.size() == 0) return kj::READY_NOW;
+
+  auto buffer = kj::heapArray<byte>(expected.size());
+
+  auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
+  return promise.then(kj::mvCapture(buffer, [&in,expected](kj::Array<byte> buffer, size_t amount) {
+    if (amount == 0) {
+      KJ_FAIL_ASSERT("expected data never sent", expected);
+    }
+
+    auto actual = buffer.slice(0, amount);
+    if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
+      KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
+    }
+
+    return expectRead(in, expected.slice(amount, expected.size()));
+  }));
+}
+
 void testHttpClientRequest(kj::AsyncIoContext& io, const HttpRequestTestCase& testCase) {
   auto pipe = io.provider->newTwoWayPipe();
 
@@ -1146,6 +1166,298 @@ KJ_TEST("HttpClient <-> HttpServer") {
   pipe.ends[0]->shutdownWrite();
   listenTask.wait(io.waitScope);
   KJ_EXPECT(service.getRequestCount() == kj::size(PIPELINE_TESTS));
+}
+
+// -----------------------------------------------------------------------------
+
+KJ_TEST("WebSocket core protocol") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  auto client = newWebSocket(kj::mv(pipe.ends[0]));
+  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+
+  auto mediumString = kj::strArray(kj::repeat(kj::StringPtr("123456789"), 30), "");
+  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("123456789"), 10000), "");
+
+  auto clientTask = client->send(kj::StringPtr("hello"))
+      .then([&]() { return client->send(mediumString); })
+      .then([&]() { return client->send(bigString); })
+      .then([&]() { return client->send(kj::StringPtr("world").asBytes()); })
+      .then([&]() { return client->close(1234, "bored"); });
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "hello");
+  }
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == mediumString);
+  }
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == bigString);
+  }
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::Array<byte>>());
+    KJ_EXPECT(kj::str(message.get<kj::Array<byte>>().asChars()) == "world");
+  }
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<WebSocket::Close>());
+    KJ_EXPECT(message.get<WebSocket::Close>().code == 1234);
+    KJ_EXPECT(message.get<WebSocket::Close>().reason == "bored");
+  }
+
+  auto serverTask = server->close(4321, "whatever");
+
+  {
+    auto message = client->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<WebSocket::Close>());
+    KJ_EXPECT(message.get<WebSocket::Close>().code == 4321);
+    KJ_EXPECT(message.get<WebSocket::Close>().reason == "whatever");
+  }
+
+  clientTask.wait(io.waitScope);
+  serverTask.wait(io.waitScope);
+}
+
+KJ_TEST("WebSocket fragmented") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+
+  byte DATA[] = {
+    0x01, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',
+
+    0x00, 0x03, 'w', 'o', 'r',
+
+    0x80, 0x02, 'l', 'd',
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "hello world");
+  }
+
+  clientTask.wait(io.waitScope);
+}
+
+class ConstantMaskGenerator final: public WebSocket::MaskKeyGenerator {
+public:
+  void next(byte (&bytes)[4]) override {
+    bytes[0] = 12;
+    bytes[1] = 34;
+    bytes[2] = 56;
+    bytes[3] = 78;
+  }
+};
+
+KJ_TEST("WebSocket masked") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+  ConstantMaskGenerator maskGenerator;
+
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), maskGenerator);
+
+  byte DATA[] = {
+    0x81, 0x86, 12, 34, 56, 78, 'h' ^ 12, 'e' ^ 34, 'l' ^ 56, 'l' ^ 78, 'o' ^ 12, ' ' ^ 34,
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+  auto serverTask = server->send(kj::StringPtr("hello "));
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "hello ");
+  }
+
+  expectRead(*client, DATA).wait(io.waitScope);
+
+  clientTask.wait(io.waitScope);
+  serverTask.wait(io.waitScope);
+}
+
+KJ_TEST("WebSocket unsolicited pong") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+
+  byte DATA[] = {
+    0x01, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',
+
+    0x8A, 0x03, 'f', 'o', 'o',
+
+    0x80, 0x05, 'w', 'o', 'r', 'l', 'd',
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "hello world");
+  }
+
+  clientTask.wait(io.waitScope);
+}
+
+KJ_TEST("WebSocket ping") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+
+  // Be extra-annoying by having the ping arrive between fragments.
+  byte DATA[] = {
+    0x01, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',
+
+    0x89, 0x03, 'f', 'o', 'o',
+
+    0x80, 0x05, 'w', 'o', 'r', 'l', 'd',
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "hello world");
+  }
+
+  auto serverTask = server->send(kj::StringPtr("bar"));
+
+  byte EXPECTED[] = {
+    0x8A, 0x03, 'f', 'o', 'o',  // pong
+    0x81, 0x03, 'b', 'a', 'r',  // message
+  };
+
+  expectRead(*client, EXPECTED).wait(io.waitScope);
+
+  clientTask.wait(io.waitScope);
+  serverTask.wait(io.waitScope);
+}
+
+KJ_TEST("WebSocket ping mid-send") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+
+  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
+  auto serverTask = server->send(bigString).eagerlyEvaluate(nullptr);
+
+  byte DATA[] = {
+    0x89, 0x03, 'f', 'o', 'o',  // ping
+    0x81, 0x03, 'b', 'a', 'r',  // some other message
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "bar");
+  }
+
+  byte EXPECTED1[] = { 0x81, 0x7f, 0, 0, 0, 0, 0, 8, 0, 0 };
+  expectRead(*client, EXPECTED1).wait(io.waitScope);
+  expectRead(*client, bigString).wait(io.waitScope);
+
+  byte EXPECTED2[] = { 0x8A, 0x03, 'f', 'o', 'o' };
+  expectRead(*client, EXPECTED2).wait(io.waitScope);
+
+  clientTask.wait(io.waitScope);
+  serverTask.wait(io.waitScope);
+}
+
+KJ_TEST("WebSocket double-ping mid-send") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+
+  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
+  auto serverTask = server->send(bigString).eagerlyEvaluate(nullptr);
+
+  byte DATA[] = {
+    0x89, 0x03, 'f', 'o', 'o',  // ping
+    0x89, 0x03, 'q', 'u', 'x',  // ping2
+    0x81, 0x03, 'b', 'a', 'r',  // some other message
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "bar");
+  }
+
+  byte EXPECTED1[] = { 0x81, 0x7f, 0, 0, 0, 0, 0, 8, 0, 0 };
+  expectRead(*client, EXPECTED1).wait(io.waitScope);
+  expectRead(*client, bigString).wait(io.waitScope);
+
+  byte EXPECTED2[] = { 0x8A, 0x03, 'q', 'u', 'x' };
+  expectRead(*client, EXPECTED2).wait(io.waitScope);
+
+  clientTask.wait(io.waitScope);
+  serverTask.wait(io.waitScope);
+}
+
+KJ_TEST("WebSocket ping received during pong send") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+
+  // Send a very large ping so that sending the pong takes a while. Then send a second ping
+  // immediately after.
+  byte PREFIX[] = { 0x89, 0x7f, 0, 0, 0, 0, 0, 8, 0, 0 };
+  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
+  byte POSTFIX[] = {
+    0x89, 0x03, 'f', 'o', 'o',
+    0x81, 0x03, 'b', 'a', 'r',
+  };
+
+  kj::ArrayPtr<const byte> parts[] = {PREFIX, bigString.asBytes(), POSTFIX};
+  auto clientTask = client->write(parts);
+
+  {
+    auto message = server->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "bar");
+  }
+
+  byte EXPECTED1[] = { 0x8A, 0x7f, 0, 0, 0, 0, 0, 8, 0, 0 };
+  expectRead(*client, EXPECTED1).wait(io.waitScope);
+  expectRead(*client, bigString).wait(io.waitScope);
+
+  byte EXPECTED2[] = { 0x8A, 0x03, 'f', 'o', 'o' };
+  expectRead(*client, EXPECTED2).wait(io.waitScope);
+
+  clientTask.wait(io.waitScope);
 }
 
 // -----------------------------------------------------------------------------
