@@ -98,4 +98,41 @@ TEST(OneOf, Copy) {
   EXPECT_STREQ("foo", var2.get<const char*>());
 }
 
+TEST(OneOf, Switch) {
+  OneOf<int, float, const char*> var;
+  var = "foo";
+  uint count = 0;
+
+  {
+    KJ_SWITCH_ONEOF(var) {
+      KJ_CASE_ONEOF(i, int) {
+        KJ_FAIL_ASSERT("expected char*, got int", i);
+      }
+      KJ_CASE_ONEOF(s, const char*) {
+        KJ_EXPECT(kj::StringPtr(s) == "foo");
+        ++count;
+      }
+      KJ_CASE_ONEOF(n, float) {
+        KJ_FAIL_ASSERT("expected char*, got float", n);
+      }
+    }
+  }
+
+  KJ_EXPECT(count == 1);
+
+  {
+    KJ_SWITCH_ONEOF(kj::cp(var)) {
+      KJ_CASE_ONEOF(i, int) {
+        KJ_FAIL_ASSERT("expected char*, got int", i);
+      }
+      KJ_CASE_ONEOF(s, const char*) {
+        KJ_EXPECT(kj::StringPtr(s) == "foo");
+      }
+      KJ_CASE_ONEOF(n, float) {
+        KJ_FAIL_ASSERT("expected char*, got float", n);
+      }
+    }
+  }
+}
+
 }  // namespace kj
