@@ -1900,6 +1900,26 @@ public:
     return promise.attach(kj::mv(payload));
   }
 
+  kj::Promise<void> disconnect() override {
+    KJ_REQUIRE(!sendClosed, "WebSocket already closed");
+    KJ_REQUIRE(!currentlySending, "another message send is already in progress");
+
+    KJ_IF_MAYBE(p, sendingPong) {
+      // We recently sent a pong, make sure it's finished before proceeding.
+      currentlySending = true;
+      auto promise = p->then([this]() {
+        currentlySending = false;
+        return disconnect();
+      });
+      sendingPong = nullptr;
+      return promise;
+    }
+
+    sendClosed = true;
+    stream->shutdownWrite();
+    return kj::READY_NOW;
+  }
+
   kj::Promise<Message> receive() override {
     auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
     size_t headerSize = recvHeader.headerSize(recvData.size());
@@ -2543,6 +2563,30 @@ public:
     return kj::joinPromises(promises.finish());
   }
 
+  kj::Promise<void> openWebSocket(
+      kj::StringPtr url, const HttpHeaders& headers, WebSocketResponse& response) override {
+    return client.openWebSocket(url, headers)
+        .then([&response](HttpClient::WebSocketResponse&& innerResponse) -> kj::Promise<void> {
+      KJ_SWITCH_ONEOF(innerResponse.webSocketOrBody) {
+        KJ_CASE_ONEOF(ws, kj::Own<WebSocket>) {
+          auto ws2 = response.acceptWebSocket(*innerResponse.headers);
+          auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+          promises.add(pumpWebSocket(*ws, *ws2));
+          promises.add(pumpWebSocket(*ws2, *ws));
+          return kj::joinPromises(promises.finish()).attach(kj::mv(ws), kj::mv(ws2));
+        }
+        KJ_CASE_ONEOF(body, kj::Own<kj::AsyncInputStream>) {
+          auto out = response.send(
+              innerResponse.statusCode, innerResponse.statusText, *innerResponse.headers,
+              body->tryGetLength());
+          auto promise = body->pumpTo(*out);
+          return promise.ignoreResult().attach(kj::mv(out), kj::mv(body));
+        }
+      }
+      KJ_UNREACHABLE;
+    });
+  }
+
   kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host) override {
     return client.connect(kj::mv(host));
   }
@@ -2551,6 +2595,40 @@ public:
 
 private:
   HttpClient& client;
+
+  static kj::Promise<void> pumpWebSocket(WebSocket& from, WebSocket& to) {
+    return kj::evalNow([&]() {
+      return pumpWebSocketLoop(from, to);
+    }).catch_([&to](kj::Exception&& e) -> kj::Promise<void> {
+      if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+        return to.disconnect();
+      } else {
+        return to.close(1002, e.getDescription());
+      }
+    });
+  }
+
+  static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
+    return from.receive().then([&from,&to](WebSocket::Message&& message) {
+      KJ_SWITCH_ONEOF(message) {
+        KJ_CASE_ONEOF(text, kj::String) {
+          return to.send(text)
+              .attach(kj::mv(text))
+              .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
+        }
+        KJ_CASE_ONEOF(data, kj::Array<byte>) {
+          return to.send(data)
+              .attach(kj::mv(data))
+              .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
+        }
+        KJ_CASE_ONEOF(close, WebSocket::Close) {
+          return to.close(close.code, close.reason)
+              .attach(kj::mv(close));
+        }
+      }
+      KJ_UNREACHABLE;
+    });
+  }
 };
 
 }  // namespace

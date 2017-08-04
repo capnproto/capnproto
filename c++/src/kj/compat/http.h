@@ -404,6 +404,11 @@ public:
   // for the other end to send a Close reply. The application should await a reply before dropping
   // the WebSocket object.
 
+  virtual kj::Promise<void> disconnect() = 0;
+  // Sends EOF on the underlying connection without sending a "close" message. This is NOT a clean
+  // shutdown, but is sometimes useful when you want the other end to trigger whatever behavior
+  // it normally triggers when a connection is dropped.
+
   struct Close {
     uint16_t code;
     kj::String reason;

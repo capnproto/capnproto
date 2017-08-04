@@ -2076,6 +2076,81 @@ KJ_TEST("newHttpService from HttpClient") {
   writeResponsesPromise.wait(io.waitScope);
 }
 
+KJ_TEST("newHttpService from HttpClient WebSockets") {
+  auto io = kj::setupAsyncIo();
+  auto frontPipe = io.provider->newTwoWayPipe();
+  auto backPipe = io.provider->newTwoWayPipe();
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
+  auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
+      .then([&]() { return backPipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)}); })
+      .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_FIRST_MESSAGE_INLINE}); })
+      .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_MESSAGE); })
+      .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_REPLY_MESSAGE}); })
+      .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_CLOSE); })
+      .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_REPLY_CLOSE}); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  {
+    HttpHeaderTable table;
+    FakeEntropySource entropySource;
+    auto backClient = newHttpClient(table, *backPipe.ends[0], entropySource);
+    auto frontService = newHttpService(*backClient);
+    HttpServer frontServer(io.provider->getTimer(), table, *frontService);
+    auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
+
+    frontPipe.ends[0]->write({request.asBytes()}).wait(io.waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_RESPONSE_HANDSHAKE).wait(io.waitScope);
+
+    expectRead(*frontPipe.ends[0], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(io.waitScope);
+    frontPipe.ends[0]->write({WEBSOCKET_SEND_MESSAGE}).wait(io.waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_REPLY_MESSAGE).wait(io.waitScope);
+    frontPipe.ends[0]->write({WEBSOCKET_SEND_CLOSE}).wait(io.waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_REPLY_CLOSE).wait(io.waitScope);
+
+    frontPipe.ends[0]->shutdownWrite();
+    listenTask.wait(io.waitScope);
+  }
+
+  writeResponsesPromise.wait(io.waitScope);
+}
+
+KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
+  auto io = kj::setupAsyncIo();
+  auto frontPipe = io.provider->newTwoWayPipe();
+  auto backPipe = io.provider->newTwoWayPipe();
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
+  auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
+      .then([&]() { return backPipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)}); })
+      .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_FIRST_MESSAGE_INLINE}); })
+      .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_MESSAGE); })
+      .then([&]() { backPipe.ends[1]->shutdownWrite(); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  {
+    HttpHeaderTable table;
+    FakeEntropySource entropySource;
+    auto backClient = newHttpClient(table, *backPipe.ends[0], entropySource);
+    auto frontService = newHttpService(*backClient);
+    HttpServer frontServer(io.provider->getTimer(), table, *frontService);
+    auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
+
+    frontPipe.ends[0]->write({request.asBytes()}).wait(io.waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_RESPONSE_HANDSHAKE).wait(io.waitScope);
+
+    expectRead(*frontPipe.ends[0], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(io.waitScope);
+    frontPipe.ends[0]->write({WEBSOCKET_SEND_MESSAGE}).wait(io.waitScope);
+
+    KJ_EXPECT(frontPipe.ends[0]->readAllText().wait(io.waitScope) == "");
+
+    frontPipe.ends[0]->shutdownWrite();
+    listenTask.wait(io.waitScope);
+  }
+
+  writeResponsesPromise.wait(io.waitScope);
+}
+
 // -----------------------------------------------------------------------------
 
 KJ_TEST("HttpClient to capnproto.org") {
