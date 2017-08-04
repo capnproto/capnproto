@@ -1174,8 +1174,8 @@ KJ_TEST("WebSocket core protocol") {
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
 
-  auto client = newWebSocket(kj::mv(pipe.ends[0]));
-  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+  auto client = newWebSocket(kj::mv(pipe.ends[0]), nullptr);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
 
   auto mediumString = kj::strArray(kj::repeat(kj::StringPtr("123456789"), 30), "");
   auto bigString = kj::strArray(kj::repeat(kj::StringPtr("123456789"), 10000), "");
@@ -1235,7 +1235,7 @@ KJ_TEST("WebSocket fragmented") {
   auto pipe = io.provider->newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
-  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
 
   byte DATA[] = {
     0x01, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',
@@ -1256,20 +1256,21 @@ KJ_TEST("WebSocket fragmented") {
   clientTask.wait(io.waitScope);
 }
 
-class ConstantMaskGenerator final: public WebSocket::MaskKeyGenerator {
+class FakeEntropySource final: public EntropySource {
 public:
-  void next(byte (&bytes)[4]) override {
-    bytes[0] = 12;
-    bytes[1] = 34;
-    bytes[2] = 56;
-    bytes[3] = 78;
+  void generate(kj::ArrayPtr<byte> buffer) override {
+    static constexpr byte DUMMY[4] = { 12, 34, 56, 78 };
+
+    for (auto i: kj::indices(buffer)) {
+      buffer[i] = DUMMY[i % sizeof(DUMMY)];
+    }
   }
 };
 
 KJ_TEST("WebSocket masked") {
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newTwoWayPipe();
-  ConstantMaskGenerator maskGenerator;
+  FakeEntropySource maskGenerator;
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), maskGenerator);
@@ -1298,7 +1299,7 @@ KJ_TEST("WebSocket unsolicited pong") {
   auto pipe = io.provider->newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
-  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
 
   byte DATA[] = {
     0x01, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',
@@ -1324,7 +1325,7 @@ KJ_TEST("WebSocket ping") {
   auto pipe = io.provider->newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
-  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
 
   // Be extra-annoying by having the ping arrive between fragments.
   byte DATA[] = {
@@ -1361,7 +1362,7 @@ KJ_TEST("WebSocket ping mid-send") {
   auto pipe = io.provider->newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
-  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
 
   auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
   auto serverTask = server->send(bigString).eagerlyEvaluate(nullptr);
@@ -1395,7 +1396,7 @@ KJ_TEST("WebSocket double-ping mid-send") {
   auto pipe = io.provider->newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
-  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
 
   auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
   auto serverTask = server->send(bigString).eagerlyEvaluate(nullptr);
@@ -1430,7 +1431,7 @@ KJ_TEST("WebSocket ping received during pong send") {
   auto pipe = io.provider->newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
-  auto server = newWebSocket(kj::mv(pipe.ends[1]));
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
 
   // Send a very large ping so that sending the pong takes a while. Then send a second ping
   // immediately after.
@@ -1529,7 +1530,7 @@ const char WEBSOCKET_REQUEST_HANDSHAKE[] =
     " HTTP/1.1\r\n"
     "Connection: Upgrade\r\n"
     "Upgrade: websocket\r\n"
-    "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+    "Sec-WebSocket-Key: DCI4TgwiOE4MIjhODCI4Tg==\r\n"
     "Sec-WebSocket-Version: 13\r\n"
     "My-Header: foo\r\n"
     "\r\n";
@@ -1537,7 +1538,7 @@ const char WEBSOCKET_RESPONSE_HANDSHAKE[] =
     "HTTP/1.1 101 Switching Protocols\r\n"
     "Connection: Upgrade\r\n"
     "Upgrade: websocket\r\n"
-    "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"
+    "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
     "My-Header: respond-foo\r\n"
     "\r\n";
 const char WEBSOCKET_RESPONSE_HANDSHAKE_ERROR[] =
@@ -1545,18 +1546,123 @@ const char WEBSOCKET_RESPONSE_HANDSHAKE_ERROR[] =
     "Content-Length: 0\r\n"
     "My-Header: respond-foo\r\n"
     "\r\n";
-const byte WEBSOCKET_FIRST_MESSAGE_INLINE[] = "\x81\x0c" "start-inline";
-const byte WEBSOCKET_FIRST_MESSAGE_DETACHED[] = "\x81\x0e" "start-detached";
-const byte WEBSOCKET_SEND_MESSAGE[] = "\x81\x03" "bar";
-const byte WEBSOCKET_REPLY_MESSAGE[] = "\x81\x09" "reply:bar";
-const byte WEBSOCKET_SEND_CLOSE[] = "\x88\x05\x12\x34" "qux";
-const byte WEBSOCKET_REPLY_CLOSE[] = "\x88\x11\x12\x35" "close-reply:qux";
+const byte WEBSOCKET_FIRST_MESSAGE_INLINE[] =
+    { 0x81, 0x0c, 's','t','a','r','t','-','i','n','l','i','n','e' };
+const byte WEBSOCKET_FIRST_MESSAGE_DETACHED[] =
+    { 0x81, 0x0e, 's','t','a','r','t','-','d','e','t','a','c','h','e','d' };
+const byte WEBSOCKET_SEND_MESSAGE[] =
+    { 0x81, 0x83, 12, 34, 56, 78, 'b'^12, 'a'^34, 'r'^56 };
+const byte WEBSOCKET_REPLY_MESSAGE[] =
+    { 0x81, 0x09, 'r','e','p','l','y',':','b','a','r' };
+const byte WEBSOCKET_SEND_CLOSE[] =
+    { 0x88, 0x85, 12, 34, 56, 78, 0x12^12, 0x34^34, 'q'^56, 'u'^78, 'x'^12 };
+const byte WEBSOCKET_REPLY_CLOSE[] =
+    { 0x88, 0x11, 0x12, 0x35, 'c','l','o','s','e','-','r','e','p','l','y',':','q','u','x' };
 
 template <size_t s>
-kj::ArrayPtr<const byte> nulterm(const byte (&bytes)[s]) {
-  // Ugh, the byte arrays defined above all end up having NUL terminators because I specified them
-  // as string literals. This function will remove the NUL.
-  return kj::ArrayPtr<const byte>(bytes, s - 1);
+kj::ArrayPtr<const byte> asBytes(const char (&chars)[s]) {
+  return kj::ArrayPtr<const char>(chars, s - 1).asBytes();
+}
+
+KJ_TEST("HttpClient WebSocket handshake") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
+
+  auto serverTask = expectRead(*pipe.ends[1], request)
+      .then([&]() { return pipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)}); })
+      .then([&]() { return pipe.ends[1]->write({WEBSOCKET_FIRST_MESSAGE_INLINE}); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_MESSAGE); })
+      .then([&]() { return pipe.ends[1]->write({WEBSOCKET_REPLY_MESSAGE}); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_CLOSE); })
+      .then([&]() { return pipe.ends[1]->write({WEBSOCKET_REPLY_CLOSE}); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  HttpHeaderTable::Builder tableBuilder;
+  HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
+  auto headerTable = tableBuilder.build();
+
+  FakeEntropySource entropySource;
+
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], entropySource);
+
+  kj::HttpHeaders headers(*headerTable);
+  headers.set(hMyHeader, "foo");
+  auto response = client->openWebSocket("/websocket", headers).wait(io.waitScope);
+
+  KJ_EXPECT(response.statusCode == 101);
+  KJ_EXPECT(response.statusText == "Switching Protocols", response.statusText);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(hMyHeader)) == "respond-foo");
+  KJ_ASSERT(response.webSocketOrBody.is<kj::Own<WebSocket>>());
+  auto ws = kj::mv(response.webSocketOrBody.get<kj::Own<WebSocket>>());
+
+  {
+    auto message = ws->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "start-inline");
+  }
+
+  ws->send(kj::StringPtr("bar")).wait(io.waitScope);
+  {
+    auto message = ws->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "reply:bar");
+  }
+
+  ws->close(0x1234, "qux").wait(io.waitScope);
+  {
+    auto message = ws->receive().wait(io.waitScope);
+    KJ_ASSERT(message.is<WebSocket::Close>());
+    KJ_EXPECT(message.get<WebSocket::Close>().code == 0x1235);
+    KJ_EXPECT(message.get<WebSocket::Close>().reason == "close-reply:qux");
+  }
+
+  serverTask.wait(io.waitScope);
+}
+
+KJ_TEST("HttpClient WebSocket error") {
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newTwoWayPipe();
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
+
+  auto serverTask = expectRead(*pipe.ends[1], request)
+      .then([&]() { return pipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE_ERROR)}); })
+      .then([&]() { return expectRead(*pipe.ends[1], request); })
+      .then([&]() { return pipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE_ERROR)}); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  HttpHeaderTable::Builder tableBuilder;
+  HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
+  auto headerTable = tableBuilder.build();
+
+  FakeEntropySource entropySource;
+
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], entropySource);
+
+  kj::HttpHeaders headers(*headerTable);
+  headers.set(hMyHeader, "foo");
+
+  {
+    auto response = client->openWebSocket("/websocket", headers).wait(io.waitScope);
+
+    KJ_EXPECT(response.statusCode == 404);
+    KJ_EXPECT(response.statusText == "Not Found", response.statusText);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(hMyHeader)) == "respond-foo");
+    KJ_ASSERT(response.webSocketOrBody.is<kj::Own<AsyncInputStream>>());
+  }
+
+  {
+    auto response = client->openWebSocket("/websocket", headers).wait(io.waitScope);
+
+    KJ_EXPECT(response.statusCode == 404);
+    KJ_EXPECT(response.statusText == "Not Found", response.statusText);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(hMyHeader)) == "respond-foo");
+    KJ_ASSERT(response.webSocketOrBody.is<kj::Own<AsyncInputStream>>());
+  }
+
+  serverTask.wait(io.waitScope);
 }
 
 KJ_TEST("HttpServer WebSocket handshake") {
@@ -1575,11 +1681,11 @@ KJ_TEST("HttpServer WebSocket handshake") {
   pipe.ends[1]->write({request.asBytes()}).wait(io.waitScope);
   expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE).wait(io.waitScope);
 
-  expectRead(*pipe.ends[1], nulterm(WEBSOCKET_FIRST_MESSAGE_INLINE)).wait(io.waitScope);
-  pipe.ends[1]->write({nulterm(WEBSOCKET_SEND_MESSAGE)}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], nulterm(WEBSOCKET_REPLY_MESSAGE)).wait(io.waitScope);
-  pipe.ends[1]->write({nulterm(WEBSOCKET_SEND_CLOSE)}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], nulterm(WEBSOCKET_REPLY_CLOSE)).wait(io.waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(io.waitScope);
+  pipe.ends[1]->write({WEBSOCKET_SEND_MESSAGE}).wait(io.waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_MESSAGE).wait(io.waitScope);
+  pipe.ends[1]->write({WEBSOCKET_SEND_CLOSE}).wait(io.waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE).wait(io.waitScope);
 
   listenTask.wait(io.waitScope);
 }
@@ -1602,11 +1708,11 @@ KJ_TEST("HttpServer WebSocket handshake detached") {
 
   listenTask.wait(io.waitScope);
 
-  expectRead(*pipe.ends[1], nulterm(WEBSOCKET_FIRST_MESSAGE_DETACHED)).wait(io.waitScope);
-  pipe.ends[1]->write({nulterm(WEBSOCKET_SEND_MESSAGE)}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], nulterm(WEBSOCKET_REPLY_MESSAGE)).wait(io.waitScope);
-  pipe.ends[1]->write({nulterm(WEBSOCKET_SEND_CLOSE)}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], nulterm(WEBSOCKET_REPLY_CLOSE)).wait(io.waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_FIRST_MESSAGE_DETACHED).wait(io.waitScope);
+  pipe.ends[1]->write({WEBSOCKET_SEND_MESSAGE}).wait(io.waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_MESSAGE).wait(io.waitScope);
+  pipe.ends[1]->write({WEBSOCKET_SEND_CLOSE}).wait(io.waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE).wait(io.waitScope);
 }
 
 KJ_TEST("HttpServer WebSocket handshake error") {

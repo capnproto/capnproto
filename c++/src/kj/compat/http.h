@@ -371,6 +371,16 @@ private:
   //   also add direct accessors for those headers.
 };
 
+class EntropySource {
+  // Interface for an object that generates entropy. Typically, cryptographically-random entropy
+  // is expected.
+  //
+  // TODO(cleanup): Put this somewhere more general.
+
+public:
+  virtual void generate(kj::ArrayPtr<byte> buffer) = 0;
+};
+
 class WebSocket {
   // Interface representincg an open WebSocket session.
   //
@@ -404,24 +414,6 @@ public:
   virtual kj::Promise<Message> receive() = 0;
   // Read one message from the WebSocket and return it. Can only call once at a time. Do not call
   // again after EndOfStream is received.
-
-  class MaskKeyGenerator {
-    // Class for generating WebSocket packet masks keys. See RFC6455 to understand how masking is
-    // used in WebSockets.
-    //
-    // The RFC insists that mask keys must be crypto-random, but it is not crypto -- it's just a
-    // value to be XOR'd with each four bytes of the data, and the mask itself is transmitted in
-    // plaintext ahead of the message. Apparently the WebSocket designers imagined that a random
-    // mask would make mass surveillance via string matching more difficult, but in practice this
-    // seems like no more than a minor speedbump. The other purpose of the mask is to prevent dumb
-    // proxies and captive portals from getting confused, but even a global constant mask could
-    // accomplish that.
-    //
-    // KJ leaves it up to the application to decide how to generate masks.
-
-  public:
-    virtual void next(byte (&bytes)[4]) = 0;
-  };
 };
 
 class HttpClient {
@@ -471,7 +463,7 @@ public:
     uint statusCode;
     kj::StringPtr statusText;
     const HttpHeaders* headers;
-    kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> upstreamOrBody;
+    kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> webSocketOrBody;
     // `statusText` and `headers` remain valid until `upstreamOrBody` is dropped.
   };
   virtual kj::Promise<WebSocketResponse> openWebSocket(
@@ -545,15 +537,25 @@ public:
 };
 
 kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Network& network,
-                                  kj::Maybe<kj::Network&> tlsNetwork = nullptr);
+                                  kj::Maybe<kj::Network&> tlsNetwork = nullptr,
+                                  kj::Maybe<EntropySource&> entropySource = nullptr);
 // Creates a proxy HttpClient that connects to hosts over the given network.
 //
 // `responseHeaderTable` is used when parsing HTTP responses. Requests can use any header table.
 //
 // `tlsNetwork` is required to support HTTPS destination URLs. Otherwise, only HTTP URLs can be
 // fetched.
+//
+// `entropySource` must be provided in order to use `openWebSocket`. If you don't need WebSockets,
+// `entropySource` can be omitted. The WebSocket protocol uses random values to avoid triggering
+// flaws (including security flaws) in certain HTTP proxy software. Specifically, entropy is used
+// to generate the `Sec-WebSocket-Key` header and to generate frame masks. If you know that there
+// are no broken or vulnerable proxies between you and the server, you can provide an dummy entropy
+// source that doesn't generate real entropy (e.g. returning the same value every time). Otherwise,
+// you must provide a cryptographically-random entropy source.
 
-kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream);
+kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
+                                  kj::Maybe<EntropySource&> entropySource = nullptr);
 // Creates an HttpClient that speaks over the given pre-established connection. The client may
 // be used as a proxy client or a host client depending on whether the peer is operating as
 // a proxy.
@@ -563,19 +565,32 @@ kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Asyn
 // fail as well. If the destination server chooses to close the connection after a response,
 // subsequent requests will fail. If a response takes a long time, it blocks subsequent responses.
 // If a WebSocket is opened successfully, all subsequent requests fail.
+//
+// `entropySource` must be provided in order to use `openWebSocket`. If you don't need WebSockets,
+// `entropySource` can be omitted. The WebSocket protocol uses random values to avoid triggering
+// flaws (including security flaws) in certain HTTP proxy software. Specifically, entropy is used
+// to generate the `Sec-WebSocket-Key` header and to generate frame masks. If you know that there
+// are no broken or vulnerable proxies between you and the server, you can provide an dummy entropy
+// source that doesn't generate real entropy (e.g. returning the same value every time). Otherwise,
+// you must provide a cryptographically-random entropy source.
 
 kj::Own<HttpClient> newHttpClient(HttpService& service);
 kj::Own<HttpService> newHttpService(HttpClient& client);
 // Adapts an HttpClient to an HttpService and vice versa.
 
 kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
-                                kj::Maybe<WebSocket::MaskKeyGenerator&> maskKeyGenerator = nullptr);
+                                kj::Maybe<EntropySource&> maskEntropySource);
 // Create a new WebSocket on top of the given stream. It is assumed that the HTTP -> WebSocket
 // upgrade handshake has already occurred (or is not needed), and messages can immediately be
 // sent and received on the stream. Normally applications would not call this directly.
 //
-// `maskKeyGenerator` is optional, but if omitted, the WebSocket frames will not be masked. Refer
-// to RFC6455 to understand when masking is required.
+// `maskEntropySource` is used to generate cryptographically-random frame masks. If null, outgoing
+// frames will not be masked. Servers are not required to mask their outgoing frames, but clients
+// ARE required to do so. So, on the client side, you MUST specify an entropy source. The mask
+// must be crytographically random if the data being sent on the WebSocket may be malicious. The
+// purpose of the mask is to prevent badly-written HTTP proxies from interpreting "things that look
+// like HTTP requests" in a message as being actual HTTP requests, which could result in cache
+// poisoning. See RFC6455 section 10.3.
 
 struct HttpServerSettings {
   kj::Duration headerTimeout = 15 * kj::SECONDS;
