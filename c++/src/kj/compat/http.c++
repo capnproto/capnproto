@@ -24,8 +24,302 @@
 #include <kj/parse/char.h>
 #include <unordered_map>
 #include <stdlib.h>
+#include <kj/encoding.h>
 
 namespace kj {
+
+// =======================================================================================
+// SHA-1 implementation from https://github.com/clibs/sha1
+//
+// The WebSocket standard depends on SHA-1. ARRRGGGHHHHH.
+//
+// Any old checksum would have served the purpose, or hell, even just returning the header
+// verbatim. But NO, they decided to throw a whole complicated hash algorithm in there, AND
+// THEY CHOSE A BROKEN ONE THAT WE OTHERWISE WOULDN'T NEED ANYMORE.
+//
+// TODO(cleanup): Move this to a shared hashing library. Maybe. Or maybe don't, becaues no one
+//   should be using SHA-1 anymore.
+//
+// THIS USAGE IS NOT SECURITY SENSITIVE. IF YOU REPORT A SECURITY ISSUE BECAUSE YOU SAW SHA1 IN THE
+// SOURCE CODE I WILL MAKE FUN OF YOU.
+
+/*
+SHA-1 in C
+By Steve Reid <steve@edmweb.com>
+100% Public Domain
+Test Vectors (from FIPS PUB 180-1)
+"abc"
+  A9993E36 4706816A BA3E2571 7850C26C 9CD0D89D
+"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+  84983E44 1C3BD26E BAAE4AA1 F95129E5 E54670F1
+A million repetitions of "a"
+  34AA973C D4C4DAA4 F61EEB2B DBAD2731 6534016F
+*/
+
+/* #define LITTLE_ENDIAN * This should be #define'd already, if true. */
+/* #define SHA1HANDSOFF * Copies data before messing with it. */
+
+#define SHA1HANDSOFF
+
+typedef struct
+{
+    uint32_t state[5];
+    uint32_t count[2];
+    unsigned char buffer[64];
+} SHA1_CTX;
+
+#define rol(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
+
+/* blk0() and blk() perform the initial expand. */
+/* I got the idea of expanding during the round function from SSLeay */
+#if BYTE_ORDER == LITTLE_ENDIAN
+#define blk0(i) (block->l[i] = (rol(block->l[i],24)&0xFF00FF00) \
+    |(rol(block->l[i],8)&0x00FF00FF))
+#elif BYTE_ORDER == BIG_ENDIAN
+#define blk0(i) block->l[i]
+#else
+#error "Endianness not defined!"
+#endif
+#define blk(i) (block->l[i&15] = rol(block->l[(i+13)&15]^block->l[(i+8)&15] \
+    ^block->l[(i+2)&15]^block->l[i&15],1))
+
+/* (R0+R1), R2, R3, R4 are the different operations used in SHA1 */
+#define R0(v,w,x,y,z,i) z+=((w&(x^y))^y)+blk0(i)+0x5A827999+rol(v,5);w=rol(w,30);
+#define R1(v,w,x,y,z,i) z+=((w&(x^y))^y)+blk(i)+0x5A827999+rol(v,5);w=rol(w,30);
+#define R2(v,w,x,y,z,i) z+=(w^x^y)+blk(i)+0x6ED9EBA1+rol(v,5);w=rol(w,30);
+#define R3(v,w,x,y,z,i) z+=(((w|x)&y)|(w&x))+blk(i)+0x8F1BBCDC+rol(v,5);w=rol(w,30);
+#define R4(v,w,x,y,z,i) z+=(w^x^y)+blk(i)+0xCA62C1D6+rol(v,5);w=rol(w,30);
+
+
+/* Hash a single 512-bit block. This is the core of the algorithm. */
+
+void SHA1Transform(
+    uint32_t state[5],
+    const unsigned char buffer[64]
+)
+{
+    uint32_t a, b, c, d, e;
+
+    typedef union
+    {
+        unsigned char c[64];
+        uint32_t l[16];
+    } CHAR64LONG16;
+
+#ifdef SHA1HANDSOFF
+    CHAR64LONG16 block[1];      /* use array to appear as a pointer */
+
+    memcpy(block, buffer, 64);
+#else
+    /* The following had better never be used because it causes the
+     * pointer-to-const buffer to be cast into a pointer to non-const.
+     * And the result is written through.  I threw a "const" in, hoping
+     * this will cause a diagnostic.
+     */
+    CHAR64LONG16 *block = (const CHAR64LONG16 *) buffer;
+#endif
+    /* Copy context->state[] to working vars */
+    a = state[0];
+    b = state[1];
+    c = state[2];
+    d = state[3];
+    e = state[4];
+    /* 4 rounds of 20 operations each. Loop unrolled. */
+    R0(a, b, c, d, e, 0);
+    R0(e, a, b, c, d, 1);
+    R0(d, e, a, b, c, 2);
+    R0(c, d, e, a, b, 3);
+    R0(b, c, d, e, a, 4);
+    R0(a, b, c, d, e, 5);
+    R0(e, a, b, c, d, 6);
+    R0(d, e, a, b, c, 7);
+    R0(c, d, e, a, b, 8);
+    R0(b, c, d, e, a, 9);
+    R0(a, b, c, d, e, 10);
+    R0(e, a, b, c, d, 11);
+    R0(d, e, a, b, c, 12);
+    R0(c, d, e, a, b, 13);
+    R0(b, c, d, e, a, 14);
+    R0(a, b, c, d, e, 15);
+    R1(e, a, b, c, d, 16);
+    R1(d, e, a, b, c, 17);
+    R1(c, d, e, a, b, 18);
+    R1(b, c, d, e, a, 19);
+    R2(a, b, c, d, e, 20);
+    R2(e, a, b, c, d, 21);
+    R2(d, e, a, b, c, 22);
+    R2(c, d, e, a, b, 23);
+    R2(b, c, d, e, a, 24);
+    R2(a, b, c, d, e, 25);
+    R2(e, a, b, c, d, 26);
+    R2(d, e, a, b, c, 27);
+    R2(c, d, e, a, b, 28);
+    R2(b, c, d, e, a, 29);
+    R2(a, b, c, d, e, 30);
+    R2(e, a, b, c, d, 31);
+    R2(d, e, a, b, c, 32);
+    R2(c, d, e, a, b, 33);
+    R2(b, c, d, e, a, 34);
+    R2(a, b, c, d, e, 35);
+    R2(e, a, b, c, d, 36);
+    R2(d, e, a, b, c, 37);
+    R2(c, d, e, a, b, 38);
+    R2(b, c, d, e, a, 39);
+    R3(a, b, c, d, e, 40);
+    R3(e, a, b, c, d, 41);
+    R3(d, e, a, b, c, 42);
+    R3(c, d, e, a, b, 43);
+    R3(b, c, d, e, a, 44);
+    R3(a, b, c, d, e, 45);
+    R3(e, a, b, c, d, 46);
+    R3(d, e, a, b, c, 47);
+    R3(c, d, e, a, b, 48);
+    R3(b, c, d, e, a, 49);
+    R3(a, b, c, d, e, 50);
+    R3(e, a, b, c, d, 51);
+    R3(d, e, a, b, c, 52);
+    R3(c, d, e, a, b, 53);
+    R3(b, c, d, e, a, 54);
+    R3(a, b, c, d, e, 55);
+    R3(e, a, b, c, d, 56);
+    R3(d, e, a, b, c, 57);
+    R3(c, d, e, a, b, 58);
+    R3(b, c, d, e, a, 59);
+    R4(a, b, c, d, e, 60);
+    R4(e, a, b, c, d, 61);
+    R4(d, e, a, b, c, 62);
+    R4(c, d, e, a, b, 63);
+    R4(b, c, d, e, a, 64);
+    R4(a, b, c, d, e, 65);
+    R4(e, a, b, c, d, 66);
+    R4(d, e, a, b, c, 67);
+    R4(c, d, e, a, b, 68);
+    R4(b, c, d, e, a, 69);
+    R4(a, b, c, d, e, 70);
+    R4(e, a, b, c, d, 71);
+    R4(d, e, a, b, c, 72);
+    R4(c, d, e, a, b, 73);
+    R4(b, c, d, e, a, 74);
+    R4(a, b, c, d, e, 75);
+    R4(e, a, b, c, d, 76);
+    R4(d, e, a, b, c, 77);
+    R4(c, d, e, a, b, 78);
+    R4(b, c, d, e, a, 79);
+    /* Add the working vars back into context.state[] */
+    state[0] += a;
+    state[1] += b;
+    state[2] += c;
+    state[3] += d;
+    state[4] += e;
+    /* Wipe variables */
+    a = b = c = d = e = 0;
+#ifdef SHA1HANDSOFF
+    memset(block, '\0', sizeof(block));
+#endif
+}
+
+
+/* SHA1Init - Initialize new context */
+
+void SHA1Init(
+    SHA1_CTX * context
+)
+{
+    /* SHA1 initialization constants */
+    context->state[0] = 0x67452301;
+    context->state[1] = 0xEFCDAB89;
+    context->state[2] = 0x98BADCFE;
+    context->state[3] = 0x10325476;
+    context->state[4] = 0xC3D2E1F0;
+    context->count[0] = context->count[1] = 0;
+}
+
+
+/* Run your data through this. */
+
+void SHA1Update(
+    SHA1_CTX * context,
+    const unsigned char *data,
+    uint32_t len
+)
+{
+    uint32_t i;
+
+    uint32_t j;
+
+    j = context->count[0];
+    if ((context->count[0] += len << 3) < j)
+        context->count[1]++;
+    context->count[1] += (len >> 29);
+    j = (j >> 3) & 63;
+    if ((j + len) > 63)
+    {
+        memcpy(&context->buffer[j], data, (i = 64 - j));
+        SHA1Transform(context->state, context->buffer);
+        for (; i + 63 < len; i += 64)
+        {
+            SHA1Transform(context->state, &data[i]);
+        }
+        j = 0;
+    }
+    else
+        i = 0;
+    memcpy(&context->buffer[j], &data[i], len - i);
+}
+
+
+/* Add padding and return the message digest. */
+
+void SHA1Final(
+    unsigned char digest[20],
+    SHA1_CTX * context
+)
+{
+    unsigned i;
+
+    unsigned char finalcount[8];
+
+    unsigned char c;
+
+#if 0    /* untested "improvement" by DHR */
+    /* Convert context->count to a sequence of bytes
+     * in finalcount.  Second element first, but
+     * big-endian order within element.
+     * But we do it all backwards.
+     */
+    unsigned char *fcp = &finalcount[8];
+    for (i = 0; i < 2; i++)
+    {
+        uint32_t t = context->count[i];
+        int j;
+        for (j = 0; j < 4; t >>= 8, j++)
+            *--fcp = (unsigned char) t}
+#else
+    for (i = 0; i < 8; i++)
+    {
+        finalcount[i] = (unsigned char) ((context->count[(i >= 4 ? 0 : 1)] >> ((3 - (i & 3)) * 8)) & 255);      /* Endian independent */
+    }
+#endif
+    c = 0200;
+    SHA1Update(context, &c, 1);
+    while ((context->count[0] & 504) != 448)
+    {
+        c = 0000;
+        SHA1Update(context, &c, 1);
+    }
+    SHA1Update(context, finalcount, 8); /* Should cause a SHA1Transform() */
+    for (i = 0; i < 20; i++)
+    {
+        digest[i] = (unsigned char)
+            ((context->state[i >> 2] >> ((3 - (i & 3)) * 8)) & 255);
+    }
+    /* Wipe variables */
+    memset(context, '\0', sizeof(*context));
+    memset(&finalcount, '\0', sizeof(finalcount));
+}
+
+// End SHA-1 implementation.
+// =======================================================================================
 
 static const char* METHOD_NAMES[] = {
 #define METHOD_NAME(id) #id,
@@ -128,6 +422,9 @@ kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name) {
 // =======================================================================================
 
 namespace {
+
+constexpr char WEBSOCKET_GUID[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+// From RFC6455.
 
 constexpr auto HTTP_SEPARATOR_CHARS = kj::parse::anyOfChars("()<>@,;:\\\"/[]?={} \t");
 // RFC2616 section 2.2: https://www.w3.org/Protocols/rfc2616/rfc2616-sec2.html#sec2.2
@@ -866,6 +1163,18 @@ public:
       RequestOrResponse type, HttpMethod method, uint statusCode,
       HttpHeaders::ConnectionHeaders& connectionHeaders);
 
+  struct ReleasedBuffer {
+    kj::Array<byte> buffer;
+    size_t filled;
+  };
+
+  ReleasedBuffer releaseBuffer() {
+    if (leftover.size() > 0) {
+      memmove(headerBuffer.begin(), leftover.begin(), leftover.size());
+    }
+    return { headerBuffer.releaseAsBytes(), leftover.size() };
+  }
+
 private:
   AsyncIoStream& inner;
   kj::Array<char> headerBuffer;
@@ -1552,8 +1861,10 @@ public:
   WebSocketImpl(kj::Own<kj::AsyncIoStream> stream,
                 kj::Maybe<WebSocket::MaskKeyGenerator&> maskKeyGenerator,
                 kj::Array<byte> buffer = kj::heapArray<byte>(4096),
-                size_t bytesAlreadyAvailable = 0)
+                size_t bytesAlreadyAvailable = 0,
+                kj::Maybe<kj::Promise<void>> waitBeforeSend = nullptr)
       : stream(kj::mv(stream)), maskKeyGenerator(maskKeyGenerator),
+        sendingPong(kj::mv(waitBeforeSend)),
         recvAvail(bytesAlreadyAvailable), recvBuffer(kj::mv(buffer)) {}
 
   kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
@@ -1910,6 +2221,11 @@ private:
   kj::Maybe<kj::Promise<void>> sendingPong;
   // If a Pong is being sent asynchronously in response to a Ping, this is a promise for the
   // completion of that send.
+  //
+  // Additionally, this member is used if we need to block our first send on WebSocket startup,
+  // e.g. because we need to wait for HTTP handshake writes to flush before we can start sending
+  // WebSocket data. `sendingPong` was overloaded for this use case because the logic is the same.
+  // Perhaps it should be renamed to `blockSend` or `writeQueue`.
 
   uint fragmentOpcode = 0;
   kj::Vector<kj::Array<byte>> fragments;
@@ -1995,6 +2311,16 @@ private:
     return stream->write(sendParts);
   }
 };
+
+kj::Own<WebSocket> upgradeToWebSocket(
+    kj::Own<kj::AsyncIoStream> stream, HttpInputStream& httpInput, HttpOutputStream& httpOutput,
+    kj::Maybe<WebSocket::MaskKeyGenerator&> maskKeyGenerator = nullptr) {
+  // Create a WebSocket upgraded from an HTTP stream.
+  auto releasedBuffer = httpInput.releaseBuffer();
+  return kj::heap<WebSocketImpl>(kj::mv(stream), maskKeyGenerator,
+                                 kj::mv(releasedBuffer.buffer), releasedBuffer.filled,
+                                 httpOutput.flush());
+}
 
 }  // namespace
 
@@ -2156,14 +2482,8 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> HttpService::connect(kj::StringPtr host)
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpService");
 }
 
-class HttpServer::Connection final: private HttpService::Response {
+class HttpServer::Connection final: private HttpService::WebSocketResponse {
 public:
-  Connection(HttpServer& server, kj::AsyncIoStream& stream)
-      : server(server),
-        httpInput(stream, server.requestHeaderTable),
-        httpOutput(stream) {
-    ++server.connectionCount;
-  }
   Connection(HttpServer& server, kj::Own<kj::AsyncIoStream>&& stream)
       : server(server),
         httpInput(*stream, server.requestHeaderTable),
@@ -2247,21 +2567,56 @@ public:
       }
 
       KJ_IF_MAYBE(req, request) {
-        currentMethod = req->method;
-        auto body = httpInput.getEntityBody(
-            HttpInputStream::REQUEST, req->method, 0, req->connectionHeaders);
+        kj::Promise<void> promise = nullptr;
 
-        // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
-        //   prevent permanent deadlock. It's slightly weird in that arguably the client should
-        //   be able to shutdown the upstream but still wait on the downstream, but I believe many
-        //   other HTTP servers do similar things.
+        if (req->connectionHeaders.upgrade == "websocket") {
+          if (req->method != HttpMethod::GET) {
+            return sendError(400, "Bad Request", kj::str(
+                "ERROR: WebSocket must be initiated with a GET request."));
+          }
 
-        auto promise = server.service.request(
-            req->method, req->url, httpInput.getHeaders(), *body, *this);
-        return promise.attach(kj::mv(body))
-            .then([this]() { return httpOutput.flush(); })
+          if (req->connectionHeaders.websocketVersion != "13") {
+            return sendError(400, "Bad Request", kj::str(
+                "ERROR: The requested WebSocket version is not supported."));
+          }
+
+          if (req->connectionHeaders.websocketKey == nullptr) {
+            return sendError(400, "Bad Request", kj::str("ERROR: Missing Sec-WebSocket-Key"));
+          }
+
+          currentMethod = HttpMethod::GET;
+          websocketKey = kj::str(req->connectionHeaders.websocketKey);
+          promise = server.service.openWebSocket(req->url, httpInput.getHeaders(), *this);
+        } else {
+          currentMethod = req->method;
+          websocketKey = nullptr;
+          auto body = httpInput.getEntityBody(
+              HttpInputStream::REQUEST, req->method, 0, req->connectionHeaders);
+
+          // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
+          //   prevent permanent deadlock. It's slightly weird in that arguably the client should
+          //   be able to shutdown the upstream but still wait on the downstream, but I believe many
+          //   other HTTP servers do similar things.
+
+          promise = server.service.request(
+              req->method, req->url, httpInput.getHeaders(), *body, *this);
+          promise = promise.attach(kj::mv(body));
+        }
+
+        return promise
             .then([this]() -> kj::Promise<void> {
           // Response done. Await next request.
+
+          if (upgraded) {
+            // We've upgraded to WebSocket so we can exit this listen loop. In fact, we no longer
+            // own the stream.
+            //
+            // Note that the WebSocket itself also flush()es the httpOutput before writing any
+            // WebSocket content, but we should also make sure that we don't let the listen loop
+            // exit until that flush is done, since we can't destroy the HttpOutputStream in the
+            // meantime.
+            return httpOutput.flush();
+          }
 
           if (currentMethod != nullptr) {
             return sendError(500, "Internal Server Error", kj::str(
@@ -2273,7 +2628,7 @@ public:
             return httpOutput.flush();
           }
 
-          return loop(false);
+          return httpOutput.flush().then([this]() { return loop(false); });
         });
       } else {
         // Bad request.
@@ -2322,14 +2677,22 @@ private:
   HttpOutputStream httpOutput;
   kj::Own<kj::AsyncIoStream> ownStream;
   kj::Maybe<HttpMethod> currentMethod;
+  kj::Maybe<kj::String> websocketKey;
   bool timedOut = false;
   bool closed = false;
+  bool upgraded = false;
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called startResponse()");
     currentMethod = nullptr;
+
+    if (websocketKey != nullptr) {
+      // This was a WebSocket request but the upgrade wasn't accepted.
+      websocketKey = nullptr;
+      httpInput.finishRead();
+    }
 
     HttpHeaders::ConnectionHeaders connectionHeaders;
     kj::String lengthStr;
@@ -2359,6 +2722,32 @@ private:
     } else {
       return heap<HttpChunkedEntityWriter>(httpOutput);
     }
+  }
+
+  kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) override {
+    auto key = KJ_REQUIRE_NONNULL(kj::mv(websocketKey), "not a WebSocket request");
+    currentMethod = nullptr;
+    websocketKey = nullptr;
+    upgraded = true;
+
+    // WebSocket demands we do a SHA-1 here. ARRGHH WHY SHA-1 WHYYYYYY?
+    SHA1_CTX ctx;
+    byte digest[20];
+    SHA1Init(&ctx);
+    SHA1Update(&ctx, key.asBytes().begin(), key.size());
+    SHA1Update(&ctx, reinterpret_cast<const byte*>(WEBSOCKET_GUID), strlen(WEBSOCKET_GUID));
+    SHA1Final(digest, &ctx);
+    auto websocketAccept = kj::encodeBase64(digest);
+
+    HttpHeaders::ConnectionHeaders connectionHeaders;
+    connectionHeaders.websocketAccept = websocketAccept;
+    connectionHeaders.upgrade = "websocket";
+    connectionHeaders.connection = "Upgrade";
+
+    httpOutput.writeHeaders(headers.serializeResponse(
+        101, "Switching Protocols", connectionHeaders));
+
+    return upgradeToWebSocket(kj::mv(ownStream), httpInput, httpOutput);
   }
 
   kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText, kj::String body) {

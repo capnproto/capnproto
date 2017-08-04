@@ -86,7 +86,10 @@ namespace kj {
   MACRO(te, "TE") \
   MACRO(trailer, "Trailer") \
   MACRO(transferEncoding, "Transfer-Encoding") \
-  MACRO(upgrade, "Upgrade")
+  MACRO(upgrade, "Upgrade") \
+  MACRO(websocketKey, "Sec-WebSocket-Key") \
+  MACRO(websocketVersion, "Sec-WebSocket-Version") \
+  MACRO(websocketAccept, "Sec-WebSocket-Accept")
 
 enum class HttpMethod {
   // Enum of known HTTP methods.
@@ -523,12 +526,10 @@ public:
 
   class WebSocketResponse: public Response {
   public:
-    kj::Own<WebSocket> acceptWebSocket(
-        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers);
+    virtual kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) = 0;
     // Accept and open the WebSocket.
     //
-    // `statusText` and `headers` need only remain valid until acceptWebSocket() returns (they can
-    // be stack-allocated).
+    // `headers` need only remain valid until acceptWebSocket() returns (it can be stack-allocated).
   };
 
   virtual kj::Promise<void> openWebSocket(
