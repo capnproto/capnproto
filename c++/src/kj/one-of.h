@@ -241,7 +241,7 @@ void OneOf<Variants...>::allHandled() {
   switch (auto _kj_switch_subject = value._switchSubject(); _kj_switch_subject->which())
 #else
 #define KJ_SWITCH_ONEOF(value) \
-  // Without C++17, we can only support one switch per containing block. Deal with it.
+  /* Without C++17, we can only support one switch per containing block. Deal with it. */ \
   auto _kj_switch_subject = value._switchSubject(); \
   switch (_kj_switch_subject->which())
 #endif
