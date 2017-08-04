@@ -596,7 +596,7 @@ struct MyType $foo("bar") {
 {% endhighlight %}
 
 The possible targets for an annotation are: `file`, `struct`, `field`, `union`, `enum`, `enumerant`,
-`interface`, `method`, `parameter`, `annotation`, `const`.  You may also specify `*` to cover them
+`interface`, `method`, `param`, `annotation`, `const`.  You may also specify `*` to cover them
 all.
 
 {% highlight capnp %}
