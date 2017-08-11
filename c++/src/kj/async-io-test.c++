@@ -75,11 +75,12 @@ String tryParse(WaitScope& waitScope, Network& network, StringPtr text, uint por
   return network.parseAddress(text, portHint).wait(waitScope)->toString();
 }
 
-bool hasIpv6() {
-  // Can getaddrinfo() parse ipv6 addresses? This is only true if ipv6 is configured on at least
-  // one interface. (The loopback interface usually has it even if others don't... but not always.)
+bool systemSupportsAddress(StringPtr addr) {
+  // Can getaddrinfo() parse this addresses? This is only true if the address family (e.g., ipv6)
+  // is configured on at least one interface. (The loopback interface usually has both ipv4 and
+  // ipv6 configured, but not always.)
   struct addrinfo* list;
-  int status = getaddrinfo("::", nullptr, nullptr, &list);
+  int status = getaddrinfo(addr.cStr(), nullptr, nullptr, &list);
   if (status == 0) {
     freeaddrinfo(list);
     return true;
@@ -87,6 +88,7 @@ bool hasIpv6() {
     return false;
   }
 }
+
 
 TEST(AsyncIo, AddressParsing) {
   auto ioContext = setupAsyncIo();
@@ -103,20 +105,28 @@ TEST(AsyncIo, AddressParsing) {
 #endif
 
   // We can parse services by name...
-#if !__ANDROID__  // Service names not supported on Android for some reason?
-  EXPECT_EQ("1.2.3.4:80", tryParse(w, network, "1.2.3.4:http", 5678));
-  EXPECT_EQ("*:80", tryParse(w, network, "*:http", 5678));
-#endif
+  //
+  // For some reason, Android and some various Linux distros do not support service names.
+  if (systemSupportsAddress("1.2.3.4:http")) {
+    EXPECT_EQ("1.2.3.4:80", tryParse(w, network, "1.2.3.4:http", 5678));
+    EXPECT_EQ("*:80", tryParse(w, network, "*:http", 5678));
+  } else {
+    KJ_LOG(WARNING, "system does not support resolving service names on ipv4; skipping tests");
+  }
 
   // IPv6 tests. Annoyingly, these don't work on machines that don't have IPv6 configured on any
   // interfaces.
-  if (hasIpv6()) {
+  if (systemSupportsAddress("::")) {
     EXPECT_EQ("[::]:123", tryParse(w, network, "0::0", 123));
     EXPECT_EQ("[12ab:cd::34]:321", tryParse(w, network, "[12ab:cd:0::0:34]:321", 432));
-#if !__ANDROID__  // Service names not supported on Android for some reason?
-    EXPECT_EQ("[::]:80", tryParse(w, network, "[::]:http", 5678));
-    EXPECT_EQ("[12ab:cd::34]:80", tryParse(w, network, "[12ab:cd::34]:http", 5678));
-#endif
+    if (systemSupportsAddress("[12ab:cd::34]:http")) {
+      EXPECT_EQ("[::]:80", tryParse(w, network, "[::]:http", 5678));
+      EXPECT_EQ("[12ab:cd::34]:80", tryParse(w, network, "[12ab:cd::34]:http", 5678));
+    } else {
+      KJ_LOG(WARNING, "system does not support resolving service names on ipv6; skipping tests");
+    }
+  } else {
+    KJ_LOG(WARNING, "system does not support ipv6; skipping tests");
   }
 
   // It would be nice to test DNS lookup here but the test would not be very hermetic.  Even
