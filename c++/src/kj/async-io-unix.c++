@@ -471,8 +471,11 @@ public:
       KJ_REQUIRE(path.size() < sizeof(addr.unixDomain.sun_path),
                  "Unix domain socket address is too long.", str);
       result.addr.unixDomain.sun_family = AF_UNIX;
-      strcpy(result.addr.unixDomain.sun_path, path.cStr());
-      result.addrlen = offsetof(struct sockaddr_un, sun_path) + path.size() + 1;
+      memcpy(result.addr.unixDomain.sun_path, path.cStr(), path.size() + 1);
+      result.addrlen = offsetof(struct sockaddr_un, sun_path) + path.size();
+      // Linux-specific: abstract namespace for unix sockets
+      // According to unix(7), addrlen of an abstract socket should not include the NULL terminator
+      if (path[0] != '\0') result.addrlen++;
       auto array = kj::heapArrayBuilder<SocketAddress>(1);
       array.add(result);
       return array.finish();
