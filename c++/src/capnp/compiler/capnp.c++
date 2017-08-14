@@ -1459,6 +1459,7 @@ private:
       case Format::PACKED     : return isPlausiblyPacked    (prefix);
       case Format::FLAT       : return isPlausiblyFlat      (prefix);
       case Format::FLAT_PACKED: return isPlausiblyPackedFlat(prefix);
+      case Format::CANONICAL  : return isPlausiblyFlat      (prefix);
       case Format::TEXT       : return isPlausiblyText      (prefix);
       case Format::JSON       : return isPlausiblyJson      (prefix);
     }
