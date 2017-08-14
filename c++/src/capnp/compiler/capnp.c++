@@ -1006,6 +1006,9 @@ private:
 
         kj::ArrayPtr<const word> segments[1] = { words };
         SegmentArrayMessageReader message(segments, options);
+        if (convertFrom == Format::CANONICAL) {
+          KJ_REQUIRE(message.isCanonical());
+        }
         return writeConversion(message.getRoot<AnyStruct>(), output);
       }
       case Format::FLAT_PACKED: {
