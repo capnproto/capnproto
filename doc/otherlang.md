@@ -46,6 +46,8 @@ new languages.
 * [Vim Syntax Highlighting](https://github.com/peter-edge/vim-capnp) by [@peter-edge](https://github.com/peter-edge)
   (originally by [@cstrahan](https://github.com/cstrahan))
 * [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
+* [VS Code Syntax Highlighter](https://marketplace.visualstudio.com/items?itemName=xmonader.vscode-capnp) by [@xmonader](https://github.com/xmonader)
+* [IntelliJ Syntax Highlighter](https://github.com/xmonader/sercapnp) by [@xmonader](https://github.com/xmonader)
 
 ## Contribute Your Own!
 
