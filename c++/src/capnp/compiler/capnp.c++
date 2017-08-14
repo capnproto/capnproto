@@ -127,6 +127,7 @@ public:
           "    packed      packed binary format (deflates zeroes)\n"
           "    flat        binary single segment, no segment table (rare)\n"
           "    flat-packed flat and packed\n"
+          "    canonical   canonicalized binary single segment, no segment table\n"
           "    text        schema language struct literal format\n"
           "    json        JSON format\n"
           "When using \"text\" or \"json\" format, you must specify <schema-file> and <type> "
@@ -641,6 +642,7 @@ private:
     PACKED,
     FLAT,
     FLAT_PACKED,
+    CANONICAL,
     TEXT,
     JSON
   };
@@ -650,6 +652,7 @@ private:
     if (name == "packed"     ) return Format::PACKED;
     if (name == "flat"       ) return Format::FLAT;
     if (name == "flat-packed") return Format::FLAT_PACKED;
+    if (name == "canonical"  ) return Format::CANONICAL;
     if (name == "text"       ) return Format::TEXT;
     if (name == "json"       ) return Format::JSON;
 
@@ -662,6 +665,7 @@ private:
       case Format::PACKED     : return "packed";
       case Format::FLAT       : return "flat";
       case Format::FLAT_PACKED: return "flat-packed";
+      case Format::CANONICAL  : return "canonical";
       case Format::TEXT       : return "text";
       case Format::JSON       : return "json";
     }
@@ -989,7 +993,8 @@ private:
         capnp::PackedMessageReader message(input, options);
         return writeConversion(message.getRoot<AnyStruct>(), output);
       }
-      case Format::FLAT: {
+      case Format::FLAT:
+      case Format::CANONICAL: {
         auto allBytes = readAll(input);
 
         // Technically we don't know if the bytes are aligned so we'd better copy them to a new
@@ -1072,6 +1077,11 @@ private:
         kj::BufferedOutputStreamWrapper buffered(output);
         capnp::_::PackedOutputStream packed(buffered);
         packed.write(words.begin(), words.asBytes().size());
+        return;
+      }
+      case Format::CANONICAL: {
+        auto words = reader.canonicalize();
+        output.write(words.begin(), words.asBytes().size());
         return;
       }
       case Format::TEXT: {
