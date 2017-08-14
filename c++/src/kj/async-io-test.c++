@@ -102,6 +102,9 @@ TEST(AsyncIo, AddressParsing) {
 
 #if !_WIN32
   EXPECT_EQ("unix:foo/bar/baz", tryParse(w, network, "unix:foo/bar/baz"));
+#if __linux__
+  EXPECT_EQ("unix-abstract:foo/bar/baz", tryParse(w, network, "unix-abstract:foo/bar/baz"));
+#endif
 #endif
 
   // We can parse services by name...

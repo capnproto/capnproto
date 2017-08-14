@@ -390,7 +390,8 @@ int main(int argc, const char* argv[]) {
 {% endhighlight %}
 
 Note that for the connect address, Cap'n Proto supports DNS host names as well as IPv4 and IPv6
-addresses.  Additionally, a Unix domain socket can be specified as `unix:` followed by a path name.
+addresses.  Additionally, a Unix domain socket can be specified as `unix:` followed by a path name,
+and an abstract Unix domain socket can be specified as `unix-abstract:` followed by an identifier.
 
 For a more complete example, see the
 [calculator client sample](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples/calculator-client.c++).
@@ -429,7 +430,8 @@ int main(int argc, const char* argv[]) {
 Note that for the bind address, Cap'n Proto supports DNS host names as well as IPv4 and IPv6
 addresses.  The special address `*` can be used to bind to the same port on all local IPv4 and
 IPv6 interfaces.  Additionally, a Unix domain socket can be specified as `unix:` followed by a
-path name.
+path name, and an abstract Unix domain socket can be specified as `unix-abstract:` followed by
+an identifier.
 
 For a more complete example, see the
 [calculator server sample](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples/calculator-server.c++).
