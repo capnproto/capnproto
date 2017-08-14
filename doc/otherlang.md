@@ -17,6 +17,7 @@ project's documentation for details.
 * [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
 * [Go](https://github.com/zombiezen/go-capnproto2) by [@zombiezen](https://github.com/zombiezen) (forked from [@glycerine](https://github.com/glycerine)'s serialization-only version, below)
 * [Javascript (Node.js only)](https://github.com/capnproto/node-capnp) by [@kentonv](https://github.com/kentonv)
+* [OCaml](https://github.com/capnproto/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj) with [RPC](https://github.com/mirage/capnp-rpc) by [@talex5](https://github.com/talex5)
 * [Python](http://capnproto.github.io/pycapnp/) by [@jparyani](https://github.com/jparyani)
 * [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
 
@@ -31,7 +32,6 @@ project's documentation for details.
 * [Javascript](https://github.com/jscheid/capnproto-js) (older, abandoned) by [@jscheid](https://github.com/jscheid)
 * [Lua](https://github.com/cloudflare/lua-capnproto) by [CloudFlare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
 * [Nim](https://github.com/zielmicha/capnp.nim) by [@zielmicha](https://github.com/zielmicha)
-* [OCaml](https://github.com/capnproto/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj)
 * [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
 * [Scala](https://github.com/katis/capnp-scala) by [@katis](https://github.com/katis)
 
