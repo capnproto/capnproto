@@ -351,6 +351,7 @@ A canonical Cap'n Proto message must adhere to the following rules:
 * Similarly, for a struct list, if a trailing word in a section of all structs in the list is zero,
   then it must be truncated from all structs in the list. (All structs in a struct list must have
   equal sizes, hence a trailing zero can only be removed if it is zero in all elements.)
+* Any struct pointer pointing to a zero-sized struct should have an offset of -1.
 * Canonical messages are not packed. However, packing can still be applied for transmission
   purposes; the message must simply be unpacked before checking signatures.
 
