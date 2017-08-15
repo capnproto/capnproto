@@ -1873,7 +1873,7 @@ public:
                 kj::Maybe<kj::Promise<void>> waitBeforeSend = nullptr)
       : stream(kj::mv(stream)), maskKeyGenerator(maskKeyGenerator),
         sendingPong(kj::mv(waitBeforeSend)),
-        recvData(leftover), recvBuffer(kj::mv(buffer)) {}
+        recvBuffer(kj::mv(buffer)), recvData(leftover) {}
 
   kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
     return sendImpl(OPCODE_BINARY, message);
@@ -2722,7 +2722,7 @@ public:
     }
 
     return receivedHeaders
-        .then([this,firstRequest](kj::Maybe<HttpHeaders::Request>&& request) -> kj::Promise<void> {
+        .then([this](kj::Maybe<HttpHeaders::Request>&& request) -> kj::Promise<void> {
       if (closed) {
         // Client closed connection. Close our end too.
         return httpOutput.flush();
