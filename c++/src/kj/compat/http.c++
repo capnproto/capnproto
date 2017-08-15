@@ -2342,7 +2342,7 @@ private:
 
     sendParts[0] = sendHeader.compose(true, OPCODE_PONG, payload.size(), Mask(maskKeyGenerator));
     sendParts[1] = payload;
-    return stream->write(sendParts);
+    return stream->write(sendParts).attach(kj::mv(payload));
   }
 };
 
