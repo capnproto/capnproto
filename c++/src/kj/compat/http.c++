@@ -1901,21 +1901,23 @@ public:
   }
 
   kj::Promise<void> disconnect() override {
-    KJ_REQUIRE(!sendClosed, "WebSocket already closed");
-    KJ_REQUIRE(!currentlySending, "another message send is already in progress");
+    if (!sendClosed) {
+      KJ_REQUIRE(!currentlySending, "another message send is already in progress");
 
-    KJ_IF_MAYBE(p, sendingPong) {
-      // We recently sent a pong, make sure it's finished before proceeding.
-      currentlySending = true;
-      auto promise = p->then([this]() {
-        currentlySending = false;
-        return disconnect();
-      });
-      sendingPong = nullptr;
-      return promise;
+      KJ_IF_MAYBE(p, sendingPong) {
+        // We recently sent a pong, make sure it's finished before proceeding.
+        currentlySending = true;
+        auto promise = p->then([this]() {
+          currentlySending = false;
+          return disconnect();
+        });
+        sendingPong = nullptr;
+        return promise;
+      }
+
+      sendClosed = true;
     }
 
-    sendClosed = true;
     stream->shutdownWrite();
     return kj::READY_NOW;
   }
@@ -2623,7 +2625,8 @@ private:
         }
         KJ_CASE_ONEOF(close, WebSocket::Close) {
           return to.close(close.code, close.reason)
-              .attach(kj::mv(close));
+              .attach(kj::mv(close))
+              .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
         }
       }
       KJ_UNREACHABLE;
