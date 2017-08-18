@@ -28,6 +28,7 @@
 #include "windows-sanity.h"
 #else
 #include <netdb.h>
+#include <unistd.h>
 #endif
 
 namespace kj {
@@ -387,6 +388,23 @@ TEST(AsyncIo, Udp) {
 }
 
 #endif  // !_WIN32
+
+#ifdef __linux__  // Abstract unix sockets are only supported on Linux
+
+TEST(AsyncIo, AbstractUnixSocket) {
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
+
+  Own<NetworkAddress> addr = network.parseAddress("unix-abstract:foo").wait(ioContext.waitScope);
+
+  Own<ConnectionReceiver> listener = addr->listen();
+  // chdir proves no filesystem dependence. Test fails for regular unix socket
+  // but passes for abstract unix socket.
+  chdir("/tmp");
+  addr->connect().attach(kj::mv(listener)).wait(ioContext.waitScope);
+}
+
+#endif  // __linux__
 
 }  // namespace
 }  // namespace kj
