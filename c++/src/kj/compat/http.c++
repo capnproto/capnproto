@@ -2189,9 +2189,9 @@ private:
     Mask getMask() const {
       if (bytes[1] & USE_MASK_MASK) {
         byte payloadLen = bytes[1] & PAYLOAD_LEN_MASK;
-        if (payloadLen == 128) {
+        if (payloadLen == 127) {
           return Mask(bytes + 10);
-        } else if (payloadLen == 127) {
+        } else if (payloadLen == 126) {
           return Mask(bytes + 4);
         } else {
           return Mask(bytes + 2);
