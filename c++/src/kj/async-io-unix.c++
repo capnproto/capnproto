@@ -491,7 +491,9 @@ public:
                  "Unix domain socket address is too long.", str);
       result.addr.unixDomain.sun_family = AF_UNIX;
       result.addr.unixDomain.sun_path[0] = '\0';
-      memcpy(result.addr.unixDomain.sun_path + 1, path.cStr(), path.size());
+      // although not strictly required by Linux, also copy the trailing
+      // NULL terminator so that we can safely read it back in toString
+      memcpy(result.addr.unixDomain.sun_path + 1, path.cStr(), path.size() + 1);
       result.addrlen = offsetof(struct sockaddr_un, sun_path) + path.size() + 1;
       auto array = kj::heapArrayBuilder<SocketAddress>(1);
       array.add(result);
