@@ -690,7 +690,7 @@ public:
 
     StringPtr textPtr = text;
 
-    while (text != nullptr) {
+    while (textPtr != nullptr) {
       miniposix::ssize_t n = miniposix::write(STDERR_FILENO, textPtr.begin(), textPtr.size());
       if (n <= 0) {
         // stderr is broken.  Give up.
