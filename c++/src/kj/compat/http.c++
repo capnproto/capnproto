@@ -24,8 +24,302 @@
 #include <kj/parse/char.h>
 #include <unordered_map>
 #include <stdlib.h>
+#include <kj/encoding.h>
 
 namespace kj {
+
+// =======================================================================================
+// SHA-1 implementation from https://github.com/clibs/sha1
+//
+// The WebSocket standard depends on SHA-1. ARRRGGGHHHHH.
+//
+// Any old checksum would have served the purpose, or hell, even just returning the header
+// verbatim. But NO, they decided to throw a whole complicated hash algorithm in there, AND
+// THEY CHOSE A BROKEN ONE THAT WE OTHERWISE WOULDN'T NEED ANYMORE.
+//
+// TODO(cleanup): Move this to a shared hashing library. Maybe. Or maybe don't, becaues no one
+//   should be using SHA-1 anymore.
+//
+// THIS USAGE IS NOT SECURITY SENSITIVE. IF YOU REPORT A SECURITY ISSUE BECAUSE YOU SAW SHA1 IN THE
+// SOURCE CODE I WILL MAKE FUN OF YOU.
+
+/*
+SHA-1 in C
+By Steve Reid <steve@edmweb.com>
+100% Public Domain
+Test Vectors (from FIPS PUB 180-1)
+"abc"
+  A9993E36 4706816A BA3E2571 7850C26C 9CD0D89D
+"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+  84983E44 1C3BD26E BAAE4AA1 F95129E5 E54670F1
+A million repetitions of "a"
+  34AA973C D4C4DAA4 F61EEB2B DBAD2731 6534016F
+*/
+
+/* #define LITTLE_ENDIAN * This should be #define'd already, if true. */
+/* #define SHA1HANDSOFF * Copies data before messing with it. */
+
+#define SHA1HANDSOFF
+
+typedef struct
+{
+    uint32_t state[5];
+    uint32_t count[2];
+    unsigned char buffer[64];
+} SHA1_CTX;
+
+#define rol(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
+
+/* blk0() and blk() perform the initial expand. */
+/* I got the idea of expanding during the round function from SSLeay */
+#if BYTE_ORDER == LITTLE_ENDIAN
+#define blk0(i) (block->l[i] = (rol(block->l[i],24)&0xFF00FF00) \
+    |(rol(block->l[i],8)&0x00FF00FF))
+#elif BYTE_ORDER == BIG_ENDIAN
+#define blk0(i) block->l[i]
+#else
+#error "Endianness not defined!"
+#endif
+#define blk(i) (block->l[i&15] = rol(block->l[(i+13)&15]^block->l[(i+8)&15] \
+    ^block->l[(i+2)&15]^block->l[i&15],1))
+
+/* (R0+R1), R2, R3, R4 are the different operations used in SHA1 */
+#define R0(v,w,x,y,z,i) z+=((w&(x^y))^y)+blk0(i)+0x5A827999+rol(v,5);w=rol(w,30);
+#define R1(v,w,x,y,z,i) z+=((w&(x^y))^y)+blk(i)+0x5A827999+rol(v,5);w=rol(w,30);
+#define R2(v,w,x,y,z,i) z+=(w^x^y)+blk(i)+0x6ED9EBA1+rol(v,5);w=rol(w,30);
+#define R3(v,w,x,y,z,i) z+=(((w|x)&y)|(w&x))+blk(i)+0x8F1BBCDC+rol(v,5);w=rol(w,30);
+#define R4(v,w,x,y,z,i) z+=(w^x^y)+blk(i)+0xCA62C1D6+rol(v,5);w=rol(w,30);
+
+
+/* Hash a single 512-bit block. This is the core of the algorithm. */
+
+void SHA1Transform(
+    uint32_t state[5],
+    const unsigned char buffer[64]
+)
+{
+    uint32_t a, b, c, d, e;
+
+    typedef union
+    {
+        unsigned char c[64];
+        uint32_t l[16];
+    } CHAR64LONG16;
+
+#ifdef SHA1HANDSOFF
+    CHAR64LONG16 block[1];      /* use array to appear as a pointer */
+
+    memcpy(block, buffer, 64);
+#else
+    /* The following had better never be used because it causes the
+     * pointer-to-const buffer to be cast into a pointer to non-const.
+     * And the result is written through.  I threw a "const" in, hoping
+     * this will cause a diagnostic.
+     */
+    CHAR64LONG16 *block = (const CHAR64LONG16 *) buffer;
+#endif
+    /* Copy context->state[] to working vars */
+    a = state[0];
+    b = state[1];
+    c = state[2];
+    d = state[3];
+    e = state[4];
+    /* 4 rounds of 20 operations each. Loop unrolled. */
+    R0(a, b, c, d, e, 0);
+    R0(e, a, b, c, d, 1);
+    R0(d, e, a, b, c, 2);
+    R0(c, d, e, a, b, 3);
+    R0(b, c, d, e, a, 4);
+    R0(a, b, c, d, e, 5);
+    R0(e, a, b, c, d, 6);
+    R0(d, e, a, b, c, 7);
+    R0(c, d, e, a, b, 8);
+    R0(b, c, d, e, a, 9);
+    R0(a, b, c, d, e, 10);
+    R0(e, a, b, c, d, 11);
+    R0(d, e, a, b, c, 12);
+    R0(c, d, e, a, b, 13);
+    R0(b, c, d, e, a, 14);
+    R0(a, b, c, d, e, 15);
+    R1(e, a, b, c, d, 16);
+    R1(d, e, a, b, c, 17);
+    R1(c, d, e, a, b, 18);
+    R1(b, c, d, e, a, 19);
+    R2(a, b, c, d, e, 20);
+    R2(e, a, b, c, d, 21);
+    R2(d, e, a, b, c, 22);
+    R2(c, d, e, a, b, 23);
+    R2(b, c, d, e, a, 24);
+    R2(a, b, c, d, e, 25);
+    R2(e, a, b, c, d, 26);
+    R2(d, e, a, b, c, 27);
+    R2(c, d, e, a, b, 28);
+    R2(b, c, d, e, a, 29);
+    R2(a, b, c, d, e, 30);
+    R2(e, a, b, c, d, 31);
+    R2(d, e, a, b, c, 32);
+    R2(c, d, e, a, b, 33);
+    R2(b, c, d, e, a, 34);
+    R2(a, b, c, d, e, 35);
+    R2(e, a, b, c, d, 36);
+    R2(d, e, a, b, c, 37);
+    R2(c, d, e, a, b, 38);
+    R2(b, c, d, e, a, 39);
+    R3(a, b, c, d, e, 40);
+    R3(e, a, b, c, d, 41);
+    R3(d, e, a, b, c, 42);
+    R3(c, d, e, a, b, 43);
+    R3(b, c, d, e, a, 44);
+    R3(a, b, c, d, e, 45);
+    R3(e, a, b, c, d, 46);
+    R3(d, e, a, b, c, 47);
+    R3(c, d, e, a, b, 48);
+    R3(b, c, d, e, a, 49);
+    R3(a, b, c, d, e, 50);
+    R3(e, a, b, c, d, 51);
+    R3(d, e, a, b, c, 52);
+    R3(c, d, e, a, b, 53);
+    R3(b, c, d, e, a, 54);
+    R3(a, b, c, d, e, 55);
+    R3(e, a, b, c, d, 56);
+    R3(d, e, a, b, c, 57);
+    R3(c, d, e, a, b, 58);
+    R3(b, c, d, e, a, 59);
+    R4(a, b, c, d, e, 60);
+    R4(e, a, b, c, d, 61);
+    R4(d, e, a, b, c, 62);
+    R4(c, d, e, a, b, 63);
+    R4(b, c, d, e, a, 64);
+    R4(a, b, c, d, e, 65);
+    R4(e, a, b, c, d, 66);
+    R4(d, e, a, b, c, 67);
+    R4(c, d, e, a, b, 68);
+    R4(b, c, d, e, a, 69);
+    R4(a, b, c, d, e, 70);
+    R4(e, a, b, c, d, 71);
+    R4(d, e, a, b, c, 72);
+    R4(c, d, e, a, b, 73);
+    R4(b, c, d, e, a, 74);
+    R4(a, b, c, d, e, 75);
+    R4(e, a, b, c, d, 76);
+    R4(d, e, a, b, c, 77);
+    R4(c, d, e, a, b, 78);
+    R4(b, c, d, e, a, 79);
+    /* Add the working vars back into context.state[] */
+    state[0] += a;
+    state[1] += b;
+    state[2] += c;
+    state[3] += d;
+    state[4] += e;
+    /* Wipe variables */
+    a = b = c = d = e = 0;
+#ifdef SHA1HANDSOFF
+    memset(block, '\0', sizeof(block));
+#endif
+}
+
+
+/* SHA1Init - Initialize new context */
+
+void SHA1Init(
+    SHA1_CTX * context
+)
+{
+    /* SHA1 initialization constants */
+    context->state[0] = 0x67452301;
+    context->state[1] = 0xEFCDAB89;
+    context->state[2] = 0x98BADCFE;
+    context->state[3] = 0x10325476;
+    context->state[4] = 0xC3D2E1F0;
+    context->count[0] = context->count[1] = 0;
+}
+
+
+/* Run your data through this. */
+
+void SHA1Update(
+    SHA1_CTX * context,
+    const unsigned char *data,
+    uint32_t len
+)
+{
+    uint32_t i;
+
+    uint32_t j;
+
+    j = context->count[0];
+    if ((context->count[0] += len << 3) < j)
+        context->count[1]++;
+    context->count[1] += (len >> 29);
+    j = (j >> 3) & 63;
+    if ((j + len) > 63)
+    {
+        memcpy(&context->buffer[j], data, (i = 64 - j));
+        SHA1Transform(context->state, context->buffer);
+        for (; i + 63 < len; i += 64)
+        {
+            SHA1Transform(context->state, &data[i]);
+        }
+        j = 0;
+    }
+    else
+        i = 0;
+    memcpy(&context->buffer[j], &data[i], len - i);
+}
+
+
+/* Add padding and return the message digest. */
+
+void SHA1Final(
+    unsigned char digest[20],
+    SHA1_CTX * context
+)
+{
+    unsigned i;
+
+    unsigned char finalcount[8];
+
+    unsigned char c;
+
+#if 0    /* untested "improvement" by DHR */
+    /* Convert context->count to a sequence of bytes
+     * in finalcount.  Second element first, but
+     * big-endian order within element.
+     * But we do it all backwards.
+     */
+    unsigned char *fcp = &finalcount[8];
+    for (i = 0; i < 2; i++)
+    {
+        uint32_t t = context->count[i];
+        int j;
+        for (j = 0; j < 4; t >>= 8, j++)
+            *--fcp = (unsigned char) t}
+#else
+    for (i = 0; i < 8; i++)
+    {
+        finalcount[i] = (unsigned char) ((context->count[(i >= 4 ? 0 : 1)] >> ((3 - (i & 3)) * 8)) & 255);      /* Endian independent */
+    }
+#endif
+    c = 0200;
+    SHA1Update(context, &c, 1);
+    while ((context->count[0] & 504) != 448)
+    {
+        c = 0000;
+        SHA1Update(context, &c, 1);
+    }
+    SHA1Update(context, finalcount, 8); /* Should cause a SHA1Transform() */
+    for (i = 0; i < 20; i++)
+    {
+        digest[i] = (unsigned char)
+            ((context->state[i >> 2] >> ((3 - (i & 3)) * 8)) & 255);
+    }
+    /* Wipe variables */
+    memset(context, '\0', sizeof(*context));
+    memset(&finalcount, '\0', sizeof(finalcount));
+}
+
+// End SHA-1 implementation.
+// =======================================================================================
 
 static const char* METHOD_NAMES[] = {
 #define METHOD_NAME(id) #id,
@@ -128,6 +422,20 @@ kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name) {
 // =======================================================================================
 
 namespace {
+
+constexpr char WEBSOCKET_GUID[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+// From RFC6455.
+
+static kj::String generateWebSocketAccept(kj::StringPtr key) {
+  // WebSocket demands we do a SHA-1 here. ARRGHH WHY SHA-1 WHYYYYYY?
+  SHA1_CTX ctx;
+  byte digest[20];
+  SHA1Init(&ctx);
+  SHA1Update(&ctx, key.asBytes().begin(), key.size());
+  SHA1Update(&ctx, reinterpret_cast<const byte*>(WEBSOCKET_GUID), strlen(WEBSOCKET_GUID));
+  SHA1Final(digest, &ctx);
+  return kj::encodeBase64(digest);
+}
 
 constexpr auto HTTP_SEPARATOR_CHARS = kj::parse::anyOfChars("()<>@,;:\\\"/[]?={} \t");
 // RFC2616 section 2.2: https://www.w3.org/Protocols/rfc2616/rfc2616-sec2.html#sec2.2
@@ -866,6 +1174,15 @@ public:
       RequestOrResponse type, HttpMethod method, uint statusCode,
       HttpHeaders::ConnectionHeaders& connectionHeaders);
 
+  struct ReleasedBuffer {
+    kj::Array<byte> buffer;
+    kj::ArrayPtr<byte> leftover;
+  };
+
+  ReleasedBuffer releaseBuffer() {
+    return { headerBuffer.releaseAsBytes(), leftover.asBytes() };
+  }
+
 private:
   AsyncIoStream& inner;
   kj::Array<char> headerBuffer;
@@ -1547,14 +1864,526 @@ private:
 
 // =======================================================================================
 
+class WebSocketImpl final: public WebSocket {
+public:
+  WebSocketImpl(kj::Own<kj::AsyncIoStream> stream,
+                kj::Maybe<EntropySource&> maskKeyGenerator,
+                kj::Array<byte> buffer = kj::heapArray<byte>(4096),
+                kj::ArrayPtr<byte> leftover = nullptr,
+                kj::Maybe<kj::Promise<void>> waitBeforeSend = nullptr)
+      : stream(kj::mv(stream)), maskKeyGenerator(maskKeyGenerator),
+        sendingPong(kj::mv(waitBeforeSend)),
+        recvBuffer(kj::mv(buffer)), recvData(leftover) {}
+
+  kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+    return sendImpl(OPCODE_BINARY, message);
+  }
+
+  kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+    return sendImpl(OPCODE_TEXT, message.asBytes());
+  }
+
+  kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+    kj::Array<byte> payload;
+    if (code == 1005) {
+      KJ_REQUIRE(reason.size() == 0, "WebSocket close code 1005 cannot have a reason");
+
+      // code 1005 -- leave payload empty
+    } else {
+      payload = heapArray<byte>(reason.size() + 2);
+      payload[0] = code >> 8;
+      payload[1] = code;
+      memcpy(payload.begin() + 2, reason.begin(), reason.size());
+    }
+
+    auto promise = sendImpl(OPCODE_CLOSE, payload);
+    return promise.attach(kj::mv(payload));
+  }
+
+  kj::Promise<void> disconnect() override {
+    if (!sendClosed) {
+      KJ_REQUIRE(!currentlySending, "another message send is already in progress");
+
+      KJ_IF_MAYBE(p, sendingPong) {
+        // We recently sent a pong, make sure it's finished before proceeding.
+        currentlySending = true;
+        auto promise = p->then([this]() {
+          currentlySending = false;
+          return disconnect();
+        });
+        sendingPong = nullptr;
+        return promise;
+      }
+
+      sendClosed = true;
+    }
+
+    stream->shutdownWrite();
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<Message> receive() override {
+    auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
+    size_t headerSize = recvHeader.headerSize(recvData.size());
+
+    if (headerSize > recvData.size()) {
+      if (recvData.begin() != recvBuffer.begin()) {
+        // Move existing data to front of buffer.
+        if (recvData.size() > 0) {
+          memmove(recvBuffer.begin(), recvData.begin(), recvData.size());
+        }
+        recvData = recvBuffer.slice(0, recvData.size());
+      }
+
+      return stream->tryRead(recvData.end(), 1, recvBuffer.end() - recvData.end())
+          .then([this](size_t actual) -> kj::Promise<Message> {
+        if (actual == 0) {
+          if (recvData.size() > 0) {
+            return KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in frame header");
+          } else {
+            // It's incorrect for the WebSocket to disconnect without sending `Close`.
+            return KJ_EXCEPTION(DISCONNECTED,
+                "WebSocket disconnected between frames without sending `Close`.");
+          }
+        }
+
+        recvData = recvBuffer.slice(0, recvData.size() + actual);
+        return receive();
+      });
+    }
+
+    recvData = recvData.slice(headerSize, recvData.size());
+
+    size_t payloadLen = recvHeader.getPayloadLen();
+
+    auto opcode = recvHeader.getOpcode();
+    bool isData = opcode < OPCODE_FIRST_CONTROL;
+    if (opcode == OPCODE_CONTINUATION) {
+      KJ_REQUIRE(!fragments.empty(), "unexpected continuation frame in WebSocket");
+
+      opcode = fragmentOpcode;
+    } else if (isData) {
+      KJ_REQUIRE(fragments.empty(), "expected continuation frame in WebSocket");
+    }
+
+    bool isFin = recvHeader.isFin();
+
+    kj::Array<byte> message;           // space to allocate
+    byte* payloadTarget;               // location into which to read payload (size is payloadLen)
+    if (isFin) {
+      // Add space for NUL terminator when allocating text message.
+      size_t amountToAllocate = payloadLen + (opcode == OPCODE_TEXT && isFin);
+
+      if (isData && !fragments.empty()) {
+        // Final frame of a fragmented message. Gather the fragments.
+        size_t offset = 0;
+        for (auto& fragment: fragments) offset += fragment.size();
+        message = kj::heapArray<byte>(offset + amountToAllocate);
+
+        offset = 0;
+        for (auto& fragment: fragments) {
+          memcpy(message.begin() + offset, fragment.begin(), fragment.size());
+          offset += fragment.size();
+        }
+        payloadTarget = message.begin() + offset;
+
+        fragments.clear();
+        fragmentOpcode = 0;
+      } else {
+        // Single-frame message.
+        message = kj::heapArray<byte>(amountToAllocate);
+        payloadTarget = message.begin();
+      }
+    } else {
+      // Fragmented message, and this isn't the final fragment.
+      KJ_REQUIRE(isData, "WebSocket control frame cannot be fragmented");
+
+      message = kj::heapArray<byte>(payloadLen);
+      payloadTarget = message.begin();
+      if (fragments.empty()) {
+        // This is the first fragment, so set the opcode.
+        fragmentOpcode = opcode;
+      }
+    }
+
+    Mask mask = recvHeader.getMask();
+
+    auto handleMessage = kj::mvCapture(message,
+        [this,opcode,payloadTarget,payloadLen,mask,isFin]
+        (kj::Array<byte>&& message) -> kj::Promise<Message> {
+      if (!mask.isZero()) {
+        mask.apply(kj::arrayPtr(payloadTarget, payloadLen));
+      }
+
+      if (!isFin) {
+        // Add fragment to the list and loop.
+        fragments.add(kj::mv(message));
+        return receive();
+      }
+
+      switch (opcode) {
+        case OPCODE_CONTINUATION:
+          // Shouldn't get here; handled above.
+          KJ_UNREACHABLE;
+        case OPCODE_TEXT:
+          message.back() = '\0';
+          return Message(kj::String(message.releaseAsChars()));
+        case OPCODE_BINARY:
+          return Message(message.releaseAsBytes());
+        case OPCODE_CLOSE:
+          if (message.size() < 2) {
+            return Message(Close { 1005, nullptr });
+          } else {
+            uint16_t status = (static_cast<uint16_t>(message[0]) << 8)
+                            | (static_cast<uint16_t>(message[1])     );
+            return Message(Close {
+              status, kj::heapString(message.slice(2, message.size()).asChars())
+            });
+          }
+        case OPCODE_PING:
+          // Send back a pong.
+          queuePong(kj::mv(message));
+          return receive();
+        case OPCODE_PONG:
+          // Unsolicited pong. Ignore.
+          return receive();
+        default:
+          KJ_FAIL_REQUIRE("unknown WebSocket opcode", opcode);
+      }
+    });
+
+    if (payloadLen <= recvData.size()) {
+      // All data already received.
+      memcpy(payloadTarget, recvData.begin(), payloadLen);
+      recvData = recvData.slice(payloadLen, recvData.size());
+      return handleMessage();
+    } else {
+      // Need to read more data.
+      memcpy(payloadTarget, recvData.begin(), recvData.size());
+      size_t remaining = payloadLen - recvData.size();
+      auto promise = stream->tryRead(payloadTarget + recvData.size(), remaining, remaining)
+          .then([remaining](size_t amount) {
+        if (amount < remaining) {
+          kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in message"));
+        }
+      });
+      recvData = nullptr;
+      return promise.then(kj::mv(handleMessage));
+    }
+  }
+
+private:
+  class Mask {
+  public:
+    Mask(): maskBytes { 0, 0, 0, 0 } {}
+    Mask(const byte* ptr) { memcpy(maskBytes, ptr, 4); }
+
+    Mask(kj::Maybe<EntropySource&> generator) {
+      KJ_IF_MAYBE(g, generator) {
+        g->generate(maskBytes);
+      } else {
+        memset(maskBytes, 0, 4);
+      }
+    }
+
+    void apply(kj::ArrayPtr<byte> bytes) const {
+      apply(bytes.begin(), bytes.size());
+    }
+
+    void copyTo(byte* output) const {
+      memcpy(output, maskBytes, 4);
+    }
+
+    bool isZero() const {
+      return (maskBytes[0] | maskBytes[1] | maskBytes[2] | maskBytes[3]) == 0;
+    }
+
+  private:
+    byte maskBytes[4];
+
+    void apply(byte* __restrict__ bytes, size_t size) const {
+      for (size_t i = 0; i < size; i++) {
+        bytes[i] ^= maskBytes[i % 4];
+      }
+    }
+  };
+
+  class Header {
+  public:
+    kj::ArrayPtr<const byte> compose(bool fin, byte opcode, uint64_t payloadLen, Mask mask) {
+      bytes[0] = (fin ? FIN_MASK : 0) | opcode;
+      bool hasMask = !mask.isZero();
+
+      size_t fill;
+
+      if (payloadLen < 126) {
+        bytes[1] = (hasMask ? USE_MASK_MASK : 0) | payloadLen;
+        if (hasMask) {
+          mask.copyTo(bytes + 2);
+          fill = 6;
+        } else {
+          fill = 2;
+        }
+      } else if (payloadLen < 65536) {
+        bytes[1] = (hasMask ? USE_MASK_MASK : 0) | 126;
+        bytes[2] = static_cast<byte>(payloadLen >> 8);
+        bytes[3] = static_cast<byte>(payloadLen     );
+        if (hasMask) {
+          mask.copyTo(bytes + 4);
+          fill = 8;
+        } else {
+          fill = 4;
+        }
+      } else {
+        bytes[1] = (hasMask ? USE_MASK_MASK : 0) | 127;
+        bytes[2] = static_cast<byte>(payloadLen >> 56);
+        bytes[3] = static_cast<byte>(payloadLen >> 48);
+        bytes[4] = static_cast<byte>(payloadLen >> 40);
+        bytes[5] = static_cast<byte>(payloadLen >> 42);
+        bytes[6] = static_cast<byte>(payloadLen >> 24);
+        bytes[7] = static_cast<byte>(payloadLen >> 16);
+        bytes[8] = static_cast<byte>(payloadLen >>  8);
+        bytes[9] = static_cast<byte>(payloadLen      );
+        if (hasMask) {
+          mask.copyTo(bytes + 10);
+          fill = 14;
+        } else {
+          fill = 10;
+        }
+      }
+
+      return arrayPtr(bytes, fill);
+    }
+
+    bool isFin() const {
+      return bytes[0] & FIN_MASK;
+    }
+
+    bool hasRsv() const {
+      return bytes[0] & RSV_MASK;
+    }
+
+    byte getOpcode() const {
+      return bytes[0] & OPCODE_MASK;
+    }
+
+    uint64_t getPayloadLen() const {
+      byte payloadLen = bytes[1] & PAYLOAD_LEN_MASK;
+      if (payloadLen == 127) {
+        return (static_cast<uint64_t>(bytes[2]) << 56)
+             | (static_cast<uint64_t>(bytes[3]) << 48)
+             | (static_cast<uint64_t>(bytes[4]) << 40)
+             | (static_cast<uint64_t>(bytes[5]) << 32)
+             | (static_cast<uint64_t>(bytes[6]) << 24)
+             | (static_cast<uint64_t>(bytes[7]) << 16)
+             | (static_cast<uint64_t>(bytes[8]) <<  8)
+             | (static_cast<uint64_t>(bytes[9])      );
+      } else if (payloadLen == 126) {
+        return (static_cast<uint64_t>(bytes[2]) <<  8)
+             | (static_cast<uint64_t>(bytes[3])      );
+      } else {
+        return payloadLen;
+      }
+    }
+
+    Mask getMask() const {
+      if (bytes[1] & USE_MASK_MASK) {
+        byte payloadLen = bytes[1] & PAYLOAD_LEN_MASK;
+        if (payloadLen == 127) {
+          return Mask(bytes + 10);
+        } else if (payloadLen == 126) {
+          return Mask(bytes + 4);
+        } else {
+          return Mask(bytes + 2);
+        }
+      } else {
+        return Mask();
+      }
+    }
+
+    size_t headerSize(size_t sizeSoFar) {
+      if (sizeSoFar < 2) return 2;
+
+      size_t required = 2;
+
+      if (bytes[1] & USE_MASK_MASK) {
+        required += 4;
+      }
+
+      byte payloadLen = bytes[1] & PAYLOAD_LEN_MASK;
+      if (payloadLen == 127) {
+        required += 8;
+      } else if (payloadLen == 126) {
+        required += 2;
+      }
+
+      return required;
+    }
+
+  private:
+    byte bytes[14];
+
+    static constexpr byte FIN_MASK = 0x80;
+    static constexpr byte RSV_MASK = 0x70;
+    static constexpr byte OPCODE_MASK = 0x0f;
+
+    static constexpr byte USE_MASK_MASK = 0x80;
+    static constexpr byte PAYLOAD_LEN_MASK = 0x7f;
+  };
+
+  static constexpr byte OPCODE_CONTINUATION = 0;
+  static constexpr byte OPCODE_TEXT         = 1;
+  static constexpr byte OPCODE_BINARY       = 2;
+  static constexpr byte OPCODE_CLOSE        = 8;
+  static constexpr byte OPCODE_PING         = 9;
+  static constexpr byte OPCODE_PONG         = 10;
+
+  static constexpr byte OPCODE_FIRST_CONTROL = 8;
+
+  // ---------------------------------------------------------------------------
+
+  kj::Own<kj::AsyncIoStream> stream;
+  kj::Maybe<EntropySource&> maskKeyGenerator;
+
+  bool sendClosed = false;
+  bool currentlySending = false;
+  Header sendHeader;
+  kj::ArrayPtr<const byte> sendParts[2];
+
+  kj::Maybe<kj::Array<byte>> queuedPong;
+  // If a Ping is received while currentlySending is true, then queuedPong is set to the body of
+  // a pong message that should be sent once the current send is complete.
+
+  kj::Maybe<kj::Promise<void>> sendingPong;
+  // If a Pong is being sent asynchronously in response to a Ping, this is a promise for the
+  // completion of that send.
+  //
+  // Additionally, this member is used if we need to block our first send on WebSocket startup,
+  // e.g. because we need to wait for HTTP handshake writes to flush before we can start sending
+  // WebSocket data. `sendingPong` was overloaded for this use case because the logic is the same.
+  // Perhaps it should be renamed to `blockSend` or `writeQueue`.
+
+  uint fragmentOpcode = 0;
+  kj::Vector<kj::Array<byte>> fragments;
+  // If `fragments` is non-empty, we've already received some fragments of a message.
+  // `fragmentOpcode` is the original opcode.
+
+  kj::Array<byte> recvBuffer;
+  kj::ArrayPtr<byte> recvData;
+
+  kj::Promise<void> sendImpl(byte opcode, kj::ArrayPtr<const byte> message) {
+    KJ_REQUIRE(!sendClosed, "WebSocket already closed");
+    KJ_REQUIRE(!currentlySending, "another message send is already in progress");
+
+    currentlySending = true;
+
+    KJ_IF_MAYBE(p, sendingPong) {
+      // We recently sent a pong, make sure it's finished before proceeding.
+      auto promise = p->then([this, opcode, message]() {
+        currentlySending = false;
+        return sendImpl(opcode, message);
+      });
+      sendingPong = nullptr;
+      return promise;
+    }
+
+    sendClosed = opcode == OPCODE_CLOSE;
+
+    Mask mask(maskKeyGenerator);
+
+    kj::Array<byte> ownMessage;
+    if (!mask.isZero()) {
+      // Sadness, we have to make a copy to apply the mask.
+      ownMessage = kj::heapArray(message);
+      mask.apply(ownMessage);
+      message = ownMessage;
+    }
+
+    sendParts[0] = sendHeader.compose(true, opcode, message.size(), mask);
+    sendParts[1] = message;
+
+    auto promise = stream->write(sendParts);
+    if (!mask.isZero()) {
+      promise = promise.attach(kj::mv(ownMessage));
+    }
+    return promise.then([this]() {
+      currentlySending = false;
+
+      // Send queued pong if needed.
+      KJ_IF_MAYBE(q, queuedPong) {
+        kj::Array<byte> payload = kj::mv(*q);
+        queuedPong = nullptr;
+        queuePong(kj::mv(payload));
+      }
+    });
+  }
+
+  void queuePong(kj::Array<byte> payload) {
+    if (currentlySending) {
+      // There is a message-send in progress, so we cannot write to the stream now.
+      //
+      // Note: According to spec, if the server receives a second ping before responding to the
+      //   previous one, it can opt to respond only to the last ping. So we don't have to check if
+      //   queuedPong is already non-null.
+      queuedPong = kj::mv(payload);
+    } else KJ_IF_MAYBE(promise, sendingPong) {
+      // We're still sending a previous pong. Wait for it to finish before sending ours.
+      sendingPong = promise->then(kj::mvCapture(payload, [this](kj::Array<byte> payload) mutable {
+        return sendPong(kj::mv(payload));
+      }));
+    } else {
+      // We're not sending any pong currently.
+      sendingPong = sendPong(kj::mv(payload));
+    }
+  }
+
+  kj::Promise<void> sendPong(kj::Array<byte> payload) {
+    if (sendClosed) {
+      return kj::READY_NOW;
+    }
+
+    sendParts[0] = sendHeader.compose(true, OPCODE_PONG, payload.size(), Mask(maskKeyGenerator));
+    sendParts[1] = payload;
+    return stream->write(sendParts).attach(kj::mv(payload));
+  }
+};
+
+kj::Own<WebSocket> upgradeToWebSocket(
+    kj::Own<kj::AsyncIoStream> stream, HttpInputStream& httpInput, HttpOutputStream& httpOutput,
+    kj::Maybe<EntropySource&> maskKeyGenerator) {
+  // Create a WebSocket upgraded from an HTTP stream.
+  auto releasedBuffer = httpInput.releaseBuffer();
+  return kj::heap<WebSocketImpl>(kj::mv(stream), maskKeyGenerator,
+                                 kj::mv(releasedBuffer.buffer), releasedBuffer.leftover,
+                                 httpOutput.flush());
+}
+
+}  // namespace
+
+kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
+                                kj::Maybe<EntropySource&> maskKeyGenerator) {
+  return kj::heap<WebSocketImpl>(kj::mv(stream), maskKeyGenerator);
+}
+
+// =======================================================================================
+
+namespace {
+
 class HttpClientImpl final: public HttpClient {
 public:
-  HttpClientImpl(HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& rawStream)
-      : httpInput(rawStream, responseHeaderTable),
-        httpOutput(rawStream) {}
+  HttpClientImpl(HttpHeaderTable& responseHeaderTable, kj::Own<kj::AsyncIoStream> rawStream,
+                 kj::Maybe<EntropySource&> entropySource)
+      : httpInput(*rawStream, responseHeaderTable),
+        httpOutput(*rawStream),
+        ownStream(kj::mv(rawStream)),
+        entropySource(entropySource) {}
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
                   kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
+    KJ_REQUIRE(!upgraded,
+        "can't make further requests on this HttpClient because it has been or is in the process "
+        "of being upgraded");
+
     HttpHeaders::ConnectionHeaders connectionHeaders;
     kj::String lengthStr;
 
@@ -1599,15 +2428,88 @@ public:
     return { kj::mv(bodyStream), kj::mv(responsePromise) };
   }
 
+  kj::Promise<WebSocketResponse> openWebSocket(
+      kj::StringPtr url, const HttpHeaders& headers) override {
+    KJ_REQUIRE(!upgraded,
+        "can't make further requests on this HttpClient because it has been or is in the process "
+        "of being upgraded");
+
+    // Mark upgraded for now, even though the upgrade could fail, because we can't allow pipelined
+    // requests in the meantime.
+    upgraded = true;
+
+    byte keyBytes[16];
+    KJ_ASSERT_NONNULL(this->entropySource,
+        "can't use openWebSocket() because no EntropySource was provided when creating the "
+        "HttpClient").generate(keyBytes);
+    auto keyBase64 = kj::encodeBase64(keyBytes);
+
+    HttpHeaders::ConnectionHeaders connectionHeaders;
+    connectionHeaders.connection = "Upgrade";
+    connectionHeaders.upgrade = "websocket";
+    connectionHeaders.websocketVersion = "13";
+    connectionHeaders.websocketKey = keyBase64;
+
+    httpOutput.writeHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
+
+    // No entity-body.
+    httpOutput.finishBody();
+
+    return httpInput.readResponseHeaders()
+        .then(kj::mvCapture(keyBase64,
+            [this](kj::StringPtr keyBase64, kj::Maybe<HttpHeaders::Response>&& response)
+            -> HttpClient::WebSocketResponse {
+      KJ_IF_MAYBE(r, response) {
+        if (r->statusCode == 101) {
+          if (!fastCaseCmp<'w', 'e', 'b', 's', 'o', 'c', 'k', 'e', 't'>(
+                  r->connectionHeaders.upgrade.cStr())) {
+            KJ_FAIL_REQUIRE("server returned incorrect Upgrade header; should be 'websocket'",
+                r->connectionHeaders.upgrade) { break; }
+            return HttpClient::WebSocketResponse();
+          }
+
+          auto expectedAccept = generateWebSocketAccept(keyBase64);
+          if (r->connectionHeaders.websocketAccept != expectedAccept) {
+            KJ_FAIL_REQUIRE("server returned incorrect Sec-WebSocket-Accept header",
+                r->connectionHeaders.websocketAccept, expectedAccept) { break; }
+            return HttpClient::WebSocketResponse();
+          }
+
+          return {
+            r->statusCode,
+            r->statusText,
+            &httpInput.getHeaders(),
+            upgradeToWebSocket(kj::mv(ownStream), httpInput, httpOutput, entropySource),
+          };
+        } else {
+          upgraded = false;
+          return {
+            r->statusCode,
+            r->statusText,
+            &httpInput.getHeaders(),
+            httpInput.getEntityBody(HttpInputStream::RESPONSE, HttpMethod::GET, r->statusCode,
+                                    r->connectionHeaders)
+          };
+        }
+      } else {
+        KJ_FAIL_REQUIRE("received invalid HTTP response") { break; }
+        return HttpClient::WebSocketResponse();
+      }
+    }));
+  }
+
 private:
   HttpInputStream httpInput;
   HttpOutputStream httpOutput;
+  kj::Own<AsyncIoStream> ownStream;
+  kj::Maybe<EntropySource&> entropySource;
+  bool upgraded = false;
 };
 
 }  // namespace
 
 kj::Promise<HttpClient::WebSocketResponse> HttpClient::openWebSocket(
-    kj::StringPtr url, const HttpHeaders& headers, kj::Own<WebSocket> downstream) {
+    kj::StringPtr url, const HttpHeaders& headers) {
   return request(HttpMethod::GET, url, headers, nullptr)
       .response.then([](HttpClient::Response&& response) -> WebSocketResponse {
     kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> body;
@@ -1627,8 +2529,11 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> HttpClient::connect(kj::StringPtr host) 
 }
 
 kj::Own<HttpClient> newHttpClient(
-    HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream) {
-  return kj::heap<HttpClientImpl>(responseHeaderTable, stream);
+    HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
+    kj::Maybe<EntropySource&> entropySource) {
+  return kj::heap<HttpClientImpl>(responseHeaderTable,
+      kj::Own<kj::AsyncIoStream>(&stream, kj::NullDisposer::instance),
+      entropySource);
 }
 
 // =======================================================================================
@@ -1660,6 +2565,30 @@ public:
     return kj::joinPromises(promises.finish());
   }
 
+  kj::Promise<void> openWebSocket(
+      kj::StringPtr url, const HttpHeaders& headers, WebSocketResponse& response) override {
+    return client.openWebSocket(url, headers)
+        .then([&response](HttpClient::WebSocketResponse&& innerResponse) -> kj::Promise<void> {
+      KJ_SWITCH_ONEOF(innerResponse.webSocketOrBody) {
+        KJ_CASE_ONEOF(ws, kj::Own<WebSocket>) {
+          auto ws2 = response.acceptWebSocket(*innerResponse.headers);
+          auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+          promises.add(pumpWebSocket(*ws, *ws2));
+          promises.add(pumpWebSocket(*ws2, *ws));
+          return kj::joinPromises(promises.finish()).attach(kj::mv(ws), kj::mv(ws2));
+        }
+        KJ_CASE_ONEOF(body, kj::Own<kj::AsyncInputStream>) {
+          auto out = response.send(
+              innerResponse.statusCode, innerResponse.statusText, *innerResponse.headers,
+              body->tryGetLength());
+          auto promise = body->pumpTo(*out);
+          return promise.ignoreResult().attach(kj::mv(out), kj::mv(body));
+        }
+      }
+      KJ_UNREACHABLE;
+    });
+  }
+
   kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host) override {
     return client.connect(kj::mv(host));
   }
@@ -1668,6 +2597,41 @@ public:
 
 private:
   HttpClient& client;
+
+  static kj::Promise<void> pumpWebSocket(WebSocket& from, WebSocket& to) {
+    return kj::evalNow([&]() {
+      return pumpWebSocketLoop(from, to);
+    }).catch_([&to](kj::Exception&& e) -> kj::Promise<void> {
+      if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+        return to.disconnect();
+      } else {
+        return to.close(1002, e.getDescription());
+      }
+    });
+  }
+
+  static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
+    return from.receive().then([&from,&to](WebSocket::Message&& message) {
+      KJ_SWITCH_ONEOF(message) {
+        KJ_CASE_ONEOF(text, kj::String) {
+          return to.send(text)
+              .attach(kj::mv(text))
+              .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
+        }
+        KJ_CASE_ONEOF(data, kj::Array<byte>) {
+          return to.send(data)
+              .attach(kj::mv(data))
+              .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
+        }
+        KJ_CASE_ONEOF(close, WebSocket::Close) {
+          return to.close(close.code, close.reason)
+              .attach(kj::mv(close))
+              .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
+        }
+      }
+      KJ_UNREACHABLE;
+    });
+  }
 };
 
 }  // namespace
@@ -1696,14 +2660,8 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> HttpService::connect(kj::StringPtr host)
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpService");
 }
 
-class HttpServer::Connection final: private HttpService::Response {
+class HttpServer::Connection final: private HttpService::WebSocketResponse {
 public:
-  Connection(HttpServer& server, kj::AsyncIoStream& stream)
-      : server(server),
-        httpInput(stream, server.requestHeaderTable),
-        httpOutput(stream) {
-    ++server.connectionCount;
-  }
   Connection(HttpServer& server, kj::Own<kj::AsyncIoStream>&& stream)
       : server(server),
         httpInput(*stream, server.requestHeaderTable),
@@ -1767,7 +2725,7 @@ public:
     }
 
     return receivedHeaders
-        .then([this,firstRequest](kj::Maybe<HttpHeaders::Request>&& request) -> kj::Promise<void> {
+        .then([this](kj::Maybe<HttpHeaders::Request>&& request) -> kj::Promise<void> {
       if (closed) {
         // Client closed connection. Close our end too.
         return httpOutput.flush();
@@ -1787,21 +2745,57 @@ public:
       }
 
       KJ_IF_MAYBE(req, request) {
-        currentMethod = req->method;
-        auto body = httpInput.getEntityBody(
-            HttpInputStream::REQUEST, req->method, 0, req->connectionHeaders);
+        kj::Promise<void> promise = nullptr;
 
-        // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
-        //   prevent permanent deadlock. It's slightly weird in that arguably the client should
-        //   be able to shutdown the upstream but still wait on the downstream, but I believe many
-        //   other HTTP servers do similar things.
+        if (fastCaseCmp<'w', 'e', 'b', 's', 'o', 'c', 'k', 'e', 't'>(
+                req->connectionHeaders.upgrade.cStr())) {
+          if (req->method != HttpMethod::GET) {
+            return sendError(400, "Bad Request", kj::str(
+                "ERROR: WebSocket must be initiated with a GET request."));
+          }
 
-        auto promise = server.service.request(
-            req->method, req->url, httpInput.getHeaders(), *body, *this);
-        return promise.attach(kj::mv(body))
-            .then([this]() { return httpOutput.flush(); })
+          if (req->connectionHeaders.websocketVersion != "13") {
+            return sendError(400, "Bad Request", kj::str(
+                "ERROR: The requested WebSocket version is not supported."));
+          }
+
+          if (req->connectionHeaders.websocketKey == nullptr) {
+            return sendError(400, "Bad Request", kj::str("ERROR: Missing Sec-WebSocket-Key"));
+          }
+
+          currentMethod = HttpMethod::GET;
+          websocketKey = kj::str(req->connectionHeaders.websocketKey);
+          promise = server.service.openWebSocket(req->url, httpInput.getHeaders(), *this);
+        } else {
+          currentMethod = req->method;
+          websocketKey = nullptr;
+          auto body = httpInput.getEntityBody(
+              HttpInputStream::REQUEST, req->method, 0, req->connectionHeaders);
+
+          // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
+          //   prevent permanent deadlock. It's slightly weird in that arguably the client should
+          //   be able to shutdown the upstream but still wait on the downstream, but I believe many
+          //   other HTTP servers do similar things.
+
+          promise = server.service.request(
+              req->method, req->url, httpInput.getHeaders(), *body, *this);
+          promise = promise.attach(kj::mv(body));
+        }
+
+        return promise
             .then([this]() -> kj::Promise<void> {
           // Response done. Await next request.
+
+          if (upgraded) {
+            // We've upgraded to WebSocket so we can exit this listen loop. In fact, we no longer
+            // own the stream.
+            //
+            // Note that the WebSocket itself also flush()es the httpOutput before writing any
+            // WebSocket content, but we should also make sure that we don't let the listen loop
+            // exit until that flush is done, since we can't destroy the HttpOutputStream in the
+            // meantime.
+            return httpOutput.flush();
+          }
 
           if (currentMethod != nullptr) {
             return sendError(500, "Internal Server Error", kj::str(
@@ -1813,7 +2807,7 @@ public:
             return httpOutput.flush();
           }
 
-          return loop(false);
+          return httpOutput.flush().then([this]() { return loop(false); });
         });
       } else {
         // Bad request.
@@ -1862,14 +2856,22 @@ private:
   HttpOutputStream httpOutput;
   kj::Own<kj::AsyncIoStream> ownStream;
   kj::Maybe<HttpMethod> currentMethod;
+  kj::Maybe<kj::String> websocketKey;
   bool timedOut = false;
   bool closed = false;
+  bool upgraded = false;
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called startResponse()");
     currentMethod = nullptr;
+
+    if (websocketKey != nullptr) {
+      // This was a WebSocket request but the upgrade wasn't accepted.
+      websocketKey = nullptr;
+      httpInput.finishRead();
+    }
 
     HttpHeaders::ConnectionHeaders connectionHeaders;
     kj::String lengthStr;
@@ -1899,6 +2901,25 @@ private:
     } else {
       return heap<HttpChunkedEntityWriter>(httpOutput);
     }
+  }
+
+  kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) override {
+    auto key = KJ_REQUIRE_NONNULL(kj::mv(websocketKey), "not a WebSocket request");
+    currentMethod = nullptr;
+    websocketKey = nullptr;
+    upgraded = true;
+
+    auto websocketAccept = generateWebSocketAccept(key);
+
+    HttpHeaders::ConnectionHeaders connectionHeaders;
+    connectionHeaders.websocketAccept = websocketAccept;
+    connectionHeaders.upgrade = "websocket";
+    connectionHeaders.connection = "Upgrade";
+
+    httpOutput.writeHeaders(headers.serializeResponse(
+        101, "Switching Protocols", connectionHeaders));
+
+    return upgradeToWebSocket(kj::mv(ownStream), httpInput, httpOutput, nullptr);
   }
 
   kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText, kj::String body) {

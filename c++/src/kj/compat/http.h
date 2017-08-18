@@ -86,7 +86,10 @@ namespace kj {
   MACRO(te, "TE") \
   MACRO(trailer, "Trailer") \
   MACRO(transferEncoding, "Transfer-Encoding") \
-  MACRO(upgrade, "Upgrade")
+  MACRO(upgrade, "Upgrade") \
+  MACRO(websocketKey, "Sec-WebSocket-Key") \
+  MACRO(websocketVersion, "Sec-WebSocket-Version") \
+  MACRO(websocketAccept, "Sec-WebSocket-Accept")
 
 enum class HttpMethod {
   // Enum of known HTTP methods.
@@ -368,13 +371,54 @@ private:
   //   also add direct accessors for those headers.
 };
 
-class WebSocket {
-public:
-  WebSocket(kj::Own<kj::AsyncIoStream> stream);
-  // Create a WebSocket wrapping the given I/O stream.
+class EntropySource {
+  // Interface for an object that generates entropy. Typically, cryptographically-random entropy
+  // is expected.
+  //
+  // TODO(cleanup): Put this somewhere more general.
 
-  kj::Promise<void> send(kj::ArrayPtr<const byte> message);
-  kj::Promise<void> send(kj::ArrayPtr<const char> message);
+public:
+  virtual void generate(kj::ArrayPtr<byte> buffer) = 0;
+};
+
+class WebSocket {
+  // Interface representincg an open WebSocket session.
+  //
+  // Each side can send and receive data and "close" messages.
+  //
+  // Ping/Pong and message fragmentation are not exposed through this interface. These features of
+  // the underlying WebSocket protocol are not exposed by the browser-level Javascript API either,
+  // and thus applications typically need to implement these features at the application protocol
+  // level instead. The implementation is, however, expected to reply to Ping messages it receives.
+
+public:
+  virtual kj::Promise<void> send(kj::ArrayPtr<const byte> message) = 0;
+  virtual kj::Promise<void> send(kj::ArrayPtr<const char> message) = 0;
+  // Send a message (binary or text). The underlying buffer must remain valid, and you must not
+  // call send() again, until the returned promise resolves.
+
+  virtual kj::Promise<void> close(uint16_t code, kj::StringPtr reason) = 0;
+  // Send a Close message.
+  //
+  // Note that the returned Promise resolves once the message has been sent -- it does NOT wait
+  // for the other end to send a Close reply. The application should await a reply before dropping
+  // the WebSocket object.
+
+  virtual kj::Promise<void> disconnect() = 0;
+  // Sends EOF on the underlying connection without sending a "close" message. This is NOT a clean
+  // shutdown, but is sometimes useful when you want the other end to trigger whatever behavior
+  // it normally triggers when a connection is dropped.
+
+  struct Close {
+    uint16_t code;
+    kj::String reason;
+  };
+
+  typedef kj::OneOf<kj::String, kj::Array<byte>, Close> Message;
+
+  virtual kj::Promise<Message> receive() = 0;
+  // Read one message from the WebSocket and return it. Can only call once at a time. Do not call
+  // again after EndOfStream is received.
 };
 
 class HttpClient {
@@ -392,7 +436,7 @@ public:
     kj::StringPtr statusText;
     const HttpHeaders* headers;
     kj::Own<kj::AsyncInputStream> body;
-    // `statusText` and `headers` remain valid until `body` is dropped.
+    // `statusText` and `headers` remain valid until `body` is dropped or read from.
   };
 
   struct Request {
@@ -424,14 +468,15 @@ public:
     uint statusCode;
     kj::StringPtr statusText;
     const HttpHeaders* headers;
-    kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> upstreamOrBody;
-    // `statusText` and `headers` remain valid until `upstreamOrBody` is dropped.
+    kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> webSocketOrBody;
+    // `statusText` and `headers` remain valid until `webSocketOrBody` is dropped or read from.
   };
   virtual kj::Promise<WebSocketResponse> openWebSocket(
-      kj::StringPtr url, const HttpHeaders& headers, kj::Own<WebSocket> downstream);
+      kj::StringPtr url, const HttpHeaders& headers);
   // Tries to open a WebSocket. Default implementation calls send() and never returns a WebSocket.
   //
-  // `url` and `headers` are invalidated when the returned promise resolves.
+  // `url` and `headers` need only remain valid until `openWebSocket()` returns (they can be
+  // stack-allocated).
 
   virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host);
   // Handles CONNECT requests. Only relevant for proxy clients. Default implementation throws
@@ -478,13 +523,10 @@ public:
 
   class WebSocketResponse: public Response {
   public:
-    kj::Own<WebSocket> startWebSocket(
-        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
-        WebSocket& upstream);
-    // Begin the response.
+    virtual kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) = 0;
+    // Accept and open the WebSocket.
     //
-    // `statusText` and `headers` need only remain valid until startWebSocket() returns (they can
-    // be stack-allocated).
+    // `headers` need only remain valid until acceptWebSocket() returns (it can be stack-allocated).
   };
 
   virtual kj::Promise<void> openWebSocket(
@@ -500,15 +542,25 @@ public:
 };
 
 kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Network& network,
-                                  kj::Maybe<kj::Network&> tlsNetwork = nullptr);
+                                  kj::Maybe<kj::Network&> tlsNetwork = nullptr,
+                                  kj::Maybe<EntropySource&> entropySource = nullptr);
 // Creates a proxy HttpClient that connects to hosts over the given network.
 //
 // `responseHeaderTable` is used when parsing HTTP responses. Requests can use any header table.
 //
 // `tlsNetwork` is required to support HTTPS destination URLs. Otherwise, only HTTP URLs can be
 // fetched.
+//
+// `entropySource` must be provided in order to use `openWebSocket`. If you don't need WebSockets,
+// `entropySource` can be omitted. The WebSocket protocol uses random values to avoid triggering
+// flaws (including security flaws) in certain HTTP proxy software. Specifically, entropy is used
+// to generate the `Sec-WebSocket-Key` header and to generate frame masks. If you know that there
+// are no broken or vulnerable proxies between you and the server, you can provide an dummy entropy
+// source that doesn't generate real entropy (e.g. returning the same value every time). Otherwise,
+// you must provide a cryptographically-random entropy source.
 
-kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream);
+kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
+                                  kj::Maybe<EntropySource&> entropySource = nullptr);
 // Creates an HttpClient that speaks over the given pre-established connection. The client may
 // be used as a proxy client or a host client depending on whether the peer is operating as
 // a proxy.
@@ -518,10 +570,32 @@ kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Asyn
 // fail as well. If the destination server chooses to close the connection after a response,
 // subsequent requests will fail. If a response takes a long time, it blocks subsequent responses.
 // If a WebSocket is opened successfully, all subsequent requests fail.
+//
+// `entropySource` must be provided in order to use `openWebSocket`. If you don't need WebSockets,
+// `entropySource` can be omitted. The WebSocket protocol uses random values to avoid triggering
+// flaws (including security flaws) in certain HTTP proxy software. Specifically, entropy is used
+// to generate the `Sec-WebSocket-Key` header and to generate frame masks. If you know that there
+// are no broken or vulnerable proxies between you and the server, you can provide an dummy entropy
+// source that doesn't generate real entropy (e.g. returning the same value every time). Otherwise,
+// you must provide a cryptographically-random entropy source.
 
 kj::Own<HttpClient> newHttpClient(HttpService& service);
 kj::Own<HttpService> newHttpService(HttpClient& client);
 // Adapts an HttpClient to an HttpService and vice versa.
+
+kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
+                                kj::Maybe<EntropySource&> maskEntropySource);
+// Create a new WebSocket on top of the given stream. It is assumed that the HTTP -> WebSocket
+// upgrade handshake has already occurred (or is not needed), and messages can immediately be
+// sent and received on the stream. Normally applications would not call this directly.
+//
+// `maskEntropySource` is used to generate cryptographically-random frame masks. If null, outgoing
+// frames will not be masked. Servers are required NOT to mask their outgoing frames, but clients
+// ARE required to do so. So, on the client side, you MUST specify an entropy source. The mask
+// must be crytographically random if the data being sent on the WebSocket may be malicious. The
+// purpose of the mask is to prevent badly-written HTTP proxies from interpreting "things that look
+// like HTTP requests" in a message as being actual HTTP requests, which could result in cache
+// poisoning. See RFC6455 section 10.3.
 
 struct HttpServerSettings {
   kj::Duration headerTimeout = 15 * kj::SECONDS;

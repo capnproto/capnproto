@@ -11,6 +11,9 @@ QUICK=
 
 PARALLEL=$(nproc 2>/dev/null || echo 1)
 
+# Have automake dump test failure to stdout. Important for CI.
+export VERBOSE=true
+
 while [ $# -gt 0 ]; do
   case "$1" in
     -j* )
