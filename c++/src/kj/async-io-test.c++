@@ -29,6 +29,7 @@
 #else
 #include <netdb.h>
 #include <unistd.h>
+#include <fcntl.h>
 #endif
 
 namespace kj {
@@ -400,7 +401,12 @@ TEST(AsyncIo, AbstractUnixSocket) {
   Own<ConnectionReceiver> listener = addr->listen();
   // chdir proves no filesystem dependence. Test fails for regular unix socket
   // but passes for abstract unix socket.
-  chdir("/tmp");
+  int originalDirFd;
+  KJ_SYSCALL(originalDirFd = open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+  KJ_DEFER(close(originalDirFd));
+  KJ_SYSCALL(chdir("/tmp"));
+  KJ_DEFER(KJ_SYSCALL(fchdir(originalDirFd)));
+
   addr->connect().attach(kj::mv(listener)).wait(ioContext.waitScope);
 }
 
