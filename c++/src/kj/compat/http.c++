@@ -2168,7 +2168,7 @@ private:
     }
 
     uint64_t getPayloadLen() const {
-      byte payloadLen = bytes[1] & PAYLOAD_MASK;
+      byte payloadLen = bytes[1] & PAYLOAD_LEN_MASK;
       if (payloadLen == 127) {
         return (static_cast<uint64_t>(bytes[2]) << 56)
              | (static_cast<uint64_t>(bytes[3]) << 48)
@@ -2188,7 +2188,7 @@ private:
 
     Mask getMask() const {
       if (bytes[1] & USE_MASK_MASK) {
-        byte payloadLen = bytes[1] & PAYLOAD_MASK;
+        byte payloadLen = bytes[1] & PAYLOAD_LEN_MASK;
         if (payloadLen == 128) {
           return Mask(bytes + 10);
         } else if (payloadLen == 127) {
@@ -2210,7 +2210,7 @@ private:
         required += 4;
       }
 
-      byte payloadLen = bytes[1] & PAYLOAD_MASK;
+      byte payloadLen = bytes[1] & PAYLOAD_LEN_MASK;
       if (payloadLen == 127) {
         required += 8;
       } else if (payloadLen == 126) {
@@ -2228,7 +2228,7 @@ private:
     static constexpr byte OPCODE_MASK = 0x0f;
 
     static constexpr byte USE_MASK_MASK = 0x80;
-    static constexpr byte PAYLOAD_MASK = 0x7f;
+    static constexpr byte PAYLOAD_LEN_MASK = 0x7f;
   };
 
   static constexpr byte OPCODE_CONTINUATION = 0;

@@ -388,7 +388,7 @@ class WebSocket {
   //
   // Ping/Pong and message fragmentation are not exposed through this interface. These features of
   // the underlying WebSocket protocol are not exposed by the browser-level Javascript API either,
-  // and thus applications typically need to implement these features at the applicaiton protocol
+  // and thus applications typically need to implement these features at the application protocol
   // level instead. The implementation is, however, expected to reply to Ping messages it receives.
 
 public:
@@ -436,7 +436,7 @@ public:
     kj::StringPtr statusText;
     const HttpHeaders* headers;
     kj::Own<kj::AsyncInputStream> body;
-    // `statusText` and `headers` remain valid until `body` is dropped.
+    // `statusText` and `headers` remain valid until `body` is dropped or read from.
   };
 
   struct Request {
@@ -469,7 +469,7 @@ public:
     kj::StringPtr statusText;
     const HttpHeaders* headers;
     kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> webSocketOrBody;
-    // `statusText` and `headers` remain valid until `upstreamOrBody` is dropped.
+    // `statusText` and `headers` remain valid until `webSocketOrBody` is dropped or read from.
   };
   virtual kj::Promise<WebSocketResponse> openWebSocket(
       kj::StringPtr url, const HttpHeaders& headers);
@@ -590,7 +590,7 @@ kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
 // sent and received on the stream. Normally applications would not call this directly.
 //
 // `maskEntropySource` is used to generate cryptographically-random frame masks. If null, outgoing
-// frames will not be masked. Servers are not required to mask their outgoing frames, but clients
+// frames will not be masked. Servers are required NOT to mask their outgoing frames, but clients
 // ARE required to do so. So, on the client side, you MUST specify an entropy source. The mask
 // must be crytographically random if the data being sent on the WebSocket may be malicious. The
 // purpose of the mask is to prevent badly-written HTTP proxies from interpreting "things that look
