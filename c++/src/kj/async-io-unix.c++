@@ -449,7 +449,11 @@ public:
         return str('[', buffer, "]:", ntohs(addr.inet6.sin6_port));
       }
       case AF_UNIX: {
-        return str("unix:", addr.unixDomain.sun_path);
+        if (addr.unixDomain.sun_path[0] == '\0') {
+          return str("unix-abstract:", addr.unixDomain.sun_path + 1);
+        } else {
+          return str("unix:", addr.unixDomain.sun_path);
+        }
       }
       default:
         return str("(unknown address family ", addr.generic.sa_family, ")");
@@ -470,8 +474,26 @@ public:
       StringPtr path = str.slice(strlen("unix:"));
       KJ_REQUIRE(path.size() < sizeof(addr.unixDomain.sun_path),
                  "Unix domain socket address is too long.", str);
+      KJ_REQUIRE(path.size() == strlen(path.cStr()),
+                 "Unix domain socket address contains NULL. Use"
+                 " 'unix-abstract:' for the abstract namespace.");
       result.addr.unixDomain.sun_family = AF_UNIX;
       strcpy(result.addr.unixDomain.sun_path, path.cStr());
+      result.addrlen = offsetof(struct sockaddr_un, sun_path) + path.size() + 1;
+      auto array = kj::heapArrayBuilder<SocketAddress>(1);
+      array.add(result);
+      return array.finish();
+    }
+
+    if (str.startsWith("unix-abstract:")) {
+      StringPtr path = str.slice(strlen("unix-abstract:"));
+      KJ_REQUIRE(path.size() + 1 < sizeof(addr.unixDomain.sun_path),
+                 "Unix domain socket address is too long.", str);
+      result.addr.unixDomain.sun_family = AF_UNIX;
+      result.addr.unixDomain.sun_path[0] = '\0';
+      // although not strictly required by Linux, also copy the trailing
+      // NULL terminator so that we can safely read it back in toString
+      memcpy(result.addr.unixDomain.sun_path + 1, path.cStr(), path.size() + 1);
       result.addrlen = offsetof(struct sockaddr_un, sun_path) + path.size() + 1;
       auto array = kj::heapArrayBuilder<SocketAddress>(1);
       array.add(result);

@@ -28,6 +28,8 @@
 #include "windows-sanity.h"
 #else
 #include <netdb.h>
+#include <unistd.h>
+#include <fcntl.h>
 #endif
 
 namespace kj {
@@ -102,6 +104,7 @@ TEST(AsyncIo, AddressParsing) {
 
 #if !_WIN32
   EXPECT_EQ("unix:foo/bar/baz", tryParse(w, network, "unix:foo/bar/baz"));
+  EXPECT_EQ("unix-abstract:foo/bar/baz", tryParse(w, network, "unix-abstract:foo/bar/baz"));
 #endif
 
   // We can parse services by name...
@@ -386,6 +389,28 @@ TEST(AsyncIo, Udp) {
 }
 
 #endif  // !_WIN32
+
+#ifdef __linux__  // Abstract unix sockets are only supported on Linux
+
+TEST(AsyncIo, AbstractUnixSocket) {
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
+
+  Own<NetworkAddress> addr = network.parseAddress("unix-abstract:foo").wait(ioContext.waitScope);
+
+  Own<ConnectionReceiver> listener = addr->listen();
+  // chdir proves no filesystem dependence. Test fails for regular unix socket
+  // but passes for abstract unix socket.
+  int originalDirFd;
+  KJ_SYSCALL(originalDirFd = open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+  KJ_DEFER(close(originalDirFd));
+  KJ_SYSCALL(chdir("/tmp"));
+  KJ_DEFER(KJ_SYSCALL(fchdir(originalDirFd)));
+
+  addr->connect().attach(kj::mv(listener)).wait(ioContext.waitScope);
+}
+
+#endif  // __linux__
 
 }  // namespace
 }  // namespace kj
