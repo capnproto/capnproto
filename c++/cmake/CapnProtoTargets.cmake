@@ -12,8 +12,6 @@
 #
 #   -DCapnProto_DEBUG=ON
 #
-# TODO(soon): Implement CapnProtoConfigVersion.cmake, too.
-#
 # TODO(someday): Distinguish between debug and release builds. I.e., set IMPORTED_LOCATION_RELEASE
 #   rather than IMPORTED_LOCATION, etc., if this installation was configured as a release build. But
 #   how do we tell? grep for -g in CXXFLAGS?

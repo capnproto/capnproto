@@ -81,11 +81,17 @@ add_subdirectory(src)
 # Install ======================================================================
 
 include(CMakePackageConfigHelpers)
-write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfigVersion.cmake"
-  VERSION ${VERSION}
-  COMPATIBILITY AnyNewerVersion
-)
+
+# We used to use write_basic_package_version_file(), but since the autotools build needs to install
+# a config version script as well, I copied the AnyNewerVersion template from my CMake Modules
+# directory to Cap'n Proto's cmake/ directory (alternatively, we could make the autotools build
+# depend on CMake).
+#
+# We might as well use the local copy of the template. In the future we can modify the project's
+# version compatibility policy just by changing that file.
+set(PACKAGE_VERSION ${VERSION})
+configure_file(cmake/CapnProtoConfigVersion.cmake.in cmake/CapnProtoConfigVersion.cmake @ONLY)
+
 set(CONFIG_PACKAGE_LOCATION ${CMAKE_INSTALL_LIBDIR}/cmake/CapnProto)
 
 configure_package_config_file(cmake/CapnProtoConfig.cmake.in

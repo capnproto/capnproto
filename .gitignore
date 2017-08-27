@@ -57,6 +57,7 @@
 /c++/capnp
 /c++/capnp-evolution-test
 /c++/cmake/CapnProtoConfig.cmake
+/c++/cmake/CapnProtoConfigVersion.cmake
 /c++/pkgconfig/*.pc
 /c++/capnp-test
 /c++/capnpc-c++
