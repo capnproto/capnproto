@@ -86,10 +86,16 @@ private:
   std::string::size_type readPos;
 };
 
-void expectPacksTo(kj::ArrayPtr<const byte> unpacked, kj::ArrayPtr<const byte> packed) {
+void expectPacksTo(kj::ArrayPtr<const byte> unpackedUnaligned, kj::ArrayPtr<const byte> packed) {
   TestPipe pipe;
 
-  EXPECT_EQ(unpacked.size(), computeUnpackedSizeInWords(packed) * sizeof(word));
+  auto unpackedSizeInWords = computeUnpackedSizeInWords(packed);
+  EXPECT_EQ(unpackedUnaligned.size(), unpackedSizeInWords * sizeof(word));
+
+  // Make a guaranteed-to-be-aligned copy of the unpacked buffer.
+  kj::Array<word> unpackedWords = kj::heapArray<word>(unpackedSizeInWords);
+  memcpy(unpackedWords.begin(), unpackedUnaligned.begin(), unpackedUnaligned.size());
+  kj::ArrayPtr<const byte> unpacked = unpackedWords.asBytes();
 
   // -----------------------------------------------------------------
   // write

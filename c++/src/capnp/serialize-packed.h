@@ -50,6 +50,7 @@ private:
 };
 
 class PackedOutputStream: public kj::OutputStream {
+  // An output stream that packs data. Buffers passed to `write()` must be word-aligned.
 public:
   explicit PackedOutputStream(kj::BufferedOutputStream& inner);
   KJ_DISALLOW_COPY(PackedOutputStream);

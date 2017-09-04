@@ -450,11 +450,17 @@ public:
     // check might catch bugs.  Probably people should use Vector if they want to build arrays
     // without knowing the final size in advance.
     KJ_IREQUIRE(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
-    Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr, *disposer);
+    const ptrdiff_t size = pos - ptr;
+    T* start = reinterpret_cast<T*>(ptr);
     ptr = nullptr;
     pos = nullptr;
     endPtr = nullptr;
-    return result;
+    if (size == 0) {
+      // `disposer` possibly does not point to anything, so don't pass `*disposer` to `Array`.
+      return Array<T>();
+    } else {
+      return Array<T>(start, size, *disposer);
+    }
   }
 
   inline bool isFull() const {
