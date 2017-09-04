@@ -569,7 +569,7 @@ HttpHeaderTable::HttpHeaderTable()
 }
 HttpHeaderTable::~HttpHeaderTable() noexcept(false) {}
 
-kj::Maybe<HttpHeaderId> HttpHeaderTable::stringToId(kj::StringPtr name) {
+kj::Maybe<HttpHeaderId> HttpHeaderTable::stringToId(kj::StringPtr name) const {
   auto iter = idsByName->map.find(name);
   if (iter == idsByName->map.end()) {
     return nullptr;
@@ -580,7 +580,7 @@ kj::Maybe<HttpHeaderId> HttpHeaderTable::stringToId(kj::StringPtr name) {
 
 // =======================================================================================
 
-HttpHeaders::HttpHeaders(HttpHeaderTable& table)
+HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
     : table(&table),
       indexedHeaders(kj::heapArray<kj::StringPtr>(table.idCount())) {}
 

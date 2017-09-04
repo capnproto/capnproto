@@ -132,7 +132,7 @@ public:
 
   kj::StringPtr toString() const;
 
-  void requireFrom(HttpHeaderTable& table) const;
+  void requireFrom(const HttpHeaderTable& table) const;
   // In debug mode, throws an exception if the HttpHeaderId is not from the given table.
   //
   // In opt mode, no-op.
@@ -157,10 +157,11 @@ public:
 #undef DECLARE_HEADER
 
 private:
-  HttpHeaderTable* table;
+  const HttpHeaderTable* table;
   uint id;
 
-  inline explicit constexpr HttpHeaderId(HttpHeaderTable* table, uint id): table(table), id(id) {}
+  inline explicit constexpr HttpHeaderId(const HttpHeaderTable* table, uint id)
+      : table(table), id(id) {}
   friend class HttpHeaderTable;
   friend class HttpHeaders;
 };
@@ -214,16 +215,16 @@ public:
   KJ_DISALLOW_COPY(HttpHeaderTable);  // Can't copy because HttpHeaderId points to the table.
   ~HttpHeaderTable() noexcept(false);
 
-  uint idCount();
+  uint idCount() const;
   // Return the number of IDs in the table.
 
-  kj::Maybe<HttpHeaderId> stringToId(kj::StringPtr name);
+  kj::Maybe<HttpHeaderId> stringToId(kj::StringPtr name) const;
   // Try to find an ID for the given name. The matching is case-insensitive, per the HTTP spec.
   //
   // Note: if `name` contains characters that aren't allowed in HTTP header names, this may return
   //   a bogus value rather than null, due to optimizations used in case-insensitive matching.
 
-  kj::StringPtr idToString(HttpHeaderId id);
+  kj::StringPtr idToString(HttpHeaderId id) const;
   // Get the canonical string name for the given ID.
 
 private:
@@ -239,7 +240,7 @@ class HttpHeaders {
   // exception.
 
 public:
-  explicit HttpHeaders(HttpHeaderTable& table);
+  explicit HttpHeaders(const HttpHeaderTable& table);
 
   KJ_DISALLOW_COPY(HttpHeaders);
   HttpHeaders(HttpHeaders&&) = default;
@@ -342,7 +343,7 @@ public:
   kj::String toString() const;
 
 private:
-  HttpHeaderTable* table;
+  const HttpHeaderTable* table;
 
   kj::Array<kj::StringPtr> indexedHeaders;
   // Size is always table->idCount().
@@ -666,7 +667,7 @@ private:
 // =======================================================================================
 // inline implementation
 
-inline void HttpHeaderId::requireFrom(HttpHeaderTable& table) const {
+inline void HttpHeaderId::requireFrom(const HttpHeaderTable& table) const {
   KJ_IREQUIRE(this->table == nullptr || this->table == &table,
       "the provided HttpHeaderId is from the wrong HttpHeaderTable");
 }
@@ -674,9 +675,9 @@ inline void HttpHeaderId::requireFrom(HttpHeaderTable& table) const {
 inline kj::Own<HttpHeaderTable> HttpHeaderTable::Builder::build() { return kj::mv(table); }
 inline HttpHeaderTable& HttpHeaderTable::Builder::getFutureTable() { return *table; }
 
-inline uint HttpHeaderTable::idCount() { return namesById.size(); }
+inline uint HttpHeaderTable::idCount() const { return namesById.size(); }
 
-inline kj::StringPtr HttpHeaderTable::idToString(HttpHeaderId id) {
+inline kj::StringPtr HttpHeaderTable::idToString(HttpHeaderId id) const {
   id.requireFrom(*this);
   return namesById[id.id];
 }
