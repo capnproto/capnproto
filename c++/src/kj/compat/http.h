@@ -420,6 +420,15 @@ public:
   virtual kj::Promise<Message> receive() = 0;
   // Read one message from the WebSocket and return it. Can only call once at a time. Do not call
   // again after EndOfStream is received.
+
+  kj::Promise<void> pumpTo(WebSocket& other);
+  // Continuously receives messages from this WebSocket and send them to `other`.
+  //
+  // On EOF, calls other.disconnect(), then resolves.
+  //
+  // On other read errors, calls other.close() with the error, then resolves.
+  //
+  // On write error, rejects with the error.
 };
 
 class HttpClient {
