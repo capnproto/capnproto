@@ -411,6 +411,70 @@ KJ_TEST("TLS certificate validation") {
                     "self signed certificate");
 }
 
+KJ_TEST("TLS client certificate verification") {
+  TlsContext::Options serverOptions = TlsTest::defaultServer();
+  TlsContext::Options clientOptions = TlsTest::defaultClient();
+
+  serverOptions.verifyClients = true;
+  serverOptions.trustedCertificates = clientOptions.trustedCertificates;
+
+  // No certificate loaded in the client: fail
+  {
+    TlsTest test(clientOptions, serverOptions);
+
+    auto pipe = test.io.provider->newTwoWayPipe();
+
+    auto clientPromise = test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com");
+    auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
+
+    KJ_EXPECT_THROW_MESSAGE("peer did not return a certificate",
+        serverPromise.wait(test.io.waitScope));
+    KJ_EXPECT_THROW_MESSAGE("alert handshake failure",
+        clientPromise.wait(test.io.waitScope));
+  }
+
+  // Self-signed certificate loaded in the client: fail
+  {
+    TlsKeypair selfSignedKeypair = { TlsPrivateKey(HOST_KEY), TlsCertificate(SELF_SIGNED_CERT) };
+    clientOptions.defaultKeypair = selfSignedKeypair;
+
+    TlsTest test(clientOptions, serverOptions);
+
+    auto pipe = test.io.provider->newTwoWayPipe();
+
+    auto clientPromise = test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com");
+    auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
+
+    KJ_EXPECT_THROW_MESSAGE("certificate verify failed",
+        serverPromise.wait(test.io.waitScope));
+    KJ_EXPECT_THROW_MESSAGE("alert unknown ca",
+        clientPromise.wait(test.io.waitScope));
+  }
+
+  // Trusted certificate loaded in the client: success.
+  {
+    clientOptions.defaultKeypair = serverOptions.defaultKeypair;
+
+    TlsTest test(clientOptions, serverOptions);
+    ErrorNexus e;
+
+    auto pipe = test.io.provider->newTwoWayPipe();
+
+    auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
+    auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
+
+    auto client = clientPromise.wait(test.io.waitScope);
+    auto server = serverPromise.wait(test.io.waitScope);
+
+    auto writePromise = client->write("foo", 3);
+    char buf[4];
+    server->read(&buf, 3).wait(test.io.waitScope);
+    buf[3] = '\0';
+
+    KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  }
+}
+
 #ifdef KJ_EXTERNAL_TESTS
 KJ_TEST("TLS to capnproto.org") {
   kj::AsyncIoContext io = setupAsyncIo();
