@@ -2643,6 +2643,18 @@ kj::Own<HttpService> newHttpService(HttpClient& client) {
 
 // =======================================================================================
 
+kj::Promise<void> HttpService::Response::sendError(
+    uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) {
+  auto stream = send(statusCode, statusText, headers, statusText.size());
+  auto promise = stream->write(statusText.begin(), statusText.size());
+  return promise.attach(kj::mv(stream));
+}
+
+kj::Promise<void> HttpService::Response::sendError(
+    uint statusCode, kj::StringPtr statusText, const HttpHeaderTable& headerTable) {
+  return sendError(statusCode, statusText, HttpHeaders(headerTable));
+}
+
 kj::Promise<void> HttpService::openWebSocket(
     kj::StringPtr url, const HttpHeaders& headers, WebSocketResponse& response) {
   class EmptyStream final: public kj::AsyncInputStream {

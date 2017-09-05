@@ -518,6 +518,17 @@ public:
     //
     // `statusText` and `headers` need only remain valid until send() returns (they can be
     // stack-allocated).
+
+    kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
+                                const HttpHeaders& headers);
+    kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
+                                const HttpHeaderTable& headerTable);
+    // Convenience wrapper around send() which sends a basic error. A generic error page specifying
+    // the error code is sent as the body.
+    //
+    // You must provide headers or a header table because downstream service wrappers may be
+    // expecting response headers built with a particular table so that they can insert additional
+    // headers.
   };
 
   virtual kj::Promise<void> request(
