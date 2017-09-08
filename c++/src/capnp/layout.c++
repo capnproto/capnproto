@@ -158,7 +158,7 @@ struct WirePointer {
                 reinterpret_cast<uintptr_t>(segment->getStartPtr()));
     KJ_DREQUIRE(reinterpret_cast<uintptr_t>(target) <=
                 reinterpret_cast<uintptr_t>(segment->getStartPtr() + segment->getSize()));
-    offsetAndKind.set(((target - reinterpret_cast<word*>(this) - 1) << 2) | kind);
+    offsetAndKind.set((static_cast<uint32_t>(target - reinterpret_cast<word*>(this) - 1) << 2) | kind);
   }
   KJ_ALWAYS_INLINE(void setKindWithZeroOffset(Kind kind)) {
     offsetAndKind.set(kind);
