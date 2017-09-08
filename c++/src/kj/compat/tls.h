@@ -58,6 +58,13 @@ public:
     bool useSystemTrustStore;
     // Whether or not to trust the system's default trust store. Default: true.
 
+    bool verifyClients;
+    // If true, when acting as a server, require the client to present a certificate. The
+    // certificate must be signed by one of the trusted CAs, otherwise the client will be rejected.
+    // (Typically you should set `useSystemTrustStore` false when using this flag, and specify
+    // your specific trusted CAs in `trustedCertificates`.)
+    // Default: false
+
     kj::ArrayPtr<const TlsCertificate> trustedCertificates;
     // Additional certificates which should be trusted. Default: none.
 
