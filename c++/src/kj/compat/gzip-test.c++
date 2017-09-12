@@ -65,21 +65,21 @@ KJ_TEST("gzip decompression") {
   // Normal read.
   {
     MockInputStream rawInput(FOOBAR_GZIP, kj::maxValue);
-    GzipInputStream gzip(rawInput);
+    GzipAsyncInputStream gzip(rawInput);
     KJ_EXPECT(gzip.readAllText().wait(io.waitScope) == "foobar");
   }
 
   // Force read one byte at a time.
   {
     MockInputStream rawInput(FOOBAR_GZIP, 1);
-    GzipInputStream gzip(rawInput);
+    GzipAsyncInputStream gzip(rawInput);
     KJ_EXPECT(gzip.readAllText().wait(io.waitScope) == "foobar");
   }
 
   // Read truncated input.
   {
     MockInputStream rawInput(kj::arrayPtr(FOOBAR_GZIP, sizeof(FOOBAR_GZIP) / 2), kj::maxValue);
-    GzipInputStream gzip(rawInput);
+    GzipAsyncInputStream gzip(rawInput);
 
     char text[16];
     size_t n = gzip.tryRead(text, 1, sizeof(text)).wait(io.waitScope);
@@ -96,7 +96,7 @@ KJ_TEST("gzip decompression") {
     bytes.addAll(ArrayPtr<const byte>(FOOBAR_GZIP));
     bytes.addAll(ArrayPtr<const byte>(FOOBAR_GZIP));
     MockInputStream rawInput(bytes, kj::maxValue);
-    GzipInputStream gzip(rawInput);
+    GzipAsyncInputStream gzip(rawInput);
 
     KJ_EXPECT(gzip.readAllText().wait(io.waitScope) == "foobarfoobar");
   }
@@ -108,7 +108,7 @@ public:
 
   kj::String decompress(WaitScope& ws) {
     MockInputStream rawInput(bytes, kj::maxValue);
-    GzipInputStream gzip(rawInput);
+    GzipAsyncInputStream gzip(rawInput);
     return gzip.readAllText().wait(ws);
   }
 
@@ -130,7 +130,7 @@ KJ_TEST("gzip compression") {
   // Normal write.
   {
     MockOutputStream rawOutput;
-    GzipOutputStream gzip(rawOutput);
+    GzipAsyncOutputStream gzip(rawOutput);
     gzip.write("foobar", 6).wait(io.waitScope);
     gzip.end().wait(io.waitScope);
 
@@ -140,9 +140,24 @@ KJ_TEST("gzip compression") {
   // Multi-part write.
   {
     MockOutputStream rawOutput;
-    GzipOutputStream gzip(rawOutput);
+    GzipAsyncOutputStream gzip(rawOutput);
     gzip.write("foo", 3).wait(io.waitScope);
     gzip.write("bar", 3).wait(io.waitScope);
+    gzip.end().wait(io.waitScope);
+
+    KJ_EXPECT(rawOutput.decompress(io.waitScope) == "foobar");
+  }
+
+  // Array-of-arrays write.
+  {
+    MockOutputStream rawOutput;
+    GzipAsyncOutputStream gzip(rawOutput);
+
+    ArrayPtr<const byte> pieces[] = {
+      kj::StringPtr("foo").asBytes(),
+      kj::StringPtr("bar").asBytes(),
+    };
+    gzip.write(pieces).wait(io.waitScope);
     gzip.end().wait(io.waitScope);
 
     KJ_EXPECT(rawOutput.decompress(io.waitScope) == "foobar");
@@ -158,12 +173,12 @@ KJ_TEST("gzip huge round trip") {
   }
 
   MockOutputStream rawOutput;
-  GzipOutputStream gzipOut(rawOutput);
+  GzipAsyncOutputStream gzipOut(rawOutput);
   gzipOut.write(bytes.begin(), bytes.size()).wait(io.waitScope);
   gzipOut.end().wait(io.waitScope);
 
   MockInputStream rawInput(rawOutput.bytes, kj::maxValue);
-  GzipInputStream gzipIn(rawInput);
+  GzipAsyncInputStream gzipIn(rawInput);
   auto decompressed = gzipIn.readAllBytes().wait(io.waitScope);
 
   KJ_ASSERT(decompressed.size() == bytes.size());

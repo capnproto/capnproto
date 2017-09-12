@@ -24,7 +24,7 @@
 
 namespace kj {
 
-GzipInputStream::GzipInputStream(AsyncInputStream& inner)
+GzipAsyncInputStream::GzipAsyncInputStream(AsyncInputStream& inner)
     : inner(inner) {
   memset(&ctx, 0, sizeof(ctx));
   ctx.next_in = nullptr;
@@ -36,17 +36,17 @@ GzipInputStream::GzipInputStream(AsyncInputStream& inner)
   KJ_ASSERT(inflateInit2(&ctx, 15 + 16) == Z_OK);
 }
 
-GzipInputStream::~GzipInputStream() noexcept(false) {
+GzipAsyncInputStream::~GzipAsyncInputStream() noexcept(false) {
   inflateEnd(&ctx);
 }
 
-Promise<size_t> GzipInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
+Promise<size_t> GzipAsyncInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
   if (maxBytes == 0) return size_t(0);
 
   return readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
 }
 
-Promise<size_t> GzipInputStream::readImpl(
+Promise<size_t> GzipAsyncInputStream::readImpl(
     byte* out, size_t minBytes, size_t maxBytes, size_t alreadyRead) {
   if (ctx.avail_in == 0) {
     return inner.tryRead(buffer, 1, sizeof(buffer))
@@ -90,7 +90,7 @@ Promise<size_t> GzipInputStream::readImpl(
 
 // =======================================================================================
 
-GzipOutputStream::GzipOutputStream(AsyncOutputStream& inner, int compressionLevel)
+GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel)
     : inner(inner) {
   memset(&ctx, 0, sizeof(ctx));
   ctx.next_in = nullptr;
@@ -106,17 +106,17 @@ GzipOutputStream::GzipOutputStream(AsyncOutputStream& inner, int compressionLeve
   KJ_ASSERT(initResult == Z_OK, initResult);
 }
 
-GzipOutputStream::~GzipOutputStream() noexcept(false) {
+GzipAsyncOutputStream::~GzipAsyncOutputStream() noexcept(false) {
   deflateEnd(&ctx);
 }
 
-Promise<void> GzipOutputStream::write(const void* in, size_t size) {
+Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
   ctx.next_in = const_cast<byte*>(reinterpret_cast<const byte*>(in));
   ctx.avail_in = size;
   return pump();
 }
 
-Promise<void> GzipOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   KJ_REQUIRE(!ended, "already ended");
 
   if (pieces.size() == 0) return kj::READY_NOW;
@@ -126,7 +126,7 @@ Promise<void> GzipOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> piece
   });
 }
 
-Promise<void> GzipOutputStream::end() {
+Promise<void> GzipAsyncOutputStream::end() {
   KJ_REQUIRE(!ended, "already ended");
 
   ctx.next_out = buffer;
@@ -151,7 +151,7 @@ Promise<void> GzipOutputStream::end() {
   }
 }
 
-kj::Promise<void>  GzipOutputStream::pump() {
+kj::Promise<void> GzipAsyncOutputStream::pump() {
   if (ctx.avail_in == 0) {
     return kj::READY_NOW;
   }

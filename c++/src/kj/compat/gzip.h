@@ -27,10 +27,11 @@
 
 namespace kj {
 
-class GzipInputStream: public AsyncInputStream {
+class GzipAsyncInputStream: public AsyncInputStream {
 public:
-  GzipInputStream(AsyncInputStream& inner);
-  ~GzipInputStream() noexcept(false);
+  GzipAsyncInputStream(AsyncInputStream& inner);
+  ~GzipAsyncInputStream() noexcept(false);
+  KJ_DISALLOW_COPY(GzipAsyncInputStream);
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
@@ -44,10 +45,11 @@ private:
   Promise<size_t> readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
 };
 
-class GzipOutputStream: public AsyncOutputStream {
+class GzipAsyncOutputStream: public AsyncOutputStream {
 public:
-  GzipOutputStream(AsyncOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
-  ~GzipOutputStream() noexcept(false);
+  GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
+  ~GzipAsyncOutputStream() noexcept(false);
+  KJ_DISALLOW_COPY(GzipAsyncOutputStream);
 
   Promise<void> write(const void* buffer, size_t size) override;
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
