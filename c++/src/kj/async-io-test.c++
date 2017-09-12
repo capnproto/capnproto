@@ -77,12 +77,13 @@ String tryParse(WaitScope& waitScope, Network& network, StringPtr text, uint por
   return network.parseAddress(text, portHint).wait(waitScope)->toString();
 }
 
-bool systemSupportsAddress(StringPtr addr) {
+bool systemSupportsAddress(StringPtr addr, StringPtr service = nullptr) {
   // Can getaddrinfo() parse this addresses? This is only true if the address family (e.g., ipv6)
   // is configured on at least one interface. (The loopback interface usually has both ipv4 and
   // ipv6 configured, but not always.)
   struct addrinfo* list;
-  int status = getaddrinfo(addr.cStr(), nullptr, nullptr, &list);
+  int status = getaddrinfo(
+      addr.cStr(), service == nullptr ? nullptr : service.cStr(), nullptr, &list);
   if (status == 0) {
     freeaddrinfo(list);
     return true;
@@ -90,7 +91,6 @@ bool systemSupportsAddress(StringPtr addr) {
     return false;
   }
 }
-
 
 TEST(AsyncIo, AddressParsing) {
   auto ioContext = setupAsyncIo();
@@ -110,7 +110,7 @@ TEST(AsyncIo, AddressParsing) {
   // We can parse services by name...
   //
   // For some reason, Android and some various Linux distros do not support service names.
-  if (systemSupportsAddress("1.2.3.4:http")) {
+  if (systemSupportsAddress("1.2.3.4", "http")) {
     EXPECT_EQ("1.2.3.4:80", tryParse(w, network, "1.2.3.4:http", 5678));
     EXPECT_EQ("*:80", tryParse(w, network, "*:http", 5678));
   } else {
@@ -122,7 +122,7 @@ TEST(AsyncIo, AddressParsing) {
   if (systemSupportsAddress("::")) {
     EXPECT_EQ("[::]:123", tryParse(w, network, "0::0", 123));
     EXPECT_EQ("[12ab:cd::34]:321", tryParse(w, network, "[12ab:cd:0::0:34]:321", 432));
-    if (systemSupportsAddress("[12ab:cd::34]:http")) {
+    if (systemSupportsAddress("12ab:cd::34", "http")) {
       EXPECT_EQ("[::]:80", tryParse(w, network, "[::]:http", 5678));
       EXPECT_EQ("[12ab:cd::34]:80", tryParse(w, network, "[12ab:cd::34]:http", 5678));
     } else {
