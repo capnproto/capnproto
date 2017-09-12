@@ -173,6 +173,18 @@ TEST(String, ToString) {
 }
 #endif
 
+KJ_TEST("string literals with _kj suffix") {
+  static constexpr StringPtr FOO = "foo"_kj;
+  KJ_EXPECT(FOO == "foo", FOO);
+  KJ_EXPECT(FOO[3] == 0);
+
+  KJ_EXPECT("foo\0bar"_kj == StringPtr("foo\0bar", 7));
+
+  static constexpr ArrayPtr<const char> ARR = "foo"_kj;
+  KJ_EXPECT(ARR.size() == 3);
+  KJ_EXPECT(kj::str(ARR) == "foo");
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
