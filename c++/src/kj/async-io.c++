@@ -19,15 +19,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if _WIN32
+// Request Vista-level APIs.
+#define WINVER 0x0600
+#define _WIN32_WINNT 0x0600
+#endif
+
 #include "async-io.h"
 #include "async-io-internal.h"
 #include "debug.h"
 #include "vector.h"
 
 #if _WIN32
-// Request Vista-level APIs.
-#define WINVER 0x0600
-#define _WIN32_WINNT 0x0600
 #include <winsock2.h>
 #include <ws2ipdef.h>
 #include <ws2tcpip.h>
@@ -205,7 +208,8 @@ void DatagramPort::setsockopt(int level, int option, const void* value, uint len
 Own<DatagramPort> NetworkAddress::bindDatagramPort() {
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
 }
-Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(Fd fd, uint flags) {
+Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(
+    Fd fd, LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags) {
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
 }
 
