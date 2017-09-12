@@ -19,17 +19,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if _WIN32
+// Request Vista-level APIs.
+#define WINVER 0x0600
+#define _WIN32_WINNT 0x0600
+#endif
+
 #include "async-io.h"
+#include "async-io-internal.h"
 #include "debug.h"
 #include <kj/compat/gtest.h>
 #include <sys/types.h>
 #if _WIN32
 #include <ws2tcpip.h>
 #include "windows-sanity.h"
+#define inet_pton InetPtonA
+#define inet_ntop InetNtopA
 #else
 #include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <arpa/inet.h>
 #endif
 
 namespace kj {
@@ -411,6 +421,153 @@ TEST(AsyncIo, AbstractUnixSocket) {
 }
 
 #endif  // __linux__
+
+KJ_TEST("CIDR parsing") {
+  KJ_EXPECT(_::CidrRange("1.2.3.4/16").toString() == "1.2.0.0/16");
+  KJ_EXPECT(_::CidrRange("1.2.255.4/18").toString() == "1.2.192.0/18");
+  KJ_EXPECT(_::CidrRange("1234::abcd:ffff:ffff/98").toString() == "1234::abcd:c000:0/98");
+
+  KJ_EXPECT(_::CidrRange::inet4({1,2,255,4}, 18).toString() == "1.2.192.0/18");
+  KJ_EXPECT(_::CidrRange::inet6({0x1234, 0x5678}, {0xabcd, 0xffff, 0xffff}, 98).toString() ==
+            "1234:5678::abcd:c000:0/98");
+
+  union {
+    struct sockaddr addr;
+    struct sockaddr_in addr4;
+    struct sockaddr_in6 addr6;
+  };
+  memset(&addr6, 0, sizeof(addr6));
+
+  {
+    addr4.sin_family = AF_INET;
+    addr4.sin_addr.s_addr = htonl(0x0102dfff);
+    KJ_EXPECT(_::CidrRange("1.2.255.255/18").matches(&addr));
+    KJ_EXPECT(!_::CidrRange("1.2.255.255/19").matches(&addr));
+    KJ_EXPECT(_::CidrRange("1.2.0.0/16").matches(&addr));
+    KJ_EXPECT(!_::CidrRange("1.3.0.0/16").matches(&addr));
+    KJ_EXPECT(_::CidrRange("1.2.223.255/32").matches(&addr));
+    KJ_EXPECT(_::CidrRange("0.0.0.0/0").matches(&addr));
+    KJ_EXPECT(!_::CidrRange("::/0").matches(&addr));
+  }
+
+  {
+    addr4.sin_family = AF_INET6;
+    byte bytes[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    memcpy(addr6.sin6_addr.s6_addr, bytes, 16);
+    KJ_EXPECT(_::CidrRange("0102:03ff::/24").matches(&addr));
+    KJ_EXPECT(!_::CidrRange("0102:02ff::/24").matches(&addr));
+    KJ_EXPECT(_::CidrRange("0102:02ff::/23").matches(&addr));
+    KJ_EXPECT(_::CidrRange("0102:0304:0506:0708:090a:0b0c:0d0e:0f10/128").matches(&addr));
+    KJ_EXPECT(_::CidrRange("::/0").matches(&addr));
+    KJ_EXPECT(!_::CidrRange("0.0.0.0/0").matches(&addr));
+  }
+
+  {
+    addr4.sin_family = AF_INET6;
+    inet_pton(AF_INET6, "::ffff:1.2.223.255", &addr6.sin6_addr);
+    KJ_EXPECT(_::CidrRange("1.2.255.255/18").matches(&addr));
+    KJ_EXPECT(!_::CidrRange("1.2.255.255/19").matches(&addr));
+    KJ_EXPECT(_::CidrRange("1.2.0.0/16").matches(&addr));
+    KJ_EXPECT(!_::CidrRange("1.3.0.0/16").matches(&addr));
+    KJ_EXPECT(_::CidrRange("1.2.223.255/32").matches(&addr));
+    KJ_EXPECT(_::CidrRange("0.0.0.0/0").matches(&addr));
+    KJ_EXPECT(_::CidrRange("::/0").matches(&addr));
+  }
+}
+
+bool allowed4(const _::NetworkFilter& filter, StringPtr addrStr) {
+  struct sockaddr_in addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  inet_pton(AF_INET, addrStr.cStr(), &addr.sin_addr);
+  return filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr));
+}
+
+bool allowed6(const _::NetworkFilter& filter, StringPtr addrStr) {
+  struct sockaddr_in6 addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin6_family = AF_INET6;
+  inet_pton(AF_INET6, addrStr.cStr(), &addr.sin6_addr);
+  return filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr));
+}
+
+KJ_TEST("NetworkFilter") {
+  _::NetworkFilter base;
+
+  KJ_EXPECT(allowed4(base, "8.8.8.8"));
+  KJ_EXPECT(!allowed4(base, "240.1.2.3"));
+
+  {
+    _::NetworkFilter filter({"public"}, {}, base);
+
+    KJ_EXPECT(allowed4(filter, "8.8.8.8"));
+    KJ_EXPECT(!allowed4(base, "240.1.2.3"));
+
+    KJ_EXPECT(!allowed4(filter, "192.168.0.1"));
+    KJ_EXPECT(!allowed4(filter, "10.1.2.3"));
+    KJ_EXPECT(!allowed4(filter, "127.0.0.1"));
+    KJ_EXPECT(!allowed4(filter, "0.0.0.0"));
+
+    KJ_EXPECT(allowed6(filter, "2400:cb00:2048:1::c629:d7a2"));
+    KJ_EXPECT(!allowed6(filter, "fc00::1234"));
+    KJ_EXPECT(!allowed6(filter, "::1"));
+    KJ_EXPECT(!allowed6(filter, "::"));
+  }
+
+  {
+    _::NetworkFilter filter({"private"}, {"local"}, base);
+
+    KJ_EXPECT(!allowed4(filter, "8.8.8.8"));
+    KJ_EXPECT(!allowed4(base, "240.1.2.3"));
+
+    KJ_EXPECT(allowed4(filter, "192.168.0.1"));
+    KJ_EXPECT(allowed4(filter, "10.1.2.3"));
+    KJ_EXPECT(!allowed4(filter, "127.0.0.1"));
+    KJ_EXPECT(!allowed4(filter, "0.0.0.0"));
+
+    KJ_EXPECT(!allowed6(filter, "2400:cb00:2048:1::c629:d7a2"));
+    KJ_EXPECT(allowed6(filter, "fc00::1234"));
+    KJ_EXPECT(!allowed6(filter, "::1"));
+    KJ_EXPECT(!allowed6(filter, "::"));
+  }
+
+  {
+    _::NetworkFilter filter({"1.0.0.0/8", "1.2.3.0/24"}, {"1.2.0.0/16", "1.2.3.4/32"}, base);
+
+    KJ_EXPECT(!allowed4(filter, "8.8.8.8"));
+    KJ_EXPECT(!allowed4(base, "240.1.2.3"));
+
+    KJ_EXPECT(allowed4(filter, "1.0.0.1"));
+    KJ_EXPECT(!allowed4(filter, "1.2.2.1"));
+    KJ_EXPECT(allowed4(filter, "1.2.3.1"));
+    KJ_EXPECT(!allowed4(filter, "1.2.3.4"));
+  }
+}
+
+KJ_TEST("Network::restrictPeers()") {
+  auto ioContext = setupAsyncIo();
+  auto& w = ioContext.waitScope;
+  auto& network = ioContext.provider->getNetwork();
+  auto restrictedNetwork = network.restrictPeers({"public"});
+
+  KJ_EXPECT(tryParse(w, *restrictedNetwork, "8.8.8.8") == "8.8.8.8:0");
+  KJ_EXPECT_THROW_MESSAGE("restrictPeers", tryParse(w, *restrictedNetwork, "unix:/foo"));
+
+  auto addr = restrictedNetwork->parseAddress("127.0.0.1").wait(w);
+
+  auto listener = addr->listen();
+  auto acceptTask = listener->accept()
+      .then([](kj::Own<kj::AsyncIoStream>) {
+    KJ_FAIL_EXPECT("should not have received connection");
+  }).eagerlyEvaluate(nullptr);
+
+  KJ_EXPECT_THROW_MESSAGE("restrictPeers", addr->connect().wait(w));
+
+  // We can connect to the listener but the connection will be immediately closed.
+  auto addr2 = network.parseAddress("127.0.0.1", listener->getPort()).wait(w);
+  auto conn = addr2->connect().wait(w);
+  KJ_EXPECT(conn->readAllText().wait(w) == "");
+}
 
 }  // namespace
 }  // namespace kj

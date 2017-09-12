@@ -20,8 +20,25 @@
 // THE SOFTWARE.
 
 #include "async-io.h"
+#include "async-io-internal.h"
 #include "debug.h"
 #include "vector.h"
+
+#if _WIN32
+// Request Vista-level APIs.
+#define WINVER 0x0600
+#define _WIN32_WINNT 0x0600
+#include <winsock2.h>
+#include <ws2ipdef.h>
+#include <ws2tcpip.h>
+#include "windows-sanity.h"
+#define inet_pton InetPtonA
+#define inet_ntop InetNtopA
+#else
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <sys/un.h>
+#endif
 
 namespace kj {
 
@@ -192,4 +209,332 @@ Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(Fd fd, uint flag
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
 }
 
+// =======================================================================================
+
+namespace _ {  // private
+
+CidrRange::CidrRange(StringPtr pattern) {
+  size_t slashPos = KJ_REQUIRE_NONNULL(pattern.findFirst('/'), "invalid CIDR", pattern);
+
+  bitCount = pattern.slice(slashPos + 1).parseAs<uint>();
+
+  KJ_STACK_ARRAY(char, addr, slashPos + 1, 128, 128);
+  memcpy(addr.begin(), pattern.begin(), slashPos);
+  addr[slashPos] = '\0';
+
+  if (pattern.findFirst(':') == nullptr) {
+    family = AF_INET;
+    KJ_REQUIRE(bitCount <= 32, "invalid CIDR", pattern);
+  } else {
+    family = AF_INET6;
+    KJ_REQUIRE(bitCount <= 128, "invalid CIDR", pattern);
+  }
+
+  KJ_ASSERT(inet_pton(family, addr.begin(), bits) > 0, "invalid CIDR", pattern);
+  zeroIrrelevantBits();
+}
+
+CidrRange::CidrRange(int family, ArrayPtr<const byte> bits, uint bitCount)
+    : family(family), bitCount(bitCount) {
+  if (family == AF_INET) {
+    KJ_REQUIRE(bitCount <= 32);
+  } else {
+    KJ_REQUIRE(bitCount <= 128);
+  }
+  KJ_REQUIRE(bits.size() * 8 >= bitCount);
+  size_t byteCount = (bitCount + 7) / 8;
+  memcpy(this->bits, bits.begin(), byteCount);
+  memset(this->bits + byteCount, 0, sizeof(bits) - byteCount);
+
+  zeroIrrelevantBits();
+}
+
+CidrRange CidrRange::inet4(ArrayPtr<const byte> bits, uint bitCount) {
+  return CidrRange(AF_INET, bits, bitCount);
+}
+CidrRange CidrRange::inet6(
+    ArrayPtr<const uint16_t> prefix, ArrayPtr<const uint16_t> suffix,
+    uint bitCount) {
+  KJ_REQUIRE(prefix.size() + suffix.size() <= 8);
+
+  byte bits[16] = { 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, };
+
+  for (size_t i: kj::indices(prefix)) {
+    bits[i * 2] = prefix[i] >> 8;
+    bits[i * 2 + 1] = prefix[i] & 0xff;
+  }
+
+  byte* suffixBits = bits + (16 - suffix.size() * 2);
+  for (size_t i: kj::indices(suffix)) {
+    suffixBits[i * 2] = suffix[i] >> 8;
+    suffixBits[i * 2 + 1] = suffix[i] & 0xff;
+  }
+
+  return CidrRange(AF_INET6, bits, bitCount);
+}
+
+bool CidrRange::matches(const struct sockaddr* addr) const {
+  const byte* otherBits;
+
+  switch (family) {
+    case AF_INET:
+      if (addr->sa_family == AF_INET6) {
+        otherBits = reinterpret_cast<const struct sockaddr_in6*>(addr)->sin6_addr.s6_addr;
+        static constexpr byte V6MAPPED[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff };
+        if (memcmp(otherBits, V6MAPPED, sizeof(V6MAPPED)) == 0) {
+          // We're an ipv4 range and the address is ipv6, but it's a "v6 mapped" address, meaning
+          // it's equivalent to an ipv4 address. Try to match against the ipv4 part.
+          otherBits = otherBits + sizeof(V6MAPPED);
+        } else {
+          return false;
+        }
+      } else if (addr->sa_family == AF_INET) {
+        otherBits = reinterpret_cast<const byte*>(
+            &reinterpret_cast<const struct sockaddr_in*>(addr)->sin_addr.s_addr);
+      } else {
+        return false;
+      }
+
+      break;
+
+    case AF_INET6:
+      if (addr->sa_family != AF_INET6) return false;
+
+      otherBits = reinterpret_cast<const struct sockaddr_in6*>(addr)->sin6_addr.s6_addr;
+      break;
+
+    default:
+      KJ_UNREACHABLE;
+  }
+
+  if (memcmp(bits, otherBits, bitCount / 8) != 0) return false;
+
+  return bitCount == 128 ||
+      bits[bitCount / 8] == (otherBits[bitCount / 8] & (0xff00 >> (bitCount % 8)));
+}
+
+bool CidrRange::matchesFamily(int family) const {
+  switch (family) {
+    case AF_INET:
+      return this->family == AF_INET;
+    case AF_INET6:
+      // Even if we're a v4 CIDR, we can match v6 addresses in the v4-mapped range.
+      return true;
+    default:
+      return false;
+  }
+}
+
+String CidrRange::toString() const {
+  char result[128];
+  KJ_ASSERT(inet_ntop(family, (void*)bits, result, sizeof(result)) == result);
+  return kj::str(result, '/', bitCount);
+}
+
+void CidrRange::zeroIrrelevantBits() {
+  // Mask out insignificant bits of partial byte.
+  if (bitCount < 128) {
+    bits[bitCount / 8] &= 0xff00 >> (bitCount % 8);
+
+    // Zero the remaining bytes.
+    size_t n = bitCount / 8 + 1;
+    memset(bits + n, 0, sizeof(bits) - n);
+  }
+}
+
+// -----------------------------------------------------------------------------
+
+ArrayPtr<const CidrRange> localCidrs() {
+  static const CidrRange result[] = {
+    // localhost
+    "127.0.0.0/8"_kj,
+    "::1/128"_kj,
+
+    // Trying to *connect* to 0.0.0.0 on many systems is equivalent to connecting to localhost.
+    // (wat)
+    "0.0.0.0/32"_kj,
+    "::/128"_kj,
+  };
+  return result;
+}
+
+ArrayPtr<const CidrRange> privateCidrs() {
+  static const CidrRange result[] = {
+    "10.0.0.0/8"_kj,            // RFC1918 reserved for internal network
+    "100.64.0.0/10"_kj,         // RFC6598 "shared address space" for carrier-grade NAT
+    "169.254.0.0/16"_kj,        // RFC3927 "link local" (auto-configured LAN in absence of DHCP)
+    "172.16.0.0/12"_kj,         // RFC1918 reserved for internal network
+    "192.168.0.0/16"_kj,        // RFC1918 reserved for internal network
+
+    "fc00::/7"_kj,              // RFC4193 unique private network
+    "fe80::/10"_kj,             // RFC4291 "link local" (auto-configured LAN in absence of DHCP)
+  };
+  return result;
+}
+
+ArrayPtr<const CidrRange> reservedCidrs() {
+  static const CidrRange result[] = {
+    "192.0.0.0/24"_kj,          // RFC6890 reserved for special protocols
+    "224.0.0.0/4"_kj,           // RFC1112 multicast
+    "240.0.0.0/4"_kj,           // RFC1112 multicast / reserved for future use
+    "255.255.255.255/32"_kj,    // RFC0919 broadcast address
+
+    "2001::/23"_kj,             // RFC2928 reserved for special protocols
+    "ff00::/8"_kj,              // RFC4291 multicast
+  };
+  return result;
+}
+
+ArrayPtr<const CidrRange> exampleAddresses() {
+  static const CidrRange result[] = {
+    "192.0.2.0/24"_kj,          // RFC5737 "example address" block 1 -- like example.com for IPs
+    "198.51.100.0/24"_kj,       // RFC5737 "example address" block 2 -- like example.com for IPs
+    "203.0.113.0/24"_kj,        // RFC5737 "example address" block 3 -- like example.com for IPs
+    "2001:db8::/32"_kj,         // RFC3849 "example address" block -- like example.com for IPs
+  };
+  return result;
+}
+
+NetworkFilter::NetworkFilter()
+    : allowUnix(true), allowAbstractUnix(true) {
+  allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
+  allowCidrs.add(CidrRange::inet6({}, {}, 0));
+  denyCidrs.addAll(reservedCidrs());
+}
+
+NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const StringPtr> deny,
+                             NetworkFilter& next)
+    : allowUnix(false), allowAbstractUnix(false), next(next) {
+  for (auto rule: allow) {
+    if (rule == "local") {
+      allowCidrs.addAll(localCidrs());
+    } else if (rule == "network") {
+      allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
+      allowCidrs.add(CidrRange::inet6({}, {}, 0));
+      denyCidrs.addAll(localCidrs());
+    } else if (rule == "private") {
+      allowCidrs.addAll(privateCidrs());
+      allowCidrs.addAll(localCidrs());
+    } else if (rule == "public") {
+      allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
+      allowCidrs.add(CidrRange::inet6({}, {}, 0));
+      denyCidrs.addAll(privateCidrs());
+      denyCidrs.addAll(localCidrs());
+    } else if (rule == "unix") {
+      allowUnix = true;
+    } else if (rule == "unix-abstract") {
+      allowAbstractUnix = true;
+    } else {
+      allowCidrs.add(CidrRange(rule));
+    }
+  }
+
+  for (auto rule: deny) {
+    if (rule == "local") {
+      denyCidrs.addAll(localCidrs());
+    } else if (rule == "network") {
+      KJ_FAIL_REQUIRE("don't deny 'network', allow 'local' isntead");
+    } else if (rule == "private") {
+      denyCidrs.addAll(privateCidrs());
+    } else if (rule == "public") {
+      // Tricky: What if we allow 'network' and deny 'public'?
+      KJ_FAIL_REQUIRE("don't deny 'public', allow 'private' isntead");
+    } else if (rule == "unix") {
+      allowUnix = false;
+    } else if (rule == "unix-abstract") {
+      allowAbstractUnix = false;
+    } else {
+      denyCidrs.add(CidrRange(rule));
+    }
+  }
+}
+
+bool NetworkFilter::shouldAllow(const struct sockaddr* addr) const {
+#if !_WIN32
+  if (addr->sa_family == AF_UNIX) {
+    if (reinterpret_cast<const struct sockaddr_un*>(addr)->sun_path[0] == '\0') {
+      return allowAbstractUnix;
+    } else {
+      return allowUnix;
+    }
+  }
+#endif
+
+  bool allowed = false;
+  uint allowSpecificity = 0;
+  for (auto& cidr: allowCidrs) {
+    if (cidr.matches(addr)) {
+      allowSpecificity = kj::max(allowSpecificity, cidr.getSpecificity());
+      allowed = true;
+    }
+  }
+  if (!allowed) return false;
+  for (auto& cidr: denyCidrs) {
+    if (cidr.matches(addr)) {
+      if (cidr.getSpecificity() >= allowSpecificity) return false;
+    }
+  }
+
+  KJ_IF_MAYBE(n, next) {
+    return n->shouldAllow(addr);
+  } else {
+    return true;
+  }
+}
+
+bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr) const {
+  bool matched = false;
+#if !_WIN32
+  if (addr->sa_family == AF_UNIX) {
+    if (reinterpret_cast<const struct sockaddr_un*>(addr)->sun_path[0] == '\0') {
+      if (allowAbstractUnix) matched = true;
+    } else {
+      if (allowUnix) matched = true;
+    }
+  } else {
+#endif
+    for (auto& cidr: allowCidrs) {
+      if (cidr.matchesFamily(addr->sa_family)) {
+        matched = true;
+      }
+    }
+#if !_WIN32
+  }
+#endif
+
+  if (matched) {
+    KJ_IF_MAYBE(n, next) {
+      return n->shouldAllowParse(addr);
+    } else {
+      return true;
+    }
+  } else {
+    // No allow rule matches this address family, so don't even allow parsing it.
+    return false;
+  }
+}
+
+bool NetworkFilter::shouldAllow(const struct sockaddr* addr, uint addrlen) {
+  switch (addr->sa_family) {
+    case AF_INET:
+      KJ_REQUIRE(addrlen >= sizeof(struct sockaddr_in));
+      break;
+    case AF_INET6:
+      KJ_REQUIRE(addrlen >= sizeof(struct sockaddr_in6));
+      break;
+#if !_WIN32
+    case AF_UNIX: {
+      auto un = reinterpret_cast<const struct sockaddr_un*>(addr);
+      static const size_t PATH_OFFSET = offsetof(struct sockaddr_un, sun_path);
+      KJ_REQUIRE(addrlen >= PATH_OFFSET &&
+                 memchr(un->sun_path, 0, addrlen - PATH_OFFSET) != nullptr);
+      break;
+    }
+#endif
+  }
+
+  return shouldAllow(addr);
+}
+
+}  // namespace _ (private)
 }  // namespace kj
