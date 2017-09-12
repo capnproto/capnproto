@@ -284,8 +284,10 @@ private:
             disconnected = true;
             return size_t(0);
           } else {
-            KJ_FAIL_ASSERT(
-                "OpenSSL claims there was an I/O error but we shouldn't get here then...");
+            // According to documentation we shouldn't get here, because our BIO never returns an
+            // "error". But in practice we do get here sometimes when the peer disconnects
+            // prematurely.
+            KJ_FAIL_ASSERT("TLS protocol error");
           }
         default:
           KJ_FAIL_ASSERT("unexpected SSL error code", error);
