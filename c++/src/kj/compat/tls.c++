@@ -441,6 +441,8 @@ private:
 class TlsNetwork: public kj::Network {
 public:
   TlsNetwork(TlsContext& tls, kj::Network& inner): tls(tls), inner(inner) {}
+  TlsNetwork(TlsContext& tls, kj::Own<kj::Network> inner)
+      : tls(tls), inner(*inner), ownInner(kj::mv(inner)) {}
 
   Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint) override {
     kj::String hostname;
@@ -461,9 +463,19 @@ public:
     KJ_UNIMPLEMENTED("TLS does not implement getSockaddr() because it needs to know hostnames");
   }
 
+  Own<Network> restrictPeers(
+      kj::ArrayPtr<const kj::StringPtr> allow,
+      kj::ArrayPtr<const kj::StringPtr> deny = nullptr) override {
+    // TODO(someday): Maybe we could implement the ability to specify CA or hostname restrictions?
+    //   Or is it better to let people do that via the TlsContext? A neat thing about
+    //   restrictPeers() is that it's easy to make user-configurable.
+    return kj::heap<TlsNetwork>(tls, inner.restrictPeers(allow, deny));
+  }
+
 private:
   TlsContext& tls;
   kj::Network& inner;
+  kj::Own<kj::Network> ownInner;
 };
 
 }  // namespace
