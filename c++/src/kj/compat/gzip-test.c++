@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#if KJ_HAS_GZIP
+#if KJ_HAS_ZLIB
 
 #include "gzip.h"
 #include <kj/test.h>
@@ -190,4 +190,4 @@ KJ_TEST("gzip huge round trip") {
 }  // namespace
 }  // namespace kj
 
-#endif  // KJ_HAS_GZIP
+#endif  // KJ_HAS_ZLIB
