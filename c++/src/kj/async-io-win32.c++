@@ -642,10 +642,17 @@ public:
     }
   }
 
-  static SocketAddress getLocalAddress(int sockfd) {
+  static SocketAddress getLocalAddress(SOCKET sockfd) {
     SocketAddress result;
     result.addrlen = sizeof(addr);
     KJ_WINSOCK(getsockname(sockfd, &result.addr.generic, &result.addrlen));
+    return result;
+  }
+
+  static SocketAddress getPeerAddress(SOCKET sockfd) {
+    SocketAddress result;
+    result.addrlen = sizeof(addr);
+    KJ_WINSOCK(getpeername(sockfd, &result.addr.generic, &result.addrlen));
     return result;
   }
 
@@ -653,7 +660,7 @@ public:
     return filter.shouldAllow(&addr.generic, addrlen);
   }
 
-  bool parseAllowedBy(const _::NetworkFilter& filter) {
+  bool parseAllowedBy(_::NetworkFilter& filter) {
     return filter.shouldAllowParse(&addr.generic, addrlen);
   }
 
@@ -881,7 +888,8 @@ public:
     }
 
     return op->onComplete().then(mvCapture(result, mvCapture(scratch,
-        [this](Array<byte> scratch, Own<AsyncIoStream> stream, Win32EventPort::IoResult ioResult)
+        [this,newFd]
+        (Array<byte> scratch, Own<AsyncIoStream> stream, Win32EventPort::IoResult ioResult)
         -> Promise<Own<AsyncIoStream>> {
       if (ioResult.errorCode != ERROR_SUCCESS) {
         KJ_FAIL_WIN32("AcceptEx()", ioResult.errorCode) { break; }
@@ -891,11 +899,13 @@ public:
                            reinterpret_cast<char*>(&me), sizeof(me));
       }
 
-      auto addr = reinterpret_cast<struct sockaddr*>(scratch.begin() + 128);
-      size_t addrlen = addr->sa_family == AF_INET
-          ? sizeof(struct sockaddr_in)
-          : sizeof(struct sockaddr_in6);
-      if (filter.shouldAllow(addr, addrlen)) {
+      // Supposedly, AcceptEx() places the local and peer addresses into the buffer (which we've
+      // named `scratch`). However, the format in which it writes these is undocumented, and
+      // doesn't even match between native Windows and WINE. Apparently it is useless. I don't know
+      // why they require the buffer to have space for it in the first place. We'll need to call
+      // getpeername() to get the address.
+      auto addr = SocketAddress::getPeerAddress(newFd);
+      if (addr.allowedBy(filter)) {
         return kj::mv(stream);
       } else {
         return accept();

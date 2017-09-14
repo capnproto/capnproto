@@ -551,7 +551,9 @@ KJ_TEST("Network::restrictPeers()") {
   auto restrictedNetwork = network.restrictPeers({"public"});
 
   KJ_EXPECT(tryParse(w, *restrictedNetwork, "8.8.8.8") == "8.8.8.8:0");
+#if !_WIN32
   KJ_EXPECT_THROW_MESSAGE("restrictPeers", tryParse(w, *restrictedNetwork, "unix:/foo"));
+#endif
 
   auto addr = restrictedNetwork->parseAddress("127.0.0.1").wait(w);
 

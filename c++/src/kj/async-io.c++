@@ -268,7 +268,7 @@ CidrRange::CidrRange(int family, ArrayPtr<const byte> bits, uint bitCount)
   KJ_REQUIRE(bits.size() * 8 >= bitCount);
   size_t byteCount = (bitCount + 7) / 8;
   memcpy(this->bits, bits.begin(), byteCount);
-  memset(this->bits + byteCount, 0, sizeof(bits) - byteCount);
+  memset(this->bits + byteCount, 0, sizeof(this->bits) - byteCount);
 
   zeroIrrelevantBits();
 }
@@ -486,7 +486,7 @@ NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const Str
 }
 
 bool NetworkFilter::shouldAllow(const struct sockaddr* addr, uint addrlen) {
-  KJ_REQUIRE(addrlen > sizeof(addr->sa_family));
+  KJ_REQUIRE(addrlen >= sizeof(addr->sa_family));
 
 #if !_WIN32
   if (addr->sa_family == AF_UNIX) {
