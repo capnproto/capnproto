@@ -475,20 +475,20 @@ KJ_TEST("CIDR parsing") {
   }
 }
 
-bool allowed4(const _::NetworkFilter& filter, StringPtr addrStr) {
+bool allowed4(_::NetworkFilter& filter, StringPtr addrStr) {
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   inet_pton(AF_INET, addrStr.cStr(), &addr.sin_addr);
-  return filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr));
+  return filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
 }
 
-bool allowed6(const _::NetworkFilter& filter, StringPtr addrStr) {
+bool allowed6(_::NetworkFilter& filter, StringPtr addrStr) {
   struct sockaddr_in6 addr;
   memset(&addr, 0, sizeof(addr));
   addr.sin6_family = AF_INET6;
   inet_pton(AF_INET6, addrStr.cStr(), &addr.sin6_addr);
-  return filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr));
+  return filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
 }
 
 KJ_TEST("NetworkFilter") {

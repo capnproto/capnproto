@@ -217,6 +217,26 @@ Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(
 
 namespace _ {  // private
 
+#if !_WIN32
+
+kj::ArrayPtr<const char> safeUnixPath(const struct sockaddr_un* addr, uint addrlen) {
+  KJ_REQUIRE(addr->sun_family == AF_UNIX, "not a unix address");
+  KJ_REQUIRE(addrlen >= offsetof(sockaddr_un, sun_path), "invalid unix address");
+
+  size_t maxPathlen = addrlen - offsetof(sockaddr_un, sun_path);
+
+  size_t pathlen;
+  if (maxPathlen > 0 && addr->sun_path[0] == '\0') {
+    // Linux "abstract" unix address
+    pathlen = strnlen(addr->sun_path + 1, maxPathlen - 1) + 1;
+  } else {
+    pathlen = strnlen(addr->sun_path, maxPathlen);
+  }
+  return kj::arrayPtr(addr->sun_path, pathlen);
+}
+
+#endif  // !_WIN32
+
 CidrRange::CidrRange(StringPtr pattern) {
   size_t slashPos = KJ_REQUIRE_NONNULL(pattern.findFirst('/'), "invalid CIDR", pattern);
 
@@ -465,10 +485,13 @@ NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const Str
   }
 }
 
-bool NetworkFilter::shouldAllow(const struct sockaddr* addr) const {
+bool NetworkFilter::shouldAllow(const struct sockaddr* addr, uint addrlen) {
+  KJ_REQUIRE(addrlen > sizeof(addr->sa_family));
+
 #if !_WIN32
   if (addr->sa_family == AF_UNIX) {
-    if (reinterpret_cast<const struct sockaddr_un*>(addr)->sun_path[0] == '\0') {
+    auto path = safeUnixPath(reinterpret_cast<const struct sockaddr_un*>(addr), addrlen);
+    if (path.size() > 0 && path[0] == '\0') {
       return allowAbstractUnix;
     } else {
       return allowUnix;
@@ -492,17 +515,18 @@ bool NetworkFilter::shouldAllow(const struct sockaddr* addr) const {
   }
 
   KJ_IF_MAYBE(n, next) {
-    return n->shouldAllow(addr);
+    return n->shouldAllow(addr, addrlen);
   } else {
     return true;
   }
 }
 
-bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr) const {
+bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr, uint addrlen) {
   bool matched = false;
 #if !_WIN32
   if (addr->sa_family == AF_UNIX) {
-    if (reinterpret_cast<const struct sockaddr_un*>(addr)->sun_path[0] == '\0') {
+    auto path = safeUnixPath(reinterpret_cast<const struct sockaddr_un*>(addr), addrlen);
+    if (path.size() > 0 && path[0] == '\0') {
       if (allowAbstractUnix) matched = true;
     } else {
       if (allowUnix) matched = true;
@@ -520,7 +544,7 @@ bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr) const {
 
   if (matched) {
     KJ_IF_MAYBE(n, next) {
-      return n->shouldAllowParse(addr);
+      return n->shouldAllowParse(addr, addrlen);
     } else {
       return true;
     }
@@ -528,28 +552,6 @@ bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr) const {
     // No allow rule matches this address family, so don't even allow parsing it.
     return false;
   }
-}
-
-bool NetworkFilter::shouldAllow(const struct sockaddr* addr, uint addrlen) {
-  switch (addr->sa_family) {
-    case AF_INET:
-      KJ_REQUIRE(addrlen >= sizeof(struct sockaddr_in));
-      break;
-    case AF_INET6:
-      KJ_REQUIRE(addrlen >= sizeof(struct sockaddr_in6));
-      break;
-#if !_WIN32
-    case AF_UNIX: {
-      auto un = reinterpret_cast<const struct sockaddr_un*>(addr);
-      static const size_t PATH_OFFSET = offsetof(struct sockaddr_un, sun_path);
-      KJ_REQUIRE(addrlen >= PATH_OFFSET &&
-                 memchr(un->sun_path, 0, addrlen - PATH_OFFSET) != nullptr);
-      break;
-    }
-#endif
-  }
-
-  return shouldAllow(addr);
 }
 
 }  // namespace _ (private)

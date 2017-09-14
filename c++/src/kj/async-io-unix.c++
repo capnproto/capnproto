@@ -450,10 +450,11 @@ public:
         return str('[', buffer, "]:", ntohs(addr.inet6.sin6_port));
       }
       case AF_UNIX: {
-        if (addr.unixDomain.sun_path[0] == '\0') {
-          return str("unix-abstract:", addr.unixDomain.sun_path + 1);
+        auto path = _::safeUnixPath(&addr.unixDomain, addrlen);
+        if (path.size() > 0 && path[0] == '\0') {
+          return str("unix-abstract:", path.slice(1, path.size()));
         } else {
-          return str("unix:", addr.unixDomain.sun_path);
+          return str("unix:", path);
         }
       }
       default:
@@ -641,8 +642,8 @@ public:
     return filter.shouldAllow(&addr.generic, addrlen);
   }
 
-  bool parseAllowedBy(const _::NetworkFilter& filter) {
-    return filter.shouldAllowParse(&addr.generic);
+  bool parseAllowedBy(_::NetworkFilter& filter) {
+    return filter.shouldAllowParse(&addr.generic, addrlen);
   }
 
 private:

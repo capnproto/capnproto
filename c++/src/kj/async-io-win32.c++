@@ -654,7 +654,7 @@ public:
   }
 
   bool parseAllowedBy(const _::NetworkFilter& filter) {
-    return filter.shouldAllowParse(&addr.generic);
+    return filter.shouldAllowParse(&addr.generic, addrlen);
   }
 
   static SocketAddress getWildcardForFamily(int family) {

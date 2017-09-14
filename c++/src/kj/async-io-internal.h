@@ -28,9 +28,18 @@
 #include <stdint.h>
 
 struct sockaddr;
+struct sockaddr_un;
 
 namespace kj {
 namespace _ {  // private
+
+// =======================================================================================
+
+#if !_WIN32
+kj::ArrayPtr<const char> safeUnixPath(const struct sockaddr_un* addr, uint addrlen);
+// sockaddr_un::sun_path is not required to have a NUL terminator! Thus to be safe unix address
+// paths MUST be read using this function.
+#endif
 
 class CidrRange {
 public:
@@ -64,10 +73,8 @@ public:
   NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const StringPtr> deny,
                 NetworkFilter& next);
 
-  bool shouldAllow(const struct sockaddr* addr) const;
-  bool shouldAllowParse(const struct sockaddr* addr) const;
-
   bool shouldAllow(const struct sockaddr* addr, uint addrlen) override;
+  bool shouldAllowParse(const struct sockaddr* addr, uint addrlen);
 
 private:
   Vector<CidrRange> allowCidrs;
