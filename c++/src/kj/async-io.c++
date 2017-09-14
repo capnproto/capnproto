@@ -359,7 +359,10 @@ ArrayPtr<const CidrRange> localCidrs() {
     "0.0.0.0/32"_kj,
     "::/128"_kj,
   };
-  return result;
+
+  // TODO(cleanup): A bug in GCC 4.8, fixed in 4.9, prevents result from implicitly
+  //   casting to our return type.
+  return kj::arrayPtr(result, kj::size(result));
 }
 
 ArrayPtr<const CidrRange> privateCidrs() {
@@ -373,7 +376,10 @@ ArrayPtr<const CidrRange> privateCidrs() {
     "fc00::/7"_kj,              // RFC4193 unique private network
     "fe80::/10"_kj,             // RFC4291 "link local" (auto-configured LAN in absence of DHCP)
   };
-  return result;
+
+  // TODO(cleanup): A bug in GCC 4.8, fixed in 4.9, prevents result from implicitly
+  //   casting to our return type.
+  return kj::arrayPtr(result, kj::size(result));
 }
 
 ArrayPtr<const CidrRange> reservedCidrs() {
@@ -386,7 +392,10 @@ ArrayPtr<const CidrRange> reservedCidrs() {
     "2001::/23"_kj,             // RFC2928 reserved for special protocols
     "ff00::/8"_kj,              // RFC4291 multicast
   };
-  return result;
+
+  // TODO(cleanup): A bug in GCC 4.8, fixed in 4.9, prevents result from implicitly
+  //   casting to our return type.
+  return kj::arrayPtr(result, kj::size(result));
 }
 
 ArrayPtr<const CidrRange> exampleAddresses() {
@@ -396,7 +405,10 @@ ArrayPtr<const CidrRange> exampleAddresses() {
     "203.0.113.0/24"_kj,        // RFC5737 "example address" block 3 -- like example.com for IPs
     "2001:db8::/32"_kj,         // RFC3849 "example address" block -- like example.com for IPs
   };
-  return result;
+
+  // TODO(cleanup): A bug in GCC 4.8, fixed in 4.9, prevents result from implicitly
+  //   casting to our return type.
+  return kj::arrayPtr(result, kj::size(result));
 }
 
 NetworkFilter::NetworkFilter()
