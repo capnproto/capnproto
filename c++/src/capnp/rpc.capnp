@@ -492,6 +492,9 @@ struct Return {
   # should always set this true.  This defaults true because if level 0 implementations forget to
   # set it they'll never notice (just silently leak caps), but if level >=1 implementations forget
   # to set it to false they'll quickly get errors.
+  #
+  # The receiver should act as if the sender had sent a release message with count=1 for each
+  # CapDescriptor in the original Call message.
 
   union {
     results @2 :Payload;
@@ -499,9 +502,9 @@ struct Return {
     #
     # For regular method calls, `results.content` points to the result struct.
     #
-    # For a `Return` in response to an `Accept`, `results` contains a single capability (rather
-    # than a struct), and `results.content` is just a capability pointer with index 0.  A `Finish`
-    # is still required in this case.
+    # For a `Return` in response to an `Accept` or `Bootstrap`, `results` contains a single
+    # capability (rather than a struct), and `results.content` is just a capability pointer with
+    # index 0.  A `Finish` is still required in this case.
 
     exception @3 :Exception;
     # Indicates that the call failed and explains why.
@@ -513,6 +516,10 @@ struct Return {
     resultsSentElsewhere @5 :Void;
     # This is set when returning from a `Call` that had `sendResultsTo` set to something other
     # than `caller`.
+    #
+    # It doesn't matter too much when this is sent, as the receiver doesn't need to do anything
+    # with it, but the C++ implementation appears to wait for the call to finish before sending
+    # this.
 
     takeFromOtherQuestion @6 :QuestionId;
     # The sender has also sent (before this message) a `Call` with the given question ID and with
@@ -691,7 +698,7 @@ struct Disembargo {
   # Extending the embargo/disembargo protocol to be able to shorted multiple hops at once seems
   # difficult. Instead, we make a rule that prevents this case from coming up:
   #
-  # One a promise P has been resolved to a remove object reference R, then all further messages
+  # One a promise P has been resolved to a remote object reference R, then all further messages
   # received addressed to P will be forwarded strictly to R. Even if it turns out later that R is
   # itself a promise, and has resolved to some other object Q, messages sent to P will still be
   # forwarded to R, not directly to Q (R will of course further forward the messages to Q).
@@ -939,6 +946,11 @@ struct CapDescriptor {
   #
   # Keep in mind that `ExportIds` in a `CapDescriptor` are subject to reference counting.  See the
   # description of `ExportId`.
+  #
+  # Note that it is currently not possible to include a broken capability in the CapDescriptor
+  # table.  Instead, create a new export (`senderPromise`) for each broken capability and then
+  # immediately follow the payload-bearing Call or Return message with one Resolve message for each
+  # broken capability, resolving it to an exception.
 
   union {
     none @0 :Void;
@@ -1040,7 +1052,7 @@ struct ThirdPartyCapDescriptor {
   #   simply send calls to the vine.  Such calls will be forwarded to the third-party by the
   #   sender.
   #
-  # * Level 3 implementations must release the vine once they have successfully picked up the
+  # * Level 3 implementations must release the vine only once they have successfully picked up the
   #   object from the third party.  This ensures that the capability is not released by the sender
   #   prematurely.
   #
