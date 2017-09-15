@@ -213,6 +213,20 @@ Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
 }
 
+namespace {
+
+class DummyNetworkFilter: public kj::LowLevelAsyncIoProvider::NetworkFilter {
+public:
+  bool shouldAllow(const struct sockaddr* addr, uint addrlen) override { return true; }
+};
+
+}  // namespace
+
+LowLevelAsyncIoProvider::NetworkFilter& LowLevelAsyncIoProvider::NetworkFilter::getAllAllowed() {
+  static DummyNetworkFilter result;
+  return result;
+}
+
 // =======================================================================================
 
 namespace _ {  // private

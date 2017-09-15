@@ -536,16 +536,24 @@ public:
     virtual bool shouldAllow(const struct sockaddr* addr, uint addrlen) = 0;
     // Returns true if incoming connections or datagrams from the given peer should be accepted.
     // If false, they will be dropped. This is used to implement kj::Network::restrictPeers().
+
+    static NetworkFilter& getAllAllowed();
   };
 
   virtual Own<ConnectionReceiver> wrapListenSocketFd(
       Fd fd, NetworkFilter& filter, uint flags = 0) = 0;
+  inline Own<ConnectionReceiver> wrapListenSocketFd(Fd fd, uint flags = 0) {
+    return wrapListenSocketFd(fd, NetworkFilter::getAllAllowed(), flags);
+  }
   // Create an AsyncIoStream wrapping a listen socket file descriptor.  This socket should already
   // have had `bind()` and `listen()` called on it, so it's ready for `accept()`.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
   virtual Own<DatagramPort> wrapDatagramSocketFd(Fd fd, NetworkFilter& filter, uint flags = 0);
+  inline Own<DatagramPort> wrapDatagramSocketFd(Fd fd, uint flags = 0) {
+    return wrapDatagramSocketFd(fd, NetworkFilter::getAllAllowed(), flags);
+  }
 
   virtual Timer& getTimer() = 0;
   // Returns a `Timer` based on real time.  Time does not pass while event handlers are running --
