@@ -1280,7 +1280,7 @@ public:
     return ArrayPtr<const T>(ptr, size_);
   }
 
-  inline size_t size() const { return size_; }
+  inline constexpr size_t size() const { return size_; }
   inline const T& operator[](size_t index) const {
     KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
     return ptr[index];
@@ -1294,8 +1294,8 @@ public:
   inline T* end() { return ptr + size_; }
   inline T& front() { return *ptr; }
   inline T& back() { return *(ptr + size_ - 1); }
-  inline const T* begin() const { return ptr; }
-  inline const T* end() const { return ptr + size_; }
+  inline constexpr const T* begin() const { return ptr; }
+  inline constexpr const T* end() const { return ptr + size_; }
   inline const T& front() const { return *ptr; }
   inline const T& back() const { return *(ptr + size_ - 1); }
 

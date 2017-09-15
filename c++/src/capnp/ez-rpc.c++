@@ -198,6 +198,19 @@ kj::LowLevelAsyncIoProvider& EzRpcClient::getLowLevelIoProvider() {
 
 // =======================================================================================
 
+namespace {
+
+class DummyFilter: public kj::LowLevelAsyncIoProvider::NetworkFilter {
+public:
+  bool shouldAllow(const struct sockaddr* addr, uint addrlen) override {
+    return true;
+  }
+};
+
+static DummyFilter DUMMY_FILTER;
+
+}  // namespace
+
 struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
                                 public kj::TaskSet::ErrorHandler {
   Capability::Client mainInterface;
@@ -271,7 +284,8 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
         context(EzRpcContext::getThreadLocal()),
         portPromise(kj::Promise<uint>(port).fork()),
         tasks(*this) {
-    acceptLoop(context->getLowLevelIoProvider().wrapListenSocketFd(socketFd), readerOpts);
+    acceptLoop(context->getLowLevelIoProvider().wrapListenSocketFd(socketFd, DUMMY_FILTER),
+               readerOpts);
   }
 
   void acceptLoop(kj::Own<kj::ConnectionReceiver>&& listener, ReaderOptions readerOpts) {

@@ -319,6 +319,67 @@ public:
 
   virtual Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) = 0;
   // Construct a network address from a legacy struct sockaddr.
+
+  virtual Own<Network> restrictPeers(
+      kj::ArrayPtr<const kj::StringPtr> allow,
+      kj::ArrayPtr<const kj::StringPtr> deny = nullptr) KJ_WARN_UNUSED_RESULT = 0;
+  // Constructs a new Network instance wrapping this one which restricts which peer addresses are
+  // permitted (both for outgoing and incoming connections).
+  //
+  // Communication will be allowed only with peers whose addresses match one of the patterns
+  // specified in the `allow` array. If a `deny` array is specified, then any address which matches
+  // a pattern in `deny` and *does not* match any more-specific pattern in `allow` will also be
+  // denied.
+  //
+  // The syntax of address patterns depends on the network, except that three special patterns are
+  // defined for all networks:
+  // - "private": Matches network addresses that are reserved by standards for private networks,
+  //   such as "10.0.0.0/8" or "192.168.0.0/16". This is a superset of "local".
+  // - "public": Opposite of "private".
+  // - "local": Matches network addresses that are defined by standards to only be accessible from
+  //   the local machine, such as "127.0.0.0/8" or Unix domain addresses.
+  // - "network": Opposite of "local".
+  //
+  // For the standard KJ network implementation, the following patterns are also recognized:
+  // - Network blocks specified in CIDR notation (ipv4 and ipv6), such as "192.0.2.0/24" or
+  //   "2001:db8::/32".
+  // - "unix" to match all Unix domain addresses. (In the future, we may support specifying a
+  //   glob.)
+  // - "unix-abstract" to match Linux's "abstract unix domain" addresses. (In the future, we may
+  //   support specifying a glob.)
+  //
+  // Network restrictions apply *after* DNS resolution (otherwise they'd be useless).
+  //
+  // It is legal to parseAddress() a restricted address. An exception won't be thrown until
+  // connect() is called.
+  //
+  // It's possible to listen() on a restricted address. However, connections will only be accepted
+  // from non-restricted addresses; others will be dropped. If a particular listen address has no
+  // valid peers (e.g. because it's a unix socket address and unix sockets are not allowed) then
+  // listen() may throw (or may simply never receive any connections).
+  //
+  // Examples:
+  //
+  //     auto restricted = network->restrictPeers({"public"});
+  //
+  // Allows connections only to/from public internet addresses. Use this when connecting to an
+  // address specified by a third party that is not trusted and is not themselves already on your
+  // private network.
+  //
+  //     auto restricted = network->restrictPeers({"private"});
+  //
+  // Allows connections only to/from the private network. Use this on the server side to reject
+  // connections from the public internet.
+  //
+  //     auto restricted = network->restrictPeers({"192.0.2.0/24"}, {"192.0.2.3/32"});
+  //
+  // Allows connections only to/from 192.0.2.*, except 192.0.2.3 which is blocked.
+  //
+  //     auto restricted = network->restrictPeers({"10.0.0.0/8", "10.1.2.3/32"}, {"10.1.2.0/24"});
+  //
+  // Allows connections to/from 10.*.*.*, with the exception of 10.1.2.* (which is denied), with an
+  // exception to the exception of 10.1.2.3 (which is allowed, because it is matched by an allow
+  // rule that is more specific than the deny rule).
 };
 
 // =======================================================================================
@@ -470,13 +531,21 @@ public:
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
-  virtual Own<ConnectionReceiver> wrapListenSocketFd(Fd fd, uint flags = 0) = 0;
+  class NetworkFilter {
+  public:
+    virtual bool shouldAllow(const struct sockaddr* addr, uint addrlen) = 0;
+    // Returns true if incoming connections or datagrams from the given peer should be accepted.
+    // If false, they will be dropped. This is used to implement kj::Network::restrictPeers().
+  };
+
+  virtual Own<ConnectionReceiver> wrapListenSocketFd(
+      Fd fd, NetworkFilter& filter, uint flags = 0) = 0;
   // Create an AsyncIoStream wrapping a listen socket file descriptor.  This socket should already
   // have had `bind()` and `listen()` called on it, so it's ready for `accept()`.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
-  virtual Own<DatagramPort> wrapDatagramSocketFd(Fd fd, uint flags = 0);
+  virtual Own<DatagramPort> wrapDatagramSocketFd(Fd fd, NetworkFilter& filter, uint flags = 0);
 
   virtual Timer& getTimer() = 0;
   // Returns a `Timer` based on real time.  Time does not pass while event handlers are running --

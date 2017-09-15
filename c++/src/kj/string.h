@@ -31,11 +31,29 @@
 #include <string.h>
 
 namespace kj {
+  class StringPtr;
+  class String;
 
-class StringPtr;
-class String;
+  class StringTree;   // string-tree.h
+}
 
-class StringTree;   // string-tree.h
+constexpr kj::StringPtr operator "" _kj(const char* str, size_t n);
+// You can append _kj to a string literal to make its type be StringPtr. There are a few cases
+// where you must do this for correctness:
+// - When you want to declare a constexpr StringPtr. Without _kj, this is a compile error.
+// - When you want to initialize a static/global StringPtr from a string literal without forcing
+//   global constructor code to run at dynamic initialization time.
+// - When you have a string literal that contains NUL characters. Without _kj, the string will
+//   be considered to end at the first NUL.
+// - When you want to initialize an ArrayPtr<const char> from a string literal, without including
+//   the NUL terminator in the data. (Initializing an ArrayPtr from a regular string literal is
+//   a compile error specifically due to this ambiguity.)
+//
+// In other cases, there should be no difference between initializing a StringPtr from a regular
+// string literal vs. one with _kj (assuming the compiler is able to optimize away strlen() on a
+// string literal).
+
+namespace kj {
 
 // Our STL string SFINAE trick does not work with GCC 4.7, but it works with Clang and GCC 4.8, so
 // we'll just preprocess it out if not supported.
@@ -75,8 +93,8 @@ public:
   // those who don't want it.
 #endif
 
-  inline operator ArrayPtr<const char>() const;
-  inline ArrayPtr<const char> asArray() const;
+  inline constexpr operator ArrayPtr<const char>() const;
+  inline constexpr ArrayPtr<const char> asArray() const;
   inline ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
@@ -121,9 +139,11 @@ public:
   // Overflowed floating numbers return inf.
 
 private:
-  inline StringPtr(ArrayPtr<const char> content): content(content) {}
+  inline constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
 
   ArrayPtr<const char> content;
+
+  friend constexpr kj::StringPtr (::operator "" _kj)(const char* str, size_t n);
 };
 
 inline bool operator==(const char* a, const StringPtr& b) { return b == a; }
@@ -427,12 +447,12 @@ inline String Stringifier::operator*(const Array<T>& arr) const {
 
 inline StringPtr::StringPtr(const String& value): content(value.begin(), value.size() + 1) {}
 
-inline StringPtr::operator ArrayPtr<const char>() const {
-  return content.slice(0, content.size() - 1);
+inline constexpr StringPtr::operator ArrayPtr<const char>() const {
+  return ArrayPtr<const char>(content.begin(), content.size() - 1);
 }
 
-inline ArrayPtr<const char> StringPtr::asArray() const {
-  return content.slice(0, content.size() - 1);
+inline constexpr ArrayPtr<const char> StringPtr::asArray() const {
+  return ArrayPtr<const char>(content.begin(), content.size() - 1);
 }
 
 inline bool StringPtr::operator==(const StringPtr& other) const {
@@ -530,5 +550,9 @@ inline String heapString(ArrayPtr<const char> value) {
 }
 
 }  // namespace kj
+
+constexpr kj::StringPtr operator "" _kj(const char* str, size_t n) {
+  return kj::StringPtr(kj::ArrayPtr<const char>(str, n + 1));
+};
 
 #endif  // KJ_STRING_H_
