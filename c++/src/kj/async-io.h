@@ -323,7 +323,7 @@ public:
   virtual Own<Network> restrictPeers(
       kj::ArrayPtr<const kj::StringPtr> allow,
       kj::ArrayPtr<const kj::StringPtr> deny = nullptr) KJ_WARN_UNUSED_RESULT = 0;
-  // Constructs a new Network instance wrappingc this one which restricts which peer addresses are
+  // Constructs a new Network instance wrapping this one which restricts which peer addresses are
   // permitted (both for outgoing and incoming connections).
   //
   // Communication will be allowed only with peers whose addresses match one of the patterns

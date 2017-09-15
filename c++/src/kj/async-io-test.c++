@@ -501,7 +501,7 @@ KJ_TEST("NetworkFilter") {
     _::NetworkFilter filter({"public"}, {}, base);
 
     KJ_EXPECT(allowed4(filter, "8.8.8.8"));
-    KJ_EXPECT(!allowed4(base, "240.1.2.3"));
+    KJ_EXPECT(!allowed4(filter, "240.1.2.3"));
 
     KJ_EXPECT(!allowed4(filter, "192.168.0.1"));
     KJ_EXPECT(!allowed4(filter, "10.1.2.3"));
@@ -518,7 +518,7 @@ KJ_TEST("NetworkFilter") {
     _::NetworkFilter filter({"private"}, {"local"}, base);
 
     KJ_EXPECT(!allowed4(filter, "8.8.8.8"));
-    KJ_EXPECT(!allowed4(base, "240.1.2.3"));
+    KJ_EXPECT(!allowed4(filter, "240.1.2.3"));
 
     KJ_EXPECT(allowed4(filter, "192.168.0.1"));
     KJ_EXPECT(allowed4(filter, "10.1.2.3"));
@@ -535,7 +535,7 @@ KJ_TEST("NetworkFilter") {
     _::NetworkFilter filter({"1.0.0.0/8", "1.2.3.0/24"}, {"1.2.0.0/16", "1.2.3.4/32"}, base);
 
     KJ_EXPECT(!allowed4(filter, "8.8.8.8"));
-    KJ_EXPECT(!allowed4(base, "240.1.2.3"));
+    KJ_EXPECT(!allowed4(filter, "240.1.2.3"));
 
     KJ_EXPECT(allowed4(filter, "1.0.0.1"));
     KJ_EXPECT(!allowed4(filter, "1.2.2.1"));
