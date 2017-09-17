@@ -39,10 +39,12 @@ namespace kj {
 class Win32EventPort;
 #else
 class UnixEventPort;
+class AutoCloseFd;
 #endif
 
 class NetworkAddress;
 class AsyncOutputStream;
+class AsyncIoStream;
 
 // =======================================================================================
 // Streaming I/O
@@ -130,6 +132,42 @@ public:
   // ephemeral addresses for a single connection.
 };
 
+class AsyncCapabilityStream: public AsyncIoStream {
+  // An AsyncIoStream that also allows sending and receiving new connections or other kinds of
+  // capabilities, in addition to simple data.
+  //
+  // For correct functioning, a protocol must be designed such that the receiver knows when to
+  // expect a capability transfer. The receiver must not read() when a capability is expected, and
+  // must not receiveStream() when data is expected -- if it does, an exception may be thrown or
+  // invalid data may be returned. This implies that data sent over an AsyncCapabilityStream must
+  // be framed such that the receiver knows exactly how many bytes to read before receiving a
+  // capability.
+  //
+  // On Unix, KJ provides an implementation based on Unix domain sockets and file descriptor
+  // passing via SCM_RIGHTS. Due to the nature of SCM_RIGHTS, if the application accidentally
+  // read()s when it should have called receiveStream(), it will observe a NUL byte in the data
+  // and the capability will be discarded. Of course, an application should not depend on this
+  // behavior; it should avoid read()ing through a capability.
+  //
+  // KJ does not provide any implementation of this type on Windows, as there's no obvious
+  // implementation there. Handle passing on Windows requires at least one of the processes
+  // involved to have permission to modify the other's handle table, which is effectively full
+  // control. Handle passing between mutually non-trusting processes would require a trusted
+  // broker process to facilitate. One could possibly implement this type in terms of such a
+  // broker, or in terms of direct handle passing if at least one process trusts the other.
+
+public:
+  Promise<Own<AsyncCapabilityStream>> receiveStream();
+  virtual Promise<Maybe<Own<AsyncCapabilityStream>>> tryReceiveStream() = 0;
+  virtual Promise<void> sendStream(Own<AsyncCapabilityStream> stream) = 0;
+  // Transfer a stream.
+
+  Promise<AutoCloseFd> receiveFd();
+  virtual Promise<Maybe<AutoCloseFd>> tryReceiveFd();
+  virtual Promise<void> sendFd(int fd);
+  // Transfer a raw file descriptor. Default implementation throws UNIMPLEMENTED.
+};
+
 struct OneWayPipe {
   // A data pipe with an input end and an output end.  (Typically backed by pipe() system call.)
 
@@ -142,6 +180,12 @@ struct TwoWayPipe {
   // other end's input.  (Typically backed by socketpair() system call.)
 
   Own<AsyncIoStream> ends[2];
+};
+
+struct CapabilityPipe {
+  // Like TwoWayPipe but allowing capability-passing.
+
+  Own<AsyncCapabilityStream> ends[2];
 };
 
 class ConnectionReceiver {
@@ -401,6 +445,13 @@ public:
   // Creates two AsyncIoStreams representing the two ends of a two-way pipe (e.g. created with
   // socketpair(2) system call).  Data written to one end can be read from the other.
 
+  virtual CapabilityPipe newCapabilityPipe();
+  // Creates two AsyncCapabilityStreams representing the two ends of a two-way capability pipe.
+  //
+  // The default implementation throws an unimplemented exception. In particular this is not
+  // implemented by the default AsyncIoProvider on Windows, since Windows lacks any sane way to
+  // pass handles over a stream.
+
   virtual Network& getNetwork() = 0;
   // Creates a new `Network` instance representing the networks exposed by the operating system.
   //
@@ -524,6 +575,12 @@ public:
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
+#if !_WIN32
+  virtual Own<AsyncCapabilityStream> wrapUnixSocketFd(Fd fd, uint flags = 0) = 0;
+  // Like wrapSocketFd() but also support capability passing via SCM_RIGHTS. The socket must be
+  // a Unix domain socket.
+#endif
+
   virtual Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
       Fd fd, const struct sockaddr* addr, uint addrlen, uint flags = 0) = 0;
   // Create an AsyncIoStream wrapping a socket and initiate a connection to the given address.
@@ -608,6 +665,50 @@ AsyncIoContext setupAsyncIo();
 //   not work correctly in the child, even if the parent ceases to use its copy. In particular
 //   note that this means that server processes which daemonize themselves at startup must wait
 //   until after daemonization to create an AsyncIoContext.
+
+// =======================================================================================
+// Convenience adapters.
+
+class CapabilityStreamConnectionReceiver: public ConnectionReceiver {
+  // Trivial wrapper which allows an AsyncCapabilityStream to act as a ConnectionReceiver. accept()
+  // calls receiveStream().
+
+public:
+  CapabilityStreamConnectionReceiver(AsyncCapabilityStream& inner)
+      : inner(inner) {}
+
+  Promise<Own<AsyncIoStream>> accept() override;
+  uint getPort() override;
+
+private:
+  AsyncCapabilityStream& inner;
+};
+
+class CapabilityStreamNetworkAddress: public NetworkAddress {
+  // Trivial wrapper which allows an AsyncCapabilityStream to act as a NetworkAddress.
+  //
+  // connect() is implemented by calling provider.newCapabilityPipe(), sending one end over the
+  // original capability stream, and returning the other end.
+  //
+  // listen().accept() is implemented by receiving new streams over the original stream.
+  //
+  // Note that clone() dosen't work (due to ownership issues) and toString() returns a static
+  // string.
+
+public:
+  CapabilityStreamNetworkAddress(AsyncIoProvider& provider, AsyncCapabilityStream& inner)
+      : provider(provider), inner(inner) {}
+
+  Promise<Own<AsyncIoStream>> connect() override;
+  Own<ConnectionReceiver> listen() override;
+
+  Own<NetworkAddress> clone() override;
+  String toString() override;
+
+private:
+  AsyncIoProvider& provider;
+  AsyncCapabilityStream& inner;
+};
 
 // =======================================================================================
 // inline implementation details

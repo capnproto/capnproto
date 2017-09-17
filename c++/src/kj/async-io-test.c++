@@ -192,6 +192,47 @@ TEST(AsyncIo, TwoWayPipe) {
   EXPECT_EQ("bar", result2);
 }
 
+#if !_WIN32
+TEST(AsyncIo, CapabilityPipe) {
+  auto ioContext = setupAsyncIo();
+
+  auto pipe = ioContext.provider->newCapabilityPipe();
+  auto pipe2 = ioContext.provider->newCapabilityPipe();
+  char receiveBuffer1[4];
+  char receiveBuffer2[4];
+
+  // Expect to receive a stream, then write "bar" to it, then receive "foo" from it.
+  Own<AsyncCapabilityStream> receivedStream;
+  auto promise = pipe2.ends[1]->receiveStream()
+      .then([&](Own<AsyncCapabilityStream> stream) {
+    receivedStream = kj::mv(stream);
+    return receivedStream->write("bar", 3);
+  }).then([&]() {
+    return receivedStream->tryRead(receiveBuffer2, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer2, n);
+  });
+
+  // Send a stream, then write "foo" to the other end of the sent stream, then receive "bar"
+  // from it.
+  kj::String result = pipe2.ends[0]->sendStream(kj::mv(pipe.ends[1]))
+      .then([&]() {
+    return pipe.ends[0]->write("foo", 3);
+  }).then([&]() {
+    return pipe.ends[0]->tryRead(receiveBuffer1, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer1, n);
+  }).wait(ioContext.waitScope);
+
+  kj::String result2 = promise.wait(ioContext.waitScope);
+
+  EXPECT_EQ("bar", result);
+  EXPECT_EQ("foo", result2);
+}
+#endif
+
 TEST(AsyncIo, PipeThread) {
   auto ioContext = setupAsyncIo();
 

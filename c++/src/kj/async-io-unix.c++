@@ -112,10 +112,11 @@ private:
 
 // =======================================================================================
 
-class AsyncStreamFd: public OwnedFileDescriptor, public AsyncIoStream {
+class AsyncStreamFd: public OwnedFileDescriptor, public AsyncCapabilityStream {
 public:
   AsyncStreamFd(UnixEventPort& eventPort, int fd, uint flags)
       : OwnedFileDescriptor(fd, flags),
+        eventPort(eventPort),
         observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ_WRITE) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
@@ -198,6 +199,57 @@ public:
     *length = socklen;
   }
 
+  kj::Promise<Maybe<Own<AsyncCapabilityStream>>> tryReceiveStream() override {
+    return tryReceiveFdImpl<Own<AsyncCapabilityStream>>();
+  }
+
+  kj::Promise<void> sendStream(Own<AsyncCapabilityStream> stream) override {
+    auto downcasted = stream.downcast<AsyncStreamFd>();
+    auto promise = sendFd(downcasted->fd);
+    return promise.attach(kj::mv(downcasted));
+  }
+
+  kj::Promise<kj::Maybe<AutoCloseFd>> tryReceiveFd() override {
+    return tryReceiveFdImpl<AutoCloseFd>();
+  }
+
+  kj::Promise<void> sendFd(int fdToSend) override {
+    struct msghdr msg;
+    struct iovec iov;
+    union {
+      struct cmsghdr cmsg;
+      char cmsgSpace[CMSG_LEN(sizeof(int))];
+    };
+    memset(&msg, 0, sizeof(msg));
+    memset(&iov, 0, sizeof(iov));
+    memset(cmsgSpace, 0, sizeof(cmsgSpace));
+
+    char c = 0;
+    iov.iov_base = &c;
+    iov.iov_len = 1;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    msg.msg_control = &cmsg;
+    msg.msg_controllen = sizeof(cmsgSpace);
+
+    cmsg.cmsg_len = sizeof(cmsgSpace);
+    cmsg.cmsg_level = SOL_SOCKET;
+    cmsg.cmsg_type = SCM_RIGHTS;
+    *reinterpret_cast<int*>(CMSG_DATA(&cmsg)) = fdToSend;
+
+    ssize_t n;
+    KJ_NONBLOCKING_SYSCALL(n = sendmsg(fd, &msg, 0));
+    if (n < 0) {
+      return observer.whenBecomesWritable().then([this,fdToSend]() {
+        return sendFd(fdToSend);
+      });
+    } else {
+      KJ_ASSERT(n == 1);
+      return kj::READY_NOW;
+    }
+  }
+
   Promise<void> waitConnected() {
     // Wait until initial connection has completed. This actually just waits until it is writable.
 
@@ -222,6 +274,7 @@ public:
   }
 
 private:
+  UnixEventPort& eventPort;
   UnixEventPort::FdObserver observer;
 
   Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
@@ -353,6 +406,59 @@ private:
         morePieces = morePieces.slice(1, morePieces.size());
       }
     }
+  }
+
+  template <typename T>
+  kj::Promise<kj::Maybe<T>> tryReceiveFdImpl() {
+    struct msghdr msg;
+    memset(&msg, 0, sizeof(msg));
+
+    struct iovec iov;
+    memset(&iov, 0, sizeof(iov));
+    char c;
+    iov.iov_base = &c;
+    iov.iov_len = 1;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    // Allocate space to receive a cmsg.
+    union {
+      struct cmsghdr cmsg;
+      char cmsgSpace[CMSG_SPACE(sizeof(int))];
+    };
+    msg.msg_control = &cmsg;
+    msg.msg_controllen = sizeof(cmsgSpace);
+
+    ssize_t n;
+    KJ_NONBLOCKING_SYSCALL(n = recvmsg(fd, &msg, MSG_CMSG_CLOEXEC));
+    if (n < 0) {
+      return observer.whenBecomesReadable().then([this]() {
+        return tryReceiveFdImpl<T>();
+      });
+    } else if (n == 0) {
+      return kj::Maybe<T>(nullptr);
+    } else {
+      KJ_REQUIRE(msg.msg_controllen >= sizeof(cmsg),
+          "expected to receive FD over socket; received data instead");
+
+      // We expect an SCM_RIGHTS message with a single FD.
+      KJ_REQUIRE(cmsg.cmsg_level == SOL_SOCKET);
+      KJ_REQUIRE(cmsg.cmsg_type == SCM_RIGHTS);
+      KJ_REQUIRE(cmsg.cmsg_len == CMSG_LEN(sizeof(int)));
+
+      int receivedFd;
+      memcpy(&receivedFd, CMSG_DATA(&cmsg), sizeof(receivedFd));
+      return kj::Maybe<T>(wrapFd(receivedFd, (T*)nullptr));
+    }
+  }
+
+  AutoCloseFd wrapFd(int newFd, AutoCloseFd*) {
+    auto result = AutoCloseFd(newFd);
+    setCloseOnExec(result);
+    return result;
+  }
+  Own<AsyncCapabilityStream> wrapFd(int newFd, Own<AsyncCapabilityStream>*) {
+    return kj::heap<AsyncStreamFd>(eventPort, newFd, LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
   }
 };
 
@@ -951,6 +1057,9 @@ public:
   Own<AsyncIoStream> wrapSocketFd(int fd, uint flags = 0) override {
     return heap<AsyncStreamFd>(eventPort, fd, flags);
   }
+  Own<AsyncCapabilityStream> wrapUnixSocketFd(Fd fd, uint flags = 0) override {
+    return heap<AsyncStreamFd>(eventPort, fd, flags);
+  }
   Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
       int fd, const struct sockaddr* addr, uint addrlen, uint flags = 0) override {
     // Unfortunately connect() doesn't fit the mold of KJ_NONBLOCKING_SYSCALL, since it indicates
@@ -1372,6 +1481,19 @@ public:
     return TwoWayPipe { {
       lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS),
       lowLevel.wrapSocketFd(fds[1], NEW_FD_FLAGS)
+    } };
+  }
+
+  CapabilityPipe newCapabilityPipe() override {
+    int fds[2];
+    int type = SOCK_STREAM;
+#if __linux__ && !__BIONIC__
+    type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
+#endif
+    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    return CapabilityPipe { {
+      lowLevel.wrapUnixSocketFd(fds[0], NEW_FD_FLAGS),
+      lowLevel.wrapUnixSocketFd(fds[1], NEW_FD_FLAGS)
     } };
   }
 
