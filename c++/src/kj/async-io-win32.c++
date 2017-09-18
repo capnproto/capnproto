@@ -149,9 +149,28 @@ int win32Socketpair(SOCKET socks[2]) {
     if (connect(socks[0], &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
       break;
 
+  retryAccept:
     socks[1] = accept(listener, NULL, NULL);
     if (socks[1] == -1)
       break;
+
+    // Verify that the client is actually us and not someone else who raced to connect first.
+    // (This check added by Kenton for security.)
+    union {
+      struct sockaddr_in inaddr;
+      struct sockaddr addr;
+    } b, c;
+    socklen_t bAddrlen = sizeof(b.inaddr);
+    socklen_t cAddrlen = sizeof(b.inaddr);
+    if (getpeername(socks[1], &b.addr, &bAddrlen) == SOCKET_ERROR)
+      break;
+    if (getsockname(socks[0], &c.addr, &cAddrlen) == SOCKET_ERROR)
+      break;
+    if (bAddrlen != cAddrlen || memcmp(&b.addr, &c.addr, bAddrlen) != 0) {
+      // Someone raced to connect first. Ignore.
+      closesocket(socks[1]);
+      goto retryAccept;
+    }
 
     closesocket(listener);
     return 0;
