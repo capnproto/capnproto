@@ -202,6 +202,11 @@ typedef unsigned char byte;
 // TODO(msvc): Again, here, MSVC prefers a prefix, __declspec(deprecated).
 #endif
 
+#if KJ_TESTING_KJ  // defined in KJ's own unit tests; others should not define this
+#undef KJ_DEPRECATED
+#define KJ_DEPRECATED(reason)
+#endif
+
 namespace _ {  // private
 
 KJ_NORETURN(void inlineRequireFailure(

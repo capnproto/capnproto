@@ -157,7 +157,7 @@ TEST(Mutex, When) {
       threads.add(kj::heap<kj::Thread>([i,&value]() {
         if (i % 2 == 0) delay();
         uint m = value.when([i](const uint& n) { return n == i; },
-            [i](uint& n) { return n++; });
+            [](uint& n) { return n++; });
         KJ_ASSERT(m == i);
       }));
     }

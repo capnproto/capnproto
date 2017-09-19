@@ -1759,7 +1759,7 @@ public:
     });
 
     if (overshot) {
-      promise = promise.then([this,amount,&input](uint64_t actual) -> kj::Promise<uint64_t> {
+      promise = promise.then([amount,&input](uint64_t actual) -> kj::Promise<uint64_t> {
         if (actual == amount) {
           // We read exactly the amount expected. In order to detect an overshoot, we have to
           // try reading one more byte. Ugh.

@@ -99,7 +99,7 @@ public:
   // Connect to the given vat and return its bootstrap interface.
 
   Capability::Client restore(typename VatId::Reader hostId, AnyPointer::Reader objectId)
-      KJ_DEPRECATED("Please transition to using a bootstrap interface instead.");
+      CAPNP_DEPRECATED("Please transition to using a bootstrap interface instead.");
   // ** DEPRECATED **
   //
   // Restores the given SturdyRef from the network and return the capability representing it.
@@ -196,7 +196,7 @@ template <typename VatId, typename LocalSturdyRefObjectId,
 RpcSystem<VatId> makeRpcServer(
     VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
     SturdyRefRestorer<LocalSturdyRefObjectId>& restorer)
-    KJ_DEPRECATED("Please transition to using a bootstrap interface instead.");
+    CAPNP_DEPRECATED("Please transition to using a bootstrap interface instead.");
 // ** DEPRECATED **
 //
 // Create an RPC server which exports multiple main interfaces by object ID. The `restorer` object
@@ -254,9 +254,8 @@ class SturdyRefRestorer: public _::SturdyRefRestorerBase {
   //   string names.
 
 public:
-  virtual Capability::Client restore(typename SturdyRefObjectId::Reader ref)
-      KJ_DEPRECATED(
-          "Please transition to using bootstrap interfaces instead of SturdyRefRestorer.") = 0;
+  virtual Capability::Client restore(typename SturdyRefObjectId::Reader ref) CAPNP_DEPRECATED(
+      "Please transition to using bootstrap interfaces instead of SturdyRefRestorer.") = 0;
   // Restore the given object, returning a capability representing it.
 
 private:

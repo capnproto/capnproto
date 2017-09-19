@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#define CAPNP_TESTING_CAPNP 1
+
 #include "schema-loader.h"
 #include <kj/compat/gtest.h>
 #include "test-util.h"

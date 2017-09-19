@@ -51,6 +51,12 @@ namespace capnp {
 #define CAPNP_LITE 0
 #endif
 
+#if CAPNP_TESTING_CAPNP  // defined in Cap'n Proto's own unit tests; others should not define this
+#define CAPNP_DEPRECATED(reason)
+#else
+#define CAPNP_DEPRECATED KJ_DEPRECATED
+#endif
+
 typedef unsigned int uint;
 
 struct Void {

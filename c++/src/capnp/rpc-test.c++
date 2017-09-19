@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#define CAPNP_TESTING_CAPNP 1
+
 #include "rpc.h"
 #include "test-util.h"
 #include "schema.h"
