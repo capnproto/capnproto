@@ -2355,6 +2355,344 @@ KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
 
 // -----------------------------------------------------------------------------
 
+// TODO(now): Test NetworkAddressHttpClient:
+// - Serial requests open only one connection.
+// - Parallel requests open multiple connections.
+// - Connections time out.
+
+class CountingIoStream final: public kj::AsyncIoStream {
+  // An AsyncIoStream which waits for a promise to resolve then forwards all calls to the promised
+  // stream.
+  //
+  // TODO(cleanup): Make this more broadly available.
+
+public:
+  CountingIoStream(kj::Own<kj::AsyncIoStream> inner, uint& count)
+      : inner(kj::mv(inner)), count(count) {}
+  ~CountingIoStream() noexcept(false) {
+    --count;
+  }
+
+  kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return inner->read(buffer, minBytes, maxBytes);
+  }
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return inner->tryRead(buffer, minBytes, maxBytes);
+  }
+  kj::Maybe<uint64_t> tryGetLength() override {
+    return inner->tryGetLength();;
+  }
+  kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
+    return inner->pumpTo(output, amount);
+  }
+  kj::Promise<void> write(const void* buffer, size_t size) override {
+    return inner->write(buffer, size);
+  }
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    return inner->write(pieces);
+  }
+  kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
+      kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
+    return inner->tryPumpFrom(input, amount);
+  }
+  void shutdownWrite() override {
+    return inner->shutdownWrite();
+  }
+  void abortRead() override {
+    return inner->abortRead();
+  }
+
+public:
+  kj::Own<AsyncIoStream> inner;
+  uint& count;
+};
+
+class CountingNetworkAddress final: public kj::NetworkAddress {
+public:
+  CountingNetworkAddress(kj::NetworkAddress& inner, uint& count)
+      : inner(inner), count(count), addrCount(ownAddrCount) {}
+  CountingNetworkAddress(kj::Own<kj::NetworkAddress> inner, uint& count, uint& addrCount)
+      : inner(*inner), ownInner(kj::mv(inner)), count(count), addrCount(addrCount) {}
+  ~CountingNetworkAddress() noexcept(false) {
+    --addrCount;
+  }
+
+  kj::Promise<kj::Own<kj::AsyncIoStream>> connect() override {
+    ++count;
+    return inner.connect()
+        .then([this](kj::Own<kj::AsyncIoStream> stream) -> kj::Own<kj::AsyncIoStream> {
+      return kj::heap<CountingIoStream>(kj::mv(stream), count);
+    });
+  }
+
+  kj::Own<kj::ConnectionReceiver> listen() override { KJ_UNIMPLEMENTED("test"); }
+  kj::Own<kj::NetworkAddress> clone() override { KJ_UNIMPLEMENTED("test"); }
+  kj::String toString() override { KJ_UNIMPLEMENTED("test"); }
+
+private:
+  kj::NetworkAddress& inner;
+  kj::Own<kj::NetworkAddress> ownInner;
+  uint& count;
+  uint ownAddrCount = 1;
+  uint& addrCount;
+};
+
+class ConnectionCountingNetwork final: public kj::Network {
+public:
+  ConnectionCountingNetwork(kj::Network& inner, uint& count, uint& addrCount)
+      : inner(inner), count(count), addrCount(addrCount) {}
+
+  Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint = 0) override {
+    ++addrCount;
+    return inner.parseAddress(addr, portHint)
+        .then([this](Own<NetworkAddress>&& addr) -> Own<NetworkAddress> {
+      return kj::heap<CountingNetworkAddress>(kj::mv(addr), count, addrCount);
+    });
+  }
+  Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) override {
+    KJ_UNIMPLEMENTED("test");
+  }
+  Own<Network> restrictPeers(
+      kj::ArrayPtr<const kj::StringPtr> allow,
+      kj::ArrayPtr<const kj::StringPtr> deny = nullptr) override {
+    KJ_UNIMPLEMENTED("test");
+  }
+
+private:
+  kj::Network& inner;
+  uint& count;
+  uint& addrCount;
+};
+
+class DummyService final: public HttpService {
+public:
+  DummyService(HttpHeaderTable& headerTable): headerTable(headerTable) {}
+
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    KJ_ASSERT(url != "/throw");
+
+    auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
+    auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
+    auto promise = stream->write(body.begin(), body.size());
+    return promise.attach(kj::mv(stream), kj::mv(body));
+  }
+
+  kj::Promise<void> openWebSocket(
+      kj::StringPtr url, const HttpHeaders& headers, WebSocketResponse& response) override {
+    auto ws = response.acceptWebSocket(HttpHeaders(headerTable));
+    auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
+    auto sendPromise = ws->send(body);
+
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+    promises.add(sendPromise.attach(kj::mv(body)));
+    promises.add(ws->receive().ignoreResult());
+    return kj::joinPromises(promises.finish()).attach(kj::mv(ws));
+  }
+
+private:
+  HttpHeaderTable& headerTable;
+};
+
+KJ_TEST("HttpClient connection management") {
+  auto io = kj::setupAsyncIo();
+
+  kj::TimerImpl serverTimer(kj::origin<kj::TimePoint>());
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable headerTable;
+
+  auto listener = io.provider->getNetwork().parseAddress("localhost", 0)
+      .wait(io.waitScope)->listen();
+  DummyService service(headerTable);
+  HttpServerSettings serverSettings;
+  HttpServer server(serverTimer, headerTable, service, serverSettings);
+  auto listenTask = server.listenHttp(*listener);
+
+  auto addr = io.provider->getNetwork().parseAddress("localhost", listener->getPort())
+      .wait(io.waitScope);
+  uint count = 0;
+  CountingNetworkAddress countingAddr(*addr, count);
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  auto client = newHttpClient(clientTimer, headerTable, countingAddr, clientSettings);
+
+  KJ_EXPECT(count == 0);
+
+  uint i = 0;
+  auto doRequest = [&]() {
+    uint n = i++;
+    return client->request(HttpMethod::GET, kj::str("/", n), HttpHeaders(headerTable)).response
+        .then([](HttpClient::Response&& response) {
+      auto promise = response.body->readAllText();
+      return promise.attach(kj::mv(response.body));
+    }).then([n](kj::String body) {
+      KJ_EXPECT(body == kj::str("null:/", n));
+    });
+  };
+
+  // We can do several requests in a row and only have one connection.
+  doRequest().wait(io.waitScope);
+  doRequest().wait(io.waitScope);
+  doRequest().wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+
+  // But if we do two in parallel, we'll end up with two connections.
+  auto req1 = doRequest();
+  auto req2 = doRequest();
+  req1.wait(io.waitScope);
+  req2.wait(io.waitScope);
+  KJ_EXPECT(count == 2);
+
+  // Advance time for half the timeout, then exercise one of the connections.
+  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout / 2);
+  doRequest().wait(io.waitScope);
+  doRequest().wait(io.waitScope);
+  io.waitScope.poll();
+  KJ_EXPECT(count == 2);
+
+  // Advance time past when the other connection should time out. It should be dropped.
+  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout * 3 / 4);
+  io.waitScope.poll();
+  KJ_EXPECT(count == 1);
+
+  // Wait for the other to drop.
+  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout / 2);
+  io.waitScope.poll();
+  KJ_EXPECT(count == 0);
+
+  // New request creates a new connection again.
+  doRequest().wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+
+  // WebSocket connections are not reused.
+  client->openWebSocket(kj::str("/websocket"), HttpHeaders(headerTable))
+      .wait(io.waitScope);
+  KJ_EXPECT(count == 0);
+
+  // Errored connections are not reused.
+  doRequest().wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+  client->request(HttpMethod::GET, kj::str("/throw"), HttpHeaders(headerTable)).response
+      .wait(io.waitScope);
+  KJ_EXPECT(count == 0);
+
+  // If the server times out the connection, we figure it out on the client.
+  doRequest().wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+  serverTimer.advanceTo(serverTimer.now() + serverSettings.pipelineTimeout * 2);
+  io.waitScope.poll();
+  KJ_EXPECT(count == 0);
+
+  // Can still make requests.
+  doRequest().wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+}
+
+KJ_TEST("HttpClient multi host") {
+  auto io = kj::setupAsyncIo();
+
+  kj::TimerImpl serverTimer(kj::origin<kj::TimePoint>());
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable headerTable;
+
+  auto listener1 = io.provider->getNetwork().parseAddress("localhost", 0)
+      .wait(io.waitScope)->listen();
+  auto listener2 = io.provider->getNetwork().parseAddress("localhost", 0)
+      .wait(io.waitScope)->listen();
+  DummyService service(headerTable);
+  HttpServer server(serverTimer, headerTable, service);
+  auto listenTask1 = server.listenHttp(*listener1);
+  auto listenTask2 = server.listenHttp(*listener2);
+
+  uint count = 0, addrCount = 0;
+  uint tlsCount = 0, tlsAddrCount = 0;
+  ConnectionCountingNetwork countingNetwork(io.provider->getNetwork(), count, addrCount);
+  ConnectionCountingNetwork countingTlsNetwork(io.provider->getNetwork(), tlsCount, tlsAddrCount);
+
+  HttpClientSettings clientSettings;
+  auto client = newHttpClient(clientTimer, headerTable,
+      countingNetwork, countingTlsNetwork, clientSettings);
+
+  KJ_EXPECT(count == 0);
+
+  uint i = 0;
+  auto doRequest = [&](bool tls, uint port) {
+    uint n = i++;
+    return client->request(HttpMethod::GET,
+        kj::str((tls ? "https://localhost:" : "http://localhost:"), port, '/', n),
+                HttpHeaders(headerTable)).response
+        .then([](HttpClient::Response&& response) {
+      auto promise = response.body->readAllText();
+      return promise.attach(kj::mv(response.body));
+    }).then([n, port](kj::String body) {
+      KJ_EXPECT(body == kj::str("localhost:", port, ":/", n), body, port, n);
+    });
+  };
+
+  uint port1 = listener1->getPort();
+  uint port2 = listener2->getPort();
+
+  // We can do several requests in a row to the same host and only have one connection.
+  doRequest(false, port1).wait(io.waitScope);
+  doRequest(false, port1).wait(io.waitScope);
+  doRequest(false, port1).wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+  KJ_EXPECT(tlsCount == 0);
+  KJ_EXPECT(addrCount == 1);
+  KJ_EXPECT(tlsAddrCount == 0);
+
+  // Request a different host, and now we have two connections.
+  doRequest(false, port2).wait(io.waitScope);
+  KJ_EXPECT(count == 2);
+  KJ_EXPECT(tlsCount == 0);
+  KJ_EXPECT(addrCount == 2);
+  KJ_EXPECT(tlsAddrCount == 0);
+
+  // Try TLS.
+  doRequest(true, port1).wait(io.waitScope);
+  KJ_EXPECT(count == 2);
+  KJ_EXPECT(tlsCount == 1);
+  KJ_EXPECT(addrCount == 2);
+  KJ_EXPECT(tlsAddrCount == 1);
+
+  // Try first host again, no change in connection count.
+  doRequest(false, port1).wait(io.waitScope);
+  KJ_EXPECT(count == 2);
+  KJ_EXPECT(tlsCount == 1);
+  KJ_EXPECT(addrCount == 2);
+  KJ_EXPECT(tlsAddrCount == 1);
+
+  // Multipre requests in parallel forces more connections to that host.
+  auto promise1 = doRequest(false, port1);
+  auto promise2 = doRequest(false, port1);
+  promise1.wait(io.waitScope);
+  promise2.wait(io.waitScope);
+  KJ_EXPECT(count == 3);
+  KJ_EXPECT(tlsCount == 1);
+  KJ_EXPECT(addrCount == 2);
+  KJ_EXPECT(tlsAddrCount == 1);
+
+  // Let everything expire.
+  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout * 2);
+  kj::Promise<void>(kj::NEVER_DONE).poll(io.waitScope);
+  KJ_EXPECT(count == 0);
+  KJ_EXPECT(tlsCount == 0);
+  KJ_EXPECT(addrCount == 0);
+  KJ_EXPECT(tlsAddrCount == 0);
+
+  // We can still request those hosts again.
+  doRequest(false, port1).wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+  KJ_EXPECT(tlsCount == 0);
+  KJ_EXPECT(addrCount == 1);
+  KJ_EXPECT(tlsAddrCount == 0);
+}
+
+// -----------------------------------------------------------------------------
+
 KJ_TEST("HttpClient to capnproto.org") {
   auto io = kj::setupAsyncIo();
 
