@@ -2798,7 +2798,7 @@ public:
   kj::Maybe<kj::Own<AsyncOutputStream>> stream;
 };
 
-class AttachmentOutputStream: public kj::AsyncOutputStream {
+class AttachmentOutputStream final: public kj::AsyncOutputStream {
   // An AsyncOutputStream which also owns some separate object, released when the stream is freed.
 
 public:
@@ -2821,7 +2821,7 @@ private:
   kj::Own<kj::Refcounted> attachment;
 };
 
-class AttachmentInputStream: public kj::AsyncInputStream {
+class AttachmentInputStream final: public kj::AsyncInputStream {
   // An AsyncInputStream which also owns some separate object, released when the stream is freed.
 
 public:
@@ -2921,7 +2921,7 @@ private:
 
   std::deque<AvailableClient> availableClients;
 
-  struct RefcountedClient: public kj::Refcounted {
+  struct RefcountedClient final: public kj::Refcounted {
     RefcountedClient(NetworkAddressHttpClient& parent, kj::Own<HttpClientImpl> client)
         : parent(parent), client(kj::mv(client)) {
       ++parent.activeConnectionCount;
