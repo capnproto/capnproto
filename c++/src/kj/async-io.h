@@ -37,11 +37,12 @@ namespace kj {
 
 #if _WIN32
 class Win32EventPort;
+class AutoCloseHandle;
 #else
 class UnixEventPort;
-class AutoCloseFd;
 #endif
 
+class AutoCloseFd;
 class NetworkAddress;
 class AsyncOutputStream;
 class AsyncIoStream;
