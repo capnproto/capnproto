@@ -166,7 +166,7 @@ typedef unsigned char byte;
 #define KJ_NOINLINE __attribute__((noinline))
 #endif
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !__clang__
 #define KJ_NORETURN(prototype) __declspec(noreturn) prototype
 #define KJ_UNUSED
 #define KJ_WARN_UNUSED_RESULT
@@ -635,7 +635,7 @@ struct ThrowOverflow {
   void operator()() const;
 };
 
-#if __GNUC__
+#if __GNUC__ || __clang__
 inline constexpr float inf() { return __builtin_huge_valf(); }
 inline constexpr float nan() { return __builtin_nanf(""); }
 

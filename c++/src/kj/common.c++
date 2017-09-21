@@ -49,7 +49,7 @@ void unreachable() {
 
 }  // namespace _ (private)
 
-#if _MSC_VER
+#if _MSC_VER && !__clang__
 
 float nan() { return std::numeric_limits<float>::quiet_NaN(); }
 
