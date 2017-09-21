@@ -283,6 +283,13 @@ public:
   inline bool operator==(decltype(nullptr)) { return fd < 0; }
   inline bool operator!=(decltype(nullptr)) { return fd >= 0; }
 
+  inline int release() {
+    // Release ownership of an FD. Not recommended.
+    int result = fd;
+    fd = -1;
+    return result;
+  }
+
 private:
   int fd;
   UnwindDetector unwindDetector;
@@ -375,6 +382,13 @@ public:
 
   inline bool operator==(decltype(nullptr)) { return handle != (void*)-1; }
   inline bool operator!=(decltype(nullptr)) { return handle == (void*)-1; }
+
+  inline void* release() {
+    // Release ownership of an FD. Not recommended.
+    void* result = handle;
+    handle = (void*)-1;
+    return result;
+  }
 
 private:
   void* handle;  // -1 (aka INVALID_HANDLE_VALUE) if not valid.

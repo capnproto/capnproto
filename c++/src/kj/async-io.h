@@ -512,16 +512,11 @@ class LowLevelAsyncIoProvider {
   // Different implementations of this interface might work on top of different event handling
   // primitives, such as poll vs. epoll vs. kqueue vs. some higher-level event library.
   //
-  // On Windows, this interface can be used to import native HANDLEs into the async framework.
+  // On Windows, this interface can be used to import native SOCKETs into the async framework.
   // Different implementations of this interface might work on top of different event handling
   // primitives, such as I/O completion ports vs. completion routines.
-  //
-  // TODO(port):  Actually implement Windows support.
 
 public:
-  // ---------------------------------------------------------------------------
-  // Unix-specific stuff
-
   enum Flags {
     // Flags controlling how to wrap a file descriptor.
 
@@ -552,11 +547,13 @@ public:
 
 #if _WIN32
   typedef uintptr_t Fd;
+  typedef AutoCloseHandle OwnFd;
   // On Windows, the `fd` parameter to each of these methods must be a SOCKET, and must have the
   // flag WSA_FLAG_OVERLAPPED (which socket() uses by default, but WSASocket() wants you to specify
   // explicitly).
 #else
   typedef int Fd;
+  typedef AutoCloseFd OwnFd;
   // On Unix, any arbitrary file descriptor is supported.
 #endif
 
@@ -619,6 +616,22 @@ public:
   //
   // This timer is not affected by changes to the system date.  It is unspecified whether the timer
   // continues to count while the system is suspended.
+
+  Own<AsyncInputStream> wrapInputFd(OwnFd fd, uint flags = 0);
+  Own<AsyncOutputStream> wrapOutputFd(OwnFd fd, uint flags = 0);
+  Own<AsyncIoStream> wrapSocketFd(OwnFd fd, uint flags = 0);
+#if !_WIN32
+  Own<AsyncCapabilityStream> wrapUnixSocketFd(OwnFd fd, uint flags = 0);
+#endif
+  Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
+      OwnFd fd, const struct sockaddr* addr, uint addrlen, uint flags = 0);
+  Own<ConnectionReceiver> wrapListenSocketFd(
+      OwnFd fd, NetworkFilter& filter, uint flags = 0);
+  Own<ConnectionReceiver> wrapListenSocketFd(OwnFd fd, uint flags = 0);
+  Own<DatagramPort> wrapDatagramSocketFd(OwnFd fd, NetworkFilter& filter, uint flags = 0);
+  Own<DatagramPort> wrapDatagramSocketFd(OwnFd fd, uint flags = 0);
+  // Convenience wrappers which transfer ownership via AutoCloseFd (Unix) or AutoCloseHandle
+  // (Windows). TAKE_OWNERSHIP will be implicitly added to `flags`.
 };
 
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);

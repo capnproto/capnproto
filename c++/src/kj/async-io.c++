@@ -245,6 +245,40 @@ CapabilityPipe AsyncIoProvider::newCapabilityPipe() {
   KJ_UNIMPLEMENTED("Capability pipes not implemented.");
 }
 
+Own<AsyncInputStream> LowLevelAsyncIoProvider::wrapInputFd(OwnFd fd, uint flags) {
+  return wrapInputFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+Own<AsyncOutputStream> LowLevelAsyncIoProvider::wrapOutputFd(OwnFd fd, uint flags) {
+  return wrapOutputFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+Own<AsyncIoStream> LowLevelAsyncIoProvider::wrapSocketFd(OwnFd fd, uint flags) {
+  return wrapSocketFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+#if !_WIN32
+Own<AsyncCapabilityStream> LowLevelAsyncIoProvider::wrapUnixSocketFd(OwnFd fd, uint flags) {
+  return wrapUnixSocketFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+#endif
+Promise<Own<AsyncIoStream>> LowLevelAsyncIoProvider::wrapConnectingSocketFd(
+    OwnFd fd, const struct sockaddr* addr, uint addrlen, uint flags) {
+  return wrapConnectingSocketFd(reinterpret_cast<Fd>(fd.release()), addr, addrlen,
+                                flags | TAKE_OWNERSHIP);
+}
+Own<ConnectionReceiver> LowLevelAsyncIoProvider::wrapListenSocketFd(
+    OwnFd fd, NetworkFilter& filter, uint flags) {
+  return wrapListenSocketFd(reinterpret_cast<Fd>(fd.release()), filter, flags | TAKE_OWNERSHIP);
+}
+Own<ConnectionReceiver> LowLevelAsyncIoProvider::wrapListenSocketFd(OwnFd fd, uint flags) {
+  return wrapListenSocketFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(
+    OwnFd fd, NetworkFilter& filter, uint flags) {
+  return wrapDatagramSocketFd(reinterpret_cast<Fd>(fd.release()), filter, flags | TAKE_OWNERSHIP);
+}
+Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(OwnFd fd, uint flags) {
+  return wrapDatagramSocketFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+
 namespace {
 
 class DummyNetworkFilter: public kj::LowLevelAsyncIoProvider::NetworkFilter {
