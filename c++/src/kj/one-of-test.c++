@@ -133,6 +133,22 @@ TEST(OneOf, Switch) {
       }
     }
   }
+
+  {
+    // At one time this failed to compile.
+    const auto& constVar = var;
+    KJ_SWITCH_ONEOF(constVar) {
+      KJ_CASE_ONEOF(i, int) {
+        KJ_FAIL_ASSERT("expected char*, got int", i);
+      }
+      KJ_CASE_ONEOF(s, const char*) {
+        KJ_EXPECT(kj::StringPtr(s) == "foo");
+      }
+      KJ_CASE_ONEOF(n, float) {
+        KJ_FAIL_ASSERT("expected char*, got float", n);
+      }
+    }
+  }
 }
 
 }  // namespace kj

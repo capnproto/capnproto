@@ -128,7 +128,7 @@ public:
 
   typedef _::Variants<sizeof...(Variants)> Tag;
 
-  Tag which() {
+  Tag which() const {
     KJ_IREQUIRE(tag != 0, "Can't KJ_SWITCH_ONEOF() on uninitialized value.");
     return static_cast<Tag>(tag - 1);
   }
