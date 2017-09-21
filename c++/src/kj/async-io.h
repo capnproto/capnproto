@@ -683,7 +683,7 @@ AsyncIoContext setupAsyncIo();
 // =======================================================================================
 // Convenience adapters.
 
-class CapabilityStreamConnectionReceiver: public ConnectionReceiver {
+class CapabilityStreamConnectionReceiver final: public ConnectionReceiver {
   // Trivial wrapper which allows an AsyncCapabilityStream to act as a ConnectionReceiver. accept()
   // calls receiveStream().
 
@@ -698,7 +698,7 @@ private:
   AsyncCapabilityStream& inner;
 };
 
-class CapabilityStreamNetworkAddress: public NetworkAddress {
+class CapabilityStreamNetworkAddress final: public NetworkAddress {
   // Trivial wrapper which allows an AsyncCapabilityStream to act as a NetworkAddress.
   //
   // connect() is implemented by calling provider.newCapabilityPipe(), sending one end over the
