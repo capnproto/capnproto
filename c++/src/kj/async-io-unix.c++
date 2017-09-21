@@ -45,25 +45,35 @@
 #include <set>
 #include <poll.h>
 #include <limits.h>
+#include <sys/ioctl.h>
 
 namespace kj {
 
 namespace {
 
 void setNonblocking(int fd) {
+#ifdef FIONBIO
+  int opt = 1;
+  KJ_SYSCALL(ioctl(fd, FIONBIO, &opt));
+#else
   int flags;
   KJ_SYSCALL(flags = fcntl(fd, F_GETFL));
   if ((flags & O_NONBLOCK) == 0) {
     KJ_SYSCALL(fcntl(fd, F_SETFL, flags | O_NONBLOCK));
   }
+#endif
 }
 
 void setCloseOnExec(int fd) {
+#ifdef FIOCLEX
+  KJ_SYSCALL(ioctl(fd, FIOCLEX));
+#else
   int flags;
   KJ_SYSCALL(flags = fcntl(fd, F_GETFD));
   if ((flags & FD_CLOEXEC) == 0) {
     KJ_SYSCALL(fcntl(fd, F_SETFD, flags | FD_CLOEXEC));
   }
+#endif
 }
 
 static constexpr uint NEW_FD_FLAGS =
