@@ -162,40 +162,31 @@ public:
   }
 
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    readQueue = readQueue.addBranch().then([this,buffer,minBytes,maxBytes](size_t) {
-      return tryReadInternal(buffer, minBytes, maxBytes, 0);
-    }).fork();
-    return readQueue.addBranch();
+    return tryReadInternal(buffer, minBytes, maxBytes, 0);
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
-    writeQueue = writeQueue.addBranch().then([this,buffer,size]() {
-      return writeInternal(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size), nullptr);
-    }).fork();
-    return writeQueue.addBranch();
+    return writeInternal(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size), nullptr);
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    if (pieces.size() > 0) {
-      writeQueue = writeQueue.addBranch().then([this,pieces]() {
-        return writeInternal(pieces[0], pieces.slice(1, pieces.size()));
-      }).fork();
-    }
-    return writeQueue.addBranch();
+    return writeInternal(pieces[0], pieces.slice(1, pieces.size()));
   }
 
   void shutdownWrite() override {
+    KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
+
     // TODO(soon): shutdownWrite() is problematic because it doesn't return a promise. It was
     //   designed to assume that it would only be called after all writes are finished and that
     //   there was no reason to block at that point, but SSL sessions don't fit this since they
     //   actually have to send a shutdown message.
-    writeQueue = writeQueue.addBranch().then([this]() {
-      sslCall([this]() {
-        // The first SSL_shutdown() call is expected to return 0 and may flag a misleading error.
-        int result = SSL_shutdown(ssl);
-        return result == 0 ? 1 : result;
-      });
-    }).fork();
+    shutdownTask = sslCall([this]() {
+      // The first SSL_shutdown() call is expected to return 0 and may flag a misleading error.
+      int result = SSL_shutdown(ssl);
+      return result == 0 ? 1 : result;
+    }).ignoreResult().eagerlyEvaluate([](kj::Exception&& e) {
+      KJ_LOG(ERROR, e);
+    });
   }
 
   void abortRead() override {
@@ -222,8 +213,7 @@ private:
   kj::Own<kj::AsyncIoStream> ownInner;
 
   bool disconnected = false;
-  kj::ForkedPromise<size_t> readQueue = kj::Promise<size_t>(size_t(0)).fork();
-  kj::ForkedPromise<void> writeQueue = kj::Promise<void>(kj::READY_NOW).fork();
+  kj::Maybe<kj::Promise<void>> shutdownTask;
 
   ReadyInputStreamWrapper readBuffer;
   ReadyOutputStreamWrapper writeBuffer;
@@ -245,6 +235,8 @@ private:
 
   Promise<void> writeInternal(kj::ArrayPtr<const byte> first,
                               kj::ArrayPtr<const kj::ArrayPtr<const byte>> rest) {
+    KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
+
     return sslCall([this,first]() { return SSL_write(ssl, first.begin(), first.size()); })
         .then([this,first,rest](size_t n) -> kj::Promise<void> {
       if (n < first.size()) {
