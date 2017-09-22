@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#define KJ_TESTING_KJ 1
+
 #include "http.h"
 #include <kj/debug.h>
 #include <kj/test.h>
@@ -2468,8 +2470,10 @@ public:
 
     auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
     auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
-    auto promise = stream->write(body.begin(), body.size());
-    return promise.attach(kj::mv(stream), kj::mv(body));
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+    promises.add(stream->write(body.begin(), body.size()));
+    promises.add(requestBody.readAllBytes().ignoreResult());
+    return kj::joinPromises(promises.finish()).attach(kj::mv(stream), kj::mv(body));
   }
 
   kj::Promise<void> openWebSocket(
@@ -2539,6 +2543,17 @@ KJ_TEST("HttpClient connection management") {
   req2.wait(io.waitScope);
   KJ_EXPECT(count == 2);
 
+  // We can reuse after a POST, provided we write the whole POST body properly.
+  {
+    auto req = client->request(
+        HttpMethod::POST, kj::str("/foo"), HttpHeaders(headerTable), size_t(6));
+    req.body->write("foobar", 6).wait(io.waitScope);
+    req.response.wait(io.waitScope).body->readAllBytes().wait(io.waitScope);
+  }
+  KJ_EXPECT(count == 2);
+  doRequest().wait(io.waitScope);
+  KJ_EXPECT(count == 2);
+
   // Advance time for half the timeout, then exercise one of the connections.
   clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout / 2);
   doRequest().wait(io.waitScope);
@@ -2569,7 +2584,21 @@ KJ_TEST("HttpClient connection management") {
   doRequest().wait(io.waitScope);
   KJ_EXPECT(count == 1);
   client->request(HttpMethod::GET, kj::str("/throw"), HttpHeaders(headerTable)).response
+      .wait(io.waitScope).body->readAllBytes().wait(io.waitScope);
+  KJ_EXPECT(count == 0);
+
+  // Connections where we failed to read the full response body are not reused.
+  doRequest().wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+  client->request(HttpMethod::GET, kj::str("/foo"), HttpHeaders(headerTable)).response
       .wait(io.waitScope);
+  KJ_EXPECT(count == 0);
+
+  // Connections where we failed to write the full request body are not reused.
+  doRequest().wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+  client->request(HttpMethod::POST, kj::str("/foo"), HttpHeaders(headerTable), size_t(6)).response
+      .wait(io.waitScope).body->readAllBytes().wait(io.waitScope);
   KJ_EXPECT(count == 0);
 
 #if !_WIN32  // TODO(soon): Figure out why this doesn't work on Windows. Probably a bug in
