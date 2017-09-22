@@ -618,19 +618,19 @@ public:
   // This timer is not affected by changes to the system date.  It is unspecified whether the timer
   // continues to count while the system is suspended.
 
-  Own<AsyncInputStream> wrapInputFd(OwnFd fd, uint flags = 0);
-  Own<AsyncOutputStream> wrapOutputFd(OwnFd fd, uint flags = 0);
-  Own<AsyncIoStream> wrapSocketFd(OwnFd fd, uint flags = 0);
+  Own<AsyncInputStream> wrapInputFd(OwnFd&& fd, uint flags = 0);
+  Own<AsyncOutputStream> wrapOutputFd(OwnFd&& fd, uint flags = 0);
+  Own<AsyncIoStream> wrapSocketFd(OwnFd&& fd, uint flags = 0);
 #if !_WIN32
-  Own<AsyncCapabilityStream> wrapUnixSocketFd(OwnFd fd, uint flags = 0);
+  Own<AsyncCapabilityStream> wrapUnixSocketFd(OwnFd&& fd, uint flags = 0);
 #endif
   Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
-      OwnFd fd, const struct sockaddr* addr, uint addrlen, uint flags = 0);
+      OwnFd&& fd, const struct sockaddr* addr, uint addrlen, uint flags = 0);
   Own<ConnectionReceiver> wrapListenSocketFd(
-      OwnFd fd, NetworkFilter& filter, uint flags = 0);
-  Own<ConnectionReceiver> wrapListenSocketFd(OwnFd fd, uint flags = 0);
-  Own<DatagramPort> wrapDatagramSocketFd(OwnFd fd, NetworkFilter& filter, uint flags = 0);
-  Own<DatagramPort> wrapDatagramSocketFd(OwnFd fd, uint flags = 0);
+      OwnFd&& fd, NetworkFilter& filter, uint flags = 0);
+  Own<ConnectionReceiver> wrapListenSocketFd(OwnFd&& fd, uint flags = 0);
+  Own<DatagramPort> wrapDatagramSocketFd(OwnFd&& fd, NetworkFilter& filter, uint flags = 0);
+  Own<DatagramPort> wrapDatagramSocketFd(OwnFd&& fd, uint flags = 0);
   // Convenience wrappers which transfer ownership via AutoCloseFd (Unix) or AutoCloseHandle
   // (Windows). TAKE_OWNERSHIP will be implicitly added to `flags`.
 };
