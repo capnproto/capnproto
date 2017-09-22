@@ -439,8 +439,14 @@ private:
     msg.msg_control = &cmsg;
     msg.msg_controllen = sizeof(cmsgSpace);
 
+#ifdef MSG_CMSG_CLOEXEC
+    int recvmsgFlags = MSG_CMSG_CLOEXEC;
+#else
+    int recvmsgFlags = 0;
+#endif
+
     ssize_t n;
-    KJ_NONBLOCKING_SYSCALL(n = recvmsg(fd, &msg, MSG_CMSG_CLOEXEC));
+    KJ_NONBLOCKING_SYSCALL(n = recvmsg(fd, &msg, recvmsgFlags));
     if (n < 0) {
       return observer.whenBecomesReadable().then([this]() {
         return tryReceiveFdImpl<T>();
@@ -464,11 +470,17 @@ private:
 
   AutoCloseFd wrapFd(int newFd, AutoCloseFd*) {
     auto result = AutoCloseFd(newFd);
+#ifndef MSG_CMSG_CLOEXEC
     setCloseOnExec(result);
+#endif
     return result;
   }
   Own<AsyncCapabilityStream> wrapFd(int newFd, Own<AsyncCapabilityStream>*) {
-    return kj::heap<AsyncStreamFd>(eventPort, newFd, LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+    return kj::heap<AsyncStreamFd>(eventPort, newFd,
+#ifdef MSG_CMSG_CLOEXEC
+        LowLevelAsyncIoProvider::ALREADY_CLOEXEC |
+#endif
+        LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
   }
 };
 
