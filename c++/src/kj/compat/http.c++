@@ -3163,8 +3163,6 @@ private:
         networkToUse = &KJ_REQUIRE_NONNULL(tlsNetwork, "this HttpClient doesn't support HTTPS");
       }
 
-      auto paf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
-
       auto promise = networkToUse->parseAddress(parsed.host, isHttps ? 443 : 80)
           .then([this](kj::Own<kj::NetworkAddress> addr) {
         return kj::heap<NetworkAddressHttpClient>(
