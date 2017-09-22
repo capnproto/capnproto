@@ -166,8 +166,8 @@ protected:
     void init(Event* newEvent);
 
     void arm();
-    // Arms the event if init() has already been called and makes future calls to init() return
-    // true.
+    // Arms the event if init() has already been called and makes future calls to init()
+    // automatically arm the event.
 
   private:
     Event* event = nullptr;

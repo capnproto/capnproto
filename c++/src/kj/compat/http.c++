@@ -2929,15 +2929,7 @@ private:
     ~RefcountedClient() noexcept(false) {
       --parent.activeConnectionCount;
       KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-        // Only return the connection to the pool if it is reusable.
-        if (client->canReuse()) {
-          parent.availableClients.push_back(AvailableClient {
-            kj::mv(client), parent.timer.now() + parent.settings.idleTimout
-          });
-        }
-
-        // Call this either way because it also signals onDrained().
-        parent.ensureTimetoutsScheduled();
+        parent.returnClientToAvailable(kj::mv(client));
       })) {
         KJ_LOG(ERROR, *exception);
       }
@@ -2964,7 +2956,15 @@ private:
     }
   }
 
-  void ensureTimetoutsScheduled() {
+  void returnClientToAvailable(kj::Own<HttpClientImpl> client) {
+    // Only return the connection to the pool if it is reusable.
+    if (client->canReuse()) {
+      availableClients.push_back(AvailableClient {
+        kj::mv(client), timer.now() + settings.idleTimout
+      });
+    }
+
+    // Call this either way because it also signals onDrained().
     if (!timeoutsScheduled) {
       timeoutsScheduled = true;
       timeoutTask = applyTimeouts();

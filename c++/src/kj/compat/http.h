@@ -572,7 +572,7 @@ struct HttpClientSettings {
   // omitted. The WebSocket protocol uses random values to avoid triggering flaws (including
   // security flaws) in certain HTTP proxy software. Specifically, entropy is used to generate the
   // `Sec-WebSocket-Key` header and to generate frame masks. If you know that there are no broken
-  // or vulnerable proxies between you and the server, you can provide an dummy entropy source that
+  // or vulnerable proxies between you and the server, you can provide a dummy entropy source that
   // doesn't generate real entropy (e.g. returning the same value every time). Otherwise, you must
   // provide a cryptographically-random entropy source.
 };

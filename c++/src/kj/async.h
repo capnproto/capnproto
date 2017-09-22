@@ -243,7 +243,7 @@ public:
   //
   // Generally, poll() is most useful in tests. Often, you may want to verify that a promise does
   // not resolve until some specific event occurs. To do so, poll() the promise before the event to
-  // verify it isn't resolved, then trigger the event, the poll() again to verify that it resolves.
+  // verify it isn't resolved, then trigger the event, then poll() again to verify that it resolves.
   // The first poll() verifies that the promise doesn't resolve early, which would otherwise be
   // hard to do deterministically. The second poll() allows you to check that the promise has
   // resolved and avoid a wait() that might deadlock in the case that it hasn't.

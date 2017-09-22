@@ -2355,16 +2355,9 @@ KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
 
 // -----------------------------------------------------------------------------
 
-// TODO(now): Test NetworkAddressHttpClient:
-// - Serial requests open only one connection.
-// - Parallel requests open multiple connections.
-// - Connections time out.
-
 class CountingIoStream final: public kj::AsyncIoStream {
-  // An AsyncIoStream which waits for a promise to resolve then forwards all calls to the promised
-  // stream.
-  //
-  // TODO(cleanup): Make this more broadly available.
+  // An AsyncIoStream wrapper which decrements a counter when destroyed (allowing us to count how
+  // many connections are open).
 
 public:
   CountingIoStream(kj::Own<kj::AsyncIoStream> inner, uint& count)
@@ -2668,7 +2661,7 @@ KJ_TEST("HttpClient multi host") {
   KJ_EXPECT(addrCount == 2);
   KJ_EXPECT(tlsAddrCount == 1);
 
-  // Multipre requests in parallel forces more connections to that host.
+  // Multiple requests in parallel forces more connections to that host.
   auto promise1 = doRequest(false, port1);
   auto promise2 = doRequest(false, port1);
   promise1.wait(io.waitScope);
@@ -2680,7 +2673,7 @@ KJ_TEST("HttpClient multi host") {
 
   // Let everything expire.
   clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout * 2);
-  kj::Promise<void>(kj::NEVER_DONE).poll(io.waitScope);
+  io.waitScope.poll();
   KJ_EXPECT(count == 0);
   KJ_EXPECT(tlsCount == 0);
   KJ_EXPECT(addrCount == 0);
