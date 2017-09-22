@@ -2866,6 +2866,36 @@ private:
   kj::Own<kj::AsyncInputStream> inner;
 };
 
+class AttachmentWebSocket final: public WebSocket {
+  // An WebSocket which also owns some separate object, released when the stream is freed.
+
+public:
+  AttachmentWebSocket(kj::Own<WebSocket> inner, kj::Own<kj::Refcounted> attachment)
+      : attachment(kj::mv(attachment)), inner(kj::mv(inner)) {}
+
+  kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+    return inner->send(message);
+  }
+  kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+    return inner->send(message);
+  }
+  kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+    return inner->close(code, reason);
+  }
+  kj::Promise<void> disconnect() override {
+    return inner->disconnect();
+  }
+  kj::Promise<Message> receive() override {
+    return inner->receive();
+  }
+
+private:
+  // Note that it's important that `inner` be destroyed first since it typically depends on
+  // `attachment`.
+  kj::Own<kj::Refcounted> attachment;
+  kj::Own<WebSocket> inner;
+};
+
 class NetworkAddressHttpClient final: public HttpClient {
 public:
   NetworkAddressHttpClient(kj::Timer& timer, HttpHeaderTable& responseHeaderTable,
@@ -2912,8 +2942,13 @@ public:
               kj::heap<AttachmentInputStream>(kj::mv(body), kj::mv(refcounted)));
         }
         KJ_CASE_ONEOF(ws, kj::Own<WebSocket>) {
-          // We actually don't need to attach the HttpClient to the WebSocket -- our HttpClient
-          // implementation transfers ownership of the connection into the WebSocket.
+          // The only reason we need to attach the client to the WebSocket is because otherwise
+          // the response headers will be deleted prematurely. Otherwise, the WebSocket has taken
+          // ownership of the connection.
+          //
+          // TODO(perf): Maybe we could transfer ownership of the response headers specifically?
+          response.webSocketOrBody.init<kj::Own<WebSocket>>(
+              kj::heap<AttachmentWebSocket>(kj::mv(ws), kj::mv(refcounted)));
         }
       }
       return kj::mv(response);
