@@ -1026,6 +1026,10 @@ public:
       : inner(inner), headerBuffer(kj::heapArray<char>(MIN_BUFFER)), headers(table) {
   }
 
+  bool canReuse() {
+    return !broken;
+  }
+
   // ---------------------------------------------------------------------------
   // Stream locking: While an entity-body is being read, the body stream "locks" the underlying
   // HTTP stream. Once the entity-body is complete, we can read the next pipelined message.
@@ -1041,9 +1045,10 @@ public:
     // Called when a body input stream was destroyed without reading to the end.
 
     KJ_REQUIRE_NONNULL(onMessageDone)->reject(KJ_EXCEPTION(FAILED,
-        "client did not finish reading previous HTTP response body",
-        "can't read next pipelined response"));
+        "application did not finish reading previous HTTP response body",
+        "can't read next pipelined request/response"));
     onMessageDone = nullptr;
+    broken = true;
   }
 
   // ---------------------------------------------------------------------------
@@ -1217,6 +1222,9 @@ private:
   // If true, the next await should expect to start with a spurrious '\n' or '\r\n'. This happens
   // as a side-effect of HTTP chunked encoding, where such a newline is added to the end of each
   // chunk, for no good reason.
+
+  bool broken = false;
+  // Becomes true if the caller failed to read the whole entity-body before closing the stream.
 
   kj::Promise<void> messageReadQueue = kj::READY_NOW;
 
@@ -1612,6 +1620,10 @@ class HttpOutputStream {
 public:
   HttpOutputStream(AsyncOutputStream& inner): inner(inner) {}
 
+  bool canReuse() {
+    return !inBody && !broken;
+  }
+
   void writeHeaders(String content) {
     // Writes some header content and begins a new entity body.
 
@@ -1671,6 +1683,7 @@ public:
     // Called if the application failed to write all expected body bytes.
     KJ_REQUIRE(inBody) { return; }
     inBody = false;
+    broken = true;
 
     writeQueue = writeQueue.then([]() -> kj::Promise<void> {
       return KJ_EXCEPTION(FAILED,
@@ -1688,6 +1701,7 @@ private:
   AsyncOutputStream& inner;
   kj::Promise<void> writeQueue = kj::READY_NOW;
   bool inBody = false;
+  bool broken = false;
 
   void queueWrite(kj::String content) {
     writeQueue = writeQueue.then(kj::mvCapture(content, [this](kj::String&& content) {
@@ -2431,9 +2445,9 @@ public:
         settings(kj::mv(settings)) {}
 
   bool canReuse() {
-    // Returns true if
+    // Returns true if we can reuse this HttpClient for another request.
 
-    return !upgraded && !closed;
+    return !upgraded && !closed && httpInput.canReuse() && httpOutput.canReuse();
   }
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
@@ -2803,7 +2817,7 @@ class AttachmentOutputStream final: public kj::AsyncOutputStream {
 
 public:
   AttachmentOutputStream(kj::Own<kj::AsyncOutputStream> inner, kj::Own<kj::Refcounted> attachment)
-      : inner(kj::mv(inner)), attachment(kj::mv(attachment)) {}
+      : attachment(kj::mv(attachment)), inner(kj::mv(inner)) {}
 
   kj::Promise<void> write(const void* buffer, size_t size) override {
     return inner->write(buffer, size);
@@ -2817,8 +2831,10 @@ public:
   }
 
 private:
-  kj::Own<kj::AsyncOutputStream> inner;
+  // Note that it's important that `inner` be destroyed first since it typically depends on
+  // `attachment`.
   kj::Own<kj::Refcounted> attachment;
+  kj::Own<kj::AsyncOutputStream> inner;
 };
 
 class AttachmentInputStream final: public kj::AsyncInputStream {
@@ -2826,7 +2842,7 @@ class AttachmentInputStream final: public kj::AsyncInputStream {
 
 public:
   AttachmentInputStream(kj::Own<kj::AsyncInputStream> inner, kj::Own<kj::Refcounted> attachment)
-      : inner(kj::mv(inner)), attachment(kj::mv(attachment)) {}
+      : attachment(kj::mv(attachment)), inner(kj::mv(inner)) {}
 
   kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
     return inner->read(buffer, minBytes, maxBytes);
@@ -2844,8 +2860,10 @@ public:
   }
 
 private:
-  kj::Own<kj::AsyncInputStream> inner;
+  // Note that it's important that `inner` be destroyed first since it typically depends on
+  // `attachment`.
   kj::Own<kj::Refcounted> attachment;
+  kj::Own<kj::AsyncInputStream> inner;
 };
 
 class NetworkAddressHttpClient final: public HttpClient {
