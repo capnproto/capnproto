@@ -562,26 +562,53 @@ public:
   // UNIMPLEMENTED.
 };
 
-kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Network& network,
-                                  kj::Maybe<kj::Network&> tlsNetwork = nullptr,
-                                  kj::Maybe<EntropySource&> entropySource = nullptr);
-// Creates a proxy HttpClient that connects to hosts over the given network.
+struct HttpClientSettings {
+  kj::Duration idleTimout = 5 * kj::SECONDS;
+  // For clients which automatically create new connections, any connection idle for at least this
+  // long will be closed.
+
+  kj::Maybe<EntropySource&> entropySource = nullptr;
+  // Must be provided in order to use `openWebSocket`. If you don't need WebSockets, this can be
+  // omitted. The WebSocket protocol uses random values to avoid triggering flaws (including
+  // security flaws) in certain HTTP proxy software. Specifically, entropy is used to generate the
+  // `Sec-WebSocket-Key` header and to generate frame masks. If you know that there are no broken
+  // or vulnerable proxies between you and the server, you can provide a dummy entropy source that
+  // doesn't generate real entropy (e.g. returning the same value every time). Otherwise, you must
+  // provide a cryptographically-random entropy source.
+};
+
+kj::Own<HttpClient> newHttpClient(kj::Timer& timer, HttpHeaderTable& responseHeaderTable,
+                                  kj::Network& network, kj::Maybe<kj::Network&> tlsNetwork,
+                                  HttpClientSettings settings = HttpClientSettings());
+// Creates a proxy HttpClient that connects to hosts over the given network. The URL must always
+// be an absolute URL; the host is parsed from the URL. This implementation will automatically
+// add an appropriate Host header (and convert the URL to just a path) once it has connected.
+//
+// Note that if you wish to route traffic through an HTTP proxy server rather than connect to
+// remote hosts directly, you should use the form of newHttpClient() that takes a NetworkAddress,
+// and supply the proxy's address.
 //
 // `responseHeaderTable` is used when parsing HTTP responses. Requests can use any header table.
 //
-// `tlsNetwork` is required to support HTTPS destination URLs. Otherwise, only HTTP URLs can be
+// `tlsNetwork` is required to support HTTPS destination URLs. If null, only HTTP URLs can be
 // fetched.
+
+kj::Own<HttpClient> newHttpClient(kj::Timer& timer, HttpHeaderTable& responseHeaderTable,
+                                  kj::NetworkAddress& addr,
+                                  HttpClientSettings settings = HttpClientSettings());
+// Creates an HttpClient that always connects to the given address no matter what URL is requested.
+// The client will open and close connections as needed. It will attempt to reuse connections for
+// multiple requests but will not send a new request before the previous response on the same
+// connection has completed, as doing so can result in head-of-line blocking issues. The client may
+// be used as a proxy client or a host client depending on whether the peer is operating as
+// a proxy. (Hint: This is the best kind of client to use when routing traffic through an HTTP
+// proxy. `addr` should be the address of the proxy, and the proxy itself will resolve remote hosts
+// based on the URLs passed to it.)
 //
-// `entropySource` must be provided in order to use `openWebSocket`. If you don't need WebSockets,
-// `entropySource` can be omitted. The WebSocket protocol uses random values to avoid triggering
-// flaws (including security flaws) in certain HTTP proxy software. Specifically, entropy is used
-// to generate the `Sec-WebSocket-Key` header and to generate frame masks. If you know that there
-// are no broken or vulnerable proxies between you and the server, you can provide an dummy entropy
-// source that doesn't generate real entropy (e.g. returning the same value every time). Otherwise,
-// you must provide a cryptographically-random entropy source.
+// `responseHeaderTable` is used when parsing HTTP responses. Requests can use any header table.
 
 kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
-                                  kj::Maybe<EntropySource&> entropySource = nullptr);
+                                  HttpClientSettings settings = HttpClientSettings());
 // Creates an HttpClient that speaks over the given pre-established connection. The client may
 // be used as a proxy client or a host client depending on whether the peer is operating as
 // a proxy.
@@ -591,14 +618,12 @@ kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Asyn
 // fail as well. If the destination server chooses to close the connection after a response,
 // subsequent requests will fail. If a response takes a long time, it blocks subsequent responses.
 // If a WebSocket is opened successfully, all subsequent requests fail.
-//
-// `entropySource` must be provided in order to use `openWebSocket`. If you don't need WebSockets,
-// `entropySource` can be omitted. The WebSocket protocol uses random values to avoid triggering
-// flaws (including security flaws) in certain HTTP proxy software. Specifically, entropy is used
-// to generate the `Sec-WebSocket-Key` header and to generate frame masks. If you know that there
-// are no broken or vulnerable proxies between you and the server, you can provide an dummy entropy
-// source that doesn't generate real entropy (e.g. returning the same value every time). Otherwise,
-// you must provide a cryptographically-random entropy source.
+
+kj::Own<HttpClient> newHttpClient(
+    HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
+    kj::Maybe<EntropySource&> entropySource) KJ_DEPRECATED("use HttpClientSettings");
+// Temporary for backwards-compatibilty.
+// TODO(soon): Remove this before next release.
 
 kj::Own<HttpClient> newHttpClient(HttpService& service);
 kj::Own<HttpService> newHttpService(HttpClient& client);
@@ -724,6 +749,14 @@ inline void HttpHeaders::forEach(Func&& func) const {
   for (auto& header: unindexedHeaders) {
     func(header.name, header.value);
   }
+}
+
+inline kj::Own<HttpClient> newHttpClient(
+    HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
+    kj::Maybe<EntropySource&> entropySource) {
+  HttpClientSettings settings;
+  settings.entropySource = entropySource;
+  return newHttpClient(responseHeaderTable, stream, kj::mv(settings));
 }
 
 }  // namespace kj

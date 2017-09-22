@@ -136,8 +136,12 @@ class PromiseNode {
   // internal implementation details.
 
 public:
-  virtual void onReady(Event& event) noexcept = 0;
+  virtual void onReady(Event* event) noexcept = 0;
   // Arms the given event when ready.
+  //
+  // May be called multiple times. If called again before the event was armed, the old event will
+  // never be armed, only the new one. If called again after the event was armed, the new event
+  // will be armed immediately. Can be called with nullptr to un-register the existing event.
 
   virtual void setSelfPointer(Own<PromiseNode>* selfPtr) noexcept;
   // Tells the node that `selfPtr` is the pointer that owns this node, and will continue to own
@@ -159,12 +163,11 @@ protected:
     // Helper class for implementing onReady().
 
   public:
-    void init(Event& newEvent);
-    // Returns true if arm() was already called.
+    void init(Event* newEvent);
 
     void arm();
-    // Arms the event if init() has already been called and makes future calls to init() return
-    // true.
+    // Arms the event if init() has already been called and makes future calls to init()
+    // automatically arm the event.
 
   private:
     Event* event = nullptr;
@@ -178,7 +181,7 @@ public:
   ImmediatePromiseNodeBase();
   ~ImmediatePromiseNodeBase() noexcept(false);
 
-  void onReady(Event& event) noexcept override;
+  void onReady(Event* event) noexcept override;
 };
 
 template <typename T>
@@ -212,7 +215,7 @@ class AttachmentPromiseNodeBase: public PromiseNode {
 public:
   AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency);
 
-  void onReady(Event& event) noexcept override;
+  void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -338,7 +341,7 @@ class TransformPromiseNodeBase: public PromiseNode {
 public:
   TransformPromiseNodeBase(Own<PromiseNode>&& dependency, void* continuationTracePtr);
 
-  void onReady(Event& event) noexcept override;
+  void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -410,7 +413,7 @@ public:
   // Called by the hub to indicate that it is ready.
 
   // implements PromiseNode ------------------------------------------
-  void onReady(Event& event) noexcept override;
+  void onReady(Event* event) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
 protected:
@@ -545,7 +548,7 @@ public:
   explicit ChainPromiseNode(Own<PromiseNode> inner);
   ~ChainPromiseNode() noexcept(false);
 
-  void onReady(Event& event) noexcept override;
+  void onReady(Event* event) noexcept override;
   void setSelfPointer(Own<PromiseNode>* selfPtr) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
@@ -585,7 +588,7 @@ public:
   ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right);
   ~ExclusiveJoinPromiseNode() noexcept(false);
 
-  void onReady(Event& event) noexcept override;
+  void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -619,7 +622,7 @@ public:
                            ExceptionOrValue* resultParts, size_t partSize);
   ~ArrayJoinPromiseNodeBase() noexcept(false);
 
-  void onReady(Event& event) noexcept override final;
+  void onReady(Event* event) noexcept override final;
   void get(ExceptionOrValue& output) noexcept override final;
   PromiseNode* getInnerForTrace() override final;
 
@@ -698,7 +701,7 @@ class EagerPromiseNodeBase: public PromiseNode, protected Event {
 public:
   EagerPromiseNodeBase(Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef);
 
-  void onReady(Event& event) noexcept override;
+  void onReady(Event* event) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
 private:
@@ -735,7 +738,7 @@ Own<PromiseNode> spark(Own<PromiseNode>&& node) {
 
 class AdapterPromiseNodeBase: public PromiseNode {
 public:
-  void onReady(Event& event) noexcept override;
+  void onReady(Event* event) noexcept override;
 
 protected:
   inline void setReady() {
@@ -854,7 +857,7 @@ template <typename T>
 T Promise<T>::wait(WaitScope& waitScope) {
   _::ExceptionOr<_::FixVoid<T>> result;
 
-  waitImpl(kj::mv(node), result, waitScope);
+  _::waitImpl(kj::mv(node), result, waitScope);
 
   KJ_IF_MAYBE(value, result.value) {
     KJ_IF_MAYBE(exception, result.exception) {
@@ -875,7 +878,7 @@ inline void Promise<void>::wait(WaitScope& waitScope) {
 
   _::ExceptionOr<_::Void> result;
 
-  waitImpl(kj::mv(node), result, waitScope);
+  _::waitImpl(kj::mv(node), result, waitScope);
 
   if (result.value != nullptr) {
     KJ_IF_MAYBE(exception, result.exception) {
@@ -887,6 +890,11 @@ inline void Promise<void>::wait(WaitScope& waitScope) {
     // Result contained neither a value nor an exception?
     KJ_UNREACHABLE;
   }
+}
+
+template <typename T>
+bool Promise<T>::poll(WaitScope& waitScope) {
+  return _::pollImpl(*node, waitScope);
 }
 
 template <typename T>

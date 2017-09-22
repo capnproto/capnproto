@@ -235,6 +235,19 @@ public:
   // TODO(someday):  Implement fibers, and let them call wait() even when they are handling an
   //   event.
 
+  bool poll(WaitScope& waitScope);
+  // Returns true if a call to wait() would complete without blocking, false if it would block.
+  //
+  // If the promise is not yet resolved, poll() will pump the event loop and poll for I/O in an
+  // attempt to resolve it. Only when there is nothing left to do will it return false.
+  //
+  // Generally, poll() is most useful in tests. Often, you may want to verify that a promise does
+  // not resolve until some specific event occurs. To do so, poll() the promise before the event to
+  // verify it isn't resolved, then trigger the event, then poll() again to verify that it resolves.
+  // The first poll() verifies that the promise doesn't resolve early, which would otherwise be
+  // hard to do deterministically. The second poll() allows you to check that the promise has
+  // resolved and avoid a wait() that might deadlock in the case that it hasn't.
+
   ForkedPromise<T> fork() KJ_WARN_UNUSED_RESULT;
   // Forks the promise, so that multiple different clients can independently wait on the result.
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
@@ -650,6 +663,7 @@ private:
   friend void _::detach(kj::Promise<void>&& promise);
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);
+  friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
   friend class _::Event;
   friend class WaitScope;
 };
@@ -668,11 +682,15 @@ public:
   inline ~WaitScope() { loop.leaveScope(); }
   KJ_DISALLOW_COPY(WaitScope);
 
+  void poll();
+  // Pumps the event queue and polls for I/O until there's nothing left to do (without blocking).
+
 private:
   EventLoop& loop;
   friend class EventLoop;
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);
+  friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
 };
 
 }  // namespace kj

@@ -748,5 +748,16 @@ TEST(Async, SetRunnable) {
   }
 }
 
+TEST(Async, Poll) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<void>();
+  KJ_ASSERT(!paf.promise.poll(waitScope));
+  paf.fulfiller->fulfill();
+  KJ_ASSERT(paf.promise.poll(waitScope));
+  paf.promise.wait(waitScope);
+}
+
 }  // namespace
 }  // namespace kj

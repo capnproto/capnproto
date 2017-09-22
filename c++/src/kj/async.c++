@@ -66,8 +66,8 @@ public:
 
 class YieldPromiseNode final: public _::PromiseNode {
 public:
-  void onReady(_::Event& event) noexcept override {
-    event.armBreadthFirst();
+  void onReady(_::Event* event) noexcept override {
+    if (event) event->armBreadthFirst();
   }
   void get(_::ExceptionOrValue& output) noexcept override {
     output.as<_::Void>() = _::Void();
@@ -76,7 +76,7 @@ public:
 
 class NeverDonePromiseNode final: public _::PromiseNode {
 public:
-  void onReady(_::Event& event) noexcept override {
+  void onReady(_::Event* event) noexcept override {
     // ignore
   }
   void get(_::ExceptionOrValue& output) noexcept override {
@@ -108,7 +108,7 @@ public:
     Task(TaskSetImpl& taskSet, Own<_::PromiseNode>&& nodeParam)
         : taskSet(taskSet), node(kj::mv(nodeParam)) {
       node->setSelfPointer(&node);
-      node->onReady(*this);
+      node->onReady(this);
     }
 
   protected:
@@ -312,6 +312,26 @@ void EventLoop::leaveScope() {
   threadLocalEventLoop = nullptr;
 }
 
+void WaitScope::poll() {
+  KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
+  KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
+
+  loop.running = true;
+  KJ_DEFER(loop.running = false);
+
+  for (;;) {
+    if (!loop.turn()) {
+      // No events in the queue.  Poll for I/O.
+      loop.port.poll();
+
+      if (!loop.isRunnable()) {
+        // Still no events in the queue. We're done.
+        return;
+      }
+    }
+  }
+}
+
 namespace _ {  // private
 
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope) {
@@ -321,7 +341,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 
   BoolEvent doneEvent;
   node->setSelfPointer(&node);
-  node->onReady(doneEvent);
+  node->onReady(&doneEvent);
 
   loop.running = true;
   KJ_DEFER(loop.running = false);
@@ -341,6 +361,35 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
   })) {
     result.addException(kj::mv(*exception));
   }
+}
+
+bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
+  EventLoop& loop = waitScope.loop;
+  KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
+  KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
+
+  BoolEvent doneEvent;
+  node.onReady(&doneEvent);
+
+  loop.running = true;
+  KJ_DEFER(loop.running = false);
+
+  while (!doneEvent.fired) {
+    if (!loop.turn()) {
+      // No events in the queue.  Poll for I/O.
+      loop.port.poll();
+
+      if (!doneEvent.fired && !loop.isRunnable()) {
+        // No progress. Give up.
+        node.onReady(nullptr);
+        loop.setRunnable(false);
+        return false;
+      }
+    }
+  }
+
+  loop.setRunnable(loop.isRunnable());
+  return true;
 }
 
 Promise<void> yield() {
@@ -498,26 +547,28 @@ void PromiseNode::setSelfPointer(Own<PromiseNode>* selfPtr) noexcept {}
 
 PromiseNode* PromiseNode::getInnerForTrace() { return nullptr; }
 
-void PromiseNode::OnReadyEvent::init(Event& newEvent) {
+void PromiseNode::OnReadyEvent::init(Event* newEvent) {
   if (event == _kJ_ALREADY_READY) {
     // A new continuation was added to a promise that was already ready.  In this case, we schedule
     // breadth-first, to make it difficult for applications to accidentally starve the event loop
     // by repeatedly waiting on immediate promises.
-    newEvent.armBreadthFirst();
+    if (newEvent) newEvent->armBreadthFirst();
   } else {
-    event = &newEvent;
+    event = newEvent;
   }
 }
 
 void PromiseNode::OnReadyEvent::arm() {
-  if (event == nullptr) {
-    event = _kJ_ALREADY_READY;
-  } else {
+  KJ_ASSERT(event != _kJ_ALREADY_READY, "arm() should only be called once");
+
+  if (event != nullptr) {
     // A promise resolved and an event is already waiting on it.  In this case, arm in depth-first
     // order so that the event runs immediately after the current one.  This way, chained promises
     // execute together for better cache locality and lower latency.
     event->armDepthFirst();
   }
+
+  event = _kJ_ALREADY_READY;
 }
 
 // -------------------------------------------------------------------
@@ -525,8 +576,8 @@ void PromiseNode::OnReadyEvent::arm() {
 ImmediatePromiseNodeBase::ImmediatePromiseNodeBase() {}
 ImmediatePromiseNodeBase::~ImmediatePromiseNodeBase() noexcept(false) {}
 
-void ImmediatePromiseNodeBase::onReady(Event& event) noexcept {
-  event.armBreadthFirst();
+void ImmediatePromiseNodeBase::onReady(Event* event) noexcept {
+  if (event) event->armBreadthFirst();
 }
 
 ImmediateBrokenPromiseNode::ImmediateBrokenPromiseNode(Exception&& exception)
@@ -543,7 +594,7 @@ AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependen
   dependency->setSelfPointer(&dependency);
 }
 
-void AttachmentPromiseNodeBase::onReady(Event& event) noexcept {
+void AttachmentPromiseNodeBase::onReady(Event* event) noexcept {
   dependency->onReady(event);
 }
 
@@ -567,7 +618,7 @@ TransformPromiseNodeBase::TransformPromiseNodeBase(
   dependency->setSelfPointer(&dependency);
 }
 
-void TransformPromiseNodeBase::onReady(Event& event) noexcept {
+void TransformPromiseNodeBase::onReady(Event* event) noexcept {
   dependency->onReady(event);
 }
 
@@ -635,7 +686,7 @@ void ForkBranchBase::releaseHub(ExceptionOrValue& output) {
   }
 }
 
-void ForkBranchBase::onReady(Event& event) noexcept {
+void ForkBranchBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
@@ -648,7 +699,7 @@ PromiseNode* ForkBranchBase::getInnerForTrace() {
 ForkHubBase::ForkHubBase(Own<PromiseNode>&& innerParam, ExceptionOrValue& resultRef)
     : inner(kj::mv(innerParam)), resultRef(resultRef) {
   inner->setSelfPointer(&inner);
-  inner->onReady(*this);
+  inner->onReady(this);
 }
 
 Maybe<Own<Event>> ForkHubBase::fire() {
@@ -682,16 +733,16 @@ _::PromiseNode* ForkHubBase::getInnerForTrace() {
 ChainPromiseNode::ChainPromiseNode(Own<PromiseNode> innerParam)
     : state(STEP1), inner(kj::mv(innerParam)) {
   inner->setSelfPointer(&inner);
-  inner->onReady(*this);
+  inner->onReady(this);
 }
 
 ChainPromiseNode::~ChainPromiseNode() noexcept(false) {}
 
-void ChainPromiseNode::onReady(Event& event) noexcept {
+void ChainPromiseNode::onReady(Event* event) noexcept {
   switch (state) {
     case STEP1:
       KJ_REQUIRE(onReadyEvent == nullptr, "onReady() can only be called once.");
-      onReadyEvent = &event;
+      onReadyEvent = event;
       return;
     case STEP2:
       inner->onReady(event);
@@ -755,7 +806,7 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
     *selfPtr = kj::mv(inner);
     selfPtr->get()->setSelfPointer(selfPtr);
     if (onReadyEvent != nullptr) {
-      selfPtr->get()->onReady(*onReadyEvent);
+      selfPtr->get()->onReady(onReadyEvent);
     }
 
     // Return our self-pointer so that the caller takes care of deleting it.
@@ -763,7 +814,7 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
   } else {
     inner->setSelfPointer(&inner);
     if (onReadyEvent != nullptr) {
-      inner->onReady(*onReadyEvent);
+      inner->onReady(onReadyEvent);
     }
 
     return nullptr;
@@ -777,7 +828,7 @@ ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<Pr
 
 ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {}
 
-void ExclusiveJoinPromiseNode::onReady(Event& event) noexcept {
+void ExclusiveJoinPromiseNode::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
@@ -797,7 +848,7 @@ ExclusiveJoinPromiseNode::Branch::Branch(
     ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependencyParam)
     : joinNode(joinNode), dependency(kj::mv(dependencyParam)) {
   dependency->setSelfPointer(&dependency);
-  dependency->onReady(*this);
+  dependency->onReady(this);
 }
 
 ExclusiveJoinPromiseNode::Branch::~Branch() noexcept(false) {}
@@ -847,7 +898,7 @@ ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
 }
 ArrayJoinPromiseNodeBase::~ArrayJoinPromiseNodeBase() noexcept(false) {}
 
-void ArrayJoinPromiseNodeBase::onReady(Event& event) noexcept {
+void ArrayJoinPromiseNodeBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
@@ -873,7 +924,7 @@ ArrayJoinPromiseNodeBase::Branch::Branch(
     ArrayJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependencyParam, ExceptionOrValue& output)
     : joinNode(joinNode), dependency(kj::mv(dependencyParam)), output(output) {
   dependency->setSelfPointer(&dependency);
-  dependency->onReady(*this);
+  dependency->onReady(this);
 }
 
 ArrayJoinPromiseNodeBase::Branch::~Branch() noexcept(false) {}
@@ -921,10 +972,10 @@ EagerPromiseNodeBase::EagerPromiseNodeBase(
     Own<PromiseNode>&& dependencyParam, ExceptionOrValue& resultRef)
     : dependency(kj::mv(dependencyParam)), resultRef(resultRef) {
   dependency->setSelfPointer(&dependency);
-  dependency->onReady(*this);
+  dependency->onReady(this);
 }
 
-void EagerPromiseNodeBase::onReady(Event& event) noexcept {
+void EagerPromiseNodeBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
@@ -946,7 +997,7 @@ Maybe<Own<Event>> EagerPromiseNodeBase::fire() {
 
 // -------------------------------------------------------------------
 
-void AdapterPromiseNodeBase::onReady(Event& event) noexcept {
+void AdapterPromiseNodeBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
