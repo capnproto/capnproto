@@ -29,6 +29,7 @@
 #include "async-io-internal.h"
 #include "debug.h"
 #include "vector.h"
+#include "io.h"
 
 #if _WIN32
 #include <winsock2.h>
@@ -181,6 +182,34 @@ Maybe<Promise<uint64_t>> AsyncOutputStream::tryPumpFrom(
   return nullptr;
 }
 
+Promise<Own<AsyncCapabilityStream>> AsyncCapabilityStream::receiveStream() {
+  return tryReceiveStream()
+      .then([](Maybe<Own<AsyncCapabilityStream>>&& result)
+            -> Promise<Own<AsyncCapabilityStream>> {
+    KJ_IF_MAYBE(r, result) {
+      return kj::mv(*r);
+    } else {
+      return KJ_EXCEPTION(FAILED, "EOF when expecting to receive capability");
+    }
+  });
+}
+
+Promise<AutoCloseFd> AsyncCapabilityStream::receiveFd() {
+  return tryReceiveFd().then([](Maybe<AutoCloseFd>&& result) -> Promise<AutoCloseFd> {
+    KJ_IF_MAYBE(r, result) {
+      return kj::mv(*r);
+    } else {
+      return KJ_EXCEPTION(FAILED, "EOF when expecting to receive capability");
+    }
+  });
+}
+Promise<Maybe<AutoCloseFd>> AsyncCapabilityStream::tryReceiveFd() {
+  return KJ_EXCEPTION(UNIMPLEMENTED, "this stream cannot receive file descriptors");
+}
+Promise<void> AsyncCapabilityStream::sendFd(int fd) {
+  return KJ_EXCEPTION(UNIMPLEMENTED, "this stream cannot send file descriptors");
+}
+
 void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length) {
   KJ_UNIMPLEMENTED("Not a socket.");
 }
@@ -212,6 +241,43 @@ Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(
     Fd fd, LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags) {
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
 }
+CapabilityPipe AsyncIoProvider::newCapabilityPipe() {
+  KJ_UNIMPLEMENTED("Capability pipes not implemented.");
+}
+
+Own<AsyncInputStream> LowLevelAsyncIoProvider::wrapInputFd(OwnFd fd, uint flags) {
+  return wrapInputFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+Own<AsyncOutputStream> LowLevelAsyncIoProvider::wrapOutputFd(OwnFd fd, uint flags) {
+  return wrapOutputFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+Own<AsyncIoStream> LowLevelAsyncIoProvider::wrapSocketFd(OwnFd fd, uint flags) {
+  return wrapSocketFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+#if !_WIN32
+Own<AsyncCapabilityStream> LowLevelAsyncIoProvider::wrapUnixSocketFd(OwnFd fd, uint flags) {
+  return wrapUnixSocketFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+#endif
+Promise<Own<AsyncIoStream>> LowLevelAsyncIoProvider::wrapConnectingSocketFd(
+    OwnFd fd, const struct sockaddr* addr, uint addrlen, uint flags) {
+  return wrapConnectingSocketFd(reinterpret_cast<Fd>(fd.release()), addr, addrlen,
+                                flags | TAKE_OWNERSHIP);
+}
+Own<ConnectionReceiver> LowLevelAsyncIoProvider::wrapListenSocketFd(
+    OwnFd fd, NetworkFilter& filter, uint flags) {
+  return wrapListenSocketFd(reinterpret_cast<Fd>(fd.release()), filter, flags | TAKE_OWNERSHIP);
+}
+Own<ConnectionReceiver> LowLevelAsyncIoProvider::wrapListenSocketFd(OwnFd fd, uint flags) {
+  return wrapListenSocketFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
+Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(
+    OwnFd fd, NetworkFilter& filter, uint flags) {
+  return wrapDatagramSocketFd(reinterpret_cast<Fd>(fd.release()), filter, flags | TAKE_OWNERSHIP);
+}
+Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(OwnFd fd, uint flags) {
+  return wrapDatagramSocketFd(reinterpret_cast<Fd>(fd.release()), flags | TAKE_OWNERSHIP);
+}
 
 namespace {
 
@@ -225,6 +291,39 @@ public:
 LowLevelAsyncIoProvider::NetworkFilter& LowLevelAsyncIoProvider::NetworkFilter::getAllAllowed() {
   static DummyNetworkFilter result;
   return result;
+}
+
+// =======================================================================================
+// Convenience adapters.
+
+Promise<Own<AsyncIoStream>> CapabilityStreamConnectionReceiver::accept() {
+  return inner.receiveStream()
+      .then([](Own<AsyncCapabilityStream>&& stream) -> Own<AsyncIoStream> {
+    return kj::mv(stream);
+  });
+}
+
+uint CapabilityStreamConnectionReceiver::getPort() {
+  return 0;
+}
+
+Promise<Own<AsyncIoStream>> CapabilityStreamNetworkAddress::connect() {
+  auto pipe = provider.newCapabilityPipe();
+  auto result = kj::mv(pipe.ends[0]);
+  return inner.sendStream(kj::mv(pipe.ends[1]))
+      .then(kj::mvCapture(result, [](Own<AsyncIoStream>&& result) {
+    return kj::mv(result);
+  }));
+}
+Own<ConnectionReceiver> CapabilityStreamNetworkAddress::listen() {
+  return kj::heap<CapabilityStreamConnectionReceiver>(inner);
+}
+
+Own<NetworkAddress> CapabilityStreamNetworkAddress::clone() {
+  KJ_UNIMPLEMENTED("can't clone CapabilityStreamNetworkAddress");
+}
+String CapabilityStreamNetworkAddress::toString() {
+  return kj::str("<CapabilityStreamNetworkAddress>");
 }
 
 // =======================================================================================
