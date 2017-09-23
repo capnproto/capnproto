@@ -241,6 +241,11 @@ Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(
     Fd fd, LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags) {
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");
 }
+#if !_WIN32
+Own<AsyncCapabilityStream> LowLevelAsyncIoProvider::wrapUnixSocketFd(Fd fd, uint flags) {
+  KJ_UNIMPLEMENTED("Unix socket with FD passing not implemented.");
+}
+#endif
 CapabilityPipe AsyncIoProvider::newCapabilityPipe() {
   KJ_UNIMPLEMENTED("Capability pipes not implemented.");
 }

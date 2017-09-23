@@ -574,9 +574,12 @@ public:
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
 #if !_WIN32
-  virtual Own<AsyncCapabilityStream> wrapUnixSocketFd(Fd fd, uint flags = 0) = 0;
+  virtual Own<AsyncCapabilityStream> wrapUnixSocketFd(Fd fd, uint flags = 0);
   // Like wrapSocketFd() but also support capability passing via SCM_RIGHTS. The socket must be
   // a Unix domain socket.
+  //
+  // The default implementation throws UNIMPLEMENTED, for backwards-compatibility with
+  // LowLevelAsyncIoProvider implementations written before this method was added.
 #endif
 
   virtual Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
