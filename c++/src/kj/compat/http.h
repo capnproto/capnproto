@@ -89,7 +89,8 @@ namespace kj {
   MACRO(upgrade, "Upgrade") \
   MACRO(websocketKey, "Sec-WebSocket-Key") \
   MACRO(websocketVersion, "Sec-WebSocket-Version") \
-  MACRO(websocketAccept, "Sec-WebSocket-Accept")
+  MACRO(websocketAccept, "Sec-WebSocket-Accept") \
+  MACRO(websocketExtensions, "Sec-WebSocket-Extensions")
 
 enum class HttpMethod {
   // Enum of known HTTP methods.
