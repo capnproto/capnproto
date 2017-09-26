@@ -3060,7 +3060,7 @@ public:
     KJ_IF_MAYBE(c, client) {
       return c->get()->isDrained();
     } else {
-      return false;
+      return failed;
     }
   }
 
@@ -3070,8 +3070,9 @@ public:
     } else {
       return promise.addBranch().then([this]() {
         return KJ_ASSERT_NONNULL(client)->onDrained();
-      }, [](kj::Exception&& e) {
+      }, [this](kj::Exception&& e) {
         // Connecting failed. Treat as immediately drained.
+        failed = true;
         return kj::READY_NOW;
       });
     }
@@ -3117,6 +3118,7 @@ public:
 private:
   kj::ForkedPromise<void> promise;
   kj::Maybe<kj::Own<NetworkAddressHttpClient>> client;
+  bool failed = false;
 };
 
 class NetworkHttpClient final: public HttpClient, private kj::TaskSet::ErrorHandler {
