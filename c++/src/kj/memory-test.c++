@@ -65,6 +65,77 @@ TEST(Memory, AssignNested) {
   EXPECT_TRUE(destroyed1 && destroyed2);
 }
 
+struct DestructionOrderRecorder {
+  DestructionOrderRecorder(uint& counter, uint& recordTo)
+      : counter(counter), recordTo(recordTo) {}
+  ~DestructionOrderRecorder() {
+    recordTo = ++counter;
+  }
+
+  uint& counter;
+  uint& recordTo;
+};
+
+TEST(Memory, Attach) {
+  uint counter = 0;
+  uint destroyed1 = 0;
+  uint destroyed2 = 0;
+  uint destroyed3 = 0;
+
+  auto obj1 = kj::heap<DestructionOrderRecorder>(counter, destroyed1);
+  auto obj2 = kj::heap<DestructionOrderRecorder>(counter, destroyed2);
+  auto obj3 = kj::heap<DestructionOrderRecorder>(counter, destroyed3);
+
+  auto ptr = obj1.get();
+
+  Own<DestructionOrderRecorder> combined = obj1.attach(kj::mv(obj2), kj::mv(obj3));
+
+  KJ_EXPECT(combined.get() == ptr);
+
+  KJ_EXPECT(obj1.get() == nullptr);
+  KJ_EXPECT(obj2.get() == nullptr);
+  KJ_EXPECT(obj3.get() == nullptr);
+  KJ_EXPECT(destroyed1 == 0);
+  KJ_EXPECT(destroyed2 == 0);
+  KJ_EXPECT(destroyed3 == 0);
+
+  combined = nullptr;
+
+  KJ_EXPECT(destroyed1 == 1, destroyed1);
+  KJ_EXPECT(destroyed2 == 2, destroyed2);
+  KJ_EXPECT(destroyed3 == 3, destroyed3);
+}
+
+TEST(Memory, AttachNested) {
+  uint counter = 0;
+  uint destroyed1 = 0;
+  uint destroyed2 = 0;
+  uint destroyed3 = 0;
+
+  auto obj1 = kj::heap<DestructionOrderRecorder>(counter, destroyed1);
+  auto obj2 = kj::heap<DestructionOrderRecorder>(counter, destroyed2);
+  auto obj3 = kj::heap<DestructionOrderRecorder>(counter, destroyed3);
+
+  auto ptr = obj1.get();
+
+  Own<DestructionOrderRecorder> combined = obj1.attach(kj::mv(obj2)).attach(kj::mv(obj3));
+
+  KJ_EXPECT(combined.get() == ptr);
+
+  KJ_EXPECT(obj1.get() == nullptr);
+  KJ_EXPECT(obj2.get() == nullptr);
+  KJ_EXPECT(obj3.get() == nullptr);
+  KJ_EXPECT(destroyed1 == 0);
+  KJ_EXPECT(destroyed2 == 0);
+  KJ_EXPECT(destroyed3 == 0);
+
+  combined = nullptr;
+
+  KJ_EXPECT(destroyed1 == 1, destroyed1);
+  KJ_EXPECT(destroyed2 == 2, destroyed2);
+  KJ_EXPECT(destroyed3 == 3, destroyed3);
+}
+
 // TODO(test):  More tests.
 
 }  // namespace

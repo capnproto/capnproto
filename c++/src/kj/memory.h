@@ -150,6 +150,15 @@ public:
     return *this;
   }
 
+  template <typename... Attachments>
+  Own<T> attach(Attachments&&... attachments);
+  // Returns an Own<T> which points to the same object but which also ensures that all values
+  // passed to `attachments` remain alive until after this object is destroyed. Normally
+  // `attachments` are other Own<?>s pointing to objects that this one depends on.
+  //
+  // Note that attachments will eventually be destroyed in the order they are listed. Hence,
+  // foo.attach(bar, baz) is equivalent to (but more efficient than) foo.attach(bar).attach(baz).
+
   template <typename U>
   Own<U> downcast() {
     // Downcast the pointer to Own<U>, destroying the original pointer.  If this pointer does not
@@ -399,6 +408,50 @@ struct Disposer::Dispose_<T, false> {
 template <typename T>
 void Disposer::dispose(T* object) const {
   Dispose_<T>::dispose(object, *this);
+}
+
+namespace _ {  // private
+
+template <typename... T>
+struct OwnedBundle;
+
+template <>
+struct OwnedBundle<> {};
+
+template <typename First, typename... Rest>
+struct OwnedBundle<First, Rest...>: public OwnedBundle<Rest...> {
+  OwnedBundle(First&& first, Rest&&... rest)
+      : OwnedBundle<Rest...>(kj::fwd<Rest>(rest)...), first(kj::fwd<First>(first)) {}
+
+  // Note that it's intentional that `first` is destroyed before `rest`. This way, doing
+  // ptr.attach(foo, bar, baz) is equivalent to ptr.attach(foo).attach(bar).attach(baz) in terms
+  // of destruction order (although the former does fewer allocations).
+  Decay<First> first;
+};
+
+template <typename... T>
+struct DisposableOwnedBundle final: public Disposer, public OwnedBundle<T...> {
+  DisposableOwnedBundle(T&&... values): OwnedBundle<T...>(kj::fwd<T>(values)...) {}
+  void disposeImpl(void* pointer) const override { delete this; }
+};
+
+}  // namespace _ (private)
+
+template <typename T>
+template <typename... Attachments>
+Own<T> Own<T>::attach(Attachments&&... attachments) {
+  T* ptrCopy = ptr;
+
+  KJ_IREQUIRE(ptrCopy != nullptr, "cannot attach to null pointer");
+
+  // HACK: If someone accidentally calls .attach() on a null pointer in opt mode, try our best to
+  //   accomplish reasonable behavior: We turn the pointer non-null but still invalid, so that the
+  //   disposer will still be called when the pointer goes out of scope.
+  if (ptrCopy == nullptr) ptrCopy = reinterpret_cast<T*>(1);
+
+  auto bundle = new _::DisposableOwnedBundle<Own<T>, Attachments...>(
+      kj::mv(*this), kj::fwd<Attachments>(attachments)...);
+  return Own<T>(ptrCopy, *bundle);
 }
 
 }  // namespace kj
