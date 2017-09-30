@@ -430,7 +430,7 @@ struct OwnedBundle<First, Rest...>: public OwnedBundle<Rest...> {
 };
 
 template <typename... T>
-struct DisposableOwnedBundle: public Disposer, public OwnedBundle<T...> {
+struct DisposableOwnedBundle final: public Disposer, public OwnedBundle<T...> {
   DisposableOwnedBundle(T&&... values): OwnedBundle<T...>(kj::fwd<T>(values)...) {}
   void disposeImpl(void* pointer) const override { delete this; }
 };
