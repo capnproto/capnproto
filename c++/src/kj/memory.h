@@ -155,6 +155,9 @@ public:
   // Returns an Own<T> which points to the same object but which also ensures that all values
   // passed to `attachments` remain alive until after this object is destroyed. Normally
   // `attachments` are other Own<?>s pointing to objects that this one depends on.
+  //
+  // Note that attachments will eventually be destroyed in the order they are listed. Hence,
+  // foo.attach(bar, baz) is equivalent to (but more efficient than) foo.attach(bar).attach(baz).
 
   template <typename U>
   Own<U> downcast() {
