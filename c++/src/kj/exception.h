@@ -354,6 +354,14 @@ String stringifyStackTrace(ArrayPtr<void* const>);
 // Convert the stack trace to a string with file names and line numbers. This may involve executing
 // suprocesses.
 
+String stringifyStackTraceAddresses(ArrayPtr<void* const> trace);
+// Construct a string containing just enough information about a stack trace to be able to convert
+// it to file and line numbers later using offline tools. This produces a sequence of
+// space-separated code location identifiers. Each identifier may be an absolute address
+// (hex number starting with 0x) or may be a module-relative address "<module>@0x<hex>". The
+// latter case is preferred when ASLR is in effect and has loaded different modules at different
+// addresses.
+
 String getStackTrace();
 // Get a stack trace right now and stringify it. Useful for debugging.
 
