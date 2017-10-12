@@ -261,7 +261,7 @@ KJ_NORETURN(void unreachable());
 #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack) \
   size_t name##_size = (size); \
   bool name##_isOnStack = name##_size <= (maxStack); \
-  type name##_stack[name##_isOnStack ? size : 0]; \
+  type name##_stack[kj::max(1, name##_isOnStack ? name##_size : 0)]; \
   ::kj::Array<type> name##_heap = name##_isOnStack ? \
       nullptr : kj::heapArray<type>(name##_size); \
   ::kj::ArrayPtr<type> name = name##_isOnStack ? \
