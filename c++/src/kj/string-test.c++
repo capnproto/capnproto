@@ -54,6 +54,12 @@ TEST(String, Str) {
   EXPECT_EQ("foo", str(mv(f)));
 }
 
+TEST(String, Nullptr) {
+  EXPECT_EQ(String(nullptr), "");
+  EXPECT_EQ(StringPtr(String(nullptr)).size(), 0u);
+  EXPECT_EQ(StringPtr(String(nullptr))[0], '\0');
+}
+
 TEST(String, StartsEndsWith) {
   EXPECT_TRUE(StringPtr("foobar").startsWith("foo"));
   EXPECT_FALSE(StringPtr("foobar").startsWith("bar"));
