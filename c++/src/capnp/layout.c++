@@ -371,15 +371,15 @@ struct WireHelpers {
 #endif
 
   static KJ_ALWAYS_INLINE(void zeroMemory(byte* ptr, ByteCount32 count)) {
-    memset(ptr, 0, unbound(count / BYTES));
+    if (count != 0u) memset(ptr, 0, unbound(count / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(word* ptr, WordCountN<29> count)) {
-    memset(ptr, 0, unbound(count * BYTES_PER_WORD / BYTES));
+    if (count != 0u) memset(ptr, 0, unbound(count * BYTES_PER_WORD / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(WirePointer* ptr, WirePointerCountN<29> count)) {
-    memset(ptr, 0, unbound(count * BYTES_PER_POINTER / BYTES));
+    if (count != 0u) memset(ptr, 0, unbound(count * BYTES_PER_POINTER / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(WirePointer* ptr)) {
@@ -388,20 +388,20 @@ struct WireHelpers {
 
   template <typename T>
   static inline void zeroMemory(kj::ArrayPtr<T> array) {
-    memset(array.begin(), 0, array.size() * sizeof(array[0]));
+    if (array.size() != 0u) memset(array.begin(), 0, array.size() * sizeof(array[0]));
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(byte* to, const byte* from, ByteCount32 count)) {
-    memcpy(to, from, unbound(count / BYTES));
+    if (count != 0u) memcpy(to, from, unbound(count / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(word* to, const word* from, WordCountN<29> count)) {
-    memcpy(to, from, unbound(count * BYTES_PER_WORD / BYTES));
+    if (count != 0u) memcpy(to, from, unbound(count * BYTES_PER_WORD / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(WirePointer* to, const WirePointer* from,
                                           WirePointerCountN<29> count)) {
-    memcpy(to, from, unbound(count * BYTES_PER_POINTER  / BYTES));
+    if (count != 0u) memcpy(to, from, unbound(count * BYTES_PER_POINTER  / BYTES));
   }
 
   template <typename T>
@@ -412,14 +412,14 @@ struct WireHelpers {
   // TODO(cleanup): Turn these into a .copyTo() method of ArrayPtr?
   template <typename T>
   static inline void copyMemory(T* to, kj::ArrayPtr<T> from) {
-    memcpy(to, from.begin(), from.size() * sizeof(from[0]));
+    if (from.size() != 0u) memcpy(to, from.begin(), from.size() * sizeof(from[0]));
   }
   template <typename T>
   static inline void copyMemory(T* to, kj::ArrayPtr<const T> from) {
-    memcpy(to, from.begin(), from.size() * sizeof(from[0]));
+    if (from.size() != 0u) memcpy(to, from.begin(), from.size() * sizeof(from[0]));
   }
   static KJ_ALWAYS_INLINE(void copyMemory(char* to, kj::StringPtr from)) {
-    memcpy(to, from.begin(), from.size() * sizeof(from[0]));
+    if (from.size() != 0u) memcpy(to, from.begin(), from.size() * sizeof(from[0]));
   }
 
   static KJ_ALWAYS_INLINE(bool boundsCheck(

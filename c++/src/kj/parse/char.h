@@ -219,6 +219,7 @@ namespace _ { // private
 
 struct IdentifierToString {
   inline String operator()(char first, const Array<char>& rest) const {
+    if (rest.size() == 0) return heapString(&first, 1);
     String result = heapString(rest.size() + 1);
     result[0] = first;
     memcpy(result.begin() + 1, rest.begin(), rest.size());
