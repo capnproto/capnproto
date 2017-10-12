@@ -1953,8 +1953,7 @@ public:
   }
 
   kj::Promise<Message> receive() override {
-    auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
-    size_t headerSize = recvHeader.headerSize(recvData.size());
+    size_t headerSize = Header::headerSize(recvData.begin(), recvData.size());
 
     if (headerSize > recvData.size()) {
       if (recvData.begin() != recvBuffer.begin()) {
@@ -1981,6 +1980,8 @@ public:
         return receive();
       });
     }
+
+    auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
 
     recvData = recvData.slice(headerSize, recvData.size());
 
@@ -2231,7 +2232,7 @@ private:
       }
     }
 
-    size_t headerSize(size_t sizeSoFar) {
+    static size_t headerSize(byte const* bytes, size_t sizeSoFar) {
       if (sizeSoFar < 2) return 2;
 
       size_t required = 2;
