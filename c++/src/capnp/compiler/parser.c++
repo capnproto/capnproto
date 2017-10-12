@@ -32,6 +32,7 @@
 
 #if _WIN32
 #include <windows.h>
+#include <wincrypt.h>
 #undef VOID
 #endif
 
