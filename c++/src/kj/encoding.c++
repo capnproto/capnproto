@@ -687,7 +687,9 @@ int base64_decode_block(const char* code_in, const int length_in,
   char* plainchar = plaintext_out;
   char fragment;
 
-  *plainchar = state_in->plainchar;
+  if (state_in->step != step_a) {
+    *plainchar = state_in->plainchar;
+  }
 
   switch (state_in->step)
   {
