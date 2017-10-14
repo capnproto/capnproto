@@ -113,6 +113,8 @@ void printAddressBook(int fd) {
   }
 }
 
+#if !CAPNP_LITE
+
 #include "addressbook.capnp.h"
 #include <capnp/message.h>
 #include <capnp/serialize-packed.h>
@@ -260,8 +262,9 @@ void dynamicPrintMessage(int fd, StructSchema schema) {
   std::cout << std::endl;
 }
 
+#endif  // !CAPNP_LITE
+
 int main(int argc, char* argv[]) {
-  StructSchema schema = Schema::from<AddressBook>();
   if (argc != 2) {
     std::cerr << "Missing arg." << std::endl;
     return 1;
@@ -269,10 +272,14 @@ int main(int argc, char* argv[]) {
     writeAddressBook(1);
   } else if (strcmp(argv[1], "read") == 0) {
     printAddressBook(0);
+#if !CAPNP_LITE
   } else if (strcmp(argv[1], "dwrite") == 0) {
+    StructSchema schema = Schema::from<AddressBook>();
     dynamicWriteAddressBook(1, schema);
   } else if (strcmp(argv[1], "dread") == 0) {
+    StructSchema schema = Schema::from<AddressBook>();
     dynamicPrintMessage(0, schema);
+#endif
   } else {
     std::cerr << "Invalid arg: " << argv[1] << std::endl;
     return 1;
