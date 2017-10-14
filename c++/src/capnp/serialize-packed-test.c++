@@ -94,7 +94,9 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpackedUnaligned, kj::ArrayPtr<cons
 
   // Make a guaranteed-to-be-aligned copy of the unpacked buffer.
   kj::Array<word> unpackedWords = kj::heapArray<word>(unpackedSizeInWords);
-  memcpy(unpackedWords.begin(), unpackedUnaligned.begin(), unpackedUnaligned.size());
+  if (unpackedUnaligned.size() != 0u) {
+    memcpy(unpackedWords.begin(), unpackedUnaligned.begin(), unpackedUnaligned.size());
+  }
   kj::ArrayPtr<const byte> unpacked = unpackedWords.asBytes();
 
   // -----------------------------------------------------------------

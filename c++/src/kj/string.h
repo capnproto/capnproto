@@ -445,7 +445,7 @@ inline String Stringifier::operator*(const Array<T>& arr) const {
 // =======================================================================================
 // Inline implementation details.
 
-inline StringPtr::StringPtr(const String& value): content(value.begin(), value.size() + 1) {}
+inline StringPtr::StringPtr(const String& value): content(value.cStr(), value.size() + 1) {}
 
 inline constexpr StringPtr::operator ArrayPtr<const char>() const {
   return ArrayPtr<const char>(content.begin(), content.size() - 1);
