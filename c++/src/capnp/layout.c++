@@ -371,15 +371,15 @@ struct WireHelpers {
 #endif
 
   static KJ_ALWAYS_INLINE(void zeroMemory(byte* ptr, ByteCount32 count)) {
-    if (count != 0u) memset(ptr, 0, unbound(count / BYTES));
+    if (count != ZERO * BYTES) memset(ptr, 0, unbound(count / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(word* ptr, WordCountN<29> count)) {
-    if (count != 0u) memset(ptr, 0, unbound(count * BYTES_PER_WORD / BYTES));
+    if (count != ZERO * WORDS) memset(ptr, 0, unbound(count * BYTES_PER_WORD / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(WirePointer* ptr, WirePointerCountN<29> count)) {
-    if (count != 0u) memset(ptr, 0, unbound(count * BYTES_PER_POINTER / BYTES));
+    if (count != ZERO * POINTERS) memset(ptr, 0, unbound(count * BYTES_PER_POINTER / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(WirePointer* ptr)) {
@@ -392,16 +392,16 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(byte* to, const byte* from, ByteCount32 count)) {
-    if (count != 0u) memcpy(to, from, unbound(count / BYTES));
+    if (count != ZERO * BYTES) memcpy(to, from, unbound(count / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(word* to, const word* from, WordCountN<29> count)) {
-    if (count != 0u) memcpy(to, from, unbound(count * BYTES_PER_WORD / BYTES));
+    if (count != ZERO * WORDS) memcpy(to, from, unbound(count * BYTES_PER_WORD / BYTES));
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(WirePointer* to, const WirePointer* from,
                                           WirePointerCountN<29> count)) {
-    if (count != 0u) memcpy(to, from, unbound(count * BYTES_PER_POINTER  / BYTES));
+    if (count != ZERO * POINTERS) memcpy(to, from, unbound(count * BYTES_PER_POINTER  / BYTES));
   }
 
   template <typename T>
