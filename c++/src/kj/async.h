@@ -532,11 +532,19 @@ public:
   kj::String trace();
   // Return debug info about all promises currently in the TaskSet.
 
+  bool isEmpty() { return tasks == nullptr; }
+  // Check if any tasks are running.
+
+  Promise<void> onEmpty();
+  // Returns a promise that fulfills the next time the TaskSet is empty. Only one such promise can
+  // exist at a time.
+
 private:
   class Task;
 
   TaskSet::ErrorHandler& errorHandler;
   Maybe<Own<Task>> tasks;
+  Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
 };
 
 // =======================================================================================

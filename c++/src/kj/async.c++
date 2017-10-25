@@ -127,6 +127,14 @@ protected:
     *prev = kj::mv(next);
     next = nullptr;
     prev = nullptr;
+
+    KJ_IF_MAYBE(f, taskSet.emptyFulfiller) {
+      if (taskSet.tasks == nullptr) {
+        f->get()->fulfill();
+        taskSet.emptyFulfiller = nullptr;
+      }
+    }
+
     return mv(self);
   }
 
@@ -163,6 +171,18 @@ kj::String TaskSet::trace() {
   }
 
   return kj::strArray(traces, "\n============================================\n");
+}
+
+Promise<void> TaskSet::onEmpty() {
+  KJ_REQUIRE(emptyFulfiller == nullptr, "onEmpty() can only be called once at a time");
+
+  if (tasks == nullptr) {
+    return READY_NOW;
+  } else {
+    auto paf = newPromiseAndFulfiller<void>();
+    emptyFulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
 }
 
 namespace _ {  // private
