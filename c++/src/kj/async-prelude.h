@@ -38,6 +38,7 @@ class EventLoop;
 template <typename T>
 class Promise;
 class WaitScope;
+class TaskSet;
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
@@ -172,8 +173,6 @@ class ChainPromiseNode;
 template <typename T>
 class ForkHub;
 
-class TaskSetImpl;
-
 class Event;
 
 class PromiseBase {
@@ -191,7 +190,7 @@ private:
   friend class ChainPromiseNode;
   template <typename>
   friend class kj::Promise;
-  friend class TaskSetImpl;
+  friend class kj::TaskSet;
   template <typename U>
   friend Promise<Array<U>> kj::joinPromises(Array<Promise<U>>&& promises);
   friend Promise<void> kj::joinPromises(Array<Promise<void>>&& promises);

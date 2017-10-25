@@ -317,7 +317,7 @@ private:
   friend PromiseFulfillerPair<U> newPromiseAndFulfiller();
   template <typename>
   friend class _::ForkHub;
-  friend class _::TaskSetImpl;
+  friend class TaskSet;
   friend Promise<void> _::yield();
   friend class _::NeverDone;
   template <typename U>
@@ -522,8 +522,8 @@ public:
   };
 
   TaskSet(ErrorHandler& errorHandler);
-  // `loop` will be used to wait on promises.  `errorHandler` will be executed any time a task
-  // throws an exception, and will execute within the given EventLoop.
+  // `errorHandler` will be executed any time a task throws an exception, and will execute within
+  // the given EventLoop.
 
   ~TaskSet() noexcept(false);
 
@@ -532,8 +532,19 @@ public:
   kj::String trace();
   // Return debug info about all promises currently in the TaskSet.
 
+  bool isEmpty() { return tasks == nullptr; }
+  // Check if any tasks are running.
+
+  Promise<void> onEmpty();
+  // Returns a promise that fulfills the next time the TaskSet is empty. Only one such promise can
+  // exist at a time.
+
 private:
-  Own<_::TaskSetImpl> impl;
+  class Task;
+
+  TaskSet::ErrorHandler& errorHandler;
+  Maybe<Own<Task>> tasks;
+  Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
 };
 
 // =======================================================================================
@@ -653,7 +664,7 @@ private:
   _::Event** tail = &head;
   _::Event** depthFirstInsertPoint = &head;
 
-  Own<_::TaskSetImpl> daemons;
+  Own<TaskSet> daemons;
 
   bool turn();
   void setRunnable(bool runnable);

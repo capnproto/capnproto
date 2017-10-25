@@ -23,8 +23,6 @@
 #include "debug.h"
 #include "vector.h"
 #include "threadlocal.h"
-#include <exception>
-#include <map>
 
 #if KJ_USE_FUTEX
 #include <unistd.h>
@@ -86,86 +84,108 @@ public:
 
 }  // namespace
 
-namespace _ {  // private
+TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler)
+  : errorHandler(errorHandler) {}
 
-class TaskSetImpl {
+TaskSet::~TaskSet() noexcept(false) {}
+
+class TaskSet::Task final: public _::Event {
 public:
-  inline TaskSetImpl(TaskSet::ErrorHandler& errorHandler)
-    : errorHandler(errorHandler) {}
-
-  ~TaskSetImpl() noexcept(false) {
-    // std::map doesn't like it when elements' destructors throw, so carefully disassemble it.
-    if (!tasks.empty()) {
-      Vector<Own<Task>> deleteMe(tasks.size());
-      for (auto& entry: tasks) {
-        deleteMe.add(kj::mv(entry.second));
-      }
-    }
+  Task(TaskSet& taskSet, Own<_::PromiseNode>&& nodeParam)
+      : taskSet(taskSet), node(kj::mv(nodeParam)) {
+    node->setSelfPointer(&node);
+    node->onReady(this);
   }
 
-  class Task final: public Event {
-  public:
-    Task(TaskSetImpl& taskSet, Own<_::PromiseNode>&& nodeParam)
-        : taskSet(taskSet), node(kj::mv(nodeParam)) {
-      node->setSelfPointer(&node);
-      node->onReady(this);
+  Maybe<Own<Task>> next;
+  Maybe<Own<Task>>* prev = nullptr;
+
+protected:
+  Maybe<Own<Event>> fire() override {
+    // Get the result.
+    _::ExceptionOr<_::Void> result;
+    node->get(result);
+
+    // Delete the node, catching any exceptions.
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
+      node = nullptr;
+    })) {
+      result.addException(kj::mv(*exception));
     }
 
-  protected:
-    Maybe<Own<Event>> fire() override {
-      // Get the result.
-      _::ExceptionOr<_::Void> result;
-      node->get(result);
+    // Call the error handler if there was an exception.
+    KJ_IF_MAYBE(e, result.exception) {
+      taskSet.errorHandler.taskFailed(kj::mv(*e));
+    }
 
-      // Delete the node, catching any exceptions.
-      KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
-        node = nullptr;
-      })) {
-        result.addException(kj::mv(*exception));
+    // Remove from the task list.
+    KJ_IF_MAYBE(n, next) {
+      n->get()->prev = prev;
+    }
+    Own<Event> self = kj::mv(KJ_ASSERT_NONNULL(*prev));
+    KJ_ASSERT(self.get() == this);
+    *prev = kj::mv(next);
+    next = nullptr;
+    prev = nullptr;
+
+    KJ_IF_MAYBE(f, taskSet.emptyFulfiller) {
+      if (taskSet.tasks == nullptr) {
+        f->get()->fulfill();
+        taskSet.emptyFulfiller = nullptr;
       }
-
-      // Call the error handler if there was an exception.
-      KJ_IF_MAYBE(e, result.exception) {
-        taskSet.errorHandler.taskFailed(kj::mv(*e));
-      }
-
-      // Remove from the task map.
-      auto iter = taskSet.tasks.find(this);
-      KJ_ASSERT(iter != taskSet.tasks.end());
-      Own<Event> self = kj::mv(iter->second);
-      taskSet.tasks.erase(iter);
-      return mv(self);
     }
 
-    _::PromiseNode* getInnerForTrace() override {
-      return node;
-    }
-
-  private:
-    TaskSetImpl& taskSet;
-    kj::Own<_::PromiseNode> node;
-  };
-
-  void add(Promise<void>&& promise) {
-    auto task = heap<Task>(*this, kj::mv(promise.node));
-    Task* ptr = task;
-    tasks.insert(std::make_pair(ptr, kj::mv(task)));
+    return mv(self);
   }
 
-  kj::String trace() {
-    kj::Vector<kj::String> traces;
-    for (auto& entry: tasks) {
-      traces.add(entry.second->trace());
-    }
-    return kj::strArray(traces, "\n============================================\n");
+  _::PromiseNode* getInnerForTrace() override {
+    return node;
   }
 
 private:
-  TaskSet::ErrorHandler& errorHandler;
-
-  // TODO(perf):  Use a linked list instead.
-  std::map<Task*, Own<Task>> tasks;
+  TaskSet& taskSet;
+  Own<_::PromiseNode> node;
 };
+
+void TaskSet::add(Promise<void>&& promise) {
+  auto task = heap<Task>(*this, kj::mv(promise.node));
+  KJ_IF_MAYBE(head, tasks) {
+    head->get()->prev = &task->next;
+    task->next = kj::mv(tasks);
+  }
+  task->prev = &tasks;
+  tasks = kj::mv(task);
+}
+
+kj::String TaskSet::trace() {
+  kj::Vector<kj::String> traces;
+
+  Maybe<Own<Task>>* ptr = &tasks;
+  for (;;) {
+    KJ_IF_MAYBE(task, *ptr) {
+      traces.add(task->get()->trace());
+      ptr = &task->get()->next;
+    } else {
+      break;
+    }
+  }
+
+  return kj::strArray(traces, "\n============================================\n");
+}
+
+Promise<void> TaskSet::onEmpty() {
+  KJ_REQUIRE(emptyFulfiller == nullptr, "onEmpty() can only be called once at a time");
+
+  if (tasks == nullptr) {
+    return READY_NOW;
+  } else {
+    auto paf = newPromiseAndFulfiller<void>();
+    emptyFulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
+}
+
+namespace _ {  // private
 
 class LoggingErrorHandler: public TaskSet::ErrorHandler {
 public:
@@ -210,11 +230,11 @@ void EventPort::wake() const {
 
 EventLoop::EventLoop()
     : port(_::NullEventPort::instance),
-      daemons(kj::heap<_::TaskSetImpl>(_::LoggingErrorHandler::instance)) {}
+      daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::EventLoop(EventPort& port)
     : port(port),
-      daemons(kj::heap<_::TaskSetImpl>(_::LoggingErrorHandler::instance)) {}
+      daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
   // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
@@ -523,19 +543,6 @@ kj::String Event::trace() {
 }  // namespace _ (private)
 
 // =======================================================================================
-
-TaskSet::TaskSet(ErrorHandler& errorHandler)
-    : impl(heap<_::TaskSetImpl>(errorHandler)) {}
-
-TaskSet::~TaskSet() noexcept(false) {}
-
-void TaskSet::add(Promise<void>&& promise) {
-  impl->add(kj::mv(promise));
-}
-
-kj::String TaskSet::trace() {
-  return impl->trace();
-}
 
 namespace _ {  // private
 
