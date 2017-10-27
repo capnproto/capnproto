@@ -3295,8 +3295,9 @@ public:
     if (!firstRequest) {
       // For requests after the first, require that the first byte arrive before the pipeline
       // timeout, otherwise treat it like the connection was simply closed.
-      firstByte = firstByte.exclusiveJoin(
-          server.timer.afterDelay(server.settings.pipelineTimeout)
+      firstByte = firstByte
+          .exclusiveJoin(server.timer.afterDelay(server.settings.pipelineTimeout)
+          .exclusiveJoin(server.onDrain.addBranch())
           .then([this]() -> bool {
         timedOut = true;
         return false;
@@ -3328,8 +3329,9 @@ public:
 
     if (firstRequest) {
       // On the first request, the header timeout starts ticking immediately upon request opening.
-      receivedHeaders = receivedHeaders.exclusiveJoin(
-          server.timer.afterDelay(server.settings.headerTimeout)
+      receivedHeaders = receivedHeaders
+          .exclusiveJoin(server.timer.afterDelay(server.settings.headerTimeout)
+          .exclusiveJoin(server.onDrain.addBranch())
           .then([this]() -> kj::Maybe<HttpHeaders::Request> {
         timedOut = true;
         return nullptr;
@@ -3352,6 +3354,10 @@ public:
         // request is in-flight when we close... if it's a GET, the browser should retry. But if
         // it's a POST, retrying may be dangerous. This is why 408 exists -- it unambiguously
         // tells the client that it should retry.)
+        //
+        // Also note that if we ever decide to send 408 again, we might want to send some other
+        // error in the case that the server is draining, which also sets timedOut = true; see
+        // above.
 
         return httpOutput.flush();
       }
