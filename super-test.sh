@@ -167,6 +167,83 @@ while [ $# -gt 0 ]; do
       doit make -j$PARALLEL check
       exit 0
       ;;
+    cmake-package )
+      # Test that a particular configuration of Cap'n Proto can be discovered and configured against
+      # by a CMake project using the find_package() command. This is currently implemented by
+      # building the samples against the desired configuration.
+      #
+      # Takes one argument, the build configuration, which must be one of:
+      #
+      #   autotools-shared
+      #   autotools-static
+      #   cmake-shared
+      #   cmake-static
+
+      if [ "$#" -ne 2 ]; then
+        echo "usage: $0 cmake-package CONFIGURATION" >&2
+        echo "  where CONFIGURATION is one of {autotools,cmake}-{static,shared}" >&2
+        exit 1
+      fi
+
+      CONFIGURATION=$2
+      WORKSPACE=$(pwd)/cmake-package/$CONFIGURATION
+      SOURCE_DIR=$(pwd)/c++
+
+      rm -rf $WORKSPACE
+      mkdir -p $WORKSPACE/{build,build-samples,inst}
+
+      # Configure
+      cd $WORKSPACE/build
+      case "$CONFIGURATION" in
+        autotools-shared )
+          autoreconf -i $SOURCE_DIR
+          doit $SOURCE_DIR/configure --prefix="$WORKSPACE/inst" --disable-static
+          ;;
+        autotools-static )
+          autoreconf -i $SOURCE_DIR
+          doit $SOURCE_DIR/configure --prefix="$WORKSPACE/inst" --disable-shared
+          ;;
+        cmake-shared )
+          doit cmake $SOURCE_DIR -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX="$WORKSPACE/inst" \
+              -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=ON
+          # The CMake build does not currently set the rpath of the capnp compiler tools.
+          export LD_LIBRARY_PATH="$WORKSPACE/inst/lib"
+          ;;
+        cmake-static )
+          doit cmake $SOURCE_DIR -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX="$WORKSPACE/inst" \
+              -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF
+          ;;
+        * )
+          echo "Unrecognized cmake-package CONFIGURATION argument, must be {autotools,cmake}-{static,shared}" >&2
+          exit 1
+          ;;
+      esac
+
+      # Build and install
+      doit make -j$PARALLEL install
+
+      # Configure, build, and execute the samples.
+      cd $WORKSPACE/build-samples
+      doit cmake $SOURCE_DIR/samples -G "Unix Makefiles" -DCMAKE_PREFIX_PATH="$WORKSPACE/inst" \
+          -DCAPNPC_FLAGS=--no-standard-import -DCAPNPC_IMPORT_DIRS="$WORKSPACE/inst/include"
+      doit make -j$PARALLEL
+
+      echo "@@@@ ./addressbook (in various configurations)"
+      ./addressbook write | ./addressbook read
+      ./addressbook dwrite | ./addressbook dread
+      rm -f /tmp/capnp-calculator-example-$$
+      ./calculator-server unix:/tmp/capnp-calculator-example-$$ &
+      sleep 0.1
+      ./calculator-client unix:/tmp/capnp-calculator-example-$$
+      kill %+
+      wait %+ || true
+
+      echo "========================================================================="
+      echo "Cap'n Proto ($CONFIGURATION) installs a working CMake config package."
+      echo "========================================================================="
+
+      exit 0
+      ;;
     exotic )
       echo "========================================================================="
       echo "MinGW 64-bit"
