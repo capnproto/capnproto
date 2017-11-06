@@ -1130,9 +1130,8 @@ public:
         } else if ('A' <= c && c <= 'F') {
           value = value * 16 + (c - 'A' + 10);
         } else {
-          KJ_FAIL_REQUIRE("invalid HTTP chunk size", text, text.asBytes()) {
-            return value;
-          }
+          KJ_FAIL_REQUIRE("invalid HTTP chunk size", text, text.asBytes()) { break; }
+          return value;
         }
       }
 
