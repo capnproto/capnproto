@@ -3294,13 +3294,13 @@ public:
     if (!firstRequest) {
       // For requests after the first, require that the first byte arrive before the pipeline
       // timeout, otherwise treat it like the connection was simply closed.
-      firstByte = firstByte
-          .exclusiveJoin(server.timer.afterDelay(server.settings.pipelineTimeout)
+      auto timeoutPromise = server.timer.afterDelay(server.settings.pipelineTimeout)
           .exclusiveJoin(server.onDrain.addBranch())
           .then([this]() -> bool {
         timedOut = true;
         return false;
-      }));
+      });
+      firstByte = firstByte.exclusiveJoin(kj::mv(timeoutPromise));
     }
 
     auto receivedHeaders = firstByte
@@ -3328,13 +3328,13 @@ public:
 
     if (firstRequest) {
       // On the first request, the header timeout starts ticking immediately upon request opening.
-      receivedHeaders = receivedHeaders
-          .exclusiveJoin(server.timer.afterDelay(server.settings.headerTimeout)
+      auto timeoutPromise = server.timer.afterDelay(server.settings.headerTimeout)
           .exclusiveJoin(server.onDrain.addBranch())
           .then([this]() -> kj::Maybe<HttpHeaders::Request> {
         timedOut = true;
         return nullptr;
-      }));
+      });
+      receivedHeaders = receivedHeaders.exclusiveJoin(kj::mv(timeoutPromise));
     }
 
     return receivedHeaders
