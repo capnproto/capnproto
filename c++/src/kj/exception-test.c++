@@ -138,6 +138,42 @@ TEST(Exception, ScopeSuccessFail) {
 }
 #endif
 
+#if __GNUG__
+kj::String testStackTrace() __attribute__((noinline));
+#elif _MSC_VER
+__declspec(noinline) kj::String testStackTrace();
+#endif
+
+kj::String testStackTrace() {
+  // getStackTrace() normally skips its immediate caller, so we wrap it in another layer.
+  return getStackTrace();
+}
+
+KJ_TEST("getStackTrace() returns correct line number, not line + 1") {
+  // Backtraces normally produce the return address of each stack frame, but that's usually the
+  // address immediately after the one that made the call. As a result, it used to be that stack
+  // traces often pointed to the line after the one that made a call, which was confusing. This
+  // checks that this bug is fixed.
+  //
+  // This is not a very robust test, because:
+  // 1) Since symbolic stack traces are not available in many situations (e.g. release builds
+  //    lacking debug symbols, systems where addr2line isn't present, etc.), we only check that
+  //    the stack trace does *not* contain the *wrong* value, rather than checking that it does
+  //    contain the right one.
+  // 2) This test only detects the problem if the call instruction to testStackTrace() is the
+  //    *last* instruction attributed to its line of code. Whether or not this is true seems to be
+  //    dependent on obscure complier behavior. For example, below, it could only be the case if
+  //    RVO is applied -- but in my testing, RVO does seem to be applied here. I tried several
+  //    variations involving passing via an output parameter or a global variable rather than
+  //    returning, but found some variations detected the problem and others didn't, essentially
+  //    at random.
+
+  auto trace = testStackTrace();
+  auto wrong = kj::str("exception-test.c++:", __LINE__);
+
+  KJ_ASSERT(strstr(trace.cStr(), wrong.cStr()) == nullptr, trace, wrong);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
