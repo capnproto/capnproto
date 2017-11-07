@@ -172,6 +172,16 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
   return getStackTrace(space, ignoreCount, GetCurrentThread(), context);
 #elif KJ_HAS_BACKTRACE
   size_t size = backtrace(space.begin(), space.size());
+  for (auto& addr: space.slice(0, size)) {
+    // The addresses produced by backtrace() are return addresses, which means they point to the
+    // instruction immediately after the call. Invoking addr2line on these can be confusing because
+    // it often points to the next line. If the next instruction is inlined from another function,
+    // the trace can be extra-confusing, since now it claims to be in a function that was not
+    // actually on the call stack. If we subtract 1 from each address, though, we get a much more
+    // reasonable trace. This may cause the addresses to be invalid instruction pointers if the
+    // instructions were multi-byte, but it appears addr2line is able to cope with this.
+    addr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) - 1);
+  }
   return space.slice(kj::min(ignoreCount + 1, size), size);
 #else
   return nullptr;
