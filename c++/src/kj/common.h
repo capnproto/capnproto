@@ -1222,6 +1222,16 @@ public:
     }
   }
 
+  template <typename Func>
+  auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      const T& ref = *ptr;
+      return f(ref);
+    }
+  }
+
 private:
   T* ptr;
 
