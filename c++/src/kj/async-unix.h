@@ -127,7 +127,7 @@ public:
   //   which child, and therefore it may inadvertently reap children created by other threads.
 
   static void captureChildExit();
-  // Arranges for child process exit to be captured and handled via UnixEventPort, so than you may
+  // Arranges for child process exit to be captured and handled via UnixEventPort, so that you may
   // call `onChildExit()`. Much like `captureSignal()`, this static method must be called early on
   // in program startup.
   //

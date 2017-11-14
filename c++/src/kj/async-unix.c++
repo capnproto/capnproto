@@ -157,6 +157,9 @@ void UnixEventPort::ChildSet::checkExits() {
 }
 
 Promise<int> UnixEventPort::onChildExit(Maybe<pid_t>& pid) {
+  KJ_REQUIRE(capturedChildExit,
+      "must call UnixEventPort::captureChildExit() to use onChildExit().");
+
   ChildSet* cs;
   KJ_IF_MAYBE(c, childSet) {
     cs = *c;
