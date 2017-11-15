@@ -30,6 +30,8 @@
 #include <limits>
 #include <chrono>
 #include <pthread.h>
+#include <map>
+#include <sys/wait.h>
 
 #if KJ_USE_EPOLL
 #include <unistd.h>
@@ -57,6 +59,8 @@ namespace {
 
 int reservedSignal = SIGUSR1;
 bool tooLateToSetReserved = false;
+bool capturedChildExit = false;
+bool threadClaimedChildExits = false;
 
 struct SignalCapture {
   sigjmp_buf jumpTo;
@@ -109,6 +113,76 @@ pthread_once_t registerReservedSignalOnce = PTHREAD_ONCE_INIT;
 
 }  // namespace
 
+struct UnixEventPort::ChildSet {
+  std::map<pid_t, ChildExitPromiseAdapter*> waiters;
+
+  void checkExits();
+};
+
+class UnixEventPort::ChildExitPromiseAdapter {
+public:
+  inline ChildExitPromiseAdapter(PromiseFulfiller<int>& fulfiller,
+                                 ChildSet& childSet, Maybe<pid_t>& pidRef)
+      : childSet(childSet),
+        pid(KJ_REQUIRE_NONNULL(pidRef,
+            "`pid` must be non-null at the time `onChildExit()` is called")),
+        pidRef(pidRef), fulfiller(fulfiller) {
+    KJ_REQUIRE(childSet.waiters.insert(std::make_pair(pid, this)).second,
+        "already called onChildExit() for this pid");
+  }
+
+  ~ChildExitPromiseAdapter() noexcept(false) {
+    childSet.waiters.erase(pid);
+  }
+
+  ChildSet& childSet;
+  pid_t pid;
+  Maybe<pid_t>& pidRef;
+  PromiseFulfiller<int>& fulfiller;
+};
+
+void UnixEventPort::ChildSet::checkExits() {
+  for (;;) {
+    int status;
+    pid_t pid;
+    KJ_SYSCALL(pid = waitpid(-1, &status, WNOHANG));
+    if (pid == 0) break;
+
+    auto iter = waiters.find(pid);
+    if (iter != waiters.end()) {
+      iter->second->pidRef = nullptr;
+      iter->second->fulfiller.fulfill(kj::cp(status));
+    }
+  }
+}
+
+Promise<int> UnixEventPort::onChildExit(Maybe<pid_t>& pid) {
+  KJ_REQUIRE(capturedChildExit,
+      "must call UnixEventPort::captureChildExit() to use onChildExit().");
+
+  ChildSet* cs;
+  KJ_IF_MAYBE(c, childSet) {
+    cs = *c;
+  } else {
+    // In theory we should do an atomic compare-and-swap on threadClaimedChildExits, but this is
+    // for debug purposes only so it's not a big deal.
+    KJ_REQUIRE(!threadClaimedChildExits,
+        "only one UnixEvertPort per process may listen for child exits");
+    threadClaimedChildExits = true;
+
+    auto newChildSet = kj::heap<ChildSet>();
+    cs = newChildSet;
+    childSet = kj::mv(newChildSet);
+  }
+
+  return kj::newAdaptedPromise<int, ChildExitPromiseAdapter>(*cs, pid);
+}
+
+void UnixEventPort::captureChildExit() {
+  captureSignal(SIGCHLD);
+  capturedChildExit = true;
+}
+
 class UnixEventPort::SignalPromiseAdapter {
 public:
   inline SignalPromiseAdapter(PromiseFulfiller<siginfo_t>& fulfiller,
@@ -151,6 +225,8 @@ public:
 };
 
 Promise<siginfo_t> UnixEventPort::onSignal(int signum) {
+  KJ_REQUIRE(signum != SIGCHLD || !capturedChildExit,
+      "can't call onSigal(SIGCHLD) when kj::UnixEventPort::captureChildExit() has been called");
   return newAdaptedPromise<siginfo_t, SignalPromiseAdapter>(*this, signum);
 }
 
@@ -178,6 +254,14 @@ void UnixEventPort::setReservedSignal(int signum) {
 }
 
 void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
+  // If onChildExit() has been called and this is SIGCHLD, check for child exits.
+  KJ_IF_MAYBE(cs, childSet) {
+    if (siginfo.si_signo == SIGCHLD) {
+      cs->get()->checkExits();
+      return;
+    }
+  }
+
   // Fire any events waiting on this signal.
   auto ptr = signalHead;
   while (ptr != nullptr) {
@@ -222,7 +306,12 @@ UnixEventPort::UnixEventPort()
   KJ_SYSCALL(epoll_ctl(epollFd, EPOLL_CTL_ADD, eventFd, &event));
 }
 
-UnixEventPort::~UnixEventPort() noexcept(false) {}
+UnixEventPort::~UnixEventPort() noexcept(false) {
+  if (childSet != nullptr) {
+    // We had claimed the exclusive right to call onChildExit(). Release that right.
+    threadClaimedChildExits = false;
+  }
+}
 
 UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint flags)
     : eventPort(eventPort), fd(fd), flags(flags) {
@@ -439,6 +528,9 @@ bool UnixEventPort::doEpollWait(int timeout) {
     while (ptr != nullptr) {
       sigaddset(&newMask, ptr->signum);
       ptr = ptr->next;
+    }
+    if (childSet != nullptr) {
+      sigaddset(&newMask, SIGCHLD);
     }
   }
 
@@ -673,6 +765,9 @@ bool UnixEventPort::wait() {
     while (ptr != nullptr) {
       sigaddset(&newMask, ptr->signum);
       ptr = ptr->next;
+    }
+    if (childSet != nullptr) {
+      sigaddset(&newMask, SIGCHLD);
     }
   }
 

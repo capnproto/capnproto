@@ -99,15 +99,49 @@ public:
 
   Timer& getTimer() { return timerImpl; }
 
+  Promise<int> onChildExit(Maybe<pid_t>& pid);
+  // When the given child process exits, resolves to its wait status, as returned by wait(2). You
+  // will need to use the WIFEXITED() etc. macros to interpret the status code.
+  //
+  // You must call onChildExit() immediately after the child is created, before returning to the
+  // event loop. Otherwise, you may miss the child exit event.
+  //
+  // `pid` is a reference to a Maybe<pid_t> which must be non-null at the time of the call. When
+  // wait() is invoked (and indicates this pid has finished), `pid` will be nulled out. This is
+  // necessary to avoid a race condition: as soon as the child has been wait()ed, the PID table
+  // entry is freed and can then be reused. So, if you ever want safely to call `kill()` on the
+  // PID, it's necessary to know whether it has been wait()ed already. Since the promise's
+  // .then() continuation may not run immediately, we need a more precise way, hence we null out
+  // the Maybe.
+  //
+  // You must call `kj::UnixEventPort::captureChildExit()` early in your program if you want to use
+  // `onChildExit()`.
+  //
+  // WARNING: Only one UnixEventPort per process is allowed to use onChildExit(). This is because
+  //   child exit is signaled to the process via SIGCHLD, and Unix does not allow the program to
+  //   control which thread receives the signal. (We may fix this in the future by automatically
+  //   coordinating between threads when multiple threads are expecting child exits.)
+  // WARNING 2: If any UnixEventPort in the process is currently waiting for onChildExit(), then
+  //   *only* that port's thread can safely wait on child processes, even synchronously. This is
+  //   because the thread which used onChildExit() uses wait() to reap children, without specifying
+  //   which child, and therefore it may inadvertently reap children created by other threads.
+
+  static void captureChildExit();
+  // Arranges for child process exit to be captured and handled via UnixEventPort, so that you may
+  // call `onChildExit()`. Much like `captureSignal()`, this static method must be called early on
+  // in program startup.
+  //
+  // This method may capture the `SIGCHLD` signal. You must not use `captureSignal(SIGCHLD)` nor
+  // `onSignal(SIGCHLD)` in your own code if you use `captureChildExit()`.
+
   // implements EventPort ------------------------------------------------------
   bool wait() override;
   bool poll() override;
   void wake() const override;
 
 private:
-  struct TimerSet;  // Defined in source file to avoid STL include.
-  class TimerPromiseAdapter;
   class SignalPromiseAdapter;
+  class ChildExitPromiseAdapter;
 
   TimerImpl timerImpl;
 
@@ -138,6 +172,9 @@ private:
 
   unsigned long long threadId;  // actually pthread_t
 #endif
+
+  struct ChildSet;
+  Maybe<Own<ChildSet>> childSet;
 };
 
 class UnixEventPort::FdObserver {
