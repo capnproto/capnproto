@@ -81,11 +81,17 @@ add_subdirectory(src)
 # Install ======================================================================
 
 include(CMakePackageConfigHelpers)
-write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfigVersion.cmake"
-  VERSION ${VERSION}
-  COMPATIBILITY AnyNewerVersion
-)
+
+# We used to use write_basic_package_version_file(), but since the autotools build needs to install
+# a config version script as well, I copied the AnyNewerVersion template from my CMake Modules
+# directory to Cap'n Proto's cmake/ directory (alternatively, we could make the autotools build
+# depend on CMake).
+#
+# We might as well use the local copy of the template. In the future we can modify the project's
+# version compatibility policy just by changing that file.
+set(PACKAGE_VERSION ${VERSION})
+configure_file(cmake/CapnProtoConfigVersion.cmake.in cmake/CapnProtoConfigVersion.cmake @ONLY)
+
 set(CONFIG_PACKAGE_LOCATION ${CMAKE_INSTALL_LIBDIR}/cmake/CapnProto)
 
 configure_package_config_file(cmake/CapnProtoConfig.cmake.in
@@ -120,22 +126,25 @@ if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
   set(PTHREAD_CFLAGS "-pthread")
   set(STDLIB_FLAG)  # TODO: Unsupported
 
-  configure_file(kj.pc.in "${CMAKE_CURRENT_BINARY_DIR}/kj.pc" @ONLY)
-  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kj.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-
-  configure_file(capnp.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" @ONLY)
-  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+  set(CAPNP_PKG_CONFIG_FILES
+    pkgconfig/kj.pc
+    pkgconfig/capnp.pc
+  )
 
   if(NOT CAPNP_LITE)
-    configure_file(kj-async.pc.in "${CMAKE_CURRENT_BINARY_DIR}/kj-async.pc" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kj-async.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-
-    configure_file(capnp-rpc.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-rpc.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-
-    configure_file(capnp-json.pc.in "${CMAKE_CURRENT_BINARY_DIR}/capnp-json.pc" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/capnp-json.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+    list(APPEND CAPNP_PKG_CONFIG_FILES
+      pkgconfig/kj-async.pc
+      pkgconfig/kj-http.pc
+      pkgconfig/kj-test.pc
+      pkgconfig/capnp-rpc.pc
+      pkgconfig/capnp-json.pc
+    )
   endif()
+
+  foreach(pcfile ${CAPNP_PKG_CONFIG_FILES})
+    configure_file(${pcfile}.in "${CMAKE_CURRENT_BINARY_DIR}/${pcfile}" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${pcfile}" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+  endforeach()
 
   unset(STDLIB_FLAG)
   unset(PTHREAD_CFLAGS)

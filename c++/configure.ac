@@ -105,5 +105,35 @@ AC_SUBST([STDLIB_FLAG])
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 
-AC_CONFIG_FILES([Makefile capnp.pc capnp-rpc.pc capnp-json.pc kj.pc kj-async.pc])
+AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
+  pkgconfig/capnp.pc \
+  pkgconfig/capnp-rpc.pc \
+  pkgconfig/capnp-json.pc \
+  pkgconfig/kj.pc \
+  pkgconfig/kj-async.pc \
+  pkgconfig/kj-http.pc \
+  pkgconfig/kj-test.pc \
+])
+AC_DEFUN([CAPNP_CMAKE_CONFIG_FILES], [ \
+  cmake/CapnProtoConfig.cmake \
+  cmake/CapnProtoConfigVersion.cmake \
+])
+
+[CAPNP_PKG_CONFIG_FILES]="CAPNP_PKG_CONFIG_FILES"
+[CAPNP_CMAKE_CONFIG_FILES]="CAPNP_CMAKE_CONFIG_FILES"
+AC_SUBST([CAPNP_PKG_CONFIG_FILES])
+AC_SUBST([CAPNP_CMAKE_CONFIG_FILES])
+
+# CapnProtoConfig.cmake.in needs these PACKAGE_* output variables.
+PACKAGE_INIT="set([CAPNP_PKG_CONFIG_FILES] CAPNP_PKG_CONFIG_FILES)"
+PACKAGE_CMAKE_INSTALL_FULL_INCLUDEDIR="${CMAKE_CURRENT_LIST_DIR}/../../include"
+AC_SUBST([PACKAGE_INIT])
+AC_SUBST([PACKAGE_CMAKE_INSTALL_FULL_INCLUDEDIR])
+
+# CapnProtoConfigVersion.cmake.in needs PACKAGE_VERSION (already defined by AC_INIT) and
+# CMAKE_SIZEOF_VOID_P output variables.
+AC_CHECK_SIZEOF([void *])
+AC_SUBST(CMAKE_SIZEOF_VOID_P, $ac_cv_sizeof_void_p)
+
+AC_CONFIG_FILES([Makefile] CAPNP_PKG_CONFIG_FILES CAPNP_CMAKE_CONFIG_FILES)
 AC_OUTPUT
