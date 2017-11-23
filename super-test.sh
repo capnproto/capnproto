@@ -261,6 +261,13 @@ while [ $# -gt 0 ]; do
       echo "CMake"
       echo "========================================================================="
       "$0" cmake
+      echo "========================================================================="
+      echo "CMake config packages"
+      echo "========================================================================="
+      "$0" cmake-package autotools-shared
+      "$0" cmake-package autotools-static
+      "$0" cmake-package cmake-shared
+      "$0" cmake-package cmake-static
       exit 0
       ;;
     clean )
