@@ -35,6 +35,8 @@
 #include <pthread.h>
 #include <algorithm>
 #include <sys/wait.h>
+#include <sys/time.h>
+#include <errno.h>
 
 namespace kj {
 namespace {
@@ -574,6 +576,41 @@ TEST(AsyncUnixTest, SteadyTimers) {
     KJ_EXPECT(expected[i] <= actual[i], "Actual time for timer i is too early.",
               i, ((expected[i] - actual[i]) / NANOSECONDS));
   }
+}
+
+bool dummySignalHandlerCalled = false;
+void dummySignalHandler(int) {
+  dummySignalHandlerCalled = true;
+}
+
+TEST(AsyncUnixTest, InterruptedTimer) {
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  // Schedule a timer event in 10ms.
+  auto& timer = port.getTimer();
+  auto start = timer.now();
+  constexpr auto timeout = 10 * MILLISECONDS;
+
+  // Arrange SIGALRM to be delivered in 5ms, handled in an empty signal handler. This will cause
+  // our wait to be interrupted with EINTR. We should nevertheless continue waiting for the right
+  // amount of time.
+  dummySignalHandlerCalled = false;
+  if (signal(SIGALRM, &dummySignalHandler) == SIG_ERR) {
+    KJ_FAIL_SYSCALL("signal(SIGALRM)", errno);
+  }
+  struct itimerval itv;
+  memset(&itv, 0, sizeof(itv));
+  itv.it_value.tv_usec = 5000;  // signal after 5ms
+  setitimer(ITIMER_REAL, &itv, nullptr);
+
+  timer.afterDelay(timeout).wait(waitScope);
+
+  KJ_EXPECT(dummySignalHandlerCalled);
+  KJ_EXPECT(timer.now() - start >= timeout);
+  KJ_EXPECT(timer.now() - start <= timeout + (timeout / 5));  // allow 2ms error
 }
 
 TEST(AsyncUnixTest, Wake) {
