@@ -27,7 +27,7 @@
 #endif
 
 #include "async.h"
-#include "time.h"
+#include "timer.h"
 #include "io.h"
 #include <atomic>
 #include <inttypes.h>

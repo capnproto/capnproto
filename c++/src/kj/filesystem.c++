@@ -23,6 +23,7 @@
 #include "vector.h"
 #include "debug.h"
 #include "one-of.h"
+#include "refcount.h"
 #include <map>
 
 namespace kj {

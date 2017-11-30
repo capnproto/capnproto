@@ -29,7 +29,7 @@
 #include "async.h"
 #include "function.h"
 #include "thread.h"
-#include "time.h"
+#include "timer.h"
 
 struct sockaddr;
 

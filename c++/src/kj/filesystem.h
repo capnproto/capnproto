@@ -25,7 +25,7 @@
 #include "memory.h"
 #include "io.h"
 #include <inttypes.h>
-#include "time.h"  // TODO(now): problematic
+#include "time.h"
 #include "function.h"
 
 namespace kj {

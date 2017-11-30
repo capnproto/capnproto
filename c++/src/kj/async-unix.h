@@ -31,7 +31,7 @@
 #endif
 
 #include "async.h"
-#include "time.h"
+#include "timer.h"
 #include "vector.h"
 #include "io.h"
 #include <signal.h>

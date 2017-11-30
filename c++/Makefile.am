@@ -143,6 +143,7 @@ includekj_HEADERS =                                            \
   src/kj/async.h                                               \
   src/kj/async-inl.h                                           \
   src/kj/time.h                                                \
+  src/kj/timer.h                                               \
   src/kj/async-unix.h                                          \
   src/kj/async-win32.h                                         \
   src/kj/async-io.h                                            \
@@ -227,6 +228,7 @@ libkj_la_SOURCES=                                              \
   src/kj/io.c++                                                \
   src/kj/mutex.c++                                             \
   src/kj/thread.c++                                            \
+  src/kj/time.c++                                              \
   src/kj/test-helpers.c++                                      \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
@@ -245,7 +247,7 @@ libkj_async_la_SOURCES=                                        \
   src/kj/async-io.c++                                          \
   src/kj/async-io-unix.c++                                     \
   src/kj/async-io-win32.c++                                    \
-  src/kj/time.c++
+  src/kj/timer.c++
 
 libkj_http_la_LIBADD = libkj-async.la libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_http_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
