@@ -22,6 +22,7 @@
 #include "encoding.h"
 #include "vector.h"
 #include "debug.h"
+#include "parse/char.h"
 
 namespace kj {
 
@@ -661,24 +662,44 @@ typedef enum {
 } base64_decodestep;
 
 typedef struct {
-  base64_decodestep step;
-  char plainchar;
+  size_t nBytesProcessed = 0;
+  size_t nPaddingBytesProcessed = 0;
+  bool hadErrors = false;
+  // Output state.
+
+  base64_decodestep step = step_a;
+  char plainchar = 0;
 } base64_decodestate;
 
-int base64_decode_value(char value_in) {
+int base64_decode_value(char value_in, base64_decodestate& state) {
+  // Returns either the fragment value or: -1 on invalid input, -2 on padding, -3 on whitespace.
+
+  // Skip whitespace completely -- they don't contribute to the total number of bytes processed.
+  constexpr auto whitespace = kj::parse::anyOfChars(" \t\n\f\r");  // But not \v, per Infra spec.
+  if (whitespace.contains(value_in)) return -3;
+
   static const char decoding[] = {
     62,-1,-1,-1,63,52,53,54,55,56,57,58,59,60,61,-1,-1,-1,-2,-1,-1,-1,
     0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1,-1,
     26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51};
   static const char decoding_size = sizeof(decoding);
-  value_in -= 43;
-  if (value_in < 0 || value_in > decoding_size) return -1;
-  return decoding[(int)value_in];
-}
 
-void base64_init_decodestate(base64_decodestate* state_in) {
-  state_in->step = step_a;
-  state_in->plainchar = 0;
+  value_in -= 43;
+  auto fragment = (value_in < 0 || value_in > decoding_size) ? -1 : decoding[(int)value_in];
+
+  // Error on invalid input characters or if we've seen a non-padding input character after a
+  // padding input character.
+  state.hadErrors = state.hadErrors || fragment == -1
+                                    || (state.nPaddingBytesProcessed > 0 && fragment > -2);
+
+  // Keep track of how many padding bytes we've seen. We can use this information after all calls to
+  // base64_decode_block() are complete to perform more validity checks.
+  if (fragment == -2) ++state.nPaddingBytesProcessed;
+
+  // Invalid input characters are errors, and don't contribute to the number of bytes processed.
+  if (fragment != -1) ++state.nBytesProcessed;
+
+  return fragment;
 }
 
 int base64_decode_block(const char* code_in, const int length_in,
@@ -700,7 +721,7 @@ int base64_decode_block(const char* code_in, const int length_in,
           state_in->plainchar = *plainchar;
           return plainchar - plaintext_out;
         }
-        fragment = (char)base64_decode_value(*codechar++);
+        fragment = (char)base64_decode_value(*codechar++, *state_in);
       } while (fragment < 0);
       *plainchar    = (fragment & 0x03f) << 2;
   case step_b:
@@ -710,7 +731,7 @@ int base64_decode_block(const char* code_in, const int length_in,
           state_in->plainchar = *plainchar;
           return plainchar - plaintext_out;
         }
-        fragment = (char)base64_decode_value(*codechar++);
+        fragment = (char)base64_decode_value(*codechar++, *state_in);
       } while (fragment < 0);
       *plainchar++ |= (fragment & 0x030) >> 4;
       *plainchar    = (fragment & 0x00f) << 4;
@@ -721,7 +742,7 @@ int base64_decode_block(const char* code_in, const int length_in,
           state_in->plainchar = *plainchar;
           return plainchar - plaintext_out;
         }
-        fragment = (char)base64_decode_value(*codechar++);
+        fragment = (char)base64_decode_value(*codechar++, *state_in);
       } while (fragment < 0);
       *plainchar++ |= (fragment & 0x03c) >> 2;
       *plainchar    = (fragment & 0x003) << 6;
@@ -732,7 +753,7 @@ int base64_decode_block(const char* code_in, const int length_in,
           state_in->plainchar = *plainchar;
           return plainchar - plaintext_out;
         }
-        fragment = (char)base64_decode_value(*codechar++);
+        fragment = (char)base64_decode_value(*codechar++, *state_in);
       } while (fragment < 0);
       *plainchar++   |= (fragment & 0x03f);
     }
@@ -743,14 +764,23 @@ int base64_decode_block(const char* code_in, const int length_in,
 
 }  // namespace
 
-Array<byte> decodeBase64(ArrayPtr<const char> input) {
+EncodingResult<Array<byte>> decodeBase64(ArrayPtr<const char> input) {
   base64_decodestate state;
-  base64_init_decodestate(&state);
 
   auto output = heapArray<byte>((input.size() * 6 + 7) / 8);
 
   size_t n = base64_decode_block(input.begin(), input.size(),
       reinterpret_cast<char*>(output.begin()), &state);
+
+  // Now we can sanity-check the number of bytes / number of padding bytes processed. There are
+  // three error cases we need to check:
+  //   1. An input length / 4 remainder of 1.
+  //   2. More than 2 padding bytes.
+  //   3. Any padding bytes at all when the input length is not a multiple of 4.
+  auto lengthRem = state.nBytesProcessed & 0b11;
+  state.hadErrors = state.hadErrors || lengthRem == 1
+                                    || state.nPaddingBytesProcessed > 2
+                                    || (state.nPaddingBytesProcessed > 0 && lengthRem != 0);
 
   if (n < output.size()) {
     auto copy = heapArray<byte>(n);
@@ -758,7 +788,7 @@ Array<byte> decodeBase64(ArrayPtr<const char> input) {
     output = kj::mv(copy);
   }
 
-  return output;
+  return EncodingResult<Array<byte>>(kj::mv(output), state.hadErrors);
 }
 
 } // namespace kj
