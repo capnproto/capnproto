@@ -589,10 +589,19 @@ TEST(AsyncUnixTest, InterruptedTimer) {
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
+#if __linux__
+  // Linux timeslices are 1ms.
+  constexpr auto OS_SLOWNESS_FACTOR = 1;
+#else
+  // OSX timeslices are 10ms, so we need longer timeouts to avoid flakiness.
+  // To be safe we'll assume other OS's are similar.
+  constexpr auto OS_SLOWNESS_FACTOR = 10;
+#endif
+
   // Schedule a timer event in 10ms.
   auto& timer = port.getTimer();
   auto start = timer.now();
-  constexpr auto timeout = 10 * MILLISECONDS;
+  constexpr auto timeout = 10 * MILLISECONDS * OS_SLOWNESS_FACTOR;
 
   // Arrange SIGALRM to be delivered in 5ms, handled in an empty signal handler. This will cause
   // our wait to be interrupted with EINTR. We should nevertheless continue waiting for the right
@@ -603,7 +612,7 @@ TEST(AsyncUnixTest, InterruptedTimer) {
   }
   struct itimerval itv;
   memset(&itv, 0, sizeof(itv));
-  itv.it_value.tv_usec = 5000;  // signal after 5ms
+  itv.it_value.tv_usec = 5000 * OS_SLOWNESS_FACTOR;  // signal after 5ms
   setitimer(ITIMER_REAL, &itv, nullptr);
 
   timer.afterDelay(timeout).wait(waitScope);
