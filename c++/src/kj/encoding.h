@@ -97,9 +97,9 @@ String encodeBase64(ArrayPtr<const byte> bytes, bool breakLines = false);
 // Encode the given bytes as base64 text. If `breakLines` is true, line breaks will be inserted
 // into the output every 72 characters (e.g. for encoding e-mail bodies).
 
-Array<byte> decodeBase64(ArrayPtr<const char> text);
-// Decode base64 text. Non-base64 characters are ignored and padding characters are not requried;
-// as such, this function never fails.
+EncodingResult<Array<byte>> decodeBase64(ArrayPtr<const char> text);
+// Decode base64 text. This function reports errors required by the WHATWG HTML/Infra specs: see
+// https://html.spec.whatwg.org/multipage/webappapis.html#atob for details.
 
 // =======================================================================================
 // inline implementation details
@@ -200,7 +200,7 @@ inline EncodingResult<String> decodeCEscape(const char (&text)[s]) {
   return decodeCEscape(arrayPtr(text, s-1));
 }
 template <size_t s>
-Array<byte> decodeBase64(const char (&text)[s]) {
+EncodingResult<Array<byte>> decodeBase64(const char (&text)[s]) {
   return decodeBase64(arrayPtr(text, s - 1));
 }
 
