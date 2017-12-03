@@ -616,6 +616,43 @@ KJ_TEST("DiskDirectory copy") {
   KJ_EXPECT(dst->openFile(Path({"link", "bar"}))->readAllText() == "foobar");
 }
 
+KJ_TEST("DiskDirectory copy-replace") {
+  TempDir tempDirSrc;
+  TempDir tempDirDst;
+
+  auto src = tempDirSrc.get();
+  auto dst = tempDirDst.get();
+
+  src->openFile(Path({"foo", "bar"}), WriteMode::CREATE | WriteMode::CREATE_PARENT)
+     ->writeAll("foobar");
+  src->openFile(Path({"foo", "baz", "qux"}), WriteMode::CREATE | WriteMode::CREATE_PARENT)
+     ->writeAll("bazqux");
+
+  dst->openFile(Path({"link", "corge"}), WriteMode::CREATE | WriteMode::CREATE_PARENT)
+     ->writeAll("abcd");
+
+  // CREATE fails.
+  KJ_EXPECT(!dst->tryTransfer(Path("link"), WriteMode::CREATE,
+                              *src, Path("foo"), TransferMode::COPY));
+
+  // Verify nothing changed.
+  KJ_EXPECT(dst->openFile(Path({"link", "corge"}))->readAllText() == "abcd");
+  KJ_EXPECT(!dst->exists(Path({"foo", "bar"})));
+
+  // Now try MODIFY.
+  dst->transfer(Path("link"), WriteMode::MODIFY, *src, Path("foo"), TransferMode::COPY);
+
+  KJ_EXPECT(src->openFile(Path({"foo", "bar"}))->readAllText() == "foobar");
+  KJ_EXPECT(src->openFile(Path({"foo", "baz", "qux"}))->readAllText() == "bazqux");
+  KJ_EXPECT(dst->openFile(Path({"link", "bar"}))->readAllText() == "foobar");
+  KJ_EXPECT(dst->openFile(Path({"link", "baz", "qux"}))->readAllText() == "bazqux");
+  KJ_EXPECT(!dst->exists(Path({"link", "corge"})));
+
+  KJ_EXPECT(dst->exists(Path({"link", "bar"})));
+  src->remove(Path({"foo", "bar"}));
+  KJ_EXPECT(dst->openFile(Path({"link", "bar"}))->readAllText() == "foobar");
+}
+
 KJ_TEST("DiskDirectory move") {
   TempDir tempDirSrc;
   TempDir tempDirDst;
@@ -635,6 +672,38 @@ KJ_TEST("DiskDirectory move") {
   KJ_EXPECT(dst->openFile(Path({"link", "baz", "qux"}))->readAllText() == "bazqux");
 }
 
+KJ_TEST("DiskDirectory move-replace") {
+  TempDir tempDirSrc;
+  TempDir tempDirDst;
+
+  auto src = tempDirSrc.get();
+  auto dst = tempDirDst.get();
+
+  src->openFile(Path({"foo", "bar"}), WriteMode::CREATE | WriteMode::CREATE_PARENT)
+     ->writeAll("foobar");
+  src->openFile(Path({"foo", "baz", "qux"}), WriteMode::CREATE | WriteMode::CREATE_PARENT)
+     ->writeAll("bazqux");
+
+  dst->openFile(Path({"link", "corge"}), WriteMode::CREATE | WriteMode::CREATE_PARENT)
+     ->writeAll("abcd");
+
+  // CREATE fails.
+  KJ_EXPECT(!dst->tryTransfer(Path("link"), WriteMode::CREATE,
+                              *src, Path("foo"), TransferMode::MOVE));
+
+  // Verify nothing changed.
+  KJ_EXPECT(dst->openFile(Path({"link", "corge"}))->readAllText() == "abcd");
+  KJ_EXPECT(!dst->exists(Path({"foo", "bar"})));
+  KJ_EXPECT(src->exists(Path({"foo"})));
+
+  // Now try MODIFY.
+  dst->transfer(Path("link"), WriteMode::MODIFY, *src, Path("foo"), TransferMode::MOVE);
+
+  KJ_EXPECT(!src->exists(Path({"foo"})));
+  KJ_EXPECT(dst->openFile(Path({"link", "bar"}))->readAllText() == "foobar");
+  KJ_EXPECT(dst->openFile(Path({"link", "baz", "qux"}))->readAllText() == "bazqux");
+}
+
 KJ_TEST("DiskDirectory createTemporary") {
   TempDir tempDir;
   auto dir = tempDir.get();
@@ -642,6 +711,46 @@ KJ_TEST("DiskDirectory createTemporary") {
   file->writeAll("foobar");
   KJ_EXPECT(file->readAllText() == "foobar");
   KJ_EXPECT(dir->listNames() == nullptr);
+}
+
+KJ_TEST("DiskDirectory replaceSubdir()") {
+  TempDir tempDir;
+  auto dir = tempDir.get();
+
+  {
+    auto replacer = dir->replaceSubdir(Path("foo"), WriteMode::CREATE);
+    replacer->get().openFile(Path("bar"), WriteMode::CREATE)->writeAll("original");
+    KJ_EXPECT(replacer->get().openFile(Path("bar"))->readAllText() == "original");
+    KJ_EXPECT(!dir->exists(Path({"foo", "bar"})));
+
+    replacer->commit();
+    KJ_EXPECT(replacer->get().openFile(Path("bar"))->readAllText() == "original");
+    KJ_EXPECT(dir->openFile(Path({"foo", "bar"}))->readAllText() == "original");
+  }
+
+  {
+    // CREATE fails -- already exists.
+    auto replacer = dir->replaceSubdir(Path("foo"), WriteMode::CREATE);
+    replacer->get().openFile(Path("corge"), WriteMode::CREATE)->writeAll("bazqux");
+    KJ_EXPECT(dir->listNames().size() == 1 && dir->listNames()[0] == "foo");
+    KJ_EXPECT(!replacer->tryCommit());
+  }
+
+  // Unchanged.
+  KJ_EXPECT(dir->openFile(Path({"foo", "bar"}))->readAllText() == "original");
+  KJ_EXPECT(!dir->exists(Path({"foo", "corge"})));
+
+  {
+    // MODIFY succeeds.
+    auto replacer = dir->replaceSubdir(Path("foo"), WriteMode::MODIFY);
+    replacer->get().openFile(Path("corge"), WriteMode::CREATE)->writeAll("bazqux");
+    KJ_EXPECT(dir->listNames().size() == 1 && dir->listNames()[0] == "foo");
+    replacer->commit();
+  }
+
+  // Replaced with new contents.
+  KJ_EXPECT(!dir->exists(Path({"foo", "bar"})));
+  KJ_EXPECT(dir->openFile(Path({"foo", "corge"}))->readAllText() == "bazqux");
 }
 
 KJ_TEST("DiskDirectory replace directory with file") {
