@@ -21,16 +21,176 @@
 
 #include "filesystem.h"
 #include "test.h"
+#include "encoding.h"
 #include <stdlib.h>
+#if _WIN32
+#include <windows.h>
+#include "windows-sanity.h"
+#else
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
+#endif
 
 namespace kj {
 namespace {
+
+bool isWine() KJ_UNUSED;
+
+#if _WIN32
+
+bool detectWine() {
+  HMODULE hntdll = GetModuleHandle("ntdll.dll");
+  if(hntdll == NULL) return false;
+  return GetProcAddress(hntdll, "wine_get_version") != nullptr;
+}
+
+bool isWine() {
+  static bool result = detectWine();
+  return result;
+}
+
+template <typename Func>
+static auto newTemp(Func&& create)
+    -> Decay<decltype(*kj::_::readMaybe(create(Array<wchar_t>())))> {
+  wchar_t wtmpdir[MAX_PATH + 1];
+  DWORD len = GetTempPathW(kj::size(wtmpdir), wtmpdir);
+  KJ_ASSERT(len < kj::size(wtmpdir));
+  auto tmpdir = decodeWideString(arrayPtr(wtmpdir, len));
+
+  static uint counter = 0;
+  for (;;) {
+    auto path = kj::str(tmpdir, "kj-filesystem-test.", GetCurrentProcessId(), ".", counter++);
+    KJ_IF_MAYBE(result, create(encodeWideString(path, true))) {
+      return kj::mv(*result);
+    }
+  }
+}
+
+static Own<File> newTempFile() {
+  return newTemp([](Array<wchar_t> candidatePath) -> Maybe<Own<File>> {
+    HANDLE handle;
+    KJ_WIN32_HANDLE_ERRORS(handle = CreateFileW(
+        candidatePath.begin(),
+        FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+        0,
+        NULL,
+        CREATE_NEW,
+        FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
+        NULL)) {
+      case ERROR_ALREADY_EXISTS:
+      case ERROR_FILE_EXISTS:
+        return nullptr;
+      default:
+        KJ_FAIL_WIN32("CreateFileW", error);
+    }
+    return newDiskFile(AutoCloseHandle(handle));
+  });
+}
+
+static Array<wchar_t> join16(ArrayPtr<const wchar_t> path, const wchar_t* file) {
+  // Assumes `path` ends with a NUL terminator (and `file` is of course NUL terminated as well).
+
+  size_t len = wcslen(file) + 1;
+  auto result = kj::heapArray<wchar_t>(path.size() + len);
+  memcpy(result.begin(), path.begin(), path.asBytes().size() - sizeof(wchar_t));
+  result[path.size() - 1] = '\\';
+  memcpy(result.begin() + path.size(), file, len * sizeof(wchar_t));
+  return result;
+}
+
+class TempDir {
+public:
+  TempDir(): filename(newTemp([](Array<wchar_t> candidatePath) -> Maybe<Array<wchar_t>> {
+        KJ_WIN32_HANDLE_ERRORS(CreateDirectoryW(candidatePath.begin(), NULL)) {
+          case ERROR_ALREADY_EXISTS:
+          case ERROR_FILE_EXISTS:
+            return nullptr;
+          default:
+            KJ_FAIL_WIN32("CreateDirectoryW", error);
+        }
+        return kj::mv(candidatePath);
+      })) {}
+
+  Own<Directory> get() {
+    HANDLE handle;
+    KJ_WIN32(handle = CreateFileW(
+        filename.begin(),
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS,  // apparently, this flag is required for directories
+        NULL));
+    return newDiskDirectory(AutoCloseHandle(handle));
+  }
+
+  ~TempDir() noexcept(false) {
+    recursiveDelete(filename);
+  }
+
+private:
+  Array<wchar_t> filename;
+
+  static void recursiveDelete(ArrayPtr<const wchar_t> path) {
+    // Recursively delete the temp dir, verifying that no .kj-tmp. files were left over.
+    //
+    // Mostly copied from rmrfChildren() in filesystem-win32.c++.
+
+    auto glob = join16(path, L"\\*");
+
+    for (;;) {
+      WIN32_FIND_DATAW data;
+      HANDLE handle = FindFirstFileW(glob.begin(), &data);
+      if (handle == INVALID_HANDLE_VALUE) {
+        auto error = GetLastError();
+        if (error == ERROR_FILE_NOT_FOUND) return;
+        KJ_FAIL_WIN32("FindFirstFile", error, path) { return; }
+      }
+      KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
+
+      bool foundAny = false;
+      do {
+        // Ignore "." and "..", ugh.
+        if (data.cFileName[0] == L'.') {
+          if (data.cFileName[1] == L'\0' ||
+              (data.cFileName[1] == L'.' && data.cFileName[2] == L'\0')) {
+            continue;
+          }
+        }
+
+        String utf8Name = decodeWideString(arrayPtr(data.cFileName, wcslen(data.cFileName)));
+        KJ_EXPECT(!utf8Name.startsWith(".kj-tmp."), "temp file not cleaned up", utf8Name);
+
+        auto child = join16(path, data.cFileName);
+        if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+            !(data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+          recursiveDelete(child);
+        } else {
+          KJ_WIN32(DeleteFileW(child.begin()));
+        }
+      } while (FindNextFileW(handle, &data));
+
+      auto error = GetLastError();
+      if (error != ERROR_NO_MORE_FILES) {
+        KJ_FAIL_WIN32("FindNextFile", error, path) { return; }
+      }
+
+      if (!foundAny) {
+        return;
+      }
+    }
+
+    KJ_WIN32(RemoveDirectoryW(path.begin()));
+  }
+};
+
+#else
+
+bool isWine() { return false; }
 
 static Own<File> newTempFile() {
   char filename[] = "/var/tmp/kj-filesystem-test.XXXXXX";
@@ -94,6 +254,8 @@ private:
     KJ_SYSCALL(rmdir(path.cStr()));
   }
 };
+
+#endif  // _WIN32, else
 
 KJ_TEST("DiskFile") {
   auto file = newTempFile();
@@ -332,6 +494,11 @@ KJ_TEST("DiskDirectory") {
   KJ_EXPECT(dir->exists(Path("bar")));
   KJ_EXPECT(!dir->tryRemove(Path({"bar", "baz"})));
 
+#if _WIN32
+  // On Windows, we can't delete a directory while we still have it open.
+  subdir = nullptr;
+#endif
+
   KJ_EXPECT(dir->exists(Path("corge")));
   KJ_EXPECT(dir->exists(Path({"corge", "grault"})));
   dir->remove(Path("corge"));
@@ -340,6 +507,7 @@ KJ_TEST("DiskDirectory") {
   KJ_EXPECT(!dir->tryRemove(Path("corge")));
 }
 
+#if !_WIN32  // Creating symlinks on Win32 requires admin privileges prior to Windows 10.
 KJ_TEST("DiskDirectory symlinks") {
   TempDir tempDir;
   auto dir = tempDir.get();
@@ -394,6 +562,7 @@ KJ_TEST("DiskDirectory symlinks") {
   KJ_EXPECT(!dir->exists(Path("foo")));
   KJ_EXPECT(dir->tryOpenFile(Path("foo")) == nullptr);
 }
+#endif
 
 KJ_TEST("DiskDirectory link") {
   TempDir tempDirSrc;
@@ -535,6 +704,11 @@ KJ_TEST("DiskDirectory replace file with directory") {
 
 #ifndef HOLES_NOT_SUPPORTED
 KJ_TEST("DiskFile holes") {
+  if (isWine()) {
+    // WINE doesn't support sparse files.
+    return;
+  }
+
   TempDir tempDir;
   auto dir = tempDir.get();
 
