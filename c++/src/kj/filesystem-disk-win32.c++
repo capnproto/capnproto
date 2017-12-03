@@ -22,6 +22,13 @@
 #if _WIN32
 // For Unix implementation, see filesystem-disk-unix.c++.
 
+#include "filesystem.h"
+#include "debug.h"
+#include "encoding.h"
+#include "vector.h"
+#include <algorithm>
+#include <wchar.h>
+
 // Request Vista-level APIs.
 #define WINVER 0x0600
 #define _WIN32_WINNT 0x0600
@@ -30,13 +37,7 @@
 
 #include <windows.h>
 #include <winioctl.h>
-#include <wchar.h>
 #include "windows-sanity.h"
-#include "filesystem.h"
-#include "debug.h"
-#include "encoding.h"
-#include "vector.h"
-#include <algorithm>
 
 namespace kj {
 
