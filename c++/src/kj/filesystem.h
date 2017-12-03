@@ -151,7 +151,8 @@ public:
 
   Path evalWin32(StringPtr pathText) const&;
   Path evalWin32(StringPtr pathText) &&;
-  // Evaluates a Win32-style path. Differences from `eval()` include:
+  // Evaluates a Win32-style path, as might be written by a user. Differences from `eval()`
+  // include:
   //
   // - Backslashes can be used as path separators.
   // - Absolute paths begin with a drive letter followed by a colon. The drive letter, including
@@ -159,9 +160,9 @@ public:
   // - A network path like "\\host\share\path" is parsed as {"host", "share", "path"}.
 
   String toWin32String(bool absolute = false) const;
-  // Converts the path to a Win32 path string.
+  // Converts the path to a Win32 path string, as you might display to a user.
   //
-  // (In most cases you'll want to further convert the returned string from UTF-8 to UTF-16.)
+  // This is meant for display. For making Win32 system calls, consider `toWin32Api()` instead.
   //
   // If `absolute` is true, the path is expected to be an absolute path, meaning the first
   // component is a drive letter, namespace, or network host name. These are converted to their
@@ -170,6 +171,24 @@ public:
   // This throws if the path would have unexpected special meaning or is otherwise invalid on
   // Windows, such as if it contains backslashes (within a path component), colons, or special
   // names like "con".
+
+  Array<wchar_t> forWin32Api(bool absolute) const;
+  // Like toWin32String, but additionally:
+  // - Converts the path to UTF-16, with a NUL terminator included.
+  // - For absolute paths, adds the "\\?\" prefix which opts into permitting paths longer than
+  //   MAX_PATH, and turns off relative path processing (which KJ paths already handle in userspace
+  //   anyway).
+  //
+  // This method is good to use when making a Win32 API call, e.g.:
+  //
+  //     DeleteFileW(path.forWin32Api(true).begin());
+
+  static Path parseWin32Api(ArrayPtr<const wchar_t> text);
+  // Parses an absolute path as returned by a Win32 API call like GetFinalPathNameByHandle() or
+  // GetCurrentDirectory(). A "\\?\" prefix is optional but understood if present.
+  //
+  // Since such Win32 API calls generally return a length, this function inputs an array slice.
+  // The slice should not include any NUL terminator.
 
 private:
   Array<String> parts;
@@ -186,7 +205,7 @@ private:
   static void validatePart(StringPtr part);
   static void evalPart(Vector<String>& parts, ArrayPtr<const char> part);
   static Path evalImpl(Vector<String>&& parts, StringPtr path);
-  static Path evalWin32Impl(Vector<String>&& parts, StringPtr path);
+  static Path evalWin32Impl(Vector<String>&& parts, StringPtr path, bool fromApi = false);
   static size_t countParts(StringPtr path);
   static size_t countPartsWin32(StringPtr path);
   static bool isWin32Drive(ArrayPtr<const char> part);
@@ -219,12 +238,15 @@ public:
   PathPtr slice(size_t start, size_t end) const;
   Path evalWin32(StringPtr pathText) const;
   String toWin32String(bool absolute = false) const;
+  Array<wchar_t> forWin32Api(bool absolute) const;
   // Equivalent to the corresponding methods of `Path`.
 
 private:
   ArrayPtr<const String> parts;
 
   explicit PathPtr(ArrayPtr<const String> parts);
+
+  String toWin32StringImpl(bool absolute, bool forApi) const;
 
   friend class Path;
 };
@@ -880,6 +902,9 @@ inline Path Path::evalWin32(StringPtr pathText) const& {
 inline String Path::toWin32String(bool absolute) const {
   return PathPtr(*this).toWin32String(absolute);
 }
+inline Array<wchar_t> Path::forWin32Api(bool absolute) const {
+  return PathPtr(*this).forWin32Api(absolute);
+}
 
 inline PathPtr::PathPtr(decltype(nullptr)): parts(nullptr) {}
 inline PathPtr::PathPtr(const Path& path): parts(path.parts) {}
@@ -892,6 +917,9 @@ inline const String* PathPtr::begin() const { return parts.begin(); }
 inline const String* PathPtr::end() const { return parts.end(); }
 inline PathPtr PathPtr::slice(size_t start, size_t end) const {
   return PathPtr(parts.slice(start, end));
+}
+inline String PathPtr::toWin32String(bool absolute) const {
+  return toWin32StringImpl(absolute, false);
 }
 
 inline Own<FsNode> FsNode::clone() { return cloneFsNode().downcast<FsNode>(); }

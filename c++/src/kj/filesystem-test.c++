@@ -21,6 +21,7 @@
 
 #include "filesystem.h"
 #include "test.h"
+#include <wchar.h>
 
 namespace kj {
 namespace {
@@ -108,6 +109,14 @@ KJ_TEST("Path exceptions") {
   KJ_EXPECT_THROW_MESSAGE("root path has no parent", Path(nullptr).parent());
 }
 
+static inline bool operator==(const Array<wchar_t>& arr, const wchar_t* expected) {
+  return wcscmp(arr.begin(), expected) == 0;
+}
+
+constexpr kj::ArrayPtr<const wchar_t> operator "" _a(const wchar_t* str, size_t n) {
+  return { str, n };
+}
+
 KJ_TEST("Win32 Path") {
   KJ_EXPECT(Path({"foo", "bar"}).toWin32String() == "foo\\bar");
   KJ_EXPECT(Path({"foo", "bar"}).toWin32String(true) == "\\\\foo\\bar");
@@ -147,6 +156,16 @@ KJ_TEST("Win32 Path") {
       .toWin32String(true) == "d:\\qux");
   KJ_EXPECT(Path({"foo", "bar", "baz"}).evalWin32("\\qux")
       .toWin32String(true) == "\\\\foo\\bar\\qux");
+
+  KJ_EXPECT(Path({"foo", "bar"}).forWin32Api(false) == L"foo\\bar");
+  KJ_EXPECT(Path({"foo", "bar"}).forWin32Api(true) == L"\\\\?\\UNC\\foo\\bar");
+  KJ_EXPECT(Path({"c:", "foo", "bar"}).forWin32Api(true) == L"\\\\?\\c:\\foo\\bar");
+  KJ_EXPECT(Path({"A:", "foo", "bar"}).forWin32Api(true) == L"\\\\?\\A:\\foo\\bar");
+
+  KJ_EXPECT(Path::parseWin32Api(L"\\\\?\\c:\\foo\\bar"_a).toString() == "c:/foo/bar");
+  KJ_EXPECT(Path::parseWin32Api(L"\\\\?\\UNC\\foo\\bar"_a).toString() == "foo/bar");
+  KJ_EXPECT(Path::parseWin32Api(L"c:\\foo\\bar"_a).toString() == "c:/foo/bar");
+  KJ_EXPECT(Path::parseWin32Api(L"\\\\foo\\bar"_a).toString() == "foo/bar");
 }
 
 KJ_TEST("Win32 Path exceptions") {
