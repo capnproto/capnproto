@@ -163,7 +163,7 @@ static void rmrfChildren(ArrayPtr<const wchar_t> path) {
     if (handle == INVALID_HANDLE_VALUE) {
       auto error = GetLastError();
       if (error == ERROR_FILE_NOT_FOUND) return;
-      KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(path)) { return; }
+      KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(glob)) { return; }
     }
     KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
 
@@ -567,7 +567,7 @@ public:
     if (handle == INVALID_HANDLE_VALUE) {
       auto error = GetLastError();
       if (error == ERROR_FILE_NOT_FOUND) return nullptr;
-      KJ_FAIL_WIN32("FindFirstFile", error, path);
+      KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(glob));
     }
     KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
 
