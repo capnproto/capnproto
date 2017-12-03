@@ -57,7 +57,7 @@ struct REPARSE_DATA_BUFFER {
   ULONG ReparseTag;
   USHORT ReparseDataLength;
   USHORT Reserved;
-  _ANONYMOUS_UNION union {
+  union {
     struct {
       USHORT SubstituteNameOffset;
       USHORT SubstituteNameLength;
@@ -76,7 +76,7 @@ struct REPARSE_DATA_BUFFER {
     struct {
       UCHAR DataBuffer[1];
     } GenericReparseBuffer;
-  } DUMMYUNIONNAME;
+  };
 };
 
 #define HIDDEN_PREFIX ".kj-tmp."
@@ -1023,8 +1023,8 @@ public:
 
         if (has(mode, WriteMode::MODIFY)) {
           KJ_IF_MAYBE(tempName,
-              createNamedTemporary(toPath, WriteMode::CREATE, [&](const wchar_t* tempName) {
-            return MoveFileW(wToPath.begin(), tempName);
+              createNamedTemporary(toPath, WriteMode::CREATE, [&](const wchar_t* tempName2) {
+            return MoveFileW(wToPath.begin(), tempName2);
           })) {
             KJ_WIN32_HANDLE_ERRORS(MoveFileW(fromPath.begin(), wToPath.begin())) {
               default:
