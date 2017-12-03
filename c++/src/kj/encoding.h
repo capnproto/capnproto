@@ -52,17 +52,24 @@ struct EncodingResult: public ResultType {
   const bool hadErrors;
 };
 
+template <typename T>
+inline auto KJ_STRINGIFY(const EncodingResult<T>& value)
+    -> decltype(toCharSequence(implicitCast<const T&>(value))) {
+  return toCharSequence(implicitCast<const T&>(value));
+}
+
 EncodingResult<Array<char16_t>> encodeUtf16(ArrayPtr<const char> text, bool nulTerminate = false);
 EncodingResult<Array<char32_t>> encodeUtf32(ArrayPtr<const char> text, bool nulTerminate = false);
 // Convert UTF-8 text (which KJ strings use) to UTF-16 or UTF-32.
 //
 // If `nulTerminate` is true, an extra NUL character will be added to the end of the output.
 //
-// The `try` versions return null if the input is invalid; the non-`try` versions return data
-// containing the Unicode replacement character (U+FFFD).
-//
 // The returned arrays are in platform-native endianness (otherwise they wouldn't really be
 // char16_t / char32_t).
+//
+// Note that the KJ Unicode encoding and decoding functions actually implement
+// [WTF-8 encoding](http://simonsapin.github.io/wtf-8/), which affects how invalid input is
+// handled. See comments on decodeUtf16() for more info.
 
 EncodingResult<String> decodeUtf16(ArrayPtr<const char16_t> utf16);
 EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf32);
@@ -71,10 +78,34 @@ EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf32);
 // The input should NOT include a NUL terminator; any NUL characters in the input array will be
 // preserved in the output.
 //
-// The `try` versions return null if the input is invalid; the non-`try` versions return data
-// containing the Unicode replacement character (U+FFFD).
-//
 // The input must be in platform-native endianness. BOMs are NOT recognized by these functions.
+//
+// Note that the KJ Unicode encoding and decoding functions actually implement
+// [WTF-8 encoding](http://simonsapin.github.io/wtf-8/). This means that if you start with an array
+// of char16_t and you pass it through any number of conversions to other Unicode encodings,
+// eventually returning it to UTF-16, all the while ignoring `hadErrors`, you will end up with
+// exactly the same char16_t array you started with, *even if* the array is not valid UTF-16. This
+// is useful because many real-world systems that were designed for UCS-2 (plain 16-bit Unicode)
+// and later "upgraded" to UTF-16 do not enforce that their UTF-16 is well-formed. For example,
+// file names on Windows NT are encoded using 16-bit characters, without enforcing that the
+// character sequence is valid UTF-16. It is important that programs on Windows be able to handle
+// such filenames, even if they choose to convert the name to UTF-8 for internal processing.
+//
+// Specifically, KJ's Unicode handling allows unpaired surrogate code points to round-trip through
+// UTF-8 and UTF-32. Unpaired surrogates will be flagged as an error (setting `hadErrors` in the
+// result), but will NOT be replaced with the Unicode replacement character as other erroneous
+// sequences would be, but rather encoded as an invalid surrogate codepoint in the target encoding.
+//
+// KJ makes the following guarantees about invalid input:
+// - A round trip from UTF-16 to other encodings and back will produce exactly the original input,
+//   with every leg of the trip raising the `hadErrors` flag if the original input was not valid.
+// - A round trip from UTF-8 or UTF-32 to other encodings and back will either produce exactly
+//   the original input, or will have replaced some invalid sequences with the Unicode replacement
+//   character, U+FFFD. No code units will ever be removed unless they are replaced with U+FFFD,
+//   and no code units will ever be added except to encode U+FFFD. If the original input was not
+//   valid, the `hadErrors` flag will be raised on the first leg of the trip, and will also be
+//   raised on subsequent legs unless all invalid sequences were replaced with U+FFFD (which, after
+//   all, is a valid code point).
 
 String encodeHex(ArrayPtr<const byte> bytes);
 EncodingResult<Array<byte>> decodeHex(ArrayPtr<const char> text);

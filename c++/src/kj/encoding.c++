@@ -79,8 +79,23 @@ EncodingResult<Array<T>> encodeUtf(ArrayPtr<const char> text, bool nulTerminate)
       // Disallow overlong sequence.
       GOTO_ERROR_IF(u < 0x0800);
 
-      // Disallow surrogate pair code points.
-      GOTO_ERROR_IF((u & 0xf800) == 0xd800);
+      // Flag surrogate pair code points as errors, but allow them through.
+      if (KJ_UNLIKELY((u & 0xf800) == 0xd800)) {
+        if (result.size() > 0 &&
+            (u & 0xfc00) == 0xdc00 &&
+            (result.back() & 0xfc00) == 0xd800) {
+          // Whoops, the *previous* character was also an invalid surrogate, and if we add this
+          // one too, they'll form a valid surrogate pair. If we allowed this, then it would mean
+          // invalid UTF-8 round-tripped to UTF-16 and back could actually change meaning entirely.
+          // OTOH, the reason we allow dangling surrogates is to allow invalid UTF-16 to round-trip
+          // to UTF-8 without loss, but if the original UTF-16 had a valid surrogate pair, it would
+          // have been encoded as a valid single UTF-8 codepoint, not as separate UTF-8 codepoints
+          // for each surrogate.
+          goto error;
+        }
+
+        hadErrors = true;
+      }
 
       result.add(u);
       continue;
@@ -153,9 +168,12 @@ EncodingResult<String> decodeUtf16(ArrayPtr<const char16_t> utf16) {
     } else if ((u & 0xf800) == 0xd800) {
       // surrogate pair
       char16_t u2;
-      GOTO_ERROR_IF(i == utf16.size()                       // missing second half
-                 || (u & 0x0400) != 0                       // first half in wrong range
-                 || ((u2 = utf16[i]) & 0xfc00) != 0xdc00);  // second half in wrong range
+      if (KJ_UNLIKELY(i == utf16.size()                         // missing second half
+                   || (u & 0x0400) != 0                         // first half in wrong range
+                   || ((u2 = utf16[i]) & 0xfc00) != 0xdc00)) {  // second half in wrong range
+        hadErrors = true;
+        goto threeByte;
+      }
       ++i;
 
       char32_t u32 = (((u & 0x03ff) << 10) | (u2 & 0x03ff)) + 0x10000;
@@ -167,6 +185,7 @@ EncodingResult<String> decodeUtf16(ArrayPtr<const char16_t> utf16) {
       });
       continue;
     } else {
+    threeByte:
       result.addAll<std::initializer_list<char>>({
         static_cast<char>(((u >> 12)       ) | 0xe0),
         static_cast<char>(((u >>  6) & 0x3f) | 0x80),
@@ -174,10 +193,6 @@ EncodingResult<String> decodeUtf16(ArrayPtr<const char16_t> utf16) {
       });
       continue;
     }
-
-  error:
-    result.addAll(StringPtr(u8"\ufffd"));
-    hadErrors = true;
   }
 
   result.add(0);
@@ -202,7 +217,10 @@ EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
       });
       continue;
     } else if (u < 0x10000) {
-      GOTO_ERROR_IF((u & 0xfffff800) == 0xd800);  // no surrogates allowed in utf-32
+      if (KJ_UNLIKELY((u & 0xfffff800) == 0xd800)) {
+        // no surrogates allowed in utf-32
+        hadErrors = true;
+      }
       result.addAll<std::initializer_list<char>>({
         static_cast<char>(((u >> 12)       ) | 0xe0),
         static_cast<char>(((u >>  6) & 0x3f) | 0x80),
