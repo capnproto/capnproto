@@ -97,14 +97,14 @@ public:
   // is NOT accepted -- if that is a problem, you probably want `eval()`. Trailing '/'s are
   // ignored.
 
-  Path append(Path suffix) const&;
-  Path append(Path suffix) &&;
+  Path append(Path&& suffix) const&;
+  Path append(Path&& suffix) &&;
   Path append(PathPtr suffix) const&;
   Path append(PathPtr suffix) &&;
   Path append(StringPtr suffix) const&;
   Path append(StringPtr suffix) &&;
-  Path append(String suffix) const&;
-  Path append(String suffix) &&;
+  Path append(String&& suffix) const&;
+  Path append(String&& suffix) &&;
   // Create a new path by appending the given path to this path.
   //
   // `suffix` cannot contain '/' characters. Instead, you can append an array:
@@ -204,10 +204,10 @@ public:
   PathPtr(const Path& path);
 
   Path clone();
-  Path append(Path suffix) const;
+  Path append(Path&& suffix) const;
   Path append(PathPtr suffix) const;
   Path append(StringPtr suffix) const;
-  Path append(String suffix) const;
+  Path append(String&& suffix) const;
   Path eval(StringPtr pathText) const;
   PathPtr basename() const;
   PathPtr parent() const;
@@ -856,12 +856,12 @@ inline Path::Path(std::initializer_list<StringPtr> parts)
 inline Path::Path(Array<String> parts, decltype(ALREADY_CHECKED))
     : parts(kj::mv(parts)) {}
 inline Path Path::clone() const { return PathPtr(*this).clone(); }
-inline Path Path::append(Path suffix) const& { return PathPtr(*this).append(kj::mv(suffix)); }
+inline Path Path::append(Path&& suffix) const& { return PathPtr(*this).append(kj::mv(suffix)); }
 inline Path Path::append(PathPtr suffix) const& { return PathPtr(*this).append(suffix); }
 inline Path Path::append(StringPtr suffix) const& { return append(Path(suffix)); }
 inline Path Path::append(StringPtr suffix) && { return kj::mv(*this).append(Path(suffix)); }
-inline Path Path::append(String suffix) const& { return append(Path(kj::mv(suffix))); }
-inline Path Path::append(String suffix) && { return kj::mv(*this).append(Path(kj::mv(suffix))); }
+inline Path Path::append(String&& suffix) const& { return append(Path(kj::mv(suffix))); }
+inline Path Path::append(String&& suffix) && { return kj::mv(*this).append(Path(kj::mv(suffix))); }
 inline Path Path::eval(StringPtr pathText) const& { return PathPtr(*this).eval(pathText); }
 inline PathPtr Path::basename() const& { return PathPtr(*this).basename(); }
 inline PathPtr Path::parent() const& { return PathPtr(*this).parent(); }
@@ -885,7 +885,7 @@ inline PathPtr::PathPtr(decltype(nullptr)): parts(nullptr) {}
 inline PathPtr::PathPtr(const Path& path): parts(path.parts) {}
 inline PathPtr::PathPtr(ArrayPtr<const String> parts): parts(parts) {}
 inline Path PathPtr::append(StringPtr suffix) const { return append(Path(suffix)); }
-inline Path PathPtr::append(String suffix) const { return append(Path(kj::mv(suffix))); }
+inline Path PathPtr::append(String&& suffix) const { return append(Path(kj::mv(suffix))); }
 inline const String& PathPtr::operator[](size_t i) const { return parts[i]; }
 inline size_t PathPtr::size() const { return parts.size(); }
 inline const String* PathPtr::begin() const { return parts.begin(); }

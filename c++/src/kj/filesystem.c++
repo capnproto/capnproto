@@ -55,13 +55,13 @@ Path Path::parse(StringPtr path) {
   return evalImpl(Vector<String>(countParts(path)), path);
 }
 
-Path PathPtr::append(Path suffix) const {
+Path PathPtr::append(Path&& suffix) const {
   auto newParts = kj::heapArrayBuilder<String>(parts.size() + suffix.parts.size());
   for (auto& p: parts) newParts.add(heapString(p));
   for (auto& p: suffix.parts) newParts.add(kj::mv(p));
   return Path(newParts.finish(), Path::ALREADY_CHECKED);
 }
-Path Path::append(Path suffix) && {
+Path Path::append(Path&& suffix) && {
   auto newParts = kj::heapArrayBuilder<String>(parts.size() + suffix.parts.size());
   for (auto& p: parts) newParts.add(kj::mv(p));
   for (auto& p: suffix.parts) newParts.add(kj::mv(p));
