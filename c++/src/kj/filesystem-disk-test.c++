@@ -316,6 +316,7 @@ KJ_TEST("DiskFile") {
     file->write(12, StringPtr("corge").asBytes());
     KJ_EXPECT(kj::str(mapping.slice(12, 17).asChars()) == "corge");
 
+#if !_WIN32  // Windows doesn't allow the file size to change while mapped.
     // Can shrink.
     file->truncate(6);
     KJ_EXPECT(kj::str(mapping.slice(12, 17).asChars()) == kj::StringPtr("\0\0\0\0\0", 5));
@@ -326,6 +327,7 @@ KJ_TEST("DiskFile") {
 
     // Can even regrow past previous capacity.
     file->truncate(100);
+#endif
   }
 
   file->truncate(6);
