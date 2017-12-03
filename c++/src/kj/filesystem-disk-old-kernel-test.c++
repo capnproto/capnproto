@@ -29,6 +29,11 @@
 //
 // This test must be compiled as a separate program, since it alters the calling process by
 // enabling seccomp to disable the kernel features.
+//
+// At present this test only runs under Ekam builds. It *could* reasonably easily be added to the
+// autotools or cmake builds, but would require compiling a separate test binary, which is a bit
+// weird, and may lead to spurious error reports on systems that don't support seccomp for whatever
+// reason.
 
 #include <syscall.h>
 #include <unistd.h>
