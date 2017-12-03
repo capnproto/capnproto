@@ -452,7 +452,9 @@ capnp_test_LDADD =                                             \
   libkj-http.la                                                \
   libkj-async.la                                               \
   libkj-test.la                                                \
-  libkj.la
+  libkj.la                                                     \
+  $(ASYNC_LIBS)                                                \
+  $(PTHREAD_LIBS)
 
 endif !LITE_MODE
 
