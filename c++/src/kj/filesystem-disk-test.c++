@@ -192,6 +192,10 @@ private:
 
 bool isWine() { return false; }
 
+#if __APPLE__
+#define HOLES_NOT_SUPPORTED 1
+#endif
+
 static Own<File> newTempFile() {
   char filename[] = "/var/tmp/kj-filesystem-test.XXXXXX";
   int fd;

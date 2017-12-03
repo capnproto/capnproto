@@ -63,6 +63,11 @@ namespace {
 #define MAYBE_O_DIRECTORY 0
 #endif
 
+#if __APPLE__
+// Mac OSX defines SEEK_HOLE, but it doesn't work. ("Inappropriate ioctl for device", it says.)
+#undef SEEK_HOLE
+#endif
+
 static void setCloexec(int fd) KJ_UNUSED;
 static void setCloexec(int fd) {
   // Set the O_CLOEXEC flag on the given fd.
@@ -119,7 +124,11 @@ static FsNode::Metadata statToMetadata(struct stat& stats) {
     modeToType(stats.st_mode),
     implicitCast<uint64_t>(stats.st_size),
     implicitCast<uint64_t>(stats.st_blocks * 512u),
+#if __APPLE__
+    toKjDate(stats.st_mtimespec),
+#else
     toKjDate(stats.st_mtim),
+#endif
     implicitCast<uint>(stats.st_nlink)
   };
 }
@@ -280,8 +289,26 @@ public:
     return statToMetadata(stats);
   }
 
-  void sync() { KJ_SYSCALL(fsync(fd)); }
-  void datasync() { KJ_SYSCALL(fdatasync(fd)); }
+  void sync() {
+#if __APPLE__
+    // For whatever reason, fsync() on OSX only flushes kernel buffers. It does not flush hardware
+    // disk buffers. This makes it not very useful. But OSX documents fcntl F_FULLFSYNC which does
+    // the right thing. Why they don't just make fsync() do the right thing, I do not know.
+    KJ_SYSCALL(fcntl(fd, F_FULLFSYNC));
+#else
+    KJ_SYSCALL(fsync(fd));
+#endif
+  }
+
+  void datasync() {
+    // The presence of the _POSIX_SYNCHRONIZED_IO define is supposed to tell us that fdatasync()
+    // exists. But Apple defines this yet doesn't offer fdatasync(). Thanks, Apple.
+#if _POSIX_SYNCHRONIZED_IO && !__APPLE__
+    KJ_SYSCALL(fdatasync(fd));
+#else
+    this->sync();
+#endif
+  }
 
   // ReadableFile --------------------------------------------------------------
 
@@ -350,9 +377,18 @@ public:
     }
 #endif
 
-    // Use a 4k buffer of zeros amplified by iov to write zeros with as few syscalls as possible.
     static const byte ZEROS[4096] = { 0 };
 
+#if __APPLE__
+    // Mac doesn't have pwritev().
+    while (size > sizeof(ZEROS)) {
+      write(offset, ZEROS);
+      size -= sizeof(ZEROS);
+      offset += sizeof(ZEROS);
+    }
+    write(offset, kj::arrayPtr(ZEROS, size));
+#else
+    // Use a 4k buffer of zeros amplified by iov to write zeros with as few syscalls as possible.
     size_t count = (size + sizeof(ZEROS) - 1) / sizeof(ZEROS);
     const size_t iovmax = miniposix::iovMax(count);
     KJ_STACK_ARRAY(struct iovec, iov, kj::min(iovmax, count), 16, 256);
@@ -381,6 +417,7 @@ public:
       offset += n;
       size -= n;
     }
+#endif
   }
 
   void truncate(uint64_t size)  {
@@ -1092,7 +1129,15 @@ public:
         if (S_ISDIR(stats.st_mode)) {
           return mkdirat(fd, candidatePath.cStr(), 0700);
         } else {
+#if __APPLE__
+          // No mknodat() on OSX, gotta open() a file, ugh.
+          int newFd = openat(fd, candidatePath.cStr(),
+                             O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, 0700);
+          if (newFd >= 0) close(newFd);
+          return newFd;
+#else
           return mknodat(fd, candidatePath.cStr(), S_IFREG | 0600, dev_t());
+#endif
         }
       })) {
         away = kj::mv(*awayPath);
