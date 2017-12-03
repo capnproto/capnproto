@@ -273,9 +273,13 @@ public:
   //
   // Under the hood, this will call dup(), so the FD number will not be the same.
 
-  virtual Maybe<int> getFd() = 0;
-  // Get the underlying file descriptor, if any. Returns nullptr if this object actually isn't
+  virtual Maybe<int> getFd() { return nullptr; }
+  // Get the underlying Unix file descriptor, if any. Returns nullptr if this object actually isn't
   // wrapping a file descriptor.
+
+  virtual Maybe<void*> getWin32Handle() { return nullptr; }
+  // Get the underlying Win32 HANDLE, if any. Returns nullptr if this object actually isn't
+  // wrapping a handle.
 
   enum class Type {
     FILE,
@@ -402,6 +406,12 @@ public:
   // returning.
   //
   // `slice` must be a slice of `bytes()`.
+  //
+  // On Windows, this calls FlushViewOfFile(). The documentation for this function implies that in
+  // some circumstances, to fully sync to physical disk, you may need to call FlushFileBuffers() on
+  // the file HANDLE as well. The documentation is not very clear on when and why this is needed.
+  // If you believe your program needs this, you can accomplish it by calling `.sync()` on the File
+  // object after calling `.sync()` on the WritableFileMapping.
 };
 
 class File: public ReadableFile {
@@ -496,6 +506,9 @@ public:
   // If `path` is a symlink, reads and returns the link contents.
   //
   // See Directory::symlink() for warnings about symlinks.
+  //
+  // TODO(now): Should tryReadlink() throw if the path exists but is not a link? Currently it
+  //   returns null.
 };
 
 enum class WriteMode {
@@ -523,8 +536,6 @@ enum class WriteMode {
   CREATE = 1,
   // Create a new empty file.
   //
-  // This can be OR'd with MODIFY, but not with REPLACE.
-  //
   // When not combined with MODIFY, if the file already exists (including as a broken symlink),
   // tryOpenFile() returns null (and openFile() throws).
   //
@@ -534,8 +545,6 @@ enum class WriteMode {
 
   MODIFY = 2,
   // Modify an existing file.
-  //
-  // This can be OR'd with CREATE, but not with REPLACE.
   //
   // When not combined with CREATE, if the file doesn't exist (including if it is a broken symlink),
   // tryOpenFile() returns null (and openFile() throws).
@@ -612,11 +621,19 @@ class Directory: public ReadableDirectory {
   // A `Directory` object *only* provides access to children of the directory, not parents. That
   // is, you cannot open the file "..", nor jump to the root directory with "/".
   //
-  // On OSs that support in, a `Directory` is backed by an open handle to the directory node. This
+  // On OSs that support it, a `Directory` is backed by an open handle to the directory node. This
   // means:
   // - If the directory is renamed on-disk, the `Directory` object still points at it.
   // - Opening files in the directory only requires the OS to traverse the path from the directory
   //   to the file; it doesn't have to re-traverse all the way from the filesystem root.
+  //
+  // On Windows, a `Directory` object holds a lock on the underlying directory such that it cannot
+  // be renamed nor deleted while the object exists. This is necessary because Windows does not
+  // fully support traversing paths relative to file handles (it does for some operations but not
+  // all), so the KJ filesystem implementation is forced to remember the full path and needs to
+  // ensure that the path is not invalidated. If, in the future, Windows fully supports
+  // handle-relative paths, KJ may stop locking directories in this way, so do not rely on this
+  // behavior.
 
 public:
   Own<Directory> clone();
@@ -688,6 +705,11 @@ public:
     //   disappearing after the replacement (actually, a swap) has taken place. This differs from
     //   files, where a process that has opened a file before it is replaced will continue see the
     //   file's old content unchanged after the replacement.
+    // - On Windows, there are multiple ways to replace one file with another in a single system
+    //   call, but none are documented as being atomic. KJ always uses `MoveFileEx()` with
+    //   MOVEFILE_REPLACE_EXISTING. While the alternative `ReplaceFile()` is attractive for many
+    //   reasons, it has the critical problem that it cannot be used when the source file has open
+    //   file handles, which is generally the case when using Replacer.
 
   protected:
     const WriteMode mode;
@@ -851,12 +873,18 @@ Own<AppendableFile> newFileAppender(Own<File> inner);
 // are happening simultaneously, as is achieved with the O_APPEND flag to open(2), but that
 // behavior is not possible to emulate on top of `File`.
 
-Own<ReadableFile> newDiskReadableFile(kj::AutoCloseFd fd);
-Own<AppendableFile> newDiskAppendableFile(kj::AutoCloseFd fd);
-Own<File> newDiskFile(kj::AutoCloseFd fd);
-Own<ReadableDirectory> newDiskReadableDirectory(kj::AutoCloseFd fd);
-Own<Directory> newDiskDirectory(kj::AutoCloseFd fd);
-// Wrap a file descriptor as various filesystem types.
+#if _WIN32
+typedef AutoCloseHandle OsFileHandle;
+#else
+typedef AutoCloseFd OsFileHandle;
+#endif
+
+Own<ReadableFile> newDiskReadableFile(OsFileHandle fd);
+Own<AppendableFile> newDiskAppendableFile(OsFileHandle fd);
+Own<File> newDiskFile(OsFileHandle fd);
+Own<ReadableDirectory> newDiskReadableDirectory(OsFileHandle fd);
+Own<Directory> newDiskDirectory(OsFileHandle fd);
+// Wrap a file descriptor (or Windows HANDLE) as various filesystem types.
 
 Own<Filesystem> newDiskFilesystem();
 // Get at implementation of `Filesystem` representing the real filesystem.
