@@ -231,7 +231,7 @@ libkj_la_SOURCES=                                              \
   src/kj/thread.c++                                            \
   src/kj/time.c++                                              \
   src/kj/filesystem.c++                                        \
-  src/kj/filesystem-disk.c++                                   \
+  src/kj/filesystem-disk-unix.c++                                   \
   src/kj/filesystem-disk-win32.c++                             \
   src/kj/test-helpers.c++                                      \
   src/kj/main.c++                                              \

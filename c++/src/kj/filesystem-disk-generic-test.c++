@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// This test compiles filesystem-disk.c++ with various features #undefed, causing it to take
+// This test compiles filesystem-disk-unix.c++ with various features #undefed, causing it to take
 // different code paths, then runs filesystem-disk-test.c++ against that.
 
 #include "filesystem.h"
@@ -53,5 +53,5 @@
 
 #define HOLES_NOT_SUPPORTED
 
-#include "filesystem-disk.c++"
+#include "filesystem-disk-unix.c++"
 #include "filesystem-disk-test.c++"

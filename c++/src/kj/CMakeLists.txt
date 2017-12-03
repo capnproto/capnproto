@@ -22,7 +22,7 @@ set(kj_sources_heavy
   encoding.c++
   time.c++
   filesystem.c++
-  filesystem-disk.c++
+  filesystem-disk-unix.c++
   filesystem-disk-win32.c++
   parse/char.c++
 )
