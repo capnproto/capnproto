@@ -297,7 +297,7 @@ namespace kj {
 
 #define KJ_SYSCALL_HANDLE_ERRORS(call) \
   if (int _kjSyscallError = ::kj::_::Debug::syscallError([&](){return (call);}, false)) \
-    switch (int error = _kjSyscallError)
+    switch (int error KJ_UNUSED = _kjSyscallError)
 // Like KJ_SYSCALL, but doesn't throw. Instead, the block after the macro is a switch block on the
 // error. Additionally, the int value `error` is defined within the block. So you can do:
 //
@@ -318,7 +318,7 @@ namespace kj {
 
 #define KJ_WIN32_HANDLE_ERRORS(call) \
   if (uint _kjWin32Error = ::kj::_::Debug::win32Call(call).number) \
-    switch (uint error = _kjWin32Error)
+    switch (uint error KJ_UNUSED = _kjWin32Error)
 // Like KJ_WIN32, but doesn't throw. Instead, the block after the macro is a switch block on the
 // error. Additionally, the int value `error` is defined within the block. So you can do:
 //
