@@ -152,7 +152,9 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
       break;
     }
 
-    space[count] = reinterpret_cast<void*>(frame.AddrPC.Offset);
+    // Subtract 1 from each address so that we identify the calling instructions, rather than the
+    // return addresses (which are typically the instruction after the call).
+    space[count] = reinterpret_cast<void*>(frame.AddrPC.Offset - 1);
   }
 
   return space.slice(kj::min(ignoreCount, count), count);
