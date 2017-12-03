@@ -149,7 +149,7 @@ static String dbgStr(ArrayPtr<const wchar_t> wstr) {
 }
 
 static void rmrfChildren(ArrayPtr<const wchar_t> path) {
-  auto glob = join16(path, L"\\*");
+  auto glob = join16(path, L"*");
 
   // According to Niall Douglas, on Windows, deleting all files in a directory requires repeatedly
   // scanning the directory until it is found to be empty. I couldn't find an explanation why, but
@@ -558,7 +558,7 @@ public:
   auto list(bool needTypes, Func&& func)
       -> Array<Decay<decltype(func(instance<StringPtr>(), instance<FsNode::Type>()))>> {
     PathPtr path = KJ_ASSERT_NONNULL(dirPath);
-    auto glob = join16(path.forWin32Api(true), L"\\*");
+    auto glob = join16(path.forWin32Api(true), L"*");
 
     // TODO(perf): Use FindFileEx() with FindExInfoBasic? Not apparently supported on Vista.
     // TODO(someday): Use NtQueryDirectoryObject() instead? It's "internal", but so much cleaner.
