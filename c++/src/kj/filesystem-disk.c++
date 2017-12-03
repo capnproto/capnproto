@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !_WIN32
+
 #include "filesystem.h"
 #include "debug.h"
 #include <sys/types.h>
@@ -223,12 +225,7 @@ protected:
                    size_t capacity, void (*destroyElement)(void*)) const {
     auto range = getMmapRange(reinterpret_cast<uintptr_t>(firstElement),
                               elementSize * elementCount);
-
-#if _WIN32
-    KJ_ASSERT(UnmapViewOfFile(reinterpret_cast<byte*>(range.offset))) { break; }
-#else
     KJ_SYSCALL(munmap(reinterpret_cast<byte*>(range.offset), range.size)) { break; }
-#endif
   }
 };
 
@@ -1655,3 +1652,5 @@ Own<Filesystem> newDiskFilesystem() {
 }
 
 } // namespace kj
+
+#endif  // !_WIN32
