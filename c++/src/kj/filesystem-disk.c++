@@ -351,25 +351,24 @@ public:
 #endif
 
     // Use a 4k buffer of zeros amplified by iov to write zeros with as few syscalls as possible.
-    byte buffer[4096];
-    memset(buffer, 0, sizeof(buffer));
+    static const byte ZEROS[4096] = { 0 };
 
-    size_t count = (size + sizeof(buffer) - 1) / sizeof(buffer);
+    size_t count = (size + sizeof(ZEROS) - 1) / sizeof(ZEROS);
     const size_t iovmax = miniposix::iovMax(count);
     KJ_STACK_ARRAY(struct iovec, iov, kj::min(iovmax, count), 16, 256);
 
     for (auto& item: iov) {
-      item.iov_base = buffer;
-      item.iov_len = sizeof(buffer);
+      item.iov_base = const_cast<byte*>(ZEROS);
+      item.iov_len = sizeof(ZEROS);
     }
 
     while (size > 0) {
       size_t iovCount;
-      if (size >= iov.size() * sizeof(buffer)) {
+      if (size >= iov.size() * sizeof(ZEROS)) {
         iovCount = iov.size();
       } else {
-        iovCount = size / sizeof(buffer);
-        size_t rem = size % sizeof(buffer);
+        iovCount = size / sizeof(ZEROS);
+        size_t rem = size % sizeof(ZEROS);
         if (rem > 0) {
           iov[iovCount++].iov_len = rem;
         }
