@@ -355,7 +355,7 @@ void Debug::Fault::init(
 
 #if _WIN32
 void Debug::Fault::init(
-    const char* file, int line, Win32Error osErrorNumber,
+    const char* file, int line, Win32Result osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   LPVOID ptr;
   // TODO(soon): Why doesn't this work for winsock errors?
@@ -400,8 +400,8 @@ int Debug::getOsErrorNumber(bool nonblocking) {
 }
 
 #if _WIN32
-Debug::Win32Error Debug::getWin32Error() {
-  return Win32Error(::GetLastError());
+uint Debug::getWin32ErrorCode() {
+  return ::GetLastError();
 }
 #endif
 
