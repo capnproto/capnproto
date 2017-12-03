@@ -32,13 +32,13 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <dirent.h>
-#include <syscall.h>
 #include <stdlib.h>
 #include "vector.h"
 #include "miniposix.h"
 #include <algorithm>
 
 #if __linux__
+#include <syscall.h>
 #include <linux/fs.h>
 #include <sys/sendfile.h>
 #endif
@@ -1012,7 +1012,7 @@ public:
       }
     }
 
-#ifdef RENAME_EXCHANGE
+#if __linux__ && defined(RENAME_EXCHANGE)
     // Try to use Linux's renameat2() to atomically check preconditions and apply.
 
     if (has(mode, WriteMode::MODIFY)) {
@@ -1250,7 +1250,7 @@ public:
   Own<File> createTemporary() {
     int newFd_;
 
-#ifdef O_TMPFILE
+#if __linux__ && defined(O_TMPFILE)
     // Use syscall() to work around glibc bug with O_TMPFILE:
     //     https://sourceware.org/bugzilla/show_bug.cgi?id=17523
     KJ_SYSCALL_HANDLE_ERRORS(newFd_ = syscall(
