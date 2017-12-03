@@ -21,6 +21,9 @@ set(kj_sources_heavy
   string-tree.c++
   encoding.c++
   time.c++
+  filesystem.c++
+  filesystem-disk.c++
+  filesystem-disk-win32.c++
   parse/char.c++
 )
 if(NOT CAPNP_LITE)
@@ -49,6 +52,7 @@ set(kj_headers
   mutex.h
   thread.h
   threadlocal.h
+  filesystem.h
   time.h
   main.h
   windows-sanity.h
@@ -190,6 +194,8 @@ if(BUILD_TESTING)
       one-of-test.c++
       function-test.c++
       threadlocal-pthread-test.c++
+      filesystem-test.c++
+      filesystem-disk-test.c++
       parse/common-test.c++
       parse/char-test.c++
       compat/url-test.c++
