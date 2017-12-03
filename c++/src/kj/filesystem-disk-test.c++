@@ -824,6 +824,18 @@ KJ_TEST("DiskFile holes") {
   auto dir = tempDir.get();
 
   auto file = dir->openFile(Path("holes"), WriteMode::CREATE);
+
+#if _WIN32
+  FILE_SET_SPARSE_BUFFER sparseInfo;
+  memset(&sparseInfo, 0, sizeof(sparseInfo));
+  sparseInfo.SetSparse = TRUE;
+  DWORD dummy;
+  KJ_WIN32(DeviceIoControl(
+      KJ_ASSERT_NONNULL(file->getWin32Handle()),
+      FSCTL_SET_SPARSE, &sparseInfo, sizeof(sparseInfo),
+      NULL, 0, &dummy, NULL));
+#endif
+
   file->writeAll("foobar");
   file->write(1 << 20, StringPtr("foobar").asBytes());
 
@@ -833,6 +845,8 @@ KJ_TEST("DiskFile holes") {
   KJ_EXPECT(meta.spaceUsed <= 2 * 65536);
 
   byte buf[7];
+
+#if !_WIN32  // Win32 CopyFile() does NOT preserve sparseness.
   {
     // Copy doesn't fill in holes.
     dir->transfer(Path("copy"), WriteMode::CREATE, Path("holes"), TransferMode::COPY);
@@ -847,12 +861,14 @@ KJ_TEST("DiskFile holes") {
     KJ_EXPECT(copy->read(1 << 19, buf) == 7);
     KJ_EXPECT(StringPtr(reinterpret_cast<char*>(buf), 6) == StringPtr("\0\0\0\0\0\0", 6));
   }
+#endif
 
   file->truncate(1 << 21);
   KJ_EXPECT(file->stat().spaceUsed == meta.spaceUsed);
   KJ_EXPECT(file->read(1 << 20, buf) == 7);
   KJ_EXPECT(StringPtr(reinterpret_cast<char*>(buf), 6) == "foobar");
 
+#if !_WIN32  // Win32 CopyFile() does NOT preserve sparseness.
   {
     dir->transfer(Path("copy"), WriteMode::MODIFY, Path("holes"), TransferMode::COPY);
     auto copy = dir->openFile(Path("copy"));
@@ -866,6 +882,11 @@ KJ_TEST("DiskFile holes") {
     KJ_EXPECT(copy->read(1 << 19, buf) == 7);
     KJ_EXPECT(StringPtr(reinterpret_cast<char*>(buf), 6) == StringPtr("\0\0\0\0\0\0", 6));
   }
+#endif
+
+  // Try punching a hole with zero().
+  file->zero(1 << 20, 4096);
+  KJ_EXPECT(file->stat().spaceUsed < meta.spaceUsed);
 }
 #endif
 
