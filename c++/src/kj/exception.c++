@@ -348,7 +348,7 @@ BOOL WINAPI breakHandler(DWORD type) {
           context.ContextFlags = CONTEXT_FULL;
           if (GetThreadContext(thread, &context)) {
             void* traceSpace[32];
-            auto trace = getStackTrace(traceSpace, 2, thread, context);
+            auto trace = getStackTrace(traceSpace, 0, thread, context);
             ResumeThread(thread);
             auto message = kj::str("*** Received CTRL+C. stack: ",
                                    stringifyStackTraceAddresses(trace),
@@ -369,11 +369,51 @@ BOOL WINAPI breakHandler(DWORD type) {
   return FALSE;  // still crash
 }
 
+kj::StringPtr exceptionDescription(DWORD code) {
+  switch (code) {
+    case EXCEPTION_ACCESS_VIOLATION: return "access violation";
+    case EXCEPTION_ARRAY_BOUNDS_EXCEEDED: return "array bounds exceeded";
+    case EXCEPTION_BREAKPOINT: return "breakpoint";
+    case EXCEPTION_DATATYPE_MISALIGNMENT: return "datatype misalignment";
+    case EXCEPTION_FLT_DENORMAL_OPERAND: return "denormal floating point operand";
+    case EXCEPTION_FLT_DIVIDE_BY_ZERO: return "floating point division by zero";
+    case EXCEPTION_FLT_INEXACT_RESULT: return "inexact floating point result";
+    case EXCEPTION_FLT_INVALID_OPERATION: return "invalid floating point operation";
+    case EXCEPTION_FLT_OVERFLOW: return "floating point overflow";
+    case EXCEPTION_FLT_STACK_CHECK: return "floating point stack overflow";
+    case EXCEPTION_FLT_UNDERFLOW: return "floating point underflow";
+    case EXCEPTION_ILLEGAL_INSTRUCTION: return "illegal instruction";
+    case EXCEPTION_IN_PAGE_ERROR: return "page error";
+    case EXCEPTION_INT_DIVIDE_BY_ZERO: return "integer divided by zero";
+    case EXCEPTION_INT_OVERFLOW: return "integer overflow";
+    case EXCEPTION_INVALID_DISPOSITION: return "invalid disposition";
+    case EXCEPTION_NONCONTINUABLE_EXCEPTION: return "noncontinuable exception";
+    case EXCEPTION_PRIV_INSTRUCTION: return "privileged instruction";
+    case EXCEPTION_SINGLE_STEP: return "single step";
+    case EXCEPTION_STACK_OVERFLOW: return "stack overflow";
+    default: return "(unknown exception code)";
+  }
+}
+
+LONG WINAPI sehHandler(EXCEPTION_POINTERS* info) {
+  void* traceSpace[32];
+  auto trace = getStackTrace(traceSpace, 0, GetCurrentThread(), *info->ContextRecord);
+  auto message = kj::str("*** Received structured exception #0x",
+                         hex(info->ExceptionRecord->ExceptionCode), ": ",
+                         exceptionDescription(info->ExceptionRecord->ExceptionCode),
+                         "; stack: ",
+                         stringifyStackTraceAddresses(trace),
+                         stringifyStackTrace(trace), '\n');
+  FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  return EXCEPTION_EXECUTE_HANDLER;  // still crash
+}
+
 }  // namespace
 
 void printStackTraceOnCrash() {
   mainThreadId = GetCurrentThreadId();
   KJ_WIN32(SetConsoleCtrlHandler(breakHandler, TRUE));
+  SetUnhandledExceptionFilter(&sehHandler);
 }
 
 #elif KJ_HAS_BACKTRACE
