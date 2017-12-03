@@ -387,7 +387,7 @@ public:
     KJ_SYSCALL(ftruncate(fd, size));
   }
 
-  class WritableFileMappingImpl: public WritableFileMapping {
+  class WritableFileMappingImpl final: public WritableFileMapping {
   public:
     WritableFileMappingImpl(Array<byte> bytes): bytes(kj::mv(bytes)) {}
 
@@ -1168,7 +1168,7 @@ public:
   }
 
   template <typename T>
-  class ReplacerImpl: public Directory::Replacer<T> {
+  class ReplacerImpl final: public Directory::Replacer<T> {
   public:
     ReplacerImpl(Own<T>&& object, DiskHandle& handle,
                  String&& tempPath, String&& path, WriteMode mode)
@@ -1201,7 +1201,7 @@ public:
   };
 
   template <typename T>
-  class BrokenReplacer: public Directory::Replacer<T> {
+  class BrokenReplacer final: public Directory::Replacer<T> {
     // For recovery path when exceptions are disabled.
 
   public:
