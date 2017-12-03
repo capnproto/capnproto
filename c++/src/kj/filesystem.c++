@@ -672,6 +672,8 @@ bool Directory::tryTransfer(PathPtr toPath, WriteMode toMode,
     case TransferMode::LINK:
       KJ_FAIL_REQUIRE("can't link across different Directory implementations") { return false; }
   }
+
+  KJ_UNREACHABLE;
 }
 
 Maybe<bool> Directory::tryTransferTo(Directory& toDirectory, PathPtr toPath, WriteMode toMode,
@@ -1296,7 +1298,7 @@ private:
   Date lastModified;
 
   template <typename T>
-  class ReplacerImpl: public Replacer<T> {
+  class ReplacerImpl final: public Replacer<T> {
   public:
     ReplacerImpl(InMemoryDirectory& directory, kj::StringPtr name, Own<T> inner, WriteMode mode)
         : Replacer<T>(mode), directory(addRef(directory)), name(heapString(name)),
@@ -1324,7 +1326,7 @@ private:
   };
 
   template <typename T>
-  class BrokenReplacer: public Replacer<T> {
+  class BrokenReplacer final: public Replacer<T> {
     // For recovery path when exceptions are disabled.
 
   public:
