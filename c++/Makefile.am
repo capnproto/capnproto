@@ -139,6 +139,7 @@ includekj_HEADERS =                                            \
   src/kj/mutex.h                                               \
   src/kj/thread.h                                              \
   src/kj/threadlocal.h                                         \
+  src/kj/filesystem.h                                          \
   src/kj/async-prelude.h                                       \
   src/kj/async.h                                               \
   src/kj/async-inl.h                                           \
@@ -229,6 +230,9 @@ libkj_la_SOURCES=                                              \
   src/kj/mutex.c++                                             \
   src/kj/thread.c++                                            \
   src/kj/time.c++                                              \
+  src/kj/filesystem.c++                                        \
+  src/kj/filesystem-disk.c++                                   \
+  src/kj/filesystem-disk-win32.c++                             \
   src/kj/test-helpers.c++                                      \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
@@ -472,6 +476,8 @@ capnp_test_SOURCES =                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/threadlocal-test.c++                                  \
   src/kj/threadlocal-pthread-test.c++                          \
+  src/kj/filesystem-test.c++                                   \
+  src/kj/filesystem-disk-test.c++                              \
   src/kj/test-test.c++                                         \
   src/capnp/common-test.c++                                    \
   src/capnp/blob-test.c++                                      \
