@@ -247,6 +247,85 @@ EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
   return { String(result.releaseAsArray()), hadErrors };
 }
 
+namespace {
+
+template <typename To, typename From>
+Array<To> coerceTo(Array<From>&& array) {
+  static_assert(sizeof(To) == sizeof(From), "incompatible coercion");
+  Array<wchar_t> result;
+  memcpy(&result, &array, sizeof(array));
+  memset(&array, 0, sizeof(array));
+  return result;
+}
+
+template <typename To, typename From>
+ArrayPtr<To> coerceTo(ArrayPtr<From> array) {
+  static_assert(sizeof(To) == sizeof(From), "incompatible coercion");
+  return arrayPtr(reinterpret_cast<To*>(array.begin()), array.size());
+}
+
+template <typename To, typename From>
+EncodingResult<Array<To>> coerceTo(EncodingResult<Array<From>>&& result) {
+  return { coerceTo<To>(Array<From>(kj::mv(result))), result.hadErrors };
+}
+
+template <size_t s>
+struct WideConverter;
+
+template <>
+struct WideConverter<sizeof(char)> {
+  typedef char Type;
+
+  static EncodingResult<Array<char>> encode(ArrayPtr<const char> text, bool nulTerminate) {
+    auto result = heapArray<char>(text.size() + nulTerminate);
+    memcpy(result.begin(), text.begin(), text.size());
+    if (nulTerminate) result.back() = 0;
+    return { kj::mv(result), false };
+  }
+
+  static EncodingResult<kj::String> decode(ArrayPtr<const char> text) {
+    return { kj::heapString(text), false };
+  }
+};
+
+template <>
+struct WideConverter<sizeof(char16_t)> {
+  typedef char16_t Type;
+
+  static inline EncodingResult<Array<char16_t>> encode(
+      ArrayPtr<const char> text, bool nulTerminate) {
+    return encodeUtf16(text, nulTerminate);
+  }
+
+  static inline EncodingResult<kj::String> decode(ArrayPtr<const char16_t> text) {
+    return decodeUtf16(text);
+  }
+};
+
+template <>
+struct WideConverter<sizeof(char32_t)> {
+  typedef char32_t Type;
+
+  static inline EncodingResult<Array<char32_t>> encode(
+      ArrayPtr<const char> text, bool nulTerminate) {
+    return encodeUtf32(text, nulTerminate);
+  }
+
+  static inline EncodingResult<kj::String> decode(ArrayPtr<const char32_t> text) {
+    return decodeUtf32(text);
+  }
+};
+
+}  // namespace
+
+EncodingResult<Array<wchar_t>> encodeWideString(ArrayPtr<const char> text, bool nulTerminate) {
+  return coerceTo<wchar_t>(WideConverter<sizeof(wchar_t)>::encode(text, nulTerminate));
+}
+EncodingResult<String> decodeWideString(ArrayPtr<const wchar_t> wide) {
+  using Converter = WideConverter<sizeof(wchar_t)>;
+  return Converter::decode(coerceTo<const Converter::Type>(wide));
+}
+
 // =======================================================================================
 
 namespace {

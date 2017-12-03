@@ -107,6 +107,18 @@ EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf32);
 //   raised on subsequent legs unless all invalid sequences were replaced with U+FFFD (which, after
 //   all, is a valid code point).
 
+EncodingResult<Array<wchar_t>> encodeWideString(
+    ArrayPtr<const char> text, bool nulTerminate = false);
+EncodingResult<String> decodeWideString(ArrayPtr<const wchar_t> wide);
+// Encode / decode strings of wchar_t, aka "wide strings". Unfortunately, different platforms have
+// different definitions for wchar_t. For example, on Windows they are 16-bit and encode UTF-16,
+// but on Linux they are 32-bit and encode UTF-32. Some platforms even define wchar_t as 8-bit,
+// encoding UTF-8 (e.g. BeOS did this).
+//
+// KJ assumes that wide strings use the UTF encoding that corresponds to the size of wchar_t on
+// the target platform. So, these functions are simple aliases for encodeUtf*/decodeUtf*, above
+// (or simply make a copy if wchar_t is 8 bits).
+
 String encodeHex(ArrayPtr<const byte> bytes);
 EncodingResult<Array<byte>> decodeHex(ArrayPtr<const char> text);
 // Encode/decode bytes as hex strings.
@@ -195,12 +207,21 @@ inline EncodingResult<Array<char32_t>> encodeUtf32(const char (&text)[s], bool n
   return encodeUtf32(arrayPtr(text, s - 1), nulTerminate);
 }
 template <size_t s>
+inline EncodingResult<Array<wchar_t>> encodeWideString(
+    const char (&text)[s], bool nulTerminate=false) {
+  return encodeWideString(arrayPtr(text, s - 1), nulTerminate);
+}
+template <size_t s>
 inline EncodingResult<String> decodeUtf16(const char16_t (&utf16)[s]) {
   return decodeUtf16(arrayPtr(utf16, s - 1));
 }
 template <size_t s>
 inline EncodingResult<String> decodeUtf32(const char32_t (&utf32)[s]) {
   return decodeUtf32(arrayPtr(utf32, s - 1));
+}
+template <size_t s>
+inline EncodingResult<String> decodeWideString(const wchar_t (&utf32)[s]) {
+  return decodeWideString(arrayPtr(utf32, s - 1));
 }
 template <size_t s>
 inline EncodingResult<Array<byte>> decodeHex(const char (&text)[s]) {

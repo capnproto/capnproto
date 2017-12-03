@@ -30,6 +30,7 @@ CappedArray<char, sizeof(char    ) * 2 + 1> hex(byte     i) { return kj::hex((ui
 CappedArray<char, sizeof(char    ) * 2 + 1> hex(char     i) { return kj::hex((uint8_t )i); }
 CappedArray<char, sizeof(char16_t) * 2 + 1> hex(char16_t i) { return kj::hex((uint16_t)i); }
 CappedArray<char, sizeof(char32_t) * 2 + 1> hex(char32_t i) { return kj::hex((uint32_t)i); }
+CappedArray<char, sizeof(uint32_t) * 2 + 1> hex(wchar_t  i) { return kj::hex((uint32_t)i); }
 // Hexify chars correctly.
 //
 // TODO(cleanup): Should this go into string.h with the other definitions of hex()?
@@ -243,6 +244,20 @@ KJ_TEST("EncodingResult as a Maybe") {
   }
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(decodeUtf16(u"foo")) == "foo");
+}
+
+KJ_TEST("encode to wchar_t") {
+  expectRes(encodeWideString(u8"foo"), L"foo");
+  expectRes(encodeWideString(u8"Здравствуйте"), L"Здравствуйте");
+  expectRes(encodeWideString(u8"中国网络"), L"中国网络");
+  expectRes(encodeWideString(u8"😺☁☄🐵"), L"😺☁☄🐵");
+}
+
+KJ_TEST("decode from wchar_t") {
+  expectRes(decodeWideString(L"foo"), u8"foo");
+  expectRes(decodeWideString(L"Здравствуйте"), u8"Здравствуйте");
+  expectRes(decodeWideString(L"中国网络"), u8"中国网络");
+  expectRes(decodeWideString(L"😺☁☄🐵"), u8"😺☁☄🐵");
 }
 
 // =======================================================================================
