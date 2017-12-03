@@ -124,23 +124,18 @@ KJ_TEST("invalid UTF-8 to UTF-16") {
 
   // Surrogates encoded as separate UTF-8 code points are flagged as errors but allowed to decode
   // to UTF-16 surrogate values.
-  expectRes(encodeUtf16(u8"\ud7ff\xed\xb0\x80\xed\xaf\xbf\ue000"),
-      u"\xd7ff\xdc00\xdbff\xe000", true);
-  expectRes(encodeUtf16(u8"\ud7ff\xed\xbf\xbf\xed\xa0\x80\ue000"),
-      u"\xd7ff\xdfff\xd800\xe000", true);
+  expectRes(encodeUtf16("\xed\xb0\x80\xed\xaf\xbf"), u"\xdc00\xdbff", true);
+  expectRes(encodeUtf16("\xed\xbf\xbf\xed\xa0\x80"), u"\xdfff\xd800", true);
 
-  expectRes(encodeUtf16(u8"\ud7ff\xed\xb0\x80\xed\xbf\xbf\ue000"),
-      u"\xd7ff\xdc00\xdfff\xe000", true);
-  expectRes(encodeUtf16(u8"f\xed\xa0\x80"), u"f\xd800", true);
-  expectRes(encodeUtf16(u8"f\xed\xa0\x80x"), u"f\xd800x", true);
-  expectRes(encodeUtf16(u8"f\xed\xa0\x80\xed\xa0\x80x"), u"f\xd800\xd800x", true);
+  expectRes(encodeUtf16("\xed\xb0\x80\xed\xbf\xbf"), u"\xdc00\xdfff", true);
+  expectRes(encodeUtf16("f\xed\xa0\x80"), u"f\xd800", true);
+  expectRes(encodeUtf16("f\xed\xa0\x80x"), u"f\xd800x", true);
+  expectRes(encodeUtf16("f\xed\xa0\x80\xed\xa0\x80x"), u"f\xd800\xd800x", true);
 
   // However, if successive UTF-8 codepoints decode to a proper surrogate pair, the second
   // surrogate is replaced with the Unicode replacement character to avoid creating valid UTF-16.
-  expectRes(encodeUtf16(u8"\ud7ff\xed\xa0\x80\xed\xbf\xbf\ue000"),
-      u"\xd7ff\xd800\xfffd\xe000", true);
-  expectRes(encodeUtf16(u8"\ud7ff\xed\xaf\xbf\xed\xb0\x80\ue000"),
-      u"\xd7ff\xdbff\xfffd\xe000", true);
+  expectRes(encodeUtf16("\xed\xa0\x80\xed\xbf\xbf"), u"\xd800\xfffd", true);
+  expectRes(encodeUtf16("\xed\xaf\xbf\xed\xb0\x80"), u"\xdbff\xfffd", true);
 }
 
 KJ_TEST("encode UTF-8 to UTF-32") {
@@ -197,15 +192,15 @@ KJ_TEST("decode UTF-16 to UTF-8") {
 
 KJ_TEST("invalid UTF-16 to UTF-8") {
   // Surrogates in wrong order.
-  expectRes(decodeUtf16(u"\xd7ff\xdc00\xdbff\xe000"),
-      u8"\ud7ff\xed\xb0\x80\xed\xaf\xbf\ue000", true);
-  expectRes(decodeUtf16(u"\xd7ff\xdfff\xd800\xe000"),
-      u8"\ud7ff\xed\xbf\xbf\xed\xa0\x80\ue000", true);
+  expectRes(decodeUtf16(u"\xdc00\xdbff"),
+      "\xed\xb0\x80\xed\xaf\xbf", true);
+  expectRes(decodeUtf16(u"\xdfff\xd800"),
+      "\xed\xbf\xbf\xed\xa0\x80", true);
 
   // Missing second surrogate.
-  expectRes(decodeUtf16(u"f\xd800"), u8"f\xed\xa0\x80", true);
-  expectRes(decodeUtf16(u"f\xd800x"), u8"f\xed\xa0\x80x", true);
-  expectRes(decodeUtf16(u"f\xd800\xd800x"), u8"f\xed\xa0\x80\xed\xa0\x80x", true);
+  expectRes(decodeUtf16(u"f\xd800"), "f\xed\xa0\x80", true);
+  expectRes(decodeUtf16(u"f\xd800x"), "f\xed\xa0\x80x", true);
+  expectRes(decodeUtf16(u"f\xd800\xd800x"), "f\xed\xa0\x80\xed\xa0\x80x", true);
 }
 
 KJ_TEST("decode UTF-32 to UTF-8") {
@@ -217,12 +212,12 @@ KJ_TEST("decode UTF-32 to UTF-8") {
 
 KJ_TEST("invalid UTF-32 to UTF-8") {
   // Surrogates rejected.
-  expectRes(decodeUtf32(U"\xd7ff\xdfff\xd800\xe000"),
-      u8"\ud7ff\xed\xbf\xbf\xed\xa0\x80\ue000", true);
+  expectRes(decodeUtf32(U"\xdfff\xd800"),
+      "\xed\xbf\xbf\xed\xa0\x80", true);
 
   // Even if it would be a valid surrogate pair in UTF-16.
-  expectRes(decodeUtf32(U"\xd7ff\xd800\xdfff\xe000"),
-      u8"\ud7ff\xed\xa0\x80\xed\xbf\xbf\ue000", true);
+  expectRes(decodeUtf32(U"\xd800\xdfff"),
+      "\xed\xa0\x80\xed\xbf\xbf", true);
 }
 
 KJ_TEST("round-trip invalid UTF-16") {
