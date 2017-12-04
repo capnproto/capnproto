@@ -277,7 +277,9 @@ KJ_TEST("base64 encoding/decoding") {
   {
     auto encoded = encodeBase64(StringPtr("foo").asBytes(), false);
     KJ_EXPECT(encoded == "Zm9v", encoded, encoded.size());
-    KJ_EXPECT(heapString(decodeBase64(encoded.asArray()).asChars()) == "foo");
+    auto decoded = decodeBase64(encoded.asArray());
+    KJ_EXPECT(!decoded.hadErrors);
+    KJ_EXPECT(heapString(decoded.asChars()) == "foo");
   }
 
   {
@@ -289,11 +291,35 @@ KJ_TEST("base64 encoding/decoding") {
   {
     auto encoded = encodeBase64(StringPtr("corge").asBytes(), false);
     KJ_EXPECT(encoded == "Y29yZ2U=", encoded);
-    KJ_EXPECT(heapString(decodeBase64(encoded.asArray()).asChars()) == "corge");
+    auto decoded = decodeBase64(encoded.asArray());
+    KJ_EXPECT(!decoded.hadErrors);
+    KJ_EXPECT(heapString(decoded.asChars()) == "corge");
   }
 
-  KJ_EXPECT(heapString(decodeBase64("Y29yZ2U").asChars()) == "corge");
-  KJ_EXPECT(heapString(decodeBase64("Y\n29y Z@2U=\n").asChars()) == "corge");
+  {
+    auto decoded = decodeBase64("Y29yZ2U");
+    KJ_EXPECT(!decoded.hadErrors);
+    KJ_EXPECT(heapString(decoded.asChars()) == "corge");
+  }
+
+  {
+    auto decoded = decodeBase64("Y\n29y Z@2U=\n");
+    KJ_EXPECT(decoded.hadErrors);  // @-sign is invalid base64 input.
+    KJ_EXPECT(heapString(decoded.asChars()) == "corge");
+  }
+
+  {
+    auto decoded = decodeBase64("Y\n29y Z2U=\n");
+    KJ_EXPECT(!decoded.hadErrors);
+    KJ_EXPECT(heapString(decoded.asChars()) == "corge");
+  }
+
+  // Too much padding.
+  KJ_EXPECT(decodeBase64("Y29yZ2U==").hadErrors);
+  KJ_EXPECT(decodeBase64("Y29yZ===").hadErrors);
+
+  // Non-terminal padding.
+  KJ_EXPECT(decodeBase64("ab=c").hadErrors);
 
   {
     auto encoded = encodeBase64(StringPtr("corge").asBytes(), true);

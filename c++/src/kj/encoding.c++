@@ -661,24 +661,43 @@ typedef enum {
 } base64_decodestep;
 
 typedef struct {
-  base64_decodestep step;
-  char plainchar;
+  bool hadErrors = false;
+  size_t nPaddingBytesSeen = 0;
+  // Output state. `nPaddingBytesSeen` is not guaranteed to be correct if `hadErrors` is true. It is
+  // included in the state purely to preserve the streaming capability of the algorithm while still
+  // checking for errors correctly (consider chunk 1 = "abc=", chunk 2 = "d").
+
+  base64_decodestep step = step_a;
+  char plainchar = 0;
 } base64_decodestate;
 
 int base64_decode_value(char value_in) {
-  static const char decoding[] = {
-    62,-1,-1,-1,63,52,53,54,55,56,57,58,59,60,61,-1,-1,-1,-2,-1,-1,-1,
-    0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1,-1,
-    26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51};
-  static const char decoding_size = sizeof(decoding);
-  value_in -= 43;
-  if (value_in < 0 || value_in > decoding_size) return -1;
-  return decoding[(int)value_in];
-}
+  // Returns either the fragment value or: -1 on whitespace, -2 on padding, -3 on invalid input.
+  //
+  // Note that the original libb64 implementation used -1 for invalid input, -2 on padding -- this
+  // new scheme allows for some simpler error checks in steps A and B.
 
-void base64_init_decodestate(base64_decodestate* state_in) {
-  state_in->step = step_a;
-  state_in->plainchar = 0;
+  static const char decoding[] = {
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-1,-1,-3,-1,-1,-3,-3,
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
+    -1,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,62,-3,-3,-3,63,
+    52,53,54,55,56,57,58,59,  60,61,-3,-3,-3,-2,-3,-3,
+    -3, 0, 1, 2, 3, 4, 5, 6,   7, 8, 9,10,11,12,13,14,
+    15,16,17,18,19,20,21,22,  23,24,25,-3,-3,-3,-3,-3,
+    -3,26,27,28,29,30,31,32,  33,34,35,36,37,38,39,40,
+    41,42,43,44,45,46,47,48,  49,50,51,-3,-3,-3,-3,-3,
+
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
+    -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
+  };
+  static_assert(sizeof(decoding) == 256, "base64 decoding table size error");
+  return decoding[(unsigned char)value_in];
 }
 
 int base64_decode_block(const char* code_in, const int length_in,
@@ -690,6 +709,8 @@ int base64_decode_block(const char* code_in, const int length_in,
   if (state_in->step != step_a) {
     *plainchar = state_in->plainchar;
   }
+
+#define ERROR_IF(predicate) state_in->hadErrors = state_in->hadErrors || (predicate)
 
   switch (state_in->step)
   {
@@ -703,6 +724,8 @@ int base64_decode_block(const char* code_in, const int length_in,
           return plainchar - plaintext_out;
         }
         fragment = (char)base64_decode_value(*codechar++);
+        // It is an error to see invalid or padding bytes in step A.
+        ERROR_IF(fragment < -1);
       } while (fragment < 0);
       *plainchar    = (fragment & 0x03f) << 2;
   case step_b:
@@ -710,9 +733,15 @@ int base64_decode_block(const char* code_in, const int length_in,
         if (codechar == code_in+length_in) {
           state_in->step = step_b;
           state_in->plainchar = *plainchar;
+          // It is always an error to suspend from step B, because we don't have enough bits yet.
+          // TODO(someday): This actually breaks the streaming use case, if base64_decode_block() is
+          //   to be called multiple times. We'll fix it if we ever care to support streaming.
+          state_in->hadErrors = true;
           return plainchar - plaintext_out;
         }
         fragment = (char)base64_decode_value(*codechar++);
+        // It is an error to see invalid or padding bytes in step B.
+        ERROR_IF(fragment < -1);
       } while (fragment < 0);
       *plainchar++ |= (fragment & 0x030) >> 4;
       *plainchar    = (fragment & 0x00f) << 4;
@@ -721,10 +750,18 @@ int base64_decode_block(const char* code_in, const int length_in,
         if (codechar == code_in+length_in) {
           state_in->step = step_c;
           state_in->plainchar = *plainchar;
+          // It is an error to complete from step C if we have seen incomplete padding.
+          // TODO(someday): This actually breaks the streaming use case, if base64_decode_block() is
+          //   to be called multiple times. We'll fix it if we ever care to support streaming.
+          ERROR_IF(state_in->nPaddingBytesSeen == 1);
           return plainchar - plaintext_out;
         }
         fragment = (char)base64_decode_value(*codechar++);
+        // It is an error to see invalid bytes or more than two padding bytes in step C.
+        ERROR_IF(fragment < -2 || (fragment == -2 && ++state_in->nPaddingBytesSeen > 2));
       } while (fragment < 0);
+      // It is an error to continue from step C after having seen any padding.
+      ERROR_IF(state_in->nPaddingBytesSeen > 0);
       *plainchar++ |= (fragment & 0x03c) >> 2;
       *plainchar    = (fragment & 0x003) << 6;
   case step_d:
@@ -735,19 +772,25 @@ int base64_decode_block(const char* code_in, const int length_in,
           return plainchar - plaintext_out;
         }
         fragment = (char)base64_decode_value(*codechar++);
+        // It is an error to see invalid bytes or more than one padding byte in step D.
+        ERROR_IF(fragment < -2 || (fragment == -2 && ++state_in->nPaddingBytesSeen > 1));
       } while (fragment < 0);
+      // It is an error to continue from step D after having seen padding bytes.
+      ERROR_IF(state_in->nPaddingBytesSeen > 0);
       *plainchar++   |= (fragment & 0x03f);
     }
   }
+
+#undef ERROR_IF
+
   /* control should not reach here */
   return plainchar - plaintext_out;
 }
 
 }  // namespace
 
-Array<byte> decodeBase64(ArrayPtr<const char> input) {
+EncodingResult<Array<byte>> decodeBase64(ArrayPtr<const char> input) {
   base64_decodestate state;
-  base64_init_decodestate(&state);
 
   auto output = heapArray<byte>((input.size() * 6 + 7) / 8);
 
@@ -760,7 +803,7 @@ Array<byte> decodeBase64(ArrayPtr<const char> input) {
     output = kj::mv(copy);
   }
 
-  return output;
+  return EncodingResult<Array<byte>>(kj::mv(output), state.hadErrors);
 }
 
 } // namespace kj
