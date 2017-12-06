@@ -76,7 +76,7 @@ public:
   // the call stack. The default is 64.
 
   template <typename T>
-  kj::String encode(T&& value);
+  kj::String encode(T&& value) const;
   // Encode any Cap'n Proto value to JSON, including primitives and
   // Dynamic{Enum,Struct,List,Capability}, but not DynamicValue (see below).
 
@@ -126,7 +126,7 @@ public:
   // Translate JsonValue <-> text.
 
   template <typename T>
-  void encode(T&& value, JsonValue::Builder output);
+  void encode(T&& value, JsonValue::Builder output) const;
   void encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const;
   void decode(JsonValue::Reader input, DynamicStruct::Builder output) const;
   template <typename T>
@@ -228,7 +228,7 @@ template <bool isDynamic>
 struct EncodeImpl;
 
 template <typename T>
-kj::String JsonCodec::encode(T&& value) {
+kj::String JsonCodec::encode(T&& value) const {
   Type type = Type::from(value);
   typedef FromAny<kj::Decay<T>> Base;
   return encode(DynamicValue::Reader(ReaderFor<Base>(kj::fwd<T>(value))), type);
@@ -265,7 +265,7 @@ inline DynamicEnum JsonCodec::decode(kj::ArrayPtr<const char> input, EnumSchema 
 // -----------------------------------------------------------------------------
 
 template <typename T>
-void JsonCodec::encode(T&& value, JsonValue::Builder output) {
+void JsonCodec::encode(T&& value, JsonValue::Builder output) const {
   typedef FromAny<kj::Decay<T>> Base;
   encode(DynamicValue::Reader(ReaderFor<Base>(kj::fwd<T>(value))), Type::from<Base>(), output);
 }
