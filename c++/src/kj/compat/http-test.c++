@@ -233,6 +233,29 @@ KJ_TEST("HttpHeaders parse invalid") {
       "\r\n")) == nullptr);
 }
 
+KJ_TEST("HttpHeaders validation") {
+  auto table = HttpHeaderTable::Builder().build();
+  HttpHeaders headers(*table);
+
+  headers.add("Valid-Name", "valid value");
+
+  // The HTTP RFC prohibits control characters, but browsers only prohibit \0, \r, and \n. KJ goes
+  // with the browsers for compatibility.
+  headers.add("Valid-Name", "valid\x01value");
+
+  // The HTTP RFC does not permit non-ASCII values.
+  // KJ chooses to interpret them as UTF-8, to avoid the need for any expensive conversion.
+  // Browsers apparently interpret them as LATIN-1. Applications can reinterpet these strings as
+  // LATIN-1 easily enough if they really need to.
+  headers.add("Valid-Name", u8"valid€value");
+
+  KJ_EXPECT_THROW_MESSAGE("invalid header name", headers.add("Invalid Name", "value"));
+  KJ_EXPECT_THROW_MESSAGE("invalid header name", headers.add("Invalid@Name", "value"));
+
+  KJ_EXPECT_THROW_MESSAGE("invalid header value", headers.set(HttpHeaderId::HOST, "in\nvalid"));
+  KJ_EXPECT_THROW_MESSAGE("invalid header value", headers.add("Valid-Name", "in\nvalid"));
+}
+
 // =======================================================================================
 
 class ReadFragmenter final: public kj::AsyncIoStream {

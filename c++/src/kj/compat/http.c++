@@ -461,7 +461,11 @@ static void requireValidHeaderName(kj::StringPtr name) {
 
 static void requireValidHeaderValue(kj::StringPtr value) {
   for (char c: value) {
-    KJ_REQUIRE(c >= 0x20, "invalid header value", value);
+    // While the HTTP spec suggests that only printable ASCII characters are allowed in header
+    // values, reality has a different opinion. See: https://github.com/httpwg/http11bis/issues/19
+    // We follow the browsers' lead.
+    KJ_REQUIRE(c != '\0' && c != '\r' && c != '\n', "invalid header value",
+        kj::encodeCEscape(value));
   }
 }
 
