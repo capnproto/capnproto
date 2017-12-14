@@ -136,12 +136,6 @@ TEST(Memory, AttachNested) {
   KJ_EXPECT(destroyed3 == 3, destroyed3);
 }
 
-#if __GNUG__
-// We don't actually illegally invoke any non-virtual destructors but it's hard to write this test
-// without triggering this warning, so ignore it.
-#pragma GCC diagnostic ignored "-Wdelete-non-virtual-dtor"
-#endif
-
 struct StaticType {
   int i;
 };
@@ -162,15 +156,27 @@ struct DynamicType2 {
   DynamicType2(int k): k(k) {}
 };
 
-struct DerivedDynamic: public DynamicType1, public DynamicType2 {
-  DerivedDynamic(int j, int k, bool& destructorCalled)
+struct SingularDerivedDynamic final: public DynamicType1 {
+  SingularDerivedDynamic(int j, bool& destructorCalled)
+      : DynamicType1(j), destructorCalled(destructorCalled) {}
+
+  ~SingularDerivedDynamic() {
+    destructorCalled = true;
+  }
+  KJ_DISALLOW_COPY(SingularDerivedDynamic);
+
+  bool& destructorCalled;
+};
+
+struct MultipleDerivedDynamic final: public DynamicType1, public DynamicType2 {
+  MultipleDerivedDynamic(int j, int k, bool& destructorCalled)
       : DynamicType1(j), DynamicType2(k), destructorCalled(destructorCalled) {}
 
-  ~DerivedDynamic() {
+  ~MultipleDerivedDynamic() {
     destructorCalled = true;
   }
 
-  KJ_DISALLOW_COPY(DerivedDynamic);
+  KJ_DISALLOW_COPY(MultipleDerivedDynamic);
 
   bool& destructorCalled;
 };
@@ -184,16 +190,17 @@ TEST(Memory, OwnVoid) {
   }
 
   {
-    Own<DynamicType1> ptr = heap<DynamicType1>(123);
-    DynamicType1* addr = ptr.get();
+    bool destructorCalled = false;
+    Own<SingularDerivedDynamic> ptr = heap<SingularDerivedDynamic>(123, destructorCalled);
+    SingularDerivedDynamic* addr = ptr.get();
     Own<void> voidPtr = kj::mv(ptr);
     KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
   }
 
   {
     bool destructorCalled = false;
-    Own<DerivedDynamic> ptr = heap<DerivedDynamic>(123, 456, destructorCalled);
-    DerivedDynamic* addr = ptr.get();
+    Own<MultipleDerivedDynamic> ptr = heap<MultipleDerivedDynamic>(123, 456, destructorCalled);
+    MultipleDerivedDynamic* addr = ptr.get();
     Own<void> voidPtr = kj::mv(ptr);
     KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
 
@@ -204,8 +211,8 @@ TEST(Memory, OwnVoid) {
 
   {
     bool destructorCalled = false;
-    Own<DerivedDynamic> ptr = heap<DerivedDynamic>(123, 456, destructorCalled);
-    DerivedDynamic* addr = ptr.get();
+    Own<MultipleDerivedDynamic> ptr = heap<MultipleDerivedDynamic>(123, 456, destructorCalled);
+    MultipleDerivedDynamic* addr = ptr.get();
     Own<DynamicType2> basePtr = kj::mv(ptr);
     DynamicType2* baseAddr = basePtr.get();
 
@@ -237,16 +244,17 @@ TEST(Memory, OwnConstVoid) {
   }
 
   {
-    Own<DynamicType1> ptr = heap<DynamicType1>(123);
-    DynamicType1* addr = ptr.get();
+    bool destructorCalled = false;
+    Own<SingularDerivedDynamic> ptr = heap<SingularDerivedDynamic>(123, destructorCalled);
+    SingularDerivedDynamic* addr = ptr.get();
     Own<const void> voidPtr = kj::mv(ptr);
     KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
   }
 
   {
     bool destructorCalled = false;
-    Own<DerivedDynamic> ptr = heap<DerivedDynamic>(123, 456, destructorCalled);
-    DerivedDynamic* addr = ptr.get();
+    Own<MultipleDerivedDynamic> ptr = heap<MultipleDerivedDynamic>(123, 456, destructorCalled);
+    MultipleDerivedDynamic* addr = ptr.get();
     Own<const void> voidPtr = kj::mv(ptr);
     KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
 
@@ -257,8 +265,8 @@ TEST(Memory, OwnConstVoid) {
 
   {
     bool destructorCalled = false;
-    Own<DerivedDynamic> ptr = heap<DerivedDynamic>(123, 456, destructorCalled);
-    DerivedDynamic* addr = ptr.get();
+    Own<MultipleDerivedDynamic> ptr = heap<MultipleDerivedDynamic>(123, 456, destructorCalled);
+    MultipleDerivedDynamic* addr = ptr.get();
     Own<DynamicType2> basePtr = kj::mv(ptr);
     DynamicType2* baseAddr = basePtr.get();
 
