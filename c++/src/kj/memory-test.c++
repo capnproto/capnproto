@@ -228,6 +228,59 @@ TEST(Memory, OwnVoid) {
   }
 }
 
+TEST(Memory, OwnConstVoid) {
+  {
+    Own<StaticType> ptr = heap<StaticType>({123});
+    StaticType* addr = ptr.get();
+    Own<const void> voidPtr = kj::mv(ptr);
+    KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
+  }
+
+  {
+    Own<DynamicType1> ptr = heap<DynamicType1>(123);
+    DynamicType1* addr = ptr.get();
+    Own<const void> voidPtr = kj::mv(ptr);
+    KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
+  }
+
+  {
+    bool destructorCalled = false;
+    Own<DerivedDynamic> ptr = heap<DerivedDynamic>(123, 456, destructorCalled);
+    DerivedDynamic* addr = ptr.get();
+    Own<const void> voidPtr = kj::mv(ptr);
+    KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
+
+    KJ_EXPECT(!destructorCalled);
+    voidPtr = nullptr;
+    KJ_EXPECT(destructorCalled);
+  }
+
+  {
+    bool destructorCalled = false;
+    Own<DerivedDynamic> ptr = heap<DerivedDynamic>(123, 456, destructorCalled);
+    DerivedDynamic* addr = ptr.get();
+    Own<DynamicType2> basePtr = kj::mv(ptr);
+    DynamicType2* baseAddr = basePtr.get();
+
+    // On most (all?) C++ ABIs, the second base class in a multiply-inherited class is offset from
+    // the beginning of the object (assuming the first base class has non-zero size). We use this
+    // fact here to verify that then casting to Own<void> does in fact result in a pointer that
+    // points to the start of the overall object, not the base class. We expect that the pointers
+    // are different here to prove that the test below is non-trivial.
+    //
+    // If there is some other ABI where these pointers are the same, and thus this expectation
+    // fails, then it's no problem to #ifdef out the expectation on that platform.
+    KJ_EXPECT(static_cast<void*>(baseAddr) != static_cast<void*>(addr));
+
+    Own<const void> voidPtr = kj::mv(basePtr);
+    KJ_EXPECT(voidPtr.get() == static_cast<void*>(addr));
+
+    KJ_EXPECT(!destructorCalled);
+    voidPtr = nullptr;
+    KJ_EXPECT(destructorCalled);
+  }
+}
+
 // TODO(test):  More tests.
 
 }  // namespace

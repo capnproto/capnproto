@@ -73,7 +73,7 @@ void* castToVoid(T* ptr) {
 }
 
 template <typename T>
-void* castToConstVoid(T* ptr) {
+const void* castToConstVoid(T* ptr) {
   return CastToVoid_<T>::applyConst(ptr);
 }
 
