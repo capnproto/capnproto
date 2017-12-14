@@ -30,6 +30,55 @@
 
 namespace kj {
 
+namespace _ {  // private
+
+template <typename T> struct RefOrVoid_ { typedef T& Type; };
+template <> struct RefOrVoid_<void> { typedef void Type; };
+template <> struct RefOrVoid_<const void> { typedef void Type; };
+
+template <typename T>
+using RefOrVoid = typename RefOrVoid_<T>::Type;
+// Evaluates to T&, unless T is `void`, in which case evaluates to `void`.
+//
+// This is a hack needed to avoid defining Own<void> as a totally separate class.
+
+template <typename T, bool isPolymorphic = __is_polymorphic(T)>
+struct CastToVoid_;
+
+template <typename T>
+struct CastToVoid_<T, false> {
+  static void* apply(T* ptr) {
+    return static_cast<void*>(ptr);
+  }
+  static const void* applyConst(T* ptr) {
+    const T* cptr = ptr;
+    return static_cast<const void*>(cptr);
+  }
+};
+
+template <typename T>
+struct CastToVoid_<T, true> {
+  static void* apply(T* ptr) {
+    return dynamic_cast<void*>(ptr);
+  }
+  static const void* applyConst(T* ptr) {
+    const T* cptr = ptr;
+    return dynamic_cast<const void*>(cptr);
+  }
+};
+
+template <typename T>
+void* castToVoid(T* ptr) {
+  return CastToVoid_<T>::apply(ptr);
+}
+
+template <typename T>
+const void* castToConstVoid(T* ptr) {
+  return CastToVoid_<T>::applyConst(ptr);
+}
+
+}  // namespace _ (private)
+
 // =======================================================================================
 // Disposer -- Implementation details.
 
@@ -120,9 +169,7 @@ public:
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U>&& other) noexcept
-      : disposer(other.disposer), ptr(other.ptr) {
-    static_assert(__is_polymorphic(T),
-        "Casting owned pointers requires that the target type is polymorphic.");
+      : disposer(other.disposer), ptr(cast(other.ptr)) {
     other.ptr = nullptr;
   }
   inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), ptr(ptr) {}
@@ -177,8 +224,8 @@ public:
 #define NULLCHECK KJ_IREQUIRE(ptr != nullptr, "null Own<> dereference")
   inline T* operator->() { NULLCHECK; return ptr; }
   inline const T* operator->() const { NULLCHECK; return ptr; }
-  inline T& operator*() { NULLCHECK; return *ptr; }
-  inline const T& operator*() const { NULLCHECK; return *ptr; }
+  inline _::RefOrVoid<T> operator*() { NULLCHECK; return *ptr; }
+  inline _::RefOrVoid<const T> operator*() const { NULLCHECK; return *ptr; }
 #undef NULLCHECK
   inline T* get() { return ptr; }
   inline const T* get() const { return ptr; }
@@ -206,9 +253,28 @@ private:
   }
 
   template <typename U>
+  static inline T* cast(U* ptr) {
+    static_assert(__is_polymorphic(T),
+        "Casting owned pointers requires that the target type is polymorphic.");
+    return ptr;
+  }
+
+  template <typename U>
   friend class Own;
   friend class Maybe<Own<T>>;
 };
+
+template <>
+template <typename U>
+inline void* Own<void>::cast(U* ptr) {
+  return _::castToVoid(ptr);
+}
+
+template <>
+template <typename U>
+inline const void* Own<const void>::cast(U* ptr) {
+  return _::castToConstVoid(ptr);
+}
 
 namespace _ {  // private
 

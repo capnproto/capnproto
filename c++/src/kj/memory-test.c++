@@ -136,6 +136,159 @@ TEST(Memory, AttachNested) {
   KJ_EXPECT(destroyed3 == 3, destroyed3);
 }
 
+struct StaticType {
+  int i;
+};
+
+struct DynamicType1 {
+  virtual void foo() {}
+
+  int j;
+
+  DynamicType1(int j): j(j) {}
+};
+
+struct DynamicType2 {
+  virtual void bar() {}
+
+  int k;
+
+  DynamicType2(int k): k(k) {}
+};
+
+struct SingularDerivedDynamic final: public DynamicType1 {
+  SingularDerivedDynamic(int j, bool& destructorCalled)
+      : DynamicType1(j), destructorCalled(destructorCalled) {}
+
+  ~SingularDerivedDynamic() {
+    destructorCalled = true;
+  }
+  KJ_DISALLOW_COPY(SingularDerivedDynamic);
+
+  bool& destructorCalled;
+};
+
+struct MultipleDerivedDynamic final: public DynamicType1, public DynamicType2 {
+  MultipleDerivedDynamic(int j, int k, bool& destructorCalled)
+      : DynamicType1(j), DynamicType2(k), destructorCalled(destructorCalled) {}
+
+  ~MultipleDerivedDynamic() {
+    destructorCalled = true;
+  }
+
+  KJ_DISALLOW_COPY(MultipleDerivedDynamic);
+
+  bool& destructorCalled;
+};
+
+TEST(Memory, OwnVoid) {
+  {
+    Own<StaticType> ptr = heap<StaticType>({123});
+    StaticType* addr = ptr.get();
+    Own<void> voidPtr = kj::mv(ptr);
+    KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
+  }
+
+  {
+    bool destructorCalled = false;
+    Own<SingularDerivedDynamic> ptr = heap<SingularDerivedDynamic>(123, destructorCalled);
+    SingularDerivedDynamic* addr = ptr.get();
+    Own<void> voidPtr = kj::mv(ptr);
+    KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
+  }
+
+  {
+    bool destructorCalled = false;
+    Own<MultipleDerivedDynamic> ptr = heap<MultipleDerivedDynamic>(123, 456, destructorCalled);
+    MultipleDerivedDynamic* addr = ptr.get();
+    Own<void> voidPtr = kj::mv(ptr);
+    KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
+
+    KJ_EXPECT(!destructorCalled);
+    voidPtr = nullptr;
+    KJ_EXPECT(destructorCalled);
+  }
+
+  {
+    bool destructorCalled = false;
+    Own<MultipleDerivedDynamic> ptr = heap<MultipleDerivedDynamic>(123, 456, destructorCalled);
+    MultipleDerivedDynamic* addr = ptr.get();
+    Own<DynamicType2> basePtr = kj::mv(ptr);
+    DynamicType2* baseAddr = basePtr.get();
+
+    // On most (all?) C++ ABIs, the second base class in a multiply-inherited class is offset from
+    // the beginning of the object (assuming the first base class has non-zero size). We use this
+    // fact here to verify that then casting to Own<void> does in fact result in a pointer that
+    // points to the start of the overall object, not the base class. We expect that the pointers
+    // are different here to prove that the test below is non-trivial.
+    //
+    // If there is some other ABI where these pointers are the same, and thus this expectation
+    // fails, then it's no problem to #ifdef out the expectation on that platform.
+    KJ_EXPECT(static_cast<void*>(baseAddr) != static_cast<void*>(addr));
+
+    Own<void> voidPtr = kj::mv(basePtr);
+    KJ_EXPECT(voidPtr.get() == static_cast<void*>(addr));
+
+    KJ_EXPECT(!destructorCalled);
+    voidPtr = nullptr;
+    KJ_EXPECT(destructorCalled);
+  }
+}
+
+TEST(Memory, OwnConstVoid) {
+  {
+    Own<StaticType> ptr = heap<StaticType>({123});
+    StaticType* addr = ptr.get();
+    Own<const void> voidPtr = kj::mv(ptr);
+    KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
+  }
+
+  {
+    bool destructorCalled = false;
+    Own<SingularDerivedDynamic> ptr = heap<SingularDerivedDynamic>(123, destructorCalled);
+    SingularDerivedDynamic* addr = ptr.get();
+    Own<const void> voidPtr = kj::mv(ptr);
+    KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
+  }
+
+  {
+    bool destructorCalled = false;
+    Own<MultipleDerivedDynamic> ptr = heap<MultipleDerivedDynamic>(123, 456, destructorCalled);
+    MultipleDerivedDynamic* addr = ptr.get();
+    Own<const void> voidPtr = kj::mv(ptr);
+    KJ_EXPECT(voidPtr.get() == implicitCast<void*>(addr));
+
+    KJ_EXPECT(!destructorCalled);
+    voidPtr = nullptr;
+    KJ_EXPECT(destructorCalled);
+  }
+
+  {
+    bool destructorCalled = false;
+    Own<MultipleDerivedDynamic> ptr = heap<MultipleDerivedDynamic>(123, 456, destructorCalled);
+    MultipleDerivedDynamic* addr = ptr.get();
+    Own<DynamicType2> basePtr = kj::mv(ptr);
+    DynamicType2* baseAddr = basePtr.get();
+
+    // On most (all?) C++ ABIs, the second base class in a multiply-inherited class is offset from
+    // the beginning of the object (assuming the first base class has non-zero size). We use this
+    // fact here to verify that then casting to Own<void> does in fact result in a pointer that
+    // points to the start of the overall object, not the base class. We expect that the pointers
+    // are different here to prove that the test below is non-trivial.
+    //
+    // If there is some other ABI where these pointers are the same, and thus this expectation
+    // fails, then it's no problem to #ifdef out the expectation on that platform.
+    KJ_EXPECT(static_cast<void*>(baseAddr) != static_cast<void*>(addr));
+
+    Own<const void> voidPtr = kj::mv(basePtr);
+    KJ_EXPECT(voidPtr.get() == static_cast<void*>(addr));
+
+    KJ_EXPECT(!destructorCalled);
+    voidPtr = nullptr;
+    KJ_EXPECT(destructorCalled);
+  }
+}
+
 // TODO(test):  More tests.
 
 }  // namespace
