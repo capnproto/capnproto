@@ -212,12 +212,12 @@ TEST(Memory, OwnVoid) {
     // On most (all?) C++ ABIs, the second base class in a multiply-inherited class is offset from
     // the beginning of the object (assuming the first base class has non-zero size). We use this
     // fact here to verify that then casting to Own<void> does in fact result in a pointer that
-    // points to the start of the overall object, not the base class. We assert that the pointers
+    // points to the start of the overall object, not the base class. We expect that the pointers
     // are different here to prove that the test below is non-trivial.
     //
-    // If there is some other ABI where these pointers are the same, and thus this assert fails,
-    // then it's no problem to #ifdef out the assert on that platform.
-    KJ_ASSERT(static_cast<void*>(baseAddr) != static_cast<void*>(addr));
+    // If there is some other ABI where these pointers are the same, and thus this expectation
+    // fails, then it's no problem to #ifdef out the expectation on that platform.
+    KJ_EXPECT(static_cast<void*>(baseAddr) != static_cast<void*>(addr));
 
     Own<void> voidPtr = kj::mv(basePtr);
     KJ_EXPECT(voidPtr.get() == static_cast<void*>(addr));
