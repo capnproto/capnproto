@@ -169,9 +169,7 @@ public:
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U>&& other) noexcept
-      : disposer(other.disposer), ptr(other.ptr) {
-    static_assert(__is_polymorphic(T),
-        "Casting owned pointers requires that the target type is polymorphic.");
+      : disposer(other.disposer), ptr(cast(other.ptr)) {
     other.ptr = nullptr;
   }
   inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), ptr(ptr) {}
@@ -255,24 +253,27 @@ private:
   }
 
   template <typename U>
+  static inline T* cast(U* ptr) {
+    static_assert(__is_polymorphic(T),
+        "Casting owned pointers requires that the target type is polymorphic.");
+    return ptr;
+  }
+
+  template <typename U>
   friend class Own;
   friend class Maybe<Own<T>>;
 };
 
 template <>
-template <typename U, typename>
-inline Own<void>::Own(Own<U>&& other) noexcept
-    : disposer(other.disposer),
-      ptr(_::castToVoid(other.ptr)) {
-  other.ptr = nullptr;
+template <typename U>
+inline void* Own<void>::cast(U* ptr) {
+  return _::castToVoid(ptr);
 }
 
 template <>
-template <typename U, typename>
-inline Own<const void>::Own(Own<U>&& other) noexcept
-    : disposer(other.disposer),
-      ptr(_::castToConstVoid(other.ptr)) {
-  other.ptr = nullptr;
+template <typename U>
+inline const void* Own<const void>::cast(U* ptr) {
+  return _::castToConstVoid(ptr);
 }
 
 namespace _ {  // private
