@@ -136,6 +136,12 @@ TEST(Memory, AttachNested) {
   KJ_EXPECT(destroyed3 == 3, destroyed3);
 }
 
+#if __GNUG__
+// We don't actually illegally invoke any non-virtual destructors but it's hard to write this test
+// without triggering this warning, so ignore it.
+#pragma GCC diagnostic ignored "-Wdelete-non-virtual-dtor"
+#endif
+
 struct StaticType {
   int i;
 };
