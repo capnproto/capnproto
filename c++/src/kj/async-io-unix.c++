@@ -514,8 +514,12 @@ public:
     int result;
 #if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
     KJ_SYSCALL(result = ::socket(addr.generic.sa_family, type, 0));
+#else
+    KJ_SYSCALL(result = ::socket(addr.generic.sa_family, type, 0));
+    setNonblocking(result);
+	setCloseOnExec(result);
+#endif
 
     if (isStream && (addr.generic.sa_family == AF_INET ||
                      addr.generic.sa_family == AF_INET6)) {
@@ -864,6 +868,10 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
   KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
 #else
   KJ_SYSCALL(pipe(fds));
+  setNonblocking(fds[0]);
+  setNonblocking(fds[1]);
+  setCloseOnExec(fds[0]);
+  setCloseOnExec(fds[1]);
 #endif
 
   auto input = lowLevel.wrapInputFd(fds[0], NEW_FD_FLAGS);
@@ -1486,6 +1494,10 @@ public:
     KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
 #else
     KJ_SYSCALL(pipe(fds));
+    setNonblocking(fds[0]);
+    setNonblocking(fds[1]);
+	setCloseOnExec(fds[0]);
+	setCloseOnExec(fds[1]);
 #endif
     return OneWayPipe {
       lowLevel.wrapInputFd(fds[0], NEW_FD_FLAGS),
@@ -1498,8 +1510,14 @@ public:
     int type = SOCK_STREAM;
 #if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
     KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+#else
+    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    setNonblocking(fds[0]);
+    setNonblocking(fds[1]);
+	setCloseOnExec(fds[0]);
+	setCloseOnExec(fds[1]);
+#endif
     return TwoWayPipe { {
       lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS),
       lowLevel.wrapSocketFd(fds[1], NEW_FD_FLAGS)
@@ -1511,8 +1529,14 @@ public:
     int type = SOCK_STREAM;
 #if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
     KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+#else
+    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    setNonblocking(fds[0]);
+    setNonblocking(fds[1]);
+	setCloseOnExec(fds[0]);
+	setCloseOnExec(fds[1]);
+#endif
     return CapabilityPipe { {
       lowLevel.wrapUnixSocketFd(fds[0], NEW_FD_FLAGS),
       lowLevel.wrapUnixSocketFd(fds[1], NEW_FD_FLAGS)
@@ -1529,8 +1553,14 @@ public:
     int type = SOCK_STREAM;
 #if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
     KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+#else
+    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    setNonblocking(fds[0]);
+    setNonblocking(fds[1]);
+	setCloseOnExec(fds[0]);
+	setCloseOnExec(fds[1]);
+#endif
 
     int threadFd = fds[1];
     KJ_ON_SCOPE_FAILURE(close(threadFd));
