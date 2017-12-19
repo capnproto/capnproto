@@ -1084,6 +1084,10 @@ public:
   }
   Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
       int fd, const struct sockaddr* addr, uint addrlen, uint flags = 0) override {
+    // It's important that we construct the AsyncStreamFd first, so that `flags` are honored,
+    // especially setting nonblocking mode and taking ownership.
+    auto result = heap<AsyncStreamFd>(eventPort, fd, flags);
+
     // Unfortunately connect() doesn't fit the mold of KJ_NONBLOCKING_SYSCALL, since it indicates
     // non-blocking using EINPROGRESS.
     for (;;) {
@@ -1101,8 +1105,6 @@ public:
         break;
       }
     }
-
-    auto result = heap<AsyncStreamFd>(eventPort, fd, flags);
 
     auto connected = result->waitConnected();
     return connected.then(kj::mvCapture(result, [fd](Own<AsyncIoStream>&& stream) {
@@ -1223,12 +1225,11 @@ private:
       ArrayPtr<SocketAddress> addrs) {
     KJ_ASSERT(addrs.size() > 0);
 
-    int fd = addrs[0].socket(SOCK_STREAM);
-
     return kj::evalNow([&]() -> Promise<Own<AsyncIoStream>> {
       if (!addrs[0].allowedBy(filter)) {
         return KJ_EXCEPTION(FAILED, "connect() blocked by restrictPeers()");
       } else {
+        int fd = addrs[0].socket(SOCK_STREAM);
         return lowLevel.wrapConnectingSocketFd(
             fd, addrs[0].getRaw(), addrs[0].getRawSize(), NEW_FD_FLAGS);
       }
