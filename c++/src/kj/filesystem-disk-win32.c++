@@ -696,39 +696,12 @@ public:
   }
 
   Maybe<String> tryReadlink(PathPtr path) {
-    HANDLE newHandle;
-    KJ_WIN32_HANDLE_ERRORS(newHandle = CreateFileW(
-        nativePath(path).begin(),
-        GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        NULL,
-        OPEN_EXISTING,
-        FILE_FLAG_OPEN_REPARSE_POINT,
-        NULL)) {
-      case ERROR_FILE_NOT_FOUND:
-      case ERROR_PATH_NOT_FOUND:
-        return nullptr;
-      default:
-        KJ_FAIL_WIN32("CreateFile(symlinkPath, OPEN_EXISTING)", error, path) { return nullptr; }
-    }
-
-    kj::AutoCloseHandle ownHandle(newHandle);
-
-    auto buffer = kj::heapArray<byte>(MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
-    DWORD actualSize;
-    KJ_WIN32(DeviceIoControl(
-        ownHandle, FSCTL_GET_REPARSE_POINT, NULL, 0, buffer.begin(), buffer.size(),
-        &actualSize, NULL));
-
-    auto msReparse = reinterpret_cast<REPARSE_DATA_BUFFER*>(buffer.begin());
-    KJ_REQUIRE(msReparse->ReparseTag == IO_REPARSE_TAG_SYMLINK, "not a symlink", path);
-
-    auto& symlink = msReparse->SymbolicLinkReparseBuffer;
-
-    auto start = symlink.PathBuffer + symlink.SubstituteNameOffset / sizeof(WCHAR);
-    auto end = start + symlink.SubstituteNameLength / sizeof(WCHAR);
-
-    return decodeWideString(arrayPtr(start, end));
+    // Windows symlinks work differently from Unix. Generally they are set up by the system
+    // administrator and apps are expected to treat them transparently. Hence, on Windows, we act
+    // as if nothing is a symlink by always returning null here.
+    // TODO(someday): If we want to treat Windows symlinks more like Unix ones, start by reverting
+    //   the comment that added this comment.
+    return nullptr;
   }
 
   // Directory -----------------------------------------------------------------
