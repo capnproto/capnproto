@@ -843,9 +843,12 @@ KJ_TEST("DiskFile holes") {
   file->writeAll("foobar");
   file->write(1 << 20, StringPtr("foobar").asBytes());
 
+  // Some filesystems, like BTRFS, report zero `spaceUsed` until synced.
+  file->datasync();
+
   // Allow for block sizes as low as 512 bytes and as high as 64k.
   auto meta = file->stat();
-  KJ_EXPECT(meta.spaceUsed >= 2 * 512);
+  KJ_EXPECT(meta.spaceUsed >= 2 * 512, meta.spaceUsed);
   KJ_EXPECT(meta.spaceUsed <= 2 * 65536);
 
   byte buf[7];
@@ -868,6 +871,7 @@ KJ_TEST("DiskFile holes") {
 #endif
 
   file->truncate(1 << 21);
+  file->datasync();
   KJ_EXPECT(file->stat().spaceUsed == meta.spaceUsed);
   KJ_EXPECT(file->read(1 << 20, buf) == 7);
   KJ_EXPECT(StringPtr(reinterpret_cast<char*>(buf), 6) == "foobar");
@@ -890,6 +894,7 @@ KJ_TEST("DiskFile holes") {
 
   // Try punching a hole with zero().
   file->zero(1 << 20, 4096);
+  file->datasync();
 #if !_WIN32
   // TODO(someday): This doesn't work on Windows. I don't know why. We're definitely using the
   //   proper ioctl. Oh well.
