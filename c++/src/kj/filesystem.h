@@ -505,10 +505,14 @@ public:
   virtual Maybe<String> tryReadlink(PathPtr path) = 0;
   // If `path` is a symlink, reads and returns the link contents.
   //
-  // See Directory::symlink() for warnings about symlinks.
+  // Note that tryReadlink() differs subtly from tryOpen*(). For example, tryOpenFile() throws if
+  // the path is not a file (e.g. if it's a directory); it only returns null if the path doesn't
+  // exist at all. tryReadlink() returns null if either the path doesn't exist, or if it does exist
+  // but isn't a symlink. This is because if it were to throw instead, then almost every real-world
+  // use case of tryReadlink() would be forced to perform an lstat() first for the sole purpose of
+  // checking if it is a link, wasting a syscall and a path traversal.
   //
-  // TODO(now): Should tryReadlink() throw if the path exists but is not a link? Currently it
-  //   returns null.
+  // See Directory::symlink() for warnings about symlinks.
 };
 
 enum class WriteMode {
