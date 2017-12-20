@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !_WIN32
+
 #include "filesystem.h"
 #include "debug.h"
 #include <sys/types.h>
@@ -30,13 +32,13 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <dirent.h>
-#include <syscall.h>
 #include <stdlib.h>
 #include "vector.h"
 #include "miniposix.h"
 #include <algorithm>
 
 #if __linux__
+#include <syscall.h>
 #include <linux/fs.h>
 #include <sys/sendfile.h>
 #endif
@@ -59,6 +61,11 @@ namespace {
 #define MAYBE_O_DIRECTORY O_DIRECTORY
 #else
 #define MAYBE_O_DIRECTORY 0
+#endif
+
+#if __APPLE__
+// Mac OSX defines SEEK_HOLE, but it doesn't work. ("Inappropriate ioctl for device", it says.)
+#undef SEEK_HOLE
 #endif
 
 static void setCloexec(int fd) KJ_UNUSED;
@@ -117,7 +124,11 @@ static FsNode::Metadata statToMetadata(struct stat& stats) {
     modeToType(stats.st_mode),
     implicitCast<uint64_t>(stats.st_size),
     implicitCast<uint64_t>(stats.st_blocks * 512u),
+#if __APPLE__
+    toKjDate(stats.st_mtimespec),
+#else
     toKjDate(stats.st_mtim),
+#endif
     implicitCast<uint>(stats.st_nlink)
   };
 }
@@ -223,12 +234,7 @@ protected:
                    size_t capacity, void (*destroyElement)(void*)) const {
     auto range = getMmapRange(reinterpret_cast<uintptr_t>(firstElement),
                               elementSize * elementCount);
-
-#if _WIN32
-    KJ_ASSERT(UnmapViewOfFile(reinterpret_cast<byte*>(range.offset))) { break; }
-#else
     KJ_SYSCALL(munmap(reinterpret_cast<byte*>(range.offset), range.size)) { break; }
-#endif
   }
 };
 
@@ -283,8 +289,26 @@ public:
     return statToMetadata(stats);
   }
 
-  void sync() { KJ_SYSCALL(fsync(fd)); }
-  void datasync() { KJ_SYSCALL(fdatasync(fd)); }
+  void sync() {
+#if __APPLE__
+    // For whatever reason, fsync() on OSX only flushes kernel buffers. It does not flush hardware
+    // disk buffers. This makes it not very useful. But OSX documents fcntl F_FULLFSYNC which does
+    // the right thing. Why they don't just make fsync() do the right thing, I do not know.
+    KJ_SYSCALL(fcntl(fd, F_FULLFSYNC));
+#else
+    KJ_SYSCALL(fsync(fd));
+#endif
+  }
+
+  void datasync() {
+    // The presence of the _POSIX_SYNCHRONIZED_IO define is supposed to tell us that fdatasync()
+    // exists. But Apple defines this yet doesn't offer fdatasync(). Thanks, Apple.
+#if _POSIX_SYNCHRONIZED_IO && !__APPLE__
+    KJ_SYSCALL(fdatasync(fd));
+#else
+    this->sync();
+#endif
+  }
 
   // ReadableFile --------------------------------------------------------------
 
@@ -353,26 +377,34 @@ public:
     }
 #endif
 
-    // Use a 4k buffer of zeros amplified by iov to write zeros with as few syscalls as possible.
-    byte buffer[4096];
-    memset(buffer, 0, sizeof(buffer));
+    static const byte ZEROS[4096] = { 0 };
 
-    size_t count = (size + sizeof(buffer) - 1) / sizeof(buffer);
+#if __APPLE__
+    // Mac doesn't have pwritev().
+    while (size > sizeof(ZEROS)) {
+      write(offset, ZEROS);
+      size -= sizeof(ZEROS);
+      offset += sizeof(ZEROS);
+    }
+    write(offset, kj::arrayPtr(ZEROS, size));
+#else
+    // Use a 4k buffer of zeros amplified by iov to write zeros with as few syscalls as possible.
+    size_t count = (size + sizeof(ZEROS) - 1) / sizeof(ZEROS);
     const size_t iovmax = miniposix::iovMax(count);
     KJ_STACK_ARRAY(struct iovec, iov, kj::min(iovmax, count), 16, 256);
 
     for (auto& item: iov) {
-      item.iov_base = buffer;
-      item.iov_len = sizeof(buffer);
+      item.iov_base = const_cast<byte*>(ZEROS);
+      item.iov_len = sizeof(ZEROS);
     }
 
     while (size > 0) {
       size_t iovCount;
-      if (size >= iov.size() * sizeof(buffer)) {
+      if (size >= iov.size() * sizeof(ZEROS)) {
         iovCount = iov.size();
       } else {
-        iovCount = size / sizeof(buffer);
-        size_t rem = size % sizeof(buffer);
+        iovCount = size / sizeof(ZEROS);
+        size_t rem = size % sizeof(ZEROS);
         if (rem > 0) {
           iov[iovCount++].iov_len = rem;
         }
@@ -385,13 +417,14 @@ public:
       offset += n;
       size -= n;
     }
+#endif
   }
 
   void truncate(uint64_t size)  {
     KJ_SYSCALL(ftruncate(fd, size));
   }
 
-  class WritableFileMappingImpl: public WritableFileMapping {
+  class WritableFileMappingImpl final: public WritableFileMapping {
   public:
     WritableFileMappingImpl(Array<byte> bytes): bytes(kj::mv(bytes)) {}
 
@@ -1016,7 +1049,7 @@ public:
       }
     }
 
-#ifdef RENAME_EXCHANGE
+#if __linux__ && defined(RENAME_EXCHANGE)
     // Try to use Linux's renameat2() to atomically check preconditions and apply.
 
     if (has(mode, WriteMode::MODIFY)) {
@@ -1096,7 +1129,15 @@ public:
         if (S_ISDIR(stats.st_mode)) {
           return mkdirat(fd, candidatePath.cStr(), 0700);
         } else {
+#if __APPLE__
+          // No mknodat() on OSX, gotta open() a file, ugh.
+          int newFd = openat(fd, candidatePath.cStr(),
+                             O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, 0700);
+          if (newFd >= 0) close(newFd);
+          return newFd;
+#else
           return mknodat(fd, candidatePath.cStr(), S_IFREG | 0600, dev_t());
+#endif
         }
       })) {
         away = kj::mv(*awayPath);
@@ -1172,7 +1213,7 @@ public:
   }
 
   template <typename T>
-  class ReplacerImpl: public Directory::Replacer<T> {
+  class ReplacerImpl final: public Directory::Replacer<T> {
   public:
     ReplacerImpl(Own<T>&& object, DiskHandle& handle,
                  String&& tempPath, String&& path, WriteMode mode)
@@ -1205,7 +1246,7 @@ public:
   };
 
   template <typename T>
-  class BrokenReplacer: public Directory::Replacer<T> {
+  class BrokenReplacer final: public Directory::Replacer<T> {
     // For recovery path when exceptions are disabled.
 
   public:
@@ -1254,7 +1295,7 @@ public:
   Own<File> createTemporary() {
     int newFd_;
 
-#ifdef O_TMPFILE
+#if __linux__ && defined(O_TMPFILE)
     // Use syscall() to work around glibc bug with O_TMPFILE:
     //     https://sourceware.org/bugzilla/show_bug.cgi?id=17523
     KJ_SYSCALL_HANDLE_ERRORS(newFd_ = syscall(
@@ -1655,3 +1696,5 @@ Own<Filesystem> newDiskFilesystem() {
 }
 
 } // namespace kj
+
+#endif  // !_WIN32

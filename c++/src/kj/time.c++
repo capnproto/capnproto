@@ -26,10 +26,6 @@
 
 namespace kj {
 
-kj::Exception Timer::makeTimeoutException() {
-  return KJ_EXCEPTION(OVERLOADED, "operation timed out");
-}
-
 Clock& nullClock() {
   class NullClock final: public Clock {
   public:
@@ -37,98 +33,6 @@ Clock& nullClock() {
   };
   static NullClock NULL_CLOCK;
   return NULL_CLOCK;
-}
-
-struct TimerImpl::Impl {
-  struct TimerBefore {
-    bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs);
-  };
-  using Timers = std::multiset<TimerPromiseAdapter*, TimerBefore>;
-  Timers timers;
-};
-
-class TimerImpl::TimerPromiseAdapter {
-public:
-  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, TimerImpl::Impl& impl, TimePoint time)
-      : time(time), fulfiller(fulfiller), impl(impl) {
-    pos = impl.timers.insert(this);
-  }
-
-  ~TimerPromiseAdapter() {
-    if (pos != impl.timers.end()) {
-      impl.timers.erase(pos);
-    }
-  }
-
-  void fulfill() {
-    fulfiller.fulfill();
-    impl.timers.erase(pos);
-    pos = impl.timers.end();
-  }
-
-  const TimePoint time;
-
-private:
-  PromiseFulfiller<void>& fulfiller;
-  TimerImpl::Impl& impl;
-  Impl::Timers::const_iterator pos;
-};
-
-inline bool TimerImpl::Impl::TimerBefore::operator()(
-    TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) {
-  return lhs->time < rhs->time;
-}
-
-Promise<void> TimerImpl::atTime(TimePoint time) {
-  return newAdaptedPromise<void, TimerPromiseAdapter>(*impl, time);
-}
-
-Promise<void> TimerImpl::afterDelay(Duration delay) {
-  return newAdaptedPromise<void, TimerPromiseAdapter>(*impl, time + delay);
-}
-
-TimerImpl::TimerImpl(TimePoint startTime)
-    : time(startTime), impl(heap<Impl>()) {}
-
-TimerImpl::~TimerImpl() noexcept(false) {}
-
-Maybe<TimePoint> TimerImpl::nextEvent() {
-  auto iter = impl->timers.begin();
-  if (iter == impl->timers.end()) {
-    return nullptr;
-  } else {
-    return (*iter)->time;
-  }
-}
-
-Maybe<uint64_t> TimerImpl::timeoutToNextEvent(TimePoint start, Duration unit, uint64_t max) {
-  return nextEvent().map([&](TimePoint nextTime) -> uint64_t {
-    if (nextTime <= start) return 0;
-
-    Duration timeout = nextTime - start;
-
-    uint64_t result = timeout / unit;
-    bool roundUp = timeout % unit > 0 * SECONDS;
-
-    if (result >= max) {
-      return max;
-    } else {
-      return result + roundUp;
-    }
-  });
-}
-
-void TimerImpl::advanceTo(TimePoint newTime) {
-  KJ_REQUIRE(newTime >= time, "can't advance backwards in time") { return; }
-
-  time = newTime;
-  for (;;) {
-    auto front = impl->timers.begin();
-    if (front == impl->timers.end() || (*front)->time > time) {
-      break;
-    }
-    (*front)->fulfill();
-  }
 }
 
 }  // namespace kj

@@ -25,7 +25,7 @@
 #include "memory.h"
 #include "io.h"
 #include <inttypes.h>
-#include "time.h"  // TODO(now): problematic
+#include "time.h"
 #include "function.h"
 
 namespace kj {
@@ -97,14 +97,14 @@ public:
   // is NOT accepted -- if that is a problem, you probably want `eval()`. Trailing '/'s are
   // ignored.
 
-  Path append(Path suffix) const&;
-  Path append(Path suffix) &&;
+  Path append(Path&& suffix) const&;
+  Path append(Path&& suffix) &&;
   Path append(PathPtr suffix) const&;
   Path append(PathPtr suffix) &&;
   Path append(StringPtr suffix) const&;
   Path append(StringPtr suffix) &&;
-  Path append(String suffix) const&;
-  Path append(String suffix) &&;
+  Path append(String&& suffix) const&;
+  Path append(String&& suffix) &&;
   // Create a new path by appending the given path to this path.
   //
   // `suffix` cannot contain '/' characters. Instead, you can append an array:
@@ -151,7 +151,8 @@ public:
 
   Path evalWin32(StringPtr pathText) const&;
   Path evalWin32(StringPtr pathText) &&;
-  // Evaluates a Win32-style path. Differences from `eval()` include:
+  // Evaluates a Win32-style path, as might be written by a user. Differences from `eval()`
+  // include:
   //
   // - Backslashes can be used as path separators.
   // - Absolute paths begin with a drive letter followed by a colon. The drive letter, including
@@ -159,9 +160,9 @@ public:
   // - A network path like "\\host\share\path" is parsed as {"host", "share", "path"}.
 
   String toWin32String(bool absolute = false) const;
-  // Converts the path to a Win32 path string.
+  // Converts the path to a Win32 path string, as you might display to a user.
   //
-  // (In most cases you'll want to further convert the returned string from UTF-8 to UTF-16.)
+  // This is meant for display. For making Win32 system calls, consider `toWin32Api()` instead.
   //
   // If `absolute` is true, the path is expected to be an absolute path, meaning the first
   // component is a drive letter, namespace, or network host name. These are converted to their
@@ -170,6 +171,24 @@ public:
   // This throws if the path would have unexpected special meaning or is otherwise invalid on
   // Windows, such as if it contains backslashes (within a path component), colons, or special
   // names like "con".
+
+  Array<wchar_t> forWin32Api(bool absolute) const;
+  // Like toWin32String, but additionally:
+  // - Converts the path to UTF-16, with a NUL terminator included.
+  // - For absolute paths, adds the "\\?\" prefix which opts into permitting paths longer than
+  //   MAX_PATH, and turns off relative path processing (which KJ paths already handle in userspace
+  //   anyway).
+  //
+  // This method is good to use when making a Win32 API call, e.g.:
+  //
+  //     DeleteFileW(path.forWin32Api(true).begin());
+
+  static Path parseWin32Api(ArrayPtr<const wchar_t> text);
+  // Parses an absolute path as returned by a Win32 API call like GetFinalPathNameByHandle() or
+  // GetCurrentDirectory(). A "\\?\" prefix is optional but understood if present.
+  //
+  // Since such Win32 API calls generally return a length, this function inputs an array slice.
+  // The slice should not include any NUL terminator.
 
 private:
   Array<String> parts;
@@ -186,7 +205,7 @@ private:
   static void validatePart(StringPtr part);
   static void evalPart(Vector<String>& parts, ArrayPtr<const char> part);
   static Path evalImpl(Vector<String>&& parts, StringPtr path);
-  static Path evalWin32Impl(Vector<String>&& parts, StringPtr path);
+  static Path evalWin32Impl(Vector<String>&& parts, StringPtr path, bool fromApi = false);
   static size_t countParts(StringPtr path);
   static size_t countPartsWin32(StringPtr path);
   static bool isWin32Drive(ArrayPtr<const char> part);
@@ -204,10 +223,10 @@ public:
   PathPtr(const Path& path);
 
   Path clone();
-  Path append(Path suffix) const;
+  Path append(Path&& suffix) const;
   Path append(PathPtr suffix) const;
   Path append(StringPtr suffix) const;
-  Path append(String suffix) const;
+  Path append(String&& suffix) const;
   Path eval(StringPtr pathText) const;
   PathPtr basename() const;
   PathPtr parent() const;
@@ -219,12 +238,15 @@ public:
   PathPtr slice(size_t start, size_t end) const;
   Path evalWin32(StringPtr pathText) const;
   String toWin32String(bool absolute = false) const;
+  Array<wchar_t> forWin32Api(bool absolute) const;
   // Equivalent to the corresponding methods of `Path`.
 
 private:
   ArrayPtr<const String> parts;
 
   explicit PathPtr(ArrayPtr<const String> parts);
+
+  String toWin32StringImpl(bool absolute, bool forApi) const;
 
   friend class Path;
 };
@@ -251,9 +273,13 @@ public:
   //
   // Under the hood, this will call dup(), so the FD number will not be the same.
 
-  virtual Maybe<int> getFd() = 0;
-  // Get the underlying file descriptor, if any. Returns nullptr if this object actually isn't
+  virtual Maybe<int> getFd() { return nullptr; }
+  // Get the underlying Unix file descriptor, if any. Returns nullptr if this object actually isn't
   // wrapping a file descriptor.
+
+  virtual Maybe<void*> getWin32Handle() { return nullptr; }
+  // Get the underlying Win32 HANDLE, if any. Returns nullptr if this object actually isn't
+  // wrapping a handle.
 
   enum class Type {
     FILE,
@@ -380,6 +406,12 @@ public:
   // returning.
   //
   // `slice` must be a slice of `bytes()`.
+  //
+  // On Windows, this calls FlushViewOfFile(). The documentation for this function implies that in
+  // some circumstances, to fully sync to physical disk, you may need to call FlushFileBuffers() on
+  // the file HANDLE as well. The documentation is not very clear on when and why this is needed.
+  // If you believe your program needs this, you can accomplish it by calling `.sync()` on the File
+  // object after calling `.sync()` on the WritableFileMapping.
 };
 
 class File: public ReadableFile {
@@ -473,6 +505,13 @@ public:
   virtual Maybe<String> tryReadlink(PathPtr path) = 0;
   // If `path` is a symlink, reads and returns the link contents.
   //
+  // Note that tryReadlink() differs subtly from tryOpen*(). For example, tryOpenFile() throws if
+  // the path is not a file (e.g. if it's a directory); it only returns null if the path doesn't
+  // exist at all. tryReadlink() returns null if either the path doesn't exist, or if it does exist
+  // but isn't a symlink. This is because if it were to throw instead, then almost every real-world
+  // use case of tryReadlink() would be forced to perform an lstat() first for the sole purpose of
+  // checking if it is a link, wasting a syscall and a path traversal.
+  //
   // See Directory::symlink() for warnings about symlinks.
 };
 
@@ -501,8 +540,6 @@ enum class WriteMode {
   CREATE = 1,
   // Create a new empty file.
   //
-  // This can be OR'd with MODIFY, but not with REPLACE.
-  //
   // When not combined with MODIFY, if the file already exists (including as a broken symlink),
   // tryOpenFile() returns null (and openFile() throws).
   //
@@ -512,8 +549,6 @@ enum class WriteMode {
 
   MODIFY = 2,
   // Modify an existing file.
-  //
-  // This can be OR'd with CREATE, but not with REPLACE.
   //
   // When not combined with CREATE, if the file doesn't exist (including if it is a broken symlink),
   // tryOpenFile() returns null (and openFile() throws).
@@ -590,11 +625,19 @@ class Directory: public ReadableDirectory {
   // A `Directory` object *only* provides access to children of the directory, not parents. That
   // is, you cannot open the file "..", nor jump to the root directory with "/".
   //
-  // On OSs that support in, a `Directory` is backed by an open handle to the directory node. This
+  // On OSs that support it, a `Directory` is backed by an open handle to the directory node. This
   // means:
   // - If the directory is renamed on-disk, the `Directory` object still points at it.
   // - Opening files in the directory only requires the OS to traverse the path from the directory
   //   to the file; it doesn't have to re-traverse all the way from the filesystem root.
+  //
+  // On Windows, a `Directory` object holds a lock on the underlying directory such that it cannot
+  // be renamed nor deleted while the object exists. This is necessary because Windows does not
+  // fully support traversing paths relative to file handles (it does for some operations but not
+  // all), so the KJ filesystem implementation is forced to remember the full path and needs to
+  // ensure that the path is not invalidated. If, in the future, Windows fully supports
+  // handle-relative paths, KJ may stop locking directories in this way, so do not rely on this
+  // behavior.
 
 public:
   Own<Directory> clone();
@@ -666,6 +709,11 @@ public:
     //   disappearing after the replacement (actually, a swap) has taken place. This differs from
     //   files, where a process that has opened a file before it is replaced will continue see the
     //   file's old content unchanged after the replacement.
+    // - On Windows, there are multiple ways to replace one file with another in a single system
+    //   call, but none are documented as being atomic. KJ always uses `MoveFileEx()` with
+    //   MOVEFILE_REPLACE_EXISTING. While the alternative `ReplaceFile()` is attractive for many
+    //   reasons, it has the critical problem that it cannot be used when the source file has open
+    //   file handles, which is generally the case when using Replacer.
 
   protected:
     const WriteMode mode;
@@ -829,12 +877,18 @@ Own<AppendableFile> newFileAppender(Own<File> inner);
 // are happening simultaneously, as is achieved with the O_APPEND flag to open(2), but that
 // behavior is not possible to emulate on top of `File`.
 
-Own<ReadableFile> newDiskReadableFile(kj::AutoCloseFd fd);
-Own<AppendableFile> newDiskAppendableFile(kj::AutoCloseFd fd);
-Own<File> newDiskFile(kj::AutoCloseFd fd);
-Own<ReadableDirectory> newDiskReadableDirectory(kj::AutoCloseFd fd);
-Own<Directory> newDiskDirectory(kj::AutoCloseFd fd);
-// Wrap a file descriptor as various filesystem types.
+#if _WIN32
+typedef AutoCloseHandle OsFileHandle;
+#else
+typedef AutoCloseFd OsFileHandle;
+#endif
+
+Own<ReadableFile> newDiskReadableFile(OsFileHandle fd);
+Own<AppendableFile> newDiskAppendableFile(OsFileHandle fd);
+Own<File> newDiskFile(OsFileHandle fd);
+Own<ReadableDirectory> newDiskReadableDirectory(OsFileHandle fd);
+Own<Directory> newDiskDirectory(OsFileHandle fd);
+// Wrap a file descriptor (or Windows HANDLE) as various filesystem types.
 
 Own<Filesystem> newDiskFilesystem();
 // Get at implementation of `Filesystem` representing the real filesystem.
@@ -856,12 +910,12 @@ inline Path::Path(std::initializer_list<StringPtr> parts)
 inline Path::Path(Array<String> parts, decltype(ALREADY_CHECKED))
     : parts(kj::mv(parts)) {}
 inline Path Path::clone() const { return PathPtr(*this).clone(); }
-inline Path Path::append(Path suffix) const& { return PathPtr(*this).append(kj::mv(suffix)); }
+inline Path Path::append(Path&& suffix) const& { return PathPtr(*this).append(kj::mv(suffix)); }
 inline Path Path::append(PathPtr suffix) const& { return PathPtr(*this).append(suffix); }
 inline Path Path::append(StringPtr suffix) const& { return append(Path(suffix)); }
 inline Path Path::append(StringPtr suffix) && { return kj::mv(*this).append(Path(suffix)); }
-inline Path Path::append(String suffix) const& { return append(Path(kj::mv(suffix))); }
-inline Path Path::append(String suffix) && { return kj::mv(*this).append(Path(kj::mv(suffix))); }
+inline Path Path::append(String&& suffix) const& { return append(Path(kj::mv(suffix))); }
+inline Path Path::append(String&& suffix) && { return kj::mv(*this).append(Path(kj::mv(suffix))); }
 inline Path Path::eval(StringPtr pathText) const& { return PathPtr(*this).eval(pathText); }
 inline PathPtr Path::basename() const& { return PathPtr(*this).basename(); }
 inline PathPtr Path::parent() const& { return PathPtr(*this).parent(); }
@@ -880,18 +934,24 @@ inline Path Path::evalWin32(StringPtr pathText) const& {
 inline String Path::toWin32String(bool absolute) const {
   return PathPtr(*this).toWin32String(absolute);
 }
+inline Array<wchar_t> Path::forWin32Api(bool absolute) const {
+  return PathPtr(*this).forWin32Api(absolute);
+}
 
 inline PathPtr::PathPtr(decltype(nullptr)): parts(nullptr) {}
 inline PathPtr::PathPtr(const Path& path): parts(path.parts) {}
 inline PathPtr::PathPtr(ArrayPtr<const String> parts): parts(parts) {}
 inline Path PathPtr::append(StringPtr suffix) const { return append(Path(suffix)); }
-inline Path PathPtr::append(String suffix) const { return append(Path(kj::mv(suffix))); }
+inline Path PathPtr::append(String&& suffix) const { return append(Path(kj::mv(suffix))); }
 inline const String& PathPtr::operator[](size_t i) const { return parts[i]; }
 inline size_t PathPtr::size() const { return parts.size(); }
 inline const String* PathPtr::begin() const { return parts.begin(); }
 inline const String* PathPtr::end() const { return parts.end(); }
 inline PathPtr PathPtr::slice(size_t start, size_t end) const {
   return PathPtr(parts.slice(start, end));
+}
+inline String PathPtr::toWin32String(bool absolute) const {
+  return toWin32StringImpl(absolute, false);
 }
 
 inline Own<FsNode> FsNode::clone() { return cloneFsNode().downcast<FsNode>(); }

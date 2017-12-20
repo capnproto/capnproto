@@ -169,12 +169,6 @@ KJ_TEST("readiness IO: read many even") {
   auto io = setupAsyncIo();
   auto pipe = io.provider->newOneWayPipe();
 
-  // Abort on hang.
-  // TODO(now): Remove this.
-  io.provider->getTimer().afterDelay(1 * kj::SECONDS).then([]() {
-    abort();
-  }).detach([](kj::Exception&&) {});
-
   char dummy[8192];
   for (auto i: kj::indices(dummy)) {
     dummy[i] = "ba"[i%2];

@@ -142,10 +142,12 @@ includekj_HEADERS =                                            \
   src/kj/mutex.h                                               \
   src/kj/thread.h                                              \
   src/kj/threadlocal.h                                         \
+  src/kj/filesystem.h                                          \
   src/kj/async-prelude.h                                       \
   src/kj/async.h                                               \
   src/kj/async-inl.h                                           \
   src/kj/time.h                                                \
+  src/kj/timer.h                                               \
   src/kj/async-unix.h                                          \
   src/kj/async-win32.h                                         \
   src/kj/async-io.h                                            \
@@ -230,6 +232,10 @@ libkj_la_SOURCES=                                              \
   src/kj/io.c++                                                \
   src/kj/mutex.c++                                             \
   src/kj/thread.c++                                            \
+  src/kj/time.c++                                              \
+  src/kj/filesystem.c++                                        \
+  src/kj/filesystem-disk-unix.c++                                   \
+  src/kj/filesystem-disk-win32.c++                             \
   src/kj/test-helpers.c++                                      \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
@@ -248,7 +254,7 @@ libkj_async_la_SOURCES=                                        \
   src/kj/async-io.c++                                          \
   src/kj/async-io-unix.c++                                     \
   src/kj/async-io-win32.c++                                    \
-  src/kj/time.c++
+  src/kj/timer.c++
 
 libkj_http_la_LIBADD = libkj-async.la libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_http_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
@@ -449,7 +455,9 @@ capnp_test_LDADD =                                             \
   libkj-http.la                                                \
   libkj-async.la                                               \
   libkj-test.la                                                \
-  libkj.la
+  libkj.la                                                     \
+  $(ASYNC_LIBS)                                                \
+  $(PTHREAD_LIBS)
 
 endif !LITE_MODE
 
@@ -473,6 +481,8 @@ capnp_test_SOURCES =                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/threadlocal-test.c++                                  \
   src/kj/threadlocal-pthread-test.c++                          \
+  src/kj/filesystem-test.c++                                   \
+  src/kj/filesystem-disk-test.c++                              \
   src/kj/test-test.c++                                         \
   src/capnp/common-test.c++                                    \
   src/capnp/blob-test.c++                                      \

@@ -23,6 +23,8 @@
 #include "vector.h"
 #include "debug.h"
 #include "one-of.h"
+#include "encoding.h"
+#include "refcount.h"
 #include <map>
 
 namespace kj {
@@ -54,13 +56,18 @@ Path Path::parse(StringPtr path) {
   return evalImpl(Vector<String>(countParts(path)), path);
 }
 
-Path PathPtr::append(Path suffix) const {
+Path Path::parseWin32Api(ArrayPtr<const wchar_t> text) {
+  auto utf8 = decodeWideString(text);
+  return evalWin32Impl(Vector<String>(countPartsWin32(utf8)), utf8, true);
+}
+
+Path PathPtr::append(Path&& suffix) const {
   auto newParts = kj::heapArrayBuilder<String>(parts.size() + suffix.parts.size());
   for (auto& p: parts) newParts.add(heapString(p));
   for (auto& p: suffix.parts) newParts.add(kj::mv(p));
   return Path(newParts.finish(), Path::ALREADY_CHECKED);
 }
-Path Path::append(Path suffix) && {
+Path Path::append(Path&& suffix) && {
   auto newParts = kj::heapArrayBuilder<String>(parts.size() + suffix.parts.size());
   for (auto& p: parts) newParts.add(kj::mv(p));
   for (auto& p: suffix.parts) newParts.add(kj::mv(p));
@@ -159,7 +166,7 @@ Path Path::evalWin32(StringPtr pathText) && {
   return evalWin32Impl(kj::mv(newParts), pathText);
 }
 
-String PathPtr::toWin32String(bool absolute) const {
+String PathPtr::toWin32StringImpl(bool absolute, bool forApi) const {
   if (parts.size() == 0) {
     // Special-case empty path.
     KJ_REQUIRE(!absolute, "absolute path is missing disk designator") {
@@ -178,18 +185,36 @@ String PathPtr::toWin32String(bool absolute) const {
       KJ_FAIL_REQUIRE("absolute win32 path must start with drive letter or netbios host name",
                       parts[0]);
     }
+  } else {
+    // Currently we do nothing differently in the forApi case for relative paths.
+    forApi = false;
   }
 
-  size_t size = (isUncPath ? 2 : 0) + (parts.size() - 1);
+  size_t size = forApi
+      ? (isUncPath ? 8 : 4) + (parts.size() - 1)
+      : (isUncPath ? 2 : 0) + (parts.size() - 1);
   for (auto& p: parts) size += p.size();
 
   String result = heapString(size);
 
   char* ptr = result.begin();
 
-  if (isUncPath) {
+  if (forApi) {
     *ptr++ = '\\';
     *ptr++ = '\\';
+    *ptr++ = '?';
+    *ptr++ = '\\';
+    if (isUncPath) {
+      *ptr++ = 'U';
+      *ptr++ = 'N';
+      *ptr++ = 'C';
+      *ptr++ = '\\';
+    }
+  } else {
+    if (isUncPath) {
+      *ptr++ = '\\';
+      *ptr++ = '\\';
+    }
   }
 
   bool leadingSlash = false;
@@ -217,7 +242,7 @@ String PathPtr::toWin32String(bool absolute) const {
   // appearing to start with a drive letter.
   for (size_t i: kj::indices(result)) {
     if (result[i] == ':') {
-      if (absolute && i == 1) {
+      if (absolute && i == (forApi ? 5 : 1)) {
         // False alarm: this is the drive letter.
       } else {
         KJ_FAIL_REQUIRE(
@@ -231,6 +256,10 @@ String PathPtr::toWin32String(bool absolute) const {
   }
 
   return result;
+}
+
+Array<wchar_t> PathPtr::forWin32Api(bool absolute) const {
+  return encodeWideString(toWin32StringImpl(absolute, true), true);
 }
 
 // -----------------------------------------------------------------------------
@@ -290,10 +319,10 @@ Path Path::evalImpl(Vector<String>&& parts, StringPtr path) {
   return Path(parts.releaseAsArray(), Path::ALREADY_CHECKED);
 }
 
-Path Path::evalWin32Impl(Vector<String>&& parts, StringPtr path) {
+Path Path::evalWin32Impl(Vector<String>&& parts, StringPtr path, bool fromApi) {
   // Convert all forward slashes to backslashes.
   String ownPath;
-  if (path.findFirst('/') != nullptr) {
+  if (!fromApi && path.findFirst('/') != nullptr) {
     ownPath = heapString(path);
     for (char& c: ownPath) {
       if (c == '/') c = '\\';
@@ -302,13 +331,23 @@ Path Path::evalWin32Impl(Vector<String>&& parts, StringPtr path) {
   }
 
   // Interpret various forms of absolute paths.
-  if (path.startsWith("\\\\")) {
+  if (fromApi && path.startsWith("\\\\?\\")) {
+    path = path.slice(4);
+    if (path.startsWith("UNC\\")) {
+      path = path.slice(4);
+    }
+
+    // The path is absolute.
+    parts.clear();
+  } else if (path.startsWith("\\\\")) {
     // UNC path.
     path = path.slice(2);
 
     // This path is absolute. The first component is a server name.
     parts.clear();
   } else if (path.startsWith("\\")) {
+    KJ_REQUIRE(!fromApi, "parseWin32Api() requires absolute path");
+
     // Path is relative to the current drive / network share.
     if (parts.size() >= 1 && isWin32Drive(parts[0])) {
       // Leading \ interpreted as root of current drive.
@@ -329,6 +368,8 @@ Path Path::evalWin32Impl(Vector<String>&& parts, StringPtr path) {
              isWin32Drive(path.slice(0, 2))) {
     // Starts with a drive letter.
     parts.clear();
+  } else {
+    KJ_REQUIRE(!fromApi, "parseWin32Api() requires absolute path");
   }
 
   size_t partStart = 0;
@@ -671,6 +712,8 @@ bool Directory::tryTransfer(PathPtr toPath, WriteMode toMode,
     case TransferMode::LINK:
       KJ_FAIL_REQUIRE("can't link across different Directory implementations") { return false; }
   }
+
+  KJ_UNREACHABLE;
 }
 
 Maybe<bool> Directory::tryTransferTo(Directory& toDirectory, PathPtr toPath, WriteMode toMode,
@@ -1295,7 +1338,7 @@ private:
   Date lastModified;
 
   template <typename T>
-  class ReplacerImpl: public Replacer<T> {
+  class ReplacerImpl final: public Replacer<T> {
   public:
     ReplacerImpl(InMemoryDirectory& directory, kj::StringPtr name, Own<T> inner, WriteMode mode)
         : Replacer<T>(mode), directory(addRef(directory)), name(heapString(name)),
@@ -1323,7 +1366,7 @@ private:
   };
 
   template <typename T>
-  class BrokenReplacer: public Replacer<T> {
+  class BrokenReplacer final: public Replacer<T> {
     // For recovery path when exceptions are disabled.
 
   public:

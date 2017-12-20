@@ -19,8 +19,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// This test compiles filesystem-disk.c++ with various features #undefed, causing it to take
+#if __linux__
+
+// This test compiles filesystem-disk-unix.c++ with various features #undefed, causing it to take
 // different code paths, then runs filesystem-disk-test.c++ against that.
+//
+// This test is only intended to run on Linux, but is intended to make the code behave like it
+// would on a generic flavor of Unix.
+//
+// At present this test only runs under Ekam builds. Integrating it into other builds would be
+// awkward since it #includes filesystem-disk-unix.c++, so it cannot link against that file, but
+// needs to link against the rest of KJ. Ekam "just figures it out", but other build systems would
+// require a lot of work here.
 
 #include "filesystem.h"
 #include "debug.h"
@@ -53,5 +63,7 @@
 
 #define HOLES_NOT_SUPPORTED
 
-#include "filesystem-disk.c++"
+#include "filesystem-disk-unix.c++"
 #include "filesystem-disk-test.c++"
+
+#endif  // __linux__

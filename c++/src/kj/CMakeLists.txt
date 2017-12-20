@@ -20,6 +20,10 @@ set(kj_sources_heavy
   refcount.c++
   string-tree.c++
   encoding.c++
+  time.c++
+  filesystem.c++
+  filesystem-disk-unix.c++
+  filesystem-disk-win32.c++
   parse/char.c++
 )
 if(NOT CAPNP_LITE)
@@ -48,6 +52,8 @@ set(kj_headers
   mutex.h
   thread.h
   threadlocal.h
+  filesystem.h
+  time.h
   main.h
   windows-sanity.h
 )
@@ -105,7 +111,7 @@ set(kj-async_sources
   async-io-win32.c++
   async-io.c++
   async-io-unix.c++
-  time.c++
+  timer.c++
 )
 set(kj-async_headers
   async-prelude.h
@@ -114,7 +120,7 @@ set(kj-async_headers
   async-unix.h
   async-win32.h
   async-io.h
-  time.h
+  timer.h
 )
 if(NOT CAPNP_LITE)
   add_library(kj-async ${kj-async_sources})
@@ -188,6 +194,8 @@ if(BUILD_TESTING)
       one-of-test.c++
       function-test.c++
       threadlocal-pthread-test.c++
+      filesystem-test.c++
+      filesystem-disk-test.c++
       parse/common-test.c++
       parse/char-test.c++
       compat/url-test.c++
