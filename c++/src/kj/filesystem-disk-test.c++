@@ -142,49 +142,53 @@ private:
 
     auto glob = join16(path, L"\\*");
 
-    for (;;) {
-      WIN32_FIND_DATAW data;
-      HANDLE handle = FindFirstFileW(glob.begin(), &data);
-      if (handle == INVALID_HANDLE_VALUE) {
-        auto error = GetLastError();
-        if (error == ERROR_FILE_NOT_FOUND) return;
-        KJ_FAIL_WIN32("FindFirstFile", error, path) { return; }
-      }
-      KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
-
-      bool foundAny = false;
-      do {
-        // Ignore "." and "..", ugh.
-        if (data.cFileName[0] == L'.') {
-          if (data.cFileName[1] == L'\0' ||
-              (data.cFileName[1] == L'.' && data.cFileName[2] == L'\0')) {
-            continue;
-          }
-        }
-
-        String utf8Name = decodeWideString(arrayPtr(data.cFileName, wcslen(data.cFileName)));
-        KJ_EXPECT(!utf8Name.startsWith(".kj-tmp."), "temp file not cleaned up", utf8Name);
-
-        auto child = join16(path, data.cFileName);
-        if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
-            !(data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
-          recursiveDelete(child);
-        } else {
-          KJ_WIN32(DeleteFileW(child.begin()));
-        }
-      } while (FindNextFileW(handle, &data));
-
+    WIN32_FIND_DATAW data;
+    HANDLE handle = FindFirstFileW(glob.begin(), &data);
+    if (handle == INVALID_HANDLE_VALUE) {
       auto error = GetLastError();
-      if (error != ERROR_NO_MORE_FILES) {
-        KJ_FAIL_WIN32("FindNextFile", error, path) { return; }
+      if (error == ERROR_FILE_NOT_FOUND) return;
+      KJ_FAIL_WIN32("FindFirstFile", error, path) { return; }
+    }
+    KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
+
+    do {
+      // Ignore "." and "..", ugh.
+      if (data.cFileName[0] == L'.') {
+        if (data.cFileName[1] == L'\0' ||
+            (data.cFileName[1] == L'.' && data.cFileName[2] == L'\0')) {
+          continue;
+        }
       }
 
-      if (!foundAny) {
-        return;
+      String utf8Name = decodeWideString(arrayPtr(data.cFileName, wcslen(data.cFileName)));
+      KJ_EXPECT(!utf8Name.startsWith(".kj-tmp."), "temp file not cleaned up", utf8Name);
+
+      auto child = join16(path, data.cFileName);
+      if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+          !(data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        recursiveDelete(child);
+      } else {
+        KJ_WIN32(DeleteFileW(child.begin()));
       }
+    } while (FindNextFileW(handle, &data));
+
+    auto error = GetLastError();
+    if (error != ERROR_NO_MORE_FILES) {
+      KJ_FAIL_WIN32("FindNextFile", error, path) { return; }
     }
 
-    KJ_WIN32(RemoveDirectoryW(path.begin()));
+    uint retryCount = 0;
+  retry:
+    KJ_WIN32_HANDLE_ERRORS(RemoveDirectoryW(path.begin())) {
+      case ERROR_DIR_NOT_EMPTY:
+        if (retryCount++ < 10) {
+          Sleep(10);
+          goto retry;
+        }
+        // fallthrough
+      default:
+        KJ_FAIL_WIN32("RemoveDirectory", error) { break; }
+    }
   }
 };
 

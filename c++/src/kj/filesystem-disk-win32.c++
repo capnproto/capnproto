@@ -151,54 +151,58 @@ static String dbgStr(ArrayPtr<const wchar_t> wstr) {
 static void rmrfChildren(ArrayPtr<const wchar_t> path) {
   auto glob = join16(path, L"*");
 
-  // According to Niall Douglas, on Windows, deleting all files in a directory requires repeatedly
-  // scanning the directory until it is found to be empty. I couldn't find an explanation why, but
-  // my guess is that deleting a file while a search is in progress could reorder the remaining
-  // files causing the iterator to possibly skip things?
-  //
-  // Anyway, hence the loop.
-  for (;;) {
-    WIN32_FIND_DATAW data;
-    HANDLE handle = FindFirstFileW(glob.begin(), &data);
-    if (handle == INVALID_HANDLE_VALUE) {
-      auto error = GetLastError();
-      if (error == ERROR_FILE_NOT_FOUND) return;
-      KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(glob)) { return; }
-    }
-    KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
-
-    bool foundAny = false;
-    do {
-      // Ignore "." and "..", ugh.
-      if (data.cFileName[0] == L'.') {
-        if (data.cFileName[1] == L'\0' ||
-            (data.cFileName[1] == L'.' && data.cFileName[2] == L'\0')) {
-          continue;
-        }
-      }
-
-      foundAny = true;
-      auto child = join16(path, data.cFileName);
-      // For rmrf purposes, we assume any "reparse points" are symlink-like, even if they aren't
-      // actually the "symbolic link" reparse type, because we don't want to recursively delete any
-      // shared content.
-      if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
-          !(data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
-        rmrfChildren(child);
-        KJ_WIN32(RemoveDirectoryW(child.begin()));
-      } else {
-        KJ_WIN32(DeleteFileW(child.begin()));
-      }
-    } while (FindNextFileW(handle, &data));
-
+  WIN32_FIND_DATAW data;
+  HANDLE handle = FindFirstFileW(glob.begin(), &data);
+  if (handle == INVALID_HANDLE_VALUE) {
     auto error = GetLastError();
-    if (error != ERROR_NO_MORE_FILES) {
-      KJ_FAIL_WIN32("FindNextFile", error, dbgStr(path)) { return; }
+    if (error == ERROR_FILE_NOT_FOUND) return;
+    KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(glob)) { return; }
+  }
+  KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
+
+  do {
+    // Ignore "." and "..", ugh.
+    if (data.cFileName[0] == L'.') {
+      if (data.cFileName[1] == L'\0' ||
+          (data.cFileName[1] == L'.' && data.cFileName[2] == L'\0')) {
+        continue;
+      }
     }
 
-    if (!foundAny) {
-      return;
+    auto child = join16(path, data.cFileName);
+    // For rmrf purposes, we assume any "reparse points" are symlink-like, even if they aren't
+    // actually the "symbolic link" reparse type, because we don't want to recursively delete any
+    // shared content.
+    if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+        !(data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+      rmrfChildren(child);
+      uint retryCount = 0;
+    retry:
+      KJ_WIN32_HANDLE_ERRORS(RemoveDirectoryW(child.begin())) {
+        case ERROR_DIR_NOT_EMPTY:
+          // On Windows, deleting a file actually only schedules it for deletion. Under heavy
+          // load it may take a bit for the deletion to go through. Or, if another process has
+          // the file open, it may not be deleted until that process closes it.
+          //
+          // We'll repeatedly retry for up to 100ms, then give up. This is awful but there's no
+          // way to tell for sure if the system is just being slow or if someone has the file
+          // open.
+          if (retryCount++ < 10) {
+            Sleep(10);
+            goto retry;
+          }
+          // fallthrough
+        default:
+          KJ_FAIL_WIN32("RemoveDirectory", error, dbgStr(child)) { break; }
+      }
+    } else {
+      KJ_WIN32(DeleteFileW(child.begin()));
     }
+  } while (FindNextFileW(handle, &data));
+
+  auto error = GetLastError();
+  if (error != ERROR_NO_MORE_FILES) {
+    KJ_FAIL_WIN32("FindNextFile", error, dbgStr(path)) { return; }
   }
 }
 
