@@ -1806,6 +1806,8 @@ private:
 
     KJ_DISALLOW_COPY(OutputDirective);
     OutputDirective(OutputDirective&&) = default;
+    OutputDirective(kj::ArrayPtr<const char> name, kj::Maybe<kj::Path> dir)
+        : name(name), dir(kj::mv(dir)) {}
   };
   kj::Vector<OutputDirective> outputs;
 
