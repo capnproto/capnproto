@@ -49,7 +49,7 @@ public:
 
 private:
   kj::Own<kj::Directory> root = kj::newInMemoryDirectory(kj::nullClock());
-  kj::Path cwd = kj::Path::parse(ABS("path/to/current/dir"));
+  kj::Path cwd = kj::Path({}).evalNative(ABS("path/to/current/dir"));
   kj::Own<kj::Directory> current = root->openSubdir(cwd,
       kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT);
 };
