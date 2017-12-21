@@ -86,6 +86,47 @@ KJ_TEST("Path") {
   KJ_EXPECT(kj::str(Path({"foo", "bar"})) == "foo/bar");
 }
 
+KJ_TEST("Path comparisons") {
+  KJ_EXPECT(Path({"foo", "bar"}) == Path({"foo", "bar"}));
+  KJ_EXPECT(!(Path({"foo", "bar"}) != Path({"foo", "bar"})));
+  KJ_EXPECT(Path({"foo", "bar"}) != Path({"foo", "baz"}));
+  KJ_EXPECT(!(Path({"foo", "bar"}) == Path({"foo", "baz"})));
+
+  KJ_EXPECT(Path({"foo", "bar"}) != Path({"fob", "bar"}));
+  KJ_EXPECT(Path({"foo", "bar"}) != Path({"foo", "bar", "baz"}));
+  KJ_EXPECT(Path({"foo", "bar", "baz"}) != Path({"foo", "bar"}));
+
+  KJ_EXPECT(Path({"foo", "bar"}) <= Path({"foo", "bar"}));
+  KJ_EXPECT(Path({"foo", "bar"}) >= Path({"foo", "bar"}));
+  KJ_EXPECT(!(Path({"foo", "bar"}) < Path({"foo", "bar"})));
+  KJ_EXPECT(!(Path({"foo", "bar"}) > Path({"foo", "bar"})));
+
+  KJ_EXPECT(Path({"foo", "bar"}) < Path({"foo", "bar", "baz"}));
+  KJ_EXPECT(!(Path({"foo", "bar"}) > Path({"foo", "bar", "baz"})));
+  KJ_EXPECT(Path({"foo", "bar", "baz"}) > Path({"foo", "bar"}));
+  KJ_EXPECT(!(Path({"foo", "bar", "baz"}) < Path({"foo", "bar"})));
+
+  KJ_EXPECT(Path({"foo", "bar"}) < Path({"foo", "baz"}));
+  KJ_EXPECT(Path({"foo", "bar"}) > Path({"foo", "baa"}));
+  KJ_EXPECT(Path({"foo", "bar"}) > Path({"foo"}));
+
+  KJ_EXPECT(Path({"foo", "bar"}).startsWith(Path({})));
+  KJ_EXPECT(Path({"foo", "bar"}).startsWith(Path({"foo"})));
+  KJ_EXPECT(Path({"foo", "bar"}).startsWith(Path({"foo", "bar"})));
+  KJ_EXPECT(!Path({"foo", "bar"}).startsWith(Path({"foo", "bar", "baz"})));
+  KJ_EXPECT(!Path({"foo", "bar"}).startsWith(Path({"foo", "baz"})));
+  KJ_EXPECT(!Path({"foo", "bar"}).startsWith(Path({"baz", "foo", "bar"})));
+  KJ_EXPECT(!Path({"foo", "bar"}).startsWith(Path({"baz"})));
+
+  KJ_EXPECT(Path({"foo", "bar"}).endsWith(Path({})));
+  KJ_EXPECT(Path({"foo", "bar"}).endsWith(Path({"bar"})));
+  KJ_EXPECT(Path({"foo", "bar"}).endsWith(Path({"foo", "bar"})));
+  KJ_EXPECT(!Path({"foo", "bar"}).endsWith(Path({"baz", "foo", "bar"})));
+  KJ_EXPECT(!Path({"foo", "bar"}).endsWith(Path({"fob", "bar"})));
+  KJ_EXPECT(!Path({"foo", "bar"}).endsWith(Path({"foo", "bar", "baz"})));
+  KJ_EXPECT(!Path({"foo", "bar"}).endsWith(Path({"baz"})));
+}
+
 KJ_TEST("Path exceptions") {
   KJ_EXPECT_THROW_MESSAGE("invalid path component", Path(""));
   KJ_EXPECT_THROW_MESSAGE("invalid path component", Path("."));

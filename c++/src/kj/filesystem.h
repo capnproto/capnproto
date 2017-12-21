@@ -149,6 +149,18 @@ public:
   Path slice(size_t start, size_t end) &&;
   // A Path can be accessed as an array of strings.
 
+  bool operator==(PathPtr other) const;
+  bool operator!=(PathPtr other) const;
+  bool operator< (PathPtr other) const;
+  bool operator> (PathPtr other) const;
+  bool operator<=(PathPtr other) const;
+  bool operator>=(PathPtr other) const;
+  // Compare path components lexically.
+
+  bool startsWith(PathPtr prefix) const;
+  bool endsWith(PathPtr suffix) const;
+  // Compare prefix / suffix.
+
   Path evalWin32(StringPtr pathText) const&;
   Path evalWin32(StringPtr pathText) &&;
   // Evaluates a Win32-style path, as might be written by a user. Differences from `eval()`
@@ -236,6 +248,14 @@ public:
   const String* begin() const;
   const String* end() const;
   PathPtr slice(size_t start, size_t end) const;
+  bool operator==(PathPtr other) const;
+  bool operator!=(PathPtr other) const;
+  bool operator< (PathPtr other) const;
+  bool operator> (PathPtr other) const;
+  bool operator<=(PathPtr other) const;
+  bool operator>=(PathPtr other) const;
+  bool startsWith(PathPtr prefix) const;
+  bool endsWith(PathPtr suffix) const;
   Path evalWin32(StringPtr pathText) const;
   String toWin32String(bool absolute = false) const;
   Array<wchar_t> forWin32Api(bool absolute) const;
@@ -927,6 +947,14 @@ inline const String* Path::end() const { return parts.end(); }
 inline PathPtr Path::slice(size_t start, size_t end) const& {
   return PathPtr(*this).slice(start, end);
 }
+inline bool Path::operator==(PathPtr other) const { return PathPtr(*this) == other; }
+inline bool Path::operator!=(PathPtr other) const { return PathPtr(*this) != other; }
+inline bool Path::operator< (PathPtr other) const { return PathPtr(*this) <  other; }
+inline bool Path::operator> (PathPtr other) const { return PathPtr(*this) >  other; }
+inline bool Path::operator<=(PathPtr other) const { return PathPtr(*this) <= other; }
+inline bool Path::operator>=(PathPtr other) const { return PathPtr(*this) >= other; }
+inline bool Path::startsWith(PathPtr prefix) const { return PathPtr(*this).startsWith(prefix); }
+inline bool Path::endsWith  (PathPtr suffix) const { return PathPtr(*this).endsWith  (suffix); }
 inline String Path::toString(bool absolute) const { return PathPtr(*this).toString(absolute); }
 inline Path Path::evalWin32(StringPtr pathText) const& {
   return PathPtr(*this).evalWin32(pathText);
@@ -950,6 +978,10 @@ inline const String* PathPtr::end() const { return parts.end(); }
 inline PathPtr PathPtr::slice(size_t start, size_t end) const {
   return PathPtr(parts.slice(start, end));
 }
+inline bool PathPtr::operator!=(PathPtr other) const { return !(*this == other); }
+inline bool PathPtr::operator> (PathPtr other) const { return other < *this; }
+inline bool PathPtr::operator<=(PathPtr other) const { return !(other < *this); }
+inline bool PathPtr::operator>=(PathPtr other) const { return !(*this < other); }
 inline String PathPtr::toWin32String(bool absolute) const {
   return toWin32StringImpl(absolute, false);
 }

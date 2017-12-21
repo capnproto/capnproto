@@ -155,6 +155,29 @@ Path Path::slice(size_t start, size_t end) && {
   return Path(KJ_MAP(p, parts.slice(start, end)) { return kj::mv(p); });
 }
 
+bool PathPtr::operator==(PathPtr other) const {
+  return parts == other.parts;
+}
+bool PathPtr::operator< (PathPtr other) const {
+  for (size_t i = 0; i < kj::min(parts.size(), other.parts.size()); i++) {
+    int comp = strcmp(parts[i].cStr(), other.parts[i].cStr());
+    if (comp < 0) return true;
+    if (comp > 0) return false;
+  }
+
+  return parts.size() < other.parts.size();
+}
+
+bool PathPtr::startsWith(PathPtr prefix) const {
+  return parts.size() >= prefix.parts.size() &&
+         parts.slice(0, prefix.parts.size()) == prefix.parts;
+}
+
+bool PathPtr::endsWith(PathPtr suffix) const {
+  return parts.size() >= suffix.parts.size() &&
+         parts.slice(parts.size() - suffix.parts.size(), parts.size()) == suffix.parts;
+}
+
 Path PathPtr::evalWin32(StringPtr pathText) const {
   Vector<String> newParts(parts.size() + Path::countPartsWin32(pathText));
   for (auto& p: parts) newParts.add(heapString(p));
