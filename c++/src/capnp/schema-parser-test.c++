@@ -30,10 +30,16 @@
 namespace capnp {
 namespace {
 
+#if _WIN32
+#define ABS(x) "C:\\" x
+#else
+#define ABS(x) "/" x
+#endif
+
 class FakeFileReader final: public kj::Filesystem {
 public:
   void add(kj::StringPtr name, kj::StringPtr content) {
-    root->openFile(cwd.eval(name), kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT)
+    root->openFile(cwd.evalNative(name), kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT)
         ->writeAll(content);
   }
 
@@ -43,7 +49,7 @@ public:
 
 private:
   kj::Own<kj::Directory> root = kj::newInMemoryDirectory(kj::nullClock());
-  kj::Path cwd = kj::Path({"path", "to", "current", "dir"});
+  kj::Path cwd = kj::Path::parse(ABS("path/to/current/dir"));
   kj::Own<kj::Directory> current = root->openSubdir(cwd,
       kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT);
 };
@@ -73,18 +79,18 @@ TEST(SchemaParser, Basic) {
   reader.add("src/qux/corge.capnp",
       "@0x83456789abcdef12;\n"
       "struct Corge {}\n");
-  reader.add("/usr/include/grault.capnp",
+  reader.add(ABS("usr/include/grault.capnp"),
       "@0x8456789abcdef123;\n"
       "struct Grault {}\n");
-  reader.add("/opt/include/grault.capnp",
+  reader.add(ABS("opt/include/grault.capnp"),
       "@0x8000000000000001;\n"
       "struct WrongGrault {}\n");
-  reader.add("/usr/local/include/garply.capnp",
+  reader.add(ABS("usr/local/include/garply.capnp"),
       "@0x856789abcdef1234;\n"
       "struct Garply {}\n");
 
   kj::StringPtr importPath[] = {
-    "/usr/include", "/usr/local/include", "/opt/include"
+    ABS("usr/include"), ABS("usr/local/include"), ABS("opt/include")
   };
 
   ParsedSchema barSchema = parser.parseDiskFile(
@@ -124,7 +130,7 @@ TEST(SchemaParser, Basic) {
 
   auto graultSchema = parser.parseDiskFile(
       "not/used/because/already/loaded",
-      "/usr/include/grault.capnp", importPath);
+      ABS("usr/include/grault.capnp"), importPath);
   EXPECT_EQ(0x8456789abcdef123ull, graultSchema.getProto().getId());
   EXPECT_EQ("grault.capnp", graultSchema.getProto().getDisplayName());
   auto graultStruct = graultSchema.getNested("Grault").asStruct();
@@ -134,7 +140,7 @@ TEST(SchemaParser, Basic) {
   // it wasn't imported before.
   auto wrongGraultSchema = parser.parseDiskFile(
       "weird/display/name.capnp",
-      "/opt/include/grault.capnp", importPath);
+      ABS("opt/include/grault.capnp"), importPath);
   EXPECT_EQ(0x8000000000000001ull, wrongGraultSchema.getProto().getId());
   EXPECT_EQ("weird/display/name.capnp", wrongGraultSchema.getProto().getDisplayName());
 }
