@@ -45,6 +45,11 @@
 
 #if _WIN32
 #include <process.h>
+#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
+#include <windows.h>
+#include <kj/windows-sanity.h>
+#undef VOID
+#undef CONST
 #else
 #include <sys/wait.h>
 #endif
@@ -416,7 +421,7 @@ public:
       if (stat(dir.cStr(), &stats) < 0 || !S_ISDIR(stats.st_mode)) {
         return "output location is inaccessible or is not a directory";
       }
-      outputs.add(OutputDirective { plugin, dir });
+      outputs.add(OutputDirective { plugin, disk->getCurrentPath().eval(dir) });
     } else {
       outputs.add(OutputDirective { spec.asArray(), nullptr });
     }
@@ -521,8 +526,14 @@ public:
         KJ_SYSCALL(dup2(pipeFds[0], STDIN_FILENO));
         KJ_SYSCALL(close(pipeFds[0]));
 
-        if (output.dir != nullptr) {
-          KJ_SYSCALL(chdir(output.dir.cStr()), output.dir);
+        KJ_IF_MAYBE(d, output.dir) {
+#if _WIN32
+          KJ_SYSCALL(SetCurrentDirectoryW(d->forWin32Api(true).begin()), d->toWin32String(true));
+#else
+          auto wd = d->toString(true);
+          KJ_SYSCALL(chdir(wd.cStr()), wd);
+          KJ_SYSCALL(setenv("PWD", wd.cStr(), true));
+#endif
         }
 
         if (shouldSearchPath) {
@@ -1791,7 +1802,10 @@ private:
 
   struct OutputDirective {
     kj::ArrayPtr<const char> name;
-    kj::StringPtr dir;
+    kj::Maybe<kj::Path> dir;
+
+    KJ_DISALLOW_COPY(OutputDirective);
+    OutputDirective(OutputDirective&&) = default;
   };
   kj::Vector<OutputDirective> outputs;
 
