@@ -30,6 +30,7 @@
 #include <kj/string.h>
 #include <kj/exception.h>
 #include <kj/vector.h>
+#include <kj/filesystem.h>
 
 namespace capnp {
 namespace compiler {
@@ -68,7 +69,8 @@ public:
     uint column;
   };
 
-  virtual void addError(kj::StringPtr file, SourcePos start, SourcePos end,
+  virtual void addError(kj::ReadableDirectory& directory, kj::PathPtr path,
+                        SourcePos start, SourcePos end,
                         kj::StringPtr message) = 0;
   // Report an error at the given location in the given file.
 

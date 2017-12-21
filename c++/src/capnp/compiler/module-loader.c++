@@ -28,226 +28,50 @@
 #include <kj/io.h>
 #include <capnp/message.h>
 #include <map>
-#include <kj/miniposix.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-
-#if _WIN32
-#include <windows.h>
-#else
-#include <sys/mman.h>
-#endif
 
 namespace capnp {
 namespace compiler {
 
-namespace {
-
-class MmapDisposer: public kj::ArrayDisposer {
-protected:
-  void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
-                   size_t capacity, void (*destroyElement)(void*)) const {
-#if _WIN32
-    KJ_ASSERT(UnmapViewOfFile(firstElement));
-#else
-    munmap(firstElement, elementSize * elementCount);
-#endif
-  }
-};
-
-KJ_CONSTEXPR(static const) MmapDisposer mmapDisposer = MmapDisposer();
-
-kj::Array<const byte> mmapForRead(kj::StringPtr filename) {
-  int fd;
-  // We already established that the file exists, so this should not fail.
-  KJ_SYSCALL(fd = open(filename.cStr(), O_RDONLY), filename);
-  kj::AutoCloseFd closer(fd);
-
-  struct stat stats;
-  KJ_SYSCALL(fstat(fd, &stats));
-
-  if (S_ISREG(stats.st_mode)) {
-    if (stats.st_size == 0) {
-      // mmap()ing zero bytes will fail.
-      return nullptr;
-    }
-
-    // Regular file.  Just mmap() it.
-#if _WIN32
-    HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
-    KJ_ASSERT(handle != INVALID_HANDLE_VALUE);
-    HANDLE mappingHandle = CreateFileMapping(
-        handle, NULL, PAGE_READONLY, 0, stats.st_size, NULL);
-    KJ_ASSERT(mappingHandle != INVALID_HANDLE_VALUE);
-    KJ_DEFER(KJ_ASSERT(CloseHandle(mappingHandle)));
-    const void* mapping = MapViewOfFile(mappingHandle, FILE_MAP_READ, 0, 0, stats.st_size);
-#else  // _WIN32
-    const void* mapping = mmap(NULL, stats.st_size, PROT_READ, MAP_SHARED, fd, 0);
-    if (mapping == MAP_FAILED) {
-      KJ_FAIL_SYSCALL("mmap", errno, filename);
-    }
-#endif  // _WIN32, else
-
-    return kj::Array<const byte>(
-        reinterpret_cast<const byte*>(mapping), stats.st_size, mmapDisposer);
-  } else {
-    // This could be a stream of some sort, like a pipe.  Fall back to read().
-    // TODO(cleanup):  This does a lot of copies.  Not sure I care.
-    kj::Vector<byte> data(8192);
-
-    byte buffer[4096];
-    for (;;) {
-      kj::miniposix::ssize_t n;
-      KJ_SYSCALL(n = read(fd, buffer, sizeof(buffer)));
-      if (n == 0) break;
-      data.addAll(buffer, buffer + n);
-    }
-
-    return data.releaseAsArray();
-  }
-}
-
-static char* canonicalizePath(char* path) {
-  // Taken from some old C code of mine.
-
-  // Preconditions:
-  // - path has already been determined to be relative, perhaps because the pointer actually points
-  //   into the middle of some larger path string, in which case it must point to the character
-  //   immediately after a '/'.
-
-  // Invariants:
-  // - src points to the beginning of a path component.
-  // - dst points to the location where the path component should end up, if it is not special.
-  // - src == path or src[-1] == '/'.
-  // - dst == path or dst[-1] == '/'.
-
-  char* src = path;
-  char* dst = path;
-  char* locked = dst;  // dst cannot backtrack past this
-  char* partEnd;
-  bool hasMore;
-
-  for (;;) {
-    while (*src == '/') {
-      // Skip duplicate slash.
-      ++src;
-    }
-
-    partEnd = strchr(src, '/');
-    hasMore = partEnd != NULL;
-    if (hasMore) {
-      *partEnd = '\0';
-    } else {
-      partEnd = src + strlen(src);
-    }
-
-    if (strcmp(src, ".") == 0) {
-      // Skip it.
-    } else if (strcmp(src, "..") == 0) {
-      if (dst > locked) {
-        // Backtrack over last path component.
-        --dst;
-        while (dst > locked && dst[-1] != '/') --dst;
-      } else {
-        locked += 3;
-        goto copy;
-      }
-    } else {
-      // Copy if needed.
-    copy:
-      if (dst < src) {
-        memmove(dst, src, partEnd - src);
-        dst += partEnd - src;
-      } else {
-        dst = partEnd;
-      }
-      *dst++ = '/';
-    }
-
-    if (hasMore) {
-      src = partEnd + 1;
-    } else {
-      // Oops, we have to remove the trailing '/'.
-      if (dst == path) {
-        // Oops, there is no trailing '/'.  We have to return ".".
-        strcpy(path, ".");
-        return path + 1;
-      } else {
-        // Remove the trailing '/'.  Note that this means that opening the file will work even
-        // if it is not a directory, where normally it should fail on non-directories when a
-        // trailing '/' is present.  If this is a problem, we need to add some sort of special
-        // handling for this case where we stat() it separately to check if it is a directory,
-        // because Ekam findInput will not accept a trailing '/'.
-        --dst;
-        *dst = '\0';
-        return dst;
-      }
-    }
-  }
-}
-
-kj::String canonicalizePath(kj::StringPtr path) {
-  KJ_STACK_ARRAY(char, result, path.size() + 1, 128, 512);
-  strcpy(result.begin(), path.begin());
-
-  char* start = path.startsWith("/") ? result.begin() + 1 : result.begin();
-  char* end = canonicalizePath(start);
-  return kj::heapString(result.slice(0, end - result.begin()));
-}
-
-kj::String catPath(kj::StringPtr base, kj::StringPtr add) {
-  if (add.size() > 0 && add[0] == '/') {
-    return kj::heapString(add);
-  }
-
-  const char* pos = base.end();
-  while (pos > base.begin() && pos[-1] != '/') {
-    --pos;
-  }
-
-  return kj::str(base.slice(0, pos - base.begin()), add);
-}
-
-}  // namespace
-
-
 class ModuleLoader::Impl {
 public:
-  Impl(GlobalErrorReporter& errorReporter): errorReporter(errorReporter) {}
+  Impl(GlobalErrorReporter& errorReporter)
+      : errorReporter(errorReporter) {}
 
-  void addImportPath(kj::String path) {
-    searchPath.add(kj::heapString(kj::mv(path)));
+  void addImportPath(kj::ReadableDirectory& dir) {
+    searchPath.add(&dir);
   }
 
-  kj::Maybe<Module&> loadModule(kj::StringPtr localName, kj::StringPtr sourceName);
-  kj::Maybe<Module&> loadModuleFromSearchPath(kj::StringPtr sourceName);
-  kj::Maybe<kj::Array<const byte>> readEmbed(kj::StringPtr localName, kj::StringPtr sourceName);
-  kj::Maybe<kj::Array<const byte>> readEmbedFromSearchPath(kj::StringPtr sourceName);
+  kj::Maybe<Module&> loadModule(kj::ReadableDirectory& dir, kj::PathPtr path);
+  kj::Maybe<Module&> loadModuleFromSearchPath(kj::PathPtr path);
+  kj::Maybe<kj::Array<const byte>> readEmbed(kj::ReadableDirectory& dir, kj::PathPtr path);
+  kj::Maybe<kj::Array<const byte>> readEmbedFromSearchPath(kj::PathPtr path);
   GlobalErrorReporter& getErrorReporter() { return errorReporter; }
 
 private:
   GlobalErrorReporter& errorReporter;
-  kj::Vector<kj::String> searchPath;
-  std::map<kj::StringPtr, kj::Own<Module>> modules;
+  kj::Vector<kj::ReadableDirectory*> searchPath;
+  std::map<std::pair<kj::ReadableDirectory*, kj::PathPtr>, kj::Own<Module>> modules;
 };
 
 class ModuleLoader::ModuleImpl final: public Module {
 public:
-  ModuleImpl(ModuleLoader::Impl& loader, kj::String localName, kj::String sourceName)
-      : loader(loader), localName(kj::mv(localName)), sourceName(kj::mv(sourceName)) {}
+  ModuleImpl(ModuleLoader::Impl& loader, kj::Own<kj::ReadableFile> file,
+             kj::ReadableDirectory& sourceDir, kj::PathPtr path)
+      : loader(loader), file(kj::mv(file)), sourceDir(sourceDir), path(path.clone()),
+        sourceNameStr(path.toString()) {
+    KJ_REQUIRE(path.size() > 0);
+  }
 
-  kj::StringPtr getLocalName() {
-    return localName;
+  kj::PathPtr getPath() {
+    return path;
   }
 
   kj::StringPtr getSourceName() override {
-    return sourceName;
+    return sourceNameStr;
   }
 
   Orphan<ParsedFile> loadContent(Orphanage orphanage) override {
-    kj::Array<const char> content = mmapForRead(localName).releaseAsChars();
+    kj::Array<const char> content = file->mmap(0, file->stat().size).releaseAsChars();
 
     lineBreaks = nullptr;  // In case loadContent() is called multiple times.
     lineBreaks = lineBreaksSpace.construct(content);
@@ -263,17 +87,17 @@ public:
 
   kj::Maybe<Module&> importRelative(kj::StringPtr importPath) override {
     if (importPath.size() > 0 && importPath[0] == '/') {
-      return loader.loadModuleFromSearchPath(importPath.slice(1));
+      return loader.loadModuleFromSearchPath(kj::Path::parse(importPath.slice(1)));
     } else {
-      return loader.loadModule(catPath(localName, importPath), catPath(sourceName, importPath));
+      return loader.loadModule(sourceDir, path.parent().eval(importPath));
     }
   }
 
   kj::Maybe<kj::Array<const byte>> embedRelative(kj::StringPtr embedPath) override {
     if (embedPath.size() > 0 && embedPath[0] == '/') {
-      return loader.readEmbedFromSearchPath(embedPath.slice(1));
+      return loader.readEmbedFromSearchPath(kj::Path::parse(embedPath.slice(1)));
     } else {
-      return loader.readEmbed(catPath(localName, embedPath), catPath(sourceName, embedPath));
+      return loader.readEmbed(sourceDir, path.parent().eval(embedPath));
     }
   }
 
@@ -281,8 +105,8 @@ public:
     auto& lines = *KJ_REQUIRE_NONNULL(lineBreaks,
         "Can't report errors until loadContent() is called.");
 
-    loader.getErrorReporter().addError(
-        localName, lines.toSourcePos(startByte), lines.toSourcePos(endByte), message);
+    loader.getErrorReporter().addError(sourceDir, path,
+        lines.toSourcePos(startByte), lines.toSourcePos(endByte), message);
   }
 
   bool hadErrors() override {
@@ -291,8 +115,10 @@ public:
 
 private:
   ModuleLoader::Impl& loader;
-  kj::String localName;
-  kj::String sourceName;
+  kj::Own<kj::ReadableFile> file;
+  kj::ReadableDirectory& sourceDir;
+  kj::Path path;
+  kj::String sourceNameStr;
 
   kj::SpaceFor<LineBreakTable> lineBreaksSpace;
   kj::Maybe<kj::Own<LineBreakTable>> lineBreaks;
@@ -301,35 +127,27 @@ private:
 // =======================================================================================
 
 kj::Maybe<Module&> ModuleLoader::Impl::loadModule(
-    kj::StringPtr localName, kj::StringPtr sourceName) {
-  kj::String canonicalLocalName = canonicalizePath(localName);
-  kj::String canonicalSourceName = canonicalizePath(sourceName);
-
-  auto iter = modules.find(canonicalLocalName);
+    kj::ReadableDirectory& dir, kj::PathPtr path) {
+  auto iter = modules.find(std::make_pair(&dir, path));
   if (iter != modules.end()) {
     // Return existing file.
     return *iter->second;
   }
 
-  if (access(canonicalLocalName.cStr(), F_OK) < 0) {
+  KJ_IF_MAYBE(file, dir.tryOpenFile(path)) {
+    auto module = kj::heap<ModuleImpl>(*this, kj::mv(*file), dir, path);
+    auto& result = *module;
+    modules.insert(std::make_pair(std::make_pair(&dir, result.getPath()), kj::mv(module)));
+    return result;
+  } else {
     // No such file.
     return nullptr;
   }
-
-  auto module = kj::heap<ModuleImpl>(
-      *this, kj::mv(canonicalLocalName), kj::mv(canonicalSourceName));
-  auto& result = *module;
-  modules.insert(std::make_pair(result.getLocalName(), kj::mv(module)));
-  return result;
 }
 
-kj::Maybe<Module&> ModuleLoader::Impl::loadModuleFromSearchPath(kj::StringPtr sourceName) {
-  for (auto& search: searchPath) {
-    kj::String candidate = kj::str(search, "/", sourceName);
-    char* end = canonicalizePath(candidate.begin() + (candidate[0] == '/'));
-
-    KJ_IF_MAYBE(module, loadModule(
-        kj::heapString(candidate.slice(0, end - candidate.begin())), sourceName)) {
+kj::Maybe<Module&> ModuleLoader::Impl::loadModuleFromSearchPath(kj::PathPtr path) {
+  for (auto candidate: searchPath) {
+    KJ_IF_MAYBE(module, loadModule(*candidate, path)) {
       return *module;
     }
   }
@@ -337,26 +155,16 @@ kj::Maybe<Module&> ModuleLoader::Impl::loadModuleFromSearchPath(kj::StringPtr so
 }
 
 kj::Maybe<kj::Array<const byte>> ModuleLoader::Impl::readEmbed(
-    kj::StringPtr localName, kj::StringPtr sourceName) {
-  kj::String canonicalLocalName = canonicalizePath(localName);
-  kj::String canonicalSourceName = canonicalizePath(sourceName);
-
-  if (access(canonicalLocalName.cStr(), F_OK) < 0) {
-    // No such file.
-    return nullptr;
+    kj::ReadableDirectory& dir, kj::PathPtr path) {
+  KJ_IF_MAYBE(file, dir.tryOpenFile(path)) {
+    return file->get()->mmap(0, file->get()->stat().size);
   }
-
-  return mmapForRead(localName);
+  return nullptr;
 }
 
-kj::Maybe<kj::Array<const byte>> ModuleLoader::Impl::readEmbedFromSearchPath(
-    kj::StringPtr sourceName) {
-  for (auto& search: searchPath) {
-    kj::String candidate = kj::str(search, "/", sourceName);
-    char* end = canonicalizePath(candidate.begin() + (candidate[0] == '/'));
-
-    KJ_IF_MAYBE(module, readEmbed(
-        kj::heapString(candidate.slice(0, end - candidate.begin())), sourceName)) {
+kj::Maybe<kj::Array<const byte>> ModuleLoader::Impl::readEmbedFromSearchPath(kj::PathPtr path) {
+  for (auto candidate: searchPath) {
+    KJ_IF_MAYBE(module, readEmbed(*candidate, path)) {
       return kj::mv(*module);
     }
   }
@@ -369,10 +177,12 @@ ModuleLoader::ModuleLoader(GlobalErrorReporter& errorReporter)
     : impl(kj::heap<Impl>(errorReporter)) {}
 ModuleLoader::~ModuleLoader() noexcept(false) {}
 
-void ModuleLoader::addImportPath(kj::String path) { impl->addImportPath(kj::mv(path)); }
+void ModuleLoader::addImportPath(kj::ReadableDirectory& dir) {
+  impl->addImportPath(dir);
+}
 
-kj::Maybe<Module&> ModuleLoader::loadModule(kj::StringPtr localName, kj::StringPtr sourceName) {
-  return impl->loadModule(localName, sourceName);
+kj::Maybe<Module&> ModuleLoader::loadModule(kj::ReadableDirectory& dir, kj::PathPtr path) {
+  return impl->loadModule(dir, path);
 }
 
 }  // namespace compiler

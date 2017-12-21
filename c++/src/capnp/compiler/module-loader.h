@@ -31,6 +31,7 @@
 #include <kj/memory.h>
 #include <kj/array.h>
 #include <kj/string.h>
+#include <kj/filesystem.h>
 
 namespace capnp {
 namespace compiler {
@@ -44,13 +45,12 @@ public:
 
   ~ModuleLoader() noexcept(false);
 
-  void addImportPath(kj::String path);
+  void addImportPath(kj::ReadableDirectory& dir);
   // Add a directory to the list of paths that is searched for imports that start with a '/'.
 
-  kj::Maybe<Module&> loadModule(kj::StringPtr localName, kj::StringPtr sourceName);
-  // Tries to load the module with the given filename.  `localName` is the path to the file on
-  // disk (as you'd pass to open(2)), and `sourceName` is the canonical name it should be given
-  // in the schema (this is used e.g. to decide output file locations).  Often, these are the same.
+  kj::Maybe<Module&> loadModule(kj::ReadableDirectory& dir, kj::PathPtr path);
+  // Tries to load a module with the given path inside the given directory. Returns nullptr if the
+  // file doesn't exist.
 
 private:
   class Impl;

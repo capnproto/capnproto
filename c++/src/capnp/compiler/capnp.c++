@@ -65,7 +65,7 @@ static const char VERSION_STRING[] = "Cap'n Proto version " VERSION;
 class CompilerMain final: public GlobalErrorReporter {
 public:
   explicit CompilerMain(kj::ProcessContext& context)
-      : context(context), loader(*this) {}
+      : context(context), disk(kj::newDiskFilesystem()), loader(*this) {}
 
   kj::MainFunc getMain() {
     if (context.getProgramName().endsWith("capnpc")) {
@@ -305,8 +305,12 @@ public:
   // shared options
 
   kj::MainBuilder::Validity addImportPath(kj::StringPtr path) {
-    loader.addImportPath(kj::heapString(path));
-    return true;
+    KJ_IF_MAYBE(dir, getSourceDirectory(path, false)) {
+      loader.addImportPath(*dir);
+      return true;
+    } else {
+      return "no such directory";
+    }
   }
 
   kj::MainBuilder::Validity noStandardImport() {
@@ -315,31 +319,32 @@ public:
   }
 
   kj::MainBuilder::Validity addSource(kj::StringPtr file) {
-    // Strip redundant "./" prefixes to make src-prefix matching more lenient.
-    while (file.startsWith("./")) {
-      file = file.slice(2);
-
-      // Remove redundant slashes as well (e.g. ".////foo" -> "foo").
-      while (file.startsWith("/")) {
-        file = file.slice(1);
-      }
-    }
-
     if (!compilerConstructed) {
       compiler = compilerSpace.construct(annotationFlag);
       compilerConstructed = true;
     }
 
     if (addStandardImportPaths) {
-      loader.addImportPath(kj::heapString("/usr/local/include"));
-      loader.addImportPath(kj::heapString("/usr/include"));
+      static constexpr kj::StringPtr STANDARD_IMPORT_PATHS[] = {
+        "/usr/local/include"_kj,
+        "/usr/include"_kj,
 #ifdef CAPNP_INCLUDE_DIR
-      loader.addImportPath(kj::heapString(CAPNP_INCLUDE_DIR));
+        KJ_CONCAT(CAPNP_INCLUDE_DIR, _kj),
 #endif
+      };
+      for (auto path: STANDARD_IMPORT_PATHS) {
+        KJ_IF_MAYBE(dir, getSourceDirectory(path, false)) {
+          loader.addImportPath(*dir);
+        } else {
+          // ignore standard path that doesn't exist
+        }
+      }
+
       addStandardImportPaths = false;
     }
 
-    KJ_IF_MAYBE(module, loadModule(file)) {
+    auto dirPathPair = interpretSourceFile(file);
+    KJ_IF_MAYBE(module, loader.loadModule(dirPathPair.dir, dirPathPair.path)) {
       uint64_t id = compiler->add(*module);
       compiler->eagerlyCompile(id, compileEagerness);
       sourceFiles.add(SourceFile { id, module->getSourceName(), &*module });
@@ -348,20 +353,6 @@ public:
     }
 
     return true;
-  }
-
-private:
-  kj::Maybe<Module&> loadModule(kj::StringPtr file) {
-    size_t longestPrefix = 0;
-
-    for (auto& prefix: sourcePrefixes) {
-      if (file.startsWith(prefix)) {
-        longestPrefix = kj::max(longestPrefix, prefix.size());
-      }
-    }
-
-    kj::StringPtr canonicalName = file.slice(longestPrefix);
-    return loader.loadModule(file, canonicalName);
   }
 
 public:
@@ -434,22 +425,11 @@ public:
   }
 
   kj::MainBuilder::Validity addSourcePrefix(kj::StringPtr prefix) {
-    // Strip redundant "./" prefixes to make src-prefix matching more lenient.
-    while (prefix.startsWith("./")) {
-      prefix = prefix.slice(2);
-    }
-
-    if (prefix == "" || prefix == ".") {
-      // Irrelevant prefix.
+    if (getSourceDirectory(prefix, true) == nullptr) {
+      return "no such directory";
+    } else {
       return true;
     }
-
-    if (prefix.endsWith("/")) {
-      sourcePrefixes.add(kj::heapString(prefix));
-    } else {
-      sourcePrefixes.add(kj::str(prefix, '/'));
-    }
-    return true;
   }
 
   kj::MainBuilder::Validity generateOutput() {
@@ -1725,8 +1705,11 @@ public:
 public:
   // =====================================================================================
 
-  void addError(kj::StringPtr file, SourcePos start, SourcePos end,
+  void addError(kj::ReadableDirectory& directory, kj::PathPtr path,
+                SourcePos start, SourcePos end,
                 kj::StringPtr message) override {
+    auto file = getDisplayName(directory, path);
+
     kj::String wholeMessage;
     if (end.line == start.line) {
       if (end.column == start.column) {
@@ -1751,6 +1734,7 @@ public:
 
 private:
   kj::ProcessContext& context;
+  kj::Own<kj::Filesystem> disk;
   ModuleLoader loader;
   kj::SpaceFor<Compiler> compilerSpace;
   bool compilerConstructed = false;
@@ -1764,7 +1748,24 @@ private:
   // of those schemas, plus the parent nodes of any dependencies.  This is what most code generators
   // require to function.
 
-  kj::Vector<kj::String> sourcePrefixes;
+  struct SourceDirectory {
+    kj::Path path;
+    kj::Own<kj::ReadableDirectory> dir;
+    bool isSourcePrefix;
+  };
+
+  std::map<kj::PathPtr, SourceDirectory> sourceDirectories;
+  // For each import path and source prefix, tracks the directory object we opened for it.
+  //
+  // Use via getSourceDirectory().
+
+  std::map<kj::ReadableDirectory*, kj::String> dirPrefixes;
+  // For each open directory object, maps to a path prefix to add when displaying this path in
+  // error messages. This keeps track of the original directory name as given by the user, before
+  // canonicalization.
+  //
+  // Use via getDisplayName().
+
   bool addStandardImportPaths = true;
 
   Format convertFrom = Format::BINARY;
@@ -1795,6 +1796,112 @@ private:
   kj::Vector<OutputDirective> outputs;
 
   bool hadErrors_ = false;
+
+  kj::Maybe<kj::ReadableDirectory&> getSourceDirectory(
+      kj::StringPtr pathStr, bool isSourcePrefix) {
+    auto cwd = disk->getCurrentPath();
+    auto path = cwd.evalNative(pathStr);
+
+    if (path.size() == 0) return disk->getRoot();
+
+    auto iter = sourceDirectories.find(path);
+    if (iter != sourceDirectories.end()) {
+      iter->second.isSourcePrefix = iter->second.isSourcePrefix || isSourcePrefix;
+      return *iter->second.dir;
+    }
+
+    if (path == cwd) {
+      // Slight hack if the working directory is explicitly specified:
+      // - We want to avoid opening a new copy of the working directory, as tryOpenSubdir() would
+      //   do.
+      // - If isSourcePrefix is true, we need to add it to sourceDirectories to track that.
+      //   Otherwise we don't need to add it at all.
+      // - We do not need to add it to dirPrefixes since the cwd is already handled in
+      //   getDisplayName().
+      auto& result = disk->getCurrent();
+      if (isSourcePrefix) {
+        kj::PathPtr key = path;
+        kj::Own<kj::ReadableDirectory> fakeOwn(&result, kj::NullDisposer::instance);
+        KJ_ASSERT(sourceDirectories.insert(std::make_pair(key,
+            SourceDirectory { kj::mv(path), kj::mv(fakeOwn), isSourcePrefix })).second);
+      }
+      return result;
+    }
+
+    KJ_IF_MAYBE(dir, disk->getRoot().tryOpenSubdir(path)) {
+      auto& result = *dir->get();
+      kj::PathPtr key = path;
+      KJ_ASSERT(sourceDirectories.insert(std::make_pair(key,
+          SourceDirectory { kj::mv(path), kj::mv(*dir), isSourcePrefix })).second);
+#if _WIN32
+      kj::String prefix = pathStr.endsWith("/") || pathStr.endsWith("\\")
+                        ? kj::str(pathStr) : kj::str(pathStr, '\\');
+#else
+      kj::String prefix = pathStr.endsWith("/") ? kj::str(pathStr) : kj::str(pathStr, '/');
+#endif
+      KJ_ASSERT(dirPrefixes.insert(std::make_pair(&result, kj::mv(prefix))).second);
+      return result;
+    } else {
+      return nullptr;
+    }
+  }
+
+  struct DirPathPair {
+    kj::ReadableDirectory& dir;
+    kj::Path path;
+  };
+
+  DirPathPair interpretSourceFile(kj::StringPtr pathStr) {
+    auto cwd = disk->getCurrentPath();
+    auto path = cwd.evalNative(pathStr);
+
+    KJ_REQUIRE(path.size() > 0);
+    for (size_t i = path.size() - 1; i > 0; i--) {
+      auto prefix = path.slice(0, i);
+      auto remainder = path.slice(i, path.size());
+
+      auto iter = sourceDirectories.find(prefix);
+      if (iter != sourceDirectories.end() && iter->second.isSourcePrefix) {
+        return { *iter->second.dir, remainder.clone() };
+      }
+    }
+
+    // No source prefix matched. Fall back to heuristic: try stripping the current directory,
+    // otherwise don't strip anything.
+    if (path.startsWith(cwd)) {
+      return { disk->getCurrent(), path.slice(cwd.size(), path.size()).clone() };
+    } else {
+      // Hmm, no src-prefix matched and the file isn't even in the current directory. This might
+      // be OK if we aren't generating any output anyway, but otherwise the results will almost
+      // certainly not be what the user wanted. Let's print a warning, unless the output directives
+      // are ones which we know do not produce output files. This is a hack.
+      for (auto& output: outputs) {
+        auto name = kj::str(output.name);
+        if (name != "-" && name != "capnp") {
+          context.warning(kj::str(pathStr,
+              ": File is not in the current directory and does not match any prefix defined with "
+              "--src-prefix. Please pass an appropriate --src-prefix so I can figure out where to "
+              "write the output for this file."));
+          break;
+        }
+      }
+
+      return { disk->getRoot(), kj::mv(path) };
+    }
+  }
+
+  kj::String getDisplayName(kj::ReadableDirectory& dir, kj::PathPtr path) {
+    auto iter = dirPrefixes.find(&dir);
+    if (iter != dirPrefixes.end()) {
+      return kj::str(iter->second, path.toNativeString());
+    } else if (&dir == &disk->getRoot()) {
+      return path.toNativeString(true);
+    } else if (&dir == &disk->getCurrent()) {
+      return path.toNativeString(false);
+    } else {
+      KJ_FAIL_ASSERT("unrecognized directory");
+    }
+  }
 };
 
 }  // namespace compiler
