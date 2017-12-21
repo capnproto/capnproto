@@ -194,10 +194,13 @@ if(BUILD_TESTING)
     test-import2.capnp
   )
 
-  # Add "/capnp" to match the path used to import the files in the test sources
-  set(CAPNPC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_capnp/capnp")
-  include_directories("${CMAKE_CURRENT_BINARY_DIR}/test_capnp")  # Note: no "/capnp"
+  set(CAPNPC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_capnp")
+  include_directories("${CAPNPC_OUTPUT_DIR}")
   file(MAKE_DIRECTORY "${CAPNPC_OUTPUT_DIR}")
+  # Tell capnp_generate_cpp to set --src-prefix to our parent directory. This allows us to pass our
+  # .capnp files relative to this directory, but have their canonical name end up as
+  # capnp/test.capnp, capnp/test-import.capnp, etc.
+  get_filename_component(CAPNPC_SRC_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 
   capnp_generate_cpp(test_capnp_cpp_files test_capnp_h_files ${test_capnp_files})
 

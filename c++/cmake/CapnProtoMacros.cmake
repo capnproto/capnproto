@@ -15,7 +15,7 @@
 #       Directory to place compiled schema sources (default: CMAKE_CURRENT_BINARY_DIR).
 #   CAPNPC_IMPORT_DIRS
 #       List of additional include directories for the schema compiler.
-#       (CMAKE_CURRENT_SOURCE_DIR and CAPNP_INCLUDE_DIRECTORY are always included.)
+#       (CAPNPC_SRC_PREFIX and CAPNP_INCLUDE_DIRECTORY are always included.)
 #   CAPNPC_SRC_PREFIX
 #       Schema file source prefix (default: CMAKE_CURRENT_SOURCE_DIR).
 #   CAPNPC_FLAGS
@@ -45,17 +45,6 @@ function(CAPNP_GENERATE_CPP SOURCES HEADERS)
     message(SEND_ERROR "Could not locate capnp header files (CAPNP_INCLUDE_DIRECTORY).")
   endif()
 
-  # Default compiler includes
-  set(include_path -I ${CMAKE_CURRENT_SOURCE_DIR} -I ${CAPNP_INCLUDE_DIRECTORY})
-
-  if(DEFINED CAPNPC_IMPORT_DIRS)
-    # Append each directory as a series of '-I' flags in ${include_path}
-    foreach(directory ${CAPNPC_IMPORT_DIRS})
-      get_filename_component(absolute_path "${directory}" ABSOLUTE)
-      list(APPEND include_path -I ${absolute_path})
-    endforeach()
-  endif()
-
   if(DEFINED CAPNPC_OUTPUT_DIR)
     # Prepend a ':' to get the format for the '-o' flag right
     set(output_dir ":${CAPNPC_OUTPUT_DIR}")
@@ -67,6 +56,22 @@ function(CAPNP_GENERATE_CPP SOURCES HEADERS)
     set(CAPNPC_SRC_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}")
   endif()
   get_filename_component(CAPNPC_SRC_PREFIX "${CAPNPC_SRC_PREFIX}" ABSOLUTE)
+
+  # Default compiler includes. Note that in capnp's own test usage of capnp_generate_cpp(), these
+  # two variables will end up evaluating to the same directory. However, it's difficult to
+  # deduplicate them because if CAPNP_INCLUDE_DIRECTORY came from the capnp_tool target property,
+  # then it must be a generator expression in order to handle usages in both the build tree and the
+  # install tree. This vastly overcomplicates duplication detection, so the duplication doesn't seem
+  # worth fixing.
+  set(include_path -I "${CAPNPC_SRC_PREFIX}" -I "${CAPNP_INCLUDE_DIRECTORY}")
+
+  if(DEFINED CAPNPC_IMPORT_DIRS)
+    # Append each directory as a series of '-I' flags in ${include_path}
+    foreach(directory ${CAPNPC_IMPORT_DIRS})
+      get_filename_component(absolute_path "${directory}" ABSOLUTE)
+      list(APPEND include_path -I "${absolute_path}")
+    endforeach()
+  endif()
 
   set(${SOURCES})
   set(${HEADERS})
