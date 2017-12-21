@@ -171,6 +171,12 @@ public:
   //   the colon, will become the first component of the path, e.g. "c:\foo" becomes {"c:", "foo"}.
   // - A network path like "\\host\share\path" is parsed as {"host", "share", "path"}.
 
+  Path evalNative(StringPtr pathText) const&;
+  Path evalNative(StringPtr pathText) &&;
+  // Alias for either eval() or evalWin32() depending on the target platform. Use this when you are
+  // parsing a path provided by a user and you want the user to be able to use the "natural" format
+  // for their platform.
+
   String toWin32String(bool absolute = false) const;
   // Converts the path to a Win32 path string, as you might display to a user.
   //
@@ -183,6 +189,11 @@ public:
   // This throws if the path would have unexpected special meaning or is otherwise invalid on
   // Windows, such as if it contains backslashes (within a path component), colons, or special
   // names like "con".
+
+  String toNativeString(bool absolute = false) const;
+  // Alias for either toString() or toWin32String() depending on the target platform. Use this when
+  // you are formatting a path to display to a user and you want to present it in the "natural"
+  // format for the user's platform.
 
   Array<wchar_t> forWin32Api(bool absolute) const;
   // Like toWin32String, but additionally:
@@ -257,7 +268,9 @@ public:
   bool startsWith(PathPtr prefix) const;
   bool endsWith(PathPtr suffix) const;
   Path evalWin32(StringPtr pathText) const;
+  Path evalNative(StringPtr pathText) const;
   String toWin32String(bool absolute = false) const;
+  String toNativeString(bool absolute = false) const;
   Array<wchar_t> forWin32Api(bool absolute) const;
   // Equivalent to the corresponding methods of `Path`.
 
@@ -985,6 +998,40 @@ inline bool PathPtr::operator>=(PathPtr other) const { return !(*this < other); 
 inline String PathPtr::toWin32String(bool absolute) const {
   return toWin32StringImpl(absolute, false);
 }
+
+#if _WIN32
+inline Path Path::evalNative(StringPtr pathText) const& {
+  return evalWin32(pathText);
+}
+inline Path Path::evalNative(StringPtr pathText) && {
+  return kj::mv(*this).evalWin32(pathText);
+}
+inline String Path::toNativeString(bool absolute) const {
+  return toWin32String(absolute);
+}
+inline Path PathPtr::evalNative(StringPtr pathText) const {
+  return evalWin32(pathText);
+}
+inline String PathPtr::toNativeString(bool absolute) const {
+  return toWin32String(absolute);
+}
+#else
+inline Path Path::evalNative(StringPtr pathText) const& {
+  return eval(pathText);
+}
+inline Path Path::evalNative(StringPtr pathText) && {
+  return kj::mv(*this).eval(pathText);
+}
+inline String Path::toNativeString(bool absolute) const {
+  return toString(absolute);
+}
+inline Path PathPtr::evalNative(StringPtr pathText) const {
+  return eval(pathText);
+}
+inline String PathPtr::toNativeString(bool absolute) const {
+  return toString(absolute);
+}
+#endif  // _WIN32, else
 
 inline Own<FsNode> FsNode::clone() { return cloneFsNode().downcast<FsNode>(); }
 inline Own<ReadableFile> ReadableFile::clone() { return cloneFsNode().downcast<ReadableFile>(); }
