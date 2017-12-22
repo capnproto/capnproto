@@ -19,13 +19,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include "memory.h"
-
 #ifndef KJ_REFCOUNT_H_
 #define KJ_REFCOUNT_H_
 
+#include "memory.h"
+
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
+#endif
+
+#if _MSC_VER
+#include <intrin0.h>
 #endif
 
 namespace kj {
@@ -110,14 +114,32 @@ Own<T> Refcounted::addRefInternal(T* object) {
 //
 // Warning: Atomic ops are SLOW.
 
+#if _MSC_VER
+#if _M_ARM
+#define KJ_MSVC_INTERLOCKED(OP, MEM) _Interlocked##OP##_##MEM
+#else
+#define KJ_MSVC_INTERLOCKED(OP, MEM) _Interlocked##OP
+#endif
+#endif
+
 class AtomicRefcounted: private kj::Disposer {
 public:
   virtual ~AtomicRefcounted() noexcept(false);
 
-  inline bool isShared() const { return __atomic_load_n(&refcount, __ATOMIC_ACQUIRE) > 1; }
+  inline bool isShared() const {
+#if _MSC_VER
+    KJ_MSVC_INTERLOCKED(Or, acq)(&refcount, 0) > 1;
+#else
+    return __atomic_load_n(&refcount, __ATOMIC_ACQUIRE) > 1;
+#endif
+  }
 
 private:
-  mutable uint refcount = 0;
+#if _MSC_VER
+  mutable volatile long refcount = 0;
+#else
+  mutable volatile uint refcount = 0;
+#endif
 
   bool addRefWeakInternal() const;
 
@@ -174,14 +196,22 @@ kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object) {
 template <typename T>
 kj::Own<T> AtomicRefcounted::addRefInternal(T* object) {
   AtomicRefcounted* refcounted = object;
+#if _MSC_VER
+  KJ_MSVC_INTERLOCKED(Increment, nf)(&refcounted->refcount);
+#else
   __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
+#endif
   return kj::Own<T>(object, *refcounted);
 }
 
 template <typename T>
 kj::Own<const T> AtomicRefcounted::addRefInternal(const T* object) {
   const AtomicRefcounted* refcounted = object;
+#if _MSC_VER
+  KJ_MSVC_INTERLOCKED(Increment, nf)(&refcounted->refcount);
+#else
   __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
+#endif
   return kj::Own<const T>(object, *refcounted);
 }
 

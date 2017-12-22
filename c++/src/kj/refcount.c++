@@ -21,7 +21,13 @@
 
 #include "refcount.h"
 #include "debug.h"
-#include <memory>
+
+#if _MSC_VER
+// Annoyingly, MSVC only implements the C++ atomic libs, not the C libs, so the only useful
+// thing we can get from <atomic> seems to be atomic_thread_fence... but that one function is
+// indeed not implemented by the intrinsics, so...
+#include <atomic>
+#endif
 
 namespace kj {
 
@@ -46,15 +52,39 @@ AtomicRefcounted::~AtomicRefcounted() noexcept(false) {
 }
 
 void AtomicRefcounted::disposeImpl(void* pointer) const {
+#if _MSC_VER
+  if (KJ_MSVC_INTERLOCKED(Decrement, rel)(&refcount) == 0) {
+    std::atomic_thread_fence(std::memory_order_acquire);
+    delete this;
+  }
+#else
   if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
     delete this;
   }
+#endif
 }
 
 bool AtomicRefcounted::addRefWeakInternal() const {
+#if _MSC_VER
+  long orig = refcount;
+
   for (;;) {
-    uint orig = __atomic_load_n(&refcount, __ATOMIC_RELAXED);
+    if (orig == 0) {
+      // Refcount already hit zero. Destructor is already running so we can't revive the object.
+      return false;
+    }
+
+    unsigned long old = KJ_MSVC_INTERLOCKED(CompareExchange, nf)(&refcount, orig + 1, orig);
+    if (old == orig) {
+      return true;
+    }
+    orig = old;
+  }
+#else
+  uint orig = __atomic_load_n(&refcount, __ATOMIC_RELAXED);
+
+  for (;;) {
     if (orig == 0) {
       // Refcount already hit zero. Destructor is already running so we can't revive the object.
       return false;
@@ -66,6 +96,7 @@ bool AtomicRefcounted::addRefWeakInternal() const {
       return true;
     }
   }
+#endif
 }
 
 }  // namespace kj
