@@ -171,11 +171,11 @@ struct SchemaParser::DiskFileCompat {
   struct ImportDir {
     kj::String pathStr;
     kj::Path path;
-    kj::Own<kj::ReadableDirectory> dir;
+    kj::Own<const kj::ReadableDirectory> dir;
   };
   std::map<kj::StringPtr, ImportDir> cachedImportDirs;
 
-  std::map<std::pair<const kj::StringPtr*, size_t>, kj::Array<kj::ReadableDirectory*>>
+  std::map<std::pair<const kj::StringPtr*, size_t>, kj::Array<const kj::ReadableDirectory*>>
       cachedImportPaths;
 
   DiskFileCompat(): ownFs(kj::newDiskFilesystem()), fs(*ownFs) {}
@@ -195,8 +195,8 @@ SchemaParser::SchemaParser(): impl(kj::heap<Impl>()) {}
 SchemaParser::~SchemaParser() noexcept(false) {}
 
 ParsedSchema SchemaParser::parseFromDirectory(
-    kj::ReadableDirectory& baseDir, kj::Path path,
-    kj::ArrayPtr<kj::ReadableDirectory* const> importPath) const {
+    const kj::ReadableDirectory& baseDir, kj::Path path,
+    kj::ArrayPtr<const kj::ReadableDirectory* const> importPath) const {
   return parseFile(SchemaFile::newFromDirectory(baseDir, kj::mv(path), importPath));
 }
 
@@ -214,24 +214,24 @@ ParsedSchema SchemaParser::parseDiskFile(
   auto& root = compat->fs.getRoot();
   auto cwd = compat->fs.getCurrentPath();
 
-  kj::ReadableDirectory* baseDir = &root;
+  const kj::ReadableDirectory* baseDir = &root;
   kj::Path path = cwd.evalNative(diskPath);
 
-  kj::ArrayPtr<kj::ReadableDirectory* const> translatedImportPath = nullptr;
+  kj::ArrayPtr<const kj::ReadableDirectory* const> translatedImportPath = nullptr;
 
   if (importPath.size() > 0) {
     auto importPathKey = std::make_pair(importPath.begin(), importPath.size());
     auto& slot = compat->cachedImportPaths[importPathKey];
 
     if (slot == nullptr) {
-      slot = KJ_MAP(path, importPath) -> kj::ReadableDirectory* {
+      slot = KJ_MAP(path, importPath) -> const kj::ReadableDirectory* {
         auto iter = compat->cachedImportDirs.find(path);
         if (iter != compat->cachedImportDirs.end()) {
           return iter->second.dir;
         }
 
         auto parsed = cwd.evalNative(path);
-        kj::Own<kj::ReadableDirectory> dir;
+        kj::Own<const kj::ReadableDirectory> dir;
         KJ_IF_MAYBE(d, root.tryOpenSubdir(parsed)) {
           dir = kj::mv(*d);
         } else {
@@ -239,7 +239,7 @@ ParsedSchema SchemaParser::parseDiskFile(
           dir = kj::newInMemoryDirectory(kj::nullClock());
         }
 
-        kj::ReadableDirectory* result = dir;
+        const kj::ReadableDirectory* result = dir;
 
         kj::StringPtr pathRef = path;
         KJ_ASSERT(compat->cachedImportDirs.insert(std::make_pair(pathRef,
@@ -336,9 +336,9 @@ schema::Node::SourceInfo::Reader ParsedSchema::getSourceInfo() const {
 
 class SchemaFile::DiskSchemaFile final: public SchemaFile {
 public:
-  DiskSchemaFile(kj::ReadableDirectory& baseDir, kj::Path pathParam,
-                 kj::ArrayPtr<kj::ReadableDirectory* const> importPath,
-                 kj::Own<kj::ReadableFile> file,
+  DiskSchemaFile(const kj::ReadableDirectory& baseDir, kj::Path pathParam,
+                 kj::ArrayPtr<const kj::ReadableDirectory* const> importPath,
+                 kj::Own<const kj::ReadableFile> file,
                  kj::Maybe<kj::String> displayNameOverride)
       : baseDir(baseDir), path(kj::mv(pathParam)), importPath(importPath), file(kj::mv(file)) {
     KJ_IF_MAYBE(dn, displayNameOverride) {
@@ -355,12 +355,7 @@ public:
   }
 
   kj::Array<const char> readContent() const override {
-    auto lock = file.lockExclusive();
-    // TODO(soon): Should we say that KJ files must be thread-safe and mark all the methods const?
-    //   The disk-based implementations are already thread-safe. The in-memory implementations
-    //   are not thread-safe, in fact they are thread-hostile currently due to the non-threadsafe
-    //   refcounting.
-    return lock->get()->mmap(0, lock->get()->stat().size).releaseAsChars();
+    return file->mmap(0, file->stat().size).releaseAsChars();
   }
 
   kj::Maybe<kj::Own<SchemaFile>> import(kj::StringPtr target) const override {
@@ -422,17 +417,17 @@ public:
   }
 
 private:
-  kj::ReadableDirectory& baseDir;
+  const kj::ReadableDirectory& baseDir;
   kj::Path path;
-  kj::ArrayPtr<kj::ReadableDirectory* const> importPath;
-  kj::MutexGuarded<kj::Own<kj::ReadableFile>> file;
+  kj::ArrayPtr<const kj::ReadableDirectory* const> importPath;
+  kj::Own<const kj::ReadableFile> file;
   kj::String displayName;
   bool displayNameOverridden;
 };
 
 kj::Own<SchemaFile> SchemaFile::newFromDirectory(
-    kj::ReadableDirectory& baseDir, kj::Path path,
-    kj::ArrayPtr<kj::ReadableDirectory* const> importPath,
+    const kj::ReadableDirectory& baseDir, kj::Path path,
+    kj::ArrayPtr<const kj::ReadableDirectory* const> importPath,
     kj::Maybe<kj::String> displayNameOverride) {
   return kj::heap<DiskSchemaFile>(baseDir, kj::mv(path), importPath, baseDir.openFile(path),
                                   kj::mv(displayNameOverride));

@@ -44,8 +44,9 @@ public:
   SchemaParser();
   ~SchemaParser() noexcept(false);
 
-  ParsedSchema parseFromDirectory(kj::ReadableDirectory& baseDir, kj::Path path,
-                                  kj::ArrayPtr<kj::ReadableDirectory* const> importPath) const;
+  ParsedSchema parseFromDirectory(
+      const kj::ReadableDirectory& baseDir, kj::Path path,
+      kj::ArrayPtr<const kj::ReadableDirectory* const> importPath) const;
   // Parse a file from the KJ filesystem API.  Throws an exception if the file dosen't exist.
   //
   // `baseDir` and `path` are used together to resolve relative imports. `path` is the source
@@ -197,8 +198,8 @@ public:
   //   kj::ReadableDirectory, or using kj::newInMemoryDirectory().
 
   static kj::Own<SchemaFile> newFromDirectory(
-      kj::ReadableDirectory& baseDir, kj::Path path,
-      kj::ArrayPtr<kj::ReadableDirectory* const> importPath,
+      const kj::ReadableDirectory& baseDir, kj::Path path,
+      kj::ArrayPtr<const kj::ReadableDirectory* const> importPath,
       kj::Maybe<kj::String> displayNameOverride = nullptr);
   // Construct a SchemaFile representing a file in a kj::ReadableDirectory. This is used to
   // implement SchemaParser::parseFromDirectory(); see there for details.

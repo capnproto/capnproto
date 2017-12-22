@@ -43,14 +43,14 @@ public:
         ->writeAll(content);
   }
 
-  kj::Directory& getRoot() override { return *root; }
-  kj::Directory& getCurrent() override { return *current; }
-  kj::PathPtr getCurrentPath() override { return cwd; }
+  const kj::Directory& getRoot() const override { return *root; }
+  const kj::Directory& getCurrent() const override { return *current; }
+  kj::PathPtr getCurrentPath() const override { return cwd; }
 
 private:
-  kj::Own<kj::Directory> root = kj::newInMemoryDirectory(kj::nullClock());
+  kj::Own<const kj::Directory> root = kj::newInMemoryDirectory(kj::nullClock());
   kj::Path cwd = kj::Path({}).evalNative(ABS("path/to/current/dir"));
-  kj::Own<kj::Directory> current = root->openSubdir(cwd,
+  kj::Own<const kj::Directory> current = root->openSubdir(cwd,
       kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT);
 };
 
