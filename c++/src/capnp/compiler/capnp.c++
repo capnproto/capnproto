@@ -421,7 +421,7 @@ public:
       if (stat(dir.cStr(), &stats) < 0 || !S_ISDIR(stats.st_mode)) {
         return "output location is inaccessible or is not a directory";
       }
-      outputs.add(OutputDirective { plugin, disk->getCurrentPath().eval(dir) });
+      outputs.add(OutputDirective { plugin, disk->getCurrentPath().evalNative(dir) });
     } else {
       outputs.add(OutputDirective { spec.asArray(), nullptr });
     }
