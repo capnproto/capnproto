@@ -441,13 +441,19 @@ public:
     void changed(ArrayPtr<byte> slice) override {
       KJ_REQUIRE(slice.begin() >= bytes.begin() && slice.end() <= bytes.end(),
                  "byte range is not part of this mapping");
-      KJ_SYSCALL(msync(slice.begin(), slice.size(), MS_ASYNC));
+
+      // msync() requires page-alignment, apparently, so use getMmapRange() to accomplish that.
+      auto range = getMmapRange(reinterpret_cast<uintptr_t>(slice.begin()), slice.size());
+      KJ_SYSCALL(msync(reinterpret_cast<void*>(range.offset), range.size, MS_ASYNC));
     }
 
     void sync(ArrayPtr<byte> slice) override {
       KJ_REQUIRE(slice.begin() >= bytes.begin() && slice.end() <= bytes.end(),
                  "byte range is not part of this mapping");
-      KJ_SYSCALL(msync(slice.begin(), slice.size(), MS_SYNC));
+
+      // msync() requires page-alignment, apparently, so use getMmapRange() to accomplish that.
+      auto range = getMmapRange(reinterpret_cast<uintptr_t>(slice.begin()), slice.size());
+      KJ_SYSCALL(msync(reinterpret_cast<void*>(range.offset), range.size, MS_SYNC));
     }
 
   private:
