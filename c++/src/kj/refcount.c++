@@ -25,6 +25,9 @@
 
 namespace kj {
 
+// =======================================================================================
+// Non-atomic (thread-unsafe) refcounting
+
 Refcounted::~Refcounted() noexcept(false) {
   KJ_ASSERT(refcount == 0, "Refcounted object deleted with non-zero refcount.");
 }
@@ -32,6 +35,36 @@ Refcounted::~Refcounted() noexcept(false) {
 void Refcounted::disposeImpl(void* pointer) const {
   if (--refcount == 0) {
     delete this;
+  }
+}
+
+// =======================================================================================
+// Atomic (thread-safe) refcounting
+
+AtomicRefcounted::~AtomicRefcounted() noexcept(false) {
+  KJ_ASSERT(refcount == 0, "Refcounted object deleted with non-zero refcount.");
+}
+
+void AtomicRefcounted::disposeImpl(void* pointer) const {
+  if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    delete this;
+  }
+}
+
+bool AtomicRefcounted::addRefWeakInternal() const {
+  for (;;) {
+    uint orig = __atomic_load_n(&refcount, __ATOMIC_RELAXED);
+    if (orig == 0) {
+      // Refcount already hit zero. Destructor is already running so we can't revive the object.
+      return false;
+    }
+
+    if (__atomic_compare_exchange_n(&refcount, &orig, orig + 1, true,
+        __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+      // Successfully incremented refcount without letting it hit zero.
+      return true;
+    }
   }
 }
 

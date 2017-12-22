@@ -30,6 +30,9 @@
 
 namespace kj {
 
+// =======================================================================================
+// Non-atomic (thread-unsafe) refcounting
+
 class Refcounted: private Disposer {
   // Subclass this to create a class that contains a reference count. Then, use
   // `kj::refcounted<T>()` to allocate a new refcounted pointer.
@@ -100,6 +103,86 @@ Own<T> Refcounted::addRefInternal(T* object) {
   Refcounted* refcounted = object;
   ++refcounted->refcount;
   return Own<T>(object, *refcounted);
+}
+
+// =======================================================================================
+// Atomic (thread-safe) refcounting
+//
+// Warning: Atomic ops are SLOW.
+
+class AtomicRefcounted: private kj::Disposer {
+public:
+  virtual ~AtomicRefcounted() noexcept(false);
+
+  inline bool isShared() const { return __atomic_load_n(&refcount, __ATOMIC_ACQUIRE) > 1; }
+
+private:
+  mutable uint refcount = 0;
+
+  bool addRefWeakInternal() const;
+
+  void disposeImpl(void* pointer) const override;
+  template <typename T>
+  static kj::Own<T> addRefInternal(T* object);
+  template <typename T>
+  static kj::Own<const T> addRefInternal(const T* object);
+
+  template <typename T>
+  friend kj::Own<T> atomicAddRef(T& object);
+  template <typename T>
+  friend kj::Own<const T> atomicAddRef(const T& object);
+  template <typename T>
+  friend kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object);
+  template <typename T, typename... Params>
+  friend kj::Own<T> atomicRefcounted(Params&&... params);
+};
+
+template <typename T, typename... Params>
+inline kj::Own<T> atomicRefcounted(Params&&... params) {
+  return AtomicRefcounted::addRefInternal(new T(kj::fwd<Params>(params)...));
+}
+
+template <typename T>
+kj::Own<T> atomicAddRef(T& object) {
+  KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0, "Object not allocated with kj::refcounted().");
+  return AtomicRefcounted::addRefInternal(&object);
+}
+
+template <typename T>
+kj::Own<const T> atomicAddRef(const T& object) {
+  KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0, "Object not allocated with kj::refcounted().");
+  return AtomicRefcounted::addRefInternal(&object);
+}
+
+template <typename T>
+kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object) {
+  // Try to addref an object whose refcount could have already reached zero in another thread, and
+  // whose destructor could therefore already have started executing. The destructor must contain
+  // some synchronization that guarantees that said destructor has not yet completed when
+  // attomicAddRefWeak() is called (so that the object is still valid). Since the destructor cannot
+  // be canceled once it has started, in the case that it has already started, this function
+  // returns nullptr.
+
+  const AtomicRefcounted* refcounted = &object;
+  if (refcounted->addRefWeakInternal()) {
+    return kj::Own<const T>(&object, *refcounted);
+  } else {
+    return nullptr;
+  }
+}
+
+template <typename T>
+kj::Own<T> AtomicRefcounted::addRefInternal(T* object) {
+  AtomicRefcounted* refcounted = object;
+  __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
+  return kj::Own<T>(object, *refcounted);
+}
+
+template <typename T>
+kj::Own<const T> AtomicRefcounted::addRefInternal(const T* object) {
+  const AtomicRefcounted* refcounted = object;
+  __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
+  return kj::Own<const T>(object, *refcounted);
 }
 
 }  // namespace kj
