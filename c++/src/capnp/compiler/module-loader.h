@@ -45,10 +45,10 @@ public:
 
   ~ModuleLoader() noexcept(false);
 
-  void addImportPath(kj::ReadableDirectory& dir);
+  void addImportPath(const kj::ReadableDirectory& dir);
   // Add a directory to the list of paths that is searched for imports that start with a '/'.
 
-  kj::Maybe<Module&> loadModule(kj::ReadableDirectory& dir, kj::PathPtr path);
+  kj::Maybe<Module&> loadModule(const kj::ReadableDirectory& dir, kj::PathPtr path);
   // Tries to load a module with the given path inside the given directory. Returns nullptr if the
   // file doesn't exist.
 

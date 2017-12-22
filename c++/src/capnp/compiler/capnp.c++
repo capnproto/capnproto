@@ -1716,7 +1716,7 @@ public:
 public:
   // =====================================================================================
 
-  void addError(kj::ReadableDirectory& directory, kj::PathPtr path,
+  void addError(const kj::ReadableDirectory& directory, kj::PathPtr path,
                 SourcePos start, SourcePos end,
                 kj::StringPtr message) override {
     auto file = getDisplayName(directory, path);
@@ -1761,7 +1761,7 @@ private:
 
   struct SourceDirectory {
     kj::Path path;
-    kj::Own<kj::ReadableDirectory> dir;
+    kj::Own<const kj::ReadableDirectory> dir;
     bool isSourcePrefix;
   };
 
@@ -1770,7 +1770,7 @@ private:
   //
   // Use via getSourceDirectory().
 
-  std::map<kj::ReadableDirectory*, kj::String> dirPrefixes;
+  std::map<const kj::ReadableDirectory*, kj::String> dirPrefixes;
   // For each open directory object, maps to a path prefix to add when displaying this path in
   // error messages. This keeps track of the original directory name as given by the user, before
   // canonicalization.
@@ -1813,7 +1813,7 @@ private:
 
   bool hadErrors_ = false;
 
-  kj::Maybe<kj::ReadableDirectory&> getSourceDirectory(
+  kj::Maybe<const kj::ReadableDirectory&> getSourceDirectory(
       kj::StringPtr pathStr, bool isSourcePrefix) {
     auto cwd = disk->getCurrentPath();
     auto path = cwd.evalNative(pathStr);
@@ -1837,7 +1837,7 @@ private:
       auto& result = disk->getCurrent();
       if (isSourcePrefix) {
         kj::PathPtr key = path;
-        kj::Own<kj::ReadableDirectory> fakeOwn(&result, kj::NullDisposer::instance);
+        kj::Own<const kj::ReadableDirectory> fakeOwn(&result, kj::NullDisposer::instance);
         KJ_ASSERT(sourceDirectories.insert(std::make_pair(key,
             SourceDirectory { kj::mv(path), kj::mv(fakeOwn), isSourcePrefix })).second);
       }
@@ -1863,7 +1863,7 @@ private:
   }
 
   struct DirPathPair {
-    kj::ReadableDirectory& dir;
+    const kj::ReadableDirectory& dir;
     kj::Path path;
   };
 
@@ -1906,7 +1906,7 @@ private:
     }
   }
 
-  kj::String getDisplayName(kj::ReadableDirectory& dir, kj::PathPtr path) {
+  kj::String getDisplayName(const kj::ReadableDirectory& dir, kj::PathPtr path) {
     auto iter = dirPrefixes.find(&dir);
     if (iter != dirPrefixes.end()) {
       return kj::str(iter->second, path.toNativeString());

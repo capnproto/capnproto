@@ -42,20 +42,20 @@ struct FileKey {
   //
   // This is probably over-engineered.
 
-  kj::ReadableDirectory& baseDir;
+  const kj::ReadableDirectory& baseDir;
   kj::PathPtr path;
-  kj::ReadableFile* file;  // should be Maybe<ReadableFile&> but annoying const-copy issues come up.
+  kj::Maybe<const kj::ReadableFile&> file;
   uint64_t hashCode;
   uint64_t size;
   kj::Date lastModified;
 
-  FileKey(kj::ReadableDirectory& baseDir, kj::PathPtr path)
+  FileKey(const kj::ReadableDirectory& baseDir, kj::PathPtr path)
       : baseDir(baseDir), path(path), file(nullptr),
         hashCode(0), size(0), lastModified(kj::UNIX_EPOCH) {}
-  FileKey(kj::ReadableDirectory& baseDir, kj::PathPtr path, kj::ReadableFile& file)
+  FileKey(const kj::ReadableDirectory& baseDir, kj::PathPtr path, const kj::ReadableFile& file)
       : FileKey(baseDir, path, file, file.stat()) {}
 
-  FileKey(kj::ReadableDirectory& baseDir, kj::PathPtr path, kj::ReadableFile& file,
+  FileKey(const kj::ReadableDirectory& baseDir, kj::PathPtr path, const kj::ReadableFile& file,
           kj::FsNode::Metadata meta)
       : baseDir(baseDir), path(path), file(&file),
         hashCode(meta.hashCode), size(meta.size), lastModified(meta.lastModified) {}
@@ -77,8 +77,8 @@ struct FileKey {
     // Same file hash, but different paths, but same size and modification date. This could be a
     // case of two different import paths overlapping and containing the same file. We'll need to
     // check the content.
-    auto mapping1 = file->mmap(0, size);
-    auto mapping2 = other.file->mmap(0, size);
+    auto mapping1 = KJ_ASSERT_NONNULL(file).mmap(0, size);
+    auto mapping2 = KJ_ASSERT_NONNULL(other.file).mmap(0, size);
     if (memcmp(mapping1.begin(), mapping2.begin(), size) != 0) return false;
 
     if (path == other.path) {
@@ -127,26 +127,26 @@ public:
   Impl(GlobalErrorReporter& errorReporter)
       : errorReporter(errorReporter) {}
 
-  void addImportPath(kj::ReadableDirectory& dir) {
+  void addImportPath(const kj::ReadableDirectory& dir) {
     searchPath.add(&dir);
   }
 
-  kj::Maybe<Module&> loadModule(kj::ReadableDirectory& dir, kj::PathPtr path);
+  kj::Maybe<Module&> loadModule(const kj::ReadableDirectory& dir, kj::PathPtr path);
   kj::Maybe<Module&> loadModuleFromSearchPath(kj::PathPtr path);
-  kj::Maybe<kj::Array<const byte>> readEmbed(kj::ReadableDirectory& dir, kj::PathPtr path);
+  kj::Maybe<kj::Array<const byte>> readEmbed(const kj::ReadableDirectory& dir, kj::PathPtr path);
   kj::Maybe<kj::Array<const byte>> readEmbedFromSearchPath(kj::PathPtr path);
   GlobalErrorReporter& getErrorReporter() { return errorReporter; }
 
 private:
   GlobalErrorReporter& errorReporter;
-  kj::Vector<kj::ReadableDirectory*> searchPath;
+  kj::Vector<const kj::ReadableDirectory*> searchPath;
   std::unordered_map<FileKey, kj::Own<Module>, FileKeyHash> modules;
 };
 
 class ModuleLoader::ModuleImpl final: public Module {
 public:
-  ModuleImpl(ModuleLoader::Impl& loader, kj::Own<kj::ReadableFile> file,
-             kj::ReadableDirectory& sourceDir, kj::Path pathParam)
+  ModuleImpl(ModuleLoader::Impl& loader, kj::Own<const kj::ReadableFile> file,
+             const kj::ReadableDirectory& sourceDir, kj::Path pathParam)
       : loader(loader), file(kj::mv(file)), sourceDir(sourceDir), path(kj::mv(pathParam)),
         sourceNameStr(path.toString()) {
     KJ_REQUIRE(path.size() > 0);
@@ -205,8 +205,8 @@ public:
 
 private:
   ModuleLoader::Impl& loader;
-  kj::Own<kj::ReadableFile> file;
-  kj::ReadableDirectory& sourceDir;
+  kj::Own<const kj::ReadableFile> file;
+  const kj::ReadableDirectory& sourceDir;
   kj::Path path;
   kj::String sourceNameStr;
 
@@ -217,7 +217,7 @@ private:
 // =======================================================================================
 
 kj::Maybe<Module&> ModuleLoader::Impl::loadModule(
-    kj::ReadableDirectory& dir, kj::PathPtr path) {
+    const kj::ReadableDirectory& dir, kj::PathPtr path) {
   auto iter = modules.find(FileKey(dir, path));
   if (iter != modules.end()) {
     // Return existing file.
@@ -252,7 +252,7 @@ kj::Maybe<Module&> ModuleLoader::Impl::loadModuleFromSearchPath(kj::PathPtr path
 }
 
 kj::Maybe<kj::Array<const byte>> ModuleLoader::Impl::readEmbed(
-    kj::ReadableDirectory& dir, kj::PathPtr path) {
+    const kj::ReadableDirectory& dir, kj::PathPtr path) {
   KJ_IF_MAYBE(file, dir.tryOpenFile(path)) {
     return file->get()->mmap(0, file->get()->stat().size);
   }
@@ -274,11 +274,11 @@ ModuleLoader::ModuleLoader(GlobalErrorReporter& errorReporter)
     : impl(kj::heap<Impl>(errorReporter)) {}
 ModuleLoader::~ModuleLoader() noexcept(false) {}
 
-void ModuleLoader::addImportPath(kj::ReadableDirectory& dir) {
+void ModuleLoader::addImportPath(const kj::ReadableDirectory& dir) {
   impl->addImportPath(dir);
 }
 
-kj::Maybe<Module&> ModuleLoader::loadModule(kj::ReadableDirectory& dir, kj::PathPtr path) {
+kj::Maybe<Module&> ModuleLoader::loadModule(const kj::ReadableDirectory& dir, kj::PathPtr path) {
   return impl->loadModule(dir, path);
 }
 

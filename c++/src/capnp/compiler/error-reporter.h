@@ -69,7 +69,7 @@ public:
     uint column;
   };
 
-  virtual void addError(kj::ReadableDirectory& directory, kj::PathPtr path,
+  virtual void addError(const kj::ReadableDirectory& directory, kj::PathPtr path,
                         SourcePos start, SourcePos end,
                         kj::StringPtr message) = 0;
   // Report an error at the given location in the given file.
