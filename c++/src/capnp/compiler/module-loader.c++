@@ -27,10 +27,100 @@
 #include <kj/debug.h>
 #include <kj/io.h>
 #include <capnp/message.h>
-#include <map>
+#include <unordered_map>
 
 namespace capnp {
 namespace compiler {
+
+namespace {
+
+struct FileKey {
+  // Key type for the modules map. We need to implement some complicated heuristics to detect when
+  // two files are actually the same underlying file on disk, in order to handle the case where
+  // people have mapped the same file into multiple locations in the import tree, whether by
+  // passing overlapping import paths, weird symlinks, or whatever.
+  //
+  // This is probably over-engineered.
+
+  kj::ReadableDirectory& baseDir;
+  kj::PathPtr path;
+  kj::ReadableFile* file;  // should be Maybe<ReadableFile&> but annoying const-copy issues come up.
+  uint64_t hashCode;
+  uint64_t size;
+  kj::Date lastModified;
+
+  FileKey(kj::ReadableDirectory& baseDir, kj::PathPtr path)
+      : baseDir(baseDir), path(path), file(nullptr),
+        hashCode(0), size(0), lastModified(kj::UNIX_EPOCH) {}
+  FileKey(kj::ReadableDirectory& baseDir, kj::PathPtr path, kj::ReadableFile& file)
+      : FileKey(baseDir, path, file, file.stat()) {}
+
+  FileKey(kj::ReadableDirectory& baseDir, kj::PathPtr path, kj::ReadableFile& file,
+          kj::FsNode::Metadata meta)
+      : baseDir(baseDir), path(path), file(&file),
+        hashCode(meta.hashCode), size(meta.size), lastModified(meta.lastModified) {}
+
+  bool operator==(const FileKey& other) const {
+    // Allow matching on baseDir and path without a file.
+    if (&baseDir == &other.baseDir && path == other.path) return true;
+    if (file == nullptr || other.file == nullptr) return false;
+
+    // Try comparing various file metadata to rule out obvious differences.
+    if (hashCode != other.hashCode) return false;
+    if (size != other.size || lastModified != other.lastModified) return false;
+    if (path.size() > 0 && other.path.size() > 0 &&
+        path[path.size() - 1] != other.path[other.path.size() - 1]) {
+      // Names differ, so probably not the same file.
+      return false;
+    }
+
+    // Same file hash, but different paths, but same size and modification date. This could be a
+    // case of two different import paths overlapping and containing the same file. We'll need to
+    // check the content.
+    auto mapping1 = file->mmap(0, size);
+    auto mapping2 = other.file->mmap(0, size);
+    if (memcmp(mapping1.begin(), mapping2.begin(), size) != 0) return false;
+
+    if (path == other.path) {
+      // Exactly the same content was mapped at exactly the same path relative to two different
+      // import directories. This can only really happen if this was one of the files passed on
+      // the command line, but its --src-prefix is not also an import path, but some other
+      // directory containing the same file was given as an import path. Whatever, we'll ignore
+      // this.
+      return true;
+    }
+
+    // Exactly the same content!
+    static bool warned = false;
+    if (!warned) {
+      KJ_LOG(WARNING,
+          "Found exactly the same source file mapped at two different paths. This suggests "
+          "that your -I and --src-prefix flags are overlapping or inconsistent. Remember, these "
+          "flags should only specify directories that are logical 'roots' of the source tree. "
+          "It should never be the case that one of the import directories contains another one of "
+          "them.",
+          path, other.path);
+      warned = true;
+    }
+
+    return true;
+  }
+};
+
+struct FileKeyHash {
+  size_t operator()(const FileKey& key) const {
+    if (sizeof(size_t) < sizeof(key.hashCode)) {
+      // 32-bit system, do more mixing
+      return (key.hashCode >> 32) * 31 + static_cast<size_t>(key.hashCode) +
+          key.size * 103 + (key.lastModified - kj::UNIX_EPOCH) / kj::MILLISECONDS * 73;
+    } else {
+      return key.hashCode + key.size * 103 +
+          (key.lastModified - kj::UNIX_EPOCH) / kj::NANOSECONDS * 73;
+    }
+  }
+};
+
+};
 
 class ModuleLoader::Impl {
 public:
@@ -50,14 +140,14 @@ public:
 private:
   GlobalErrorReporter& errorReporter;
   kj::Vector<kj::ReadableDirectory*> searchPath;
-  std::map<std::pair<kj::ReadableDirectory*, kj::PathPtr>, kj::Own<Module>> modules;
+  std::unordered_map<FileKey, kj::Own<Module>, FileKeyHash> modules;
 };
 
 class ModuleLoader::ModuleImpl final: public Module {
 public:
   ModuleImpl(ModuleLoader::Impl& loader, kj::Own<kj::ReadableFile> file,
-             kj::ReadableDirectory& sourceDir, kj::PathPtr path)
-      : loader(loader), file(kj::mv(file)), sourceDir(sourceDir), path(path.clone()),
+             kj::ReadableDirectory& sourceDir, kj::Path pathParam)
+      : loader(loader), file(kj::mv(file)), sourceDir(sourceDir), path(kj::mv(pathParam)),
         sourceNameStr(path.toString()) {
     KJ_REQUIRE(path.size() > 0);
   }
@@ -128,17 +218,24 @@ private:
 
 kj::Maybe<Module&> ModuleLoader::Impl::loadModule(
     kj::ReadableDirectory& dir, kj::PathPtr path) {
-  auto iter = modules.find(std::make_pair(&dir, path));
+  auto iter = modules.find(FileKey(dir, path));
   if (iter != modules.end()) {
     // Return existing file.
     return *iter->second;
   }
 
   KJ_IF_MAYBE(file, dir.tryOpenFile(path)) {
-    auto module = kj::heap<ModuleImpl>(*this, kj::mv(*file), dir, path);
+    auto pathCopy = path.clone();
+    auto key = FileKey(dir, pathCopy, **file);
+    auto module = kj::heap<ModuleImpl>(*this, kj::mv(*file), dir, kj::mv(pathCopy));
     auto& result = *module;
-    modules.insert(std::make_pair(std::make_pair(&dir, result.getPath()), kj::mv(module)));
-    return result;
+    auto insertResult = modules.insert(std::make_pair(key, kj::mv(module)));
+    if (insertResult.second) {
+      return result;
+    } else {
+      // Now that we have the file open, we noticed a collision. Return the old file.
+      return *insertResult.first->second;
+    }
   } else {
     // No such file.
     return nullptr;
