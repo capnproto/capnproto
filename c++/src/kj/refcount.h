@@ -29,7 +29,11 @@
 #endif
 
 #if _MSC_VER
+#if _MSC_VER < 1910
+#include <intrin.h>
+#else
 #include <intrin0.h>
+#endif
 #endif
 
 namespace kj {
