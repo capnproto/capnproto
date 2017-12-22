@@ -341,16 +341,37 @@ public:
     uint linkCount = 1;
     // Number of hard links pointing to this node.
 
+    uint64_t hashCode = 0;
+    // Hint which can be used to determine if two FsNode instances point to the same underlying
+    // file object. If two FsNodes report different hashCodes, then they are not the same object.
+    // If they report the same hashCode, then they may or may not be teh same object.
+    //
+    // The Unix filesystem implementation builds the hashCode based on st_dev and st_ino of
+    // `struct stat`. However, note that some filesystems -- especially FUSE-based -- may not fill
+    // in st_ino.
+    //
+    // The Windows filesystem implementation builds the hashCode based on dwVolumeSerialNumber and
+    // dwFileIndex{Low,High} of the BY_HANDLE_FILE_INFORMATION structure. However, these are again
+    // not guaranteed to be unique on all filesystems. In particular the documentation says that
+    // ReFS uses 128-bit identifiers which can't be represented here, and again virtual filesystems
+    // may often not report real identifiers.
+    //
+    // Of course, the process of hashing values into a single hash code can also cause collisions
+    // even if the filesystem reports reliable information.
+    //
+    // Additionally note that this value is not reliable when returned by `lstat()`. You should
+    // actually open the object, then call `stat()` on the opened object.
+
     // Not currently included:
-    // - Device / inode number: Rarely useful, and not safe to use in practice anyway.
     // - Access control info: Differs wildly across platforms, and KJ prefers capabilities anyway.
     // - Other timestamps: Differs across platforms.
     // - Device number: If you care, you're probably doing platform-specific stuff anyway.
 
     Metadata() = default;
-    Metadata(Type type, uint64_t size, uint64_t spaceUsed, Date lastModified, uint linkCount)
+    Metadata(Type type, uint64_t size, uint64_t spaceUsed, Date lastModified, uint linkCount,
+             uint64_t hashCode)
         : type(type), size(size), spaceUsed(spaceUsed), lastModified(lastModified),
-          linkCount(linkCount) {}
+          linkCount(linkCount), hashCode(hashCode) {}
     // TODO(cleanup): This constructor is redundant in C++14, but needed in C++11.
   };
 

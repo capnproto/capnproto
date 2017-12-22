@@ -120,6 +120,11 @@ static FsNode::Type modeToType(mode_t mode) {
 }
 
 static FsNode::Metadata statToMetadata(struct stat& stats) {
+  // Probably st_ino and st_dev are usually under 32 bits, so mix by rotating st_dev left 32 bits
+  // and XOR.
+  uint64_t d = stats.st_dev;
+  uint64_t hash = ((d << 32) | (d >> 32)) ^ stats.st_ino;
+
   return FsNode::Metadata {
     modeToType(stats.st_mode),
     implicitCast<uint64_t>(stats.st_size),
@@ -129,7 +134,8 @@ static FsNode::Metadata statToMetadata(struct stat& stats) {
 #else
     toKjDate(stats.st_mtim),
 #endif
-    implicitCast<uint>(stats.st_nlink)
+    implicitCast<uint>(stats.st_nlink),
+    hash
   };
 }
 

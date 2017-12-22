@@ -779,7 +779,8 @@ public:
   }
 
   Metadata stat() override {
-    return Metadata { Type::FILE, size, size, lastModified, 1 };
+    uint64_t hash = reinterpret_cast<uintptr_t>(this);
+    return Metadata { Type::FILE, size, size, lastModified, 1, hash };
   }
 
   void sync() override {}
@@ -967,7 +968,8 @@ public:
   }
 
   Metadata stat() override {
-    return Metadata { Type::DIRECTORY, 0, 0, lastModified, 1 };
+    uint64_t hash = reinterpret_cast<uintptr_t>(this);
+    return Metadata { Type::DIRECTORY, 0, 0, lastModified, 1, hash };
   }
 
   void sync() override {}
@@ -1023,7 +1025,8 @@ public:
           return entry->node.get<DirectoryNode>().directory->stat();
         } else if (entry->node.is<SymlinkNode>()) {
           auto& link = entry->node.get<SymlinkNode>();
-          return FsNode::Metadata { FsNode::Type::SYMLINK, 0, 0, link.lastModified, 1 };
+          uint64_t hash = reinterpret_cast<uintptr_t>(link.content.begin());
+          return FsNode::Metadata { FsNode::Type::SYMLINK, 0, 0, link.lastModified, 1, hash };
         } else {
           KJ_FAIL_ASSERT("unknown node type") { return nullptr; }
         }

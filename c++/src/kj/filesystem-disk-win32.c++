@@ -104,6 +104,12 @@ static FsNode::Type modeToType(DWORD attrs, DWORD reparseTag) {
 static FsNode::Metadata statToMetadata(const BY_HANDLE_FILE_INFORMATION& stats) {
   uint64_t size = (implicitCast<uint64_t>(stats.nFileSizeHigh) << 32) | stats.nFileSizeLow;
 
+  // Assume file index is usually a small number, i.e. nFileIndexHigh is usually 0. So we try to
+  // put the serial number in the upper 32 bits and the index in the lower.
+  uint64_t hash = ((uint64_t(stats.dwVolumeSerialNumber) << 32)
+                 ^ (uint64_t(stats.nFileIndexHigh) << 32))
+                | (uint64_t(stats.nFileIndexLow));
+
   return FsNode::Metadata {
     modeToType(stats.dwFileAttributes, 0),
     size,
@@ -111,7 +117,8 @@ static FsNode::Metadata statToMetadata(const BY_HANDLE_FILE_INFORMATION& stats) 
     // syscall for something rarely used would be sad.
     size,
     toKjDate(stats.ftLastWriteTime),
-    stats.nNumberOfLinks
+    stats.nNumberOfLinks,
+    hash
   };
 }
 
@@ -126,7 +133,9 @@ static FsNode::Metadata statToMetadata(const WIN32_FIND_DATAW& stats) {
     size,
     toKjDate(stats.ftLastWriteTime),
     // We can't get the number of links without opening the file, apparently. Meh.
-    1
+    1,
+    // We can't produce a reliable hashCode without opening the file.
+    0
   };
 }
 
@@ -1483,7 +1492,7 @@ public:
   }
 
   Metadata stat() override {
-    return { Type::DIRECTORY, 0, 0, UNIX_EPOCH, 1 };
+    return { Type::DIRECTORY, 0, 0, UNIX_EPOCH, 1, 0 };
   }
   void sync() override {}
   void datasync() override {}
