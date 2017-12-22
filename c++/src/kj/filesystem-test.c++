@@ -264,13 +264,13 @@ public:
     time += 1 * SECONDS;
   }
 
-  Date now() override { return time; }
+  Date now() const override { return time; }
 
-  void expectChanged(FsNode& file) {
+  void expectChanged(const FsNode& file) {
     KJ_EXPECT(file.stat().lastModified == time);
     time += 1 * SECONDS;
   }
-  void expectUnchanged(FsNode& file) {
+  void expectUnchanged(const FsNode& file) {
     KJ_EXPECT(file.stat().lastModified != time);
   }
 

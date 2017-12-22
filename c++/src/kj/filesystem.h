@@ -295,22 +295,26 @@ private:
 // slower than RAM (which is slower than L3 cache, which is slower than L2, which is slower than
 // L1). You can't do asynchronous RAM access so why asynchronous filesystem? The only way to
 // parallelize these is using threads.
+//
+// All KJ filesystem objects are thread-safe, and so all methods are marked "const" (even write
+// methods). Of course, if you concurrently write the same bytes of a file from multiple threads,
+// it's unspecified which write will "win".
 
 class FsNode {
   // Base class for filesystem node types.
 
 public:
-  Own<FsNode> clone();
+  Own<const FsNode> clone() const;
   // Creates a new object of exactly the same type as this one, pointing at exactly the same
   // external object.
   //
   // Under the hood, this will call dup(), so the FD number will not be the same.
 
-  virtual Maybe<int> getFd() { return nullptr; }
+  virtual Maybe<int> getFd() const { return nullptr; }
   // Get the underlying Unix file descriptor, if any. Returns nullptr if this object actually isn't
   // wrapping a file descriptor.
 
-  virtual Maybe<void*> getWin32Handle() { return nullptr; }
+  virtual Maybe<void*> getWin32Handle() const { return nullptr; }
   // Get the underlying Win32 HANDLE, if any. Returns nullptr if this object actually isn't
   // wrapping a handle.
 
@@ -375,10 +379,10 @@ public:
     // TODO(cleanup): This constructor is redundant in C++14, but needed in C++11.
   };
 
-  virtual Metadata stat() = 0;
+  virtual Metadata stat() const = 0;
 
-  virtual void sync() = 0;
-  virtual void datasync() = 0;
+  virtual void sync() const = 0;
+  virtual void datasync() const = 0;
   // Maps to fsync() and fdatasync() system calls.
   //
   // Also, when creating or overwriting a file, the first call to sync() atomically links the file
@@ -387,29 +391,29 @@ public:
   // it.)
 
 protected:
-  virtual Own<FsNode> cloneFsNode() = 0;
+  virtual Own<const FsNode> cloneFsNode() const = 0;
   // Implements clone(). Required to return an object with exactly the same type as this one.
   // Hence, every subclass must implement this.
 };
 
 class ReadableFile: public FsNode {
 public:
-  Own<ReadableFile> clone();
+  Own<const ReadableFile> clone() const;
 
-  String readAllText();
+  String readAllText() const;
   // Read all text in the file and return as a big string.
 
-  Array<byte> readAllBytes();
+  Array<byte> readAllBytes() const;
   // Read all bytes in the file and return as a big byte array.
   //
   // This differs from mmap() in that the read is performed all at once. Future changes to the file
   // do not affect the returned copy. Consider using mmap() instead, particularly for large files.
 
-  virtual size_t read(uint64_t offset, ArrayPtr<byte> buffer) = 0;
+  virtual size_t read(uint64_t offset, ArrayPtr<byte> buffer) const = 0;
   // Fills `buffer` with data starting at `offset`. Returns the number of bytes actually read --
   // the only time this is less than `buffer.size()` is when EOF occurs mid-buffer.
 
-  virtual Array<const byte> mmap(uint64_t offset, uint64_t size) = 0;
+  virtual Array<const byte> mmap(uint64_t offset, uint64_t size) const = 0;
   // Maps the file to memory read-only. The returned array always has exactly the requested size.
   // Depending on the capabilities of the OS and filesystem, the mapping may or may not reflect
   // changes that happen to the file after mmap() returns.
@@ -423,7 +427,7 @@ public:
   // The returned array is always exactly the size requested. However, accessing bytes beyond the
   // current end of the file may raise SIGBUS, or may simply return zero.
 
-  virtual Array<byte> mmapPrivate(uint64_t offset, uint64_t size) = 0;
+  virtual Array<byte> mmapPrivate(uint64_t offset, uint64_t size) const = 0;
   // Like mmap() but returns a view that the caller can modify. Modifications will not be written
   // to the underlying file. Every call to this method returns a unique mapping. Changes made to
   // the underlying file by other clients may or may not be reflected in the mapping -- in fact,
@@ -436,26 +440,26 @@ public:
 
 class AppendableFile: public FsNode, public OutputStream {
 public:
-  Own<AppendableFile> clone();
+  Own<const AppendableFile> clone() const;
 
   // All methods are inherited.
 };
 
 class WritableFileMapping {
 public:
-  virtual ArrayPtr<byte> get() = 0;
+  virtual ArrayPtr<byte> get() const = 0;
   // Gets the mapped bytes. The returned array can be modified, and those changes may be written to
   // the underlying file, but there is no guarantee that they are written unless you subsequently
   // call changed().
 
-  virtual void changed(ArrayPtr<byte> slice) = 0;
+  virtual void changed(ArrayPtr<byte> slice) const = 0;
   // Notifies the implementation that the given bytes have changed. For some implementations this
   // may be a no-op while for others it may be necessary in order for the changes to be written
   // back at all.
   //
   // `slice` must be a slice of `bytes()`.
 
-  virtual void sync(ArrayPtr<byte> slice) = 0;
+  virtual void sync(ArrayPtr<byte> slice) const = 0;
   // Implies `changed()`, and then waits until the range has actually been written to disk before
   // returning.
   //
@@ -470,31 +474,32 @@ public:
 
 class File: public ReadableFile {
 public:
-  Own<File> clone();
+  Own<const File> clone() const;
 
-  void writeAll(ArrayPtr<const byte> bytes);
-  void writeAll(StringPtr text);
+  void writeAll(ArrayPtr<const byte> bytes) const;
+  void writeAll(StringPtr text) const;
   // Completely replace the file with the given bytes or text.
 
-  virtual void write(uint64_t offset, ArrayPtr<const byte> data) = 0;
+  virtual void write(uint64_t offset, ArrayPtr<const byte> data) const = 0;
   // Write the given data starting at the given offset in the file.
 
-  virtual void zero(uint64_t offset, uint64_t size) = 0;
+  virtual void zero(uint64_t offset, uint64_t size) const = 0;
   // Write zeros to the file, starting at `offset` and continuing for `size` bytes. If the platform
   // supports it, this will "punch a hole" in the file, such that blocks that are entirely zeros
   // do not take space on disk.
 
-  virtual void truncate(uint64_t size) = 0;
+  virtual void truncate(uint64_t size) const = 0;
   // Set the file end pointer to `size`. If `size` is less than the current size, data past the end
   // is truncated. If `size` is larger than the current size, zeros are added to the end of the
   // file. If the platform supports it, blocks containing all-zeros will not be stored to disk.
 
-  virtual Own<WritableFileMapping> mmapWritable(uint64_t offset, uint64_t size) = 0;
+  virtual Own<const WritableFileMapping> mmapWritable(uint64_t offset, uint64_t size) const = 0;
   // Like ReadableFile::mmap() but returns a mapping for which any changes will be immediately
   // visible in other mappings of the file on the same system and will eventually be written back
   // to the file.
 
-  virtual size_t copy(uint64_t offset, ReadableFile& from, uint64_t fromOffset, uint64_t size);
+  virtual size_t copy(uint64_t offset, const ReadableFile& from, uint64_t fromOffset,
+                      uint64_t size) const;
   // Copies bytes from one file to another.
   //
   // Copies `size` bytes or to EOF, whichever comes first. Returns the number of bytes actually
@@ -510,9 +515,9 @@ class ReadableDirectory: public FsNode {
   // Read-only subset of `Directory`.
 
 public:
-  Own<ReadableDirectory> clone();
+  Own<const ReadableDirectory> clone() const;
 
-  virtual Array<String> listNames() = 0;
+  virtual Array<String> listNames() const = 0;
   // List the contents of this directory. Does NOT include "." nor "..".
 
   struct Entry {
@@ -526,37 +531,37 @@ public:
     // Convenience comparison operators to sort entries by name.
   };
 
-  virtual Array<Entry> listEntries() = 0;
+  virtual Array<Entry> listEntries() const = 0;
   // List the contents of the directory including the type of each file. On some platforms and
   // filesystems, this is just as fast as listNames(), but on others it may require stat()ing each
   // file.
 
-  virtual bool exists(PathPtr path) = 0;
+  virtual bool exists(PathPtr path) const = 0;
   // Does the specified path exist?
   //
   // If the path is a symlink, the symlink is followed and the return value indicates if the target
   // exists. If you want to know if the symlink exists, use lstat(). (This implies that listNames()
   // may return names for which exists() reports false.)
 
-  FsNode::Metadata lstat(PathPtr path);
-  virtual Maybe<FsNode::Metadata> tryLstat(PathPtr path) = 0;
+  FsNode::Metadata lstat(PathPtr path) const;
+  virtual Maybe<FsNode::Metadata> tryLstat(PathPtr path) const = 0;
   // Gets metadata about the path. If the path is a symlink, it is not followed -- the metadata
   // describes the symlink itself. `tryLstat()` returns null if the path doesn't exist.
 
-  Own<ReadableFile> openFile(PathPtr path);
-  virtual Maybe<Own<ReadableFile>> tryOpenFile(PathPtr path) = 0;
+  Own<const ReadableFile> openFile(PathPtr path) const;
+  virtual Maybe<Own<const ReadableFile>> tryOpenFile(PathPtr path) const = 0;
   // Open a file for reading.
   //
   // `tryOpenFile()` returns null if the path doesn't exist. Other errors still throw exceptions.
 
-  Own<ReadableDirectory> openSubdir(PathPtr path);
-  virtual Maybe<Own<ReadableDirectory>> tryOpenSubdir(PathPtr path) = 0;
+  Own<const ReadableDirectory> openSubdir(PathPtr path) const;
+  virtual Maybe<Own<const ReadableDirectory>> tryOpenSubdir(PathPtr path) const = 0;
   // Opens a subdirectory.
   //
   // `tryOpenSubdir()` returns null if the path doesn't exist. Other errors still throw exceptions.
 
-  String readlink(PathPtr path);
-  virtual Maybe<String> tryReadlink(PathPtr path) = 0;
+  String readlink(PathPtr path) const;
+  virtual Maybe<String> tryReadlink(PathPtr path) const = 0;
   // If `path` is a symlink, reads and returns the link contents.
   //
   // Note that tryReadlink() differs subtly from tryOpen*(). For example, tryOpenFile() throws if
@@ -694,7 +699,7 @@ class Directory: public ReadableDirectory {
   // behavior.
 
 public:
-  Own<Directory> clone();
+  Own<const Directory> clone() const;
 
   template <typename T>
   class Replacer {
@@ -722,7 +727,7 @@ public:
   public:
     explicit Replacer(WriteMode mode);
 
-    virtual T& get() = 0;
+    virtual const T& get() = 0;
     // Gets the File or Directory representing the replacement data. Fill in this object before
     // calling commit().
 
@@ -778,45 +783,45 @@ public:
   using ReadableDirectory::tryOpenFile;
   using ReadableDirectory::tryOpenSubdir;
 
-  Own<File> openFile(PathPtr path, WriteMode mode);
-  virtual Maybe<Own<File>> tryOpenFile(PathPtr path, WriteMode mode) = 0;
+  Own<const File> openFile(PathPtr path, WriteMode mode) const;
+  virtual Maybe<Own<const File>> tryOpenFile(PathPtr path, WriteMode mode) const = 0;
   // Open a file for writing.
   //
   // `tryOpenFile()` returns null if the path is required to exist but doesn't (MODIFY or REPLACE)
   // or if the path is required not to exist but does (CREATE or RACE).
 
-  virtual Own<Replacer<File>> replaceFile(PathPtr path, WriteMode mode) = 0;
+  virtual Own<Replacer<File>> replaceFile(PathPtr path, WriteMode mode) const = 0;
   // Construct a file which, when ready, will be atomically moved to `path`, replacing whatever
   // is there already. See `Replacer<T>` for detalis.
   //
   // The `CREATE` and `MODIFY` bits of `mode` are not enforced until commit time, hence
   // `replaceFile()` has no "try" variant.
 
-  virtual Own<File> createTemporary() = 0;
+  virtual Own<const File> createTemporary() const = 0;
   // Create a temporary file backed by this directory's filesystem, but which isn't linked into
   // the directory tree. The file is deleted from disk when all references to it have been dropped.
 
-  Own<AppendableFile> appendFile(PathPtr path, WriteMode mode);
-  virtual Maybe<Own<AppendableFile>> tryAppendFile(PathPtr path, WriteMode mode) = 0;
+  Own<AppendableFile> appendFile(PathPtr path, WriteMode mode) const;
+  virtual Maybe<Own<AppendableFile>> tryAppendFile(PathPtr path, WriteMode mode) const = 0;
   // Opens the file for appending only. Useful for log files.
   //
   // If the underlying filesystem supports it, writes to the file will always be appended even if
   // other writers are writing to the same file at the same time -- however, some implementations
   // may instead assume that no other process is changing the file size between writes.
 
-  Own<Directory> openSubdir(PathPtr path, WriteMode mode);
-  virtual Maybe<Own<Directory>> tryOpenSubdir(PathPtr path, WriteMode mode) = 0;
+  Own<const Directory> openSubdir(PathPtr path, WriteMode mode) const;
+  virtual Maybe<Own<const Directory>> tryOpenSubdir(PathPtr path, WriteMode mode) const = 0;
   // Opens a subdirectory for writing.
 
-  virtual Own<Replacer<Directory>> replaceSubdir(PathPtr path, WriteMode mode) = 0;
+  virtual Own<Replacer<Directory>> replaceSubdir(PathPtr path, WriteMode mode) const = 0;
   // Construct a directory which, when ready, will be atomically moved to `path`, replacing
   // whatever is there already. See `Replacer<T>` for detalis.
   //
   // The `CREATE` and `MODIFY` bits of `mode` are not enforced until commit time, hence
   // `replaceSubdir()` has no "try" variant.
 
-  void symlink(PathPtr linkpath, StringPtr content, WriteMode mode);
-  virtual bool trySymlink(PathPtr linkpath, StringPtr content, WriteMode mode) = 0;
+  void symlink(PathPtr linkpath, StringPtr content, WriteMode mode) const;
+  virtual bool trySymlink(PathPtr linkpath, StringPtr content, WriteMode mode) const = 0;
   // Create a symlink. `content` is the raw text which will be written into the symlink node.
   // How this text is interpreted is entirely dependent on the filesystem. Note in particular that:
   // - Windows will require a path that uses backslashes as the separator.
@@ -831,15 +836,15 @@ public:
   // exists.
 
   void transfer(PathPtr toPath, WriteMode toMode,
-                PathPtr fromPath, TransferMode mode);
+                PathPtr fromPath, TransferMode mode) const;
   void transfer(PathPtr toPath, WriteMode toMode,
-                Directory& fromDirectory, PathPtr fromPath,
-                TransferMode mode);
+                const Directory& fromDirectory, PathPtr fromPath,
+                TransferMode mode) const;
   virtual bool tryTransfer(PathPtr toPath, WriteMode toMode,
-                           Directory& fromDirectory, PathPtr fromPath,
-                           TransferMode mode);
-  virtual Maybe<bool> tryTransferTo(Directory& toDirectory, PathPtr toPath, WriteMode toMode,
-                                    PathPtr fromPath, TransferMode mode);
+                           const Directory& fromDirectory, PathPtr fromPath,
+                           TransferMode mode) const;
+  virtual Maybe<bool> tryTransferTo(const Directory& toDirectory, PathPtr toPath, WriteMode toMode,
+                                    PathPtr fromPath, TransferMode mode) const;
   // Move, link, or copy a file/directory tree from one location to another.
   //
   // Filesystems vary in what kinds of transfers are allowed, especially for TransferMode::LINK,
@@ -856,8 +861,8 @@ public:
   // `toMode` controls how the target path is created. CREATE_PARENT is honored but EXECUTABLE and
   // PRIVATE have no effect.
 
-  void remove(PathPtr path);
-  virtual bool tryRemove(PathPtr path) = 0;
+  void remove(PathPtr path) const;
+  virtual bool tryRemove(PathPtr path) const = 0;
   // Deletes/unlinks the given path. If the path names a directory, it is recursively deleted.
   //
   // tryRemove() returns false if the path doesn't exist; remove() throws in this case.
@@ -882,13 +887,13 @@ private:
 
 class Filesystem {
 public:
-  virtual Directory& getRoot() = 0;
+  virtual const Directory& getRoot() const = 0;
   // Get the filesystem's root directory, as of the time the Filesystem object was created.
 
-  virtual Directory& getCurrent() = 0;
+  virtual const Directory& getCurrent() const = 0;
   // Get the filesystem's current directory, as of the time the Filesystem object was created.
 
-  virtual PathPtr getCurrentPath() = 0;
+  virtual PathPtr getCurrentPath() const = 0;
   // Get the path from the root to the current directory, as of the time the Filesystem object was
   // created. Note that because a `Directory` does not provide access to its parent, if you want to
   // follow `..` from the current directory, you must use `getCurrentPath().eval("..")` or
@@ -909,8 +914,8 @@ public:
 
 // =======================================================================================
 
-Own<File> newInMemoryFile(Clock& clock);
-Own<Directory> newInMemoryDirectory(Clock& clock);
+Own<File> newInMemoryFile(const Clock& clock);
+Own<Directory> newInMemoryDirectory(const Clock& clock);
 // Construct file and directory objects which reside in-memory.
 //
 // InMemoryFile has the following special properties:
@@ -925,7 +930,7 @@ Own<Directory> newInMemoryDirectory(Clock& clock);
 // - link() and rename() accept any kind of Directory as `fromDirectory` -- it doesn't need to be
 //   another InMemoryDirectory. However, for rename(), the from path must be a directory.
 
-Own<AppendableFile> newFileAppender(Own<File> inner);
+Own<AppendableFile> newFileAppender(Own<const File> inner);
 // Creates an AppendableFile by wrapping a File. Note that this implementation assumes it is the
 // only writer. A correct implementation should always append to the file even if other writes
 // are happening simultaneously, as is achieved with the O_APPEND flag to open(2), but that
@@ -1054,19 +1059,23 @@ inline String PathPtr::toNativeString(bool absolute) const {
 }
 #endif  // _WIN32, else
 
-inline Own<FsNode> FsNode::clone() { return cloneFsNode().downcast<FsNode>(); }
-inline Own<ReadableFile> ReadableFile::clone() { return cloneFsNode().downcast<ReadableFile>(); }
-inline Own<AppendableFile> AppendableFile::clone() {
-  return cloneFsNode().downcast<AppendableFile>();
+inline Own<const FsNode> FsNode::clone() const { return cloneFsNode().downcast<const FsNode>(); }
+inline Own<const ReadableFile> ReadableFile::clone() const {
+  return cloneFsNode().downcast<const ReadableFile>();
 }
-inline Own<File> File::clone() { return cloneFsNode().downcast<File>(); }
-inline Own<ReadableDirectory> ReadableDirectory::clone() {
-  return cloneFsNode().downcast<ReadableDirectory>();
+inline Own<const AppendableFile> AppendableFile::clone() const {
+  return cloneFsNode().downcast<const AppendableFile>();
 }
-inline Own<Directory> Directory::clone() { return cloneFsNode().downcast<Directory>(); }
+inline Own<const File> File::clone() const { return cloneFsNode().downcast<const File>(); }
+inline Own<const ReadableDirectory> ReadableDirectory::clone() const {
+  return cloneFsNode().downcast<const ReadableDirectory>();
+}
+inline Own<const Directory> Directory::clone() const {
+  return cloneFsNode().downcast<const Directory>();
+}
 
 inline void Directory::transfer(
-    PathPtr toPath, WriteMode toMode, PathPtr fromPath, TransferMode mode) {
+    PathPtr toPath, WriteMode toMode, PathPtr fromPath, TransferMode mode) const {
   return transfer(toPath, toMode, *this, fromPath, mode);
 }
 

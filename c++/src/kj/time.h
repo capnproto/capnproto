@@ -63,10 +63,10 @@ constexpr Date UNIX_EPOCH = origin<Date>();
 class Clock {
   // Interface to read the current date and time.
 public:
-  virtual Date now() = 0;
+  virtual Date now() const = 0;
 };
 
-Clock& nullClock();
+const Clock& nullClock();
 // A clock which always returns UNIX_EPOCH as the current time. Useful when you don't care about
 // time.
 
