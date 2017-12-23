@@ -30,26 +30,28 @@
 namespace capnp {
 namespace {
 
-class FakeFileReader final: public SchemaFile::FileReader {
+#if _WIN32
+#define ABS(x) "C:\\" x
+#else
+#define ABS(x) "/" x
+#endif
+
+class FakeFileReader final: public kj::Filesystem {
 public:
   void add(kj::StringPtr name, kj::StringPtr content) {
-    files[name] = content;
+    root->openFile(cwd.evalNative(name), kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT)
+        ->writeAll(content);
   }
 
-  bool exists(kj::StringPtr path) const override {
-    return files.count(path) > 0;
-  }
-
-  kj::Array<const char> read(kj::StringPtr path) const override {
-    auto iter = files.find(path);
-    KJ_ASSERT(iter != files.end(), "FakeFileReader has no such file.", path);
-    auto result = kj::heapArray<char>(iter->second.size());
-    memcpy(result.begin(), iter->second.begin(), iter->second.size());
-    return kj::mv(result);
-  }
+  const kj::Directory& getRoot() const override { return *root; }
+  const kj::Directory& getCurrent() const override { return *current; }
+  kj::PathPtr getCurrentPath() const override { return cwd; }
 
 private:
-  std::map<kj::StringPtr, kj::StringPtr> files;
+  kj::Own<const kj::Directory> root = kj::newInMemoryDirectory(kj::nullClock());
+  kj::Path cwd = kj::Path({}).evalNative(ABS("path/to/current/dir"));
+  kj::Own<const kj::Directory> current = root->openSubdir(cwd,
+      kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT);
 };
 
 static uint64_t getFieldTypeFileId(StructSchema::Field field) {
@@ -59,8 +61,9 @@ static uint64_t getFieldTypeFileId(StructSchema::Field field) {
 }
 
 TEST(SchemaParser, Basic) {
-  SchemaParser parser;
   FakeFileReader reader;
+  SchemaParser parser;
+  parser.setDiskFilesystem(reader);
 
   reader.add("src/foo/bar.capnp",
       "@0x8123456789abcdef;\n"
@@ -76,22 +79,22 @@ TEST(SchemaParser, Basic) {
   reader.add("src/qux/corge.capnp",
       "@0x83456789abcdef12;\n"
       "struct Corge {}\n");
-  reader.add("/usr/include/grault.capnp",
+  reader.add(ABS("usr/include/grault.capnp"),
       "@0x8456789abcdef123;\n"
       "struct Grault {}\n");
-  reader.add("/opt/include/grault.capnp",
+  reader.add(ABS("opt/include/grault.capnp"),
       "@0x8000000000000001;\n"
       "struct WrongGrault {}\n");
-  reader.add("/usr/local/include/garply.capnp",
+  reader.add(ABS("usr/local/include/garply.capnp"),
       "@0x856789abcdef1234;\n"
       "struct Garply {}\n");
 
   kj::StringPtr importPath[] = {
-    "/usr/include", "/usr/local/include", "/opt/include"
+    ABS("usr/include"), ABS("usr/local/include"), ABS("opt/include")
   };
 
-  ParsedSchema barSchema = parser.parseFile(SchemaFile::newDiskFile(
-      "foo2/bar2.capnp", "src/foo/bar.capnp", importPath, reader));
+  ParsedSchema barSchema = parser.parseDiskFile(
+      "foo2/bar2.capnp", "src/foo/bar.capnp", importPath);
 
   auto barProto = barSchema.getProto();
   EXPECT_EQ(0x8123456789abcdefull, barProto.getId());
@@ -109,25 +112,25 @@ TEST(SchemaParser, Basic) {
   EXPECT_EQ("garply", barFields[3].getProto().getName());
   EXPECT_EQ(0x856789abcdef1234ull, getFieldTypeFileId(barFields[3]));
 
-  auto bazSchema = parser.parseFile(SchemaFile::newDiskFile(
+  auto bazSchema = parser.parseDiskFile(
       "not/used/because/already/loaded",
-      "src/foo/baz.capnp", importPath, reader));
+      "src/foo/baz.capnp", importPath);
   EXPECT_EQ(0x823456789abcdef1ull, bazSchema.getProto().getId());
   EXPECT_EQ("foo2/baz.capnp", bazSchema.getProto().getDisplayName());
   auto bazStruct = bazSchema.getNested("Baz").asStruct();
   EXPECT_EQ(bazStruct, barStruct.getDependency(bazStruct.getProto().getId()));
 
-  auto corgeSchema = parser.parseFile(SchemaFile::newDiskFile(
+  auto corgeSchema = parser.parseDiskFile(
       "not/used/because/already/loaded",
-      "src/qux/corge.capnp", importPath, reader));
+      "src/qux/corge.capnp", importPath);
   EXPECT_EQ(0x83456789abcdef12ull, corgeSchema.getProto().getId());
   EXPECT_EQ("qux/corge.capnp", corgeSchema.getProto().getDisplayName());
   auto corgeStruct = corgeSchema.getNested("Corge").asStruct();
   EXPECT_EQ(corgeStruct, barStruct.getDependency(corgeStruct.getProto().getId()));
 
-  auto graultSchema = parser.parseFile(SchemaFile::newDiskFile(
+  auto graultSchema = parser.parseDiskFile(
       "not/used/because/already/loaded",
-      "/usr/include/grault.capnp", importPath, reader));
+      ABS("usr/include/grault.capnp"), importPath);
   EXPECT_EQ(0x8456789abcdef123ull, graultSchema.getProto().getId());
   EXPECT_EQ("grault.capnp", graultSchema.getProto().getDisplayName());
   auto graultStruct = graultSchema.getNested("Grault").asStruct();
@@ -135,9 +138,9 @@ TEST(SchemaParser, Basic) {
 
   // Try importing the other grault.capnp directly.  It'll get the display name we specify since
   // it wasn't imported before.
-  auto wrongGraultSchema = parser.parseFile(SchemaFile::newDiskFile(
+  auto wrongGraultSchema = parser.parseDiskFile(
       "weird/display/name.capnp",
-      "/opt/include/grault.capnp", importPath, reader));
+      ABS("opt/include/grault.capnp"), importPath);
   EXPECT_EQ(0x8000000000000001ull, wrongGraultSchema.getProto().getId());
   EXPECT_EQ("weird/display/name.capnp", wrongGraultSchema.getProto().getDisplayName());
 }
@@ -147,8 +150,9 @@ TEST(SchemaParser, Constants) {
   // constants are not actually accessible from the generated code API, so the only way to ever
   // get a ConstSchema is by parsing it.
 
-  SchemaParser parser;
   FakeFileReader reader;
+  SchemaParser parser;
+  parser.setDiskFilesystem(reader);
 
   reader.add("const.capnp",
       "@0x8123456789abcdef;\n"
@@ -164,8 +168,8 @@ TEST(SchemaParser, Constants) {
       "  value @0 :T;\n"
       "}\n");
 
-  ParsedSchema fileSchema = parser.parseFile(SchemaFile::newDiskFile(
-      "const.capnp", "const.capnp", nullptr, reader));
+  ParsedSchema fileSchema = parser.parseDiskFile(
+      "const.capnp", "const.capnp", nullptr);
 
   EXPECT_EQ(1234, fileSchema.getNested("uint32Const").asConst().as<uint32_t>());
 
@@ -198,8 +202,9 @@ void expectSourceInfo(schema::Node::SourceInfo::Reader sourceInfo,
 }
 
 TEST(SchemaParser, SourceInfo) {
-  SchemaParser parser;
   FakeFileReader reader;
+  SchemaParser parser;
+  parser.setDiskFilesystem(reader);
 
   reader.add("foo.capnp",
       "@0x84a2c6051e1061ed;\n"
@@ -234,8 +239,8 @@ TEST(SchemaParser, SourceInfo) {
       "struct Thud @0xcca9972702b730b4 {}\n"
       "# post-comment\n");
 
-  ParsedSchema file = parser.parseFile(SchemaFile::newDiskFile(
-      "foo.capnp", "foo.capnp", nullptr, reader));
+  ParsedSchema file = parser.parseDiskFile(
+      "foo.capnp", "foo.capnp", nullptr);
   ParsedSchema foo = file.getNested("Foo");
 
   expectSourceInfo(file.getSourceInfo(), 0x84a2c6051e1061edull, "file doc comment\n", {});

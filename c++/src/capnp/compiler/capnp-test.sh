@@ -40,6 +40,13 @@ fi
 SCHEMA=`dirname "$0"`/../test.capnp
 TESTDATA=`dirname "$0"`/../testdata
 
+SUFFIX=${TESTDATA#*/src/}
+PREFIX=${TESTDATA%${SUFFIX}}
+
+if [ "$PREFIX" = "" ]; then
+  PREFIX=.
+fi
+
 # ========================================================================================
 # convert
 
@@ -102,5 +109,5 @@ test_eval 'TestListDefaults.lists.int32ListList[2][0]' 12341234
 
 test "x`$CAPNP eval $SCHEMA -ojson globalPrintableStruct | tr -d '\r'`" = "x{\"someText\": \"foo\"}" || fail eval json "globalPrintableStruct == {someText = \"foo\"}"
 
-$CAPNP compile -ofoo $TESTDATA/errors.capnp.nobuild 2>&1 | sed -e "s,^.*/errors[.]capnp[.]nobuild,file,g" | tr -d '\r' |
+$CAPNP compile --src-prefix="$PREFIX" -ofoo $TESTDATA/errors.capnp.nobuild 2>&1 | sed -e "s,^.*errors[.]capnp[.]nobuild:,file:,g" | tr -d '\r' |
     cmp $TESTDATA/errors.txt - || fail error output

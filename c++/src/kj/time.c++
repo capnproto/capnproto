@@ -26,12 +26,12 @@
 
 namespace kj {
 
-Clock& nullClock() {
+const Clock& nullClock() {
   class NullClock final: public Clock {
   public:
-    Date now() override { return UNIX_EPOCH; }
+    Date now() const override { return UNIX_EPOCH; }
   };
-  static NullClock NULL_CLOCK;
+  static KJ_CONSTEXPR(const) NullClock NULL_CLOCK;
   return NULL_CLOCK;
 }
 

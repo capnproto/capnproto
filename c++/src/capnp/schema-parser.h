@@ -28,6 +28,7 @@
 
 #include "schema-loader.h"
 #include <kj/string.h>
+#include <kj/filesystem.h>
 
 namespace capnp {
 
@@ -43,31 +44,86 @@ public:
   SchemaParser();
   ~SchemaParser() noexcept(false);
 
-  ParsedSchema parseDiskFile(kj::StringPtr displayName, kj::StringPtr diskPath,
-                             kj::ArrayPtr<const kj::StringPtr> importPath) const;
-  // Parse a file located on disk.  Throws an exception if the file dosen't exist.
+  ParsedSchema parseFromDirectory(
+      const kj::ReadableDirectory& baseDir, kj::Path path,
+      kj::ArrayPtr<const kj::ReadableDirectory* const> importPath) const;
+  // Parse a file from the KJ filesystem API.  Throws an exception if the file dosen't exist.
   //
-  // Parameters:
-  // * `displayName`:  The name that will appear in the file's schema node.  (If the file has
-  //   already been parsed, this will be ignored and the display name from the first time it was
-  //   parsed will be kept.)
-  // * `diskPath`:  The path to the file on disk.
-  // * `importPath`:  Directories to search when resolving absolute imports within this file
-  //   (imports that start with a `/`).  Must remain valid until the SchemaParser is destroyed.
-  //   (If the file has already been parsed, this will be ignored and the import path from the
-  //   first time it was parsed will be kept.)
+  // `baseDir` and `path` are used together to resolve relative imports. `path` is the source
+  // file's path within `baseDir`. Relative imports will be interpreted relative to `path` and
+  // will be opened using `baseDir`. Note that the KJ filesystem API prohibits "breaking out" of
+  // a directory using "..", so relative imports will be restricted to children of `baseDir`.
+  //
+  // `importPath` is used for absolute imports (imports that start with a '/'). Each directory in
+  // the array will be searched in order until a file is found.
+  //
+  // All `ReadableDirectory` objects must remain valid until the `SchemaParser` is destroyed. Also,
+  // the `importPath` array must remain valid. `path` will be copied; it need not remain valid.
   //
   // This method is a shortcut, equivalent to:
-  //     parser.parseFile(SchemaFile::newDiskFile(displayName, diskPath, importPath))`;
+  //     parser.parseFromDirectory(SchemaFile::newDiskFile(baseDir, path, importPath))`;
   //
   // This method throws an exception if any errors are encountered in the file or in anything the
   // file depends on.  Note that merely importing another file does not count as a dependency on
   // anything in the imported file -- only the imported types which are actually used are
   // "dependencies".
+  //
+  // Hint: Use kj::newDiskFilesystem() to initialize the KJ filesystem API. Usually you should do
+  //   this at a high level in your program, e.g. the main() function, and then pass down the
+  //   appropriate File/Directory objects to the components that need them. Example:
+  //
+  //     auto fs = kj::newDiskFilesystem();
+  //     SchemaParser parser;
+  //     auto schema = parser->parseFromDirectory(fs->getCurrent(),
+  //         kj::Path::parse("foo/bar.capnp"), nullptr);
+  //
+  // Hint: To use in-memory data rather than real disk, you can use kj::newInMemoryDirectory(),
+  //   write the files you want, then pass it to SchemaParser. Example:
+  //
+  //     auto dir = kj::newInMemoryDirectory(kj::nullClock());
+  //     auto path = kj::Path::parse("foo/bar.capnp");
+  //     dir->openFile(path, kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT)
+  //        ->writeAll("struct Foo {}");
+  //     auto schema = parser->parseFromDirectory(*dir, path, nullptr);
+  //
+  // Hint: You can create an in-memory directory but then populate it with real files from disk,
+  //   in order to control what is visible while also avoiding reading files yourself or making
+  //   extra copies. Example:
+  //
+  //     auto fs = kj::newDiskFilesystem();
+  //     auto dir = kj::newInMemoryDirectory(kj::nullClock());
+  //     auto fakePath = kj::Path::parse("foo/bar.capnp");
+  //     auto realPath = kj::Path::parse("path/to/some/file.capnp");
+  //     dir->transfer(fakePath, kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT,
+  //                   fs->getCurrent(), realPath, kj::TransferMode::LINK);
+  //     auto schema = parser->parseFromDirectory(*dir, fakePath, nullptr);
+  //
+  //   In this example, note that any imports in the file will fail, since the in-memory directory
+  //   you created contains no files except the specific one you linked in.
+
+  ParsedSchema parseDiskFile(kj::StringPtr displayName, kj::StringPtr diskPath,
+                             kj::ArrayPtr<const kj::StringPtr> importPath) const
+      CAPNP_DEPRECATED("Use parseFromDirectory() instead.");
+  // Creates a private kj::Filesystem and uses it to parse files from the real disk.
+  //
+  // DO NOT USE in new code. Use parseFromDirectory() instead.
+  //
+  // This API has a serious problem: the file can import and embed files located anywhere on disk
+  // using relative paths. Even if you specify no `importPath`, relative imports still work. By
+  // using `parseFromDirectory()`, you can arrange so that imports are only allowed within a
+  // particular directory, or even set up a dummy filesystem where other files are not visible.
+
+  void setDiskFilesystem(kj::Filesystem& fs)
+      CAPNP_DEPRECATED("Use parseFromDirectory() instead.");
+  // Call before calling parseDiskFile() to choose an alternative disk filesystem implementation.
+  // This exists mostly for testing purposes; new code should use parseFromDirectory() instead.
+  //
+  // If parseDiskFile() is called without having called setDiskFilesystem(), then
+  // kj::newDiskFilesystem() will be used instead.
 
   ParsedSchema parseFile(kj::Own<SchemaFile>&& file) const;
   // Advanced interface for parsing a file that may or may not be located in any global namespace.
-  // Most users will prefer `parseDiskFile()`.
+  // Most users will prefer `parseFromDirectory()`.
   //
   // If the file has already been parsed (that is, a SchemaFile that compares equal to this one
   // was parsed previously), the existing schema will be returned again.
@@ -90,6 +146,7 @@ public:
 
 private:
   struct Impl;
+  struct DiskFileCompat;
   class ModuleImpl;
   kj::Own<Impl> impl;
   mutable bool hadErrors = false;
@@ -135,44 +192,20 @@ class SchemaFile {
   // `SchemaFile::newDiskFile()`.
 
 public:
-  class FileReader {
-  public:
-    virtual bool exists(kj::StringPtr path) const = 0;
-    virtual kj::Array<const char> read(kj::StringPtr path) const = 0;
-  };
+  // Note: Cap'n Proto 0.6.x and below had classes FileReader and DiskFileReader and a method
+  //   newDiskFile() defined here. These were removed when SchemaParser was transitioned to use the
+  //   KJ filesystem API. You should be able to get the same effect by subclassing
+  //   kj::ReadableDirectory, or using kj::newInMemoryDirectory().
 
-  class DiskFileReader final: public FileReader {
-    // Implementation of FileReader that uses the local disk.  Files are read using mmap() if
-    // possible.
-
-  public:
-    static const DiskFileReader instance;
-
-    bool exists(kj::StringPtr path) const override;
-    kj::Array<const char> read(kj::StringPtr path) const override;
-  };
-
-  static kj::Own<SchemaFile> newDiskFile(
-      kj::StringPtr displayName, kj::StringPtr diskPath,
-      kj::ArrayPtr<const kj::StringPtr> importPath,
-      const FileReader& fileReader = DiskFileReader::instance);
-  // Construct a SchemaFile representing a file on disk (or located in the filesystem-like
-  // namespace represented by `fileReader`).
+  static kj::Own<SchemaFile> newFromDirectory(
+      const kj::ReadableDirectory& baseDir, kj::Path path,
+      kj::ArrayPtr<const kj::ReadableDirectory* const> importPath,
+      kj::Maybe<kj::String> displayNameOverride = nullptr);
+  // Construct a SchemaFile representing a file in a kj::ReadableDirectory. This is used to
+  // implement SchemaParser::parseFromDirectory(); see there for details.
   //
-  // Parameters:
-  // * `displayName`:  The name that will appear in the file's schema node.
-  // * `diskPath`:  The path to the file on disk.
-  // * `importPath`:  Directories to search when resolving absolute imports within this file
-  //   (imports that start with a `/`).  The array content must remain valid as long as the
-  //   SchemaFile exists (which is at least as long as the SchemaParser that parses it exists).
-  // * `fileReader`:  Allows you to use a filesystem other than the actual local disk.  Although,
-  //   if you find yourself using this, it may make more sense for you to implement SchemaFile
-  //   yourself.
-  //
-  // The SchemaFile compares equal to any other SchemaFile that has exactly the same disk path,
-  // after canonicalization.
-  //
-  // The SchemaFile will throw an exception if any errors are reported.
+  // The SchemaFile compares equal to any other SchemaFile that has exactly the same `baseDir`
+  // object (by identity) and `path` (by value).
 
   // -----------------------------------------------------------------
   // For more control, you can implement this interface.

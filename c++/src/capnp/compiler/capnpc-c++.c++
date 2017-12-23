@@ -28,19 +28,25 @@
 #include <kj/string-tree.h>
 #include <kj/tuple.h>
 #include <kj/vector.h>
+#include <kj/filesystem.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
-#include <kj/miniposix.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <map>
 #include <set>
 #include <kj/main.h>
 #include <algorithm>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
+
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
+#include <windows.h>
+#include <kj/windows-sanity.h>
+#undef VOID
+#undef CONST
+#else
+#include <sys/time.h>
+#endif
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -2995,42 +3001,67 @@ private:
 
   // -----------------------------------------------------------------
 
-  void makeDirectory(kj::StringPtr path) {
-    KJ_IF_MAYBE(slashpos, path.findLast('/')) {
-      // Make the parent dir.
-      makeDirectory(kj::str(path.slice(0, *slashpos)));
-    }
-
-    if (kj::miniposix::mkdir(path.cStr(), 0777) < 0) {
-      int error = errno;
-      if (error != EEXIST) {
-        KJ_FAIL_SYSCALL("mkdir(path)", error, path);
-      }
-    }
-  }
+  kj::Own<kj::Filesystem> fs = kj::newDiskFilesystem();
 
   void writeFile(kj::StringPtr filename, const kj::StringTree& text) {
-    if (!filename.startsWith("/")) {
-      KJ_IF_MAYBE(slashpos, filename.findLast('/')) {
-        // Make the parent dir.
-        makeDirectory(kj::str(filename.slice(0, *slashpos)));
+    // We don't use replaceFile() here because atomic replacements are actually detrimental for
+    // build tools:
+    // - It's the responsibility of the build pipeline to ensure that no one else is concurrently
+    //   reading the file when we write it, so atomicity brings no benefit.
+    // - Atomic replacements force disk syncs which could slow us down for no benefit at all.
+    // - Opening the existing file and overwriting it may allow the filesystem to reuse
+    //   already-allocated blocks, or maybe even notice that no actual changes occurred.
+    // - In a power outage scenario, the user would obviously restart the build from scratch
+    //   anyway.
+    //
+    // We do, however, use mmap(), allowing us to write directly to page cache, avoiding a copy,
+    // and even allowing us to avoid dirtying the file pages if they're not modified, which will
+    // commonly be the case with incremental builds.
+    //
+    // Yes, I overengineered this a bit... but it was fun.
+
+    auto path = kj::Path::parse(filename);
+    auto file = fs->getCurrent().openFile(path,
+        kj::WriteMode::CREATE | kj::WriteMode::MODIFY | kj::WriteMode::CREATE_PARENT);
+    file->truncate(text.size());
+    auto mapping = file->mmapWritable(0, text.size());
+    auto bytes = mapping->get();
+
+    byte* target = bytes.begin();
+    byte* firstModified = nullptr;
+    text.visit([&](kj::ArrayPtr<const char> text) {
+      if (firstModified == nullptr) {
+        if (memcmp(target, text.begin(), text.size()) == 0) {
+          target += text.size();
+          return;
+        }
+        firstModified = target;
       }
+      memcpy(target, text.begin(), text.size());
+      target += text.size();
+    });
+    KJ_ASSERT(target == bytes.end());
+    if (firstModified == nullptr) {
+      // The file is completely unchanged. But we should probably update the modification time
+      // anyway so that build systems don't get confused.
+      //
+      // TODO(cleanup): Add touch() to kj::FsNode.
+#if _WIN32
+      FILETIME time;
+      GetSystemTimeAsFileTime(&time);
+      KJ_WIN32(SetFileTime(KJ_ASSERT_NONNULL(file->getWin32Handle()), NULL, &time, &time));
+#else
+      KJ_SYSCALL(futimes(KJ_ASSERT_NONNULL(file->getFd()), nullptr));
+#endif
+    } else {
+      mapping->changed(kj::arrayPtr(firstModified, bytes.end()));
     }
-
-    int fd;
-    KJ_SYSCALL(fd = open(filename.cStr(), O_CREAT | O_WRONLY | O_TRUNC, 0666), filename);
-    kj::FdOutputStream out((kj::AutoCloseFd(fd)));
-
-    text.visit(
-        [&](kj::ArrayPtr<const char> text) {
-          out.write(text.begin(), text.size());
-        });
   }
 
   kj::MainBuilder::Validity run() {
     ReaderOptions options;
     options.traversalLimitInWords = 1 << 30;  // Don't limit.
-    StreamFdMessageReader reader(STDIN_FILENO, options);
+    StreamFdMessageReader reader(0, options);
     auto request = reader.getRoot<schema::CodeGeneratorRequest>();
 
     auto capnpVersion = request.getCapnpVersion();
@@ -3057,9 +3088,6 @@ private:
     for (auto node: request.getNodes()) {
       schemaLoader.load(node);
     }
-
-    kj::FdOutputStream rawOut(STDOUT_FILENO);
-    kj::BufferedOutputStreamWrapper out(rawOut);
 
     for (auto requestedFile: request.getRequestedFiles()) {
       auto schema = schemaLoader.get(requestedFile.getId());

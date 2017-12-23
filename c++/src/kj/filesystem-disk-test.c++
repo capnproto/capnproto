@@ -310,10 +310,10 @@ KJ_TEST("DiskFile") {
     KJ_EXPECT(kj::str(writableMapping->get().slice(0, 6).asChars()) == "foobaz");
     KJ_EXPECT(kj::str(privateMapping.slice(0, 6).asChars()) == "Foobaz");
 
-    writableMapping->get()[0] = 'D';
-    writableMapping->changed(writableMapping->get().slice(0, 1));
-    KJ_EXPECT(kj::str(mapping.slice(0, 6).asChars()) == "Doobaz");
-    KJ_EXPECT(kj::str(writableMapping->get().slice(0, 6).asChars()) == "Doobaz");
+    writableMapping->get()[1] = 'D';
+    writableMapping->changed(writableMapping->get().slice(1, 2));
+    KJ_EXPECT(kj::str(mapping.slice(0, 6).asChars()) == "fDobaz");
+    KJ_EXPECT(kj::str(writableMapping->get().slice(0, 6).asChars()) == "fDobaz");
     KJ_EXPECT(kj::str(privateMapping.slice(0, 6).asChars()) == "Foobaz");
 
     file->write(0, StringPtr("qux").asBytes());
