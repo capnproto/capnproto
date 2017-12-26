@@ -866,6 +866,8 @@ interface TestMembrane {
   callIntercept @2 (thing :Thing, tailCall :Bool) -> Result;
   loopback @3 (thing :Thing) -> (thing :Thing);
 
+  waitForever @4 ();
+
   interface Thing {
     passThrough @0 () -> Result;
     intercept @1 () -> Result;

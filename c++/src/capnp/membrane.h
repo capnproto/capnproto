@@ -104,6 +104,16 @@ public:
   // object actually to be the *same* membrane. This is relevant when an object passes into the
   // membrane and then back out (or out and then back in): instead of double-wrapping the object,
   // the wrapping will be removed.
+
+  virtual kj::Maybe<kj::Promise<void>> onRevoked() { return nullptr; }
+  // If this returns non-null, then it is a promise that will reject (throw an exception) when the
+  // membrane should be revoked. On revocation, all capabilities pointing across the membrane will
+  // be dropped and all outstanding calls canceled. The exception thrown by the promise will be
+  // propagated to all these calls. It is an error for the promise to resolve without throwing.
+  //
+  // After the revocation promise has rejected, inboundCall() and outboundCall() will still be
+  // invoked for new calls, but the `target` passed to them will be a capability that always
+  // rethrows the revocation exception.
 };
 
 Capability::Client membrane(Capability::Client inner, kj::Own<MembranePolicy> policy);

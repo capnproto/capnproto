@@ -88,10 +88,19 @@ protected:
     context.getResults().setThing(context.getParams().getThing());
     return kj::READY_NOW;
   }
+
+  kj::Promise<void> waitForever(WaitForeverContext context) override {
+    context.allowCancellation();
+    return kj::NEVER_DONE;
+  }
 };
 
 class MembranePolicyImpl: public MembranePolicy, public kj::Refcounted {
 public:
+  MembranePolicyImpl() = default;
+  MembranePolicyImpl(kj::Maybe<kj::Promise<void>> revokePromise)
+      : revokePromise(revokePromise.map([](kj::Promise<void>& p) { return p.fork(); })) {}
+
   kj::Maybe<Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId,
                                             Capability::Client target) override {
     if (interfaceId == capnp::typeId<Thing>() && methodId == 1) {
@@ -113,6 +122,15 @@ public:
   kj::Own<MembranePolicy> addRef() override {
     return kj::addRef(*this);
   }
+
+  kj::Maybe<kj::Promise<void>> onRevoked() override {
+    return revokePromise.map([](kj::ForkedPromise<void>& fork) {
+      return fork.addBranch();
+    });
+  }
+
+private:
+  kj::Maybe<kj::ForkedPromise<void>> revokePromise;
 };
 
 void testThingImpl(kj::WaitScope& waitScope, test::TestMembrane::Client membraned,
@@ -265,12 +283,13 @@ struct TestRpcEnv {
   TwoPartyClient server;
   test::TestMembrane::Client membraned;
 
-  TestRpcEnv()
+  TestRpcEnv(kj::Maybe<kj::Promise<void>> revokePromise = nullptr)
       : io(kj::setupAsyncIo()),
         pipe(io.provider->newTwoWayPipe()),
         client(*pipe.ends[0]),
         server(*pipe.ends[1],
-               membrane(kj::heap<TestMembraneImpl>(), kj::refcounted<MembranePolicyImpl>()),
+               membrane(kj::heap<TestMembraneImpl>(),
+                        kj::refcounted<MembranePolicyImpl>(kj::mv(revokePromise))),
                rpc::twoparty::Side::SERVER),
         membraned(client.bootstrap().castAs<test::TestMembrane>()) {}
 
@@ -328,6 +347,29 @@ KJ_TEST("call remote promise pointing into membrane that eventually resolves to 
     req.setThing(kj::heap<ThingImpl>("outside"));
     return req.send().getThing();
   }, "outside", "outside", "outside", "outbound");
+}
+
+KJ_TEST("revoke membrane") {
+  auto paf = kj::newPromiseAndFulfiller<void>();
+
+  TestRpcEnv env(kj::mv(paf.promise));
+
+  auto thing = env.membraned.makeThingRequest().send().wait(env.io.waitScope).getThing();
+
+  auto callPromise = env.membraned.waitForeverRequest().send();
+
+  KJ_EXPECT(!callPromise.poll(env.io.waitScope));
+
+  paf.fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "foobar"));
+
+  KJ_ASSERT(callPromise.poll(env.io.waitScope));
+  KJ_EXPECT_THROW_MESSAGE("foobar", callPromise.wait(env.io.waitScope));
+
+  KJ_EXPECT_THROW_MESSAGE("foobar",
+      env.membraned.makeThingRequest().send().wait(env.io.waitScope));
+
+  KJ_EXPECT_THROW_MESSAGE("foobar",
+      thing.passThroughRequest().send().wait(env.io.waitScope));
 }
 
 }  // namespace
