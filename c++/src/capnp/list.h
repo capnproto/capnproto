@@ -124,6 +124,10 @@ struct List<T, Kind::PRIMITIVE> {
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
 
+    inline MessageSize totalSize() const {
+      return reader.totalSize().asPublic();
+    }
+
   private:
     _::ListReader reader;
     template <typename U, Kind K>
@@ -219,6 +223,10 @@ struct List<T, Kind::STRUCT> {
     typedef _::IndexingIterator<const Reader, typename T::Reader> Iterator;
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
+
+    inline MessageSize totalSize() const {
+      return reader.totalSize().asPublic();
+    }
 
   private:
     _::ListReader reader;
@@ -343,6 +351,10 @@ struct List<List<T>, Kind::LIST> {
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
 
+    inline MessageSize totalSize() const {
+      return reader.totalSize().asPublic();
+    }
+
   private:
     _::ListReader reader;
     template <typename U, Kind K>
@@ -451,6 +463,10 @@ struct List<T, Kind::BLOB> {
     typedef _::IndexingIterator<const Reader, typename T::Reader> Iterator;
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
+
+    inline MessageSize totalSize() const {
+      return reader.totalSize().asPublic();
+    }
 
   private:
     _::ListReader reader;

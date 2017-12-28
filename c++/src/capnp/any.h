@@ -408,6 +408,10 @@ struct List<AnyPointer, Kind::OTHER> {
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
 
+    inline MessageSize totalSize() const {
+      return reader.totalSize().asPublic();
+    }
+
   private:
     _::ListReader reader;
     template <typename U, Kind K>
@@ -585,6 +589,10 @@ public:
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
+  inline MessageSize totalSize() const {
+    return reader.totalSize().asPublic();
+  }
+
 private:
   _::ListReader reader;
   template <typename U, Kind K>
@@ -648,6 +656,10 @@ public:
   bool operator==(AnyList::Reader right);
   inline bool operator!=(AnyList::Reader right) {
     return !(*this == right);
+  }
+
+  inline MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
   template <typename T> ReaderFor<T> as() {

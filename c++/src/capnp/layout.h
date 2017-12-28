@@ -625,9 +625,7 @@ public:
   MessageSizeCounts totalSize() const;
   // Return the total size of the struct and everything to which it points.  Does not count far
   // pointer overhead.  This is useful for deciding how much space is needed to copy the struct
-  // into a flat array.  However, the caller is advised NOT to treat this value as secure.  Instead,
-  // use the result as a hint for allocating the first segment, do the copy, and then throw an
-  // exception if it overruns.
+  // into a flat array.
 
   CapTableReader* getCapTable();
   // Gets the capability context in which this object is operating.
@@ -792,6 +790,9 @@ public:
   KJ_ALWAYS_INLINE(PointerReader getPointerElement(ElementCount index) const);
 
   StructReader getStructElement(ElementCount index) const;
+
+  MessageSizeCounts totalSize() const;
+  // Like StructReader::totalSize(). Note that for struct lists, the size includes the list tag.
 
   CapTableReader* getCapTable();
   // Gets the capability context in which this object is operating.

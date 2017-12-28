@@ -1929,6 +1929,32 @@ TEST(Encoding, DefaultListBuilder) {
   List<Text>::Builder(nullptr);
 }
 
+TEST(Encoding, ListSize) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestListDefaults>();
+  initTestMessage(root);
+
+  auto lists = root.asReader().getLists();
+
+  auto listSizes =
+      lists.getList0().totalSize() +
+      lists.getList1().totalSize() +
+      lists.getList8().totalSize() +
+      lists.getList16().totalSize() +
+      lists.getList32().totalSize() +
+      lists.getList64().totalSize() +
+      lists.getListP().totalSize() +
+      lists.getInt32ListList().totalSize() +
+      lists.getTextListList().totalSize() +
+      lists.getStructListList().totalSize();
+
+  auto structSize = lists.totalSize();
+
+  auto shallowSize = unbound(capnp::_::structSize<test::TestLists>().total() / WORDS);
+
+  EXPECT_EQ(structSize.wordCount - shallowSize, listSizes.wordCount);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
