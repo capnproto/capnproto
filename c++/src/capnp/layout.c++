@@ -843,7 +843,7 @@ struct WireHelpers {
 
             // We count the actual size rather than the claimed word count because that's what
             // we'll end up with if we make a copy.
-            result.addWords(wordCount + POINTER_SIZE_IN_WORDS);
+            result.addWords(actualSize + POINTER_SIZE_IN_WORDS);
 
             WordCount dataSize = elementTag->structRef.dataSize.get();
             WirePointerCount pointerCount = elementTag->structRef.ptrCount.get();
@@ -3111,6 +3111,64 @@ StructReader ListReader::getStructElement(ElementCount index) const {
       segment, capTable, structData, structPointers,
       structDataSize, structPointerCount,
       nestingLimit - 1);
+}
+
+MessageSizeCounts ListReader::totalSize() const {
+  // TODO(cleanup): This is kind of a lot of logic duplicated from WireHelpers::totalSize(), but
+  //   it's unclear how to share it effectively.
+
+  MessageSizeCounts result = { ZERO * WORDS, 0 };
+
+  switch (elementSize) {
+    case ElementSize::VOID:
+      // Nothing.
+      break;
+    case ElementSize::BIT:
+    case ElementSize::BYTE:
+    case ElementSize::TWO_BYTES:
+    case ElementSize::FOUR_BYTES:
+    case ElementSize::EIGHT_BYTES:
+      result.addWords(WireHelpers::roundBitsUpToWords(
+          upgradeBound<uint64_t>(elementCount) * dataBitsPerElement(elementSize)));
+      break;
+    case ElementSize::POINTER: {
+      auto count = elementCount * (POINTERS / ELEMENTS);
+      result.addWords(count * WORDS_PER_POINTER);
+
+      for (auto i: kj::zeroTo(count)) {
+        result += WireHelpers::totalSize(segment, reinterpret_cast<const WirePointer*>(ptr) + i,
+                                         nestingLimit);
+      }
+      break;
+    }
+    case ElementSize::INLINE_COMPOSITE: {
+      // Don't forget to count the tag word.
+      auto wordSize = upgradeBound<uint64_t>(elementCount) * step / BITS_PER_WORD;
+      result.addWords(wordSize + POINTER_SIZE_IN_WORDS);
+
+      if (structPointerCount > ZERO * POINTERS) {
+        const word* pos = reinterpret_cast<const word*>(ptr);
+        for (auto i KJ_UNUSED: kj::zeroTo(elementCount)) {
+          pos += structDataSize / BITS_PER_WORD;
+
+          for (auto j KJ_UNUSED: kj::zeroTo(structPointerCount)) {
+            result += WireHelpers::totalSize(segment, reinterpret_cast<const WirePointer*>(pos),
+                                             nestingLimit);
+            pos += POINTER_SIZE_IN_WORDS;
+          }
+        }
+      }
+      break;
+    }
+  }
+
+  if (segment != nullptr) {
+    // This traversal should not count against the read limit, because it's highly likely that
+    // the caller is going to traverse the object again, e.g. to copy it.
+    segment->unread(result.wordCount);
+  }
+
+  return result;
 }
 
 CapTableReader* ListReader::getCapTable() {

@@ -661,6 +661,10 @@ struct List<T, Kind::INTERFACE> {
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
 
+    inline MessageSize totalSize() const {
+      return reader.totalSize().asPublic();
+    }
+
   private:
     _::ListReader reader;
     template <typename U, Kind K>
