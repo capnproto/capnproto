@@ -75,6 +75,10 @@ public:
   // Set maximum nesting depth when decoding JSON to prevent highly nested input from overflowing
   // the call stack. The default is 64.
 
+  void setStrictDecode(bool enabled);
+  // Enable to report mismatched field names, useful for checking typos.
+  // Causion: it may cause trouble about schema evolution.
+
   template <typename T>
   kj::String encode(T&& value) const;
   // Encode any Cap'n Proto value to JSON, including primitives and
@@ -215,8 +219,8 @@ private:
 
   void encodeField(StructSchema::Field field, DynamicValue::Reader input,
                    JsonValue::Builder output) const;
-  void decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output) const;
-  void decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct::Builder output) const;
+  void decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output, JsonValue::SourceInfo::Builder& source) const;
+  void decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct::Builder output, JsonValue::SourceInfo::Builder& source) const;
   void addTypeHandlerImpl(Type type, HandlerBase& handler);
   void addFieldHandlerImpl(StructSchema::Field field, Type type, HandlerBase& handler);
 };

@@ -45,6 +45,8 @@ struct JsonValue {
     # reason this extension exists. We do NOT recommend using `call` unless you specifically need
     # to be compatible with some silly format that uses this syntax.
   }
+  
+  source @7 :SourceInfo;
 
   struct Field {
     name @0 :Text;
@@ -54,5 +56,10 @@ struct JsonValue {
   struct Call {
     function @0 :Text;
     params @1 :List(JsonValue);
+  }
+  
+  struct SourceInfo {
+    line @0 :Int32;
+    column @1 :Int32;
   }
 }

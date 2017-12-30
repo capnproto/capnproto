@@ -50,6 +50,7 @@ struct FieldHash {
 struct JsonCodec::Impl {
   bool prettyPrint = false;
   size_t maxNestingDepth = 64;
+  bool strictDecode = false;
 
   std::unordered_map<Type, HandlerBase*, TypeHash> typeHandlers;
   std::unordered_map<StructSchema::Field, HandlerBase*, FieldHash> fieldHandlers;
@@ -194,6 +195,9 @@ void JsonCodec::setPrettyPrint(bool enabled) { impl->prettyPrint = enabled; }
 void JsonCodec::setMaxNestingDepth(size_t maxNestingDepth) {
   impl->maxNestingDepth = maxNestingDepth;
 }
+
+void JsonCodec::setStrictDecode(bool enabled) { impl->strictDecode = enabled; }
+
 
 kj::String JsonCodec::encode(DynamicValue::Reader value, Type type) const {
   MallocMessageBuilder message;
@@ -518,44 +522,59 @@ void decodeField(Type type, JsonValue::Reader value, SetFn setFn, DecodeArrayFn 
 }
 } // namespace
 
-void JsonCodec::decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output) const {
+void JsonCodec::decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output, JsonValue::SourceInfo::Builder& source) const {
   KJ_ASSERT(input.size() == output.size(), "Builder was not initialized to input size");
   auto type = output.getSchema().getElementType();
   for (auto i = 0; i < input.size(); i++) {
+    auto inputSource = input[i].getSource();
+    source.setLine(inputSource.getLine());
+    source.setColumn(inputSource.getColumn());
     decodeField(type, input[i],
         [&](DynamicValue::Reader value) { output.set(i, value); },
         [&](List<JsonValue>::Reader array) {
-          decodeArray(array, output.init(i, array.size()).as<DynamicList>());
+          decodeArray(array, output.init(i, array.size()).as<DynamicList>(), source);
         },
         [&](List<JsonValue::Field>::Reader object) {
-          decodeObject(object, output[i].as<DynamicStruct>());
+          decodeObject(object, output[i].as<DynamicStruct>(), source);
         });
   }
 }
 
-void JsonCodec::decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct::Builder output)
-    const {
+void JsonCodec::decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct::Builder output, JsonValue::SourceInfo::Builder& source) const {
   for (auto field : input) {
+    auto inputSource = field.getValue().getSource();
+    source.setLine(inputSource.getLine());
+    source.setColumn(inputSource.getColumn());
     KJ_IF_MAYBE(fieldSchema, output.getSchema().findFieldByName(field.getName())) {
       decodeField((*fieldSchema).getType(), field.getValue(),
           [&](DynamicValue::Reader value) { output.set(*fieldSchema, value); },
           [&](List<JsonValue>::Reader array) {
-            decodeArray(array, output.init(*fieldSchema, array.size()).as<DynamicList>());
+            decodeArray(array, output.init(*fieldSchema, array.size()).as<DynamicList>(), source);
           },
           [&](List<JsonValue::Field>::Reader object) {
-            decodeObject(object, output.init(*fieldSchema).as<DynamicStruct>());
+            decodeObject(object, output.init(*fieldSchema).as<DynamicStruct>(), source);
           });
     } else {
+      KJ_REQUIRE(!impl->strictDecode, "unknown field name", field.getName());
       // Unknown json fields are ignored to allow schema evolution
     }
   }
 }
 
 void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) const {
+  word sourceStack[16] = {};
+  kj::ArrayPtr<word> sourceArray(sourceStack);
+  MallocMessageBuilder message(sourceArray);
+  JsonValue::SourceInfo::Builder source = message.initRoot<JsonValue::SourceInfo>();
   // TODO(soon): type and field handlers
   switch (input.which()) {
     case JsonValue::OBJECT:
-      decodeObject(input.getObject(), output);
+      try {
+        decodeObject(input.getObject(), output, source);
+      } catch (kj::Exception e) {
+        KJ_LOG(ERROR, "error when decoding JSON", source);
+		throw(e);
+      }
       break;
     default:
       KJ_FAIL_REQUIRE("Top level json value must be object");
@@ -574,7 +593,13 @@ namespace {
 
 class Input {
 public:
-  Input(kj::ArrayPtr<const char> input) : wrapped(input) {}
+  Input(kj::ArrayPtr<const char> input, JsonValue::SourceInfo::Builder& consumed) : wrapped(input), consumed(consumed) {
+    consumed.setLine(1);
+  }
+
+  JsonValue::SourceInfo::Builder& sourceConsumed() {
+    return consumed;
+  }
 
   bool exhausted() {
     return wrapped.size() == 0 || wrapped.front() == '\0';
@@ -587,12 +612,14 @@ public:
 
   void advance(size_t numBytes = 1) {
     KJ_REQUIRE(numBytes <= wrapped.size(), "JSON message ends prematurely.");
+    consumed.setColumn(consumed.getColumn() + numBytes);
     wrapped = kj::arrayPtr(wrapped.begin() + numBytes, wrapped.end());
   }
 
   void advanceTo(const char *newPos) {
     KJ_REQUIRE(wrapped.begin() <= newPos && newPos < wrapped.end(),
         "JSON message ends prematurely.");
+    consumed.setColumn(consumed.getColumn() + newPos - wrapped.begin());
     wrapped = kj::arrayPtr(newPos, wrapped.end());
   }
 
@@ -652,7 +679,11 @@ public:
   }
 
   void consumeWhitespace() {
-    consumeWhile([](char chr) {
+    consumeWhile([this](char chr) {
+      if (chr == '\n') {
+        consumed.setLine(consumed.getLine() + 1);
+        consumed.setColumn(0);
+      }
       return (
         chr == ' '  ||
         chr == '\n' ||
@@ -665,13 +696,13 @@ public:
 
 private:
   kj::ArrayPtr<const char> wrapped;
-
+  JsonValue::SourceInfo::Builder& consumed;
 };  // class Input
 
 class Parser {
 public:
-  Parser(size_t maxNestingDepth, kj::ArrayPtr<const char> input) :
-    maxNestingDepth(maxNestingDepth), input(input), nestingDepth(0) {}
+  Parser(size_t maxNestingDepth, kj::ArrayPtr<const char> input, JsonValue::SourceInfo::Builder& consumed) :
+    maxNestingDepth(maxNestingDepth), input(input, consumed), nestingDepth(0) {}
 
   void parseValue(JsonValue::Builder& output) {
     input.consumeWhitespace();
@@ -679,6 +710,7 @@ public:
 
     KJ_REQUIRE(!input.exhausted(), "JSON message ends prematurely.");
 
+    output.setSource(input.sourceConsumed());
     switch (input.nextChar()) {
       case 'n': input.consume(kj::StringPtr("null"));  output.setNull();         break;
       case 'f': input.consume(kj::StringPtr("false")); output.setBoolean(false); break;
@@ -901,8 +933,17 @@ private:
 
 
 void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder output) const {
-  Parser parser(impl->maxNestingDepth, input);
-  parser.parseValue(output);
+  word sourceStack[16] = {};
+  kj::ArrayPtr<word> sourceArray(sourceStack);
+  MallocMessageBuilder message(sourceArray);
+  JsonValue::SourceInfo::Builder consumed = message.initRoot<JsonValue::SourceInfo>();
+  Parser parser(impl->maxNestingDepth, input, consumed);
+  try {
+    parser.parseValue(output);
+  } catch (kj::Exception e) {
+    KJ_LOG(ERROR, "error when parsing JSON", consumed);
+    throw(e);
+  }
 
   KJ_REQUIRE(parser.inputExhausted(), "Input remains after parsing JSON.");
 }
