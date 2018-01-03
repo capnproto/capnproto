@@ -359,7 +359,8 @@ public:
       // something outside the membrane later. We have to wait before we actually redirect,
       // otherwise behavior will differ depending on whether the promise is resolved.
       KJ_IF_MAYBE(p, whenMoreResolved()) {
-        return newLocalPromiseClient(kj::mv(*p))->newCall(interfaceId, methodId, sizeHint);
+        return newLocalPromiseClient(p->attach(addRef()))
+            ->newCall(interfaceId, methodId, sizeHint);
       }
 
       return ClientHook::from(kj::mv(*r))->newCall(interfaceId, methodId, sizeHint);
@@ -386,7 +387,8 @@ public:
       // something outside the membrane later. We have to wait before we actually redirect,
       // otherwise behavior will differ depending on whether the promise is resolved.
       KJ_IF_MAYBE(p, whenMoreResolved()) {
-        return newLocalPromiseClient(kj::mv(*p))->call(interfaceId, methodId, kj::mv(context));
+        return newLocalPromiseClient(p->attach(addRef()))
+            ->call(interfaceId, methodId, kj::mv(context));
       }
 
       return ClientHook::from(kj::mv(*r))->call(interfaceId, methodId, kj::mv(context));
