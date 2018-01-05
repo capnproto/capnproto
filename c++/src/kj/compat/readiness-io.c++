@@ -49,7 +49,8 @@ kj::Maybe<size_t> ReadyInputStreamWrapper::read(kj::ArrayPtr<byte> dst) {
           } else {
             content = kj::arrayPtr(buffer, n);
           }
-        }).attach(kj::defer([this]() {isPumping = false;}));
+          isPumping = false;
+        });
       }).fork();
     }
 
@@ -98,7 +99,7 @@ kj::Maybe<size_t> ReadyOutputStreamWrapper::write(kj::ArrayPtr<const byte> data)
   if (!isPumping) {
     isPumping = true;
     pumpTask = kj::evalNow([&]() {
-      return pump().attach(kj::defer([this]() {isPumping = false;}));
+      return pump();
     }).fork();
   }
 
@@ -130,6 +131,7 @@ kj::Promise<void> ReadyOutputStreamWrapper::pump() {
     if (filled > 0) {
       return pump();
     } else {
+      isPumping = false;
       return kj::READY_NOW;
     }
   });

@@ -30,6 +30,7 @@
 #include <openssl/x509v3.h>
 #include <openssl/evp.h>
 #include <openssl/conf.h>
+#include <openssl/ssl.h>
 #include <openssl/tls1.h>
 #include <kj/debug.h>
 #include <kj/vector.h>
@@ -489,6 +490,13 @@ TlsContext::Options::Options()
 // Classic DH is arguably obsolete and will only become more so as time passes, so perhaps we'll
 // never bother.
 
+struct TlsContext::SniCallback {
+  // struct SniCallback exists only so that callback() can be declared in the .c++ file, since it
+  // references OpenSSL types.
+
+  static int callback(SSL* ssl, int* ad, void* arg);
+};
+
 TlsContext::TlsContext(Options options) {
   ensureOpenSslInitialized();
 
@@ -573,21 +581,17 @@ TlsContext::TlsContext(Options options) {
 
   // honor options.sniCallback
   KJ_IF_MAYBE(sni, options.sniCallback) {
-    SSL_CTX_set_tlsext_servername_callback(ctx, &sniCallback);
+    SSL_CTX_set_tlsext_servername_callback(ctx, &SniCallback::callback);
     SSL_CTX_set_tlsext_servername_arg(ctx, sni);
   }
 
   this->ctx = ctx;
 }
 
-int TlsContext::sniCallback(void* sslp, int* ad, void* arg) {
-  // The first parameter is actually type SSL*, but we didn't want to include the OpenSSL headers
-  // from our header.
-  //
+int TlsContext::SniCallback::callback(SSL* ssl, int* ad, void* arg) {
   // The third parameter is actually type TlsSniCallback*.
 
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    SSL* ssl = reinterpret_cast<SSL*>(sslp);
     TlsSniCallback& sni = *reinterpret_cast<TlsSniCallback*>(arg);
 
     const char* name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
@@ -671,14 +675,14 @@ TlsPrivateKey::TlsPrivateKey(kj::ArrayPtr<const byte> asn1) {
   }
 }
 
-TlsPrivateKey::TlsPrivateKey(kj::StringPtr pem) {
+TlsPrivateKey::TlsPrivateKey(kj::StringPtr pem, kj::Maybe<kj::StringPtr> password) {
   ensureOpenSslInitialized();
 
   // const_cast apparently needed for older versions of OpenSSL.
   BIO* bio = BIO_new_mem_buf(const_cast<char*>(pem.begin()), pem.size());
   KJ_DEFER(BIO_free(bio));
 
-  pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+  pkey = PEM_read_bio_PrivateKey(bio, nullptr, &passwordCallback, &password);
   if (pkey == nullptr) {
     throwOpensslError();
   }
@@ -700,6 +704,18 @@ TlsPrivateKey& TlsPrivateKey::operator=(const TlsPrivateKey& other) {
 
 TlsPrivateKey::~TlsPrivateKey() noexcept(false) {
   EVP_PKEY_free(reinterpret_cast<EVP_PKEY*>(pkey));
+}
+
+int TlsPrivateKey::passwordCallback(char* buf, int size, int rwflag, void* u) {
+  auto& password = *reinterpret_cast<kj::Maybe<kj::StringPtr>*>(u);
+
+  KJ_IF_MAYBE(p, password) {
+    int result = kj::min(p->size(), size);
+    memcpy(buf, p->begin(), result);
+    return result;
+  } else {
+    return 0;
+  }
 }
 
 // =======================================================================================

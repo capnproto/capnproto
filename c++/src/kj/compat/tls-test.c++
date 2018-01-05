@@ -25,6 +25,7 @@
 #include <kj/test.h>
 #include <kj/async-io.h>
 #include <stdlib.h>
+#include <openssl/opensslv.h>
 
 namespace kj {
 namespace {
@@ -344,6 +345,92 @@ KJ_TEST("TLS basics") {
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
 }
 
+KJ_TEST("TLS multiple messages") {
+  TlsTest test;
+  ErrorNexus e;
+
+  auto pipe = test.io.provider->newTwoWayPipe();
+
+  auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
+  auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
+
+  auto client = clientPromise.wait(test.io.waitScope);
+  auto server = serverPromise.wait(test.io.waitScope);
+
+  auto writePromise = client->write("foo", 3)
+      .then([&]() { return client->write("bar", 3); });
+
+  char buf[4];
+  buf[3] = '\0';
+
+  server->read(&buf, 3).wait(test.io.waitScope);
+  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+
+  writePromise = writePromise
+      .then([&]() { return client->write("baz", 3); });
+
+  server->read(&buf, 3).wait(test.io.waitScope);
+  KJ_ASSERT(kj::StringPtr(buf) == "bar");
+
+  server->read(&buf, 3).wait(test.io.waitScope);
+  KJ_ASSERT(kj::StringPtr(buf) == "baz");
+
+  auto readPromise = server->read(&buf, 3);
+  KJ_EXPECT(!readPromise.poll(test.io.waitScope));
+
+  writePromise = writePromise
+      .then([&]() { return client->write("qux", 3); });
+
+  readPromise.wait(test.io.waitScope);
+  KJ_ASSERT(kj::StringPtr(buf) == "qux");
+}
+
+kj::Promise<void> writeN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t count) {
+  if (count == 0) return kj::READY_NOW;
+  --count;
+  return stream.write(text.begin(), text.size())
+      .then([&stream, text, count]() {
+    return writeN(stream, text, count);
+  });
+}
+
+kj::Promise<void> readN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t count) {
+  if (count == 0) return kj::READY_NOW;
+  --count;
+  auto buf = kj::heapString(text.size());
+  auto promise = stream.read(buf.begin(), buf.size());
+  return promise.then(kj::mvCapture(buf, [&stream, text, count](kj::String buf) {
+    KJ_ASSERT(buf == text, buf, text, count);
+    return readN(stream, text, count);
+  }));
+}
+
+KJ_TEST("TLS full duplex") {
+  TlsTest test;
+  ErrorNexus e;
+
+  auto pipe = test.io.provider->newTwoWayPipe();
+
+  auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
+  auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
+
+  auto client = clientPromise.wait(test.io.waitScope);
+  auto server = serverPromise.wait(test.io.waitScope);
+
+  auto writeUp = writeN(*client, "foo", 10000);
+  auto readDown = readN(*client, "bar", 10000);
+  KJ_EXPECT(!writeUp.poll(test.io.waitScope));
+  KJ_EXPECT(!readDown.poll(test.io.waitScope));
+
+  auto writeDown = writeN(*server, "bar", 10000);
+  auto readUp = readN(*server, "foo", 10000);
+
+  readUp.wait(test.io.waitScope);
+  readDown.wait(test.io.waitScope);
+  writeUp.wait(test.io.waitScope);
+  writeDown.wait(test.io.waitScope);
+}
+
 class TestSniCallback: public TlsSniCallback {
 public:
   kj::Maybe<TlsKeypair> getKey(kj::StringPtr hostname) override {
@@ -411,6 +498,13 @@ KJ_TEST("TLS certificate validation") {
                     "self signed certificate");
 }
 
+// BoringSSL seems to print error messages differently.
+#ifdef OPENSSL_IS_BORINGSSL
+#define SSL_MESSAGE(interesting, boring) boring
+#else
+#define SSL_MESSAGE(interesting, boring) interesting
+#endif
+
 KJ_TEST("TLS client certificate verification") {
   TlsContext::Options serverOptions = TlsTest::defaultServer();
   TlsContext::Options clientOptions = TlsTest::defaultClient();
@@ -427,9 +521,13 @@ KJ_TEST("TLS client certificate verification") {
     auto clientPromise = test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com");
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
-    KJ_EXPECT_THROW_MESSAGE("peer did not return a certificate",
+    KJ_EXPECT_THROW_MESSAGE(
+        SSL_MESSAGE("peer did not return a certificate",
+                    "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
         serverPromise.wait(test.io.waitScope));
-    KJ_EXPECT_THROW_MESSAGE("alert handshake failure",
+    KJ_EXPECT_THROW_MESSAGE(
+        SSL_MESSAGE("alert handshake failure",
+                    "SSLV3_ALERT_HANDSHAKE_FAILURE"),
         clientPromise.wait(test.io.waitScope));
   }
 
@@ -445,9 +543,13 @@ KJ_TEST("TLS client certificate verification") {
     auto clientPromise = test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com");
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
-    KJ_EXPECT_THROW_MESSAGE("certificate verify failed",
+    KJ_EXPECT_THROW_MESSAGE(
+        SSL_MESSAGE("certificate verify failed",
+                    "CERTIFICATE_VERIFY_FAILED"),
         serverPromise.wait(test.io.waitScope));
-    KJ_EXPECT_THROW_MESSAGE("alert unknown ca",
+    KJ_EXPECT_THROW_MESSAGE(
+        SSL_MESSAGE("alert unknown ca",
+                    "TLSV1_ALERT_UNKNOWN_CA"),
         clientPromise.wait(test.io.waitScope));
   }
 
