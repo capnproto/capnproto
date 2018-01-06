@@ -114,6 +114,47 @@ public:
   // After the revocation promise has rejected, inboundCall() and outboundCall() will still be
   // invoked for new calls, but the `target` passed to them will be a capability that always
   // rethrows the revocation exception.
+
+  // ---------------------------------------------------------------------------
+  // Control over importing and exporting.
+  //
+  // Most membranes should not override these methods. The default behavior is that a capability
+  // that crosses the membrane is wrapped in it, and if the wrapped version crosses back the other
+  // way, it is unwrapped.
+
+  virtual Capability::Client importExternal(Capability::Client external);
+  // An external capability is crossing into the membrane. Returns the capability that should
+  // substitute for it when called from the inside.
+  //
+  // The default implementation creates a capability that invokes this MembranePolicy. E.g. all
+  // calls will invoke outboundCall().
+  //
+  // Note that reverseMembrane(cap, policy) normally calls policy->importExternal(cap), unless
+  // `cap` itself was originally returned by the default implementation of exportInternal(), in
+  // which case importInternal() is called instead.
+
+  virtual Capability::Client exportInternal(Capability::Client internal);
+  // An internal capability is crossing out of the membrane. Returns the capability that should
+  // substitute for it when called from the outside.
+  //
+  // The default implementation creates a capability that invokes this MembranePolicy. E.g. all
+  // calls will invoke inboundCall().
+  //
+  // Note that membrane(cap, policy) normally calls policy->exportInternal(cap), unless `cap`
+  // itself was originally returned by the default implementation of exportInternal(), in which
+  // case importInternal() is called instead.
+
+  virtual Capability::Client importInternal(Capability::Client internal);
+  // An internal capability which was previously exported is now being re-imported, i.e. a
+  // capability passed out of the membrane and then back in.
+  //
+  // The default implementation simply returns `internal`.
+
+  virtual Capability::Client exportExternal(Capability::Client external);
+  // An external capability which was previously imported is now being re-exported, i.e. a
+  // capability passed into the membrane and then back out.
+  //
+  // The default implementation simply returns `external`.
 };
 
 Capability::Client membrane(Capability::Client inner, kj::Own<MembranePolicy> policy);
