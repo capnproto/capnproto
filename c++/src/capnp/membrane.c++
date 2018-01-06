@@ -321,27 +321,41 @@ public:
   static kj::Own<ClientHook> wrap(ClientHook& cap, MembranePolicy& policy, bool reverse) {
     if (cap.getBrand() == MEMBRANE_BRAND) {
       auto& otherMembrane = kj::downcast<MembraneHook>(cap);
-      if (otherMembrane.policy.get() == &policy && otherMembrane.reverse == !reverse) {
+      auto& rootPolicy = policy.rootPolicy();
+      if (&otherMembrane.policy->rootPolicy() == &rootPolicy &&
+          otherMembrane.reverse == !reverse) {
         // Capability that passed across the membrane one way is now passing back the other way.
         // Unwrap it rather than double-wrap it.
-        return otherMembrane.inner->addRef();
+        Capability::Client unwrapped(otherMembrane.inner->addRef());
+        return ClientHook::from(
+            reverse ? rootPolicy.importInternal(kj::mv(unwrapped), *otherMembrane.policy, policy)
+                    : rootPolicy.exportExternal(kj::mv(unwrapped), *otherMembrane.policy, policy));
       }
     }
 
-    return kj::refcounted<MembraneHook>(cap.addRef(), policy.addRef(), reverse);
+    return ClientHook::from(
+        reverse ? policy.importExternal(Capability::Client(cap.addRef()))
+                : policy.exportInternal(Capability::Client(cap.addRef())));
   }
 
   static kj::Own<ClientHook> wrap(kj::Own<ClientHook> cap, MembranePolicy& policy, bool reverse) {
     if (cap->getBrand() == MEMBRANE_BRAND) {
       auto& otherMembrane = kj::downcast<MembraneHook>(*cap);
-      if (otherMembrane.policy.get() == &policy && otherMembrane.reverse == !reverse) {
+      auto& rootPolicy = policy.rootPolicy();
+      if (&otherMembrane.policy->rootPolicy() == &rootPolicy &&
+          otherMembrane.reverse == !reverse) {
         // Capability that passed across the membrane one way is now passing back the other way.
         // Unwrap it rather than double-wrap it.
-        return otherMembrane.inner->addRef();
+        Capability::Client unwrapped(otherMembrane.inner->addRef());
+        return ClientHook::from(
+            reverse ? rootPolicy.importInternal(kj::mv(unwrapped), *otherMembrane.policy, policy)
+                    : rootPolicy.exportExternal(kj::mv(unwrapped), *otherMembrane.policy, policy));
       }
     }
 
-    return kj::refcounted<MembraneHook>(kj::mv(cap), policy.addRef(), reverse);
+    return ClientHook::from(
+        reverse ? policy.importExternal(Capability::Client(kj::mv(cap)))
+                : policy.exportInternal(Capability::Client(kj::mv(cap))));
   }
 
   Request<AnyPointer, AnyPointer> newCall(
@@ -359,7 +373,8 @@ public:
       // something outside the membrane later. We have to wait before we actually redirect,
       // otherwise behavior will differ depending on whether the promise is resolved.
       KJ_IF_MAYBE(p, whenMoreResolved()) {
-        return newLocalPromiseClient(kj::mv(*p))->newCall(interfaceId, methodId, sizeHint);
+        return newLocalPromiseClient(p->attach(addRef()))
+            ->newCall(interfaceId, methodId, sizeHint);
       }
 
       return ClientHook::from(kj::mv(*r))->newCall(interfaceId, methodId, sizeHint);
@@ -386,7 +401,8 @@ public:
       // something outside the membrane later. We have to wait before we actually redirect,
       // otherwise behavior will differ depending on whether the promise is resolved.
       KJ_IF_MAYBE(p, whenMoreResolved()) {
-        return newLocalPromiseClient(kj::mv(*p))->call(interfaceId, methodId, kj::mv(context));
+        return newLocalPromiseClient(p->attach(addRef()))
+            ->call(interfaceId, methodId, kj::mv(context));
       }
 
       return ClientHook::from(kj::mv(*r))->call(interfaceId, methodId, kj::mv(context));
@@ -466,6 +482,26 @@ kj::Own<ClientHook> membrane(kj::Own<ClientHook> inner, MembranePolicy& policy, 
 }
 
 }  // namespace
+
+Capability::Client MembranePolicy::importExternal(Capability::Client external) {
+  return Capability::Client(kj::refcounted<MembraneHook>(
+      ClientHook::from(kj::mv(external)), addRef(), true));
+}
+
+Capability::Client MembranePolicy::exportInternal(Capability::Client internal) {
+  return Capability::Client(kj::refcounted<MembraneHook>(
+      ClientHook::from(kj::mv(internal)), addRef(), false));
+}
+
+Capability::Client MembranePolicy::importInternal(
+    Capability::Client internal, MembranePolicy& exportPolicy, MembranePolicy& importPolicy) {
+  return kj::mv(internal);
+}
+
+Capability::Client MembranePolicy::exportExternal(
+    Capability::Client external, MembranePolicy& importPolicy, MembranePolicy& exportPolicy) {
+  return kj::mv(external);
+}
 
 Capability::Client membrane(Capability::Client inner, kj::Own<MembranePolicy> policy) {
   return Capability::Client(membrane(

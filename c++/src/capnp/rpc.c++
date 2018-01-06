@@ -2394,7 +2394,7 @@ private:
                                           kj::Own<ClientHook> resolvedCap) {
             auto vpap = startCall(interfaceId, methodId, kj::mv(resolvedCap), kj::mv(context));
             return kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline));
-          })).attach(addRef(*this)).split();
+          })).attach(addRef(*this), kj::mv(capability)).split();
 
           return {
             kj::mv(kj::get<0>(promises)),

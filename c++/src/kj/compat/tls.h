@@ -125,7 +125,7 @@ public:
 private:
   void* ctx;  // actually type SSL_CTX, but we don't want to #include the OpenSSL headers here
 
-  static int sniCallback(void* ssl, int* ad, void* arg);
+  struct SniCallback;
 };
 
 class TlsPrivateKey {
@@ -137,10 +137,10 @@ public:
   // RSA and DSA keys. Does not accept encrypted keys; it is the caller's responsibility to
   // decrypt.
 
-  TlsPrivateKey(kj::StringPtr pem);
+  TlsPrivateKey(kj::StringPtr pem, kj::Maybe<kj::StringPtr> password = nullptr);
   // Parse a single PEM-encoded private key. Supports PKCS8 keys as well as "traditional format"
-  // RSA and DSA keys. Does not accept encrypted keys; it is the caller's responsibility to
-  // decrypt.
+  // RSA and DSA keys. A password may optionally be provided and will be used if the key is
+  // encrypted.
 
   ~TlsPrivateKey() noexcept(false);
 
@@ -158,6 +158,8 @@ private:
   void* pkey;  // actually type EVP_PKEY*
 
   friend class TlsContext;
+
+  static int passwordCallback(char* buf, int size, int rwflag, void* u);
 };
 
 class TlsCertificate {

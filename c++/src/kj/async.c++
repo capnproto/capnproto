@@ -748,7 +748,6 @@ ChainPromiseNode::~ChainPromiseNode() noexcept(false) {}
 void ChainPromiseNode::onReady(Event* event) noexcept {
   switch (state) {
     case STEP1:
-      KJ_REQUIRE(onReadyEvent == nullptr, "onReady() can only be called once.");
       onReadyEvent = event;
       return;
     case STEP2:
