@@ -144,13 +144,22 @@ public:
   // itself was originally returned by the default implementation of exportInternal(), in which
   // case importInternal() is called instead.
 
-  virtual Capability::Client importInternal(Capability::Client internal);
+  virtual MembranePolicy& rootPolicy() { return *this; }
+  // If two policies return the same value for rootPolicy(), then a capability imported through
+  // one can be exported through the other, and vice versa. `importInternal()` and
+  // `exportExternal()` will always be called on the root policy, passing the two child policies
+  // as parameters. If you don't override rootPolicy(), then the policy references passed to
+  // importInternal() and exportExternal() will always be references to *this.
+
+  virtual Capability::Client importInternal(
+      Capability::Client internal, MembranePolicy& exportPolicy, MembranePolicy& importPolicy);
   // An internal capability which was previously exported is now being re-imported, i.e. a
   // capability passed out of the membrane and then back in.
   //
   // The default implementation simply returns `internal`.
 
-  virtual Capability::Client exportExternal(Capability::Client external);
+  virtual Capability::Client exportExternal(
+      Capability::Client external, MembranePolicy& importPolicy, MembranePolicy& exportPolicy);
   // An external capability which was previously imported is now being re-exported, i.e. a
   // capability passed into the membrane and then back out.
   //

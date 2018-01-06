@@ -321,13 +321,15 @@ public:
   static kj::Own<ClientHook> wrap(ClientHook& cap, MembranePolicy& policy, bool reverse) {
     if (cap.getBrand() == MEMBRANE_BRAND) {
       auto& otherMembrane = kj::downcast<MembraneHook>(cap);
-      if (otherMembrane.policy.get() == &policy && otherMembrane.reverse == !reverse) {
+      auto& rootPolicy = policy.rootPolicy();
+      if (&otherMembrane.policy->rootPolicy() == &rootPolicy &&
+          otherMembrane.reverse == !reverse) {
         // Capability that passed across the membrane one way is now passing back the other way.
         // Unwrap it rather than double-wrap it.
         Capability::Client unwrapped(otherMembrane.inner->addRef());
         return ClientHook::from(
-            reverse ? policy.importInternal(kj::mv(unwrapped))
-                    : policy.exportExternal(kj::mv(unwrapped)));
+            reverse ? rootPolicy.importInternal(kj::mv(unwrapped), *otherMembrane.policy, policy)
+                    : rootPolicy.exportExternal(kj::mv(unwrapped), *otherMembrane.policy, policy));
       }
     }
 
@@ -339,13 +341,15 @@ public:
   static kj::Own<ClientHook> wrap(kj::Own<ClientHook> cap, MembranePolicy& policy, bool reverse) {
     if (cap->getBrand() == MEMBRANE_BRAND) {
       auto& otherMembrane = kj::downcast<MembraneHook>(*cap);
-      if (otherMembrane.policy.get() == &policy && otherMembrane.reverse == !reverse) {
+      auto& rootPolicy = policy.rootPolicy();
+      if (&otherMembrane.policy->rootPolicy() == &rootPolicy &&
+          otherMembrane.reverse == !reverse) {
         // Capability that passed across the membrane one way is now passing back the other way.
         // Unwrap it rather than double-wrap it.
         Capability::Client unwrapped(otherMembrane.inner->addRef());
         return ClientHook::from(
-            reverse ? policy.importInternal(kj::mv(unwrapped))
-                    : policy.exportExternal(kj::mv(unwrapped)));
+            reverse ? rootPolicy.importInternal(kj::mv(unwrapped), *otherMembrane.policy, policy)
+                    : rootPolicy.exportExternal(kj::mv(unwrapped), *otherMembrane.policy, policy));
       }
     }
 
@@ -489,11 +493,13 @@ Capability::Client MembranePolicy::exportInternal(Capability::Client internal) {
       ClientHook::from(kj::mv(internal)), addRef(), false));
 }
 
-Capability::Client MembranePolicy::importInternal(Capability::Client internal) {
+Capability::Client MembranePolicy::importInternal(
+    Capability::Client internal, MembranePolicy& exportPolicy, MembranePolicy& importPolicy) {
   return kj::mv(internal);
 }
 
-Capability::Client MembranePolicy::exportExternal(Capability::Client external) {
+Capability::Client MembranePolicy::exportExternal(
+    Capability::Client external, MembranePolicy& importPolicy, MembranePolicy& exportPolicy) {
   return kj::mv(external);
 }
 
