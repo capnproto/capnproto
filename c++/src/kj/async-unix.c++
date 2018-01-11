@@ -542,8 +542,18 @@ bool UnixEventPort::doEpollWait(int timeout) {
   }
 
   struct epoll_event events[16];
-  int n;
-  KJ_SYSCALL(n = epoll_wait(epollFd, events, kj::size(events), timeout));
+  int n = epoll_wait(epollFd, events, kj::size(events), timeout);
+  if (n < 0) {
+    int error = errno;
+    if (error == EINTR) {
+      // We can't simply restart the epoll call because we need to recompute the timeout. Instead,
+      // we pretend epoll_wait() returned zero events. This will cause the event loop to spin once,
+      // decide it has nothing to do, recompute timeouts, then return to waiting.
+      n = 0;
+    } else {
+      KJ_FAIL_SYSCALL("epoll_wait()", error);
+    }
+  }
 
   bool woken = false;
 
@@ -724,13 +734,16 @@ public:
   }
 
   void run(int timeout) {
-    do {
-      pollResult = ::poll(pollfds.begin(), pollfds.size(), timeout);
-      pollError = pollResult < 0 ? errno : 0;
+    pollResult = ::poll(pollfds.begin(), pollfds.size(), timeout);
+    pollError = pollResult < 0 ? errno : 0;
 
-      // EINTR should only happen if we received a signal *other than* the ones registered via
-      // the UnixEventPort, so we don't care about that case.
-    } while (pollError == EINTR);
+    if (pollError == EINTR) {
+      // We can't simply restart the poll call because we need to recompute the timeout. Instead,
+      // we pretend poll() returned zero events. This will cause the event loop to spin once,
+      // decide it has nothing to do, recompute timeouts, then return to waiting.
+      pollResult = 0;
+      pollError = 0;
+    }
   }
 
   void processResults() {
