@@ -23,8 +23,7 @@
 //
 // This defines very simple utilities that are widely applicable.
 
-#ifndef KJ_COMMON_H_
-#define KJ_COMMON_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -1462,5 +1461,3 @@ _::Deferred<Func> defer(Func&& func) {
 // Run the given code when the function exits, whether by return or exception.
 
 }  // namespace kj
-
-#endif  // KJ_COMMON_H_

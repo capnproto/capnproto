@@ -24,16 +24,15 @@
 //
 // Non-inline declarations here are defined in async.c++.
 
-#ifndef KJ_ASYNC_H_
-#error "Do not include this directly; include kj/async.h."
-#include "async.h"  // help IDE parse this file
-#endif
-
-#ifndef KJ_ASYNC_INL_H_
-#define KJ_ASYNC_INL_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
+#endif
+
+#ifndef KJ_ASYNC_H_INCLUDED
+#error "Do not include this directly; include kj/async.h."
+#include "async.h"  // help IDE parse this file
 #endif
 
 namespace kj {
@@ -1116,5 +1115,3 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller() {
 }
 
 }  // namespace kj
-
-#endif  // KJ_ASYNC_INL_H_

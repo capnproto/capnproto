@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_EXCEPTION_H_
-#define KJ_EXCEPTION_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -375,5 +374,3 @@ kj::StringPtr trimSourceFilename(kj::StringPtr filename);
 // "/ekam-provider/canonical/".
 
 }  // namespace kj
-
-#endif  // KJ_EXCEPTION_H_

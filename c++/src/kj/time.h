@@ -20,8 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_TIME_H_
-#define KJ_TIME_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -71,5 +70,3 @@ const Clock& nullClock();
 // time.
 
 }  // namespace kj
-
-#endif  // KJ_TIME_H_

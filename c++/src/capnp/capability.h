@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_CAPABILITY_H_
-#define CAPNP_CAPABILITY_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -883,6 +882,6 @@ struct Orphanage::GetInnerReader<T, Kind::INTERFACE> {
   }
 };
 
-}  // namespace capnp
+#define CAPNP_CAPABILITY_H_INCLUDED  // for testing includes in unit test
 
-#endif  // CAPNP_CAPABILITY_H_
+}  // namespace capnp

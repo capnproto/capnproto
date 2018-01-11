@@ -33,8 +33,7 @@
 // will have updated the input cursor to point to the position just past the end of what was parsed.
 // On failure, the cursor position is unspecified.
 
-#ifndef KJ_PARSE_COMMON_H_
-#define KJ_PARSE_COMMON_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -820,5 +819,3 @@ constexpr EndOfInput_ endOfInput = EndOfInput_();
 
 }  // namespace parse
 }  // namespace kj
-
-#endif  // KJ_PARSE_COMMON_H_

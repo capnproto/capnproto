@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_MUTEX_H_
-#define KJ_MUTEX_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -413,5 +412,3 @@ inline const T& Lazy<T>::get(Func&& init) const {
 }
 
 }  // namespace kj
-
-#endif  // KJ_MUTEX_H_

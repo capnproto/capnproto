@@ -21,13 +21,13 @@
 
 #include "schema.capnp.h"
 
-#ifdef CAPNP_CAPABILITY_H_
+#ifdef CAPNP_CAPABILITY_H_INCLUDED
 #error "schema.capnp should not depend on capability.h, because it contains no interfaces."
 #endif
 
 #include <capnp/test.capnp.h>
 
-#ifndef CAPNP_CAPABILITY_H_
+#ifndef CAPNP_CAPABILITY_H_INCLUDED
 #error "test.capnp did not include capability.h."
 #endif
 

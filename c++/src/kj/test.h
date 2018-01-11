@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_TEST_H_
-#define KJ_TEST_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -163,5 +162,3 @@ private:
 
 }  // namespace _ (private)
 }  // namespace kj
-
-#endif // KJ_TEST_H_

@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_ARENA_H_
-#define KJ_ARENA_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -209,5 +208,3 @@ ArrayBuilder<T> Arena::allocateOwnArrayBuilder(size_t capacity) {
 }
 
 }  // namespace kj
-
-#endif  // KJ_ARENA_H_

@@ -22,8 +22,7 @@
 // This file contains a bunch of internal declarations that must appear before rpc.h can start.
 // We don't define these directly in rpc.h because it makes the file hard to read.
 
-#ifndef CAPNP_RPC_PRELUDE_H_
-#define CAPNP_RPC_PRELUDE_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -126,5 +125,3 @@ using ExternalRefFromRealmGatewayClient = ExternalRefFromRealmGateway<typename T
 
 }  // namespace _ (private)
 }  // namespace capnp
-
-#endif  // CAPNP_RPC_PRELUDE_H_

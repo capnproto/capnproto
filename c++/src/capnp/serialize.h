@@ -38,8 +38,7 @@
 // - A multi-segment message can be read entirely in three system calls with no buffering.
 // - The format is appropriate for mmap()ing since all data is aligned.
 
-#ifndef CAPNP_SERIALIZE_H_
-#define CAPNP_SERIALIZE_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -233,5 +232,3 @@ inline void writeMessageToFd(int fd, MessageBuilder& builder) {
 }
 
 }  // namespace capnp
-
-#endif  // SERIALIZE_H_

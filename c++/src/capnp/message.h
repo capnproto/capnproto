@@ -27,8 +27,7 @@
 #include "layout.h"
 #include "any.h"
 
-#ifndef CAPNP_MESSAGE_H_
-#define CAPNP_MESSAGE_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -504,5 +503,3 @@ kj::Array<word> canonicalize(T&& reader) {
 }
 
 }  // namespace capnp
-
-#endif  // CAPNP_MESSAGE_H_

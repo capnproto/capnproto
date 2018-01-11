@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_MINIPOSIX_H_
-#define KJ_MINIPOSIX_H_
+#pragma once
 
 // This header provides a small subset of the POSIX API which also happens to be available on
 // Windows under slightly-different names.
@@ -148,5 +147,3 @@ inline size_t iovMax(size_t count) {
 
 }  // namespace miniposix
 }  // namespace kj
-
-#endif  // KJ_MINIPOSIX_H_

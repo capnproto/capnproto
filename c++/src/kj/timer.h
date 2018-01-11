@@ -20,8 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_TIMER_H_
-#define KJ_TIMER_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -131,5 +130,3 @@ Promise<T> Timer::timeoutAfter(Duration delay, Promise<T>&& promise) {
 inline TimePoint TimerImpl::now() { return time; }
 
 }  // namespace kj
-
-#endif  // KJ_TIMER_H_

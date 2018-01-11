@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_LIST_H_
-#define CAPNP_LIST_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -558,5 +557,3 @@ struct iterator_traits<capnp::_::IndexingIterator<Container, Element>>
 
 }  // namespace std
 #endif  // KJ_STD_COMPAT
-
-#endif  // CAPNP_LIST_H_

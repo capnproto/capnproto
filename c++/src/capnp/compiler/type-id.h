@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_COMPILER_TYPE_ID_H
-#define CAPNP_COMPILER_TYPE_ID_H
+#pragma once
 
 #include <kj/string.h>
 #include <kj/array.h>
@@ -41,5 +40,3 @@ uint64_t generateMethodParamsId(uint64_t parentId, uint16_t methodOrdinal, bool 
 
 }  // namespace compiler
 }  // namespace capnp
-
-#endif  // CAPNP_COMPILER_TYPE_ID_H

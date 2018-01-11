@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_EZ_RPC_H_
-#define CAPNP_EZ_RPC_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -250,5 +249,3 @@ inline typename Type::Client EzRpcClient::importCap(kj::StringPtr name) {
 }
 
 }  // namespace capnp
-
-#endif  // CAPNP_EZ_RPC_H_

@@ -23,8 +23,7 @@
  * Compatibility layer for stdlib iostream
  */
 
-#ifndef KJ_STD_IOSTREAM_H_
-#define KJ_STD_IOSTREAM_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -84,5 +83,3 @@ private:
 
 }  // namespace std
 }  // namespace kj
-
-#endif  // KJ_STD_IOSTREAM_H_

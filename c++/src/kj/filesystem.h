@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_FILESYSTEM_H_
-#define KJ_FILESYSTEM_H_
+#pragma once
 
 #include "memory.h"
 #include "io.h"
@@ -1088,5 +1087,3 @@ void Directory::Replacer<T>::commit() {
 }
 
 } // namespace kj
-
-#endif // KJ_FILESYSTEM_H_

@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_COMPAT_READINESS_IO_H_
-#define KJ_COMPAT_READINESS_IO_H_
+#pragma once
 
 #include <kj/async-io.h>
 
@@ -88,5 +87,3 @@ private:
 };
 
 } // namespace kj
-
-#endif // KJ_COMPAT_READINESS_IO_H_

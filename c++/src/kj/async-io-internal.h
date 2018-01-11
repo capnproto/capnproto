@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_ASYNC_IO_INTERNAL_H_
-#define KJ_ASYNC_IO_INTERNAL_H_
+#pragma once
 
 #include "string.h"
 #include "vector.h"
@@ -87,5 +86,3 @@ private:
 
 }  // namespace _ (private)
 }  // namespace kj
-
-#endif // KJ_ASYNC_IO_INTERNAL_H_

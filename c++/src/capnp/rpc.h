@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_RPC_H_
-#define CAPNP_RPC_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -565,5 +564,3 @@ RpcSystem<VatId> makeRpcClient(
 }
 
 }  // namespace capnp
-
-#endif  // CAPNP_RPC_H_

@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_ENCODING_H_
-#define KJ_ENCODING_H_
+#pragma once
 // Functions for encoding/decoding bytes and text in common formats, including:
 // - UTF-{8,16,32}
 // - Hex
@@ -257,5 +256,3 @@ EncodingResult<Array<byte>> decodeBase64(const char (&text)[s]) {
 }
 
 } // namespace kj
-
-#endif // KJ_ENCODING_H_

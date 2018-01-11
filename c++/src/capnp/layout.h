@@ -26,8 +26,7 @@
 // as does other parts of the Cap'n proto library which provide a higher-level interface for
 // dynamic introspection.
 
-#ifndef CAPNP_LAYOUT_H_
-#define CAPNP_LAYOUT_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -1271,5 +1270,3 @@ inline OrphanBuilder& OrphanBuilder::operator=(OrphanBuilder&& other) {
 
 }  // namespace _ (private)
 }  // namespace capnp
-
-#endif  // CAPNP_LAYOUT_H_

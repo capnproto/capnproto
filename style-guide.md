@@ -567,8 +567,7 @@ Headers:
     //
     // Licensed under the Whatever License blah blah no warranties.
 
-    #ifndef HEADER_PATH_FILENAME_H_
-    #define HEADER_PATH_FILENAME_H_
+    #pragma once
     // Documentation for file.
 
     #include <kj/common.h>
@@ -584,8 +583,6 @@ Headers:
     }  // namespace _ (private)
 
     }  // namespace myproject
-
-    #endif  // HEADER_PATH_FILENAME_H_
 
 Source code:
 
