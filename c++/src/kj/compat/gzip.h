@@ -26,7 +26,7 @@
 
 namespace kj {
 
-class GzipAsyncInputStream: public AsyncInputStream {
+class GzipAsyncInputStream final: public AsyncInputStream {
 public:
   GzipAsyncInputStream(AsyncInputStream& inner);
   ~GzipAsyncInputStream() noexcept(false);
@@ -44,7 +44,7 @@ private:
   Promise<size_t> readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
 };
 
-class GzipAsyncOutputStream: public AsyncOutputStream {
+class GzipAsyncOutputStream final: public AsyncOutputStream {
 public:
   GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
   ~GzipAsyncOutputStream() noexcept(false);
