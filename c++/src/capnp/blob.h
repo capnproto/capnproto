@@ -101,7 +101,9 @@ public:
   inline Builder(kj::Array<byte>& value): ArrayPtr<byte>(value) {}
   inline Builder(ArrayPtr<byte> value): ArrayPtr<byte>(value) {}
 
-  inline Data::Reader asReader() const { return Data::Reader(*this); }
+  inline Data::Reader asReader() const {
+    return Data::Reader(kj::implicitCast<const kj::ArrayPtr<byte>&>(*this));
+  }
   inline operator Reader() const { return asReader(); }
 };
 
