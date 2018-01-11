@@ -594,8 +594,9 @@ TEST(AsyncUnixTest, InterruptedTimer) {
   constexpr auto OS_SLOWNESS_FACTOR = 1;
 #else
   // OSX timeslices are 10ms, so we need longer timeouts to avoid flakiness.
+  // In fact, even 10x doesn't make OSX happy so we're pushing it to 100x.
   // To be safe we'll assume other OS's are similar.
-  constexpr auto OS_SLOWNESS_FACTOR = 10;
+  constexpr auto OS_SLOWNESS_FACTOR = 100;
 #endif
 
   // Schedule a timer event in 10ms.
