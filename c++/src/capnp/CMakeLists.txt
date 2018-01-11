@@ -194,12 +194,22 @@ if(BUILD_TESTING)
     test-import2.capnp
   )
 
-  # Add "/capnp" to match the path used to import the files in the test sources
-  set(CAPNPC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_capnp/capnp")
-  include_directories("${CMAKE_CURRENT_BINARY_DIR}/test_capnp")  # Note: no "/capnp"
+  set(CAPNPC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_capnp")
+  include_directories("${CAPNPC_OUTPUT_DIR}")
   file(MAKE_DIRECTORY "${CAPNPC_OUTPUT_DIR}")
+  # Tell capnp_generate_cpp to set --src-prefix to our parent directory. This allows us to pass our
+  # .capnp files relative to this directory, but have their canonical name end up as
+  # capnp/test.capnp, capnp/test-import.capnp, etc.
+  get_filename_component(CAPNPC_SRC_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 
   capnp_generate_cpp(test_capnp_cpp_files test_capnp_h_files ${test_capnp_files})
+
+  # TODO(cleanup): capnp-tests and capnp-heavy-tests both depend on the test.capnp output files. In
+  #   a parallel Makefile-based build (maybe others?), they can race and cause the custom capnp
+  #   command in capnp_generate_cpp() to run twice. To get around this I'm using a custom target to
+  #   force CMake to generate race-free Makefiles. Remove this garbage when we move to a
+  #   target-based capnp_generate() command, as that will make CMake do the right thing by default.
+  add_custom_target(test_capnp DEPENDS ${test_capnp_cpp_files} ${test_capnp_h_files})
 
   if(CAPNP_LITE)
     set(test_libraries capnp kj-test kj)
@@ -226,6 +236,7 @@ if(BUILD_TESTING)
     ${test_capnp_h_files}
   )
   target_link_libraries(capnp-tests ${test_libraries})
+  add_dependencies(capnp-tests test_capnp)
   add_dependencies(check capnp-tests)
   add_test(NAME capnp-tests-run COMMAND capnp-tests)
 
@@ -258,6 +269,7 @@ if(BUILD_TESTING)
       )
     endif()
 
+    add_dependencies(capnp-heavy-tests test_capnp)
     add_dependencies(check capnp-heavy-tests)
     add_test(NAME capnp-heavy-tests-run COMMAND capnp-heavy-tests)
 
