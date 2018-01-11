@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_COMPAT_GZIP_H_
-#define KJ_COMPAT_GZIP_H_
+#pragma once
 
 #include <kj/async-io.h>
 #include <zlib.h>
@@ -70,5 +69,3 @@ private:
 };
 
 }  // namespace kj
-
-#endif // KJ_COMPAT_GZIP_H_

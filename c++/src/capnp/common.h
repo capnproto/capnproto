@@ -23,8 +23,7 @@
 // time, but should then be optimized down to basic primitives (usually, integers) by the
 // compiler.
 
-#ifndef CAPNP_COMMON_H_
-#define CAPNP_COMMON_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -729,5 +728,3 @@ inline constexpr kj::ArrayPtr<U> arrayPtr(U* ptr, T size) {
 #endif
 
 }  // namespace capnp
-
-#endif  // CAPNP_COMMON_H_

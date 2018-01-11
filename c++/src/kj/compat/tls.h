@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_COMPAT_TLS_H_
-#define KJ_COMPAT_TLS_H_
+#pragma once
 // This file implements TLS (aka SSL) encrypted networking. It is actually a wrapper, currently
 // around OpenSSL / BoringSSL / LibreSSL, but the interface is intended to remain
 // implementation-agnostic.
@@ -231,5 +230,3 @@ public:
 };
 
 } // namespace kj
-
-#endif // KJ_COMPAT_TLS_H_

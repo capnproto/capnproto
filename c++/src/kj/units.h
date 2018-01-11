@@ -23,8 +23,7 @@
 // time, but should then be optimized down to basic primitives (usually, integers) by the
 // compiler.
 
-#ifndef KJ_UNITS_H_
-#define KJ_UNITS_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -1168,5 +1167,3 @@ inline constexpr Range<Quantity<Bounded<value, uint>, Unit>>
 }
 
 }  // namespace kj
-
-#endif  // KJ_UNITS_H_

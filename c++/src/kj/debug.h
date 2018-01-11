@@ -104,8 +104,7 @@
 //   define it explicitly (e.g. -DKJ_DEBUG).  Generally, production builds should NOT use KJ_DEBUG
 //   as it may enable expensive checks that are unlikely to fail.
 
-#ifndef KJ_DEBUG_H_
-#define KJ_DEBUG_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -584,5 +583,3 @@ inline String Debug::makeDescription<>(const char* macroArgs) {
 
 }  // namespace _ (private)
 }  // namespace kj
-
-#endif  // KJ_DEBUG_H_

@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_COMPAT_GTEST_H_
-#define KJ_COMPAT_GTEST_H_
+#pragma once
 // This file defines compatibility macros converting Google Test tests into KJ tests.
 //
 // This is only intended to cover the most common functionality. Many tests will likely need
@@ -118,5 +117,3 @@ private:
 #define TEST(x, y) KJ_TEST("legacy test: " #x "/" #y)
 
 }  // namespace kj
-
-#endif  // KJ_COMPAT_GTEST_H_

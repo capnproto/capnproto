@@ -22,8 +22,7 @@
 // This file contains a bunch of internal declarations that must appear before async.h can start.
 // We don't define these directly in async.h because it makes the file hard to read.
 
-#ifndef KJ_ASYNC_PRELUDE_H_
-#define KJ_ASYNC_PRELUDE_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -214,5 +213,3 @@ public:
 
 }  // namespace _ (private)
 }  // namespace kj
-
-#endif  // KJ_ASYNC_PRELUDE_H_

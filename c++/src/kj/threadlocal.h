@@ -20,8 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_THREADLOCAL_H_
-#define KJ_THREADLOCAL_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -132,5 +131,3 @@ private:
 #endif // KJ_USE_PTHREAD_TLS
 
 }  // namespace kj
-
-#endif  // KJ_THREADLOCAL_H_

@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_ARENA_H_
-#define CAPNP_ARENA_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -492,5 +491,3 @@ inline bool SegmentBuilder::tryExtend(word* from, word* to) {
 
 }  // namespace _ (private)
 }  // namespace capnp
-
-#endif  // CAPNP_ARENA_H_

@@ -30,8 +30,7 @@
 // As always, underlying data is validated lazily, so you have to actually traverse the whole
 // message if you want to validate all content.
 
-#ifndef CAPNP_DYNAMIC_H_
-#define CAPNP_DYNAMIC_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -1659,5 +1658,3 @@ ReaderFor<T> ConstSchema::as() const {
 }
 
 }  // namespace capnp
-
-#endif  // CAPNP_DYNAMIC_H_

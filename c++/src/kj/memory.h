@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_MEMORY_H_
-#define KJ_MEMORY_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -521,5 +520,3 @@ Own<T> Own<T>::attach(Attachments&&... attachments) {
 }
 
 }  // namespace kj
-
-#endif  // KJ_MEMORY_H_

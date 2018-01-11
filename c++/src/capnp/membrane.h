@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_MEMBRANE_H_
-#define CAPNP_MEMBRANE_H_
+#pragma once
 // In capability theory, a "membrane" is a wrapper around a capability which (usually) forwards
 // calls but recursively wraps capabilities in those calls in the same membrane. The purpose of a
 // membrane is to enforce a barrier between two capabilities that cannot be bypassed by merely
@@ -258,5 +257,3 @@ Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
 }
 
 } // namespace capnp
-
-#endif // CAPNP_MEMBRANE_H_

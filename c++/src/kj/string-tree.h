@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_STRING_TREE_H_
-#define KJ_STRING_TREE_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -208,5 +207,3 @@ StringTree strTree(Params&&... params) {
 }
 
 }  // namespace kj
-
-#endif  // KJ_STRING_TREE_H_

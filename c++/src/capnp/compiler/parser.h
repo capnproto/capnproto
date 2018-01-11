@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_COMPILER_PARSER_H_
-#define CAPNP_COMPILER_PARSER_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -147,5 +146,3 @@ private:
 
 }  // namespace compiler
 }  // namespace capnp
-
-#endif  // CAPNP_COMPILER_PARSER_H_

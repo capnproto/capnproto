@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_COMPAT_HTTP_H_
-#define KJ_COMPAT_HTTP_H_
+#pragma once
 // The KJ HTTP client/server library.
 //
 // This is a simple library which can be used to implement an HTTP client or server. Properties
@@ -761,5 +760,3 @@ inline kj::Own<HttpClient> newHttpClient(
 }
 
 }  // namespace kj
-
-#endif // KJ_COMPAT_HTTP_H_

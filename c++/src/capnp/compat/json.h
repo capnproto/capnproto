@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_COMPAT_JSON_H_
-#define CAPNP_COMPAT_JSON_H_
+#pragma once
 
 #include <capnp/schema.h>
 #include <capnp/dynamic.h>
@@ -476,5 +475,3 @@ template <> void JsonCodec::addTypeHandler(Handler<DynamicCapability>& handler)
 //   or "all lists". Currently you can only target a specific struct or list type.
 
 } // namespace capnp
-
-#endif // CAPNP_COMPAT_JSON_H_

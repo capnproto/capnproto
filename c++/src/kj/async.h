@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_ASYNC_H_
-#define KJ_ASYNC_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -706,6 +705,5 @@ private:
 
 }  // namespace kj
 
+#define KJ_ASYNC_H_INCLUDED
 #include "async-inl.h"
-
-#endif  // KJ_ASYNC_H_

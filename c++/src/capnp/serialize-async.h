@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_SERIALIZE_ASYNC_H_
-#define CAPNP_SERIALIZE_ASYNC_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -60,5 +59,3 @@ inline kj::Promise<void> writeMessage(kj::AsyncOutputStream& output, MessageBuil
 }
 
 }  // namespace capnp
-
-#endif  // CAPNP_SERIALIZE_ASYNC_H_

@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_REFCOUNT_H_
-#define KJ_REFCOUNT_H_
+#pragma once
 
 #include "memory.h"
 
@@ -220,5 +219,3 @@ kj::Own<const T> AtomicRefcounted::addRefInternal(const T* object) {
 }
 
 }  // namespace kj
-
-#endif  // KJ_REFCOUNT_H_

@@ -35,8 +35,7 @@
 // - It is illegal for an element of `Tuple` to be a reference, due to problems this would cause
 //   with type inference and `tuple()`.
 
-#ifndef KJ_TUPLE_H_
-#define KJ_TUPLE_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -360,5 +359,3 @@ constexpr size_t tupleSize() { return TupleSize_<T>::size; }
 // Returns size of the tuple T.
 
 }  // namespace kj
-
-#endif  // KJ_TUPLE_H_

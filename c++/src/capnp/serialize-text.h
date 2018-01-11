@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_SERIALIZE_TEXT_H_
-#define CAPNP_SERIALIZE_TEXT_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -92,5 +91,3 @@ inline Orphan<T> TextCodec::decode(kj::StringPtr input, Orphanage orphanage) con
 }
 
 }  // namespace capnp
-
-#endif  // CAPNP_SERIALIZE_TEXT_H_

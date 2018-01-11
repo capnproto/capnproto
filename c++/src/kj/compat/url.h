@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_COMPAT_URL_H_
-#define KJ_COMPAT_URL_H_
+#pragma once
 
 #include <kj/string.h>
 #include <kj/vector.h>
@@ -118,5 +117,3 @@ struct Url {
 };
 
 } // namespace kj
-
-#endif // KJ_COMPAT_URL_H_

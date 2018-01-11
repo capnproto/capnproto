@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef CAPNP_BENCHMARK_COMMON_H_
-#define CAPNP_BENCHMARK_COMMON_H_
+#pragma once
 
 #if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
 #pragma GCC system_header
@@ -293,5 +292,3 @@ int benchmarkMain(int argc, char* argv[]) {
 
 }  // namespace capnp
 }  // namespace benchmark
-
-#endif  // CAPNP_BENCHMARK_COMMON_H_

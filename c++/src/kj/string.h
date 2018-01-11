@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_STRING_H_
-#define KJ_STRING_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -554,5 +553,3 @@ inline String heapString(ArrayPtr<const char> value) {
 constexpr kj::StringPtr operator "" _kj(const char* str, size_t n) {
   return kj::StringPtr(kj::ArrayPtr<const char>(str, n + 1));
 };
-
-#endif  // KJ_STRING_H_

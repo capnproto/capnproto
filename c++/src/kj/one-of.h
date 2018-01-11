@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_ONE_OF_H_
-#define KJ_ONE_OF_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -284,5 +283,3 @@ void OneOf<Variants...>::allHandled() {
 //   looping, but it's defined as a pointer since that's all we can define in this context.
 
 }  // namespace kj
-
-#endif  // KJ_ONE_OF_H_

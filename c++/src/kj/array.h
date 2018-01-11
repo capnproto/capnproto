@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef KJ_ARRAY_H_
-#define KJ_ARRAY_H_
+#pragma once
 
 #if defined(__GNUC__) && !KJ_HEADER_WARNINGS
 #pragma GCC system_header
@@ -836,5 +835,3 @@ inline Array<Decay<T>> arr(T&& param1, Params&&... params) {
 #endif
 
 }  // namespace kj
-
-#endif  // KJ_ARRAY_H_
