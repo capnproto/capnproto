@@ -42,7 +42,7 @@ set(CAPNP_EXECUTABLE $<TARGET_FILE:CapnProto::capnp_tool>
     CACHE FILEPATH "Location of capnp executable")
 set(CAPNPC_CXX_EXECUTABLE $<TARGET_FILE:CapnProto::capnpc_cpp>
     CACHE FILEPATH "Location of capnpc-c++ executable")
-set(CAPNP_INCLUDE_DIRECTORY "@PACKAGE_CMAKE_INSTALL_FULL_INCLUDEDIR@")
+set(CAPNP_INCLUDE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/@PACKAGE_CMAKE_INSTALL_RELATIVE_INCLUDEDIR@")
 
 # work around http://public.kitware.com/Bug/view.php?id=15258
 if(NOT _IMPORT_PREFIX)
