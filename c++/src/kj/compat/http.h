@@ -78,19 +78,6 @@ namespace kj {
   MACRO(UNSUBSCRIBE)
   /* UPnP */
 
-#define KJ_HTTP_FOR_EACH_CONNECTION_HEADER(MACRO) \
-  MACRO(connection, "Connection") \
-  MACRO(contentLength, "Content-Length") \
-  MACRO(keepAlive, "Keep-Alive") \
-  MACRO(te, "TE") \
-  MACRO(trailer, "Trailer") \
-  MACRO(transferEncoding, "Transfer-Encoding") \
-  MACRO(upgrade, "Upgrade") \
-  MACRO(websocketKey, "Sec-WebSocket-Key") \
-  MACRO(websocketVersion, "Sec-WebSocket-Version") \
-  MACRO(websocketAccept, "Sec-WebSocket-Accept") \
-  MACRO(websocketExtensions, "Sec-WebSocket-Extensions")
-
 enum class HttpMethod {
   // Enum of known HTTP methods.
   //
@@ -138,12 +125,27 @@ public:
   // In opt mode, no-op.
 
 #define KJ_HTTP_FOR_EACH_BUILTIN_HEADER(MACRO) \
+  /* Headers that are always read-only. */ \
+  MACRO(CONNECTION, "Connection") \
+  MACRO(CONTENT_LENGTH, "Content-Length") \
+  MACRO(KEEP_ALIVE, "Keep-Alive") \
+  MACRO(TE, "TE") \
+  MACRO(TRAILER, "Trailer") \
+  MACRO(TRANSFER_ENCODING, "Transfer-Encoding") \
+  MACRO(UPGRADE, "Upgrade") \
+  \
+  /* Headers that are read-only for WebSocket handshakes. */ \
+  MACRO(SEC_WEBSOCKET_KEY, "Sec-WebSocket-Key") \
+  MACRO(SEC_WEBSOCKET_VERSION, "Sec-WebSocket-Version") \
+  MACRO(SEC_WEBSOCKET_ACCEPT, "Sec-WebSocket-Accept") \
+  MACRO(SEC_WEBSOCKET_EXTENSIONS, "Sec-WebSocket-Extensions") \
+  \
+  /* Headers that you can write. */ \
   MACRO(HOST, "Host") \
   MACRO(DATE, "Date") \
   MACRO(LOCATION, "Location") \
   MACRO(CONTENT_TYPE, "Content-Type")
-  // For convenience, these very-common headers are valid for all HttpHeaderTables. You can refer
-  // to them like:
+  // For convenience, these headers are valid for all HttpHeaderTables. You can refer to them like:
   //
   //     HttpHeaderId::HOST
   //
@@ -300,26 +302,13 @@ public:
   // Takes overship of a string so that it lives until the HttpHeaders object is destroyed. Useful
   // when you've passed a dynamic value to set() or add() or parse*().
 
-  struct ConnectionHeaders {
-    // These headers govern details of the specific HTTP connection or framing of the content.
-    // Hence, they are managed internally within the HTTP library, and never appear in an
-    // HttpHeaders structure.
-
-#define DECLARE_HEADER(id, name) \
-    kj::StringPtr id;
-    KJ_HTTP_FOR_EACH_CONNECTION_HEADER(DECLARE_HEADER)
-#undef DECLARE_HEADER
-  };
-
   struct Request {
     HttpMethod method;
     kj::StringPtr url;
-    ConnectionHeaders connectionHeaders;
   };
   struct Response {
     uint statusCode;
     kj::StringPtr statusText;
-    ConnectionHeaders connectionHeaders;
   };
 
   kj::Maybe<Request> tryParseRequest(kj::ArrayPtr<char> content);
@@ -334,11 +323,15 @@ public:
   // `HttpHeaders` is destroyed, or pass it to `takeOwnership()`.
 
   kj::String serializeRequest(HttpMethod method, kj::StringPtr url,
-                              const ConnectionHeaders& connectionHeaders) const;
+                              kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
   kj::String serializeResponse(uint statusCode, kj::StringPtr statusText,
-                               const ConnectionHeaders& connectionHeaders) const;
+                               kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
   // Serialize the headers as a complete request or response blob. The blob uses '\r\n' newlines
   // and includes the double-newline to indicate the end of the headers.
+  //
+  // `connectionHeaders`, if provided, contains connection-level headers supplied by the HTTP
+  // implementation, in the order specified by the KJ_HTTP_FOR_EACH_BUILTIN_HEADER macro. These
+  // headers values override any corresponding header value in the HttpHeaders object.
 
   kj::String toString() const;
 
@@ -356,16 +349,16 @@ private:
 
   kj::Vector<kj::Array<char>> ownedStrings;
 
-  kj::Maybe<uint> addNoCheck(kj::StringPtr name, kj::StringPtr value);
+  void addNoCheck(kj::StringPtr name, kj::StringPtr value);
 
   kj::StringPtr cloneToOwn(kj::StringPtr str);
 
   kj::String serialize(kj::ArrayPtr<const char> word1,
                        kj::ArrayPtr<const char> word2,
                        kj::ArrayPtr<const char> word3,
-                       const ConnectionHeaders& connectionHeaders) const;
+                       kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const;
 
-  bool parseHeaders(char* ptr, char* end, ConnectionHeaders& connectionHeaders);
+  bool parseHeaders(char* ptr, char* end);
 
   // TODO(perf): Arguably we should store a map, but header sets are never very long
   // TODO(perf): We could optimize for common headers by storing them directly as fields. We could

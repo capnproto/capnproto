@@ -119,20 +119,21 @@ KJ_TEST("HttpHeaders::parseRequest") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(fooBar)) == "Baz");
   KJ_EXPECT(headers.get(bazQux) == nullptr);
   KJ_EXPECT(headers.get(HttpHeaderId::CONTENT_TYPE) == nullptr);
-  KJ_EXPECT(result.connectionHeaders.contentLength == "123");
-  KJ_EXPECT(result.connectionHeaders.transferEncoding == nullptr);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::CONTENT_LENGTH)) == "123");
+  KJ_EXPECT(headers.get(HttpHeaderId::TRANSFER_ENCODING) == nullptr);
 
   std::map<kj::StringPtr, kj::StringPtr> unpackedHeaders;
   headers.forEach([&](kj::StringPtr name, kj::StringPtr value) {
     KJ_EXPECT(unpackedHeaders.insert(std::make_pair(name, value)).second);
   });
-  KJ_EXPECT(unpackedHeaders.size() == 4);
+  KJ_EXPECT(unpackedHeaders.size() == 5);
+  KJ_EXPECT(unpackedHeaders["Content-Length"] == "123");
   KJ_EXPECT(unpackedHeaders["Host"] == "example.com");
   KJ_EXPECT(unpackedHeaders["Date"] == "early");
   KJ_EXPECT(unpackedHeaders["Foo-Bar"] == "Baz");
   KJ_EXPECT(unpackedHeaders["other-Header"] == "yep");
 
-  KJ_EXPECT(headers.serializeRequest(result.method, result.url, result.connectionHeaders) ==
+  KJ_EXPECT(headers.serializeRequest(result.method, result.url) ==
       "POST /some/path HTTP/1.1\r\n"
       "Content-Length: 123\r\n"
       "Host: example.com\r\n"
@@ -168,21 +169,22 @@ KJ_TEST("HttpHeaders::parseResponse") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(fooBar)) == "Baz");
   KJ_EXPECT(headers.get(bazQux) == nullptr);
   KJ_EXPECT(headers.get(HttpHeaderId::CONTENT_TYPE) == nullptr);
-  KJ_EXPECT(result.connectionHeaders.contentLength == "123");
-  KJ_EXPECT(result.connectionHeaders.transferEncoding == nullptr);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::CONTENT_LENGTH)) == "123");
+  KJ_EXPECT(headers.get(HttpHeaderId::TRANSFER_ENCODING) == nullptr);
 
   std::map<kj::StringPtr, kj::StringPtr> unpackedHeaders;
   headers.forEach([&](kj::StringPtr name, kj::StringPtr value) {
     KJ_EXPECT(unpackedHeaders.insert(std::make_pair(name, value)).second);
   });
-  KJ_EXPECT(unpackedHeaders.size() == 4);
+  KJ_EXPECT(unpackedHeaders.size() == 5);
+  KJ_EXPECT(unpackedHeaders["Content-Length"] == "123");
   KJ_EXPECT(unpackedHeaders["Host"] == "example.com");
   KJ_EXPECT(unpackedHeaders["Date"] == "early");
   KJ_EXPECT(unpackedHeaders["Foo-Bar"] == "Baz");
   KJ_EXPECT(unpackedHeaders["other-Header"] == "yep");
 
   KJ_EXPECT(headers.serializeResponse(
-        result.statusCode, result.statusText, result.connectionHeaders) ==
+        result.statusCode, result.statusText) ==
       "HTTP/1.1 418 I'm a teapot\r\n"
       "Content-Length: 123\r\n"
       "Host: example.com\r\n"
