@@ -1105,15 +1105,18 @@ public:
   }
 
   inline kj::Promise<kj::Maybe<HttpHeaders::Request>> readRequestHeaders() {
-    headers.clear();
     return readMessageHeaders().then([this](kj::ArrayPtr<char> text) {
+      headers.clear();
       return headers.tryParseRequest(text);
     });
   }
 
   inline kj::Promise<kj::Maybe<HttpHeaders::Response>> readResponseHeaders() {
-    headers.clear();
+    // Note: readResponseHeaders() could be called multiple times concurrently when pipelining
+    //   requests. readMessageHeaders() will serialize these, but it's important not to mess with
+    //   state (like calling headers.clear()) before said serialization has taken place.
     return readMessageHeaders().then([this](kj::ArrayPtr<char> text) {
+      headers.clear();
       return headers.tryParseResponse(text);
     });
   }
@@ -2421,6 +2424,8 @@ public:
         "of being upgraded");
     KJ_REQUIRE(!closed,
         "this HttpClient's connection has been closed by the server or due to an error");
+    KJ_REQUIRE(httpOutput.canReuse(),
+        "can't start new request until previous request body has been fully written");
     closeWatcherTask = nullptr;
 
     kj::StringPtr connectionHeaders[CONNECTION_HEADERS_COUNT];
