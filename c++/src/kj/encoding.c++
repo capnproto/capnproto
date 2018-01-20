@@ -774,7 +774,7 @@ int base64_decode_value(char value_in) {
   // Note that the original libb64 implementation used -1 for invalid input, -2 on padding -- this
   // new scheme allows for some simpler error checks in steps A and B.
 
-  static const char decoding[] = {
+  static const signed char decoding[] = {
     -3,-3,-3,-3,-3,-3,-3,-3,  -3,-1,-1,-3,-1,-1,-3,-3,
     -3,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,-3,-3,-3,-3,-3,
     -1,-3,-3,-3,-3,-3,-3,-3,  -3,-3,-3,62,-3,-3,-3,63,
