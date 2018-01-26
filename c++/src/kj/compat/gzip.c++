@@ -54,7 +54,9 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
     return inner.tryRead(buffer, 1, sizeof(buffer))
         .then([this,out,minBytes,maxBytes,alreadyRead](size_t amount) -> Promise<size_t> {
       if (amount == 0) {
-        KJ_REQUIRE(atValidEndpoint, "gzip compressed stream ended prematurely");
+        if (!atValidEndpoint) {
+          return KJ_EXCEPTION(DISCONNECTED, "gzip compressed stream ended prematurely");
+        }
         return alreadyRead;
       } else {
         ctx.next_in = buffer;

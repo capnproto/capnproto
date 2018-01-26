@@ -53,12 +53,14 @@ Promise<void> AsyncInputStream::read(void* buffer, size_t bytes) {
 
 Promise<size_t> AsyncInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
   return tryRead(buffer, minBytes, maxBytes).then([=](size_t result) {
-    KJ_REQUIRE(result >= minBytes, "Premature EOF") {
+    if (result >= minBytes) {
+      return result;
+    } else {
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "stream disconnected prematurely"));
       // Pretend we read zeros from the input.
       memset(reinterpret_cast<byte*>(buffer) + result, 0, minBytes - result);
       return minBytes;
     }
-    return result;
   });
 }
 
