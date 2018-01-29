@@ -225,7 +225,7 @@ private:
 
     return sslCall([this,buffer,maxBytes]() { return SSL_read(ssl, buffer, maxBytes); })
         .then([this,buffer,minBytes,maxBytes,alreadyDone](size_t n) -> kj::Promise<size_t> {
-      if (n >= minBytes) {
+      if (n >= minBytes || n == 0) {
         return alreadyDone + n;
       } else {
         return tryReadInternal(reinterpret_cast<byte*>(buffer) + n,
@@ -240,7 +240,9 @@ private:
 
     return sslCall([this,first]() { return SSL_write(ssl, first.begin(), first.size()); })
         .then([this,first,rest](size_t n) -> kj::Promise<void> {
-      if (n < first.size()) {
+      if (n == 0) {
+        return KJ_EXCEPTION(DISCONNECTED, "ssl connection ended during write");
+      } else if (n < first.size()) {
         return writeInternal(first.slice(n, first.size()), rest);
       } else if (rest.size() > 0) {
         return writeInternal(rest[0], rest.slice(1, rest.size()));
