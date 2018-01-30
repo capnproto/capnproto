@@ -86,10 +86,10 @@ public:
     for (auto& segment: message.getSegmentsForOutput()) {
       size += segment.size();
     }
-    KJ_REQUIRE(size < ReaderOptions().traversalLimitInWords, size,
-               "Trying to send Cap'n Proto message larger than the single-message size limit. The "
-               "other side probably won't accept it and would abort the connection, so I won't "
-               "send it.") {
+    KJ_REQUIRE(size < network.receiveOptions.traversalLimitInWords, size,
+               "Trying to send Cap'n Proto message larger than our single-message size limit. The "
+               "other side probably won't accept it (assuming its traversalLimitInWords matches "
+               "ours) and would abort the connection, so I won't send it.") {
       return;
     }
 
