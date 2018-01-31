@@ -25,7 +25,7 @@
 #pragma GCC system_header
 #endif
 
-#include "common.h"
+#include "memory.h"
 #include <string.h>
 #include <initializer_list>
 
@@ -233,6 +233,10 @@ public:
     other.size_ = 0;
     return *this;
   }
+
+  template <typename... Attachments>
+  Array<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
+  // Like Own<T>::attach(), but attaches to an Array.
 
 private:
   T* ptr;
@@ -833,5 +837,49 @@ inline Array<Decay<T>> arr(T&& param1, Params&&... params) {
   return builder.finish();
 }
 #endif
+
+namespace _ {  // private
+
+template <typename... T>
+struct ArrayDisposableOwnedBundle final: public ArrayDisposer, public OwnedBundle<T...> {
+  ArrayDisposableOwnedBundle(T&&... values): OwnedBundle<T...>(kj::fwd<T>(values)...) {}
+  void disposeImpl(void*, size_t, size_t, size_t, void (*)(void*)) const override { delete this; }
+};
+
+}  // namespace _ (private)
+
+template <typename T>
+template <typename... Attachments>
+Array<T> Array<T>::attach(Attachments&&... attachments) {
+  T* ptrCopy = ptr;
+
+  KJ_IREQUIRE(ptrCopy != nullptr, "cannot attach to null pointer");
+
+  // HACK: If someone accidentally calls .attach() on a null pointer in opt mode, try our best to
+  //   accomplish reasonable behavior: We turn the pointer non-null but still invalid, so that the
+  //   disposer will still be called when the pointer goes out of scope.
+  if (ptrCopy == nullptr) ptrCopy = reinterpret_cast<T*>(1);
+
+  auto bundle = new _::ArrayDisposableOwnedBundle<Array<T>, Attachments...>(
+      kj::mv(*this), kj::fwd<Attachments>(attachments)...);
+  return Array<T>(ptrCopy, size_, *bundle);
+}
+
+template <typename T>
+template <typename... Attachments>
+Array<T> ArrayPtr<T>::attach(Attachments&&... attachments) const {
+  T* ptrCopy = ptr;
+
+  KJ_IREQUIRE(ptr != nullptr, "cannot attach to null pointer");
+
+  // HACK: If someone accidentally calls .attach() on a null pointer in opt mode, try our best to
+  //   accomplish reasonable behavior: We turn the pointer non-null but still invalid, so that the
+  //   disposer will still be called when the pointer goes out of scope.
+  if (ptrCopy == nullptr) ptrCopy = reinterpret_cast<T*>(1);
+
+  auto bundle = new _::ArrayDisposableOwnedBundle<Attachments...>(
+      kj::fwd<Attachments>(attachments)...);
+  return Array<T>(ptr, size_, *bundle);
+}
 
 }  // namespace kj

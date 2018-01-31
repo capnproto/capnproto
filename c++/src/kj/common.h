@@ -1248,6 +1248,9 @@ private:
 // So common that we put it in common.h rather than array.h.
 
 template <typename T>
+class Array;
+
+template <typename T>
 class ArrayPtr: public DisallowConstCopyIfNotConst<T> {
   // A pointer to an array.  Includes a size.  Like any pointer, it doesn't own the target data,
   // and passing by value only copies the pointer, not the target.
@@ -1355,6 +1358,13 @@ public:
   }
   template <typename U>
   inline bool operator!=(const ArrayPtr<U>& other) const { return !(*this == other); }
+
+  template <typename... Attachments>
+  Array<T> attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
+  // Like Array<T>::attach(), but also promotes an ArrayPtr to an Array. Generally the attachment
+  // should be an object that actually owns the array that the ArrayPtr is pointing at.
+  //
+  // You must include kj/array.h to call this.
 
 private:
   T* ptr;
