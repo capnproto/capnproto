@@ -634,31 +634,34 @@ public:
       addrTarget = &result.addr.inet4.sin_addr;
     }
 
-    // addrPart is not necessarily NUL-terminated so we have to make a copy.  :(
     char buffer[64];
-    KJ_REQUIRE(addrPart.size() < sizeof(buffer) - 1, "IP address too long.", addrPart);
-    memcpy(buffer, addrPart.begin(), addrPart.size());
-    buffer[addrPart.size()] = '\0';
+    if (addrPart.size() < sizeof(buffer) - 1) {
+      // addrPart is not necessarily NUL-terminated so we have to make a copy.  :(
+      memcpy(buffer, addrPart.begin(), addrPart.size());
+      buffer[addrPart.size()] = '\0';
 
-    // OK, parse it!
-    switch (InetPtonA(af, buffer, addrTarget)) {
-      case 1: {
-        // success.
-        if (!result.parseAllowedBy(filter)) {
-          KJ_FAIL_REQUIRE("address family blocked by restrictPeers()");
-          return Array<SocketAddress>();
+      // OK, parse it!
+      switch (InetPtonA(af, buffer, addrTarget)) {
+        case 1: {
+          // success.
+          if (!result.parseAllowedBy(filter)) {
+            KJ_FAIL_REQUIRE("address family blocked by restrictPeers()");
+            return Array<SocketAddress>();
+          }
+
+          auto array = kj::heapArrayBuilder<SocketAddress>(1);
+          array.add(result);
+          return array.finish();
         }
-
-        auto array = kj::heapArrayBuilder<SocketAddress>(1);
-        array.add(result);
-        return array.finish();
+        case 0:
+          // It's apparently not a simple address...  fall back to DNS.
+          break;
+        default:
+          KJ_FAIL_WIN32("InetPton", WSAGetLastError(), af, addrPart);
       }
-      case 0:
-        // It's apparently not a simple address...  fall back to DNS.
-        return lookupHost(lowLevel, kj::heapString(addrPart), nullptr, port, filter);
-      default:
-        KJ_FAIL_WIN32("InetPton", WSAGetLastError(), af, addrPart);
     }
+
+    return lookupHost(lowLevel, kj::heapString(addrPart), nullptr, port, filter);
   }
 
   static SocketAddress getLocalAddress(SOCKET sockfd) {
