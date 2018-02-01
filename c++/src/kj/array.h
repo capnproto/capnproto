@@ -870,7 +870,7 @@ template <typename... Attachments>
 Array<T> ArrayPtr<T>::attach(Attachments&&... attachments) const {
   T* ptrCopy = ptr;
 
-  KJ_IREQUIRE(ptr != nullptr, "cannot attach to null pointer");
+  KJ_IREQUIRE(ptrCopy != nullptr, "cannot attach to null pointer");
 
   // HACK: If someone accidentally calls .attach() on a null pointer in opt mode, try our best to
   //   accomplish reasonable behavior: We turn the pointer non-null but still invalid, so that the
@@ -879,7 +879,7 @@ Array<T> ArrayPtr<T>::attach(Attachments&&... attachments) const {
 
   auto bundle = new _::ArrayDisposableOwnedBundle<Attachments...>(
       kj::fwd<Attachments>(attachments)...);
-  return Array<T>(ptr, size_, *bundle);
+  return Array<T>(ptrCopy, size_, *bundle);
 }
 
 }  // namespace kj
