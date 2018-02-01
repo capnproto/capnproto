@@ -732,31 +732,34 @@ public:
       addrTarget = &result.addr.inet4.sin_addr;
     }
 
-    // addrPart is not necessarily NUL-terminated so we have to make a copy.  :(
-    KJ_REQUIRE(addrPart.size() < INET6_ADDRSTRLEN - 1, "IP address too long.", addrPart);
-    char buffer[INET6_ADDRSTRLEN];
-    memcpy(buffer, addrPart.begin(), addrPart.size());
-    buffer[addrPart.size()] = '\0';
+    if (addrPart.size() < INET6_ADDRSTRLEN - 1) {
+      // addrPart is not necessarily NUL-terminated so we have to make a copy.  :(
+      char buffer[INET6_ADDRSTRLEN];
+      memcpy(buffer, addrPart.begin(), addrPart.size());
+      buffer[addrPart.size()] = '\0';
 
-    // OK, parse it!
-    switch (inet_pton(af, buffer, addrTarget)) {
-      case 1: {
-        // success.
-        if (!result.parseAllowedBy(filter)) {
-          KJ_FAIL_REQUIRE("address family blocked by restrictPeers()");
-          return Array<SocketAddress>();
+      // OK, parse it!
+      switch (inet_pton(af, buffer, addrTarget)) {
+        case 1: {
+          // success.
+          if (!result.parseAllowedBy(filter)) {
+            KJ_FAIL_REQUIRE("address family blocked by restrictPeers()");
+            return Array<SocketAddress>();
+          }
+
+          auto array = kj::heapArrayBuilder<SocketAddress>(1);
+          array.add(result);
+          return array.finish();
         }
-
-        auto array = kj::heapArrayBuilder<SocketAddress>(1);
-        array.add(result);
-        return array.finish();
+        case 0:
+          // It's apparently not a simple address...  fall back to DNS.
+          break;
+        default:
+          KJ_FAIL_SYSCALL("inet_pton", errno, af, addrPart);
       }
-      case 0:
-        // It's apparently not a simple address...  fall back to DNS.
-        return lookupHost(lowLevel, kj::heapString(addrPart), nullptr, port, filter);
-      default:
-        KJ_FAIL_SYSCALL("inet_pton", errno, af, addrPart);
     }
+
+    return lookupHost(lowLevel, kj::heapString(addrPart), nullptr, port, filter);
   }
 
   static SocketAddress getLocalAddress(int sockfd) {
