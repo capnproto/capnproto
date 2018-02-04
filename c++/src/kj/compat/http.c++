@@ -346,6 +346,7 @@ static kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr) {
   }
 
   switch (*p++) {
+    case 'A': EXPECT_REST(A,CL)
     case 'C':
       switch (*p++) {
         case 'H': EXPECT_REST(CH,ECKOUT)

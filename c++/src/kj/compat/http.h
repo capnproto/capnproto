@@ -64,6 +64,7 @@ namespace kj {
   MACRO(PROPPATCH) \
   MACRO(SEARCH) \
   MACRO(UNLOCK) \
+  MACRO(ACL) \
   /* WebDAV */ \
   \
   MACRO(REPORT) \
