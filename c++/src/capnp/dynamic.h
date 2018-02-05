@@ -169,6 +169,21 @@ private:
 
 // -------------------------------------------------------------------
 
+enum class HasMode: uint8_t {
+  // Specifies the meaning of "has(field)".
+
+  NON_NULL,
+  // "has(field)" only returns false if the field is a pointer and the pointer is null. This is the
+  // default behavior.
+
+  NON_DEFAULT
+  // "has(field)" returns false if the field is set to its default value. This differs from
+  // NON_NULL only in the handling of primitive values.
+  //
+  // "Equal to default value" is technically defined as the field value being encoded as all-zero
+  // on the wire (since primitive values are XORed by their defined default value when encoded).
+};
+
 class DynamicStruct::Reader {
 public:
   typedef DynamicStruct Reads;
@@ -191,12 +206,10 @@ public:
   DynamicValue::Reader get(StructSchema::Field field) const;
   // Read the given field value.
 
-  bool has(StructSchema::Field field) const;
-  // Tests whether the given field is set to its default value.  For pointer values, this does
-  // not actually traverse the value comparing it with the default, but simply returns true if the
-  // pointer is non-null.  For members of unions, has() returns false if the union member is not
-  // active, but does not necessarily return true if the member is active (depends on the field's
-  // value).
+  bool has(StructSchema::Field field, HasMode mode = HasMode::NON_NULL) const;
+  // Tests whether the given field is "present". If the field is a union member and is not the
+  // active member, this always returns false. Otherwise, the field's value is interpreted
+  // according to `mode`.
 
   kj::Maybe<StructSchema::Field> which() const;
   // If the struct contains an (unnamed) union, and the currently-active field within that union
@@ -206,7 +219,7 @@ public:
   // newer version of the protocol and is using a field of the union that you don't know about yet.
 
   DynamicValue::Reader get(kj::StringPtr name) const;
-  bool has(kj::StringPtr name) const;
+  bool has(kj::StringPtr name, HasMode mode = HasMode::NON_NULL) const;
   // Shortcuts to access fields by name.  These throw exceptions if no such field exists.
 
 private:
@@ -261,12 +274,11 @@ public:
   DynamicValue::Builder get(StructSchema::Field field);
   // Read the given field value.
 
-  inline bool has(StructSchema::Field field) { return asReader().has(field); }
-  // Tests whether the given field is set to its default value.  For pointer values, this does
-  // not actually traverse the value comparing it with the default, but simply returns true if the
-  // pointer is non-null.  For members of unions, has() returns whether the field is currently
-  // active and the union as a whole is non-default -- so, the only time has() will return false
-  // for an active union field is if it is the default active field and it has its default value.
+  inline bool has(StructSchema::Field field, HasMode mode = HasMode::NON_NULL)
+      { return asReader().has(field, mode); }
+  // Tests whether the given field is "present". If the field is a union member and is not the
+  // active member, this always returns false. Otherwise, the field's value is interpreted
+  // according to `mode`.
 
   kj::Maybe<StructSchema::Field> which();
   // If the struct contains an (unnamed) union, and the currently-active field within that union
@@ -292,7 +304,7 @@ public:
   // field null.
 
   DynamicValue::Builder get(kj::StringPtr name);
-  bool has(kj::StringPtr name);
+  bool has(kj::StringPtr name, HasMode mode = HasMode::NON_NULL);
   void set(kj::StringPtr name, const DynamicValue::Reader& value);
   void set(kj::StringPtr name, std::initializer_list<DynamicValue::Reader> value);
   DynamicValue::Builder init(kj::StringPtr name);

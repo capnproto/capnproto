@@ -49,6 +49,7 @@ struct FieldHash {
 
 struct JsonCodec::Impl {
   bool prettyPrint = false;
+  HasMode hasMode = HasMode::NON_NULL;
   size_t maxNestingDepth = 64;
 
   std::unordered_map<Type, HandlerBase*, TypeHash> typeHandlers;
@@ -195,6 +196,8 @@ void JsonCodec::setMaxNestingDepth(size_t maxNestingDepth) {
   impl->maxNestingDepth = maxNestingDepth;
 }
 
+void JsonCodec::setHasMode(HasMode mode) { impl->hasMode = mode; }
+
 kj::String JsonCodec::encode(DynamicValue::Reader value, Type type) const {
   MallocMessageBuilder message;
   auto json = message.getRoot<JsonValue>();
@@ -308,7 +311,7 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
 
       uint fieldCount = 0;
       for (auto i: kj::indices(nonUnionFields)) {
-        fieldCount += (hasField[i] = structValue.has(nonUnionFields[i]));
+        fieldCount += (hasField[i] = structValue.has(nonUnionFields[i], impl->hasMode));
       }
 
       // We try to write the union field, if any, in proper order with the rest.
@@ -318,7 +321,7 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
       KJ_IF_MAYBE(field, which) {
         // Even if the union field is null, if it is not the default field of the union then we
         // have to print it anyway.
-        unionFieldIsNull = !structValue.has(*field);
+        unionFieldIsNull = !structValue.has(*field, impl->hasMode);
         if (field->getProto().getDiscriminantValue() != 0 || !unionFieldIsNull) {
           ++fieldCount;
         } else {
