@@ -74,6 +74,12 @@ public:
   // Set maximum nesting depth when decoding JSON to prevent highly nested input from overflowing
   // the call stack. The default is 64.
 
+  void setHasMode(HasMode mode);
+  // Normally, primitive field values are always included even if they are equal to the default
+  // value (HasMode::NON_NULL -- only null pointers are omitted). You can use
+  // setHasMode(HasMode::NON_DEFAULT) to specify that default-valued primitive fields should be
+  // omitted as well.
+
   template <typename T>
   kj::String encode(T&& value) const;
   // Encode any Cap'n Proto value to JSON, including primitives and
