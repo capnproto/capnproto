@@ -1,5 +1,5 @@
-project("Cap'n Proto" CXX)
 cmake_minimum_required(VERSION 3.1)
+project("Cap'n Proto" CXX)
 set(VERSION 0.7-dev)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
