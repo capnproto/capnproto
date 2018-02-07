@@ -2619,6 +2619,12 @@ KJ_TEST("HttpClient connection management") {
       .wait(io.waitScope);
   KJ_EXPECT(count == 0);
 
+  // Connections where we didn't even wait for the response headers are not reused.
+  doRequest().wait(io.waitScope);
+  KJ_EXPECT(count == 1);
+  client->request(HttpMethod::GET, kj::str("/foo"), HttpHeaders(headerTable));
+  KJ_EXPECT(count == 0);
+
   // Connections where we failed to write the full request body are not reused.
   doRequest().wait(io.waitScope);
   KJ_EXPECT(count == 1);
