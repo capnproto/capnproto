@@ -2475,16 +2475,16 @@ private:
     const char* linkage = scope.size() == 0 ? "extern " : "static ";
 
     switch (type.which()) {
-      case schema::Value::BOOL:
-      case schema::Value::INT8:
-      case schema::Value::INT16:
-      case schema::Value::INT32:
-      case schema::Value::INT64:
-      case schema::Value::UINT8:
-      case schema::Value::UINT16:
-      case schema::Value::UINT32:
-      case schema::Value::UINT64:
-      case schema::Value::ENUM:
+      case schema::Type::BOOL:
+      case schema::Type::INT8:
+      case schema::Type::INT16:
+      case schema::Type::INT32:
+      case schema::Type::INT64:
+      case schema::Type::UINT8:
+      case schema::Type::UINT16:
+      case schema::Type::UINT32:
+      case schema::Type::UINT64:
+      case schema::Type::ENUM:
         return ConstText {
           false,
           kj::strTree("static constexpr ", typeName_, ' ', upperCase, " = ",
@@ -2497,9 +2497,9 @@ private:
               "#endif\n")
         };
 
-      case schema::Value::VOID:
-      case schema::Value::FLOAT32:
-      case schema::Value::FLOAT64: {
+      case schema::Type::VOID:
+      case schema::Type::FLOAT32:
+      case schema::Type::FLOAT64: {
         // TODO(msvc): MSVC doesn't like float- or class-typed constexprs. As soon as this is fixed,
         //   treat VOID, FLOAT32, and FLOAT64 the same as the other primitives.
         kj::String value = literalValue(schema.getType(), constProto.getValue()).flatten();
@@ -2513,7 +2513,7 @@ private:
         };
       }
 
-      case schema::Value::TEXT: {
+      case schema::Type::TEXT: {
         kj::String constType = kj::strTree(
             "::capnp::_::ConstText<", schema.as<Text>().size(), ">").flatten();
         return ConstText {
@@ -2524,7 +2524,7 @@ private:
         };
       }
 
-      case schema::Value::DATA: {
+      case schema::Type::DATA: {
         kj::String constType = kj::strTree(
             "::capnp::_::ConstData<", schema.as<Data>().size(), ">").flatten();
         return ConstText {
@@ -2535,7 +2535,7 @@ private:
         };
       }
 
-      case schema::Value::STRUCT: {
+      case schema::Type::STRUCT: {
         kj::String constType = kj::strTree(
             "::capnp::_::ConstStruct<", typeName_, ">").flatten();
         return ConstText {
@@ -2546,7 +2546,7 @@ private:
         };
       }
 
-      case schema::Value::LIST: {
+      case schema::Type::LIST: {
         kj::String constType = kj::strTree(
             "::capnp::_::ConstList<", typeName(type.asList().getElementType(), nullptr), ">")
             .flatten();
@@ -2558,8 +2558,8 @@ private:
         };
       }
 
-      case schema::Value::ANY_POINTER:
-      case schema::Value::INTERFACE:
+      case schema::Type::ANY_POINTER:
+      case schema::Type::INTERFACE:
         return ConstText { false, kj::strTree(), kj::strTree() };
     }
 

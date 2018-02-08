@@ -1168,7 +1168,6 @@ TEST(Rpc, RealmGatewayImportExport) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
   TestNetwork network;
-  TestRestorer restorer;
   TestNetworkAdapter& clientNetwork = network.add("client");
   TestNetworkAdapter& serverNetwork = network.add("server");
   RpcSystem<test::TestSturdyRefHostId> rpcClient =
@@ -1222,7 +1221,6 @@ TEST(Rpc, RealmGatewayImportExport) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
   TestNetwork network;
-  TestRestorer restorer;
   TestNetworkAdapter& clientNetwork = network.add("client");
   TestNetworkAdapter& serverNetwork = network.add("server");
   RpcSystem<test::TestSturdyRefHostId> rpcClient =

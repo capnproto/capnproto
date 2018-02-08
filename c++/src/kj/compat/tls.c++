@@ -99,7 +99,7 @@ void ensureOpenSslInitialized() {
 //   AsyncIoStream is simply wrapping a file descriptor (or other readiness-based stream?) and use
 //   that directly if so.
 
-class TlsConnection: public kj::AsyncIoStream {
+class TlsConnection final: public kj::AsyncIoStream {
 public:
   TlsConnection(kj::Own<kj::AsyncIoStream> stream, SSL_CTX* ctx)
       : TlsConnection(*stream, ctx) {
@@ -372,7 +372,7 @@ private:
 // =======================================================================================
 // Implementations of ConnectionReceiver, NetworkAddress, and Network as wrappers adding TLS.
 
-class TlsConnectionReceiver: public kj::ConnectionReceiver {
+class TlsConnectionReceiver final: public kj::ConnectionReceiver {
 public:
   TlsConnectionReceiver(TlsContext& tls, kj::Own<kj::ConnectionReceiver> inner)
       : tls(tls), inner(kj::mv(inner)) {}
@@ -400,7 +400,7 @@ private:
   kj::Own<kj::ConnectionReceiver> inner;
 };
 
-class TlsNetworkAddress: public kj::NetworkAddress {
+class TlsNetworkAddress final: public kj::NetworkAddress {
 public:
   TlsNetworkAddress(TlsContext& tls, kj::String hostname, kj::Own<kj::NetworkAddress>&& inner)
       : tls(tls), hostname(kj::mv(hostname)), inner(kj::mv(inner)) {}
@@ -435,7 +435,7 @@ private:
   kj::Own<kj::NetworkAddress> inner;
 };
 
-class TlsNetwork: public kj::Network {
+class TlsNetwork final: public kj::Network {
 public:
   TlsNetwork(TlsContext& tls, kj::Network& inner): tls(tls), inner(inner) {}
   TlsNetwork(TlsContext& tls, kj::Own<kj::Network> inner)
