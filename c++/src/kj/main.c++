@@ -631,7 +631,7 @@ void MainBuilder::MainImpl::usageError(StringPtr programName, StringPtr message)
 
 class MainBuilder::Impl::OptionDisplayOrder {
 public:
-  bool operator()(const Option* a, const Option* b) {
+  bool operator()(const Option* a, const Option* b) const {
     if (a == b) return false;
 
     char aShort = '\0';
