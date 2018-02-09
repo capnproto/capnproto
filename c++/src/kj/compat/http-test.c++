@@ -1691,11 +1691,8 @@ public:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
-    KJ_FAIL_ASSERT("can't get here");
-  }
+    KJ_ASSERT(headers.isWebSocket());
 
-  kj::Promise<void> openWebSocket(
-      kj::StringPtr url, const HttpHeaders& headers, WebSocketResponse& response) override {
     HttpHeaders responseHeaders(headerTable);
     KJ_IF_MAYBE(h, headers.get(hMyHeader)) {
       responseHeaders.set(hMyHeader, kj::str("respond-", *h));
@@ -2491,26 +2488,25 @@ public:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
-    KJ_ASSERT(url != "/throw");
+    if (!headers.isWebSocket()) {
+      KJ_ASSERT(url != "/throw");
 
-    auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
-    auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
-    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
-    promises.add(stream->write(body.begin(), body.size()));
-    promises.add(requestBody.readAllBytes().ignoreResult());
-    return kj::joinPromises(promises.finish()).attach(kj::mv(stream), kj::mv(body));
-  }
+      auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
+      auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
+      auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+      promises.add(stream->write(body.begin(), body.size()));
+      promises.add(requestBody.readAllBytes().ignoreResult());
+      return kj::joinPromises(promises.finish()).attach(kj::mv(stream), kj::mv(body));
+    } else {
+      auto ws = response.acceptWebSocket(HttpHeaders(headerTable));
+      auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
+      auto sendPromise = ws->send(body);
 
-  kj::Promise<void> openWebSocket(
-      kj::StringPtr url, const HttpHeaders& headers, WebSocketResponse& response) override {
-    auto ws = response.acceptWebSocket(HttpHeaders(headerTable));
-    auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
-    auto sendPromise = ws->send(body);
-
-    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
-    promises.add(sendPromise.attach(kj::mv(body)));
-    promises.add(ws->receive().ignoreResult());
-    return kj::joinPromises(promises.finish()).attach(kj::mv(ws));
+      auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+      promises.add(sendPromise.attach(kj::mv(body)));
+      promises.add(ws->receive().ignoreResult());
+      return kj::joinPromises(promises.finish()).attach(kj::mv(ws));
+    }
   }
 
 private:

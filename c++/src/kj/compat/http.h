@@ -260,6 +260,13 @@ public:
   // Creates a shallow clone of the HttpHeaders. The returned object references the same strings
   // as the original, owning none of them.
 
+  bool isWebSocket() const;
+  // Convenience method that checks for the presence of the header `Upgrade: websocket`.
+  //
+  // Note that this does not actually validate that the request is a complete WebSocket handshake
+  // with the correct version number -- such validation will occur if and when you call
+  // acceptWebSocket().
+
   kj::Maybe<kj::StringPtr> get(HttpHeaderId id) const;
   // Read a header.
 
@@ -413,7 +420,7 @@ public:
 
   virtual kj::Promise<Message> receive() = 0;
   // Read one message from the WebSocket and return it. Can only call once at a time. Do not call
-  // again after EndOfStream is received.
+  // again after Close is received.
 
   kj::Promise<void> pumpTo(WebSocket& other);
   // Continuously receives messages from this WebSocket and send them to `other`.
@@ -513,6 +520,9 @@ public:
     // `statusText` and `headers` need only remain valid until send() returns (they can be
     // stack-allocated).
 
+    virtual kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) = 0;
+    // If headers.isWebSocket() is true then you can call acceptWebSocket() instead of send().
+
     kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
                                 const HttpHeaders& headers);
     kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
@@ -535,21 +545,6 @@ public:
   //
   // `url` and `headers` are invalidated on the first read from `requestBody` or when the returned
   // promise resolves, whichever comes first.
-
-  class WebSocketResponse: public Response {
-  public:
-    virtual kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) = 0;
-    // Accept and open the WebSocket.
-    //
-    // `headers` need only remain valid until acceptWebSocket() returns (it can be stack-allocated).
-  };
-
-  virtual kj::Promise<void> openWebSocket(
-      kj::StringPtr url, const HttpHeaders& headers, WebSocketResponse& response);
-  // Tries to open a WebSocket. Default implementation calls request() and never returns a
-  // WebSocket.
-  //
-  // `url` and `headers` are invalidated when the returned promise resolves.
 
   virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host);
   // Handles CONNECT requests. Only relevant for proxy services. Default implementation throws
