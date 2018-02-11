@@ -3251,8 +3251,10 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> HttpService::connect(kj::StringPtr host)
 
 class HttpServer::Connection final: private HttpService::WebSocketResponse {
 public:
-  Connection(HttpServer& server, kj::Own<kj::AsyncIoStream>&& stream)
+  Connection(HttpServer& server, kj::Own<kj::AsyncIoStream>&& stream,
+             HttpService& service)
       : server(server),
+        service(service),
         httpInput(*stream, server.requestHeaderTable),
         httpOutput(*stream),
         ownStream(kj::mv(stream)) {
@@ -3358,7 +3360,7 @@ public:
           KJ_IF_MAYBE(key, headers.get(HttpHeaderId::SEC_WEBSOCKET_KEY)) {
             currentMethod = HttpMethod::GET;
             websocketKey = kj::str(*key);
-            promise = server.service.openWebSocket(req->url, httpInput.getHeaders(), *this);
+            promise = service.openWebSocket(req->url, httpInput.getHeaders(), *this);
           } else {
             return sendError(400, "Bad Request", kj::str("ERROR: Missing Sec-WebSocket-Key"));
           }
@@ -3373,7 +3375,7 @@ public:
           //   be able to shutdown the upstream but still wait on the downstream, but I believe many
           //   other HTTP servers do similar things.
 
-          promise = server.service.request(
+          promise = service.request(
               req->method, req->url, headers, *body, *this);
           promise = promise.attach(kj::mv(body));
         }
@@ -3448,6 +3450,7 @@ public:
 
 private:
   HttpServer& server;
+  HttpService& service;
   HttpInputStream httpInput;
   HttpOutputStream httpOutput;
   kj::Own<kj::AsyncIoStream> ownStream;
@@ -3534,13 +3537,20 @@ private:
 
 HttpServer::HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable, HttpService& service,
                        Settings settings)
-    : HttpServer(timer, requestHeaderTable, service, settings,
+    : HttpServer(timer, requestHeaderTable, &service, settings,
                  kj::newPromiseAndFulfiller<void>()) {}
 
-HttpServer::HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable, HttpService& service,
+HttpServer::HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable,
+                       HttpServiceFactory serviceFactory, Settings settings)
+    : HttpServer(timer, requestHeaderTable, kj::mv(serviceFactory), settings,
+                 kj::newPromiseAndFulfiller<void>()) {}
+
+HttpServer::HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable,
+                       kj::OneOf<HttpService*, HttpServiceFactory> service,
                        Settings settings, kj::PromiseFulfillerPair<void> paf)
-    : timer(timer), requestHeaderTable(requestHeaderTable), service(service), settings(settings),
-      onDrain(paf.promise.fork()), drainFulfiller(kj::mv(paf.fulfiller)), tasks(*this) {}
+    : timer(timer), requestHeaderTable(requestHeaderTable), service(kj::mv(service)),
+      settings(settings), onDrain(paf.promise.fork()), drainFulfiller(kj::mv(paf.fulfiller)),
+      tasks(*this) {}
 
 kj::Promise<void> HttpServer::drain() {
   KJ_REQUIRE(!draining, "you can only call drain() once");
@@ -3575,7 +3585,19 @@ kj::Promise<void> HttpServer::listenLoop(kj::ConnectionReceiver& port) {
 }
 
 kj::Promise<void> HttpServer::listenHttp(kj::Own<kj::AsyncIoStream> connection) {
-  auto obj = heap<Connection>(*this, kj::mv(connection));
+  kj::Own<Connection> obj;
+
+  KJ_SWITCH_ONEOF(service) {
+    KJ_CASE_ONEOF(ptr, HttpService*) {
+      obj = heap<Connection>(*this, kj::mv(connection), *ptr);
+    }
+    KJ_CASE_ONEOF(func, HttpServiceFactory) {
+      auto srv = func(*connection);
+      obj = heap<Connection>(*this, kj::mv(connection), *srv);
+      obj = obj.attach(kj::mv(srv));
+    }
+  }
+
   auto promise = obj->loop(true);
 
   // Eagerly evaluate so that we drop the connection when the promise resolves, even if the caller

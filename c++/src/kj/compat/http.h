@@ -652,12 +652,19 @@ class HttpServer: private kj::TaskSet::ErrorHandler {
 
 public:
   typedef HttpServerSettings Settings;
+  typedef kj::Function<kj::Own<HttpService>(kj::AsyncIoStream&)> HttpServiceFactory;
 
   HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable, HttpService& service,
              Settings settings = Settings());
   // Set up an HttpServer that directs incoming connections to the given service. The service
   // may be a host service or a proxy service depending on whether you are intending to implement
   // an HTTP server or an HTTP proxy.
+
+  HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable,
+             HttpServiceFactory serviceFactory, Settings settings = Settings());
+  // Like the other constructor, but allows a new HttpService object to be used for each
+  // connection, based on the connection object. This is particularly useful for capturing the
+  // client's IP address and injecting it as a header.
 
   kj::Promise<void> drain();
   // Stop accepting new connections or new requests on existing connections. Finish any requests
@@ -683,7 +690,7 @@ private:
 
   kj::Timer& timer;
   HttpHeaderTable& requestHeaderTable;
-  HttpService& service;
+  kj::OneOf<HttpService*, HttpServiceFactory> service;
   Settings settings;
 
   bool draining = false;
@@ -695,7 +702,8 @@ private:
 
   kj::TaskSet tasks;
 
-  HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable, HttpService& service,
+  HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable,
+             kj::OneOf<HttpService*, HttpServiceFactory> service,
              Settings settings, kj::PromiseFulfillerPair<void> paf);
 
   kj::Promise<void> listenLoop(kj::ConnectionReceiver& port);
