@@ -391,7 +391,17 @@ test_samples
 rm addressbook addressbook.capnp.c++ addressbook.capnp.h
 rm calculator-client calculator-server calculator.capnp.c++ calculator.capnp.h
 
-cd ..
+rm -rf cmake-build
+mkdir cmake-build
+cd cmake-build
+
+doit cmake .. -G "Unix Makefiles" -DCMAKE_PREFIX_PATH="$STAGING" \
+    -DCAPNPC_FLAGS=--no-standard-import -DCAPNPC_IMPORT_DIRS="$STAGING/include"
+doit make -j$PARALLEL
+
+test_samples
+cd ../..
+rm -rf samples/cmake-build
 
 if [ "$QUICK" = quick ]; then
   doit make maintainer-clean
