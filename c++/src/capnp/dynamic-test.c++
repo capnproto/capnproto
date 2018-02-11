@@ -422,15 +422,20 @@ TEST(DynamicApi, Has) {
 
   // Primitive fields are always present even if set to default.
   EXPECT_TRUE(root.has("int32Field"));
+  EXPECT_FALSE(root.has("int32Field", HasMode::NON_DEFAULT));
   root.set("int32Field", 123);
   EXPECT_TRUE(root.has("int32Field"));
+  EXPECT_TRUE(root.has("int32Field", HasMode::NON_DEFAULT));
   root.set("int32Field", -12345678);
   EXPECT_TRUE(root.has("int32Field"));
+  EXPECT_FALSE(root.has("int32Field", HasMode::NON_DEFAULT));
 
   // Pointers are absent until initialized.
   EXPECT_FALSE(root.has("structField"));
+  EXPECT_FALSE(root.has("structField", HasMode::NON_DEFAULT));
   root.init("structField");
   EXPECT_TRUE(root.has("structField"));
+  EXPECT_TRUE(root.has("structField", HasMode::NON_DEFAULT));
 }
 
 TEST(DynamicApi, HasWhenEmpty) {
@@ -443,6 +448,11 @@ TEST(DynamicApi, HasWhenEmpty) {
   EXPECT_TRUE(root.has("int32Field"));
   EXPECT_FALSE(root.has("structField"));
   EXPECT_FALSE(root.has("int32List"));
+
+  EXPECT_FALSE(root.has("voidField", HasMode::NON_DEFAULT));
+  EXPECT_FALSE(root.has("int32Field", HasMode::NON_DEFAULT));
+  EXPECT_FALSE(root.has("structField", HasMode::NON_DEFAULT));
+  EXPECT_FALSE(root.has("int32List", HasMode::NON_DEFAULT));
 }
 
 TEST(DynamicApi, SetEnumFromNative) {

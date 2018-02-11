@@ -124,10 +124,40 @@ EncodingResult<Array<byte>> decodeHex(ArrayPtr<const char> text);
 
 String encodeUriComponent(ArrayPtr<const byte> bytes);
 String encodeUriComponent(ArrayPtr<const char> bytes);
-EncodingResult<Array<byte>> decodeBinaryUriComponent(
-    ArrayPtr<const char> text, bool nulTerminate = false);
 EncodingResult<String> decodeUriComponent(ArrayPtr<const char> text);
-// Encode/decode URI components using % escapes. See Javascript's encodeURIComponent().
+// Encode/decode URI components using % escapes for characters listed as "reserved" in RFC 2396.
+// This is the same behavior as JavaScript's `encodeURIComponent()`.
+//
+// See https://tools.ietf.org/html/rfc2396#section-2.3
+
+String encodeWwwForm(ArrayPtr<const byte> bytes);
+String encodeWwwForm(ArrayPtr<const char> bytes);
+EncodingResult<String> decodeWwwForm(ArrayPtr<const char> text);
+// Encode/decode URI components using % escapes and '+' (for spaces) according to the
+// application/x-www-form-urlencoded format defined by the WHATWG URL specification.
+//
+// See https://url.spec.whatwg.org/#concept-urlencoded-byte-serializer
+
+struct DecodeUriOptions {
+  // Parameter to `decodeBinaryUriComponent()`.
+
+  // This struct is intentionally convertible from bool, in order to maintain backwards
+  // compatibility with code written when `decodeBinaryUriComponent()` took a boolean second
+  // parameter.
+  DecodeUriOptions(bool nulTerminate = false, bool plusToSpace = false)
+      : nulTerminate(nulTerminate), plusToSpace(plusToSpace) {}
+
+  bool nulTerminate;
+  // Append a terminal NUL byte.
+
+  bool plusToSpace;
+  // Convert '+' to ' ' characters before percent decoding. Used to decode
+  // application/x-www-form-urlencoded text, such as query strings.
+};
+EncodingResult<Array<byte>> decodeBinaryUriComponent(
+    ArrayPtr<const char> text, DecodeUriOptions options = DecodeUriOptions());
+// Decode URI components using % escapes. This is a lower-level interface used to implement both
+// `decodeUriComponent()` and `decodeWwwForm()`
 
 String encodeCEscape(ArrayPtr<const byte> bytes);
 String encodeCEscape(ArrayPtr<const char> bytes);
@@ -181,7 +211,16 @@ inline String encodeUriComponent(ArrayPtr<const char> text) {
   return encodeUriComponent(text.asBytes());
 }
 inline EncodingResult<String> decodeUriComponent(ArrayPtr<const char> text) {
-  auto result = decodeBinaryUriComponent(text, true);
+  auto result = decodeBinaryUriComponent(text, DecodeUriOptions { /*.nulTerminate=*/true });
+  return { String(result.releaseAsChars()), result.hadErrors };
+}
+
+inline String encodeWwwForm(ArrayPtr<const char> text) {
+  return encodeWwwForm(text.asBytes());
+}
+inline EncodingResult<String> decodeWwwForm(ArrayPtr<const char> text) {
+  auto result = decodeBinaryUriComponent(text, DecodeUriOptions { /*.nulTerminate=*/true,
+                                                                  /*.plusToSpace=*/true });
   return { String(result.releaseAsChars()), result.hadErrors };
 }
 
@@ -237,6 +276,14 @@ inline Array<byte> decodeBinaryUriComponent(const char (&text)[s]) {
 template <size_t s>
 inline EncodingResult<String> decodeUriComponent(const char (&text)[s]) {
   return decodeUriComponent(arrayPtr(text, s-1));
+}
+template <size_t s>
+inline String encodeWwwForm(const char (&text)[s]) {
+  return encodeWwwForm(arrayPtr(text, s - 1));
+}
+template <size_t s>
+inline EncodingResult<String> decodeWwwForm(const char (&text)[s]) {
+  return decodeWwwForm(arrayPtr(text, s-1));
 }
 template <size_t s>
 inline String encodeCEscape(const char (&text)[s]) {

@@ -32,7 +32,7 @@ kj::Exception Timer::makeTimeoutException() {
 
 struct TimerImpl::Impl {
   struct TimerBefore {
-    bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs);
+    bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) const;
   };
   using Timers = std::multiset<TimerPromiseAdapter*, TimerBefore>;
   Timers timers;
@@ -66,7 +66,7 @@ private:
 };
 
 inline bool TimerImpl::Impl::TimerBefore::operator()(
-    TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) {
+    TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) const {
   return lhs->time < rhs->time;
 }
 

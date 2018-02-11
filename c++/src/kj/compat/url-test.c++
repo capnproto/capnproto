@@ -133,6 +133,14 @@ KJ_TEST("parse / stringify URL") {
   }
 
   {
+    auto url = parseAndCheck("https://capnproto.org/foo?bar%20baz=qux+quux",
+                             "https://capnproto.org/foo?bar+baz=qux+quux");
+    KJ_ASSERT(url.query.size() == 1);
+    KJ_EXPECT(url.query[0].name == "bar baz");
+    KJ_EXPECT(url.query[0].value == "qux quux");
+  }
+
+  {
     auto url = parseAndCheck("https://capnproto.org/foo/bar#garply");
     KJ_EXPECT(url.scheme == "https");
     KJ_EXPECT(url.userInfo == nullptr);
@@ -232,7 +240,7 @@ KJ_TEST("URL percent encoding") {
 
   parseAndCheck(
       "https://b b: bcd@capnproto.org/f o?b r=b z#q x",
-      "https://b%20b:%20bcd@capnproto.org/f%20o?b%20r=b%20z#q%20x");
+      "https://b%20b:%20bcd@capnproto.org/f%20o?b+r=b+z#q%20x");
 }
 
 KJ_TEST("URL relative paths") {
@@ -340,6 +348,9 @@ KJ_TEST("parse relative URL") {
   parseAndCheckRelative("https://capnproto.org/foo/bar?baz=qux#corge",
                         "?grault",
                         "https://capnproto.org/foo/bar?grault");
+  parseAndCheckRelative("https://capnproto.org/foo/bar?baz=qux#corge",
+                        "?grault+garply=waldo",
+                        "https://capnproto.org/foo/bar?grault+garply=waldo");
   parseAndCheckRelative("https://capnproto.org/foo/bar?baz=qux#corge",
                         "grault",
                         "https://capnproto.org/foo/grault");

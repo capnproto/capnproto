@@ -404,9 +404,27 @@ String encodeUriComponent(ArrayPtr<const byte> bytes) {
   return String(result.releaseAsArray());
 }
 
+String encodeWwwForm(ArrayPtr<const byte> bytes) {
+  Vector<char> result(bytes.size() + 1);
+  for (byte b: bytes) {
+    if (('A' <= b && b <= 'Z') || ('a' <= b && b <= 'z') || ('0' <= b && b <= '9') ||
+        b == '-' || b == '_' || b == '.' || b == '*') {
+      result.add(b);
+    } else if (b == ' ') {
+      result.add('+');
+    } else {
+      result.add('%');
+      result.add(HEX_DIGITS_URI[b/16]);
+      result.add(HEX_DIGITS_URI[b%16]);
+    }
+  }
+  result.add('\0');
+  return String(result.releaseAsArray());
+}
+
 EncodingResult<Array<byte>> decodeBinaryUriComponent(
-    ArrayPtr<const char> text, bool nulTerminate) {
-  Vector<byte> result(text.size() + nulTerminate);
+    ArrayPtr<const char> text, DecodeUriOptions options) {
+  Vector<byte> result(text.size() + options.nulTerminate);
   bool hadErrors = false;
 
   const char* ptr = text.begin();
@@ -432,12 +450,15 @@ EncodingResult<Array<byte>> decodeBinaryUriComponent(
       } else {
         hadErrors = true;
       }
+    } else if (options.plusToSpace && *ptr == '+') {
+      ++ptr;
+      result.add(' ');
     } else {
       result.add(*ptr++);
     }
   }
 
-  if (nulTerminate) result.add(0);
+  if (options.nulTerminate) result.add(0);
   return { result.releaseAsArray(), hadErrors };
 }
 

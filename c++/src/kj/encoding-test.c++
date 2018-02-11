@@ -279,6 +279,9 @@ KJ_TEST("URI encoding/decoding") {
   KJ_EXPECT(encodeUriComponent("\xab\xba") == "%AB%BA");
   KJ_EXPECT(encodeUriComponent(StringPtr("foo\0bar", 7)) == "foo%00bar");
 
+  // Encode characters reserved by application/x-www-form-urlencoded, but not by RFC 2396.
+  KJ_EXPECT(encodeUriComponent("'foo'! (~)") == "'foo'!%20(~)");
+
   expectRes(decodeUriComponent("foo%20bar"), "foo bar");
   expectRes(decodeUriComponent("%ab%BA"), "\xab\xba");
 
@@ -287,8 +290,43 @@ KJ_TEST("URI encoding/decoding") {
   expectRes(decodeUriComponent("foo%xxx"), "fooxxx", true);
   expectRes(decodeUriComponent("foo%"), "foo", true);
 
-  byte bytes[] = {12, 34, 56};
-  KJ_EXPECT(decodeBinaryUriComponent(encodeUriComponent(bytes)).asPtr() == bytes);
+  {
+    byte bytes[] = {12, 34, 56};
+    KJ_EXPECT(decodeBinaryUriComponent(encodeUriComponent(bytes)).asPtr() == bytes);
+
+    // decodeBinaryUriComponent() takes a DecodeUriOptions struct as its second parameter, but it
+    // once took a single `bool nulTerminate`. Verify that the old behavior still compiles and
+    // works.
+    auto bytesWithNul = decodeBinaryUriComponent(encodeUriComponent(bytes), true);
+    KJ_ASSERT(bytesWithNul.size() == 4);
+    KJ_EXPECT(bytesWithNul[3] == '\0');
+    KJ_EXPECT(bytesWithNul.slice(0, 3) == bytes);
+  }
+}
+
+KJ_TEST("application/x-www-form-urlencoded encoding/decoding") {
+  KJ_EXPECT(encodeWwwForm("foo") == "foo");
+  KJ_EXPECT(encodeWwwForm("foo bar") == "foo+bar");
+  KJ_EXPECT(encodeWwwForm("\xab\xba") == "%AB%BA");
+  KJ_EXPECT(encodeWwwForm(StringPtr("foo\0bar", 7)) == "foo%00bar");
+
+  // Encode characters reserved by application/x-www-form-urlencoded, but not by RFC 2396.
+  KJ_EXPECT(encodeWwwForm("'foo'! (~)") == "%27foo%27%21+%28%7E%29");
+
+  expectRes(decodeWwwForm("foo%20bar"), "foo bar");
+  expectRes(decodeWwwForm("foo+bar"), "foo bar");
+  expectRes(decodeWwwForm("%ab%BA"), "\xab\xba");
+
+  expectRes(decodeWwwForm("foo%1xxx"), "foo\1xxx", true);
+  expectRes(decodeWwwForm("foo%1"), "foo\1", true);
+  expectRes(decodeWwwForm("foo%xxx"), "fooxxx", true);
+  expectRes(decodeWwwForm("foo%"), "foo", true);
+
+  {
+    byte bytes[] = {12, 34, 56};
+    DecodeUriOptions options { /*.nulTerminate=*/false, /*.plusToSpace=*/true };
+    KJ_EXPECT(decodeBinaryUriComponent(encodeWwwForm(bytes), options) == bytes);
+  }
 }
 
 KJ_TEST("C escape encoding/decoding") {

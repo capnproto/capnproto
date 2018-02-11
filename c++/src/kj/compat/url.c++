@@ -88,6 +88,12 @@ String percentDecode(ArrayPtr<const char> text, bool& hadErrors) {
   return kj::mv(result);
 }
 
+String percentDecodeQuery(ArrayPtr<const char> text, bool& hadErrors) {
+  auto result = decodeWwwForm(text);
+  if (result.hadErrors) hadErrors = true;
+  return kj::mv(result);
+}
+
 }  // namespace
 
 Url::~Url() noexcept(false) {}
@@ -195,9 +201,10 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context) {
 
       if (part.size() > 0) {
         KJ_IF_MAYBE(key, trySplit(part, '=')) {
-          result.query.add(QueryParam { percentDecode(*key, err), percentDecode(part, err) });
+          result.query.add(QueryParam { percentDecodeQuery(*key, err),
+                                        percentDecodeQuery(part, err) });
         } else {
-          result.query.add(QueryParam { percentDecode(part, err), nullptr });
+          result.query.add(QueryParam { percentDecodeQuery(part, err), nullptr });
         }
       }
     } while (text.startsWith("&"));
@@ -331,9 +338,10 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
 
       if (part.size() > 0) {
         KJ_IF_MAYBE(key, trySplit(part, '=')) {
-          result.query.add(QueryParam { percentDecode(*key, err), percentDecode(part, err) });
+          result.query.add(QueryParam { percentDecodeQuery(*key, err),
+                                        percentDecodeQuery(part, err) });
         } else {
-          result.query.add(QueryParam { percentDecode(part, err), nullptr });
+          result.query.add(QueryParam { percentDecodeQuery(part, err), nullptr });
         }
       }
     } while (text.startsWith("&"));
@@ -407,10 +415,10 @@ String Url::toString(Context context) const {
   for (auto& param: query) {
     chars.add(first ? '?' : '&');
     first = false;
-    chars.addAll(encodeUriComponent(param.name));
+    chars.addAll(encodeWwwForm(param.name));
     if (param.value.size() > 0) {
       chars.add('=');
-      chars.addAll(encodeUriComponent(param.value));
+      chars.addAll(encodeWwwForm(param.value));
     }
   }
 

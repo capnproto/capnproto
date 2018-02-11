@@ -993,7 +993,7 @@ public:
   }
 
   bool canReuse() {
-    return !broken;
+    return !broken && pendingMessageCount == 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -1005,6 +1005,7 @@ public:
 
     KJ_REQUIRE_NONNULL(onMessageDone)->fulfill();
     onMessageDone = nullptr;
+    --pendingMessageCount;
   }
 
   void abortRead() {
@@ -1066,6 +1067,7 @@ public:
   }
 
   kj::Promise<kj::ArrayPtr<char>> readMessageHeaders() {
+    ++pendingMessageCount;
     auto paf = kj::newPromiseAndFulfiller<void>();
 
     auto promise = messageReadQueue
@@ -1193,6 +1195,9 @@ private:
 
   bool broken = false;
   // Becomes true if the caller failed to read the whole entity-body before closing the stream.
+
+  uint pendingMessageCount = 0;
+  // Number of reads we have queued up.
 
   kj::Promise<void> messageReadQueue = kj::READY_NOW;
 
@@ -2413,7 +2418,8 @@ public:
         settings(kj::mv(settings)) {}
 
   bool canReuse() {
-    // Returns true if we can reuse this HttpClient for another request.
+    // Returns true if we can immediately reuse this HttpClient for another message (so all
+    // previous messages have been fully read).
 
     return !upgraded && !closed && httpInput.canReuse() && httpOutput.canReuse();
   }
