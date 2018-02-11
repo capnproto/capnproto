@@ -7,6 +7,19 @@ doit() {
   "$@"
 }
 
+function test_samples() {
+  echo "@@@@ ./addressbook (in various configurations)"
+  ./addressbook write | ./addressbook read
+  ./addressbook dwrite | ./addressbook dread
+  rm -f /tmp/capnp-calculator-example-$$
+  ./calculator-server unix:/tmp/capnp-calculator-example-$$ &
+  sleep 0.1
+  ./calculator-client unix:/tmp/capnp-calculator-example-$$
+  kill %+
+  wait %+ || true
+  rm -f /tmp/capnp-calculator-example-$$
+}
+
 QUICK=
 
 PARALLEL=$(nproc 2>/dev/null || echo 1)
@@ -228,15 +241,7 @@ while [ $# -gt 0 ]; do
           -DCAPNPC_FLAGS=--no-standard-import -DCAPNPC_IMPORT_DIRS="$WORKSPACE/inst/include"
       doit make -j$PARALLEL
 
-      echo "@@@@ ./addressbook (in various configurations)"
-      ./addressbook write | ./addressbook read
-      ./addressbook dwrite | ./addressbook dread
-      rm -f /tmp/capnp-calculator-example-$$
-      ./calculator-server unix:/tmp/capnp-calculator-example-$$ &
-      sleep 0.1
-      ./calculator-client unix:/tmp/capnp-calculator-example-$$
-      kill %+
-      wait %+ || true
+      test_samples
 
       echo "========================================================================="
       echo "Cap'n Proto ($CONFIGURATION) installs a working CMake config package."
@@ -375,23 +380,16 @@ cd samples
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
 doit ${CXX:-g++} -std=c++11 addressbook.c++ addressbook.capnp.c++ -o addressbook \
     $CXXFLAGS $(pkg-config --cflags --libs capnp)
-echo "@@@@ ./addressbook (in various configurations)"
-./addressbook write | ./addressbook read
-./addressbook dwrite | ./addressbook dread
-rm addressbook addressbook.capnp.c++ addressbook.capnp.h
 
 doit capnp compile -oc++ calculator.capnp -I"$STAGING"/include --no-standard-import
 doit ${CXX:-g++} -std=c++11 calculator-client.c++ calculator.capnp.c++ -o calculator-client \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
 doit ${CXX:-g++} -std=c++11 calculator-server.c++ calculator.capnp.c++ -o calculator-server \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
-rm -f /tmp/capnp-calculator-example-$$
-./calculator-server unix:/tmp/capnp-calculator-example-$$ &
-sleep 0.1
-./calculator-client unix:/tmp/capnp-calculator-example-$$
-kill %+
-wait %+ || true
-rm calculator-client calculator-server calculator.capnp.c++ calculator.capnp.h /tmp/capnp-calculator-example-$$
+
+test_samples
+rm addressbook addressbook.capnp.c++ addressbook.capnp.h
+rm calculator-client calculator-server calculator.capnp.c++ calculator.capnp.h
 
 cd ..
 
