@@ -1058,7 +1058,7 @@ inline String PathPtr::toNativeString(bool absolute) const {
 }
 #endif  // _WIN32, else
 
-inline Own<const FsNode> FsNode::clone() const { return cloneFsNode().downcast<const FsNode>(); }
+inline Own<const FsNode> FsNode::clone() const { return cloneFsNode(); }
 inline Own<const ReadableFile> ReadableFile::clone() const {
   return cloneFsNode().downcast<const ReadableFile>();
 }
