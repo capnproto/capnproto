@@ -1704,10 +1704,6 @@ public:
     } else if (url == "/ws-inline") {
       auto ws = response.acceptWebSocket(responseHeaders);
       return doWebSocket(*ws, "start-inline").attach(kj::mv(ws));
-    } else if (url == "/ws-detached") {
-      auto ws = response.acceptWebSocket(responseHeaders);
-      tasks.add(doWebSocket(*ws, "start-detached").attach(kj::mv(ws)));
-      return kj::READY_NOW;
     } else {
       KJ_FAIL_ASSERT("unexpected path", url);
     }
@@ -1767,8 +1763,6 @@ const char WEBSOCKET_RESPONSE_HANDSHAKE_ERROR[] =
     "\r\n";
 const byte WEBSOCKET_FIRST_MESSAGE_INLINE[] =
     { 0x81, 0x0c, 's','t','a','r','t','-','i','n','l','i','n','e' };
-const byte WEBSOCKET_FIRST_MESSAGE_DETACHED[] =
-    { 0x81, 0x0e, 's','t','a','r','t','-','d','e','t','a','c','h','e','d' };
 const byte WEBSOCKET_SEND_MESSAGE[] =
     { 0x81, 0x83, 12, 34, 56, 78, 'b'^12, 'a'^34, 'r'^56 };
 const byte WEBSOCKET_REPLY_MESSAGE[] =
@@ -1907,31 +1901,6 @@ KJ_TEST("HttpServer WebSocket handshake") {
   expectRead(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE).wait(io.waitScope);
 
   listenTask.wait(io.waitScope);
-}
-
-KJ_TEST("HttpServer WebSocket handshake detached") {
-  auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
-
-  HttpHeaderTable::Builder tableBuilder;
-  HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
-  auto headerTable = tableBuilder.build();
-  TestWebSocketService service(*headerTable, hMyHeader);
-  HttpServer server(io.provider->getTimer(), *headerTable, service);
-
-  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
-
-  auto request = kj::str("GET /ws-detached", WEBSOCKET_REQUEST_HANDSHAKE);
-  pipe.ends[1]->write({request.asBytes()}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE).wait(io.waitScope);
-
-  listenTask.wait(io.waitScope);
-
-  expectRead(*pipe.ends[1], WEBSOCKET_FIRST_MESSAGE_DETACHED).wait(io.waitScope);
-  pipe.ends[1]->write({WEBSOCKET_SEND_MESSAGE}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_MESSAGE).wait(io.waitScope);
-  pipe.ends[1]->write({WEBSOCKET_SEND_CLOSE}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE).wait(io.waitScope);
 }
 
 KJ_TEST("HttpServer WebSocket handshake error") {
