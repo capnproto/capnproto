@@ -3012,48 +3012,14 @@ private:
     // - In a power outage scenario, the user would obviously restart the build from scratch
     //   anyway.
     //
-    // We do, however, use mmap(), allowing us to write directly to page cache, avoiding a copy,
-    // and even allowing us to avoid dirtying the file pages if they're not modified, which will
-    // commonly be the case with incremental builds.
-    //
-    // Yes, I overengineered this a bit... but it was fun.
+    // At one point, in a fit of over-engineering, we used writable mmap() here. That turned out
+    // to be a bad idea: writable mmap() is not implemented on some filesystems, especially shared
+    // folders in VirtualBox. Oh well.
 
     auto path = kj::Path::parse(filename);
     auto file = fs->getCurrent().openFile(path,
         kj::WriteMode::CREATE | kj::WriteMode::MODIFY | kj::WriteMode::CREATE_PARENT);
-    file->truncate(text.size());
-    auto mapping = file->mmapWritable(0, text.size());
-    auto bytes = mapping->get();
-
-    byte* target = bytes.begin();
-    byte* firstModified = nullptr;
-    text.visit([&](kj::ArrayPtr<const char> text) {
-      if (firstModified == nullptr) {
-        if (memcmp(target, text.begin(), text.size()) == 0) {
-          target += text.size();
-          return;
-        }
-        firstModified = target;
-      }
-      memcpy(target, text.begin(), text.size());
-      target += text.size();
-    });
-    KJ_ASSERT(target == bytes.end());
-    if (firstModified == nullptr) {
-      // The file is completely unchanged. But we should probably update the modification time
-      // anyway so that build systems don't get confused.
-      //
-      // TODO(cleanup): Add touch() to kj::FsNode.
-#if _WIN32
-      FILETIME time;
-      GetSystemTimeAsFileTime(&time);
-      KJ_WIN32(SetFileTime(KJ_ASSERT_NONNULL(file->getWin32Handle()), NULL, &time, &time));
-#else
-      KJ_SYSCALL(futimes(KJ_ASSERT_NONNULL(file->getFd()), nullptr));
-#endif
-    } else {
-      mapping->changed(kj::arrayPtr(firstModified, bytes.end()));
-    }
+    file->writeAll(text.flatten());
   }
 
   kj::MainBuilder::Validity run() {
