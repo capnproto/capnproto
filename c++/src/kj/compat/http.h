@@ -640,6 +640,14 @@ struct HttpServerSettings {
   kj::Duration pipelineTimeout = 5 * kj::SECONDS;
   // After one request/response completes, we'll wait up to this long for a pipelined request to
   // arrive.
+
+  kj::Duration canceledUploadGacePeriod = 1 * kj::SECONDS;
+  size_t canceledUploadGraceBytes = 65536;
+  // If the HttpService sends a response and returns without having read the entire request body,
+  // then we have to decide whether to close the connection or wait for the client to finish the
+  // request so that it can pipeline the next one. We'll give them a grace period defined by the
+  // above two values -- if they hit either one, we'll close the socket, but if the request
+  // completes, we'll let the connection stay open to handle more requests.
 };
 
 class HttpServer: private kj::TaskSet::ErrorHandler {
@@ -679,6 +687,14 @@ public:
   // a complete response, and the client closed the connection gracefully or drain() was called.
   // The promise throws if an unparseable request is received or if some I/O error occurs. Dropping
   // the returned promise will cancel all I/O on the connection and cancel any in-flight requests.
+
+  kj::Promise<bool> listenHttpCleanDrain(kj::AsyncIoStream& connection);
+  // Like listenHttp(), but allows you to potentially drain the server without closing connections.
+  // The returned promise resolves to `true` if the connection has been left in a state where a
+  // new HttpServer could potentially accept further requests from it. If `false`, then the
+  // connection is either in an inconsistent state or already completed a closing handshake; the
+  // caller should close it without any further reads/writes. Note this only ever returns `true`
+  // if you called `drain()` -- otherwise this server would keep handling the connection.
 
 private:
   class Connection;

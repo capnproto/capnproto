@@ -80,7 +80,7 @@ public:
     uint64_t n = kj::min(limit - doneSoFar, sizeof(buffer));
     if (n == 0) return doneSoFar;
 
-    return input.tryRead(buffer, 1, sizeof(buffer))
+    return input.tryRead(buffer, 1, n)
         .then([this](size_t amount) -> Promise<uint64_t> {
       if (amount == 0) return doneSoFar;  // EOF
       doneSoFar += amount;
