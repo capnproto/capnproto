@@ -312,7 +312,7 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
     for (;;) {
       auto part = split(text, END_PATH_PART);
       if (part.size() == 2 && part[0] == '.' && part[1] == '.') {
-        if (path.size() != 0) {
+        if (result.path.size() != 0) {
           result.path.removeLast();
         }
         result.hasTrailingSlash = true;
