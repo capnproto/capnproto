@@ -279,6 +279,8 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
     }
 
     result.host = percentDecode(authority, err);
+    if (!HOST_CHARS.containsAll(result.host)) return nullptr;
+    toLower(result.host);
   } else {
     // copy authority
     result.host = kj::str(this->host);

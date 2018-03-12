@@ -371,5 +371,10 @@ KJ_TEST("parse relative URL") {
                         "https://capnproto.org/http%3A/grault");
 }
 
+KJ_TEST("parse relative URL failure") {
+  auto base = Url::parse("https://example.com/");
+  KJ_EXPECT(base.tryParseRelative("https://[not a host]") == nullptr);
+}
+
 }  // namespace
 }  // namespace kj
