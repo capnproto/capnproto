@@ -809,11 +809,11 @@ public:
 
   inline bool isList() const;
   inline bool hasList() const;
-  inline  ::capnp::List< ::capnp::compiler::Expression>::Reader getList() const;
+  inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Reader getList() const;
 
   inline bool isTuple() const;
   inline bool hasTuple() const;
-  inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Reader getTuple() const;
+  inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Reader getTuple() const;
 
   inline  ::uint32_t getStartByte() const;
 
@@ -904,19 +904,19 @@ public:
 
   inline bool isList();
   inline bool hasList();
-  inline  ::capnp::List< ::capnp::compiler::Expression>::Builder getList();
-  inline void setList( ::capnp::List< ::capnp::compiler::Expression>::Reader value);
-  inline  ::capnp::List< ::capnp::compiler::Expression>::Builder initList(unsigned int size);
-  inline void adoptList(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression>> disownList();
+  inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Builder getList();
+  inline void setList( ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Builder initList(unsigned int size);
+  inline void adoptList(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>> disownList();
 
   inline bool isTuple();
   inline bool hasTuple();
-  inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Builder getTuple();
-  inline void setTuple( ::capnp::List< ::capnp::compiler::Expression::Param>::Reader value);
-  inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Builder initTuple(unsigned int size);
-  inline void adoptTuple(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param>> disownTuple();
+  inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Builder getTuple();
+  inline void setTuple( ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Builder initTuple(unsigned int size);
+  inline void adoptTuple(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>> disownTuple();
 
   inline  ::uint32_t getStartByte();
   inline void setStartByte( ::uint32_t value);
@@ -1114,7 +1114,7 @@ public:
   inline  ::capnp::compiler::Expression::Reader getFunction() const;
 
   inline bool hasParams() const;
-  inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Reader getParams() const;
+  inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Reader getParams() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1152,11 +1152,11 @@ public:
   inline ::capnp::Orphan< ::capnp::compiler::Expression> disownFunction();
 
   inline bool hasParams();
-  inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Builder getParams();
-  inline void setParams( ::capnp::List< ::capnp::compiler::Expression::Param>::Reader value);
-  inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Builder initParams(unsigned int size);
-  inline void adoptParams(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param>> disownParams();
+  inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Builder getParams();
+  inline void setParams( ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Builder initParams(unsigned int size);
+  inline void adoptParams(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>> disownParams();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1302,10 +1302,10 @@ public:
   inline typename Id::Reader getId() const;
 
   inline bool hasNestedDecls() const;
-  inline  ::capnp::List< ::capnp::compiler::Declaration>::Reader getNestedDecls() const;
+  inline  ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>::Reader getNestedDecls() const;
 
   inline bool hasAnnotations() const;
-  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader getAnnotations() const;
+  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Reader getAnnotations() const;
 
   inline  ::uint32_t getStartByte() const;
 
@@ -1410,7 +1410,7 @@ public:
   inline  ::capnp::Void getBuiltinAnyPointer() const;
 
   inline bool hasParameters() const;
-  inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Reader getParameters() const;
+  inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>::Reader getParameters() const;
 
   inline bool isBuiltinAnyStruct() const;
   inline  ::capnp::Void getBuiltinAnyStruct() const;
@@ -1461,18 +1461,18 @@ public:
   inline typename Id::Builder initId();
 
   inline bool hasNestedDecls();
-  inline  ::capnp::List< ::capnp::compiler::Declaration>::Builder getNestedDecls();
-  inline void setNestedDecls( ::capnp::List< ::capnp::compiler::Declaration>::Reader value);
-  inline  ::capnp::List< ::capnp::compiler::Declaration>::Builder initNestedDecls(unsigned int size);
-  inline void adoptNestedDecls(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration>> disownNestedDecls();
+  inline  ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>::Builder getNestedDecls();
+  inline void setNestedDecls( ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>::Builder initNestedDecls(unsigned int size);
+  inline void adoptNestedDecls(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>> disownNestedDecls();
 
   inline bool hasAnnotations();
-  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Builder getAnnotations();
-  inline void setAnnotations( ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader value);
-  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Builder initAnnotations(unsigned int size);
-  inline void adoptAnnotations(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>> disownAnnotations();
+  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Builder getAnnotations();
+  inline void setAnnotations( ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Builder initAnnotations(unsigned int size);
+  inline void adoptAnnotations(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>> disownAnnotations();
 
   inline  ::uint32_t getStartByte();
   inline void setStartByte( ::uint32_t value);
@@ -1620,11 +1620,11 @@ public:
   inline void setBuiltinAnyPointer( ::capnp::Void value = ::capnp::VOID);
 
   inline bool hasParameters();
-  inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Builder getParameters();
-  inline void setParameters( ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Reader value);
-  inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Builder initParameters(unsigned int size);
-  inline void adoptParameters(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>> disownParameters();
+  inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>::Builder getParameters();
+  inline void setParameters( ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>::Builder initParameters(unsigned int size);
+  inline void adoptParameters(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>> disownParameters();
 
   inline bool isBuiltinAnyStruct();
   inline  ::capnp::Void getBuiltinAnyStruct();
@@ -1957,7 +1957,7 @@ public:
   inline Which which() const;
   inline bool isNamedList() const;
   inline bool hasNamedList() const;
-  inline  ::capnp::List< ::capnp::compiler::Declaration::Param>::Reader getNamedList() const;
+  inline  ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>::Reader getNamedList() const;
 
   inline bool isType() const;
   inline bool hasType() const;
@@ -1998,11 +1998,11 @@ public:
   inline Which which();
   inline bool isNamedList();
   inline bool hasNamedList();
-  inline  ::capnp::List< ::capnp::compiler::Declaration::Param>::Builder getNamedList();
-  inline void setNamedList( ::capnp::List< ::capnp::compiler::Declaration::Param>::Reader value);
-  inline  ::capnp::List< ::capnp::compiler::Declaration::Param>::Builder initNamedList(unsigned int size);
-  inline void adoptNamedList(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Param>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Param>> disownNamedList();
+  inline  ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>::Builder getNamedList();
+  inline void setNamedList( ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>::Builder initNamedList(unsigned int size);
+  inline void adoptNamedList(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>> disownNamedList();
 
   inline bool isType();
   inline bool hasType();
@@ -2068,7 +2068,7 @@ public:
   inline  ::capnp::compiler::Expression::Reader getType() const;
 
   inline bool hasAnnotations() const;
-  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader getAnnotations() const;
+  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Reader getAnnotations() const;
 
   inline typename DefaultValue::Reader getDefaultValue() const;
 
@@ -2119,11 +2119,11 @@ public:
   inline ::capnp::Orphan< ::capnp::compiler::Expression> disownType();
 
   inline bool hasAnnotations();
-  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Builder getAnnotations();
-  inline void setAnnotations( ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader value);
-  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Builder initAnnotations(unsigned int size);
-  inline void adoptAnnotations(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>> disownAnnotations();
+  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Builder getAnnotations();
+  inline void setAnnotations( ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Builder initAnnotations(unsigned int size);
+  inline void adoptAnnotations(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>> disownAnnotations();
 
   inline typename DefaultValue::Builder getDefaultValue();
   inline typename DefaultValue::Builder initDefaultValue();
@@ -2732,7 +2732,7 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasSuperclasses() const;
-  inline  ::capnp::List< ::capnp::compiler::Expression>::Reader getSuperclasses() const;
+  inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Reader getSuperclasses() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2763,11 +2763,11 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasSuperclasses();
-  inline  ::capnp::List< ::capnp::compiler::Expression>::Builder getSuperclasses();
-  inline void setSuperclasses( ::capnp::List< ::capnp::compiler::Expression>::Reader value);
-  inline  ::capnp::List< ::capnp::compiler::Expression>::Builder initSuperclasses(unsigned int size);
-  inline void adoptSuperclasses(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression>> disownSuperclasses();
+  inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Builder getSuperclasses();
+  inline void setSuperclasses( ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Builder initSuperclasses(unsigned int size);
+  inline void adoptSuperclasses(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>> disownSuperclasses();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3584,41 +3584,41 @@ inline bool Expression::Builder::hasList() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::compiler::Expression>::Reader Expression::Reader::getList() const {
+inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Reader Expression::Reader::getList() const {
   KJ_IREQUIRE((which() == Expression::LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::get(_reader.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::compiler::Expression>::Builder Expression::Builder::getList() {
+inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Builder Expression::Builder::getList() {
   KJ_IREQUIRE((which() == Expression::LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::get(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void Expression::Builder::setList( ::capnp::List< ::capnp::compiler::Expression>::Reader value) {
+inline void Expression::Builder::setList( ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Reader value) {
   _builder.setDataField<Expression::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Expression::LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::set(_builder.getPointerField(
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::compiler::Expression>::Builder Expression::Builder::initList(unsigned int size) {
+inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Builder Expression::Builder::initList(unsigned int size) {
   _builder.setDataField<Expression::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Expression::LIST);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::init(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
 inline void Expression::Builder::adoptList(
-    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression>>&& value) {
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>&& value) {
   _builder.setDataField<Expression::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Expression::LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::adopt(_builder.getPointerField(
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression>> Expression::Builder::disownList() {
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>> Expression::Builder::disownList() {
   KJ_IREQUIRE((which() == Expression::LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::disown(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
@@ -3638,41 +3638,41 @@ inline bool Expression::Builder::hasTuple() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Reader Expression::Reader::getTuple() const {
+inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Reader Expression::Reader::getTuple() const {
   KJ_IREQUIRE((which() == Expression::TUPLE),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::get(_reader.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Builder Expression::Builder::getTuple() {
+inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Builder Expression::Builder::getTuple() {
   KJ_IREQUIRE((which() == Expression::TUPLE),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::get(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void Expression::Builder::setTuple( ::capnp::List< ::capnp::compiler::Expression::Param>::Reader value) {
+inline void Expression::Builder::setTuple( ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Reader value) {
   _builder.setDataField<Expression::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Expression::TUPLE);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::set(_builder.getPointerField(
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Builder Expression::Builder::initTuple(unsigned int size) {
+inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Builder Expression::Builder::initTuple(unsigned int size) {
   _builder.setDataField<Expression::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Expression::TUPLE);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::init(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
 inline void Expression::Builder::adoptTuple(
-    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param>>&& value) {
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>&& value) {
   _builder.setDataField<Expression::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Expression::TUPLE);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::adopt(_builder.getPointerField(
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param>> Expression::Builder::disownTuple() {
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>> Expression::Builder::disownTuple() {
   KJ_IREQUIRE((which() == Expression::TUPLE),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::disown(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
@@ -4141,29 +4141,29 @@ inline bool Expression::Application::Builder::hasParams() {
   return !_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Reader Expression::Application::Reader::getParams() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Reader Expression::Application::Reader::getParams() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Builder Expression::Application::Builder::getParams() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Builder Expression::Application::Builder::getParams() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline void Expression::Application::Builder::setParams( ::capnp::List< ::capnp::compiler::Expression::Param>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::set(_builder.getPointerField(
+inline void Expression::Application::Builder::setParams( ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::compiler::Expression::Param>::Builder Expression::Application::Builder::initParams(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Builder Expression::Application::Builder::initParams(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), size);
 }
 inline void Expression::Application::Builder::adoptParams(
-    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param>> Expression::Application::Builder::disownParams() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>> Expression::Application::Builder::disownParams() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
@@ -4317,29 +4317,29 @@ inline bool Declaration::Builder::hasNestedDecls() {
   return !_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration>::Reader Declaration::Reader::getNestedDecls() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>::Reader Declaration::Reader::getNestedDecls() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration>::Builder Declaration::Builder::getNestedDecls() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>::Builder Declaration::Builder::getNestedDecls() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
-inline void Declaration::Builder::setNestedDecls( ::capnp::List< ::capnp::compiler::Declaration>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration>>::set(_builder.getPointerField(
+inline void Declaration::Builder::setNestedDecls( ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration>::Builder Declaration::Builder::initNestedDecls(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>::Builder Declaration::Builder::initNestedDecls(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), size);
 }
 inline void Declaration::Builder::adoptNestedDecls(
-    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration>> Declaration::Builder::disownNestedDecls() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>> Declaration::Builder::disownNestedDecls() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 
@@ -4351,29 +4351,29 @@ inline bool Declaration::Builder::hasAnnotations() {
   return !_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader Declaration::Reader::getAnnotations() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Reader Declaration::Reader::getAnnotations() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Builder Declaration::Builder::getAnnotations() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Builder Declaration::Builder::getAnnotations() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
-inline void Declaration::Builder::setAnnotations( ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::set(_builder.getPointerField(
+inline void Declaration::Builder::setAnnotations( ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Builder Declaration::Builder::initAnnotations(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Builder Declaration::Builder::initAnnotations(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS), size);
 }
 inline void Declaration::Builder::adoptAnnotations(
-    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>> Declaration::Builder::disownAnnotations() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>> Declaration::Builder::disownAnnotations() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 
@@ -5302,29 +5302,29 @@ inline bool Declaration::Builder::hasParameters() {
   return !_builder.getPointerField(
       ::capnp::bounded<7>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Reader Declaration::Reader::getParameters() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>::Reader Declaration::Reader::getParameters() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<7>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Builder Declaration::Builder::getParameters() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>::Builder Declaration::Builder::getParameters() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<7>() * ::capnp::POINTERS));
 }
-inline void Declaration::Builder::setParameters( ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>::set(_builder.getPointerField(
+inline void Declaration::Builder::setParameters( ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<7>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>::Builder Declaration::Builder::initParameters(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>::Builder Declaration::Builder::initParameters(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<7>() * ::capnp::POINTERS), size);
 }
 inline void Declaration::Builder::adoptParameters(
-    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<7>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>> Declaration::Builder::disownParameters() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>> Declaration::Builder::disownParameters() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::BrandParameter,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<7>() * ::capnp::POINTERS));
 }
 
@@ -5637,41 +5637,41 @@ inline bool Declaration::ParamList::Builder::hasNamedList() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::Param>::Reader Declaration::ParamList::Reader::getNamedList() const {
+inline  ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>::Reader Declaration::ParamList::Reader::getNamedList() const {
   KJ_IREQUIRE((which() == Declaration::ParamList::NAMED_LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param>>::get(_reader.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::Param>::Builder Declaration::ParamList::Builder::getNamedList() {
+inline  ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>::Builder Declaration::ParamList::Builder::getNamedList() {
   KJ_IREQUIRE((which() == Declaration::ParamList::NAMED_LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param>>::get(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void Declaration::ParamList::Builder::setNamedList( ::capnp::List< ::capnp::compiler::Declaration::Param>::Reader value) {
+inline void Declaration::ParamList::Builder::setNamedList( ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>::Reader value) {
   _builder.setDataField<Declaration::ParamList::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Declaration::ParamList::NAMED_LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param>>::set(_builder.getPointerField(
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::Param>::Builder Declaration::ParamList::Builder::initNamedList(unsigned int size) {
+inline  ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>::Builder Declaration::ParamList::Builder::initNamedList(unsigned int size) {
   _builder.setDataField<Declaration::ParamList::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Declaration::ParamList::NAMED_LIST);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param>>::init(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
 inline void Declaration::ParamList::Builder::adoptNamedList(
-    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Param>>&& value) {
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>>&& value) {
   _builder.setDataField<Declaration::ParamList::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Declaration::ParamList::NAMED_LIST);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param>>::adopt(_builder.getPointerField(
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Param>> Declaration::ParamList::Builder::disownNamedList() {
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>> Declaration::ParamList::Builder::disownNamedList() {
   KJ_IREQUIRE((which() == Declaration::ParamList::NAMED_LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param>>::disown(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
@@ -5843,29 +5843,29 @@ inline bool Declaration::Param::Builder::hasAnnotations() {
   return !_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader Declaration::Param::Reader::getAnnotations() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Reader Declaration::Param::Reader::getAnnotations() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Builder Declaration::Param::Builder::getAnnotations() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Builder Declaration::Param::Builder::getAnnotations() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
-inline void Declaration::Param::Builder::setAnnotations( ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::set(_builder.getPointerField(
+inline void Declaration::Param::Builder::setAnnotations( ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Builder Declaration::Param::Builder::initAnnotations(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>::Builder Declaration::Param::Builder::initAnnotations(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), size);
 }
 inline void Declaration::Param::Builder::adoptAnnotations(
-    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>> Declaration::Param::Builder::disownAnnotations() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>> Declaration::Param::Builder::disownAnnotations() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 
@@ -6414,29 +6414,29 @@ inline bool Declaration::Interface::Builder::hasSuperclasses() {
   return !_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::compiler::Expression>::Reader Declaration::Interface::Reader::getSuperclasses() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Reader Declaration::Interface::Reader::getSuperclasses() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::compiler::Expression>::Builder Declaration::Interface::Builder::getSuperclasses() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Builder Declaration::Interface::Builder::getSuperclasses() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS));
 }
-inline void Declaration::Interface::Builder::setSuperclasses( ::capnp::List< ::capnp::compiler::Expression>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::set(_builder.getPointerField(
+inline void Declaration::Interface::Builder::setSuperclasses( ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::compiler::Expression>::Builder Declaration::Interface::Builder::initSuperclasses(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Builder Declaration::Interface::Builder::initSuperclasses(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS), size);
 }
 inline void Declaration::Interface::Builder::adoptSuperclasses(
-    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression>> Declaration::Interface::Builder::disownSuperclasses() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>> Declaration::Interface::Builder::disownSuperclasses() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS));
 }
 
