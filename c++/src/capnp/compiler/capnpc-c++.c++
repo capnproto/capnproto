@@ -301,6 +301,43 @@ kj::String KJ_STRINGIFY(const CppTypeName& typeName) {
   }
 }
 
+CppTypeName whichKind(schema::Type::Which which) {
+  // Make a CppTypeName representing the capnp::Kind value for the given schema type. This makes
+  // CppTypeName conflate types and values, but this is all just a hack for MSVC's benefit. Its
+  // primary use is as a non-type template parameter to `capnp::List<T, K>` -- normally the Kind K
+  // is deduced via SFINAE, but MSVC just can't do it in certain cases, such as when a nested type
+  // of `capnp::List<T, K>` is the return type of a function, and the element type T is a template
+  // instantiation.
+
+  switch (which) {
+      case schema::Type::VOID: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+
+      case schema::Type::BOOL: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::INT8: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::INT16: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::INT32: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::INT64: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::UINT8: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::UINT16: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::UINT32: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::UINT64: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::FLOAT32: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+      case schema::Type::FLOAT64: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+
+      case schema::Type::TEXT: return CppTypeName::makePrimitive(" ::capnp::Kind::BLOB");
+      case schema::Type::DATA: return CppTypeName::makePrimitive(" ::capnp::Kind::BLOB");
+
+      case schema::Type::ENUM: return CppTypeName::makePrimitive(" ::capnp::Kind::ENUM");
+      case schema::Type::STRUCT: return CppTypeName::makePrimitive(" ::capnp::Kind::STRUCT");
+      case schema::Type::INTERFACE: return CppTypeName::makePrimitive(" ::capnp::Kind::INTERFACE");
+
+      case schema::Type::LIST: return CppTypeName::makePrimitive(" ::capnp::Kind::LIST");
+      case schema::Type::ANY_POINTER: return CppTypeName::makePrimitive(" ::capnp::Kind::OTHER");
+  }
+
+  KJ_UNREACHABLE;
+}
+
 // =======================================================================================
 
 class CapnpcCppMain {
@@ -473,8 +510,10 @@ private:
 
       case schema::Type::LIST: {
         CppTypeName result = CppTypeName::makeNamespace("capnp");
-        auto params = kj::heapArrayBuilder<CppTypeName>(1);
-        params.add(typeName(type.asList().getElementType(), method));
+        auto params = kj::heapArrayBuilder<CppTypeName>(2);
+        auto list = type.asList();
+        params.add(typeName(list.getElementType(), method));
+        params.add(whichKind(list.whichElementType()));
         result.addMemberTemplate("List", params.finish());
         return result;
       }
