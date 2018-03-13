@@ -1922,7 +1922,7 @@ public:
   inline ::capnp::AnyPointer::Reader getContent() const;
 
   inline bool hasCapTable() const;
-  inline  ::capnp::List< ::capnp::rpc::CapDescriptor>::Reader getCapTable() const;
+  inline  ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>::Reader getCapTable() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1957,11 +1957,11 @@ public:
   inline ::capnp::AnyPointer::Builder initContent();
 
   inline bool hasCapTable();
-  inline  ::capnp::List< ::capnp::rpc::CapDescriptor>::Builder getCapTable();
-  inline void setCapTable( ::capnp::List< ::capnp::rpc::CapDescriptor>::Reader value);
-  inline  ::capnp::List< ::capnp::rpc::CapDescriptor>::Builder initCapTable(unsigned int size);
-  inline void adoptCapTable(::capnp::Orphan< ::capnp::List< ::capnp::rpc::CapDescriptor>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::CapDescriptor>> disownCapTable();
+  inline  ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>::Builder getCapTable();
+  inline void setCapTable( ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>::Builder initCapTable(unsigned int size);
+  inline void adoptCapTable(::capnp::Orphan< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>> disownCapTable();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -2134,7 +2134,7 @@ public:
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasTransform() const;
-  inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>::Reader getTransform() const;
+  inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>::Reader getTransform() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2168,11 +2168,11 @@ public:
   inline void setQuestionId( ::uint32_t value);
 
   inline bool hasTransform();
-  inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>::Builder getTransform();
-  inline void setTransform( ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>::Reader value);
-  inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>::Builder initTransform(unsigned int size);
-  inline void adoptTransform(::capnp::Orphan< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>> disownTransform();
+  inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>::Builder getTransform();
+  inline void setTransform( ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>::Builder initTransform(unsigned int size);
+  inline void adoptTransform(::capnp::Orphan< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>> disownTransform();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -4422,29 +4422,29 @@ inline bool Payload::Builder::hasCapTable() {
   return !_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::rpc::CapDescriptor>::Reader Payload::Reader::getCapTable() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>::Reader Payload::Reader::getCapTable() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::rpc::CapDescriptor>::Builder Payload::Builder::getCapTable() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>::Builder Payload::Builder::getCapTable() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline void Payload::Builder::setCapTable( ::capnp::List< ::capnp::rpc::CapDescriptor>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor>>::set(_builder.getPointerField(
+inline void Payload::Builder::setCapTable( ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::rpc::CapDescriptor>::Builder Payload::Builder::initCapTable(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>::Builder Payload::Builder::initCapTable(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), size);
 }
 inline void Payload::Builder::adoptCapTable(
-    ::capnp::Orphan< ::capnp::List< ::capnp::rpc::CapDescriptor>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::CapDescriptor>> Payload::Builder::disownCapTable() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>> Payload::Builder::disownCapTable() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::CapDescriptor,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
@@ -4691,29 +4691,29 @@ inline bool PromisedAnswer::Builder::hasTransform() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>::Reader PromisedAnswer::Reader::getTransform() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>::Reader PromisedAnswer::Reader::getTransform() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>::Builder PromisedAnswer::Builder::getTransform() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>::Builder PromisedAnswer::Builder::getTransform() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void PromisedAnswer::Builder::setTransform( ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>>::set(_builder.getPointerField(
+inline void PromisedAnswer::Builder::setTransform( ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>::Builder PromisedAnswer::Builder::initTransform(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>::Builder PromisedAnswer::Builder::initTransform(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
 inline void PromisedAnswer::Builder::adoptTransform(
-    ::capnp::Orphan< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>> PromisedAnswer::Builder::disownTransform() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>> PromisedAnswer::Builder::disownTransform() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::PromisedAnswer::Op,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
