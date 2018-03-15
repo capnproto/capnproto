@@ -369,6 +369,14 @@ KJ_TEST("parse relative URL") {
   parseAndCheckRelative("https://capnproto.org/foo/bar?baz=qux#corge",
                         "/http:/grault",
                         "https://capnproto.org/http%3A/grault");
+  parseAndCheckRelative("https://capnproto.org/",
+                        "/foo/../bar",
+                        "https://capnproto.org/bar");
+}
+
+KJ_TEST("parse relative URL failure") {
+  auto base = Url::parse("https://example.com/");
+  KJ_EXPECT(base.tryParseRelative("https://[not a host]") == nullptr);
 }
 
 }  // namespace
