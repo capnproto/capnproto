@@ -2451,19 +2451,37 @@ public:
     kj::StringPtr connectionHeaders[CONNECTION_HEADERS_COUNT];
     kj::String lengthStr;
 
-    if (method == HttpMethod::GET || method == HttpMethod::HEAD) {
-      // No entity-body.
-    } else KJ_IF_MAYBE(s, expectedBodySize) {
-      lengthStr = kj::str(*s);
-      connectionHeaders[BuiltinHeaderIndices::CONTENT_LENGTH] = lengthStr;
+    bool isGet = method == HttpMethod::GET || method == HttpMethod::HEAD;
+    bool hasBody;
+
+    KJ_IF_MAYBE(s, expectedBodySize) {
+      if (isGet && *s == 0) {
+        // GET with empty body; don't send any Content-Length.
+        hasBody = false;
+      } else {
+        lengthStr = kj::str(*s);
+        connectionHeaders[BuiltinHeaderIndices::CONTENT_LENGTH] = lengthStr;
+        hasBody = true;
+      }
     } else {
-      connectionHeaders[BuiltinHeaderIndices::TRANSFER_ENCODING] = "chunked";
+      if (isGet && headers.get(HttpHeaderId::TRANSFER_ENCODING) == nullptr) {
+        // GET with empty body; don't send any Transfer-Encoding.
+        hasBody = false;
+      } else {
+        // HACK: Normally GET requests shouldn't have bodies. But, if the caller set a
+        //   Transfer-Encoding header on a GET, we use this as a special signal that it might
+        //   actually want to send a body. This allows pass-through of a GET request with a chunked
+        //   body to "just work". We strongly discourage writing any new code that sends
+        //   full-bodied GETs.
+        connectionHeaders[BuiltinHeaderIndices::TRANSFER_ENCODING] = "chunked";
+        hasBody = true;
+      }
     }
 
     httpOutput.writeHeaders(headers.serializeRequest(method, url, connectionHeaders));
 
     kj::Own<kj::AsyncOutputStream> bodyStream;
-    if (method == HttpMethod::GET || method == HttpMethod::HEAD) {
+    if (!hasBody) {
       // No entity-body.
       httpOutput.finishBody();
       bodyStream = heap<HttpNullEntityWriter>();

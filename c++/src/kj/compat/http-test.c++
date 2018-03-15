@@ -699,6 +699,38 @@ kj::ArrayPtr<const HttpRequestTestCase> requestTestCases() {
       {{HttpHeaderId::HOST, HUGE_STRING}},
       uint64_t(0), {}
     },
+
+    {
+      "GET /foo/bar HTTP/1.1\r\n"
+      "Content-Length: 6\r\n"
+      "Host: example.com\r\n"
+      "\r\n"
+      "foobar",
+
+      HttpMethod::GET,
+      "/foo/bar",
+      {{HttpHeaderId::HOST, "example.com"}},
+      uint64_t(6), { "foobar" },
+    },
+
+    {
+      "GET /foo/bar HTTP/1.1\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "Host: example.com\r\n"
+      "\r\n"
+      "3\r\n"
+      "foo\r\n"
+      "3\r\n"
+      "bar\r\n"
+      "0\r\n"
+      "\r\n",
+
+      HttpMethod::GET,
+      "/foo/bar",
+      {{HttpHeaderId::HOST, "example.com"},
+       {HttpHeaderId::TRANSFER_ENCODING, "chunked"}},
+      nullptr, { "foo", "bar" },
+    }
   };
 
   // TODO(cleanup): A bug in GCC 4.8, fixed in 4.9, prevents REQUEST_TEST_CASES from implicitly
