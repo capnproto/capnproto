@@ -35,6 +35,13 @@
 #endif
 #include "io.h"
 
+#if !KJ_NO_RTTI
+#include <typeinfo>
+#if __GNUC__
+#include <cxxabi.h>
+#endif
+#endif
+
 #if (__linux__ && __GLIBC__ && !__UCLIBC__) || __APPLE__
 #define KJ_HAS_BACKTRACE 1
 #include <execinfo.h>
@@ -918,6 +925,26 @@ void UnwindDetector::catchExceptionsAsSecondaryFaults(_::Runnable& runnable) con
   runCatchingExceptions(runnable);
 }
 
+#if __GNUC__ && !KJ_NO_RTTI
+static kj::String demangleTypeName(const char* name) {
+  if (name == nullptr) return kj::heapString("(nil)");
+
+  int status;
+  char* buf = abi::__cxa_demangle(name, nullptr, nullptr, &status);
+  kj::String result = kj::heapString(buf == nullptr ? name : buf);
+  free(buf);
+  return kj::mv(result);
+}
+
+kj::String getCaughtExceptionType() {
+  return demangleTypeName(abi::__cxa_current_exception_type()->name());
+}
+#else
+kj::String getCaughtExceptionType() {
+  return kj::heapString("(unknown)");
+}
+#endif
+
 namespace _ {  // private
 
 class RecoverableExceptionCatcher: public ExceptionCallback {
@@ -960,8 +987,12 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
     return Exception(Exception::Type::FAILED,
                      "(unknown)", -1, str("std::exception: ", e.what()));
   } catch (...) {
-    return Exception(Exception::Type::FAILED,
-                     "(unknown)", -1, str("Unknown non-KJ exception."));
+#if __GNUC__ && !KJ_NO_RTTI
+    return Exception(Exception::Type::FAILED, "(unknown)", -1, str(
+        "unknown non-KJ exception of type: ", getCaughtExceptionType()));
+#else
+    return Exception(Exception::Type::FAILED, "(unknown)", -1, str("unknown non-KJ exception"));
+#endif
   }
 #endif
 }

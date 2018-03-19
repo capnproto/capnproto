@@ -373,4 +373,10 @@ kj::StringPtr trimSourceFilename(kj::StringPtr filename);
 // Given a source code file name, trim off noisy prefixes like "src/" or
 // "/ekam-provider/canonical/".
 
+kj::String getCaughtExceptionType();
+// Utility function which attempts to return the human-readable type name of the exception
+// currently being thrown. This can be called inside a catch block, including a catch (...) block,
+// for the purpose of error logging. This function is best-effort; on some platforms it may simply
+// return "(unknown)".
+
 }  // namespace kj
