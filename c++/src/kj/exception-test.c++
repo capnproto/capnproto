@@ -22,6 +22,7 @@
 #include "exception.h"
 #include "debug.h"
 #include <kj/compat/gtest.h>
+#include <stdexcept>
 
 namespace kj {
 namespace _ {  // private
@@ -55,6 +56,36 @@ TEST(Exception, RunCatchingExceptions) {
     ADD_FAILURE() << "Expected exception";
   }
 }
+
+#if !KJ_NO_EXCEPTIONS
+TEST(Exception, RunCatchingExceptionsStdException) {
+  Maybe<Exception> e = kj::runCatchingExceptions([&]() {
+    throw std::logic_error("foo");
+  });
+
+  KJ_IF_MAYBE(ex, e) {
+    EXPECT_EQ("std::exception: foo", ex->getDescription());
+  } else {
+    ADD_FAILURE() << "Expected exception";
+  }
+}
+
+TEST(Exception, RunCatchingExceptionsOtherException) {
+  Maybe<Exception> e = kj::runCatchingExceptions([&]() {
+    throw 123;
+  });
+
+  KJ_IF_MAYBE(ex, e) {
+#if __GNUC__ && !KJ_NO_RTTI
+    EXPECT_EQ("unknown non-KJ exception of type: int", ex->getDescription());
+#else
+    EXPECT_EQ("unknown non-KJ exception", ex->getDescription());
+#endif
+  } else {
+    ADD_FAILURE() << "Expected exception";
+  }
+}
+#endif
 
 #if !KJ_NO_EXCEPTIONS
 // We skip this test when exceptions are disabled because making it no-exceptions-safe defeats
