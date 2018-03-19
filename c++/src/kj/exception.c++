@@ -841,7 +841,13 @@ void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
 
 namespace _ {  // private
 
-#if __GNUC__
+#if __cplusplus >= 201703L
+
+uint uncaughtExceptionCount() {
+  return std::uncaught_exceptions();
+}
+
+#elif __GNUC__
 
 // Horrible -- but working -- hack:  We can dig into __cxa_get_globals() in order to extract the
 // count of uncaught exceptions.  This function is part of the C++ ABI implementation used on Linux,
@@ -865,17 +871,16 @@ struct FakeEhGlobals {
   uint uncaughtExceptions;
 };
 
-// Because of the 'extern "C"', the symbol name is not mangled and thus the namespace is effectively
-// ignored for linking.  Thus it doesn't matter that we are declaring __cxa_get_globals() in a
-// different namespace from the ABI's definition.
-extern "C" {
-FakeEhGlobals* __cxa_get_globals();
-}
+// LLVM's libstdc++ doesn't declare __cxa_get_globals in its cxxabi.h. GNU does. Because it is
+// extern "C", the compiler wills get upset if we re-declare it even in a different namespace.
+#if _LIBCPPABI_VERSION
+extern "C" void* __cxa_get_globals();
+#else
+using abi::__cxa_get_globals;
+#endif
 
 uint uncaughtExceptionCount() {
-  // TODO(perf):  Use __cxa_get_globals_fast()?  Requires that __cxa_get_globals() has been called
-  //   from somewhere.
-  return __cxa_get_globals()->uncaughtExceptions;
+  return reinterpret_cast<FakeEhGlobals*>(__cxa_get_globals())->uncaughtExceptions;
 }
 
 #elif _MSC_VER
