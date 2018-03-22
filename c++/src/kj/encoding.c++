@@ -822,7 +822,7 @@ int base64_decode_block(const char* code_in, const int length_in,
                         char* plaintext_out, base64_decodestate* state_in) {
   const char* codechar = code_in;
   char* plainchar = plaintext_out;
-  char fragment;
+  signed char fragment;
 
   if (state_in->step != step_a) {
     *plainchar = state_in->plainchar;
@@ -841,7 +841,7 @@ int base64_decode_block(const char* code_in, const int length_in,
           state_in->plainchar = '\0';
           return plainchar - plaintext_out;
         }
-        fragment = (char)base64_decode_value(*codechar++);
+        fragment = (signed char)base64_decode_value(*codechar++);
         // It is an error to see invalid or padding bytes in step A.
         ERROR_IF(fragment < -1);
       } while (fragment < 0);
@@ -857,7 +857,7 @@ int base64_decode_block(const char* code_in, const int length_in,
           state_in->hadErrors = true;
           return plainchar - plaintext_out;
         }
-        fragment = (char)base64_decode_value(*codechar++);
+        fragment = (signed char)base64_decode_value(*codechar++);
         // It is an error to see invalid or padding bytes in step B.
         ERROR_IF(fragment < -1);
       } while (fragment < 0);
@@ -874,7 +874,7 @@ int base64_decode_block(const char* code_in, const int length_in,
           ERROR_IF(state_in->nPaddingBytesSeen == 1);
           return plainchar - plaintext_out;
         }
-        fragment = (char)base64_decode_value(*codechar++);
+        fragment = (signed char)base64_decode_value(*codechar++);
         // It is an error to see invalid bytes or more than two padding bytes in step C.
         ERROR_IF(fragment < -2 || (fragment == -2 && ++state_in->nPaddingBytesSeen > 2));
       } while (fragment < 0);
@@ -889,7 +889,7 @@ int base64_decode_block(const char* code_in, const int length_in,
           state_in->plainchar = *plainchar;
           return plainchar - plaintext_out;
         }
-        fragment = (char)base64_decode_value(*codechar++);
+        fragment = (signed char)base64_decode_value(*codechar++);
         // It is an error to see invalid bytes or more than one padding byte in step D.
         ERROR_IF(fragment < -2 || (fragment == -2 && ++state_in->nPaddingBytesSeen > 1));
       } while (fragment < 0);
