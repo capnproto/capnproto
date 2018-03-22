@@ -293,7 +293,50 @@ TEST(AsyncIo, Timeouts) {
 
 #if !_WIN32  // datagrams not implemented on win32 yet
 
+bool isMsgTruncBroken() {
+  // Detect if the kernel fails to set MSG_TRUNC on recvmsg(). This seems to be the case at least
+  // when running an arm64 binary under qemu.
+
+  int fd;
+  KJ_SYSCALL(fd = socket(AF_INET, SOCK_DGRAM, 0));
+  KJ_DEFER(close(fd));
+
+  struct sockaddr_in addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(0x7f000001);
+  KJ_SYSCALL(bind(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)));
+
+  // Read back the assigned port.
+  socklen_t len = sizeof(addr);
+  KJ_SYSCALL(getsockname(fd, reinterpret_cast<struct sockaddr*>(&addr), &len));
+  KJ_ASSERT(len == sizeof(addr));
+
+  const char* message = "foobar";
+  KJ_SYSCALL(sendto(fd, message, strlen(message), 0,
+      reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)));
+
+  char buf[4];
+  struct iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = 3;
+  struct msghdr msg;
+  memset(&msg, 0, sizeof(msg));
+  msg.msg_iov = &iov;
+  msg.msg_iovlen = 1;
+  ssize_t n;
+  KJ_SYSCALL(n = recvmsg(fd, &msg, 0));
+  KJ_ASSERT(n == 3);
+
+  buf[3] = 0;
+  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+
+  return (msg.msg_flags & MSG_TRUNC) == 0;
+}
+
 TEST(AsyncIo, Udp) {
+  bool msgTruncBroken = isMsgTruncBroken();
+
   auto ioContext = setupAsyncIo();
 
   auto addr = ioContext.provider->getNetwork().parseAddress("127.0.0.1").wait(ioContext.waitScope);
@@ -351,7 +394,7 @@ TEST(AsyncIo, Udp) {
     {
       auto content = recv1->getContent();
       EXPECT_EQ("01234567", kj::heapString(content.value.asChars()));
-      EXPECT_TRUE(content.isTruncated);
+      EXPECT_TRUE(content.isTruncated || msgTruncBroken);
     }
     EXPECT_EQ(addr2->toString(), recv1->getSource().toString());
     {
@@ -360,10 +403,14 @@ TEST(AsyncIo, Udp) {
       EXPECT_FALSE(ancillary.isTruncated);
     }
 
-#if defined(IP_PKTINFO) && !__CYGWIN__
+#if defined(IP_PKTINFO) && !__CYGWIN__ && !__aarch64__
     // Set IP_PKTINFO header and try to receive it.
+    //
     // Doesn't work on Cygwin; see: https://cygwin.com/ml/cygwin/2009-01/msg00350.html
     // TODO(someday): Might work on more-recent Cygwin; I'm still testing against 1.7.
+    //
+    // Doesn't work when running arm64 binaries under QEMU -- in fact, it crashes QEMU. We don't
+    // have a good way to test if we're under QEMU so we just skip this test on aarch64.
     int one = 1;
     port1->setsockopt(IPPROTO_IP, IP_PKTINFO, &one, sizeof(one));
 
@@ -404,7 +451,7 @@ TEST(AsyncIo, Udp) {
     EXPECT_EQ(addr2->toString(), recv1->getSource().toString());
     {
       auto ancillary = recv1->getAncillary();
-      EXPECT_TRUE(ancillary.isTruncated);
+      EXPECT_TRUE(ancillary.isTruncated || msgTruncBroken);
 
       // We might get a message, but it will be truncated.
       if (ancillary.value.size() != 0) {
