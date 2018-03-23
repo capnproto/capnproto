@@ -122,3 +122,12 @@ SetupSeccompForFilesystemTest setupSeccompForFilesystemTest;
 #endif
 #endif
 #endif
+
+#if __linux__ && !__x86_64__
+// HACK: We may be cross-compiling. Ekam's cross-compiling is currently hacky -- if a test is a
+//   test on the host platform then it needs to be a test on all other targets, too. So add a dummy
+//   test here.
+// TODO(cleanup): Make Ekam cross-compiling better.
+#include <kj/test.h>
+KJ_TEST("old kernel test -- not supported on this architecture") {}
+#endif
