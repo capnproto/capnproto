@@ -198,11 +198,11 @@ KJ_TEST("parse / stringify URL") {
   }
 
   {
-    auto url = parseAndCheck("https://foo:1234@capnproto.org");
+    auto url = parseAndCheck("https://$foo&:12+,34@capnproto.org");
     KJ_EXPECT(url.scheme == "https");
     auto& user = KJ_ASSERT_NONNULL(url.userInfo);
-    KJ_EXPECT(user.username == "foo");
-    KJ_EXPECT(KJ_ASSERT_NONNULL(user.password) == "1234");
+    KJ_EXPECT(user.username == "$foo&");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(user.password) == "12+,34");
     KJ_EXPECT(url.host == "capnproto.org");
     KJ_EXPECT(url.path == nullptr);
     KJ_EXPECT(!url.hasTrailingSlash);
@@ -219,6 +219,11 @@ KJ_TEST("parse / stringify URL") {
     KJ_EXPECT(!url.hasTrailingSlash);
     KJ_EXPECT(url.query == nullptr);
     KJ_EXPECT(url.fragment == nullptr);
+  }
+
+  {
+    auto url = parseAndCheck("https://capnproto.org/foo%2Fbar/baz");
+    KJ_EXPECT(url.path.asPtr() == kj::ArrayPtr<const StringPtr>({"foo/bar", "baz"}));
   }
 
   parseAndCheck("https://capnproto.org/foo/bar?", "https://capnproto.org/foo/bar");
@@ -241,6 +246,15 @@ KJ_TEST("URL percent encoding") {
   parseAndCheck(
       "https://b b: bcd@capnproto.org/f o?b r=b z#q x",
       "https://b%20b:%20bcd@capnproto.org/f%20o?b+r=b+z#q%20x");
+
+  parseAndCheck(
+      "https://capnproto.org/foo?bar=baz#@?#^[\\]{|}",
+      "https://capnproto.org/foo?bar=baz#@?#^[\\]{|}");
+
+  // All permissible non-alphanumeric, non-separator path characters.
+  parseAndCheck(
+      "https://capnproto.org/!$&'()*+,-.:;=@[]^_|~",
+      "https://capnproto.org/!$&'()*+,-.:;=@[]^_|~");
 }
 
 KJ_TEST("URL relative paths") {
@@ -368,7 +382,7 @@ KJ_TEST("parse relative URL") {
                         "http://capnproto.org/grault");
   parseAndCheckRelative("https://capnproto.org/foo/bar?baz=qux#corge",
                         "/http:/grault",
-                        "https://capnproto.org/http%3A/grault");
+                        "https://capnproto.org/http:/grault");
   parseAndCheckRelative("https://capnproto.org/",
                         "/foo/../bar",
                         "https://capnproto.org/bar");

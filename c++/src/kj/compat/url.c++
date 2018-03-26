@@ -375,10 +375,10 @@ String Url::toString(Context context) const {
 
     if (context == REMOTE_HREF) {
       KJ_IF_MAYBE(user, userInfo) {
-        chars.addAll(encodeUriComponent(user->username));
+        chars.addAll(encodeUriUserInfo(user->username));
         KJ_IF_MAYBE(pass, user->password) {
           chars.add(':');
-          chars.addAll(encodeUriComponent(*pass));
+          chars.addAll(encodeUriUserInfo(*pass));
         }
         chars.add('@');
       }
@@ -407,7 +407,7 @@ String Url::toString(Context context) const {
       continue;
     }
     chars.add('/');
-    chars.addAll(encodeUriComponent(pathPart));
+    chars.addAll(encodeUriPath(pathPart));
   }
   if (hasTrailingSlash || (path.size() == 0 && context == HTTP_REQUEST)) {
     chars.add('/');
@@ -427,7 +427,7 @@ String Url::toString(Context context) const {
   if (context == REMOTE_HREF) {
     KJ_IF_MAYBE(f, fragment) {
       chars.add('#');
-      chars.addAll(encodeUriComponent(*f));
+      chars.addAll(encodeUriFragment(*f));
     }
   }
 
