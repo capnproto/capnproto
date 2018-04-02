@@ -63,7 +63,14 @@ struct Url {
   };
   Vector<QueryParam> query;
   // Query, e.g. from "?key=value&key2=value2". If a component of the query contains no '=' sign,
-  // it will be parsed as a key with an empty value.
+  // it will be parsed as a key with a null value, and later serialized with no '=' sign if you call
+  // Url::toString().
+  //
+  // To distinguish between null-valued and empty-valued query parameters, we test whether
+  // QueryParam::value is an allocated or unallocated string. For example:
+  //
+  //     QueryParam { kj::str("name"), nullptr }      // Null-valued; will not have an '=' sign.
+  //     QueryParam { kj::str("name"), kj::str("") }  // Empty-valued; WILL have an '=' sign.
 
   Maybe<String> fragment;
   // The stuff after the '#' character (not including the '#' character itself), if present.
