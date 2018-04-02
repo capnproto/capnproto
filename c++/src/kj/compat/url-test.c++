@@ -30,6 +30,9 @@ Url parseAndCheck(kj::StringPtr originalText, kj::StringPtr expectedRestringifie
   if (expectedRestringified == nullptr) expectedRestringified = originalText;
   auto url = Url::parse(originalText);
   KJ_EXPECT(kj::str(url) == expectedRestringified, url, originalText, expectedRestringified);
+  // Make sure clones also restringify to the expected string.
+  auto clone = url.clone();
+  KJ_EXPECT(kj::str(clone) == expectedRestringified, clone, originalText, expectedRestringified);
   return url;
 }
 
@@ -101,6 +104,36 @@ KJ_TEST("parse / stringify URL") {
     KJ_EXPECT(url.query[0].value == "qux");
     KJ_EXPECT(url.query[1].name == "corge");
     KJ_EXPECT(url.query[1].value == nullptr);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(url.fragment) == "garply");
+  }
+
+  {
+    auto url = parseAndCheck("https://capnproto.org/foo/bar?baz=qux&corge=#garply");
+    KJ_EXPECT(url.scheme == "https");
+    KJ_EXPECT(url.userInfo == nullptr);
+    KJ_EXPECT(url.host == "capnproto.org");
+    KJ_EXPECT(url.path.asPtr() == kj::ArrayPtr<const StringPtr>({"foo", "bar"}));
+    KJ_EXPECT(!url.hasTrailingSlash);
+    KJ_ASSERT(url.query.size() == 2);
+    KJ_EXPECT(url.query[0].name == "baz");
+    KJ_EXPECT(url.query[0].value == "qux");
+    KJ_EXPECT(url.query[1].name == "corge");
+    KJ_EXPECT(url.query[1].value == nullptr);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(url.fragment) == "garply");
+  }
+
+  {
+    auto url = parseAndCheck("https://capnproto.org/foo/bar?baz=&corge=grault#garply");
+    KJ_EXPECT(url.scheme == "https");
+    KJ_EXPECT(url.userInfo == nullptr);
+    KJ_EXPECT(url.host == "capnproto.org");
+    KJ_EXPECT(url.path.asPtr() == kj::ArrayPtr<const StringPtr>({"foo", "bar"}));
+    KJ_EXPECT(!url.hasTrailingSlash);
+    KJ_ASSERT(url.query.size() == 2);
+    KJ_EXPECT(url.query[0].name == "baz");
+    KJ_EXPECT(url.query[0].value == "");
+    KJ_EXPECT(url.query[1].name == "corge");
+    KJ_EXPECT(url.query[1].value == "grault");
     KJ_EXPECT(KJ_ASSERT_NONNULL(url.fragment) == "garply");
   }
 
@@ -353,15 +386,26 @@ KJ_TEST("parse URL failure") {
 void parseAndCheckRelative(kj::StringPtr base, kj::StringPtr relative, kj::StringPtr expected) {
   auto parsed = Url::parse(base).parseRelative(relative);
   KJ_EXPECT(kj::str(parsed) == expected, parsed, expected);
+  auto clone = parsed.clone();
+  KJ_EXPECT(kj::str(clone) == expected, clone, expected);
 }
 
 KJ_TEST("parse relative URL") {
   parseAndCheckRelative("https://capnproto.org/foo/bar?baz=qux#corge",
                         "#grault",
                         "https://capnproto.org/foo/bar?baz=qux#grault");
+  parseAndCheckRelative("https://capnproto.org/foo/bar?baz#corge",
+                        "#grault",
+                        "https://capnproto.org/foo/bar?baz#grault");
+  parseAndCheckRelative("https://capnproto.org/foo/bar?baz=#corge",
+                        "#grault",
+                        "https://capnproto.org/foo/bar?baz=#grault");
   parseAndCheckRelative("https://capnproto.org/foo/bar?baz=qux#corge",
                         "?grault",
                         "https://capnproto.org/foo/bar?grault");
+  parseAndCheckRelative("https://capnproto.org/foo/bar?baz=qux#corge",
+                        "?grault=",
+                        "https://capnproto.org/foo/bar?grault=");
   parseAndCheckRelative("https://capnproto.org/foo/bar?baz=qux#corge",
                         "?grault+garply=waldo",
                         "https://capnproto.org/foo/bar?grault+garply=waldo");

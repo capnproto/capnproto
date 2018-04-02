@@ -111,7 +111,9 @@ Url Url::clone() const {
     KJ_MAP(part, path) { return kj::str(part); },
     hasTrailingSlash,
     KJ_MAP(param, query) -> QueryParam {
-      return { kj::str(param.name), kj::str(param.value) };
+      // Preserve the "allocated-ness" of `param.value` with this careful copy.
+      return { kj::str(param.name), param.value.begin() == nullptr ? kj::String()
+                                                                   : kj::str(param.value) };
     },
     fragment.map([](const String& s) { return kj::str(s); })
   };
@@ -349,8 +351,10 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
     } while (text.startsWith("&"));
   } else if (!hadNewAuthority && !hadNewPath) {
     // copy query
-    result.query = KJ_MAP(param, this->query) {
-      return QueryParam { kj::str(param.name), kj::str(param.value) };
+    result.query = KJ_MAP(param, this->query) -> QueryParam {
+      // Preserve the "allocated-ness" of `param.value` with this careful copy.
+      return { kj::str(param.name), param.value.begin() == nullptr ? kj::String()
+                                                                   : kj::str(param.value) };
     };
   }
 
@@ -418,7 +422,7 @@ String Url::toString(Context context) const {
     chars.add(first ? '?' : '&');
     first = false;
     chars.addAll(encodeWwwForm(param.name));
-    if (param.value.size() > 0) {
+    if (param.value.begin() != nullptr) {
       chars.add('=');
       chars.addAll(encodeWwwForm(param.value));
     }
