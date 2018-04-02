@@ -273,11 +273,17 @@ KJ_TEST("hex encoding/decoding") {
   expectRes(decodeHex("1234xbf2"), bytes, true);
 }
 
+constexpr char RFC2396_FRAGMENT_SET_DIFF[] = "#$&+,/:;=?@[\\]^{|}";
+// These are the characters reserved in RFC 2396, but not in the fragment percent encode set.
+
 KJ_TEST("URI encoding/decoding") {
   KJ_EXPECT(encodeUriComponent("foo") == "foo");
   KJ_EXPECT(encodeUriComponent("foo bar") == "foo%20bar");
   KJ_EXPECT(encodeUriComponent("\xab\xba") == "%AB%BA");
   KJ_EXPECT(encodeUriComponent(StringPtr("foo\0bar", 7)) == "foo%00bar");
+
+  KJ_EXPECT(encodeUriComponent(RFC2396_FRAGMENT_SET_DIFF) ==
+            "%23%24%26%2B%2C%2F%3A%3B%3D%3F%40%5B%5C%5D%5E%7B%7C%7D");
 
   // Encode characters reserved by application/x-www-form-urlencoded, but not by RFC 2396.
   KJ_EXPECT(encodeUriComponent("'foo'! (~)") == "'foo'!%20(~)");
@@ -302,6 +308,32 @@ KJ_TEST("URI encoding/decoding") {
     KJ_EXPECT(bytesWithNul[3] == '\0');
     KJ_EXPECT(bytesWithNul.slice(0, 3) == bytes);
   }
+}
+
+KJ_TEST("URL component encoding") {
+  KJ_EXPECT(encodeUriFragment("foo") == "foo");
+  KJ_EXPECT(encodeUriFragment("foo bar") == "foo%20bar");
+  KJ_EXPECT(encodeUriFragment("\xab\xba") == "%AB%BA");
+  KJ_EXPECT(encodeUriFragment(StringPtr("foo\0bar", 7)) == "foo%00bar");
+
+  KJ_EXPECT(encodeUriFragment(RFC2396_FRAGMENT_SET_DIFF) == RFC2396_FRAGMENT_SET_DIFF);
+
+  KJ_EXPECT(encodeUriPath("foo") == "foo");
+  KJ_EXPECT(encodeUriPath("foo bar") == "foo%20bar");
+  KJ_EXPECT(encodeUriPath("\xab\xba") == "%AB%BA");
+  KJ_EXPECT(encodeUriPath(StringPtr("foo\0bar", 7)) == "foo%00bar");
+
+  KJ_EXPECT(encodeUriPath(RFC2396_FRAGMENT_SET_DIFF) == "%23$&+,%2F:;=%3F@[%5C]^%7B|%7D");
+
+  KJ_EXPECT(encodeUriUserInfo("foo") == "foo");
+  KJ_EXPECT(encodeUriUserInfo("foo bar") == "foo%20bar");
+  KJ_EXPECT(encodeUriUserInfo("\xab\xba") == "%AB%BA");
+  KJ_EXPECT(encodeUriUserInfo(StringPtr("foo\0bar", 7)) == "foo%00bar");
+
+  KJ_EXPECT(encodeUriUserInfo(RFC2396_FRAGMENT_SET_DIFF) ==
+            "%23$&+,%2F%3A%3B%3D%3F%40%5B%5C%5D%5E%7B%7C%7D");
+
+  // NOTE: None of these functions have explicit decode equivalents.
 }
 
 KJ_TEST("application/x-www-form-urlencoded encoding/decoding") {

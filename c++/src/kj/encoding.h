@@ -130,6 +130,33 @@ EncodingResult<String> decodeUriComponent(ArrayPtr<const char> text);
 //
 // See https://tools.ietf.org/html/rfc2396#section-2.3
 
+String encodeUriFragment(ArrayPtr<const byte> bytes);
+String encodeUriFragment(ArrayPtr<const char> bytes);
+// Encode URL fragment components using the fragment percent encode set defined by the WHATWG URL
+// specification. Use decodeUriComponent() to decode.
+//
+// See https://url.spec.whatwg.org/#fragment-percent-encode-set
+
+String encodeUriPath(ArrayPtr<const byte> bytes);
+String encodeUriPath(ArrayPtr<const char> bytes);
+// Encode URL path components (not entire paths!) using the path percent encode set defined by the
+// WHATWG URL specification. Use decodeUriComponent() to decode.
+//
+// Quirk: This percent-encodes '/' and '\' characters as well, which are not actually in the set
+//   defined by the WHATWG URL spec. Since a conforming URL implementation will only ever call this
+//   function on individual path components, and never entire paths, augmenting the character set to
+//   include these separators allows this function to be used to implement a URL class that stores
+//   its path components in either percent-encoded OR percent-decoded form.
+//
+// See https://url.spec.whatwg.org/#path-percent-encode-set
+
+String encodeUriUserInfo(ArrayPtr<const byte> bytes);
+String encodeUriUserInfo(ArrayPtr<const char> bytes);
+// Encode URL userinfo components using the userinfo percent encode set defined by the WHATWG URL
+// specification. Use decodeUriComponent() to decode.
+//
+// See https://url.spec.whatwg.org/#userinfo-percent-encode-set
+
 String encodeWwwForm(ArrayPtr<const byte> bytes);
 String encodeWwwForm(ArrayPtr<const char> bytes);
 EncodingResult<String> decodeWwwForm(ArrayPtr<const char> text);
@@ -215,6 +242,16 @@ inline EncodingResult<String> decodeUriComponent(ArrayPtr<const char> text) {
   return { String(result.releaseAsChars()), result.hadErrors };
 }
 
+inline String encodeUriFragment(ArrayPtr<const char> text) {
+  return encodeUriFragment(text.asBytes());
+}
+inline String encodeUriPath(ArrayPtr<const char> text) {
+  return encodeUriPath(text.asBytes());
+}
+inline String encodeUriUserInfo(ArrayPtr<const char> text) {
+  return encodeUriUserInfo(text.asBytes());
+}
+
 inline String encodeWwwForm(ArrayPtr<const char> text) {
   return encodeWwwForm(text.asBytes());
 }
@@ -276,6 +313,18 @@ inline Array<byte> decodeBinaryUriComponent(const char (&text)[s]) {
 template <size_t s>
 inline EncodingResult<String> decodeUriComponent(const char (&text)[s]) {
   return decodeUriComponent(arrayPtr(text, s-1));
+}
+template <size_t s>
+inline String encodeUriFragment(const char (&text)[s]) {
+  return encodeUriFragment(arrayPtr(text, s - 1));
+}
+template <size_t s>
+inline String encodeUriPath(const char (&text)[s]) {
+  return encodeUriPath(arrayPtr(text, s - 1));
+}
+template <size_t s>
+inline String encodeUriUserInfo(const char (&text)[s]) {
+  return encodeUriUserInfo(arrayPtr(text, s - 1));
 }
 template <size_t s>
 inline String encodeWwwForm(const char (&text)[s]) {
