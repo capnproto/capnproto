@@ -265,6 +265,10 @@ KJ_TEST("parse / stringify URL") {
 
   // Scheme and host are forced to lower-case.
   parseAndCheck("hTtP://capNprotO.org/fOo/bAr", "http://capnproto.org/fOo/bAr");
+
+  // URLs with underscores in their hostnames are allowed, but you probably shouldn't use them. They
+  // are not valid domain names.
+  parseAndCheck("https://bad_domain.capnproto.org/");
 }
 
 KJ_TEST("URL percent encoding") {
