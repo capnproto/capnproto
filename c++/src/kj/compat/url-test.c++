@@ -269,6 +269,13 @@ KJ_TEST("parse / stringify URL") {
   // URLs with underscores in their hostnames are allowed, but you probably shouldn't use them. They
   // are not valid domain names.
   parseAndCheck("https://bad_domain.capnproto.org/");
+
+  // Make sure URLs with %-encoded '%' signs in their userinfo, path, query, and fragment components
+  // get correctly re-encoded.
+  parseAndCheck("https://foo%25bar:baz%25qux@capnproto.org/");
+  parseAndCheck("https://capnproto.org/foo%25bar");
+  parseAndCheck("https://capnproto.org/?foo%25bar=baz%25qux");
+  parseAndCheck("https://capnproto.org/#foo%25bar");
 }
 
 KJ_TEST("URL percent encoding") {
