@@ -411,8 +411,8 @@ String encodeUriFragment(ArrayPtr<const byte> bytes) {
   for (byte b: bytes) {
     if (('?' <= b && b <= '_') || // covers A-Z
         ('a' <= b && b <= '~') || // covers a-z
-        ('#' <= b && b <= ';') || // covers 0-9
-        b == '!' || b == '=') {
+        ('&' <= b && b <= ';') || // covers 0-9
+        b == '!' || b == '=' || b == '#' || b == '$') {
       result.add(b);
     } else {
       result.add('%');
@@ -430,8 +430,9 @@ String encodeUriPath(ArrayPtr<const byte> bytes) {
     if (('@' <= b && b <= '[') || // covers A-Z
         ('a' <= b && b <= 'z') ||
         ('0' <= b && b <= ';') || // covers 0-9
-        ('$' <= b && b <= '.') ||
-        b == '_' || b == '!' || b == '=' || b == ']' || b == '^' || b == '|' || b == '~') {
+        ('&' <= b && b <= '.') ||
+        b == '_' || b == '!' || b == '=' || b == ']' ||
+        b == '^' || b == '|' || b == '~' || b == '$') {
       result.add(b);
     } else {
       result.add('%');
@@ -449,8 +450,8 @@ String encodeUriUserInfo(ArrayPtr<const byte> bytes) {
     if (('A' <= b && b <= 'Z') ||
         ('a' <= b && b <= 'z') ||
         ('0' <= b && b <= '9') ||
-        ('$' <= b && b <= '.') ||
-        b == '_' || b == '!' || b == '~') {
+        ('&' <= b && b <= '.') ||
+        b == '_' || b == '!' || b == '~' || b == '$') {
       result.add(b);
     } else {
       result.add('%');

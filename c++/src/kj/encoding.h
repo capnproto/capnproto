@@ -135,6 +135,9 @@ String encodeUriFragment(ArrayPtr<const char> bytes);
 // Encode URL fragment components using the fragment percent encode set defined by the WHATWG URL
 // specification. Use decodeUriComponent() to decode.
 //
+// Quirk: We also percent-encode the '%' sign itself, because we expect to be called on percent-
+//   decoded data. In other words, this function is not idempotent, in contrast to the URL spec.
+//
 // See https://url.spec.whatwg.org/#fragment-percent-encode-set
 
 String encodeUriPath(ArrayPtr<const byte> bytes);
@@ -142,11 +145,14 @@ String encodeUriPath(ArrayPtr<const char> bytes);
 // Encode URL path components (not entire paths!) using the path percent encode set defined by the
 // WHATWG URL specification. Use decodeUriComponent() to decode.
 //
+// Quirk: We also percent-encode the '%' sign itself, because we expect to be called on percent-
+//   decoded data. In other words, this function is not idempotent, in contrast to the URL spec.
+//
 // Quirk: This percent-encodes '/' and '\' characters as well, which are not actually in the set
 //   defined by the WHATWG URL spec. Since a conforming URL implementation will only ever call this
 //   function on individual path components, and never entire paths, augmenting the character set to
 //   include these separators allows this function to be used to implement a URL class that stores
-//   its path components in either percent-encoded OR percent-decoded form.
+//   its path components in percent-decoded form.
 //
 // See https://url.spec.whatwg.org/#path-percent-encode-set
 
@@ -155,6 +161,9 @@ String encodeUriUserInfo(ArrayPtr<const char> bytes);
 // Encode URL userinfo components using the userinfo percent encode set defined by the WHATWG URL
 // specification. Use decodeUriComponent() to decode.
 //
+// Quirk: We also percent-encode the '%' sign itself, because we expect to be called on percent-
+//   decoded data. In other words, this function is not idempotent, in contrast to the URL spec.
+//
 // See https://url.spec.whatwg.org/#userinfo-percent-encode-set
 
 String encodeWwwForm(ArrayPtr<const byte> bytes);
@@ -162,6 +171,10 @@ String encodeWwwForm(ArrayPtr<const char> bytes);
 EncodingResult<String> decodeWwwForm(ArrayPtr<const char> text);
 // Encode/decode URI components using % escapes and '+' (for spaces) according to the
 // application/x-www-form-urlencoded format defined by the WHATWG URL specification.
+//
+// Note: Like the fragment, path, and userinfo percent-encoding functions above, this function is
+//   not idempotent: we percent-encode '%' signs. However, in this particular case the spec happens
+//   to agree with us!
 //
 // See https://url.spec.whatwg.org/#concept-urlencoded-byte-serializer
 
