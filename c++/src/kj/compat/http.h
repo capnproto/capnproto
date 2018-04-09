@@ -128,12 +128,14 @@ public:
 #define KJ_HTTP_FOR_EACH_BUILTIN_HEADER(MACRO) \
   /* Headers that are always read-only. */ \
   MACRO(CONNECTION, "Connection") \
-  MACRO(CONTENT_LENGTH, "Content-Length") \
   MACRO(KEEP_ALIVE, "Keep-Alive") \
   MACRO(TE, "TE") \
   MACRO(TRAILER, "Trailer") \
-  MACRO(TRANSFER_ENCODING, "Transfer-Encoding") \
   MACRO(UPGRADE, "Upgrade") \
+  \
+  /* Headers that are read-only except in the case of a response to a HEAD request. */ \
+  MACRO(CONTENT_LENGTH, "Content-Length") \
+  MACRO(TRANSFER_ENCODING, "Transfer-Encoding") \
   \
   /* Headers that are read-only for WebSocket handshakes. */ \
   MACRO(SEC_WEBSOCKET_KEY, "Sec-WebSocket-Key") \
