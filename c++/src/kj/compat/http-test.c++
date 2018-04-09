@@ -770,6 +770,20 @@ kj::ArrayPtr<const HttpResponseTestCase> responseTestCases() {
 
     {
       "HTTP/1.1 200 OK\r\n"
+      "Content-Length: foobar\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n",
+
+      200, "OK",
+      {{HttpHeaderId::CONTENT_TYPE, "text/plain"},
+       {HttpHeaderId::CONTENT_LENGTH, "foobar"}},
+      123, {},
+
+      HttpMethod::HEAD,
+    },
+
+    {
+      "HTTP/1.1 200 OK\r\n"
       "Content-Length: 8\r\n"
       "Content-Type: text/plain\r\n"
       "\r\n"

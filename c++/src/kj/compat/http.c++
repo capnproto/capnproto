@@ -489,6 +489,7 @@ namespace BuiltinHeaderIndices {
 #undef HEADER_ID
 };
 
+constexpr uint HEAD_RESPONSE_CONNECTION_HEADERS_COUNT = BuiltinHeaderIndices::CONTENT_LENGTH;
 constexpr uint CONNECTION_HEADERS_COUNT = BuiltinHeaderIndices::SEC_WEBSOCKET_KEY;
 constexpr uint WEBSOCKET_CONNECTION_HEADERS_COUNT = BuiltinHeaderIndices::HOST;
 
@@ -3539,7 +3540,19 @@ private:
       connectionHeaders[BuiltinHeaderIndices::TRANSFER_ENCODING] = "chunked";
     }
 
-    httpOutput.writeHeaders(headers.serializeResponse(statusCode, statusText, connectionHeaders));
+    // For HEAD requests, if the application specified a Content-Length or Transfer-Encoding
+    // header, use that instead of whatever we decided above.
+    kj::ArrayPtr<kj::StringPtr> connectionHeadersArray = connectionHeaders;
+    if (method == HttpMethod::HEAD) {
+      if (headers.get(HttpHeaderId::CONTENT_LENGTH) != nullptr ||
+          headers.get(HttpHeaderId::TRANSFER_ENCODING) != nullptr) {
+        connectionHeadersArray = connectionHeadersArray
+            .slice(0, HEAD_RESPONSE_CONNECTION_HEADERS_COUNT);
+      }
+    }
+
+    httpOutput.writeHeaders(headers.serializeResponse(
+        statusCode, statusText, connectionHeadersArray));
 
     kj::Own<kj::AsyncOutputStream> bodyStream;
     if (method == HttpMethod::HEAD) {
