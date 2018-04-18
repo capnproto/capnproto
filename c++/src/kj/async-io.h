@@ -175,12 +175,23 @@ struct OneWayPipe {
   Own<AsyncOutputStream> out;
 };
 
+OneWayPipe newOneWayPipe(kj::Maybe<uint64_t> expectedLength = nullptr);
+// Constructs a OneWayPipe that operates in-process. The pipe does not do any buffering -- it waits
+// until both a read() and a write() call are pending, then resolves both.
+//
+// If `expectedLength` is non-null, then the pipe will be expected to transmit exactly that many
+// bytes. The input end's `tryGetLength()` will return the number of bytes left.
+
 struct TwoWayPipe {
   // A data pipe that supports sending in both directions.  Each end's output sends data to the
   // other end's input.  (Typically backed by socketpair() system call.)
 
   Own<AsyncIoStream> ends[2];
 };
+
+TwoWayPipe newTwoWayPipe();
+// Constructs a TwoWayPipe that operates in-process. The pipe does not do any buffering -- it waits
+// until both a read() and a write() call are pending, then resolves both.
 
 struct CapabilityPipe {
   // Like TwoWayPipe but allowing capability-passing.

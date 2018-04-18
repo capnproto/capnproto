@@ -661,5 +661,170 @@ KJ_TEST("Network::restrictPeers()") {
   KJ_EXPECT(conn->readAllText().wait(w) == "");
 }
 
+kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
+  if (expected.size() == 0) return kj::READY_NOW;
+
+  auto buffer = kj::heapArray<char>(expected.size());
+
+  auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
+  return promise.then(kj::mvCapture(buffer, [&in,expected](kj::Array<char> buffer, size_t amount) {
+    if (amount == 0) {
+      KJ_FAIL_ASSERT("expected data never sent", expected);
+    }
+
+    auto actual = buffer.slice(0, amount);
+    if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
+      KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
+    }
+
+    return expectRead(in, expected.slice(amount));
+  }));
+}
+
+KJ_TEST("Userland pipe") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  auto promise = pipe.out->write("foo", 3);
+  KJ_EXPECT(!promise.poll(ws));
+
+  char buf[4];
+  KJ_EXPECT(pipe.in->tryRead(buf, 1, 4).wait(ws) == 3);
+  buf[3] = '\0';
+  KJ_EXPECT(buf == "foo"_kj);
+
+  promise.wait(ws);
+
+  auto promise2 = pipe.in->readAllText();
+  KJ_EXPECT(!promise2.poll(ws));
+
+  pipe.out = nullptr;
+  KJ_EXPECT(promise2.wait(ws) == "");
+}
+
+KJ_TEST("Userland pipe cancel write") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  auto promise = pipe.out->write("foobar", 6);
+  KJ_EXPECT(!promise.poll(ws));
+
+  expectRead(*pipe.in, "foo").wait(ws);
+  KJ_EXPECT(!promise.poll(ws));
+  promise = nullptr;
+
+  promise = pipe.out->write("baz", 3);
+  expectRead(*pipe.in, "baz").wait(ws);
+  promise.wait(ws);
+
+  pipe.out = nullptr;
+  KJ_EXPECT(pipe.in->readAllText().wait(ws) == "");
+}
+
+KJ_TEST("Userland pipe cancel read") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  auto writeOp = pipe.out->write("foo", 3);
+  auto readOp = expectRead(*pipe.in, "foobar");
+  writeOp.wait(ws);
+  KJ_EXPECT(!readOp.poll(ws));
+  readOp = nullptr;
+
+  auto writeOp2 = pipe.out->write("baz", 3);
+  expectRead(*pipe.in, "baz").wait(ws);
+}
+
+KJ_TEST("Userland pipe pumpTo") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+  auto pumpPromise = pipe.in->pumpTo(*pipe2.out);
+
+  auto promise = pipe.out->write("foo", 3);
+  KJ_EXPECT(!promise.poll(ws));
+
+  expectRead(*pipe2.in, "foo").wait(ws);
+
+  promise.wait(ws);
+
+  auto promise2 = pipe2.in->readAllText();
+  KJ_EXPECT(!promise2.poll(ws));
+
+  pipe.out = nullptr;
+  KJ_EXPECT(pumpPromise.wait(ws) == 3);
+}
+
+KJ_TEST("Userland pipe tryPumpFrom") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
+
+  auto promise = pipe.out->write("foo", 3);
+  KJ_EXPECT(!promise.poll(ws));
+
+  expectRead(*pipe2.in, "foo").wait(ws);
+
+  promise.wait(ws);
+
+  auto promise2 = pipe2.in->readAllText();
+  KJ_EXPECT(!promise2.poll(ws));
+
+  pipe.out = nullptr;
+  KJ_EXPECT(!promise2.poll(ws));
+  KJ_EXPECT(pumpPromise.wait(ws) == 3);
+}
+
+KJ_TEST("Userland pipe pumpTo cancel") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+  auto pumpPromise = pipe.in->pumpTo(*pipe2.out);
+
+  auto promise = pipe.out->write("foobar", 3);
+  KJ_EXPECT(!promise.poll(ws));
+
+  expectRead(*pipe2.in, "foo").wait(ws);
+
+  // Cancel pump.
+  pumpPromise = nullptr;
+
+  auto promise3 = pipe2.out->write("baz", 3);
+  expectRead(*pipe2.in, "baz").wait(ws);
+}
+
+KJ_TEST("Userland pipe pumpTo cancel") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
+
+  auto promise = pipe.out->write("foobar", 3);
+  KJ_EXPECT(!promise.poll(ws));
+
+  expectRead(*pipe2.in, "foo").wait(ws);
+
+  // Cancel pump.
+  pumpPromise = nullptr;
+
+  auto promise3 = pipe2.out->write("baz", 3);
+  expectRead(*pipe2.in, "baz").wait(ws);
+}
+
 }  // namespace
 }  // namespace kj
