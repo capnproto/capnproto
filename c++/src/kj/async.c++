@@ -84,6 +84,62 @@ public:
 
 }  // namespace
 
+// =======================================================================================
+
+Canceler::~Canceler() noexcept(false) {
+  cancel("operation canceled");
+}
+
+void Canceler::cancel(StringPtr cancelReason) {
+  if (isEmpty()) return;
+  cancel(Exception(Exception::Type::FAILED, __FILE__, __LINE__, kj::str(cancelReason)));
+}
+
+void Canceler::cancel(const Exception& exception) {
+  for (;;) {
+    KJ_IF_MAYBE(a, list) {
+      list = a->next;
+      a->prev = nullptr;
+      a->next = nullptr;
+      a->cancel(kj::cp(exception));
+    } else {
+      break;
+    }
+  }
+}
+
+void Canceler::release() {
+  for (;;) {
+    KJ_IF_MAYBE(a, list) {
+      list = a->next;
+      a->prev = nullptr;
+      a->next = nullptr;
+    } else {
+      break;
+    }
+  }
+}
+
+Canceler::AdapterBase::AdapterBase(Canceler& canceler)
+    : prev(canceler.list),
+      next(canceler.list) {
+  canceler.list = *this;
+  KJ_IF_MAYBE(n, next) {
+    n->prev = next;
+  }
+}
+
+Canceler::AdapterBase::~AdapterBase() noexcept(false) {
+  KJ_IF_MAYBE(p, prev) {
+    *p = next;
+  }
+  KJ_IF_MAYBE(n, next) {
+    n->prev = prev;
+  }
+}
+
+// =======================================================================================
+
 TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler)
   : errorHandler(errorHandler) {}
 
