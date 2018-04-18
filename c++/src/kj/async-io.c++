@@ -689,7 +689,7 @@ private:
           if (actual < amount) {
             // We din't complete pumping. Restart from the pipe.
             return input.pumpTo(pipe, amount - actual)
-                .then([actual](size_t actual2) { return actual + actual2; });
+                .then([actual](uint64_t actual2) { return actual + actual2; });
           }
         }
 
