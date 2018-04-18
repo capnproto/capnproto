@@ -138,6 +138,20 @@ Canceler::AdapterBase::~AdapterBase() noexcept(false) {
   }
 }
 
+Canceler::AdapterImpl<void>::AdapterImpl(kj::PromiseFulfiller<void>& fulfiller,
+            Canceler& canceler, kj::Promise<void> inner)
+    : AdapterBase(canceler),
+      fulfiller(fulfiller),
+      inner(inner.then(
+          [&fulfiller]() { fulfiller.fulfill(); },
+          [&fulfiller](kj::Exception&& e) { fulfiller.reject(kj::mv(e)); })
+          .eagerlyEvaluate(nullptr)) {}
+
+void Canceler::AdapterImpl<void>::cancel(kj::Exception&& e) {
+  fulfiller.reject(kj::mv(e));
+  inner = nullptr;
+}
+
 // =======================================================================================
 
 TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler)

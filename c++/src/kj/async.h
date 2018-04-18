@@ -593,18 +593,10 @@ template <>
 class Canceler::AdapterImpl<void>: public AdapterBase {
 public:
   AdapterImpl(kj::PromiseFulfiller<void>& fulfiller,
-              Canceler& canceler, kj::Promise<void> inner)
-      : AdapterBase(canceler),
-        fulfiller(fulfiller),
-        inner(inner.then(
-            [&fulfiller]() { fulfiller.fulfill(); },
-            [&fulfiller](kj::Exception&& e) { fulfiller.reject(kj::mv(e)); })
-            .eagerlyEvaluate(nullptr)) {}
-
-  void cancel(kj::Exception&& e) override {
-    fulfiller.reject(kj::mv(e));
-    inner = nullptr;
-  }
+              Canceler& canceler, kj::Promise<void> inner);
+  void cancel(kj::Exception&& e) override;
+  // These must be defined in async.c++ to prevent translation units compiled by MSVC from trying to
+  // link with symbols defined in async.c++ merely because they included async.h.
 
 private:
   kj::PromiseFulfiller<void>& fulfiller;
