@@ -131,7 +131,7 @@ public:
 
   inline bool isShared() const {
 #if _MSC_VER
-    KJ_MSVC_INTERLOCKED(Or, acq)(&refcount, 0) > 1;
+    return KJ_MSVC_INTERLOCKED(Or, acq)(&refcount, 0) > 1;
 #else
     return __atomic_load_n(&refcount, __ATOMIC_ACQUIRE) > 1;
 #endif
