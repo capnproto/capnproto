@@ -689,7 +689,7 @@ private:
           if (actual < amount) {
             // We din't complete pumping. Restart from the pipe.
             return input.pumpTo(pipe, amount - actual)
-                .then([actual](uint64_t actual2) { return actual + actual2; });
+                .then([actual](uint64_t actual2) -> uint64_t { return actual + actual2; });
           }
         }
 
@@ -723,7 +723,7 @@ private:
     // AsyncPipe state when a pumpTo() is currently waiting for a corresponding write().
 
   public:
-    BlockedPumpTo(PromiseFulfiller<size_t>& fulfiller, AsyncPipe& pipe,
+    BlockedPumpTo(PromiseFulfiller<uint64_t>& fulfiller, AsyncPipe& pipe,
                   AsyncOutputStream& output, uint64_t amount)
         : fulfiller(fulfiller), pipe(pipe), output(output), amount(amount) {
       KJ_REQUIRE(pipe.state == nullptr);
@@ -879,7 +879,7 @@ private:
     }
 
   private:
-    PromiseFulfiller<size_t>& fulfiller;
+    PromiseFulfiller<uint64_t>& fulfiller;
     AsyncPipe& pipe;
     AsyncOutputStream& output;
     uint64_t amount;
