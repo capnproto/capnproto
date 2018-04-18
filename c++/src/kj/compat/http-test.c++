@@ -428,7 +428,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::ArrayPtr<const byte> 
   }));
 }
 
-void testHttpClientRequest(kj::AsyncIoContext& io, const HttpRequestTestCase& testCase) {
+void testHttpClientRequest(kj::WaitScope& waitScope, const HttpRequestTestCase& testCase) {
   auto pipe = kj::newTwoWayPipe();
 
   auto serverTask = expectRead(*pipe.ends[1], testCase.raw).then([&]() {
@@ -451,7 +451,7 @@ void testHttpClientRequest(kj::AsyncIoContext& io, const HttpRequestTestCase& te
 
   auto request = client->request(testCase.method, testCase.path, headers, testCase.requestBodySize);
   if (testCase.requestBodyParts.size() > 0) {
-    writeEach(*request.body, testCase.requestBodyParts).wait(io.waitScope);
+    writeEach(*request.body, testCase.requestBodyParts).wait(waitScope);
   }
   request.body = nullptr;
   auto clientTask = request.response
@@ -460,15 +460,15 @@ void testHttpClientRequest(kj::AsyncIoContext& io, const HttpRequestTestCase& te
     return promise.attach(kj::mv(response.body));
   }).ignoreResult();
 
-  serverTask.exclusiveJoin(kj::mv(clientTask)).wait(io.waitScope);
+  serverTask.exclusiveJoin(kj::mv(clientTask)).wait(waitScope);
 
   // Verify no more data written by client.
   client = nullptr;
   pipe.ends[0]->shutdownWrite();
-  KJ_EXPECT(pipe.ends[1]->readAllText().wait(io.waitScope) == "");
+  KJ_EXPECT(pipe.ends[1]->readAllText().wait(waitScope) == "");
 }
 
-void testHttpClientResponse(kj::AsyncIoContext& io, const HttpResponseTestCase& testCase,
+void testHttpClientResponse(kj::WaitScope& waitScope, const HttpResponseTestCase& testCase,
                             size_t readFragmentSize) {
   auto pipe = kj::newTwoWayPipe();
   ReadFragmenter fragmenter(*pipe.ends[0], readFragmentSize);
@@ -504,12 +504,12 @@ void testHttpClientResponse(kj::AsyncIoContext& io, const HttpResponseTestCase& 
     KJ_EXPECT(body == kj::strArray(testCase.responseBodyParts, ""), body);
   });
 
-  serverTask.exclusiveJoin(kj::mv(clientTask)).wait(io.waitScope);
+  serverTask.exclusiveJoin(kj::mv(clientTask)).wait(waitScope);
 
   // Verify no more data written by client.
   client = nullptr;
   pipe.ends[0]->shutdownWrite();
-  KJ_EXPECT(pipe.ends[1]->readAllText().wait(io.waitScope) == "");
+  KJ_EXPECT(pipe.ends[1]->readAllText().wait(waitScope) == "");
 }
 
 class TestHttpService final: public HttpService {
@@ -581,23 +581,23 @@ private:
   uint requestCount = 0;
 };
 
-void testHttpServerRequest(kj::AsyncIoContext& io,
+void testHttpServerRequest(kj::WaitScope& waitScope, kj::Timer& timer,
                            const HttpRequestTestCase& requestCase,
                            const HttpResponseTestCase& responseCase) {
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(requestCase, responseCase, table);
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
-  pipe.ends[1]->write(requestCase.raw.begin(), requestCase.raw.size()).wait(io.waitScope);
+  pipe.ends[1]->write(requestCase.raw.begin(), requestCase.raw.size()).wait(waitScope);
   pipe.ends[1]->shutdownWrite();
 
-  expectRead(*pipe.ends[1], responseCase.raw).wait(io.waitScope);
+  expectRead(*pipe.ends[1], responseCase.raw).wait(waitScope);
 
-  listenTask.wait(io.waitScope);
+  listenTask.wait(waitScope);
 
   KJ_EXPECT(service.getRequestCount() == 1);
 }
@@ -818,24 +818,26 @@ kj::ArrayPtr<const HttpResponseTestCase> responseTestCases() {
 }
 
 KJ_TEST("HttpClient requests") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
 
   for (auto& testCase: requestTestCases()) {
     if (testCase.side == SERVER_ONLY) continue;
     KJ_CONTEXT(testCase.raw);
-    testHttpClientRequest(io, testCase);
+    testHttpClientRequest(waitScope, testCase);
   }
 }
 
 KJ_TEST("HttpClient responses") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   size_t FRAGMENT_SIZES[] = { 1, 2, 3, 4, 5, 6, 7, 8, 16, 31, kj::maxValue };
 
   for (auto& testCase: responseTestCases()) {
     if (testCase.side == SERVER_ONLY) continue;
     for (size_t fragmentSize: FRAGMENT_SIZES) {
       KJ_CONTEXT(testCase.raw, fragmentSize);
-      testHttpClientResponse(io, testCase, fragmentSize);
+      testHttpClientResponse(waitScope, testCase, fragmentSize);
     }
   }
 }
@@ -862,12 +864,14 @@ KJ_TEST("HttpServer requests") {
     3, {"foo"}
   };
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
 
   for (auto& testCase: requestTestCases()) {
     if (testCase.side == CLIENT_ONLY) continue;
     KJ_CONTEXT(testCase.raw);
-    testHttpServerRequest(io, testCase,
+    testHttpServerRequest(waitScope, timer, testCase,
         testCase.method == HttpMethod::HEAD ? HEAD_RESPONSE : RESPONSE);
   }
 }
@@ -893,12 +897,14 @@ KJ_TEST("HttpServer responses") {
     uint64_t(0), {},
   };
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
 
   for (auto& testCase: responseTestCases()) {
     if (testCase.side == CLIENT_ONLY) continue;
     KJ_CONTEXT(testCase.raw);
-    testHttpServerRequest(io,
+    testHttpServerRequest(waitScope, timer,
         testCase.method == HttpMethod::HEAD ? HEAD_REQUEST : REQUEST, testCase);
   }
 }
@@ -1038,7 +1044,8 @@ kj::ArrayPtr<const HttpTestCase> pipelineTestCases() {
 KJ_TEST("HttpClient pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
@@ -1065,14 +1072,14 @@ KJ_TEST("HttpClient pipeline") {
     auto request = client->request(
         testCase.request.method, testCase.request.path, headers, testCase.request.requestBodySize);
     for (auto& part: testCase.request.requestBodyParts) {
-      request.body->write(part.begin(), part.size()).wait(io.waitScope);
+      request.body->write(part.begin(), part.size()).wait(waitScope);
     }
     request.body = nullptr;
 
-    auto response = request.response.wait(io.waitScope);
+    auto response = request.response.wait(waitScope);
 
     KJ_EXPECT(response.statusCode == testCase.response.statusCode);
-    auto body = response.body->readAllText().wait(io.waitScope);
+    auto body = response.body->readAllText().wait(waitScope);
     if (testCase.request.method == HttpMethod::HEAD) {
       KJ_EXPECT(body == "");
     } else {
@@ -1083,13 +1090,14 @@ KJ_TEST("HttpClient pipeline") {
   client = nullptr;
   pipe.ends[0]->shutdownWrite();
 
-  writeResponsesPromise.wait(io.waitScope);
+  writeResponsesPromise.wait(waitScope);
 }
 
 KJ_TEST("HttpClient parallel pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   kj::Promise<void> readRequestsPromise = kj::READY_NOW;
@@ -1124,7 +1132,7 @@ KJ_TEST("HttpClient parallel pipeline") {
     auto request = client->request(
         testCase.request.method, testCase.request.path, headers, testCase.request.requestBodySize);
     for (auto& part: testCase.request.requestBodyParts) {
-      request.body->write(part.begin(), part.size()).wait(io.waitScope);
+      request.body->write(part.begin(), part.size()).wait(waitScope);
     }
 
     return kj::mv(request.response);
@@ -1132,10 +1140,10 @@ KJ_TEST("HttpClient parallel pipeline") {
 
   for (auto i: kj::indices(PIPELINE_TESTS)) {
     auto& testCase = PIPELINE_TESTS[i];
-    auto response = responsePromises[i].wait(io.waitScope);
+    auto response = responsePromises[i].wait(waitScope);
 
     KJ_EXPECT(response.statusCode == testCase.response.statusCode);
-    auto body = response.body->readAllText().wait(io.waitScope);
+    auto body = response.body->readAllText().wait(waitScope);
     if (testCase.request.method == HttpMethod::HEAD) {
       KJ_EXPECT(body == "");
     } else {
@@ -1146,18 +1154,20 @@ KJ_TEST("HttpClient parallel pipeline") {
   client = nullptr;
   pipe.ends[0]->shutdownWrite();
 
-  writeResponsesPromise.wait(io.waitScope);
+  writeResponsesPromise.wait(waitScope);
 }
 
 KJ_TEST("HttpServer pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
@@ -1165,13 +1175,13 @@ KJ_TEST("HttpServer pipeline") {
     KJ_CONTEXT(testCase.request.raw, testCase.response.raw);
 
     pipe.ends[1]->write(testCase.request.raw.begin(), testCase.request.raw.size())
-        .wait(io.waitScope);
+        .wait(waitScope);
 
-    expectRead(*pipe.ends[1], testCase.response.raw).wait(io.waitScope);
+    expectRead(*pipe.ends[1], testCase.response.raw).wait(waitScope);
   }
 
   pipe.ends[1]->shutdownWrite();
-  listenTask.wait(io.waitScope);
+  listenTask.wait(waitScope);
 
   KJ_EXPECT(service.getRequestCount() == kj::size(PIPELINE_TESTS));
 }
@@ -1179,7 +1189,9 @@ KJ_TEST("HttpServer pipeline") {
 KJ_TEST("HttpServer parallel pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   auto allRequestText =
@@ -1189,17 +1201,17 @@ KJ_TEST("HttpServer parallel pipeline") {
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
-  pipe.ends[1]->write(allRequestText.begin(), allRequestText.size()).wait(io.waitScope);
+  pipe.ends[1]->write(allRequestText.begin(), allRequestText.size()).wait(waitScope);
   pipe.ends[1]->shutdownWrite();
 
-  auto rawResponse = pipe.ends[1]->readAllText().wait(io.waitScope);
+  auto rawResponse = pipe.ends[1]->readAllText().wait(waitScope);
   KJ_EXPECT(rawResponse == allResponseText, rawResponse);
 
-  listenTask.wait(io.waitScope);
+  listenTask.wait(waitScope);
 
   KJ_EXPECT(service.getRequestCount() == kj::size(PIPELINE_TESTS));
 }
@@ -1207,12 +1219,14 @@ KJ_TEST("HttpServer parallel pipeline") {
 KJ_TEST("HttpClient <-> HttpServer") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[1]));
   auto client = newHttpClient(table, *pipe.ends[0]);
@@ -1228,14 +1242,14 @@ KJ_TEST("HttpClient <-> HttpServer") {
     auto request = client->request(
         testCase.request.method, testCase.request.path, headers, testCase.request.requestBodySize);
     for (auto& part: testCase.request.requestBodyParts) {
-      request.body->write(part.begin(), part.size()).wait(io.waitScope);
+      request.body->write(part.begin(), part.size()).wait(waitScope);
     }
     request.body = nullptr;
 
-    auto response = request.response.wait(io.waitScope);
+    auto response = request.response.wait(waitScope);
 
     KJ_EXPECT(response.statusCode == testCase.response.statusCode);
-    auto body = response.body->readAllText().wait(io.waitScope);
+    auto body = response.body->readAllText().wait(waitScope);
     if (testCase.request.method == HttpMethod::HEAD) {
       KJ_EXPECT(body == "");
     } else {
@@ -1245,14 +1259,15 @@ KJ_TEST("HttpClient <-> HttpServer") {
 
   client = nullptr;
   pipe.ends[0]->shutdownWrite();
-  listenTask.wait(io.waitScope);
+  listenTask.wait(waitScope);
   KJ_EXPECT(service.getRequestCount() == kj::size(PIPELINE_TESTS));
 }
 
 // -----------------------------------------------------------------------------
 
 KJ_TEST("WebSocket core protocol") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   auto client = newWebSocket(kj::mv(pipe.ends[0]), nullptr);
@@ -1268,31 +1283,31 @@ KJ_TEST("WebSocket core protocol") {
       .then([&]() { return client->close(1234, "bored"); });
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "hello");
   }
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == mediumString);
   }
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == bigString);
   }
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::Array<byte>>());
     KJ_EXPECT(kj::str(message.get<kj::Array<byte>>().asChars()) == "world");
   }
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<WebSocket::Close>());
     KJ_EXPECT(message.get<WebSocket::Close>().code == 1234);
     KJ_EXPECT(message.get<WebSocket::Close>().reason == "bored");
@@ -1301,18 +1316,19 @@ KJ_TEST("WebSocket core protocol") {
   auto serverTask = server->close(4321, "whatever");
 
   {
-    auto message = client->receive().wait(io.waitScope);
+    auto message = client->receive().wait(waitScope);
     KJ_ASSERT(message.is<WebSocket::Close>());
     KJ_EXPECT(message.get<WebSocket::Close>().code == 4321);
     KJ_EXPECT(message.get<WebSocket::Close>().reason == "whatever");
   }
 
-  clientTask.wait(io.waitScope);
-  serverTask.wait(io.waitScope);
+  clientTask.wait(waitScope);
+  serverTask.wait(waitScope);
 }
 
 KJ_TEST("WebSocket fragmented") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
@@ -1329,12 +1345,12 @@ KJ_TEST("WebSocket fragmented") {
   auto clientTask = client->write(DATA, sizeof(DATA));
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "hello world");
   }
 
-  clientTask.wait(io.waitScope);
+  clientTask.wait(waitScope);
 }
 
 class FakeEntropySource final: public EntropySource {
@@ -1349,7 +1365,8 @@ public:
 };
 
 KJ_TEST("WebSocket masked") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
   FakeEntropySource maskGenerator;
 
@@ -1364,19 +1381,20 @@ KJ_TEST("WebSocket masked") {
   auto serverTask = server->send(kj::StringPtr("hello "));
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "hello ");
   }
 
-  expectRead(*client, DATA).wait(io.waitScope);
+  expectRead(*client, DATA).wait(waitScope);
 
-  clientTask.wait(io.waitScope);
-  serverTask.wait(io.waitScope);
+  clientTask.wait(waitScope);
+  serverTask.wait(waitScope);
 }
 
 KJ_TEST("WebSocket unsolicited pong") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
@@ -1393,16 +1411,17 @@ KJ_TEST("WebSocket unsolicited pong") {
   auto clientTask = client->write(DATA, sizeof(DATA));
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "hello world");
   }
 
-  clientTask.wait(io.waitScope);
+  clientTask.wait(waitScope);
 }
 
 KJ_TEST("WebSocket ping") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
@@ -1420,7 +1439,7 @@ KJ_TEST("WebSocket ping") {
   auto clientTask = client->write(DATA, sizeof(DATA));
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "hello world");
   }
@@ -1432,14 +1451,15 @@ KJ_TEST("WebSocket ping") {
     0x81, 0x03, 'b', 'a', 'r',  // message
   };
 
-  expectRead(*client, EXPECTED).wait(io.waitScope);
+  expectRead(*client, EXPECTED).wait(waitScope);
 
-  clientTask.wait(io.waitScope);
-  serverTask.wait(io.waitScope);
+  clientTask.wait(waitScope);
+  serverTask.wait(waitScope);
 }
 
 KJ_TEST("WebSocket ping mid-send") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
@@ -1456,20 +1476,20 @@ KJ_TEST("WebSocket ping mid-send") {
   auto clientTask = client->write(DATA, sizeof(DATA));
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "bar");
   }
 
   byte EXPECTED1[] = { 0x81, 0x7f, 0, 0, 0, 0, 0, 8, 0, 0 };
-  expectRead(*client, EXPECTED1).wait(io.waitScope);
-  expectRead(*client, bigString).wait(io.waitScope);
+  expectRead(*client, EXPECTED1).wait(waitScope);
+  expectRead(*client, bigString).wait(waitScope);
 
   byte EXPECTED2[] = { 0x8A, 0x03, 'f', 'o', 'o' };
-  expectRead(*client, EXPECTED2).wait(io.waitScope);
+  expectRead(*client, EXPECTED2).wait(waitScope);
 
-  clientTask.wait(io.waitScope);
-  serverTask.wait(io.waitScope);
+  clientTask.wait(waitScope);
+  serverTask.wait(waitScope);
 }
 
 class InputOutputPair final: public kj::AsyncIoStream {
@@ -1517,7 +1537,8 @@ private:
 };
 
 KJ_TEST("WebSocket double-ping mid-send") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
 
   auto upPipe = newOneWayPipe();
   auto downPipe = newOneWayPipe();
@@ -1537,24 +1558,25 @@ KJ_TEST("WebSocket double-ping mid-send") {
   auto clientTask = client.write(DATA, sizeof(DATA));
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "bar");
   }
 
   byte EXPECTED1[] = { 0x81, 0x7f, 0, 0, 0, 0, 0, 8, 0, 0 };
-  expectRead(client, EXPECTED1).wait(io.waitScope);
-  expectRead(client, bigString).wait(io.waitScope);
+  expectRead(client, EXPECTED1).wait(waitScope);
+  expectRead(client, bigString).wait(waitScope);
 
   byte EXPECTED2[] = { 0x8A, 0x03, 'q', 'u', 'x' };
-  expectRead(client, EXPECTED2).wait(io.waitScope);
+  expectRead(client, EXPECTED2).wait(waitScope);
 
-  clientTask.wait(io.waitScope);
-  serverTask.wait(io.waitScope);
+  clientTask.wait(waitScope);
+  serverTask.wait(waitScope);
 }
 
 KJ_TEST("WebSocket ping received during pong send") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
@@ -1573,19 +1595,19 @@ KJ_TEST("WebSocket ping received during pong send") {
   auto clientTask = client->write(parts);
 
   {
-    auto message = server->receive().wait(io.waitScope);
+    auto message = server->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "bar");
   }
 
   byte EXPECTED1[] = { 0x8A, 0x7f, 0, 0, 0, 0, 0, 8, 0, 0 };
-  expectRead(*client, EXPECTED1).wait(io.waitScope);
-  expectRead(*client, bigString).wait(io.waitScope);
+  expectRead(*client, EXPECTED1).wait(waitScope);
+  expectRead(*client, bigString).wait(waitScope);
 
   byte EXPECTED2[] = { 0x8A, 0x03, 'f', 'o', 'o' };
-  expectRead(*client, EXPECTED2).wait(io.waitScope);
+  expectRead(*client, EXPECTED2).wait(waitScope);
 
-  clientTask.wait(io.waitScope);
+  clientTask.wait(waitScope);
 }
 
 class TestWebSocketService final: public HttpService, private kj::TaskSet::ErrorHandler {
@@ -1683,7 +1705,8 @@ kj::ArrayPtr<const byte> asBytes(const char (&chars)[s]) {
 }
 
 KJ_TEST("HttpClient WebSocket handshake") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
@@ -1707,7 +1730,7 @@ KJ_TEST("HttpClient WebSocket handshake") {
 
   kj::HttpHeaders headers(*headerTable);
   headers.set(hMyHeader, "foo");
-  auto response = client->openWebSocket("/websocket", headers).wait(io.waitScope);
+  auto response = client->openWebSocket("/websocket", headers).wait(waitScope);
 
   KJ_EXPECT(response.statusCode == 101);
   KJ_EXPECT(response.statusText == "Switching Protocols", response.statusText);
@@ -1716,31 +1739,32 @@ KJ_TEST("HttpClient WebSocket handshake") {
   auto ws = kj::mv(response.webSocketOrBody.get<kj::Own<WebSocket>>());
 
   {
-    auto message = ws->receive().wait(io.waitScope);
+    auto message = ws->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "start-inline");
   }
 
-  ws->send(kj::StringPtr("bar")).wait(io.waitScope);
+  ws->send(kj::StringPtr("bar")).wait(waitScope);
   {
-    auto message = ws->receive().wait(io.waitScope);
+    auto message = ws->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "reply:bar");
   }
 
-  ws->close(0x1234, "qux").wait(io.waitScope);
+  ws->close(0x1234, "qux").wait(waitScope);
   {
-    auto message = ws->receive().wait(io.waitScope);
+    auto message = ws->receive().wait(waitScope);
     KJ_ASSERT(message.is<WebSocket::Close>());
     KJ_EXPECT(message.get<WebSocket::Close>().code == 0x1235);
     KJ_EXPECT(message.get<WebSocket::Close>().reason == "close-reply:qux");
   }
 
-  serverTask.wait(io.waitScope);
+  serverTask.wait(waitScope);
 }
 
 KJ_TEST("HttpClient WebSocket error") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
   auto pipe = kj::newTwoWayPipe();
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
@@ -1763,7 +1787,7 @@ KJ_TEST("HttpClient WebSocket error") {
   headers.set(hMyHeader, "foo");
 
   {
-    auto response = client->openWebSocket("/websocket", headers).wait(io.waitScope);
+    auto response = client->openWebSocket("/websocket", headers).wait(waitScope);
 
     KJ_EXPECT(response.statusCode == 404);
     KJ_EXPECT(response.statusText == "Not Found", response.statusText);
@@ -1772,7 +1796,7 @@ KJ_TEST("HttpClient WebSocket error") {
   }
 
   {
-    auto response = client->openWebSocket("/websocket", headers).wait(io.waitScope);
+    auto response = client->openWebSocket("/websocket", headers).wait(waitScope);
 
     KJ_EXPECT(response.statusCode == 404);
     KJ_EXPECT(response.statusText == "Not Found", response.statusText);
@@ -1780,57 +1804,61 @@ KJ_TEST("HttpClient WebSocket error") {
     KJ_ASSERT(response.webSocketOrBody.is<kj::Own<AsyncInputStream>>());
   }
 
-  serverTask.wait(io.waitScope);
+  serverTask.wait(waitScope);
 }
 
 KJ_TEST("HttpServer WebSocket handshake") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable::Builder tableBuilder;
   HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
   auto headerTable = tableBuilder.build();
   TestWebSocketService service(*headerTable, hMyHeader);
-  HttpServer server(io.provider->getTimer(), *headerTable, service);
+  HttpServer server(timer, *headerTable, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   auto request = kj::str("GET /ws-inline", WEBSOCKET_REQUEST_HANDSHAKE);
-  pipe.ends[1]->write({request.asBytes()}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE).wait(io.waitScope);
+  pipe.ends[1]->write({request.asBytes()}).wait(waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE).wait(waitScope);
 
-  expectRead(*pipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(io.waitScope);
-  pipe.ends[1]->write({WEBSOCKET_SEND_MESSAGE}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_MESSAGE).wait(io.waitScope);
-  pipe.ends[1]->write({WEBSOCKET_SEND_CLOSE}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE).wait(io.waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(waitScope);
+  pipe.ends[1]->write({WEBSOCKET_SEND_MESSAGE}).wait(waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_MESSAGE).wait(waitScope);
+  pipe.ends[1]->write({WEBSOCKET_SEND_CLOSE}).wait(waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE).wait(waitScope);
 
-  listenTask.wait(io.waitScope);
+  listenTask.wait(waitScope);
 }
 
 KJ_TEST("HttpServer WebSocket handshake error") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable::Builder tableBuilder;
   HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
   auto headerTable = tableBuilder.build();
   TestWebSocketService service(*headerTable, hMyHeader);
-  HttpServer server(io.provider->getTimer(), *headerTable, service);
+  HttpServer server(timer, *headerTable, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   auto request = kj::str("GET /return-error", WEBSOCKET_REQUEST_HANDSHAKE);
-  pipe.ends[1]->write({request.asBytes()}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE_ERROR).wait(io.waitScope);
+  pipe.ends[1]->write({request.asBytes()}).wait(waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE_ERROR).wait(waitScope);
 
   // Can send more requests!
-  pipe.ends[1]->write({request.asBytes()}).wait(io.waitScope);
-  expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE_ERROR).wait(io.waitScope);
+  pipe.ends[1]->write({request.asBytes()}).wait(waitScope);
+  expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE_ERROR).wait(waitScope);
 
   pipe.ends[1]->shutdownWrite();
 
-  listenTask.wait(io.waitScope);
+  listenTask.wait(waitScope);
 }
 
 // -----------------------------------------------------------------------------
@@ -1838,46 +1866,59 @@ KJ_TEST("HttpServer WebSocket handshake error") {
 KJ_TEST("HttpServer request timeout") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
   HttpServerSettings settings;
   settings.headerTimeout = 1 * kj::MILLISECONDS;
-  HttpServer server(io.provider->getTimer(), table, service, settings);
+  HttpServer server(timer, table, service, settings);
 
   // Shouldn't hang! Should time out.
-  server.listenHttp(kj::mv(pipe.ends[0])).wait(io.waitScope);
+  auto promise = server.listenHttp(kj::mv(pipe.ends[0]));
+  KJ_EXPECT(!promise.poll(waitScope));
+  timer.advanceTo(timer.now() + settings.headerTimeout / 2);
+  KJ_EXPECT(!promise.poll(waitScope));
+  timer.advanceTo(timer.now() + settings.headerTimeout);
+  promise.wait(waitScope);
 
   // Closes the connection without sending anything.
-  KJ_EXPECT(pipe.ends[1]->readAllText().wait(io.waitScope) == "");
+  KJ_EXPECT(pipe.ends[1]->readAllText().wait(waitScope) == "");
 }
 
 KJ_TEST("HttpServer pipeline timeout") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
   HttpServerSettings settings;
   settings.pipelineTimeout = 1 * kj::MILLISECONDS;
-  HttpServer server(io.provider->getTimer(), table, service, settings);
+  HttpServer server(timer, table, service, settings);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   // Do one request.
   pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
-      .wait(io.waitScope);
-  expectRead(*pipe.ends[1], PIPELINE_TESTS[0].response.raw).wait(io.waitScope);
+      .wait(waitScope);
+  expectRead(*pipe.ends[1], PIPELINE_TESTS[0].response.raw).wait(waitScope);
 
   // Listen task should time out even though we didn't shutdown the socket.
-  listenTask.wait(io.waitScope);
+  KJ_EXPECT(!listenTask.poll(waitScope));
+  timer.advanceTo(timer.now() + settings.pipelineTimeout / 2);
+  KJ_EXPECT(!listenTask.poll(waitScope));
+  timer.advanceTo(timer.now() + settings.pipelineTimeout);
+  listenTask.wait(waitScope);
 
   // In this case, no data is sent back.
-  KJ_EXPECT(pipe.ends[1]->readAllText().wait(io.waitScope) == "");
+  KJ_EXPECT(pipe.ends[1]->readAllText().wait(waitScope) == "");
 }
 
 class BrokenHttpService final: public HttpService {
@@ -1905,19 +1946,21 @@ private:
 KJ_TEST("HttpServer no response") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service;
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   // Do one request.
   pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
-      .wait(io.waitScope);
-  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+      .wait(waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
 
   KJ_EXPECT(text ==
       "HTTP/1.1 500 Internal Server Error\r\n"
@@ -1931,19 +1974,21 @@ KJ_TEST("HttpServer no response") {
 KJ_TEST("HttpServer disconnected") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(DISCONNECTED, "disconnected"));
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   // Do one request.
   pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
-      .wait(io.waitScope);
-  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+      .wait(waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
 
   KJ_EXPECT(text == "", text);
 }
@@ -1951,19 +1996,21 @@ KJ_TEST("HttpServer disconnected") {
 KJ_TEST("HttpServer overloaded") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(OVERLOADED, "overloaded"));
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   // Do one request.
   pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
-      .wait(io.waitScope);
-  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+      .wait(waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
 
   KJ_EXPECT(text.startsWith("HTTP/1.1 503 Service Unavailable"), text);
 }
@@ -1971,19 +2018,21 @@ KJ_TEST("HttpServer overloaded") {
 KJ_TEST("HttpServer unimplemented") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(UNIMPLEMENTED, "unimplemented"));
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   // Do one request.
   pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
-      .wait(io.waitScope);
-  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+      .wait(waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
 
   KJ_EXPECT(text.startsWith("HTTP/1.1 501 Not Implemented"), text);
 }
@@ -1991,19 +2040,21 @@ KJ_TEST("HttpServer unimplemented") {
 KJ_TEST("HttpServer threw exception") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(FAILED, "failed"));
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   // Do one request.
   pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
-      .wait(io.waitScope);
-  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+      .wait(waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
 
   KJ_EXPECT(text.startsWith("HTTP/1.1 500 Internal Server Error"), text);
 }
@@ -2033,12 +2084,14 @@ private:
 KJ_TEST("HttpServer threw exception after starting response") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   PartialResponseService service;
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
@@ -2046,8 +2099,8 @@ KJ_TEST("HttpServer threw exception after starting response") {
 
   // Do one request.
   pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
-      .wait(io.waitScope);
-  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+      .wait(waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
 
   KJ_EXPECT(text ==
       "HTTP/1.1 200 OK\r\n"
@@ -2104,20 +2157,22 @@ private:
 KJ_TEST("HttpFixedLengthEntityWriter correctly implements tryPumpFrom") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   PumpResponseService service;
-  HttpServer server(io.provider->getTimer(), table, service);
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   // Do one request.
   pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
-      .wait(io.waitScope);
+      .wait(waitScope);
   pipe.ends[1]->shutdownWrite();
-  auto text = pipe.ends[1]->readAllText().wait(io.waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
 
   KJ_EXPECT(text ==
       "HTTP/1.1 200 OK\r\n"
@@ -2131,7 +2186,9 @@ KJ_TEST("HttpFixedLengthEntityWriter correctly implements tryPumpFrom") {
 KJ_TEST("newHttpService from HttpClient") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto frontPipe = kj::newTwoWayPipe();
   auto backPipe = kj::newTwoWayPipe();
 
@@ -2149,28 +2206,30 @@ KJ_TEST("newHttpService from HttpClient") {
     HttpHeaderTable table;
     auto backClient = newHttpClient(table, *backPipe.ends[0]);
     auto frontService = newHttpService(*backClient);
-    HttpServer frontServer(io.provider->getTimer(), table, *frontService);
+    HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
 
     for (auto& testCase: PIPELINE_TESTS) {
       KJ_CONTEXT(testCase.request.raw, testCase.response.raw);
 
       frontPipe.ends[0]->write(testCase.request.raw.begin(), testCase.request.raw.size())
-               .wait(io.waitScope);
+               .wait(waitScope);
 
-      expectRead(*frontPipe.ends[0], testCase.response.raw).wait(io.waitScope);
+      expectRead(*frontPipe.ends[0], testCase.response.raw).wait(waitScope);
     }
 
     frontPipe.ends[0]->shutdownWrite();
-    listenTask.wait(io.waitScope);
+    listenTask.wait(waitScope);
   }
 
   backPipe.ends[0]->shutdownWrite();
-  writeResponsesPromise.wait(io.waitScope);
+  writeResponsesPromise.wait(waitScope);
 }
 
 KJ_TEST("newHttpService from HttpClient WebSockets") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto frontPipe = kj::newTwoWayPipe();
   auto backPipe = kj::newTwoWayPipe();
 
@@ -2196,27 +2255,29 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
     FakeEntropySource entropySource;
     auto backClient = newHttpClient(table, *backPipe.ends[0], entropySource);
     auto frontService = newHttpService(*backClient);
-    HttpServer frontServer(io.provider->getTimer(), table, *frontService);
+    HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
 
-    frontPipe.ends[0]->write({request.asBytes()}).wait(io.waitScope);
-    expectRead(*frontPipe.ends[0], WEBSOCKET_RESPONSE_HANDSHAKE).wait(io.waitScope);
+    frontPipe.ends[0]->write({request.asBytes()}).wait(waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_RESPONSE_HANDSHAKE).wait(waitScope);
 
-    expectRead(*frontPipe.ends[0], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(io.waitScope);
-    frontPipe.ends[0]->write({WEBSOCKET_SEND_MESSAGE}).wait(io.waitScope);
-    expectRead(*frontPipe.ends[0], WEBSOCKET_REPLY_MESSAGE).wait(io.waitScope);
-    frontPipe.ends[0]->write({WEBSOCKET_SEND_CLOSE}).wait(io.waitScope);
-    expectRead(*frontPipe.ends[0], WEBSOCKET_REPLY_CLOSE).wait(io.waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(waitScope);
+    frontPipe.ends[0]->write({WEBSOCKET_SEND_MESSAGE}).wait(waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_REPLY_MESSAGE).wait(waitScope);
+    frontPipe.ends[0]->write({WEBSOCKET_SEND_CLOSE}).wait(waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_REPLY_CLOSE).wait(waitScope);
 
     frontPipe.ends[0]->shutdownWrite();
-    listenTask.wait(io.waitScope);
+    listenTask.wait(waitScope);
   }
 
-  writeResponsesPromise.wait(io.waitScope);
+  writeResponsesPromise.wait(waitScope);
 }
 
 KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto frontPipe = kj::newTwoWayPipe();
   auto backPipe = kj::newTwoWayPipe();
 
@@ -2233,22 +2294,22 @@ KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
     FakeEntropySource entropySource;
     auto backClient = newHttpClient(table, *backPipe.ends[0], entropySource);
     auto frontService = newHttpService(*backClient);
-    HttpServer frontServer(io.provider->getTimer(), table, *frontService);
+    HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
 
-    frontPipe.ends[0]->write({request.asBytes()}).wait(io.waitScope);
-    expectRead(*frontPipe.ends[0], WEBSOCKET_RESPONSE_HANDSHAKE).wait(io.waitScope);
+    frontPipe.ends[0]->write({request.asBytes()}).wait(waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_RESPONSE_HANDSHAKE).wait(waitScope);
 
-    expectRead(*frontPipe.ends[0], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(io.waitScope);
-    frontPipe.ends[0]->write({WEBSOCKET_SEND_MESSAGE}).wait(io.waitScope);
+    expectRead(*frontPipe.ends[0], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(waitScope);
+    frontPipe.ends[0]->write({WEBSOCKET_SEND_MESSAGE}).wait(waitScope);
 
-    KJ_EXPECT(frontPipe.ends[0]->readAllText().wait(io.waitScope) == "");
+    KJ_EXPECT(frontPipe.ends[0]->readAllText().wait(waitScope) == "");
 
     frontPipe.ends[0]->shutdownWrite();
-    listenTask.wait(io.waitScope);
+    listenTask.wait(waitScope);
   }
 
-  writeResponsesPromise.wait(io.waitScope);
+  writeResponsesPromise.wait(waitScope);
 }
 
 // -----------------------------------------------------------------------------
