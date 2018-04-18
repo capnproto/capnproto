@@ -429,7 +429,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::ArrayPtr<const byte> 
 }
 
 void testHttpClientRequest(kj::AsyncIoContext& io, const HttpRequestTestCase& testCase) {
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto serverTask = expectRead(*pipe.ends[1], testCase.raw).then([&]() {
     static const char SIMPLE_RESPONSE[] =
@@ -470,7 +470,7 @@ void testHttpClientRequest(kj::AsyncIoContext& io, const HttpRequestTestCase& te
 
 void testHttpClientResponse(kj::AsyncIoContext& io, const HttpResponseTestCase& testCase,
                             size_t readFragmentSize) {
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
   ReadFragmenter fragmenter(*pipe.ends[0], readFragmentSize);
 
   auto expectedReqText = testCase.method == HttpMethod::GET || testCase.method == HttpMethod::HEAD
@@ -584,7 +584,7 @@ private:
 void testHttpServerRequest(kj::AsyncIoContext& io,
                            const HttpRequestTestCase& requestCase,
                            const HttpResponseTestCase& responseCase) {
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(requestCase, responseCase, table);
@@ -1039,7 +1039,7 @@ KJ_TEST("HttpClient pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
   for (auto& testCase: PIPELINE_TESTS) {
@@ -1090,14 +1090,22 @@ KJ_TEST("HttpClient parallel pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
+  kj::Promise<void> readRequestsPromise = kj::READY_NOW;
   kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
   for (auto& testCase: PIPELINE_TESTS) {
-    writeResponsesPromise = writeResponsesPromise
+    auto forked = readRequestsPromise
         .then([&]() {
       return expectRead(*pipe.ends[1], testCase.request.raw);
-    }).then([&]() {
+    }).fork();
+    readRequestsPromise = forked.addBranch();
+
+    // Don't write each response until the corresponding request is received.
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+    promises.add(forked.addBranch());
+    promises.add(kj::mv(writeResponsesPromise));
+    writeResponsesPromise = kj::joinPromises(promises.finish()).then([&]() {
       return pipe.ends[1]->write(testCase.response.raw.begin(), testCase.response.raw.size());
     });
   }
@@ -1145,7 +1153,7 @@ KJ_TEST("HttpServer pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
@@ -1172,7 +1180,7 @@ KJ_TEST("HttpServer parallel pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto allRequestText =
       kj::strArray(KJ_MAP(testCase, PIPELINE_TESTS) { return testCase.request.raw; }, "");
@@ -1200,7 +1208,7 @@ KJ_TEST("HttpClient <-> HttpServer") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
@@ -1245,7 +1253,7 @@ KJ_TEST("HttpClient <-> HttpServer") {
 
 KJ_TEST("WebSocket core protocol") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto client = newWebSocket(kj::mv(pipe.ends[0]), nullptr);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1305,7 +1313,7 @@ KJ_TEST("WebSocket core protocol") {
 
 KJ_TEST("WebSocket fragmented") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1342,7 +1350,7 @@ public:
 
 KJ_TEST("WebSocket masked") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
   FakeEntropySource maskGenerator;
 
   auto client = kj::mv(pipe.ends[0]);
@@ -1369,7 +1377,7 @@ KJ_TEST("WebSocket masked") {
 
 KJ_TEST("WebSocket unsolicited pong") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1395,7 +1403,7 @@ KJ_TEST("WebSocket unsolicited pong") {
 
 KJ_TEST("WebSocket ping") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1432,7 +1440,7 @@ KJ_TEST("WebSocket ping") {
 
 KJ_TEST("WebSocket ping mid-send") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1464,207 +1472,58 @@ KJ_TEST("WebSocket ping mid-send") {
   serverTask.wait(io.waitScope);
 }
 
-class UnbufferedPipe final: public AsyncIoStream {
-  // An in-memory one-way pipe with no internal buffer. read() blocks waiting for write()s and
-  // write() blocks waiting for read()s.
-  //
-  // TODO(cleanup): This is probably broadly useful. Put it in a utility library somewhere.
-  //   NOTE: Must implement handling of cancellation first!
-
-public:
-  kj::Promise<void> write(const void* buffer, size_t size) override {
-    KJ_SWITCH_ONEOF(current) {
-      KJ_CASE_ONEOF(w, CurrentWrite) {
-        KJ_FAIL_REQUIRE("can only call write() once at a time");
-      }
-      KJ_CASE_ONEOF(r, CurrentRead) {
-        if (size < r.minBytes) {
-          // Write does not complete the current read.
-          memcpy(r.buffer.begin(), buffer, size);
-          r.minBytes -= size;
-          r.alreadyRead += size;
-          r.buffer = r.buffer.slice(size, r.buffer.size());
-          return kj::READY_NOW;
-        } else if (size <= r.buffer.size()) {
-          // Write satisfies the current read, and read satisfies the write.
-          memcpy(r.buffer.begin(), buffer, size);
-          r.fulfiller->fulfill(r.alreadyRead + size);
-          current = None();
-          return kj::READY_NOW;
-        } else {
-          // Write satisfies the read and still has more data leftover to write.
-          size_t amount = r.buffer.size();
-          memcpy(r.buffer.begin(), buffer, amount);
-          r.fulfiller->fulfill(amount + r.alreadyRead);
-          auto paf = kj::newPromiseAndFulfiller<void>();
-          current = CurrentWrite {
-            kj::arrayPtr(reinterpret_cast<const byte*>(buffer) + amount, size - amount),
-            kj::mv(paf.fulfiller)
-          };
-          return kj::mv(paf.promise);
-        }
-      }
-      KJ_CASE_ONEOF(e, Eof) {
-        KJ_FAIL_REQUIRE("write after EOF");
-      }
-      KJ_CASE_ONEOF(n, None) {
-        auto paf = kj::newPromiseAndFulfiller<void>();
-        current = CurrentWrite {
-          kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size),
-          kj::mv(paf.fulfiller)
-        };
-        return kj::mv(paf.promise);
-      }
-    }
-    KJ_UNREACHABLE;
-  }
-
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    KJ_SWITCH_ONEOF(current) {
-      KJ_CASE_ONEOF(w, CurrentWrite) {
-        if (maxBytes < w.buffer.size()) {
-          // Entire read satisfied by write, write is still pending.
-          memcpy(buffer, w.buffer.begin(), maxBytes);
-          w.buffer = w.buffer.slice(maxBytes, w.buffer.size());
-          return maxBytes;
-        } else if (minBytes <= w.buffer.size()) {
-          // Read is satisfied by write and consumes entire write.
-          size_t result = w.buffer.size();
-          memcpy(buffer, w.buffer.begin(), result);
-          w.fulfiller->fulfill();
-          current = None();
-          return result;
-        } else {
-          // Read consumes entire write and is not satisfied.
-          size_t alreadyRead = w.buffer.size();
-          memcpy(buffer, w.buffer.begin(), alreadyRead);
-          w.fulfiller->fulfill();
-          auto paf = kj::newPromiseAndFulfiller<size_t>();
-          current = CurrentRead {
-            kj::arrayPtr(reinterpret_cast<byte*>(buffer) + alreadyRead, maxBytes - alreadyRead),
-            minBytes - alreadyRead,
-            alreadyRead,
-            kj::mv(paf.fulfiller)
-          };
-          return kj::mv(paf.promise);
-        }
-      }
-      KJ_CASE_ONEOF(r, CurrentRead) {
-        KJ_FAIL_REQUIRE("can only call read() once at a time");
-      }
-      KJ_CASE_ONEOF(e, Eof) {
-        return size_t(0);
-      }
-      KJ_CASE_ONEOF(n, None) {
-        auto paf = kj::newPromiseAndFulfiller<size_t>();
-        current = CurrentRead {
-          kj::arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes),
-          minBytes,
-          0,
-          kj::mv(paf.fulfiller)
-        };
-        return kj::mv(paf.promise);
-      }
-    }
-    KJ_UNREACHABLE;
-  }
-
-  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
-    // TODO(cleanup): Should this be the defalut implementation of this method?
-    if (pieces.size() == 0) return kj::READY_NOW;
-    return write(pieces[0].begin(), pieces[0].size())
-        .then([this, pieces]() {
-      return write(pieces.slice(1, pieces.size()));
-    });
-  }
-
-  void shutdownWrite() override {
-    KJ_SWITCH_ONEOF(current) {
-      KJ_CASE_ONEOF(w, CurrentWrite) {
-        KJ_FAIL_REQUIRE("can't call shutdownWrite() during a write()");
-      }
-      KJ_CASE_ONEOF(r, CurrentRead) {
-        r.fulfiller->fulfill(kj::mv(r.alreadyRead));
-      }
-      KJ_CASE_ONEOF(e, Eof) {
-        // ignore
-      }
-      KJ_CASE_ONEOF(n, None) {
-        // ignore
-      }
-    }
-
-    current = Eof();
-  }
-
-private:
-  struct CurrentWrite {
-    kj::ArrayPtr<const byte> buffer;
-    kj::Own<kj::PromiseFulfiller<void>> fulfiller;
-  };
-  struct CurrentRead {
-    kj::ArrayPtr<byte> buffer;
-    size_t minBytes;
-    size_t alreadyRead;
-    kj::Own<kj::PromiseFulfiller<size_t>> fulfiller;
-  };
-  struct Eof {};
-  struct None {};
-
-  kj::OneOf<CurrentWrite, CurrentRead, Eof, None> current = None();
-};
-
 class InputOutputPair final: public kj::AsyncIoStream {
   // Creates an AsyncIoStream out of an AsyncInputStream and an AsyncOutputStream.
 
 public:
-  InputOutputPair(kj::AsyncInputStream& in, kj::AsyncIoStream& out)
-      : in(in), out(out) {}
+  InputOutputPair(kj::Own<kj::AsyncInputStream> in, kj::Own<kj::AsyncOutputStream> out)
+      : in(kj::mv(in)), out(kj::mv(out)) {}
 
   kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return in.read(buffer, minBytes, maxBytes);
+    return in->read(buffer, minBytes, maxBytes);
   }
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return in.tryRead(buffer, minBytes, maxBytes);
+    return in->tryRead(buffer, minBytes, maxBytes);
   }
 
   Maybe<uint64_t> tryGetLength() override {
-    return in.tryGetLength();
+    return in->tryGetLength();
   }
 
   Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount = kj::maxValue) override {
-    return in.pumpTo(output, amount);
+    return in->pumpTo(output, amount);
   }
 
   kj::Promise<void> write(const void* buffer, size_t size) override {
-    return out.write(buffer, size);
+    return out->write(buffer, size);
   }
 
   kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
-    return out.write(pieces);
+    return out->write(pieces);
   }
 
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
       kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
-    return out.tryPumpFrom(input, amount);
+    return out->tryPumpFrom(input, amount);
   }
 
   void shutdownWrite() override {
-    return out.shutdownWrite();
+    out = nullptr;
   }
 
 private:
-  kj::AsyncInputStream& in;
-  kj::AsyncIoStream& out;
+  kj::Own<kj::AsyncInputStream> in;
+  kj::Own<kj::AsyncOutputStream> out;
 };
 
 KJ_TEST("WebSocket double-ping mid-send") {
   auto io = kj::setupAsyncIo();
 
-  UnbufferedPipe upPipe;
-  UnbufferedPipe downPipe;
-  InputOutputPair client(downPipe, upPipe);
-  auto server = newWebSocket(kj::heap<InputOutputPair>(upPipe, downPipe), nullptr);
+  auto upPipe = newOneWayPipe();
+  auto downPipe = newOneWayPipe();
+  InputOutputPair client(kj::mv(downPipe.in), kj::mv(upPipe.out));
+  auto server = newWebSocket(kj::heap<InputOutputPair>(kj::mv(upPipe.in), kj::mv(downPipe.out)),
+                             nullptr);
 
   auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
   auto serverTask = server->send(bigString).eagerlyEvaluate(nullptr);
@@ -1696,7 +1555,7 @@ KJ_TEST("WebSocket double-ping mid-send") {
 
 KJ_TEST("WebSocket ping received during pong send") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1825,7 +1684,7 @@ kj::ArrayPtr<const byte> asBytes(const char (&chars)[s]) {
 
 KJ_TEST("HttpClient WebSocket handshake") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
 
@@ -1882,7 +1741,7 @@ KJ_TEST("HttpClient WebSocket handshake") {
 
 KJ_TEST("HttpClient WebSocket error") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
 
@@ -1926,7 +1785,7 @@ KJ_TEST("HttpClient WebSocket error") {
 
 KJ_TEST("HttpServer WebSocket handshake") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable::Builder tableBuilder;
   HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
@@ -1951,7 +1810,7 @@ KJ_TEST("HttpServer WebSocket handshake") {
 
 KJ_TEST("HttpServer WebSocket handshake error") {
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable::Builder tableBuilder;
   HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
@@ -1980,7 +1839,7 @@ KJ_TEST("HttpServer request timeout") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
@@ -1999,7 +1858,7 @@ KJ_TEST("HttpServer pipeline timeout") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
@@ -2047,7 +1906,7 @@ KJ_TEST("HttpServer no response") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service;
@@ -2073,7 +1932,7 @@ KJ_TEST("HttpServer disconnected") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(DISCONNECTED, "disconnected"));
@@ -2093,7 +1952,7 @@ KJ_TEST("HttpServer overloaded") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(OVERLOADED, "overloaded"));
@@ -2113,7 +1972,7 @@ KJ_TEST("HttpServer unimplemented") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(UNIMPLEMENTED, "unimplemented"));
@@ -2133,7 +1992,7 @@ KJ_TEST("HttpServer threw exception") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(FAILED, "failed"));
@@ -2175,7 +2034,7 @@ KJ_TEST("HttpServer threw exception after starting response") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   PartialResponseService service;
@@ -2246,7 +2105,7 @@ KJ_TEST("HttpFixedLengthEntityWriter correctly implements tryPumpFrom") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto pipe = io.provider->newTwoWayPipe();
+  auto pipe = kj::newTwoWayPipe();
 
   HttpHeaderTable table;
   PumpResponseService service;
@@ -2273,8 +2132,8 @@ KJ_TEST("newHttpService from HttpClient") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
   auto io = kj::setupAsyncIo();
-  auto frontPipe = io.provider->newTwoWayPipe();
-  auto backPipe = io.provider->newTwoWayPipe();
+  auto frontPipe = kj::newTwoWayPipe();
+  auto backPipe = kj::newTwoWayPipe();
 
   kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
   for (auto& testCase: PIPELINE_TESTS) {
@@ -2312,8 +2171,8 @@ KJ_TEST("newHttpService from HttpClient") {
 
 KJ_TEST("newHttpService from HttpClient WebSockets") {
   auto io = kj::setupAsyncIo();
-  auto frontPipe = io.provider->newTwoWayPipe();
-  auto backPipe = io.provider->newTwoWayPipe();
+  auto frontPipe = kj::newTwoWayPipe();
+  auto backPipe = kj::newTwoWayPipe();
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
   auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
@@ -2358,8 +2217,8 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
 
 KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
   auto io = kj::setupAsyncIo();
-  auto frontPipe = io.provider->newTwoWayPipe();
-  auto backPipe = io.provider->newTwoWayPipe();
+  auto frontPipe = kj::newTwoWayPipe();
+  auto backPipe = kj::newTwoWayPipe();
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
   auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
