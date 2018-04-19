@@ -26,7 +26,7 @@
 // the types are expected to be compatible, the test also constructs an instance of the old
 // type and reads it as the new type, and vice versa.
 
-#if __CYGWIN__
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 

@@ -22,7 +22,7 @@
 #if !_WIN32
 // For Win32 implementation, see async-io-win32.c++.
 
-#if __CYGWIN__
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 

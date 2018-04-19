@@ -22,7 +22,7 @@
 // This program is a code generator plugin for `capnp compile` which writes the schema back to
 // stdout in roughly capnpc format.
 
-#if __CYGWIN__
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 
