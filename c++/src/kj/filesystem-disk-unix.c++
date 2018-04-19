@@ -21,6 +21,10 @@
 
 #if !_WIN32
 
+#if __CYGWIN__
+#define _GNU_SOURCE
+#endif
+
 #include "filesystem.h"
 #include "debug.h"
 #include <sys/types.h>
@@ -385,8 +389,8 @@ public:
 
     static const byte ZEROS[4096] = { 0 };
 
-#if __APPLE__
-    // Mac doesn't have pwritev().
+#if __APPLE__ || __CYGWIN__
+    // Mac & Cygwin doesn't have pwritev().
     while (size > sizeof(ZEROS)) {
       write(offset, ZEROS);
       size -= sizeof(ZEROS);

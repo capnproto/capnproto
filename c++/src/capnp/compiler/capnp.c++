@@ -19,6 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if __CYGWIN__
+#define _GNU_SOURCE
+#endif
+
 #include "lexer.h"
 #include "parser.h"
 #include "compiler.h"

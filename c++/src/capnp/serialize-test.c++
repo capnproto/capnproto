@@ -19,6 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if __CYGWIN__
+#define _GNU_SOURCE
+#endif
+
 #include "serialize.h"
 #include <kj/debug.h>
 #include <kj/compat/gtest.h>

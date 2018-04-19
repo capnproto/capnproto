@@ -19,6 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if __CYGWIN__
+#define _GNU_SOURCE
+#endif
+
 #include <capnp/test-import.capnp.h>
 #include <capnp/test-import2.capnp.h>
 #include "message.h"
