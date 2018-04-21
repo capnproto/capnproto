@@ -810,7 +810,7 @@ private:
             }));
           }
 
-          auto remainder = pieces.slice(i + 1, pieces.size());
+          auto remainder = pieces.slice(i, pieces.size());
           if (remainder.size() > 0) {
             auto& pipeRef = pipe;
             promise = promise.then([&pipeRef,remainder]() {
@@ -826,7 +826,7 @@ private:
       }
 
       // Turns out we can forward this whole write.
-      KJ_ASSERT(pumpedSoFar + size == amount);
+      KJ_ASSERT(size <= amount - pumpedSoFar);
       return canceler.wrap(output.write(pieces).then([this,size]() {
         pumpedSoFar += size;
         KJ_ASSERT(pumpedSoFar <= amount);
@@ -949,7 +949,7 @@ private:
 class PipeReadEnd final: public AsyncInputStream {
 public:
   PipeReadEnd(kj::Own<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
-  ~PipeReadEnd() {
+  ~PipeReadEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       pipe->abortRead();
     });
@@ -971,7 +971,7 @@ private:
 class PipeWriteEnd final: public AsyncOutputStream {
 public:
   PipeWriteEnd(kj::Own<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
-  ~PipeWriteEnd() {
+  ~PipeWriteEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       pipe->shutdownWrite();
     });
@@ -999,7 +999,7 @@ class TwoWayPipeEnd final: public AsyncIoStream {
 public:
   TwoWayPipeEnd(kj::Own<AsyncPipe> in, kj::Own<AsyncPipe> out)
       : in(kj::mv(in)), out(kj::mv(out)) {}
-  ~TwoWayPipeEnd() {
+  ~TwoWayPipeEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       out->shutdownWrite();
       in->abortRead();
@@ -1060,9 +1060,10 @@ public:
 
   Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
     if (limit == 0) return uint64_t(0);
-    return inner->pumpTo(output, kj::min(amount, limit))
-        .then([this,amount](uint64_t actual) {
-      decreaseLimit(actual, amount);
+    auto requested = kj::min(amount, limit);
+    return inner->pumpTo(output, requested)
+        .then([this,requested](uint64_t actual) {
+      decreaseLimit(actual, requested);
       return actual;
     });
   }
