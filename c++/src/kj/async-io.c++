@@ -484,8 +484,8 @@ private:
         if (actual >= minBytes) {
           return actual;
         } else {
-          return pipe.read(reinterpret_cast<byte*>(readBuffer) + actual,
-                           minBytes - actual, maxBytes - actual)
+          return pipe.tryRead(reinterpret_cast<byte*>(readBuffer) + actual,
+                              minBytes - actual, maxBytes - actual)
               .then([actual](size_t actual2) { return actual + actual2; });
         }
       }));
