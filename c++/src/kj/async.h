@@ -501,6 +501,109 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller();
 // `fulfill()` callback, and the promises are chained.
 
 // =======================================================================================
+// Canceler
+
+class Canceler {
+  // A Canceler can wrap some set of Promises and then forcefully cancel them on-demand, or
+  // implicitly when the Canceler is destroyed.
+  //
+  // The cancellation is done in such a way that once cancel() (or the Canceler's destructor)
+  // returns, it's guaranteed that the promise has already been canceled and destroyed. This
+  // guarantee is important for enforcing ownership constraints. For example, imagine that Alice
+  // calls a method on Bob that returns a Promise. That Promise encapsulates a task that uses Bob's
+  // internal state. But, imagine that Alice does not own Bob, and indeed Bob might be destroyed
+  // at random without Alice having canceled the promise. In this case, it is necessary for Bob to
+  // ensure that the promise will be forcefully canceled. Bob can do this by constructing a
+  // Canceler and using it to wrap promises before returning them to callers. When Bob is
+  // destroyed, the Canceler is destroyed too, and all promises Bob wrapped with it throw errors.
+  //
+  // Note that another common strategy for cancelation is to use exclusiveJoin() to join a promise
+  // with some "cancellation promise" which only resolves if the operation should be canceled. The
+  // cancellation promise could itself be created by newPromiseAndFulfiller<void>(), and thus
+  // calling the PromiseFulfiller cancels the operation. There is a major problem with this
+  // approach: upon invoking the fulfiller, an arbitrary amount of time may pass before the
+  // exclusive-joined promise actually resolves and cancels its other fork. During that time, the
+  // task might continue to execute. If it holds pointers to objects that have been destroyed, this
+  // might cause segfaults. Thus, it is safer to use a Canceler.
+
+public:
+  inline Canceler() {}
+  ~Canceler() noexcept(false);
+  KJ_DISALLOW_COPY(Canceler);
+
+  template <typename T>
+  Promise<T> wrap(Promise<T> promise) {
+    return newAdaptedPromise<T, AdapterImpl<T>>(*this, kj::mv(promise));
+  }
+
+  void cancel(StringPtr cancelReason);
+  void cancel(const Exception& exception);
+  // Cancel all previously-wrapped promises that have not already completed, causing them to throw
+  // the given exception. If you provide just a description message instead of an exception, then
+  // an exception object will be constructed from it -- but only if there are requests to cancel.
+
+  void release();
+  // Releases previously-wrapped promises, so that they will not be canceled regardless of what
+  // happens to this Canceler.
+
+  bool isEmpty() { return list == nullptr; }
+  // Indicates if any previously-wrapped promises are still executing. (If this returns false, then
+  // cancel() would be a no-op.)
+
+private:
+  class AdapterBase {
+  public:
+    AdapterBase(Canceler& canceler);
+    ~AdapterBase() noexcept(false);
+
+    virtual void cancel(Exception&& e) = 0;
+
+  private:
+    Maybe<Maybe<AdapterBase&>&> prev;
+    Maybe<AdapterBase&> next;
+    friend class Canceler;
+  };
+
+  template <typename T>
+  class AdapterImpl: public AdapterBase {
+  public:
+    AdapterImpl(PromiseFulfiller<T>& fulfiller,
+                Canceler& canceler, Promise<T> inner)
+        : AdapterBase(canceler),
+          fulfiller(fulfiller),
+          inner(inner.then(
+              [&fulfiller](T&& value) { fulfiller.fulfill(kj::mv(value)); },
+              [&fulfiller](Exception&& e) { fulfiller.reject(kj::mv(e)); })
+              .eagerlyEvaluate(nullptr)) {}
+
+    void cancel(Exception&& e) override {
+      fulfiller.reject(kj::mv(e));
+      inner = nullptr;
+    }
+
+  private:
+    PromiseFulfiller<T>& fulfiller;
+    Promise<void> inner;
+  };
+
+  Maybe<AdapterBase&> list;
+};
+
+template <>
+class Canceler::AdapterImpl<void>: public AdapterBase {
+public:
+  AdapterImpl(kj::PromiseFulfiller<void>& fulfiller,
+              Canceler& canceler, kj::Promise<void> inner);
+  void cancel(kj::Exception&& e) override;
+  // These must be defined in async.c++ to prevent translation units compiled by MSVC from trying to
+  // link with symbols defined in async.c++ merely because they included async.h.
+
+private:
+  kj::PromiseFulfiller<void>& fulfiller;
+  kj::Promise<void> inner;
+};
+
+// =======================================================================================
 // TaskSet
 
 class TaskSet {

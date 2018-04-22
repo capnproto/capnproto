@@ -2492,8 +2492,10 @@ public:
       bodyStream = heap<HttpChunkedEntityWriter>(httpOutput);
     }
 
-    auto responsePromise = httpInput.readResponseHeaders()
-        .then([this,method](kj::Maybe<HttpHeaders::Response>&& response) -> HttpClient::Response {
+    auto id = ++counter;
+
+    auto responsePromise = httpInput.readResponseHeaders().then(
+          [this,method,id](kj::Maybe<HttpHeaders::Response>&& response) -> HttpClient::Response {
       KJ_IF_MAYBE(r, response) {
         auto& headers = httpInput.getHeaders();
         HttpClient::Response result {
@@ -2506,8 +2508,11 @@ public:
         if (fastCaseCmp<'c', 'l', 'o', 's', 'e'>(
             headers.get(HttpHeaderId::CONNECTION).orDefault(nullptr).cStr())) {
           closed = true;
-        } else {
+        } else if (counter == id) {
           watchForClose();
+        } else {
+          // Anothe request was already queued after this one, so we don't want to watch for
+          // stream closure because we're fully expecting another response.
         }
         return result;
       } else {
@@ -2550,9 +2555,11 @@ public:
     // No entity-body.
     httpOutput.finishBody();
 
+    auto id = ++counter;
+
     return httpInput.readResponseHeaders()
         .then(kj::mvCapture(keyBase64,
-            [this](kj::StringPtr keyBase64, kj::Maybe<HttpHeaders::Response>&& response)
+            [this,id](kj::StringPtr keyBase64, kj::Maybe<HttpHeaders::Response>&& response)
             -> HttpClient::WebSocketResponse {
       KJ_IF_MAYBE(r, response) {
         auto& headers = httpInput.getHeaders();
@@ -2593,8 +2600,11 @@ public:
           if (fastCaseCmp<'c', 'l', 'o', 's', 'e'>(
               headers.get(HttpHeaderId::CONNECTION).orDefault(nullptr).cStr())) {
             closed = true;
-          } else {
+          } else if (counter == id) {
             watchForClose();
+          } else {
+            // Anothe request was already queued after this one, so we don't want to watch for
+            // stream closure because we're fully expecting another response.
           }
           return result;
         }
@@ -2613,6 +2623,10 @@ private:
   kj::Maybe<kj::Promise<void>> closeWatcherTask;
   bool upgraded = false;
   bool closed = false;
+
+  uint counter = 0;
+  // Counts requests for the sole purpose of detecting if more requests have been made after some
+  // point in history.
 
   void watchForClose() {
     closeWatcherTask = httpInput.awaitNextMessage().then([this](bool hasData) {

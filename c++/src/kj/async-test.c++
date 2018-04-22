@@ -580,6 +580,29 @@ TEST(Async, ArrayJoinVoid) {
   promise.wait(waitScope);
 }
 
+TEST(Async, Canceler) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Canceler canceler;
+
+  auto never = canceler.wrap(kj::Promise<void>(kj::NEVER_DONE));
+  auto now = canceler.wrap(kj::Promise<void>(kj::READY_NOW));
+  auto neverI = canceler.wrap(kj::Promise<void>(kj::NEVER_DONE).then([]() { return 123u; }));
+  auto nowI = canceler.wrap(kj::Promise<uint>(123u));
+
+  KJ_EXPECT(!never.poll(waitScope));
+  KJ_EXPECT(now.poll(waitScope));
+  KJ_EXPECT(!neverI.poll(waitScope));
+  KJ_EXPECT(nowI.poll(waitScope));
+
+  canceler.cancel("foobar");
+
+  KJ_EXPECT_THROW_MESSAGE("foobar", never.wait(waitScope));
+  now.wait(waitScope);
+  KJ_EXPECT_THROW_MESSAGE("foobar", neverI.wait(waitScope));
+  KJ_EXPECT(nowI.wait(waitScope) == 123u);
+}
+
 class ErrorHandlerImpl: public TaskSet::ErrorHandler {
 public:
   uint exceptionCount = 0;
