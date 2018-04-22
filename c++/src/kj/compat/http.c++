@@ -2406,17 +2406,532 @@ static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
 }
 
 kj::Promise<void> WebSocket::pumpTo(WebSocket& other) {
-  return kj::evalNow([&]() {
-    return pumpWebSocketLoop(*this, other);
-  }).catch_([&other](kj::Exception&& e) -> kj::Promise<void> {
-    if (e.getType() == kj::Exception::Type::DISCONNECTED) {
-      return other.disconnect();
-    } else {
-      return other.close(1002, e.getDescription());
-    }
-  });
+  KJ_IF_MAYBE(p, other.tryPumpFrom(*this)) {
+    // Yay, optimized pump!
+    return kj::mv(*p);
+  } else {
+    // Fall back to default implementation.
+    return kj::evalNow([&]() {
+      return pumpWebSocketLoop(*this, other);
+    }).catch_([&other](kj::Exception&& e) -> kj::Promise<void> {
+      if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+        return other.disconnect();
+      } else {
+        return other.close(1002, e.getDescription());
+      }
+    });
+  }
 }
 
+kj::Maybe<kj::Promise<void>> WebSocket::tryPumpFrom(WebSocket& other) {
+  return nullptr;
+}
+
+namespace {
+
+class AbortableWebSocket: public WebSocket {
+public:
+  virtual void abort() = 0;
+};
+
+class WebSocketPipeImpl final: public AbortableWebSocket, public kj::Refcounted {
+public:
+  ~WebSocketPipeImpl() noexcept(false) {
+    KJ_REQUIRE(state == nullptr || ownState.get() != nullptr,
+        "destroying WebSocketPipe with operation still in-progress; probably going to segfault") {
+      // Don't std::terminate().
+      break;
+    }
+  }
+
+  void abort() override {
+    KJ_IF_MAYBE(s, state) {
+      s->abort();
+    } else {
+      ownState = heap<Aborted>();
+      state = *ownState;
+    }
+  }
+
+  kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+    KJ_IF_MAYBE(s, state) {
+      return s->send(message);
+    } else {
+      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message));
+    }
+  }
+  kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+    KJ_IF_MAYBE(s, state) {
+      return s->send(message);
+    } else {
+      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message));
+    }
+  }
+  kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+    KJ_IF_MAYBE(s, state) {
+      return s->close(code, reason);
+    } else {
+      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(ClosePtr { code, reason }));
+    }
+  }
+  kj::Promise<void> disconnect() override {
+    KJ_IF_MAYBE(s, state) {
+      return s->disconnect();
+    } else {
+      ownState = heap<Disconnected>();
+      state = *ownState;
+      return kj::READY_NOW;
+    }
+  }
+  kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
+    KJ_IF_MAYBE(s, state) {
+      return s->tryPumpFrom(other);
+    } else {
+      return newAdaptedPromise<void, BlockedPumpFrom>(*this, other);
+    }
+  }
+
+  kj::Promise<Message> receive() override {
+    KJ_IF_MAYBE(s, state) {
+      return s->receive();
+    } else {
+      return newAdaptedPromise<Message, BlockedReceive>(*this);
+    }
+  }
+  kj::Promise<void> pumpTo(WebSocket& other) override {
+    KJ_IF_MAYBE(s, state) {
+      return s->pumpTo(other);
+    } else {
+      return newAdaptedPromise<void, BlockedPumpTo>(*this, other);
+    }
+  }
+
+private:
+  kj::Maybe<AbortableWebSocket&> state;
+  // Represents the state of the rendezvous for this end's send() calls / the other end's
+  // receive() calls. (otherEnd.sendState provides the reverse state.)
+
+  kj::Own<AbortableWebSocket> ownState;
+
+  void endState(WebSocket& obj) {
+    KJ_IF_MAYBE(s, state) {
+      if (s == &obj) {
+        state = nullptr;
+      }
+    }
+  }
+
+  struct ClosePtr {
+    uint16_t code;
+    kj::StringPtr reason;
+  };
+  typedef kj::OneOf<kj::ArrayPtr<const char>, kj::ArrayPtr<const byte>, ClosePtr> MessagePtr;
+
+  class BlockedSend final: public AbortableWebSocket {
+  public:
+    BlockedSend(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe, MessagePtr message)
+        : fulfiller(fulfiller), pipe(pipe), message(kj::mv(message)) {
+      KJ_REQUIRE(pipe.state == nullptr);
+      pipe.state = *this;
+    }
+    ~BlockedSend() noexcept(false) {
+      pipe.endState(*this);
+    }
+
+    void abort() override {
+      canceler.cancel("other end of WebSocketPipe was destroyed");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed"));
+      pipe.endState(*this);
+      pipe.abort();
+    }
+
+    kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+    kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+    kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+    kj::Promise<void> disconnect() override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+    kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+
+    kj::Promise<Message> receive() override {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
+      fulfiller.fulfill();
+      pipe.endState(*this);
+      KJ_SWITCH_ONEOF(message) {
+        KJ_CASE_ONEOF(arr, kj::ArrayPtr<const char>) {
+          return Message(kj::str(arr));
+        }
+        KJ_CASE_ONEOF(arr, kj::ArrayPtr<const byte>) {
+          auto copy = kj::heapArray<byte>(arr.size());
+          memcpy(copy.begin(), arr.begin(), arr.size());
+          return Message(kj::mv(copy));
+        }
+        KJ_CASE_ONEOF(close, ClosePtr) {
+          return Message(Close { close.code, kj::str(close.reason) });
+        }
+      }
+      KJ_UNREACHABLE;
+    }
+    kj::Promise<void> pumpTo(WebSocket& other) override {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
+      kj::Promise<void> promise = nullptr;
+      KJ_SWITCH_ONEOF(message) {
+        KJ_CASE_ONEOF(arr, kj::ArrayPtr<const char>) {
+          promise = other.send(arr);
+        }
+        KJ_CASE_ONEOF(arr, kj::ArrayPtr<const byte>) {
+          promise = other.send(arr);
+        }
+        KJ_CASE_ONEOF(close, ClosePtr) {
+          promise = other.close(close.code, close.reason);
+        }
+      }
+      return canceler.wrap(promise.then([this,&other]() {
+        canceler.release();
+        fulfiller.fulfill();
+        pipe.endState(*this);
+        return pipe.pumpTo(other);
+      }, [this](kj::Exception&& e) -> kj::Promise<void> {
+        canceler.release();
+        fulfiller.reject(kj::cp(e));
+        pipe.endState(*this);
+        return kj::mv(e);
+      }));
+    }
+
+  private:
+    kj::PromiseFulfiller<void>& fulfiller;
+    WebSocketPipeImpl& pipe;
+    MessagePtr message;
+    Canceler canceler;
+  };
+
+  class BlockedPumpFrom final: public AbortableWebSocket {
+  public:
+    BlockedPumpFrom(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe,
+                    WebSocket& input)
+        : fulfiller(fulfiller), pipe(pipe), input(input) {
+      KJ_REQUIRE(pipe.state == nullptr);
+      pipe.state = *this;
+    }
+    ~BlockedPumpFrom() noexcept(false) {
+      pipe.endState(*this);
+    }
+
+    void abort() override {
+      canceler.cancel("other end of WebSocketPipe was destroyed");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed"));
+      pipe.endState(*this);
+      pipe.abort();
+    }
+
+    kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+    kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+    kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+    kj::Promise<void> disconnect() override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+    kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
+      KJ_FAIL_ASSERT("another message send is already in progress");
+    }
+
+    kj::Promise<Message> receive() override {
+      KJ_REQUIRE(canceler.isEmpty(), "another message receive is already in progress");
+      return canceler.wrap(input.receive()
+          .then([this](Message message) {
+        if (message.is<Close>()) {
+          canceler.release();
+          fulfiller.fulfill();
+          pipe.endState(*this);
+        }
+        return kj::mv(message);
+      }, [this](kj::Exception&& e) -> Message {
+        canceler.release();
+        fulfiller.reject(kj::cp(e));
+        pipe.endState(*this);
+        kj::throwRecoverableException(kj::mv(e));
+        return Message(kj::String());
+      }));
+    }
+    kj::Promise<void> pumpTo(WebSocket& other) override {
+      KJ_REQUIRE(canceler.isEmpty(), "another message receive is already in progress");
+      return canceler.wrap(input.pumpTo(other)
+          .then([this]() {
+        canceler.release();
+        fulfiller.fulfill();
+        pipe.endState(*this);
+      }, [this](kj::Exception&& e) {
+        canceler.release();
+        fulfiller.reject(kj::cp(e));
+        pipe.endState(*this);
+        kj::throwRecoverableException(kj::mv(e));
+      }));
+    }
+
+  private:
+    kj::PromiseFulfiller<void>& fulfiller;
+    WebSocketPipeImpl& pipe;
+    WebSocket& input;
+    Canceler canceler;
+  };
+
+  class BlockedReceive final: public AbortableWebSocket {
+  public:
+    BlockedReceive(kj::PromiseFulfiller<Message>& fulfiller, WebSocketPipeImpl& pipe)
+        : fulfiller(fulfiller), pipe(pipe) {
+      KJ_REQUIRE(pipe.state == nullptr);
+      pipe.state = *this;
+    }
+    ~BlockedReceive() noexcept(false) {
+      pipe.endState(*this);
+    }
+
+    void abort() override {
+      canceler.cancel("other end of WebSocketPipe was destroyed");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed"));
+      pipe.endState(*this);
+      pipe.abort();
+    }
+
+    kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
+      auto copy = kj::heapArray<byte>(message.size());
+      memcpy(copy.begin(), message.begin(), message.size());
+      fulfiller.fulfill(Message(kj::mv(copy)));
+      pipe.endState(*this);
+      return kj::READY_NOW;
+    }
+    kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
+      fulfiller.fulfill(Message(kj::str(message)));
+      pipe.endState(*this);
+      return kj::READY_NOW;
+    }
+    kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
+      fulfiller.fulfill(Message(Close { code, kj::str(reason) }));
+      pipe.endState(*this);
+      return kj::READY_NOW;
+    }
+    kj::Promise<void> disconnect() override {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "WebSocket disconnected"));
+      pipe.endState(*this);
+      return pipe.disconnect();
+    }
+    kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
+      return canceler.wrap(other.receive().then([this,&other](Message message) {
+        fulfiller.fulfill(kj::mv(message));
+        pipe.endState(*this);
+        return other.pumpTo(pipe);
+      }, [this](kj::Exception&& e) -> kj::Promise<void> {
+        canceler.release();
+        fulfiller.reject(kj::cp(e));
+        pipe.endState(*this);
+        return kj::mv(e);
+      }));
+    }
+
+    kj::Promise<Message> receive() override {
+      KJ_FAIL_ASSERT("another message receive is already in progress");
+    }
+    kj::Promise<void> pumpTo(WebSocket& other) override {
+      KJ_FAIL_ASSERT("another message receive is already in progress");
+    }
+
+  private:
+    kj::PromiseFulfiller<Message>& fulfiller;
+    WebSocketPipeImpl& pipe;
+    Canceler canceler;
+  };
+
+  class BlockedPumpTo final: public AbortableWebSocket {
+  public:
+    BlockedPumpTo(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe, WebSocket& output)
+        : fulfiller(fulfiller), pipe(pipe), output(output) {
+      KJ_REQUIRE(pipe.state == nullptr);
+      pipe.state = *this;
+    }
+    ~BlockedPumpTo() noexcept(false) {
+      pipe.endState(*this);
+    }
+
+    void abort() override {
+      canceler.cancel("other end of WebSocketPipe was destroyed");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed"));
+      pipe.endState(*this);
+      pipe.abort();
+    }
+
+    kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+      KJ_REQUIRE(canceler.isEmpty(), "another message send is already in progress");
+      return canceler.wrap(output.send(message));
+    }
+    kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+      KJ_REQUIRE(canceler.isEmpty(), "another message send is already in progress");
+      return canceler.wrap(output.send(message));
+    }
+    kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+      KJ_REQUIRE(canceler.isEmpty(), "another message send is already in progress");
+      return canceler.wrap(output.close(code, reason));
+    }
+    kj::Promise<void> disconnect() override {
+      KJ_REQUIRE(canceler.isEmpty(), "another message send is already in progress");
+      return canceler.wrap(output.disconnect().then([this]() {
+        canceler.release();
+        pipe.endState(*this);
+        fulfiller.fulfill();
+        return pipe.disconnect();
+      }));
+    }
+    kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
+      KJ_REQUIRE(canceler.isEmpty(), "another message send is already in progress");
+      return canceler.wrap(other.pumpTo(output).then([this]() {
+        canceler.release();
+        pipe.endState(*this);
+        fulfiller.fulfill();
+      }));
+    }
+
+    kj::Promise<Message> receive() override {
+      KJ_FAIL_ASSERT("another message receive is already in progress");
+    }
+    kj::Promise<void> pumpTo(WebSocket& other) override {
+      KJ_FAIL_ASSERT("another message receive is already in progress");
+    }
+
+  private:
+    kj::PromiseFulfiller<void>& fulfiller;
+    WebSocketPipeImpl& pipe;
+    WebSocket& output;
+    Canceler canceler;
+  };
+
+  class Disconnected final: public AbortableWebSocket {
+  public:
+    void abort() override {
+      // can ignore
+    }
+
+    kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+      KJ_FAIL_REQUIRE("can't send() after disconnect()");
+    }
+    kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+      KJ_FAIL_REQUIRE("can't send() after disconnect()");
+    }
+    kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+      KJ_FAIL_REQUIRE("can't close() after disconnect()");
+    }
+    kj::Promise<void> disconnect() override {
+      return kj::READY_NOW;
+    }
+    kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
+      KJ_FAIL_REQUIRE("can't tryPumpFrom() after disconnect()");
+    }
+
+    kj::Promise<Message> receive() override {
+      return KJ_EXCEPTION(DISCONNECTED, "WebSocket disconnected");
+    }
+    kj::Promise<void> pumpTo(WebSocket& other) override {
+      return kj::READY_NOW;
+    }
+  };
+
+  class Aborted final: public AbortableWebSocket {
+  public:
+    void abort() override {
+      // can ignore
+    }
+
+    kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+      return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
+    }
+    kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+      return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
+    }
+    kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+      return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
+    }
+    kj::Promise<void> disconnect() override {
+      return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
+    }
+    kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
+      return kj::Promise<void>(KJ_EXCEPTION(DISCONNECTED,
+          "other end of WebSocketPipe was destroyed"));
+    }
+
+    kj::Promise<Message> receive() override {
+      return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
+    }
+    kj::Promise<void> pumpTo(WebSocket& other) override {
+      return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
+    }
+  };
+};
+
+class WebSocketPipeEnd final: public WebSocket {
+public:
+  WebSocketPipeEnd(kj::Own<WebSocketPipeImpl> in, kj::Own<WebSocketPipeImpl> out)
+      : in(kj::mv(in)), out(kj::mv(out)) {}
+  ~WebSocketPipeEnd() noexcept(false) {
+    in->abort();
+    out->abort();
+  }
+
+  kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
+    return out->send(message);
+  }
+  kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
+    return out->send(message);
+  }
+  kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
+    return out->close(code, reason);
+  }
+  kj::Promise<void> disconnect() override {
+    return out->disconnect();
+  }
+  kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
+    return out->tryPumpFrom(other);
+  }
+
+  kj::Promise<Message> receive() override {
+    return in->receive();
+  }
+  kj::Promise<void> pumpTo(WebSocket& other) override {
+    return in->pumpTo(other);
+  }
+
+private:
+  kj::Own<WebSocketPipeImpl> in;
+  kj::Own<WebSocketPipeImpl> out;
+};
+
+}  // namespace
+
+WebSocketPipe newWebSocketPipe() {
+  auto pipe1 = kj::refcounted<WebSocketPipeImpl>();
+  auto pipe2 = kj::refcounted<WebSocketPipeImpl>();
+
+  auto end1 = kj::heap<WebSocketPipeEnd>(kj::addRef(*pipe1), kj::addRef(*pipe2));
+  auto end2 = kj::heap<WebSocketPipeEnd>(kj::mv(pipe2), kj::mv(pipe1));
+
+  return { { kj::mv(end1), kj::mv(end2) } };
+}
 
 // =======================================================================================
 
@@ -3204,6 +3719,207 @@ kj::Own<HttpClient> newHttpClient(kj::Timer& timer, HttpHeaderTable& responseHea
 
 namespace {
 
+class NullInputStream final: public kj::AsyncInputStream {
+public:
+  NullInputStream(kj::Maybe<size_t> expectedLength = size_t(0))
+      : expectedLength(expectedLength) {}
+
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return size_t(0);
+  }
+
+  kj::Maybe<uint64_t> tryGetLength() override {
+    return expectedLength;
+  }
+
+  kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+    return uint64_t(0);
+  }
+
+private:
+  kj::Maybe<size_t> expectedLength;
+};
+
+class NullOutputStream final: public kj::AsyncOutputStream {
+public:
+  Promise<void> write(const void* buffer, size_t size) override {
+    return kj::READY_NOW;
+  }
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    return kj::READY_NOW;
+  }
+
+  // We can't really optimize tryPumpFrom() unless AsyncInputStream grows a skip() method.
+};
+
+class HttpClientAdapter final: public HttpClient {
+public:
+  HttpClientAdapter(HttpService& service): service(service) {}
+
+  Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+                  kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
+    // We have to clone the URL and headers because HttpService implementation are allowed to
+    // assume that they remain valid until the service handler completes whereas HttpClient callers
+    // are allowed to destroy them immediately after the call.
+    auto urlCopy = kj::str(url);
+    auto headersCopy = kj::heap(headers.clone());
+
+    auto pipe = newOneWayPipe(expectedBodySize);
+
+    auto paf = kj::newPromiseAndFulfiller<Response>();
+    auto responder = kj::refcounted<ResponseImpl>(method, kj::mv(paf.fulfiller));
+    auto promise = service.request(method, urlCopy, *headersCopy, *pipe.in, *responder);
+    responder->setPromise(promise.attach(kj::mv(pipe.in), kj::mv(urlCopy), kj::mv(headersCopy)));
+
+    return {
+      kj::mv(pipe.out),
+      paf.promise.attach(kj::mv(responder))
+    };
+  }
+
+  kj::Promise<WebSocketResponse> openWebSocket(
+      kj::StringPtr url, const HttpHeaders& headers) override {
+    // We have to clone the URL and headers because HttpService implementation are allowed to
+    // assume that they remain valid until the service handler completes whereas HttpClient callers
+    // are allowed to destroy them immediately after the call. Also we need to add
+    // `Upgrade: websocket` so that headers.isWebSocket() returns true on the service side.
+    auto urlCopy = kj::str(url);
+    auto headersCopy = kj::heap(headers.clone());
+    headersCopy->set(HttpHeaderId::UPGRADE, "websocket");
+    KJ_DASSERT(headersCopy->isWebSocket());
+
+    auto paf = kj::newPromiseAndFulfiller<WebSocketResponse>();
+    auto responder = kj::refcounted<WebSocketResponseImpl>(kj::mv(paf.fulfiller));
+    auto in = kj::heap<NullInputStream>();
+    auto promise = service.request(HttpMethod::GET, urlCopy, *headersCopy, *in, *responder);
+    responder->setPromise(promise.attach(kj::mv(in), kj::mv(urlCopy), kj::mv(headersCopy)));
+
+    return paf.promise.attach(kj::mv(responder));
+  }
+
+  kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host) override {
+    return service.connect(kj::mv(host));
+  }
+
+private:
+  HttpService& service;
+
+  class ResponseImpl final: public HttpService::Response, public kj::Refcounted {
+  public:
+    ResponseImpl(kj::HttpMethod method,
+                 kj::Own<kj::PromiseFulfiller<HttpClient::Response>> fulfiller)
+        : method(method), fulfiller(kj::mv(fulfiller)) {}
+
+    void setPromise(kj::Promise<void> promise) {
+      task = promise.eagerlyEvaluate([this](kj::Exception&& exception) {
+        if (fulfiller->isWaiting()) {
+          fulfiller->reject(kj::mv(exception));
+        } else {
+          KJ_LOG(ERROR, "HttpService threw an exception after having already started responding",
+                        exception);
+        }
+      });
+    }
+
+    kj::Own<kj::AsyncOutputStream> send(
+        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
+      // The caller of HttpClient is allowed to assume that the statusText and headers remain
+      // valid until the body stream is dropped, but the HttpService implementation is allowed to
+      // send values that are only valid until send() returns, so we have to copy.
+      auto statusTextCopy = kj::str(statusText);
+      auto headersCopy = kj::heap(headers.clone());
+
+      if (method == kj::HttpMethod::HEAD) {
+        fulfiller->fulfill({
+          statusCode, statusTextCopy, headersCopy.get(),
+          kj::heap<NullInputStream>(expectedBodySize)
+              .attach(kj::addRef(*this), kj::mv(statusTextCopy), kj::mv(headersCopy))
+        });
+        return kj::heap<NullOutputStream>();
+      } else {
+        auto pipe = newOneWayPipe(expectedBodySize);
+        fulfiller->fulfill({
+          statusCode, statusTextCopy, headersCopy.get(),
+          pipe.in.attach(kj::addRef(*this), kj::mv(statusTextCopy), kj::mv(headersCopy))
+        });
+        return kj::mv(pipe.out);
+      }
+    }
+
+    kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) override {
+      KJ_FAIL_REQUIRE("a WebSocket was not requested");
+    }
+
+  private:
+    kj::HttpMethod method;
+    kj::Own<kj::PromiseFulfiller<HttpClient::Response>> fulfiller;
+    kj::Promise<void> task = nullptr;
+  };
+
+  class WebSocketResponseImpl final: public HttpService::Response, public kj::Refcounted {
+  public:
+    WebSocketResponseImpl(kj::Own<kj::PromiseFulfiller<HttpClient::WebSocketResponse>> fulfiller)
+        : fulfiller(kj::mv(fulfiller)) {}
+
+    void setPromise(kj::Promise<void> promise) {
+      task = promise.eagerlyEvaluate([this](kj::Exception&& exception) {
+        if (fulfiller->isWaiting()) {
+          fulfiller->reject(kj::mv(exception));
+        } else {
+          KJ_LOG(ERROR, "HttpService threw an exception after having already started responding",
+                        exception);
+        }
+      });
+    }
+
+    kj::Own<kj::AsyncOutputStream> send(
+        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
+      // The caller of HttpClient is allowed to assume that the statusText and headers remain
+      // valid until the body stream is dropped, but the HttpService implementation is allowed to
+      // send values that are only valid until send() returns, so we have to copy.
+      auto statusTextCopy = kj::str(statusText);
+      auto headersCopy = kj::heap(headers.clone());
+
+      auto pipe = newOneWayPipe(expectedBodySize);
+      fulfiller->fulfill({
+        statusCode, statusTextCopy, headersCopy.get(),
+        pipe.in.attach(kj::addRef(*this), kj::mv(statusTextCopy), kj::mv(headersCopy))
+      });
+      return kj::mv(pipe.out);
+    }
+
+    kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) override {
+      // The caller of HttpClient is allowed to assume that the headers remain valid until the body
+      // stream is dropped, but the HttpService implementation is allowed to send headers that are
+      // only valid until acceptWebSocket() returns, so we have to copy.
+      auto headersCopy = kj::heap(headers.clone());
+
+      auto pipe = newWebSocketPipe();
+      fulfiller->fulfill({
+        101, "Switching Protocols", headersCopy.get(),
+        pipe.ends[0].attach(kj::addRef(*this), kj::mv(headersCopy))
+      });
+      return kj::mv(pipe.ends[1]);
+    }
+
+  private:
+    kj::Own<kj::PromiseFulfiller<HttpClient::WebSocketResponse>> fulfiller;
+    kj::Promise<void> task = nullptr;
+  };
+};
+
+}  // namespace
+
+kj::Own<HttpClient> newHttpClient(HttpService& service) {
+  return kj::heap<HttpClientAdapter>(service);
+}
+
+// =======================================================================================
+
+namespace {
+
 class HttpServiceAdapter final: public HttpService {
 public:
   HttpServiceAdapter(HttpClient& client): client(client) {}
@@ -3255,8 +3971,6 @@ public:
   kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host) override {
     return client.connect(kj::mv(host));
   }
-
-  // TODO(soon): other methods
 
 private:
   HttpClient& client;
