@@ -22,6 +22,10 @@
 // This program is a code generator plugin for `capnp compile` which writes the schema back to
 // stdout in roughly capnpc format.
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <capnp/schema.capnp.h>
 #include "../serialize.h"
 #include <kj/debug.h>

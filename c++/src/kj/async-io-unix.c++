@@ -22,6 +22,10 @@
 #if !_WIN32
 // For Win32 implementation, see async-io-win32.c++.
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "async-io.h"
 #include "async-io-internal.h"
 #include "async-unix.h"

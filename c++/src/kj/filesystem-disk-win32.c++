@@ -1094,7 +1094,7 @@ public:
       }
       KJ_DEFER({
         if (kj::isSameType<T, Directory>()) {
-          HANDLE newHandle;
+          HANDLE newHandle = nullptr;
           KJ_WIN32(newHandle = CreateFileW(
               committed ? parentDirectory.nativePath(path).begin() : tempPath.begin(),
               GENERIC_READ,

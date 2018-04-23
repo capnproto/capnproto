@@ -50,11 +50,15 @@ environment:
       BUILD_NAME: mingw
       EXTRA_BUILD_FLAGS: -j2
 
+    - BUILD_NAME: cygwin
+
 install:
   - if not exist "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
   - 7z x -y "%MINGW_ARCHIVE%" > nul
   - ps: Get-Command sh.exe -All | Remove-Item
   # CMake refuses to generate MinGW Makefiles if sh.exe is in the PATH
+  - if "%BUILD_NAME%"=="cygwin" appveyor DownloadFile "http://cygwin.com/setup-x86_64.exe" -FileName "C:\cygwin64\setup-x86_64.exe"
+  - if "%BUILD_NAME%"=="cygwin" C:\cygwin64\setup-x86_64.exe --quiet-mode --no-shortcuts --upgrade-also --root "C:\cygwin64" --packages cmake
 
 before_build:
   - set PATH=%CD%\%MINGW_DIR%\bin;%PATH%
@@ -64,24 +68,21 @@ before_build:
 
 build_script:
   - echo "Building Cap'n Proto with %CMAKE_GENERATOR%"
-  - >-
-      cmake -Hc++ -B%BUILD_DIR% -G "%CMAKE_GENERATOR%"
-      -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
-      -DCMAKE_INSTALL_PREFIX=%INSTALL_PREFIX%
-  - cmake --build %BUILD_DIR% --config %BUILD_TYPE% --target install -- %EXTRA_BUILD_FLAGS%
+  - if NOT "%BUILD_NAME%"=="cygwin" cmake -Hc++ -B%BUILD_DIR% -G "%CMAKE_GENERATOR%" -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DCMAKE_INSTALL_PREFIX=%INSTALL_PREFIX%
+  - if NOT "%BUILD_NAME%"=="cygwin" cmake --build %BUILD_DIR% --config %BUILD_TYPE% --target install -- %EXTRA_BUILD_FLAGS%
   # MinGW wants the build type at configure-time while MSVC wants the build type at build-time. We
   # can satisfy both by passing the build type to both cmake invocations. We have to suffer a
   # warning, but both generators will work.
 
   - echo "Building Cap'n Proto samples with %CMAKE_GENERATOR%"
-  - >-
-      cmake -Hc++/samples -B%BUILD_DIR%-samples -G "%CMAKE_GENERATOR%"
-      -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
-      -DCMAKE_PREFIX_PATH=%INSTALL_PREFIX%
-  - cmake --build %BUILD_DIR%-samples --config %BUILD_TYPE%
+  - if NOT "%BUILD_NAME%"=="cygwin" cmake -Hc++/samples -B%BUILD_DIR%-samples -G "%CMAKE_GENERATOR%" -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DCMAKE_PREFIX_PATH=%INSTALL_PREFIX%
+  - if NOT "%BUILD_NAME%"=="cygwin" cmake --build %BUILD_DIR%-samples --config %BUILD_TYPE%
+
+  # Cygwin build
+  - if "%BUILD_NAME%"=="cygwin" C:\cygwin64\bin\bash -lc 'cd /cygdrive/c/projects/capnproto; ./appveyor-cygwin.sh'
 
 test_script:
   - timeout /t 2
   # Sleep a little to prevent interleaving test output with build output.
   - cd %BUILD_DIR%\src
-  - ctest -V -C %BUILD_TYPE%
+  - if NOT "%BUILD_NAME%"=="cygwin" ctest -V -C %BUILD_TYPE%

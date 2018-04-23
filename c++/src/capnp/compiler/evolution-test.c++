@@ -26,6 +26,10 @@
 // the types are expected to be compatible, the test also constructs an instance of the old
 // type and reads it as the new type, and vice versa.
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <capnp/compiler/grammar.capnp.h>
 #include <capnp/schema-loader.h>
 #include <capnp/message.h>
