@@ -646,7 +646,7 @@ struct WebSocketPipe {
 
 WebSocketPipe newWebSocketPipe();
 // Create a WebSocket pipe. Messages written to one end of the pipe will be readable from the other
-// end. No buffering occurs -- a message send does not complete under a corresponding receive
+// end. No buffering occurs -- a message send does not complete until a corresponding receive
 // accepts the message.
 
 struct HttpServerSettings {
