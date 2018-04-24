@@ -522,7 +522,26 @@ private:
 
     void abortRead() override {
       canceler.cancel("abortRead() was called");
-      fulfiller.reject(KJ_EXCEPTION(FAILED, "read end of pipe was aborted"));
+
+      // The input might have reached EOF, but we haven't detected it yet because we haven't tried
+      // to read that far. If we had not optimized tryPumpFrom() and instead used the default
+      // pumpTo() implementation, then the input would not have called write() again once it
+      // reached EOF, and therefore the abortRead() on the other end would *not* propagate an
+      // exception! We need the same behavior here. To that end, we need to detect if we're at EOF
+      // by reading one last byte.
+      checkEofTask = kj::evalNow([&]() {
+        static char junk;
+        return input.tryRead(&junk, 1, 1).then([this](uint64_t n) {
+          if (n == 0) {
+            fulfiller.fulfill(kj::cp(pumpedSoFar));
+          } else {
+            fulfiller.reject(KJ_EXCEPTION(FAILED, "read end of pipe was aborted"));
+          }
+        }).eagerlyEvaluate([this](kj::Exception&& e) {
+          fulfiller.reject(kj::mv(e));
+        });
+      });
+
       pipe.endState(*this);
       pipe.abortRead();
     }
@@ -547,6 +566,7 @@ private:
     uint64_t amount;
     uint64_t pumpedSoFar = 0;
     Canceler canceler;
+    kj::Promise<void> checkEofTask = nullptr;
   };
 
   class BlockedRead final: public AsyncIoStream {
