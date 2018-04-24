@@ -897,7 +897,14 @@ KJ_TEST("DiskFile holes") {
 #endif
 
   // Try punching a hole with zero().
-  file->zero(1 << 20, 4096);
+#if _WIN32
+  uint64_t blockSize = 4096; // TODO(someday): Actually ask the OS.
+#else
+  struct stat stats;
+  KJ_SYSCALL(fstat(KJ_ASSERT_NONNULL(file->getFd()), &stats));
+  uint64_t blockSize = stats.st_blksize;
+#endif
+  file->zero(1 << 20, blockSize);
   file->datasync();
 #if !_WIN32
   // TODO(someday): This doesn't work on Windows. I don't know why. We're definitely using the
