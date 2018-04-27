@@ -1289,5 +1289,25 @@ KJ_TEST("Userland pipe pumpTo less than write amount") {
   writePromise.wait(ws);
 }
 
+KJ_TEST("Userland pipe pumpFrom EOF on abortRead()") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
+
+  auto promise = pipe.out->write("foobar", 6);
+  KJ_EXPECT(!promise.poll(ws));
+  expectRead(*pipe2.in, "foobar").wait(ws);
+  promise.wait(ws);
+
+  KJ_EXPECT(!pumpPromise.poll(ws));
+  pipe.out = nullptr;
+  pipe2.in = nullptr;  // force pump to notice EOF
+  KJ_EXPECT(pumpPromise.wait(ws) == 6);
+  pipe2.out = nullptr;
+}
+
 }  // namespace
 }  // namespace kj

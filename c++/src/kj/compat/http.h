@@ -424,7 +424,7 @@ public:
   // Read one message from the WebSocket and return it. Can only call once at a time. Do not call
   // again after Close is received.
 
-  kj::Promise<void> pumpTo(WebSocket& other);
+  virtual kj::Promise<void> pumpTo(WebSocket& other);
   // Continuously receives messages from this WebSocket and send them to `other`.
   //
   // On EOF, calls other.disconnect(), then resolves.
@@ -432,6 +432,12 @@ public:
   // On other read errors, calls other.close() with the error, then resolves.
   //
   // On write error, rejects with the error.
+
+  virtual kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other);
+  // Either returns null, or performs the equivalent of other.pumpTo(*this). Only returns non-null
+  // if this WebSocket implementation is able to perform the pump in an optimized way, better than
+  // the default implementation of pumpTo(). The default implementation of pumpTo() always tries
+  // calling this first, and the default implementation of tryPumpFrom() always returns null.
 };
 
 class HttpClient {
@@ -633,6 +639,15 @@ kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
 // purpose of the mask is to prevent badly-written HTTP proxies from interpreting "things that look
 // like HTTP requests" in a message as being actual HTTP requests, which could result in cache
 // poisoning. See RFC6455 section 10.3.
+
+struct WebSocketPipe {
+  kj::Own<WebSocket> ends[2];
+};
+
+WebSocketPipe newWebSocketPipe();
+// Create a WebSocket pipe. Messages written to one end of the pipe will be readable from the other
+// end. No buffering occurs -- a message send does not complete until a corresponding receive
+// accepts the message.
 
 struct HttpServerSettings {
   kj::Duration headerTimeout = 15 * kj::SECONDS;
