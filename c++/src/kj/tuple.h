@@ -100,12 +100,10 @@ struct TupleElement {
 
 template <uint index, typename T>
 struct TupleElement<index, T&> {
-  // If tuples contained references, one of the following would have to be true:
-  // - `auto x = tuple(y, z)` would cause x to be a tuple of references to y and z, which is
-  //   probably not what you expected.
-  // - `Tuple<Foo&, Bar&> x = tuple(a, b)` would not work, because `tuple()` returned
-  //   Tuple<Foo, Bar>.
-  static_assert(sizeof(T*) == 0, "Sorry, tuples cannot contain references.");
+  // A tuple containing references can be constucted using refTuple().
+
+  T& value;
+  constexpr inline TupleElement(T& value): value(value) {}
 };
 
 template <uint index, typename... T>
@@ -136,7 +134,7 @@ struct TupleImpl<Indexes<indexes...>, Types...>
 
   template <typename... U>
   constexpr inline TupleImpl(Tuple<U...>&& other)
-      : TupleElement<indexes, Types>(kj::mv(getImpl<indexes>(other)))... {}
+      : TupleElement<indexes, Types>(kj::fwd<U>(getImpl<indexes>(other)))... {}
   template <typename... U>
   constexpr inline TupleImpl(Tuple<U...>& other)
       : TupleElement<indexes, Types>(getImpl<indexes>(other))... {}
@@ -146,6 +144,7 @@ struct TupleImpl<Indexes<indexes...>, Types...>
 };
 
 struct MakeTupleFunc;
+struct MakeRefTupleFunc;
 
 template <typename... T>
 class Tuple {
@@ -172,6 +171,7 @@ private:
   template <size_t index, typename... U>
   friend inline const TypeByIndex<index, U...>& getImpl(const Tuple<U...>& tuple);
   friend struct MakeTupleFunc;
+  friend struct MakeRefTupleFunc;
 };
 
 template <>
@@ -313,6 +313,17 @@ struct MakeTupleFunc {
   }
 };
 
+struct MakeRefTupleFunc {
+  template <typename... Params>
+  Tuple<Params...> operator()(Params&&... params) {
+    return Tuple<Params...>(kj::fwd<Params>(params)...);
+  }
+  template <typename Param>
+  Param operator()(Param&& param) {
+    return kj::fwd<Param>(param);
+  }
+};
+
 }  // namespace _ (private)
 
 template <typename... T> struct Tuple_ { typedef _::Tuple<T...> Type; };
@@ -333,6 +344,14 @@ inline auto tuple(Params&&... params)
   // Construct a new tuple from the given values.  Any tuples in the argument list will be
   // flattened into the result.
   return _::expandAndApply(_::MakeTupleFunc(), kj::fwd<Params>(params)...);
+}
+
+template <typename... Params>
+inline auto refTuple(Params&&... params)
+    -> decltype(_::expandAndApply(_::MakeRefTupleFunc(), kj::fwd<Params>(params)...)) {
+  // Like tuple(), but if the params include lvalue references, they will be captured as
+  // references. rvalue references will still be captured as whole values (moved).
+  return _::expandAndApply(_::MakeRefTupleFunc(), kj::fwd<Params>(params)...);
 }
 
 template <size_t index, typename Tuple>
