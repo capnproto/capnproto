@@ -83,6 +83,11 @@ TEST(Tuple, Tuple) {
 
   i = tuple(tuple(), 456, tuple(tuple(), tuple()));
   EXPECT_EQ(456u, i);
+
+  EXPECT_EQ(0, (indexOfType<int, Tuple<int, char, bool>>()));
+  EXPECT_EQ(1, (indexOfType<char, Tuple<int, char, bool>>()));
+  EXPECT_EQ(2, (indexOfType<bool, Tuple<int, char, bool>>()));
+  EXPECT_EQ(0, (indexOfType<int, int>()));
 }
 
 }  // namespace kj

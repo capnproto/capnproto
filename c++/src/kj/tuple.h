@@ -358,4 +358,63 @@ template <typename T>
 constexpr size_t tupleSize() { return TupleSize_<T>::size; }
 // Returns size of the tuple T.
 
+template <typename T, typename Tuple>
+struct IndexOfType_;
+template <typename T, typename Tuple>
+struct HasType_ {
+  static constexpr bool value = false;
+};
+
+template <typename T>
+struct IndexOfType_<T, T> {
+  static constexpr size_t value = 0;
+};
+template <typename T>
+struct HasType_<T, T> {
+  static constexpr bool value = true;
+};
+
+template <typename T, typename... U>
+struct IndexOfType_<T, _::Tuple<T, U...>> {
+  static constexpr size_t value = 0;
+  static_assert(!HasType_<T, _::Tuple<U...>>::value,
+      "requested type appears multiple times in tuple");
+};
+template <typename T, typename... U>
+struct HasType_<T, _::Tuple<T, U...>> {
+  static constexpr bool value = true;
+};
+
+template <typename T, typename U, typename... V>
+struct IndexOfType_<T, _::Tuple<U, V...>> {
+  static constexpr size_t value = IndexOfType_<T, _::Tuple<V...>>::value + 1;
+};
+template <typename T, typename U, typename... V>
+struct HasType_<T, _::Tuple<U, V...>> {
+  static constexpr bool value = HasType_<T, _::Tuple<V...>>::value;
+};
+
+template <typename T, typename U>
+inline constexpr size_t indexOfType() {
+  static_assert(HasType_<T, U>::value, "type not present");
+  return IndexOfType_<T, U>::value;
+}
+
+template <size_t i, typename T>
+struct TypeOfIndex_;
+template <typename T>
+struct TypeOfIndex_<0, T> {
+  typedef T Type;
+};
+template <size_t i, typename T, typename... U>
+struct TypeOfIndex_<i, _::Tuple<T, U...>>
+    : public TypeOfIndex_<i - 1, _::Tuple<U...>> {};
+template <typename T, typename... U>
+struct TypeOfIndex_<0, _::Tuple<T, U...>> {
+  typedef T Type;
+};
+
+template <size_t i, typename Tuple>
+using TypeOfIndex = typename TypeOfIndex_<i, Tuple>::Type;
+
 }  // namespace kj
