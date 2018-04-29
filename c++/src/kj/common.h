@@ -530,8 +530,13 @@ template <typename T, size_t s>
 inline constexpr size_t size(T (&arr)[s]) { return s; }
 template <typename T>
 inline constexpr size_t size(T&& arr) { return arr.size(); }
+template <typename T, typename U, size_t s>
+inline constexpr size_t size(U (T::*arr)[s]) { return s; }
 // Returns the size of the parameter, whether the parameter is a regular C array or a container
 // with a `.size()` method.
+//
+// Can also be invoked on a pointer-to-member-array to get the declared size of that array,
+// without having an instance of the containing type. E.g.: kj::size(&MyType::someArray)
 
 class MaxValue_ {
 private:

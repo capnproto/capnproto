@@ -213,7 +213,8 @@ public:
 
     // All instances of Wrapper<Func> are two pointers in size: a vtable, and a Func&. So if we
     // allocate space for two pointers, we can construct a Wrapper<Func> in it!
-    static_assert(sizeof(WrapperType) == sizeof(space));
+    static_assert(sizeof(WrapperType) == sizeof(space),
+        "expected WrapperType to be two pointers");
 
     // Even if `func` is an rvalue reference, it's OK to use it as an lvalue here, because
     // FunctionParam is used strictly for parameters. If we captured a temporary, we know that
