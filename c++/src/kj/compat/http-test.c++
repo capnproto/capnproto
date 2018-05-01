@@ -869,6 +869,40 @@ KJ_TEST("HttpClient responses") {
   }
 }
 
+KJ_TEST("HttpClient canceled write") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto serverPromise = pipe.ends[1]->readAllText();
+
+  {
+    HttpHeaderTable table;
+    auto client = newHttpClient(table, *pipe.ends[0]);
+
+    auto body = kj::heapArray<byte>(4096);
+    memset(body.begin(), 0xcf, body.size());
+
+    auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table), uint64_t(4096));
+
+    // Start a write and immediately cancel it.
+    (void)req.body->write(body.begin(), body.size());
+
+    KJ_EXPECT_THROW_MESSAGE("overwrote", req.body->write("foo", 3).wait(waitScope));
+    req.body = nullptr;
+
+    KJ_EXPECT(!serverPromise.poll(waitScope));
+
+    KJ_EXPECT_THROW_MESSAGE("can't start new request until previous request body",
+        client->request(HttpMethod::GET, "/", HttpHeaders(table)).response.wait(waitScope));
+  }
+
+  pipe.ends[0]->shutdownWrite();
+  auto text = serverPromise.wait(waitScope);
+  KJ_EXPECT(text == "POST / HTTP/1.1\r\nContent-Length: 4096\r\n\r\n", text);
+}
+
 KJ_TEST("HttpServer requests") {
   HttpResponseTestCase RESPONSE = {
     "HTTP/1.1 200 OK\r\n"
