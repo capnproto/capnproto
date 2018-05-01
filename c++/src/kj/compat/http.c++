@@ -1707,7 +1707,7 @@ private:
   bool writeInProgress = false;
   // True if a write method has been called and has not completed successfully. In the case that
   // a write throws an exception or is canceled, this remains true forever. In these cases, the
-  // underlying steram is in an inconsitent state and cannot be reused.
+  // underlying stream is in an inconsistent state and cannot be reused.
 
   void queueWrite(kj::String content) {
     writeQueue = writeQueue.then(kj::mvCapture(content, [this](kj::String&& content) {
