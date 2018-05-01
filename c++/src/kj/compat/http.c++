@@ -1607,12 +1607,13 @@ public:
   HttpOutputStream(AsyncOutputStream& inner): inner(inner) {}
 
   bool canReuse() {
-    return !inBody && !broken;
+    return !inBody && !broken && !writeInProgress;
   }
 
   void writeHeaders(String content) {
     // Writes some header content and begins a new entity body.
 
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return; }
     KJ_REQUIRE(!inBody, "previous HTTP message body incomplete; can't write more messages");
     inBody = true;
 
@@ -1620,42 +1621,56 @@ public:
   }
 
   void writeBodyData(kj::String content) {
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return; }
     KJ_REQUIRE(inBody) { return; }
 
     queueWrite(kj::mv(content));
   }
 
   kj::Promise<void> writeBodyData(const void* buffer, size_t size) {
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return kj::READY_NOW; }
     KJ_REQUIRE(inBody) { return kj::READY_NOW; }
 
-    auto fork = writeQueue.then([this,buffer,size]() {
-      return inner.write(buffer, size);
-    }).fork();
-
+    writeInProgress = true;
+    auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
-    return fork.addBranch();
+
+    return fork.addBranch().then([this,buffer,size]() {
+      return inner.write(buffer, size);
+    }).then([this]() {
+      writeInProgress = false;
+    });
   }
 
   kj::Promise<void> writeBodyData(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return kj::READY_NOW; }
     KJ_REQUIRE(inBody) { return kj::READY_NOW; }
 
-    auto fork = writeQueue.then([this,pieces]() {
-      return inner.write(pieces);
-    }).fork();
-
+    writeInProgress = true;
+    auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
-    return fork.addBranch();
+
+    return fork.addBranch().then([this,pieces]() {
+      return inner.write(pieces);
+    }).then([this]() {
+      writeInProgress = false;
+    });
   }
 
   Promise<uint64_t> pumpBodyFrom(AsyncInputStream& input, uint64_t amount) {
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return uint64_t(0); }
     KJ_REQUIRE(inBody) { return uint64_t(0); }
 
-    auto fork = writeQueue.then([this,&input,amount]() {
-      return input.pumpTo(inner, amount);
-    }).fork();
+    writeInProgress = true;
+    auto fork = writeQueue.fork();
+    writeQueue = fork.addBranch();
 
-    writeQueue = fork.addBranch().ignoreResult();
-    return fork.addBranch();
+    return fork.addBranch().then([this,&input,amount]() {
+      return input.pumpTo(inner, amount);
+    }).then([this](uint64_t actual) {
+      writeInProgress = false;
+      return actual;
+    });
   }
 
   void finishBody() {
@@ -1688,6 +1703,11 @@ private:
   kj::Promise<void> writeQueue = kj::READY_NOW;
   bool inBody = false;
   bool broken = false;
+
+  bool writeInProgress = false;
+  // True if a write method has been called and has not completed successfully. In the case that
+  // a write throws an exception or is canceled, this remains true forever. In these cases, the
+  // underlying steram is in an inconsitent state and cannot be reused.
 
   void queueWrite(kj::String content) {
     writeQueue = writeQueue.then(kj::mvCapture(content, [this](kj::String&& content) {
