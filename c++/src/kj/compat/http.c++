@@ -1610,6 +1610,10 @@ public:
     return !inBody && !broken && !writeInProgress;
   }
 
+  bool canWriteBodyData() {
+    return !writeInProgress && inBody;
+  }
+
   void writeHeaders(String content) {
     // Writes some header content and begins a new entity body.
 
@@ -1833,8 +1837,12 @@ public:
   HttpChunkedEntityWriter(HttpOutputStream& inner)
       : inner(inner) {}
   ~HttpChunkedEntityWriter() noexcept(false) {
-    inner.writeBodyData(kj::str("0\r\n\r\n"));
-    inner.finishBody();
+    if (inner.canWriteBodyData()) {
+      inner.writeBodyData(kj::str("0\r\n\r\n"));
+      inner.finishBody();
+    } else {
+      inner.abortBody();
+    }
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
