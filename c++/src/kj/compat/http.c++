@@ -1614,6 +1614,10 @@ public:
     return !writeInProgress && inBody;
   }
 
+  bool isBroken() {
+    return broken;
+  }
+
   void writeHeaders(String content) {
     // Writes some header content and begins a new entity body.
 
@@ -4173,6 +4177,15 @@ public:
           if (currentMethod != nullptr) {
             return sendError(500, "Internal Server Error", kj::str(
                 "ERROR: The HttpService did not generate a response."));
+          }
+
+          if (httpOutput.isBroken()) {
+            // We started a response but didn't finish it. But HttpService returns success? Perhaps
+            // it decided that it doesn't want to finish this response. We'll have to disconnect
+            // here. If the response body is not complete (e.g. Content-Length not reached), the
+            // client should notice. We don't want to log an error because this condition might be
+            // intentional on the service's part.
+            return false;
           }
 
           return httpOutput.flush().then(kj::mvCapture(body,

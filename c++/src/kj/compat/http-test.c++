@@ -2131,6 +2131,52 @@ KJ_TEST("HttpServer threw exception after starting response") {
       "foo", text);
 }
 
+class PartialResponseNoThrowService final: public HttpService {
+  // HttpService that sends a partial response then returns without throwing.
+public:
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    return requestBody.readAllBytes()
+        .then([this,&response](kj::Array<byte>&&) -> kj::Promise<void> {
+      HttpHeaders headers(table);
+      auto body = response.send(200, "OK", headers, 32);
+      auto promise = body->write("foo", 3);
+      return promise.attach(kj::mv(body));
+    });
+  }
+
+private:
+  kj::Maybe<kj::Exception> exception;
+  HttpHeaderTable table;
+};
+
+KJ_TEST("HttpServer failed to write complete response but didn't throw") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = kj::newTwoWayPipe();
+
+  HttpHeaderTable table;
+  PartialResponseNoThrowService service;
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
+
+  KJ_EXPECT(text ==
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 32\r\n"
+      "\r\n"
+      "foo", text);
+}
+
 class SimpleInputStream final: public kj::AsyncInputStream {
   // An InputStream that returns bytes out of a static string.
 
