@@ -244,7 +244,9 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     StringPtr colon = ": ";
 
     StringPtr sysErrorArray;
-#if __USE_GNU
+// On android before marshmallow only the posix version of stderror_r was
+// available, even with __USE_GNU.
+#if __USE_GNU && !(defined(__ANDROID_API__) && __ANDROID_API__ < 23)
     char buffer[256];
     if (style == SYSCALL) {
       if (sysErrorString == nullptr) {
