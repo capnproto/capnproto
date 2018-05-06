@@ -89,6 +89,15 @@ template <typename Signature>
 class ConstFunction;
 // Like Function, but wraps a "const" (i.e. thread-safe) call.
 
+template <typename Signature>
+class FunctionParam;
+// Like Function, but used specifically as a call parameter type. Does not do any heap allocation.
+//
+// This type MUST NOT be used for anything other than a parameter type to a function or method.
+// This is because if FunctionParam binds to a temporary, it assumes that the temporary will
+// outlive the FunctionParam instance. This is true when FunctionParam is used as a parameter type,
+// but not if it is used as a local variable nor a class member variable.
+
 template <typename Return, typename... Params>
 class Function<Return(Params...)> {
 public:
@@ -193,6 +202,54 @@ private:
   };
 
   Own<Iface> impl;
+};
+
+template <typename Return, typename... Params>
+class FunctionParam<Return(Params...)> {
+public:
+  template <typename Func>
+  FunctionParam(Func&& func) {
+    typedef Wrapper<Decay<Func>> WrapperType;
+
+    // All instances of Wrapper<Func> are two pointers in size: a vtable, and a Func&. So if we
+    // allocate space for two pointers, we can construct a Wrapper<Func> in it!
+    static_assert(sizeof(WrapperType) == sizeof(space));
+
+    // Even if `func` is an rvalue reference, it's OK to use it as an lvalue here, because
+    // FunctionParam is used strictly for parameters. If we captured a temporary, we know that
+    // temporary will not be destroyed until after the function call completes.
+    ctor(*reinterpret_cast<WrapperType*>(space), func);
+  }
+
+  FunctionParam(const FunctionParam& other) = default;
+  FunctionParam(FunctionParam& other) = default;
+  FunctionParam(FunctionParam&& other) = default;
+  // Magically, a plain copy works.
+
+  inline Return operator()(Params... params) {
+    return (*reinterpret_cast<WrapperBase*>(space))(kj::fwd<Params>(params)...);
+  }
+
+private:
+  void* space[2];
+
+  class WrapperBase {
+  public:
+    virtual Return operator()(Params... params) = 0;
+  };
+
+  template <typename Func>
+  class Wrapper: public WrapperBase {
+  public:
+    Wrapper(Func& func): func(func) {}
+
+    inline Return operator()(Params... params) override {
+      return func(kj::fwd<Params>(params)...);
+    }
+
+  private:
+    Func& func;
+  };
 };
 
 #if 1

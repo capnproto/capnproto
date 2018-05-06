@@ -117,5 +117,51 @@ TEST(ConstFunction, Method) {
   EXPECT_EQ(9 + 2 + 5, f(2, 9));
 }
 
+int testFunctionParam(FunctionParam<int(char, bool)> func, char c, bool b) {
+  return func(c, b);
+}
+
+int testFunctionParamRecursive(FunctionParam<int(char, bool)> func, char c, bool b) {
+  return testFunctionParam(func, c, b);
+}
+
+KJ_TEST("FunctionParam") {
+  {
+    int i = 123;
+    int result = testFunctionParam([i](char c, bool b) {
+      KJ_EXPECT(c == 'x');
+      KJ_EXPECT(b);
+      KJ_EXPECT(i == 123);
+      return 456;
+    }, 'x', true);
+
+    KJ_EXPECT(result == 456);
+  }
+
+  {
+    int i = 123;
+    auto func = [i](char c, bool b) {
+      KJ_EXPECT(c == 'x');
+      KJ_EXPECT(b);
+      KJ_EXPECT(i == 123);
+      return 456;
+    };
+    int result = testFunctionParam(func, 'x', true);
+    KJ_EXPECT(result == 456);
+  }
+
+  {
+    int i = 123;
+    int result = testFunctionParamRecursive([i](char c, bool b) {
+      KJ_EXPECT(c == 'x');
+      KJ_EXPECT(b);
+      KJ_EXPECT(i == 123);
+      return 456;
+    }, 'x', true);
+
+    KJ_EXPECT(result == 456);
+  }
+}
+
 } // namespace
 } // namespace kj
