@@ -48,6 +48,10 @@ struct TestType {
   int foo(int a, int b) {
     return a + b + callCount++;
   }
+
+  int foo(int c) {
+    return c * 100;
+  }
 };
 
 TEST(Function, Method) {
@@ -60,6 +64,9 @@ TEST(Function, Method) {
   EXPECT_EQ(9u + 2u + 2u, f2(2, 9));
 
   EXPECT_EQ(3, obj.callCount);
+
+  Function<int(int)> f3 = KJ_BIND_METHOD(obj, foo);
+  EXPECT_EQ(12300, f3(123));
 
   // Bind to a temporary.
   f = KJ_BIND_METHOD(TestType(10), foo);

@@ -252,80 +252,42 @@ private:
   };
 };
 
-#if 1
-
 namespace _ {  // private
 
-template <typename T, typename Signature, Signature method>
-class BoundMethod;
-
-template <typename T, typename Return, typename... Params, Return (Decay<T>::*method)(Params...)>
-class BoundMethod<T, Return (Decay<T>::*)(Params...), method> {
+template <typename T, typename Func, typename ConstFunc>
+class BoundMethod {
 public:
-  BoundMethod(T&& t): t(kj::fwd<T>(t)) {}
+  BoundMethod(T&& t, Func&& func, ConstFunc&& constFunc)
+      : t(kj::fwd<T>(t)), func(kj::mv(func)), constFunc(kj::mv(constFunc)) {}
 
-  Return operator()(Params&&... params) {
-    return (t.*method)(kj::fwd<Params>(params)...);
+  template <typename... Params>
+  auto operator()(Params&&... params) {
+    return func(t, kj::fwd<Params>(params)...);
+  }
+  template <typename... Params>
+  auto operator()(Params&&... params) const {
+    return constFunc(t, kj::fwd<Params>(params)...);
   }
 
 private:
   T t;
+  Func func;
+  ConstFunc constFunc;
 };
 
-template <typename T, typename Return, typename... Params,
-          Return (Decay<T>::*method)(Params...) const>
-class BoundMethod<T, Return (Decay<T>::*)(Params...) const, method> {
-public:
-  BoundMethod(T&& t): t(kj::fwd<T>(t)) {}
-
-  Return operator()(Params&&... params) const {
-    return (t.*method)(kj::fwd<Params>(params)...);
-  }
-
-private:
-  T t;
-};
+template <typename T, typename Func, typename ConstFunc>
+BoundMethod<T, Func, ConstFunc> boundMethod(T&& t, Func&& func, ConstFunc&& constFunc) {
+  return { kj::fwd<T>(t), kj::fwd<Func>(func), kj::fwd<ConstFunc>(constFunc) };
+}
 
 }  // namespace _ (private)
 
 #define KJ_BIND_METHOD(obj, method) \
-  ::kj::_::BoundMethod<KJ_DECLTYPE_REF(obj), \
-                       decltype(&::kj::Decay<decltype(obj)>::method), \
-                       &::kj::Decay<decltype(obj)>::method>(obj)
+  ::kj::_::boundMethod(obj, \
+      [](auto& s, auto&&... p) mutable { return s.method(kj::fwd<decltype(p)>(p)...); }, \
+      [](auto& s, auto&&... p) { return s.method(kj::fwd<decltype(p)>(p)...); })
 // Macro that produces a functor object which forwards to the method `obj.name`.  If `obj` is an
 // lvalue, the functor will hold a reference to it.  If `obj` is an rvalue, the functor will
-// contain a copy (by move) of it.
-//
-// The current implementation requires that the method is not overloaded.
-//
-// TODO(someday):  C++14's generic lambdas may be able to simplify this code considerably, and
-//   probably make it work with overloaded methods.
-
-#else
-// Here's a better implementation of the above that doesn't work with GCC (but does with Clang)
-// because it uses a local class with a template method.  Sigh.  This implementation supports
-// overloaded methods.
-
-#define KJ_BIND_METHOD(obj, method) \
-  ({ \
-    typedef KJ_DECLTYPE_REF(obj) T; \
-    class F { \
-    public: \
-      inline F(T&& t): t(::kj::fwd<T>(t)) {} \
-      template <typename... Params> \
-      auto operator()(Params&&... params) \
-          -> decltype(::kj::instance<T>().method(::kj::fwd<Params>(params)...)) { \
-        return t.method(::kj::fwd<Params>(params)...); \
-      } \
-    private: \
-      T t; \
-    }; \
-    (F(obj)); \
-  })
-// Macro that produces a functor object which forwards to the method `obj.name`.  If `obj` is an
-// lvalue, the functor will hold a reference to it.  If `obj` is an rvalue, the functor will
-// contain a copy (by move) of it.
-
-#endif
+// contain a copy (by move) of it. The method is allowed to be overloaded.
 
 }  // namespace kj
