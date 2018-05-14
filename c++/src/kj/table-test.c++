@@ -21,9 +21,24 @@
 
 #include "table.h"
 #include <kj/test.h>
+#include <set>
+#include <unordered_set>
+#include "hash.h"
 
 namespace kj {
 namespace _ {
+
+#if defined(KJ_DEBUG) && !__OPTIMIZE__
+static constexpr uint MEDIUM_PRIME = 619;
+static constexpr uint BIG_PRIME = 6143;
+#else
+static constexpr uint MEDIUM_PRIME = 6143;
+static constexpr uint BIG_PRIME = 101363;
+#endif
+// Some of the tests build large tables. These numbers are used as the table sizes. We use primes
+// to avoid any unintended aliasing affects -- this is probably just paranoia, but why not?
+//
+// We use smaller values for debug builds to keep runtime down.
 
 KJ_TEST("_::tryReserveSize() works") {
   {
@@ -44,13 +59,7 @@ public:
     return a == b;
   }
   uint hashCode(StringPtr str) const {
-    // djb hash with xor
-    // TDOO(soon): Use KJ hash lib.
-    size_t result = 5381;
-    for (char c: str) {
-      result = (result * 33) ^ c;
-    }
-    return result;
+    return kj::hashCode(str);
   }
 };
 
@@ -303,8 +312,8 @@ public:
   }
 };
 
-KJ_TEST("large hash table") {
-  constexpr uint SOME_PRIME = 6143;
+KJ_TEST("benchmark: kj::Table<uint, HashIndex>") {
+  constexpr uint SOME_PRIME = BIG_PRIME;
   constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
 
   for (auto step: STEP) {
@@ -334,6 +343,134 @@ KJ_TEST("large hash table") {
       } else {
         uint value = KJ_ASSERT_NONNULL(table.find(i * 5 + 123));
         KJ_ASSERT(value == i * 5 + 123);
+      }
+    }
+  }
+}
+
+KJ_TEST("benchmark: std::unordered_set<uint>") {
+  constexpr uint SOME_PRIME = BIG_PRIME;
+  constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
+
+  for (auto step: STEP) {
+    KJ_CONTEXT(step);
+    std::unordered_set<uint> table;
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      uint j = (i * step) % SOME_PRIME;
+      table.insert(j * 5 + 123);
+    }
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      auto iter = table.find(i * 5 + 123);
+      KJ_ASSERT(iter != table.end());
+      uint value = *iter;
+      KJ_ASSERT(value == i * 5 + 123);
+      KJ_ASSERT(table.find(i * 5 + 122) == table.end());
+      KJ_ASSERT(table.find(i * 5 + 124) == table.end());
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        KJ_ASSERT(table.erase(i * 5 + 123) > 0);
+      }
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        // erased
+        KJ_ASSERT(table.find(i * 5 + 123) == table.end());
+      } else {
+        auto iter = table.find(i * 5 + 123);
+        KJ_ASSERT(iter != table.end());
+        uint value = *iter;
+        KJ_ASSERT(value == i * 5 + 123);
+      }
+    }
+  }
+}
+
+KJ_TEST("benchmark: kj::Table<StringPtr, HashIndex>") {
+  constexpr uint SOME_PRIME = BIG_PRIME;
+  constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
+
+  kj::Vector<String> strings(SOME_PRIME);
+  for (uint i: kj::zeroTo(SOME_PRIME)) {
+    strings.add(kj::str(i * 5 + 123));
+  }
+
+  for (auto step: STEP) {
+    KJ_CONTEXT(step);
+    Table<StringPtr, HashIndex<StringHasher>> table;
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      uint j = (i * step) % SOME_PRIME;
+      table.insert(strings[j]);
+    }
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      StringPtr value = KJ_ASSERT_NONNULL(table.find(strings[i]));
+      KJ_ASSERT(value == strings[i]);
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        table.erase(KJ_ASSERT_NONNULL(table.find(strings[i])));
+      }
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        // erased
+        KJ_ASSERT(table.find(strings[i]) == nullptr);
+      } else {
+        StringPtr value = KJ_ASSERT_NONNULL(table.find(strings[i]));
+        KJ_ASSERT(value == strings[i]);
+      }
+    }
+  }
+}
+
+struct StlStringHash {
+  inline size_t operator()(StringPtr str) const {
+    return kj::hashCode(str);
+  }
+};
+
+KJ_TEST("benchmark: std::unordered_set<StringPtr>") {
+  constexpr uint SOME_PRIME = BIG_PRIME;
+  constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
+
+  kj::Vector<String> strings(SOME_PRIME);
+  for (uint i: kj::zeroTo(SOME_PRIME)) {
+    strings.add(kj::str(i * 5 + 123));
+  }
+
+  for (auto step: STEP) {
+    KJ_CONTEXT(step);
+    std::unordered_set<StringPtr, StlStringHash> table;
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      uint j = (i * step) % SOME_PRIME;
+      table.insert(strings[j]);
+    }
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      auto iter = table.find(strings[i]);
+      KJ_ASSERT(iter != table.end());
+      StringPtr value = *iter;
+      KJ_ASSERT(value == strings[i]);
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        KJ_ASSERT(table.erase(strings[i]) > 0);
+      }
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        // erased
+        KJ_ASSERT(table.find(strings[i]) == table.end());
+      } else {
+        auto iter = table.find(strings[i]);
+        KJ_ASSERT(iter != table.end());
+        StringPtr value = *iter;
+        KJ_ASSERT(value == strings[i]);
       }
     }
   }
@@ -543,7 +680,7 @@ public:
 };
 
 KJ_TEST("large tree table") {
-  constexpr uint SOME_PRIME = 6143;
+  constexpr uint SOME_PRIME = MEDIUM_PRIME;
   constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
 
   for (auto step: STEP) {
@@ -592,6 +729,166 @@ KJ_TEST("large tree table") {
         }
       }
       KJ_ASSERT(iter == range.end());
+    }
+  }
+}
+
+KJ_TEST("benchmark: kj::Table<uint, TreeIndex>") {
+  constexpr uint SOME_PRIME = BIG_PRIME;
+  constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
+
+  for (auto step: STEP) {
+    KJ_CONTEXT(step);
+    Table<uint, TreeIndex<UintCompare>> table;
+    table.reserve(SOME_PRIME);
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      uint j = (i * step) % SOME_PRIME;
+      table.insert(j * 5 + 123);
+    }
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      uint value = KJ_ASSERT_NONNULL(table.find(i * 5 + 123));
+      KJ_ASSERT(value == i * 5 + 123);
+      KJ_ASSERT(table.find(i * 5 + 122) == nullptr);
+      KJ_ASSERT(table.find(i * 5 + 124) == nullptr);
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        table.erase(KJ_ASSERT_NONNULL(table.find(i * 5 + 123)));
+      }
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        // erased
+        KJ_ASSERT(table.find(i * 5 + 123) == nullptr);
+      } else {
+        uint value = KJ_ASSERT_NONNULL(table.find(i * 5 + 123));
+        KJ_ASSERT(value == i * 5 + 123);
+      }
+    }
+  }
+}
+
+KJ_TEST("benchmark: std::set<uint>") {
+  constexpr uint SOME_PRIME = BIG_PRIME;
+  constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
+
+  for (auto step: STEP) {
+    KJ_CONTEXT(step);
+    std::set<uint> table;
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      uint j = (i * step) % SOME_PRIME;
+      table.insert(j * 5 + 123);
+    }
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      auto iter = table.find(i * 5 + 123);
+      KJ_ASSERT(iter != table.end());
+      uint value = *iter;
+      KJ_ASSERT(value == i * 5 + 123);
+      KJ_ASSERT(table.find(i * 5 + 122) == table.end());
+      KJ_ASSERT(table.find(i * 5 + 124) == table.end());
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        KJ_ASSERT(table.erase(i * 5 + 123) > 0);
+      }
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        // erased
+        KJ_ASSERT(table.find(i * 5 + 123) == table.end());
+      } else {
+        auto iter = table.find(i * 5 + 123);
+        KJ_ASSERT(iter != table.end());
+        uint value = *iter;
+        KJ_ASSERT(value == i * 5 + 123);
+      }
+    }
+  }
+}
+
+KJ_TEST("benchmark: kj::Table<StringPtr, TreeIndex>") {
+  constexpr uint SOME_PRIME = BIG_PRIME;
+  constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
+
+  kj::Vector<String> strings(SOME_PRIME);
+  for (uint i: kj::zeroTo(SOME_PRIME)) {
+    strings.add(kj::str(i * 5 + 123));
+  }
+
+  for (auto step: STEP) {
+    KJ_CONTEXT(step);
+    Table<StringPtr, TreeIndex<StringCompare>> table;
+    table.reserve(SOME_PRIME);
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      uint j = (i * step) % SOME_PRIME;
+      table.insert(strings[j]);
+    }
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      StringPtr value = KJ_ASSERT_NONNULL(table.find(strings[i]));
+      KJ_ASSERT(value == strings[i]);
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        table.erase(KJ_ASSERT_NONNULL(table.find(strings[i])));
+      }
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        // erased
+        KJ_ASSERT(table.find(strings[i]) == nullptr);
+      } else {
+        auto& value = KJ_ASSERT_NONNULL(table.find(strings[i]));
+        KJ_ASSERT(value == strings[i]);
+      }
+    }
+  }
+}
+
+KJ_TEST("benchmark: std::set<StringPtr>") {
+  constexpr uint SOME_PRIME = BIG_PRIME;
+  constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
+
+  kj::Vector<String> strings(SOME_PRIME);
+  for (uint i: kj::zeroTo(SOME_PRIME)) {
+    strings.add(kj::str(i * 5 + 123));
+  }
+
+  for (auto step: STEP) {
+    KJ_CONTEXT(step);
+    std::set<StringPtr> table;
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      uint j = (i * step) % SOME_PRIME;
+      table.insert(strings[j]);
+    }
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      auto iter = table.find(strings[i]);
+      KJ_ASSERT(iter != table.end());
+      StringPtr value = *iter;
+      KJ_ASSERT(value == strings[i]);
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        KJ_ASSERT(table.erase(strings[i]) > 0);
+      }
+    }
+
+    for (uint i: kj::zeroTo(SOME_PRIME)) {
+      if (i % 2 == 0 || i % 7 == 0) {
+        // erased
+        KJ_ASSERT(table.find(strings[i]) == table.end());
+      } else {
+        auto iter = table.find(strings[i]);
+        KJ_ASSERT(iter != table.end());
+        StringPtr value = *iter;
+        KJ_ASSERT(value == strings[i]);
+      }
     }
   }
 }
