@@ -220,8 +220,8 @@ private:
 
   void encodeField(StructSchema::Field field, DynamicValue::Reader input,
                    JsonValue::Builder output) const;
-  void decodeArray(List<JsonValue>::Reader input, DynamicList::Builder output) const;
-  void decodeObject(List<JsonValue::Field>::Reader input, DynamicStruct::Builder output) const;
+  Orphan<DynamicList> decodeArray(List<JsonValue>::Reader input, ListSchema type, Orphanage orphanage) const;
+  void decodeObject(JsonValue::Reader input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const;
   void addTypeHandlerImpl(Type type, HandlerBase& handler);
   void addFieldHandlerImpl(StructSchema::Field field, Type type, HandlerBase& handler);
 };

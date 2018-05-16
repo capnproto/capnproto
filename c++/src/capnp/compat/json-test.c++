@@ -257,19 +257,21 @@ KJ_TEST("decode all types") {
   CASE(R"({"textField":"hello"})", kj::str("hello") == root.getTextField());
   CASE(R"({"dataField":[7,0,122]})",
       kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataField());
-  CASE(R"({"structField":null})", root.hasStructField() == false);
   CASE(R"({"structField":{}})", root.hasStructField() == true);
   CASE(R"({"structField":{}})", root.getStructField().getBoolField() == false);
   CASE(R"({"structField":{"boolField":false}})", root.getStructField().getBoolField() == false);
   CASE(R"({"structField":{"boolField":true}})", root.getStructField().getBoolField() == true);
   CASE(R"({"enumField":"bar"})", root.getEnumField() == TestEnum::BAR);
 
+  CASE_THROW_RECOVERABLE(R"({"structField":null})", "Expected object value");
+  CASE_THROW_RECOVERABLE(R"({"structList":null})", "Expected list value");
+  CASE_THROW_RECOVERABLE(R"({"boolList":null})", "Expected list value");
+  CASE_THROW_RECOVERABLE(R"({"structList":[null]})", "Expected object value");
   CASE_THROW_RECOVERABLE(R"({"int64Field":"177a"})", "String does not contain valid");
   CASE_THROW_RECOVERABLE(R"({"uInt64Field":"177a"})", "String does not contain valid");
   CASE_THROW_RECOVERABLE(R"({"float64Field":"177a"})", "String does not contain valid");
 
   CASE(R"({})", root.hasBoolList() == false);
-  CASE(R"({"boolList":null})", root.hasBoolList() == false);
   CASE(R"({"boolList":[]})", root.hasBoolList() == true);
   CASE(R"({"boolList":[]})", root.getBoolList().size() == 0);
   CASE(R"({"boolList":[false]})", root.getBoolList().size() == 1);
@@ -306,9 +308,7 @@ KJ_TEST("decode all types") {
   CASE(R"({"textList":["hello"]})", kj::str("hello") == root.getTextList()[0]);
   CASE(R"({"dataList":[[7,0,122]]})",
       kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataList()[0]);
-  CASE(R"({"structList":null})", root.hasStructList() == false);
-  CASE(R"({"structList":[null]})", root.hasStructList() == true);
-  CASE(R"({"structList":[null]})", root.getStructList()[0].getBoolField() == false);
+  CASE(R"({"structList":[{}]})", root.hasStructList() == true);
   CASE(R"({"structList":[{}]})", root.getStructList()[0].getBoolField() == false);
   CASE(R"({"structList":[{"boolField":false}]})", root.getStructList()[0].getBoolField() == false);
   CASE(R"({"structList":[{"boolField":true}]})", root.getStructList()[0].getBoolField() == true);
@@ -637,7 +637,7 @@ KJ_TEST("maximum nesting depth") {
   }
 }
 
-class TestHandler: public JsonCodec::Handler<Text> {
+class TestCallHandler: public JsonCodec::Handler<Text> {
 public:
   void encode(const JsonCodec& codec, Text::Reader input,
               JsonValue::Builder output) const override {
@@ -654,31 +654,144 @@ public:
   }
 };
 
-KJ_TEST("register handler") {
+class TestDynamicStructHandler: public JsonCodec::Handler<DynamicStruct> {
+public:
+  void encode(const JsonCodec& codec, DynamicStruct::Reader input,
+              JsonValue::Builder output) const override {
+    auto fields = input.getSchema().getFields();
+    auto items = output.initArray(fields.size());
+    for (auto field: fields) {
+      KJ_REQUIRE(field.getIndex() < items.size());
+      auto item = items[field.getIndex()];
+      if (input.has(field)) {
+        codec.encode(input.get(field), field.getType(), item);
+      } else {
+        item.setNull();
+      }
+    }
+  }
+
+  void decode(const JsonCodec& codec, JsonValue::Reader input,
+              DynamicStruct::Builder output) const override {
+    auto orphanage = Orphanage::getForMessageContaining(output);
+    auto fields = output.getSchema().getFields();
+    auto items = input.getArray();
+    for (auto field: fields) {
+      KJ_REQUIRE(field.getIndex() < items.size());
+      auto item = items[field.getIndex()];
+      if (!item.isNull()) {
+        output.adopt(field, codec.decode(item, field.getType(), orphanage));
+      }
+    }
+  }
+};
+
+class TestStructHandler: public JsonCodec::Handler<test::TestOldVersion> {
+public:
+  void encode(const JsonCodec& codec, test::TestOldVersion::Reader input, JsonValue::Builder output) const override {
+    dynamicHandler.encode(codec, input, output);
+  }
+
+  void decode(const JsonCodec& codec, JsonValue::Reader input, test::TestOldVersion::Builder output) const override {
+    dynamicHandler.decode(codec, input, output);
+  }
+
+private:
+  TestDynamicStructHandler dynamicHandler;
+};
+
+KJ_TEST("register custom encoding handlers") {
+  JsonCodec json;
+
+  TestStructHandler structHandler;
+  json.addTypeHandler(structHandler);
+
+  // JSON decoder can't parse calls back, so test only encoder here
+  TestCallHandler callHandler;
+  json.addTypeHandler(callHandler);
+
   MallocMessageBuilder message;
   auto root = message.getRoot<test::TestOldVersion>();
-
-  TestHandler handler;
-  JsonCodec json;
-  json.addTypeHandler(handler);
-
   root.setOld1(123);
   root.setOld2("foo");
-  KJ_EXPECT(json.encode(root) == "{\"old1\":\"123\",\"old2\":Frob(123,\"foo\")}");
+
+  KJ_EXPECT(json.encode(root) == "[\"123\",Frob(123,\"foo\"),null]");
+}
+
+KJ_TEST("register custom roundtrip handler") {
+  for (auto i = 1; i <= 2; i++) {
+    JsonCodec json;
+    TestStructHandler staticHandler;
+    TestDynamicStructHandler dynamicHandler;
+    kj::String encoded;
+
+    if (i == 1) {
+      // first iteration: test with explicit struct handler
+      json.addTypeHandler(staticHandler);
+    } else {
+      // second iteration: same checks, but with DynamicStruct handler
+      json.addTypeHandler(StructSchema::from<test::TestOldVersion>(), dynamicHandler);
+    }
+
+    {
+      MallocMessageBuilder message;
+      auto root = message.getRoot<test::TestOldVersion>();
+      root.setOld1(123);
+      root.initOld3().setOld2("foo");
+
+      encoded = json.encode(root);
+
+      KJ_EXPECT(encoded == "[\"123\",null,[\"0\",\"foo\",null]]");
+    }
+
+    {
+      MallocMessageBuilder message;
+      auto root = message.getRoot<test::TestOldVersion>();
+      json.decode(encoded, root);
+
+      KJ_EXPECT(root.getOld1() == 123);
+      KJ_EXPECT(!root.hasOld2());
+      auto nested = root.getOld3();
+      KJ_EXPECT(nested.getOld1() == 0);
+      KJ_EXPECT("foo" == nested.getOld2());
+      KJ_EXPECT(!nested.hasOld3());
+    }
+  }
 }
 
 KJ_TEST("register field handler") {
-  MallocMessageBuilder message;
-  auto root = message.getRoot<test::TestOutOfOrder>();
-
-  TestHandler handler;
+  TestStructHandler handler;
   JsonCodec json;
-  json.addFieldHandler(StructSchema::from<test::TestOutOfOrder>().getFieldByName("corge"),
+  json.addFieldHandler(StructSchema::from<test::TestOldVersion>().getFieldByName("old3"),
                        handler);
 
-  root.setBaz("abcd");
-  root.setCorge("efg");
-  KJ_EXPECT(json.encode(root) == "{\"corge\":Frob(123,\"efg\"),\"baz\":\"abcd\"}");
+  kj::String encoded;
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<test::TestOldVersion>();
+    root.setOld1(123);
+    root.setOld2("foo");
+    auto nested = root.initOld3();
+    nested.setOld2("bar");
+
+    encoded = json.encode(root);
+
+    KJ_EXPECT(encoded == "{\"old1\":\"123\",\"old2\":\"foo\",\"old3\":[\"0\",\"bar\",null]}")
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<test::TestOldVersion>();
+    json.decode(encoded, root);
+
+    KJ_EXPECT(root.getOld1() == 123);
+    KJ_EXPECT("foo" == root.getOld2());
+    auto nested = root.getOld3();
+    KJ_EXPECT(nested.getOld1() == 0);
+    KJ_EXPECT("bar" == nested.getOld2());
+    KJ_EXPECT(!nested.hasOld3());
+  }
 }
 
 class TestCapabilityHandler: public JsonCodec::Handler<test::TestInterface> {
@@ -701,29 +814,6 @@ KJ_TEST("register capability handler") {
   TestCapabilityHandler handler;
   JsonCodec json;
   json.addTypeHandler(handler);
-}
-
-class TestDynamicStructHandler: public JsonCodec::Handler<DynamicStruct> {
-public:
-  void encode(const JsonCodec& codec, DynamicStruct::Reader input,
-              JsonValue::Builder output) const override {
-    KJ_UNIMPLEMENTED("TestDynamicStructHandler::encode");
-  }
-
-  void decode(const JsonCodec& codec, JsonValue::Reader input,
-              DynamicStruct::Builder output) const override {
-    KJ_UNIMPLEMENTED("TestDynamicStructHandler::decode");
-  }
-};
-
-
-KJ_TEST("register DynamicStruct handler") {
-  // This test currently only checks that this compiles, which at one point wasn't the caes.
-  // TODO(test): Actually run some code here.
-
-  TestDynamicStructHandler handler;
-  JsonCodec json;
-  json.addTypeHandler(Schema::from<TestAllTypes>(), handler);
 }
 
 }  // namespace
