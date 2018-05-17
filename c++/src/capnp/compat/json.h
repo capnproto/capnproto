@@ -49,7 +49,7 @@ class JsonCodec {
   // - 64-bit integers are encoded as strings, since JSON "numbers" are double-precision floating
   //   points which cannot store a 64-bit integer without losing data.
   // - NaNs and infinite floating point numbers are not allowed by the JSON spec, and so are encoded
-  //   as null. This matches the behavior of `JSON.stringify` in at least Firefox and Chrome.
+  //   as strings.
   // - Data is encoded as an array of numbers in the range [0,255]. You probably want to register
   //   a handler that does something better, like maybe base64 encoding, but there are a zillion
   //   different ways people do this.

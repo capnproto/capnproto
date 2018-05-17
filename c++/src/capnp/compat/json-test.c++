@@ -258,6 +258,8 @@ KJ_TEST("decode all types") {
   CASE_NO_ROUNDTRIP(R"({"float32Field":"-infinity"})", root.getFloat32Field() == -kj::inf());
   CASE_NO_ROUNDTRIP(R"({"float32Field":"INF"})", root.getFloat32Field() == kj::inf());
   CASE_NO_ROUNDTRIP(R"({"float32Field":"-INF"})", root.getFloat32Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":1e39})", root.getFloat32Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":-1e39})", root.getFloat32Field() == -kj::inf());
   CASE_NO_ROUNDTRIP(R"({"float64Field":0})", root.getFloat64Field() == 0);
   CASE(R"({"float64Field":4.5})", root.getFloat64Field() == 4.5);
   CASE_NO_ROUNDTRIP(R"({"float64Field":null})", kj::isNaN(root.getFloat64Field()));
@@ -268,6 +270,8 @@ KJ_TEST("decode all types") {
   CASE_NO_ROUNDTRIP(R"({"float64Field":"-infinity"})", root.getFloat64Field() == -kj::inf());
   CASE_NO_ROUNDTRIP(R"({"float64Field":"INF"})", root.getFloat64Field() == kj::inf());
   CASE_NO_ROUNDTRIP(R"({"float64Field":"-INF"})", root.getFloat64Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":1e309})", root.getFloat64Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":-1e309})", root.getFloat64Field() == -kj::inf());
   CASE(R"({"textField":"hello"})", kj::str("hello") == root.getTextField());
   CASE(R"({"dataField":[7,0,122]})",
       kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataField());
@@ -529,20 +533,6 @@ KJ_TEST("basic json decoding") {
 
     // Leading + not allowed in numbers.
     KJ_EXPECT_THROW_MESSAGE("Unexpected", json.decodeRaw("+123", root));
-  }
-
-  {
-    MallocMessageBuilder message;
-    auto root = message.initRoot<JsonValue>();
-
-    KJ_EXPECT_THROW_MESSAGE("Overflow", json.decodeRaw("1e1024", root));
-  }
-
-  {
-    MallocMessageBuilder message;
-    auto root = message.initRoot<JsonValue>();
-
-    KJ_EXPECT_THROW_MESSAGE("Underflow", json.decodeRaw("1e-1023", root));
   }
 
   {

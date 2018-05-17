@@ -658,19 +658,7 @@ public:
   }
 
   void parseNumber(JsonValue::Builder& output) {
-    auto numberStr = consumeNumber();
-    char *endPtr;
-
-    errno = 0;
-    double value = strtod(numberStr.begin(), &endPtr);
-
-    KJ_ASSERT(endPtr != numberStr.begin(), "strtod should not fail! Is consumeNumber wrong?");
-    KJ_REQUIRE((value != HUGE_VAL && value != -HUGE_VAL) || errno != ERANGE,
-        "Overflow in JSON number.");
-    KJ_REQUIRE(value != 0.0 || errno != ERANGE,
-        "Underflow in JSON number.");
-
-    output.setNumber(value);
+    output.setNumber(consumeNumber().parseAs<double>());
   }
 
   void parseString(JsonValue::Builder& output) {
