@@ -530,6 +530,8 @@ Orphan<DynamicValue> JsonCodec::decode(
       KJ_FAIL_REQUIRE("don't know how to JSON-decode AnyPointer; "
                       "please register a JsonCodec::Handler for this");
   }
+
+  KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT;
 }
 
 // -----------------------------------------------------------------------------
