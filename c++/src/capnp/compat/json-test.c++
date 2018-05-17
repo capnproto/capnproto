@@ -185,13 +185,20 @@ KJ_TEST("encode union") {
 
 KJ_TEST("decode all types") {
   JsonCodec json;
-#define CASE(s, f) \
+  json.setHasMode(HasMode::NON_DEFAULT);
+
+#define CASE_MAYBE_ROUNDTRIP(s, f, roundtrip) \
   { \
     MallocMessageBuilder message; \
     auto root = message.initRoot<TestAllTypes>(); \
-    json.decode(s, root); \
-    KJ_EXPECT((f)) \
+    kj::StringPtr input = s; \
+    json.decode(input, root); \
+    KJ_EXPECT((f), input, root); \
+    auto reencoded = json.encode(root); \
+    KJ_EXPECT(roundtrip == (input == reencoded), roundtrip, input, reencoded); \
   }
+#define CASE_NO_ROUNDTRIP(s, f) CASE_MAYBE_ROUNDTRIP(s, f, false)
+#define CASE(s, f) CASE_MAYBE_ROUNDTRIP(s, f, true)
 #define CASE_THROW(s, errorMessage) \
   { \
     MallocMessageBuilder message; \
@@ -206,60 +213,67 @@ KJ_TEST("decode all types") {
   }
 
   CASE(R"({})", root.getBoolField() == false);
-  CASE(R"({"unknownField":7})", root.getBoolField() == false);
+  CASE_NO_ROUNDTRIP(R"({"unknownField":7})", root.getBoolField() == false);
   CASE(R"({"boolField":true})", root.getBoolField() == true);
   CASE(R"({"int8Field":-128})", root.getInt8Field() == -128);
-  CASE(R"({"int8Field":"127"})", root.getInt8Field() == 127);
+  CASE_NO_ROUNDTRIP(R"({"int8Field":"127"})", root.getInt8Field() == 127);
   CASE_THROW_RECOVERABLE(R"({"int8Field":"-129"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"int8Field":128})", "Value out-of-range");
   CASE(R"({"int16Field":-32768})", root.getInt16Field() == -32768);
-  CASE(R"({"int16Field":"32767"})", root.getInt16Field() == 32767);
+  CASE_NO_ROUNDTRIP(R"({"int16Field":"32767"})", root.getInt16Field() == 32767);
   CASE_THROW_RECOVERABLE(R"({"int16Field":"-32769"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"int16Field":32768})", "Value out-of-range");
   CASE(R"({"int32Field":-2147483648})", root.getInt32Field() == -2147483648);
-  CASE(R"({"int32Field":"2147483647"})", root.getInt32Field() == 2147483647);
-  CASE(R"({"int64Field":-9007199254740992})", root.getInt64Field() == -9007199254740992LL);
-  CASE(R"({"int64Field":9007199254740991})", root.getInt64Field() == 9007199254740991LL);
+  CASE_NO_ROUNDTRIP(R"({"int32Field":"2147483647"})", root.getInt32Field() == 2147483647);
+  CASE_NO_ROUNDTRIP(R"({"int64Field":-9007199254740992})", root.getInt64Field() == -9007199254740992LL);
+  CASE_NO_ROUNDTRIP(R"({"int64Field":9007199254740991})", root.getInt64Field() == 9007199254740991LL);
   CASE(R"({"int64Field":"-9223372036854775808"})", root.getInt64Field() == -9223372036854775808ULL);
   CASE(R"({"int64Field":"9223372036854775807"})", root.getInt64Field() == 9223372036854775807LL);
   CASE_THROW_RECOVERABLE(R"({"int64Field":"-9223372036854775809"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"int64Field":"9223372036854775808"})", "Value out-of-range");
   CASE(R"({"uInt8Field":255})", root.getUInt8Field() == 255);
-  CASE(R"({"uInt8Field":"0"})", root.getUInt8Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"uInt8Field":"0"})", root.getUInt8Field() == 0);
   CASE_THROW_RECOVERABLE(R"({"uInt8Field":"256"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"uInt8Field":-1})", "Value out-of-range");
   CASE(R"({"uInt16Field":65535})", root.getUInt16Field() == 65535);
-  CASE(R"({"uInt16Field":"0"})", root.getUInt16Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"uInt16Field":"0"})", root.getUInt16Field() == 0);
   CASE_THROW_RECOVERABLE(R"({"uInt16Field":"655356"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"uInt16Field":-1})", "Value out-of-range");
   CASE(R"({"uInt32Field":4294967295})", root.getUInt32Field() == 4294967295);
-  CASE(R"({"uInt32Field":"0"})", root.getUInt32Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"uInt32Field":"0"})", root.getUInt32Field() == 0);
   CASE_THROW_RECOVERABLE(R"({"uInt32Field":"42949672956"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"uInt32Field":-1})", "Value out-of-range");
-  CASE(R"({"uInt64Field":9007199254740991})", root.getUInt64Field() == 9007199254740991ULL);
+  CASE_NO_ROUNDTRIP(R"({"uInt64Field":9007199254740991})", root.getUInt64Field() == 9007199254740991ULL);
   CASE(R"({"uInt64Field":"18446744073709551615"})", root.getUInt64Field() == 18446744073709551615ULL);
-  CASE(R"({"uInt64Field":"0"})", root.getUInt64Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"uInt64Field":"0"})", root.getUInt64Field() == 0);
   CASE_THROW_RECOVERABLE(R"({"uInt64Field":"18446744073709551616"})", "Value out-of-range");
-  CASE(R"({"float32Field":0})", root.getFloat32Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"float32Field":0})", root.getFloat32Field() == 0);
   CASE(R"({"float32Field":4.5})", root.getFloat32Field() == 4.5);
-  CASE(R"({"float32Field":null})", kj::isNaN(root.getFloat32Field()));
-  CASE(R"({"float32Field":"nan"})", kj::isNaN(root.getFloat32Field()));
-  CASE(R"({"float32Field":"nan"})", kj::isNaN(root.getFloat32Field()));
+  CASE_NO_ROUNDTRIP(R"({"float32Field":null})", kj::isNaN(root.getFloat32Field()));
+  CASE(R"({"float32Field":"NaN"})", kj::isNaN(root.getFloat32Field()));
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"nan"})", kj::isNaN(root.getFloat32Field()));
   CASE(R"({"float32Field":"Infinity"})", root.getFloat32Field() == kj::inf());
   CASE(R"({"float32Field":"-Infinity"})", root.getFloat32Field() == -kj::inf());
-  CASE(R"({"float64Field":0})", root.getFloat64Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"infinity"})", root.getFloat32Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"-infinity"})", root.getFloat32Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"INF"})", root.getFloat32Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"-INF"})", root.getFloat32Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":0})", root.getFloat64Field() == 0);
   CASE(R"({"float64Field":4.5})", root.getFloat64Field() == 4.5);
-  CASE(R"({"float64Field":null})", kj::isNaN(root.getFloat64Field()));
-  CASE(R"({"float64Field":"nan"})", kj::isNaN(root.getFloat64Field()));
-  CASE(R"({"float64Field":"nan"})", kj::isNaN(root.getFloat64Field()));
+  CASE_NO_ROUNDTRIP(R"({"float64Field":null})", kj::isNaN(root.getFloat64Field()));
+  CASE(R"({"float64Field":"NaN"})", kj::isNaN(root.getFloat64Field()));
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"nan"})", kj::isNaN(root.getFloat64Field()));
   CASE(R"({"float64Field":"Infinity"})", root.getFloat64Field() == kj::inf());
-  CASE(R"({"float64Field":"-Infinity"})", root.getFloat64Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"infinity"})", root.getFloat64Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"-infinity"})", root.getFloat64Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"INF"})", root.getFloat64Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"-INF"})", root.getFloat64Field() == -kj::inf());
   CASE(R"({"textField":"hello"})", kj::str("hello") == root.getTextField());
   CASE(R"({"dataField":[7,0,122]})",
       kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataField());
   CASE(R"({"structField":{}})", root.hasStructField() == true);
   CASE(R"({"structField":{}})", root.getStructField().getBoolField() == false);
-  CASE(R"({"structField":{"boolField":false}})", root.getStructField().getBoolField() == false);
+  CASE_NO_ROUNDTRIP(R"({"structField":{"boolField":false}})", root.getStructField().getBoolField() == false);
   CASE(R"({"structField":{"boolField":true}})", root.getStructField().getBoolField() == true);
   CASE(R"({"enumField":"bar"})", root.getEnumField() == TestEnum::BAR);
 
@@ -278,41 +292,43 @@ KJ_TEST("decode all types") {
   CASE(R"({"boolList":[false]})", root.getBoolList()[0] == false);
   CASE(R"({"boolList":[true]})", root.getBoolList()[0] == true);
   CASE(R"({"int8List":[7]})", root.getInt8List()[0] == 7);
-  CASE(R"({"int8List":["7"]})", root.getInt8List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"int8List":["7"]})", root.getInt8List()[0] == 7);
   CASE(R"({"int16List":[7]})", root.getInt16List()[0] == 7);
-  CASE(R"({"int16List":["7"]})", root.getInt16List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"int16List":["7"]})", root.getInt16List()[0] == 7);
   CASE(R"({"int32List":[7]})", root.getInt32List()[0] == 7);
-  CASE(R"({"int32List":["7"]})", root.getInt32List()[0] == 7);
-  CASE(R"({"int64List":[7]})", root.getInt64List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"int32List":["7"]})", root.getInt32List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"int64List":[7]})", root.getInt64List()[0] == 7);
   CASE(R"({"int64List":["7"]})", root.getInt64List()[0] == 7);
   CASE(R"({"uInt8List":[7]})", root.getUInt8List()[0] == 7);
-  CASE(R"({"uInt8List":["7"]})", root.getUInt8List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"uInt8List":["7"]})", root.getUInt8List()[0] == 7);
   CASE(R"({"uInt16List":[7]})", root.getUInt16List()[0] == 7);
-  CASE(R"({"uInt16List":["7"]})", root.getUInt16List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"uInt16List":["7"]})", root.getUInt16List()[0] == 7);
   CASE(R"({"uInt32List":[7]})", root.getUInt32List()[0] == 7);
-  CASE(R"({"uInt32List":["7"]})", root.getUInt32List()[0] == 7);
-  CASE(R"({"uInt64List":[7]})", root.getUInt64List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"uInt32List":["7"]})", root.getUInt32List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"uInt64List":[7]})", root.getUInt64List()[0] == 7);
   CASE(R"({"uInt64List":["7"]})", root.getUInt64List()[0] == 7);
   CASE(R"({"float32List":[4.5]})", root.getFloat32List()[0] == 4.5);
-  CASE(R"({"float32List":["4.5"]})", root.getFloat32List()[0] == 4.5);
-  CASE(R"({"float32List":[null]})", kj::isNaN(root.getFloat32List()[0]));
-  CASE(R"({"float32List":["nan"]})", kj::isNaN(root.getFloat32List()[0]));
-  CASE(R"({"float32List":["infinity"]})", root.getFloat32List()[0] == kj::inf());
-  CASE(R"({"float32List":["-infinity"]})", root.getFloat32List()[0] == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32List":["4.5"]})", root.getFloat32List()[0] == 4.5);
+  CASE_NO_ROUNDTRIP(R"({"float32List":[null]})", kj::isNaN(root.getFloat32List()[0]));
+  CASE(R"({"float32List":["NaN"]})", kj::isNaN(root.getFloat32List()[0]));
+  CASE(R"({"float32List":["Infinity"]})", root.getFloat32List()[0] == kj::inf());
+  CASE(R"({"float32List":["-Infinity"]})", root.getFloat32List()[0] == -kj::inf());
   CASE(R"({"float64List":[4.5]})", root.getFloat64List()[0] == 4.5);
-  CASE(R"({"float64List":["4.5"]})", root.getFloat64List()[0] == 4.5);
-  CASE(R"({"float64List":[null]})", kj::isNaN(root.getFloat64List()[0]));
-  CASE(R"({"float64List":["nan"]})", kj::isNaN(root.getFloat64List()[0]));
-  CASE(R"({"float64List":["infinity"]})", root.getFloat64List()[0] == kj::inf());
-  CASE(R"({"float64List":["-infinity"]})", root.getFloat64List()[0] == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64List":["4.5"]})", root.getFloat64List()[0] == 4.5);
+  CASE_NO_ROUNDTRIP(R"({"float64List":[null]})", kj::isNaN(root.getFloat64List()[0]));
+  CASE(R"({"float64List":["NaN"]})", kj::isNaN(root.getFloat64List()[0]));
+  CASE(R"({"float64List":["Infinity"]})", root.getFloat64List()[0] == kj::inf());
+  CASE(R"({"float64List":["-Infinity"]})", root.getFloat64List()[0] == -kj::inf());
   CASE(R"({"textList":["hello"]})", kj::str("hello") == root.getTextList()[0]);
   CASE(R"({"dataList":[[7,0,122]]})",
       kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataList()[0]);
   CASE(R"({"structList":[{}]})", root.hasStructList() == true);
   CASE(R"({"structList":[{}]})", root.getStructList()[0].getBoolField() == false);
-  CASE(R"({"structList":[{"boolField":false}]})", root.getStructList()[0].getBoolField() == false);
+  CASE_NO_ROUNDTRIP(R"({"structList":[{"boolField":false}]})", root.getStructList()[0].getBoolField() == false);
   CASE(R"({"structList":[{"boolField":true}]})", root.getStructList()[0].getBoolField() == true);
   CASE(R"({"enumList":["bar"]})", root.getEnumList()[0] == TestEnum::BAR);
+#undef CASE_MAYBE_ROUNDTRIP
+#undef CASE_NO_ROUNDTRIP
 #undef CASE
 #undef CASE_THROW
 #undef CASE_THROW_RECOVERABLE
