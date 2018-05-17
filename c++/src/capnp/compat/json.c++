@@ -498,7 +498,7 @@ Orphan<DynamicValue> JsonCodec::decode(
             KJ_REQUIRE(byte(x) == x, "Number in byte array is not an integer in [0, 255]");
             data[i] = x;
           }
-          return orphan;
+          return kj::mv(orphan);
         }
         default:
           KJ_FAIL_REQUIRE("Expected data value");
@@ -521,7 +521,7 @@ Orphan<DynamicValue> JsonCodec::decode(
       auto structType = type.asStruct();
       auto orphan = orphanage.newOrphan(structType);
       decodeObject(input, structType, orphanage, orphan.get());
-      return orphan;
+      return kj::mv(orphan);
     }
     case schema::Type::INTERFACE:
       KJ_FAIL_REQUIRE("don't know how to JSON-decode capabilities; "
