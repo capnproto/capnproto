@@ -46,6 +46,7 @@
 #include <capnp/compat/json.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <kj/map.h>
 
 #if _WIN32
 #include <process.h>
@@ -1767,17 +1768,16 @@ private:
   // require to function.
 
   struct SourceDirectory {
-    kj::Path path;
     kj::Own<const kj::ReadableDirectory> dir;
     bool isSourcePrefix;
   };
 
-  std::map<kj::PathPtr, SourceDirectory> sourceDirectories;
+  kj::HashMap<kj::Path, SourceDirectory> sourceDirectories;
   // For each import path and source prefix, tracks the directory object we opened for it.
   //
   // Use via getSourceDirectory().
 
-  std::map<const kj::ReadableDirectory*, kj::String> dirPrefixes;
+  kj::HashMap<const kj::ReadableDirectory*, kj::String> dirPrefixes;
   // For each open directory object, maps to a path prefix to add when displaying this path in
   // error messages. This keeps track of the original directory name as given by the user, before
   // canonicalization.
@@ -1827,10 +1827,9 @@ private:
 
     if (path.size() == 0) return disk->getRoot();
 
-    auto iter = sourceDirectories.find(path);
-    if (iter != sourceDirectories.end()) {
-      iter->second.isSourcePrefix = iter->second.isSourcePrefix || isSourcePrefix;
-      return *iter->second.dir;
+    KJ_IF_MAYBE(sdir, sourceDirectories.find(path)) {
+      sdir->isSourcePrefix = sdir->isSourcePrefix || isSourcePrefix;
+      return *sdir->dir;
     }
 
     if (path == cwd) {
@@ -1843,26 +1842,22 @@ private:
       //   getDisplayName().
       auto& result = disk->getCurrent();
       if (isSourcePrefix) {
-        kj::PathPtr key = path;
         kj::Own<const kj::ReadableDirectory> fakeOwn(&result, kj::NullDisposer::instance);
-        KJ_ASSERT(sourceDirectories.insert(std::make_pair(key,
-            SourceDirectory { kj::mv(path), kj::mv(fakeOwn), isSourcePrefix })).second);
+        sourceDirectories.insert(kj::mv(path), { kj::mv(fakeOwn), isSourcePrefix });
       }
       return result;
     }
 
     KJ_IF_MAYBE(dir, disk->getRoot().tryOpenSubdir(path)) {
       auto& result = *dir->get();
-      kj::PathPtr key = path;
-      KJ_ASSERT(sourceDirectories.insert(std::make_pair(key,
-          SourceDirectory { kj::mv(path), kj::mv(*dir), isSourcePrefix })).second);
+      sourceDirectories.insert(kj::mv(path), { kj::mv(*dir), isSourcePrefix });
 #if _WIN32
       kj::String prefix = pathStr.endsWith("/") || pathStr.endsWith("\\")
                         ? kj::str(pathStr) : kj::str(pathStr, '\\');
 #else
       kj::String prefix = pathStr.endsWith("/") ? kj::str(pathStr) : kj::str(pathStr, '/');
 #endif
-      KJ_ASSERT(dirPrefixes.insert(std::make_pair(&result, kj::mv(prefix))).second);
+      dirPrefixes.insert(&result, kj::mv(prefix));
       return result;
     } else {
       return nullptr;
@@ -1883,9 +1878,8 @@ private:
       auto prefix = path.slice(0, i);
       auto remainder = path.slice(i, path.size());
 
-      auto iter = sourceDirectories.find(prefix);
-      if (iter != sourceDirectories.end() && iter->second.isSourcePrefix) {
-        return { *iter->second.dir, remainder.clone() };
+      KJ_IF_MAYBE(sdir, sourceDirectories.find(prefix)) {
+        return { *sdir->dir, remainder.clone() };
       }
     }
 
@@ -1914,9 +1908,8 @@ private:
   }
 
   kj::String getDisplayName(const kj::ReadableDirectory& dir, kj::PathPtr path) {
-    auto iter = dirPrefixes.find(&dir);
-    if (iter != dirPrefixes.end()) {
-      return kj::str(iter->second, path.toNativeString());
+    KJ_IF_MAYBE(prefix, dirPrefixes.find(&dir)) {
+      return kj::str(*prefix, path.toNativeString());
     } else if (&dir == &disk->getRoot()) {
       return path.toNativeString(true);
     } else if (&dir == &disk->getCurrent()) {

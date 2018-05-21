@@ -98,11 +98,10 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 
   SegmentMap* segments = nullptr;
   KJ_IF_MAYBE(s, *lock) {
-    auto iter = s->get()->find(id.value);
-    if (iter != s->get()->end()) {
-      return iter->second;
+    KJ_IF_MAYBE(segment, s->find(id.value)) {
+      return *segment;
     }
-    segments = *s;
+    segments = s;
   }
 
   kj::ArrayPtr<const word> newSegment = message->getSegment(id.value);
@@ -114,15 +113,13 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 
   if (*lock == nullptr) {
     // OK, the segment exists, so allocate the map.
-    auto s = kj::heap<SegmentMap>();
-    segments = s;
-    *lock = kj::mv(s);
+    segments = &lock->emplace();
   }
 
   auto segment = kj::heap<SegmentReader>(
       this, id, newSegment.begin(), newSegmentSize, &readLimiter);
   SegmentReader* result = segment;
-  segments->insert(std::make_pair(id.value, mv(segment)));
+  segments->insert(id.value, kj::mv(segment));
   return result;
 }
 
