@@ -86,7 +86,6 @@ function(_capnp_import_pkg_config_target target)
   find_library(CapnProto_${target}_IMPORTED_LOCATION
     NAMES ${target_name_shared} ${target_name_static}  # prefer libfoo-version.so over libfoo.a
     PATHS ${${target}_LIBRARY_DIRS}
-    NO_DEFAULT_PATH
   )
   if(NOT CapnProto_${target}_IMPORTED_LOCATION)
     # Not an error if the library doesn't exist -- we may have found a lite mode installation.
