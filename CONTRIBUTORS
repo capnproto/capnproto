@@ -17,6 +17,7 @@ Harris Hancock <vortrab@gmail.com>: MSVC support
 Branislav Katreniak <branislav.katreniak@digitalstrom.com>: JSON decode
 Matthew Maurer <matthew.r.maurer@gmail.com>: Canonicalization Support
 David Renshaw <david@sandstorm.io>: bugfixes and miscellaneous maintenance
+Ingvar Stepanyan <me@rreverser.com> <ingvar@cloudflare.com>: Custom handlers for JSON decode
 
 This file does not list people who maintain their own Cap'n Proto
 implementations as separate projects.  Those people are awesome too!  :)
