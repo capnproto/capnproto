@@ -185,13 +185,20 @@ KJ_TEST("encode union") {
 
 KJ_TEST("decode all types") {
   JsonCodec json;
-#define CASE(s, f) \
+  json.setHasMode(HasMode::NON_DEFAULT);
+
+#define CASE_MAYBE_ROUNDTRIP(s, f, roundtrip) \
   { \
     MallocMessageBuilder message; \
     auto root = message.initRoot<TestAllTypes>(); \
-    json.decode(s, root); \
-    KJ_EXPECT((f)) \
+    kj::StringPtr input = s; \
+    json.decode(input, root); \
+    KJ_EXPECT((f), input, root); \
+    auto reencoded = json.encode(root); \
+    KJ_EXPECT(roundtrip == (input == reencoded), roundtrip, input, reencoded); \
   }
+#define CASE_NO_ROUNDTRIP(s, f) CASE_MAYBE_ROUNDTRIP(s, f, false)
+#define CASE(s, f) CASE_MAYBE_ROUNDTRIP(s, f, true)
 #define CASE_THROW(s, errorMessage) \
   { \
     MallocMessageBuilder message; \
@@ -206,113 +213,126 @@ KJ_TEST("decode all types") {
   }
 
   CASE(R"({})", root.getBoolField() == false);
-  CASE(R"({"unknownField":7})", root.getBoolField() == false);
+  CASE_NO_ROUNDTRIP(R"({"unknownField":7})", root.getBoolField() == false);
   CASE(R"({"boolField":true})", root.getBoolField() == true);
   CASE(R"({"int8Field":-128})", root.getInt8Field() == -128);
-  CASE(R"({"int8Field":"127"})", root.getInt8Field() == 127);
+  CASE_NO_ROUNDTRIP(R"({"int8Field":"127"})", root.getInt8Field() == 127);
   CASE_THROW_RECOVERABLE(R"({"int8Field":"-129"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"int8Field":128})", "Value out-of-range");
   CASE(R"({"int16Field":-32768})", root.getInt16Field() == -32768);
-  CASE(R"({"int16Field":"32767"})", root.getInt16Field() == 32767);
+  CASE_NO_ROUNDTRIP(R"({"int16Field":"32767"})", root.getInt16Field() == 32767);
   CASE_THROW_RECOVERABLE(R"({"int16Field":"-32769"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"int16Field":32768})", "Value out-of-range");
   CASE(R"({"int32Field":-2147483648})", root.getInt32Field() == -2147483648);
-  CASE(R"({"int32Field":"2147483647"})", root.getInt32Field() == 2147483647);
-  CASE(R"({"int64Field":-9007199254740992})", root.getInt64Field() == -9007199254740992LL);
-  CASE(R"({"int64Field":9007199254740991})", root.getInt64Field() == 9007199254740991LL);
+  CASE_NO_ROUNDTRIP(R"({"int32Field":"2147483647"})", root.getInt32Field() == 2147483647);
+  CASE_NO_ROUNDTRIP(R"({"int64Field":-9007199254740992})", root.getInt64Field() == -9007199254740992LL);
+  CASE_NO_ROUNDTRIP(R"({"int64Field":9007199254740991})", root.getInt64Field() == 9007199254740991LL);
   CASE(R"({"int64Field":"-9223372036854775808"})", root.getInt64Field() == -9223372036854775808ULL);
   CASE(R"({"int64Field":"9223372036854775807"})", root.getInt64Field() == 9223372036854775807LL);
   CASE_THROW_RECOVERABLE(R"({"int64Field":"-9223372036854775809"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"int64Field":"9223372036854775808"})", "Value out-of-range");
   CASE(R"({"uInt8Field":255})", root.getUInt8Field() == 255);
-  CASE(R"({"uInt8Field":"0"})", root.getUInt8Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"uInt8Field":"0"})", root.getUInt8Field() == 0);
   CASE_THROW_RECOVERABLE(R"({"uInt8Field":"256"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"uInt8Field":-1})", "Value out-of-range");
   CASE(R"({"uInt16Field":65535})", root.getUInt16Field() == 65535);
-  CASE(R"({"uInt16Field":"0"})", root.getUInt16Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"uInt16Field":"0"})", root.getUInt16Field() == 0);
   CASE_THROW_RECOVERABLE(R"({"uInt16Field":"655356"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"uInt16Field":-1})", "Value out-of-range");
   CASE(R"({"uInt32Field":4294967295})", root.getUInt32Field() == 4294967295);
-  CASE(R"({"uInt32Field":"0"})", root.getUInt32Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"uInt32Field":"0"})", root.getUInt32Field() == 0);
   CASE_THROW_RECOVERABLE(R"({"uInt32Field":"42949672956"})", "Value out-of-range");
   CASE_THROW_RECOVERABLE(R"({"uInt32Field":-1})", "Value out-of-range");
-  CASE(R"({"uInt64Field":9007199254740991})", root.getUInt64Field() == 9007199254740991ULL);
+  CASE_NO_ROUNDTRIP(R"({"uInt64Field":9007199254740991})", root.getUInt64Field() == 9007199254740991ULL);
   CASE(R"({"uInt64Field":"18446744073709551615"})", root.getUInt64Field() == 18446744073709551615ULL);
-  CASE(R"({"uInt64Field":"0"})", root.getUInt64Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"uInt64Field":"0"})", root.getUInt64Field() == 0);
   CASE_THROW_RECOVERABLE(R"({"uInt64Field":"18446744073709551616"})", "Value out-of-range");
-  CASE(R"({"float32Field":0})", root.getFloat32Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"float32Field":0})", root.getFloat32Field() == 0);
   CASE(R"({"float32Field":4.5})", root.getFloat32Field() == 4.5);
-  CASE(R"({"float32Field":null})", kj::isNaN(root.getFloat32Field()));
-  CASE(R"({"float32Field":"nan"})", kj::isNaN(root.getFloat32Field()));
-  CASE(R"({"float32Field":"nan"})", kj::isNaN(root.getFloat32Field()));
+  CASE_NO_ROUNDTRIP(R"({"float32Field":null})", kj::isNaN(root.getFloat32Field()));
+  CASE(R"({"float32Field":"NaN"})", kj::isNaN(root.getFloat32Field()));
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"nan"})", kj::isNaN(root.getFloat32Field()));
   CASE(R"({"float32Field":"Infinity"})", root.getFloat32Field() == kj::inf());
   CASE(R"({"float32Field":"-Infinity"})", root.getFloat32Field() == -kj::inf());
-  CASE(R"({"float64Field":0})", root.getFloat64Field() == 0);
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"infinity"})", root.getFloat32Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"-infinity"})", root.getFloat32Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"INF"})", root.getFloat32Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":"-INF"})", root.getFloat32Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":1e39})", root.getFloat32Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32Field":-1e39})", root.getFloat32Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":0})", root.getFloat64Field() == 0);
   CASE(R"({"float64Field":4.5})", root.getFloat64Field() == 4.5);
-  CASE(R"({"float64Field":null})", kj::isNaN(root.getFloat64Field()));
-  CASE(R"({"float64Field":"nan"})", kj::isNaN(root.getFloat64Field()));
-  CASE(R"({"float64Field":"nan"})", kj::isNaN(root.getFloat64Field()));
+  CASE_NO_ROUNDTRIP(R"({"float64Field":null})", kj::isNaN(root.getFloat64Field()));
+  CASE(R"({"float64Field":"NaN"})", kj::isNaN(root.getFloat64Field()));
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"nan"})", kj::isNaN(root.getFloat64Field()));
   CASE(R"({"float64Field":"Infinity"})", root.getFloat64Field() == kj::inf());
-  CASE(R"({"float64Field":"-Infinity"})", root.getFloat64Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"infinity"})", root.getFloat64Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"-infinity"})", root.getFloat64Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"INF"})", root.getFloat64Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":"-INF"})", root.getFloat64Field() == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":1e309})", root.getFloat64Field() == kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64Field":-1e309})", root.getFloat64Field() == -kj::inf());
   CASE(R"({"textField":"hello"})", kj::str("hello") == root.getTextField());
   CASE(R"({"dataField":[7,0,122]})",
       kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataField());
-  CASE(R"({"structField":null})", root.hasStructField() == false);
   CASE(R"({"structField":{}})", root.hasStructField() == true);
   CASE(R"({"structField":{}})", root.getStructField().getBoolField() == false);
-  CASE(R"({"structField":{"boolField":false}})", root.getStructField().getBoolField() == false);
+  CASE_NO_ROUNDTRIP(R"({"structField":{"boolField":false}})", root.getStructField().getBoolField() == false);
   CASE(R"({"structField":{"boolField":true}})", root.getStructField().getBoolField() == true);
   CASE(R"({"enumField":"bar"})", root.getEnumField() == TestEnum::BAR);
 
+  CASE_THROW_RECOVERABLE(R"({"structField":null})", "Expected object value");
+  CASE_THROW_RECOVERABLE(R"({"structList":null})", "Expected list value");
+  CASE_THROW_RECOVERABLE(R"({"boolList":null})", "Expected list value");
+  CASE_THROW_RECOVERABLE(R"({"structList":[null]})", "Expected object value");
   CASE_THROW_RECOVERABLE(R"({"int64Field":"177a"})", "String does not contain valid");
   CASE_THROW_RECOVERABLE(R"({"uInt64Field":"177a"})", "String does not contain valid");
   CASE_THROW_RECOVERABLE(R"({"float64Field":"177a"})", "String does not contain valid");
 
   CASE(R"({})", root.hasBoolList() == false);
-  CASE(R"({"boolList":null})", root.hasBoolList() == false);
   CASE(R"({"boolList":[]})", root.hasBoolList() == true);
   CASE(R"({"boolList":[]})", root.getBoolList().size() == 0);
   CASE(R"({"boolList":[false]})", root.getBoolList().size() == 1);
   CASE(R"({"boolList":[false]})", root.getBoolList()[0] == false);
   CASE(R"({"boolList":[true]})", root.getBoolList()[0] == true);
   CASE(R"({"int8List":[7]})", root.getInt8List()[0] == 7);
-  CASE(R"({"int8List":["7"]})", root.getInt8List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"int8List":["7"]})", root.getInt8List()[0] == 7);
   CASE(R"({"int16List":[7]})", root.getInt16List()[0] == 7);
-  CASE(R"({"int16List":["7"]})", root.getInt16List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"int16List":["7"]})", root.getInt16List()[0] == 7);
   CASE(R"({"int32List":[7]})", root.getInt32List()[0] == 7);
-  CASE(R"({"int32List":["7"]})", root.getInt32List()[0] == 7);
-  CASE(R"({"int64List":[7]})", root.getInt64List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"int32List":["7"]})", root.getInt32List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"int64List":[7]})", root.getInt64List()[0] == 7);
   CASE(R"({"int64List":["7"]})", root.getInt64List()[0] == 7);
   CASE(R"({"uInt8List":[7]})", root.getUInt8List()[0] == 7);
-  CASE(R"({"uInt8List":["7"]})", root.getUInt8List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"uInt8List":["7"]})", root.getUInt8List()[0] == 7);
   CASE(R"({"uInt16List":[7]})", root.getUInt16List()[0] == 7);
-  CASE(R"({"uInt16List":["7"]})", root.getUInt16List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"uInt16List":["7"]})", root.getUInt16List()[0] == 7);
   CASE(R"({"uInt32List":[7]})", root.getUInt32List()[0] == 7);
-  CASE(R"({"uInt32List":["7"]})", root.getUInt32List()[0] == 7);
-  CASE(R"({"uInt64List":[7]})", root.getUInt64List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"uInt32List":["7"]})", root.getUInt32List()[0] == 7);
+  CASE_NO_ROUNDTRIP(R"({"uInt64List":[7]})", root.getUInt64List()[0] == 7);
   CASE(R"({"uInt64List":["7"]})", root.getUInt64List()[0] == 7);
   CASE(R"({"float32List":[4.5]})", root.getFloat32List()[0] == 4.5);
-  CASE(R"({"float32List":["4.5"]})", root.getFloat32List()[0] == 4.5);
-  CASE(R"({"float32List":[null]})", kj::isNaN(root.getFloat32List()[0]));
-  CASE(R"({"float32List":["nan"]})", kj::isNaN(root.getFloat32List()[0]));
-  CASE(R"({"float32List":["infinity"]})", root.getFloat32List()[0] == kj::inf());
-  CASE(R"({"float32List":["-infinity"]})", root.getFloat32List()[0] == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float32List":["4.5"]})", root.getFloat32List()[0] == 4.5);
+  CASE_NO_ROUNDTRIP(R"({"float32List":[null]})", kj::isNaN(root.getFloat32List()[0]));
+  CASE(R"({"float32List":["NaN"]})", kj::isNaN(root.getFloat32List()[0]));
+  CASE(R"({"float32List":["Infinity"]})", root.getFloat32List()[0] == kj::inf());
+  CASE(R"({"float32List":["-Infinity"]})", root.getFloat32List()[0] == -kj::inf());
   CASE(R"({"float64List":[4.5]})", root.getFloat64List()[0] == 4.5);
-  CASE(R"({"float64List":["4.5"]})", root.getFloat64List()[0] == 4.5);
-  CASE(R"({"float64List":[null]})", kj::isNaN(root.getFloat64List()[0]));
-  CASE(R"({"float64List":["nan"]})", kj::isNaN(root.getFloat64List()[0]));
-  CASE(R"({"float64List":["infinity"]})", root.getFloat64List()[0] == kj::inf());
-  CASE(R"({"float64List":["-infinity"]})", root.getFloat64List()[0] == -kj::inf());
+  CASE_NO_ROUNDTRIP(R"({"float64List":["4.5"]})", root.getFloat64List()[0] == 4.5);
+  CASE_NO_ROUNDTRIP(R"({"float64List":[null]})", kj::isNaN(root.getFloat64List()[0]));
+  CASE(R"({"float64List":["NaN"]})", kj::isNaN(root.getFloat64List()[0]));
+  CASE(R"({"float64List":["Infinity"]})", root.getFloat64List()[0] == kj::inf());
+  CASE(R"({"float64List":["-Infinity"]})", root.getFloat64List()[0] == -kj::inf());
   CASE(R"({"textList":["hello"]})", kj::str("hello") == root.getTextList()[0]);
   CASE(R"({"dataList":[[7,0,122]]})",
       kj::heapArray<byte>({7,0,122}).asPtr() == root.getDataList()[0]);
-  CASE(R"({"structList":null})", root.hasStructList() == false);
-  CASE(R"({"structList":[null]})", root.hasStructList() == true);
-  CASE(R"({"structList":[null]})", root.getStructList()[0].getBoolField() == false);
+  CASE(R"({"structList":[{}]})", root.hasStructList() == true);
   CASE(R"({"structList":[{}]})", root.getStructList()[0].getBoolField() == false);
-  CASE(R"({"structList":[{"boolField":false}]})", root.getStructList()[0].getBoolField() == false);
+  CASE_NO_ROUNDTRIP(R"({"structList":[{"boolField":false}]})", root.getStructList()[0].getBoolField() == false);
   CASE(R"({"structList":[{"boolField":true}]})", root.getStructList()[0].getBoolField() == true);
   CASE(R"({"enumList":["bar"]})", root.getEnumList()[0] == TestEnum::BAR);
+#undef CASE_MAYBE_ROUNDTRIP
+#undef CASE_NO_ROUNDTRIP
 #undef CASE
 #undef CASE_THROW
 #undef CASE_THROW_RECOVERABLE
@@ -519,20 +539,6 @@ KJ_TEST("basic json decoding") {
     MallocMessageBuilder message;
     auto root = message.initRoot<JsonValue>();
 
-    KJ_EXPECT_THROW_MESSAGE("Overflow", json.decodeRaw("1e1024", root));
-  }
-
-  {
-    MallocMessageBuilder message;
-    auto root = message.initRoot<JsonValue>();
-
-    KJ_EXPECT_THROW_MESSAGE("Underflow", json.decodeRaw("1e-1023", root));
-  }
-
-  {
-    MallocMessageBuilder message;
-    auto root = message.initRoot<JsonValue>();
-
     KJ_EXPECT_THROW_MESSAGE("Unexpected", json.decodeRaw("[00]", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected", json.decodeRaw("[01]", root));
   }
@@ -637,7 +643,7 @@ KJ_TEST("maximum nesting depth") {
   }
 }
 
-class TestHandler: public JsonCodec::Handler<Text> {
+class TestCallHandler: public JsonCodec::Handler<Text> {
 public:
   void encode(const JsonCodec& codec, Text::Reader input,
               JsonValue::Builder output) const override {
@@ -654,31 +660,144 @@ public:
   }
 };
 
-KJ_TEST("register handler") {
+class TestDynamicStructHandler: public JsonCodec::Handler<DynamicStruct> {
+public:
+  void encode(const JsonCodec& codec, DynamicStruct::Reader input,
+              JsonValue::Builder output) const override {
+    auto fields = input.getSchema().getFields();
+    auto items = output.initArray(fields.size());
+    for (auto field: fields) {
+      KJ_REQUIRE(field.getIndex() < items.size());
+      auto item = items[field.getIndex()];
+      if (input.has(field)) {
+        codec.encode(input.get(field), field.getType(), item);
+      } else {
+        item.setNull();
+      }
+    }
+  }
+
+  void decode(const JsonCodec& codec, JsonValue::Reader input,
+              DynamicStruct::Builder output) const override {
+    auto orphanage = Orphanage::getForMessageContaining(output);
+    auto fields = output.getSchema().getFields();
+    auto items = input.getArray();
+    for (auto field: fields) {
+      KJ_REQUIRE(field.getIndex() < items.size());
+      auto item = items[field.getIndex()];
+      if (!item.isNull()) {
+        output.adopt(field, codec.decode(item, field.getType(), orphanage));
+      }
+    }
+  }
+};
+
+class TestStructHandler: public JsonCodec::Handler<test::TestOldVersion> {
+public:
+  void encode(const JsonCodec& codec, test::TestOldVersion::Reader input, JsonValue::Builder output) const override {
+    dynamicHandler.encode(codec, input, output);
+  }
+
+  void decode(const JsonCodec& codec, JsonValue::Reader input, test::TestOldVersion::Builder output) const override {
+    dynamicHandler.decode(codec, input, output);
+  }
+
+private:
+  TestDynamicStructHandler dynamicHandler;
+};
+
+KJ_TEST("register custom encoding handlers") {
+  JsonCodec json;
+
+  TestStructHandler structHandler;
+  json.addTypeHandler(structHandler);
+
+  // JSON decoder can't parse calls back, so test only encoder here
+  TestCallHandler callHandler;
+  json.addTypeHandler(callHandler);
+
   MallocMessageBuilder message;
   auto root = message.getRoot<test::TestOldVersion>();
-
-  TestHandler handler;
-  JsonCodec json;
-  json.addTypeHandler(handler);
-
   root.setOld1(123);
   root.setOld2("foo");
-  KJ_EXPECT(json.encode(root) == "{\"old1\":\"123\",\"old2\":Frob(123,\"foo\")}");
+
+  KJ_EXPECT(json.encode(root) == "[\"123\",Frob(123,\"foo\"),null]");
+}
+
+KJ_TEST("register custom roundtrip handler") {
+  for (auto i = 1; i <= 2; i++) {
+    JsonCodec json;
+    TestStructHandler staticHandler;
+    TestDynamicStructHandler dynamicHandler;
+    kj::String encoded;
+
+    if (i == 1) {
+      // first iteration: test with explicit struct handler
+      json.addTypeHandler(staticHandler);
+    } else {
+      // second iteration: same checks, but with DynamicStruct handler
+      json.addTypeHandler(StructSchema::from<test::TestOldVersion>(), dynamicHandler);
+    }
+
+    {
+      MallocMessageBuilder message;
+      auto root = message.getRoot<test::TestOldVersion>();
+      root.setOld1(123);
+      root.initOld3().setOld2("foo");
+
+      encoded = json.encode(root);
+
+      KJ_EXPECT(encoded == "[\"123\",null,[\"0\",\"foo\",null]]");
+    }
+
+    {
+      MallocMessageBuilder message;
+      auto root = message.getRoot<test::TestOldVersion>();
+      json.decode(encoded, root);
+
+      KJ_EXPECT(root.getOld1() == 123);
+      KJ_EXPECT(!root.hasOld2());
+      auto nested = root.getOld3();
+      KJ_EXPECT(nested.getOld1() == 0);
+      KJ_EXPECT("foo" == nested.getOld2());
+      KJ_EXPECT(!nested.hasOld3());
+    }
+  }
 }
 
 KJ_TEST("register field handler") {
-  MallocMessageBuilder message;
-  auto root = message.getRoot<test::TestOutOfOrder>();
-
-  TestHandler handler;
+  TestStructHandler handler;
   JsonCodec json;
-  json.addFieldHandler(StructSchema::from<test::TestOutOfOrder>().getFieldByName("corge"),
+  json.addFieldHandler(StructSchema::from<test::TestOldVersion>().getFieldByName("old3"),
                        handler);
 
-  root.setBaz("abcd");
-  root.setCorge("efg");
-  KJ_EXPECT(json.encode(root) == "{\"corge\":Frob(123,\"efg\"),\"baz\":\"abcd\"}");
+  kj::String encoded;
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<test::TestOldVersion>();
+    root.setOld1(123);
+    root.setOld2("foo");
+    auto nested = root.initOld3();
+    nested.setOld2("bar");
+
+    encoded = json.encode(root);
+
+    KJ_EXPECT(encoded == "{\"old1\":\"123\",\"old2\":\"foo\",\"old3\":[\"0\",\"bar\",null]}")
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<test::TestOldVersion>();
+    json.decode(encoded, root);
+
+    KJ_EXPECT(root.getOld1() == 123);
+    KJ_EXPECT("foo" == root.getOld2());
+    auto nested = root.getOld3();
+    KJ_EXPECT(nested.getOld1() == 0);
+    KJ_EXPECT("bar" == nested.getOld2());
+    KJ_EXPECT(!nested.hasOld3());
+  }
 }
 
 class TestCapabilityHandler: public JsonCodec::Handler<test::TestInterface> {
@@ -701,29 +820,6 @@ KJ_TEST("register capability handler") {
   TestCapabilityHandler handler;
   JsonCodec json;
   json.addTypeHandler(handler);
-}
-
-class TestDynamicStructHandler: public JsonCodec::Handler<DynamicStruct> {
-public:
-  void encode(const JsonCodec& codec, DynamicStruct::Reader input,
-              JsonValue::Builder output) const override {
-    KJ_UNIMPLEMENTED("TestDynamicStructHandler::encode");
-  }
-
-  void decode(const JsonCodec& codec, JsonValue::Reader input,
-              DynamicStruct::Builder output) const override {
-    KJ_UNIMPLEMENTED("TestDynamicStructHandler::decode");
-  }
-};
-
-
-KJ_TEST("register DynamicStruct handler") {
-  // This test currently only checks that this compiles, which at one point wasn't the caes.
-  // TODO(test): Actually run some code here.
-
-  TestDynamicStructHandler handler;
-  JsonCodec json;
-  json.addTypeHandler(Schema::from<TestAllTypes>(), handler);
 }
 
 }  // namespace
