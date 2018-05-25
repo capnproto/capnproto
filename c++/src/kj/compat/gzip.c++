@@ -29,12 +29,6 @@ namespace kj {
 namespace _ {  // private
 
 GzipOutputContext::GzipOutputContext(kj::Maybe<int> compressionLevel) {
-  memset(&ctx, 0, sizeof(ctx));
-  ctx.next_in = nullptr;
-  ctx.avail_in = 0;
-  ctx.next_out = nullptr;
-  ctx.avail_out = 0;
-
   int initResult;
 
   KJ_IF_MAYBE(level, compressionLevel) {
@@ -91,12 +85,6 @@ void GzipOutputContext::fail(int result) {
 
 GzipInputStream::GzipInputStream(InputStream& inner)
     : inner(inner) {
-  memset(&ctx, 0, sizeof(ctx));
-  ctx.next_in = nullptr;
-  ctx.avail_in = 0;
-  ctx.next_out = nullptr;
-  ctx.avail_out = 0;
-
   // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
   KJ_ASSERT(inflateInit2(&ctx, 15 + 16) == Z_OK);
 }
@@ -180,12 +168,6 @@ void GzipOutputStream::pump(int flush) {
 
 GzipAsyncInputStream::GzipAsyncInputStream(AsyncInputStream& inner)
     : inner(inner) {
-  memset(&ctx, 0, sizeof(ctx));
-  ctx.next_in = nullptr;
-  ctx.avail_in = 0;
-  ctx.next_out = nullptr;
-  ctx.avail_out = 0;
-
   // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
   KJ_ASSERT(inflateInit2(&ctx, 15 + 16) == Z_OK);
 }

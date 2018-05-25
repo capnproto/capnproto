@@ -41,7 +41,7 @@ public:
 
 private:
   bool compressing;
-  z_stream ctx;
+  z_stream ctx = {};
   byte buffer[4096];
 
   void fail(int result);
@@ -59,7 +59,7 @@ public:
 
 private:
   InputStream& inner;
-  z_stream ctx;
+  z_stream ctx = {};
   bool atValidEndpoint = false;
 
   byte buffer[4096];
@@ -102,7 +102,7 @@ public:
 
 private:
   AsyncInputStream& inner;
-  z_stream ctx;
+  z_stream ctx = {};
   bool atValidEndpoint = false;
 
   byte buffer[4096];
