@@ -226,7 +226,7 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
 
 // =======================================================================================
 
-GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel)
+GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, kj::Maybe<int> compressionLevel)
     : inner(inner) {
   memset(&ctx, 0, sizeof(ctx));
   ctx.next_in = nullptr;
@@ -234,27 +234,34 @@ GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compr
   ctx.next_out = nullptr;
   ctx.avail_out = 0;
 
-  int initResult =
-      deflateInit2(&ctx, compressionLevel, Z_DEFLATED,
+  int initResult;
+  KJ_IF_MAYBE(level, compressionLevel) {
+    compressing = true;
+    initResult =
+      deflateInit2(&ctx, *level, Z_DEFLATED,
                    15 + 16,  // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
                    8,        // memLevel = 8 (the default)
                    Z_DEFAULT_STRATEGY);
-  KJ_ASSERT(initResult == Z_OK, initResult);
+  } else {
+    compressing = false;
+    initResult = inflateInit2(&ctx, 15 + 16);
+  }
+  if (initResult != Z_OK) {
+    fail(initResult);
+  }
 }
 
 GzipAsyncOutputStream::~GzipAsyncOutputStream() noexcept(false) {
-  deflateEnd(&ctx);
+  compressing ? deflateEnd(&ctx) : inflateEnd(&ctx);
 }
 
 Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
   ctx.next_in = const_cast<byte*>(reinterpret_cast<const byte*>(in));
   ctx.avail_in = size;
-  return pump();
+  return pump(Z_NO_FLUSH);
 }
 
 Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  KJ_REQUIRE(!ended, "already ended");
-
   if (pieces.size() == 0) return kj::READY_NOW;
   return write(pieces[0].begin(), pieces[0].size())
       .then([this,pieces]() {
@@ -262,50 +269,39 @@ Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> 
   });
 }
 
+Promise<void> GzipAsyncOutputStream::flush() {
+  return pump(Z_SYNC_FLUSH);
+}
+
 Promise<void> GzipAsyncOutputStream::end() {
-  KJ_REQUIRE(!ended, "already ended");
+  return pump(Z_FINISH);
+}
 
-  ctx.next_out = buffer;
-  ctx.avail_out = sizeof(buffer);
-
-  auto deflateResult = deflate(&ctx, Z_FINISH);
-  if (deflateResult == Z_OK || deflateResult == Z_STREAM_END) {
-    size_t n = sizeof(buffer) - ctx.avail_out;
-    auto promise = inner.write(buffer, n);
-    if (deflateResult == Z_OK) {
-      return promise.then([this]() { return end(); });
-    } else {
-      ended = true;
-      return promise;
-    }
+void GzipAsyncOutputStream::fail(int result) {
+  if (ctx.msg == nullptr) {
+    KJ_FAIL_REQUIRE("gzip failed", result);
   } else {
-    if (ctx.msg == nullptr) {
-      KJ_FAIL_REQUIRE("gzip compression failed", deflateResult);
-    } else {
-      KJ_FAIL_REQUIRE("gzip compression failed", ctx.msg);
-    }
+    KJ_FAIL_REQUIRE("gzip failed", ctx.msg);
   }
 }
 
-kj::Promise<void> GzipAsyncOutputStream::pump() {
-  if (ctx.avail_in == 0) {
-    return kj::READY_NOW;
-  }
-
+kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
   ctx.next_out = buffer;
   ctx.avail_out = sizeof(buffer);
 
-  auto deflateResult = deflate(&ctx, Z_NO_FLUSH);
-  if (deflateResult == Z_OK) {
-    size_t n = sizeof(buffer) - ctx.avail_out;
-    return inner.write(buffer, n)
-        .then([this]() { return pump(); });
+  auto result = compressing ? deflate(&ctx, flush) : inflate(&ctx, flush);
+  if (result != Z_OK && result != Z_BUF_ERROR && result != Z_STREAM_END) {
+    fail(result);
+  }
+  size_t n = sizeof(buffer) - ctx.avail_out;
+  auto promise = inner.write(buffer, n);
+  if (result == Z_OK) {
+    return promise.then([this, flush]() { return pump(flush); });
   } else {
-    if (ctx.msg == nullptr) {
-      KJ_FAIL_REQUIRE("gzip compression failed", deflateResult);
-    } else {
-      KJ_FAIL_REQUIRE("gzip compression failed", ctx.msg);
-    }
+    // - Z_STREAM_END means we have finished the stream successfully.
+    // - Z_BUF_ERROR means we didn't have any more input to process
+    //   (but had to make a call nevertheless to potentially flush data).
+    return promise;
   }
 }
 

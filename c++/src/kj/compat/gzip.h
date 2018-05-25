@@ -83,26 +83,35 @@ private:
 
 class GzipAsyncOutputStream final: public AsyncOutputStream {
 public:
-  GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
+  GzipAsyncOutputStream(AsyncOutputStream& inner, kj::Maybe<int> compressionLevel = Z_DEFAULT_COMPRESSION);
   ~GzipAsyncOutputStream() noexcept(false);
   KJ_DISALLOW_COPY(GzipAsyncOutputStream);
+  GzipAsyncOutputStream(GzipAsyncOutputStream&&) = default;
+
+  static inline GzipAsyncOutputStream Decompress(AsyncOutputStream& inner) {
+    return GzipAsyncOutputStream(inner, nullptr);
+  }
 
   Promise<void> write(const void* buffer, size_t size) override;
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 
+  Promise<void> flush();
+  // Call if you need to flush a stream at an arbitrary data point.
+
   Promise<void> end();
-  // Must call to flush the stream, since some data may be buffered.
+  // Must call to flush and finish the stream, since some data may be buffered.
   //
   // TODO(cleanup): This should be a virtual method on AsyncOutputStream.
 
 private:
   AsyncOutputStream& inner;
-  bool ended = false;
+  bool compressing;
   z_stream ctx;
 
   byte buffer[4096];
 
-  kj::Promise<void> pump();
+  kj::Promise<void> pump(int flush);
+  void fail(int result);
 };
 
 }  // namespace kj
