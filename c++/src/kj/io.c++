@@ -28,6 +28,7 @@
 #include "miniposix.h"
 #include <algorithm>
 #include <errno.h>
+#include "vector.h"
 
 #if _WIN32
 #ifndef NOMINMAX
@@ -64,6 +65,43 @@ void InputStream::skip(size_t bytes) {
     read(scratch, amount);
     bytes -= amount;
   }
+}
+
+
+namespace {
+
+Array<byte> readAll(InputStream& input, bool nulTerminate) {
+  Vector<Array<byte>> parts;
+  constexpr size_t BLOCK_SIZE = 4096;
+
+  for (;;) {
+    auto part = heapArray<byte>(BLOCK_SIZE);
+    size_t n = input.tryRead(part.begin(), part.size(), part.size());
+    if (n < part.size()) {
+      auto result = heapArray<byte>(parts.size() * BLOCK_SIZE + n + nulTerminate);
+      byte* pos = result.begin();
+      for (auto& p: parts) {
+        memcpy(pos, p.begin(), BLOCK_SIZE);
+        pos += BLOCK_SIZE;
+      }
+      memcpy(pos, part.begin(), n);
+      pos += n;
+      if (nulTerminate) *pos++ = '\0';
+      KJ_ASSERT(pos == result.end());
+      return result;
+    } else {
+      parts.add(kj::mv(part));
+    }
+  }
+}
+
+}  // namespace
+
+String InputStream::readAllText() {
+  return String(readAll(*this, true).releaseAsChars());
+}
+Array<byte> InputStream::readAllBytes() {
+  return readAll(*this, false);
 }
 
 void OutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {

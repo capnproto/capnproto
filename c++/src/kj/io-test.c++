@@ -112,5 +112,41 @@ KJ_TEST("VectorOutputStream") {
   KJ_ASSERT(output.getWriteBuffer().begin() == output.getArray().begin() + 40);
 }
 
+class MockInputStream: public InputStream {
+public:
+  MockInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
+      : bytes(bytes), blockSize(blockSize) {}
+
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    // Clamp max read to blockSize.
+    size_t n = kj::min(blockSize, maxBytes);
+
+    // Unless that's less than minBytes -- in which case, use minBytes.
+    n = kj::max(n, minBytes);
+
+    // But also don't read more data than we have.
+    n = kj::min(n, bytes.size());
+
+    memcpy(buffer, bytes.begin(), n);
+    bytes = bytes.slice(n, bytes.size());
+    return n;
+  }
+
+private:
+  kj::ArrayPtr<const byte> bytes;
+  size_t blockSize;
+};
+
+KJ_TEST("InputStream::readAllText()") {
+  auto bigText = strArray(kj::repeat("foo bar baz"_kj, 12345), ",");
+  size_t blockSizes[] = { 1, 4, 256, bigText.size() };
+
+  for (size_t blockSize: blockSizes) {
+    KJ_CONTEXT(blockSize);
+    MockInputStream input(bigText.asBytes(), blockSize);
+    KJ_EXPECT(input.readAllText() == bigText);
+  }
+}
+
 }  // namespace
 }  // namespace kj
