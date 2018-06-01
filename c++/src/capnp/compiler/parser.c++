@@ -432,12 +432,14 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                     initLocation(location, builder);
                     return result;
                   }),
-              p::transform(stringLiteral,
-                  [this](Located<Text::Reader>&& value) -> Orphan<Expression> {
+              p::transform(p::oneOrMore(stringLiteral),
+                  [this](kj::Array<Located<Text::Reader>>&& value) -> Orphan<Expression> {
                     auto result = orphanage.newOrphan<Expression>();
                     auto builder = result.get();
-                    builder.setString(value.value);
-                    value.copyLocationTo(builder);
+                    builder.setString(kj::strArray(
+                        KJ_MAP(part, value) { return part.value; }, ""));
+                    builder.setStartByte(value.front().startByte);
+                    builder.setEndByte(value.back().endByte);
                     return result;
                   }),
               p::transform(binaryLiteral,
