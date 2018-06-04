@@ -31,9 +31,40 @@ namespace {
 
 constexpr auto ALPHAS = parse::charRange('a', 'z').orRange('A', 'Z');
 constexpr auto DIGITS = parse::charRange('0', '9');
+
 constexpr auto END_AUTHORITY = parse::anyOfChars("/?#");
-constexpr auto END_PATH_PART = parse::anyOfChars("/?#");
-constexpr auto END_QUERY_PART = parse::anyOfChars("&#");
+
+// Authority, path, and query components can typically be terminated by the start of a fragment.
+// However, fragments are disallowed in HTTP_REQUEST and HTTP_PROXY_REQUEST contexts. As a quirk, we
+// allow the fragment start character ('#') to live unescaped in path and query components. We do
+// not currently allow it in the authority component, because our parser would reject it as a host
+// character anyway.
+
+const parse::CharGroup_& getEndPathPart(Url::Context context) {
+  static constexpr auto END_PATH_PART_HREF = parse::anyOfChars("/?#");
+  static constexpr auto END_PATH_PART_REQUEST = parse::anyOfChars("/?");
+
+  switch (context) {
+    case Url::REMOTE_HREF:        return END_PATH_PART_HREF;
+    case Url::HTTP_PROXY_REQUEST: return END_PATH_PART_REQUEST;
+    case Url::HTTP_REQUEST:       return END_PATH_PART_REQUEST;
+  }
+
+  KJ_UNREACHABLE;
+}
+
+const parse::CharGroup_& getEndQueryPart(Url::Context context) {
+  static constexpr auto END_QUERY_PART_HREF = parse::anyOfChars("&#");
+  static constexpr auto END_QUERY_PART_REQUEST = parse::anyOfChars("&");
+
+  switch (context) {
+    case Url::REMOTE_HREF:        return END_QUERY_PART_HREF;
+    case Url::HTTP_PROXY_REQUEST: return END_QUERY_PART_REQUEST;
+    case Url::HTTP_REQUEST:       return END_QUERY_PART_REQUEST;
+  }
+
+  KJ_UNREACHABLE;
+}
 
 constexpr auto SCHEME_CHARS = ALPHAS.orGroup(DIGITS).orAny("+-.");
 constexpr auto NOT_SCHEME_CHARS = SCHEME_CHARS.invert();
@@ -138,6 +169,9 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
   Url result;
   result.options = options;
   bool err = false;  // tracks percent-decoding errors
+
+  auto& END_PATH_PART = getEndPathPart(context);
+  auto& END_QUERY_PART = getEndQueryPart(context);
 
   if (context == HTTP_REQUEST) {
     if (!text.startsWith("/")) {
@@ -250,6 +284,9 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
   Url result;
   result.options = options;
   bool err = false;  // tracks percent-decoding errors
+
+  auto& END_PATH_PART = getEndPathPart(Url::REMOTE_HREF);
+  auto& END_QUERY_PART = getEndQueryPart(Url::REMOTE_HREF);
 
   // scheme
   {

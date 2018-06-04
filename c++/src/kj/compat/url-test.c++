@@ -400,6 +400,58 @@ KJ_TEST("URL for HTTP request") {
     KJ_EXPECT(url.query[1].name == "corge");
     KJ_EXPECT(url.query[1].value == nullptr);
   }
+
+  {
+    // '#' is allowed in path components in the HTTP_REQUEST context.
+    Url url = Url::parse("/foo#bar", Url::HTTP_REQUEST);
+    KJ_EXPECT(url.toString(Url::HTTP_REQUEST) == "/foo%23bar");
+    KJ_EXPECT(url.scheme == nullptr);
+    KJ_EXPECT(url.host == nullptr);
+    KJ_EXPECT(url.path.asPtr() == kj::ArrayPtr<const StringPtr>{"foo#bar"});
+    KJ_EXPECT(!url.hasTrailingSlash);
+    KJ_EXPECT(url.query == nullptr);
+    KJ_EXPECT(url.fragment == nullptr);
+  }
+
+  {
+    // '#' is allowed in path components in the HTTP_PROXY_REQUEST context.
+    Url url = Url::parse("https://capnproto.org/foo#bar", Url::HTTP_PROXY_REQUEST);
+    KJ_EXPECT(url.toString(Url::HTTP_PROXY_REQUEST) == "https://capnproto.org/foo%23bar");
+    KJ_EXPECT(url.scheme == "https");
+    KJ_EXPECT(url.host == "capnproto.org");
+    KJ_EXPECT(url.path.asPtr() == kj::ArrayPtr<const StringPtr>{"foo#bar"});
+    KJ_EXPECT(!url.hasTrailingSlash);
+    KJ_EXPECT(url.query == nullptr);
+    KJ_EXPECT(url.fragment == nullptr);
+  }
+
+  {
+    // '#' is allowed in query components in the HTTP_REQUEST context.
+    Url url = Url::parse("/?foo=bar#123", Url::HTTP_REQUEST);
+    KJ_EXPECT(url.toString(Url::HTTP_REQUEST) == "/?foo=bar%23123");
+    KJ_EXPECT(url.scheme == nullptr);
+    KJ_EXPECT(url.host == nullptr);
+    KJ_EXPECT(url.path == nullptr);
+    KJ_EXPECT(url.hasTrailingSlash);
+    KJ_ASSERT(url.query.size() == 1);
+    KJ_EXPECT(url.query[0].name == "foo");
+    KJ_EXPECT(url.query[0].value == "bar#123");
+    KJ_EXPECT(url.fragment == nullptr);
+  }
+
+  {
+    // '#' is allowed in query components in the HTTP_PROXY_REQUEST context.
+    Url url = Url::parse("https://capnproto.org/?foo=bar#123", Url::HTTP_PROXY_REQUEST);
+    KJ_EXPECT(url.toString(Url::HTTP_PROXY_REQUEST) == "https://capnproto.org/?foo=bar%23123");
+    KJ_EXPECT(url.scheme == "https");
+    KJ_EXPECT(url.host == "capnproto.org");
+    KJ_EXPECT(url.path == nullptr);
+    KJ_EXPECT(url.hasTrailingSlash);
+    KJ_ASSERT(url.query.size() == 1);
+    KJ_EXPECT(url.query[0].name == "foo");
+    KJ_EXPECT(url.query[0].value == "bar#123");
+    KJ_EXPECT(url.fragment == nullptr);
+  }
 }
 
 KJ_TEST("parse URL failure") {
@@ -413,9 +465,8 @@ KJ_TEST("parse URL failure") {
 
   // components not valid in context
   KJ_EXPECT(Url::tryParse("https://capnproto.org/foo", Url::HTTP_REQUEST) == nullptr);
-  KJ_EXPECT(Url::tryParse("/foo#bar", Url::HTTP_REQUEST) == nullptr);
   KJ_EXPECT(Url::tryParse("https://bob:123@capnproto.org/foo", Url::HTTP_PROXY_REQUEST) == nullptr);
-  KJ_EXPECT(Url::tryParse("https://capnproto.org/foo#bar", Url::HTTP_PROXY_REQUEST) == nullptr);
+  KJ_EXPECT(Url::tryParse("https://capnproto.org#/foo", Url::HTTP_PROXY_REQUEST) == nullptr);
 }
 
 void parseAndCheckRelative(kj::StringPtr base, kj::StringPtr relative, kj::StringPtr expected,
