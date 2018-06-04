@@ -21,10 +21,47 @@
 
 #pragma once
 
+#include <kj/io.h>
 #include <kj/async-io.h>
 #include <zlib.h>
 
 namespace kj {
+
+class GzipInputStream final: public InputStream {
+public:
+  GzipInputStream(InputStream& inner);
+  ~GzipInputStream() noexcept(false);
+  KJ_DISALLOW_COPY(GzipInputStream);
+
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+
+private:
+  InputStream& inner;
+  z_stream ctx;
+  bool atValidEndpoint = false;
+
+  byte buffer[4096];
+
+  size_t readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
+};
+
+class GzipOutputStream final: public OutputStream {
+public:
+  GzipOutputStream(OutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
+  ~GzipOutputStream() noexcept(false);
+  KJ_DISALLOW_COPY(GzipOutputStream);
+
+  void write(const void* buffer, size_t size) override;
+  using OutputStream::write;
+
+private:
+  OutputStream& inner;
+  z_stream ctx;
+
+  byte buffer[4096];
+
+  void pump();
+};
 
 class GzipAsyncInputStream final: public AsyncInputStream {
 public:

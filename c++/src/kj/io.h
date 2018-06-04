@@ -65,6 +65,10 @@ public:
   virtual void skip(size_t bytes);
   // Skips past the given number of bytes, discarding them.  The default implementation read()s
   // into a scratch buffer.
+
+  String readAllText();
+  Array<byte> readAllBytes();
+  // Read until EOF and return as one big byte array or string.
 };
 
 class OutputStream {
