@@ -1072,7 +1072,7 @@ public:
     // Returns whether we can cleanly drain the stream at this point.
     if (onMessageDone != nullptr) return false;
     snarfBufferedLineBreak();
-    return !lineBreakBeforeNextHeader && leftover != nullptr;
+    return !lineBreakBeforeNextHeader && leftover == nullptr;
   }
 
   kj::Promise<kj::ArrayPtr<char>> readMessageHeaders() {
