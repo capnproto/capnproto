@@ -376,7 +376,7 @@ private:
       // Write the first piece.
       auto promise = output.write(writeBuffer.begin(), writeBuffer.size());
 
-      // Write full pieces as a singcle gather-write.
+      // Write full pieces as a single gather-write.
       if (i > 0) {
         auto more = morePieces.slice(0, i);
         promise = promise.then([&output,more]() { return output.write(more); });
