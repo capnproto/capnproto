@@ -667,7 +667,7 @@ struct HttpServerSettings {
   // completes, we'll let the connection stay open to handle more requests.
 };
 
-class HttpServer: private kj::TaskSet::ErrorHandler {
+class HttpServer final: private kj::TaskSet::ErrorHandler {
   // Class which listens for requests on ports or connections and sends them to an HttpService.
 
 public:
