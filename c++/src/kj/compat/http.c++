@@ -1879,8 +1879,8 @@ public:
 
     if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
 
-    auto header = kj::str(size, "\r\n");
-    auto partsBuilder = kj::heapArrayBuilder<ArrayPtr<const byte>>(pieces.size());
+    auto header = kj::str(kj::hex(size), "\r\n");
+    auto partsBuilder = kj::heapArrayBuilder<ArrayPtr<const byte>>(pieces.size() + 2);
     partsBuilder.add(header.asBytes());
     for (auto& piece: pieces) {
       partsBuilder.add(piece);
@@ -1897,7 +1897,7 @@ public:
       // Hey, we know exactly how large the input is, so we can write just one chunk.
 
       uint64_t length = kj::min(amount, *l);
-      inner.writeBodyData(kj::str(length, "\r\n"));
+      inner.writeBodyData(kj::str(kj::hex(length), "\r\n"));
       return inner.pumpBodyFrom(input, length)
           .then([this,length](uint64_t actual) {
         if (actual < length) {
