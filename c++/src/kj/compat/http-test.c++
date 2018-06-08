@@ -903,6 +903,86 @@ KJ_TEST("HttpClient canceled write") {
   KJ_EXPECT(text == "POST / HTTP/1.1\r\nContent-Length: 4096\r\n\r\n", text);
 }
 
+KJ_TEST("HttpClient chunked body gather-write") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto serverPromise = pipe.ends[1]->readAllText();
+
+  {
+    HttpHeaderTable table;
+    auto client = newHttpClient(table, *pipe.ends[0]);
+
+    auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table));
+
+    kj::ArrayPtr<const byte> bodyParts[] = {
+      { 'f','o','o' }, { ' ' }, { 'b','a','r' }, { ' ' }, { 'b','a','z' }
+    };
+
+    req.body->write(kj::arrayPtr(bodyParts, kj::size(bodyParts))).wait(waitScope);
+    req.body = nullptr;
+
+    // Wait for a response so the client has a chance to end the request body with a 0-chunk.
+    kj::StringPtr responseText = "HTTP/1.1 204 No Content\r\n\r\n";
+    pipe.ends[1]->write(responseText.begin(), responseText.size()).wait(waitScope);
+    auto response = req.response.wait(waitScope);
+  }
+
+  pipe.ends[0]->shutdownWrite();
+
+  auto text = serverPromise.wait(waitScope);
+  KJ_EXPECT(text == "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
+                    "b\r\nfoo bar baz\r\n0\r\n\r\n", text);
+}
+
+KJ_TEST("HttpClient chunked body pump from fixed length stream") {
+  class FixedBodyStream final: public kj::AsyncInputStream {
+    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      auto n = kj::min(body.size(), maxBytes);
+      n = kj::max(n, minBytes);
+      n = kj::min(n, body.size());
+      memcpy(buffer, body.begin(), n);
+      body = body.slice(n);
+      return n;
+    }
+
+    Maybe<uint64_t> tryGetLength() override { return body.size(); }
+
+    kj::StringPtr body = "foo bar baz";
+  };
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto serverPromise = pipe.ends[1]->readAllText();
+
+  {
+    HttpHeaderTable table;
+    auto client = newHttpClient(table, *pipe.ends[0]);
+
+    auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table));
+
+    FixedBodyStream bodyStream;
+    bodyStream.pumpTo(*req.body).wait(waitScope);
+    req.body = nullptr;
+
+    // Wait for a response so the client has a chance to end the request body with a 0-chunk.
+    kj::StringPtr responseText = "HTTP/1.1 204 No Content\r\n\r\n";
+    pipe.ends[1]->write(responseText.begin(), responseText.size()).wait(waitScope);
+    auto response = req.response.wait(waitScope);
+  }
+
+  pipe.ends[0]->shutdownWrite();
+
+  auto text = serverPromise.wait(waitScope);
+  KJ_EXPECT(text == "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
+                    "b\r\nfoo bar baz\r\n0\r\n\r\n", text);
+}
+
 KJ_TEST("HttpServer requests") {
   HttpResponseTestCase RESPONSE = {
     "HTTP/1.1 200 OK\r\n"
