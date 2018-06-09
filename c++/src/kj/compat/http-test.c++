@@ -918,7 +918,9 @@ KJ_TEST("HttpClient chunked body gather-write") {
     auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table));
 
     kj::ArrayPtr<const byte> bodyParts[] = {
-      { 'f','o','o' }, { ' ' }, { 'b','a','r' }, { ' ' }, { 'b','a','z' }
+      "foo"_kj.asBytes(), " "_kj.asBytes(),
+      "bar"_kj.asBytes(), " "_kj.asBytes(),
+      "baz"_kj.asBytes()
     };
 
     req.body->write(kj::arrayPtr(bodyParts, kj::size(bodyParts))).wait(waitScope);
