@@ -50,6 +50,7 @@ matrix:
             - llvm-toolchain-trusty-3.6
           packages:
             - clang-3.6
+            - libc++-dev     # clang-3.6 can't compile C++14 against libstdc++, apparently.
       env:
         - MATRIX_CC=clang-3.6
         - MATRIX_CXX=clang++-3.6
