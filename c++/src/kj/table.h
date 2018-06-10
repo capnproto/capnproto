@@ -887,7 +887,7 @@ KJ_ALWAYS_INLINE(void compilerBarrier()) {
   // writes that occur after this call. We need this in a couple places below to prevent C++
   // strict aliasing rules from breaking things.
 #if _MSC_VER
-  _ReadWriteBarrier()
+  _ReadWriteBarrier();
 #else
   __asm__ __volatile__("": : :"memory");
 #endif

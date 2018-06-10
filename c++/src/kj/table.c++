@@ -26,7 +26,7 @@
 namespace kj {
 namespace _ {
 
-static constexpr uint lg(uint value) {
+static inline uint lg(uint value) {
   // Compute floor(log2(value)).
   return sizeof(uint) * 8 - 1 - __builtin_clz(value);
 }

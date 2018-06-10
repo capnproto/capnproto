@@ -223,7 +223,6 @@ public:
   }
 
   FunctionParam(const FunctionParam& other) = default;
-  FunctionParam(FunctionParam& other) = default;
   FunctionParam(FunctionParam&& other) = default;
   // Magically, a plain copy works.
 
