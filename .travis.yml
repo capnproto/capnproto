@@ -71,7 +71,7 @@ matrix:
     # Mac. We only test Clang because Mac builds are expensive for Travis and probably any
     # compiler-specific problems will be caught on the Linux matrix anyway.
     - os: osx
-      osx_image: xcode8
+      osx_image: xcode9.3
       env:
         - MATRIX_CC=clang
         - MATRIX_CXX=clang++
