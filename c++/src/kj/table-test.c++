@@ -893,5 +893,109 @@ KJ_TEST("benchmark: std::set<StringPtr>") {
   }
 }
 
+// =======================================================================================
+
+KJ_TEST("insertion order index") {
+  Table<uint, InsertionOrderIndex> table;
+
+  {
+    auto range = table.ordered();
+    KJ_EXPECT(range.begin() == range.end());
+  }
+
+  table.insert(12);
+  table.insert(34);
+  table.insert(56);
+  table.insert(78);
+
+  {
+    auto range = table.ordered();
+    auto iter = range.begin();
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 12);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 34);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 56);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 78);
+    KJ_EXPECT(iter == range.end());
+    KJ_EXPECT(*--iter == 78);
+    KJ_EXPECT(*--iter == 56);
+    KJ_EXPECT(*--iter == 34);
+    KJ_EXPECT(*--iter == 12);
+    KJ_EXPECT(iter == range.begin());
+  }
+
+  table.erase(table.begin()[1]);
+
+  {
+    auto range = table.ordered();
+    auto iter = range.begin();
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 12);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 56);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 78);
+    KJ_EXPECT(iter == range.end());
+    KJ_EXPECT(*--iter == 78);
+    KJ_EXPECT(*--iter == 56);
+    KJ_EXPECT(*--iter == 12);
+    KJ_EXPECT(iter == range.begin());
+  }
+
+  // Allocate enough more elements to cause a resize.
+  table.insert(111);
+  table.insert(222);
+  table.insert(333);
+  table.insert(444);
+  table.insert(555);
+  table.insert(666);
+  table.insert(777);
+  table.insert(888);
+  table.insert(999);
+
+  {
+    auto range = table.ordered();
+    auto iter = range.begin();
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 12);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 56);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 78);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 111);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 222);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 333);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 444);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 555);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 666);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 777);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 888);
+    KJ_ASSERT(iter != range.end());
+    KJ_EXPECT(*iter++ == 999);
+    KJ_EXPECT(iter == range.end());
+  }
+
+  // Remove everything.
+  while (table.size() > 0) {
+    table.erase(*table.begin());
+  }
+
+  {
+    auto range = table.ordered();
+    KJ_EXPECT(range.begin() == range.end());
+  }
+}
+
 }  // namespace kj
 }  // namespace _

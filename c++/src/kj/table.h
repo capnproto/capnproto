@@ -1388,4 +1388,95 @@ private:
   }
 };
 
+// -----------------------------------------------------------------------------
+// Insertion order index
+
+class InsertionOrderIndex {
+  // Table index which allows iterating over elements in order of insertion. This index cannot
+  // be used for Table::find(), but can be used for Table::ordered().
+
+  struct Link;
+public:
+  InsertionOrderIndex();
+  ~InsertionOrderIndex() noexcept(false);
+
+  class Iterator {
+  public:
+    Iterator(const Link* links, uint pos)
+        : links(links), pos(pos) {}
+
+    inline size_t operator*() const {
+      KJ_IREQUIRE(pos != 0, "can't derefrence end() iterator");
+      return pos - 1;
+    };
+
+    inline Iterator& operator++() {
+      pos = links[pos].next;
+      return *this;
+    }
+    inline Iterator operator++(int) {
+      Iterator result = *this;
+      ++*this;
+      return result;
+    }
+    inline Iterator& operator--() {
+      pos = links[pos].prev;
+      return *this;
+    }
+    inline Iterator operator--(int) {
+      Iterator result = *this;
+      --*this;
+      return result;
+    }
+
+    inline bool operator==(const Iterator& other) const {
+      return pos == other.pos;
+    }
+    inline bool operator!=(const Iterator& other) const {
+      return pos != other.pos;
+    }
+
+  private:
+    const Link* links;
+    uint pos;
+  };
+
+  void reserve(size_t size);
+  void clear();
+  inline Iterator begin() const { return Iterator(links, links[0].next); }
+  inline Iterator end() const { return Iterator(links, 0); }
+
+  template <typename Row>
+  kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos) {
+    return insertImpl(pos);
+  }
+
+  template <typename Row>
+  void erase(kj::ArrayPtr<Row> table, size_t pos) {
+    eraseImpl(pos);
+  }
+
+  template <typename Row>
+  void move(kj::ArrayPtr<Row> table, size_t oldPos, size_t newPos) {
+    return moveImpl(oldPos, newPos);
+  }
+
+private:
+  struct Link {
+    uint next;
+    uint prev;
+  };
+
+  uint capacity;
+  Link* links;
+  // links[0] is special: links[0].next points to the first link, links[0].prev points to the last.
+  // links[n+1] corresponds no row n.
+
+  kj::Maybe<size_t> insertImpl(size_t pos);
+  void eraseImpl(size_t pos);
+  void moveImpl(size_t oldPos, size_t newPos);
+
+  static const Link EMPTY_LINK;
+};
+
 } // namespace kj

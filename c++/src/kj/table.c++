@@ -721,4 +721,90 @@ void BTreeImpl::Parent::eraseAfter(uint i) {
 }
 
 }  // namespace _
+
+// =======================================================================================
+// Insertion order
+
+const InsertionOrderIndex::Link InsertionOrderIndex::EMPTY_LINK = { 0, 0 };
+
+InsertionOrderIndex::InsertionOrderIndex(): capacity(0), links(const_cast<Link*>(&EMPTY_LINK)) {}
+InsertionOrderIndex::~InsertionOrderIndex() noexcept(false) {
+  if (links != &EMPTY_LINK) delete links;
+}
+
+void InsertionOrderIndex::reserve(size_t size) {
+  KJ_ASSERT(size < (1u << 31), "Table too big for InsertionOrderIndex");
+
+  if (size > capacity) {
+    // Need to grow.
+    // Note that `size` and `capacity` do not include the special link[0].
+
+    // Round up to the next power of 2.
+    size_t allocation = 1u << (_::lg(size) + 1);
+    KJ_DASSERT(allocation > size);
+    KJ_DASSERT(allocation <= size * 2);
+
+    // Round first allocation up to 8.
+    allocation = kj::max(allocation, 8);
+
+    Link* newLinks = new Link[allocation];
+#ifdef KJ_DEBUG
+    // To catch bugs, fill unused links with 0xff.
+    memset(newLinks, 0xff, allocation * sizeof(Link));
+#endif
+    _::acopy(newLinks, links, capacity + 1);
+    if (links != &EMPTY_LINK) delete[] links;
+    links = newLinks;
+    capacity = allocation - 1;
+  }
+}
+
+void InsertionOrderIndex::clear() {
+  links[0] = Link { 0, 0 };
+
+#ifdef KJ_DEBUG
+  // To catch bugs, fill unused links with 0xff.
+  memset(links + 1, 0xff, capacity * sizeof(Link));
+#endif
+}
+
+kj::Maybe<size_t> InsertionOrderIndex::insertImpl(size_t pos) {
+  if (pos >= capacity) {
+    reserve(pos + 1);
+  }
+
+  links[pos + 1].prev = links[0].prev;
+  links[pos + 1].next = 0;
+  links[links[0].prev].next = pos + 1;
+  links[0].prev = pos + 1;
+
+  return nullptr;
+}
+
+void InsertionOrderIndex::eraseImpl(size_t pos) {
+  Link& link = links[pos + 1];
+  links[link.next].prev = link.prev;
+  links[link.prev].next = link.next;
+
+#ifdef KJ_DEBUG
+  memset(&link, 0xff, sizeof(Link));
+#endif
+}
+
+void InsertionOrderIndex::moveImpl(size_t oldPos, size_t newPos) {
+  Link& link = links[oldPos + 1];
+  Link& newLink = links[newPos + 1];
+
+  newLink = link;
+
+  KJ_DASSERT(links[link.next].prev == oldPos + 1);
+  KJ_DASSERT(links[link.prev].next == oldPos + 1);
+  links[link.next].prev = newPos + 1;
+  links[link.prev].next = newPos + 1;
+
+#ifdef KJ_DEBUG
+  memset(&link, 0xff, sizeof(Link));
+#endif
+}
+
 }  // namespace kj
