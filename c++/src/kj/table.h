@@ -277,7 +277,7 @@ class TreeIndex;
 //   class Callbacks {
 //   public:
 //     bool isBefore(const Row&, const Row&) const;
-//     // Returns true if the row on te left comes before the row on the right.
+//     // Returns true if the row on the left comes before the row on the right.
 //
 //     bool matches(const Row&, const Row&) const;
 //     // Returns true if the rows "match".
@@ -932,7 +932,7 @@ public:
   BTreeImpl();
   ~BTreeImpl() noexcept(false);
 
-  void logInconsitency() const;
+  void logInconsistency() const;
 
   void reserve(size_t size);
 
@@ -1470,7 +1470,7 @@ private:
   uint capacity;
   Link* links;
   // links[0] is special: links[0].next points to the first link, links[0].prev points to the last.
-  // links[n+1] corresponds no row n.
+  // links[n+1] corresponds to row n.
 
   kj::Maybe<size_t> insertImpl(size_t pos);
   void eraseImpl(size_t pos);

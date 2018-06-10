@@ -172,7 +172,7 @@ size_t BTreeImpl::verifyNode(size_t size, FunctionParam<bool(uint, uint)>& f,
   }
 }
 
-void BTreeImpl::logInconsitency() const {
+void BTreeImpl::logInconsistency() const {
   KJ_LOG(ERROR,
       "BTreeIndex detected tree state inconsistency. This can happen if you create a kj::Table "
       "with a b-tree index and you modify the rows in the table post-indexing in a way that would "
@@ -437,7 +437,7 @@ void BTreeImpl::erase(uint row, const SearchKey& searchKey) {
         *fixup = leaf.rows[r - 1];
       }
     } else {
-      logInconsitency();
+      logInconsistency();
     }
   }
 }
@@ -535,7 +535,7 @@ void BTreeImpl::renumber(uint oldRow, uint newRow, const SearchKey& searchKey) {
     if (leaf.rows[r] == oldRow) {
       leaf.rows[r] = newRow;
     } else {
-      logInconsitency();
+      logInconsistency();
     }
   }
 }
