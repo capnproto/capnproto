@@ -3,12 +3,6 @@ branches:
   - master
   - /release-.*/
 language: cpp
-os:
-  - linux
-  - osx
-compiler:
-  - gcc
-  - clang
 dist: trusty
 sudo: false
 addons:
@@ -19,3 +13,58 @@ addons:
       - libtool
       - pkg-config
 script: ./super-test.sh -j2 quick  # limit parallelism due to limited memory on Travis
+
+matrix:
+  include:
+    # Old GCC
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-4.9
+      env:
+         - MATRIX_EVAL="CC=gcc-4.9 && CXX=g++-4.9"
+
+    # New GCC
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+      env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+
+    # Old Clang
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.6
+          packages:
+            - clang-3.6
+      env:
+        - MATRIX_EVAL="CC=clang-3.6 && CXX=clang++-3.6"
+
+    # New Clang
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-5.0
+          packages:
+            - clang-5.0
+      env:
+        - MATRIX_EVAL="CC=clang-5.0 && CXX=clang++-5.0"
+
+    # Mac. We only test Clang because Mac builds are expensive for Travis and probably any
+    # compiler-specific problems will be caught on the Linux matrix anyway.
+    - os: osx
+      osx_image: xcode8
+      env:
+        - MATRIX_EVAL="CC=clang && CXX=clang++"
