@@ -16,19 +16,19 @@ all:
 	echo "You probably accidentally told Eclipse to build.  Stopping."
 
 once:
-	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -O2 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++14 -O2 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6
 
 continuous:
-	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -g -DCAPNP_DEBUG_TYPES=1 -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++14 -g -DCAPNP_DEBUG_TYPES=1 -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
 continuous-opt:
-	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -O2 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++14 -O2 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
 continuous-opt3:
-	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -O3 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++14 -O3 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
 continuous-opts:
-	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -Os -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++14 -Os -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
 clean:
 	rm -rf bin lib tmp

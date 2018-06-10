@@ -136,7 +136,7 @@ function(_capnp_import_pkg_config_target target)
   set_target_properties(CapnProto::${target} PROPERTIES
     ${imported_soname_property}
     IMPORTED_LOCATION "${target_location}"
-    INTERFACE_COMPILE_FEATURES "cxx_constexpr"
+    INTERFACE_COMPILE_FEATURES "cxx_std_14"
     INTERFACE_COMPILE_OPTIONS "${${target}_CFLAGS_OTHER}"
     INTERFACE_INCLUDE_DIRECTORIES "${${target}_INCLUDE_DIRS}"
 
