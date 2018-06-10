@@ -10,6 +10,8 @@ set(kj_sources_lite
   memory.c++
   mutex.c++
   string.c++
+  hash.c++
+  table.c++
   thread.c++
   main.c++
   arena.c++
@@ -41,6 +43,9 @@ set(kj_headers
   vector.h
   string.h
   string-tree.h
+  hash.h
+  table.h
+  map.h
   encoding.h
   exception.h
   debug.h
@@ -190,6 +195,8 @@ if(BUILD_TESTING)
     memory-test.c++
     array-test.c++
     string-test.c++
+    table-test.c++
+    map-test.c++
     exception-test.c++
     debug-test.c++
     io-test.c++
