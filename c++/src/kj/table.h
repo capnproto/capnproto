@@ -1033,7 +1033,8 @@ struct BTreeImpl::Leaf {
   uint prev;
   // Pointers to next and previous nodes at the same level, used for fast iteration.
 
-  MaybeUint rows[14];
+  static constexpr size_t NROWS = 14;
+  MaybeUint rows[NROWS];
   // Pointers to table rows, offset by 1 so that 0 is an empty value.
 
   inline bool isFull() const;
@@ -1041,21 +1042,21 @@ struct BTreeImpl::Leaf {
   inline bool isHalfFull() const;
 
   inline void insert(uint i, uint newRow) {
-    KJ_IREQUIRE(rows[kj::size(&Leaf::rows) - 1] == nullptr);  // check not full
+    KJ_IREQUIRE(rows[Leaf::NROWS - 1] == nullptr);  // check not full
 
-    amove(rows + i + 1, rows + i, kj::size(&Leaf::rows) - (i + 1));
+    amove(rows + i + 1, rows + i, Leaf::NROWS - (i + 1));
     rows[i] = newRow;
   }
 
   inline void erase(uint i) {
     KJ_IREQUIRE(rows[0] != nullptr);  // check not empty
 
-    amove(rows + i, rows + i + 1, kj::size(&Leaf::rows) - (i + 1));
-    rows[kj::size(&Leaf::rows) - 1] = nullptr;
+    amove(rows + i, rows + i + 1, Leaf::NROWS - (i + 1));
+    rows[Leaf::NROWS - 1] = nullptr;
   }
 
   inline uint size() const {
-    static_assert(kj::size(&Leaf::rows) == 14, "logic here needs updating");
+    static_assert(Leaf::NROWS == 14, "logic here needs updating");
 
     // Binary search for first empty element in `rows`, or return 14 if no empty elements. We do
     // this in a branch-free manner. Since there are 15 possible results (0 through 14, inclusive),
@@ -1072,7 +1073,7 @@ struct BTreeImpl::Leaf {
   inline uint binarySearch(Func& predicate) const {
     // Binary search to find first row for which predicate(row) is false.
 
-    static_assert(kj::size(&Leaf::rows) == 14, "logic here needs updating");
+    static_assert(Leaf::NROWS == 14, "logic here needs updating");
 
     // See comments in size().
     uint i = (rows[6].check(predicate)) * 7;
@@ -1089,10 +1090,12 @@ struct BTreeImpl::Parent {
   uint unused;
   // Not used. May be arbitrarily non-zero due to overlap with Freelisted::nextOffset.
 
-  MaybeUint keys[7];
+  static constexpr size_t NKEYS = 7;
+  MaybeUint keys[NKEYS];
   // Pointers to table rows, offset by 1 so that 0 is an empty value.
 
-  uint children[kj::size(&Parent::keys) + 1];
+  static constexpr size_t NCHILDREN = NKEYS + 1;
+  uint children[NCHILDREN];
   // Pointers to children. Not offset because the root is always at position 0, and a pointer
   // to the root would be nonsensical.
 
@@ -1104,7 +1107,7 @@ struct BTreeImpl::Parent {
   inline void eraseAfter(uint i);
 
   inline uint keyCount() const {
-    static_assert(kj::size(&Parent::keys) == 7, "logic here needs updating");
+    static_assert(Parent::NKEYS == 7, "logic here needs updating");
 
     // Binary search for first empty element in `keys`, or return 7 if no empty elements. We do
     // this in a branch-free manner. Since there are 8 possible results (0 through 7, inclusive),
@@ -1119,7 +1122,7 @@ struct BTreeImpl::Parent {
   inline uint binarySearch(Func& predicate) const {
     // Binary search to find first key for which predicate(key) is false.
 
-    static_assert(kj::size(&Parent::keys) == 7, "logic here needs updating");
+    static_assert(Parent::NKEYS == 7, "logic here needs updating");
 
     // See comments in size().
     uint i = (keys[3].check(predicate)) * 4;
@@ -1167,25 +1170,25 @@ static_assert(sizeof(BTreeImpl::NodeUnion) == 64,
     "BTreeImpl::NodeUnion should be optimized to fit a cache line");
 
 bool BTreeImpl::Leaf::isFull() const {
-  return rows[kj::size(&Leaf::rows) - 1] != nullptr;
+  return rows[Leaf::NROWS - 1] != nullptr;
 }
 bool BTreeImpl::Leaf::isMostlyFull() const {
-  return rows[kj::size(&Leaf::rows) / 2] != nullptr;
+  return rows[Leaf::NROWS / 2] != nullptr;
 }
 bool BTreeImpl::Leaf::isHalfFull() const {
-  KJ_IASSERT(rows[kj::size(&Leaf::rows) / 2 - 1] != nullptr);
-  return rows[kj::size(&Leaf::rows) / 2] == nullptr;
+  KJ_IASSERT(rows[Leaf::NROWS / 2 - 1] != nullptr);
+  return rows[Leaf::NROWS / 2] == nullptr;
 }
 
 bool BTreeImpl::Parent::isFull() const {
-  return keys[kj::size(&Parent::keys) - 1] != nullptr;
+  return keys[Parent::NKEYS - 1] != nullptr;
 }
 bool BTreeImpl::Parent::isMostlyFull() const {
-  return keys[kj::size(&Parent::keys) / 2] != nullptr;
+  return keys[Parent::NKEYS / 2] != nullptr;
 }
 bool BTreeImpl::Parent::isHalfFull() const {
-  KJ_IASSERT(keys[kj::size(&Parent::keys) / 2 - 1] != nullptr);
-  return keys[kj::size(&Parent::keys) / 2] == nullptr;
+  KJ_IASSERT(keys[Parent::NKEYS / 2 - 1] != nullptr);
+  return keys[Parent::NKEYS / 2] == nullptr;
 }
 
 class BTreeImpl::Iterator {
@@ -1194,7 +1197,7 @@ public:
       : tree(tree), leaf(leaf), row(row) {}
 
   size_t operator*() const {
-    KJ_IREQUIRE(row < kj::size(&Leaf::rows) && leaf->rows[row] != nullptr,
+    KJ_IREQUIRE(row < Leaf::NROWS && leaf->rows[row] != nullptr,
         "tried to dereference end() iterator");
     return *leaf->rows[row];
   }
@@ -1202,7 +1205,7 @@ public:
   inline Iterator& operator++() {
     KJ_IREQUIRE(leaf->rows[row] != nullptr, "B-tree iterator overflow");
     ++row;
-    if (row >= kj::size(&Leaf::rows) || leaf->rows[row] == nullptr) {
+    if (row >= Leaf::NROWS || leaf->rows[row] == nullptr) {
       if (leaf->next == 0) {
         // at end; stay on current leaf
       } else {
@@ -1242,7 +1245,7 @@ public:
   }
 
   bool isEnd() {
-    return row == kj::size(&Leaf::rows) || leaf->rows[row] == nullptr;
+    return row == Leaf::NROWS || leaf->rows[row] == nullptr;
   }
 
   void insert(BTreeImpl& impl, uint newRow) {

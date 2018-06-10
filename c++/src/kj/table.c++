@@ -202,12 +202,12 @@ void BTreeImpl::reserve(size_t size) {
   // least half-full. (Note that it's correct for this calculation to round down, not up: The
   // remainder will necessarily be distributed among the non-full leaves, rather than creating a
   // new leaf, because if it went into a new leaf, that leaf would be less than half-full.)
-  uint leaves = size / (kj::size(&Leaf::rows) / 2);
+  uint leaves = size / (Leaf::NROWS / 2);
 
   // Calculate the worst-case number of parents to cover the leaves, given that a parent is always
   // at least half-full. Since the parents form a tree with branching factor B, the size of the
   // tree is N/B + N/B^2 + N/B^3 + N/B^4 + ... = N / (B - 1). Math.
-  constexpr uint branchingFactor = kj::size(&Parent::children) / 2;
+  constexpr uint branchingFactor = Parent::NCHILDREN / 2;
   uint parents = leaves / (branchingFactor - 1);
 
   // Height is log-base-branching-factor of leaves, plus 1 for the root node.
@@ -516,7 +516,7 @@ Node& BTreeImpl::eraseHelper(
           return sib;
         }
       }
-    } else if (indexInParent < kj::size(&Parent::keys) && parent->keys[indexInParent] != nullptr) {
+    } else if (indexInParent < Parent::NKEYS && parent->keys[indexInParent] != nullptr) {
       // There's a sibling to the right.
       uint sibPos = parent->children[indexInParent + 1];
       Node& sib = tree[sibPos];
@@ -580,20 +580,20 @@ void BTreeImpl::renumber(uint oldRow, uint newRow, const SearchKey& searchKey) {
 }
 
 uint BTreeImpl::split(Parent& dst, uint dstPos, Parent& src, uint srcPos) {
-  constexpr size_t mid = kj::size(&Parent::keys) / 2;
+  constexpr size_t mid = Parent::NKEYS / 2;
   uint pivot = *src.keys[mid];
-  acopy(dst.keys, src.keys + mid + 1, kj::size(&Parent::keys) - mid - 1);
-  azero(src.keys + mid, kj::size(&Parent::keys) - mid);
-  acopy(dst.children, src.children + mid + 1, kj::size(&Parent::children) - mid - 1);
-  azero(src.children + mid + 1, kj::size(&Parent::children) - mid - 1);
+  acopy(dst.keys, src.keys + mid + 1, Parent::NKEYS - mid - 1);
+  azero(src.keys + mid, Parent::NKEYS - mid);
+  acopy(dst.children, src.children + mid + 1, Parent::NCHILDREN - mid - 1);
+  azero(src.children + mid + 1, Parent::NCHILDREN - mid - 1);
   return pivot;
 }
 
 uint BTreeImpl::split(Leaf& dst, uint dstPos, Leaf& src, uint srcPos) {
-  constexpr size_t mid = kj::size(&Leaf::rows) / 2;
+  constexpr size_t mid = Leaf::NROWS / 2;
   uint pivot = *src.rows[mid - 1];
-  acopy(dst.rows, src.rows + mid, kj::size(&Leaf::rows) - mid);
-  azero(src.rows + mid, kj::size(&Leaf::rows) - mid);
+  acopy(dst.rows, src.rows + mid, Leaf::NROWS - mid);
+  azero(src.rows + mid, Leaf::NROWS - mid);
 
   if (src.next == 0) {
     endLeaf = dstPos;
@@ -614,7 +614,7 @@ void BTreeImpl::merge(Parent& dst, uint dstPos, uint pivot, Parent& src) {
   KJ_DASSERT(src.isHalfFull());
   KJ_DASSERT(dst.isHalfFull());
 
-  constexpr size_t mid = kj::size(&Parent::keys)/2;
+  constexpr size_t mid = Parent::NKEYS/2;
   dst.keys[mid] = pivot;
   acopy(dst.keys + mid + 1, src.keys, mid);
   acopy(dst.children + mid + 1, src.children, mid + 1);
@@ -627,7 +627,7 @@ void BTreeImpl::merge(Leaf& dst, uint dstPos, uint pivot, Leaf& src) {
   KJ_DASSERT(src.isHalfFull());
   KJ_DASSERT(dst.isHalfFull());
 
-  constexpr size_t mid = kj::size(&Leaf::rows)/2;
+  constexpr size_t mid = Leaf::NROWS/2;
   dst.rows[mid] = pivot;
   acopy(dst.rows + mid, src.rows, mid);
 
@@ -665,15 +665,15 @@ void BTreeImpl::rotateLeft(
   KJ_DASSERT(left.isHalfFull());
   KJ_DASSERT(right.isMostlyFull());
 
-  constexpr size_t mid = kj::size(&Parent::keys)/2;
+  constexpr size_t mid = Parent::NKEYS/2;
   left.keys[mid] = parent.keys[indexInParent];
   if (fixup == &parent.keys[indexInParent]) fixup = &left.keys[mid];
   parent.keys[indexInParent] = right.keys[0];
   left.children[mid + 1] = right.children[0];
-  amove(right.keys, right.keys + 1, kj::size(&Parent::keys) - 1);
-  right.keys[kj::size(&Parent::keys) - 1] = nullptr;
-  amove(right.children, right.children + 1, kj::size(&Parent::children) - 1);
-  right.children[kj::size(&Parent::children) - 1] = 0;
+  amove(right.keys, right.keys + 1, Parent::NKEYS - 1);
+  right.keys[Parent::NKEYS - 1] = nullptr;
+  amove(right.children, right.children + 1, Parent::NCHILDREN - 1);
+  right.children[Parent::NCHILDREN - 1] = 0;
 }
 
 void BTreeImpl::rotateLeft(
@@ -684,11 +684,11 @@ void BTreeImpl::rotateLeft(
   KJ_DASSERT(left.isHalfFull());
   KJ_DASSERT(right.isMostlyFull());
 
-  constexpr size_t mid = kj::size(&Leaf::rows)/2;
+  constexpr size_t mid = Leaf::NROWS/2;
   parent.keys[indexInParent] = left.rows[mid] = right.rows[0];
   if (fixup == &parent.keys[indexInParent]) fixup = nullptr;
-  amove(right.rows, right.rows + 1, kj::size(&Leaf::rows) - 1);
-  right.rows[kj::size(&Leaf::rows) - 1] = nullptr;
+  amove(right.rows, right.rows + 1, Leaf::NROWS - 1);
+  right.rows[Leaf::NROWS - 1] = nullptr;
 }
 
 void BTreeImpl::rotateRight(Parent& left, Parent& right, Parent& parent, uint indexInParent) {
@@ -698,7 +698,7 @@ void BTreeImpl::rotateRight(Parent& left, Parent& right, Parent& parent, uint in
   KJ_DASSERT(right.isHalfFull());
   KJ_DASSERT(left.isMostlyFull());
 
-  constexpr size_t mid = kj::size(&Parent::keys)/2;
+  constexpr size_t mid = Parent::NKEYS/2;
   amove(right.keys + 1, right.keys, mid);
   amove(right.children + 1, right.children, mid + 1);
 
@@ -718,7 +718,7 @@ void BTreeImpl::rotateRight(Leaf& left, Leaf& right, Parent& parent, uint indexI
   KJ_DASSERT(right.isHalfFull());
   KJ_DASSERT(left.isMostlyFull());
 
-  constexpr size_t mid = kj::size(&Leaf::rows)/2;
+  constexpr size_t mid = Leaf::NROWS/2;
   amove(right.rows + 1, right.rows, mid);
 
   uint back = left.size() - 1;
@@ -738,25 +738,25 @@ void BTreeImpl::Parent::initRoot(uint key, uint leftChild, uint rightChild) {
   keys[0] = key;
   children[0] = leftChild;
   children[1] = rightChild;
-  azero(keys + 1, kj::size(&Parent::keys) - 1);
-  azero(children + 2, kj::size(&Parent::children) - 2);
+  azero(keys + 1, Parent::NKEYS - 1);
+  azero(children + 2, Parent::NCHILDREN - 2);
 }
 
 void BTreeImpl::Parent::insertAfter(uint i, uint splitKey, uint child) {
-  KJ_IREQUIRE(children[kj::size(&Parent::children) - 1] == 0);  // check not full
+  KJ_IREQUIRE(children[Parent::NCHILDREN - 1] == 0);  // check not full
 
-  amove(keys + i + 1, keys + i, kj::size(&Parent::keys) - (i + 1));
+  amove(keys + i + 1, keys + i, Parent::NKEYS - (i + 1));
   keys[i] = splitKey;
 
-  amove(children + i + 2, children + i + 1, kj::size(&Parent::children) - (i + 2));
+  amove(children + i + 2, children + i + 1, Parent::NCHILDREN - (i + 2));
   children[i + 1] = child;
 }
 
 void BTreeImpl::Parent::eraseAfter(uint i) {
-  amove(keys + i, keys + i + 1, kj::size(&Parent::keys) - (i + 1));
-  keys[kj::size(&Parent::keys) - 1] = nullptr;
-  amove(children + i + 1, children + i + 2, kj::size(&Parent::children) - (i + 2));
-  children[kj::size(&Parent::children) - 1] = 0;
+  amove(keys + i, keys + i + 1, Parent::NKEYS - (i + 1));
+  keys[Parent::NKEYS - 1] = nullptr;
+  amove(children + i + 1, children + i + 2, Parent::NCHILDREN - (i + 2));
+  children[Parent::NCHILDREN - 1] = 0;
 }
 
 }  // namespace _
