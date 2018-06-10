@@ -631,7 +631,7 @@ TEST(Async, TaskSet) {
     EXPECT_EQ(2, counter++);
   }));
 
-  (void)evalLater([&]() {
+  auto ignore KJ_UNUSED = evalLater([&]() {
     KJ_FAIL_EXPECT("Promise without waiter shouldn't execute.");
   });
 
@@ -725,7 +725,10 @@ TEST(Async, Detach) {
   bool ran2 = false;
   bool ran3 = false;
 
-  (void)evalLater([&]() { ran1 = true; });  // let returned promise be destroyed (canceled)
+  {
+    // let returned promise be destroyed (canceled)
+    auto ignore KJ_UNUSED = evalLater([&]() { ran1 = true; });
+  }
   evalLater([&]() { ran2 = true; }).detach([](kj::Exception&&) { ADD_FAILURE(); });
   evalLater([]() { KJ_FAIL_ASSERT("foo"){break;} }).detach([&](kj::Exception&& e) { ran3 = true; });
 

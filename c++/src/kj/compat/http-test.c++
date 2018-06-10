@@ -887,7 +887,9 @@ KJ_TEST("HttpClient canceled write") {
     auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table), uint64_t(4096));
 
     // Start a write and immediately cancel it.
-    (void)req.body->write(body.begin(), body.size());
+    {
+      auto ignore KJ_UNUSED = req.body->write(body.begin(), body.size());
+    }
 
     KJ_EXPECT_THROW_MESSAGE("overwrote", req.body->write("foo", 3).wait(waitScope));
     req.body = nullptr;
