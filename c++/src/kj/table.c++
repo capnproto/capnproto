@@ -28,7 +28,16 @@ namespace _ {
 
 static inline uint lg(uint value) {
   // Compute floor(log2(value)).
+  //
+  // Undefined for value = 0.
+#if _MSC_VER
+  unsigned long i;
+  auto found = _BitScanReverse(&i, value);
+  KJ_DASSERT(found);  // !found means value = 0
+  return i;
+#else
   return sizeof(uint) * 8 - 1 - __builtin_clz(value);
+#endif
 }
 
 void throwDuplicateTableRow() {
