@@ -123,6 +123,12 @@ kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t t
 // =======================================================================================
 // BTree
 
+#if _WIN32
+#define aligned_free _aligned_free
+#else
+#define aligned_free ::free
+#endif
+
 BTreeImpl::BTreeImpl()
     : tree(const_cast<NodeUnion*>(&EMPTY_NODE)),
       treeCapacity(1),
@@ -133,7 +139,7 @@ BTreeImpl::BTreeImpl()
       endLeaf(0) {}
 BTreeImpl::~BTreeImpl() noexcept(false) {
   if (tree != &EMPTY_NODE) {
-    ::free(tree);
+    aligned_free(tree);
   }
 }
 
@@ -221,12 +227,36 @@ void BTreeImpl::clear() {
 void BTreeImpl::growTree(uint minCapacity) {
   uint newCapacity = kj::max(kj::max(minCapacity, treeCapacity * 2), 4);
   freelistSize += newCapacity - treeCapacity;
+
+  // Allocate some aligned memory! In theory this should be as simple as calling the C11 standard
+  // aligned_alloc() function. Unfortunately, many platforms don't implement it. Luckily, there
+  // are usually alternatives.
+
+#if __APPLE__
+  // OSX lacks aligned_alloc(), but has posix_memalign(). Fine.
+  void* allocPtr;
+  int error = posix_memalign(&allocPtr,
+      sizeof(BTreeImpl::NodeUnion), newCapacity * sizeof(BTreeImpl::NodeUnion));
+  if (error != 0) {
+    KJ_FAIL_SYSCALL("posix_memalign", error);
+  }
+  NodeUnion* newTree = reinterpret_cast<NodeUnion*>(allocPtr);
+#elif _WIN32
+  // Windows lacks aligned_alloc() but has its own _aligned_malloc() (which requires freeing using
+  // _aligned_free()).
+  NodeUnion* newTree = reinterpret_cast<NodeUnion*>(
+      _aligned_malloc(sizeof(BTreeImpl::NodeUnion), newCapacity * sizeof(BTreeImpl::NodeUnion)));
+  KJ_ASSERT(newTree != nullptr, "memory allocation failed", newCapacity);
+#else
+  // Let's use the C11 standard.
   NodeUnion* newTree = reinterpret_cast<NodeUnion*>(
       aligned_alloc(sizeof(BTreeImpl::NodeUnion), newCapacity * sizeof(BTreeImpl::NodeUnion)));
   KJ_ASSERT(newTree != nullptr, "memory allocation failed", newCapacity);
+#endif
+
   acopy(newTree, tree, treeCapacity);
   azero(newTree + treeCapacity, newCapacity - treeCapacity);
-  if (tree != &EMPTY_NODE) ::free(tree);
+  if (tree != &EMPTY_NODE) aligned_free(tree);
   tree = newTree;
   treeCapacity = newCapacity;
 }
