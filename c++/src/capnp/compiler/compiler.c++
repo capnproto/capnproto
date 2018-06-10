@@ -520,8 +520,7 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
       }
 
       content.advanceState(Content::EXPANDED);
-      // no break
-    }
+    } // fallthrough
 
     case Content::EXPANDED: {
       if (minimumState <= Content::EXPANDED) break;
@@ -584,8 +583,7 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
       }));
 
       content.advanceState(Content::BOOTSTRAP);
-      // no break
-    }
+    } // fallthrough
 
     case Content::BOOTSTRAP: {
       if (minimumState <= Content::BOOTSTRAP) break;
@@ -597,8 +595,7 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
       content.sourceInfo = kj::mv(nodeSet.sourceInfo);
 
       content.advanceState(Content::FINISHED);
-      // no break
-    }
+    } // fallthrough
 
     case Content::FINISHED:
       break;

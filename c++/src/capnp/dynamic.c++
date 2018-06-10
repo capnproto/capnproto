@@ -740,6 +740,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
               (uint)type.which());
           break;
       }
+      KJ_UNREACHABLE;
     }
 
     case schema::Field::GROUP:

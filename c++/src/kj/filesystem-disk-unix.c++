@@ -936,6 +936,7 @@ public:
             // Retry, but make sure we don't try to create the parent again.
             return tryReplaceNode(path, mode - WriteMode::CREATE_PARENT, kj::mv(tryCreate));
           }
+          // fallthrough
         default:
           KJ_FAIL_SYSCALL("create(path)", error, path) { return false; }
       } else {

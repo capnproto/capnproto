@@ -47,8 +47,10 @@ uint HashCoder::operator*(ArrayPtr<const byte> s) const {
   switch (len) {
   case 3:
     h ^= data[2] << 16;
+    // fallthrough
   case 2:
     h ^= data[1] << 8;
+    // fallthrough
   case 1:
     h ^= data[0];
     h *= m;
