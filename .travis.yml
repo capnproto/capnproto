@@ -12,7 +12,8 @@ addons:
       - autoconf
       - libtool
       - pkg-config
-script: ./super-test.sh -j2 quick  # limit parallelism due to limited memory on Travis
+# limit parallelism due to limited memory on Travis
+script: CC=$MATRIX_CC CXX=$MATRIX_CXX ./super-test.sh -j2 quick
 
 matrix:
   include:
@@ -25,7 +26,8 @@ matrix:
           packages:
             - g++-4.9
       env:
-         - MATRIX_EVAL="CC=gcc-4.9 && CXX=g++-4.9"
+        - MATRIX_CC=gcc-4.9
+        - MATRIX_CXX=g++-4.9
 
     # New GCC
     - os: linux
@@ -36,7 +38,8 @@ matrix:
           packages:
             - g++-7
       env:
-        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+        - MATRIX_CC=gcc-7
+        - MATRIX_CXX=g++-7
 
     # Old Clang
     - os: linux
@@ -44,11 +47,12 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-3.6
+            - llvm-toolchain-trusty-3.6
           packages:
             - clang-3.6
       env:
-        - MATRIX_EVAL="CC=clang-3.6 && CXX=clang++-3.6"
+        - MATRIX_CC=clang-3.6
+        - MATRIX_CXX=clang++-3.6
 
     # New Clang
     - os: linux
@@ -56,15 +60,17 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-5.0
+            - llvm-toolchain-trusty-5.0
           packages:
             - clang-5.0
       env:
-        - MATRIX_EVAL="CC=clang-5.0 && CXX=clang++-5.0"
+        - MATRIX_CC=clang-5.0
+        - MATRIX_CXX=clang++-5.0
 
     # Mac. We only test Clang because Mac builds are expensive for Travis and probably any
     # compiler-specific problems will be caught on the Linux matrix anyway.
     - os: osx
       osx_image: xcode8
       env:
-        - MATRIX_EVAL="CC=clang && CXX=clang++"
+        - MATRIX_CC=clang
+        - MATRIX_CXX=clang++
