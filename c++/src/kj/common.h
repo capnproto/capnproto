@@ -30,7 +30,9 @@
 #endif
 
 #ifndef KJ_NO_COMPILER_CHECK
-#if __cplusplus < 201402L && !__CDT_PARSER__ && !_MSC_VER
+// Technically, __cplusplus should be 201402L for C++14, but GCC 4.9 -- which is supported -- still
+// had it defined to 201300L even with -std=c++14.
+#if __cplusplus < 201300L && !__CDT_PARSER__ && !_MSC_VER
   #error "This code requires C++14. Either your compiler does not support it or it is not enabled."
   #ifdef __GNUC__
     // Compiler claims compatibility with GCC, so presumably supports -std.
