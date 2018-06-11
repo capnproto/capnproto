@@ -70,13 +70,15 @@ void InputStream::skip(size_t bytes) {
 
 namespace {
 
-Array<byte> readAll(InputStream& input, bool nulTerminate) {
+Array<byte> readAll(InputStream& input, uint64_t limit, bool nulTerminate) {
   Vector<Array<byte>> parts;
   constexpr size_t BLOCK_SIZE = 4096;
 
   for (;;) {
-    auto part = heapArray<byte>(BLOCK_SIZE);
+    KJ_REQUIRE(limit > 0, "Reached limit before EOF.");
+    auto part = heapArray<byte>(kj::min(BLOCK_SIZE, limit));
     size_t n = input.tryRead(part.begin(), part.size(), part.size());
+    limit -= n;
     if (n < part.size()) {
       auto result = heapArray<byte>(parts.size() * BLOCK_SIZE + n + nulTerminate);
       byte* pos = result.begin();
@@ -97,11 +99,11 @@ Array<byte> readAll(InputStream& input, bool nulTerminate) {
 
 }  // namespace
 
-String InputStream::readAllText() {
-  return String(readAll(*this, true).releaseAsChars());
+String InputStream::readAllText(uint64_t limit) {
+  return String(readAll(*this, limit, true).releaseAsChars());
 }
-Array<byte> InputStream::readAllBytes() {
-  return readAll(*this, false);
+Array<byte> InputStream::readAllBytes(uint64_t limit) {
+  return readAll(*this, limit, false);
 }
 
 void OutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {

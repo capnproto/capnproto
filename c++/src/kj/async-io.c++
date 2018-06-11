@@ -121,17 +121,17 @@ class AllReader {
 public:
   AllReader(AsyncInputStream& input): input(input) {}
 
-  Promise<Array<byte>> readAllBytes() {
-    return loop().then([this](uint64_t size) {
-      auto out = heapArray<byte>(size);
+  Promise<Array<byte>> readAllBytes(uint64_t limit) {
+    return loop(limit).then([this, limit](uint64_t headroom) {
+      auto out = heapArray<byte>(limit - headroom);
       copyInto(out);
       return out;
     });
   }
 
-  Promise<String> readAllText() {
-    return loop().then([this](uint64_t size) {
-      auto out = heapArray<char>(size + 1);
+  Promise<String> readAllText(uint64_t limit) {
+    return loop(limit).then([this, limit](uint64_t headroom) {
+      auto out = heapArray<char>(limit - headroom + 1);
       copyInto(out.slice(0, out.size() - 1).asBytes());
       out.back() = '\0';
       return String(kj::mv(out));
@@ -142,17 +142,19 @@ private:
   AsyncInputStream& input;
   Vector<Array<byte>> parts;
 
-  Promise<uint64_t> loop(uint64_t total = 0) {
-    auto part = heapArray<byte>(4096);
+  Promise<uint64_t> loop(uint64_t limit) {
+    KJ_REQUIRE(limit > 0, "Reached limit before EOF.");
+
+    auto part = heapArray<byte>(kj::min(4096, limit));
     auto partPtr = part.asPtr();
     parts.add(kj::mv(part));
     return input.tryRead(partPtr.begin(), partPtr.size(), partPtr.size())
-        .then([this,KJ_CPCAP(partPtr),total](size_t amount) -> Promise<uint64_t> {
-      uint64_t newTotal = total + amount;
+        .then([this,KJ_CPCAP(partPtr),limit](size_t amount) mutable -> Promise<uint64_t> {
+      limit -= amount;
       if (amount < partPtr.size()) {
-        return newTotal;
+        return limit;
       } else {
-        return loop(newTotal);
+        return loop(limit);
       }
     });
   }
@@ -169,15 +171,15 @@ private:
 
 }  // namespace
 
-Promise<Array<byte>> AsyncInputStream::readAllBytes() {
+Promise<Array<byte>> AsyncInputStream::readAllBytes(uint64_t limit) {
   auto reader = kj::heap<AllReader>(*this);
-  auto promise = reader->readAllBytes();
+  auto promise = reader->readAllBytes(limit);
   return promise.attach(kj::mv(reader));
 }
 
-Promise<String> AsyncInputStream::readAllText() {
+Promise<String> AsyncInputStream::readAllText(uint64_t limit) {
   auto reader = kj::heap<AllReader>(*this);
-  auto promise = reader->readAllText();
+  auto promise = reader->readAllText(limit);
   return promise.attach(kj::mv(reader));
 }
 

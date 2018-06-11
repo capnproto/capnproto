@@ -137,14 +137,41 @@ private:
   size_t blockSize;
 };
 
-KJ_TEST("InputStream::readAllText()") {
+KJ_TEST("InputStream::readAllText() / readAllBytes()") {
   auto bigText = strArray(kj::repeat("foo bar baz"_kj, 12345), ",");
-  size_t blockSizes[] = { 1, 4, 256, bigText.size() };
+  size_t inputSizes[] = { 0, 1, 256, 4096, 8191, 8192, 8193, 10000, bigText.size() };
+  size_t blockSizes[] = { 1, 4, 256, 4096, 8192, bigText.size() };
+  uint64_t limits[] = {
+    0, 1, 256,
+    bigText.size() / 2,
+    bigText.size() - 1,
+    bigText.size(),
+    bigText.size() + 1,
+    kj::maxValue
+  };
 
-  for (size_t blockSize: blockSizes) {
-    KJ_CONTEXT(blockSize);
-    MockInputStream input(bigText.asBytes(), blockSize);
-    KJ_EXPECT(input.readAllText() == bigText);
+  for (size_t inputSize: inputSizes) {
+    for (size_t blockSize: blockSizes) {
+      for (uint64_t limit: limits) {
+        KJ_CONTEXT(inputSize, blockSize, limit);
+        auto textSlice = bigText.asBytes().slice(0, inputSize);
+        auto readAllText = [&]() {
+          MockInputStream input(textSlice, blockSize);
+          return input.readAllText(limit);
+        };
+        auto readAllBytes = [&]() {
+          MockInputStream input(textSlice, blockSize);
+          return input.readAllBytes(limit);
+        };
+        if (limit > inputSize) {
+          KJ_EXPECT(readAllText().asBytes() == textSlice);
+          KJ_EXPECT(readAllBytes() == textSlice);
+        } else {
+          KJ_EXPECT_THROW_MESSAGE("Reached limit before EOF.", readAllText());
+          KJ_EXPECT_THROW_MESSAGE("Reached limit before EOF.", readAllBytes());
+        }
+      }
+    }
   }
 }
 

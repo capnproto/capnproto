@@ -79,9 +79,13 @@ public:
   // The default implementation first tries calling output.tryPumpFrom(), but if that fails, it
   // performs a naive pump by allocating a buffer and reading to it / writing from it in a loop.
 
-  Promise<Array<byte>> readAllBytes();
-  Promise<String> readAllText();
-  // Read until EOF and return as one big byte array or string.
+  Promise<Array<byte>> readAllBytes(uint64_t limit = kj::maxValue);
+  Promise<String> readAllText(uint64_t limit = kj::maxValue);
+  // Read until EOF and return as one big byte array or string. Throw an exception if EOF is not
+  // seen before reading `limit` bytes.
+  //
+  // To prevent runaway memory allocation, consider using a more conservative value for `limit` than
+  // the default, particularly on untrusted data streams which may never see EOF.
 };
 
 class AsyncOutputStream {
