@@ -253,8 +253,9 @@ void BTreeImpl::growTree(uint minCapacity) {
 #elif _WIN32
   // Windows lacks aligned_alloc() but has its own _aligned_malloc() (which requires freeing using
   // _aligned_free()).
+  // WATCH OUT: The argument order for _aligned_malloc() is opposite of aligned_alloc()!
   NodeUnion* newTree = reinterpret_cast<NodeUnion*>(
-      _aligned_malloc(sizeof(BTreeImpl::NodeUnion), newCapacity * sizeof(BTreeImpl::NodeUnion)));
+      _aligned_malloc(newCapacity * sizeof(BTreeImpl::NodeUnion), sizeof(BTreeImpl::NodeUnion)));
   KJ_ASSERT(newTree != nullptr, "memory allocation failed", newCapacity);
 #else
   // Let's use the C11 standard.
