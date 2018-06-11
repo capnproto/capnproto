@@ -443,7 +443,7 @@ public:
 };
 
 template <typename Row, typename... Indexes>
-Table<Row, Indexes...>::Table(): Table(Indexes()...) {}
+Table<Row, Indexes...>::Table() {}
 
 template <typename Row, typename... Indexes>
 Table<Row, Indexes...>::Table(Indexes&&... indexes)

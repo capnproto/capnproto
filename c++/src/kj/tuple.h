@@ -123,6 +123,8 @@ struct TupleImpl<Indexes<indexes...>, Types...>
 
   static_assert(sizeof...(indexes) == sizeof...(Types), "Incorrect use of TupleImpl.");
 
+  TupleImpl() = default;
+
   template <typename... Params>
   inline TupleImpl(Params&&... params)
       : TupleElement<indexes, Types>(kj::fwd<Params>(params))... {
@@ -151,6 +153,8 @@ class Tuple {
   // The actual Tuple class (used for tuples of size other than 1).
 
 public:
+  Tuple() = default;
+
   template <typename... U>
   constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
   template <typename... U>
