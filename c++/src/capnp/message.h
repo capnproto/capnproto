@@ -23,6 +23,7 @@
 #include <kj/memory.h>
 #include <kj/mutex.h>
 #include <kj/debug.h>
+#include <kj/vector.h>
 #include "common.h"
 #include "layout.h"
 #include "any.h"
@@ -387,9 +388,7 @@ private:
   bool returnedFirstSegment;
 
   void* firstSegment;
-
-  struct MoreSegments;
-  kj::Maybe<kj::Own<MoreSegments>> moreSegments;
+  kj::Vector<void*> moreSegments;
 };
 
 class FlatMessageBuilder: public MessageBuilder {
