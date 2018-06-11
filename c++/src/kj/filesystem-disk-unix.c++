@@ -222,7 +222,12 @@ struct MmapRange {
 };
 
 static MmapRange getMmapRange(uint64_t offset, uint64_t size) {
-  // Rounds the given byte range up to page boundaries.
+  // Comes up with an offset and size to pass to mmap(), given an offset and size requested by
+  // the caller, and considering the fact that mappings must start at a page boundary.
+  //
+  // The offset is rounded down to the nearest page boundary, and the size is increased to
+  // compensate. Note that the endpoint of the mapping is *not* rounded up to a page boundary, as
+  // mmap() does not actually require this, and it causes trouble on some systems (notably Cygwin).
 
 #ifndef _SC_PAGESIZE
 #define _SC_PAGESIZE _SC_PAGE_SIZE
@@ -232,10 +237,7 @@ static MmapRange getMmapRange(uint64_t offset, uint64_t size) {
 
   uint64_t realOffset = offset & ~pageMask;
 
-  uint64_t end = offset + size;
-  uint64_t realEnd = (end + pageMask) & ~pageMask;
-
-  return { realOffset, realEnd - realOffset };
+  return { realOffset, offset + size - realOffset };
 }
 
 class MmapDisposer: public ArrayDisposer {
