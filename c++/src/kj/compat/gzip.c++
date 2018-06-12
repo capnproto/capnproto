@@ -142,8 +142,11 @@ size_t GzipInputStream::readImpl(
 
 // =======================================================================================
 
-GzipOutputStream::GzipOutputStream(OutputStream& inner, kj::Maybe<int> compressionLevel)
+GzipOutputStream::GzipOutputStream(OutputStream& inner, int compressionLevel)
     : inner(inner), ctx(compressionLevel) {}
+
+GzipOutputStream::GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS))
+    : inner(inner), ctx(nullptr) {}
 
 GzipOutputStream::~GzipOutputStream() noexcept(false) {
   pump(Z_FINISH);
@@ -228,8 +231,11 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
 
 // =======================================================================================
 
-GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, kj::Maybe<int> compressionLevel)
+GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel)
     : inner(inner), ctx(compressionLevel) {}
+
+GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS))
+    : inner(inner), ctx(nullptr) {}
 
 Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
   ctx.setInput(in, size);

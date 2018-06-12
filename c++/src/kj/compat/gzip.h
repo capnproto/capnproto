@@ -34,7 +34,6 @@ public:
   GzipOutputContext(kj::Maybe<int> compressionLevel);
   ~GzipOutputContext() noexcept(false);
   KJ_DISALLOW_COPY(GzipOutputContext);
-  GzipOutputContext(GzipOutputContext&&) = default;
 
   void setInput(const void* in, size_t size);
   kj::Tuple<bool, kj::ArrayPtr<const byte>> pumpOnce(int flush);
@@ -69,14 +68,12 @@ private:
 
 class GzipOutputStream final: public OutputStream {
 public:
-  GzipOutputStream(OutputStream& inner, kj::Maybe<int> compressionLevel = Z_DEFAULT_COMPRESSION);
+  enum { DECOMPRESS };
+
+  GzipOutputStream(OutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
+  GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS));
   ~GzipOutputStream() noexcept(false);
   KJ_DISALLOW_COPY(GzipOutputStream);
-  GzipOutputStream(GzipOutputStream&&) = default;
-
-  static inline GzipOutputStream Decompress(OutputStream& inner) {
-    return GzipOutputStream(inner, nullptr);
-  }
 
   void write(const void* buffer, size_t size) override;
   using OutputStream::write;
@@ -112,13 +109,11 @@ private:
 
 class GzipAsyncOutputStream final: public AsyncOutputStream {
 public:
-  GzipAsyncOutputStream(AsyncOutputStream& inner, kj::Maybe<int> compressionLevel = Z_DEFAULT_COMPRESSION);
-  KJ_DISALLOW_COPY(GzipAsyncOutputStream);
-  GzipAsyncOutputStream(GzipAsyncOutputStream&&) = default;
+  enum { DECOMPRESS };
 
-  static inline GzipAsyncOutputStream Decompress(AsyncOutputStream& inner) {
-    return GzipAsyncOutputStream(inner, nullptr);
-  }
+  GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
+  GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS));
+  KJ_DISALLOW_COPY(GzipAsyncOutputStream);
 
   Promise<void> write(const void* buffer, size_t size) override;
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;

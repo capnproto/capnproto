@@ -214,7 +214,7 @@ KJ_TEST("async gzip decompression") {
   // Decompress using an output stream.
   {
     MockAsyncOutputStream rawOutput;
-    auto gzip = GzipAsyncOutputStream::Decompress(rawOutput);
+    GzipAsyncOutputStream gzip(rawOutput, GzipAsyncOutputStream::DECOMPRESS);
 
     auto mid = sizeof(FOOBAR_GZIP) / 2;
     gzip.write(FOOBAR_GZIP, mid).wait(io.waitScope);
