@@ -681,6 +681,72 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
   }));
 }
 
+class MockAsyncInputStream: public AsyncInputStream {
+public:
+  MockAsyncInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
+      : bytes(bytes), blockSize(blockSize) {}
+
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    // Clamp max read to blockSize.
+    size_t n = kj::min(blockSize, maxBytes);
+
+    // Unless that's less than minBytes -- in which case, use minBytes.
+    n = kj::max(n, minBytes);
+
+    // But also don't read more data than we have.
+    n = kj::min(n, bytes.size());
+
+    memcpy(buffer, bytes.begin(), n);
+    bytes = bytes.slice(n, bytes.size());
+    return n;
+  }
+
+private:
+  kj::ArrayPtr<const byte> bytes;
+  size_t blockSize;
+};
+
+KJ_TEST("AsyncInputStream::readAllText() / readAllBytes()") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto bigText = strArray(kj::repeat("foo bar baz"_kj, 12345), ",");
+  size_t inputSizes[] = { 0, 1, 256, 4096, 8191, 8192, 8193, 10000, bigText.size() };
+  size_t blockSizes[] = { 1, 4, 256, 4096, 8192, bigText.size() };
+  uint64_t limits[] = {
+    0, 1, 256,
+    bigText.size() / 2,
+    bigText.size() - 1,
+    bigText.size(),
+    bigText.size() + 1,
+    kj::maxValue
+  };
+
+  for (size_t inputSize: inputSizes) {
+    for (size_t blockSize: blockSizes) {
+      for (uint64_t limit: limits) {
+        KJ_CONTEXT(inputSize, blockSize, limit);
+        auto textSlice = bigText.asBytes().slice(0, inputSize);
+        auto readAllText = [&]() {
+          MockAsyncInputStream input(textSlice, blockSize);
+          return input.readAllText(limit).wait(ws);
+        };
+        auto readAllBytes = [&]() {
+          MockAsyncInputStream input(textSlice, blockSize);
+          return input.readAllBytes(limit).wait(ws);
+        };
+        if (limit > inputSize) {
+          KJ_EXPECT(readAllText().asBytes() == textSlice);
+          KJ_EXPECT(readAllBytes() == textSlice);
+        } else {
+          KJ_EXPECT_THROW_MESSAGE("Reached limit before EOF.", readAllText());
+          KJ_EXPECT_THROW_MESSAGE("Reached limit before EOF.", readAllBytes());
+        }
+      }
+    }
+  }
+}
+
 KJ_TEST("Userland pipe") {
   kj::EventLoop loop;
   WaitScope ws(loop);
