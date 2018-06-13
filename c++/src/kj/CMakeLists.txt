@@ -158,6 +158,31 @@ if(NOT CAPNP_LITE)
   install(FILES ${kj-http_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
 endif()
 
+# kj-gzip ======================================================================
+
+set(kj-gzip_sources
+  compat/gzip.c++
+)
+set(kj-gzip_headers
+  compat/gzip.h
+)
+if(NOT CAPNP_LITE)
+  add_library(kj-gzip ${kj-gzip_sources})
+  add_library(CapnProto::kj-gzip ALIAS kj-gzip)
+
+  find_package(ZLIB)
+  if(ZLIB_FOUND)
+    add_definitions(-D KJ_HAS_ZLIB=1)
+    include_directories(${ZLIB_INCLUDE_DIRS})
+    target_link_libraries(kj-gzip PUBLIC kj-async kj ${ZLIB_LIBRARIES})
+  endif()
+
+  # Ensure the library has a version set to match autotools build
+  set_target_properties(kj-gzip PROPERTIES VERSION ${VERSION})
+  install(TARGETS kj-gzip ${INSTALL_TARGETS_DEFAULT_ARGS})
+  install(FILES ${kj-gzip_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
+endif()
+
 # Tests ========================================================================
 
 if(BUILD_TESTING)
@@ -200,8 +225,9 @@ if(BUILD_TESTING)
       parse/char-test.c++
       compat/url-test.c++
       compat/http-test.c++
+      compat/gzip-test.c++
     )
-    target_link_libraries(kj-heavy-tests kj-http kj-async kj-test kj)
+    target_link_libraries(kj-heavy-tests kj-http kj-gzip kj-async kj-test kj)
     add_dependencies(check kj-heavy-tests)
     add_test(NAME kj-heavy-tests-run COMMAND kj-heavy-tests)
   endif()  # NOT CAPNP_LITE

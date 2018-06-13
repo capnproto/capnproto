@@ -86,6 +86,48 @@ private:
   size_t blockSize;
 };
 
+class MockOutputStream: public OutputStream {
+public:
+  kj::Vector<byte> bytes;
+
+  kj::String decompress() {
+    MockInputStream rawInput(bytes, kj::maxValue);
+    GzipInputStream gzip(rawInput);
+    return gzip.readAllText();
+  }
+
+  void write(const void* buffer, size_t size) override {
+    bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+  }
+  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    for (auto& piece: pieces) {
+      bytes.addAll(piece);
+    }
+  }
+};
+
+class MockAsyncOutputStream: public AsyncOutputStream {
+public:
+  kj::Vector<byte> bytes;
+
+  kj::String decompress(WaitScope& ws) {
+    MockAsyncInputStream rawInput(bytes, kj::maxValue);
+    GzipAsyncInputStream gzip(rawInput);
+    return gzip.readAllText().wait(ws);
+  }
+
+  Promise<void> write(const void* buffer, size_t size) override {
+    bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+    return kj::READY_NOW;
+  }
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    for (auto& piece: pieces) {
+      bytes.addAll(piece);
+    }
+    return kj::READY_NOW;
+  }
+};
+
 KJ_TEST("gzip decompression") {
   // Normal read.
   {
@@ -168,49 +210,24 @@ KJ_TEST("async gzip decompression") {
 
     KJ_EXPECT(gzip.readAllText().wait(io.waitScope) == "foobarfoobar");
   }
+
+  // Decompress using an output stream.
+  {
+    MockAsyncOutputStream rawOutput;
+    GzipAsyncOutputStream gzip(rawOutput, GzipAsyncOutputStream::DECOMPRESS);
+
+    auto mid = sizeof(FOOBAR_GZIP) / 2;
+    gzip.write(FOOBAR_GZIP, mid).wait(io.waitScope);
+    auto str1 = kj::heapString(rawOutput.bytes.asPtr().asChars());
+    KJ_EXPECT(str1 == "fo", str1);
+
+    gzip.write(FOOBAR_GZIP + mid, sizeof(FOOBAR_GZIP) - mid).wait(io.waitScope);
+    auto str2 = kj::heapString(rawOutput.bytes.asPtr().asChars());
+    KJ_EXPECT(str2 == "foobar", str2);
+
+    gzip.end().wait(io.waitScope);
+  }
 }
-
-class MockOutputStream: public OutputStream {
-public:
-  kj::Vector<byte> bytes;
-
-  kj::String decompress() {
-    MockInputStream rawInput(bytes, kj::maxValue);
-    GzipInputStream gzip(rawInput);
-    return gzip.readAllText();
-  }
-
-  void write(const void* buffer, size_t size) override {
-    bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
-  }
-  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    for (auto& piece: pieces) {
-      bytes.addAll(piece);
-    }
-  }
-};
-
-class MockAsyncOutputStream: public AsyncOutputStream {
-public:
-  kj::Vector<byte> bytes;
-
-  kj::String decompress(WaitScope& ws) {
-    MockAsyncInputStream rawInput(bytes, kj::maxValue);
-    GzipAsyncInputStream gzip(rawInput);
-    return gzip.readAllText().wait(ws);
-  }
-
-  Promise<void> write(const void* buffer, size_t size) override {
-    bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
-    return kj::READY_NOW;
-  }
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    for (auto& piece: pieces) {
-      bytes.addAll(piece);
-    }
-    return kj::READY_NOW;
-  }
-};
 
 KJ_TEST("gzip compression") {
   // Normal write.
@@ -291,8 +308,18 @@ KJ_TEST("async gzip compression") {
   {
     MockAsyncOutputStream rawOutput;
     GzipAsyncOutputStream gzip(rawOutput);
+
     gzip.write("foo", 3).wait(io.waitScope);
+    auto prevSize = rawOutput.bytes.size();
+
     gzip.write("bar", 3).wait(io.waitScope);
+    auto curSize = rawOutput.bytes.size();
+    KJ_EXPECT(prevSize == curSize, prevSize, curSize);
+
+    gzip.flush().wait(io.waitScope);
+    curSize = rawOutput.bytes.size();
+    KJ_EXPECT(prevSize < curSize, prevSize, curSize);
+
     gzip.end().wait(io.waitScope);
 
     KJ_EXPECT(rawOutput.decompress(io.waitScope) == "foobar");

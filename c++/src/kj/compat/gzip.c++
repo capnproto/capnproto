@@ -26,14 +26,65 @@
 
 namespace kj {
 
+namespace _ {  // private
+
+GzipOutputContext::GzipOutputContext(kj::Maybe<int> compressionLevel) {
+  int initResult;
+
+  KJ_IF_MAYBE(level, compressionLevel) {
+    compressing = true;
+    initResult =
+      deflateInit2(&ctx, *level, Z_DEFLATED,
+                   15 + 16,  // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
+                   8,        // memLevel = 8 (the default)
+                   Z_DEFAULT_STRATEGY);
+  } else {
+    compressing = false;
+    initResult = inflateInit2(&ctx, 15 + 16);
+  }
+
+  if (initResult != Z_OK) {
+    fail(initResult);
+  }
+}
+
+GzipOutputContext::~GzipOutputContext() noexcept(false) {
+  compressing ? deflateEnd(&ctx) : inflateEnd(&ctx);
+}
+
+void GzipOutputContext::setInput(const void* in, size_t size) {
+  ctx.next_in = const_cast<byte*>(reinterpret_cast<const byte*>(in));
+  ctx.avail_in = size;
+}
+
+kj::Tuple<bool, kj::ArrayPtr<const byte>> GzipOutputContext::pumpOnce(int flush) {
+  ctx.next_out = buffer;
+  ctx.avail_out = sizeof(buffer);
+
+  auto result = compressing ? deflate(&ctx, flush) : inflate(&ctx, flush);
+  if (result != Z_OK && result != Z_BUF_ERROR && result != Z_STREAM_END) {
+    fail(result);
+  }
+
+  // - Z_STREAM_END means we have finished the stream successfully.
+  // - Z_BUF_ERROR means we didn't have any more input to process
+  //   (but still have to make a call to write to potentially flush data).
+  return kj::tuple(result == Z_OK, kj::arrayPtr(buffer, sizeof(buffer) - ctx.avail_out));
+}
+
+void GzipOutputContext::fail(int result) {
+  auto header = compressing ? "gzip compression failed" : "gzip decompression failed";
+  if (ctx.msg == nullptr) {
+    KJ_FAIL_REQUIRE(header, result);
+  } else {
+    KJ_FAIL_REQUIRE(header, ctx.msg);
+  }
+}
+
+}  // namespace _ (private)
+
 GzipInputStream::GzipInputStream(InputStream& inner)
     : inner(inner) {
-  memset(&ctx, 0, sizeof(ctx));
-  ctx.next_in = nullptr;
-  ctx.avail_in = 0;
-  ctx.next_out = nullptr;
-  ctx.avail_out = 0;
-
   // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
   KJ_ASSERT(inflateInit2(&ctx, 15 + 16) == Z_OK);
 }
@@ -92,80 +143,34 @@ size_t GzipInputStream::readImpl(
 // =======================================================================================
 
 GzipOutputStream::GzipOutputStream(OutputStream& inner, int compressionLevel)
-    : inner(inner) {
-  memset(&ctx, 0, sizeof(ctx));
-  ctx.next_in = nullptr;
-  ctx.avail_in = 0;
-  ctx.next_out = nullptr;
-  ctx.avail_out = 0;
+    : inner(inner), ctx(compressionLevel) {}
 
-  int initResult =
-      deflateInit2(&ctx, compressionLevel, Z_DEFLATED,
-                   15 + 16,  // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
-                   8,        // memLevel = 8 (the default)
-                   Z_DEFAULT_STRATEGY);
-  KJ_ASSERT(initResult == Z_OK, initResult);
-}
+GzipOutputStream::GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS))
+    : inner(inner), ctx(nullptr) {}
 
 GzipOutputStream::~GzipOutputStream() noexcept(false) {
-  KJ_DEFER(deflateEnd(&ctx));
-
-  for (;;) {
-    ctx.next_out = buffer;
-    ctx.avail_out = sizeof(buffer);
-
-    auto deflateResult = deflate(&ctx, Z_FINISH);
-    if (deflateResult != Z_OK && deflateResult != Z_STREAM_END) {
-      if (ctx.msg == nullptr) {
-        KJ_FAIL_REQUIRE("gzip compression failed", deflateResult);
-      } else {
-        KJ_FAIL_REQUIRE("gzip compression failed", ctx.msg);
-      }
-    }
-
-    size_t n = sizeof(buffer) - ctx.avail_out;
-    inner.write(buffer, n);
-    if (deflateResult == Z_STREAM_END) {
-      break;
-    }
-  }
+  pump(Z_FINISH);
 }
 
 void GzipOutputStream::write(const void* in, size_t size) {
-  ctx.next_in = const_cast<byte*>(reinterpret_cast<const byte*>(in));
-  ctx.avail_in = size;
-  pump();
+  ctx.setInput(in, size);
+  pump(Z_NO_FLUSH);
 }
 
-void GzipOutputStream::pump() {
-  while (ctx.avail_in > 0) {
-    ctx.next_out = buffer;
-    ctx.avail_out = sizeof(buffer);
-
-    auto deflateResult = deflate(&ctx, Z_NO_FLUSH);
-    if (deflateResult != Z_OK) {
-      if (ctx.msg == nullptr) {
-        KJ_FAIL_REQUIRE("gzip compression failed", deflateResult);
-      } else {
-        KJ_FAIL_REQUIRE("gzip compression failed", ctx.msg);
-      }
-    }
-
-    size_t n = sizeof(buffer) - ctx.avail_out;
-    inner.write(buffer, n);
-  }
+void GzipOutputStream::pump(int flush) {
+  bool ok;
+  do {
+    auto result = ctx.pumpOnce(flush);
+    ok = get<0>(result);
+    auto chunk = get<1>(result);
+    inner.write(chunk.begin(), chunk.size());
+  } while (ok);
 }
 
 // =======================================================================================
 
 GzipAsyncInputStream::GzipAsyncInputStream(AsyncInputStream& inner)
     : inner(inner) {
-  memset(&ctx, 0, sizeof(ctx));
-  ctx.next_in = nullptr;
-  ctx.avail_in = 0;
-  ctx.next_out = nullptr;
-  ctx.avail_out = 0;
-
   // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
   KJ_ASSERT(inflateInit2(&ctx, 15 + 16) == Z_OK);
 }
@@ -227,34 +232,17 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
 // =======================================================================================
 
 GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel)
-    : inner(inner) {
-  memset(&ctx, 0, sizeof(ctx));
-  ctx.next_in = nullptr;
-  ctx.avail_in = 0;
-  ctx.next_out = nullptr;
-  ctx.avail_out = 0;
+    : inner(inner), ctx(compressionLevel) {}
 
-  int initResult =
-      deflateInit2(&ctx, compressionLevel, Z_DEFLATED,
-                   15 + 16,  // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
-                   8,        // memLevel = 8 (the default)
-                   Z_DEFAULT_STRATEGY);
-  KJ_ASSERT(initResult == Z_OK, initResult);
-}
-
-GzipAsyncOutputStream::~GzipAsyncOutputStream() noexcept(false) {
-  deflateEnd(&ctx);
-}
+GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS))
+    : inner(inner), ctx(nullptr) {}
 
 Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
-  ctx.next_in = const_cast<byte*>(reinterpret_cast<const byte*>(in));
-  ctx.avail_in = size;
-  return pump();
+  ctx.setInput(in, size);
+  return pump(Z_NO_FLUSH);
 }
 
 Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  KJ_REQUIRE(!ended, "already ended");
-
   if (pieces.size() == 0) return kj::READY_NOW;
   return write(pieces[0].begin(), pieces[0].size())
       .then([this,pieces]() {
@@ -262,51 +250,15 @@ Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> 
   });
 }
 
-Promise<void> GzipAsyncOutputStream::end() {
-  KJ_REQUIRE(!ended, "already ended");
-
-  ctx.next_out = buffer;
-  ctx.avail_out = sizeof(buffer);
-
-  auto deflateResult = deflate(&ctx, Z_FINISH);
-  if (deflateResult == Z_OK || deflateResult == Z_STREAM_END) {
-    size_t n = sizeof(buffer) - ctx.avail_out;
-    auto promise = inner.write(buffer, n);
-    if (deflateResult == Z_OK) {
-      return promise.then([this]() { return end(); });
-    } else {
-      ended = true;
-      return promise;
-    }
-  } else {
-    if (ctx.msg == nullptr) {
-      KJ_FAIL_REQUIRE("gzip compression failed", deflateResult);
-    } else {
-      KJ_FAIL_REQUIRE("gzip compression failed", ctx.msg);
-    }
+kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
+  auto result = ctx.pumpOnce(flush);
+  auto ok = get<0>(result);
+  auto chunk = get<1>(result);
+  auto promise = inner.write(chunk.begin(), chunk.size());
+  if (ok) {
+    promise = promise.then([this, flush]() { return pump(flush); });
   }
-}
-
-kj::Promise<void> GzipAsyncOutputStream::pump() {
-  if (ctx.avail_in == 0) {
-    return kj::READY_NOW;
-  }
-
-  ctx.next_out = buffer;
-  ctx.avail_out = sizeof(buffer);
-
-  auto deflateResult = deflate(&ctx, Z_NO_FLUSH);
-  if (deflateResult == Z_OK) {
-    size_t n = sizeof(buffer) - ctx.avail_out;
-    return inner.write(buffer, n)
-        .then([this]() { return pump(); });
-  } else {
-    if (ctx.msg == nullptr) {
-      KJ_FAIL_REQUIRE("gzip compression failed", deflateResult);
-    } else {
-      KJ_FAIL_REQUIRE("gzip compression failed", ctx.msg);
-    }
-  }
+  return promise;
 }
 
 }  // namespace kj
