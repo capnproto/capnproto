@@ -65,6 +65,10 @@ build_script:
   - if NOT "%BUILD_NAME%"=="cygwin" cmake --build %BUILD_DIR%-samples --config %BUILD_TYPE%
 
   # Cygwin build -- use super-test.sh like other Unix builds.
+  # But, we need to install Cygwin's cmake package in order to pass the cmake part of super-test.
+  # Somewhat ridiculously, this requires downloading Cygwin's setup program and running it.
+  - if "%BUILD_NAME%"=="cygwin" appveyor DownloadFile "https://cygwin.com/setup-x86_64.exe" -FileName "C:\cygwin64\setup-x86_64.exe"
+  - if "%BUILD_NAME%"=="cygwin" C:\cygwin64\setup-x86_64.exe --quiet-mode --no-shortcuts --upgrade-also --root "C:\cygwin64" --packages cmake
   - if "%BUILD_NAME%"=="cygwin" C:\cygwin64\bin\bash -lc 'cd /cygdrive/c/projects/capnproto; ./super-test.sh -j2 quick'
 
 test_script:
