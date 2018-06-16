@@ -761,7 +761,7 @@ kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t t
 template <typename Callbacks>
 class HashIndex {
 public:
-  HashIndex() = default;
+  HashIndex() KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY
   template <typename... Params>
   HashIndex(Params&&... params): cb(kj::fwd<Params>(params)...) {}
 
@@ -1299,7 +1299,7 @@ inline BTreeImpl::Iterator BTreeImpl::end() const {
 template <typename Callbacks>
 class TreeIndex {
 public:
-  TreeIndex() = default;
+  TreeIndex() KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY
   template <typename... Params>
   TreeIndex(Params&&... params): cb(kj::fwd<Params>(params)...) {}
 

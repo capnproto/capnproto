@@ -93,7 +93,7 @@ struct TupleElement {
   // from a TupleElement for each element, which is more efficient than a recursive definition.
 
   T value;
-  TupleElement() = default;
+  TupleElement() KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY
   constexpr inline TupleElement(const T& value): value(value) {}
   constexpr inline TupleElement(T&& value): value(kj::mv(value)) {}
 };
@@ -123,7 +123,7 @@ struct TupleImpl<Indexes<indexes...>, Types...>
 
   static_assert(sizeof...(indexes) == sizeof...(Types), "Incorrect use of TupleImpl.");
 
-  TupleImpl() = default;
+  TupleImpl() KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY
 
   template <typename... Params>
   inline TupleImpl(Params&&... params)
@@ -153,7 +153,7 @@ class Tuple {
   // The actual Tuple class (used for tuples of size other than 1).
 
 public:
-  Tuple() = default;
+  Tuple() KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY
 
   template <typename... U>
   constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}

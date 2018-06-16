@@ -303,6 +303,14 @@ KJ_NORETURN(void unreachable());
 #define KJ_CONSTEXPR(...) constexpr
 #endif
 
+#if defined(_MSC_VER) && _MSC_VER < 1910
+// TODO(msvc): Visual Studio 2015 mishandles declaring the no-arg constructor `= default` for
+//   certain template types -- it fails to call member constructors.
+#define KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY {}
+#else
+#define KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY = default;
+#endif
+
 // =======================================================================================
 // Template metaprogramming helpers.
 
