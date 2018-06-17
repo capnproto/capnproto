@@ -756,6 +756,8 @@ inline size_t probeHash(const kj::Array<HashBucket>& buckets, size_t i) {
 
 kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t targetSize);
 
+uint chooseBucket(uint hash, uint count);
+
 }  // namespace _ (private)
 
 template <typename Callbacks>
@@ -785,7 +787,7 @@ public:
 
     uint hashCode = cb.hashCode(table[pos]);
     Maybe<_::HashBucket&> erasedSlot;
-    for (uint i = hashCode % buckets.size();; i = _::probeHash(buckets, i)) {
+    for (uint i = _::chooseBucket(hashCode, buckets.size());; i = _::probeHash(buckets, i)) {
       auto& bucket = buckets[i];
       if (bucket.isEmpty()) {
         // no duplicates found
@@ -813,7 +815,7 @@ public:
   template <typename Row>
   void erase(kj::ArrayPtr<Row> table, size_t pos) {
     uint hashCode = cb.hashCode(table[pos]);
-    for (uint i = hashCode % buckets.size();; i = _::probeHash(buckets, i)) {
+    for (uint i = _::chooseBucket(hashCode, buckets.size());; i = _::probeHash(buckets, i)) {
       auto& bucket = buckets[i];
       if (bucket.isPos(pos)) {
         // found it
@@ -831,7 +833,7 @@ public:
   template <typename Row>
   void move(kj::ArrayPtr<Row> table, size_t oldPos, size_t newPos) {
     uint hashCode = cb.hashCode(table[oldPos]);
-    for (uint i = hashCode % buckets.size();; i = _::probeHash(buckets, i)) {
+    for (uint i = _::chooseBucket(hashCode, buckets.size());; i = _::probeHash(buckets, i)) {
       auto& bucket = buckets[i];
       if (bucket.isPos(oldPos)) {
         // found it
@@ -850,7 +852,7 @@ public:
     if (buckets.size() == 0) return nullptr;
 
     uint hashCode = cb.hashCode(params...);
-    for (uint i = hashCode % buckets.size();; i = _::probeHash(buckets, i)) {
+    for (uint i = _::chooseBucket(hashCode, buckets.size());; i = _::probeHash(buckets, i)) {
       auto& bucket = buckets[i];
       if (bucket.isEmpty()) {
         // not found.

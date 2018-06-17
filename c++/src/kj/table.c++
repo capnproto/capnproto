@@ -90,6 +90,55 @@ static const size_t PRIMES[] = {
   1610612741,  // 2^30 = 1073741824
 };
 
+uint chooseBucket(uint hash, uint count) {
+  // Integer modulus is really, really slow. It turns out that the compiler can generate much
+  // faster code if the denominator is a constant. Since we have a fixed set of possible
+  // denominators, a big old switch() statement is a win.
+
+  // TODO(perf): Consider using power-of-two bucket sizes. We can safely do so as long as we demand
+  //   high-quality hash functions -- kj::hashCode() needs good diffusion even for integers, can't
+  //   just be a cast. Also be sure to implement Robin Hood hashing to avoid extremely bad negative
+  //   lookup time when elements have sequential hashes (otherwise, it could be necessary to scan
+  //   the entire list to determine that an element isn't present).
+
+  switch (count) {
+#define HANDLE(i) case i##u: return hash % i##u
+    HANDLE(         1);
+    HANDLE(         3);
+    HANDLE(         5);
+    HANDLE(        11);
+    HANDLE(        23);
+    HANDLE(        53);
+    HANDLE(        97);
+    HANDLE(       193);
+    HANDLE(       389);
+    HANDLE(       769);
+    HANDLE(      1543);
+    HANDLE(      3079);
+    HANDLE(      6151);
+    HANDLE(     12289);
+    HANDLE(     24593);
+    HANDLE(     49157);
+    HANDLE(     98317);
+    HANDLE(    196613);
+    HANDLE(    393241);
+    HANDLE(    786433);
+    HANDLE(   1572869);
+    HANDLE(   3145739);
+    HANDLE(   6291469);
+    HANDLE(  12582917);
+    HANDLE(  25165843);
+    HANDLE(  50331653);
+    HANDLE( 100663319);
+    HANDLE( 201326611);
+    HANDLE( 402653189);
+    HANDLE( 805306457);
+    HANDLE(1610612741);
+#undef HANDLE
+    default: return hash % count;
+  }
+}
+
 size_t chooseHashTableSize(uint size) {
   if (size == 0) return 0;
 
