@@ -72,7 +72,7 @@ build_script:
   - if "%BUILD_NAME%"=="cygwin" C:\cygwin64\bin\bash -lc 'cd /cygdrive/c/projects/capnproto; ./super-test.sh -j2 quick'
 
 test_script:
-  - timeout /t 2
   # Sleep a little to prevent interleaving test output with build output.
-  - cd %BUILD_DIR%\src
+  - if NOT "%BUILD_NAME%"=="cygwin" timeout /t 2
+  - if NOT "%BUILD_NAME%"=="cygwin" cd %BUILD_DIR%\src
   - if NOT "%BUILD_NAME%"=="cygwin" ctest -V -C %BUILD_TYPE%
