@@ -71,7 +71,8 @@ set(kj-std_headers
 )
 add_library(kj ${kj_sources})
 add_library(CapnProto::kj ALIAS kj)
-target_compile_features(kj PUBLIC cxx_std_14)
+# TODO(cleanup): Use cxx_std_14 once it's safe to require cmake 3.8.
+target_compile_features(kj PUBLIC cxx_generic_lambdas)
 
 if(UNIX AND NOT ANDROID)
   target_link_libraries(kj PUBLIC pthread)
