@@ -2445,6 +2445,12 @@ static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
       }
     }
     KJ_UNREACHABLE;
+  }, [&to](kj::Exception&& e) {
+    if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+      return to.disconnect();
+    } else {
+      return to.close(1002, e.getDescription());
+    }
   });
 }
 
@@ -2456,12 +2462,6 @@ kj::Promise<void> WebSocket::pumpTo(WebSocket& other) {
     // Fall back to default implementation.
     return kj::evalNow([&]() {
       return pumpWebSocketLoop(*this, other);
-    }).catch_([&other](kj::Exception&& e) -> kj::Promise<void> {
-      if (e.getType() == kj::Exception::Type::DISCONNECTED) {
-        return other.disconnect();
-      } else {
-        return other.close(1002, e.getDescription());
-      }
     });
   }
 }

@@ -1709,6 +1709,56 @@ KJ_TEST("WebSocket ping received during pong send") {
   clientTask.wait(waitScope);
 }
 
+KJ_TEST("WebSocket pump disconnect on send") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  auto pipe1 = kj::newTwoWayPipe();
+  auto pipe2 = kj::newTwoWayPipe();
+
+  auto client1 = newWebSocket(kj::mv(pipe1.ends[0]), nullptr);
+  auto server1 = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
+  auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), nullptr);
+
+  auto pumpTask = server1->pumpTo(*client2);
+  auto sendTask = client1->send("hello"_kj);
+
+  // Endpoint reads three bytes and then disconnects.
+  char buffer[3];
+  pipe2.ends[1]->read(buffer, 3).wait(waitScope);
+  pipe2.ends[1] = nullptr;
+
+  // Pump throws disconnected.
+  KJ_EXPECT_THROW(DISCONNECTED, pumpTask.wait(waitScope));
+
+  // client1 managed to send its whole message into the pump, though.
+  sendTask.wait(waitScope);
+}
+
+KJ_TEST("WebSocket pump disconnect on receive") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  auto pipe1 = kj::newTwoWayPipe();
+  auto pipe2 = kj::newTwoWayPipe();
+
+  auto server1 = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
+  auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), nullptr);
+  auto server2 = newWebSocket(kj::mv(pipe2.ends[1]), nullptr);
+
+  auto pumpTask = server1->pumpTo(*client2);
+  auto receiveTask = server2->receive();
+
+  // Client sends three bytes of a valid message then disconnects.
+  const char DATA[] = {0x01, 0x06, 'h'};
+  pipe1.ends[0]->write(DATA, 3).wait(waitScope);
+  pipe1.ends[0] = nullptr;
+
+  // The pump completes successfully, forwarding the disconnect.
+  pumpTask.wait(waitScope);
+
+  // The eventual receiver gets a disconnect execption.
+  KJ_EXPECT_THROW(DISCONNECTED, receiveTask.wait(waitScope));
+}
+
 class TestWebSocketService final: public HttpService, private kj::TaskSet::ErrorHandler {
 public:
   TestWebSocketService(HttpHeaderTable& headerTable, HttpHeaderId hMyHeader)
