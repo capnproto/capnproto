@@ -424,7 +424,7 @@ private:
 
     void abortRead() override {
       canceler.cancel("abortRead() was called");
-      fulfiller.reject(KJ_EXCEPTION(FAILED, "read end of pipe was aborted"));
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
       pipe.endState(*this);
       pipe.abortRead();
     }
@@ -537,7 +537,7 @@ private:
           if (n == 0) {
             fulfiller.fulfill(kj::cp(pumpedSoFar));
           } else {
-            fulfiller.reject(KJ_EXCEPTION(FAILED, "read end of pipe was aborted"));
+            fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
           }
         }).eagerlyEvaluate([this](kj::Exception&& e) {
           fulfiller.reject(kj::mv(e));
@@ -595,7 +595,7 @@ private:
 
     void abortRead() override {
       canceler.cancel("abortRead() was called");
-      fulfiller.reject(KJ_EXCEPTION(FAILED, "read end of pipe was aborted"));
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
       pipe.endState(*this);
       pipe.abortRead();
     }
@@ -765,7 +765,7 @@ private:
 
     void abortRead() override {
       canceler.cancel("abortRead() was called");
-      fulfiller.reject(KJ_EXCEPTION(FAILED, "read end of pipe was aborted"));
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
       pipe.endState(*this);
       pipe.abortRead();
     }
