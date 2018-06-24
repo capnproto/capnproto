@@ -540,13 +540,20 @@ public:
 #endif
         }
 
+#if _WIN32
+        // MSVCRT's spawn*() don't correctly escape arguments, which is necessary on Windows
+        // since the underlying system call takes a single command line string rather than
+        // an arg list. We do the escaping ourselves by wrapping the name in quotes. We know
+        // that exeName itself can't contain quotes (since filenames aren't allowed to contain
+        // quotes on Windows), so we don't have to account for those.
+        KJ_ASSERT(exeName.findFirst('\"') == nullptr,
+            "Windows filenames can't contain quotes", exeName);
+        auto escapedExeName = kj::str("\"", exeName, "\"");
+#endif
+
         if (shouldSearchPath) {
 #if _WIN32
-          // MSVCRT's spawn*() don't correctly escape arguments, which is necessary on Windows
-          // since the underlying system call takes a single command line string rather than
-          // an arg list. Instead of trying to do the escaping ourselves, we just pass "plugin"
-          // for argv[0].
-          child = _spawnlp(_P_NOWAIT, exeName.cStr(), "plugin", nullptr);
+          child = _spawnlp(_P_NOWAIT, exeName.cStr(), escapedExeName.cStr(), nullptr);
 #else
           execlp(exeName.cStr(), exeName.cStr(), nullptr);
 #endif
@@ -562,11 +569,7 @@ public:
           }
 
 #if _WIN32
-          // MSVCRT's spawn*() don't correctly escape arguments, which is necessary on Windows
-          // since the underlying system call takes a single command line string rather than
-          // an arg list. Instead of trying to do the escaping ourselves, we just pass "plugin"
-          // for argv[0].
-          child = _spawnl(_P_NOWAIT, exeName.cStr(), "plugin", nullptr);
+          child = _spawnl(_P_NOWAIT, exeName.cStr(), escapedExeName.cStr(), nullptr);
 #else
           execl(exeName.cStr(), exeName.cStr(), nullptr);
 #endif
