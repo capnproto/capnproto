@@ -1031,6 +1031,55 @@ TEST(Capability, TransferCap) {
   }).wait(waitScope);
 }
 
+KJ_TEST("Promise<RemotePromise<T>> automatically reduces to RemotePromise<T>") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0;
+  test::TestInterface::Client client(kj::heap<TestInterfaceImpl>(callCount));
+
+  RemotePromise<test::TestInterface::FooResults> promise = kj::evalLater([&]() {
+    auto request = client.fooRequest();
+    request.setI(123);
+    request.setJ(true);
+    return request.send();
+  });
+
+  EXPECT_EQ(0, callCount);
+  auto response = promise.wait(waitScope);
+  EXPECT_EQ("foo", response.getX());
+  EXPECT_EQ(1, callCount);
+}
+
+KJ_TEST("Promise<RemotePromise<T>> automatically reduces to RemotePromise<T> with pipelining") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0;
+  int chainedCallCount = 0;
+  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
+
+  auto promise = kj::evalLater([&]() {
+    auto request = client.getCapRequest();
+    request.setN(234);
+    request.setInCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
+    return request.send();
+  });
+
+  auto pipelineRequest = promise.getOutBox().getCap().fooRequest();
+  pipelineRequest.setI(321);
+  auto pipelinePromise = pipelineRequest.send();
+
+  EXPECT_EQ(0, callCount);
+  EXPECT_EQ(0, chainedCallCount);
+
+  auto response = pipelinePromise.wait(waitScope);
+  EXPECT_EQ("bar", response.getX());
+
+  EXPECT_EQ(2, callCount);
+  EXPECT_EQ(1, chainedCallCount);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

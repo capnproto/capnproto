@@ -60,6 +60,9 @@ public:
   KJ_DISALLOW_COPY(RemotePromise);
   RemotePromise(RemotePromise&& other) = default;
   RemotePromise& operator=(RemotePromise&& other) = default;
+
+  static RemotePromise<T> reducePromise(kj::Promise<RemotePromise>&& promise);
+  // Hook for KJ so that Promise<RemotePromise<T>> automatically reduces to RemotePromise<T>.
 };
 
 class LocalClient;
@@ -736,6 +739,19 @@ private:
 
 // =======================================================================================
 // Inline implementation details
+
+template <typename T>
+RemotePromise<T> RemotePromise<T>::reducePromise(kj::Promise<RemotePromise>&& promise) {
+  kj::Tuple<kj::Promise<Response<T>>, kj::Promise<kj::Own<PipelineHook>>> splitPromise =
+      promise.then([](RemotePromise&& inner) {
+    return kj::tuple(kj::Promise<Response<T>>(kj::mv(inner)),
+                     PipelineHook::from(kj::mv(inner)));
+  }).split();
+
+  return RemotePromise(kj::mv(kj::get<0>(splitPromise)),
+      typename T::Pipeline(AnyPointer::Pipeline(
+          newLocalPromisePipeline(kj::mv(kj::get<1>(splitPromise))))));
+}
 
 template <typename Params, typename Results>
 RemotePromise<Results> Request<Params, Results>::send() {

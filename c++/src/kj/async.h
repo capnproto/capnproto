@@ -44,7 +44,7 @@ template <typename T>
 struct PromiseFulfillerPair;
 
 template <typename Func, typename T>
-using PromiseForResult = Promise<_::JoinPromises<_::ReturnType<Func, T>>>;
+using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
 // T.  If T is void, then the promise is for the result of calling Func with no arguments.  If
 // Func itself returns a promise, the promises are joined, so you never get Promise<Promise<T>>.
@@ -482,7 +482,7 @@ Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams);
 
 template <typename T>
 struct PromiseFulfillerPair {
-  Promise<_::JoinPromises<T>> promise;
+  _::ReducePromises<T> promise;
   Own<PromiseFulfiller<T>> fulfiller;
 };
 
