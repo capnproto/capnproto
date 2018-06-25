@@ -1586,7 +1586,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
     if (fastCaseCmp<'c','h','u','n','k','e','d'>(te->cStr())) {
       return kj::heap<HttpChunkedEntityReader>(*this);
     } else {
-      KJ_FAIL_REQUIRE("unknown transfer encoding") { break; }
+      KJ_FAIL_REQUIRE("unknown transfer encoding", *te) { break; }
     }
   }
 
