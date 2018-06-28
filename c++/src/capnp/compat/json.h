@@ -27,6 +27,11 @@
 
 namespace capnp {
 
+typedef json::Value JsonValue;
+// For backwards-compatibility.
+//
+// TODO(cleanup): Consider replacing all uses of JsonValue with json::Value?
+
 class JsonCodec {
   // Flexible class for encoding Cap'n Proto types as JSON, and decoding JSON back to Cap'n Proto.
   //

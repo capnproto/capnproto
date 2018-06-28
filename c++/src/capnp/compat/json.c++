@@ -951,7 +951,7 @@ public:
           case JSON_FLATTEN_ANNOTATION_ID:
             KJ_REQUIRE(type.isStruct(), "only struct types can be flattened", fieldName, typeName);
             flattened = true;
-            info.prefix = anno.getValue().getStruct().getAs<JsonFlattenFlags>().getPrefix();
+            info.prefix = anno.getValue().getStruct().getAs<json::FlattenOptions>().getPrefix();
             break;
           case JSON_DISCRIMINATOR_ANNOTATION_ID:
             KJ_REQUIRE(fieldProto.isGroup(), "only unions can have discriminator");

@@ -21,8 +21,7 @@
 
 @0xc9d405cf4333e4c9;
 
-using Json = import "json.capnp".JsonAnnotations;
-using JsonValue = import "json.capnp".JsonValue;
+using Json = import "json.capnp";
 
 $import "/capnp/c++.capnp".namespace("capnp");
 
