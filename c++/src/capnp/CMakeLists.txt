@@ -192,6 +192,7 @@ if(BUILD_TESTING)
     test.capnp
     test-import.capnp
     test-import2.capnp
+    compat/json-test.capnp
   )
 
   set(CAPNPC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_capnp")

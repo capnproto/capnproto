@@ -1210,6 +1210,8 @@ private:
                 output.get(variant).as<DynamicStruct>(), unionsSeen);
       }
     }
+
+    KJ_UNREACHABLE;
   }
 
   const void* getUnionInstanceIdentifier(DynamicStruct::Builder obj) const {

@@ -380,7 +380,8 @@ endif LITE_MODE
 test_capnpc_inputs =                                           \
   src/capnp/test.capnp                                         \
   src/capnp/test-import.capnp                                  \
-  src/capnp/test-import2.capnp
+  src/capnp/test-import2.capnp                                 \
+  src/capnp/compat/json-test.capnp
 
 test_capnpc_outputs =                                          \
   src/capnp/test.capnp.c++                                     \
@@ -388,7 +389,9 @@ test_capnpc_outputs =                                          \
   src/capnp/test-import.capnp.c++                              \
   src/capnp/test-import.capnp.h                                \
   src/capnp/test-import2.capnp.c++                             \
-  src/capnp/test-import2.capnp.h
+  src/capnp/test-import2.capnp.h                               \
+  src/capnp/compat/json-test.capnp.c++                         \
+  src/capnp/compat/json-test.capnp.h
 
 if USE_EXTERNAL_CAPNP
 
