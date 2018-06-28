@@ -56,3 +56,37 @@ struct JsonValue {
     params @1 :List(JsonValue);
   }
 }
+
+struct JsonFlattenFlags {
+  prefix @0 :Text = "";
+  # Optional: Adds the given prefix to flattened field names.
+}
+
+struct JsonAnnotations {
+  # These are wrapped in this struct for namespacing purposes. Typical usage:
+  #
+  #     using Json = import "/capnp/compat/json.capnp".JsonAnnotations;
+  #
+  # And then later on:
+  #
+  #     myField @0 :Text $Json.name("my_field");
+
+  annotation name @0xfa5b1fd61c2e7c3d (field, enumerant, method, group, union): Text;
+  # Define an alternative name to use when encoding the given item in JSON. This can be used, for
+  # example, to use snake_case names where needed, even though Cap'n Proto uses strictly camelCase.
+  #
+  # (However, because JSON is derived from JavaScript, you *should* use camelCase names when
+  # defining JSON-based APIs. But, when supporting a pre-existing API you may not have a choice.)
+
+  annotation flatten @0x82d3e852af0336bf (field, group, union): JsonFlattenFlags;
+  # Specifies that an aggregate field should be flattened into its parent.
+  #
+  # In order to flatten a member of a union, the union (or, for an anonymous union, the parent
+  # struct type) must have the $jsonDiscribinator annotation.
+
+  annotation discriminator @0xcfa794e8d19a0162 (struct, union): Text;
+  # Specifies that a union's variant will be decided not by which fields are present, but instead
+  # by a special discriminator field with the given name. The value of the discriminator field is
+  # a string naming which variant is active. This allows the members of the union to have the
+  # $jsonFlatten annotation.
+}

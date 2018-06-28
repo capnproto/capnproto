@@ -22,6 +22,7 @@
 #include "json.h"
 #include <capnp/test-util.h>
 #include <capnp/compat/json.capnp.h>
+#include <capnp/compat/json-test.capnp.h>
 #include <kj/debug.h>
 #include <kj/string.h>
 #include <kj/test.h>
@@ -820,6 +821,104 @@ KJ_TEST("register capability handler") {
   TestCapabilityHandler handler;
   JsonCodec json;
   json.addTypeHandler(handler);
+}
+
+static constexpr kj::StringPtr GOLDEN_ANNOTATED =
+R"({ "names-can_contain!anything Really": "foo",
+  "flatFoo": 123,
+  "flatBar": "abc",
+  "renamed-flatBaz": {"hello": true},
+  "flatQux": "cba",
+  "pfx.foo": "this is a long string in order to force multi-line pretty printing",
+  "pfx.renamed-bar": 321,
+  "pfx.baz": {"hello": true},
+  "pfx.xfp.qux": "fed",
+  "union-type": "renamed-bar",
+  "barMember": 789,
+  "multiMember": "ghi",
+  "dependency": {"renamed-foo": "corge"},
+  "simpleGroup": {"renamed-grault": "garply"},
+  "enums": ["qux", "renamed-bar", "foo", "renamed-baz"] })"_kj;
+
+static constexpr kj::StringPtr GOLDEN_ANNOTATED_REVERSE =
+R"({
+  "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
+  "simpleGroup": { "renamed-grault": "garply" },
+  "dependency": { "renamed-foo": "corge" },
+  "multiMember": "ghi",
+  "barMember": 789,
+  "union-type": "renamed-bar",
+  "pfx.xfp.qux": "fed",
+  "pfx.baz": {"hello": true},
+  "pfx.renamed-bar": 321,
+  "pfx.foo": "this is a long string in order to force multi-line pretty printing",
+  "flatQux": "cba",
+  "renamed-flatBaz": {"hello": true},
+  "flatBar": "abc",
+  "flatFoo": 123,
+  "names-can_contain!anything Really": "foo"
+})"_kj;
+
+KJ_TEST("rename fields") {
+  JsonCodec json;
+  json.handleByAnnotation<TestJsonAnnotations>();
+  json.setPrettyPrint(true);
+
+  kj::String goldenText;
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<TestJsonAnnotations>();
+    root.setSomeField("foo");
+
+    auto aGroup = root.getAGroup();
+    aGroup.setFlatFoo(123);
+    aGroup.setFlatBar("abc");
+    aGroup.getFlatBaz().setHello(true);
+    aGroup.getDoubleFlat().setFlatQux("cba");
+
+    auto prefixedGroup = root.getPrefixedGroup();
+    prefixedGroup.setFoo("this is a long string in order to force multi-line pretty printing");
+    prefixedGroup.setBar(321);
+    prefixedGroup.getBaz().setHello(true);
+    prefixedGroup.getMorePrefix().setQux("fed");
+
+    auto unionBar = root.getAUnion().initBar();
+    unionBar.setBarMember(789);
+    unionBar.setMultiMember("ghi");
+
+    root.initDependency().setFoo("corge");
+    root.initSimpleGroup().setGrault("garply");
+
+    root.setEnums({
+      TestJsonAnnotatedEnum::QUX,
+      TestJsonAnnotatedEnum::BAR,
+      TestJsonAnnotatedEnum::FOO,
+      TestJsonAnnotatedEnum::BAZ
+    });
+
+    auto encoded = json.encode(root.asReader());
+    KJ_EXPECT(encoded == GOLDEN_ANNOTATED, encoded);
+
+    goldenText = kj::str(root);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<TestJsonAnnotations>();
+    json.decode(GOLDEN_ANNOTATED, root);
+
+    KJ_EXPECT(kj::str(root) == goldenText, root, goldenText);
+  }
+
+  {
+    // Try parsing in reverse, mostly to test that union tags can come after content.
+    MallocMessageBuilder message;
+    auto root = message.getRoot<TestJsonAnnotations>();
+    json.decode(GOLDEN_ANNOTATED_REVERSE, root);
+
+    KJ_EXPECT(kj::str(root) == goldenText, root, goldenText);
+  }
 }
 
 }  // namespace

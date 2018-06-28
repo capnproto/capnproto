@@ -198,6 +198,16 @@ public:
   void addFieldHandler(StructSchema::Field field, Handler<T>& handler);
   // Matches only the specific field. T can be a dynamic type. T must match the field's type.
 
+  void handleByAnnotation(Schema schema);
+  template <typename T> void handleByAnnotation();
+  // Inspects the given type (as specified by type parameter or dynamic schema) and all its
+  // dependencies looking for JSON annotations (see json.capnp), building and registering Handlers
+  // based on these annotations.
+  //
+  // If you'd like to use annotations to control JSON, you must call these functions before you
+  // start using the codec. They are not loaded "on demand" because that would require mutex
+  // locking.
+
   // ---------------------------------------------------------------------------
   // Hack to support string literal parameters
 
@@ -214,6 +224,8 @@ public:
 
 private:
   class HandlerBase;
+  class AnnotatedHandler;
+  class AnnotatedEnumHandler;
   struct Impl;
 
   kj::Own<Impl> impl;
@@ -224,6 +236,10 @@ private:
   void decodeObject(JsonValue::Reader input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const;
   void addTypeHandlerImpl(Type type, HandlerBase& handler);
   void addFieldHandlerImpl(StructSchema::Field field, Type type, HandlerBase& handler);
+
+  AnnotatedHandler& loadAnnotatedHandler(StructSchema schema,
+                                         kj::Maybe<kj::StringPtr> discriminator,
+                                         kj::Vector<Schema>& dependencies);
 };
 
 // =======================================================================================
@@ -479,5 +495,10 @@ template <> void JsonCodec::addTypeHandler(Handler<DynamicCapability>& handler)
                    "try specifying a specific type schema as the first parameter");
 // TODO(someday): Implement support for registering handlers that cover thinsg like "all structs"
 //   or "all lists". Currently you can only target a specific struct or list type.
+
+template <typename T>
+void JsonCodec::handleByAnnotation() {
+  return handleByAnnotation(Schema::from<T>());
+}
 
 } // namespace capnp

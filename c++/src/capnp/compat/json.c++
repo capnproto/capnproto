@@ -24,6 +24,8 @@
 #include <stdlib.h>  // strtod
 #include <errno.h>   // for strtod errors
 #include <unordered_map>
+#include <map>
+#include <set>
 #include <capnp/orphan.h>
 #include <kj/debug.h>
 #include <kj/function.h>
@@ -54,6 +56,8 @@ struct JsonCodec::Impl {
 
   std::unordered_map<Type, HandlerBase*, TypeHash> typeHandlers;
   std::unordered_map<StructSchema::Field, HandlerBase*, FieldHash> fieldHandlers;
+  std::unordered_map<Type, kj::Maybe<kj::Own<AnnotatedHandler>>, TypeHash> annotatedHandlers;
+  std::unordered_map<Type, kj::Own<AnnotatedEnumHandler>, TypeHash> annotatedEnumHandlers;
 
   kj::StringTree encodeRaw(JsonValue::Reader value, uint indent, bool& multiline,
                            bool hasPrefix) const {
@@ -880,6 +884,432 @@ void JsonCodec::addFieldHandlerImpl(StructSchema::Field field, Type type, Handle
   KJ_REQUIRE(type == field.getType(),
       "handler type did not match field type for addFieldHandler()");
   impl->fieldHandlers[field] = &handler;
+}
+
+// =======================================================================================
+
+static constexpr uint64_t JSON_NAME_ANNOTATION_ID = 0xfa5b1fd61c2e7c3dull;
+static constexpr uint64_t JSON_FLATTEN_ANNOTATION_ID = 0x82d3e852af0336bfull;
+static constexpr uint64_t JSON_DISCRIMINATOR_ANNOTATION_ID = 0xcfa794e8d19a0162ull;
+
+class JsonCodec::AnnotatedHandler final: public JsonCodec::Handler<DynamicStruct> {
+public:
+  AnnotatedHandler(JsonCodec& codec, StructSchema schema, kj::Maybe<kj::StringPtr> discriminator,
+                   kj::Vector<Schema>& dependencies)
+      : schema(schema) {
+    auto schemaProto = schema.getProto();
+    auto typeName = schemaProto.getDisplayName();
+
+    if (discriminator == nullptr) {
+      // There are two cases of unions:
+      // * Named unions, which are special cases of named groups. In this case, the union may be
+      //   annotated by annotating the field. In this case, we receive a non-null `discriminator`
+      //   as a constructor parameter, and schemaProto.getAnnotations() must be empty because
+      //   it's not possible to annotate a group's type (becaues the type is anonymous).
+      // * Unnamed unions, of which there can only be one in any particular scope. In this case,
+      //   the parent struct type itself is annotated.
+      // So if we received `null` as the constructor parameter, check for annotations on the struct
+      // type.
+      for (auto anno: schemaProto.getAnnotations()) {
+        switch (anno.getId()) {
+          case JSON_DISCRIMINATOR_ANNOTATION_ID:
+            discriminator = anno.getValue().getText();
+            break;
+        }
+      }
+    }
+
+    KJ_IF_MAYBE(d, discriminator) {
+      unionTagName = discriminator;
+      fieldsByName.insert(std::make_pair(*d, FieldNameInfo {
+        FieldNameInfo::UNION_TAG, 0, 0, nullptr
+      }));
+    }
+
+    discriminantOffset = schemaProto.getStruct().getDiscriminantOffset();
+
+    fields = KJ_MAP(field, schema.getFields()) {
+      auto fieldProto = field.getProto();
+      auto type = field.getType();
+      auto fieldName = fieldProto.getName();
+
+      FieldNameInfo nameInfo;
+      nameInfo.index = field.getIndex();
+      nameInfo.type = FieldNameInfo::NORMAL;
+      nameInfo.prefixLength = 0;
+
+      FieldInfo info;
+      info.name = fieldName;
+
+      kj::Maybe<kj::StringPtr> subDiscriminator;
+      bool flattened = false;
+      for (auto anno: field.getProto().getAnnotations()) {
+        switch (anno.getId()) {
+          case JSON_NAME_ANNOTATION_ID:
+            info.name = anno.getValue().getText();
+            break;
+          case JSON_FLATTEN_ANNOTATION_ID:
+            KJ_REQUIRE(type.isStruct(), "only struct types can be flattened", fieldName, typeName);
+            flattened = true;
+            info.prefix = anno.getValue().getStruct().getAs<JsonFlattenFlags>().getPrefix();
+            break;
+          case JSON_DISCRIMINATOR_ANNOTATION_ID:
+            KJ_REQUIRE(fieldProto.isGroup(), "only unions can have discriminator");
+            subDiscriminator = anno.getValue().getText();
+            break;
+        }
+      }
+
+      if (flattened) {
+        info.flattenHandler = codec.loadAnnotatedHandler(
+            type.asStruct(), subDiscriminator, dependencies);
+      }
+
+      bool isUnionMember = fieldProto.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
+
+      KJ_IF_MAYBE(fh, info.flattenHandler) {
+        // Set up fieldsByName for each of the child's fields.
+        for (auto& entry: fh->fieldsByName) {
+          kj::StringPtr flattenedName;
+          kj::String ownName;
+          if (info.prefix.size() > 0) {
+            ownName = kj::str(info.prefix, entry.first);
+            flattenedName = ownName;
+          } else {
+            flattenedName = entry.first;
+          }
+          fieldsByName.insert(std::make_pair(flattenedName, FieldNameInfo {
+            isUnionMember ? FieldNameInfo::FLATTENED_FROM_UNION : FieldNameInfo::FLATTENED,
+            field.getIndex(), (uint)info.prefix.size(), kj::mv(ownName)
+          }));
+        }
+      }
+
+      if (!flattened) {
+        fieldsByName.insert(std::make_pair(info.name, kj::mv(nameInfo)));
+      }
+
+      if (isUnionMember) {
+        unionTagValues.insert(std::make_pair(info.name, field));
+      }
+
+      // Look for dependencies that we need to add.
+      while (type.isList()) type = type.asList().getElementType();
+      if (codec.impl->typeHandlers.count(type) == 0) {
+        switch (type.which()) {
+          case schema::Type::STRUCT:
+            dependencies.add(type.asStruct());
+            break;
+          case schema::Type::ENUM:
+            dependencies.add(type.asEnum());
+            break;
+          case schema::Type::INTERFACE:
+            dependencies.add(type.asInterface());
+            break;
+          default:
+            break;
+        }
+      }
+
+      return info;
+    };
+  }
+
+  const StructSchema schema;
+
+  void encode(const JsonCodec& codec, DynamicStruct::Reader input,
+              JsonValue::Builder output) const override {
+    kj::Vector<FlattenedField> flattenedFields;
+    gatherForEncode(codec, input, nullptr, nullptr, flattenedFields);
+
+    auto outs = output.initObject(flattenedFields.size());
+    for (auto i: kj::indices(flattenedFields)) {
+      auto& in = flattenedFields[i];
+      auto out = outs[i];
+      out.setName(in.name);
+      codec.encode(in.value, in.type, out.initValue());
+    }
+  }
+
+  void decode(const JsonCodec& codec, JsonValue::Reader input,
+              DynamicStruct::Builder output) const override {
+    KJ_REQUIRE(input.isObject());
+    std::set<const void*> unionsSeen;
+    kj::Vector<JsonValue::Field::Reader> retries;
+    for (auto field: input.getObject()) {
+      if (!decodeField(codec, field.getName(), field.getValue(), output, unionsSeen)) {
+        retries.add(field);
+      }
+    }
+    while (!retries.empty()) {
+      auto retriesCopy = kj::mv(retries);
+      KJ_ASSERT(retries.empty());
+      for (auto field: retriesCopy) {
+        if (!decodeField(codec, field.getName(), field.getValue(), output, unionsSeen)) {
+          retries.add(field);
+        }
+      }
+      if (retries.size() == retriesCopy.size()) {
+        // We made no progress in this iteration. Give up on the remaining fields.
+        break;
+      }
+    }
+  }
+
+private:
+  struct FieldInfo {
+    kj::StringPtr name;
+    kj::Maybe<const AnnotatedHandler&> flattenHandler;
+    kj::StringPtr prefix;
+  };
+
+  kj::Array<FieldInfo> fields;
+  // Maps field index -> info about the field
+
+  struct FieldNameInfo {
+    enum {
+      NORMAL,
+      // This is a normal field with the given `index`.
+
+      FLATTENED,
+      // This is a field of a flattened inner struct or group (that is not in a union). `index`
+      // is the field index of the particular struct/group field.
+
+      UNION_TAG,
+      // The parent struct is a flattened union, and this field is the discriminant tag. It is a
+      // string field whose name determines the union type. `index` is not used.
+
+      FLATTENED_FROM_UNION
+      // The parent struct is a flattened union, and some of the union's members are flattened
+      // structs or groups, and this field is possibly a member of one or more of them. `index`
+      // is not used, because it's possible that the same field name appears in multiple variants.
+      // Intsead, the parser must find the union tag, and then can descend and attempt to parse
+      // the field in the context of whichever variant is selected.
+    } type;
+
+    uint index;
+    // For `NORMAL` and `FLATTENED`, the index of the field in schema.getFields().
+
+    uint prefixLength;
+    kj::String ownName;
+  };
+
+  std::map<kj::StringPtr, FieldNameInfo> fieldsByName;
+  // Maps JSON names to info needed to parse them.
+
+  std::map<kj::StringPtr, StructSchema::Field> unionTagValues;
+  // If the parent struct is a flattened union, it has a tag field which is a string with one of
+  // these values. The map maps to the union member to set.
+
+  kj::Maybe<kj::StringPtr> unionTagName;
+  // If the parent struct is a flattened union, the name of the "tag" field.
+
+  uint discriminantOffset;
+  // Shortcut for schema.getProto().getStruct().getDiscriminantOffset(), used in a hack to identify
+  // which unions have been seen.
+
+  struct FlattenedField {
+    kj::String ownName;
+    kj::StringPtr name;
+    Type type;
+    DynamicValue::Reader value;
+
+    FlattenedField(kj::StringPtr prefix, kj::StringPtr name, Type type, DynamicValue::Reader value)
+        : ownName(prefix.size() > 0 ? kj::str(prefix, name) : nullptr),
+          name(prefix.size() > 0 ? ownName : name),
+          type(type), value(value) {}
+  };
+
+  void gatherForEncode(const JsonCodec& codec, DynamicValue::Reader input,
+                       kj::StringPtr prefix, kj::StringPtr morePrefix,
+                       kj::Vector<FlattenedField>& flattenedFields) const {
+    kj::String ownPrefix;
+    if (morePrefix.size() > 0) {
+      if (prefix.size() > 0) {
+        ownPrefix = kj::str(prefix, morePrefix);
+        prefix = ownPrefix;
+      } else {
+        prefix = morePrefix;
+      }
+    }
+
+    auto reader = input.as<DynamicStruct>();
+    auto schema = reader.getSchema();
+    for (auto field: schema.getNonUnionFields()) {
+      auto& info = fields[field.getIndex()];
+      if (!reader.has(field, codec.impl->hasMode)) {
+        // skip
+      } else KJ_IF_MAYBE(handler, info.flattenHandler) {
+        handler->gatherForEncode(codec, reader.get(field), prefix, info.prefix, flattenedFields);
+      } else {
+        flattenedFields.add(FlattenedField {
+            prefix, info.name, field.getType(), reader.get(field) });
+      }
+    }
+
+    KJ_IF_MAYBE(which, reader.which()) {
+      auto& info = fields[which->getIndex()];
+      KJ_IF_MAYBE(tag, unionTagName) {
+        flattenedFields.add(FlattenedField {
+            prefix, *tag, schema::Type::TEXT, Text::Reader(info.name) });
+      }
+
+      KJ_IF_MAYBE(handler, info.flattenHandler) {
+        handler->gatherForEncode(codec, reader.get(*which), prefix, info.prefix, flattenedFields);
+      } else {
+        flattenedFields.add(FlattenedField {
+            prefix, info.name, which->getType(), reader.get(*which) });
+      }
+    }
+  }
+
+  bool decodeField(const JsonCodec& codec, kj::StringPtr name, JsonValue::Reader value,
+                   DynamicStruct::Builder output, std::set<const void*>& unionsSeen) const {
+    auto iter = fieldsByName.find(name);
+    if (iter == fieldsByName.end()) {
+      // Ignore undefined field.
+      return true;
+    }
+
+    auto& info = iter->second;
+    switch (info.type) {
+      case FieldNameInfo::NORMAL: {
+        auto field = output.getSchema().getFields()[info.index];
+        output.adopt(field, codec.decode(value, field.getType(),
+            Orphanage::getForMessageContaining(output)));
+        return true;
+      }
+      case FieldNameInfo::FLATTENED:
+        return KJ_ASSERT_NONNULL(fields[info.index].flattenHandler)
+            .decodeField(codec, name.slice(info.prefixLength), value,
+                output.get(output.getSchema().getFields()[info.index]).as<DynamicStruct>(),
+                unionsSeen);
+      case FieldNameInfo::UNION_TAG: {
+        KJ_REQUIRE(value.isString(), "Expected string value.");
+
+        // Mark that we've seen a union tag for this struct.
+        const void* ptr = getUnionInstanceIdentifier(output);
+        KJ_REQUIRE(unionsSeen.insert(ptr).second, "Duplicate field name.");
+
+        auto iter = unionTagValues.find(value.getString());
+        if (iter != unionTagValues.end()) {
+          output.init(iter->second);
+        }
+        return true;
+      }
+      case FieldNameInfo::FLATTENED_FROM_UNION: {
+        const void* ptr = getUnionInstanceIdentifier(output);
+        if (unionsSeen.count(ptr) == 0) {
+          // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
+          return false;
+        }
+
+        auto variant = KJ_ASSERT_NONNULL(output.which());
+        return KJ_ASSERT_NONNULL(fields[info.index].flattenHandler)
+            .decodeField(codec, name.slice(info.prefixLength), value,
+                output.get(variant).as<DynamicStruct>(), unionsSeen);
+      }
+    }
+  }
+
+  const void* getUnionInstanceIdentifier(DynamicStruct::Builder obj) const {
+    // Gets a value uniquely identifying an instance of a union.
+    // HACK: We return a poniter to the union's discriminant within the underlying buffer.
+    return reinterpret_cast<const uint16_t*>(
+        AnyStruct::Reader(obj.asReader()).getDataSection().begin()) + discriminantOffset;
+  }
+};
+
+class JsonCodec::AnnotatedEnumHandler final: public JsonCodec::Handler<DynamicEnum> {
+public:
+  AnnotatedEnumHandler(EnumSchema schema): schema(schema) {
+    auto enumerants = schema.getEnumerants();
+    auto builder = kj::heapArrayBuilder<kj::StringPtr>(enumerants.size());
+
+    for (auto e: enumerants) {
+      auto proto = e.getProto();
+      kj::StringPtr name = proto.getName();
+
+      for (auto anno: proto.getAnnotations()) {
+        switch (anno.getId()) {
+          case JSON_NAME_ANNOTATION_ID:
+            name = anno.getValue().getText();
+            break;
+        }
+      }
+
+      builder.add(name);
+      nameToValue.insert(std::make_pair(name, e.getIndex()));
+    }
+
+    valueToName = builder.finish();
+  }
+
+  void encode(const JsonCodec& codec, DynamicEnum input, JsonValue::Builder output) const override {
+    KJ_IF_MAYBE(e, input.getEnumerant()) {
+      KJ_ASSERT(e->getIndex() < valueToName.size());
+      output.setString(valueToName[e->getIndex()]);
+    } else {
+      output.setNumber(input.getRaw());
+    }
+  }
+
+  DynamicEnum decode(const JsonCodec& codec, JsonValue::Reader input) const override {
+    if (input.isNumber()) {
+      return DynamicEnum(schema, static_cast<uint16_t>(input.getNumber()));
+    } else {
+      auto iter = nameToValue.find(input.getString());
+      KJ_REQUIRE(iter != nameToValue.end(), "invalid enum value", input.getString());
+      return DynamicEnum(schema.getEnumerants()[iter->second]);
+    }
+  }
+
+private:
+  EnumSchema schema;
+  kj::Array<kj::StringPtr> valueToName;
+  std::map<kj::StringPtr, uint16_t> nameToValue;
+};
+
+JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
+      StructSchema schema, kj::Maybe<kj::StringPtr> discriminator,
+      kj::Vector<Schema>& dependencies) {
+  auto insertResult = impl->annotatedHandlers.insert(std::make_pair(schema, nullptr));
+  if (insertResult.second) {
+    // Not seen before.
+    auto newHandler = kj::heap<AnnotatedHandler>(*this, schema, discriminator, dependencies);
+    auto& result = *newHandler;
+    insertResult.first->second = kj::mv(newHandler);
+    addTypeHandler(schema, result);
+    return result;
+  } else KJ_IF_MAYBE(handler, insertResult.first->second) {
+    return **handler;
+  } else {
+    KJ_FAIL_REQUIRE("cyclic JSON flattening detected", schema.getProto().getDisplayName());
+  }
+}
+
+void JsonCodec::handleByAnnotation(Schema schema) {
+  switch (schema.getProto().which()) {
+    case schema::Node::STRUCT: {
+      kj::Vector<Schema> dependencies;
+      loadAnnotatedHandler(schema.asStruct(), nullptr, dependencies);
+      for (auto dep: dependencies) {
+        handleByAnnotation(dep);
+      }
+      break;
+    }
+    case schema::Node::ENUM: {
+      auto enumSchema = schema.asEnum();
+      auto& slot = impl->annotatedEnumHandlers[enumSchema];
+      if (slot.get() == nullptr) {
+        slot = kj::heap<AnnotatedEnumHandler>(enumSchema);
+        addTypeHandler(enumSchema, *slot);
+      }
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 } // namespace capnp
