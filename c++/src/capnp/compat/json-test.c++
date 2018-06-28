@@ -838,10 +838,12 @@ R"({ "names-can_contain!anything Really": "foo",
   "multiMember": "ghi",
   "dependency": {"renamed-foo": "corge"},
   "simpleGroup": {"renamed-grault": "garply"},
-  "enums": ["qux", "renamed-bar", "foo", "renamed-baz"] })"_kj;
+  "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
+  "innerJson": [123, "hello", {"object": true}] })"_kj;
 
 static constexpr kj::StringPtr GOLDEN_ANNOTATED_REVERSE =
 R"({
+  "innerJson": [123, "hello", {"object": true}],
   "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
   "simpleGroup": { "renamed-grault": "garply" },
   "dependency": { "renamed-foo": "corge" },
@@ -896,6 +898,14 @@ KJ_TEST("rename fields") {
       TestJsonAnnotatedEnum::FOO,
       TestJsonAnnotatedEnum::BAZ
     });
+
+    auto val = root.initInnerJson();
+    auto arr = val.initArray(3);
+    arr[0].setNumber(123);
+    arr[1].setString("hello");
+    auto field = arr[2].initObject(1)[0];
+    field.setName("object");
+    field.initValue().setBoolean(true);
 
     auto encoded = json.encode(root.asReader());
     KJ_EXPECT(encoded == GOLDEN_ANNOTATED, encoded);

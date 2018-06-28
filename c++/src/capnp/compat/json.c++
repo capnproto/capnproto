@@ -1270,6 +1270,42 @@ private:
   std::map<kj::StringPtr, uint16_t> nameToValue;
 };
 
+class JsonCodec::JsonValueHandler final: public JsonCodec::Handler<DynamicStruct> {
+public:
+  void encode(const JsonCodec& codec, DynamicStruct::Reader input,
+              JsonValue::Builder output) const override {
+    rawCopy(input, kj::mv(output));
+  }
+
+  void decode(const JsonCodec& codec, JsonValue::Reader input,
+              DynamicStruct::Builder output) const override {
+    rawCopy(input, kj::mv(output));
+  }
+
+private:
+  EnumSchema schema;
+  kj::Array<kj::StringPtr> valueToName;
+  std::map<kj::StringPtr, uint16_t> nameToValue;
+
+  void rawCopy(AnyStruct::Reader input, AnyStruct::Builder output) const {
+    // HACK: Manually copy using AnyStruct, so that if JsonValue's definition changes, this code
+    //   doesn't need to be updated. However, note that if JsonValue ever adds new fields that
+    //   change its size, and the input struct is a newer version than the output, we may lose
+    //   the new fields. Technically the "correct" thing to do would be to allocate the output
+    //   struct to be exactly the same size as the input, but JsonCodec's Handler interface is
+    //   not designed to allow that -- it passes in an already-allocated builder. Oops.
+    auto dataIn = input.getDataSection();
+    auto dataOut = output.getDataSection();
+    memcpy(dataOut.begin(), dataIn.begin(), kj::min(dataOut.size(), dataIn.size()));
+
+    auto ptrIn = input.getPointerSection();
+    auto ptrOut = output.getPointerSection();
+    for (auto i: kj::zeroTo(kj::min(ptrIn.size(), ptrOut.size()))) {
+      ptrOut[i].set(ptrIn[i]);
+    }
+  }
+};
+
 JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
       StructSchema schema, kj::Maybe<kj::StringPtr> discriminator,
       kj::Vector<Schema>& dependencies) {
@@ -1291,10 +1327,16 @@ JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
 void JsonCodec::handleByAnnotation(Schema schema) {
   switch (schema.getProto().which()) {
     case schema::Node::STRUCT: {
-      kj::Vector<Schema> dependencies;
-      loadAnnotatedHandler(schema.asStruct(), nullptr, dependencies);
-      for (auto dep: dependencies) {
-        handleByAnnotation(dep);
+      if (schema.getProto().getId() == capnp::typeId<JsonValue>()) {
+        // Special handler for JsonValue.
+        static JsonValueHandler GLOBAL_HANDLER;
+        addTypeHandler(schema.asStruct(), GLOBAL_HANDLER);
+      } else {
+        kj::Vector<Schema> dependencies;
+        loadAnnotatedHandler(schema.asStruct(), nullptr, dependencies);
+        for (auto dep: dependencies) {
+          handleByAnnotation(dep);
+        }
       }
       break;
     }

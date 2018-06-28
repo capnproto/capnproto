@@ -231,6 +231,7 @@ private:
   class HandlerBase;
   class AnnotatedHandler;
   class AnnotatedEnumHandler;
+  class JsonValueHandler;
   struct Impl;
 
   kj::Own<Impl> impl;

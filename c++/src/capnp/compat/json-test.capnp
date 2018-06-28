@@ -70,6 +70,8 @@ struct TestJsonAnnotations {
   }
 
   enums @15 :List(TestJsonAnnotatedEnum);
+
+  innerJson @16 :Json.Value;
 }
 
 struct TestJsonAnnotations2 {
