@@ -231,6 +231,8 @@ private:
   class HandlerBase;
   class AnnotatedHandler;
   class AnnotatedEnumHandler;
+  class Base64Handler;
+  class HexHandler;
   class JsonValueHandler;
   struct Impl;
 

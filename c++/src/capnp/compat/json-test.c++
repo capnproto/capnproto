@@ -840,10 +840,14 @@ R"({ "names-can_contain!anything Really": "foo",
   "simpleGroup": {"renamed-grault": "garply"},
   "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
   "innerJson": [123, "hello", {"object": true}],
-  "customFieldHandler": "add-prefix-waldo" })"_kj;
+  "customFieldHandler": "add-prefix-waldo",
+  "testBase64": "ZnJlZA==",
+  "testHex": "706c756768" })"_kj;
 
 static constexpr kj::StringPtr GOLDEN_ANNOTATED_REVERSE =
 R"({
+  "testHex": "706c756768",
+  "testBase64": "ZnJlZA==",
   "customFieldHandler": "add-prefix-waldo",
   "innerJson": [123, "hello", {"object": true}],
   "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
@@ -926,6 +930,9 @@ KJ_TEST("rename fields") {
     field.initValue().setBoolean(true);
 
     root.setCustomFieldHandler("waldo");
+
+    root.setTestBase64("fred"_kj.asBytes());
+    root.setTestHex("plugh"_kj.asBytes());
 
     auto encoded = json.encode(root.asReader());
     KJ_EXPECT(encoded == GOLDEN_ANNOTATED, encoded);

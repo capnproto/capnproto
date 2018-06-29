@@ -74,6 +74,9 @@ struct TestJsonAnnotations {
   innerJson @16 :Json.Value;
 
   customFieldHandler @17 :Text;
+
+  testBase64 @18 :Data $Json.base64;
+  testHex @19 :Data $Json.hex;
 }
 
 struct TestJsonAnnotations2 {

@@ -13,4 +13,6 @@
   "dependency": {"renamed-foo": "corge"},
   "simpleGroup": {"renamed-grault": "garply"},
   "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
-  "innerJson": [123, "hello", {"object": true}] }
+  "innerJson": [123, "hello", {"object": true}],
+  "testBase64": "ZnJlZA==",
+  "testHex": "706c756768" }

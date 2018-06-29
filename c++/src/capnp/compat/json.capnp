@@ -92,3 +92,9 @@ annotation discriminator @0xcfa794e8d19a0162 (struct, union): Text;
 # by a special discriminator field with the given name. The value of the discriminator field is
 # a string naming which variant is active. This allows the members of the union to have the
 # $jsonFlatten annotation.
+
+annotation base64 @0xd7d879450a253e4b (field): Void;
+# Place on a field of type `Data` to indicate that its JSON representation is a Base64 string.
+
+annotation hex @0xf061e22f0ae5c7b5 (field): Void;
+# Place on a field of type `Data` to indicate that its JSON representation is a hex string.

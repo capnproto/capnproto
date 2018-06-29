@@ -31,6 +31,7 @@
 #include <kj/function.h>
 #include <kj/vector.h>
 #include <kj/one-of.h>
+#include <kj/encoding.h>
 
 namespace capnp {
 
@@ -896,6 +897,32 @@ void JsonCodec::addFieldHandlerImpl(StructSchema::Field field, Type type, Handle
 static constexpr uint64_t JSON_NAME_ANNOTATION_ID = 0xfa5b1fd61c2e7c3dull;
 static constexpr uint64_t JSON_FLATTEN_ANNOTATION_ID = 0x82d3e852af0336bfull;
 static constexpr uint64_t JSON_DISCRIMINATOR_ANNOTATION_ID = 0xcfa794e8d19a0162ull;
+static constexpr uint64_t JSON_BASE64_ANNOTATION_ID = 0xd7d879450a253e4bull;
+static constexpr uint64_t JSON_HEX_ANNOTATION_ID = 0xf061e22f0ae5c7b5ull;
+
+class JsonCodec::Base64Handler final: public JsonCodec::Handler<capnp::Data> {
+public:
+  void encode(const JsonCodec& codec, capnp::Data::Reader input, JsonValue::Builder output) const {
+    output.setString(kj::encodeBase64(input));
+  }
+
+  Orphan<capnp::Data> decode(const JsonCodec& codec, JsonValue::Reader input,
+                             Orphanage orphanage) const {
+    return orphanage.newOrphanCopy(capnp::Data::Reader(kj::decodeBase64(input.getString())));
+  }
+};
+
+class JsonCodec::HexHandler final: public JsonCodec::Handler<capnp::Data> {
+public:
+  void encode(const JsonCodec& codec, capnp::Data::Reader input, JsonValue::Builder output) const {
+    output.setString(kj::encodeHex(input));
+  }
+
+  Orphan<capnp::Data> decode(const JsonCodec& codec, JsonValue::Reader input,
+                             Orphanage orphanage) const {
+    return orphanage.newOrphanCopy(capnp::Data::Reader(kj::decodeHex(input.getString())));
+  }
+};
 
 class JsonCodec::AnnotatedHandler final: public JsonCodec::Handler<DynamicStruct> {
 public:
@@ -962,6 +989,18 @@ public:
             KJ_REQUIRE(fieldProto.isGroup(), "only unions can have discriminator");
             subDiscriminator = anno.getValue().getText();
             break;
+          case JSON_BASE64_ANNOTATION_ID: {
+            KJ_REQUIRE(field.getType().isData(), "only Data can be marked for base64 encoding");
+            static Base64Handler handler;
+            codec.addFieldHandler(field, handler);
+            break;
+          }
+          case JSON_HEX_ANNOTATION_ID: {
+            KJ_REQUIRE(field.getType().isData(), "only Data can be marked for hex encoding");
+            static HexHandler handler;
+            codec.addFieldHandler(field, handler);
+            break;
+          }
         }
       }
 
