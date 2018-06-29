@@ -1276,7 +1276,12 @@ class JsonCodec::JsonValueHandler final: public JsonCodec::Handler<DynamicStruct
 public:
   void encode(const JsonCodec& codec, DynamicStruct::Reader input,
               JsonValue::Builder output) const override {
+#if _MSC_VER
+    // TODO(msvc): Hack to work around missing AnyStruct::Builder constructor on MSVC.
+    rawCopy(input, toDynamic(output));
+#else
     rawCopy(input, kj::mv(output));
+#endif
   }
 
   void decode(const JsonCodec& codec, JsonValue::Reader input,
