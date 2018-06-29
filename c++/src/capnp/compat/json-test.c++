@@ -839,10 +839,12 @@ R"({ "names-can_contain!anything Really": "foo",
   "dependency": {"renamed-foo": "corge"},
   "simpleGroup": {"renamed-grault": "garply"},
   "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
-  "innerJson": [123, "hello", {"object": true}] })"_kj;
+  "innerJson": [123, "hello", {"object": true}],
+  "customFieldHandler": "add-prefix-waldo" })"_kj;
 
 static constexpr kj::StringPtr GOLDEN_ANNOTATED_REVERSE =
 R"({
+  "customFieldHandler": "add-prefix-waldo",
   "innerJson": [123, "hello", {"object": true}],
   "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
   "simpleGroup": { "renamed-grault": "garply" },
@@ -861,10 +863,26 @@ R"({
   "names-can_contain!anything Really": "foo"
 })"_kj;
 
+class PrefixAdder: public JsonCodec::Handler<capnp::Text> {
+public:
+  void encode(const JsonCodec& codec, capnp::Text::Reader input, JsonValue::Builder output) const {
+    output.setString(kj::str("add-prefix-", input));
+  }
+
+  Orphan<capnp::Text> decode(const JsonCodec& codec, JsonValue::Reader input,
+                             Orphanage orphanage) const {
+    return orphanage.newOrphanCopy(capnp::Text::Reader(input.getString().slice(11)));
+  }
+};
+
 KJ_TEST("rename fields") {
   JsonCodec json;
   json.handleByAnnotation<TestJsonAnnotations>();
   json.setPrettyPrint(true);
+
+  PrefixAdder customHandler;
+  json.addFieldHandler(Schema::from<TestJsonAnnotations>().getFieldByName("customFieldHandler"),
+                       customHandler);
 
   kj::String goldenText;
 
@@ -906,6 +924,8 @@ KJ_TEST("rename fields") {
     auto field = arr[2].initObject(1)[0];
     field.setName("object");
     field.initValue().setBoolean(true);
+
+    root.setCustomFieldHandler("waldo");
 
     auto encoded = json.encode(root.asReader());
     KJ_EXPECT(encoded == GOLDEN_ANNOTATED, encoded);

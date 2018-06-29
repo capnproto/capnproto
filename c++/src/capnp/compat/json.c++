@@ -30,6 +30,7 @@
 #include <kj/debug.h>
 #include <kj/function.h>
 #include <kj/vector.h>
+#include <kj/one-of.h>
 
 namespace capnp {
 
@@ -403,18 +404,22 @@ void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphana
   KJ_REQUIRE(input.isObject(), "Expected object value");
   for (auto field: input.getObject()) {
     KJ_IF_MAYBE(fieldSchema, type.findFieldByName(field.getName())) {
-      auto fieldValue = field.getValue();
-      auto fieldType = (*fieldSchema).getType();
-
-      auto iter = impl->fieldHandlers.find(*fieldSchema);
-      if (iter != impl->fieldHandlers.end()) {
-        output.adopt(*fieldSchema, iter->second->decodeBase(*this, fieldValue, fieldType, orphanage));
-      } else {
-        output.adopt(*fieldSchema, decode(fieldValue, fieldType, orphanage));
-      }
+      decodeField(*fieldSchema, field.getValue(), orphanage, output);
     } else {
       // Unknown json fields are ignored to allow schema evolution
     }
+  }
+}
+
+void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader fieldValue,
+                            Orphanage orphanage, DynamicStruct::Builder output) const {
+  auto fieldType = fieldSchema.getType();
+
+  auto iter = impl->fieldHandlers.find(fieldSchema);
+  if (iter != impl->fieldHandlers.end()) {
+    output.adopt(fieldSchema, iter->second->decodeBase(*this, fieldValue, fieldType, orphanage));
+  } else {
+    output.adopt(fieldSchema, decode(fieldValue, fieldType, orphanage));
   }
 }
 
@@ -1027,7 +1032,14 @@ public:
       auto& in = flattenedFields[i];
       auto out = outs[i];
       out.setName(in.name);
-      codec.encode(in.value, in.type, out.initValue());
+      KJ_SWITCH_ONEOF(in.type) {
+        KJ_CASE_ONEOF(type, Type) {
+          codec.encode(in.value, type, out.initValue());
+        }
+        KJ_CASE_ONEOF(field, StructSchema::Field) {
+          codec.encodeField(field, in.value, out.initValue());
+        }
+      }
     }
   }
 
@@ -1111,10 +1123,11 @@ private:
   struct FlattenedField {
     kj::String ownName;
     kj::StringPtr name;
-    Type type;
+    kj::OneOf<StructSchema::Field, Type> type;
     DynamicValue::Reader value;
 
-    FlattenedField(kj::StringPtr prefix, kj::StringPtr name, Type type, DynamicValue::Reader value)
+    FlattenedField(kj::StringPtr prefix, kj::StringPtr name,
+                   kj::OneOf<StructSchema::Field, Type> type, DynamicValue::Reader value)
         : ownName(prefix.size() > 0 ? kj::str(prefix, name) : nullptr),
           name(prefix.size() > 0 ? ownName : name),
           type(type), value(value) {}
@@ -1143,7 +1156,7 @@ private:
         handler->gatherForEncode(codec, reader.get(field), prefix, info.prefix, flattenedFields);
       } else {
         flattenedFields.add(FlattenedField {
-            prefix, info.name, field.getType(), reader.get(field) });
+            prefix, info.name, field, reader.get(field) });
       }
     }
 
@@ -1151,7 +1164,7 @@ private:
       auto& info = fields[which->getIndex()];
       KJ_IF_MAYBE(tag, unionTagName) {
         flattenedFields.add(FlattenedField {
-            prefix, *tag, schema::Type::TEXT, Text::Reader(info.name) });
+            prefix, *tag, Type(schema::Type::TEXT), Text::Reader(info.name) });
       }
 
       KJ_IF_MAYBE(handler, info.flattenHandler) {
@@ -1175,8 +1188,7 @@ private:
     switch (info.type) {
       case FieldNameInfo::NORMAL: {
         auto field = output.getSchema().getFields()[info.index];
-        output.adopt(field, codec.decode(value, field.getType(),
-            Orphanage::getForMessageContaining(output)));
+        codec.decodeField(field, value, Orphanage::getForMessageContaining(output), output);
         return true;
       }
       case FieldNameInfo::FLATTENED:
