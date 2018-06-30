@@ -79,7 +79,7 @@ kj::Own<ClientHook> AnyPointer::Pipeline::asCap() {
 
 #endif  // !CAPNP_LITE
 
-Equality AnyStruct::Reader::equals(AnyStruct::Reader right) {
+Equality AnyStruct::Reader::equals(AnyStruct::Reader right) const {
   auto dataL = getDataSection();
   size_t dataSizeL = dataL.size();
   while(dataSizeL > 0 && dataL[dataSizeL - 1] == 0) {
@@ -150,7 +150,7 @@ kj::StringPtr KJ_STRINGIFY(Equality res) {
   KJ_UNREACHABLE;
 }
 
-Equality AnyList::Reader::equals(AnyList::Reader right) {
+Equality AnyList::Reader::equals(AnyList::Reader right) const {
   if(size() != right.size()) {
     return Equality::NOT_EQUAL;
   }
@@ -209,7 +209,7 @@ Equality AnyList::Reader::equals(AnyList::Reader right) {
   KJ_UNREACHABLE;
 }
 
-Equality AnyPointer::Reader::equals(AnyPointer::Reader right) {
+Equality AnyPointer::Reader::equals(AnyPointer::Reader right) const {
   if(getPointerType() != right.getPointerType()) {
     return Equality::NOT_EQUAL;
   }
@@ -227,7 +227,7 @@ Equality AnyPointer::Reader::equals(AnyPointer::Reader right) {
   KJ_UNREACHABLE;
 }
 
-bool AnyPointer::Reader::operator==(AnyPointer::Reader right) {
+bool AnyPointer::Reader::operator==(AnyPointer::Reader right) const {
   switch(equals(right)) {
     case Equality::EQUAL:
       return true;
@@ -240,7 +240,7 @@ bool AnyPointer::Reader::operator==(AnyPointer::Reader right) {
   KJ_UNREACHABLE;
 }
 
-bool AnyStruct::Reader::operator==(AnyStruct::Reader right) {
+bool AnyStruct::Reader::operator==(AnyStruct::Reader right) const {
   switch(equals(right)) {
     case Equality::EQUAL:
       return true;
@@ -253,7 +253,7 @@ bool AnyStruct::Reader::operator==(AnyStruct::Reader right) {
   KJ_UNREACHABLE;
 }
 
-bool AnyList::Reader::operator==(AnyList::Reader right) {
+bool AnyList::Reader::operator==(AnyList::Reader right) const {
   switch(equals(right)) {
     case Equality::EQUAL:
       return true;

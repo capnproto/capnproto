@@ -104,9 +104,9 @@ struct AnyPointer {
     inline bool isList() const { return getPointerType() == PointerType::LIST; }
     inline bool isCapability() const { return getPointerType() == PointerType::CAPABILITY; }
 
-    Equality equals(AnyPointer::Reader right);
-    bool operator==(AnyPointer::Reader right);
-    inline bool operator!=(AnyPointer::Reader right) {
+    Equality equals(AnyPointer::Reader right) const;
+    bool operator==(AnyPointer::Reader right) const;
+    inline bool operator!=(AnyPointer::Reader right) const {
       return !(*this == right);
     }
 
@@ -158,13 +158,13 @@ struct AnyPointer {
     inline bool isList() { return getPointerType() == PointerType::LIST; }
     inline bool isCapability() { return getPointerType() == PointerType::CAPABILITY; }
 
-    inline Equality equals(AnyPointer::Reader right) {
+    inline Equality equals(AnyPointer::Reader right) const {
       return asReader().equals(right);
     }
-    inline bool operator==(AnyPointer::Reader right) {
+    inline bool operator==(AnyPointer::Reader right) const {
       return asReader() == right;
     }
-    inline bool operator!=(AnyPointer::Reader right) {
+    inline bool operator!=(AnyPointer::Reader right) const {
       return !(*this == right);
     }
 
@@ -477,9 +477,9 @@ public:
     return _reader.canonicalize();
   }
 
-  Equality equals(AnyStruct::Reader right);
-  bool operator==(AnyStruct::Reader right);
-  inline bool operator!=(AnyStruct::Reader right) {
+  Equality equals(AnyStruct::Reader right) const;
+  bool operator==(AnyStruct::Reader right) const;
+  inline bool operator!=(AnyStruct::Reader right) const {
     return !(*this == right);
   }
 
@@ -521,13 +521,13 @@ public:
     return List<AnyPointer>::Builder(_builder.getPointerSectionAsList());
   }
 
-  inline Equality equals(AnyStruct::Reader right) {
+  inline Equality equals(AnyStruct::Reader right) const {
     return asReader().equals(right);
   }
-  inline bool operator==(AnyStruct::Reader right) {
+  inline bool operator==(AnyStruct::Reader right) const {
     return asReader() == right;
   }
-  inline bool operator!=(AnyStruct::Reader right) {
+  inline bool operator!=(AnyStruct::Reader right) const {
     return !(*this == right);
   }
 
@@ -651,9 +651,9 @@ public:
 
   inline kj::ArrayPtr<const byte> getRawBytes() { return _reader.asRawBytes(); }
 
-  Equality equals(AnyList::Reader right);
-  bool operator==(AnyList::Reader right);
-  inline bool operator!=(AnyList::Reader right) {
+  Equality equals(AnyList::Reader right) const;
+  bool operator==(AnyList::Reader right) const;
+  inline bool operator!=(AnyList::Reader right) const {
     return !(*this == right);
   }
 
@@ -689,11 +689,11 @@ public:
   inline ElementSize getElementSize() { return _builder.getElementSize(); }
   inline uint size() { return unbound(_builder.size() / ELEMENTS); }
 
-  Equality equals(AnyList::Reader right);
-  inline bool operator==(AnyList::Reader right) {
+  Equality equals(AnyList::Reader right) const;
+  inline bool operator==(AnyList::Reader right) const{
     return asReader() == right;
   }
-  inline bool operator!=(AnyList::Reader right) {
+  inline bool operator!=(AnyList::Reader right) const{
     return !(*this == right);
   }
 
