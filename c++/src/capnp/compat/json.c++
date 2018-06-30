@@ -1217,6 +1217,8 @@ private:
 
   bool decodeField(const JsonCodec& codec, kj::StringPtr name, JsonValue::Reader value,
                    DynamicStruct::Builder output, std::set<const void*>& unionsSeen) const {
+    KJ_ASSERT(output.getSchema() == schema);
+
     auto iter = fieldsByName.find(name);
     if (iter == fieldsByName.end()) {
       // Ignore undefined field.
@@ -1256,7 +1258,7 @@ private:
         }
 
         auto variant = KJ_ASSERT_NONNULL(output.which());
-        return KJ_ASSERT_NONNULL(fields[info.index].flattenHandler)
+        return KJ_ASSERT_NONNULL(fields[variant.getIndex()].flattenHandler)
             .decodeField(codec, name.slice(info.prefixLength), value,
                 output.get(variant).as<DynamicStruct>(), unionsSeen);
       }
