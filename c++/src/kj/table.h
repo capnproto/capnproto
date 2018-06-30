@@ -73,36 +73,56 @@ class Table {
   //   template <typename Key>
   //   class Index {
   //   public:
-  //     kj::Maybe<size_t> insert(kj::ArrayPtr<const Row> table, size_t pos);
-  //     // Called to indicate that table[pos] is a newly-added value that needs to be indexed.
-  //     // If this index disallows duplicates and some other matching row already exists, then
-  //     // insert() returns the index of that row -- in this case, the table will roll back the
-  //     // insertion.
-  //     //
-  //     // Insert may throw an exception, in which case the table will roll back insertion.
-  //
   //     void reserve(size_t size);
   //     // Called when Table::reserve() is called.
   //
-  //     void erase(kj::ArrayPtr<const Row> table, size_t pos);
-  //     // Called to indicate that table[pos] is about to be removed, so should be de-indexed.
-  //     //
-  //     // erase() called immediately after insert() must not throw an exception, as it may be
-  //     // called during unwind.
+  //     // In all function calls below, `SearchPrams` refers to whatever parameters the index
+  //     // supports for looking up a row in the table. At the very least, the table row type
+  //     // itself must be supported. However, most indexes will also want to support some sort
+  //     // of "key" type that is not a whole row.
   //
-  //     void move(kj::ArrayPtr<const Row> table, size_t oldPos, size_t newPos);
-  //     // Called when the value at table[oldPos] is about to be moved to table[newPos].
+  //     template <typename... SearchParams>
+  //     kj::Maybe<size_t> insert(kj::ArrayPtr<const Row> table, size_t pos, SearchParams&&...);
+  //     // Called to indicate that we're about to insert a new row which will match the given
+  //     // search parameters, and will be located at the given position. If this index disallows
+  //     //  duplicates and some other matching row already exists, then insert() returns the index
+  //     // of that row without modifying the index. If the row does not exist, then insert()
+  //     // updates the index to note that the new row is located at `pos`. Note that `table[pos]`
+  //     // may not be valid yet at the time of this call; the index must go on the search params
+  //     // alone.
+  //     //
+  //     // Insert may throw an exception, in which case the table will roll back insertion.
+  //
+  //     template <typename... SearchParams>
+  //     void erase(kj::ArrayPtr<const Row> table, size_t pos, SearchParams&&...);
+  //     // Called to indicate that the index must remove references to row number `pos`. The
+  //     // index must not attempt to access table[pos] directly -- in fact, `pos` may be equal to
+  //     // `table.size()`, i.e., may be out-of-bounds (this happens when rolling back a failed
+  //     // insertion). Instead, the index can use the search params to search for the row -- they
+  //     // will either be the same as the params passed to insert(), or will be a single value of
+  //     // type `Row&`.
+  //     //
+  //     // erase() called immediately after a successful insert() must not throw an exception, as
+  //     // it may be called during unwind.
+  //
+  //     template <typename... SearchParams>
+  //     void move(kj::ArrayPtr<const Row> table, size_t oldPos, size_t newPos, SearchParams&&...);
+  //     // Called when a row is about to be moved from `oldPos` to `newPos` in the table. The
+  //     // index should update it to the new location. Neither `table[oldPos]` nor `table[newPos]`
+  //     // is valid during the call -- use the search params to find the row. Before this call
+  //     // `oldPos` is indexed and `newPos` is not -- after the call, the opposite is true.
+  //     //
   //     // This should never throw; if it does the table may be corrupted.
   //
   //     class Iterator;  // Behaves like a C++ iterator over size_t values.
   //     class Iterable;  // Has begin() and end() methods returning iterators.
   //
-  //     template <typename... Params>
-  //     Maybe<size_t> find(kj::ArrayPtr<const Row> table, Params&&...) const;
+  //     template <typename... SearchParams>
+  //     Maybe<size_t> find(kj::ArrayPtr<const Row> table, SearchParams&&...) const;
   //     // Optional. Implements Table::find<Index>(...).
   //
-  //     template <typename... Params>
-  //     Iterable range(kj::ArrayPtr<const Row> table, Params&&...) const;
+  //     template <typename... SearchParams>
+  //     Iterable range(kj::ArrayPtr<const Row> table, SearchParams&&...) const;
   //     // Optional. Implements Table::range<Index>(...).
   //
   //     Iterator begin() const;
@@ -155,6 +175,15 @@ public:
   // Using the given index, search for a matching row. What parameters are accepted depends on the
   // index. Not all indexes support this method -- "multimap" indexes may support only range().
 
+  template <typename Index, typename... Params, typename Func>
+  Row& findOrCreate(Params&&... params, Func&& createFunc);
+  // Like find(), but if the row doesn't exist, call a function to create it. createFunc() must
+  // return `Row` or something that implicitly converts to `Row`.
+  //
+  // NOTE: C++ doesn't actually properly suppoprt inferring types of a parameter pack at the
+  //   beginning of an argument list, but we define a hack to support it below. Don't worry about
+  //   it.
+
   template <typename Index, typename... Params>
   auto range(Params&&... params);
   template <typename Index, typename... Params>
@@ -199,6 +228,8 @@ public:
   kj::Maybe<Row&> find(Params&&... params);
   template <size_t index = 0, typename... Params>
   kj::Maybe<const Row&> find(Params&&... params) const;
+  template <size_t index = 0, typename... Params, typename Func>
+  Row& findOrCreate(Params&&... params, Func&& createFunc);
   template <size_t index = 0, typename... Params>
   auto range(Params&&... params);
   template <size_t index = 0, typename... Params>
@@ -221,12 +252,25 @@ public:
   // Checks the integrity of indexes, throwing an exception if there are any problems. This is
   // intended to be called within the unit test for an index.
 
+  template <typename Index, typename First, typename... Rest>
+  Row& findOrCreate(First&& first, Rest&&... rest);
+  template <size_t index = 0, typename First, typename... Rest>
+  Row& findOrCreate(First&& first, Rest&&... rest);
+  // HACK: A parameter pack can only be inferred if it lives at the end of the argument list, so
+  //   the findOrCreate() definitions from earlier won't actually work. These ones will, but we
+  //   have to do some annoying things inside to regroup the arguments.
+
 private:
   Vector<Row> rows;
   Tuple<Indexes...> indexes;
 
   template <size_t index = 0, bool final = (index >= sizeof...(Indexes))>
   class Impl;
+  template <typename Func, typename... Params>
+  class FindOrCreateImpl;
+
+  template <typename ParamsTuple, typename... Params>
+  struct FindOrCreateHack;
 
   void eraseImpl(size_t pos);
   template <typename Collection>
@@ -408,26 +452,29 @@ public:
     Impl<index + 1>::clear(table);
   }
 
-  static kj::Maybe<size_t> insert(Table<Row, Indexes...>& table, size_t pos) {
-    KJ_IF_MAYBE(existing, get<index>(table.indexes).insert(table.rows.asPtr(), pos)) {
+  static kj::Maybe<size_t> insert(Table<Row, Indexes...>& table, size_t pos, Row& row, uint skip) {
+    if (skip == index) {
+      return Impl<index + 1>::insert(table, pos, row, skip);
+    }
+    KJ_IF_MAYBE(existing, get<index>(table.indexes).insert(table.rows.asPtr(), pos, row)) {
       return *existing;
     }
 
     bool success = false;
-    KJ_DEFER(if (!success) { get<index>(table.indexes).erase(table.rows.asPtr(), pos); });
-    auto result = Impl<index + 1>::insert(table, pos);
+    KJ_DEFER(if (!success) { get<index>(table.indexes).erase(table.rows.asPtr(), pos, row); });
+    auto result = Impl<index + 1>::insert(table, pos, row, skip);
     success = result == nullptr;
     return result;
   }
 
-  static void erase(Table<Row, Indexes...>& table, size_t pos) {
-    get<index>(table.indexes).erase(table.rows.asPtr(), pos);
-    Impl<index + 1>::erase(table, pos);
+  static void erase(Table<Row, Indexes...>& table, size_t pos, Row& row) {
+    get<index>(table.indexes).erase(table.rows.asPtr(), pos, row);
+    Impl<index + 1>::erase(table, pos, row);
   }
 
-  static void move(Table<Row, Indexes...>& table, size_t oldPos, size_t newPos) {
-    get<index>(table.indexes).move(table.rows.asPtr(), oldPos, newPos);
-    Impl<index + 1>::move(table, oldPos, newPos);
+  static void move(Table<Row, Indexes...>& table, size_t oldPos, size_t newPos, Row& row) {
+    get<index>(table.indexes).move(table.rows.asPtr(), oldPos, newPos, row);
+    Impl<index + 1>::move(table, oldPos, newPos, row);
   }
 };
 
@@ -437,9 +484,11 @@ class Table<Row, Indexes...>::Impl<index, true> {
 public:
   static void reserve(Table<Row, Indexes...>& table, size_t size) {}
   static void clear(Table<Row, Indexes...>& table) {}
-  static kj::Maybe<size_t> insert(Table<Row, Indexes...>& table, size_t pos) { return nullptr; }
-  static void erase(Table<Row, Indexes...>& table, size_t pos) {}
-  static void move(Table<Row, Indexes...>& table, size_t oldPos, size_t newPos) {}
+  static kj::Maybe<size_t> insert(Table<Row, Indexes...>& table, size_t pos, Row& row, uint skip) {
+    return nullptr;
+  }
+  static void erase(Table<Row, Indexes...>& table, size_t pos, Row& row) {}
+  static void move(Table<Row, Indexes...>& table, size_t oldPos, size_t newPos, Row& row) {}
 };
 
 template <typename Row, typename... Indexes>
@@ -488,15 +537,10 @@ const Row* Table<Row, Indexes...>::end() const {
 
 template <typename Row, typename... Indexes>
 Row& Table<Row, Indexes...>::insert(Row&& row) {
-  size_t pos = rows.size();
-  Row& rowRef = rows.add(kj::mv(row));
-  bool success = false;
-  KJ_DEFER({ if (!success) rows.removeLast(); });
-  KJ_IF_MAYBE(existing, Impl<>::insert(*this, pos)) {
+  KJ_IF_MAYBE(existing, Impl<>::insert(*this, rows.size(), row, kj::maxValue)) {
     _::throwDuplicateTableRow();
   } else {
-    success = true;
-    return rowRef;
+    return rows.add(kj::mv(row));
   }
 }
 template <typename Row, typename... Indexes>
@@ -525,14 +569,11 @@ void Table<Row, Indexes...>::insertAll(Collection& collection) {
 template <typename Row, typename... Indexes>
 template <typename UpdateFunc>
 Row& Table<Row, Indexes...>::upsert(Row&& row, UpdateFunc&& update) {
-  size_t pos = rows.size();
-  Row& rowRef = rows.add(kj::mv(row));
-  KJ_IF_MAYBE(existing, Impl<>::insert(*this, pos)) {
-    update(rows[*existing], kj::mv(rowRef));
-    rows.removeLast();
+  KJ_IF_MAYBE(existing, Impl<>::insert(*this, rows.size(), row, kj::maxValue)) {
+    update(rows[*existing], kj::mv(row));
     return rows[*existing];
   } else {
-    return rowRef;
+    return rows.add(kj::mv(row));
   }
 }
 template <typename Row, typename... Indexes>
@@ -568,6 +609,59 @@ kj::Maybe<const Row&> Table<Row, Indexes...>::find(Params&&... params) const {
   } else {
     return nullptr;
   }
+}
+
+template <typename Row, typename... Indexes>
+template <typename... Params, typename Func>
+class Table<Row, Indexes...>::FindOrCreateImpl<Func, Params...> {
+public:
+  template <size_t index>
+  static Row& apply(Table<Row, Indexes...>& table, Params&&... params, Func&& createFunc) {
+    auto pos = table.rows.size();
+    KJ_IF_MAYBE(existing, get<index>(table.indexes).insert(table.rows.asPtr(), pos, params...)) {
+      return table.rows[*existing];
+    } else {
+      bool success = false;
+      auto& newRow = table.rows.add(createFunc());
+      KJ_DEFER({
+        if (!success) {
+          table.rows.removeLast();
+          get<index>(table.indexes).erase(table.rows.asPtr(), pos, params...);
+        }
+      });
+      if (Impl<>::insert(table, pos, newRow, index) == nullptr) {
+        success = true;
+      } else {
+        _::throwDuplicateTableRow();
+      }
+      return newRow;
+    }
+  }
+};
+
+template <typename Row, typename... Indexes>
+template <typename... T, typename U, typename V, typename... W>
+struct Table<Row, Indexes...>::FindOrCreateHack<_::Tuple<T...>, U, V, W...>
+    : public FindOrCreateHack<_::Tuple<T..., U>, V, W...> {};
+template <typename Row, typename... Indexes>
+template <typename... T, typename U>
+struct Table<Row, Indexes...>::FindOrCreateHack<_::Tuple<T...>, U>
+    : public FindOrCreateImpl<U, T...> {};
+// This awful hack works around C++'s lack of support for parameter packs anywhere other than at
+// the end of an argument list. We accumulate all of the types except for the last one into a
+// Tuple, then forward to FindOrCreateImpl with the last parameter as the Func.
+
+template <typename Row, typename... Indexes>
+template <typename Index, typename First, typename... Rest>
+Row& Table<Row, Indexes...>::findOrCreate(First&& first, Rest&&... rest) {
+  return findOrCreate<indexOfType<Index, Tuple<Indexes...>>()>(
+      kj::fwd<First>(first), kj::fwd<Rest>(rest)...);
+}
+template <typename Row, typename... Indexes>
+template <size_t index, typename First, typename... Rest>
+Row& Table<Row, Indexes...>::findOrCreate(First&& first, Rest&&... rest) {
+  return FindOrCreateHack<_::Tuple<>, First, Rest...>::template apply<index>(
+      *this, kj::fwd<First>(first), kj::fwd<Rest>(rest)...);
 }
 
 template <typename Row, typename... Indexes>
@@ -655,10 +749,10 @@ void Table<Row, Indexes...>::erase(Row& row) {
 }
 template <typename Row, typename... Indexes>
 void Table<Row, Indexes...>::eraseImpl(size_t pos) {
-  Impl<>::erase(*this, pos);
+  Impl<>::erase(*this, pos, rows[pos]);
   size_t back = rows.size() - 1;
   if (pos != back) {
-    Impl<>::move(*this, back, pos);
+    Impl<>::move(*this, back, pos, rows[back]);
     rows[pos] = kj::mv(rows[back]);
   }
   rows.removeLast();
@@ -778,14 +872,14 @@ public:
     memset(buckets.begin(), 0, buckets.asBytes().size());
   }
 
-  template <typename Row>
-  kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos) {
-    if (buckets.size() * 2 < (table.size() + erasedCount) * 3) {
+  template <typename Row, typename... Params>
+  kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos, Params&&... params) {
+    if (buckets.size() * 2 < (table.size() + 1 + erasedCount) * 3) {
       // Load factor is more than 2/3, let's rehash.
-      rehash(kj::max(buckets.size() * 2, table.size() * 2));
+      rehash(kj::max(buckets.size() * 2, (table.size() + 1) * 2));
     }
 
-    uint hashCode = cb.hashCode(table[pos]);
+    uint hashCode = cb.hashCode(params...);
     Maybe<_::HashBucket&> erasedSlot;
     for (uint i = _::chooseBucket(hashCode, buckets.size());; i = _::probeHash(buckets, i)) {
       auto& bucket = buckets[i];
@@ -805,16 +899,16 @@ public:
           erasedSlot = bucket;
         }
       } else if (bucket.hash == hashCode &&
-                 cb.matches(bucket.getRow(table), table[pos])) {
+                 cb.matches(bucket.getRow(table), params...)) {
         // duplicate row
         return size_t(bucket.getPos());
       }
     }
   }
 
-  template <typename Row>
-  void erase(kj::ArrayPtr<Row> table, size_t pos) {
-    uint hashCode = cb.hashCode(table[pos]);
+  template <typename Row, typename... Params>
+  void erase(kj::ArrayPtr<Row> table, size_t pos, Params&&... params) {
+    uint hashCode = cb.hashCode(params...);
     for (uint i = _::chooseBucket(hashCode, buckets.size());; i = _::probeHash(buckets, i)) {
       auto& bucket = buckets[i];
       if (bucket.isPos(pos)) {
@@ -830,9 +924,9 @@ public:
     }
   }
 
-  template <typename Row>
-  void move(kj::ArrayPtr<Row> table, size_t oldPos, size_t newPos) {
-    uint hashCode = cb.hashCode(table[oldPos]);
+  template <typename Row, typename... Params>
+  void move(kj::ArrayPtr<Row> table, size_t oldPos, size_t newPos, Params&&... params) {
+    uint hashCode = cb.hashCode(params...);
     for (uint i = _::chooseBucket(hashCode, buckets.size());; i = _::probeHash(buckets, i)) {
       auto& bucket = buckets[i];
       if (bucket.isPos(oldPos)) {
@@ -1317,12 +1411,11 @@ public:
   inline auto begin() const { return impl.begin(); }
   inline auto end() const { return impl.end(); }
 
-  template <typename Row>
-  kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos) {
-    auto& newRow = table[pos];
-    auto iter = impl.insert(searchKey(table, newRow));
+  template <typename Row, typename... Params>
+  kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos, Params&&... params) {
+    auto iter = impl.insert(searchKey(table, params...));
 
-    if (!iter.isEnd() && cb.matches(table[*iter], newRow)) {
+    if (!iter.isEnd() && cb.matches(table[*iter], params...)) {
       return *iter;
     } else {
       iter.insert(impl, pos);
@@ -1330,16 +1423,14 @@ public:
     }
   }
 
-  template <typename Row>
-  void erase(kj::ArrayPtr<Row> table, size_t pos) {
-    auto& row = table[pos];
-    impl.erase(pos, searchKey(table, row));
+  template <typename Row, typename... Params>
+  void erase(kj::ArrayPtr<Row> table, size_t pos, Params&&... params) {
+    impl.erase(pos, searchKey(table, params...));
   }
 
-  template <typename Row>
-  void move(kj::ArrayPtr<Row> table, size_t oldPos, size_t newPos) {
-    auto& row = table[oldPos];
-    impl.renumber(oldPos, newPos, searchKey(table, row));
+  template <typename Row, typename... Params>
+  void move(kj::ArrayPtr<Row> table, size_t oldPos, size_t newPos, Params&&... params) {
+    impl.renumber(oldPos, newPos, searchKey(table, params...));
   }
 
   template <typename Row, typename... Params>
@@ -1452,17 +1543,17 @@ public:
   inline Iterator end() const { return Iterator(links, 0); }
 
   template <typename Row>
-  kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos) {
+  kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos, const Row& row) {
     return insertImpl(pos);
   }
 
   template <typename Row>
-  void erase(kj::ArrayPtr<Row> table, size_t pos) {
+  void erase(kj::ArrayPtr<Row> table, size_t pos, const Row& row) {
     eraseImpl(pos);
   }
 
   template <typename Row>
-  void move(kj::ArrayPtr<Row> table, size_t oldPos, size_t newPos) {
+  void move(kj::ArrayPtr<Row> table, size_t oldPos, size_t newPos, const Row& row) {
     return moveImpl(oldPos, newPos);
   }
 

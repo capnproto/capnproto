@@ -82,6 +82,11 @@ public:
   //
   // Note that the default hasher for String accepts StringPtr.
 
+  template <typename KeyLike, typename Func>
+  Value& findOrCreate(KeyLike&& key, Func&& createEntry);
+  // Like find() but if the key isn't present then call createEntry() to create the corresponding
+  // entry and insert it. createEntry() must return type `Entry`.
+
   template <typename KeyLike>
   bool erase(KeyLike&& key);
   // Erase the entry with the matching key.
@@ -172,9 +177,12 @@ public:
   template <typename KeyLike>
   kj::Maybe<const Value&> find(KeyLike&& key) const;
   // Search for a matching key. The input does not have to be of type `Key`; it merely has to
-  // be something that the Hasher accepts.
-  //
-  // Note that the default hasher for String accepts StringPtr.
+  // be something that can be compared against `Key`.
+
+  template <typename KeyLike, typename Func>
+  Value& findOrCreate(KeyLike&& key, Func&& createEntry);
+  // Like find() but if the key isn't present then call createEntry() to create the corresponding
+  // entry and insert it. createEntry() must return type `Entry`.
 
   template <typename K1, typename K2>
   auto range(K1&& k1, K2&& k2);
@@ -343,6 +351,12 @@ kj::Maybe<const Value&> HashMap<Key, Value>::find(KeyLike&& key) const {
 }
 
 template <typename Key, typename Value>
+template <typename KeyLike, typename Func>
+Value& HashMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
+  return table.findOrCreate(key, kj::fwd<Func>(createEntry)).value;
+}
+
+template <typename Key, typename Value>
 template <typename KeyLike>
 bool HashMap<Key, Value>::erase(KeyLike&& key) {
   return table.eraseMatch(key);
@@ -426,6 +440,12 @@ template <typename Key, typename Value>
 template <typename KeyLike>
 kj::Maybe<const Value&> TreeMap<Key, Value>::find(KeyLike&& key) const {
   return table.find(key).map([](const Entry& e) -> const Value& { return e.value; });
+}
+
+template <typename Key, typename Value>
+template <typename KeyLike, typename Func>
+Value& TreeMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
+  return table.findOrCreate(key, kj::fwd<Func>(createEntry)).value;
 }
 
 template <typename Key, typename Value>

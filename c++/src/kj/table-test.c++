@@ -148,6 +148,37 @@ KJ_TEST("simple table") {
     KJ_EXPECT(*iter++ == "corge");
     KJ_EXPECT(iter == table.end());
   }
+
+  auto& graultRow = table.begin()[1];
+  kj::StringPtr origGrault = graultRow;
+
+  KJ_EXPECT(&table.findOrCreate("grault",
+      [&]() -> kj::StringPtr { KJ_FAIL_ASSERT("shouldn't have called this"); }) == &graultRow);
+  KJ_EXPECT(graultRow.begin() == origGrault.begin());
+  KJ_EXPECT(&KJ_ASSERT_NONNULL(table.find("grault")) == &graultRow);
+  KJ_EXPECT(table.find("waldo") == nullptr);
+  KJ_EXPECT(table.size() == 4);
+
+  kj::String searchWaldo = kj::str("waldo");
+  kj::String insertWaldo = kj::str("waldo");
+
+  auto& waldo = table.findOrCreate(searchWaldo,
+      [&]() -> kj::StringPtr { return insertWaldo; });
+  KJ_EXPECT(waldo == "waldo");
+  KJ_EXPECT(waldo.begin() == insertWaldo.begin());
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("grault")) == "grault");
+  KJ_EXPECT(&KJ_ASSERT_NONNULL(table.find("waldo")) == &waldo);
+  KJ_EXPECT(table.size() == 5);
+
+  {
+    auto iter = table.begin();
+    KJ_EXPECT(*iter++ == "garply");
+    KJ_EXPECT(*iter++ == "grault");
+    KJ_EXPECT(*iter++ == "qux");
+    KJ_EXPECT(*iter++ == "corge");
+    KJ_EXPECT(*iter++ == "waldo");
+    KJ_EXPECT(iter == table.end());
+  }
 }
 
 class BadHasher {
@@ -300,6 +331,47 @@ KJ_TEST("double-index table") {
   KJ_EXPECT(table.size() == 2);
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("foo")) == (SiPair {"foo", 123}));
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(123)) == (SiPair {"foo", 123}));
+
+  KJ_EXPECT(
+      table.findOrCreate<0>("foo",
+          []() -> SiPair { KJ_FAIL_ASSERT("shouldn't have called this"); })
+      == (SiPair {"foo", 123}));
+  KJ_EXPECT(table.size() == 2);
+  KJ_EXPECT_THROW_MESSAGE("inserted row already exists in table",
+      table.findOrCreate<0>("corge", []() -> SiPair { return {"corge", 123}; }));
+
+  KJ_EXPECT(table.size() == 2);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("foo")) == (SiPair {"foo", 123}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(123)) == (SiPair {"foo", 123}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("bar")) == (SiPair {"bar", 456}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(456)) == (SiPair {"bar", 456}));
+  KJ_EXPECT(table.find<0>("corge") == nullptr);
+
+  KJ_EXPECT(
+      table.findOrCreate<0>("corge", []() -> SiPair { return {"corge", 789}; })
+      == (SiPair {"corge", 789}));
+
+  KJ_EXPECT(table.size() == 3);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("foo")) == (SiPair {"foo", 123}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(123)) == (SiPair {"foo", 123}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("bar")) == (SiPair {"bar", 456}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(456)) == (SiPair {"bar", 456}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("corge")) == (SiPair {"corge", 789}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(789)) == (SiPair {"corge", 789}));
+
+  KJ_EXPECT(
+      table.findOrCreate<1>(234, []() -> SiPair { return {"grault", 234}; })
+      == (SiPair {"grault", 234}));
+
+  KJ_EXPECT(table.size() == 4);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("foo")) == (SiPair {"foo", 123}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(123)) == (SiPair {"foo", 123}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("bar")) == (SiPair {"bar", 456}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(456)) == (SiPair {"bar", 456}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("corge")) == (SiPair {"corge", 789}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(789)) == (SiPair {"corge", 789}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("grault")) == (SiPair {"grault", 234}));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(234)) == (SiPair {"grault", 234}));
 }
 
 class UintHasher {
@@ -666,6 +738,37 @@ KJ_TEST("simple tree table") {
     auto iter = range.begin();
     KJ_EXPECT(*iter++ == "garply");
     KJ_EXPECT(iter == range.end());
+  }
+
+  auto& graultRow = table.begin()[1];
+  kj::StringPtr origGrault = graultRow;
+
+  KJ_EXPECT(&table.findOrCreate("grault",
+      [&]() -> kj::StringPtr { KJ_FAIL_ASSERT("shouldn't have called this"); }) == &graultRow);
+  KJ_EXPECT(graultRow.begin() == origGrault.begin());
+  KJ_EXPECT(&KJ_ASSERT_NONNULL(table.find("grault")) == &graultRow);
+  KJ_EXPECT(table.find("waldo") == nullptr);
+  KJ_EXPECT(table.size() == 4);
+
+  kj::String searchWaldo = kj::str("waldo");
+  kj::String insertWaldo = kj::str("waldo");
+
+  auto& waldo = table.findOrCreate(searchWaldo,
+      [&]() -> kj::StringPtr { return insertWaldo; });
+  KJ_EXPECT(waldo == "waldo");
+  KJ_EXPECT(waldo.begin() == insertWaldo.begin());
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("grault")) == "grault");
+  KJ_EXPECT(&KJ_ASSERT_NONNULL(table.find("waldo")) == &waldo);
+  KJ_EXPECT(table.size() == 5);
+
+  {
+    auto iter = table.begin();
+    KJ_EXPECT(*iter++ == "garply");
+    KJ_EXPECT(*iter++ == "grault");
+    KJ_EXPECT(*iter++ == "qux");
+    KJ_EXPECT(*iter++ == "corge");
+    KJ_EXPECT(*iter++ == "waldo");
+    KJ_EXPECT(iter == table.end());
   }
 }
 

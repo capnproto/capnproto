@@ -43,8 +43,17 @@ KJ_TEST("HashMap") {
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
 
+  KJ_EXPECT(
+      map.findOrCreate("foo"_kj,
+          []() -> HashMap<String, int>::Entry { KJ_FAIL_ASSERT("shouldn't have been called"); })
+      == 321);
+  KJ_EXPECT(map.findOrCreate("baz"_kj,
+      [](){ return HashMap<String, int>::Entry { kj::str("baz"), 654 }; }) == 654);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("baz"_kj)) == 654);
+
   KJ_EXPECT(map.erase("bar"_kj));
-  KJ_EXPECT(!map.erase("baz"_kj));
+  KJ_EXPECT(map.erase("baz"_kj));
+  KJ_EXPECT(!map.erase("qux"_kj));
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
   KJ_EXPECT(map.size() == 1);
@@ -75,8 +84,17 @@ KJ_TEST("TreeMap") {
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
 
+  KJ_EXPECT(
+      map.findOrCreate("foo"_kj,
+          []() -> TreeMap<String, int>::Entry { KJ_FAIL_ASSERT("shouldn't have been called"); })
+      == 321);
+  KJ_EXPECT(map.findOrCreate("baz"_kj,
+      [](){ return TreeMap<String, int>::Entry { kj::str("baz"), 654 }; }) == 654);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("baz"_kj)) == 654);
+
   KJ_EXPECT(map.erase("bar"_kj));
-  KJ_EXPECT(!map.erase("baz"_kj));
+  KJ_EXPECT(map.erase("baz"_kj));
+  KJ_EXPECT(!map.erase("qux"_kj));
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
   KJ_EXPECT(map.size() == 1);
