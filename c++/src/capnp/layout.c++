@@ -3079,7 +3079,7 @@ Data::Reader ListReader::asData() {
   return Data::Reader(reinterpret_cast<const byte*>(ptr), unbound(elementCount / ELEMENTS));
 }
 
-kj::ArrayPtr<const byte> ListReader::asRawBytes() {
+kj::ArrayPtr<const byte> ListReader::asRawBytes() const {
   KJ_REQUIRE(structPointerCount == ZERO * POINTERS,
              "Expected data only, got pointers.") {
     return kj::ArrayPtr<const byte>();

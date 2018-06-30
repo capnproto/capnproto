@@ -466,10 +466,10 @@ public:
 
   inline MessageSize totalSize() const { return _reader.totalSize().asPublic(); }
 
-  kj::ArrayPtr<const byte> getDataSection() {
+  kj::ArrayPtr<const byte> getDataSection() const {
     return _reader.getDataSectionAsBlob();
   }
-  List<AnyPointer>::Reader getPointerSection() {
+  List<AnyPointer>::Reader getPointerSection() const {
     return List<AnyPointer>::Reader(_reader.getPointerSectionAsList());
   }
 
@@ -646,10 +646,10 @@ public:
       : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
 #endif
 
-  inline ElementSize getElementSize() { return _reader.getElementSize(); }
-  inline uint size() { return unbound(_reader.size() / ELEMENTS); }
+  inline ElementSize getElementSize() const { return _reader.getElementSize(); }
+  inline uint size() const { return unbound(_reader.size() / ELEMENTS); }
 
-  inline kj::ArrayPtr<const byte> getRawBytes() { return _reader.asRawBytes(); }
+  inline kj::ArrayPtr<const byte> getRawBytes() const { return _reader.asRawBytes(); }
 
   Equality equals(AnyList::Reader right) const;
   bool operator==(AnyList::Reader right) const;
@@ -661,7 +661,7 @@ public:
     return _reader.totalSize().asPublic();
   }
 
-  template <typename T> ReaderFor<T> as() {
+  template <typename T> ReaderFor<T> as() const {
     // T must be List<U>.
     return ReaderFor<T>(_reader);
   }
