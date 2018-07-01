@@ -105,6 +105,9 @@ public:
 private:
   class Callbacks {
   public:
+    inline const Key& keyForRow(const Entry& entry) const { return entry.key; }
+    inline Key& keyForRow(Entry& entry) const { return entry.key; }
+
     template <typename KeyLike>
     inline bool matches(Entry& e, KeyLike&& key) const {
       return e.key == key;
@@ -116,17 +119,6 @@ private:
     template <typename KeyLike>
     inline bool hashCode(KeyLike&& key) const {
       return kj::hashCode(key);
-    }
-
-    inline bool matches(Entry& e, Entry& e2) const { return e.key == e2.key; }
-    inline bool matches(const Entry& e, Entry& e2) const { return e.key == e2.key; }
-    inline bool matches(Entry& e, const Entry& e2) const { return e.key == e2.key; }
-    inline bool matches(const Entry& e, const Entry& e2) const { return e.key == e2.key; }
-    inline bool hashCode(Entry& entry) const {
-      return kj::hashCode(entry.key);
-    }
-    inline bool hashCode(const Entry& entry) const {
-      return kj::hashCode(entry.key);
     }
   };
 
@@ -212,6 +204,9 @@ public:
 private:
   class Callbacks {
   public:
+    inline const Key& keyForRow(const Entry& entry) const { return entry.key; }
+    inline Key& keyForRow(Entry& entry) const { return entry.key; }
+
     template <typename KeyLike>
     inline bool matches(Entry& e, KeyLike&& key) const {
       return e.key == key;
@@ -228,15 +223,6 @@ private:
     inline bool isBefore(const Entry& e, KeyLike&& key) const {
       return e.key < key;
     }
-
-    inline bool matches(Entry& e, Entry& e2) const { return e.key == e2.key; }
-    inline bool matches(Entry& e, const Entry& e2) const { return e.key == e2.key; }
-    inline bool matches(const Entry& e, Entry& e2) const { return e.key == e2.key; }
-    inline bool matches(const Entry& e, const Entry& e2) const { return e.key == e2.key; }
-    inline bool isBefore(Entry& e, Entry& e2) const { return e.key < e2.key; }
-    inline bool isBefore(Entry& e, const Entry& e2) const { return e.key < e2.key; }
-    inline bool isBefore(const Entry& e, Entry& e2) const { return e.key < e2.key; }
-    inline bool isBefore(const Entry& e, const Entry& e2) const { return e.key < e2.key; }
   };
 
   kj::Table<Entry, TreeIndex<Callbacks>> table;
@@ -246,6 +232,9 @@ namespace _ {  // private
 
 class HashSetCallbacks {
 public:
+  template <typename Row>
+  inline Row& keyForRow(Row& row) const { return row; }
+
   template <typename T, typename U>
   inline bool matches(T& a, U& b) const { return a == b; }
   template <typename KeyLike>
@@ -256,6 +245,9 @@ public:
 
 class TreeSetCallbacks {
 public:
+  template <typename Row>
+  inline Row& keyForRow(Row& row) const { return row; }
+
   template <typename T, typename U>
   inline bool matches(T& a, U& b) const { return a == b; }
   template <typename T, typename U>

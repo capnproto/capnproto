@@ -55,6 +55,8 @@ KJ_TEST("_::tryReserveSize() works") {
 
 class StringHasher {
 public:
+  StringPtr keyForRow(StringPtr s) const { return s; }
+
   bool matches(StringPtr a, StringPtr b) const {
     return a == b;
   }
@@ -185,6 +187,8 @@ class BadHasher {
   // String hash that always returns the same hash code. This should not affect correctness, only
   // performance.
 public:
+  StringPtr keyForRow(StringPtr s) const { return s; }
+
   bool matches(StringPtr a, StringPtr b) const {
     return a == b;
   }
@@ -273,12 +277,7 @@ struct SiPair {
 
 class SiPairStringHasher {
 public:
-  bool matches(SiPair a, SiPair b) const {
-    return a.str == b.str;
-  }
-  uint hashCode(SiPair pair) const {
-    return inner.hashCode(pair.str);
-  }
+  StringPtr keyForRow(SiPair s) const { return s.str; }
 
   bool matches(SiPair a, StringPtr b) const {
     return a.str == b;
@@ -293,12 +292,7 @@ private:
 
 class SiPairIntHasher {
 public:
-  bool matches(SiPair a, SiPair b) const {
-    return a.i == b.i;
-  }
-  uint hashCode(SiPair pair) const {
-    return pair.i;
-  }
+  uint keyForRow(SiPair s) const { return s.i; }
 
   bool matches(SiPair a, uint b) const {
     return a.i == b;
@@ -376,6 +370,8 @@ KJ_TEST("double-index table") {
 
 class UintHasher {
 public:
+  uint keyForRow(uint i) const { return i; }
+
   bool matches(uint a, uint b) const {
     return a == b;
   }
@@ -628,6 +624,8 @@ KJ_TEST("B-tree internals") {
 
 class StringCompare {
 public:
+  StringPtr keyForRow(StringPtr s) const { return s; }
+
   bool isBefore(StringPtr a, StringPtr b) const {
     return a < b;
   }
@@ -774,6 +772,8 @@ KJ_TEST("simple tree table") {
 
 class UintCompare {
 public:
+  uint keyForRow(uint i) const { return i; }
+
   bool isBefore(uint a, uint b) const {
     return a < b;
   }

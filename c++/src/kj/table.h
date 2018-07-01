@@ -70,16 +70,16 @@ class Table {
   //
   // Each index is a class that looks like:
   //
-  //   template <typename Key>
   //   class Index {
   //   public:
   //     void reserve(size_t size);
   //     // Called when Table::reserve() is called.
   //
+  //     SearchParam& keyForRow(const Row& row) const;
+  //     // Given a row, return a value appropriate to pass as SearchParams to the other functions.
+  //
   //     // In all function calls below, `SearchPrams` refers to whatever parameters the index
-  //     // supports for looking up a row in the table. At the very least, the table row type
-  //     // itself must be supported. However, most indexes will also want to support some sort
-  //     // of "key" type that is not a whole row.
+  //     // supports for looking up a row in the table.
   //
   //     template <typename... SearchParams>
   //     kj::Maybe<size_t> insert(kj::ArrayPtr<const Row> table, size_t pos, SearchParams&&...);
@@ -293,18 +293,22 @@ class HashIndex;
 //
 //   class Callbacks {
 //   public:
-//     bool matches(const Row&, const Row&) const;
-//     // Returns true if the two rows are matching, for the purpose of this index.
+//     // In this interface, `SearchParams...` means whatever parameters you want to support in
+//     // a call to table.find(...). By overloading the calls to support various inputs, you can
+//     // affect what table.find(...) accepts.
 //
-//     uint hashCode(const Row&) const;
-//     // Computes the hash code of the given row. Matching rows (as determined by match()) must
-//     // have the same hash code. Non-matching rows should have different hash codes, to the
-//     // maximum extent possible. Non-matching rows with the same hash code hurt performance.
+//     SearchParam& keyForRow(const Row& row);
+//     // Given a row of the table, return the SearchParams that might be passed to the other
+//     // methods to match this row.
 //
-//     bool matches(const Row&, ...) const;
-//     uint hashCode(...) const;
-//     // If you wish to support find(...) with parameters other than `const Row&`, you can do
-//     // so by implementing overloads of hashCode() and match() with those parameters.
+//     bool matches(const Row&, SearchParams&&...) const;
+//     // Returns true if the the row on the left matches thes search params on the right.
+//
+//     uint hashCode(SearchParams&&...) const;
+//     // Computes the hash code of the given search params. Matching rows (as determined by
+//     // matches()) must have the same hash code. Non-matching rows should have different hash
+//     // codes, to the maximum extent possible. Non-matching rows with the same hash code hurt
+//     // performance.
 //   };
 //
 // If your `Callbacks` type has dynamic state, you may pass its constructor parameters as the
@@ -320,19 +324,19 @@ class TreeIndex;
 //
 //   class Callbacks {
 //   public:
-//     bool isBefore(const Row&, const Row&) const;
-//     // Returns true if the row on the left comes before the row on the right.
+//     // In this interface, `SearchParams...` means whatever parameters you want to support in
+//     // a call to table.find(...). By overloading the calls to support various inputs, you can
+//     // affect what table.find(...) accepts.
 //
-//     bool matches(const Row&, const Row&) const;
-//     // Returns true if the rows "match".
-//     //
-//     // This could be computed by checking whether isBefore() returns false regardless of the
-//     // order of the parameters, but often equality is somewhat faster to check.
+//     SearchParam& keyForRow(const Row& row);
+//     // Given a row of the table, return the SearchParams that might be passed to the other
+//     // methods to match this row.
 //
-//     bool isBefore(const Row&, ...) const;
-//     bool matches(const Row&, ...) const;
-//     // If you wish to support find(...) with parameters other than `const Row&`, you can do
-//     // so by implementing overloads of isBefore() and isAfter() with those parameters.
+//     bool isBefore(const Row&, SearchParams&&...) const;
+//     // Returns true if the row on the left comes before the search params on the right.
+//
+//     bool matches(const Row&, SearchParams&&...) const;
+//     // Returns true if the row "matches" the search params.
 //   };
 
 // =======================================================================================
@@ -456,24 +460,29 @@ public:
     if (skip == index) {
       return Impl<index + 1>::insert(table, pos, row, skip);
     }
-    KJ_IF_MAYBE(existing, get<index>(table.indexes).insert(table.rows.asPtr(), pos, row)) {
+    auto& indexObj = get<index>(table.indexes);
+    KJ_IF_MAYBE(existing, indexObj.insert(table.rows.asPtr(), pos, indexObj.keyForRow(row))) {
       return *existing;
     }
 
     bool success = false;
-    KJ_DEFER(if (!success) { get<index>(table.indexes).erase(table.rows.asPtr(), pos, row); });
+    KJ_DEFER(if (!success) {
+      indexObj.erase(table.rows.asPtr(), pos, indexObj.keyForRow(row));
+    });
     auto result = Impl<index + 1>::insert(table, pos, row, skip);
     success = result == nullptr;
     return result;
   }
 
   static void erase(Table<Row, Indexes...>& table, size_t pos, Row& row) {
-    get<index>(table.indexes).erase(table.rows.asPtr(), pos, row);
+    auto& indexObj = get<index>(table.indexes);
+    indexObj.erase(table.rows.asPtr(), pos, indexObj.keyForRow(row));
     Impl<index + 1>::erase(table, pos, row);
   }
 
   static void move(Table<Row, Indexes...>& table, size_t oldPos, size_t newPos, Row& row) {
-    get<index>(table.indexes).move(table.rows.asPtr(), oldPos, newPos, row);
+    auto& indexObj = get<index>(table.indexes);
+    indexObj.move(table.rows.asPtr(), oldPos, newPos, indexObj.keyForRow(row));
     Impl<index + 1>::move(table, oldPos, newPos, row);
   }
 };
@@ -870,6 +879,11 @@ public:
   void clear() {
     erasedCount = 0;
     memset(buckets.begin(), 0, buckets.asBytes().size());
+  }
+
+  template <typename Row>
+  decltype(auto) keyForRow(Row&& row) const {
+    return cb.keyForRow(kj::fwd<Row>(row));
   }
 
   template <typename Row, typename... Params>
@@ -1411,6 +1425,11 @@ public:
   inline auto begin() const { return impl.begin(); }
   inline auto end() const { return impl.end(); }
 
+  template <typename Row>
+  decltype(auto) keyForRow(Row&& row) const {
+    return cb.keyForRow(kj::fwd<Row>(row));
+  }
+
   template <typename Row, typename... Params>
   kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos, Params&&... params) {
     auto iter = impl.insert(searchKey(table, params...));
@@ -1536,6 +1555,9 @@ public:
     const Link* links;
     uint pos;
   };
+
+  template <typename Row>
+  Row& keyForRow(Row& row) const { return row; }
 
   void reserve(size_t size);
   void clear();
