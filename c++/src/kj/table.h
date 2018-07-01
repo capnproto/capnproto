@@ -621,8 +621,8 @@ kj::Maybe<const Row&> Table<Row, Indexes...>::find(Params&&... params) const {
 }
 
 template <typename Row, typename... Indexes>
-template <typename... Params, typename Func>
-class Table<Row, Indexes...>::FindOrCreateImpl<Func, Params...> {
+template <typename Func, typename... Params>
+class Table<Row, Indexes...>::FindOrCreateImpl {
 public:
   template <size_t index>
   static Row& apply(Table<Row, Indexes...>& table, Params&&... params, Func&& createFunc) {
@@ -638,7 +638,7 @@ public:
           get<index>(table.indexes).erase(table.rows.asPtr(), pos, params...);
         }
       });
-      if (Impl<>::insert(table, pos, newRow, index) == nullptr) {
+      if (Table<Row, Indexes...>::template Impl<>::insert(table, pos, newRow, index) == nullptr) {
         success = true;
       } else {
         _::throwDuplicateTableRow();
