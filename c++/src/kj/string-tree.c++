@@ -53,11 +53,21 @@ String StringTree::flatten() const {
   return result;
 }
 
-void StringTree::flattenTo(char* __restrict__ target) const {
+char* StringTree::flattenTo(char* __restrict__ target) const {
   visit([&target](ArrayPtr<const char> text) {
     memcpy(target, text.begin(), text.size());
     target += text.size();
   });
+  return target;
+}
+
+char* StringTree::flattenTo(char* __restrict__ target, char* limit) const {
+  visit([&target,limit](ArrayPtr<const char> text) {
+    size_t size = kj::min(text.size(), limit - target);
+    memcpy(target, text.begin(), size);
+    target += size;
+  });
+  return target;
 }
 
 }  // namespace kj
