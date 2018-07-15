@@ -744,8 +744,12 @@ template <typename T>
 RemotePromise<T> RemotePromise<T>::reducePromise(kj::Promise<RemotePromise>&& promise) {
   kj::Tuple<kj::Promise<Response<T>>, kj::Promise<kj::Own<PipelineHook>>> splitPromise =
       promise.then([](RemotePromise&& inner) {
-    return kj::tuple(kj::Promise<Response<T>>(kj::mv(inner)),
-                     PipelineHook::from(kj::mv(inner)));
+    // `inner` is multiply-inherited, and we want to move away each superclass separately.
+    // Let's create two references to make clear what we're doing (though this is not strictly
+    // necessary).
+    kj::Promise<Response<T>>& innerPromise = inner;
+    typename T::Pipeline& innerPipeline = inner;
+    return kj::tuple(kj::mv(innerPromise), PipelineHook::from(kj::mv(innerPipeline)));
   }).split();
 
   return RemotePromise(kj::mv(kj::get<0>(splitPromise)),
