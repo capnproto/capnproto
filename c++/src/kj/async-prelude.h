@@ -111,7 +111,7 @@ using SplitTuplePromise = typename SplitTuplePromise_<T>::Type;
 // T -> Promise<T>
 // Tuple<T> -> Tuple<Promise<T>>
 
-struct Void {};
+typedef Tuple<> Void;
 // Application code should NOT refer to this!  See `kj::READY_NOW` instead.
 
 template <typename T> struct FixVoid_ { typedef T Type; };
@@ -126,33 +126,26 @@ template <typename T> using UnfixVoid = typename UnfixVoid_<T>::Type;
 
 template <typename In, typename Out>
 struct MaybeVoidCaller {
-  // Calls the function converting a Void input to an empty parameter list and a void return
-  // value to a Void output.
+  // Calls the function converting a Tuple input to a parameter list and a void return
+  // value to a Void output. Recall that Void is a typedef for Tuple<>.
 
   template <typename Func>
   static inline Out apply(Func& func, In&& in) {
-    return func(kj::mv(in));
+    return kj::apply(func, kj::mv(in));
   }
 };
 template <typename In, typename Out>
 struct MaybeVoidCaller<In&, Out> {
   template <typename Func>
   static inline Out apply(Func& func, In& in) {
-    return func(in);
-  }
-};
-template <typename Out>
-struct MaybeVoidCaller<Void, Out> {
-  template <typename Func>
-  static inline Out apply(Func& func, Void&& in) {
-    return func();
+    return kj::apply(func, in);
   }
 };
 template <typename In>
 struct MaybeVoidCaller<In, Void> {
   template <typename Func>
   static inline Void apply(Func& func, In&& in) {
-    func(kj::mv(in));
+    kj::apply(func, kj::mv(in));
     return Void();
   }
 };
@@ -160,15 +153,7 @@ template <typename In>
 struct MaybeVoidCaller<In&, Void> {
   template <typename Func>
   static inline Void apply(Func& func, In& in) {
-    func(in);
-    return Void();
-  }
-};
-template <>
-struct MaybeVoidCaller<Void, Void> {
-  template <typename Func>
-  static inline Void apply(Func& func, Void&& in) {
-    func();
+    kj::apply(func, in);
     return Void();
   }
 };
