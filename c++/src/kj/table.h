@@ -1013,7 +1013,8 @@ private:
 
 namespace _ {  // private
 
-KJ_ALWAYS_INLINE(void compilerBarrier()) {
+KJ_ALWAYS_INLINE(void compilerBarrier());
+void compilerBarrier() {
   // Make sure that reads occurring before this call cannot be re-ordered to happen after
   // writes that occur after this call. We need this in a couple places below to prevent C++
   // strict aliasing rules from breaking things.
