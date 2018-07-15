@@ -215,6 +215,12 @@ public:
   // WARNING: This invalidates all iterators, so you can't iterate over rows and erase them this
   //   way. Use `eraseAll()` for that.
 
+  Row release(Row& row);
+  // Remove the given row from the table and return it in one operation.
+  //
+  // WARNING: This invalidates all iterators, so you can't iterate over rows and release them this
+  //   way.
+
   template <typename Predicate, typename = decltype(instance<Predicate>()(instance<Row&>()))>
   size_t eraseAll(Predicate&& predicate);
   // Erase all rows for which predicate(row) returns true. This scans over the entire table.
@@ -765,6 +771,21 @@ void Table<Row, Indexes...>::eraseImpl(size_t pos) {
     rows[pos] = kj::mv(rows[back]);
   }
   rows.removeLast();
+}
+
+template <typename Row, typename... Indexes>
+Row Table<Row, Indexes...>::release(Row& row) {
+  KJ_IREQUIRE(&row >= rows.begin() && &row < rows.end(), "row is not a member of this table");
+  size_t pos = &row - rows.begin();
+  Impl<>::erase(*this, pos, row);
+  Row result = kj::mv(row);
+  size_t back = rows.size() - 1;
+  if (pos != back) {
+    Impl<>::move(*this, back, pos, rows[back]);
+    row = kj::mv(rows[back]);
+  }
+  rows.removeLast();
+  return result;
 }
 
 template <typename Row, typename... Indexes>
