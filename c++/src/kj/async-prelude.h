@@ -34,36 +34,48 @@
 namespace kj {
 
 class EventLoop;
-template <typename T>
+template <typename... T>
 class Promise;
 class WaitScope;
 class TaskSet;
 
-template <typename T>
-Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
+template <typename... T>
+Promise<Array<kj::Tuple<T...>>> joinPromises(Array<Promise<T...>>&& promises);
 Promise<void> joinPromises(Array<Promise<void>>&& promises);
+Promise<> joinPromises(Array<Promise<>>&& promises);
 
 namespace _ {  // private
 
 template <typename T>
 Promise<T> chainPromiseType(T*);
-template <typename T>
-Promise<T> chainPromiseType(Promise<T>*);
+template <typename... T>
+Promise<T...> chainPromiseType(_::Tuple<T...>*);
+template <typename... T>
+Promise<T...> chainPromiseType(Promise<T...>*);
 
-template <typename T>
-using ChainPromises = decltype(chainPromiseType((T*)nullptr));
+template <typename... T>
+using ChainPromises = decltype(chainPromiseType((kj::Tuple<T...>*)nullptr));
 // Constructs a promise for T, reducing double-promises. That is, if T is Promise<U>, resolves to
 // Promise<U>, otherwise resolves to Promise<T>.
+//
+// In the case of multiple values, no chaining occurs, even if the values are promises. E.g.
+// Promise<Promise<T>, U> does NOT become Promise<T, U> -- because this would delay the
+// application's ability to access the U. The application may indeed be planning to split the
+// Promise<Promise<T>, U> into a Promise<T> and a Promise<U>, where the Promise<U> would be
+// expected to resolve earlier than the Promise<T>. If the application really wants to reduce
+// to Promise<T, U>, it can achieve this by splitting and re-joining the promise.
 
 template <typename T>
 Promise<T> reducePromiseType(T*, ...);
-template <typename T>
-Promise<T> reducePromiseType(Promise<T>*, ...);
+template <typename... T>
+Promise<T...> reducePromiseType(_::Tuple<T...>*, ...);
+template <typename... T>
+Promise<T...> reducePromiseType(Promise<T...>*, ...);
 template <typename T, typename Reduced = decltype(T::reducePromise(kj::instance<Promise<T>>()))>
 Reduced reducePromiseType(T*, bool);
 
-template <typename T>
-using ReducePromises = decltype(reducePromiseType((T*)nullptr, false));
+template <typename... T>
+using ReducePromises = decltype(reducePromiseType((kj::Tuple<T...>*)nullptr, false));
 // Like ChainPromises, but also takes into account whether T has a method `reducePromise` that
 // reduces Promise<T> to something else. In particular this allows Promise<capnp::RemotePromise<U>>
 // to reduce to capnp::RemotePromise<U>.
@@ -90,13 +102,13 @@ public:
   }
 };
 
-template <typename Func, typename T>
-struct ReturnType_ { typedef decltype(instance<Func>()(instance<T>())) Type; };
+template <typename Func, typename... T>
+struct ReturnType_ { typedef decltype(kj::apply(instance<Func>(), instance<T>()...)) Type; };
 template <typename Func>
 struct ReturnType_<Func, void> { typedef decltype(instance<Func>()()) Type; };
 
-template <typename Func, typename T>
-using ReturnType = typename ReturnType_<Func, T>::Type;
+template <typename Func, typename... T>
+using ReturnType = typename ReturnType_<Func, T...>::Type;
 // The return type of functor Func given a parameter of type T, with the special exception that if
 // T is void, this is the return type of Func called with no arguments.
 
@@ -114,15 +126,10 @@ using SplitTuplePromise = typename SplitTuplePromise_<T>::Type;
 typedef Tuple<> Void;
 // Application code should NOT refer to this!  See `kj::READY_NOW` instead.
 
-template <typename T> struct FixVoid_ { typedef T Type; };
-template <> struct FixVoid_<void> { typedef Void Type; };
-template <typename T> using FixVoid = typename FixVoid_<T>::Type;
-// FixVoid<T> is just T unless T is void in which case it is _::Void (an empty struct).
-
-template <typename T> struct UnfixVoid_ { typedef T Type; };
-template <> struct UnfixVoid_<Void> { typedef void Type; };
-template <typename T> using UnfixVoid = typename UnfixVoid_<T>::Type;
-// UnfixVoid is the opposite of FixVoid.
+template <typename... T> struct PromiseNodeType_ { typedef kj::Tuple<T...> Type; };
+template <> struct PromiseNodeType_<void> { typedef Void Type; };
+template <typename... T> using PromiseNodeType = typename PromiseNodeType_<T...>::Type;
+// PromiseNodeType<T...> is the type that a PromiseNode deals in to implement Promise<T...>.
 
 template <typename In, typename Out>
 struct MaybeVoidCaller {
@@ -157,6 +164,8 @@ struct MaybeVoidCaller<In&, Void> {
     return Void();
   }
 };
+template <typename In>
+struct MaybeVoidCaller<In, void>: public MaybeVoidCaller<In, Void> {};
 
 template <typename T>
 inline T&& returnMaybeVoid(T&& t) {
@@ -185,12 +194,13 @@ private:
 
   friend class kj::EventLoop;
   friend class ChainPromiseNode;
-  template <typename>
+  template <typename...>
   friend class kj::Promise;
   friend class kj::TaskSet;
-  template <typename U>
-  friend Promise<Array<U>> kj::joinPromises(Array<Promise<U>>&& promises);
+  template <typename... U>
+  friend Promise<Array<kj::Tuple<U...>>> kj::joinPromises(Array<Promise<U...>>&& promises);
   friend Promise<void> kj::joinPromises(Array<Promise<void>>&& promises);
+  friend Promise<> kj::joinPromises(Array<Promise<>>&& promises);
 };
 
 void detach(kj::Promise<void>&& promise);
@@ -199,11 +209,19 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope);
 Promise<void> yield();
 Own<PromiseNode> neverDone();
 
+class ReadyNow {
+public:
+  inline operator Promise<>() const;
+  inline operator Promise<void>() const;
+
+  KJ_NORETURN(void wait(WaitScope& waitScope) const);
+};
+
 class NeverDone {
 public:
-  template <typename T>
-  operator Promise<T>() const {
-    return Promise<T>(false, neverDone());
+  template <typename... T>
+  operator Promise<T...>() const {
+    return Promise<T...>(false, neverDone());
   }
 
   KJ_NORETURN(void wait(WaitScope& waitScope) const);

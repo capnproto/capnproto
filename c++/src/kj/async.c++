@@ -1035,7 +1035,13 @@ void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
 }  // namespace _ (private)
 
 Promise<void> joinPromises(Array<Promise<void>>&& promises) {
-  return Promise<void>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
+  return Promise<>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return kj::mv(p.node); },
+      heapArray<_::ExceptionOr<_::Void>>(promises.size())));
+}
+
+Promise<> joinPromises(Array<Promise<>>&& promises) {
+  return Promise<>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
       KJ_MAP(p, promises) { return kj::mv(p.node); },
       heapArray<_::ExceptionOr<_::Void>>(promises.size())));
 }

@@ -494,7 +494,7 @@ TEST(Async, Split) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  Promise<Tuple<int, String, Promise<int>>> promise = evalLater([&]() {
+  Promise<int, String, Promise<int>> promise = evalLater([&]() {
     return kj::tuple(123, str("foo"), Promise<int>(321));
   });
 
@@ -804,6 +804,27 @@ TEST(Async, Poll) {
   paf.fulfiller->fulfill();
   KJ_ASSERT(paf.promise.poll(waitScope));
   paf.promise.wait(waitScope);
+}
+
+TEST(Async, Variadic) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<int, bool, StringPtr>();
+  Promise<int, bool, StringPtr> promise = kj::mv(paf.promise);
+  Own<PromiseFulfiller<int, bool, StringPtr>> fulfiller = kj::mv(paf.fulfiller);
+
+  fulfiller->fulfill(123, true, "hello"_kj);
+  Promise<StringPtr, int> promise2 = promise.then([](int i, bool b, StringPtr s) {
+    KJ_EXPECT(i == 123);
+    KJ_EXPECT(b);
+    KJ_EXPECT(s == "hello");
+    return kj::tuple("bar"_kj, 321);
+  });
+
+  Tuple<StringPtr, int> result = promise2.wait(waitScope);
+  KJ_EXPECT(get<0>(result) == "bar");
+  KJ_EXPECT(get<1>(result) == 321);
 }
 
 }  // namespace

@@ -133,6 +133,9 @@ class PromiseNode {
   // use of pointers to ExceptionOrValue which actually point to ExceptionOr<T>, but are only
   // so down-cast in the few places that really need to be templated.  Luckily this is all
   // internal implementation details.
+  //
+  // For Promise<T...>, PromiseNode actually deals in values of type PromiseNodeType<T...>, which
+  // is kj::Tuple<T...>, or kj::Tuple<> for void.
 
 public:
   virtual void onReady(Event* event) noexcept = 0;
@@ -188,14 +191,14 @@ class ImmediatePromiseNode final: public ImmediatePromiseNodeBase {
   // A promise that has already been resolved to an immediate value or exception.
 
 public:
-  ImmediatePromiseNode(ExceptionOr<T>&& result): result(kj::mv(result)) {}
+  ImmediatePromiseNode(T&& result): result(kj::mv(result)) {}
 
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = kj::mv(result);
   }
 
 private:
-  ExceptionOr<T> result;
+  T result;
 };
 
 class ImmediateBrokenPromiseNode final: public ImmediatePromiseNodeBase {
@@ -331,10 +334,9 @@ struct GetFunctorStartAddress {
   }
 };
 
-template <>
-struct GetFunctorStartAddress<Void&&>: public GetFunctorStartAddress<> {};
-// Hack for TransformPromiseNode use case: an input type of `Void` indicates that the function
-// actually has no parameters.
+template <typename... T>
+struct GetFunctorStartAddress<_::Tuple<T...>&&>: public GetFunctorStartAddress<T&&...> {};
+// Hack for TransformPromiseNode use case: flatten tuples.
 
 class TransformPromiseNodeBase: public PromiseNode {
 public:
@@ -384,7 +386,7 @@ private:
     getDepResult(depResult);
     KJ_IF_MAYBE(depException, depResult.exception) {
       output.as<T>() = handle(
-          MaybeVoidCaller<Exception, FixVoid<ReturnType<ErrorFunc, Exception>>>::apply(
+          MaybeVoidCaller<Exception, ReturnType<ErrorFunc, Exception>>::apply(
               errorHandler, kj::mv(*depException)));
     } else KJ_IF_MAYBE(depValue, depResult.value) {
       output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(*depValue)));
@@ -507,8 +509,8 @@ class ForkHub final: public ForkHubBase {
 public:
   ForkHub(Own<PromiseNode>&& inner): ForkHubBase(kj::mv(inner), result) {}
 
-  Promise<_::UnfixVoid<T>> addBranch() {
-    return Promise<_::UnfixVoid<T>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
+  Own<PromiseNode> addBranch() {
+    return kj::heap<ForkBranch<T>>(addRef(*this));
   }
 
   _::SplitTuplePromise<T> split() {
@@ -570,8 +572,8 @@ private:
   Maybe<Own<Event>> fire() override;
 };
 
-template <typename T>
-Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, Promise<T>*) {
+template <typename... T>
+Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, Promise<T...>*) {
   return heap<ChainPromiseNode>(kj::mv(node));
 }
 
@@ -585,8 +587,8 @@ inline Result maybeReduce(Promise<T>&& promise, bool) {
   return T::reducePromise(kj::mv(promise));
 }
 
-template <typename T>
-inline Promise<T> maybeReduce(Promise<T>&& promise, ...) {
+template <typename... T>
+inline Promise<T...> maybeReduce(Promise<T...>&& promise, ...) {
   return kj::mv(promise);
 }
 
@@ -758,30 +760,36 @@ private:
   OnReadyEvent onReadyEvent;
 };
 
-template <typename T, typename Adapter>
+template <typename... T>
+struct FulfillerType { typedef PromiseFulfiller<T...> Type; };
+template <>
+struct FulfillerType<> { typedef PromiseFulfiller<void> Type; };
+
+template <typename Adapter, typename... T>
 class AdapterPromiseNode final: public AdapterPromiseNodeBase,
-                                private PromiseFulfiller<UnfixVoid<T>> {
+                                private FulfillerType<T...>::Type {
   // A PromiseNode that wraps a PromiseAdapter.
 
 public:
   template <typename... Params>
   AdapterPromiseNode(Params&&... params)
-      : adapter(static_cast<PromiseFulfiller<UnfixVoid<T>>&>(*this), kj::fwd<Params>(params)...) {}
+      : adapter(static_cast<typename FulfillerType<T...>::Type&>(*this),
+                kj::fwd<Params>(params)...) {}
 
   void get(ExceptionOrValue& output) noexcept override {
     KJ_IREQUIRE(!isWaiting());
-    output.as<T>() = kj::mv(result);
+    output.as<PromiseNodeType<T...>>() = kj::mv(result);
   }
 
 private:
-  ExceptionOr<T> result;
+  ExceptionOr<PromiseNodeType<T...>> result;
   bool waiting = true;
   Adapter adapter;
 
-  void fulfill(T&& value) override {
+  void fulfill(T&&... value) override {
     if (waiting) {
       waiting = false;
-      result = ExceptionOr<T>(kj::mv(value));
+      result = ExceptionOr<PromiseNodeType<T...>>(kj::tuple(kj::mv(value)...));
       setReady();
     }
   }
@@ -789,7 +797,7 @@ private:
   void reject(Exception&& exception) override {
     if (waiting) {
       waiting = false;
-      result = ExceptionOr<T>(false, kj::mv(exception));
+      result = ExceptionOr<PromiseNodeType<T...>>(false, kj::mv(exception));
       setReady();
     }
   }
@@ -799,43 +807,53 @@ private:
   }
 };
 
+template <typename Adapter, typename... T>
+struct AdapterPromiseNodeType { typedef AdapterPromiseNode<Adapter, T...> Type; };
+template <typename Adapter>
+struct AdapterPromiseNodeType<Adapter, void> { typedef AdapterPromiseNode<Adapter> Type; };
+
 }  // namespace _ (private)
 
 // =======================================================================================
 
-template <typename T>
-Promise<T>::Promise(_::FixVoid<T> value)
-    : PromiseBase(heap<_::ImmediatePromiseNode<_::FixVoid<T>>>(kj::mv(value))) {}
+template <typename... T>
+Promise<T...>::Promise(T... value)
+    : PromiseBase(heap<_::ImmediatePromiseNode<_::PromiseNodeType<T...>>>(
+          kj::tuple(kj::mv(value)...))) {}
 
-template <typename T>
-Promise<T>::Promise(kj::Exception&& exception)
+template <typename... T>
+Promise<T...>::Promise(kj::_::Tuple<T...> value)
+    : PromiseBase(heap<_::ImmediatePromiseNode<_::PromiseNodeType<T...>>>(kj::mv(value))) {}
+
+template <typename... T>
+Promise<T...>::Promise(kj::Exception&& exception)
     : PromiseBase(heap<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
 
-template <typename T>
+template <typename... T>
 template <typename Func, typename ErrorFunc>
-PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler) {
-  typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
+PromiseForResult<Func, T...> Promise<T...>::then(Func&& func, ErrorFunc&& errorHandler) {
+  typedef _::PromiseNodeType<_::ReturnType<Func, T...>> ResultT;
 
   Own<_::PromiseNode> intermediate =
-      heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+      heap<_::TransformPromiseNode<ResultT, _::PromiseNodeType<T...>, Func, ErrorFunc>>(
           kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
-  auto result = _::ChainPromises<_::ReturnType<Func, T>>(false,
+  auto result = _::ChainPromises<_::ReturnType<Func, T...>>(false,
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
   return _::maybeReduce(kj::mv(result), false);
 }
 
 namespace _ {  // private
 
-template <typename T>
+template <typename... T>
 struct IdentityFunc {
-  inline T operator()(T&& value) const {
-    return kj::mv(value);
+  inline kj::Tuple<T...> operator()(T&&... value) const {
+    return kj::tuple(kj::mv(value)...);
   }
 };
-template <typename T>
-struct IdentityFunc<Promise<T>> {
-  inline Promise<T> operator()(T&& value) const {
-    return kj::mv(value);
+template <typename... T>
+struct IdentityFunc<Promise<T...>> {
+  inline Promise<T...> operator()(T&&... value) const {
+    return { kj::mv(value)... };
   }
 };
 template <>
@@ -852,9 +870,9 @@ struct IdentityFunc<Promise<void>> {
 
 }  // namespace _ (private)
 
-template <typename T>
+template <typename... T>
 template <typename ErrorFunc>
-Promise<T> Promise<T>::catch_(ErrorFunc&& errorHandler) {
+Promise<T...> Promise<T...>::catch_(ErrorFunc&& errorHandler) {
   // then()'s ErrorFunc can only return a Promise if Func also returns a Promise. In this case,
   // Func is being filled in automatically. We want to make sure ErrorFunc can return a Promise,
   // but we don't want the extra overhead of promise chaining if ErrorFunc doesn't actually
@@ -863,9 +881,9 @@ Promise<T> Promise<T>::catch_(ErrorFunc&& errorHandler) {
               kj::fwd<ErrorFunc>(errorHandler));
 }
 
-template <typename T>
-T Promise<T>::wait(WaitScope& waitScope) {
-  _::ExceptionOr<_::FixVoid<T>> result;
+template <typename... T>
+kj::Tuple<T...> Promise<T...>::wait(WaitScope& waitScope) {
+  _::ExceptionOr<_::PromiseNodeType<T...>> result;
 
   _::waitImpl(kj::mv(node), result, waitScope);
 
@@ -883,8 +901,8 @@ T Promise<T>::wait(WaitScope& waitScope) {
 }
 
 template <>
-inline void Promise<void>::wait(WaitScope& waitScope) {
-  // Override <void> case to use throwRecoverableException().
+inline kj::Tuple<> Promise<>::wait(WaitScope& waitScope) {
+  // Override <> (aka <void>) case to use throwRecoverableException().
 
   _::ExceptionOr<_::Void> result;
 
@@ -894,62 +912,71 @@ inline void Promise<void>::wait(WaitScope& waitScope) {
     KJ_IF_MAYBE(exception, result.exception) {
       throwRecoverableException(kj::mv(*exception));
     }
+    return {};
   } else KJ_IF_MAYBE(exception, result.exception) {
     throwRecoverableException(kj::mv(*exception));
+    return {};
   } else {
     // Result contained neither a value nor an exception?
     KJ_UNREACHABLE;
   }
 }
 
-template <typename T>
-bool Promise<T>::poll(WaitScope& waitScope) {
+inline void Promise<void>::wait(WaitScope& waitScope) {
+  Promise<>::wait(waitScope);
+}
+
+template <typename... T>
+bool Promise<T...>::poll(WaitScope& waitScope) {
   return _::pollImpl(*node, waitScope);
 }
 
-template <typename T>
-ForkedPromise<T> Promise<T>::fork() {
-  return ForkedPromise<T>(false, refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(node)));
+template <typename... T>
+ForkedPromise<T...> Promise<T...>::fork() {
+  return ForkedPromise<T...>(false, refcounted<_::ForkHub<_::PromiseNodeType<T...>>>(kj::mv(node)));
+}
+inline ForkedPromise<void> Promise<void>::fork() {
+  return Promise<>::fork();
 }
 
-template <typename T>
-Promise<T> ForkedPromise<T>::addBranch() {
-  return hub->addBranch();
+template <typename... T>
+Promise<T...> ForkedPromise<T...>::addBranch() {
+  return Promise<T...>(false, hub->addBranch());
 }
 
-template <typename T>
-_::SplitTuplePromise<T> Promise<T>::split() {
-  return refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(node))->split();
+template <typename... T>
+kj::Tuple<_::ReducePromises<T>...> Promise<T...>::split() {
+  return refcounted<_::ForkHub<_::PromiseNodeType<T...>>>(kj::mv(node))->split();
 }
 
-template <typename T>
-Promise<T> Promise<T>::exclusiveJoin(Promise<T>&& other) {
+template <typename... T>
+Promise<T...> Promise<T...>::exclusiveJoin(Promise<T...>&& other) {
   return Promise(false, heap<_::ExclusiveJoinPromiseNode>(kj::mv(node), kj::mv(other.node)));
 }
 
-template <typename T>
+template <typename... T>
 template <typename... Attachments>
-Promise<T> Promise<T>::attach(Attachments&&... attachments) {
+Promise<T...> Promise<T...>::attach(Attachments&&... attachments) {
   return Promise(false, kj::heap<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
       kj::mv(node), kj::tuple(kj::fwd<Attachments>(attachments)...)));
 }
 
-template <typename T>
+template <typename... T>
 template <typename ErrorFunc>
-Promise<T> Promise<T>::eagerlyEvaluate(ErrorFunc&& errorHandler) {
+Promise<T...> Promise<T...>::eagerlyEvaluate(ErrorFunc&& errorHandler) {
   // See catch_() for commentary.
-  return Promise(false, _::spark<_::FixVoid<T>>(then(
+  return Promise(false, _::spark<_::PromiseNodeType<T...>>(then(
       _::IdentityFunc<decltype(errorHandler(instance<Exception&&>()))>(),
       kj::fwd<ErrorFunc>(errorHandler)).node));
 }
 
-template <typename T>
-Promise<T> Promise<T>::eagerlyEvaluate(decltype(nullptr)) {
-  return Promise(false, _::spark<_::FixVoid<T>>(kj::mv(node)));
+template <typename... T>
+Promise<T...> Promise<T...>::eagerlyEvaluate(decltype(nullptr)) {
+  return Promise(false, _::spark<_::PromiseNodeType<T...>>(kj::mv(node)));
 }
 
-template <typename T>
-kj::String Promise<T>::trace() {
+template <typename... T>
+kj::String Promise<T...>::trace() {
   return PromiseBase::trace();
 }
 
@@ -969,31 +996,37 @@ inline PromiseForResult<Func, void> evalNow(Func&& func) {
   return result;
 }
 
-template <typename T>
+template <typename... T>
 template <typename ErrorFunc>
-void Promise<T>::detach(ErrorFunc&& errorHandler) {
-  return _::detach(then([](T&&) {}, kj::fwd<ErrorFunc>(errorHandler)));
+void Promise<T...>::detach(ErrorFunc&& errorHandler) {
+  return _::detach(then([](T&&...) {}, kj::fwd<ErrorFunc>(errorHandler)));
 }
 
-template <>
-template <typename ErrorFunc>
-void Promise<void>::detach(ErrorFunc&& errorHandler) {
-  return _::detach(then([]() {}, kj::fwd<ErrorFunc>(errorHandler)));
+template <typename... T>
+Promise<Array<kj::Tuple<T...>>> joinPromises(Array<Promise<T...>>&& promises) {
+  return Promise<Array<kj::Tuple<T...>>>(false,
+      kj::heap<_::ArrayJoinPromiseNode<_::PromiseNodeType<T...>>>(
+          KJ_MAP(p, promises) { return kj::mv(p.node); },
+          heapArray<_::ExceptionOr<_::PromiseNodeType<T...>>>(promises.size())));
 }
 
-template <typename T>
-Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises) {
-  return Promise<Array<T>>(false, kj::heap<_::ArrayJoinPromiseNode<T>>(
-      KJ_MAP(p, promises) { return kj::mv(p.node); },
-      heapArray<_::ExceptionOr<T>>(promises.size())));
+namespace _ {  // private
+
+inline ReadyNow::operator Promise<>() const {
+  return Promise<>(false, heap<ImmediatePromiseNode<Void>>(Void()));
 }
+inline ReadyNow::operator Promise<void>() const {
+  return Promise<void>(false, heap<ImmediatePromiseNode<Void>>(Void()));
+}
+
+}  // namespace _ (private)
 
 // =======================================================================================
 
 namespace _ {  // private
 
-template <typename T>
-class WeakFulfiller final: public PromiseFulfiller<T>, private kj::Disposer {
+template <typename... T>
+class WeakFulfiller final: public FulfillerType<T...>::Type, private kj::Disposer {
   // A wrapper around PromiseFulfiller which can be detached.
   //
   // There are a couple non-trivialities here:
@@ -1015,9 +1048,9 @@ public:
     return Own<WeakFulfiller>(ptr, *ptr);
   }
 
-  void fulfill(FixVoid<T>&& value) override {
+  void fulfill(T&&... value) override {
     if (inner != nullptr) {
-      inner->fulfill(kj::mv(value));
+      inner->fulfill(kj::mv(value)...);
     }
   }
 
@@ -1031,11 +1064,11 @@ public:
     return inner != nullptr && inner->isWaiting();
   }
 
-  void attach(PromiseFulfiller<T>& newInner) {
+  void attach(PromiseFulfiller<T...>& newInner) {
     inner = &newInner;
   }
 
-  void detach(PromiseFulfiller<T>& from) {
+  void detach(PromiseFulfiller<T...>& from) {
     if (inner == nullptr) {
       // Already disposed.
       delete this;
@@ -1046,7 +1079,7 @@ public:
   }
 
 private:
-  mutable PromiseFulfiller<T>* inner;
+  mutable PromiseFulfiller<T...>* inner;
 
   WeakFulfiller(): inner(nullptr) {}
 
@@ -1066,11 +1099,11 @@ private:
   }
 };
 
-template <typename T>
+template <typename... T>
 class PromiseAndFulfillerAdapter {
 public:
-  PromiseAndFulfillerAdapter(PromiseFulfiller<T>& fulfiller,
-                             WeakFulfiller<T>& wrapper)
+  PromiseAndFulfillerAdapter(PromiseFulfiller<T...>& fulfiller,
+                             WeakFulfiller<T...>& wrapper)
       : fulfiller(fulfiller), wrapper(wrapper) {
     wrapper.attach(fulfiller);
   }
@@ -1080,25 +1113,15 @@ public:
   }
 
 private:
-  PromiseFulfiller<T>& fulfiller;
-  WeakFulfiller<T>& wrapper;
+  PromiseFulfiller<T...>& fulfiller;
+  WeakFulfiller<T...>& wrapper;
 };
 
 }  // namespace _ (private)
 
-template <typename T>
+template <typename... T>
 template <typename Func>
-bool PromiseFulfiller<T>::rejectIfThrows(Func&& func) {
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions(kj::mv(func))) {
-    reject(kj::mv(*exception));
-    return false;
-  } else {
-    return true;
-  }
-}
-
-template <typename Func>
-bool PromiseFulfiller<void>::rejectIfThrows(Func&& func) {
+bool PromiseFulfiller<T...>::rejectIfThrows(Func&& func) {
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions(kj::mv(func))) {
     reject(kj::mv(*exception));
     return false;
@@ -1109,20 +1132,38 @@ bool PromiseFulfiller<void>::rejectIfThrows(Func&& func) {
 
 template <typename T, typename Adapter, typename... Params>
 Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
-  return Promise<T>(false, heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
+  return Promise<T>(false, heap<typename _::AdapterPromiseNodeType<Adapter, T>::Type>(
       kj::fwd<Params>(adapterConstructorParams)...));
 }
 
-template <typename T>
-PromiseFulfillerPair<T> newPromiseAndFulfiller() {
-  auto wrapper = _::WeakFulfiller<T>::make();
+template <typename Adapter, typename... T, typename... Params>
+Promise<T...> newAdaptedTuplePromise(Params&&... adapterConstructorParams) {
+  return Promise<T...>(false, heap<_::AdapterPromiseNode<Adapter, T...>>(
+      kj::fwd<Params>(adapterConstructorParams)...));
+}
+
+template <typename... T>
+PromiseFulfillerPair<T...> newPromiseAndFulfiller() {
+  auto wrapper = _::WeakFulfiller<T...>::make();
 
   Own<_::PromiseNode> intermediate(
-      heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
-  _::ReducePromises<T> promise(false,
-      _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
+      heap<_::AdapterPromiseNode<_::PromiseAndFulfillerAdapter<T...>, T...>>(*wrapper));
+  _::ReducePromises<T...> promise(false,
+      _::maybeChain(kj::mv(intermediate), implicitCast<_::PromiseNodeType<T...>*>(nullptr)));
 
-  return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
+  return PromiseFulfillerPair<T...> { kj::mv(promise), kj::mv(wrapper) };
+}
+
+template <>
+inline PromiseFulfillerPair<void> newPromiseAndFulfiller<void>() {
+  auto wrapper = _::WeakFulfiller<>::make();
+
+  Own<_::PromiseNode> intermediate(
+      heap<_::AdapterPromiseNode<_::PromiseAndFulfillerAdapter<>>>(*wrapper));
+  Promise<void> promise(false,
+      _::maybeChain(kj::mv(intermediate), implicitCast<_::PromiseNodeType<>*>(nullptr)));
+
+  return PromiseFulfillerPair<void> { kj::mv(promise), kj::mv(wrapper) };
 }
 
 }  // namespace kj
