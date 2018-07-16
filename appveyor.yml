@@ -7,8 +7,8 @@
 #     support for.
 #   - Use CMake to ...
 #       build Cap'n Proto with MinGW.
-#       build Cap'n Proto with VS2015 and VS2017.
-#       build Cap'n Proto samples with VS2015 and VS2017.
+#       build Cap'n Proto with VS2017.
+#       build Cap'n Proto samples with VS2017.
 
 version: "{build}"
 
@@ -41,10 +41,6 @@ environment:
       EXTRA_BUILD_FLAGS: # /maxcpucount
       # TODO(someday): Right now /maxcpucount occasionally expresses a filesystem-related race:
       #   capnp-capnpc++ complains that it can't create test.capnp.h.
-
-    - CMAKE_GENERATOR: Visual Studio 14 2015
-      BUILD_NAME: vs2015
-      EXTRA_BUILD_FLAGS: # /maxcpucount
 
     - CMAKE_GENERATOR: MinGW Makefiles
       BUILD_NAME: mingw

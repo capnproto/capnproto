@@ -524,8 +524,8 @@ private:
   }
 
   template <size_t index>
-  Promise<JoinPromises<typename SplitBranch<T, index>::Element>> addSplit() {
-    return Promise<JoinPromises<typename SplitBranch<T, index>::Element>>(
+  ReducePromises<typename SplitBranch<T, index>::Element> addSplit() {
+    return ReducePromises<typename SplitBranch<T, index>::Element>(
         false, maybeChain(kj::heap<SplitBranch<T, index>>(addRef(*this)),
                           implicitCast<typename SplitBranch<T, index>::Element*>(nullptr)));
   }
@@ -578,6 +578,16 @@ Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, Promise<T>*) {
 template <typename T>
 Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, T*) {
   return kj::mv(node);
+}
+
+template <typename T, typename Result = decltype(T::reducePromise(instance<Promise<T>>()))>
+inline Result maybeReduce(Promise<T>&& promise, bool) {
+  return T::reducePromise(kj::mv(promise));
+}
+
+template <typename T>
+inline Promise<T> maybeReduce(Promise<T>&& promise, ...) {
+  return kj::mv(promise);
 }
 
 // -------------------------------------------------------------------
@@ -809,8 +819,9 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
   Own<_::PromiseNode> intermediate =
       heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
           kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
-  return PromiseForResult<Func, T>(false,
+  auto result = _::ChainPromises<_::ReturnType<Func, T>>(false,
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
+  return _::maybeReduce(kj::mv(result), false);
 }
 
 namespace _ {  // private
@@ -1108,7 +1119,7 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller() {
 
   Own<_::PromiseNode> intermediate(
       heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
-  Promise<_::JoinPromises<T>> promise(false,
+  _::ReducePromises<T> promise(false,
       _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
 
   return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
