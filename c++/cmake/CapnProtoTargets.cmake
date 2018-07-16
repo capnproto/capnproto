@@ -88,6 +88,12 @@ function(_capnp_import_pkg_config_target target)
     PATHS ${${target}_LIBRARY_DIRS}
     NO_DEFAULT_PATH
   )
+  # If the installed version of Cap'n Proto is in a system location, pkg-config will not have filled
+  # in ${target}_LIBRARY_DIRS. To account for this, fall back to a regular search.
+  find_library(CapnProto_${target}_IMPORTED_LOCATION
+    NAMES ${target_name_shared} ${target_name_static}  # prefer libfoo-version.so over libfoo.a
+  )
+
   if(NOT CapnProto_${target}_IMPORTED_LOCATION)
     # Not an error if the library doesn't exist -- we may have found a lite mode installation.
     if(CapnProto_DEBUG)
