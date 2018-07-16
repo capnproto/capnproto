@@ -198,18 +198,20 @@ KJ_TEST("string literals with _kj suffix") {
 }
 
 KJ_TEST("kj::delimited() and kj::strPreallocated()") {
-  KJ_EXPECT(str(delimited(arr(1, 23, 456, 78), "::")) == "1::23::456::78");
+  int rawArray[] = {1, 23, 456, 78};
+  ArrayPtr<int> array = rawArray;
+  KJ_EXPECT(str(delimited(array, "::")) == "1::23::456::78");
 
   {
     char buffer[256];
-    KJ_EXPECT(strPreallocated(buffer, delimited(arr(1, 23, 456, 78), "::"), 'x')
+    KJ_EXPECT(strPreallocated(buffer, delimited(array, "::"), 'x')
         == "1::23::456::78x");
     KJ_EXPECT(strPreallocated(buffer, "foo", 123, true) == "foo123true");
   }
 
   {
     char buffer[5];
-    KJ_EXPECT(strPreallocated(buffer, delimited(arr(1, 23, 456, 78), "::"), 'x') == "1::2");
+    KJ_EXPECT(strPreallocated(buffer, delimited(array, "::"), 'x') == "1::2");
     KJ_EXPECT(strPreallocated(buffer, "foo", 123, true) == "foo1");
   }
 }
