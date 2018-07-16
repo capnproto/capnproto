@@ -1065,13 +1065,13 @@ public:
   Maybe(const Maybe& other): ptr(other.ptr) {}
   Maybe(Maybe& other): ptr(other.ptr) {}
 
-  template <typename U>
+  template <typename U, typename = decltype(T(instance<U&&>()))>
   Maybe(Maybe<U>&& other) noexcept(noexcept(T(instance<U&&>()))) {
     KJ_IF_MAYBE(val, kj::mv(other)) {
       ptr.emplace(kj::mv(*val));
     }
   }
-  template <typename U>
+  template <typename U, typename = decltype(T(instance<const U&>()))>
   Maybe(const Maybe<U>& other) {
     KJ_IF_MAYBE(val, other) {
       ptr.emplace(*val);
@@ -1079,6 +1079,11 @@ public:
   }
 
   Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+
+  template <typename... Params, typename = decltype(T(instance<Params>()...))>
+  Maybe(Params&&... params): ptr(T(kj::fwd<Params>(params)...)) {}
+  // A Maybe can be implicitly constructed from any parameters that can be used to construct type
+  // T.
 
   template <typename... Params>
   inline T& emplace(Params&&... params) {
