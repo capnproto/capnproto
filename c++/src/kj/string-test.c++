@@ -35,6 +35,12 @@ TEST(String, Str) {
   EXPECT_EQ("foo", str('f', 'o', 'o'));
   EXPECT_EQ("123 234 -123 e7",
             str((int8_t)123, " ", (uint8_t)234, " ", (int8_t)-123, " ", hex((uint8_t)0xe7)));
+  EXPECT_EQ("-128 -32768 -2147483648 -9223372036854775808",
+      str((signed char)-128, ' ', (signed short)-32768, ' ',
+          ((int)-2147483647) - 1, ' ', ((long long)-9223372036854775807ll) - 1))
+  EXPECT_EQ("ff ffff ffffffff ffffffffffffffff",
+      str(hex((uint8_t)0xff), ' ', hex((uint16_t)0xffff), ' ', hex((uint32_t)0xffffffffu), ' ',
+          hex((uint64_t)0xffffffffffffffffull)));
 
   char buf[3] = {'f', 'o', 'o'};
   ArrayPtr<char> a = buf;

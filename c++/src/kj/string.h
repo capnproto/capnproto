@@ -368,12 +368,12 @@ struct Stringifier {
   CappedArray<char, sizeof(unsigned long long) * 3 + 2> operator*(unsigned long long i) const;
   CappedArray<char, 24> operator*(float f) const;
   CappedArray<char, 32> operator*(double f) const;
-  CappedArray<char, sizeof(const void*) * 3 + 2> operator*(const void* s) const;
+  CappedArray<char, sizeof(const void*) * 2 + 1> operator*(const void* s) const;
 
   template <typename T>
-  String operator*(ArrayPtr<T> arr) const;
+  _::Delimited<ArrayPtr<T>> operator*(ArrayPtr<T> arr) const;
   template <typename T>
-  String operator*(const Array<T>& arr) const;
+  _::Delimited<ArrayPtr<const T>> operator*(const Array<T>& arr) const;
 
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP  // supports expression SFINAE?
   template <typename T, typename Result = decltype(instance<T>().toString())>
@@ -457,9 +457,10 @@ StringPtr strPreallocated(ArrayPtr<char> buffer, Params&&... params) {
   // This is useful for optimization. It can also potentially be used safely in async signal
   // handlers. HOWEVER, to use in an async signal handler, all of the stringifiers for the inputs
   // must also be signal-safe. KJ guarantees signal safety when stringifying any built-in integer
-  // type, basic char/byte sequences (ArrayPtr<byte>, String, etc.), as well as Array<T> as long
-  // as T can also be stringified safely. To safely stringify a delimited array, you must use
-  // kj::delimited(arr, delim) rather than the deprecated kj::strArray(arr, delim).
+  // type (but NOT floating-points), basic char/byte sequences (ArrayPtr<byte>, String, etc.), as
+  // well as Array<T> as long as T can also be stringified safely. To safely stringify a delimited
+  // array, you must use kj::delimited(arr, delim) rather than the deprecated
+  // kj::strArray(arr, delim).
 
   char* end = _::fillLimited(buffer.begin(), buffer.end() - 1,
       toCharSequence(kj::fwd<Params>(params))...);
@@ -470,13 +471,13 @@ StringPtr strPreallocated(ArrayPtr<char> buffer, Params&&... params) {
 namespace _ {  // private
 
 template <typename T>
-inline String Stringifier::operator*(ArrayPtr<T> arr) const {
-  return strArray(arr, ", ");
+inline _::Delimited<ArrayPtr<T>> Stringifier::operator*(ArrayPtr<T> arr) const {
+  return _::Delimited<ArrayPtr<T>>(arr, ", ");
 }
 
 template <typename T>
-inline String Stringifier::operator*(const Array<T>& arr) const {
-  return strArray(arr, ", ");
+inline _::Delimited<ArrayPtr<const T>> Stringifier::operator*(const Array<T>& arr) const {
+  return _::Delimited<ArrayPtr<const T>>(arr, ", ");
 }
 
 }  // namespace _ (private)
