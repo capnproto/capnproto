@@ -336,6 +336,42 @@ String stringifyStackTraceAddresses(ArrayPtr<void* const> trace) {
 #endif
 }
 
+StringPtr stringifyStackTraceAddresses(ArrayPtr<void* const> trace, ArrayPtr<char> scratch) {
+  // Version which writes into a pre-allocated buffer. This is safe for signal handlers to the
+  // extent that dladdr() is safe.
+  //
+  // TODO(cleanup): We should improve the KJ stringification framework so that there's a way to
+  //   write this string directly into a larger message buffer with strPreallocated().
+
+#if KJ_HAS_LIBDL
+  char* ptr = scratch.begin();
+  char* limit = scratch.end() - 1;
+
+  for (auto addr: trace) {
+    Dl_info info;
+    // Shared libraries are mapped near the end of the address space while the executable is mapped
+    // near the beginning. We want to print addresses in the executable as raw addresses, not
+    // offsets, since that's what addr2line expects for executables. For shared libraries it
+    // expects offsets. In any case, most frames are likely to be in the main executable so it
+    // makes the output cleaner if we don't repeatedly write its name.
+    if (reinterpret_cast<uintptr_t>(addr) >= 0x400000000000ull && dladdr(addr, &info)) {
+      uintptr_t offset = reinterpret_cast<uintptr_t>(addr) -
+                         reinterpret_cast<uintptr_t>(info.dli_fbase);
+      ptr = _::fillLimited(ptr, limit, kj::StringPtr(info.dli_fname), "@0x"_kj, hex(offset));
+    } else {
+      ptr = _::fillLimited(ptr, limit, toCharSequence(addr));
+    }
+
+    ptr = _::fillLimited(ptr, limit, " "_kj);
+  }
+  *ptr = '\0';
+  return StringPtr(scratch.begin(), ptr);
+#else
+  // TODO(someday): Support other platforms.
+  return kj::strPreallocated(scratch, kj::delimited(trace, " "));
+#endif
+}
+
 String getStackTrace() {
   void* space[32];
   auto trace = getStackTrace(space, 2);

@@ -25,6 +25,7 @@
 #include <float.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 namespace kj {
 
@@ -118,18 +119,39 @@ String heapString(const char* value, size_t size) {
   return String(buffer, size, _::HeapArrayDisposer::instance);
 }
 
-#define HEXIFY_INT(type, format) \
-CappedArray<char, sizeof(type) * 2 + 1> hex(type i) { \
-  CappedArray<char, sizeof(type) * 2 + 1> result; \
-  result.setSize(sprintf(result.begin(), format, i)); \
-  return result; \
+template <typename T>
+static CappedArray<char, sizeof(T) * 2 + 1> hexImpl(T i) {
+  // We don't use sprintf() because it's not async-signal-safe (for strPreallocated()).
+  CappedArray<char, sizeof(T) * 2 + 1> result;
+  uint8_t reverse[sizeof(T) * 2];
+  uint8_t* p = reverse;
+  if (i == 0) {
+    *p++ = 0;
+  } else {
+    while (i > 0) {
+      *p++ = i % 16;
+      i /= 16;
+    }
+  }
+
+  char* p2 = result.begin();
+  while (p > reverse) {
+    *p2++ = "0123456789abcdef"[*--p];
+  }
+  result.setSize(p2 - result.begin());
+  return result;
 }
 
-HEXIFY_INT(unsigned char, "%x");
-HEXIFY_INT(unsigned short, "%x");
-HEXIFY_INT(unsigned int, "%x");
-HEXIFY_INT(unsigned long, "%lx");
-HEXIFY_INT(unsigned long long, "%llx");
+#define HEXIFY_INT(type) \
+CappedArray<char, sizeof(type) * 2 + 1> hex(type i) { \
+  return hexImpl<type>(i); \
+}
+
+HEXIFY_INT(unsigned char);
+HEXIFY_INT(unsigned short);
+HEXIFY_INT(unsigned int);
+HEXIFY_INT(unsigned long);
+HEXIFY_INT(unsigned long long);
 
 #undef HEXIFY_INT
 
@@ -143,26 +165,53 @@ StringPtr Stringifier::operator*(bool b) const {
   return b ? StringPtr("true") : StringPtr("false");
 }
 
-#define STRINGIFY_INT(type, format) \
-CappedArray<char, sizeof(type) * 3 + 2> Stringifier::operator*(type i) const { \
-  CappedArray<char, sizeof(type) * 3 + 2> result; \
-  result.setSize(sprintf(result.begin(), format, i)); \
-  return result; \
+template <typename T, typename Unsigned>
+static CappedArray<char, sizeof(T) * 3 + 2> stringifyImpl(T i) {
+  // We don't use sprintf() because it's not async-signal-safe (for strPreallocated()).
+  CappedArray<char, sizeof(T) * 3 + 2> result;
+  bool negative = i < 0;
+  Unsigned u = negative ? -i : i;
+  uint8_t reverse[sizeof(T) * 3 + 1];
+  uint8_t* p = reverse;
+  if (u == 0) {
+    *p++ = 0;
+  } else {
+    while (u > 0) {
+      *p++ = u % 10;
+      u /= 10;
+    }
+  }
+
+  char* p2 = result.begin();
+  if (negative) *p2++ = '-';
+  while (p > reverse) {
+    *p2++ = '0' + *--p;
+  }
+  result.setSize(p2 - result.begin());
+  return result;
 }
 
-STRINGIFY_INT(signed char, "%d");
-STRINGIFY_INT(unsigned char, "%u");
-STRINGIFY_INT(short, "%d");
-STRINGIFY_INT(unsigned short, "%u");
-STRINGIFY_INT(int, "%d");
-STRINGIFY_INT(unsigned int, "%u");
-STRINGIFY_INT(long, "%ld");
-STRINGIFY_INT(unsigned long, "%lu");
-STRINGIFY_INT(long long, "%lld");
-STRINGIFY_INT(unsigned long long, "%llu");
-STRINGIFY_INT(const void*, "%p");
+#define STRINGIFY_INT(type, unsigned) \
+CappedArray<char, sizeof(type) * 3 + 2> Stringifier::operator*(type i) const { \
+  return stringifyImpl<type, unsigned>(i); \
+}
+
+STRINGIFY_INT(signed char, uint);
+STRINGIFY_INT(unsigned char, uint);
+STRINGIFY_INT(short, uint);
+STRINGIFY_INT(unsigned short, uint);
+STRINGIFY_INT(int, uint);
+STRINGIFY_INT(unsigned int, uint);
+STRINGIFY_INT(long, unsigned long);
+STRINGIFY_INT(unsigned long, unsigned long);
+STRINGIFY_INT(long long, unsigned long long);
+STRINGIFY_INT(unsigned long long, unsigned long long);
 
 #undef STRINGIFY_INT
+
+CappedArray<char, sizeof(const void*) * 2 + 1> Stringifier::operator*(const void* i) const { \
+  return hexImpl<uintptr_t>(reinterpret_cast<uintptr_t>(i));
+}
 
 namespace {
 
