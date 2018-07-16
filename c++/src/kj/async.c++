@@ -956,6 +956,63 @@ PromiseNode* ExclusiveJoinPromiseNode::Branch::getInnerForTrace() {
 
 // -------------------------------------------------------------------
 
+JoinPromiseNodeBase::JoinPromiseNodeBase(
+    Own<PromiseNode> left, Own<PromiseNode> right,
+    ExceptionOrValue& leftResult, ExceptionOrValue& rightResult)
+    : countLeft(2),
+      leftBranch(*this, kj::mv(left), leftResult),
+      rightBranch(*this, kj::mv(right), rightResult) {}
+JoinPromiseNodeBase::~JoinPromiseNodeBase() noexcept(false) {}
+
+void JoinPromiseNodeBase::onReady(Event* event) noexcept {
+  onReadyEvent.init(event);
+}
+
+void JoinPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
+  KJ_IF_MAYBE(exception, leftBranch.getPart()) {
+    output.addException(kj::mv(*exception));
+  }
+  KJ_IF_MAYBE(exception, rightBranch.getPart()) {
+    output.addException(kj::mv(*exception));
+  }
+
+  if (output.exception == nullptr) {
+    // No errors.  The template subclass will need to fill in the result.
+    getNoError(output);
+  }
+}
+
+PromiseNode* JoinPromiseNodeBase::getInnerForTrace() {
+  return leftBranch.getInnerForTrace();
+}
+
+JoinPromiseNodeBase::Branch::Branch(
+    JoinPromiseNodeBase& joinNode, Own<PromiseNode> dependencyParam, ExceptionOrValue& output)
+    : joinNode(joinNode), dependency(kj::mv(dependencyParam)), output(output) {
+  dependency->setSelfPointer(&dependency);
+  dependency->onReady(this);
+}
+
+JoinPromiseNodeBase::Branch::~Branch() noexcept(false) {}
+
+Maybe<Own<Event>> JoinPromiseNodeBase::Branch::fire() {
+  if (--joinNode.countLeft == 0) {
+    joinNode.onReadyEvent.arm();
+  }
+  return nullptr;
+}
+
+_::PromiseNode* JoinPromiseNodeBase::Branch::getInnerForTrace() {
+  return dependency->getInnerForTrace();
+}
+
+Maybe<Exception> JoinPromiseNodeBase::Branch::getPart() {
+  dependency->get(output);
+  return kj::mv(output.exception);
+}
+
+// -------------------------------------------------------------------
+
 ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
     Array<Own<PromiseNode>> promises, ExceptionOrValue* resultParts, size_t partSize)
     : countLeft(promises.size()) {

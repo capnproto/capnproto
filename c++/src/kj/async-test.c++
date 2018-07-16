@@ -827,5 +827,20 @@ TEST(Async, Variadic) {
   KJ_EXPECT(get<1>(result) == 321);
 }
 
+TEST(Async, Join) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<int, StringPtr> p1 = kj::tuple(123, "hello"_kj);
+  Promise<char> p2 = 'n';
+
+  Promise<int, StringPtr, char> joined = p1.join(kj::mv(p2));
+
+  Tuple<int, StringPtr, char> result = joined.wait(waitScope);
+  KJ_EXPECT(get<0>(result) == 123);
+  KJ_EXPECT(get<1>(result) == "hello");
+  KJ_EXPECT(get<2>(result) == 'n');
+}
+
 }  // namespace
 }  // namespace kj

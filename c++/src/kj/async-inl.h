@@ -627,6 +627,69 @@ private:
 
 // -------------------------------------------------------------------
 
+class JoinPromiseNodeBase: public PromiseNode {
+public:
+  JoinPromiseNodeBase(Own<PromiseNode> left, Own<PromiseNode> right,
+                      ExceptionOrValue& leftResult, ExceptionOrValue& rightResult);
+  ~JoinPromiseNodeBase() noexcept(false);
+
+  void onReady(Event* event) noexcept override final;
+  void get(ExceptionOrValue& output) noexcept override final;
+  PromiseNode* getInnerForTrace() override final;
+
+protected:
+  virtual void getNoError(ExceptionOrValue& output) noexcept = 0;
+  // Called to compile the result only in the case where there were no errors.
+
+private:
+  uint countLeft;
+  OnReadyEvent onReadyEvent;
+
+  class Branch final: public Event {
+  public:
+    Branch(JoinPromiseNodeBase& joinNode, Own<PromiseNode> dependency,
+           ExceptionOrValue& output);
+    ~Branch() noexcept(false);
+
+    Maybe<Own<Event>> fire() override;
+    _::PromiseNode* getInnerForTrace() override;
+
+    Maybe<Exception> getPart();
+    // Calls dependency->get(output).  If there was an exception, return it.
+
+  private:
+    JoinPromiseNodeBase& joinNode;
+    Own<PromiseNode> dependency;
+    ExceptionOrValue& output;
+  };
+
+  Branch leftBranch;
+  Branch rightBranch;
+};
+
+template <typename Left, typename Right>
+class JoinPromiseNode final: public JoinPromiseNodeBase {
+public:
+  JoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right)
+      : JoinPromiseNodeBase(kj::mv(left), kj::mv(right), leftResult, rightResult) {}
+
+protected:
+  void getNoError(ExceptionOrValue& output) noexcept override {
+    KJ_IASSERT(leftResult.value != nullptr && rightResult.value != nullptr,
+        "Bug in KJ promise framework:  Promise result had neither value nor exception.");
+    auto result = kj::tuple(
+        kj::mv(*_::readMaybe(leftResult.value)),
+        kj::mv(*_::readMaybe(rightResult.value)));
+    output.as<decltype(result)>() = kj::mv(result);
+  }
+
+private:
+  ExceptionOr<Left> leftResult;
+  ExceptionOr<Right> rightResult;
+};
+
+// -------------------------------------------------------------------
+
 class ArrayJoinPromiseNodeBase: public PromiseNode {
 public:
   ArrayJoinPromiseNodeBase(Array<Own<PromiseNode>> promises,
@@ -952,6 +1015,14 @@ kj::Tuple<_::ReducePromises<T>...> Promise<T...>::split() {
 template <typename... T>
 Promise<T...> Promise<T...>::exclusiveJoin(Promise<T...>&& other) {
   return Promise(false, heap<_::ExclusiveJoinPromiseNode>(kj::mv(node), kj::mv(other.node)));
+}
+
+template <typename... T>
+template <typename... U>
+Promise<T..., U...> Promise<T...>::join(Promise<U...>&& other) {
+  return Promise<T..., U...>(false,
+      kj::heap<_::JoinPromiseNode<_::PromiseNodeType<T...>, _::PromiseNodeType<U...>>>(
+          kj::mv(node), kj::mv(other.node)));
 }
 
 template <typename... T>

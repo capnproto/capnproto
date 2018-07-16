@@ -259,12 +259,20 @@ public:
   Tuple<_::ReducePromises<T>...> split();
   // Split a multi-value promise into a tuple of promises.
 
+  template <typename... U>
+  Promise<T..., U...> join(Promise<U...>&& other) KJ_WARN_UNUSED_RESULT;
+  // Returns a promise that waits for both `this` and `other` to complete, and resolves to the
+  // combination of their results. If one promise throws an exception, the other promise will still
+  // be allowed to complete before the exception is propagated. If both sides throw exceptions,
+  // one of the two exceptions is propagated arbitrarily.
+
+  // TODO(someday): Add failfastJoin(), which is like join() except if one side throws, the other
+  //   side is canceled. At the same time, extend joinPromises(Array<Promise<T>>) with a failfast
+  //   version.
+
   Promise<T...> exclusiveJoin(Promise<T...>&& other) KJ_WARN_UNUSED_RESULT;
   // Return a new promise that resolves when either the original promise resolves or `other`
   // resolves (whichever comes first).  The promise that didn't resolve first is canceled.
-
-  // TODO(someday): inclusiveJoin(), or perhaps just join(), which waits for both completions
-  //   and produces a tuple?
 
   template <typename... Attachments>
   Promise<T...> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
