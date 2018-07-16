@@ -264,15 +264,18 @@ public:
   // Returns a promise that waits for both `this` and `other` to complete, and resolves to the
   // combination of their results. If one promise throws an exception, the other promise will still
   // be allowed to complete before the exception is propagated. If both sides throw exceptions,
-  // one of the two exceptions is propagated arbitrarily.
+  // the exception from `this` is propagated (`other`'s exception is thrown away).
 
-  // TODO(someday): Add failfastJoin(), which is like join() except if one side throws, the other
-  //   side is canceled. At the same time, extend joinPromises(Array<Promise<T>>) with a failfast
-  //   version.
+  template <typename... U>
+  Promise<T..., U...> joinFailfast(Promise<U...>&& other) KJ_WARN_UNUSED_RESULT;
+  // Like join() but if either promise throws, the other promise is canceled and the exception is
+  // propagated immediately.
 
   Promise<T...> exclusiveJoin(Promise<T...>&& other) KJ_WARN_UNUSED_RESULT;
   // Return a new promise that resolves when either the original promise resolves or `other`
   // resolves (whichever comes first).  The promise that didn't resolve first is canceled.
+  //
+  // TODO(cleanup): JavaScript has decided to call this operation `race()`. Maybe we should too.
 
   template <typename... Attachments>
   Promise<T...> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
@@ -339,6 +342,10 @@ private:
   friend Promise<Array<Tuple<U...>>> joinPromises(Array<Promise<U...>>&& promises);
   friend Promise<void> joinPromises(Array<Promise<void>>&& promises);
   friend Promise<> joinPromises(Array<Promise<>>&& promises);
+  template <typename... U>
+  friend Promise<Array<Tuple<U...>>> joinPromisesFailfast(Array<Promise<U...>>&& promises);
+  friend Promise<void> joinPromisesFailfast(Array<Promise<void>>&& promises);
+  friend Promise<> joinPromisesFailfast(Array<Promise<>>&& promises);
 };
 
 template <>
@@ -456,6 +463,14 @@ PromiseForResult<Func, void> evalNow(Func&& func) KJ_WARN_UNUSED_RESULT;
 template <typename... T>
 Promise<Array<kj::Tuple<T...>>> joinPromises(Array<Promise<T...>>&& promises);
 // Join an array of promises into a promise for an array.
+//
+// In case of an exception, the final promise waits for all inner promises to complete before
+// propagating the exception. If there are multiple exceptions, the first one (in array order)
+// is propagated. Use joinPromisesFailfast() to cancel other promises on an exception.
+
+template <typename... T>
+Promise<Array<kj::Tuple<T...>>> joinPromisesFailfast(Array<Promise<T...>>&& promises);
+// Like joinPromises(), but if any promise throws, all the other promises are canceled.
 
 // =======================================================================================
 // Hack for creating a lambda that holds an owned pointer.

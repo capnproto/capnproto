@@ -44,6 +44,11 @@ Promise<Array<kj::Tuple<T...>>> joinPromises(Array<Promise<T...>>&& promises);
 Promise<void> joinPromises(Array<Promise<void>>&& promises);
 Promise<> joinPromises(Array<Promise<>>&& promises);
 
+template <typename... T>
+Promise<Array<kj::Tuple<T...>>> joinPromisesFailfast(Array<Promise<T...>>&& promises);
+Promise<void> joinPromisesFailfast(Array<Promise<void>>&& promises);
+Promise<> joinPromisesFailfast(Array<Promise<>>&& promises);
+
 namespace _ {  // private
 
 template <typename T>
@@ -201,6 +206,10 @@ private:
   friend Promise<Array<kj::Tuple<U...>>> kj::joinPromises(Array<Promise<U...>>&& promises);
   friend Promise<void> kj::joinPromises(Array<Promise<void>>&& promises);
   friend Promise<> kj::joinPromises(Array<Promise<>>&& promises);
+  template <typename... U>
+  friend Promise<Array<kj::Tuple<U...>>> kj::joinPromisesFailfast(Array<Promise<U...>>&& promises);
+  friend Promise<void> kj::joinPromisesFailfast(Array<Promise<void>>&& promises);
+  friend Promise<> kj::joinPromisesFailfast(Array<Promise<>>&& promises);
 };
 
 void detach(kj::Promise<void>&& promise);

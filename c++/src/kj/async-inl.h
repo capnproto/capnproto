@@ -630,7 +630,8 @@ private:
 class JoinPromiseNodeBase: public PromiseNode {
 public:
   JoinPromiseNodeBase(Own<PromiseNode> left, Own<PromiseNode> right,
-                      ExceptionOrValue& leftResult, ExceptionOrValue& rightResult);
+                      ExceptionOrValue& leftResult, ExceptionOrValue& rightResult,
+                      bool failfast);
   ~JoinPromiseNodeBase() noexcept(false);
 
   void onReady(Event* event) noexcept override final;
@@ -643,6 +644,8 @@ protected:
 
 private:
   uint countLeft;
+  bool failfast;
+  bool armed = false;
   OnReadyEvent onReadyEvent;
 
   class Branch final: public Event {
@@ -670,8 +673,8 @@ private:
 template <typename Left, typename Right>
 class JoinPromiseNode final: public JoinPromiseNodeBase {
 public:
-  JoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right)
-      : JoinPromiseNodeBase(kj::mv(left), kj::mv(right), leftResult, rightResult) {}
+  JoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right, bool failfast)
+      : JoinPromiseNodeBase(kj::mv(left), kj::mv(right), leftResult, rightResult, failfast) {}
 
 protected:
   void getNoError(ExceptionOrValue& output) noexcept override {
@@ -693,7 +696,8 @@ private:
 class ArrayJoinPromiseNodeBase: public PromiseNode {
 public:
   ArrayJoinPromiseNodeBase(Array<Own<PromiseNode>> promises,
-                           ExceptionOrValue* resultParts, size_t partSize);
+                           ExceptionOrValue* resultParts, size_t partSize,
+                           bool failfast);
   ~ArrayJoinPromiseNodeBase() noexcept(false);
 
   void onReady(Event* event) noexcept override final;
@@ -706,6 +710,8 @@ protected:
 
 private:
   uint countLeft;
+  bool failfast;
+  bool armed = false;
   OnReadyEvent onReadyEvent;
 
   class Branch final: public Event {
@@ -733,8 +739,10 @@ template <typename T>
 class ArrayJoinPromiseNode final: public ArrayJoinPromiseNodeBase {
 public:
   ArrayJoinPromiseNode(Array<Own<PromiseNode>> promises,
-                       Array<ExceptionOr<T>> resultParts)
-      : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<T>)),
+                       Array<ExceptionOr<T>> resultParts,
+                       bool failfast)
+      : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(),
+                                 sizeof(ExceptionOr<T>), failfast),
         resultParts(kj::mv(resultParts)) {}
 
 protected:
@@ -756,7 +764,8 @@ template <>
 class ArrayJoinPromiseNode<void> final: public ArrayJoinPromiseNodeBase {
 public:
   ArrayJoinPromiseNode(Array<Own<PromiseNode>> promises,
-                       Array<ExceptionOr<_::Void>> resultParts);
+                       Array<ExceptionOr<_::Void>> resultParts,
+                       bool failfast);
   ~ArrayJoinPromiseNode();
 
 protected:
@@ -1022,7 +1031,15 @@ template <typename... U>
 Promise<T..., U...> Promise<T...>::join(Promise<U...>&& other) {
   return Promise<T..., U...>(false,
       kj::heap<_::JoinPromiseNode<_::PromiseNodeType<T...>, _::PromiseNodeType<U...>>>(
-          kj::mv(node), kj::mv(other.node)));
+          kj::mv(node), kj::mv(other.node), false));
+}
+
+template <typename... T>
+template <typename... U>
+Promise<T..., U...> Promise<T...>::joinFailfast(Promise<U...>&& other) {
+  return Promise<T..., U...>(false,
+      kj::heap<_::JoinPromiseNode<_::PromiseNodeType<T...>, _::PromiseNodeType<U...>>>(
+          kj::mv(node), kj::mv(other.node), true));
 }
 
 template <typename... T>
@@ -1078,7 +1095,17 @@ Promise<Array<kj::Tuple<T...>>> joinPromises(Array<Promise<T...>>&& promises) {
   return Promise<Array<kj::Tuple<T...>>>(false,
       kj::heap<_::ArrayJoinPromiseNode<_::PromiseNodeType<T...>>>(
           KJ_MAP(p, promises) { return kj::mv(p.node); },
-          heapArray<_::ExceptionOr<_::PromiseNodeType<T...>>>(promises.size())));
+          heapArray<_::ExceptionOr<_::PromiseNodeType<T...>>>(promises.size()),
+          false));
+}
+
+template <typename... T>
+Promise<Array<kj::Tuple<T...>>> joinPromisesFailfast(Array<Promise<T...>>&& promises) {
+  return Promise<Array<kj::Tuple<T...>>>(false,
+      kj::heap<_::ArrayJoinPromiseNode<_::PromiseNodeType<T...>>>(
+          KJ_MAP(p, promises) { return kj::mv(p.node); },
+          heapArray<_::ExceptionOr<_::PromiseNodeType<T...>>>(promises.size())),
+          true);
 }
 
 namespace _ {  // private
