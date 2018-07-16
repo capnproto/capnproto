@@ -123,8 +123,8 @@ template <typename T>
 static CappedArray<char, sizeof(T) * 2 + 1> hexImpl(T i) {
   // We don't use sprintf() because it's not async-signal-safe (for strPreallocated()).
   CappedArray<char, sizeof(T) * 2 + 1> result;
-  char reverse[sizeof(T) * 2];
-  char* p = reverse;
+  uint8_t reverse[sizeof(T) * 2];
+  uint8_t* p = reverse;
   if (i == 0) {
     *p++ = 0;
   } else {
@@ -171,8 +171,8 @@ static CappedArray<char, sizeof(T) * 3 + 2> stringifyImpl(T i) {
   CappedArray<char, sizeof(T) * 3 + 2> result;
   bool negative = i < 0;
   Unsigned u = negative ? -i : i;
-  char reverse[sizeof(T) * 3 + 1];
-  char* p = reverse;
+  uint8_t reverse[sizeof(T) * 3 + 1];
+  uint8_t* p = reverse;
   if (u == 0) {
     *p++ = 0;
   } else {
