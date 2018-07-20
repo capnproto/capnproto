@@ -151,33 +151,78 @@ typedef unsigned char byte;
 #define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__
 // Don't force inline in debug mode.
 #else
+#if defined(__has_cpp_attribute)
+#if __has_cpp_attribute(gnu::always_inline)
+// Try not to mix standard (C++11) attribute syntax with GNU attribute syntax.
+#define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__ [[gnu::always_inline]]
+#endif
+#endif
+#if !defined(KJ_ALWAYS_INLINE)
 #if defined(_MSC_VER)
 #define KJ_ALWAYS_INLINE(...) __forceinline __VA_ARGS__
 #else
 #define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__ __attribute__((always_inline))
 #endif
+#endif
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #endif
 
+#if defined(__has_cpp_attribute)
+#if __has_cpp_attribute(gnu::noinline)
+#define KJ_NOINLINE [[gnu::noinline]]
+#endif
+#endif
+#if !defined(KJ_NOINLINE)
 #if defined(_MSC_VER)
 #define KJ_NOINLINE __declspec(noinline)
 #else
 #define KJ_NOINLINE __attribute__((noinline))
 #endif
+#endif
+
+// Prefer standard attributes, if available.
+#if defined(__has_cpp_attribute)
+#if __has_cpp_attribute(noreturn)
+#define KJ_NORETURN(prototype) [[noreturn]] prototype
+#endif
+#if __has_cpp_attribute(maybe_unused)
+#define KJ_UNUSED [[maybe_unused]]
+#define KJ_UNUSED_MEMBER [[maybe_unused]]
+#endif
+#if __has_cpp_attribute(nodiscard)
+#define KJ_WARN_UNUSED_RESULT [[nodiscard]]
+#endif
+#if __has_cpp_attribute(deprecated)
+#define KJ_DEPRECATED(reason) [[deprecated(reason)]]
+#endif
+#endif
 
 #if defined(_MSC_VER) && !__clang__
+#if !defined(KJ_NORETURN)
 #define KJ_NORETURN(prototype) __declspec(noreturn) prototype
+#endif
+#if !defined(KJ_UNUSED)
 #define KJ_UNUSED
+#endif
+#if !defined(KJ_WARN_UNUSED_RESULT)
 #define KJ_WARN_UNUSED_RESULT
 // TODO(msvc): KJ_WARN_UNUSED_RESULT can use _Check_return_ on MSVC, but it's a prefix, so
 //   wrapping the whole prototype is needed. http://msdn.microsoft.com/en-us/library/jj159529.aspx
 //   Similarly, KJ_UNUSED could use __pragma(warning(suppress:...)), but again that's a prefix.
+#endif
 #else
+#if !defined(KJ_NORETURN)
 #define KJ_NORETURN(prototype) prototype __attribute__((noreturn))
+#endif
+#if !defined(KJ_UNUSED)
 #define KJ_UNUSED __attribute__((unused))
+#endif
+#if !defined(KJ_WARN_UNUSED_RESULT)
 #define KJ_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #endif
+#endif
 
+#if !defined(KJ_UNUSED_MEMBER)
 #if __clang__
 #define KJ_UNUSED_MEMBER __attribute__((unused))
 // Inhibits "unused" warning for member variables.  Only Clang produces such a warning, while GCC
@@ -185,18 +230,25 @@ typedef unsigned char byte;
 #else
 #define KJ_UNUSED_MEMBER
 #endif
+#endif
 
 #if __clang__
+#if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated(reason)))
+#endif
 #define KJ_UNAVAILABLE(reason) \
     __attribute__((unavailable(reason)))
 #elif __GNUC__
+#if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated))
+#endif
 #define KJ_UNAVAILABLE(reason)
 #else
+#if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason)
+#endif
 #define KJ_UNAVAILABLE(reason)
 // TODO(msvc): Again, here, MSVC prefers a prefix, __declspec(deprecated).
 #endif
