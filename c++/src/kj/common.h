@@ -147,54 +147,49 @@ typedef unsigned char byte;
 #define KJ_UNLIKELY(condition) (condition)
 #endif
 
+// Prefer standard attributes, if available.
+#if defined(__has_cpp_attribute)
+#define KJ_HAS_CPP_ATTRIBUTE(token) __has_cpp_attribute(token)
+#else
+#define KJ_HAS_CPP_ATTRIBUTE(token) 0
+#endif
+
 #if defined(KJ_DEBUG) || __NO_INLINE__
 #define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__
 // Don't force inline in debug mode.
 #else
-#if defined(__has_cpp_attribute)
-#if __has_cpp_attribute(gnu::always_inline)
+#if KJ_HAS_CPP_ATTRIBUTE(gnu::always_inline)
 // Try not to mix standard (C++11) attribute syntax with GNU attribute syntax.
 #define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__ [[gnu::always_inline]]
-#endif
-#endif
-#if !defined(KJ_ALWAYS_INLINE)
-#if defined(_MSC_VER)
+#elif defined(_MSC_VER)
 #define KJ_ALWAYS_INLINE(...) __forceinline __VA_ARGS__
 #else
 #define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__ __attribute__((always_inline))
 #endif
-#endif
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #endif
 
-#if defined(__has_cpp_attribute)
-#if __has_cpp_attribute(gnu::noinline)
+#if KJ_HAS_CPP_ATTRIBUTE(gnu::noinline)
 #define KJ_NOINLINE [[gnu::noinline]]
-#endif
-#endif
-#if !defined(KJ_NOINLINE)
-#if defined(_MSC_VER)
+#elif defined(_MSC_VER)
 #define KJ_NOINLINE __declspec(noinline)
 #else
 #define KJ_NOINLINE __attribute__((noinline))
 #endif
-#endif
 
 // Prefer standard attributes, if available.
-#if defined(__has_cpp_attribute)
-#if __has_cpp_attribute(noreturn)
+#if KJ_HAS_CPP_ATTRIBUTE(noreturn)
 #define KJ_NORETURN(prototype) [[noreturn]] prototype
 #endif
-#if __has_cpp_attribute(maybe_unused)
+#if KJ_HAS_CPP_ATTRIBUTE(maybe_unused)
 #define KJ_UNUSED [[maybe_unused]]
 #define KJ_UNUSED_MEMBER [[maybe_unused]]
 #endif
-#if __has_cpp_attribute(nodiscard)
+#if KJ_HAS_CPP_ATTRIBUTE(nodiscard)
 #define KJ_WARN_UNUSED_RESULT [[nodiscard]]
 #endif
-#if __has_cpp_attribute(deprecated)
+#if KJ_HAS_CPP_ATTRIBUTE(deprecated)
 #define KJ_DEPRECATED(reason) [[deprecated(reason)]]
-#endif
 #endif
 
 #if defined(_MSC_VER) && !__clang__
@@ -222,14 +217,14 @@ typedef unsigned char byte;
 #endif
 #endif
 
-#if !defined(KJ_UNUSED_MEMBER)
-#if __clang__
+#if KJ_HAS_CPP_ATTRIBUTE(maybe_unused)
+#define KJ_UNUSED_MEMBER [[maybe_unused]]
+#elif __clang__
 #define KJ_UNUSED_MEMBER __attribute__((unused))
 // Inhibits "unused" warning for member variables.  Only Clang produces such a warning, while GCC
 // complains if the attribute is set on members.
 #else
 #define KJ_UNUSED_MEMBER
-#endif
 #endif
 
 #if __clang__
