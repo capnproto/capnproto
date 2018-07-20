@@ -145,7 +145,12 @@ void UnixEventPort::ChildSet::checkExits() {
   for (;;) {
     int status;
     pid_t pid;
-    KJ_SYSCALL(pid = waitpid(-1, &status, WNOHANG));
+    KJ_SYSCALL_HANDLE_ERRORS(pid = waitpid(-1, &status, WNOHANG)) {
+      case ECHILD:
+        return;
+      default:
+        KJ_FAIL_SYSCALL("waitpid()", error);
+    }
     if (pid == 0) break;
 
     auto iter = waiters.find(pid);
