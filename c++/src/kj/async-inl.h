@@ -1007,9 +1007,6 @@ template <typename... T>
 ForkedPromise<T...> Promise<T...>::fork() {
   return ForkedPromise<T...>(false, refcounted<_::ForkHub<_::PromiseNodeType<T...>>>(kj::mv(node)));
 }
-inline ForkedPromise<void> Promise<void>::fork() {
-  return Promise<>::fork();
-}
 
 template <typename... T>
 Promise<T...> ForkedPromise<T...>::addBranch() {
@@ -1090,6 +1087,28 @@ void Promise<T...>::detach(ErrorFunc&& errorHandler) {
   return _::detach(then([](T&&...) {}, kj::fwd<ErrorFunc>(errorHandler)));
 }
 
+template <typename ErrorFunc>
+inline Promise<void> Promise<void>::catch_(ErrorFunc&& errorHandler) {
+  return Promise<>::catch_(kj::fwd<ErrorFunc>(errorHandler));
+}
+inline ForkedPromise<void> Promise<void>::fork() {
+  return Promise<>::fork();
+}
+inline Promise<void> Promise<void>::exclusiveJoin(Promise<>&& other) {
+  return Promise<>::exclusiveJoin(kj::mv(other));
+}
+template <typename... Attachments>
+inline Promise<void> Promise<void>::attach(Attachments&&... attachments) {
+  return Promise<>::attach(kj::fwd<Attachments>(attachments)...);
+}
+template <typename ErrorFunc>
+inline Promise<void> Promise<void>::eagerlyEvaluate(ErrorFunc&& errorHandler) {
+  return Promise<>::eagerlyEvaluate(kj::fwd<ErrorFunc>(errorHandler));
+}
+inline Promise<void> Promise<void>::eagerlyEvaluate(decltype(nullptr)) {
+  return Promise<>::eagerlyEvaluate(nullptr);
+}
+
 template <typename... T>
 Promise<Array<kj::Tuple<T...>>> joinPromises(Array<Promise<T...>>&& promises) {
   return Promise<Array<kj::Tuple<T...>>>(false,
@@ -1112,9 +1131,6 @@ namespace _ {  // private
 
 inline ReadyNow::operator Promise<>() const {
   return Promise<>(false, heap<ImmediatePromiseNode<Void>>(Void()));
-}
-inline ReadyNow::operator Promise<void>() const {
-  return Promise<void>(false, heap<ImmediatePromiseNode<Void>>(Void()));
 }
 
 }  // namespace _ (private)

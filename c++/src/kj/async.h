@@ -363,27 +363,19 @@ class Promise<void>: public Promise<> {
 public:
   using Promise<>::Promise;
   inline Promise(Promise<>&& other): Promise<>(kj::mv(other)) {}
+  inline Promise(const _::ReadyNow& other): Promise<>(other) {}
+  inline Promise(const _::NeverDone& other): Promise<>(other) {}
   inline void wait(WaitScope& waitScope);
 
   template <typename ErrorFunc>
-  inline Promise<void> catch_(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT {
-    return Promise<>::catch_(kj::fwd<ErrorFunc>(errorHandler));
-  }
+  inline Promise<void> catch_(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
   inline ForkedPromise<void> fork();
-  inline Promise<void> exclusiveJoin(Promise<>&& other) KJ_WARN_UNUSED_RESULT {
-    return Promise<>::exclusiveJoin(kj::mv(other));
-  }
+  inline Promise<void> exclusiveJoin(Promise<>&& other) KJ_WARN_UNUSED_RESULT;
   template <typename... Attachments>
-  inline Promise<void> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT {
-    return Promise<>::attach(kj::fwd<Attachments>(attachments)...);
-  }
+  inline Promise<void> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
   template <typename ErrorFunc>
-  inline Promise<void> eagerlyEvaluate(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT {
-    return Promise<>::eagerlyEvaluate(kj::fwd<ErrorFunc>(errorHandler));
-  }
-  inline Promise<void> eagerlyEvaluate(decltype(nullptr)) KJ_WARN_UNUSED_RESULT {
-    return Promise<>::eagerlyEvaluate(nullptr);
-  }
+  inline Promise<void> eagerlyEvaluate(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
+  inline Promise<void> eagerlyEvaluate(decltype(nullptr)) KJ_WARN_UNUSED_RESULT;
 
 private:
   template <typename...>

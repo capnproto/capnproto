@@ -221,7 +221,6 @@ Own<PromiseNode> neverDone();
 class ReadyNow {
 public:
   inline operator Promise<>() const;
-  inline operator Promise<void>() const;
 
   KJ_NORETURN(void wait(WaitScope& waitScope) const);
 };
