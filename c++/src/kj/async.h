@@ -346,6 +346,8 @@ private:
   friend Promise<Array<Tuple<U...>>> joinPromisesFailfast(Array<Promise<U...>>&& promises);
   friend Promise<void> joinPromisesFailfast(Array<Promise<void>>&& promises);
   friend Promise<> joinPromisesFailfast(Array<Promise<>>&& promises);
+  template <typename... U>
+  friend Promise<U...> reducePromise(Promise<U...>*, Promise<Promise<U...>>&& promise);
 };
 
 template <>
@@ -389,6 +391,8 @@ private:
   friend Promise<void> _::yield();
   friend class _::ReadyNow;
   friend class _::NeverDone;
+  template <typename... U>
+  friend Promise<U...> reducePromise(Promise<U...>*, Promise<Promise<U...>>&& promise);
 };
 
 template <typename... T>
@@ -463,6 +467,29 @@ Promise<Array<kj::Tuple<T...>>> joinPromises(Array<Promise<T...>>&& promises);
 template <typename... T>
 Promise<Array<kj::Tuple<T...>>> joinPromisesFailfast(Array<Promise<T...>>&& promises);
 // Like joinPromises(), but if any promise throws, all the other promises are canceled.
+
+template <typename... T>
+Promise<T...> reducePromise(void*, Promise<T...>&& promise);
+template <typename... T>
+Promise<T...> reducePromise(Promise<T...>*, Promise<Promise<T...>>&& promise);
+// Hook to implement custom promise reduction. Most people should ignore these. However, if you
+// implement a custom kind of promise, you can overload `reducePromise()` such that
+// `Promise<MyPromise<T>>` automatically reduces to `MyPromise<T>` (or any other type you choose),
+// much like `Promise<Promise<T>>` reduces to `Promise<T>`.
+//
+// `reducePromise()` uses argument-dependent lookup (aka Koenig lookup) to choose an overload.
+// That means you shoud declare your overload in the same namespace as the type it applies to,
+// NOT in the KJ namespace. The first argument takes a pointer to your type (`MyPromise<T>`). The
+// pointer will always be null -- it is only there to trigger argument-dependent lookup. The second
+// parameter is a Promise for your type (i.e. `Promise<MyPromise<T>>`) which is to be reduced.
+// Your `reducePromise()` overload can return whatever type it wants to represent the reduced
+// promise, though either `Promise<T>` or `MyPromise<T>` would be typical.
+//
+// With this done, if someone uses `.then()` and passes it a lambda that returns your custom
+// promise type (`MyPromise<T>`), then `.then()` itself will return the result of invoking
+// `reducePromise()` (so, e.g., also `MyPromise<T>`, even though the lambda hasn't executed yet).
+//
+// See `capnp::RemotePromise<T>` for an example.
 
 // =======================================================================================
 // Hack for creating a lambda that holds an owned pointer.

@@ -527,9 +527,9 @@ private:
 
   template <size_t index>
   ReducePromises<typename SplitBranch<T, index>::Element> addSplit() {
-    return ReducePromises<typename SplitBranch<T, index>::Element>(
-        false, maybeChain(kj::heap<SplitBranch<T, index>>(addRef(*this)),
-                          implicitCast<typename SplitBranch<T, index>::Element*>(nullptr)));
+    typedef typename SplitBranch<T, index>::Element Element;
+    return reducePromise(implicitCast<Element*>(nullptr),
+        kj::Promise<Element>(false, kj::heap<SplitBranch<T, index>>(addRef(*this))));
   }
 };
 
@@ -571,26 +571,6 @@ private:
 
   Maybe<Own<Event>> fire() override;
 };
-
-template <typename... T>
-Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, Promise<T...>*) {
-  return heap<ChainPromiseNode>(kj::mv(node));
-}
-
-template <typename T>
-Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, T*) {
-  return kj::mv(node);
-}
-
-template <typename T, typename Result = decltype(T::reducePromise(instance<Promise<T>>()))>
-inline Result maybeReduce(Promise<T>&& promise, bool) {
-  return T::reducePromise(kj::mv(promise));
-}
-
-template <typename... T>
-inline Promise<T...> maybeReduce(Promise<T...>&& promise, ...) {
-  return kj::mv(promise);
-}
 
 // -------------------------------------------------------------------
 
@@ -905,13 +885,20 @@ template <typename... T>
 template <typename Func, typename ErrorFunc>
 PromiseForResult<Func, T...> Promise<T...>::then(Func&& func, ErrorFunc&& errorHandler) {
   typedef _::PromiseNodeType<_::ReturnType<Func, T...>> ResultT;
-
-  Own<_::PromiseNode> intermediate =
+  _::PromiseFromTuple<ResultT> intermediate(false,
       heap<_::TransformPromiseNode<ResultT, _::PromiseNodeType<T...>, Func, ErrorFunc>>(
-          kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
-  auto result = _::ChainPromises<_::ReturnType<Func, T...>>(false,
-      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
-  return _::maybeReduce(kj::mv(result), false);
+          kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler)));
+  return reducePromise(implicitCast<ResultT*>(nullptr), kj::mv(intermediate));
+}
+
+template <typename... T>
+Promise<T...> reducePromise(void*, Promise<T...>&& promise) {
+  return kj::mv(promise);
+}
+
+template <typename... T>
+Promise<T...> reducePromise(Promise<T...>*, Promise<Promise<T...>>&& promise) {
+  return Promise<T...>(false, heap<_::ChainPromiseNode>(kj::mv(promise.node)));
 }
 
 namespace _ {  // private
@@ -1259,24 +1246,17 @@ Promise<T...> newAdaptedTuplePromise(Params&&... adapterConstructorParams) {
 template <typename... T>
 PromiseFulfillerPair<T...> newPromiseAndFulfiller() {
   auto wrapper = _::WeakFulfiller<T...>::make();
-
-  Own<_::PromiseNode> intermediate(
+  Promise<T...> intermediate(false,
       heap<_::AdapterPromiseNode<_::PromiseAndFulfillerAdapter<T...>, T...>>(*wrapper));
-  _::ReducePromises<T...> promise(false,
-      _::maybeChain(kj::mv(intermediate), implicitCast<_::PromiseNodeType<T...>*>(nullptr)));
-
+  auto promise = reducePromise(implicitCast<kj::Tuple<T...>*>(nullptr), kj::mv(intermediate));
   return PromiseFulfillerPair<T...> { kj::mv(promise), kj::mv(wrapper) };
 }
 
 template <>
 inline PromiseFulfillerPair<void> newPromiseAndFulfiller<void>() {
   auto wrapper = _::WeakFulfiller<>::make();
-
-  Own<_::PromiseNode> intermediate(
-      heap<_::AdapterPromiseNode<_::PromiseAndFulfillerAdapter<>>>(*wrapper));
   Promise<void> promise(false,
-      _::maybeChain(kj::mv(intermediate), implicitCast<_::PromiseNodeType<>*>(nullptr)));
-
+      heap<_::AdapterPromiseNode<_::PromiseAndFulfillerAdapter<>>>(*wrapper));
   return PromiseFulfillerPair<void> { kj::mv(promise), kj::mv(wrapper) };
 }
 

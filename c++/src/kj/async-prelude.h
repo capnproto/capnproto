@@ -49,7 +49,19 @@ Promise<Array<kj::Tuple<T...>>> joinPromisesFailfast(Array<Promise<T...>>&& prom
 Promise<void> joinPromisesFailfast(Array<Promise<void>>&& promises);
 Promise<> joinPromisesFailfast(Array<Promise<>>&& promises);
 
+template <typename... T>
+Promise<T...> reducePromise(void*, Promise<T...>&& promise);
+template <typename... T>
+Promise<T...> reducePromise(Promise<T...>*, Promise<Promise<T...>>&& promise);
+
 namespace _ {  // private
+
+template <typename... T> struct PromiseFromTuple_ { typedef Promise<T...> Type; };
+template <typename... T>
+struct PromiseFromTuple_<kj::_::Tuple<T...>> {
+  typedef Promise<T...> Type;
+};
+template <typename... T> using PromiseFromTuple = typename PromiseFromTuple_<T...>::Type;
 
 template <typename T>
 Promise<T> chainPromiseType(T*);
@@ -70,20 +82,9 @@ using ChainPromises = decltype(chainPromiseType((kj::Tuple<T...>*)nullptr));
 // expected to resolve earlier than the Promise<T>. If the application really wants to reduce
 // to Promise<T, U>, it can achieve this by splitting and re-joining the promise.
 
-template <typename T>
-Promise<T> reducePromiseType(T*, ...);
 template <typename... T>
-Promise<T...> reducePromiseType(_::Tuple<T...>*, ...);
-template <typename... T>
-Promise<T...> reducePromiseType(Promise<T...>*, ...);
-template <typename T, typename Reduced = decltype(T::reducePromise(kj::instance<Promise<T>>()))>
-Reduced reducePromiseType(T*, bool);
-
-template <typename... T>
-using ReducePromises = decltype(reducePromiseType((kj::Tuple<T...>*)nullptr, false));
-// Like ChainPromises, but also takes into account whether T has a method `reducePromise` that
-// reduces Promise<T> to something else. In particular this allows Promise<capnp::RemotePromise<U>>
-// to reduce to capnp::RemotePromise<U>.
+using ReducePromises =
+    decltype(reducePromise(instance<kj::Tuple<T...>*>(), instance<PromiseFromTuple<T...>&&>()));
 
 class PropagateException {
   // A functor which accepts a kj::Exception as a parameter and returns a broken promise of
@@ -210,6 +211,8 @@ private:
   friend Promise<Array<kj::Tuple<U...>>> kj::joinPromisesFailfast(Array<Promise<U...>>&& promises);
   friend Promise<void> kj::joinPromisesFailfast(Array<Promise<void>>&& promises);
   friend Promise<> kj::joinPromisesFailfast(Array<Promise<>>&& promises);
+  template <typename... U>
+  friend Promise<U...> kj::reducePromise(Promise<U...>*, Promise<Promise<U...>>&& promise);
 };
 
 void detach(kj::Promise<void>&& promise);
