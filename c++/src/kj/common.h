@@ -60,8 +60,8 @@
     #endif
   #endif
 #elif defined(_MSC_VER)
-  #if _MSC_VER < 1910
-    #error "You need Visual Studio 2017 or better to compile this code."
+  #if _MSC_VER < 1900
+    #error "You need Visual Studio 2015 or better to compile this code."
   #endif
 #else
   #warning "I don't recognize your compiler.  As of this writing, Clang and GCC are the only "\
