@@ -384,6 +384,8 @@ private:
   friend class Promise;
   template <typename U, typename Adapter, typename... Params>
   friend Promise<U> newAdaptedPromise(Params&&... adapterConstructorParams);
+  template <typename... U>
+  friend PromiseFulfillerPair<U...> newPromiseAndFulfiller();
   template <typename...>
   friend class ForkedPromise;
   template <typename>
