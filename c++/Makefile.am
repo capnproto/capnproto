@@ -347,13 +347,8 @@ capnpc_c___SOURCES = src/capnp/compiler/capnpc-c++.c++
 
 # Symlink capnpc -> capnp.  The capnp binary will behave like the old capnpc
 # binary (i.e. like "capnp compile") when invoked via this symlink.
-#
-# Also attempt to run ldconfig, because otherwise users get confused.  If
-# it fails (e.g. because the platform doesn't have it, or because the
-# user doesn't have root privileges), don't worry about it.
 install-exec-hook:
 	ln -sf capnp $(DESTDIR)$(bindir)/capnpc
-	ldconfig < /dev/null > /dev/null 2>&1 || true
 
 uninstall-hook:
 	rm -f $(DESTDIR)$(bindir)/capnpc
@@ -361,7 +356,6 @@ uninstall-hook:
 else LITE_MODE
 
 install-exec-hook:
-	ldconfig < /dev/null > /dev/null 2>&1 || true
 
 endif LITE_MODE
 
