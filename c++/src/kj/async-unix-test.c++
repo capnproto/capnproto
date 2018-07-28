@@ -707,12 +707,7 @@ TEST(AsyncUnixTest, ChildProcess) {
   KJ_DEFER(KJ_SYSCALL(sigprocmask(SIG_SETMASK, &oldsigs, nullptr)) { break; });
 
   TestChild child1(port, 123);
-  TestChild child2(port, 234);
-  TestChild child3(port, 345);
-
   KJ_EXPECT(!child1.promise.poll(waitScope));
-  KJ_EXPECT(!child2.promise.poll(waitScope));
-  KJ_EXPECT(!child3.promise.poll(waitScope));
 
   child1.kill(SIGTERM);
 
@@ -721,6 +716,9 @@ TEST(AsyncUnixTest, ChildProcess) {
     KJ_EXPECT(WIFEXITED(status));
     KJ_EXPECT(WEXITSTATUS(status) == 123);
   }
+
+  TestChild child2(port, 234);
+  TestChild child3(port, 345);
 
   KJ_EXPECT(!child2.promise.poll(waitScope));
   KJ_EXPECT(!child3.promise.poll(waitScope));
