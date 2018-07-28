@@ -956,9 +956,73 @@ PromiseNode* ExclusiveJoinPromiseNode::Branch::getInnerForTrace() {
 
 // -------------------------------------------------------------------
 
+JoinPromiseNodeBase::JoinPromiseNodeBase(
+    Own<PromiseNode> left, Own<PromiseNode> right,
+    ExceptionOrValue& leftResult, ExceptionOrValue& rightResult,
+    bool failfast)
+    : countLeft(2), failfast(failfast),
+      leftBranch(*this, kj::mv(left), leftResult),
+      rightBranch(*this, kj::mv(right), rightResult) {}
+JoinPromiseNodeBase::~JoinPromiseNodeBase() noexcept(false) {}
+
+void JoinPromiseNodeBase::onReady(Event* event) noexcept {
+  onReadyEvent.init(event);
+}
+
+void JoinPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
+  KJ_IF_MAYBE(exception, leftBranch.getPart()) {
+    output.addException(kj::mv(*exception));
+  }
+  KJ_IF_MAYBE(exception, rightBranch.getPart()) {
+    output.addException(kj::mv(*exception));
+  }
+
+  if (output.exception == nullptr) {
+    // No errors.  The template subclass will need to fill in the result.
+    getNoError(output);
+  }
+}
+
+PromiseNode* JoinPromiseNodeBase::getInnerForTrace() {
+  return leftBranch.getInnerForTrace();
+}
+
+JoinPromiseNodeBase::Branch::Branch(
+    JoinPromiseNodeBase& joinNode, Own<PromiseNode> dependencyParam, ExceptionOrValue& output)
+    : joinNode(joinNode), dependency(kj::mv(dependencyParam)), output(output) {
+  dependency->setSelfPointer(&dependency);
+  dependency->onReady(this);
+}
+
+JoinPromiseNodeBase::Branch::~Branch() noexcept(false) {}
+
+Maybe<Own<Event>> JoinPromiseNodeBase::Branch::fire() {
+  dependency->get(output);
+
+  if (!joinNode.armed &&
+      (--joinNode.countLeft == 0 ||
+       (output.exception != nullptr && joinNode.failfast))) {
+    joinNode.onReadyEvent.arm();
+    joinNode.armed = true;
+  }
+
+  return nullptr;
+}
+
+_::PromiseNode* JoinPromiseNodeBase::Branch::getInnerForTrace() {
+  return dependency->getInnerForTrace();
+}
+
+Maybe<Exception> JoinPromiseNodeBase::Branch::getPart() {
+  return kj::mv(output.exception);
+}
+
+// -------------------------------------------------------------------
+
 ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
-    Array<Own<PromiseNode>> promises, ExceptionOrValue* resultParts, size_t partSize)
-    : countLeft(promises.size()) {
+    Array<Own<PromiseNode>> promises, ExceptionOrValue* resultParts, size_t partSize,
+    bool failfast)
+    : countLeft(promises.size()), failfast(failfast) {
   // Make the branches.
   auto builder = heapArrayBuilder<Branch>(promises.size());
   for (uint i: indices(promises)) {
@@ -1006,9 +1070,15 @@ ArrayJoinPromiseNodeBase::Branch::Branch(
 ArrayJoinPromiseNodeBase::Branch::~Branch() noexcept(false) {}
 
 Maybe<Own<Event>> ArrayJoinPromiseNodeBase::Branch::fire() {
-  if (--joinNode.countLeft == 0) {
+  dependency->get(output);
+
+  if (!joinNode.armed &&
+      (--joinNode.countLeft == 0 ||
+       (output.exception != nullptr && joinNode.failfast))) {
     joinNode.onReadyEvent.arm();
+    joinNode.armed = true;
   }
+
   return nullptr;
 }
 
@@ -1017,13 +1087,13 @@ _::PromiseNode* ArrayJoinPromiseNodeBase::Branch::getInnerForTrace() {
 }
 
 Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
-  dependency->get(output);
   return kj::mv(output.exception);
 }
 
 ArrayJoinPromiseNode<void>::ArrayJoinPromiseNode(
-    Array<Own<PromiseNode>> promises, Array<ExceptionOr<_::Void>> resultParts)
-    : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<_::Void>)),
+    Array<Own<PromiseNode>> promises, Array<ExceptionOr<_::Void>> resultParts, bool failfast)
+    : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(),
+                               sizeof(ExceptionOr<_::Void>), failfast),
       resultParts(kj::mv(resultParts)) {}
 
 ArrayJoinPromiseNode<void>::~ArrayJoinPromiseNode() {}
@@ -1035,9 +1105,27 @@ void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
 }  // namespace _ (private)
 
 Promise<void> joinPromises(Array<Promise<void>>&& promises) {
-  return Promise<void>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
+  return Promise<>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
       KJ_MAP(p, promises) { return kj::mv(p.node); },
-      heapArray<_::ExceptionOr<_::Void>>(promises.size())));
+      heapArray<_::ExceptionOr<_::Void>>(promises.size()), false));
+}
+
+Promise<> joinPromises(Array<Promise<>>&& promises) {
+  return Promise<>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return kj::mv(p.node); },
+      heapArray<_::ExceptionOr<_::Void>>(promises.size()), false));
+}
+
+Promise<void> joinPromisesFailfast(Array<Promise<void>>&& promises) {
+  return Promise<>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return kj::mv(p.node); },
+      heapArray<_::ExceptionOr<_::Void>>(promises.size()), true));
+}
+
+Promise<> joinPromisesFailfast(Array<Promise<>>&& promises) {
+  return Promise<>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return kj::mv(p.node); },
+      heapArray<_::ExceptionOr<_::Void>>(promises.size()), true));
 }
 
 namespace _ {  // (private)

@@ -494,7 +494,7 @@ TEST(Async, Split) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  Promise<Tuple<int, String, Promise<int>>> promise = evalLater([&]() {
+  Promise<int, String, Promise<int>> promise = evalLater([&]() {
     return kj::tuple(123, str("foo"), Promise<int>(321));
   });
 
@@ -804,6 +804,81 @@ TEST(Async, Poll) {
   paf.fulfiller->fulfill();
   KJ_ASSERT(paf.promise.poll(waitScope));
   paf.promise.wait(waitScope);
+}
+
+TEST(Async, Variadic) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<int, bool, StringPtr>();
+  Promise<int, bool, StringPtr> promise = kj::mv(paf.promise);
+  Own<PromiseFulfiller<int, bool, StringPtr>> fulfiller = kj::mv(paf.fulfiller);
+
+  fulfiller->fulfill(123, true, "hello"_kj);
+  Promise<StringPtr, int> promise2 = promise.then([](int i, bool b, StringPtr s) {
+    KJ_EXPECT(i == 123);
+    KJ_EXPECT(b);
+    KJ_EXPECT(s == "hello");
+    return kj::tuple("bar"_kj, 321);
+  });
+
+  Tuple<StringPtr, int> result = promise2.wait(waitScope);
+  KJ_EXPECT(get<0>(result) == "bar");
+  KJ_EXPECT(get<1>(result) == 321);
+}
+
+TEST(Async, Join) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  {
+    Promise<int, StringPtr> p1 = kj::tuple(123, "hello"_kj);
+    Promise<char> p2 = 'n';
+
+    Promise<int, StringPtr, char> joined = p1.join(kj::mv(p2));
+
+    Tuple<int, StringPtr, char> result = joined.wait(waitScope);
+    KJ_EXPECT(get<0>(result) == 123);
+    KJ_EXPECT(get<1>(result) == "hello");
+    KJ_EXPECT(get<2>(result) == 'n');
+  }
+
+  {
+    Promise<int, StringPtr> p1 = kj::NEVER_DONE;
+    Promise<char> p2 = KJ_EXCEPTION(FAILED, "nope");
+
+    Promise<int, StringPtr, char> joined = p1.join(kj::mv(p2));
+
+    KJ_EXPECT(!joined.poll(waitScope));
+  }
+}
+
+TEST(Async, JoinFailfast) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  {
+    Promise<int, StringPtr> p1 = kj::tuple(123, "hello"_kj);
+    Promise<char> p2 = 'n';
+
+    Promise<int, StringPtr, char> joined = p1.joinFailfast(kj::mv(p2));
+
+    Tuple<int, StringPtr, char> result = joined.wait(waitScope);
+    KJ_EXPECT(get<0>(result) == 123);
+    KJ_EXPECT(get<1>(result) == "hello");
+    KJ_EXPECT(get<2>(result) == 'n');
+  }
+
+  {
+    Promise<int, StringPtr> p1 = kj::NEVER_DONE;
+    Promise<char> p2 = KJ_EXCEPTION(FAILED, "nope");
+
+    Promise<int, StringPtr, char> joined = p1.joinFailfast(kj::mv(p2));
+
+    KJ_ASSERT(joined.poll(waitScope));
+
+    KJ_EXPECT_THROW_MESSAGE("nope", joined.wait(waitScope));
+  }
 }
 
 }  // namespace

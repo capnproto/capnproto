@@ -34,17 +34,17 @@ namespace kj {
 class EventLoop;
 class WaitScope;
 
-template <typename T>
+template <typename... T>
 class Promise;
-template <typename T>
+template <typename... T>
 class ForkedPromise;
-template <typename T>
+template <typename... T>
 class PromiseFulfiller;
-template <typename T>
+template <typename... T>
 struct PromiseFulfillerPair;
 
-template <typename Func, typename T>
-using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
+template <typename Func, typename... T>
+using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T...>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
 // T.  If T is void, then the promise is for the result of calling Func with no arguments.  If
 // Func itself returns a promise, the promises are joined, so you never get Promise<Promise<T>>.
@@ -52,7 +52,7 @@ using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // =======================================================================================
 // Promises
 
-template <typename T>
+template <typename... T>
 class Promise: protected _::PromiseBase {
   // The basic primitive of asynchronous computation in KJ.  Similar to "futures", but designed
   // specifically for event loop concurrency.  Similar to E promises and JavaScript Promises/A.
@@ -123,12 +123,15 @@ class Promise: protected _::PromiseBase {
   //   https://github.com/domenic/promises-unwrapping
 
 public:
-  Promise(_::FixVoid<T> value);
+  Promise(T... value);
   // Construct an already-fulfilled Promise from a value of type T.  For non-void promises, the
   // parameter type is simply T.  So, e.g., in a function that returns `Promise<int>`, you can
   // say `return 123;` to return a promise that is already fulfilled to 123.
   //
   // For void promises, use `kj::READY_NOW` as the value, e.g. `return kj::READY_NOW`.
+
+  Promise(kj::_::Tuple<T...> value);
+  // Can initialize from a tuple.
 
   Promise(kj::Exception&& e);
   // Construct an already-broken Promise.
@@ -136,7 +139,7 @@ public:
   inline Promise(decltype(nullptr)) {}
 
   template <typename Func, typename ErrorFunc = _::PropagateException>
-  PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler = _::PropagateException())
+  PromiseForResult<Func, T...> then(Func&& func, ErrorFunc&& errorHandler = _::PropagateException())
       KJ_WARN_UNUSED_RESULT;
   // Register a continuation function to be executed when the promise completes.  The continuation
   // (`func`) takes the promised value (an rvalue of type `T`) as its parameter.  The continuation
@@ -192,17 +195,17 @@ public:
   // actual I/O.  To solve this, use `kj::evalLater()` to yield control; this way, all other events
   // in the queue will get a chance to run before your callback is executed.
 
-  Promise<void> ignoreResult() KJ_WARN_UNUSED_RESULT { return then([](T&&) {}); }
+  Promise<> ignoreResult() KJ_WARN_UNUSED_RESULT { return then([](T&&...) {}); }
   // Convenience method to convert the promise to a void promise by ignoring the return value.
   //
   // You must still wait on the returned promise if you want the task to execute.
 
   template <typename ErrorFunc>
-  Promise<T> catch_(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
+  Promise<T...> catch_(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
   // Equivalent to `.then(identityFunc, errorHandler)`, where `identifyFunc` is a function that
   // just returns its input.
 
-  T wait(WaitScope& waitScope);
+  Tuple<T...> wait(WaitScope& waitScope);
   // Run the event loop until the promise is fulfilled, then return its result.  If the promise
   // is rejected, throw an exception.
   //
@@ -247,35 +250,43 @@ public:
   // hard to do deterministically. The second poll() allows you to check that the promise has
   // resolved and avoid a wait() that might deadlock in the case that it hasn't.
 
-  ForkedPromise<T> fork() KJ_WARN_UNUSED_RESULT;
+  ForkedPromise<T...> fork() KJ_WARN_UNUSED_RESULT;
   // Forks the promise, so that multiple different clients can independently wait on the result.
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
   // `Own<U>`, `U` must have a method `Own<U> addRef()` which returns a new reference to the same
   // (or an equivalent) object (probably implemented via reference counting).
 
-  _::SplitTuplePromise<T> split();
-  // Split a promise for a tuple into a tuple of promises.
-  //
-  // E.g. if you have `Promise<kj::Tuple<T, U>>`, `split()` returns
-  // `kj::Tuple<Promise<T>, Promise<U>>`.
+  Tuple<_::ReducePromises<T>...> split();
+  // Split a multi-value promise into a tuple of promises.
 
-  Promise<T> exclusiveJoin(Promise<T>&& other) KJ_WARN_UNUSED_RESULT;
+  template <typename... U>
+  Promise<T..., U...> join(Promise<U...>&& other) KJ_WARN_UNUSED_RESULT;
+  // Returns a promise that waits for both `this` and `other` to complete, and resolves to the
+  // combination of their results. If one promise throws an exception, the other promise will still
+  // be allowed to complete before the exception is propagated. If both sides throw exceptions,
+  // the exception from `this` is propagated (`other`'s exception is thrown away).
+
+  template <typename... U>
+  Promise<T..., U...> joinFailfast(Promise<U...>&& other) KJ_WARN_UNUSED_RESULT;
+  // Like join() but if either promise throws, the other promise is canceled and the exception is
+  // propagated immediately.
+
+  Promise<T...> exclusiveJoin(Promise<T...>&& other) KJ_WARN_UNUSED_RESULT;
   // Return a new promise that resolves when either the original promise resolves or `other`
   // resolves (whichever comes first).  The promise that didn't resolve first is canceled.
-
-  // TODO(someday): inclusiveJoin(), or perhaps just join(), which waits for both completions
-  //   and produces a tuple?
+  //
+  // TODO(cleanup): JavaScript has decided to call this operation `race()`. Maybe we should too.
 
   template <typename... Attachments>
-  Promise<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
+  Promise<T...> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
   // "Attaches" one or more movable objects (often, Own<T>s) to the promise, such that they will
   // be destroyed when the promise resolves.  This is useful when a promise's callback contains
   // pointers into some object and you want to make sure the object still exists when the callback
   // runs -- after calling then(), use attach() to add necessary objects to the result.
 
   template <typename ErrorFunc>
-  Promise<T> eagerlyEvaluate(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
-  Promise<T> eagerlyEvaluate(decltype(nullptr)) KJ_WARN_UNUSED_RESULT;
+  Promise<T...> eagerlyEvaluate(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
+  Promise<T...> eagerlyEvaluate(decltype(nullptr)) KJ_WARN_UNUSED_RESULT;
   // Force eager evaluation of this promise.  Use this if you are going to hold on to the promise
   // for awhile without consuming the result, but you want to make sure that the system actually
   // processes it.
@@ -306,25 +317,87 @@ public:
 private:
   Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
+  //
+  // TODO(cleanup): No it doesn't, for multi-value promises. But was this ever really needed
+  //   anyway?
 
-  template <typename>
+  template <typename...>
   friend class Promise;
   friend class EventLoop;
   template <typename U, typename Adapter, typename... Params>
   friend Promise<U> newAdaptedPromise(Params&&... adapterConstructorParams);
-  template <typename U>
-  friend PromiseFulfillerPair<U> newPromiseAndFulfiller();
+  template <typename Adapter, typename... U, typename... Params>
+  friend Promise<U...> newAdaptedTuplePromise(Params&&... adapterConstructorParams);
+  template <typename... U>
+  friend PromiseFulfillerPair<U...> newPromiseAndFulfiller();
+  template <typename...>
+  friend class ForkedPromise;
   template <typename>
   friend class _::ForkHub;
   friend class TaskSet;
   friend Promise<void> _::yield();
+  friend class _::ReadyNow;
   friend class _::NeverDone;
-  template <typename U>
-  friend Promise<Array<U>> joinPromises(Array<Promise<U>>&& promises);
+  template <typename... U>
+  friend Promise<Array<Tuple<U...>>> joinPromises(Array<Promise<U...>>&& promises);
   friend Promise<void> joinPromises(Array<Promise<void>>&& promises);
+  friend Promise<> joinPromises(Array<Promise<>>&& promises);
+  template <typename... U>
+  friend Promise<Array<Tuple<U...>>> joinPromisesFailfast(Array<Promise<U...>>&& promises);
+  friend Promise<void> joinPromisesFailfast(Array<Promise<void>>&& promises);
+  friend Promise<> joinPromisesFailfast(Array<Promise<>>&& promises);
+  template <typename... U>
+  friend Promise<U...> reducePromise(Promise<U...>*, Promise<Promise<U...>>&& promise);
 };
 
-template <typename T>
+template <>
+Promise<>::Promise() = delete;
+
+template <>
+class Promise<void>: public Promise<> {
+  // Originally, the Promise system was not integrated with Tuples, and a Promise had exactly one
+  // result type. To indicate no result, Promise<void> was used. Had Promises been variadic from
+  // the start, then Promise<> would have been the appropriate definition, and lots of stuff would
+  // be simpler. Unfortunately, this is not the case, and there is tons and tons of code that uses
+  // Promise<void> today, so we have to support it. This definition -- inheriting from Promise<> --
+  // is a big hack.
+
+public:
+  using Promise<>::Promise;
+  inline Promise(Promise<>&& other): Promise<>(kj::mv(other)) {}
+  inline Promise(const _::ReadyNow& other): Promise<>(other) {}
+  inline Promise(const _::NeverDone& other): Promise<>(other) {}
+  inline void wait(WaitScope& waitScope);
+
+  template <typename ErrorFunc>
+  inline Promise<void> catch_(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
+  inline ForkedPromise<void> fork();
+  inline Promise<void> exclusiveJoin(Promise<>&& other) KJ_WARN_UNUSED_RESULT;
+  template <typename... Attachments>
+  inline Promise<void> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
+  template <typename ErrorFunc>
+  inline Promise<void> eagerlyEvaluate(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
+  inline Promise<void> eagerlyEvaluate(decltype(nullptr)) KJ_WARN_UNUSED_RESULT;
+
+private:
+  template <typename...>
+  friend class Promise;
+  template <typename U, typename Adapter, typename... Params>
+  friend Promise<U> newAdaptedPromise(Params&&... adapterConstructorParams);
+  template <typename... U>
+  friend PromiseFulfillerPair<U...> newPromiseAndFulfiller();
+  template <typename...>
+  friend class ForkedPromise;
+  template <typename>
+  friend class _::ForkHub;
+  friend Promise<void> _::yield();
+  friend class _::ReadyNow;
+  friend class _::NeverDone;
+  template <typename... U>
+  friend Promise<U...> reducePromise(Promise<U...>*, Promise<Promise<U...>>&& promise);
+};
+
+template <typename... T>
 class ForkedPromise {
   // The result of `Promise::fork()` and `EventLoop::fork()`.  Allows branches to be created.
   // Like `Promise<T>`, this is a pass-by-move type.
@@ -332,19 +405,27 @@ class ForkedPromise {
 public:
   inline ForkedPromise(decltype(nullptr)) {}
 
-  Promise<T> addBranch();
+  Promise<T...> addBranch();
   // Add a new branch to the fork.  The branch is equivalent to the original promise.
 
 private:
-  Own<_::ForkHub<_::FixVoid<T>>> hub;
+  Own<_::ForkHub<_::PromiseNodeType<T...>>> hub;
 
-  inline ForkedPromise(bool, Own<_::ForkHub<_::FixVoid<T>>>&& hub): hub(kj::mv(hub)) {}
+  inline ForkedPromise(bool, Own<_::ForkHub<_::PromiseNodeType<T...>>>&& hub): hub(kj::mv(hub)) {}
 
-  friend class Promise<T>;
+  friend class Promise<T...>;
   friend class EventLoop;
 };
 
-constexpr _::Void READY_NOW = _::Void();
+template <>
+class ForkedPromise<void>: public ForkedPromise<> {
+public:
+  using ForkedPromise<>::ForkedPromise;
+  inline ForkedPromise(ForkedPromise<>&& other): ForkedPromise<>(kj::mv(other)) {}
+  inline Promise<void> addBranch() { return ForkedPromise<>::addBranch(); }
+};
+
+constexpr _::ReadyNow READY_NOW = _::ReadyNow();
 // Use this when you need a Promise<void> that is already fulfilled -- this value can be implicitly
 // cast to `Promise<void>`.
 
@@ -377,9 +458,40 @@ PromiseForResult<Func, void> evalNow(Func&& func) KJ_WARN_UNUSED_RESULT;
 // If `func()` throws an exception, the exception is caught and wrapped in a promise -- this is the
 // main reason why `evalNow()` is useful.
 
-template <typename T>
-Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
+template <typename... T>
+Promise<Array<kj::Tuple<T...>>> joinPromises(Array<Promise<T...>>&& promises);
 // Join an array of promises into a promise for an array.
+//
+// In case of an exception, the final promise waits for all inner promises to complete before
+// propagating the exception. If there are multiple exceptions, the first one (in array order)
+// is propagated. Use joinPromisesFailfast() to cancel other promises on an exception.
+
+template <typename... T>
+Promise<Array<kj::Tuple<T...>>> joinPromisesFailfast(Array<Promise<T...>>&& promises);
+// Like joinPromises(), but if any promise throws, all the other promises are canceled.
+
+template <typename... T>
+Promise<T...> reducePromise(void*, Promise<T...>&& promise);
+template <typename... T>
+Promise<T...> reducePromise(Promise<T...>*, Promise<Promise<T...>>&& promise);
+// Hook to implement custom promise reduction. Most people should ignore these. However, if you
+// implement a custom kind of promise, you can overload `reducePromise()` such that
+// `Promise<MyPromise<T>>` automatically reduces to `MyPromise<T>` (or any other type you choose),
+// much like `Promise<Promise<T>>` reduces to `Promise<T>`.
+//
+// `reducePromise()` uses argument-dependent lookup (aka Koenig lookup) to choose an overload.
+// That means you shoud declare your overload in the same namespace as the type it applies to,
+// NOT in the KJ namespace. The first argument takes a pointer to your type (`MyPromise<T>`). The
+// pointer will always be null -- it is only there to trigger argument-dependent lookup. The second
+// parameter is a Promise for your type (i.e. `Promise<MyPromise<T>>`) which is to be reduced.
+// Your `reducePromise()` overload can return whatever type it wants to represent the reduced
+// promise, though either `Promise<T>` or `MyPromise<T>` would be typical.
+//
+// With this done, if someone uses `.then()` and passes it a lambda that returns your custom
+// promise type (`MyPromise<T>`), then `.then()` itself will return the result of invoking
+// `reducePromise()` (so, e.g., also `MyPromise<T>`, even though the lambda hasn't executed yet).
+//
+// See `capnp::RemotePromise<T>` for an example.
 
 // =======================================================================================
 // Hack for creating a lambda that holds an owned pointer.
@@ -419,13 +531,13 @@ inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func
 // =======================================================================================
 // Advanced promise construction
 
-template <typename T>
+template <typename... T>
 class PromiseFulfiller {
   // A callback which can be used to fulfill a promise.  Only the first call to fulfill() or
   // reject() matters; subsequent calls are ignored.
 
 public:
-  virtual void fulfill(T&& value) = 0;
+  virtual void fulfill(T&&... value) = 0;
   // Fulfill the promise with the given value.
 
   virtual void reject(Exception&& exception) = 0;
@@ -444,20 +556,7 @@ public:
 };
 
 template <>
-class PromiseFulfiller<void> {
-  // Specialization of PromiseFulfiller for void promises.  See PromiseFulfiller<T>.
-
-public:
-  virtual void fulfill(_::Void&& value = _::Void()) = 0;
-  // Call with zero parameters.  The parameter is a dummy that only exists so that subclasses don't
-  // have to specialize for <void>.
-
-  virtual void reject(Exception&& exception) = 0;
-  virtual bool isWaiting() = 0;
-
-  template <typename Func>
-  bool rejectIfThrows(Func&& func);
-};
+class PromiseFulfiller<void>: public PromiseFulfiller<> {};
 
 template <typename T, typename Adapter, typename... Params>
 Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams);
@@ -480,14 +579,25 @@ Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams);
 // be left unfulfilled permanently because of an exception.  Consider making liberal use of
 // `PromiseFulfiller<T>::rejectIfThrows()`.
 
-template <typename T>
+template <typename Adapter, typename... T, typename... Params>
+Promise<T...> newAdaptedTuplePromise(Params&&... adapterConstructorParams);
+// Like newAdaptedPromise<>() but the template argument order is reversed so that you can specify
+// multiple T's. (When `newAdaptedPromise()` was introduced, multi-value promises didn't exist.)
+
+template <typename... T>
 struct PromiseFulfillerPair {
-  _::ReducePromises<T> promise;
-  Own<PromiseFulfiller<T>> fulfiller;
+  _::ReducePromises<T...> promise;
+  Own<PromiseFulfiller<T...>> fulfiller;
 };
 
-template <typename T>
-PromiseFulfillerPair<T> newPromiseAndFulfiller();
+template <>
+struct PromiseFulfillerPair<void> {
+  Promise<void> promise;
+  Own<PromiseFulfiller<void>> fulfiller;
+};
+
+template <typename... T>
+PromiseFulfillerPair<T...> newPromiseAndFulfiller();
 // Construct a Promise and a separate PromiseFulfiller which can be used to fulfill the promise.
 // If the PromiseFulfiller is destroyed before either of its methods are called, the Promise is
 // implicitly rejected.
@@ -531,9 +641,9 @@ public:
   ~Canceler() noexcept(false);
   KJ_DISALLOW_COPY(Canceler);
 
-  template <typename T>
-  Promise<T> wrap(Promise<T> promise) {
-    return newAdaptedPromise<T, AdapterImpl<T>>(*this, kj::mv(promise));
+  template <typename... T>
+  Promise<T...> wrap(Promise<T...> promise) {
+    return newAdaptedPromise<T..., AdapterImpl<T...>>(*this, kj::mv(promise));
   }
 
   void cancel(StringPtr cancelReason);
@@ -564,15 +674,15 @@ private:
     friend class Canceler;
   };
 
-  template <typename T>
+  template <typename... T>
   class AdapterImpl: public AdapterBase {
   public:
-    AdapterImpl(PromiseFulfiller<T>& fulfiller,
-                Canceler& canceler, Promise<T> inner)
+    AdapterImpl(PromiseFulfiller<T...>& fulfiller,
+                Canceler& canceler, Promise<T...> inner)
         : AdapterBase(canceler),
           fulfiller(fulfiller),
           inner(inner.then(
-              [&fulfiller](T&& value) { fulfiller.fulfill(kj::mv(value)); },
+              [&fulfiller](T&&... value) { fulfiller.fulfill(kj::mv(value)...); },
               [&fulfiller](Exception&& e) { fulfiller.reject(kj::mv(e)); })
               .eagerlyEvaluate(nullptr)) {}
 
@@ -582,7 +692,7 @@ private:
     }
 
   private:
-    PromiseFulfiller<T>& fulfiller;
+    PromiseFulfiller<T...>& fulfiller;
     Promise<void> inner;
   };
 
