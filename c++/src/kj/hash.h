@@ -40,7 +40,7 @@ struct HashCoder {
   // a function like `hashCode(T)` and then rely on argument-dependent lookup.  However, this has
   // the problem that it pollutes other people's namespaces and even the global namespace.  For
   // example, some other project may already have functions called `hashCode` which do something
-  // different.  Declaring `operator*` with `Stringifier` as the left operand cannot conflict with
+  // different.  Declaring `operator*` with `HashCoder` as the left operand cannot conflict with
   // anything.
 
   uint operator*(ArrayPtr<const byte> s) const;
@@ -114,15 +114,16 @@ static KJ_CONSTEXPR(const) HashCoder HASHCODER = HashCoder();
 }  // namespace _ (private)
 
 #define KJ_HASHCODE(...) operator*(::kj::_::HashCoder, __VA_ARGS__)
-// Defines a stringifier for a custom type.  Example:
+// Defines a hash function for a custom type.  Example:
 //
 //    class Foo {...};
-//    inline StringPtr KJ_STRINGIFY(const Foo& foo) { return foo.name(); }
+//    inline uint KJ_HASHCODE(const Foo& foo) { return kj::hashCode(foo.x, foo.y); }
 //
-// This allows Foo to be passed to str().
+// This allows Foo to be passed to hashCode().
 //
 // The function should be declared either in the same namespace as the target type or in the global
-// namespace.  It can return any type which is an iterable container of chars.
+// namespace. It can return any type which itself is hashable -- that value will be hashed in turn
+// until a `uint` comes out.
 
 inline uint hashCode(uint value) { return value; }
 template <typename T>

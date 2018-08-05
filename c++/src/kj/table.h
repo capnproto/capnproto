@@ -160,6 +160,9 @@ public:
   void insertAll(Collection& collection);
   // Given an iterable collection of Rows, inserts all of them into this table. If the input is
   // an rvalue, the rows will be moved rather than copied.
+  //
+  // If an insertion throws (e.g. because it violates a uniqueness constraint of some index),
+  // subsequent insertions do not occur, but previous insertions remain inserted.
 
   template <typename UpdateFunc>
   Row& upsert(Row&& row, UpdateFunc&& update);
@@ -180,7 +183,7 @@ public:
   // Like find(), but if the row doesn't exist, call a function to create it. createFunc() must
   // return `Row` or something that implicitly converts to `Row`.
   //
-  // NOTE: C++ doesn't actually properly suppoprt inferring types of a parameter pack at the
+  // NOTE: C++ doesn't actually properly support inferring types of a parameter pack at the
   //   beginning of an argument list, but we define a hack to support it below. Don't worry about
   //   it.
 
@@ -308,7 +311,7 @@ class HashIndex;
 //     // methods to match this row.
 //
 //     bool matches(const Row&, SearchParams&&...) const;
-//     // Returns true if the the row on the left matches thes search params on the right.
+//     // Returns true if the row on the left matches thes search params on the right.
 //
 //     uint hashCode(SearchParams&&...) const;
 //     // Computes the hash code of the given search params. Matching rows (as determined by
@@ -318,7 +321,7 @@ class HashIndex;
 //   };
 //
 // If your `Callbacks` type has dynamic state, you may pass its constructor parameters as the
-// consturctor parameters to `HashIndex`.
+// constructor parameters to `HashIndex`.
 
 template <typename Callbacks>
 class TreeIndex;
@@ -401,7 +404,7 @@ private:
 
 template <typename Inner, typename Mapping>
 class MappedIterable: private Mapping {
-  // An iterator that wraps some other iterator and maps the values through a mapping function.
+  // An iterable that wraps some other iterable and maps the values through a mapping function.
   // The type `Mapping` must define a method `map()` which performs this mapping.
   //
   // TODO(cleanup): This seems generally useful. Should we put it somewhere resuable?
@@ -1074,18 +1077,18 @@ public:
   Iterator end() const;
 
   Iterator search(const SearchKey& searchKey) const;
-  // Find the "first" row number (in sorted order) for which predicate(rowNumber) returns false.
+  // Find the "first" row (in sorted order) for which searchKey.isAfter(rowNumber) returns true.
 
   Iterator insert(const SearchKey& searchKey);
   // Like search() but ensures that there is room in the leaf node to insert a new row.
 
   void erase(uint row, const SearchKey& searchKey);
-  // Erase the given row number from the tree. predicate() returns false for the given row and all
-  // rows after it.
+  // Erase the given row number from the tree. searchKey.isAfter() returns true for the given row
+  // and all rows after it.
 
   void renumber(uint oldRow, uint newRow, const SearchKey& searchKey);
-  // Renumber the given row from oldRow to newRow. predicate() returns false for oldRow and all
-  // rows after it. (It will not be called on newRow.)
+  // Renumber the given row from oldRow to newRow. searchKey.isAfter() returns true for oldRow and
+  // all rows after it. (It will not be called on newRow.)
 
   void verify(size_t size, FunctionParam<bool(uint, uint)>);
 
@@ -1436,7 +1439,7 @@ public:
   TreeIndex(Params&&... params): cb(kj::fwd<Params>(params)...) {}
 
   template <typename Row>
-  void verify(kj::ArrayPtr<Row> table) { // KJ_DBG
+  void verify(kj::ArrayPtr<Row> table) {
     impl.verify(table.size(), [&](uint i, uint j) {
       return cb.isBefore(table[i], table[j]);
     });

@@ -149,8 +149,6 @@ size_t chooseHashTableSize(uint size) {
 
 kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t targetSize) {
   // Rehash the whole table.
-  // The element at `invalidPos` will be ignored.
-  // The element at `replacePos` will be recorded as if it were located at `invalidPos`.
 
   KJ_REQUIRE(targetSize < (1 << 30), "hash table has reached maximum size");
 
@@ -321,7 +319,8 @@ void BTreeImpl::growTree(uint minCapacity) {
 }
 
 BTreeImpl::Iterator BTreeImpl::search(const SearchKey& searchKey) const {
-  // Find the "first" row number (in sorted order) for which predicate(rowNumber) returns true.
+  // Find the "first" row number (in sorted order) for which searchKey.isAfter(rowNumber) returns
+  // false.
 
   uint pos = 0;
 
@@ -330,10 +329,8 @@ BTreeImpl::Iterator BTreeImpl::search(const SearchKey& searchKey) const {
     pos = parent.children[searchKey.search(parent)];
   }
 
-  {
-    auto& leaf = tree[pos].leaf;
-    return { tree, &leaf, searchKey.search(leaf) };
-  }
+  auto& leaf = tree[pos].leaf;
+  return { tree, &leaf, searchKey.search(leaf) };
 }
 
 template <typename T>
@@ -412,16 +409,14 @@ BTreeImpl::Iterator BTreeImpl::insert(const SearchKey& searchKey) {
     pos = node.children[indexInParent];
   }
 
-  {
-    Leaf& leaf = insertHelper(searchKey, tree[pos].leaf, parent, indexInParent, pos);
+  Leaf& leaf = insertHelper(searchKey, tree[pos].leaf, parent, indexInParent, pos);
 
-    // Fun fact: Unlike erase(), there's no need to climb back up the tree modifying keys, because
-    // either the newly-inserted node will not be the last in the leaf (and thus parent keys aren't
-    // modified), or the leaf is the last leaf in the tree (and thus there's no parent key to
-    // modify).
+  // Fun fact: Unlike erase(), there's no need to climb back up the tree modifying keys, because
+  // either the newly-inserted node will not be the last in the leaf (and thus parent keys aren't
+  // modified), or the leaf is the last leaf in the tree (and thus there's no parent key to
+  // modify).
 
-    return { tree, &leaf, searchKey.search(leaf) };
-  }
+  return { tree, &leaf, searchKey.search(leaf) };
 }
 
 template <typename Node>
@@ -510,24 +505,22 @@ void BTreeImpl::erase(uint row, const SearchKey& searchKey) {
     }
   }
 
-  {
-    Leaf& leaf = eraseHelper(tree[pos].leaf, parent, indexInParent, pos, fixup);
+  Leaf& leaf = eraseHelper(tree[pos].leaf, parent, indexInParent, pos, fixup);
 
-    uint r = searchKey.search(leaf);
-    if (leaf.rows[r] == row) {
-      leaf.erase(r);
+  uint r = searchKey.search(leaf);
+  if (leaf.rows[r] == row) {
+    leaf.erase(r);
 
-      if (fixup != nullptr) {
-        // There's a key in a parent node that needs fixup. This is only possible if the removed
-        // node is the last in its leaf.
-        KJ_DASSERT(leaf.rows[r] == nullptr);
-        KJ_DASSERT(r > 0);  // non-root nodes must be at least half full so this can't be item 0
-        KJ_DASSERT(*fixup == row);
-        *fixup = leaf.rows[r - 1];
-      }
-    } else {
-      logInconsistency();
+    if (fixup != nullptr) {
+      // There's a key in a parent node that needs fixup. This is only possible if the removed
+      // node is the last in its leaf.
+      KJ_DASSERT(leaf.rows[r] == nullptr);
+      KJ_DASSERT(r > 0);  // non-root nodes must be at least half full so this can't be item 0
+      KJ_DASSERT(*fixup == row);
+      *fixup = leaf.rows[r - 1];
     }
+  } else {
+    logInconsistency();
   }
 }
 
@@ -618,14 +611,12 @@ void BTreeImpl::renumber(uint oldRow, uint newRow, const SearchKey& searchKey) {
     KJ_DASSERT(pos != 0);
   }
 
-  {
-    auto& leaf = tree[pos].leaf;
-    uint r = searchKey.search(leaf);
-    if (leaf.rows[r] == oldRow) {
-      leaf.rows[r] = newRow;
-    } else {
-      logInconsistency();
-    }
+  auto& leaf = tree[pos].leaf;
+  uint r = searchKey.search(leaf);
+  if (leaf.rows[r] == oldRow) {
+    leaf.rows[r] = newRow;
+  } else {
+    logInconsistency();
   }
 }
 
@@ -711,7 +702,7 @@ void BTreeImpl::rotateLeft(
     Parent& left, Parent& right, Parent& parent, uint indexInParent, MaybeUint*& fixup) {
   // Steal one item from the right node and move it to the left node.
 
-  // Like mergeFrom(), this is only called on an exactly-half-empty node.
+  // Like merge(), this is only called on an exactly-half-empty node.
   KJ_DASSERT(left.isHalfFull());
   KJ_DASSERT(right.isMostlyFull());
 

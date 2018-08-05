@@ -36,7 +36,7 @@ class HashMap {
   //
   // `Key` must be hashable (via a `.hashCode()` method or `KJ_HASHCODE()`; see `hash.h`) and must
   // implement `operator==()`. Additionally, when performing lookups, you can use key types other
-  // that `Key` as long as the other type is also hashable (producing the same hash codes) and
+  // than `Key` as long as the other type is also hashable (producing the same hash codes) and
   // there is an `operator==` implementation with `Key` on the left and that other type on the
   // right. For example, if the key type is `String`, you can pass `StringPtr` to `find()`.
 

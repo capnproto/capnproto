@@ -24,6 +24,7 @@
 
 namespace kj {
 namespace _ {
+namespace {
 
 KJ_TEST("HashMap") {
   HashMap<String, int> map;
@@ -147,5 +148,6 @@ KJ_TEST("TreeMap range") {
   }
 }
 
-}  // namespace kj
+}  // namespace
 }  // namespace _
+}  // namespace kj

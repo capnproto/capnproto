@@ -27,6 +27,7 @@
 
 namespace kj {
 namespace _ {
+namespace {
 
 #if defined(KJ_DEBUG) && !__OPTIMIZE__
 static constexpr uint MEDIUM_PRIME = 619;
@@ -1100,5 +1101,6 @@ KJ_TEST("insertion order index") {
   }
 }
 
-}  // namespace kj
+}  // namespace
 }  // namespace _
+}  // namespace kj
