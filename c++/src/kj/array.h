@@ -420,6 +420,16 @@ public:
     }
   }
 
+  void clear() {
+    if (__has_trivial_destructor(T)) {
+      pos = ptr;
+    } else {
+      while (pos > ptr) {
+        kj::dtor(*--pos);
+      }
+    }
+  }
+
   void resize(size_t size) {
     KJ_IREQUIRE(size <= capacity(), "can't resize past capacity");
 

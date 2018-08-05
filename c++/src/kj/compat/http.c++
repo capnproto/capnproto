@@ -2828,7 +2828,11 @@ private:
 
     void abort() override {
       canceler.cancel("other end of WebSocketPipe was destroyed");
-      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed"));
+
+      // abort() is called when the pipe end is dropped. This should be treated as disconnecting,
+      // so pumpTo() should complete normally.
+      fulfiller.fulfill();
+
       pipe.endState(*this);
       pipe.abort();
     }

@@ -50,7 +50,7 @@ AC_ARG_ENABLE([reflection], [
 AC_PROG_CC
 AC_PROG_CXX
 AC_LANG([C++])
-AX_CXX_COMPILE_STDCXX_11
+AX_CXX_COMPILE_STDCXX_14
 
 AS_CASE("${host_os}", *mingw*, [
     # We don't use pthreads on MinGW.

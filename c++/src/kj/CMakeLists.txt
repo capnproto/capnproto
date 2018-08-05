@@ -10,6 +10,8 @@ set(kj_sources_lite
   memory.c++
   mutex.c++
   string.c++
+  hash.c++
+  table.c++
   thread.c++
   main.c++
   arena.c++
@@ -41,6 +43,9 @@ set(kj_headers
   vector.h
   string.h
   string-tree.h
+  hash.h
+  table.h
+  map.h
   encoding.h
   exception.h
   debug.h
@@ -66,8 +71,8 @@ set(kj-std_headers
 )
 add_library(kj ${kj_sources})
 add_library(CapnProto::kj ALIAS kj)
-target_compile_features(kj PUBLIC cxx_constexpr)
-# Requiring the cxx_std_11 metafeature would be preferable, but that doesn't exist until CMake 3.8.
+# TODO(cleanup): Use cxx_std_14 once it's safe to require cmake 3.8.
+target_compile_features(kj PUBLIC cxx_generic_lambdas)
 
 if(UNIX AND NOT ANDROID)
   target_link_libraries(kj PUBLIC pthread)
@@ -191,6 +196,8 @@ if(BUILD_TESTING)
     memory-test.c++
     array-test.c++
     string-test.c++
+    table-test.c++
+    map-test.c++
     exception-test.c++
     debug-test.c++
     io-test.c++

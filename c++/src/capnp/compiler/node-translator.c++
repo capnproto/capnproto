@@ -997,7 +997,7 @@ bool NodeTranslator::BrandedDecl::compileAsType(
         addError(errorReporter,
             "As of Cap'n Proto 0.4, 'Object' has been renamed to 'AnyPointer'.  Sorry for the "
             "inconvenience, and thanks for being an early adopter.  :)");
-        // no break
+        // fallthrough
       case Declaration::BUILTIN_ANY_POINTER:
         target.initAnyPointer().initUnconstrained().setAnyKind();
         return true;
@@ -2741,8 +2741,7 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
         return kj::mv(result);
       }
 
-      // No break -- value is positive, so we can just go on to the uint case below.
-    }
+    } // fallthrough -- value is positive, so we can just go on to the uint case below.
 
     case DynamicValue::UINT: {
       uint64_t maxValue = 0;

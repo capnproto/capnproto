@@ -194,7 +194,7 @@ TEST(AsyncIo, TwoWayPipe) {
   EXPECT_EQ("bar", result2);
 }
 
-#if !_WIN32
+#if !_WIN32 && !__CYGWIN__
 TEST(AsyncIo, CapabilityPipe) {
   auto ioContext = setupAsyncIo();
 
