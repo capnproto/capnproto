@@ -1324,6 +1324,7 @@ public:
         SYS_openat, fd.get(), ".", O_RDWR | O_TMPFILE, 0700)) {
       case EOPNOTSUPP:
       case EINVAL:
+      case EISDIR:
         // Maybe not supported by this kernel / filesystem. Fall back to below.
         break;
       default:
