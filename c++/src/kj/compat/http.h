@@ -336,12 +336,33 @@ public:
                               kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
   kj::String serializeResponse(uint statusCode, kj::StringPtr statusText,
                                kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
+  // **Most applications will not use these methods; they are called by the HTTP client and server
+  // implementations.**
+  //
   // Serialize the headers as a complete request or response blob. The blob uses '\r\n' newlines
   // and includes the double-newline to indicate the end of the headers.
   //
   // `connectionHeaders`, if provided, contains connection-level headers supplied by the HTTP
   // implementation, in the order specified by the KJ_HTTP_FOR_EACH_BUILTIN_HEADER macro. These
-  // headers values override any corresponding header value in the HttpHeaders object.
+  // headers values override any corresponding header value in the HttpHeaders object. The
+  // CONNECTION_HEADERS_COUNT constants below can help you construct this `connectionHeaders` array.
+
+  enum class BuiltinIndicesEnum {
+  #define HEADER_ID(id, name) id,
+    KJ_HTTP_FOR_EACH_BUILTIN_HEADER(HEADER_ID)
+  #undef HEADER_ID
+  };
+
+  struct BuiltinIndices {
+  #define HEADER_ID(id, name) static constexpr uint id = static_cast<uint>(BuiltinIndicesEnum::id);
+    KJ_HTTP_FOR_EACH_BUILTIN_HEADER(HEADER_ID)
+  #undef HEADER_ID
+  };
+
+  static constexpr uint HEAD_RESPONSE_CONNECTION_HEADERS_COUNT = BuiltinIndices::CONTENT_LENGTH;
+  static constexpr uint CONNECTION_HEADERS_COUNT = BuiltinIndices::SEC_WEBSOCKET_KEY;
+  static constexpr uint WEBSOCKET_CONNECTION_HEADERS_COUNT = BuiltinIndices::HOST;
+  // Constants for use with HttpHeaders::serialize*().
 
   kj::String toString() const;
 
