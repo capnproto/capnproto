@@ -477,26 +477,14 @@ static const char* BUILTIN_HEADER_NAMES[] = {
 #undef HEADER_NAME
 };
 
-enum class BuiltinHeaderIndicesEnum {
-#define HEADER_ID(id, name) id,
-  KJ_HTTP_FOR_EACH_BUILTIN_HEADER(HEADER_ID)
-#undef HEADER_ID
-};
-
-namespace BuiltinHeaderIndices {
-#define HEADER_ID(id, name) constexpr uint id = static_cast<uint>(BuiltinHeaderIndicesEnum::id);
-  KJ_HTTP_FOR_EACH_BUILTIN_HEADER(HEADER_ID)
-#undef HEADER_ID
-};
-
-constexpr uint HEAD_RESPONSE_CONNECTION_HEADERS_COUNT = BuiltinHeaderIndices::CONTENT_LENGTH;
-constexpr uint CONNECTION_HEADERS_COUNT = BuiltinHeaderIndices::SEC_WEBSOCKET_KEY;
-constexpr uint WEBSOCKET_CONNECTION_HEADERS_COUNT = BuiltinHeaderIndices::HOST;
-
 }  // namespace
 
+#define HEADER_ID(id, name) constexpr uint HttpHeaders::BuiltinIndices::id;
+  KJ_HTTP_FOR_EACH_BUILTIN_HEADER(HEADER_ID)
+#undef HEADER_ID
+
 #define DEFINE_HEADER(id, name) \
-const HttpHeaderId HttpHeaderId::id(nullptr, BuiltinHeaderIndices::id);
+const HttpHeaderId HttpHeaderId::id(nullptr, HttpHeaders::BuiltinIndices::id);
 KJ_HTTP_FOR_EACH_BUILTIN_HEADER(DEFINE_HEADER)
 #undef DEFINE_HEADER
 
@@ -560,7 +548,7 @@ HttpHeaderTable::HttpHeaderTable()
     : idsByName(kj::heap<IdsByNameMap>()) {
 #define ADD_HEADER(id, name) \
   namesById.add(name); \
-  idsByName->map.insert(std::make_pair(name, BuiltinHeaderIndices::id));
+  idsByName->map.insert(std::make_pair(name, HttpHeaders::BuiltinIndices::id));
   KJ_HTTP_FOR_EACH_BUILTIN_HEADER(ADD_HEADER);
 #undef ADD_HEADER
 }
@@ -3023,7 +3011,7 @@ public:
         "can't start new request until previous request body has been fully written");
     closeWatcherTask = nullptr;
 
-    kj::StringPtr connectionHeaders[CONNECTION_HEADERS_COUNT];
+    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
     kj::String lengthStr;
 
     bool isGet = method == HttpMethod::GET || method == HttpMethod::HEAD;
@@ -3035,7 +3023,7 @@ public:
         hasBody = false;
       } else {
         lengthStr = kj::str(*s);
-        connectionHeaders[BuiltinHeaderIndices::CONTENT_LENGTH] = lengthStr;
+        connectionHeaders[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = lengthStr;
         hasBody = true;
       }
     } else {
@@ -3048,7 +3036,7 @@ public:
         //   actually want to send a body. This allows pass-through of a GET request with a chunked
         //   body to "just work". We strongly discourage writing any new code that sends
         //   full-bodied GETs.
-        connectionHeaders[BuiltinHeaderIndices::TRANSFER_ENCODING] = "chunked";
+        connectionHeaders[HttpHeaders::BuiltinIndices::TRANSFER_ENCODING] = "chunked";
         hasBody = true;
       }
     }
@@ -3118,11 +3106,11 @@ public:
         "HttpClient").generate(keyBytes);
     auto keyBase64 = kj::encodeBase64(keyBytes);
 
-    kj::StringPtr connectionHeaders[WEBSOCKET_CONNECTION_HEADERS_COUNT];
-    connectionHeaders[BuiltinHeaderIndices::CONNECTION] = "Upgrade";
-    connectionHeaders[BuiltinHeaderIndices::UPGRADE] = "websocket";
-    connectionHeaders[BuiltinHeaderIndices::SEC_WEBSOCKET_VERSION] = "13";
-    connectionHeaders[BuiltinHeaderIndices::SEC_WEBSOCKET_KEY] = keyBase64;
+    kj::StringPtr connectionHeaders[HttpHeaders::WEBSOCKET_CONNECTION_HEADERS_COUNT];
+    connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "Upgrade";
+    connectionHeaders[HttpHeaders::BuiltinIndices::UPGRADE] = "websocket";
+    connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_VERSION] = "13";
+    connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_KEY] = keyBase64;
 
     httpOutput.writeHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
 
@@ -4338,16 +4326,16 @@ private:
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
     currentMethod = nullptr;
 
-    kj::StringPtr connectionHeaders[CONNECTION_HEADERS_COUNT];
+    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
     kj::String lengthStr;
 
     if (statusCode == 204 || statusCode == 205 || statusCode == 304) {
       // No entity-body.
     } else KJ_IF_MAYBE(s, expectedBodySize) {
       lengthStr = kj::str(*s);
-      connectionHeaders[BuiltinHeaderIndices::CONTENT_LENGTH] = lengthStr;
+      connectionHeaders[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = lengthStr;
     } else {
-      connectionHeaders[BuiltinHeaderIndices::TRANSFER_ENCODING] = "chunked";
+      connectionHeaders[HttpHeaders::BuiltinIndices::TRANSFER_ENCODING] = "chunked";
     }
 
     // For HEAD requests, if the application specified a Content-Length or Transfer-Encoding
@@ -4357,7 +4345,7 @@ private:
       if (headers.get(HttpHeaderId::CONTENT_LENGTH) != nullptr ||
           headers.get(HttpHeaderId::TRANSFER_ENCODING) != nullptr) {
         connectionHeadersArray = connectionHeadersArray
-            .slice(0, HEAD_RESPONSE_CONNECTION_HEADERS_COUNT);
+            .slice(0, HttpHeaders::HEAD_RESPONSE_CONNECTION_HEADERS_COUNT);
       }
     }
 
@@ -4408,10 +4396,10 @@ private:
 
     auto websocketAccept = generateWebSocketAccept(key);
 
-    kj::StringPtr connectionHeaders[WEBSOCKET_CONNECTION_HEADERS_COUNT];
-    connectionHeaders[BuiltinHeaderIndices::SEC_WEBSOCKET_ACCEPT] = websocketAccept;
-    connectionHeaders[BuiltinHeaderIndices::UPGRADE] = "websocket";
-    connectionHeaders[BuiltinHeaderIndices::CONNECTION] = "Upgrade";
+    kj::StringPtr connectionHeaders[HttpHeaders::WEBSOCKET_CONNECTION_HEADERS_COUNT];
+    connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_ACCEPT] = websocketAccept;
+    connectionHeaders[HttpHeaders::BuiltinIndices::UPGRADE] = "websocket";
+    connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "Upgrade";
 
     httpOutput.writeHeaders(headers.serializeResponse(
         101, "Switching Protocols", connectionHeaders));
