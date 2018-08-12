@@ -183,13 +183,15 @@ public:
   //   new objects in this message.
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
-  // Allocates an array of at least the given number of words, throwing an exception or crashing if
-  // this is not possible.  It is expected that this method will usually return more space than
-  // requested, and the caller should use that extra space as much as possible before allocating
-  // more.  The returned space remains valid at least until the MessageBuilder is destroyed.
+  // Allocates an array of at least the given number of zero'd words, throwing an exception or
+  // crashing if this is not possible.  It is expected that this method will usually return more
+  // space than requested, and the caller should use that extra space as much as possible before
+  // allocating more.  The returned space remains valid at least until the MessageBuilder is
+  // destroyed.
   //
-  // Cap'n Proto will only call this once at a time, so the subclass need not worry about
-  // thread-safety.
+  // allocateSegment() is responsible for zeroing the memory before returning. This is required
+  // because otherwise the Cap'n Proto implementation would have to zero the memory anyway, and
+  // many allocators are able to provide already-zero'd memory more efficiently.
 
   template <typename RootType>
   typename RootType::Builder initRoot();
