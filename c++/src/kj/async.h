@@ -281,7 +281,7 @@ public:
   // processes it.
   //
   // `errorHandler` is a function that takes `kj::Exception&&`, like the second parameter to
-  // `then()`, except that it must return void.  We make you specify this because otherwise it's
+  // `then()`, or the parameter to `catch_()`.  We make you specify this because otherwise it's
   // easy to forget to handle errors in a promise that you never use.  You may specify nullptr for
   // the error handler if you are sure that ignoring errors is fine, or if you know that you'll
   // eventually wait on the promise somewhere.
