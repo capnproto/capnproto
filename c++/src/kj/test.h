@@ -28,6 +28,7 @@
 #include "debug.h"
 #include "vector.h"
 #include "function.h"
+#include "windows-sanity.h"  // work-around macro conflict with `ERROR`
 
 namespace kj {
 

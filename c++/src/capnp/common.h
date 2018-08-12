@@ -32,6 +32,7 @@
 #include <inttypes.h>
 #include <kj/string.h>
 #include <kj/memory.h>
+#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
 
 #if CAPNP_DEBUG_TYPES
 #include <kj/units.h>

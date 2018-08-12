@@ -37,6 +37,7 @@
 #include "common.h"
 #include "blob.h"
 #include "endian.h"
+#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
 
 #if (defined(__mips__) || defined(__hppa__)) && !defined(CAPNP_CANONICALIZE_NAN)
 #define CAPNP_CANONICALIZE_NAN 1
