@@ -105,6 +105,10 @@ public:
   virtual kj::ArrayPtr<const word> getSegment(uint id) = 0;
   // Gets the segment with the given ID, or returns null if no such segment exists. This method
   // will be called at most once for each segment ID.
+  //
+  // The returned array must be aligned properly for the host architecture. This means that on
+  // x86/x64, alignment is optional, though recommended for performance, whereas on many other
+  // architectures, alignment is required.
 
   inline const ReaderOptions& getOptions();
   // Get the options passed to the constructor.
@@ -192,6 +196,10 @@ public:
   // allocateSegment() is responsible for zeroing the memory before returning. This is required
   // because otherwise the Cap'n Proto implementation would have to zero the memory anyway, and
   // many allocators are able to provide already-zero'd memory more efficiently.
+  //
+  // The returned array must be aligned properly for the host architecture. This means that on
+  // x86/x64, alignment is optional, though recommended for performance, whereas on many other
+  // architectures, alignment is required.
 
   template <typename RootType>
   typename RootType::Builder initRoot();
