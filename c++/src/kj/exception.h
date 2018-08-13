@@ -28,6 +28,7 @@
 #include "memory.h"
 #include "array.h"
 #include "string.h"
+#include "windows-sanity.h"  // work-around macro conflict with `ERROR`
 
 namespace kj {
 

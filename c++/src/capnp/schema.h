@@ -30,6 +30,7 @@
 #endif
 
 #include <capnp/schema.capnp.h>
+#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
 
 namespace capnp {
 
