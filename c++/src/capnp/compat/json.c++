@@ -926,7 +926,9 @@ public:
 
 class JsonCodec::AnnotatedHandler final: public JsonCodec::Handler<DynamicStruct> {
 public:
-  AnnotatedHandler(JsonCodec& codec, StructSchema schema, kj::Maybe<kj::StringPtr> discriminator,
+  AnnotatedHandler(JsonCodec& codec, StructSchema schema,
+                   kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
+                   kj::Maybe<kj::StringPtr> unionDeclName,
                    kj::Vector<Schema>& dependencies)
       : schema(schema) {
     auto schemaProto = schema.getProto();
@@ -945,17 +947,29 @@ public:
       for (auto anno: schemaProto.getAnnotations()) {
         switch (anno.getId()) {
           case JSON_DISCRIMINATOR_ANNOTATION_ID:
-            discriminator = anno.getValue().getText();
+            discriminator = anno.getValue().getStruct().getAs<json::DiscriminatorOptions>();
             break;
         }
       }
     }
 
     KJ_IF_MAYBE(d, discriminator) {
-      unionTagName = discriminator;
-      fieldsByName.insert(std::make_pair(*d, FieldNameInfo {
-        FieldNameInfo::UNION_TAG, 0, 0, nullptr
-      }));
+      if (d->hasName()) {
+        unionTagName = d->getName();
+      } else {
+        unionTagName = unionDeclName;
+      }
+      KJ_IF_MAYBE(u, unionTagName) {
+        fieldsByName.insert(std::make_pair(*u, FieldNameInfo {
+          FieldNameInfo::UNION_TAG, 0, 0, nullptr
+        }));
+      }
+
+      if (d->hasValueName()) {
+        fieldsByName.insert(std::make_pair(d->getValueName(), FieldNameInfo {
+          FieldNameInfo::UNION_VALUE, 0, 0, nullptr
+        }));
+      }
     }
 
     discriminantOffset = schemaProto.getStruct().getDiscriminantOffset();
@@ -973,7 +987,7 @@ public:
       FieldInfo info;
       info.name = fieldName;
 
-      kj::Maybe<kj::StringPtr> subDiscriminator;
+      kj::Maybe<json::DiscriminatorOptions::Reader> subDiscriminator;
       bool flattened = false;
       for (auto anno: field.getProto().getAnnotations()) {
         switch (anno.getId()) {
@@ -987,7 +1001,7 @@ public:
             break;
           case JSON_DISCRIMINATOR_ANNOTATION_ID:
             KJ_REQUIRE(fieldProto.isGroup(), "only unions can have discriminator");
-            subDiscriminator = anno.getValue().getText();
+            subDiscriminator = anno.getValue().getStruct().getAs<json::DiscriminatorOptions>();
             break;
           case JSON_BASE64_ANNOTATION_ID: {
             KJ_REQUIRE(field.getType().isData(), "only Data can be marked for base64 encoding");
@@ -1004,9 +1018,21 @@ public:
         }
       }
 
-      if (flattened) {
-        info.flattenHandler = codec.loadAnnotatedHandler(
-            type.asStruct(), subDiscriminator, dependencies);
+      if (fieldProto.isGroup()) {
+        // Load group type handler now, even if not flattened, so that we can pass its
+        // `subDiscriminator`.
+        kj::Maybe<kj::StringPtr> subFieldName;
+        if (flattened) {
+          // If the group was flattened, then we allow its field name to be used as the
+          // discriminator name, so that the discriminator doesn't have to explicitly specify a
+          // name.
+          subFieldName = fieldName;
+        }
+        auto& subHandler = codec.loadAnnotatedHandler(
+            type.asStruct(), subDiscriminator, subFieldName, dependencies);
+        if (flattened) {
+          info.flattenHandler = subHandler;
+        }
       }
 
       bool isUnionMember = fieldProto.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
@@ -1022,6 +1048,7 @@ public:
           } else {
             flattenedName = entry.first;
           }
+
           fieldsByName.insert(std::make_pair(flattenedName, FieldNameInfo {
             isUnionMember ? FieldNameInfo::FLATTENED_FROM_UNION : FieldNameInfo::FLATTENED,
             field.getIndex(), (uint)info.prefix.size(), kj::mv(ownName)
@@ -1029,12 +1056,26 @@ public:
         }
       }
 
+      info.nameForDiscriminant = info.name;
+
       if (!flattened) {
-        fieldsByName.insert(std::make_pair(info.name, kj::mv(nameInfo)));
+        bool isUnionWithValueName = false;
+        if (isUnionMember) {
+          KJ_IF_MAYBE(d, discriminator) {
+            if (d->hasValueName()) {
+              info.name = d->getValueName();
+              isUnionWithValueName = true;
+            }
+          }
+        }
+
+        if (!isUnionWithValueName) {
+          fieldsByName.insert(std::make_pair(info.name, kj::mv(nameInfo)));
+        }
       }
 
       if (isUnionMember) {
-        unionTagValues.insert(std::make_pair(info.name, field));
+        unionTagValues.insert(std::make_pair(info.nameForDiscriminant, field));
       }
 
       // Look for dependencies that we need to add.
@@ -1110,6 +1151,7 @@ public:
 private:
   struct FieldInfo {
     kj::StringPtr name;
+    kj::StringPtr nameForDiscriminant;
     kj::Maybe<const AnnotatedHandler&> flattenHandler;
     kj::StringPtr prefix;
   };
@@ -1130,12 +1172,15 @@ private:
       // The parent struct is a flattened union, and this field is the discriminant tag. It is a
       // string field whose name determines the union type. `index` is not used.
 
-      FLATTENED_FROM_UNION
+      FLATTENED_FROM_UNION,
       // The parent struct is a flattened union, and some of the union's members are flattened
       // structs or groups, and this field is possibly a member of one or more of them. `index`
       // is not used, because it's possible that the same field name appears in multiple variants.
       // Intsead, the parser must find the union tag, and then can descend and attempt to parse
       // the field in the context of whichever variant is selected.
+
+      UNION_VALUE
+      // This field is the value of a discriminated union that has `valueName` set.
     } type;
 
     uint index;
@@ -1203,7 +1248,7 @@ private:
       auto& info = fields[which->getIndex()];
       KJ_IF_MAYBE(tag, unionTagName) {
         flattenedFields.add(FlattenedField {
-            prefix, *tag, Type(schema::Type::TEXT), Text::Reader(info.name) });
+            prefix, *tag, Type(schema::Type::TEXT), Text::Reader(info.nameForDiscriminant) });
       }
 
       KJ_IF_MAYBE(handler, info.flattenHandler) {
@@ -1261,6 +1306,17 @@ private:
         return KJ_ASSERT_NONNULL(fields[variant.getIndex()].flattenHandler)
             .decodeField(codec, name.slice(info.prefixLength), value,
                 output.get(variant).as<DynamicStruct>(), unionsSeen);
+      }
+      case FieldNameInfo::UNION_VALUE: {
+        const void* ptr = getUnionInstanceIdentifier(output);
+        if (unionsSeen.count(ptr) == 0) {
+          // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
+          return false;
+        }
+
+        auto variant = KJ_ASSERT_NONNULL(output.which());
+        codec.decodeField(variant, value, Orphanage::getForMessageContaining(output), output);
+        return true;
       }
     }
 
@@ -1367,12 +1423,13 @@ private:
 };
 
 JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
-      StructSchema schema, kj::Maybe<kj::StringPtr> discriminator,
-      kj::Vector<Schema>& dependencies) {
+      StructSchema schema, kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
+      kj::Maybe<kj::StringPtr> unionDeclName, kj::Vector<Schema>& dependencies) {
   auto insertResult = impl->annotatedHandlers.insert(std::make_pair(schema, nullptr));
   if (insertResult.second) {
     // Not seen before.
-    auto newHandler = kj::heap<AnnotatedHandler>(*this, schema, discriminator, dependencies);
+    auto newHandler = kj::heap<AnnotatedHandler>(
+          *this, schema, discriminator, unionDeclName, dependencies);
     auto& result = *newHandler;
     insertResult.first->second = kj::mv(newHandler);
     addTypeHandler(schema, result);
@@ -1393,7 +1450,7 @@ void JsonCodec::handleByAnnotation(Schema schema) {
         addTypeHandler(schema.asStruct(), GLOBAL_HANDLER);
       } else {
         kj::Vector<Schema> dependencies;
-        loadAnnotatedHandler(schema.asStruct(), nullptr, dependencies);
+        loadAnnotatedHandler(schema.asStruct(), nullptr, nullptr, dependencies);
         for (auto dep: dependencies) {
           handleByAnnotation(dep);
         }

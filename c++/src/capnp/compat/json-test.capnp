@@ -50,7 +50,7 @@ struct TestJsonAnnotations {
     }
   }
 
-  aUnion :union $Json.flatten() $Json.discriminator("union-type") {
+  aUnion :union $Json.flatten() $Json.discriminator(name = "union-type") {
     foo :group $Json.flatten() {
       fooMember @9 :Text;
       multiMember @10 :UInt32;
@@ -77,6 +77,11 @@ struct TestJsonAnnotations {
 
   testBase64 @18 :Data $Json.base64;
   testHex @19 :Data $Json.hex;
+
+  bUnion :union $Json.flatten() $Json.discriminator(valueName = "bValue") {
+    foo @20 :Text;
+    bar :group $Json.name("renamed-bar") { hi @21 :UInt32; }
+  }
 }
 
 struct TestJsonAnnotations2 {

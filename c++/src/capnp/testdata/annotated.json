@@ -15,4 +15,6 @@
   "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
   "innerJson": [123, "hello", {"object": true}],
   "testBase64": "ZnJlZA==",
-  "testHex": "706c756768" }
+  "testHex": "706c756768",
+  "bUnion": "renamed-bar",
+  "bValue": {"hi": 678} }

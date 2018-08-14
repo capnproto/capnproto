@@ -247,9 +247,11 @@ private:
   void addTypeHandlerImpl(Type type, HandlerBase& handler);
   void addFieldHandlerImpl(StructSchema::Field field, Type type, HandlerBase& handler);
 
-  AnnotatedHandler& loadAnnotatedHandler(StructSchema schema,
-                                         kj::Maybe<kj::StringPtr> discriminator,
-                                         kj::Vector<Schema>& dependencies);
+  AnnotatedHandler& loadAnnotatedHandler(
+      StructSchema schema,
+      kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
+      kj::Maybe<kj::StringPtr> unionDeclName,
+      kj::Vector<Schema>& dependencies);
 };
 
 // =======================================================================================

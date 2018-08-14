@@ -87,11 +87,23 @@ struct FlattenOptions {
   # Optional: Adds the given prefix to flattened field names.
 }
 
-annotation discriminator @0xcfa794e8d19a0162 (struct, union): Text;
+annotation discriminator @0xcfa794e8d19a0162 (struct, union): DiscriminatorOptions;
 # Specifies that a union's variant will be decided not by which fields are present, but instead
-# by a special discriminator field with the given name. The value of the discriminator field is
-# a string naming which variant is active. This allows the members of the union to have the
-# $jsonFlatten annotation.
+# by a special discriminator field. The value of the discriminator field is a string naming which
+# variant is active. This allows the members of the union to have the $jsonFlatten annotation, or
+# to all have the same name.
+
+struct DiscriminatorOptions {
+  name @0 :Text;
+  # The name of the discriminator field. Defaults to matching the name of the union.
+
+  valueName @1 :Text;
+  # If non-null, specifies that the union's value shall have the given field name, rather than the
+  # value's name. In this case the union's variant can only be determined by looking at the
+  # discriminant field, not by inspecting which value field is present.
+  #
+  # It is an error to use `valueName` while also declaring some variants as $flatten.
+}
 
 annotation base64 @0xd7d879450a253e4b (field): Void;
 # Place on a field of type `Data` to indicate that its JSON representation is a Base64 string.
