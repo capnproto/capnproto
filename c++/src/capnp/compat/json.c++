@@ -23,8 +23,6 @@
 #include <math.h>    // for HUGEVAL to check for overflow in strtod
 #include <stdlib.h>  // strtod
 #include <errno.h>   // for strtod errors
-#include <unordered_map>
-#include <map>
 #include <capnp/orphan.h>
 #include <kj/debug.h>
 #include <kj/function.h>
@@ -35,31 +33,15 @@
 
 namespace capnp {
 
-namespace {
-
-struct TypeHash {
-  size_t operator()(const Type& type) const {
-    return type.hashCode();
-  }
-};
-
-struct FieldHash {
-  size_t operator()(const StructSchema::Field& field) const {
-    return field.getIndex() ^ field.getContainingStruct().getProto().getId();
-  }
-};
-
-}  // namespace
-
 struct JsonCodec::Impl {
   bool prettyPrint = false;
   HasMode hasMode = HasMode::NON_NULL;
   size_t maxNestingDepth = 64;
 
-  std::unordered_map<Type, HandlerBase*, TypeHash> typeHandlers;
-  std::unordered_map<StructSchema::Field, HandlerBase*, FieldHash> fieldHandlers;
-  std::unordered_map<Type, kj::Maybe<kj::Own<AnnotatedHandler>>, TypeHash> annotatedHandlers;
-  std::unordered_map<Type, kj::Own<AnnotatedEnumHandler>, TypeHash> annotatedEnumHandlers;
+  kj::HashMap<Type, HandlerBase*> typeHandlers;
+  kj::HashMap<StructSchema::Field, HandlerBase*> fieldHandlers;
+  kj::HashMap<Type, kj::Maybe<kj::Own<AnnotatedHandler>>> annotatedHandlers;
+  kj::HashMap<Type, kj::Own<AnnotatedEnumHandler>> annotatedEnumHandlers;
 
   kj::StringTree encodeRaw(JsonValue::Reader value, uint indent, bool& multiline,
                            bool hasPrefix) const {
@@ -235,9 +217,8 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
   // TODO(soon): For interfaces, check for handlers on superclasses, per documentation...
   // TODO(soon): For branded types, should we check for handlers on the generic?
   // TODO(someday): Allow registering handlers for "all structs", "all lists", etc?
-  auto iter = impl->typeHandlers.find(type);
-  if (iter != impl->typeHandlers.end()) {
-    iter->second->encodeBase(*this, input, output);
+  KJ_IF_MAYBE(handler, impl->typeHandlers.find(type)) {
+    (*handler)->encodeBase(*this, input, output);
     return;
   }
 
@@ -383,9 +364,8 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
 
 void JsonCodec::encodeField(StructSchema::Field field, DynamicValue::Reader input,
                             JsonValue::Builder output) const {
-  auto iter = impl->fieldHandlers.find(field);
-  if (iter != impl->fieldHandlers.end()) {
-    iter->second->encodeBase(*this, input, output);
+  KJ_IF_MAYBE(handler, impl->fieldHandlers.find(field)) {
+    (*handler)->encodeBase(*this, input, output);
     return;
   }
 
@@ -416,9 +396,8 @@ void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader f
                             Orphanage orphanage, DynamicStruct::Builder output) const {
   auto fieldType = fieldSchema.getType();
 
-  auto iter = impl->fieldHandlers.find(fieldSchema);
-  if (iter != impl->fieldHandlers.end()) {
-    output.adopt(fieldSchema, iter->second->decodeBase(*this, fieldValue, fieldType, orphanage));
+  KJ_IF_MAYBE(handler, impl->fieldHandlers.find(fieldSchema)) {
+    output.adopt(fieldSchema, (*handler)->decodeBase(*this, fieldValue, fieldType, orphanage));
   } else {
     output.adopt(fieldSchema, decode(fieldValue, fieldType, orphanage));
   }
@@ -427,9 +406,8 @@ void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader f
 void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) const {
   auto type = output.getSchema();
 
-  auto iter = impl->typeHandlers.find(type);
-  if (iter != impl->typeHandlers.end()) {
-    return iter->second->decodeStructBase(*this, input, output);
+  KJ_IF_MAYBE(handler, impl->typeHandlers.find(type)) {
+    return (*handler)->decodeStructBase(*this, input, output);
   }
 
   decodeObject(input, type, Orphanage::getForMessageContaining(output), output);
@@ -437,9 +415,8 @@ void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) c
 
 Orphan<DynamicValue> JsonCodec::decode(
     JsonValue::Reader input, Type type, Orphanage orphanage) const {
-  auto iter = impl->typeHandlers.find(type);
-  if (iter != impl->typeHandlers.end()) {
-    return iter->second->decodeBase(*this, input, type, orphanage);
+  KJ_IF_MAYBE(handler, impl->typeHandlers.find(type)) {
+    return (*handler)->decodeBase(*this, input, type, orphanage);
   }
 
   switch(type.which()) {
@@ -883,13 +860,13 @@ void JsonCodec::HandlerBase::decodeStructBase(
 }
 
 void JsonCodec::addTypeHandlerImpl(Type type, HandlerBase& handler) {
-  impl->typeHandlers[type] = &handler;
+  impl->typeHandlers.insert(type, &handler);
 }
 
 void JsonCodec::addFieldHandlerImpl(StructSchema::Field field, Type type, HandlerBase& handler) {
   KJ_REQUIRE(type == field.getType(),
       "handler type did not match field type for addFieldHandler()");
-  impl->fieldHandlers[field] = &handler;
+  impl->fieldHandlers.insert(field, &handler);
 }
 
 // =======================================================================================
@@ -960,15 +937,15 @@ public:
         unionTagName = unionDeclName;
       }
       KJ_IF_MAYBE(u, unionTagName) {
-        fieldsByName.insert(std::make_pair(*u, FieldNameInfo {
+        fieldsByName.insert(*u, FieldNameInfo {
           FieldNameInfo::UNION_TAG, 0, 0, nullptr
-        }));
+        });
       }
 
       if (d->hasValueName()) {
-        fieldsByName.insert(std::make_pair(d->getValueName(), FieldNameInfo {
+        fieldsByName.insert(d->getValueName(), FieldNameInfo {
           FieldNameInfo::UNION_VALUE, 0, 0, nullptr
-        }));
+        });
       }
     }
 
@@ -1043,16 +1020,20 @@ public:
           kj::StringPtr flattenedName;
           kj::String ownName;
           if (info.prefix.size() > 0) {
-            ownName = kj::str(info.prefix, entry.first);
+            ownName = kj::str(info.prefix, entry.key);
             flattenedName = ownName;
           } else {
-            flattenedName = entry.first;
+            flattenedName = entry.key;
           }
 
-          fieldsByName.insert(std::make_pair(flattenedName, FieldNameInfo {
+          fieldsByName.upsert(flattenedName, FieldNameInfo {
             isUnionMember ? FieldNameInfo::FLATTENED_FROM_UNION : FieldNameInfo::FLATTENED,
             field.getIndex(), (uint)info.prefix.size(), kj::mv(ownName)
-          }));
+          }, [&](FieldNameInfo& existing, FieldNameInfo&& replacement) {
+            KJ_REQUIRE(existing.type == FieldNameInfo::FLATTENED_FROM_UNION &&
+                       replacement.type == FieldNameInfo::FLATTENED_FROM_UNION,
+                "flattened members have the same name and are not mutually exclusive");
+          });
         }
       }
 
@@ -1070,17 +1051,17 @@ public:
         }
 
         if (!isUnionWithValueName) {
-          fieldsByName.insert(std::make_pair(info.name, kj::mv(nameInfo)));
+          fieldsByName.insert(info.name, kj::mv(nameInfo));
         }
       }
 
       if (isUnionMember) {
-        unionTagValues.insert(std::make_pair(info.nameForDiscriminant, field));
+        unionTagValues.insert(info.nameForDiscriminant, field);
       }
 
       // Look for dependencies that we need to add.
       while (type.isList()) type = type.asList().getElementType();
-      if (codec.impl->typeHandlers.count(type) == 0) {
+      if (codec.impl->typeHandlers.find(type) == nullptr) {
         switch (type.which()) {
           case schema::Type::STRUCT:
             dependencies.add(type.asStruct());
@@ -1190,10 +1171,10 @@ private:
     kj::String ownName;
   };
 
-  std::map<kj::StringPtr, FieldNameInfo> fieldsByName;
+  kj::HashMap<kj::StringPtr, FieldNameInfo> fieldsByName;
   // Maps JSON names to info needed to parse them.
 
-  std::map<kj::StringPtr, StructSchema::Field> unionTagValues;
+  kj::HashMap<kj::StringPtr, StructSchema::Field> unionTagValues;
   // If the parent struct is a flattened union, it has a tag field which is a string with one of
   // these values. The map maps to the union member to set.
 
@@ -1265,63 +1246,60 @@ private:
                    kj::HashMap<const void*, StructSchema::Field>& unionsSeen) const {
     KJ_ASSERT(output.getSchema() == schema);
 
-    auto iter = fieldsByName.find(name);
-    if (iter == fieldsByName.end()) {
+    KJ_IF_MAYBE(info, fieldsByName.find(name)) {
+      switch (info->type) {
+        case FieldNameInfo::NORMAL: {
+          auto field = output.getSchema().getFields()[info->index];
+          codec.decodeField(field, value, Orphanage::getForMessageContaining(output), output);
+          return true;
+        }
+        case FieldNameInfo::FLATTENED:
+          return KJ_ASSERT_NONNULL(fields[info->index].flattenHandler)
+              .decodeField(codec, name.slice(info->prefixLength), value,
+                  output.get(output.getSchema().getFields()[info->index]).as<DynamicStruct>(),
+                  unionsSeen);
+        case FieldNameInfo::UNION_TAG: {
+          KJ_REQUIRE(value.isString(), "Expected string value.");
+
+          // Mark that we've seen a union tag for this struct.
+          const void* ptr = getUnionInstanceIdentifier(output);
+          KJ_IF_MAYBE(field, unionTagValues.find(value.getString())) {
+            unionsSeen.insert(ptr, *field);
+          }
+          return true;
+        }
+        case FieldNameInfo::FLATTENED_FROM_UNION: {
+          const void* ptr = getUnionInstanceIdentifier(output);
+          KJ_IF_MAYBE(variant, unionsSeen.find(ptr)) {
+            bool alreadyInitialized = output.which()
+                .map([&](auto f) { return f == *variant; })
+                .orDefault(false);
+            auto child = alreadyInitialized ? output.get(*variant) : output.init(*variant);
+            return KJ_ASSERT_NONNULL(fields[variant->getIndex()].flattenHandler)
+                .decodeField(codec, name.slice(info->prefixLength), value,
+                    child.as<DynamicStruct>(), unionsSeen);
+          } else {
+            // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
+            return false;
+          }
+        }
+        case FieldNameInfo::UNION_VALUE: {
+          const void* ptr = getUnionInstanceIdentifier(output);
+          KJ_IF_MAYBE(variant, unionsSeen.find(ptr)) {
+            codec.decodeField(*variant, value, Orphanage::getForMessageContaining(output), output);
+            return true;
+          } else {
+            // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
+            return false;
+          }
+        }
+      }
+
+      KJ_UNREACHABLE;
+    } else {
       // Ignore undefined field.
       return true;
     }
-
-    auto& info = iter->second;
-    switch (info.type) {
-      case FieldNameInfo::NORMAL: {
-        auto field = output.getSchema().getFields()[info.index];
-        codec.decodeField(field, value, Orphanage::getForMessageContaining(output), output);
-        return true;
-      }
-      case FieldNameInfo::FLATTENED:
-        return KJ_ASSERT_NONNULL(fields[info.index].flattenHandler)
-            .decodeField(codec, name.slice(info.prefixLength), value,
-                output.get(output.getSchema().getFields()[info.index]).as<DynamicStruct>(),
-                unionsSeen);
-      case FieldNameInfo::UNION_TAG: {
-        KJ_REQUIRE(value.isString(), "Expected string value.");
-
-        // Mark that we've seen a union tag for this struct.
-        const void* ptr = getUnionInstanceIdentifier(output);
-        auto iter = unionTagValues.find(value.getString());
-        if (iter != unionTagValues.end()) {
-          unionsSeen.insert(ptr, iter->second);
-        }
-        return true;
-      }
-      case FieldNameInfo::FLATTENED_FROM_UNION: {
-        const void* ptr = getUnionInstanceIdentifier(output);
-        KJ_IF_MAYBE(variant, unionsSeen.find(ptr)) {
-          bool alreadyInitialized = output.which()
-              .map([&](auto f) { return f == *variant; })
-              .orDefault(false);
-          auto child = alreadyInitialized ? output.get(*variant) : output.init(*variant);
-          return KJ_ASSERT_NONNULL(fields[variant->getIndex()].flattenHandler)
-              .decodeField(codec, name.slice(info.prefixLength), value,
-                  child.as<DynamicStruct>(), unionsSeen);
-        } else {
-          // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
-          return false;
-        }
-      }
-      case FieldNameInfo::UNION_VALUE: {
-        const void* ptr = getUnionInstanceIdentifier(output);
-        KJ_IF_MAYBE(variant, unionsSeen.find(ptr)) {
-          codec.decodeField(*variant, value, Orphanage::getForMessageContaining(output), output);
-          return true;
-        } else {
-          // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
-          return false;
-        }
-      }
-    }
-
-    KJ_UNREACHABLE;
   }
 
   const void* getUnionInstanceIdentifier(DynamicStruct::Builder obj) const {
@@ -1351,7 +1329,7 @@ public:
       }
 
       builder.add(name);
-      nameToValue.insert(std::make_pair(name, e.getIndex()));
+      nameToValue.insert(name, e.getIndex());
     }
 
     valueToName = builder.finish();
@@ -1370,16 +1348,16 @@ public:
     if (input.isNumber()) {
       return DynamicEnum(schema, static_cast<uint16_t>(input.getNumber()));
     } else {
-      auto iter = nameToValue.find(input.getString());
-      KJ_REQUIRE(iter != nameToValue.end(), "invalid enum value", input.getString());
-      return DynamicEnum(schema.getEnumerants()[iter->second]);
+      uint16_t val = KJ_REQUIRE_NONNULL(nameToValue.find(input.getString()),
+          "invalid enum value", input.getString());
+      return DynamicEnum(schema.getEnumerants()[val]);
     }
   }
 
 private:
   EnumSchema schema;
   kj::Array<kj::StringPtr> valueToName;
-  std::map<kj::StringPtr, uint16_t> nameToValue;
+  kj::HashMap<kj::StringPtr, uint16_t> nameToValue;
 };
 
 class JsonCodec::JsonValueHandler final: public JsonCodec::Handler<DynamicStruct> {
@@ -1400,10 +1378,6 @@ public:
   }
 
 private:
-  EnumSchema schema;
-  kj::Array<kj::StringPtr> valueToName;
-  std::map<kj::StringPtr, uint16_t> nameToValue;
-
   void rawCopy(AnyStruct::Reader input, AnyStruct::Builder output) const {
     // HACK: Manually copy using AnyStruct, so that if JsonValue's definition changes, this code
     //   doesn't need to be updated. However, note that if JsonValue ever adds new fields that
@@ -1426,20 +1400,27 @@ private:
 JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
       StructSchema schema, kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
       kj::Maybe<kj::StringPtr> unionDeclName, kj::Vector<Schema>& dependencies) {
-  auto insertResult = impl->annotatedHandlers.insert(std::make_pair(schema, nullptr));
-  if (insertResult.second) {
+  auto& entry = impl->annotatedHandlers.upsert(schema, nullptr,
+      [&](kj::Maybe<kj::Own<AnnotatedHandler>>& existing, auto dummy) {
+    KJ_ASSERT(existing != nullptr,
+        "cyclic JSON flattening detected", schema.getProto().getDisplayName());
+  });
+
+  KJ_IF_MAYBE(v, entry.value) {
+    // Already exists.
+    return **v;
+  } else {
     // Not seen before.
     auto newHandler = kj::heap<AnnotatedHandler>(
           *this, schema, discriminator, unionDeclName, dependencies);
     auto& result = *newHandler;
-    insertResult.first->second = kj::mv(newHandler);
+
+    // Map may have changed, so we have to look up again.
+    KJ_ASSERT_NONNULL(impl->annotatedHandlers.find(schema)) = kj::mv(newHandler);
+
     addTypeHandler(schema, result);
     return result;
-  } else KJ_IF_MAYBE(handler, insertResult.first->second) {
-    return **handler;
-  } else {
-    KJ_FAIL_REQUIRE("cyclic JSON flattening detected", schema.getProto().getDisplayName());
-  }
+  };
 }
 
 void JsonCodec::handleByAnnotation(Schema schema) {
@@ -1460,11 +1441,12 @@ void JsonCodec::handleByAnnotation(Schema schema) {
     }
     case schema::Node::ENUM: {
       auto enumSchema = schema.asEnum();
-      auto& slot = impl->annotatedEnumHandlers[enumSchema];
-      if (slot.get() == nullptr) {
-        slot = kj::heap<AnnotatedEnumHandler>(enumSchema);
-        addTypeHandler(enumSchema, *slot);
-      }
+      impl->annotatedEnumHandlers.findOrCreate(enumSchema, [&]() {
+        auto handler = kj::heap<AnnotatedEnumHandler>(enumSchema);
+        addTypeHandler(enumSchema, *handler);
+        return kj::HashMap<Type, kj::Own<AnnotatedEnumHandler>>::Entry {
+            enumSchema, kj::mv(handler) };
+      });
       break;
     }
     default:
