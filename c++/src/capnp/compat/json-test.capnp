@@ -80,7 +80,7 @@ struct TestJsonAnnotations {
 
   bUnion :union $Json.flatten() $Json.discriminator(valueName = "bValue") {
     foo @20 :Text;
-    bar :group $Json.name("renamed-bar") { hi @21 :UInt32; }
+    bar @21 :UInt32 $Json.name("renamed-bar");
   }
 }
 

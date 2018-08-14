@@ -844,11 +844,11 @@ R"({ "names-can_contain!anything Really": "foo",
   "testBase64": "ZnJlZA==",
   "testHex": "706c756768",
   "bUnion": "renamed-bar",
-  "bValue": {"hi": 678} })"_kj;
+  "bValue": 678 })"_kj;
 
 static constexpr kj::StringPtr GOLDEN_ANNOTATED_REVERSE =
 R"({
-  "bValue": {"hi": 678},
+  "bValue": 678,
   "bUnion": "renamed-bar",
   "testHex": "706c756768",
   "testBase64": "ZnJlZA==",
@@ -938,7 +938,7 @@ KJ_TEST("rename fields") {
     root.setTestBase64("fred"_kj.asBytes());
     root.setTestHex("plugh"_kj.asBytes());
 
-    root.getBUnion().initBar().setHi(678);
+    root.getBUnion().setBar(678);
 
     auto encoded = json.encode(root.asReader());
     KJ_EXPECT(encoded == GOLDEN_ANNOTATED, encoded);

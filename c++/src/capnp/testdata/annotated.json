@@ -17,4 +17,4 @@
   "testBase64": "ZnJlZA==",
   "testHex": "706c756768",
   "bUnion": "renamed-bar",
-  "bValue": {"hi": 678} }
+  "bValue": 678 }

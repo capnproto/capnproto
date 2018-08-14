@@ -25,13 +25,13 @@
 #include <errno.h>   // for strtod errors
 #include <unordered_map>
 #include <map>
-#include <set>
 #include <capnp/orphan.h>
 #include <kj/debug.h>
 #include <kj/function.h>
 #include <kj/vector.h>
 #include <kj/one-of.h>
 #include <kj/encoding.h>
+#include <kj/map.h>
 
 namespace capnp {
 
@@ -1126,7 +1126,7 @@ public:
   void decode(const JsonCodec& codec, JsonValue::Reader input,
               DynamicStruct::Builder output) const override {
     KJ_REQUIRE(input.isObject());
-    std::set<const void*> unionsSeen;
+    kj::HashMap<const void*, StructSchema::Field> unionsSeen;
     kj::Vector<JsonValue::Field::Reader> retries;
     for (auto field: input.getObject()) {
       if (!decodeField(codec, field.getName(), field.getValue(), output, unionsSeen)) {
@@ -1261,7 +1261,8 @@ private:
   }
 
   bool decodeField(const JsonCodec& codec, kj::StringPtr name, JsonValue::Reader value,
-                   DynamicStruct::Builder output, std::set<const void*>& unionsSeen) const {
+                   DynamicStruct::Builder output,
+                   kj::HashMap<const void*, StructSchema::Field>& unionsSeen) const {
     KJ_ASSERT(output.getSchema() == schema);
 
     auto iter = fieldsByName.find(name);
@@ -1287,36 +1288,36 @@ private:
 
         // Mark that we've seen a union tag for this struct.
         const void* ptr = getUnionInstanceIdentifier(output);
-        KJ_REQUIRE(unionsSeen.insert(ptr).second, "Duplicate field name.");
-
         auto iter = unionTagValues.find(value.getString());
         if (iter != unionTagValues.end()) {
-          output.init(iter->second);
+          unionsSeen.insert(ptr, iter->second);
         }
         return true;
       }
       case FieldNameInfo::FLATTENED_FROM_UNION: {
         const void* ptr = getUnionInstanceIdentifier(output);
-        if (unionsSeen.count(ptr) == 0) {
+        KJ_IF_MAYBE(variant, unionsSeen.find(ptr)) {
+          bool alreadyInitialized = output.which()
+              .map([&](auto f) { return f == *variant; })
+              .orDefault(false);
+          auto child = alreadyInitialized ? output.get(*variant) : output.init(*variant);
+          return KJ_ASSERT_NONNULL(fields[variant->getIndex()].flattenHandler)
+              .decodeField(codec, name.slice(info.prefixLength), value,
+                  child.as<DynamicStruct>(), unionsSeen);
+        } else {
           // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
           return false;
         }
-
-        auto variant = KJ_ASSERT_NONNULL(output.which());
-        return KJ_ASSERT_NONNULL(fields[variant.getIndex()].flattenHandler)
-            .decodeField(codec, name.slice(info.prefixLength), value,
-                output.get(variant).as<DynamicStruct>(), unionsSeen);
       }
       case FieldNameInfo::UNION_VALUE: {
         const void* ptr = getUnionInstanceIdentifier(output);
-        if (unionsSeen.count(ptr) == 0) {
+        KJ_IF_MAYBE(variant, unionsSeen.find(ptr)) {
+          codec.decodeField(*variant, value, Orphanage::getForMessageContaining(output), output);
+          return true;
+        } else {
           // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
           return false;
         }
-
-        auto variant = KJ_ASSERT_NONNULL(output.which());
-        codec.decodeField(variant, value, Orphanage::getForMessageContaining(output), output);
-        return true;
       }
     }
 
