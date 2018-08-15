@@ -806,10 +806,10 @@ inline uint StructSchema::Field::hashCode() const {
   return kj::hashCode(parent, index);
 }
 inline uint EnumSchema::Enumerant::hashCode() const {
-  return kj::hashCode(parent, index);
+  return kj::hashCode(parent, ordinal);
 }
 inline uint InterfaceSchema::Method::hashCode() const {
-  return kj::hashCode(parent, index);
+  return kj::hashCode(parent, ordinal);
 }
 
 inline ListSchema ListSchema::of(StructSchema elementType) {
