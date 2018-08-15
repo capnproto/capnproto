@@ -77,7 +77,7 @@ annotation flatten @0x82d3e852af0336bf (field, group, union): FlattenOptions;
 # Specifies that an aggregate field should be flattened into its parent.
 #
 # In order to flatten a member of a union, the union (or, for an anonymous union, the parent
-# struct type) must have the $jsonDiscribinator annotation.
+# struct type) must have the $jsonDiscriminator annotation.
 #
 # TODO(someday): Maybe support "flattening" a List(Value.Field) as a way to support unknown JSON
 #   fields?
