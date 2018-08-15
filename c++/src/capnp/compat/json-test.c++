@@ -845,10 +845,12 @@ R"({ "names-can_contain!anything Really": "foo",
   "testHex": "706c756768",
   "bUnion": "renamed-bar",
   "bValue": 678,
-  "externalUnion": {"type": "bar", "value": "cba"} })"_kj;
+  "externalUnion": {"type": "bar", "value": "cba"},
+  "unionWithVoid": {"type": "voidValue"} })"_kj;
 
 static constexpr kj::StringPtr GOLDEN_ANNOTATED_REVERSE =
 R"({
+  "unionWithVoid": {"type": "voidValue"},
   "externalUnion": {"type": "bar", "value": "cba"},
   "bValue": 678,
   "bUnion": "renamed-bar",
@@ -943,6 +945,8 @@ KJ_TEST("rename fields") {
     root.getBUnion().setBar(678);
 
     root.initExternalUnion().initBar().setValue("cba");
+
+    root.initUnionWithVoid().setVoidValue();
 
     auto encoded = json.encode(root.asReader());
     KJ_EXPECT(encoded == GOLDEN_ANNOTATED, encoded);

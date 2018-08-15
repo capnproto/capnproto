@@ -262,6 +262,11 @@ class HashSet: public Table<Element, HashIndex<_::HashSetCallbacks>> {
 
 public:
   // Everything is inherited.
+
+  template <typename... Params>
+  inline bool contains(Params&&... params) const {
+    return this->find(kj::fwd<Params>(params)...) != nullptr;
+  }
 };
 
 template <typename Element>

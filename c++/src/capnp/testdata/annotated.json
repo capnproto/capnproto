@@ -18,4 +18,5 @@
   "testHex": "706c756768",
   "bUnion": "renamed-bar",
   "bValue": 678,
-  "externalUnion": {"type": "bar", "value": "cba"} }
+  "externalUnion": {"type": "bar", "value": "cba"},
+  "unionWithVoid": {"type": "voidValue"} }

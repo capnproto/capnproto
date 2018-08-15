@@ -1116,7 +1116,7 @@ public:
   void decode(const JsonCodec& codec, JsonValue::Reader input,
               DynamicStruct::Builder output) const override {
     KJ_REQUIRE(input.isObject());
-    kj::HashMap<const void*, StructSchema::Field> unionsSeen;
+    kj::HashSet<const void*> unionsSeen;
     kj::Vector<JsonValue::Field::Reader> retries;
     for (auto field: input.getObject()) {
       if (!decodeField(codec, field.getName(), field.getValue(), output, unionsSeen)) {
@@ -1244,15 +1244,19 @@ private:
       KJ_IF_MAYBE(handler, info.flattenHandler) {
         handler->gatherForEncode(codec, reader.get(*which), prefix, info.prefix, flattenedFields);
       } else {
-        flattenedFields.add(FlattenedField {
-            prefix, info.name, which->getType(), reader.get(*which) });
+        auto type = which->getType();
+        if (type.which() == schema::Type::VOID && unionTagName != nullptr) {
+          // When we have an explicit union discriminant, we don't need to encode void fields.
+        } else {
+          flattenedFields.add(FlattenedField {
+              prefix, info.name, which->getType(), reader.get(*which) });
+        }
       }
     }
   }
 
   bool decodeField(const JsonCodec& codec, kj::StringPtr name, JsonValue::Reader value,
-                   DynamicStruct::Builder output,
-                   kj::HashMap<const void*, StructSchema::Field>& unionsSeen) const {
+                   DynamicStruct::Builder output, kj::HashSet<const void*>& unionsSeen) const {
     KJ_ASSERT(output.getSchema() == schema);
 
     KJ_IF_MAYBE(info, fieldsByName.find(name)) {
@@ -1273,20 +1277,20 @@ private:
           // Mark that we've seen a union tag for this struct.
           const void* ptr = getUnionInstanceIdentifier(output);
           KJ_IF_MAYBE(field, unionTagValues.find(value.getString())) {
-            unionsSeen.insert(ptr, *field);
+            // clear() has the side-effect of activating this member of the union, without
+            // allocating any objects.
+            output.clear(*field);
+            unionsSeen.insert(ptr);
           }
           return true;
         }
         case FieldNameInfo::FLATTENED_FROM_UNION: {
           const void* ptr = getUnionInstanceIdentifier(output);
-          KJ_IF_MAYBE(variant, unionsSeen.find(ptr)) {
-            bool alreadyInitialized = output.which()
-                .map([&](auto f) { return f == *variant; })
-                .orDefault(false);
-            auto child = alreadyInitialized ? output.get(*variant) : output.init(*variant);
-            return KJ_ASSERT_NONNULL(fields[variant->getIndex()].flattenHandler)
+          if (unionsSeen.contains(ptr)) {
+            auto variant = KJ_ASSERT_NONNULL(output.which());
+            return KJ_ASSERT_NONNULL(fields[variant.getIndex()].flattenHandler)
                 .decodeField(codec, name.slice(info->prefixLength), value,
-                    child.as<DynamicStruct>(), unionsSeen);
+                    output.get(variant).as<DynamicStruct>(), unionsSeen);
           } else {
             // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
             return false;
@@ -1294,8 +1298,9 @@ private:
         }
         case FieldNameInfo::UNION_VALUE: {
           const void* ptr = getUnionInstanceIdentifier(output);
-          KJ_IF_MAYBE(variant, unionsSeen.find(ptr)) {
-            codec.decodeField(*variant, value, Orphanage::getForMessageContaining(output), output);
+          if (unionsSeen.contains(ptr)) {
+            auto variant = KJ_ASSERT_NONNULL(output.which());
+            codec.decodeField(variant, value, Orphanage::getForMessageContaining(output), output);
             return true;
           } else {
             // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
