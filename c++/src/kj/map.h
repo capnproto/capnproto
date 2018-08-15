@@ -44,8 +44,8 @@ public:
   void reserve(size_t size);
   // Pre-allocates space for a map of the given size.
 
-  size_t size();
-  size_t capacity();
+  size_t size() const;
+  size_t capacity() const;
   void clear();
 
   struct Entry {
@@ -136,8 +136,8 @@ public:
   void reserve(size_t size);
   // Pre-allocates space for a map of the given size.
 
-  size_t size();
-  size_t capacity();
+  size_t size() const;
+  size_t capacity() const;
   void clear();
 
   struct Entry {
@@ -262,6 +262,11 @@ class HashSet: public Table<Element, HashIndex<_::HashSetCallbacks>> {
 
 public:
   // Everything is inherited.
+
+  template <typename... Params>
+  inline bool contains(Params&&... params) const {
+    return this->find(kj::fwd<Params>(params)...) != nullptr;
+  }
 };
 
 template <typename Element>
@@ -281,11 +286,11 @@ void HashMap<Key, Value>::reserve(size_t size) {
 }
 
 template <typename Key, typename Value>
-size_t HashMap<Key, Value>::size() {
+size_t HashMap<Key, Value>::size() const {
   return table.size();
 }
 template <typename Key, typename Value>
-size_t HashMap<Key, Value>::capacity() {
+size_t HashMap<Key, Value>::capacity() const {
   return table.capacity();
 }
 template <typename Key, typename Value>
@@ -373,11 +378,11 @@ void TreeMap<Key, Value>::reserve(size_t size) {
 }
 
 template <typename Key, typename Value>
-size_t TreeMap<Key, Value>::size() {
+size_t TreeMap<Key, Value>::size() const {
   return table.size();
 }
 template <typename Key, typename Value>
-size_t TreeMap<Key, Value>::capacity() {
+size_t TreeMap<Key, Value>::capacity() const {
   return table.capacity();
 }
 template <typename Key, typename Value>

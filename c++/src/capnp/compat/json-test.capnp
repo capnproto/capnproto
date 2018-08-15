@@ -82,11 +82,30 @@ struct TestJsonAnnotations {
     foo @20 :Text;
     bar @21 :UInt32 $Json.name("renamed-bar");
   }
+
+  externalUnion @22 :TestJsonAnnotations3;
+
+  unionWithVoid :union $Json.discriminator(name = "type") {
+    intValue @23 :UInt32;
+    voidValue @24 :Void;
+    textValue @25 :Text;
+  }
 }
 
 struct TestJsonAnnotations2 {
   foo @0 :Text $Json.name("renamed-foo");
   cycle @1 :TestJsonAnnotations;
+}
+
+struct TestJsonAnnotations3 $Json.discriminator(name = "type") {
+  union {
+    foo @0 :UInt32;
+    bar @1 :TestFlattenedStruct $Json.flatten();
+  }
+}
+
+struct TestFlattenedStruct {
+  value @0 :Text;
 }
 
 enum TestJsonAnnotatedEnum {
