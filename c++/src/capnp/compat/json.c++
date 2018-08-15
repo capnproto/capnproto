@@ -1014,6 +1014,11 @@ public:
         if (flattened) {
           info.flattenHandler = subHandler;
         }
+      } else if (type.isStruct()) {
+        if (flattened) {
+          info.flattenHandler = codec.loadAnnotatedHandler(
+              type.asStruct(), nullptr, nullptr, dependencies);
+        }
       }
 
       bool isUnionMember = fieldProto.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
