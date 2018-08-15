@@ -860,13 +860,17 @@ void JsonCodec::HandlerBase::decodeStructBase(
 }
 
 void JsonCodec::addTypeHandlerImpl(Type type, HandlerBase& handler) {
-  impl->typeHandlers.insert(type, &handler);
+  impl->typeHandlers.upsert(type, &handler, [](HandlerBase*& existing, HandlerBase* replacement) {
+    KJ_REQUIRE(existing == replacement, "type already has a different registered handler");
+  });
 }
 
 void JsonCodec::addFieldHandlerImpl(StructSchema::Field field, Type type, HandlerBase& handler) {
   KJ_REQUIRE(type == field.getType(),
       "handler type did not match field type for addFieldHandler()");
-  impl->fieldHandlers.insert(field, &handler);
+  impl->fieldHandlers.upsert(field, &handler, [](HandlerBase*& existing, HandlerBase* replacement) {
+    KJ_REQUIRE(existing == replacement, "field already has a different registered handler");
+  });
 }
 
 // =======================================================================================
