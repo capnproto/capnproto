@@ -16,12 +16,12 @@ set(kj_sources_lite
   main.c++
   arena.c++
   test-helpers.c++
+  units.c++
+  encoding.c++
 )
 set(kj_sources_heavy
-  units.c++
   refcount.c++
   string-tree.c++
-  encoding.c++
   time.c++
   filesystem.c++
   filesystem-disk-unix.c++
