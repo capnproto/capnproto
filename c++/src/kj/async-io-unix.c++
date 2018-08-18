@@ -906,7 +906,6 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
         }
 
         SocketAddress addr;
-        memset(&addr, 0, sizeof(addr));  // mollify valgrind
         if (params.host == "*") {
           // Set up a wildcard SocketAddress.  Only use the port number returned by getaddrinfo().
           addr.wildcard = true;

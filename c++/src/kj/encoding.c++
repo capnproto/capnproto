@@ -249,6 +249,13 @@ EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
 
 namespace {
 
+#if __GNUC__ >= 8 && !__clang__
+// GCC 8's new class-memaccess warning rightly dislikes the following hacks, but we're really sure
+// we want to allow them so disable the warning.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+
 template <typename To, typename From>
 Array<To> coerceTo(Array<From>&& array) {
   static_assert(sizeof(To) == sizeof(From), "incompatible coercion");
@@ -268,6 +275,10 @@ template <typename To, typename From>
 EncodingResult<Array<To>> coerceTo(EncodingResult<Array<From>>&& result) {
   return { coerceTo<To>(Array<From>(kj::mv(result))), result.hadErrors };
 }
+
+#if __GNUC__ >= 8 && !__clang__
+#pragma GCC diagnostic pop
+#endif
 
 template <size_t s>
 struct WideConverter;
