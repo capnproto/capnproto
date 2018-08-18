@@ -31,8 +31,15 @@ EXTRA_DIST =                                                                 \
   src/capnp/testdata/pretty.txt                                              \
   src/capnp/testdata/lists.binary                                            \
   src/capnp/testdata/packedflat                                              \
+  src/capnp/testdata/pretty.json                                             \
+  src/capnp/testdata/short.json                                              \
+  src/capnp/testdata/annotated-json.binary                                   \
+  src/capnp/testdata/annotated.json                                          \
   CMakeLists.txt                                                             \
-  cmake/FindCapnProto.cmake                                                  \
+  cmake/CapnProtoMacros.cmake                                                \
+  cmake/CapnProtoTargets.cmake                                               \
+  cmake/CapnProtoConfig.cmake.in                                             \
+  cmake/CapnProtoConfigVersion.cmake.in                                      \
   src/CMakeLists.txt                                                         \
   src/kj/CMakeLists.txt                                                      \
   src/capnp/CMakeLists.txt
@@ -120,7 +127,8 @@ cmakeconfig_DATA = $(CAPNP_CMAKE_CONFIG_FILES)                 \
   cmake/CapnProtoTargets.cmake
 
 noinst_HEADERS = \
-  src/kj/miniposix.h
+  src/kj/miniposix.h \
+  src/kj/async-io-internal.h
 
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
@@ -168,7 +176,10 @@ includekjstd_HEADERS =                                         \
 includekjcompat_HEADERS =                                      \
   src/kj/compat/gtest.h                                        \
   src/kj/compat/url.h                                          \
-  src/kj/compat/http.h
+  src/kj/compat/http.h                                         \
+  src/kj/compat/gzip.h                                         \
+  src/kj/compat/readiness-io.h                                 \
+  src/kj/compat/tls.h
 
 includecapnp_HEADERS =                                         \
   src/capnp/c++.capnp.h                                        \
@@ -265,7 +276,8 @@ libkj_http_la_LIBADD = libkj-async.la libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_http_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_http_la_SOURCES=                                         \
   src/kj/compat/url.c++                                        \
-  src/kj/compat/http.c++
+  src/kj/compat/http.c++                                       \
+  src/kj/compat/gzip.c++
 endif !LITE_MODE
 
 if !LITE_MODE
@@ -438,6 +450,7 @@ heavy_tests =                                                  \
   src/kj/std/iostream-test.c++                                 \
   src/kj/compat/url-test.c++                                   \
   src/kj/compat/http-test.c++                                  \
+  src/kj/compat/gzip-test.c++                                  \
   src/capnp/canonicalize-test.c++                              \
   src/capnp/capability-test.c++                                \
   src/capnp/membrane-test.c++                                  \
