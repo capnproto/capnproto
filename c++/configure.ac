@@ -22,6 +22,11 @@ AC_ARG_WITH([external-capnp],
      one (useful for cross-compiling)])],
   [external_capnp=yes],[external_capnp=no])
 
+AC_ARG_WITH([openssl],
+  [AS_HELP_STRING([--with-openssl],
+    [build libkj-tls by linking against openssl @<:@default=check@:>@])],
+  [],[with_openssl=check])
+
 AC_ARG_ENABLE([reflection], [
   AS_HELP_STRING([--disable-reflection], [
     compile Cap'n Proto in "lite mode", in which all reflection APIs (schema.h, dynamic.h, etc.)
@@ -134,6 +139,28 @@ AC_SUBST([PACKAGE_CMAKE_INSTALL_FULL_INCLUDEDIR])
 # CMAKE_SIZEOF_VOID_P output variables.
 AC_CHECK_SIZEOF([void *])
 AC_SUBST(CMAKE_SIZEOF_VOID_P, $ac_cv_sizeof_void_p)
+
+# Detect presence of OpenSSL, if it was not specified explicitly.
+AS_IF([test "$with_openssl" = check], [
+  AC_CHECK_LIB(crypto, CRYPTO_new_ex_data, [:], [
+    with_openssl=no
+  ])
+  AC_CHECK_LIB(ssl, OPENSSL_init_ssl, [:], [
+    with_openssl=no
+  ], [-lcrypto])
+  AC_CHECK_HEADER([openssl/ssl.h], [:], [
+    with_openssl=no
+  ])
+  AS_IF([test "$with_openssl" = no], [
+    AC_MSG_WARN("could not find OpenSSL -- won't build libkj-tls")
+  ], [
+    with_openssl=yes
+  ])
+])
+AS_IF([test "$with_openssl" != no], [
+  CXXFLAGS="$CXXFLAGS -DKJ_HAS_OPENSSL"
+])
+AM_CONDITIONAL([BUILD_KJ_TLS], [test "$with_openssl" != no])
 
 AC_CONFIG_FILES([Makefile] CAPNP_PKG_CONFIG_FILES CAPNP_CMAKE_CONFIG_FILES)
 AC_OUTPUT

@@ -219,10 +219,20 @@ includecapnpcompat_HEADERS =                                   \
   src/capnp/compat/json.h                                      \
   src/capnp/compat/json.capnp.h
 
+if BUILD_KJ_TLS
+MAYBE_KJ_TLS_LA=libkj-tls.la
+MAYBE_KJ_TLS_TESTS=                                            \
+  src/kj/compat/readiness-io-test.c++                          \
+  src/kj/compat/tls-test.c++
+else
+MAYBE_KJ_TLS_LA=
+MAYBE_KJ_TLS_TESTS=
+endif
+
 if LITE_MODE
 lib_LTLIBRARIES = libkj.la libkj-test.la libcapnp.la
 else
-lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
+lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la $(MAYBE_KJ_TLS_LA) libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
 endif
 
 # Don't include security release in soname -- we want to replace old binaries
@@ -278,6 +288,13 @@ libkj_http_la_SOURCES=                                         \
   src/kj/compat/url.c++                                        \
   src/kj/compat/http.c++                                       \
   src/kj/compat/gzip.c++
+
+libkj_tls_la_LIBADD = libkj-async.la libkj.la -lssl -lcrypto $(ASYNC_LIBS) $(PTHREAD_LIBS)
+libkj_tls_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
+libkj_tls_la_SOURCES=                                          \
+  src/kj/compat/readiness-io.c++                               \
+  src/kj/compat/tls.c++
+
 endif !LITE_MODE
 
 if !LITE_MODE
@@ -451,6 +468,7 @@ heavy_tests =                                                  \
   src/kj/compat/url-test.c++                                   \
   src/kj/compat/http-test.c++                                  \
   src/kj/compat/gzip-test.c++                                  \
+  $(MAYBE_KJ_TLS_TESTS)                                        \
   src/capnp/canonicalize-test.c++                              \
   src/capnp/capability-test.c++                                \
   src/capnp/membrane-test.c++                                  \
@@ -474,6 +492,7 @@ capnp_test_LDADD =                                             \
   libcapnp-json.la                                             \
   libcapnp.la                                                  \
   libkj-http.la                                                \
+  $(MAYBE_KJ_TLS_LA)                                           \
   libkj-async.la                                               \
   libkj-test.la                                                \
   libkj.la                                                     \
