@@ -251,11 +251,12 @@ String PathPtr::toWin32StringImpl(bool absolute, bool forApi) const {
       for (size_t i = 0; i < p.size(); i++) {
         *ptr++ = '|';
       }
-      continue;
+      goto skip;
     }
 
     memcpy(ptr, p.begin(), p.size());
     ptr += p.size();
+  skip:;
   }
 
   KJ_ASSERT(ptr == result.end());
@@ -274,6 +275,7 @@ String PathPtr::toWin32StringImpl(bool absolute, bool forApi) const {
             result) {
           // Recover by using a different character which we know Win32 syscalls will reject.
           result[i] = '|';
+          break;
         }
       }
     }

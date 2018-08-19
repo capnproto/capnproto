@@ -98,7 +98,7 @@ private:
 #if KJ_NO_EXCEPTIONS
 #define KJ_EXPECT_THROW(type, code) \
   do { \
-    KJ_EXPECT(::kj::_::expectFatalThrow(type, nullptr, [&]() { code; })); \
+    KJ_EXPECT(::kj::_::expectFatalThrow(::kj::Exception::Type::type, nullptr, [&]() { code; })); \
   } while (false)
 #define KJ_EXPECT_THROW_MESSAGE(message, code) \
   do { \

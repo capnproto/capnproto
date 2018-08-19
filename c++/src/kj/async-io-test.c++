@@ -910,7 +910,7 @@ KJ_TEST("Userland pipe with limit") {
     KJ_EXPECT(!promise.poll(ws));
     auto promise2 = pipe.out->write("barbaz", 6);
     KJ_EXPECT(promise.wait(ws) == "bar");
-    KJ_EXPECT_THROW_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
   }
 
   // Further writes throw and reads return EOF.
@@ -939,7 +939,7 @@ KJ_TEST("Userland pipe pumpTo with limit") {
     auto promise2 = pipe.out->write("barbaz", 6);
     promise.wait(ws);
     pumpPromise.wait(ws);
-    KJ_EXPECT_THROW_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
   }
 
   // Further writes throw.
