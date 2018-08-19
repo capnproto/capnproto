@@ -782,8 +782,10 @@ public:
   }
 
 private:
-  SocketAddress(): addrlen(0) {
-    memset(&addr, 0, sizeof(addr));
+  SocketAddress() {
+    // We need to memset the whole object 0 otherwise Valgrind gets unhappy when we write it to a
+    // pipe, due to the padding bytes being uninitialized.
+    memset(this, 0, sizeof(*this));
   }
 
   socklen_t addrlen;

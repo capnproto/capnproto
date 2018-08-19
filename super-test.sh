@@ -516,7 +516,7 @@ if [ "x`uname`" != xDarwin ] && which valgrind > /dev/null; then
   # Running the fuzz tests under Valgrind is a great thing to do -- but it takes
   # some 40 minutes. So, it needs to be done as a separate step of the release
   # process, perhaps along with the AFL tests.
-  CAPNP_SKIP_FUZZ_TEST=1 doit valgrind --leak-check=full --track-fds=yes --error-exitcode=1 ./capnp-test
+  CAPNP_SKIP_FUZZ_TEST=1 doit valgrind --leak-check=full --track-fds=yes --error-exitcode=1 --child-silent-after-fork=yes --sim-hints=lax-ioctls ./capnp-test
 fi
 
 doit make maintainer-clean
