@@ -451,7 +451,7 @@ if [ "x`uname -m`" = "xx86_64" ]; then
     doit make distclean
 
   elif [ "x${CXX:-g++}" != "xg++-4.8" ]; then
-    doit ./configure CXX="${CXX:-g++} -m32" --disable-shared
+    doit ./configure CXX="${CXX:-g++} -m32" CXXFLAGS="$CXXFLAGS ${ADDL_M32_FLAGS:-}" --disable-shared
     doit make -j$PARALLEL check
     doit make distclean
   fi
