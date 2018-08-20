@@ -249,6 +249,13 @@ private:
 
 // -------------------------------------------------------------------
 
+#if __GNUC__ >= 8 && !__clang__
+// GCC 8's class-memaccess warning rightly does not like the memcpy()'s below, but there's no
+// "legal" way for us to extract the contetn of a PTMF so too bad.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+
 class PtmfHelper {
   // This class is a private helper for GetFunctorStartAddress. The class represents the internal
   // representation of a pointer-to-member-function.
@@ -309,6 +316,10 @@ class PtmfHelper {
   // necessary to be precise about P.
 #undef BODY
 };
+
+#if __GNUC__ >= 8 && !__clang__
+#pragma GCC diagnostic pop
+#endif
 
 template <typename... ParamTypes>
 struct GetFunctorStartAddress {

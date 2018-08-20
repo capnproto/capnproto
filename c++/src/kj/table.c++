@@ -809,7 +809,7 @@ const InsertionOrderIndex::Link InsertionOrderIndex::EMPTY_LINK = { 0, 0 };
 
 InsertionOrderIndex::InsertionOrderIndex(): capacity(0), links(const_cast<Link*>(&EMPTY_LINK)) {}
 InsertionOrderIndex::~InsertionOrderIndex() noexcept(false) {
-  if (links != &EMPTY_LINK) delete links;
+  if (links != &EMPTY_LINK) delete[] links;
 }
 
 void InsertionOrderIndex::reserve(size_t size) {

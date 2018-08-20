@@ -382,7 +382,7 @@ Orphan<DynamicList> JsonCodec::decodeArray(List<JsonValue>::Reader input, ListSc
 }
 
 void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const {
-  KJ_REQUIRE(input.isObject(), "Expected object value");
+  KJ_REQUIRE(input.isObject(), "Expected object value") { return; }
   for (auto field: input.getObject()) {
     KJ_IF_MAYBE(fieldSchema, type.findFieldByName(field.getName())) {
       decodeField(*fieldSchema, field.getValue(), orphanage, output);
@@ -495,14 +495,16 @@ Orphan<DynamicValue> JsonCodec::decode(
         case JsonValue::ARRAY:
           return decodeArray(input.getArray(), type.asList(), orphanage);
         default:
-          KJ_FAIL_REQUIRE("Expected list value");
+          KJ_FAIL_REQUIRE("Expected list value") { break; }
+          return orphanage.newOrphan(type.asList(), 0);
       }
     case schema::Type::ENUM:
       switch (input.which()) {
         case JsonValue::STRING:
           return DynamicEnum(type.asEnum().getEnumerantByName(input.getString()));
         default:
-          KJ_FAIL_REQUIRE("Expected enum value");
+          KJ_FAIL_REQUIRE("Expected enum value") { break; }
+          return DynamicEnum(type.asEnum(), 0);
       }
     case schema::Type::STRUCT: {
       auto structType = type.asStruct();

@@ -75,6 +75,7 @@ void X509_up_ref(X509* x509) {
 
 #endif
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 class OpenSslInit {
   // Initializes the OpenSSL library.
 public:
@@ -89,6 +90,11 @@ void ensureOpenSslInitialized() {
   // Initializes the OpenSSL library the first time it is called.
   static OpenSslInit init;
 }
+#else
+inline void ensureOpenSslInitialized() {
+  // As of 1.1.0, no initialization is needed.
+}
+#endif
 
 // =======================================================================================
 // Implementation of kj::AsyncIoStream that applies TLS on top of some other AsyncIoStream.

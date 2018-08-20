@@ -41,9 +41,9 @@
 
 #if !KJ_NO_RTTI
 #include <typeinfo>
+#endif
 #if __GNUC__
 #include <cxxabi.h>
-#endif
 #endif
 
 #if (__linux__ && __GLIBC__ && !__UCLIBC__) || __APPLE__

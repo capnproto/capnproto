@@ -597,7 +597,7 @@ TEST(Async, Canceler) {
 
   canceler.cancel("foobar");
 
-  KJ_EXPECT_THROW_MESSAGE("foobar", never.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar", never.wait(waitScope));
   now.wait(waitScope);
   KJ_EXPECT_THROW_MESSAGE("foobar", neverI.wait(waitScope));
   KJ_EXPECT(nowI.wait(waitScope) == 123u);

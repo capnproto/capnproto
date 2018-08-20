@@ -1730,7 +1730,7 @@ KJ_TEST("WebSocket pump disconnect on send") {
   pipe2.ends[1] = nullptr;
 
   // Pump throws disconnected.
-  KJ_EXPECT_THROW(DISCONNECTED, pumpTask.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, pumpTask.wait(waitScope));
 
   // client1 managed to send its whole message into the pump, though.
   sendTask.wait(waitScope);
@@ -2659,7 +2659,9 @@ public:
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     if (!headers.isWebSocket()) {
-      KJ_ASSERT(url != "/throw");
+      if (url == "/throw") {
+        return KJ_EXCEPTION(FAILED, "client requested failure");
+      }
 
       auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
       auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
