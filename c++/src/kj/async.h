@@ -546,7 +546,7 @@ public:
   // Releases previously-wrapped promises, so that they will not be canceled regardless of what
   // happens to this Canceler.
 
-  bool isEmpty() { return list == nullptr; }
+  bool isEmpty() const { return list == nullptr; }
   // Indicates if any previously-wrapped promises are still executing. (If this returns false, then
   // cancel() would be a no-op.)
 
