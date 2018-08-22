@@ -72,6 +72,11 @@ namespace {
 #undef SEEK_HOLE
 #endif
 
+#if __BIONIC__
+// No no DTTOIF function
+#undef DT_UNKNOWN
+#endif
+
 static void setCloexec(int fd) KJ_UNUSED;
 static void setCloexec(int fd) {
   // Set the O_CLOEXEC flag on the given fd.
