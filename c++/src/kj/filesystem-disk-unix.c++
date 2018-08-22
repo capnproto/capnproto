@@ -72,8 +72,8 @@ namespace {
 #undef SEEK_HOLE
 #endif
 
-#if __ANDROID__
-// no DTTOIF function
+#if __BIONIC__
+// No no DTTOIF function
 #undef DT_UNKNOWN
 #endif
 
