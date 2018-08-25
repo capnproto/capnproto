@@ -2853,6 +2853,17 @@ void StructBuilder::transferContentFrom(StructBuilder other) {
 void StructBuilder::copyContentFrom(StructReader other) {
   // Determine the amount of data the builders have in common.
   auto sharedDataSize = kj::min(dataSize, other.dataSize);
+  auto sharedPointerCount = kj::min(pointerCount, other.pointerCount);
+
+  if ((sharedDataSize > ZERO * BITS && other.data == data) ||
+      (sharedPointerCount > ZERO * POINTERS && other.pointers == pointers)) {
+    // At least one of the section pointers is pointing to ourself. Verify that the other is two
+    // (but ignore empty sections).
+    KJ_ASSERT((sharedDataSize == ZERO * BITS || other.data == data) &&
+              (sharedPointerCount == ZERO * POINTERS || other.pointers == pointers));
+    // So `other` appears to be a reader for this same struct. No coping is needed.
+    return;
+  }
 
   if (dataSize > sharedDataSize) {
     // Since the target is larger than the source, make sure to zero out the extra bits that the
@@ -2882,7 +2893,6 @@ void StructBuilder::copyContentFrom(StructReader other) {
   WireHelpers::zeroMemory(pointers, pointerCount);
 
   // Copy the pointers.
-  auto sharedPointerCount = kj::min(pointerCount, other.pointerCount);
   for (auto i: kj::zeroTo(sharedPointerCount)) {
     WireHelpers::copyPointer(segment, capTable, pointers + i,
         other.segment, other.capTable, other.pointers + i, other.nestingLimit);
