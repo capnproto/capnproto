@@ -41,7 +41,7 @@
 namespace capnp {
 
 #define CAPNP_VERSION_MAJOR 0
-#define CAPNP_VERSION_MINOR 7
+#define CAPNP_VERSION_MINOR 8
 #define CAPNP_VERSION_MICRO 0
 
 #define CAPNP_VERSION \
