@@ -13,7 +13,7 @@ addons:
       - libtool
       - pkg-config
 # limit parallelism due to limited memory on Travis
-script: CC=$MATRIX_CC CXX=$MATRIX_CXX ./super-test.sh -j2 quick
+script: CC=$MATRIX_CC CXX=$MATRIX_CXX ./super-test.sh -j2
 
 matrix:
   include:
