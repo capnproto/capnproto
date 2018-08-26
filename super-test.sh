@@ -126,7 +126,9 @@ while [ $# -gt 0 ]; do
     android )
       # To install Android SDK:
       # - Download command-line tools: https://developer.android.com/studio/index.html#command-tools
+      # - export SDKMANAGER_OPTS="--add-modules java.se.ee"
       # - Run $SDK_HOME/tools/bin/sdkmanager platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
+      # - export AVDMANAGER_OPTS="--add-modules java.se.ee"
       # - Run $SDK_HOME/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
       # - Run $SDK_HOME/ndk-bundle/build/tools/make_standalone_toolchain.py --arch arm --api 24 --install-dir $TOOLCHAIN_HOME
       if [ "$#" -ne 4 ]; then
@@ -148,7 +150,7 @@ while [ $# -gt 0 ]; do
 
       export PATH="$TOOLCHAIN_HOME/bin:$PATH"
       doit make distclean
-      doit ./configure --host="$CROSS_HOST" --with-external-capnp --disable-shared CXXFLAGS='-pie -fPIE' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
+      doit ./configure --host="$CROSS_HOST" CC=clang CXX=clang++ --with-external-capnp --disable-shared CXXFLAGS='-fPIE' LDFLAGS='-pie' LIBS='-static-libstdc++ -static-libgcc -ldl' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
 
       doit make -j$PARALLEL
       doit make -j$PARALLEL capnp-test
