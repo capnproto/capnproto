@@ -283,7 +283,7 @@ KJ_TEST("decode all types") {
   CASE(R"({"enumField":"bar"})", root.getEnumField() == TestEnum::BAR);
 
   CASE_NO_ROUNDTRIP(R"({"textField":"foo\u1234bar"})",
-      kj::str("foo\u1234bar") == root.getTextField());
+      kj::str(u8"foo\u1234bar") == root.getTextField());
 
   CASE_THROW_RECOVERABLE(R"({"structField":null})", "Expected object value");
   CASE_THROW_RECOVERABLE(R"({"structList":null})", "Expected list value");
