@@ -72,8 +72,8 @@ constexpr auto NOT_SCHEME_CHARS = SCHEME_CHARS.invert();
 constexpr auto HOST_CHARS = ALPHAS.orGroup(DIGITS).orAny(".-:[]_");
 // [] is for ipv6 literals.
 // _ is not allowed in domain names, but the WHATWG URL spec allows it in hostnames, so we do, too.
-// TODO(soon): The URL spec actually allows a lot more than just '_', and requires nameprepping to
-//   Punycode. We'll have to decide how we want to deal with all that.
+// TODO(someday): The URL spec actually allows a lot more than just '_', and requires nameprepping
+//   to Punycode. We'll have to decide how we want to deal with all that.
 
 void toLower(String& text) {
   for (char& c: text) {

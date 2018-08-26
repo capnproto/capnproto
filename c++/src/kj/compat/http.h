@@ -152,7 +152,7 @@ public:
   //
   //     HttpHeaderId::HOST
   //
-  // TODO(soon): Fill this out with more common headers.
+  // TODO(someday): Fill this out with more common headers.
 
 #define DECLARE_HEADER(id, name) \
   static const HttpHeaderId id;

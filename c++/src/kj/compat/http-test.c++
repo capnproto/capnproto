@@ -2809,11 +2809,11 @@ KJ_TEST("HttpClient connection management") {
   KJ_EXPECT(count == 0);
 
 #if __linux__
-  // TODO(soon): Figure out why this doesn't work on Windows and is flakey on Mac. My guess is that
-  //   the closing of the TCP connection propagates synchronously on Linux so that by the time we
-  //   poll() the EventPort it reports the client end of the connection has reached EOF, whereas on
-  //   Mac and Windows this propagation probably involves some concurrent process which may or may
-  //   not complete before we poll(). A solution in this case would be to use a dummy in-memory
+  // TODO(someday): Figure out why this doesn't work on Windows and is flakey on Mac. My guess is
+  //   that the closing of the TCP connection propagates synchronously on Linux so that by the time
+  //   we poll() the EventPort it reports the client end of the connection has reached EOF, whereas
+  //   on Mac and Windows this propagation probably involves some concurrent process which may or
+  //   may not complete before we poll(). A solution in this case would be to use a dummy in-memory
   //   ConnectionReceiver that returns in-memory pipes (see UnbufferedPipe earlier in this file),
   //   so that we don't rely on any non-local behavior. Another solution would be to pause for
   //   a short time, maybe.

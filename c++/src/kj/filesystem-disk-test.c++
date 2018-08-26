@@ -729,7 +729,7 @@ KJ_TEST("DiskDirectory createTemporary") {
   KJ_EXPECT(dir->listNames() == nullptr);
 }
 
-#if !__CYGWIN__  // TODO(soon): Figure out why this doesn't work on Cygwin.
+#if !__CYGWIN__  // TODO(someday): Figure out why this doesn't work on Cygwin.
 KJ_TEST("DiskDirectory replaceSubdir()") {
   TempDir tempDir;
   auto dir = tempDir.get();
