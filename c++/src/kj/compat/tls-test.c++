@@ -518,7 +518,11 @@ KJ_TEST("TLS client certificate verification") {
 
     auto pipe = test.io.provider->newTwoWayPipe();
 
-    auto clientPromise = test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com");
+    auto clientPromise = test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com")
+        .then([](kj::Own<kj::AsyncIoStream> stream) {
+      auto promise = stream->readAllBytes();
+      return promise.attach(kj::mv(stream));
+    });
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
     KJ_EXPECT_THROW_MESSAGE(
@@ -526,7 +530,7 @@ KJ_TEST("TLS client certificate verification") {
                     "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
         serverPromise.wait(test.io.waitScope));
     KJ_EXPECT_THROW_MESSAGE(
-        SSL_MESSAGE("alert handshake failure",
+        SSL_MESSAGE("alert",  // "alert handshake failure" or "alert certificate required"
                     "SSLV3_ALERT_HANDSHAKE_FAILURE"),
         clientPromise.wait(test.io.waitScope));
   }
@@ -540,7 +544,11 @@ KJ_TEST("TLS client certificate verification") {
 
     auto pipe = test.io.provider->newTwoWayPipe();
 
-    auto clientPromise = test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com");
+    auto clientPromise = test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com")
+        .then([](kj::Own<kj::AsyncIoStream> stream) {
+      auto promise = stream->readAllBytes();
+      return promise.attach(kj::mv(stream));
+    });
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
     KJ_EXPECT_THROW_MESSAGE(
