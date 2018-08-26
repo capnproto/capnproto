@@ -1910,8 +1910,10 @@ KJ_TEST("HttpClient WebSocket handshake") {
   auto headerTable = tableBuilder.build();
 
   FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
 
-  auto client = newHttpClient(*headerTable, *pipe.ends[0], entropySource);
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
 
   testWebSocketClient(waitScope, *headerTable, hMyHeader, *client);
 
@@ -1936,8 +1938,10 @@ KJ_TEST("HttpClient WebSocket error") {
   auto headerTable = tableBuilder.build();
 
   FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
 
-  auto client = newHttpClient(*headerTable, *pipe.ends[0], entropySource);
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
 
   kj::HttpHeaders headers(*headerTable);
   headers.set(hMyHeader, "foo");
@@ -2455,7 +2459,9 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
   {
     HttpHeaderTable table;
     FakeEntropySource entropySource;
-    auto backClient = newHttpClient(table, *backPipe.ends[0], entropySource);
+    HttpClientSettings clientSettings;
+    clientSettings.entropySource = entropySource;
+    auto backClient = newHttpClient(table, *backPipe.ends[0], clientSettings);
     auto frontService = newHttpService(*backClient);
     HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
@@ -2494,7 +2500,9 @@ KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
   {
     HttpHeaderTable table;
     FakeEntropySource entropySource;
-    auto backClient = newHttpClient(table, *backPipe.ends[0], entropySource);
+    HttpClientSettings clientSettings;
+    clientSettings.entropySource = entropySource;
+    auto backClient = newHttpClient(table, *backPipe.ends[0], clientSettings);
     auto frontService = newHttpService(*backClient);
     HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
