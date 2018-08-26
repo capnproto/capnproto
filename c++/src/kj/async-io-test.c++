@@ -504,7 +504,7 @@ TEST(AsyncIo, AbstractUnixSocket) {
   int originalDirFd;
   KJ_SYSCALL(originalDirFd = open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
   KJ_DEFER(close(originalDirFd));
-  KJ_SYSCALL(chdir("/tmp"));
+  KJ_SYSCALL(chdir("/"));
   KJ_DEFER(KJ_SYSCALL(fchdir(originalDirFd)));
 
   addr->connect().attach(kj::mv(listener)).wait(ioContext.waitScope);

@@ -116,7 +116,7 @@ struct JsonCodec::Impl {
         case '\r': escaped.addAll(kj::StringPtr("\\r")); break;
         case '\t': escaped.addAll(kj::StringPtr("\\t")); break;
         default:
-          if (c >= 0 && c < 0x20) {
+          if (static_cast<uint8_t>(c) < 0x20) {
             escaped.addAll(kj::StringPtr("\\u00"));
             uint8_t c2 = c;
             escaped.add(HEXDIGITS[c2 / 16]);
