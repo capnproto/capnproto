@@ -152,7 +152,7 @@ public:
   //
   //     HttpHeaderId::HOST
   //
-  // TODO(soon): Fill this out with more common headers.
+  // TODO(someday): Fill this out with more common headers.
 
 #define DECLARE_HEADER(id, name) \
   static const HttpHeaderId id;
@@ -637,12 +637,6 @@ kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Asyn
 // subsequent requests will fail. If a response takes a long time, it blocks subsequent responses.
 // If a WebSocket is opened successfully, all subsequent requests fail.
 
-kj::Own<HttpClient> newHttpClient(
-    HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
-    kj::Maybe<EntropySource&> entropySource) KJ_DEPRECATED("use HttpClientSettings");
-// Temporary for backwards-compatibilty.
-// TODO(soon): Remove this before next release.
-
 kj::Own<HttpClient> newHttpClient(HttpService& service);
 kj::Own<HttpService> newHttpService(HttpClient& client);
 // Adapts an HttpClient to an HttpService and vice versa.
@@ -800,14 +794,6 @@ inline void HttpHeaders::forEach(Func&& func) const {
   for (auto& header: unindexedHeaders) {
     func(header.name, header.value);
   }
-}
-
-inline kj::Own<HttpClient> newHttpClient(
-    HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
-    kj::Maybe<EntropySource&> entropySource) {
-  HttpClientSettings settings;
-  settings.entropySource = entropySource;
-  return newHttpClient(responseHeaderTable, stream, kj::mv(settings));
 }
 
 }  // namespace kj

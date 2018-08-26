@@ -214,8 +214,8 @@ kj::String JsonCodec::encodeRaw(JsonValue::Reader value) const {
 }
 
 void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const {
-  // TODO(soon): For interfaces, check for handlers on superclasses, per documentation...
-  // TODO(soon): For branded types, should we check for handlers on the generic?
+  // TODO(someday): For interfaces, check for handlers on superclasses, per documentation...
+  // TODO(someday): For branded types, should we check for handlers on the generic?
   // TODO(someday): Allow registering handlers for "all structs", "all lists", etc?
   KJ_IF_MAYBE(handler, impl->typeHandlers.find(type)) {
     (*handler)->encodeBase(*this, input, output);
@@ -828,9 +828,13 @@ private:
       }
     }
 
-    // TODO(soon): Support at least basic multi-lingual plane, ie ignore surrogates.
-    KJ_REQUIRE(codePoint < 128, "non-ASCII unicode escapes are not supported (yet!)");
-    target.add(0x7f & static_cast<char>(codePoint));
+    if (codePoint < 128) {
+      target.add(0x7f & static_cast<char>(codePoint));
+    } else {
+      // TODO(perf): This is sorta malloc-heavy...
+      char16_t u = codePoint;
+      target.addAll(kj::decodeUtf16(kj::arrayPtr(&u, 1)));
+    }
   }
 
   const size_t maxNestingDepth;

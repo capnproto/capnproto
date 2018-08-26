@@ -114,5 +114,3 @@ enum TestJsonAnnotatedEnum {
   baz @2 $Json.name("renamed-baz");
   qux @3;
 }
-
-# TODO(now): enums

@@ -66,7 +66,7 @@ public:
   // non-trivial, assert that the mutex is locked (which should be good enough to catch problems
   // in unit tests).  In non-debug builds, do nothing.
 
-#if KJ_USE_FUTEX    // TODO(soon): Implement on pthread & win32
+#if KJ_USE_FUTEX    // TODO(someday): Implement on pthread & win32
   class Predicate {
   public:
     virtual bool check() = 0;
@@ -263,7 +263,7 @@ public:
   inline T& getAlreadyLockedExclusive() const;
   // Like `getWithoutLock()`, but asserts that the lock is already held by the calling thread.
 
-#if KJ_USE_FUTEX    // TODO(soon): Implement on pthread & win32
+#if KJ_USE_FUTEX    // TODO(someday): Implement on pthread & win32
   template <typename Cond, typename Func>
   auto when(Cond&& condition, Func&& callback) const -> decltype(callback(instance<T&>())) {
     // Waits until condition(state) returns true, then calls callback(state) under lock.

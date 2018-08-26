@@ -1570,7 +1570,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
 
   KJ_IF_MAYBE(te, headers.get(HttpHeaderId::TRANSFER_ENCODING)) {
     // TODO(someday): Support plugable transfer encodings? Or at least gzip?
-    // TODO(soon): Support stacked transfer encodings, e.g. "gzip, chunked".
+    // TODO(someday): Support stacked transfer encodings, e.g. "gzip, chunked".
     if (fastCaseCmp<'c','h','u','n','k','e','d'>(te->cStr())) {
       return kj::heap<HttpChunkedEntityReader>(*this);
     } else {
@@ -1588,7 +1588,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
   }
 
   KJ_IF_MAYBE(c, headers.get(HttpHeaderId::CONNECTION)) {
-    // TODO(soon): Connection header can actually have multiple tokens... but no one ever uses
+    // TODO(someday): Connection header can actually have multiple tokens... but no one ever uses
     //   that feature?
     if (fastCaseCmp<'c','l','o','s','e'>(c->cStr())) {
       return kj::heap<HttpConnectionCloseEntityReader>(*this);

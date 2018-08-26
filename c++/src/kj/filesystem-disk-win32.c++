@@ -1171,7 +1171,7 @@ public:
           candidatePath,
           GENERIC_READ | GENERIC_WRITE,
           0,
-          NULL,   // TODO(soon): makeSecAttr(WriteMode::PRIVATE), when it's implemented
+          NULL,   // TODO(someday): makeSecAttr(WriteMode::PRIVATE), when it's implemented
           CREATE_NEW,
           FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
           NULL);
