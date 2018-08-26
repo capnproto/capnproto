@@ -69,7 +69,7 @@ build_script:
   # Somewhat ridiculously, this requires downloading Cygwin's setup program and running it.
   - if "%BUILD_NAME%"=="cygwin" appveyor DownloadFile "https://cygwin.com/setup-x86_64.exe" -FileName "C:\cygwin64\setup-x86_64.exe"
   - if "%BUILD_NAME%"=="cygwin" C:\cygwin64\setup-x86_64.exe --quiet-mode --no-shortcuts --upgrade-also --root "C:\cygwin64" --packages cmake
-  - if "%BUILD_NAME%"=="cygwin" C:\cygwin64\bin\bash -lc 'cd /cygdrive/c/projects/capnproto; ./super-test.sh -j2'
+  - if "%BUILD_NAME%"=="cygwin" C:\cygwin64\bin\bash -lc 'cd /cygdrive/c/projects/capnproto; ./super-test.sh -j2 quick'
 
 test_script:
   # Sleep a little to prevent interleaving test output with build output.
