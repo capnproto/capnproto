@@ -828,9 +828,13 @@ private:
       }
     }
 
-    // TODO(soon): Support at least basic multi-lingual plane, ie ignore surrogates.
-    KJ_REQUIRE(codePoint < 128, "non-ASCII unicode escapes are not supported (yet!)");
-    target.add(0x7f & static_cast<char>(codePoint));
+    if (codePoint < 128) {
+      target.add(0x7f & static_cast<char>(codePoint));
+    } else {
+      // TODO(perf): This is sorta malloc-heavy...
+      char16_t u = codePoint;
+      target.addAll(kj::decodeUtf16(kj::arrayPtr(&u, 1)));
+    }
   }
 
   const size_t maxNestingDepth;
