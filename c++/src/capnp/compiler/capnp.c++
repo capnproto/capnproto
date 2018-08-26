@@ -1416,7 +1416,8 @@ private:
           break;
       }
 
-      if ((c >= 0 && c < ' ' && c != '\n' && c != '\r' && c != '\t' && c != '\v') || c == 0x7f) {
+      if ((static_cast<uint8_t>(c) < 0x20 && c != '\n' && c != '\r' && c != '\t' && c != '\v')
+          || c == 0x7f) {
         // Unprintable character.
         return IMPOSSIBLE;
       }

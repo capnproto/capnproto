@@ -200,8 +200,14 @@ bool isWine() { return false; }
 #define HOLES_NOT_SUPPORTED 1
 #endif
 
+#if __ANDROID__
+#define VAR_TMP "/data/local/tmp"
+#else
+#define VAR_TMP "/var/tmp"
+#endif
+
 static Own<File> newTempFile() {
-  char filename[] = "/var/tmp/kj-filesystem-test.XXXXXX";
+  char filename[] = VAR_TMP "/kj-filesystem-test.XXXXXX";
   int fd;
   KJ_SYSCALL(fd = mkstemp(filename));
   KJ_DEFER(KJ_SYSCALL(unlink(filename)));
@@ -210,7 +216,7 @@ static Own<File> newTempFile() {
 
 class TempDir {
 public:
-  TempDir(): filename(heapString("/var/tmp/kj-filesystem-test.XXXXXX")) {
+  TempDir(): filename(heapString(VAR_TMP "/kj-filesystem-test.XXXXXX")) {
     if (mkdtemp(filename.begin()) == nullptr) {
       KJ_FAIL_SYSCALL("mkdtemp", errno, filename);
     }
