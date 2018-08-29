@@ -45,15 +45,28 @@ Promise<void> joinPromises(Array<Promise<void>>&& promises);
 
 namespace _ {  // private
 
-template <typename T> struct JoinPromises_ { typedef T Type; };
-template <typename T> struct JoinPromises_<Promise<T>> { typedef T Type; };
+template <typename T>
+Promise<T> chainPromiseType(T*);
+template <typename T>
+Promise<T> chainPromiseType(Promise<T>*);
 
 template <typename T>
-using JoinPromises = typename JoinPromises_<T>::Type;
-// If T is Promise<U>, resolves to U, otherwise resolves to T.
-//
-// TODO(cleanup):  Rename to avoid confusion with joinPromises() call which is completely
-//   unrelated.
+using ChainPromises = decltype(chainPromiseType((T*)nullptr));
+// Constructs a promise for T, reducing double-promises. That is, if T is Promise<U>, resolves to
+// Promise<U>, otherwise resolves to Promise<T>.
+
+template <typename T>
+Promise<T> reducePromiseType(T*, ...);
+template <typename T>
+Promise<T> reducePromiseType(Promise<T>*, ...);
+template <typename T, typename Reduced = decltype(T::reducePromise(kj::instance<Promise<T>>()))>
+Reduced reducePromiseType(T*, bool);
+
+template <typename T>
+using ReducePromises = decltype(reducePromiseType((T*)nullptr, false));
+// Like ChainPromises, but also takes into account whether T has a method `reducePromise` that
+// reduces Promise<T> to something else. In particular this allows Promise<capnp::RemotePromise<U>>
+// to reduce to capnp::RemotePromise<U>.
 
 class PropagateException {
   // A functor which accepts a kj::Exception as a parameter and returns a broken promise of
@@ -90,7 +103,7 @@ using ReturnType = typename ReturnType_<Func, T>::Type;
 template <typename T> struct SplitTuplePromise_ { typedef Promise<T> Type; };
 template <typename... T>
 struct SplitTuplePromise_<kj::_::Tuple<T...>> {
-  typedef kj::Tuple<Promise<JoinPromises<T>>...> Type;
+  typedef kj::Tuple<ReducePromises<T>...> Type;
 };
 
 template <typename T>

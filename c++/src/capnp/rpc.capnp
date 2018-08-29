@@ -317,7 +317,7 @@ struct Bootstrap {
   # which one to return. If this pointer is null, then the default bootstrap interface is returned.
   #
   # As of verison 0.5, use of this field is deprecated. If a service wants to export multiple
-  # bootstrap interfaces, it should instead define a single bootstarp interface that has methods
+  # bootstrap interfaces, it should instead define a single bootstrap interface that has methods
   # that return each of the other interfaces.
   #
   # **History**

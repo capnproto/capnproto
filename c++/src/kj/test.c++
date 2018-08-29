@@ -30,6 +30,8 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <chrono>
+#include "time.h"
 #ifndef _WIN32
 #include <sys/mman.h>
 #endif
@@ -182,6 +184,11 @@ private:
   bool sawError = false;
 };
 
+TimePoint readClock() {
+  return origin<TimePoint>() + std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count() * NANOSECONDS;
+}
+
 }  // namespace
 
 class TestRunner {
@@ -291,6 +298,7 @@ public:
 
         if (!listOnly) {
           bool currentFailed = true;
+          auto start = readClock();
           KJ_IF_MAYBE(exception, runCatchingExceptions([&]() {
             TestExceptionCallback exceptionCallback(context);
             testCase->run();
@@ -298,12 +306,15 @@ public:
           })) {
             context.error(kj::str(*exception));
           }
+          auto end = readClock();
+
+          auto message = kj::str(name, " (", (end - start) / kj::MICROSECONDS, " μs)");
 
           if (currentFailed) {
-            write(RED, "[ FAIL ]", name);
+            write(RED, "[ FAIL ]", message);
             ++failCount;
           } else {
-            write(GREEN, "[ PASS ]", name);
+            write(GREEN, "[ PASS ]", message);
             ++passCount;
           }
         }

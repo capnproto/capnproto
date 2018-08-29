@@ -887,7 +887,9 @@ KJ_TEST("HttpClient canceled write") {
     auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table), uint64_t(4096));
 
     // Start a write and immediately cancel it.
-    (void)req.body->write(body.begin(), body.size());
+    {
+      auto ignore KJ_UNUSED = req.body->write(body.begin(), body.size());
+    }
 
     KJ_EXPECT_THROW_MESSAGE("overwrote", req.body->write("foo", 3).wait(waitScope));
     req.body = nullptr;
@@ -901,6 +903,88 @@ KJ_TEST("HttpClient canceled write") {
   pipe.ends[0]->shutdownWrite();
   auto text = serverPromise.wait(waitScope);
   KJ_EXPECT(text == "POST / HTTP/1.1\r\nContent-Length: 4096\r\n\r\n", text);
+}
+
+KJ_TEST("HttpClient chunked body gather-write") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto serverPromise = pipe.ends[1]->readAllText();
+
+  {
+    HttpHeaderTable table;
+    auto client = newHttpClient(table, *pipe.ends[0]);
+
+    auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table));
+
+    kj::ArrayPtr<const byte> bodyParts[] = {
+      "foo"_kj.asBytes(), " "_kj.asBytes(),
+      "bar"_kj.asBytes(), " "_kj.asBytes(),
+      "baz"_kj.asBytes()
+    };
+
+    req.body->write(kj::arrayPtr(bodyParts, kj::size(bodyParts))).wait(waitScope);
+    req.body = nullptr;
+
+    // Wait for a response so the client has a chance to end the request body with a 0-chunk.
+    kj::StringPtr responseText = "HTTP/1.1 204 No Content\r\n\r\n";
+    pipe.ends[1]->write(responseText.begin(), responseText.size()).wait(waitScope);
+    auto response = req.response.wait(waitScope);
+  }
+
+  pipe.ends[0]->shutdownWrite();
+
+  auto text = serverPromise.wait(waitScope);
+  KJ_EXPECT(text == "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
+                    "b\r\nfoo bar baz\r\n0\r\n\r\n", text);
+}
+
+KJ_TEST("HttpClient chunked body pump from fixed length stream") {
+  class FixedBodyStream final: public kj::AsyncInputStream {
+    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      auto n = kj::min(body.size(), maxBytes);
+      n = kj::max(n, minBytes);
+      n = kj::min(n, body.size());
+      memcpy(buffer, body.begin(), n);
+      body = body.slice(n);
+      return n;
+    }
+
+    Maybe<uint64_t> tryGetLength() override { return body.size(); }
+
+    kj::StringPtr body = "foo bar baz";
+  };
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto serverPromise = pipe.ends[1]->readAllText();
+
+  {
+    HttpHeaderTable table;
+    auto client = newHttpClient(table, *pipe.ends[0]);
+
+    auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table));
+
+    FixedBodyStream bodyStream;
+    bodyStream.pumpTo(*req.body).wait(waitScope);
+    req.body = nullptr;
+
+    // Wait for a response so the client has a chance to end the request body with a 0-chunk.
+    kj::StringPtr responseText = "HTTP/1.1 204 No Content\r\n\r\n";
+    pipe.ends[1]->write(responseText.begin(), responseText.size()).wait(waitScope);
+    auto response = req.response.wait(waitScope);
+  }
+
+  pipe.ends[0]->shutdownWrite();
+
+  auto text = serverPromise.wait(waitScope);
+  KJ_EXPECT(text == "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
+                    "b\r\nfoo bar baz\r\n0\r\n\r\n", text);
 }
 
 KJ_TEST("HttpServer requests") {
@@ -1627,6 +1711,56 @@ KJ_TEST("WebSocket ping received during pong send") {
   clientTask.wait(waitScope);
 }
 
+KJ_TEST("WebSocket pump disconnect on send") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  auto pipe1 = kj::newTwoWayPipe();
+  auto pipe2 = kj::newTwoWayPipe();
+
+  auto client1 = newWebSocket(kj::mv(pipe1.ends[0]), nullptr);
+  auto server1 = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
+  auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), nullptr);
+
+  auto pumpTask = server1->pumpTo(*client2);
+  auto sendTask = client1->send("hello"_kj);
+
+  // Endpoint reads three bytes and then disconnects.
+  char buffer[3];
+  pipe2.ends[1]->read(buffer, 3).wait(waitScope);
+  pipe2.ends[1] = nullptr;
+
+  // Pump throws disconnected.
+  KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, pumpTask.wait(waitScope));
+
+  // client1 managed to send its whole message into the pump, though.
+  sendTask.wait(waitScope);
+}
+
+KJ_TEST("WebSocket pump disconnect on receive") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  auto pipe1 = kj::newTwoWayPipe();
+  auto pipe2 = kj::newTwoWayPipe();
+
+  auto server1 = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
+  auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), nullptr);
+  auto server2 = newWebSocket(kj::mv(pipe2.ends[1]), nullptr);
+
+  auto pumpTask = server1->pumpTo(*client2);
+  auto receiveTask = server2->receive();
+
+  // Client sends three bytes of a valid message then disconnects.
+  const char DATA[] = {0x01, 0x06, 'h'};
+  pipe1.ends[0]->write(DATA, 3).wait(waitScope);
+  pipe1.ends[0] = nullptr;
+
+  // The pump completes successfully, forwarding the disconnect.
+  pumpTask.wait(waitScope);
+
+  // The eventual receiver gets a disconnect execption.
+  KJ_EXPECT_THROW(DISCONNECTED, receiveTask.wait(waitScope));
+}
+
 class TestWebSocketService final: public HttpService, private kj::TaskSet::ErrorHandler {
 public:
   TestWebSocketService(HttpHeaderTable& headerTable, HttpHeaderId hMyHeader)
@@ -1776,8 +1910,10 @@ KJ_TEST("HttpClient WebSocket handshake") {
   auto headerTable = tableBuilder.build();
 
   FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
 
-  auto client = newHttpClient(*headerTable, *pipe.ends[0], entropySource);
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
 
   testWebSocketClient(waitScope, *headerTable, hMyHeader, *client);
 
@@ -1802,8 +1938,10 @@ KJ_TEST("HttpClient WebSocket error") {
   auto headerTable = tableBuilder.build();
 
   FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
 
-  auto client = newHttpClient(*headerTable, *pipe.ends[0], entropySource);
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
 
   kj::HttpHeaders headers(*headerTable);
   headers.set(hMyHeader, "foo");
@@ -2321,7 +2459,9 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
   {
     HttpHeaderTable table;
     FakeEntropySource entropySource;
-    auto backClient = newHttpClient(table, *backPipe.ends[0], entropySource);
+    HttpClientSettings clientSettings;
+    clientSettings.entropySource = entropySource;
+    auto backClient = newHttpClient(table, *backPipe.ends[0], clientSettings);
     auto frontService = newHttpService(*backClient);
     HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
@@ -2360,7 +2500,9 @@ KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
   {
     HttpHeaderTable table;
     FakeEntropySource entropySource;
-    auto backClient = newHttpClient(table, *backPipe.ends[0], entropySource);
+    HttpClientSettings clientSettings;
+    clientSettings.entropySource = entropySource;
+    auto backClient = newHttpClient(table, *backPipe.ends[0], clientSettings);
     auto frontService = newHttpService(*backClient);
     HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
@@ -2525,7 +2667,9 @@ public:
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     if (!headers.isWebSocket()) {
-      KJ_ASSERT(url != "/throw");
+      if (url == "/throw") {
+        return KJ_EXCEPTION(FAILED, "client requested failure");
+      }
 
       auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
       auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
@@ -2665,11 +2809,11 @@ KJ_TEST("HttpClient connection management") {
   KJ_EXPECT(count == 0);
 
 #if __linux__
-  // TODO(soon): Figure out why this doesn't work on Windows and is flakey on Mac. My guess is that
-  //   the closing of the TCP connection propagates synchronously on Linux so that by the time we
-  //   poll() the EventPort it reports the client end of the connection has reached EOF, whereas on
-  //   Mac and Windows this propagation probably involves some concurrent process which may or may
-  //   not complete before we poll(). A solution in this case would be to use a dummy in-memory
+  // TODO(someday): Figure out why this doesn't work on Windows and is flakey on Mac. My guess is
+  //   that the closing of the TCP connection propagates synchronously on Linux so that by the time
+  //   we poll() the EventPort it reports the client end of the connection has reached EOF, whereas
+  //   on Mac and Windows this propagation probably involves some concurrent process which may or
+  //   may not complete before we poll(). A solution in this case would be to use a dummy in-memory
   //   ConnectionReceiver that returns in-memory pipes (see UnbufferedPipe earlier in this file),
   //   so that we don't rely on any non-local behavior. Another solution would be to pause for
   //   a short time, maybe.

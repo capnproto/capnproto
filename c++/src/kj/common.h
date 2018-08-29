@@ -30,42 +30,37 @@
 #endif
 
 #ifndef KJ_NO_COMPILER_CHECK
-#if __cplusplus < 201103L && !__CDT_PARSER__ && !_MSC_VER
-  #error "This code requires C++11. Either your compiler does not support it or it is not enabled."
+// Technically, __cplusplus should be 201402L for C++14, but GCC 4.9 -- which is supported -- still
+// had it defined to 201300L even with -std=c++14.
+#if __cplusplus < 201300L && !__CDT_PARSER__ && !_MSC_VER
+  #error "This code requires C++14. Either your compiler does not support it or it is not enabled."
   #ifdef __GNUC__
     // Compiler claims compatibility with GCC, so presumably supports -std.
-    #error "Pass -std=c++11 on the compiler command line to enable C++11."
+    #error "Pass -std=c++14 on the compiler command line to enable C++14."
   #endif
 #endif
 
 #ifdef __GNUC__
   #if __clang__
-    #if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 2)
-      #warning "This library requires at least Clang 3.2."
-    #elif defined(__apple_build_version__) && __apple_build_version__ <= 4250028
-      #warning "This library requires at least Clang 3.2.  XCode 4.6's Clang, which claims to be "\
-               "version 4.2 (wat?), is actually built from some random SVN revision between 3.1 "\
-               "and 3.2.  Unfortunately, it is insufficient for compiling this library.  You can "\
-               "download the real Clang 3.2 (or newer) from the Clang web site.  Step-by-step "\
-               "instructions can be found in Cap'n Proto's documentation: "\
-               "http://kentonv.github.io/capnproto/install.html#clang_32_on_mac_osx"
-    #elif __cplusplus >= 201103L && !__has_include(<initializer_list>)
-      #warning "Your compiler supports C++11 but your C++ standard library does not.  If your "\
+    #if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 4)
+      #warning "This library requires at least Clang 3.4."
+    #elif __cplusplus >= 201402L && !__has_include(<initializer_list>)
+      #warning "Your compiler supports C++14 but your C++ standard library does not.  If your "\
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\
                "-stdlib=libc++ to your CXXFLAGS."
     #endif
   #else
-    #if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 7)
-      #warning "This library requires at least GCC 4.7."
+    #if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 9)
+      #warning "This library requires at least GCC 4.9."
     #endif
   #endif
 #elif defined(_MSC_VER)
-  #if _MSC_VER < 1900
-    #error "You need Visual Studio 2015 or better to compile this code."
+  #if _MSC_VER < 1910
+    #error "You need Visual Studio 2017 or better to compile this code."
   #endif
 #else
-  #warning "I don't recognize your compiler.  As of this writing, Clang and GCC are the only "\
-           "known compilers with enough C++11 support for this library.  "\
+  #warning "I don't recognize your compiler. As of this writing, Clang, GCC, and Visual Studio "\
+           "are the only known compilers with enough C++14 support for this library. "\
            "#define KJ_NO_COMPILER_CHECK to make this warning go away."
 #endif
 #endif
@@ -306,6 +301,14 @@ KJ_NORETURN(void unreachable());
 
 #else  // _MSC_VER
 #define KJ_CONSTEXPR(...) constexpr
+#endif
+
+#if defined(_MSC_VER) && _MSC_VER < 1910
+// TODO(msvc): Visual Studio 2015 mishandles declaring the no-arg constructor `= default` for
+//   certain template types -- it fails to call member constructors.
+#define KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY {}
+#else
+#define KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY = default;
 #endif
 
 // =======================================================================================

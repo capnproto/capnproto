@@ -1,18 +1,18 @@
 cmake_minimum_required(VERSION 3.1)
 project("Cap'n Proto" CXX)
-set(VERSION 0.7-dev)
+set(VERSION 0.8-dev)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(CheckIncludeFileCXX)
 include(GNUInstallDirs)
 if(MSVC)
-  check_include_file_cxx(initializer_list HAS_CXX11)
+  check_include_file_cxx(initializer_list HAS_CXX14)
 else()
-  check_include_file_cxx(initializer_list HAS_CXX11 "-std=gnu++0x")
+  check_include_file_cxx(initializer_list HAS_CXX14 "-std=gnu++1y")
 endif()
-if(NOT HAS_CXX11)
-  message(SEND_ERROR "Requires a C++11 compiler and standard library.")
+if(NOT HAS_CXX14)
+  message(SEND_ERROR "Requires a C++14 compiler and standard library.")
 endif()
 
 # these arguments are passed to all install(TARGETS) calls
@@ -66,7 +66,7 @@ else()
   add_compile_options(-Wall -Wextra -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter)
 
   if(DEFINED CMAKE_CXX_EXTENSIONS AND NOT CMAKE_CXX_EXTENSIONS)
-    message(SEND_ERROR "Cap'n Proto requires compiler-specific extensions (e.g., -std=gnu++11). Please leave CMAKE_CXX_EXTENSIONS undefined or ON.")
+    message(SEND_ERROR "Cap'n Proto requires compiler-specific extensions (e.g., -std=gnu++14). Please leave CMAKE_CXX_EXTENSIONS undefined or ON.")
   endif()
 
   if (NOT ANDROID)

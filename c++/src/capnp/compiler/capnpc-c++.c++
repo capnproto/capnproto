@@ -2980,7 +2980,8 @@ private:
           "\n"
           "#pragma once\n"
           "\n"
-          "#include <capnp/generated-header-support.h>\n",
+          "#include <capnp/generated-header-support.h>\n"
+          "#include <kj/windows-sanity.h>\n",  // work-around macro conflict with VOID
           hasInterfaces ? kj::strTree(
             "#if !CAPNP_LITE\n"
             "#include <capnp/capability.h>\n"

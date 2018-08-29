@@ -35,6 +35,12 @@ TEST(String, Str) {
   EXPECT_EQ("foo", str('f', 'o', 'o'));
   EXPECT_EQ("123 234 -123 e7",
             str((int8_t)123, " ", (uint8_t)234, " ", (int8_t)-123, " ", hex((uint8_t)0xe7)));
+  EXPECT_EQ("-128 -32768 -2147483648 -9223372036854775808",
+      str((signed char)-128, ' ', (signed short)-32768, ' ',
+          ((int)-2147483647) - 1, ' ', ((long long)-9223372036854775807ll) - 1))
+  EXPECT_EQ("ff ffff ffffffff ffffffffffffffff",
+      str(hex((uint8_t)0xff), ' ', hex((uint16_t)0xffff), ' ', hex((uint32_t)0xffffffffu), ' ',
+          hex((uint64_t)0xffffffffffffffffull)));
 
   char buf[3] = {'f', 'o', 'o'};
   ArrayPtr<char> a = buf;
@@ -189,6 +195,40 @@ KJ_TEST("string literals with _kj suffix") {
   static constexpr ArrayPtr<const char> ARR = "foo"_kj;
   KJ_EXPECT(ARR.size() == 3);
   KJ_EXPECT(kj::str(ARR) == "foo");
+}
+
+KJ_TEST("kj::delimited() and kj::strPreallocated()") {
+  int rawArray[] = {1, 23, 456, 78};
+  ArrayPtr<int> array = rawArray;
+  KJ_EXPECT(str(delimited(array, "::")) == "1::23::456::78");
+
+  {
+    char buffer[256];
+    KJ_EXPECT(strPreallocated(buffer, delimited(array, "::"), 'x')
+        == "1::23::456::78x");
+    KJ_EXPECT(strPreallocated(buffer, "foo", 123, true) == "foo123true");
+  }
+
+  {
+    char buffer[5];
+    KJ_EXPECT(strPreallocated(buffer, delimited(array, "::"), 'x') == "1::2");
+    KJ_EXPECT(strPreallocated(buffer, "foo", 123, true) == "foo1");
+  }
+}
+
+KJ_TEST("parsing 'nan' returns canonical NaN value") {
+  // There are many representations of NaN. We would prefer that parsing "NaN" produces exactly the
+  // same bits that kj::nan() returns.
+  {
+    double parsedNan = StringPtr("NaN").parseAs<double>();
+    double canonicalNan = kj::nan();
+    KJ_EXPECT(memcmp(&parsedNan, &canonicalNan, sizeof(parsedNan)) == 0);
+  }
+  {
+    float parsedNan = StringPtr("NaN").parseAs<float>();
+    float canonicalNan = kj::nan();
+    KJ_EXPECT(memcmp(&parsedNan, &canonicalNan, sizeof(parsedNan)) == 0);
+  }
 }
 
 }  // namespace

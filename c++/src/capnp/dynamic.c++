@@ -740,6 +740,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
               (uint)type.which());
           break;
       }
+      KJ_UNREACHABLE;
     }
 
     case schema::Field::GROUP:
@@ -1724,11 +1725,21 @@ int64_t unsignedToSigned<int64_t>(unsigned long long value) {
 
 template <typename T, typename U>
 T checkRoundTrip(U value) {
-  KJ_REQUIRE(T(value) == value, "Value out-of-range for requested type.", value) {
+#if __aarch64__
+  // Work around an apparently broken compiler optimization on Clang / arm64. It appears that
+  // for T = int8_t, U = double, and value = 128, the compiler incorrectly believes that the
+  // round-trip does not change the value, where in fact it should change to -128. Similar problems
+  // exist for various other types and inputs -- json-test seems to exercise several problem cases.
+  // The problem only exists when compiling with optimization. In any case, declaring the variable
+  // `volatile` kills the optimization.
+  volatile
+#endif
+  T result = value;
+  KJ_REQUIRE(U(result) == value, "Value out-of-range for requested type.", value) {
     // Use it anyway.
     break;
   }
-  return value;
+  return result;
 }
 
 }  // namespace

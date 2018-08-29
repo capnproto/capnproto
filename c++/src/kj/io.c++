@@ -28,6 +28,7 @@
 #include "miniposix.h"
 #include <algorithm>
 #include <errno.h>
+#include "vector.h"
 
 #if _WIN32
 #ifndef NOMINMAX
@@ -64,6 +65,45 @@ void InputStream::skip(size_t bytes) {
     read(scratch, amount);
     bytes -= amount;
   }
+}
+
+
+namespace {
+
+Array<byte> readAll(InputStream& input, uint64_t limit, bool nulTerminate) {
+  Vector<Array<byte>> parts;
+  constexpr size_t BLOCK_SIZE = 4096;
+
+  for (;;) {
+    KJ_REQUIRE(limit > 0, "Reached limit before EOF.");
+    auto part = heapArray<byte>(kj::min(BLOCK_SIZE, limit));
+    size_t n = input.tryRead(part.begin(), part.size(), part.size());
+    limit -= n;
+    if (n < part.size()) {
+      auto result = heapArray<byte>(parts.size() * BLOCK_SIZE + n + nulTerminate);
+      byte* pos = result.begin();
+      for (auto& p: parts) {
+        memcpy(pos, p.begin(), BLOCK_SIZE);
+        pos += BLOCK_SIZE;
+      }
+      memcpy(pos, part.begin(), n);
+      pos += n;
+      if (nulTerminate) *pos++ = '\0';
+      KJ_ASSERT(pos == result.end());
+      return result;
+    } else {
+      parts.add(kj::mv(part));
+    }
+  }
+}
+
+}  // namespace
+
+String InputStream::readAllText(uint64_t limit) {
+  return String(readAll(*this, limit, true).releaseAsChars());
+}
+Array<byte> InputStream::readAllBytes(uint64_t limit) {
+  return readAll(*this, limit, false);
 }
 
 void OutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {

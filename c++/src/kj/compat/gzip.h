@@ -21,10 +21,73 @@
 
 #pragma once
 
+#include <kj/io.h>
 #include <kj/async-io.h>
 #include <zlib.h>
 
 namespace kj {
+
+namespace _ {  // private
+
+class GzipOutputContext final {
+public:
+  GzipOutputContext(kj::Maybe<int> compressionLevel);
+  ~GzipOutputContext() noexcept(false);
+  KJ_DISALLOW_COPY(GzipOutputContext);
+
+  void setInput(const void* in, size_t size);
+  kj::Tuple<bool, kj::ArrayPtr<const byte>> pumpOnce(int flush);
+
+private:
+  bool compressing;
+  z_stream ctx = {};
+  byte buffer[4096];
+
+  void fail(int result);
+};
+
+}  // namespace _ (private)
+
+class GzipInputStream final: public InputStream {
+public:
+  GzipInputStream(InputStream& inner);
+  ~GzipInputStream() noexcept(false);
+  KJ_DISALLOW_COPY(GzipInputStream);
+
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+
+private:
+  InputStream& inner;
+  z_stream ctx = {};
+  bool atValidEndpoint = false;
+
+  byte buffer[4096];
+
+  size_t readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
+};
+
+class GzipOutputStream final: public OutputStream {
+public:
+  enum { DECOMPRESS };
+
+  GzipOutputStream(OutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
+  GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS));
+  ~GzipOutputStream() noexcept(false);
+  KJ_DISALLOW_COPY(GzipOutputStream);
+
+  void write(const void* buffer, size_t size) override;
+  using OutputStream::write;
+
+  inline void flush() {
+    pump(Z_SYNC_FLUSH);
+  }
+
+private:
+  OutputStream& inner;
+  _::GzipOutputContext ctx;
+
+  void pump(int flush);
+};
 
 class GzipAsyncInputStream final: public AsyncInputStream {
 public:
@@ -36,7 +99,7 @@ public:
 
 private:
   AsyncInputStream& inner;
-  z_stream ctx;
+  z_stream ctx = {};
   bool atValidEndpoint = false;
 
   byte buffer[4096];
@@ -46,26 +109,32 @@ private:
 
 class GzipAsyncOutputStream final: public AsyncOutputStream {
 public:
+  enum { DECOMPRESS };
+
   GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
-  ~GzipAsyncOutputStream() noexcept(false);
+  GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS));
   KJ_DISALLOW_COPY(GzipAsyncOutputStream);
 
   Promise<void> write(const void* buffer, size_t size) override;
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 
-  Promise<void> end();
-  // Must call to flush the stream, since some data may be buffered.
+  inline Promise<void> flush() {
+    return pump(Z_SYNC_FLUSH);
+  }
+  // Call if you need to flush a stream at an arbitrary data point.
+
+  Promise<void> end() {
+    return pump(Z_FINISH);
+  }
+  // Must call to flush and finish the stream, since some data may be buffered.
   //
   // TODO(cleanup): This should be a virtual method on AsyncOutputStream.
 
 private:
   AsyncOutputStream& inner;
-  bool ended = false;
-  z_stream ctx;
+  _::GzipOutputContext ctx;
 
-  byte buffer[4096];
-
-  kj::Promise<void> pump();
+  kj::Promise<void> pump(int flush);
 };
 
 }  // namespace kj

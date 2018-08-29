@@ -72,6 +72,11 @@ namespace {
 #undef SEEK_HOLE
 #endif
 
+#if __BIONIC__
+// No no DTTOIF function
+#undef DT_UNKNOWN
+#endif
+
 static void setCloexec(int fd) KJ_UNUSED;
 static void setCloexec(int fd) {
   // Set the O_CLOEXEC flag on the given fd.
@@ -222,7 +227,12 @@ struct MmapRange {
 };
 
 static MmapRange getMmapRange(uint64_t offset, uint64_t size) {
-  // Rounds the given byte range up to page boundaries.
+  // Comes up with an offset and size to pass to mmap(), given an offset and size requested by
+  // the caller, and considering the fact that mappings must start at a page boundary.
+  //
+  // The offset is rounded down to the nearest page boundary, and the size is increased to
+  // compensate. Note that the endpoint of the mapping is *not* rounded up to a page boundary, as
+  // mmap() does not actually require this, and it causes trouble on some systems (notably Cygwin).
 
 #ifndef _SC_PAGESIZE
 #define _SC_PAGESIZE _SC_PAGE_SIZE
@@ -232,10 +242,7 @@ static MmapRange getMmapRange(uint64_t offset, uint64_t size) {
 
   uint64_t realOffset = offset & ~pageMask;
 
-  uint64_t end = offset + size;
-  uint64_t realEnd = (end + pageMask) & ~pageMask;
-
-  return { realOffset, realEnd - realOffset };
+  return { realOffset, offset + size - realOffset };
 }
 
 class MmapDisposer: public ArrayDisposer {
@@ -936,6 +943,7 @@ public:
             // Retry, but make sure we don't try to create the parent again.
             return tryReplaceNode(path, mode - WriteMode::CREATE_PARENT, kj::mv(tryCreate));
           }
+          // fallthrough
         default:
           KJ_FAIL_SYSCALL("create(path)", error, path) { return false; }
       } else {
@@ -1321,6 +1329,7 @@ public:
         SYS_openat, fd.get(), ".", O_RDWR | O_TMPFILE, 0700)) {
       case EOPNOTSUPP:
       case EINVAL:
+      case EISDIR:
         // Maybe not supported by this kernel / filesystem. Fall back to below.
         break;
       default:

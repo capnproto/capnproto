@@ -37,6 +37,7 @@
 #include "common.h"
 #include "blob.h"
 #include "endian.h"
+#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
 
 #if (defined(__mips__) || defined(__hppa__)) && !defined(CAPNP_CANONICALIZE_NAN)
 #define CAPNP_CANONICALIZE_NAN 1
@@ -597,8 +598,8 @@ public:
 
   inline StructDataBitCount getDataSectionSize() const { return dataSize; }
   inline StructPointerCount getPointerSectionSize() const { return pointerCount; }
-  inline kj::ArrayPtr<const byte> getDataSectionAsBlob();
-  inline _::ListReader getPointerSectionAsList();
+  inline kj::ArrayPtr<const byte> getDataSectionAsBlob() const;
+  inline _::ListReader getPointerSectionAsList() const;
 
   kj::Array<word> canonicalize();
 
@@ -780,7 +781,7 @@ public:
   Data::Reader asData();
   // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
 
-  kj::ArrayPtr<const byte> asRawBytes();
+  kj::ArrayPtr<const byte> asRawBytes() const;
 
   template <typename T>
   KJ_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
@@ -1080,12 +1081,12 @@ inline PointerBuilder StructBuilder::getPointerField(StructPointerOffset ptrInde
 
 // -------------------------------------------------------------------
 
-inline kj::ArrayPtr<const byte> StructReader::getDataSectionAsBlob() {
+inline kj::ArrayPtr<const byte> StructReader::getDataSectionAsBlob() const {
   return kj::ArrayPtr<const byte>(reinterpret_cast<const byte*>(data),
       unbound(dataSize / BITS_PER_BYTE / BYTES));
 }
 
-inline _::ListReader StructReader::getPointerSectionAsList() {
+inline _::ListReader StructReader::getPointerSectionAsList() const {
   return _::ListReader(segment, capTable, pointers, pointerCount * (ONE * ELEMENTS / POINTERS),
                        ONE * POINTERS * BITS_PER_POINTER / ELEMENTS, ZERO * BITS, ONE * POINTERS,
                        ElementSize::POINTER, nestingLimit);

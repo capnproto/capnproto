@@ -23,6 +23,7 @@
 #include <kj/memory.h>
 #include <kj/mutex.h>
 #include <kj/debug.h>
+#include <kj/vector.h>
 #include "common.h"
 #include "layout.h"
 #include "any.h"
@@ -104,6 +105,10 @@ public:
   virtual kj::ArrayPtr<const word> getSegment(uint id) = 0;
   // Gets the segment with the given ID, or returns null if no such segment exists. This method
   // will be called at most once for each segment ID.
+  //
+  // The returned array must be aligned properly for the host architecture. This means that on
+  // x86/x64, alignment is optional, though recommended for performance, whereas on many other
+  // architectures, alignment is required.
 
   inline const ReaderOptions& getOptions();
   // Get the options passed to the constructor.
@@ -126,9 +131,9 @@ private:
 
   // Space in which we can construct a ReaderArena.  We don't use ReaderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
-  // big STL headers.  We don't use a pointer to a ReaderArena because that would require an
+  // other headers.  We don't use a pointer to a ReaderArena because that would require an
   // extra malloc on every message which could be expensive when processing small messages.
-  void* arenaSpace[15 + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
+  void* arenaSpace[18 + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
   bool allocatedArena;
 
   _::ReaderArena* arena() { return reinterpret_cast<_::ReaderArena*>(arenaSpace); }
@@ -182,13 +187,19 @@ public:
   //   new objects in this message.
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
-  // Allocates an array of at least the given number of words, throwing an exception or crashing if
-  // this is not possible.  It is expected that this method will usually return more space than
-  // requested, and the caller should use that extra space as much as possible before allocating
-  // more.  The returned space remains valid at least until the MessageBuilder is destroyed.
+  // Allocates an array of at least the given number of zero'd words, throwing an exception or
+  // crashing if this is not possible.  It is expected that this method will usually return more
+  // space than requested, and the caller should use that extra space as much as possible before
+  // allocating more.  The returned space remains valid at least until the MessageBuilder is
+  // destroyed.
   //
-  // Cap'n Proto will only call this once at a time, so the subclass need not worry about
-  // thread-safety.
+  // allocateSegment() is responsible for zeroing the memory before returning. This is required
+  // because otherwise the Cap'n Proto implementation would have to zero the memory anyway, and
+  // many allocators are able to provide already-zero'd memory more efficiently.
+  //
+  // The returned array must be aligned properly for the host architecture. This means that on
+  // x86/x64, alignment is optional, though recommended for performance, whereas on many other
+  // architectures, alignment is required.
 
   template <typename RootType>
   typename RootType::Builder initRoot();
@@ -387,9 +398,7 @@ private:
   bool returnedFirstSegment;
 
   void* firstSegment;
-
-  struct MoreSegments;
-  kj::Maybe<kj::Own<MoreSegments>> moreSegments;
+  kj::Vector<void*> moreSegments;
 };
 
 class FlatMessageBuilder: public MessageBuilder {

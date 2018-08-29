@@ -20,7 +20,7 @@ doit() {
 }
 
 get_version() {
-  local VERSION=$(grep AC_INIT c++/configure.ac | sed -e 's/^[^]]*],\[\([^]]*\)].*$/\1/g')
+  local VERSION=$(grep '^AC_INIT' c++/configure.ac | sed -e 's/^[^]]*],\[\([^]]*\)].*$/\1/g')
   if [[ ! "$VERSION" =~ $1 ]]; then
     echo "Couldn't parse version: $VERSION" >&2
     exit 1

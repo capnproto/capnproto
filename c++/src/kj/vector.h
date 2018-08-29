@@ -115,7 +115,7 @@ public:
   }
 
   inline void clear() {
-    builder.resize(0);
+    builder.clear();
   }
 
   inline void truncate(size_t size) {

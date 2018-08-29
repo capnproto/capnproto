@@ -152,7 +152,7 @@ public:
   //
   //     HttpHeaderId::HOST
   //
-  // TODO(soon): Fill this out with more common headers.
+  // TODO(someday): Fill this out with more common headers.
 
 #define DECLARE_HEADER(id, name) \
   static const HttpHeaderId id;
@@ -336,12 +336,33 @@ public:
                               kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
   kj::String serializeResponse(uint statusCode, kj::StringPtr statusText,
                                kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
+  // **Most applications will not use these methods; they are called by the HTTP client and server
+  // implementations.**
+  //
   // Serialize the headers as a complete request or response blob. The blob uses '\r\n' newlines
   // and includes the double-newline to indicate the end of the headers.
   //
   // `connectionHeaders`, if provided, contains connection-level headers supplied by the HTTP
   // implementation, in the order specified by the KJ_HTTP_FOR_EACH_BUILTIN_HEADER macro. These
-  // headers values override any corresponding header value in the HttpHeaders object.
+  // headers values override any corresponding header value in the HttpHeaders object. The
+  // CONNECTION_HEADERS_COUNT constants below can help you construct this `connectionHeaders` array.
+
+  enum class BuiltinIndicesEnum {
+  #define HEADER_ID(id, name) id,
+    KJ_HTTP_FOR_EACH_BUILTIN_HEADER(HEADER_ID)
+  #undef HEADER_ID
+  };
+
+  struct BuiltinIndices {
+  #define HEADER_ID(id, name) static constexpr uint id = static_cast<uint>(BuiltinIndicesEnum::id);
+    KJ_HTTP_FOR_EACH_BUILTIN_HEADER(HEADER_ID)
+  #undef HEADER_ID
+  };
+
+  static constexpr uint HEAD_RESPONSE_CONNECTION_HEADERS_COUNT = BuiltinIndices::CONTENT_LENGTH;
+  static constexpr uint CONNECTION_HEADERS_COUNT = BuiltinIndices::SEC_WEBSOCKET_KEY;
+  static constexpr uint WEBSOCKET_CONNECTION_HEADERS_COUNT = BuiltinIndices::HOST;
+  // Constants for use with HttpHeaders::serialize*().
 
   kj::String toString() const;
 
@@ -616,12 +637,6 @@ kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Asyn
 // subsequent requests will fail. If a response takes a long time, it blocks subsequent responses.
 // If a WebSocket is opened successfully, all subsequent requests fail.
 
-kj::Own<HttpClient> newHttpClient(
-    HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
-    kj::Maybe<EntropySource&> entropySource) KJ_DEPRECATED("use HttpClientSettings");
-// Temporary for backwards-compatibilty.
-// TODO(soon): Remove this before next release.
-
 kj::Own<HttpClient> newHttpClient(HttpService& service);
 kj::Own<HttpService> newHttpService(HttpClient& client);
 // Adapts an HttpClient to an HttpService and vice versa.
@@ -667,7 +682,7 @@ struct HttpServerSettings {
   // completes, we'll let the connection stay open to handle more requests.
 };
 
-class HttpServer: private kj::TaskSet::ErrorHandler {
+class HttpServer final: private kj::TaskSet::ErrorHandler {
   // Class which listens for requests on ports or connections and sends them to an HttpService.
 
 public:
@@ -779,14 +794,6 @@ inline void HttpHeaders::forEach(Func&& func) const {
   for (auto& header: unindexedHeaders) {
     func(header.name, header.value);
   }
-}
-
-inline kj::Own<HttpClient> newHttpClient(
-    HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
-    kj::Maybe<EntropySource&> entropySource) {
-  HttpClientSettings settings;
-  settings.entropySource = entropySource;
-  return newHttpClient(responseHeaderTable, stream, kj::mv(settings));
 }
 
 }  // namespace kj

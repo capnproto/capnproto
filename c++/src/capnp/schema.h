@@ -30,6 +30,8 @@
 #endif
 
 #include <capnp/schema.capnp.h>
+#include <kj/hash.h>
+#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
 
 namespace capnp {
 
@@ -127,6 +129,8 @@ public:
   // Determine whether two Schemas are wrapping the exact same underlying data, by identity.  If
   // you want to check if two Schemas represent the same type (but possibly different versions of
   // it), compare their IDs instead.
+
+  inline uint hashCode() const { return kj::hashCode(raw); }
 
   template <typename T>
   void requireUsableAs() const;
@@ -301,6 +305,7 @@ public:
 
   inline bool operator==(const Field& other) const;
   inline bool operator!=(const Field& other) const { return !(*this == other); }
+  inline uint hashCode() const;
 
 private:
   StructSchema parent;
@@ -399,6 +404,7 @@ public:
 
   inline bool operator==(const Enumerant& other) const;
   inline bool operator!=(const Enumerant& other) const { return !(*this == other); }
+  inline uint hashCode() const;
 
 private:
   EnumSchema parent;
@@ -491,6 +497,7 @@ public:
 
   inline bool operator==(const Method& other) const;
   inline bool operator!=(const Method& other) const { return !(*this == other); }
+  inline uint hashCode() const;
 
 private:
   InterfaceSchema parent;
@@ -643,7 +650,7 @@ public:
   bool operator==(const Type& other) const;
   inline bool operator!=(const Type& other) const { return !(*this == other); }
 
-  size_t hashCode() const;
+  uint hashCode() const;
 
   inline Type wrapInList(uint depth = 1) const;
   // Return the Type formed by wrapping this type in List() `depth` times.
@@ -793,6 +800,16 @@ inline bool EnumSchema::Enumerant::operator==(const Enumerant& other) const {
 }
 inline bool InterfaceSchema::Method::operator==(const Method& other) const {
   return parent == other.parent && ordinal == other.ordinal;
+}
+
+inline uint StructSchema::Field::hashCode() const {
+  return kj::hashCode(parent, index);
+}
+inline uint EnumSchema::Enumerant::hashCode() const {
+  return kj::hashCode(parent, ordinal);
+}
+inline uint InterfaceSchema::Method::hashCode() const {
+  return kj::hashCode(parent, ordinal);
 }
 
 inline ListSchema ListSchema::of(StructSchema elementType) {

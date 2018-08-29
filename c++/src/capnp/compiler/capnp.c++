@@ -46,6 +46,7 @@
 #include <capnp/compat/json.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <kj/map.h>
 
 #if _WIN32
 #include <process.h>
@@ -381,10 +382,14 @@ public:
       kj::StringPtr dir = spec.slice(*split + 1);
       auto plugin = spec.slice(0, *split);
 
-      KJ_IF_MAYBE(split2, dir.findFirst(':')) {
-        // Grr, there are two colons. Might this be a Windows path? Let's do some heuristics.
-        if (*split == 1 && (dir.startsWith("/") || dir.startsWith("\\"))) {
-          // So, the first ':' was the second char, and was followed by '/' or '\', e.g.:
+      if (*split == 1 && (dir.startsWith("/") || dir.startsWith("\\"))) {
+        // The colon is the second character and is immediately followed by a slash or backslash.
+        // So, the user passed something like `-o c:/foo`. Is this a request to run the C plugin
+        // and output to `/foo`? Or are we on Windows, and is this a request to run the plugin
+        // `c:/foo`?
+        KJ_IF_MAYBE(split2, dir.findFirst(':')) {
+          // There are two colons. The first ':' was the second char, and was followed by '/' or
+          // '\', e.g.:
           //     capnp compile -o c:/foo.exe:bar
           //
           // In this case we can conclude that the second colon is actually meant to be the
@@ -406,18 +411,24 @@ public:
           //   -> CONTRADICTION
           //
           // We therefore conclude that the *second* colon is in fact the plugin/location separator.
-          //
-          // Note that there is still an ambiguous case:
-          //     capnp compile -o c:/foo
-          //
-          // In this unfortunate case, we have no way to tell if the user meant "use the 'c' plugin
-          // and output to /foo" or "use the plugin c:/foo and output to the default location". We
-          // prefer the former interpretation, because the latter is Windows-specific and such
-          // users can always explicitly specify the output location like:
-          //     capnp compile -o c:/foo:.
 
           dir = dir.slice(*split2 + 1);
           plugin = spec.slice(0, *split2 + 2);
+#if _WIN32
+        } else {
+          // The user wrote something like:
+          //
+          //     capnp compile -o c:/foo/bar
+          //
+          // What does this mean? It depends on what system we're on. On a Unix system, the above
+          // clearly is a request to run the `capnpc-c` plugin (perhaps to output C code) and write
+          // to the directory /foo/bar. But on Windows, absolute paths do not start with '/', and
+          // the above is actually a request to run the plugin `c:/foo/bar`, outputting to the
+          // current directory.
+
+          outputs.add(OutputDirective { spec.asArray(), nullptr });
+          return true;
+#endif
         }
       }
 
@@ -540,13 +551,20 @@ public:
 #endif
         }
 
+#if _WIN32
+        // MSVCRT's spawn*() don't correctly escape arguments, which is necessary on Windows
+        // since the underlying system call takes a single command line string rather than
+        // an arg list. We do the escaping ourselves by wrapping the name in quotes. We know
+        // that exeName itself can't contain quotes (since filenames aren't allowed to contain
+        // quotes on Windows), so we don't have to account for those.
+        KJ_ASSERT(exeName.findFirst('\"') == nullptr,
+            "Windows filenames can't contain quotes", exeName);
+        auto escapedExeName = kj::str("\"", exeName, "\"");
+#endif
+
         if (shouldSearchPath) {
 #if _WIN32
-          // MSVCRT's spawn*() don't correctly escape arguments, which is necessary on Windows
-          // since the underlying system call takes a single command line string rather than
-          // an arg list. Instead of trying to do the escaping ourselves, we just pass "plugin"
-          // for argv[0].
-          child = _spawnlp(_P_NOWAIT, exeName.cStr(), "plugin", nullptr);
+          child = _spawnlp(_P_NOWAIT, exeName.cStr(), escapedExeName.cStr(), nullptr);
 #else
           execlp(exeName.cStr(), exeName.cStr(), nullptr);
 #endif
@@ -562,11 +580,7 @@ public:
           }
 
 #if _WIN32
-          // MSVCRT's spawn*() don't correctly escape arguments, which is necessary on Windows
-          // since the underlying system call takes a single command line string rather than
-          // an arg list. Instead of trying to do the escaping ourselves, we just pass "plugin"
-          // for argv[0].
-          child = _spawnl(_P_NOWAIT, exeName.cStr(), "plugin", nullptr);
+          child = _spawnl(_P_NOWAIT, exeName.cStr(), escapedExeName.cStr(), nullptr);
 #else
           execl(exeName.cStr(), exeName.cStr(), nullptr);
 #endif
@@ -708,6 +722,13 @@ public:
         convertTo = *t;
       } else {
         return kj::str("unknown format: ", to);
+      }
+
+      if (convertFrom == Format::JSON || convertTo == Format::JSON) {
+        // We need annotations to process JSON.
+        // TODO(someday): Find a way that we can process annotations from json.capnp without
+        //   requiring other annotation-only imports like c++.capnp
+        annotationFlag = Compiler::COMPILE_ANNOTATIONS;
       }
 
       return true;
@@ -1034,6 +1055,7 @@ private:
         MallocMessageBuilder message;
         JsonCodec codec;
         codec.setPrettyPrint(pretty);
+        codec.handleByAnnotation(rootType);
         auto root = message.initRoot<DynamicStruct>(rootType);
         codec.decode(text, root);
         return writeConversion(root.asReader(), output);
@@ -1092,6 +1114,7 @@ private:
       case Format::JSON: {
         JsonCodec codec;
         codec.setPrettyPrint(pretty);
+        codec.handleByAnnotation(rootType);
         auto text = codec.encode(reader.as<DynamicStruct>(rootType));
         output.write({text.asBytes(), kj::StringPtr("\n").asBytes()});
         return;
@@ -1393,7 +1416,8 @@ private:
           break;
       }
 
-      if ((c >= 0 && c < ' ' && c != '\n' && c != '\r' && c != '\t' && c != '\v') || c == 0x7f) {
+      if ((static_cast<uint8_t>(c) < 0x20 && c != '\n' && c != '\r' && c != '\t' && c != '\v')
+          || c == 0x7f) {
         // Unprintable character.
         return IMPOSSIBLE;
       }
@@ -1764,17 +1788,16 @@ private:
   // require to function.
 
   struct SourceDirectory {
-    kj::Path path;
     kj::Own<const kj::ReadableDirectory> dir;
     bool isSourcePrefix;
   };
 
-  std::map<kj::PathPtr, SourceDirectory> sourceDirectories;
+  kj::HashMap<kj::Path, SourceDirectory> sourceDirectories;
   // For each import path and source prefix, tracks the directory object we opened for it.
   //
   // Use via getSourceDirectory().
 
-  std::map<const kj::ReadableDirectory*, kj::String> dirPrefixes;
+  kj::HashMap<const kj::ReadableDirectory*, kj::String> dirPrefixes;
   // For each open directory object, maps to a path prefix to add when displaying this path in
   // error messages. This keeps track of the original directory name as given by the user, before
   // canonicalization.
@@ -1824,10 +1847,9 @@ private:
 
     if (path.size() == 0) return disk->getRoot();
 
-    auto iter = sourceDirectories.find(path);
-    if (iter != sourceDirectories.end()) {
-      iter->second.isSourcePrefix = iter->second.isSourcePrefix || isSourcePrefix;
-      return *iter->second.dir;
+    KJ_IF_MAYBE(sdir, sourceDirectories.find(path)) {
+      sdir->isSourcePrefix = sdir->isSourcePrefix || isSourcePrefix;
+      return *sdir->dir;
     }
 
     if (path == cwd) {
@@ -1840,26 +1862,22 @@ private:
       //   getDisplayName().
       auto& result = disk->getCurrent();
       if (isSourcePrefix) {
-        kj::PathPtr key = path;
         kj::Own<const kj::ReadableDirectory> fakeOwn(&result, kj::NullDisposer::instance);
-        KJ_ASSERT(sourceDirectories.insert(std::make_pair(key,
-            SourceDirectory { kj::mv(path), kj::mv(fakeOwn), isSourcePrefix })).second);
+        sourceDirectories.insert(kj::mv(path), { kj::mv(fakeOwn), isSourcePrefix });
       }
       return result;
     }
 
     KJ_IF_MAYBE(dir, disk->getRoot().tryOpenSubdir(path)) {
       auto& result = *dir->get();
-      kj::PathPtr key = path;
-      KJ_ASSERT(sourceDirectories.insert(std::make_pair(key,
-          SourceDirectory { kj::mv(path), kj::mv(*dir), isSourcePrefix })).second);
+      sourceDirectories.insert(kj::mv(path), { kj::mv(*dir), isSourcePrefix });
 #if _WIN32
       kj::String prefix = pathStr.endsWith("/") || pathStr.endsWith("\\")
                         ? kj::str(pathStr) : kj::str(pathStr, '\\');
 #else
       kj::String prefix = pathStr.endsWith("/") ? kj::str(pathStr) : kj::str(pathStr, '/');
 #endif
-      KJ_ASSERT(dirPrefixes.insert(std::make_pair(&result, kj::mv(prefix))).second);
+      dirPrefixes.insert(&result, kj::mv(prefix));
       return result;
     } else {
       return nullptr;
@@ -1880,9 +1898,8 @@ private:
       auto prefix = path.slice(0, i);
       auto remainder = path.slice(i, path.size());
 
-      auto iter = sourceDirectories.find(prefix);
-      if (iter != sourceDirectories.end() && iter->second.isSourcePrefix) {
-        return { *iter->second.dir, remainder.clone() };
+      KJ_IF_MAYBE(sdir, sourceDirectories.find(prefix)) {
+        return { *sdir->dir, remainder.clone() };
       }
     }
 
@@ -1911,9 +1928,8 @@ private:
   }
 
   kj::String getDisplayName(const kj::ReadableDirectory& dir, kj::PathPtr path) {
-    auto iter = dirPrefixes.find(&dir);
-    if (iter != dirPrefixes.end()) {
-      return kj::str(iter->second, path.toNativeString());
+    KJ_IF_MAYBE(prefix, dirPrefixes.find(&dir)) {
+      return kj::str(*prefix, path.toNativeString());
     } else if (&dir == &disk->getRoot()) {
       return path.toNativeString(true);
     } else if (&dir == &disk->getCurrent()) {

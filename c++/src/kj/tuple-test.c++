@@ -83,6 +83,30 @@ TEST(Tuple, Tuple) {
 
   i = tuple(tuple(), 456, tuple(tuple(), tuple()));
   EXPECT_EQ(456u, i);
+
+  EXPECT_EQ(0, (indexOfType<int, Tuple<int, char, bool>>()));
+  EXPECT_EQ(1, (indexOfType<char, Tuple<int, char, bool>>()));
+  EXPECT_EQ(2, (indexOfType<bool, Tuple<int, char, bool>>()));
+  EXPECT_EQ(0, (indexOfType<int, int>()));
+}
+
+TEST(Tuple, RefTuple) {
+  uint i = 123;
+  StringPtr s = "foo";
+
+  Tuple<uint&, StringPtr&, uint, StringPtr> t = refTuple(i, s, 321, "bar");
+  EXPECT_EQ(get<0>(t), 123);
+  EXPECT_EQ(get<1>(t), "foo");
+  EXPECT_EQ(get<2>(t), 321);
+  EXPECT_EQ(get<3>(t), "bar");
+
+  i = 456;
+  s = "baz";
+
+  EXPECT_EQ(get<0>(t), 456);
+  EXPECT_EQ(get<1>(t), "baz");
+  EXPECT_EQ(get<2>(t), 321);
+  EXPECT_EQ(get<3>(t), "bar");
 }
 
 }  // namespace kj

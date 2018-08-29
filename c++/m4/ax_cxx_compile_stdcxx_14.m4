@@ -1,19 +1,20 @@
 # ============================================================================
 #  http://www.gnu.org/software/autoconf-archive/ax_cxx_compile_stdcxx_11.html
 #  Additionally modified to detect -stdlib by Kenton Varda.
+#  Further modified for C++14 by Kenton Varda.
 # ============================================================================
 #
 # SYNOPSIS
 #
-#   AX_CXX_COMPILE_STDCXX_11([ext|noext])
+#   AX_CXX_COMPILE_STDCXX_14([ext|noext])
 #
 # DESCRIPTION
 #
-#   Check for baseline language coverage in the compiler for the C++11
+#   Check for baseline language coverage in the compiler for the C++14
 #   standard; if necessary, add switches to CXXFLAGS to enable support.
-#   Errors out if no mode that supports C++11 baseline syntax can be found.
+#   Errors out if no mode that supports C++14 baseline syntax can be found.
 #   The argument, if specified, indicates whether you insist on an extended
-#   mode (e.g. -std=gnu++11) or a strict conformance mode (e.g. -std=c++11).
+#   mode (e.g. -std=gnu++14) or a strict conformance mode (e.g. -std=c++14).
 #   If neither is specified, you get whatever works, with preference for an
 #   extended mode.
 #
@@ -42,7 +43,7 @@
 
 #serial 1
 
-m4_define([_AX_CXX_COMPILE_STDCXX_11_testbody], [
+m4_define([_AX_CXX_COMPILE_STDCXX_14_testbody], [[
   template <typename T>
   struct check
   {
@@ -78,7 +79,18 @@ m4_define([_AX_CXX_COMPILE_STDCXX_11_testbody], [
   #include <type_traits>
   #endif
   #endif
-])
+
+  // C++14 stuff
+  auto deduceReturnType(int i) { return i; }
+
+  auto genericLambda = [](auto x, auto y) { return x + y; };
+  auto captureExpressions = [x = 123]() { return x; };
+
+  // Avoid unused variable warnings.
+  int foo() {
+    return genericLambda(1, 2) + captureExpressions();
+  }
+]])
 
 m4_define([_AX_CXX_COMPILE_STDCXX_11_testbody_lib], [
   #include <initializer_list>
@@ -87,31 +99,31 @@ m4_define([_AX_CXX_COMPILE_STDCXX_11_testbody_lib], [
   #include <thread>
 ])
 
-AC_DEFUN([AX_CXX_COMPILE_STDCXX_11], [dnl
+AC_DEFUN([AX_CXX_COMPILE_STDCXX_14], [dnl
   m4_if([$1], [], [],
         [$1], [ext], [],
         [$1], [noext], [],
-        [m4_fatal([invalid argument `$1' to AX_CXX_COMPILE_STDCXX_11])])dnl
+        [m4_fatal([invalid argument `$1' to AX_CXX_COMPILE_STDCXX_14])])dnl
   AC_LANG_ASSERT([C++])dnl
   ac_success=no
-  AC_CACHE_CHECK(whether $CXX supports C++11 features by default,
-  ax_cv_cxx_compile_cxx11,
-  [AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_11_testbody])],
-    [ax_cv_cxx_compile_cxx11=yes],
-    [ax_cv_cxx_compile_cxx11=no])])
-  if test x$ax_cv_cxx_compile_cxx11 = xyes; then
+  AC_CACHE_CHECK(whether $CXX supports C++14 features by default,
+  ax_cv_cxx_compile_cxx14,
+  [AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_14_testbody])],
+    [ax_cv_cxx_compile_cxx14=yes],
+    [ax_cv_cxx_compile_cxx14=no])])
+  if test x$ax_cv_cxx_compile_cxx14 = xyes; then
     ac_success=yes
   fi
 
   m4_if([$1], [noext], [], [dnl
   if test x$ac_success = xno; then
-    for switch in -std=gnu++11 -std=gnu++0x; do
-      cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx11_$switch])
-      AC_CACHE_CHECK(whether $CXX supports C++11 features with $switch,
+    for switch in -std=gnu++14 -std=gnu++1y; do
+      cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx14_$switch])
+      AC_CACHE_CHECK(whether $CXX supports C++14 features with $switch,
                      $cachevar,
         [ac_save_CXX="$CXX"
          CXX="$CXX $switch"
-         AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_11_testbody])],
+         AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_14_testbody])],
           [eval $cachevar=yes],
           [eval $cachevar=no])
          CXX="$ac_save_CXX"])
@@ -125,13 +137,13 @@ AC_DEFUN([AX_CXX_COMPILE_STDCXX_11], [dnl
 
   m4_if([$1], [ext], [], [dnl
   if test x$ac_success = xno; then
-    for switch in -std=c++11 -std=c++0x; do
-      cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx11_$switch])
-      AC_CACHE_CHECK(whether $CXX supports C++11 features with $switch,
+    for switch in -std=c++14 -std=c++1y; do
+      cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx14_$switch])
+      AC_CACHE_CHECK(whether $CXX supports C++14 features with $switch,
                      $cachevar,
         [ac_save_CXX="$CXX"
          CXX="$CXX $switch"
-         AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_11_testbody])],
+         AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_14_testbody])],
           [eval $cachevar=yes],
           [eval $cachevar=no])
          CXX="$ac_save_CXX"])
@@ -144,7 +156,7 @@ AC_DEFUN([AX_CXX_COMPILE_STDCXX_11], [dnl
   fi])
 
   if test x$ac_success = xno; then
-    AC_MSG_ERROR([*** A compiler with support for C++11 language features is required.])
+    AC_MSG_ERROR([*** A compiler with support for C++14 language features is required.])
   else
     ac_success=no
     AC_CACHE_CHECK(whether $CXX supports C++11 library features by default,

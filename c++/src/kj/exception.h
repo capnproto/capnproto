@@ -28,6 +28,7 @@
 #include "memory.h"
 #include "array.h"
 #include "string.h"
+#include "windows-sanity.h"  // work-around macro conflict with `ERROR`
 
 namespace kj {
 
@@ -354,6 +355,7 @@ String stringifyStackTrace(ArrayPtr<void* const>);
 // suprocesses.
 
 String stringifyStackTraceAddresses(ArrayPtr<void* const> trace);
+StringPtr stringifyStackTraceAddresses(ArrayPtr<void* const> trace, ArrayPtr<char> scratch);
 // Construct a string containing just enough information about a stack trace to be able to convert
 // it to file and line numbers later using offline tools. This produces a sequence of
 // space-separated code location identifiers. Each identifier may be an absolute address

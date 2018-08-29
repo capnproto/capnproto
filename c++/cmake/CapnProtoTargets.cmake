@@ -88,6 +88,12 @@ function(_capnp_import_pkg_config_target target)
     PATHS ${${target}_LIBRARY_DIRS}
     NO_DEFAULT_PATH
   )
+  # If the installed version of Cap'n Proto is in a system location, pkg-config will not have filled
+  # in ${target}_LIBRARY_DIRS. To account for this, fall back to a regular search.
+  find_library(CapnProto_${target}_IMPORTED_LOCATION
+    NAMES ${target_name_shared} ${target_name_static}  # prefer libfoo-version.so over libfoo.a
+  )
+
   if(NOT CapnProto_${target}_IMPORTED_LOCATION)
     # Not an error if the library doesn't exist -- we may have found a lite mode installation.
     if(CapnProto_DEBUG)
@@ -130,7 +136,8 @@ function(_capnp_import_pkg_config_target target)
   set_target_properties(CapnProto::${target} PROPERTIES
     ${imported_soname_property}
     IMPORTED_LOCATION "${target_location}"
-    INTERFACE_COMPILE_FEATURES "cxx_constexpr"
+    # TODO(cleanup): Use cxx_std_14 once it's safe to require cmake 3.8.
+    INTERFACE_COMPILE_FEATURES "cxx_generic_lambdas"
     INTERFACE_COMPILE_OPTIONS "${${target}_CFLAGS_OTHER}"
     INTERFACE_INCLUDE_DIRECTORIES "${${target}_INCLUDE_DIRS}"
 

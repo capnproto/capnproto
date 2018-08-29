@@ -44,7 +44,7 @@ template <typename T>
 struct PromiseFulfillerPair;
 
 template <typename Func, typename T>
-using PromiseForResult = Promise<_::JoinPromises<_::ReturnType<Func, T>>>;
+using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
 // T.  If T is void, then the promise is for the result of calling Func with no arguments.  If
 // Func itself returns a promise, the promises are joined, so you never get Promise<Promise<T>>.
@@ -281,7 +281,7 @@ public:
   // processes it.
   //
   // `errorHandler` is a function that takes `kj::Exception&&`, like the second parameter to
-  // `then()`, except that it must return void.  We make you specify this because otherwise it's
+  // `then()`, or the parameter to `catch_()`.  We make you specify this because otherwise it's
   // easy to forget to handle errors in a promise that you never use.  You may specify nullptr for
   // the error handler if you are sure that ignoring errors is fine, or if you know that you'll
   // eventually wait on the promise somewhere.
@@ -482,7 +482,7 @@ Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams);
 
 template <typename T>
 struct PromiseFulfillerPair {
-  Promise<_::JoinPromises<T>> promise;
+  _::ReducePromises<T> promise;
   Own<PromiseFulfiller<T>> fulfiller;
 };
 
@@ -546,7 +546,7 @@ public:
   // Releases previously-wrapped promises, so that they will not be canceled regardless of what
   // happens to this Canceler.
 
-  bool isEmpty() { return list == nullptr; }
+  bool isEmpty() const { return list == nullptr; }
   // Indicates if any previously-wrapped promises are still executing. (If this returns false, then
   // cancel() would be a no-op.)
 

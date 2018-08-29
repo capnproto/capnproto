@@ -126,7 +126,9 @@ while [ $# -gt 0 ]; do
     android )
       # To install Android SDK:
       # - Download command-line tools: https://developer.android.com/studio/index.html#command-tools
+      # - export SDKMANAGER_OPTS="--add-modules java.se.ee"
       # - Run $SDK_HOME/tools/bin/sdkmanager platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
+      # - export AVDMANAGER_OPTS="--add-modules java.se.ee"
       # - Run $SDK_HOME/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
       # - Run $SDK_HOME/ndk-bundle/build/tools/make_standalone_toolchain.py --arch arm --api 24 --install-dir $TOOLCHAIN_HOME
       if [ "$#" -ne 4 ]; then
@@ -148,7 +150,7 @@ while [ $# -gt 0 ]; do
 
       export PATH="$TOOLCHAIN_HOME/bin:$PATH"
       doit make distclean
-      doit ./configure --host="$CROSS_HOST" --with-external-capnp --disable-shared CXXFLAGS='-pie -fPIE' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
+      doit ./configure --host="$CROSS_HOST" CC=clang CXX=clang++ --with-external-capnp --disable-shared CXXFLAGS='-fPIE' LDFLAGS='-pie' LIBS='-static-libstdc++ -static-libgcc -ldl' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
 
       doit make -j$PARALLEL
       doit make -j$PARALLEL capnp-test
@@ -362,7 +364,7 @@ doit make -j$PARALLEL check
 if [ $IS_CLANG = no ]; then
   # Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
   # as system headers so warnings in them are ignored.
-  doit ${CXX:-g++} -isystem src -std=c++11 -fno-permissive -pedantic -Wall -Wextra -Werror \
+  doit ${CXX:-g++} -isystem src -std=c++1y -fno-permissive -pedantic -Wall -Wextra -Werror \
       -c src/capnp/test.capnp.c++ -o /dev/null
 fi
 
@@ -378,13 +380,13 @@ test "x$(which capnpc-c++)" = "x$STAGING/bin/capnpc-c++"
 cd samples
 
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++11 addressbook.c++ addressbook.capnp.c++ -o addressbook \
+doit ${CXX:-g++} -std=c++1y addressbook.c++ addressbook.capnp.c++ -o addressbook \
     $CXXFLAGS $(pkg-config --cflags --libs capnp)
 
 doit capnp compile -oc++ calculator.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++11 calculator-client.c++ calculator.capnp.c++ -o calculator-client \
+doit ${CXX:-g++} -std=c++1y calculator-client.c++ calculator.capnp.c++ -o calculator-client \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
-doit ${CXX:-g++} -std=c++11 calculator-server.c++ calculator.capnp.c++ -o calculator-server \
+doit ${CXX:-g++} -std=c++1y calculator-server.c++ calculator.capnp.c++ -o calculator-server \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
 
 test_samples
@@ -451,7 +453,7 @@ if [ "x`uname -m`" = "xx86_64" ]; then
     doit make distclean
 
   elif [ "x${CXX:-g++}" != "xg++-4.8" ]; then
-    doit ./configure CXX="${CXX:-g++} -m32" --disable-shared
+    doit ./configure CXX="${CXX:-g++} -m32" CXXFLAGS="$CXXFLAGS ${ADDL_M32_FLAGS:-}" --disable-shared
     doit make -j$PARALLEL check
     doit make distclean
   fi
@@ -516,7 +518,7 @@ if [ "x`uname`" != xDarwin ] && which valgrind > /dev/null; then
   # Running the fuzz tests under Valgrind is a great thing to do -- but it takes
   # some 40 minutes. So, it needs to be done as a separate step of the release
   # process, perhaps along with the AFL tests.
-  CAPNP_SKIP_FUZZ_TEST=1 doit valgrind --leak-check=full --track-fds=yes --error-exitcode=1 ./capnp-test
+  CAPNP_SKIP_FUZZ_TEST=1 doit valgrind --leak-check=full --track-fds=yes --error-exitcode=1 --child-silent-after-fork=yes --sim-hints=lax-ioctls ./capnp-test
 fi
 
 doit make maintainer-clean

@@ -31,8 +31,15 @@ EXTRA_DIST =                                                                 \
   src/capnp/testdata/pretty.txt                                              \
   src/capnp/testdata/lists.binary                                            \
   src/capnp/testdata/packedflat                                              \
+  src/capnp/testdata/pretty.json                                             \
+  src/capnp/testdata/short.json                                              \
+  src/capnp/testdata/annotated-json.binary                                   \
+  src/capnp/testdata/annotated.json                                          \
   CMakeLists.txt                                                             \
-  cmake/FindCapnProto.cmake                                                  \
+  cmake/CapnProtoMacros.cmake                                                \
+  cmake/CapnProtoTargets.cmake                                               \
+  cmake/CapnProtoConfig.cmake.in                                             \
+  cmake/CapnProtoConfigVersion.cmake.in                                      \
   src/CMakeLists.txt                                                         \
   src/kj/CMakeLists.txt                                                      \
   src/capnp/CMakeLists.txt
@@ -120,7 +127,8 @@ cmakeconfig_DATA = $(CAPNP_CMAKE_CONFIG_FILES)                 \
   cmake/CapnProtoTargets.cmake
 
 noinst_HEADERS = \
-  src/kj/miniposix.h
+  src/kj/miniposix.h \
+  src/kj/async-io-internal.h
 
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
@@ -131,6 +139,9 @@ includekj_HEADERS =                                            \
   src/kj/vector.h                                              \
   src/kj/string.h                                              \
   src/kj/string-tree.h                                         \
+  src/kj/hash.h                                                \
+  src/kj/table.h                                               \
+  src/kj/map.h                                                 \
   src/kj/encoding.h                                            \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
@@ -165,7 +176,10 @@ includekjstd_HEADERS =                                         \
 includekjcompat_HEADERS =                                      \
   src/kj/compat/gtest.h                                        \
   src/kj/compat/url.h                                          \
-  src/kj/compat/http.h
+  src/kj/compat/http.h                                         \
+  src/kj/compat/gzip.h                                         \
+  src/kj/compat/readiness-io.h                                 \
+  src/kj/compat/tls.h
 
 includecapnp_HEADERS =                                         \
   src/capnp/c++.capnp.h                                        \
@@ -205,10 +219,20 @@ includecapnpcompat_HEADERS =                                   \
   src/capnp/compat/json.h                                      \
   src/capnp/compat/json.capnp.h
 
+if BUILD_KJ_TLS
+MAYBE_KJ_TLS_LA=libkj-tls.la
+MAYBE_KJ_TLS_TESTS=                                            \
+  src/kj/compat/readiness-io-test.c++                          \
+  src/kj/compat/tls-test.c++
+else
+MAYBE_KJ_TLS_LA=
+MAYBE_KJ_TLS_TESTS=
+endif
+
 if LITE_MODE
 lib_LTLIBRARIES = libkj.la libkj-test.la libcapnp.la
 else
-lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
+lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la $(MAYBE_KJ_TLS_LA) libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
 endif
 
 # Don't include security release in soname -- we want to replace old binaries
@@ -225,6 +249,8 @@ libkj_la_SOURCES=                                              \
   src/kj/array.c++                                             \
   src/kj/string.c++                                            \
   src/kj/string-tree.c++                                       \
+  src/kj/hash.c++                                              \
+  src/kj/table.c++                                             \
   src/kj/encoding.c++                                          \
   src/kj/exception.c++                                         \
   src/kj/debug.c++                                             \
@@ -260,7 +286,15 @@ libkj_http_la_LIBADD = libkj-async.la libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_http_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_http_la_SOURCES=                                         \
   src/kj/compat/url.c++                                        \
-  src/kj/compat/http.c++
+  src/kj/compat/http.c++                                       \
+  src/kj/compat/gzip.c++
+
+libkj_tls_la_LIBADD = libkj-async.la libkj.la -lssl -lcrypto $(ASYNC_LIBS) $(PTHREAD_LIBS)
+libkj_tls_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
+libkj_tls_la_SOURCES=                                          \
+  src/kj/compat/readiness-io.c++                               \
+  src/kj/compat/tls.c++
+
 endif !LITE_MODE
 
 if !LITE_MODE
@@ -375,7 +409,8 @@ endif LITE_MODE
 test_capnpc_inputs =                                           \
   src/capnp/test.capnp                                         \
   src/capnp/test-import.capnp                                  \
-  src/capnp/test-import2.capnp
+  src/capnp/test-import2.capnp                                 \
+  src/capnp/compat/json-test.capnp
 
 test_capnpc_outputs =                                          \
   src/capnp/test.capnp.c++                                     \
@@ -383,7 +418,9 @@ test_capnpc_outputs =                                          \
   src/capnp/test-import.capnp.c++                              \
   src/capnp/test-import.capnp.h                                \
   src/capnp/test-import2.capnp.c++                             \
-  src/capnp/test-import2.capnp.h
+  src/capnp/test-import2.capnp.h                               \
+  src/capnp/compat/json-test.capnp.c++                         \
+  src/capnp/compat/json-test.capnp.h
 
 if USE_EXTERNAL_CAPNP
 
@@ -430,6 +467,8 @@ heavy_tests =                                                  \
   src/kj/std/iostream-test.c++                                 \
   src/kj/compat/url-test.c++                                   \
   src/kj/compat/http-test.c++                                  \
+  src/kj/compat/gzip-test.c++                                  \
+  $(MAYBE_KJ_TLS_TESTS)                                        \
   src/capnp/canonicalize-test.c++                              \
   src/capnp/capability-test.c++                                \
   src/capnp/membrane-test.c++                                  \
@@ -453,6 +492,7 @@ capnp_test_LDADD =                                             \
   libcapnp-json.la                                             \
   libcapnp.la                                                  \
   libkj-http.la                                                \
+  $(MAYBE_KJ_TLS_LA)                                           \
   libkj-async.la                                               \
   libkj-test.la                                                \
   libkj.la                                                     \
@@ -469,6 +509,8 @@ capnp_test_SOURCES =                                           \
   src/kj/array-test.c++                                        \
   src/kj/string-test.c++                                       \
   src/kj/string-tree-test.c++                                  \
+  src/kj/table-test.c++                                        \
+  src/kj/map-test.c++                                          \
   src/kj/encoding-test.c++                                     \
   src/kj/exception-test.c++                                    \
   src/kj/debug-test.c++                                        \

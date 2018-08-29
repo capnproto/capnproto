@@ -100,7 +100,7 @@ using ::close;
 // We're on Windows, including MinGW. pipe() and mkdir() are non-standard even on MinGW.
 
 inline int pipe(int fds[2]) {
-  return ::_pipe(fds, 8192, _O_BINARY);
+  return ::_pipe(fds, 8192, _O_BINARY | _O_NOINHERIT);
 }
 inline int mkdir(const char* path, int mode) {
   return ::_mkdir(path);

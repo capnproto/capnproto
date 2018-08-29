@@ -6,16 +6,16 @@
 set -exuo pipefail
 
 capnpc -oc++ addressbook.capnp
-c++ -std=c++11 -Wall addressbook.c++ addressbook.capnp.c++ \
+c++ -std=c++14 -Wall addressbook.c++ addressbook.capnp.c++ \
     $(pkg-config --cflags --libs capnp) -o addressbook
 ./addressbook write | ./addressbook read
 ./addressbook dwrite | ./addressbook dread
 rm addressbook addressbook.capnp.c++ addressbook.capnp.h
 
 capnpc -oc++ calculator.capnp
-c++ -std=c++11 -Wall calculator-client.c++ calculator.capnp.c++ \
+c++ -std=c++14 -Wall calculator-client.c++ calculator.capnp.c++ \
     $(pkg-config --cflags --libs capnp-rpc) -o calculator-client
-c++ -std=c++11 -Wall calculator-server.c++ calculator.capnp.c++ \
+c++ -std=c++14 -Wall calculator-server.c++ calculator.capnp.c++ \
     $(pkg-config --cflags --libs capnp-rpc) -o calculator-server
 rm -f /tmp/capnp-calculator-example-$$
 ./calculator-server unix:/tmp/capnp-calculator-example-$$ &

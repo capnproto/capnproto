@@ -119,7 +119,7 @@ TEST(Mutex, MutexGuarded) {
   EXPECT_EQ(321u, value.getWithoutLock());
 }
 
-#if KJ_USE_FUTEX    // TODO(soon): Implement on pthread & win32
+#if KJ_USE_FUTEX    // TODO(someday): Implement on pthread & win32
 TEST(Mutex, When) {
   MutexGuarded<uint> value(123);
 
