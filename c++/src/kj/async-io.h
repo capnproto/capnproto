@@ -203,6 +203,30 @@ struct CapabilityPipe {
   Own<AsyncCapabilityStream> ends[2];
 };
 
+struct Tee {
+  // Two AsyncInputStreams which each read the same data from some wrapped inner AsyncInputStream.
+
+  Own<AsyncInputStream> branches[2];
+};
+
+Tee newTee(Own<AsyncInputStream> input, uint64_t limit = kj::maxValue);
+// Constructs a Tee that operates in-process. The tee buffers data if any read or pump operations is
+// called on one of the two input ends. If a read or pump operation is subsequently called on the
+// other input end, the buffered data is consumed.
+//
+// `pumpTo()` operations on the input ends will proactively read from the inner stream and block
+// while writing to the output stream. While one branch has an active `pumpTo()` operation, any
+// `tryRead()` operation on the other branch will not be allowed to read faster than allowed by the
+// pump's backpressure. (In other words, it will never cause buffering on the pump.) Similarly, if
+// there are `pumpTo()` operations active on both branches, the greater of the two backpressures is
+// respected -- the two pumps progress in lockstep, and there is no buffering.
+//
+// At no point will a branch's buffer be allowed to grow beyond `limit` bytes. If the buffer would
+// grow beyond the limit, an exception is generated, which both branches see once they have
+// exhausted their buffers.
+//
+// It is recommended that you use a more conservative value for `limit` than the default.
+
 class ConnectionReceiver {
   // Represents a server socket listening on a port.
 
