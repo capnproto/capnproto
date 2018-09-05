@@ -583,7 +583,7 @@ public:
 struct HttpClientSettings {
   kj::Duration idleTimout = 5 * kj::SECONDS;
   // For clients which automatically create new connections, any connection idle for at least this
-  // long will be closed.
+  // long will be closed. Set this to 0 to prevent connection reuse entirely.
 
   kj::Maybe<EntropySource&> entropySource = nullptr;
   // Must be provided in order to use `openWebSocket`. If you don't need WebSockets, this can be

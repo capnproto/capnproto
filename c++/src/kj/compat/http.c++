@@ -3516,8 +3516,9 @@ private:
   }
 
   void returnClientToAvailable(kj::Own<HttpClientImpl> client) {
-    // Only return the connection to the pool if it is reusable.
-    if (client->canReuse()) {
+    // Only return the connection to the pool if it is reusable and if our settings indicate we
+    // should reuse connections.
+    if (client->canReuse() && settings.idleTimout > 0 * kj::SECONDS) {
       availableClients.push_back(AvailableClient {
         kj::mv(client), timer.now() + settings.idleTimout
       });
