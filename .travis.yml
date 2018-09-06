@@ -24,10 +24,10 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
           packages:
-            - g++-4.9
+            - g++-5
       env:
-        - MATRIX_CC=gcc-4.9
-        - MATRIX_CXX=g++-4.9
+        - MATRIX_CC=gcc-5
+        - MATRIX_CXX=g++-5
 
     # New GCC
     - os: linux
