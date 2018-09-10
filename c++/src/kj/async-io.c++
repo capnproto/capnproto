@@ -31,6 +31,7 @@
 #include "vector.h"
 #include "io.h"
 #include "one-of.h"
+#include <deque>
 
 #if _WIN32
 #include <winsock2.h>
@@ -1123,6 +1124,629 @@ TwoWayPipe newTwoWayPipe() {
   auto end1 = kj::heap<TwoWayPipeEnd>(kj::addRef(*pipe1), kj::addRef(*pipe2));
   auto end2 = kj::heap<TwoWayPipeEnd>(kj::mv(pipe2), kj::mv(pipe1));
   return { { kj::mv(end1), kj::mv(end2) } };
+}
+
+namespace {
+
+class AsyncTee final: public Refcounted {
+public:
+  using BranchId = uint;
+
+  explicit AsyncTee(Own<AsyncInputStream> inner, uint64_t bufferSizeLimit)
+      : inner(mv(inner)), bufferSizeLimit(bufferSizeLimit), length(this->inner->tryGetLength()) {}
+  ~AsyncTee() noexcept(false) {
+    bool hasBranches = false;
+    for (auto& branch: branches) {
+      hasBranches = hasBranches || branch != nullptr;
+    }
+    KJ_ASSERT(!hasBranches, "destroying AsyncTee with branch still alive") {
+      // Don't std::terminate().
+      break;
+    }
+  }
+
+  void addBranch(BranchId branch) {
+    KJ_REQUIRE(branches[branch] == nullptr, "branch already exists");
+    branches[branch] = Branch();
+  }
+
+  void removeBranch(BranchId branch) {
+    auto& state = KJ_REQUIRE_NONNULL(branches[branch], "branch was already destroyed");
+    KJ_REQUIRE(state.sink == nullptr,
+        "destroying tee branch with operation still in-progress; probably going to segfault") {
+      // Don't std::terminate().
+      break;
+    }
+
+    branches[branch] = nullptr;
+  }
+
+  Promise<size_t> tryRead(BranchId branch, void* buffer, size_t minBytes, size_t maxBytes)  {
+    auto& state = KJ_ASSERT_NONNULL(branches[branch]);
+    KJ_ASSERT(state.sink == nullptr);
+
+    // If there is excess data in the buffer for us, slurp that up.
+    auto readBuffer = arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes);
+    auto readSoFar = state.buffer.consume(readBuffer, minBytes);
+
+    if (minBytes == 0) {
+      return readSoFar;
+    }
+
+    if (state.buffer.empty()) {
+      KJ_IF_MAYBE(reason, stoppage) {
+        // Prefer a short read to an exception. The exception prevents the pull loop from adding any
+        // data to the buffer, so `readSoFar` will be zero the next time someone calls `tryRead()`,
+        // and the caller will see the exception.
+        if (reason->is<Eof>() || readSoFar > 0) {
+          return readSoFar;
+        }
+        return cp(reason->get<Exception>());
+      }
+    }
+
+    auto promise = newAdaptedPromise<size_t, ReadSink>(state.sink, readBuffer, minBytes, readSoFar);
+    ensurePulling();
+    return mv(promise);
+  }
+
+  Maybe<uint64_t> tryGetLength(BranchId branch)  {
+    auto& state = KJ_ASSERT_NONNULL(branches[branch]);
+
+    return length.map([&state](uint64_t amount) {
+      return amount + state.buffer.size();
+    });
+  }
+
+  Promise<uint64_t> pumpTo(BranchId branch, AsyncOutputStream& output, uint64_t amount)  {
+    auto& state = KJ_ASSERT_NONNULL(branches[branch]);
+    KJ_ASSERT(state.sink == nullptr);
+
+    if (amount == 0) {
+      return amount;
+    }
+
+    if (state.buffer.empty()) {
+      KJ_IF_MAYBE(reason, stoppage) {
+        if (reason->is<Eof>()) {
+          return uint64_t(0);
+        }
+        return cp(reason->get<Exception>());
+      }
+    }
+
+    auto promise = newAdaptedPromise<uint64_t, PumpSink>(state.sink, output, amount);
+    ensurePulling();
+    return mv(promise);
+  }
+
+private:
+  struct Eof {};
+  using Stoppage = OneOf<Eof, Exception>;
+
+  class Buffer {
+  public:
+    uint64_t consume(ArrayPtr<byte>& readBuffer, size_t& minBytes);
+    // Consume as many bytes as possible, copying them into `readBuffer`. Return the number of bytes
+    // consumed.
+    //
+    // `readBuffer` and `minBytes` are both assigned appropriate new values, such that after any
+    // call to `consume()`, `readBuffer` will point to the remaining slice of unwritten space, and
+    // `minBytes` will have been decremented (clamped to zero) by the amount of bytes read. That is,
+    // the read can be considered fulfilled if `minBytes` is zero after a call to `consume()`.
+
+    Array<const ArrayPtr<const byte>> asArray(uint64_t minBytes, uint64_t& amount);
+    // Consume the first `minBytes` of the buffer (or the entire buffer) and return it in an Array
+    // of ArrayPtr<const byte>s, suitable for passing to AsyncOutputStream.write(). The outer Array
+    // owns the underlying data.
+
+    void produce(Array<byte> bytes);
+    // Enqueue a byte array to the end of the buffer list.
+
+    bool empty() const;
+    uint64_t size() const;
+
+  private:
+    std::deque<Array<byte>> bufferList;
+  };
+
+  class Sink {
+  public:
+    struct Need {
+      // We use uint64_t here because:
+      // - pumpTo() accepts it as the `amount` parameter.
+      // - all practical values of tryRead()'s `maxBytes` parameter (a size_t) should also fit into
+      //   a uint64_t, unless we're on a machine with multiple exabytes of memory ...
+
+      uint64_t minBytes = 0;
+
+      uint64_t maxBytes = kj::maxValue;
+    };
+
+    virtual Promise<void> fill(Buffer& inBuffer, const Maybe<Stoppage>& stoppage) = 0;
+    // Attempt to fill the sink with bytes andreturn a promise which must resolve before any inner
+    // read may be attempted. If a sink requires backpressure to be respected, this is how it should
+    // be communicated.
+    //
+    // If the sink is full, it must detach from the tee before the returned promise is resolved.
+    //
+    // The returned promise must not result in an exception.
+
+    virtual Need need() = 0;
+
+    virtual void reject(Exception&& exception) = 0;
+    // Inform this sink of a catastrophic exception and detach it. Regular read exceptions should be
+    // propagated through `fill()`'s stoppage parameter instead.
+  };
+
+  template <typename T>
+  class SinkBase: public Sink {
+    // Registers itself with the tee as a sink on construction, detaches from the tee on
+    // fulfillment, rejection, or destruction.
+    //
+    // A bit of a Frankenstein, avert your eyes. For one thing, it's more of a mixin than a base...
+
+  public:
+    explicit SinkBase(PromiseFulfiller<T>& fulfiller, Maybe<Sink&>& sinkLink)
+        : fulfiller(fulfiller), sinkLink(sinkLink) {
+      KJ_ASSERT(sinkLink == nullptr, "sink initiated with sink already in flight");
+      sinkLink = *this;
+    }
+    KJ_DISALLOW_COPY(SinkBase);
+    ~SinkBase() noexcept(false) { detach(); }
+
+    void reject(Exception&& exception) override {
+      // The tee is allowed to reject this sink if it needs to, e.g. to propagate a non-inner read
+      // exception from the pull loop. Only the derived class is allowed to fulfill() directly,
+      // though -- the tee must keep calling fill().
+
+      fulfiller.reject(mv(exception));
+      detach();
+    }
+
+  protected:
+    template <typename U>
+    void fulfill(U value) {
+      fulfiller.fulfill(fwd<U>(value));
+      detach();
+    }
+
+  private:
+    void detach() {
+      KJ_IF_MAYBE(sink, sinkLink) {
+        if (sink == this) {
+          sinkLink = nullptr;
+        }
+      }
+    }
+
+    PromiseFulfiller<T>& fulfiller;
+    Maybe<Sink&>& sinkLink;
+  };
+
+  struct Branch {
+    Buffer buffer;
+    Maybe<Sink&> sink;
+  };
+
+  class ReadSink final: public SinkBase<size_t> {
+  public:
+    explicit ReadSink(PromiseFulfiller<size_t>& fulfiller, Maybe<Sink&>& registration,
+                      ArrayPtr<byte> buffer, size_t minBytes, size_t readSoFar)
+        : SinkBase(fulfiller, registration), buffer(buffer),
+          minBytes(minBytes), readSoFar(readSoFar) {}
+
+    Promise<void> fill(Buffer& inBuffer, const Maybe<Stoppage>& stoppage) override {
+      auto amount = inBuffer.consume(buffer, minBytes);
+      readSoFar += amount;
+
+      if (minBytes == 0) {
+        // We satisfied the read request.
+        fulfill(readSoFar);
+        return READY_NOW;
+      }
+
+      if (amount == 0 && inBuffer.empty()) {
+        // We made no progress on the read request and the buffer is tapped out.
+        KJ_IF_MAYBE(reason, stoppage) {
+          if (reason->is<Eof>() || readSoFar > 0) {
+            // Prefer short read to exception.
+            fulfill(readSoFar);
+          } else {
+            reject(cp(reason->get<Exception>()));
+          }
+          return READY_NOW;
+        }
+      }
+
+      return READY_NOW;
+    }
+
+    Need need() override { return Need { minBytes, buffer.size() }; }
+
+  private:
+    ArrayPtr<byte> buffer;
+    size_t minBytes;
+    // Arguments to the outer tryRead() call, sliced/decremented after every buffer consumption.
+
+    size_t readSoFar;
+    // End result of the outer tryRead().
+  };
+
+  class PumpSink final: public SinkBase<uint64_t> {
+  public:
+    explicit PumpSink(PromiseFulfiller<uint64_t>& fulfiller, Maybe<Sink&>& registration,
+                      AsyncOutputStream& output, uint64_t limit)
+        : SinkBase(fulfiller, registration), output(output), limit(limit) {}
+
+    ~PumpSink() noexcept(false) {
+      canceler.cancel("This pump has been canceled.");
+    }
+
+    Promise<void> fill(Buffer& inBuffer, const Maybe<Stoppage>& stoppage) override {
+      KJ_ASSERT(limit > 0);
+
+      uint64_t amount = 0;
+
+      // TODO(someday): This consumes data from the buffer, but we cannot know if the stream to
+      //   which we're pumping will accept it until after the write() promise completes. If the
+      //   write() promise rejects, we lose this data. We should consume the data from the buffer
+      //   only after successful writes.
+      auto writeBuffer = inBuffer.asArray(limit, amount);
+      KJ_ASSERT(limit >= amount);
+      if (amount > 0) {
+        Promise<void> promise = nullptr;
+
+        try {
+          promise = canceler.wrap(output.write(writeBuffer).attach(mv(writeBuffer)));
+        } catch (const Exception& exception) {
+          reject(cp(exception));
+          return READY_NOW;
+        }
+
+        promise = promise.then([this, amount]() {
+          limit -= amount;
+          pumpedSoFar += amount;
+          if (limit == 0) {
+            fulfill(pumpedSoFar);
+          }
+        }).eagerlyEvaluate([this](Exception&& exception) {
+          reject(mv(exception));
+        });
+
+        return mv(promise);
+      } else KJ_IF_MAYBE(reason, stoppage) {
+        if (reason->is<Eof>()) {
+          // Unlike in the read case, it makes more sense to immediately propagate exceptions to the
+          // pump promise rather than show it a "short pump".
+          fulfill(pumpedSoFar);
+        } else {
+          reject(cp(reason->get<Exception>()));
+        }
+      }
+
+      return READY_NOW;
+    }
+
+    Need need() override { return Need { 1, limit }; }
+
+  private:
+    AsyncOutputStream& output;
+    uint64_t limit;
+    // Arguments to the outer pumpTo() call, decremented after every buffer consumption.
+    //
+    // Equal to zero once fulfiller has been fulfilled/rejected.
+
+    uint64_t pumpedSoFar = 0;
+    // End result of the outer pumpTo().
+
+    Canceler canceler;
+    // When the pump is canceled, we also need to cancel any write operations in flight.
+  };
+
+  // =====================================================================================
+
+  Maybe<Sink::Need> analyzeSinks() {
+    // Return nullptr if there are no sinks at all. Otherwise, return the largest `minBytes` and the
+    // smallest `maxBytes` requested by any sink. The pull loop will use these values to calculate
+    // the optimal buffer size for the next inner read, so that a minimum amount of data is buffered
+    // at any given time.
+
+    uint64_t minBytes = 0;
+    uint64_t maxBytes = kj::maxValue;
+
+    uint nBranches = 0;
+    uint nSinks = 0;
+
+    for (auto& state: branches) {
+      KJ_IF_MAYBE(s, state) {
+        ++nBranches;
+        KJ_IF_MAYBE(sink, s->sink) {
+          ++nSinks;
+          auto need = sink->need();
+          minBytes = kj::max(minBytes, need.minBytes);
+          maxBytes = kj::min(maxBytes, need.maxBytes);
+        }
+      }
+    }
+
+    if (nSinks > 0) {
+      KJ_ASSERT(minBytes > 0);
+      KJ_ASSERT(maxBytes > 0, "sink was filled but did not detach");
+
+      // Sinks may report non-overlapping needs.
+      maxBytes = kj::max(minBytes, maxBytes);
+
+      return Sink::Need { minBytes, maxBytes };
+    }
+
+    // No active sinks.
+    return nullptr;
+  }
+
+  void ensurePulling() {
+    if (!pulling) {
+      pulling = true;
+      UnwindDetector unwind;
+      KJ_DEFER(if (unwind.isUnwinding()) pulling = false);
+      pullPromise = pull();
+    }
+  }
+
+  Promise<void> pull() {
+    // Use evalLater() so that two pump sinks added on the same turn of the event loop will not
+    // cause buffering.
+    return evalLater([this] {
+      // Attempt to fill any sinks that exist.
+
+      Vector<Promise<void>> promises;
+
+      for (auto& state: branches) {
+        KJ_IF_MAYBE(s, state) {
+          KJ_IF_MAYBE(sink, s->sink) {
+            promises.add(sink->fill(s->buffer, stoppage));
+          }
+        }
+      }
+
+      // Respect the greatest of the sinks' backpressures.
+      return joinPromises(promises.releaseAsArray());
+    }).then([this]() -> Promise<void> {
+      // Check to see whether we need to perform an inner read.
+
+      auto need = analyzeSinks();
+
+      if (need == nullptr) {
+        // No more sinks, stop pulling.
+        pulling = false;
+        return READY_NOW;
+      }
+
+      if (stoppage != nullptr) {
+        // We're eof or errored, don't read, but loop so we can fill the sink(s).
+        return pull();
+      }
+
+      auto& n = KJ_ASSERT_NONNULL(need);
+
+      KJ_ASSERT(n.minBytes > 0);
+
+      // We must perform an inner read.
+
+      // We'd prefer not to explode our buffer, if that's cool. We cap `maxBytes` to the buffer size
+      // limit or our builtin MAX_BLOCK_SIZE, whichever is smaller. But, we make sure `maxBytes` is
+      // still >= `minBytes`.
+      n.maxBytes = kj::min(n.maxBytes, MAX_BLOCK_SIZE);
+      n.maxBytes = kj::min(n.maxBytes, bufferSizeLimit);
+      n.maxBytes = kj::max(n.minBytes, n.maxBytes);
+      for (auto& state: branches) {
+        KJ_IF_MAYBE(s, state) {
+          // TODO(perf): buffer.size() is O(n) where n = # of individual heap-allocated byte arrays.
+          if (s->buffer.size() + n.maxBytes > bufferSizeLimit) {
+            stoppage = Stoppage(KJ_EXCEPTION(FAILED, "tee buffer size limit exceeded"));
+            return pull();
+          }
+        }
+      }
+      auto heapBuffer = heapArray<byte>(n.maxBytes);
+
+      // gcc 4.9 quirk: If I don't hoist this into a separate variable and instead call
+      //
+      //   inner->tryRead(heapBuffer.begin(), n.minBytes, heapBuffer.size())
+      //
+      // `heapBuffer` seems to get moved into the lambda capture before the arguments to `tryRead()`
+      // are evaluated, meaning `inner` sees a nullptr destination. Bizarrely, `inner` sees the
+      // correct value for `heapBuffer.size()`... I dunno, man.
+      auto destination = heapBuffer.begin();
+
+      try {
+        return inner->tryRead(destination, n.minBytes, n.maxBytes)
+            .then([this, heapBuffer = mv(heapBuffer), minBytes = n.minBytes](size_t amount) mutable
+                -> Promise<void> {
+          length = length.map([amount](uint64_t n) {
+            KJ_ASSERT(n >= amount);
+            return n - amount;
+          });
+
+          if (amount < heapBuffer.size()) {
+            heapBuffer = heapBuffer.slice(0, amount).attach(mv(heapBuffer));
+          }
+
+          KJ_ASSERT(stoppage == nullptr);
+          Maybe<ArrayPtr<byte>> bufferPtr = nullptr;
+          for (auto& state: branches) {
+            KJ_IF_MAYBE(s, state) {
+              // Prefer to move the buffer into the receiving branch's deque, rather than memcpy.
+              //
+              // TODO(perf): For the 2-branch case, this is fine, since the majority of the time
+              //   only one buffer will be in use. If we generalize to the n-branch case, this would
+              //   become memcpy-heavy.
+              KJ_IF_MAYBE(ptr, bufferPtr) {
+                s->buffer.produce(heapArray(*ptr));
+              } else {
+                bufferPtr = ArrayPtr<byte>(heapBuffer);
+                s->buffer.produce(mv(heapBuffer));
+              }
+            }
+          }
+
+          if (amount < minBytes) {
+            // Short read, EOF.
+            stoppage = Stoppage(Eof());
+          }
+
+          return pull();
+        }, [this](Exception&& exception) {
+          // Exception from the inner tryRead(). Propagate.
+          stoppage = Stoppage(mv(exception));
+          return pull();
+        });
+      } catch (const Exception& exception) {
+        // Exception from the inner tryRead(). Propagate.
+        stoppage = Stoppage(cp(exception));
+        return pull();
+      }
+    }).eagerlyEvaluate([this](Exception&& exception) {
+      // Exception from our loop, not from inner tryRead(). Something is broken; tell everybody!
+      pulling = false;
+      for (auto& state: branches) {
+        KJ_IF_MAYBE(s, state) {
+          KJ_IF_MAYBE(sink, s->sink) {
+            sink->reject(KJ_EXCEPTION(FAILED, "Exception in tee loop", exception));
+          }
+        }
+      }
+    });
+  }
+
+  constexpr static size_t MAX_BLOCK_SIZE = 1 << 14;  // 16k
+
+  Own<AsyncInputStream> inner;
+  const uint64_t bufferSizeLimit = kj::maxValue;
+  Maybe<uint64_t> length;
+  Maybe<Branch> branches[2];
+  Maybe<Stoppage> stoppage;
+  Promise<void> pullPromise = READY_NOW;
+  bool pulling = false;
+};
+
+constexpr size_t AsyncTee::MAX_BLOCK_SIZE;
+
+uint64_t AsyncTee::Buffer::consume(ArrayPtr<byte>& readBuffer, size_t& minBytes) {
+  uint64_t totalAmount = 0;
+
+  while (readBuffer.size() > 0 && !bufferList.empty()) {
+    auto& bytes = bufferList.front();
+    auto amount = kj::min(bytes.size(), readBuffer.size());
+    memcpy(readBuffer.begin(), bytes.begin(), amount);
+    totalAmount += amount;
+
+    readBuffer = readBuffer.slice(amount, readBuffer.size());
+    minBytes -= kj::min(amount, minBytes);
+
+    if (amount == bytes.size()) {
+      bufferList.pop_front();
+    } else {
+      bytes = heapArray(bytes.slice(amount, bytes.size()));
+      return totalAmount;
+    }
+  }
+
+  return totalAmount;
+}
+
+void AsyncTee::Buffer::produce(Array<byte> bytes) {
+  bufferList.push_back(mv(bytes));
+}
+
+Array<const ArrayPtr<const byte>> AsyncTee::Buffer::asArray(
+    uint64_t maxBytes, uint64_t& amount) {
+  amount = 0;
+
+  Vector<ArrayPtr<const byte>> buffers;
+  Vector<Array<byte>> ownBuffers;
+
+  while (maxBytes > 0 && !bufferList.empty()) {
+    auto& bytes = bufferList.front();
+
+    if (bytes.size() <= maxBytes) {
+      amount += bytes.size();
+      maxBytes -= bytes.size();
+
+      buffers.add(bytes);
+      ownBuffers.add(mv(bytes));
+
+      bufferList.pop_front();
+    } else {
+      auto ownBytes = heapArray(bytes.slice(0, maxBytes));
+      buffers.add(ownBytes);
+      ownBuffers.add(mv(ownBytes));
+
+      bytes = heapArray(bytes.slice(maxBytes, bytes.size()));
+
+      amount += maxBytes;
+      maxBytes = 0;
+    }
+  }
+
+
+  if (buffers.size() > 0) {
+    return buffers.releaseAsArray().attach(mv(ownBuffers));
+  }
+
+  return {};
+}
+
+bool AsyncTee::Buffer::empty() const {
+  return bufferList.empty();
+}
+
+uint64_t AsyncTee::Buffer::size() const {
+  uint64_t result = 0;
+
+  for (auto& bytes: bufferList) {
+    result += bytes.size();
+  }
+
+  return result;
+}
+
+class TeeBranch final: public AsyncInputStream {
+public:
+  TeeBranch(Own<AsyncTee> tee, uint8_t branch): tee(mv(tee)), branch(branch) {
+    this->tee->addBranch(branch);
+  }
+  ~TeeBranch() noexcept(false) {
+    unwind.catchExceptionsIfUnwinding([&]() {
+      tee->removeBranch(branch);
+    });
+  }
+
+  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return tee->tryRead(branch, buffer, minBytes, maxBytes);
+  }
+
+  Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+    return tee->pumpTo(branch, output, amount);
+  }
+
+  Maybe<uint64_t> tryGetLength() override {
+    return tee->tryGetLength(branch);
+  }
+
+private:
+  Own<AsyncTee> tee;
+  const uint8_t branch;
+  UnwindDetector unwind;
+};
+
+}  // namespace
+
+Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
+  auto impl = refcounted<AsyncTee>(mv(input), limit);
+  Own<AsyncInputStream> branch1 = heap<TeeBranch>(addRef(*impl), 0);
+  Own<AsyncInputStream> branch2 = heap<TeeBranch>(mv(impl), 1);
+  return { { mv(branch1), mv(branch2) } };
 }
 
 Promise<Own<AsyncCapabilityStream>> AsyncCapabilityStream::receiveStream() {
