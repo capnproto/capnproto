@@ -798,8 +798,13 @@ public:
   void poll();
   // Pumps the event queue and polls for I/O until there's nothing left to do (without blocking).
 
+  void setBusyPollInterval(uint count) { busyPollInterval = count; }
+  // Set the maximum number of events to run in a row before calling poll() on the EventPort to
+  // check for new I/O.
+
 private:
   EventLoop& loop;
+  uint busyPollInterval = kj::maxValue;
   friend class EventLoop;
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);

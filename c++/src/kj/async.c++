@@ -436,10 +436,16 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
   loop.running = true;
   KJ_DEFER(loop.running = false);
 
+  uint counter = 0;
   while (!doneEvent.fired) {
     if (!loop.turn()) {
       // No events in the queue.  Wait for callback.
+      counter = 0;
       loop.port.wait();
+    } else if (++counter > waitScope.busyPollInterval) {
+      // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
+      counter = 0;
+      loop.port.poll();
     }
   }
 
