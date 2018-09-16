@@ -131,7 +131,8 @@ namespace kj {
 #define KJ_EXPAND(X) X
 
 #define KJ_LOG(severity, ...) \
-  if (!::kj::_::Debug::shouldLog(::kj::LogSeverity::severity)) {} else \
+  for (bool _kj_shouldLog = ::kj::_::Debug::shouldLog(::kj::LogSeverity::severity); \
+       _kj_shouldLog; _kj_shouldLog = false) \
     ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::LogSeverity::severity, \
                         "" #__VA_ARGS__, __VA_ARGS__)
 
@@ -210,7 +211,8 @@ namespace kj {
 #else
 
 #define KJ_LOG(severity, ...) \
-  if (!::kj::_::Debug::shouldLog(::kj::LogSeverity::severity)) {} else \
+  for (bool _kj_shouldLog = ::kj::_::Debug::shouldLog(::kj::LogSeverity::severity); \
+       _kj_shouldLog; _kj_shouldLog = false) \
     ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::LogSeverity::severity, \
                         #__VA_ARGS__, ##__VA_ARGS__)
 
