@@ -1255,7 +1255,7 @@ private:
           // When we have an explicit union discriminant, we don't need to encode void fields.
         } else {
           flattenedFields.add(FlattenedField {
-              prefix, info.name, which->getType(), reader.get(*which) });
+              prefix, info.name, *which, reader.get(*which) });
         }
       }
     }
