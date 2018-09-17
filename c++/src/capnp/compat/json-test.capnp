@@ -114,3 +114,10 @@ enum TestJsonAnnotatedEnum {
   baz @2 $Json.name("renamed-baz");
   qux @3;
 }
+
+struct TestBase64Union {
+  union {
+    foo @0 :Data $Json.base64;
+    bar @1 :Text;
+  }
+}

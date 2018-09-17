@@ -975,6 +975,21 @@ KJ_TEST("rename fields") {
   }
 }
 
+KJ_TEST("base64 union encoded correctly") {
+  // At one point field handlers were not correctly applied when the field was a member of a union
+  // in a type that was handled by annotation.
+
+  JsonCodec json;
+  json.handleByAnnotation<TestBase64Union>();
+  json.setPrettyPrint(true);
+
+  MallocMessageBuilder message;
+  auto root = message.getRoot<TestBase64Union>();
+  root.initFoo(5);
+
+  KJ_EXPECT(json.encode(root) == "{\"foo\": \"AAAAAAA=\"}", json.encode(root));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
