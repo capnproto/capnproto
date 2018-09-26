@@ -1007,6 +1007,52 @@ public:
     return *this;
   }
 
+  inline NullableValue& operator=(T&& other) { emplace(kj::mv(other)); return *this; }
+  inline NullableValue& operator=(T& other) { emplace(other); return *this; }
+  inline NullableValue& operator=(const T& other) { emplace(other); return *this; }
+  inline NullableValue& operator=(const T* other) {
+    if (other == nullptr) {
+      *this = nullptr;
+    } else {
+      emplace(*other);
+    }
+    return *this;
+  }
+  template <typename U>
+  inline NullableValue& operator=(NullableValue<U>&& other) {
+    if (other.isSet) {
+      emplace(kj::mv(other.value));
+    } else {
+      *this = nullptr;
+    }
+    return *this;
+  }
+  template <typename U>
+  inline NullableValue& operator=(const NullableValue<U>& other) {
+    if (other.isSet) {
+      emplace(other.value);
+    } else {
+      *this = nullptr;
+    }
+    return *this;
+  }
+  template <typename U>
+  inline NullableValue& operator=(const NullableValue<U&>& other) {
+    if (other.isSet) {
+      emplace(other.value);
+    } else {
+      *this = nullptr;
+    }
+    return *this;
+  }
+  inline NullableValue& operator=(decltype(nullptr)) {
+    if (isSet) {
+      isSet = false;
+      dtor(value);
+    }
+    return *this;
+  }
+
   inline bool operator==(decltype(nullptr)) const { return !isSet; }
   inline bool operator!=(decltype(nullptr)) const { return isSet; }
 
@@ -1092,9 +1138,35 @@ public:
     return ptr.emplace(kj::fwd<Params>(params)...);
   }
 
+  inline Maybe& operator=(T&& other) { ptr = kj::mv(other); return *this; }
+  inline Maybe& operator=(T& other) { ptr = other; return *this; }
+  inline Maybe& operator=(const T& other) { ptr = other; return *this; }
+  inline Maybe& operator=(const T* other) { ptr = other; return *this; }
+
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
   inline Maybe& operator=(Maybe& other) { ptr = other.ptr; return *this; }
   inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
+
+  template <typename U>
+  Maybe& operator=(Maybe<U>&& other) {
+    KJ_IF_MAYBE(val, kj::mv(other)) {
+      ptr.emplace(kj::mv(*val));
+    } else {
+      ptr = nullptr;
+    }
+    return *this;
+  }
+  template <typename U>
+  Maybe& operator=(const Maybe<U>& other) {
+    KJ_IF_MAYBE(val, other) {
+      ptr.emplace(*val);
+    } else {
+      ptr = nullptr;
+    }
+    return *this;
+  }
+
+  inline Maybe& operator=(decltype(nullptr)) { ptr = nullptr; return *this; }
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
