@@ -45,6 +45,11 @@ struct ImplicitToInt {
   }
 };
 
+struct Immovable {
+  Immovable() = default;
+  KJ_DISALLOW_COPY(Immovable);
+};
+
 TEST(Common, Maybe) {
   {
     Maybe<int> m = 123;
@@ -215,6 +220,16 @@ TEST(Common, Maybe) {
     } else {
       ADD_FAILURE();
     }
+  }
+
+  {
+    // Test usage of immovable types.
+    Maybe<Immovable> m;
+    KJ_EXPECT(m == nullptr);
+    m.emplace();
+    KJ_EXPECT(m != nullptr);
+    m.clear();
+    KJ_EXPECT(m == nullptr);
   }
 }
 

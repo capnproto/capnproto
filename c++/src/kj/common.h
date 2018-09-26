@@ -897,9 +897,7 @@ public:
       noexcept(noexcept(instance<T&>().~T()))
 #endif
   {
-    if (isSet) {
-      dtor(value);
-    }
+    clear();
   }
 
   inline T& operator*() & { return value; }
@@ -911,12 +909,16 @@ public:
   inline operator T*() { return isSet ? &value : nullptr; }
   inline operator const T*() const { return isSet ? &value : nullptr; }
 
-  template <typename... Params>
-  inline T& emplace(Params&&... params) {
+  inline void clear() {
     if (isSet) {
       isSet = false;
       dtor(value);
     }
+  }
+
+  template <typename... Params>
+  inline T& emplace(Params&&... params) {
+    clear();
     ctor(value, kj::fwd<Params>(params)...);
     isSet = true;
     return value;
@@ -965,10 +967,7 @@ public:
   inline NullableValue& operator=(NullableValue&& other) {
     if (&other != this) {
       // Careful about throwing destructors/constructors here.
-      if (isSet) {
-        isSet = false;
-        dtor(value);
-      }
+      clear();
       if (other.isSet) {
         ctor(value, kj::mv(other.value));
         isSet = true;
@@ -980,10 +979,7 @@ public:
   inline NullableValue& operator=(NullableValue& other) {
     if (&other != this) {
       // Careful about throwing destructors/constructors here.
-      if (isSet) {
-        isSet = false;
-        dtor(value);
-      }
+      clear();
       if (other.isSet) {
         ctor(value, other.value);
         isSet = true;
@@ -995,10 +991,7 @@ public:
   inline NullableValue& operator=(const NullableValue& other) {
     if (&other != this) {
       // Careful about throwing destructors/constructors here.
-      if (isSet) {
-        isSet = false;
-        dtor(value);
-      }
+      clear();
       if (other.isSet) {
         ctor(value, other.value);
         isSet = true;
@@ -1082,6 +1075,8 @@ public:
   }
 
   Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+
+  inline Maybe& clear() { ptr.clear(); return *this; }
 
   template <typename... Params>
   inline T& emplace(Params&&... params) {
