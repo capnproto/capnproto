@@ -870,7 +870,7 @@ class NullableValue {
   // boolean flag indicating nullness.
 
 public:
-  inline NullableValue(NullableValue&& other) noexcept(noexcept(T(instance<T&&>())))
+  inline NullableValue(NullableValue&& other)
       : isSet(other.isSet) {
     if (isSet) {
       ctor(value, kj::mv(other.value));
@@ -922,8 +922,8 @@ public:
     return value;
   }
 
-  inline NullableValue() noexcept: isSet(false) {}
-  inline NullableValue(T&& t) noexcept(noexcept(T(instance<T&&>())))
+  inline NullableValue(): isSet(false) {}
+  inline NullableValue(T&& t)
       : isSet(true) {
     ctor(value, kj::mv(t));
   }
@@ -940,7 +940,7 @@ public:
     if (isSet) ctor(value, *t);
   }
   template <typename U>
-  inline NullableValue(NullableValue<U>&& other) noexcept(noexcept(T(instance<U&&>())))
+  inline NullableValue(NullableValue<U>&& other)
       : isSet(other.isSet) {
     if (isSet) {
       ctor(value, kj::mv(other.value));
@@ -1106,16 +1106,16 @@ class Maybe {
 
 public:
   Maybe(): ptr(nullptr) {}
-  Maybe(T&& t) noexcept(noexcept(T(instance<T&&>()))): ptr(kj::mv(t)) {}
+  Maybe(T&& t): ptr(kj::mv(t)) {}
   Maybe(T& t): ptr(t) {}
   Maybe(const T& t): ptr(t) {}
-  Maybe(const T* t) noexcept: ptr(t) {}
-  Maybe(Maybe&& other) noexcept(noexcept(T(instance<T&&>()))): ptr(kj::mv(other.ptr)) {}
+  Maybe(const T* t): ptr(t) {}
+  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) {}
   Maybe(const Maybe& other): ptr(other.ptr) {}
   Maybe(Maybe& other): ptr(other.ptr) {}
 
   template <typename U>
-  Maybe(Maybe<U>&& other) noexcept(noexcept(T(instance<U&&>()))) {
+  Maybe(Maybe<U>&& other) {
     KJ_IF_MAYBE(val, kj::mv(other)) {
       ptr.emplace(kj::mv(*val));
     }
@@ -1127,7 +1127,7 @@ public:
     }
   }
 
-  Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+  Maybe(decltype(nullptr)): ptr(nullptr) {}
 
   template <typename... Params>
   inline T& emplace(Params&&... params) {
@@ -1252,22 +1252,22 @@ private:
 template <typename T>
 class Maybe<T&>: public DisallowConstCopyIfNotConst<T> {
 public:
-  Maybe() noexcept: ptr(nullptr) {}
-  Maybe(T& t) noexcept: ptr(&t) {}
-  Maybe(T* t) noexcept: ptr(t) {}
+  Maybe(): ptr(nullptr) {}
+  Maybe(T& t): ptr(&t) {}
+  Maybe(T* t): ptr(t) {}
 
   template <typename U>
-  inline Maybe(Maybe<U&>& other) noexcept: ptr(other.ptr) {}
+  inline Maybe(Maybe<U&>& other): ptr(other.ptr) {}
   template <typename U>
-  inline Maybe(const Maybe<U&>& other) noexcept: ptr(const_cast<const U*>(other.ptr)) {}
-  inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+  inline Maybe(const Maybe<U&>& other): ptr(const_cast<const U*>(other.ptr)) {}
+  inline Maybe(decltype(nullptr)): ptr(nullptr) {}
 
-  inline Maybe& operator=(T& other) noexcept { ptr = &other; return *this; }
-  inline Maybe& operator=(T* other) noexcept { ptr = other; return *this; }
+  inline Maybe& operator=(T& other) { ptr = &other; return *this; }
+  inline Maybe& operator=(T* other) { ptr = other; return *this; }
   template <typename U>
-  inline Maybe& operator=(Maybe<U&>& other) noexcept { ptr = other.ptr; return *this; }
+  inline Maybe& operator=(Maybe<U&>& other) { ptr = other.ptr; return *this; }
   template <typename U>
-  inline Maybe& operator=(const Maybe<const U&>& other) noexcept { ptr = other.ptr; return *this; }
+  inline Maybe& operator=(const Maybe<const U&>& other) { ptr = other.ptr; return *this; }
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
