@@ -332,6 +332,9 @@ public:
   // to split it into a bunch of shorter strings. The caller must keep `content` valid until the
   // `HttpHeaders` is destroyed, or pass it to `takeOwnership()`.
 
+  bool tryParse(kj::ArrayPtr<char> content);
+  // Like tryParseRequest()/tryParseResponse(), but don't expect any request/response line.
+
   kj::String serializeRequest(HttpMethod method, kj::StringPtr url,
                               kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
   kj::String serializeResponse(uint statusCode, kj::StringPtr statusText,
@@ -394,6 +397,58 @@ private:
   // TODO(perf): Arguably we should store a map, but header sets are never very long
   // TODO(perf): We could optimize for common headers by storing them directly as fields. We could
   //   also add direct accessors for those headers.
+};
+
+class HttpInputStream {
+  // Low-level interface to receive HTTP-formatted messages (headers followed by body) from an
+  // input stream, without a paired output stream.
+  //
+  // Most applications will not use this. Regular HTTP clients and servers don't need this. This
+  // is mainly useful for apps implementing various protocols that look like HTTP but aren't
+  // really.
+
+public:
+  struct Request {
+    HttpMethod method;
+    kj::StringPtr url;
+    const HttpHeaders& headers;
+    kj::Own<kj::AsyncInputStream> body;
+  };
+  virtual kj::Promise<Request> readRequest() = 0;
+  // Reads one HTTP request from the input stream.
+  //
+  // The returned struct contains pointers directly into a buffer that is invalidated on the next
+  // message read.
+
+  struct Response {
+    uint statusCode;
+    kj::StringPtr statusText;
+    const HttpHeaders& headers;
+    kj::Own<kj::AsyncInputStream> body;
+  };
+  virtual kj::Promise<Response> readResponse(HttpMethod requestMethod) = 0;
+  // Reads one HTTP response from the input stream.
+  //
+  // You must provide the request method because responses to HEAD requests require special
+  // treatment.
+  //
+  // The returned struct contains pointers directly into a buffer that is invalidated on the next
+  // message read.
+
+  struct Message {
+    const HttpHeaders& headers;
+    kj::Own<kj::AsyncInputStream> body;
+  };
+  virtual kj::Promise<Message> readMessage() = 0;
+  // Reads an HTTP header set followed by a body, with no request or response line. This is not
+  // useful for HTTP but may be useful for other protocols that make the unfortunate choice to
+  // mimic HTTP message format, such as Visual Studio Code's JSON-RPC transport.
+  //
+  // The returned struct contains pointers directly into a buffer that is invalidated on the next
+  // message read.
+
+  virtual kj::Promise<bool> awaitNextMessage() = 0;
+  // Waits until more data is available, but doesn't consume it. Returns false on EOF.
 };
 
 class EntropySource {
@@ -640,6 +695,16 @@ kj::Own<HttpClient> newHttpClient(HttpHeaderTable& responseHeaderTable, kj::Asyn
 kj::Own<HttpClient> newHttpClient(HttpService& service);
 kj::Own<HttpService> newHttpService(HttpClient& client);
 // Adapts an HttpClient to an HttpService and vice versa.
+
+kj::Own<HttpInputStream> newHttpInputStream(
+    kj::AsyncInputStream& input, HttpHeaderTable& headerTable);
+// Create an HttpInputStream on top of the given stream. Normally applications would not call this
+// directly, but it can be useful for implementing protocols that aren't quite HTTP but use similar
+// message delimiting.
+//
+// The HttpInputStream implementation does read-ahead buffering on `input`. Therefore, when the
+// HttpInputStream is destroyed, some data read from `input` may be lost, so it's not possible to
+// continue reading from `input` in a reliable way.
 
 kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
                                 kj::Maybe<EntropySource&> maskEntropySource);

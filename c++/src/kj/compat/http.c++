@@ -903,6 +903,14 @@ kj::Maybe<HttpHeaders::Response> HttpHeaders::tryParseResponse(kj::ArrayPtr<char
   return response;
 }
 
+bool HttpHeaders::tryParse(kj::ArrayPtr<char> content) {
+  char* end = trimHeaderEnding(content);
+  if (end == nullptr) return false;
+
+  char* ptr = content.begin();
+  return parseHeaders(ptr, end);
+}
+
 bool HttpHeaders::parseHeaders(char* ptr, char* end) {
   while (*ptr != '\0') {
     KJ_IF_MAYBE(name, consumeHeaderName(ptr)) {
@@ -988,14 +996,49 @@ static constexpr size_t MIN_BUFFER = 4096;
 static constexpr size_t MAX_BUFFER = 65536;
 static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 
-class HttpInputStream {
+class HttpInputStreamImpl final: public HttpInputStream {
 public:
-  explicit HttpInputStream(AsyncIoStream& inner, HttpHeaderTable& table)
+  explicit HttpInputStreamImpl(AsyncInputStream& inner, HttpHeaderTable& table)
       : inner(inner), headerBuffer(kj::heapArray<char>(MIN_BUFFER)), headers(table) {
   }
 
   bool canReuse() {
     return !broken && pendingMessageCount == 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // public interface
+
+  kj::Promise<Request> readRequest() override {
+    return readRequestHeaders()
+        .then([this](kj::Maybe<HttpHeaders::Request>&& maybeRequest) -> HttpInputStream::Request {
+      auto request = KJ_REQUIRE_NONNULL(maybeRequest, "bad request");
+      auto body = getEntityBody(HttpInputStreamImpl::REQUEST, request.method, 0, headers);
+
+      return { request.method, request.url, headers, kj::mv(body) };
+    });
+  }
+
+  kj::Promise<Response> readResponse(HttpMethod requestMethod) override {
+    return readResponseHeaders()
+        .then([this,requestMethod](kj::Maybe<HttpHeaders::Response>&& maybeResponse)
+              -> HttpInputStream::Response {
+      auto response = KJ_REQUIRE_NONNULL(maybeResponse, "bad response");
+      auto body = getEntityBody(HttpInputStreamImpl::RESPONSE, requestMethod, 0, headers);
+
+      return { response.statusCode, response.statusText, headers, kj::mv(body) };
+    });
+  }
+
+  kj::Promise<Message> readMessage() override {
+    return readMessageHeaders()
+        .then([this](kj::ArrayPtr<char> text) -> HttpInputStream::Message {
+      headers.clear();
+      KJ_REQUIRE(headers.tryParse(text), "bad message");
+      auto body = getEntityBody(HttpInputStreamImpl::RESPONSE, HttpMethod::GET, 0, headers);
+
+      return { headers, kj::mv(body) };
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -1022,7 +1065,7 @@ public:
 
   // ---------------------------------------------------------------------------
 
-  kj::Promise<bool> awaitNextMessage() {
+  kj::Promise<bool> awaitNextMessage() override {
     // Waits until more data is available, but doesn't consume it. Returns false on EOF.
     //
     // Used on the server after a request is handled, to check for pipelined requests.
@@ -1172,7 +1215,7 @@ public:
   }
 
 private:
-  AsyncIoStream& inner;
+  AsyncInputStream& inner;
   kj::Array<char> headerBuffer;
 
   size_t messageHeaderEnd = 0;
@@ -1367,7 +1410,7 @@ private:
 
 class HttpEntityBodyReader: public kj::AsyncInputStream {
 public:
-  HttpEntityBodyReader(HttpInputStream& inner): inner(inner) {}
+  HttpEntityBodyReader(HttpInputStreamImpl& inner): inner(inner) {}
   ~HttpEntityBodyReader() noexcept(false) {
     if (!finished) {
       inner.abortRead();
@@ -1375,7 +1418,7 @@ public:
   }
 
 protected:
-  HttpInputStream& inner;
+  HttpInputStreamImpl& inner;
 
   void doneReading() {
     KJ_REQUIRE(!finished);
@@ -1394,7 +1437,7 @@ class HttpNullEntityReader final: public HttpEntityBodyReader {
   // may indicate non-zero in the special case of a response to a HEAD request.
 
 public:
-  HttpNullEntityReader(HttpInputStream& inner, kj::Maybe<uint64_t> length)
+  HttpNullEntityReader(HttpInputStreamImpl& inner, kj::Maybe<uint64_t> length)
       : HttpEntityBodyReader(inner), length(length) {
     // `length` is what to return from tryGetLength(). For a response to a HEAD request, this may
     // be non-zero.
@@ -1417,7 +1460,7 @@ class HttpConnectionCloseEntityReader final: public HttpEntityBodyReader {
   // Stream which reads until EOF.
 
 public:
-  HttpConnectionCloseEntityReader(HttpInputStream& inner)
+  HttpConnectionCloseEntityReader(HttpInputStreamImpl& inner)
       : HttpEntityBodyReader(inner) {}
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -1437,7 +1480,7 @@ class HttpFixedLengthEntityReader final: public HttpEntityBodyReader {
   // Stream which reads only up to a fixed length from the underlying stream, then emulates EOF.
 
 public:
-  HttpFixedLengthEntityReader(HttpInputStream& inner, size_t length)
+  HttpFixedLengthEntityReader(HttpInputStreamImpl& inner, size_t length)
       : HttpEntityBodyReader(inner), length(length) {
     if (length == 0) doneReading();
   }
@@ -1470,7 +1513,7 @@ class HttpChunkedEntityReader final: public HttpEntityBodyReader {
   // Stream which reads a Transfer-Encoding: Chunked stream.
 
 public:
-  HttpChunkedEntityReader(HttpInputStream& inner)
+  HttpChunkedEntityReader(HttpInputStreamImpl& inner)
       : HttpEntityBodyReader(inner) {}
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -1551,7 +1594,7 @@ static_assert(!fastCaseCmp<'n','O','o','B','1'>("FooB1"), "");
 static_assert(!fastCaseCmp<'f','O','o','B'>("FooB1"), "");
 static_assert(!fastCaseCmp<'f','O','o','B','1','a'>("FooB1"), "");
 
-kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
+kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
     RequestOrResponse type, HttpMethod method, uint statusCode,
     const kj::HttpHeaders& headers) {
   if (type == RESPONSE) {
@@ -1599,7 +1642,15 @@ kj::Own<kj::AsyncInputStream> HttpInputStream::getEntityBody(
   return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
 }
 
+}  // namespace
+
+kj::Own<HttpInputStream> newHttpInputStream(kj::AsyncInputStream& input, HttpHeaderTable& table) {
+  return kj::heap<HttpInputStreamImpl>(input, table);
+}
+
 // =======================================================================================
+
+namespace {
 
 class HttpOutputStream {
 public:
@@ -2397,7 +2448,7 @@ private:
 };
 
 kj::Own<WebSocket> upgradeToWebSocket(
-    kj::Own<kj::AsyncIoStream> stream, HttpInputStream& httpInput, HttpOutputStream& httpOutput,
+    kj::Own<kj::AsyncIoStream> stream, HttpInputStreamImpl& httpInput, HttpOutputStream& httpOutput,
     kj::Maybe<EntropySource&> maskKeyGenerator) {
   // Create a WebSocket upgraded from an HTTP stream.
   auto releasedBuffer = httpInput.releaseBuffer();
@@ -3064,7 +3115,7 @@ public:
           r->statusCode,
           r->statusText,
           &headers,
-          httpInput.getEntityBody(HttpInputStream::RESPONSE, method, r->statusCode, headers)
+          httpInput.getEntityBody(HttpInputStreamImpl::RESPONSE, method, r->statusCode, headers)
         };
 
         if (fastCaseCmp<'c', 'l', 'o', 's', 'e'>(
@@ -3156,7 +3207,7 @@ public:
             r->statusCode,
             r->statusText,
             &headers,
-            httpInput.getEntityBody(HttpInputStream::RESPONSE, HttpMethod::GET, r->statusCode,
+            httpInput.getEntityBody(HttpInputStreamImpl::RESPONSE, HttpMethod::GET, r->statusCode,
                                     headers)
           };
           if (fastCaseCmp<'c', 'l', 'o', 's', 'e'>(
@@ -3178,7 +3229,7 @@ public:
   }
 
 private:
-  HttpInputStream httpInput;
+  HttpInputStreamImpl httpInput;
   HttpOutputStream httpOutput;
   kj::Own<AsyncIoStream> ownStream;
   HttpClientSettings settings;
@@ -4159,7 +4210,7 @@ public:
 
         currentMethod = req->method;
         auto body = httpInput.getEntityBody(
-            HttpInputStream::REQUEST, req->method, 0, headers);
+            HttpInputStreamImpl::REQUEST, req->method, 0, headers);
 
         // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
         //   prevent permanent deadlock. It's slightly weird in that arguably the client should
@@ -4312,7 +4363,7 @@ private:
   HttpServer& server;
   kj::AsyncIoStream& stream;
   HttpService& service;
-  HttpInputStream httpInput;
+  HttpInputStreamImpl httpInput;
   HttpOutputStream httpOutput;
   kj::Maybe<HttpMethod> currentMethod;
   bool timedOut = false;
