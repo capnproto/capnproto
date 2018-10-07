@@ -303,6 +303,12 @@ void JsonCodec::encode(T&& value, JsonValue::Builder output) const {
   encode(DynamicValue::Reader(ReaderFor<Base>(kj::fwd<T>(value))), Type::from<Base>(), output);
 }
 
+template <>
+inline void JsonCodec::encode<DynamicStruct::Reader>(
+      DynamicStruct::Reader&& value, JsonValue::Builder output) const {
+  encode(DynamicValue::Reader(value), value.getSchema(), output);
+}
+
 template <typename T>
 inline Orphan<T> JsonCodec::decode(JsonValue::Reader input, Orphanage orphanage) const {
   return decode(input, Type::from<T>(), orphanage).template releaseAs<T>();
