@@ -71,9 +71,8 @@ kj::Promise<bool> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
       return false;
     } else if (n < sizeof(firstWord)) {
       // EOF in first word.
-      KJ_FAIL_REQUIRE("Premature EOF.") {
-        return false;
-      }
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+      return false;
     }
 
     return readAfterFirstWord(inputStream, scratchSpace).then([]() { return true; });
@@ -153,7 +152,9 @@ kj::Promise<kj::Own<MessageReader>> readMessage(
   auto reader = kj::heap<AsyncMessageReader>(options);
   auto promise = reader->read(input, scratchSpace);
   return promise.then(kj::mvCapture(reader, [](kj::Own<MessageReader>&& reader, bool success) {
-    KJ_REQUIRE(success, "Premature EOF.") { break; }
+    if (!success) {
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+    }
     return kj::mv(reader);
   }));
 }
