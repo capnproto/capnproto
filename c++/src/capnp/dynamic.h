@@ -584,6 +584,9 @@ public:
   kj::Promise<void> tailCall(Request<SubParams, DynamicStruct>&& tailRequest);
   void allowCancellation();
 
+  StructSchema getParamsType() const { return paramType; }
+  StructSchema getResultsType() const { return resultType; }
+
 private:
   CallContextHook* hook;
   StructSchema paramType;

@@ -1366,6 +1366,141 @@ KJ_TEST("HttpClient <-> HttpServer") {
 
 // -----------------------------------------------------------------------------
 
+KJ_TEST("HttpInputStream requests") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  kj::HttpHeaderTable table;
+
+  auto pipe = kj::newOneWayPipe();
+  auto input = newHttpInputStream(*pipe.in, table);
+
+  kj::Promise<void> writeQueue = kj::READY_NOW;
+
+  for (auto& testCase: requestTestCases()) {
+    writeQueue = writeQueue.then([&]() {
+      return pipe.out->write(testCase.raw.begin(), testCase.raw.size());
+    });
+  }
+  writeQueue = writeQueue.then([&]() {
+    pipe.out = nullptr;
+  });
+
+  for (auto& testCase: requestTestCases()) {
+    KJ_CONTEXT(testCase.raw);
+
+    KJ_ASSERT(input->awaitNextMessage().wait(waitScope));
+    
+    auto req = input->readRequest().wait(waitScope);
+    KJ_EXPECT(req.method == testCase.method);
+    KJ_EXPECT(req.url == testCase.path);
+    for (auto& header: testCase.requestHeaders) {
+      KJ_EXPECT(KJ_ASSERT_NONNULL(req.headers.get(header.id)) == header.value);
+    }
+    auto body = req.body->readAllText().wait(waitScope);
+    KJ_EXPECT(body == kj::strArray(testCase.requestBodyParts, ""));
+  }
+
+  writeQueue.wait(waitScope);
+  KJ_EXPECT(!input->awaitNextMessage().wait(waitScope));
+}
+
+KJ_TEST("HttpInputStream responses") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  kj::HttpHeaderTable table;
+
+  auto pipe = kj::newOneWayPipe();
+  auto input = newHttpInputStream(*pipe.in, table);
+
+  kj::Promise<void> writeQueue = kj::READY_NOW;
+
+  for (auto& testCase: responseTestCases()) {
+    if (testCase.side == CLIENT_ONLY) continue;  // skip Connection: close case.
+    writeQueue = writeQueue.then([&]() {
+      return pipe.out->write(testCase.raw.begin(), testCase.raw.size());
+    });
+  }
+  writeQueue = writeQueue.then([&]() {
+    pipe.out = nullptr;
+  });
+
+  for (auto& testCase: responseTestCases()) {
+    if (testCase.side == CLIENT_ONLY) continue;  // skip Connection: close case.
+    KJ_CONTEXT(testCase.raw);
+
+    KJ_ASSERT(input->awaitNextMessage().wait(waitScope));
+    
+    auto resp = input->readResponse(testCase.method).wait(waitScope);
+    KJ_EXPECT(resp.statusCode == testCase.statusCode);
+    KJ_EXPECT(resp.statusText == testCase.statusText);
+    for (auto& header: testCase.responseHeaders) {
+      KJ_EXPECT(KJ_ASSERT_NONNULL(resp.headers.get(header.id)) == header.value);
+    }
+    auto body = resp.body->readAllText().wait(waitScope);
+    KJ_EXPECT(body == kj::strArray(testCase.responseBodyParts, ""));
+  }
+
+  writeQueue.wait(waitScope);
+  KJ_EXPECT(!input->awaitNextMessage().wait(waitScope));
+}
+
+KJ_TEST("HttpInputStream bare messages") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  kj::HttpHeaderTable table;
+
+  auto pipe = kj::newOneWayPipe();
+  auto input = newHttpInputStream(*pipe.in, table);
+
+  kj::StringPtr messages =
+      "Content-Length: 6\r\n"
+      "\r\n"
+      "foobar"
+      "Content-Length: 11\r\n"
+      "Content-Type: some/type\r\n"
+      "\r\n"
+      "bazquxcorge"
+      "Transfer-Encoding: chunked\r\n"
+      "\r\n"
+      "6\r\n"
+      "grault\r\n"
+      "b\r\n"
+      "garplywaldo\r\n"
+      "0\r\n"
+      "\r\n"_kj;
+
+  kj::Promise<void> writeTask = pipe.out->write(messages.begin(), messages.size())
+      .then([&]() { pipe.out = nullptr; });
+
+  {
+    KJ_ASSERT(input->awaitNextMessage().wait(waitScope));
+    auto message = input->readMessage().wait(waitScope);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(message.headers.get(HttpHeaderId::CONTENT_LENGTH)) == "6");
+    KJ_EXPECT(message.body->readAllText().wait(waitScope) == "foobar");
+  }
+  {
+    KJ_ASSERT(input->awaitNextMessage().wait(waitScope));
+    auto message = input->readMessage().wait(waitScope);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(message.headers.get(HttpHeaderId::CONTENT_LENGTH)) == "11");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(message.headers.get(HttpHeaderId::CONTENT_TYPE)) == "some/type");
+    KJ_EXPECT(message.body->readAllText().wait(waitScope) == "bazquxcorge");
+  }
+  {
+    KJ_ASSERT(input->awaitNextMessage().wait(waitScope));
+    auto message = input->readMessage().wait(waitScope);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(message.headers.get(HttpHeaderId::TRANSFER_ENCODING)) == "chunked");
+    KJ_EXPECT(message.body->readAllText().wait(waitScope) == "graultgarplywaldo");
+  }
+
+  writeTask.wait(waitScope);
+  KJ_EXPECT(!input->awaitNextMessage().wait(waitScope));
+}
+
+// -----------------------------------------------------------------------------
+
 KJ_TEST("WebSocket core protocol") {
   kj::EventLoop eventLoop;
   kj::WaitScope waitScope(eventLoop);
