@@ -809,6 +809,18 @@ kj::ArrayPtr<const HttpResponseTestCase> responseTestCases() {
       HttpMethod::HEAD,
     },
 
+    // Zero-length expected size response to HEAD request has no Content-Length header.
+    {
+      "HTTP/1.1 200 OK\r\n"
+      "\r\n",
+
+      200, "OK",
+      {},
+      uint64_t(0), {},
+
+      HttpMethod::HEAD,
+    },
+
     {
       "HTTP/1.1 200 OK\r\n"
       "Content-Length: 8\r\n"
@@ -1177,6 +1189,22 @@ kj::ArrayPtr<const HttpTestCase> pipelineTestCases() {
         "\r\n",
 
         200, "OK", {}, 7, { "foo bar" }
+      },
+    },
+
+    // Zero-length expected size response to HEAD request has no Content-Length header.
+    {
+      {
+        "HEAD / HTTP/1.1\r\n"
+        "\r\n",
+
+        HttpMethod::HEAD, "/", {}, uint64_t(0), {},
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "\r\n",
+
+        200, "OK", {}, uint64_t(0), {}, HttpMethod::HEAD,
       },
     },
   };
