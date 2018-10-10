@@ -332,7 +332,7 @@ kj::Promise<void> JsonRpc::ContentLengthTransport::send(kj::StringPtr text) {
 
 kj::Promise<kj::String> JsonRpc::ContentLengthTransport::receive() {
   return input->readMessage()
-      .then([this](kj::HttpInputStream::Message&& message) {
+      .then([](kj::HttpInputStream::Message&& message) {
     auto promise = message.body->readAllText();
     return promise.attach(kj::mv(message.body));
   });
