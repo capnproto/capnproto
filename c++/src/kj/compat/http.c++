@@ -1603,6 +1603,10 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
       kj::Maybe<uint64_t> length;
       KJ_IF_MAYBE(cl, headers.get(HttpHeaderId::CONTENT_LENGTH)) {
         length = strtoull(cl->cStr(), nullptr, 10);
+      } else if (headers.get(HttpHeaderId::TRANSFER_ENCODING) == nullptr) {
+        // HACK: Neither Content-Length nor Transfer-Encoding header in response to HEAD request.
+        //   Propagate this fact with a 0 expected body length.
+        length = uint64_t(0);
       }
       return kj::heap<HttpNullEntityReader>(*this, length);
     } else if (statusCode == 204 || statusCode == 205 || statusCode == 304) {
@@ -4384,8 +4388,14 @@ private:
     if (statusCode == 204 || statusCode == 205 || statusCode == 304) {
       // No entity-body.
     } else KJ_IF_MAYBE(s, expectedBodySize) {
-      lengthStr = kj::str(*s);
-      connectionHeaders[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = lengthStr;
+      // HACK: We interpret a zero-length expected body length on responses to HEAD requests to mean
+      //   "don't set a Content-Length header at all." This provides a way to omit a body header on
+      //   HEAD responses with non-null-body status codes. This is a hack that *only* makes sense
+      //   for HEAD responses.
+      if (method != HttpMethod::HEAD || *s > 0) {
+        lengthStr = kj::str(*s);
+        connectionHeaders[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = lengthStr;
+      }
     } else {
       connectionHeaders[HttpHeaders::BuiltinIndices::TRANSFER_ENCODING] = "chunked";
     }
