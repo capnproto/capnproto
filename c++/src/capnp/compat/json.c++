@@ -109,7 +109,6 @@ struct JsonCodec::Impl {
       switch (c) {
         case '\"': escaped.addAll(kj::StringPtr("\\\"")); break;
         case '\\': escaped.addAll(kj::StringPtr("\\\\")); break;
-        case '/' : escaped.addAll(kj::StringPtr("\\/" )); break;
         case '\b': escaped.addAll(kj::StringPtr("\\b")); break;
         case '\f': escaped.addAll(kj::StringPtr("\\f")); break;
         case '\n': escaped.addAll(kj::StringPtr("\\n")); break;
