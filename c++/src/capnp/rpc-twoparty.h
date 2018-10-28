@@ -52,7 +52,8 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
 
 public:
   TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
-                     ReaderOptions receiveOptions = ReaderOptions());
+                     ReaderOptions receiveOptions = ReaderOptions(),
+                     kj::ArrayPtr<word> scratchSpace = nullptr);
   KJ_DISALLOW_COPY(TwoPartyVatNetwork);
 
   kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
@@ -74,6 +75,8 @@ private:
   rpc::twoparty::Side side;
   MallocMessageBuilder peerVatId;
   ReaderOptions receiveOptions;
+  kj::ArrayPtr<word> scratchSpace;
+  bool hasScratch;
   bool accepted = false;
 
   kj::Maybe<kj::Promise<void>> previousWrite;
@@ -117,7 +120,9 @@ class TwoPartyServer: private kj::TaskSet::ErrorHandler {
   // socket and serices them as two-party connections.
 
 public:
-  explicit TwoPartyServer(Capability::Client bootstrapInterface);
+  explicit TwoPartyServer(Capability::Client bootstrapInterface,
+                          ReaderOptions receiveOptions = ReaderOptions(),
+                          kj::ArrayPtr<word> scratchSpace = nullptr);
 
   void accept(kj::Own<kj::AsyncIoStream>&& connection);
   // Accepts the connection for servicing.
@@ -129,6 +134,8 @@ public:
 
 private:
   Capability::Client bootstrapInterface;
+  ReaderOptions receiveOptions;
+  kj::ArrayPtr<word> scratchSpace;
   kj::TaskSet tasks;
 
   struct AcceptedConnection;

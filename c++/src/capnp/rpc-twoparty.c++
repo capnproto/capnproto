@@ -22,13 +22,42 @@
 #include "rpc-twoparty.h"
 #include "serialize-async.h"
 #include <kj/debug.h>
+#include <capnp/rpc.capnp.h>
 
 namespace capnp {
 
+namespace {
+
+class ScratchLock {
+  // Ensures that only one incoming message uses the scratch space at a time.
+public:
+  ScratchLock(kj::ArrayPtr<word>& sharedScratchSpace)
+      : sharedScratchSpace(sharedScratchSpace), scratchSpace(sharedScratchSpace) {
+    sharedScratchSpace = nullptr;
+  }
+  ~ScratchLock() noexcept(false) {
+    if (scratchSpace != nullptr) {
+      sharedScratchSpace = scratchSpace;
+    }
+  }
+  ScratchLock(ScratchLock&& other)
+      : sharedScratchSpace(other.sharedScratchSpace), scratchSpace(other.scratchSpace) {
+    other.scratchSpace = nullptr;
+  }
+  KJ_DISALLOW_COPY(ScratchLock);
+
+  kj::ArrayPtr<word>& sharedScratchSpace;
+  kj::ArrayPtr<word> scratchSpace;
+};
+
+}  // namespace
+
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
-                                       ReaderOptions receiveOptions)
+                                       ReaderOptions receiveOptions,
+                                       kj::ArrayPtr<word> scratchSpace)
     : stream(stream), side(side), peerVatId(4),
-      receiveOptions(receiveOptions), previousWrite(kj::READY_NOW) {
+      receiveOptions(receiveOptions), scratchSpace(scratchSpace),
+      hasScratch(scratchSpace != nullptr), previousWrite(kj::READY_NOW) {
   peerVatId.initRoot<rpc::twoparty::VatId>().setSide(
       side == rpc::twoparty::Side::CLIENT ? rpc::twoparty::Side::SERVER
                                           : rpc::twoparty::Side::CLIENT);
@@ -113,7 +142,8 @@ private:
 
 class TwoPartyVatNetwork::IncomingMessageImpl final: public IncomingRpcMessage {
 public:
-  IncomingMessageImpl(kj::Own<MessageReader> message): message(kj::mv(message)) {}
+  IncomingMessageImpl(kj::Own<MessageReader> message, ScratchLock&& scratchLock)
+      : message(kj::mv(message)), scratchLock(kj::mv(scratchLock)) {}
 
   AnyPointer::Reader getBody() override {
     return message->getRoot<AnyPointer>();
@@ -121,6 +151,7 @@ public:
 
 private:
   kj::Own<MessageReader> message;
+  ScratchLock scratchLock;
 };
 
 rpc::twoparty::VatId::Reader TwoPartyVatNetwork::getPeerVatId() {
@@ -133,11 +164,17 @@ kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSeg
 
 kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveIncomingMessage() {
   return kj::evalLater([&]() {
-    return tryReadMessage(stream, receiveOptions)
-        .then([&](kj::Maybe<kj::Own<MessageReader>>&& message)
-              -> kj::Maybe<kj::Own<IncomingRpcMessage>> {
+    ScratchLock scratchLock(scratchSpace);
+    auto promise = tryReadMessage(stream, receiveOptions, scratchLock.scratchSpace);
+    return promise
+        .then([&, scratchLock = kj::mv(scratchLock)](kj::Maybe<kj::Own<MessageReader>>&& message)
+              mutable -> kj::Maybe<kj::Own<IncomingRpcMessage>> {
       KJ_IF_MAYBE(m, message) {
-        return kj::Own<IncomingRpcMessage>(kj::heap<IncomingMessageImpl>(kj::mv(*m)));
+        if (hasScratch && scratchLock.scratchSpace == nullptr) {
+          KJ_LOG(WARNING, "not using scratch space for:", m->get()->getRoot<rpc::Message>());
+        }
+        return kj::Own<IncomingRpcMessage>(kj::heap<IncomingMessageImpl>(
+              kj::mv(*m), kj::mv(scratchLock)));
       } else {
         return nullptr;
       }
@@ -155,23 +192,33 @@ kj::Promise<void> TwoPartyVatNetwork::shutdown() {
 
 // =======================================================================================
 
-TwoPartyServer::TwoPartyServer(Capability::Client bootstrapInterface)
-    : bootstrapInterface(kj::mv(bootstrapInterface)), tasks(*this) {}
+TwoPartyServer::TwoPartyServer(Capability::Client bootstrapInterface,
+                               ReaderOptions receiveOptions,
+                               kj::ArrayPtr<word> scratchSpace)
+    : bootstrapInterface(kj::mv(bootstrapInterface)),
+      receiveOptions(receiveOptions),
+      scratchSpace(scratchSpace),
+      tasks(*this) {}
 
 struct TwoPartyServer::AcceptedConnection {
   kj::Own<kj::AsyncIoStream> connection;
   TwoPartyVatNetwork network;
   RpcSystem<rpc::twoparty::VatId> rpcSystem;
+  ScratchLock scratchLock;
 
   explicit AcceptedConnection(Capability::Client bootstrapInterface,
-                              kj::Own<kj::AsyncIoStream>&& connectionParam)
+                              kj::Own<kj::AsyncIoStream>&& connectionParam,
+                              ReaderOptions receiveOptions,
+                              ScratchLock&& scratchLock)
       : connection(kj::mv(connectionParam)),
-        network(*connection, rpc::twoparty::Side::SERVER),
-        rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))) {}
+        network(*connection, rpc::twoparty::Side::SERVER, receiveOptions, scratchLock.scratchSpace),
+        rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))),
+        scratchLock(kj::mv(scratchLock)) {}
 };
 
 void TwoPartyServer::accept(kj::Own<kj::AsyncIoStream>&& connection) {
-  auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface, kj::mv(connection));
+  auto connectionState = kj::heap<AcceptedConnection>(
+      bootstrapInterface, kj::mv(connection), receiveOptions, ScratchLock(scratchSpace));
 
   // Run the connection until disconnect.
   auto promise = connectionState->network.onDisconnect();

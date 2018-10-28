@@ -21,7 +21,8 @@
 
 #include "calculator.capnp.h"
 #include <kj/debug.h>
-#include <capnp/ez-rpc.h>
+#include <capnp/rpc.h>
+#include <capnp/rpc-twoparty.h>
 #include <capnp/message.h>
 #include <iostream>
 
@@ -187,7 +188,12 @@ public:
   }
 };
 
+capnp::word scratchSpace[1024];
+
 int main(int argc, const char* argv[]) {
+  kj::_::Debug::setLogLevel(kj::LogSeverity::INFO);
+  kj::printStackTraceOnCrash();
+
   if (argc != 2) {
     std::cerr << "usage: " << argv[0] << " ADDRESS[:PORT]\n"
         "Runs the server bound to the given address/port.\n"
@@ -196,20 +202,26 @@ int main(int argc, const char* argv[]) {
     return 1;
   }
 
-  // Set up a server.
-  capnp::EzRpcServer server(kj::heap<CalculatorImpl>(), argv[1]);
+  try {
+    // Set up a server.
+    auto io = kj::setupAsyncIo();
+    auto listener = io.provider->getNetwork().parseAddress(argv[1]).wait(io.waitScope)->listen();
 
-  // Write the port number to stdout, in case it was chosen automatically.
-  auto& waitScope = server.getWaitScope();
-  uint port = server.getPort().wait(waitScope);
-  if (port == 0) {
-    // The address format "unix:/path/to/socket" opens a unix domain socket,
-    // in which case the port will be zero.
-    std::cout << "Listening on Unix socket..." << std::endl;
-  } else {
-    std::cout << "Listening on port " << port << "..." << std::endl;
+    capnp::TwoPartyServer server(kj::heap<CalculatorImpl>(), {}, scratchSpace);
+
+    // Write the port number to stdout, in case it was chosen automatically.
+    uint port = listener->getPort();
+    if (port == 0) {
+      // The address format "unix:/path/to/socket" opens a unix domain socket,
+      // in which case the port will be zero.
+      std::cout << "Listening on Unix socket..." << std::endl;
+    } else {
+      std::cout << "Listening on port " << port << "..." << std::endl;
+    }
+
+    // Run forever, accepting connections and handling requests.
+    server.listen(*listener).wait(io.waitScope);
+  } catch (const kj::Exception& e) {
+    KJ_LOG(ERROR, e);
   }
-
-  // Run forever, accepting connections and handling requests.
-  kj::NEVER_DONE.wait(waitScope);
 }
