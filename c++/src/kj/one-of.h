@@ -246,8 +246,8 @@ void OneOf<Variants...>::allHandled() {
 #endif
 #define KJ_CASE_ONEOF(name, ...) \
     break; \
-  case ::kj::Decay<decltype(*_kj_switch_subject)>::tagFor<__VA_ARGS__>(): \
-    for (auto& name = _kj_switch_subject->get<__VA_ARGS__>(), *_kj_switch_done = &name; \
+  case ::kj::Decay<decltype(*_kj_switch_subject)>::template tagFor<__VA_ARGS__>(): \
+    for (auto& name = _kj_switch_subject->template get<__VA_ARGS__>(), *_kj_switch_done = &name; \
          _kj_switch_done; _kj_switch_done = nullptr)
 #define KJ_CASE_ONEOF_DEFAULT break; default:
 // Allows switching over a OneOf.
