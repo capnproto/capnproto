@@ -2003,22 +2003,20 @@ public:
   }
 
   kj::Promise<void> disconnect() override {
-    if (!sendClosed) {
-      KJ_REQUIRE(!currentlySending, "another message send is already in progress");
+    KJ_REQUIRE(!currentlySending, "another message send is already in progress");
 
-      KJ_IF_MAYBE(p, sendingPong) {
-        // We recently sent a pong, make sure it's finished before proceeding.
-        currentlySending = true;
-        auto promise = p->then([this]() {
-          currentlySending = false;
-          return disconnect();
-        });
-        sendingPong = nullptr;
-        return promise;
-      }
-
-      sendClosed = true;
+    KJ_IF_MAYBE(p, sendingPong) {
+      // We recently sent a pong, make sure it's finished before proceeding.
+      currentlySending = true;
+      auto promise = p->then([this]() {
+        currentlySending = false;
+        return disconnect();
+      });
+      sendingPong = nullptr;
+      return promise;
     }
+
+    disconnected = true;
 
     stream->shutdownWrite();
     return kj::READY_NOW;
@@ -2348,7 +2346,8 @@ private:
   kj::Own<kj::AsyncIoStream> stream;
   kj::Maybe<EntropySource&> maskKeyGenerator;
 
-  bool sendClosed = false;
+  bool hasSentClose = false;
+  bool disconnected = false;
   bool currentlySending = false;
   Header sendHeader;
   kj::ArrayPtr<const byte> sendParts[2];
@@ -2375,7 +2374,7 @@ private:
   kj::ArrayPtr<byte> recvData;
 
   kj::Promise<void> sendImpl(byte opcode, kj::ArrayPtr<const byte> message) {
-    KJ_REQUIRE(!sendClosed, "WebSocket already closed");
+    KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
     KJ_REQUIRE(!currentlySending, "another message send is already in progress");
 
     currentlySending = true;
@@ -2390,7 +2389,10 @@ private:
       return promise;
     }
 
-    sendClosed = opcode == OPCODE_CLOSE;
+    // We don't stop the application from sending further messages after close() -- this is the
+    // application's error to make. But, we do want to make sure we don't send any PONGs after a
+    // close, since that would be our error. So we stack whether we closed for that reason.
+    hasSentClose = hasSentClose || opcode == OPCODE_CLOSE;
 
     Mask mask(maskKeyGenerator);
 
@@ -2441,7 +2443,7 @@ private:
   }
 
   kj::Promise<void> sendPong(kj::Array<byte> payload) {
-    if (sendClosed) {
+    if (hasSentClose || disconnected) {
       return kj::READY_NOW;
     }
 
