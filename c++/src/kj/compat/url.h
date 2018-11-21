@@ -37,6 +37,12 @@ struct UrlOptions {
   bool percentDecode = true;
   // True if URL components should be automatically percent-decoded during parsing, and
   // percent-encoded during serialization.
+
+  bool allowEmpty = false;
+  // Whether or not to allow empty path and query components when parsing; otherwise, they are
+  // silently removed. In other words, setting this false causes consecutive slashes in the path or
+  // consecutive ampersands in the query to be collapsed into one, whereas if true then they
+  // produce empty components.
 };
 
 struct Url {
