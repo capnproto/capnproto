@@ -233,7 +233,8 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
         result.path.removeLast();
       }
       result.hasTrailingSlash = true;
-    } else if ((part.size() == 0 && !options.allowEmpty) || (part.size() == 1 && part[0] == '.')) {
+    } else if ((part.size() == 0 && (!options.allowEmpty || text.size() == 0)) ||
+               (part.size() == 1 && part[0] == '.')) {
       // Collapse consecutive slashes and "/./".
       result.hasTrailingSlash = true;
     } else {

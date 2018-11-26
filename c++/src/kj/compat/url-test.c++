@@ -294,6 +294,18 @@ KJ_TEST("parse / stringify URL") {
   // "." and ".." are still processed, though.
   parseAndCheck("https://capnproto.org/foo//../bar/.",
                 "https://capnproto.org/foo/bar/", ALLOW_EMPTY);
+
+  {
+    auto url = parseAndCheck("https://foo/", nullptr, ALLOW_EMPTY);
+    KJ_EXPECT(url.path.size() == 0);
+    KJ_EXPECT(url.hasTrailingSlash);
+  }
+
+  {
+    auto url = parseAndCheck("https://foo/bar/", nullptr, ALLOW_EMPTY);
+    KJ_EXPECT(url.path.size() == 1);
+    KJ_EXPECT(url.hasTrailingSlash);
+  }
 }
 
 KJ_TEST("URL percent encoding") {
