@@ -1231,7 +1231,7 @@ using SturdyRef = AnyPointer;
 # - How to authenticate the vat after connecting (e.g. a public key fingerprint).
 # - The identity of a specific object hosted by the vat. Generally, this is an opaque pointer whose
 #   format is defined by the specific vat -- the client has no need to inspect the object ID.
-#   It is important that the objec ID be unguessable if the object is not public (and objects
+#   It is important that the object ID be unguessable if the object is not public (and objects
 #   should almost never be public).
 #
 # The above are only suggestions. Some networks might work differently. For example, a private
