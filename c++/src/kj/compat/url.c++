@@ -233,7 +233,8 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
         result.path.removeLast();
       }
       result.hasTrailingSlash = true;
-    } else if (part.size() == 0 || (part.size() == 1 && part[0] == '.')) {
+    } else if ((part.size() == 0 && (!options.allowEmpty || text.size() == 0)) ||
+               (part.size() == 1 && part[0] == '.')) {
       // Collapse consecutive slashes and "/./".
       result.hasTrailingSlash = true;
     } else {
@@ -247,7 +248,7 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
       text = text.slice(1);
       auto part = split(text, END_QUERY_PART);
 
-      if (part.size() > 0) {
+      if (part.size() > 0 || options.allowEmpty) {
         KJ_IF_MAYBE(key, trySplit(part, '=')) {
           result.query.add(QueryParam { percentDecodeQuery(*key, err, options),
                                         percentDecodeQuery(part, err, options) });
@@ -458,8 +459,8 @@ String Url::toString(Context context) const {
 
   for (auto& pathPart: path) {
     // Protect against path injection.
-    KJ_REQUIRE(pathPart != "" && pathPart != "." && pathPart != "..",
-               "invalid name in URL path", *this) {
+    KJ_REQUIRE((pathPart != "" || options.allowEmpty) && pathPart != "." && pathPart != "..",
+               "invalid name in URL path", path) {
       continue;
     }
     chars.add('/');
