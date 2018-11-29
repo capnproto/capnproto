@@ -3699,7 +3699,13 @@ public:
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
                   kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
-    auto parsed = Url::parse(url, Url::HTTP_PROXY_REQUEST);
+    // We need to parse the proxy-style URL to convert it to host-style.
+    // Use URL parsing options that avoid unnecessary rewrites.
+    Url::Options urlOptions;
+    urlOptions.allowEmpty = true;
+    urlOptions.percentDecode = false;
+
+    auto parsed = Url::parse(url, Url::HTTP_PROXY_REQUEST, urlOptions);
     auto path = parsed.toString(Url::HTTP_REQUEST);
     auto headersCopy = headers.clone();
     headersCopy.set(HttpHeaderId::HOST, parsed.host);
@@ -3708,7 +3714,13 @@ public:
 
   kj::Promise<WebSocketResponse> openWebSocket(
       kj::StringPtr url, const HttpHeaders& headers) override {
-    auto parsed = Url::parse(url, Url::HTTP_PROXY_REQUEST);
+    // We need to parse the proxy-style URL to convert it to host-style.
+    // Use URL parsing options that avoid unnecessary rewrites.
+    Url::Options urlOptions;
+    urlOptions.allowEmpty = true;
+    urlOptions.percentDecode = false;
+
+    auto parsed = Url::parse(url, Url::HTTP_PROXY_REQUEST, urlOptions);
     auto path = parsed.toString(Url::HTTP_REQUEST);
     auto headersCopy = headers.clone();
     headersCopy.set(HttpHeaderId::HOST, parsed.host);
