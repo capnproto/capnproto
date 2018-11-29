@@ -1418,7 +1418,7 @@ KJ_TEST("HttpInputStream requests") {
     KJ_CONTEXT(testCase.raw);
 
     KJ_ASSERT(input->awaitNextMessage().wait(waitScope));
-    
+
     auto req = input->readRequest().wait(waitScope);
     KJ_EXPECT(req.method == testCase.method);
     KJ_EXPECT(req.url == testCase.path);
@@ -3109,14 +3109,16 @@ KJ_TEST("HttpClient multi host") {
   uint i = 0;
   auto doRequest = [&](bool tls, uint port) {
     uint n = i++;
+    // We stick a double-slash in the URL to test that it doesn't get coalesced into one slash,
+    // which was a bug in the past.
     return client->request(HttpMethod::GET,
-        kj::str((tls ? "https://localhost:" : "http://localhost:"), port, '/', n),
+        kj::str((tls ? "https://localhost:" : "http://localhost:"), port, "//", n),
                 HttpHeaders(headerTable)).response
         .then([](HttpClient::Response&& response) {
       auto promise = response.body->readAllText();
       return promise.attach(kj::mv(response.body));
     }).then([n, port](kj::String body) {
-      KJ_EXPECT(body == kj::str("localhost:", port, ":/", n), body, port, n);
+      KJ_EXPECT(body == kj::str("localhost:", port, "://", n), body, port, n);
     });
   };
 
