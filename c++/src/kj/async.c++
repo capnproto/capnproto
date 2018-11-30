@@ -512,6 +512,8 @@ Event::Event()
     : loop(currentEventLoop()), next(nullptr), prev(nullptr) {}
 
 Event::~Event() noexcept(false) {
+  dead = true;
+
   if (prev != nullptr) {
     if (loop.tail == &next) {
       loop.tail = prev;
@@ -535,6 +537,7 @@ void Event::armDepthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "the thread-safe work queue to queue events cross-thread.");
+  KJ_REQUIRE(!dead, "Event was already destroyed.");
 
   if (prev == nullptr) {
     next = *loop.depthFirstInsertPoint;
@@ -558,6 +561,7 @@ void Event::armBreadthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "the thread-safe work queue to queue events cross-thread.");
+  KJ_REQUIRE(!dead, "Event was already destroyed.");
 
   if (prev == nullptr) {
     next = *loop.tail;

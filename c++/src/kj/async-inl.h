@@ -124,6 +124,8 @@ private:
   Event* next;
   Event** prev;
   bool firing = false;
+
+  volatile bool dead = false;  // TODO(cleanup): For debugging; remove later.
 };
 
 class PromiseNode {
