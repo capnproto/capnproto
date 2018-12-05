@@ -1397,8 +1397,9 @@ private:
       if (amount > 0) {
         Promise<void> promise = nullptr;
 
+        // TODO(soon): Replace try/catch with kj::evalNow() to work with -fno-exceptions.
         try {
-          promise = canceler.wrap(output.write(writeBuffer).attach(mv(writeBuffer)));
+          promise = output.write(writeBuffer).attach(mv(writeBuffer));
         } catch (const Exception& exception) {
           reject(cp(exception));
           return READY_NOW;
@@ -1414,7 +1415,7 @@ private:
           reject(mv(exception));
         });
 
-        return mv(promise);
+        return canceler.wrap(mv(promise)).catch_([](kj::Exception&&) {});
       } else KJ_IF_MAYBE(reason, stoppage) {
         if (reason->is<Eof>()) {
           // Unlike in the read case, it makes more sense to immediately propagate exceptions to the
