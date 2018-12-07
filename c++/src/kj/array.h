@@ -457,7 +457,7 @@ public:
 
   Array<T> finish() {
     // We could safely remove this check if we assume that the disposer implementation doesn't
-    // need to know the original capacity, as is thes case with HeapArrayDisposer since it uses
+    // need to know the original capacity, as is the case with HeapArrayDisposer since it uses
     // operator new() or if we created a custom disposer for ArrayBuilder which stores the capacity
     // in a prefix.  But that would make it hard to write cleverer heap allocators, and anyway this
     // check might catch bugs.  Probably people should use Vector if they want to build arrays
