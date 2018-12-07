@@ -140,7 +140,7 @@ size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
         return out - reinterpret_cast<uint8_t*>(dst);
       }
 
-      uint inRemaining = BUFFER_REMAINING;
+      size_t inRemaining = BUFFER_REMAINING;
       if (inRemaining >= runLength) {
         // Fast path.
         memcpy(out, in, runLength);
@@ -266,7 +266,7 @@ void PackedInputStream::skip(size_t bytes) {
 
       bytes -= runLength;
 
-      uint inRemaining = BUFFER_REMAINING;
+      size_t inRemaining = BUFFER_REMAINING;
       if (inRemaining > runLength) {
         // Fast path.
         in += runLength;
