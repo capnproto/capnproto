@@ -99,12 +99,15 @@ TEST(AsyncUnixTest, SignalWithValue) {
   union sigval value;
   memset(&value, 0, sizeof(value));
   value.sival_int = 123;
-  sigqueue(getpid(), SIGURG, value);
-
-  siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
-  EXPECT_EQ(SIGURG, info.si_signo);
-  EXPECT_SI_CODE(SI_QUEUE, info.si_code);
-  EXPECT_EQ(123, info.si_value.sival_int);
+  KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
+    case ENOSYS:
+      break;
+    default:
+      siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
+      EXPECT_EQ(SIGURG, info.si_signo);
+      EXPECT_SI_CODE(SI_QUEUE, info.si_code);
+      EXPECT_EQ(123, info.si_value.sival_int);
+  }
 }
 
 TEST(AsyncUnixTest, SignalWithPointerValue) {
@@ -127,12 +130,15 @@ TEST(AsyncUnixTest, SignalWithPointerValue) {
   union sigval value;
   memset(&value, 0, sizeof(value));
   value.sival_ptr = &port;
-  sigqueue(getpid(), SIGURG, value);
-
-  siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
-  EXPECT_EQ(SIGURG, info.si_signo);
-  EXPECT_SI_CODE(SI_QUEUE, info.si_code);
-  EXPECT_EQ(&port, info.si_value.sival_ptr);
+  KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
+    case ENOSYS:
+      break;
+    default:
+      siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
+      EXPECT_EQ(SIGURG, info.si_signo);
+      EXPECT_SI_CODE(SI_QUEUE, info.si_code);
+      EXPECT_EQ(&port, info.si_value.sival_ptr);
+  }
 }
 #endif
 
