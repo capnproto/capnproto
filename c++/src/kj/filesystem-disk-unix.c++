@@ -502,6 +502,7 @@ public:
           default:
             KJ_FAIL_SYSCALL("sendfile", error) { return fromPos - fromOffset; }
         }
+        if (n == 0) break;
       }
       return fromPos - fromOffset;
     }
