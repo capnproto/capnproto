@@ -99,7 +99,14 @@ TEST(AsyncUnixTest, SignalWithValue) {
   union sigval value;
   memset(&value, 0, sizeof(value));
   value.sival_int = 123;
-  sigqueue(getpid(), SIGURG, value);
+  KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
+    case ENOSYS:
+      // sigqueue() not supported. Maybe running on WSL.
+      KJ_LOG(WARNING, "sigqueue() is not implemented by your system; skipping test");
+      return;
+    default:
+      KJ_FAIL_SYSCALL("sigqueue(getpid(), SIGURG, value)", error);
+  }
 
   siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
   EXPECT_EQ(SIGURG, info.si_signo);
@@ -127,7 +134,14 @@ TEST(AsyncUnixTest, SignalWithPointerValue) {
   union sigval value;
   memset(&value, 0, sizeof(value));
   value.sival_ptr = &port;
-  sigqueue(getpid(), SIGURG, value);
+  KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
+    case ENOSYS:
+      // sigqueue() not supported. Maybe running on WSL.
+      KJ_LOG(WARNING, "sigqueue() is not implemented by your system; skipping test");
+      return;
+    default:
+      KJ_FAIL_SYSCALL("sigqueue(getpid(), SIGURG, value)", error);
+  }
 
   siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
   EXPECT_EQ(SIGURG, info.si_signo);
