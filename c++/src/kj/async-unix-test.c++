@@ -489,6 +489,14 @@ TEST(AsyncUnixTest, UrgentObserver) {
   KJ_SYSCALL(getsockname(serverFd, reinterpret_cast<sockaddr*>(&saddr), &saddrLen));
   KJ_SYSCALL(listen(serverFd, 1));
 
+  // Create a pipe that we'll use to signal if MSG_OOB return EINVAL.
+  int failpipe[2];
+  KJ_SYSCALL(pipe(failpipe));
+  KJ_DEFER({
+    close(failpipe[0]);
+    close(failpipe[1]);
+  });
+
   // Accept one connection, send in-band and OOB byte, wait for a quit message
   Thread thread([&]() {
     int tmpFd;
@@ -504,7 +512,14 @@ TEST(AsyncUnixTest, UrgentObserver) {
     c = 'i';
     KJ_SYSCALL(send(clientFd, &c, 1, 0));
     c = 'o';
-    KJ_SYSCALL(send(clientFd, &c, 1, MSG_OOB));
+    KJ_SYSCALL_HANDLE_ERRORS(send(clientFd, &c, 1, MSG_OOB)) {
+      case EINVAL:
+        // Looks like MSG_OOB is not supported. (This is the case e.g. on WSL.)
+        KJ_SYSCALL(write(failpipe[1], &c, 1));
+        break;
+      default:
+        KJ_FAIL_SYSCALL("send(..., MSG_OOB)", error);
+    }
 
     KJ_SYSCALL(recv(clientFd, &c, 1, 0));
     EXPECT_EQ('q', c);
@@ -517,24 +532,32 @@ TEST(AsyncUnixTest, UrgentObserver) {
 
   UnixEventPort::FdObserver observer(port, clientFd,
       UnixEventPort::FdObserver::OBSERVE_READ | UnixEventPort::FdObserver::OBSERVE_URGENT);
+  UnixEventPort::FdObserver failObserver(port, failpipe[1],
+      UnixEventPort::FdObserver::OBSERVE_READ | UnixEventPort::FdObserver::OBSERVE_URGENT);
 
-  observer.whenUrgentDataAvailable().wait(waitScope);
+  auto promise = observer.whenUrgentDataAvailable().then([]() { return true; });
+  auto failPromise = failObserver.whenBecomesReadable().then([]() { return false; });
 
+  bool oobSupported = promise.exclusiveJoin(kj::mv(failPromise)).wait(waitScope);
+  if (oobSupported) {
 #if __CYGWIN__
-  // On Cygwin, reading the urgent byte first causes the subsequent regular read to block until
-  // such a time as the connection closes -- and then the byte is successfully returned. This
-  // seems to be a cygwin bug.
-  KJ_SYSCALL(recv(clientFd, &c, 1, 0));
-  EXPECT_EQ('i', c);
-  KJ_SYSCALL(recv(clientFd, &c, 1, MSG_OOB));
-  EXPECT_EQ('o', c);
+    // On Cygwin, reading the urgent byte first causes the subsequent regular read to block until
+    // such a time as the connection closes -- and then the byte is successfully returned. This
+    // seems to be a cygwin bug.
+    KJ_SYSCALL(recv(clientFd, &c, 1, 0));
+    EXPECT_EQ('i', c);
+    KJ_SYSCALL(recv(clientFd, &c, 1, MSG_OOB));
+    EXPECT_EQ('o', c);
 #else
-  // Attempt to read the urgent byte prior to reading the in-band byte.
-  KJ_SYSCALL(recv(clientFd, &c, 1, MSG_OOB));
-  EXPECT_EQ('o', c);
-  KJ_SYSCALL(recv(clientFd, &c, 1, 0));
-  EXPECT_EQ('i', c);
+    // Attempt to read the urgent byte prior to reading the in-band byte.
+    KJ_SYSCALL(recv(clientFd, &c, 1, MSG_OOB));
+    EXPECT_EQ('o', c);
+    KJ_SYSCALL(recv(clientFd, &c, 1, 0));
+    EXPECT_EQ('i', c);
 #endif
+  } else {
+    KJ_LOG(WARNING, "MSG_OOB doesn't seem to be supported on your platform.");
+  }
 
   // Allow server thread to let its clientFd go out of scope.
   c = 'q';
