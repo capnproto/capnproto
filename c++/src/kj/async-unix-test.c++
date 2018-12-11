@@ -532,7 +532,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
 
   UnixEventPort::FdObserver observer(port, clientFd,
       UnixEventPort::FdObserver::OBSERVE_READ | UnixEventPort::FdObserver::OBSERVE_URGENT);
-  UnixEventPort::FdObserver failObserver(port, failpipe[1],
+  UnixEventPort::FdObserver failObserver(port, failpipe[0],
       UnixEventPort::FdObserver::OBSERVE_READ | UnixEventPort::FdObserver::OBSERVE_URGENT);
 
   auto promise = observer.whenUrgentDataAvailable().then([]() { return true; });
