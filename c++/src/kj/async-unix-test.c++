@@ -102,7 +102,7 @@ TEST(AsyncUnixTest, SignalWithValue) {
   KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
     case ENOSYS:
       // sigqueue() not supported. Maybe running on WSL.
-      KJ_LOG(WARNING, "sigqueue() is not implemented by your system; skipping test")
+      KJ_LOG(WARNING, "sigqueue() is not implemented by your system; skipping test");
       return;
     default:
       KJ_FAIL_SYSCALL("sigqueue(getpid(), SIGURG, value)", error);
@@ -137,7 +137,7 @@ TEST(AsyncUnixTest, SignalWithPointerValue) {
   KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
     case ENOSYS:
       // sigqueue() not supported. Maybe running on WSL.
-      KJ_LOG(WARNING, "sigqueue() is not implemented by your system; skipping test")
+      KJ_LOG(WARNING, "sigqueue() is not implemented by your system; skipping test");
       return;
     default:
       KJ_FAIL_SYSCALL("sigqueue(getpid(), SIGURG, value)", error);
