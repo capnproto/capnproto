@@ -101,13 +101,17 @@ TEST(AsyncUnixTest, SignalWithValue) {
   value.sival_int = 123;
   KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
     case ENOSYS:
-      break;
+      // sigqueue() not supported. Maybe running on WSL.
+      KJ_LOG(WARNING, "sigqueue() is not implemented by your system; skipping test")
+      return;
     default:
-      siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
-      EXPECT_EQ(SIGURG, info.si_signo);
-      EXPECT_SI_CODE(SI_QUEUE, info.si_code);
-      EXPECT_EQ(123, info.si_value.sival_int);
+      KJ_FAIL_SYSCALL("sigqueue(getpid(), SIGURG, value)", error);
   }
+
+  siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
+  EXPECT_EQ(SIGURG, info.si_signo);
+  EXPECT_SI_CODE(SI_QUEUE, info.si_code);
+  EXPECT_EQ(123, info.si_value.sival_int);
 }
 
 TEST(AsyncUnixTest, SignalWithPointerValue) {
@@ -132,13 +136,17 @@ TEST(AsyncUnixTest, SignalWithPointerValue) {
   value.sival_ptr = &port;
   KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
     case ENOSYS:
-      break;
+      // sigqueue() not supported. Maybe running on WSL.
+      KJ_LOG(WARNING, "sigqueue() is not implemented by your system; skipping test")
+      return;
     default:
-      siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
-      EXPECT_EQ(SIGURG, info.si_signo);
-      EXPECT_SI_CODE(SI_QUEUE, info.si_code);
-      EXPECT_EQ(&port, info.si_value.sival_ptr);
+      KJ_FAIL_SYSCALL("sigqueue(getpid(), SIGURG, value)", error);
   }
+
+  siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
+  EXPECT_EQ(SIGURG, info.si_signo);
+  EXPECT_SI_CODE(SI_QUEUE, info.si_code);
+  EXPECT_EQ(&port, info.si_value.sival_ptr);
 }
 #endif
 
