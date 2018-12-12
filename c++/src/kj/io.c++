@@ -271,9 +271,9 @@ ArrayPtr<byte> ArrayOutputStream::getWriteBuffer() {
 }
 
 void ArrayOutputStream::write(const void* src, size_t size) {
-  if (src == fillPos) {
+  if (src == fillPos && fillPos != array.end()) {
     // Oh goody, the caller wrote directly into our buffer.
-    KJ_REQUIRE(size <= array.end() - fillPos);
+    KJ_REQUIRE(size <= array.end() - fillPos, size, fillPos, array.end() - fillPos);
     fillPos += size;
   } else {
     KJ_REQUIRE(size <= (size_t)(array.end() - fillPos),
@@ -299,9 +299,9 @@ ArrayPtr<byte> VectorOutputStream::getWriteBuffer() {
 }
 
 void VectorOutputStream::write(const void* src, size_t size) {
-  if (src == fillPos) {
+  if (src == fillPos && fillPos != vector.end()) {
     // Oh goody, the caller wrote directly into our buffer.
-    KJ_REQUIRE(size <= vector.end() - fillPos);
+    KJ_REQUIRE(size <= vector.end() - fillPos, size, fillPos, vector.end() - fillPos);
     fillPos += size;
   } else {
     if (vector.end() - fillPos < size) {
