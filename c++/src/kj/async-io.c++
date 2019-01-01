@@ -1407,17 +1407,9 @@ private:
       auto writeBuffer = inBuffer.asArray(limit, amount);
       KJ_ASSERT(limit >= amount);
       if (amount > 0) {
-        Promise<void> promise = nullptr;
-
-        // TODO(soon): Replace try/catch with kj::evalNow() to work with -fno-exceptions.
-        try {
-          promise = output.write(writeBuffer).attach(mv(writeBuffer));
-        } catch (const Exception& exception) {
-          reject(cp(exception));
-          return READY_NOW;
-        }
-
-        promise = promise.then([this, amount]() {
+        auto promise = kj::evalNow([&]() {
+          return output.write(writeBuffer).attach(mv(writeBuffer));
+        }).then([this, amount]() {
           limit -= amount;
           pumpedSoFar += amount;
           if (limit == 0) {
@@ -1427,6 +1419,9 @@ private:
           reject(mv(exception));
         });
 
+        // Ignore the canceler's own exception, since we're just using it to cancel fills when this
+        // PumpSink adapted promise gets destroyed, signalling a loss of interest by the pumpTo()
+        // caller.
         return canceler.wrap(mv(promise)).catch_([](kj::Exception&&) {});
       } else KJ_IF_MAYBE(reason, stoppage) {
         if (reason->is<Eof>()) {
@@ -1500,8 +1495,7 @@ private:
   void ensurePulling() {
     if (!pulling) {
       pulling = true;
-      UnwindDetector unwind;
-      KJ_DEFER(if (unwind.isUnwinding()) pulling = false);
+      KJ_ON_SCOPE_FAILURE(pulling = false);
       pullPromise = pull();
     }
   }
@@ -1572,7 +1566,7 @@ private:
       // correct value for `heapBuffer.size()`... I dunno, man.
       auto destination = heapBuffer.begin();
 
-      try {
+      return kj::evalNow([&]() {
         return inner->tryRead(destination, n.minBytes, n.maxBytes)
             .then([this, heapBuffer = mv(heapBuffer), minBytes = n.minBytes](size_t amount) mutable
                 -> Promise<void> {
@@ -1609,16 +1603,12 @@ private:
           }
 
           return pull();
-        }, [this](Exception&& exception) {
-          // Exception from the inner tryRead(). Propagate.
-          stoppage = Stoppage(mv(exception));
-          return pull();
         });
-      } catch (const Exception& exception) {
+      }).catch_([this](kj::Exception&& exception) {
         // Exception from the inner tryRead(). Propagate.
-        stoppage = Stoppage(cp(exception));
+        stoppage = Stoppage(mv(exception));
         return pull();
-      }
+      });
     }).eagerlyEvaluate([this](Exception&& exception) {
       // Exception from our loop, not from inner tryRead(). Something is broken; tell everybody!
       pulling = false;
