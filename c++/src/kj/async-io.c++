@@ -1264,19 +1264,29 @@ private:
     };
 
     virtual Promise<void> fill(Buffer& inBuffer, const Maybe<Stoppage>& stoppage) = 0;
-    // Attempt to fill the sink with bytes andreturn a promise which must resolve before any inner
+    // Attempt to fill the sink with bytes and return a promise which must resolve before any inner
     // read may be attempted. If a sink requires backpressure to be respected, this is how it should
     // be communicated.
     //
-    // If the sink is full, it must detach from the tee before the returned promise is resolved.
+    // If `stoppage` is non-null, the tee loop encountered either an exception or an EOF after
+    // reading the bytes in `inBuffer`.
     //
-    // The returned promise must not result in an exception.
+    // If the sink is full, the implementation of fill() must detach from the tee before the
+    // returned promise is fulfilled.
+    //
+    // Returning a rejected promise will cause the tee loop to stop, and all active sinks will be
+    // rejected with the given exception. In general, you should avoid allowing exceptions to escape
+    // fill() unless it is truly a catastrophic failure, since individual sinks should not affect
+    // other active sinks. If your fill() implementation encounters an exception, it is usually the
+    // right answer to call your own reject() method, below.
 
     virtual Need need() = 0;
 
     virtual void reject(Exception&& exception) = 0;
-    // Inform this sink of a catastrophic exception and detach it. Regular read exceptions should be
-    // propagated through `fill()`'s stoppage parameter instead.
+    // Reject this sink and detach it. This is usually only called from the implementation of
+    // fill() (e.g., with the exception value of `stoppage`), but the tee loop is allowed to reject
+    // this sink directly if it needs to propagate a catastrophic exception. The tee loop propagates
+    // "normal" inner read exceptions via the `stoppage` parameter to fill().
   };
 
   template <typename T>
@@ -1296,10 +1306,6 @@ private:
     ~SinkBase() noexcept(false) { detach(); }
 
     void reject(Exception&& exception) override {
-      // The tee is allowed to reject this sink if it needs to, e.g. to propagate a non-inner read
-      // exception from the pull loop. Only the derived class is allowed to fulfill() directly,
-      // though -- the tee must keep calling fill().
-
       fulfiller.reject(mv(exception));
       detach();
     }
@@ -1337,6 +1343,9 @@ private:
           minBytes(minBytes), readSoFar(readSoFar) {}
 
     Promise<void> fill(Buffer& inBuffer, const Maybe<Stoppage>& stoppage) override {
+      // NOTE: This function should avoid throwing exceptions / returning rejected promises, which
+      //   stop the tee loop. See the declaration of Sink::fill(), above.
+
       auto amount = inBuffer.consume(buffer, minBytes);
       readSoFar += amount;
 
@@ -1384,6 +1393,9 @@ private:
     }
 
     Promise<void> fill(Buffer& inBuffer, const Maybe<Stoppage>& stoppage) override {
+      // NOTE: This function should avoid throwing exceptions / returning rejected promises, which
+      //   stop the tee loop. See the declaration of Sink::fill(), above.
+
       KJ_ASSERT(limit > 0);
 
       uint64_t amount = 0;
