@@ -2103,5 +2103,94 @@ KJ_TEST("Userland tee buffer size limit") {
   }
 }
 
+KJ_TEST("Userspace OneWayPipe whenWriteDisconnected()") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  auto abortedPromise = pipe.out->whenWriteDisconnected();
+  KJ_ASSERT(!abortedPromise.poll(ws));
+
+  pipe.in = nullptr;
+
+  KJ_ASSERT(abortedPromise.poll(ws));
+  abortedPromise.wait(ws);
+}
+
+KJ_TEST("Userspace TwoWayPipe whenWriteDisconnected()") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newTwoWayPipe();
+
+  auto abortedPromise = pipe.ends[0]->whenWriteDisconnected();
+  KJ_ASSERT(!abortedPromise.poll(ws));
+
+  pipe.ends[1] = nullptr;
+
+  KJ_ASSERT(abortedPromise.poll(ws));
+  abortedPromise.wait(ws);
+}
+
+#if !_WIN32  // IOCP doesn't support detecting disconnect AFAICT.
+KJ_TEST("OS OneWayPipe whenWriteDisconnected()") {
+  auto io = setupAsyncIo();
+
+  auto pipe = io.provider->newOneWayPipe();
+
+  pipe.out->write("foo", 3).wait(io.waitScope);
+  auto abortedPromise = pipe.out->whenWriteDisconnected();
+  KJ_ASSERT(!abortedPromise.poll(io.waitScope));
+
+  pipe.in = nullptr;
+
+  KJ_ASSERT(abortedPromise.poll(io.waitScope));
+  abortedPromise.wait(io.waitScope);
+}
+
+KJ_TEST("OS TwoWayPipe whenWriteDisconnected()") {
+  auto io = setupAsyncIo();
+
+  auto pipe = io.provider->newTwoWayPipe();
+
+  pipe.ends[0]->write("foo", 3).wait(io.waitScope);
+  pipe.ends[1]->write("bar", 3).wait(io.waitScope);
+
+  auto abortedPromise = pipe.ends[0]->whenWriteDisconnected();
+  KJ_ASSERT(!abortedPromise.poll(io.waitScope));
+
+  pipe.ends[1] = nullptr;
+
+  KJ_ASSERT(abortedPromise.poll(io.waitScope));
+  abortedPromise.wait(io.waitScope);
+
+  char buffer[4];
+  KJ_ASSERT(pipe.ends[0]->tryRead(&buffer, sizeof(buffer), sizeof(buffer)).wait(io.waitScope) == 3);
+  buffer[3] = '\0';
+  KJ_EXPECT(buffer == "bar"_kj);
+}
+
+KJ_TEST("import socket FD that's already broken") {
+  auto io = setupAsyncIo();
+
+  int fds[2];
+  KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
+  KJ_SYSCALL(write(fds[1], "foo", 3));
+  KJ_SYSCALL(close(fds[1]));
+
+  auto stream = io.lowLevelProvider->wrapSocketFd(fds[0], LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+
+  auto abortedPromise = stream->whenWriteDisconnected();
+  KJ_ASSERT(abortedPromise.poll(io.waitScope));
+  abortedPromise.wait(io.waitScope);
+
+  char buffer[4];
+  KJ_ASSERT(stream->tryRead(&buffer, sizeof(buffer), sizeof(buffer)).wait(io.waitScope) == 3);
+  buffer[3] = '\0';
+  KJ_EXPECT(buffer == "foo"_kj);
+}
+#endif
+
 }  // namespace
 }  // namespace kj

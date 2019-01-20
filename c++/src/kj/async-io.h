@@ -106,6 +106,17 @@ public:
   // output stream. If it finds one, it performs the pump. Otherwise, it returns null.
   //
   // The default implementation always returns null.
+
+  virtual Promise<void> whenWriteDisconnected() = 0;
+  // Returns a promise that resolves when the stream has become disconnected such that new write()s
+  // will fail with a DISCONNECTED exception. This is particularly useful, for example, to cancel
+  // work early when it is detected that no one will receive the result.
+  //
+  // Note that not all streams are able to detect this condition without actually performing a
+  // write(); such stream implementations may return a promise that never resolves.
+  //
+  // Unlike most other asynchronous stream methods, it is safe to call whenWriteDisconnected()
+  // multiple times without canceling the previous promises.
 };
 
 class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {

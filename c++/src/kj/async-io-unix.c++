@@ -179,6 +179,17 @@ public:
     }
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    KJ_IF_MAYBE(p, writeDisconnectedPromise) {
+      return p->addBranch();
+    } else {
+      auto fork = observer.whenWriteDisconnected().fork();
+      auto result = fork.addBranch();
+      writeDisconnectedPromise = kj::mv(fork);
+      return kj::mv(result);
+    }
+  }
+
   void shutdownWrite() override {
     // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
     // UnixAsyncIoProvider interface.
@@ -290,6 +301,7 @@ public:
 private:
   UnixEventPort& eventPort;
   UnixEventPort::FdObserver observer;
+  Maybe<ForkedPromise<void>> writeDisconnectedPromise;
 
   Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                   size_t alreadyRead) {
