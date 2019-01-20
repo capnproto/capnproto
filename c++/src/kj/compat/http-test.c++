@@ -2558,6 +2558,64 @@ KJ_TEST("HttpFixedLengthEntityWriter correctly implements tryPumpFrom") {
       "Hello, World!", text);
 }
 
+class HangingHttpService final: public HttpService {
+  // HttpService that hangs forever.
+public:
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& responseSender) override {
+    kj::Promise<void> result = kj::NEVER_DONE;
+    ++inFlight;
+    return result.attach(kj::defer([this]() {
+      if (--inFlight == 0) {
+        KJ_IF_MAYBE(f, onCancelFulfiller) {
+          f->get()->fulfill();
+        }
+      }
+    }));
+  }
+
+  kj::Promise<void> onCancel() {
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    onCancelFulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
+
+  uint inFlight = 0;
+
+private:
+  kj::Maybe<kj::Exception> exception;
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> onCancelFulfiller;
+};
+
+KJ_TEST("HttpServer disconnects ") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = kj::newTwoWayPipe();
+
+  HttpHeaderTable table;
+  HangingHttpService service;
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  KJ_EXPECT(service.inFlight == 0);
+
+  static constexpr auto request = "GET / HTTP/1.1\r\n\r\n"_kj;
+  pipe.ends[1]->write(request.begin(), request.size()).wait(waitScope);
+
+  auto cancelPromise = service.onCancel();
+  KJ_EXPECT(!cancelPromise.poll(waitScope));
+  KJ_EXPECT(service.inFlight == 1);
+
+  // Disconnect client and verify server cancels.
+  pipe.ends[1] = nullptr;
+  KJ_ASSERT(cancelPromise.poll(waitScope));
+  KJ_EXPECT(service.inFlight == 0);
+  cancelPromise.wait(waitScope);
+}
+
 // -----------------------------------------------------------------------------
 
 KJ_TEST("newHttpService from HttpClient") {
