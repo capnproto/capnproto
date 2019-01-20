@@ -365,6 +365,13 @@ void UnixEventPort::FdObserver::fire(short events) {
     }
   }
 
+  if (events & (EPOLLHUP | EPOLLERR)) {
+    KJ_IF_MAYBE(f, hupFulfiller) {
+      f->get()->fulfill();
+      hupFulfiller = nullptr;
+    }
+  }
+
   if (events & EPOLLPRI) {
     KJ_IF_MAYBE(f, urgentFulfiller) {
       f->get()->fulfill();
@@ -395,6 +402,12 @@ Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
 
   auto paf = newPromiseAndFulfiller<void>();
   urgentFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
+  auto paf = newPromiseAndFulfiller<void>();
+  hupFulfiller = kj::mv(paf.fulfiller);
   return kj::mv(paf.promise);
 }
 
@@ -652,6 +665,13 @@ void UnixEventPort::FdObserver::fire(short events) {
     }
   }
 
+  if (events & (POLLHUP | POLLERR | POLLNVAL)) {
+    KJ_IF_MAYBE(f, hupFulfiller) {
+      f->get()->fulfill();
+      hupFulfiller = nullptr;
+    }
+  }
+
   if (events & POLLPRI) {
     KJ_IF_MAYBE(f, urgentFulfiller) {
       f->get()->fulfill();
@@ -721,6 +741,19 @@ Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
 
   auto paf = newPromiseAndFulfiller<void>();
   urgentFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
+  if (prev == nullptr) {
+    KJ_DASSERT(next == nullptr);
+    prev = eventPort.observersTail;
+    *prev = this;
+    eventPort.observersTail = &next;
+  }
+
+  auto paf = newPromiseAndFulfiller<void>();
+  hupFulfiller = kj::mv(paf.fulfiller);
   return kj::mv(paf.promise);
 }
 

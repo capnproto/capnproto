@@ -278,6 +278,9 @@ public:
   // WARNING: This has some known weird behavior on macOS. See
   //   https://github.com/sandstorm-io/capnproto/issues/374.
 
+  Promise<void> whenWriteDisconnected();
+  // Resolves when poll() on the file descriptor reports POLLHUP or POLLERR.
+
 private:
   UnixEventPort& eventPort;
   int fd;
@@ -286,6 +289,7 @@ private:
   kj::Maybe<Own<PromiseFulfiller<void>>> readFulfiller;
   kj::Maybe<Own<PromiseFulfiller<void>>> writeFulfiller;
   kj::Maybe<Own<PromiseFulfiller<void>>> urgentFulfiller;
+  kj::Maybe<Own<PromiseFulfiller<void>>> hupFulfiller;
   // Replaced each time `whenBecomesReadable()` or `whenBecomesWritable()` is called. Reverted to
   // null every time an event is fired.
 

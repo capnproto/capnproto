@@ -228,6 +228,12 @@ public:
     } else {
       ownState = kj::heap<AbortedRead>();
       state = *ownState;
+
+      readAborted = true;
+      KJ_IF_MAYBE(f, readAbortFulfiller) {
+        f->get()->fulfill();
+        readAbortFulfiller = nullptr;
+      }
     }
   }
 
@@ -268,6 +274,21 @@ public:
     }
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    if (readAborted) {
+      return kj::READY_NOW;
+    } else KJ_IF_MAYBE(p, readAbortPromise) {
+      return p->addBranch();
+    } else {
+      auto paf = newPromiseAndFulfiller<void>();
+      readAbortFulfiller = kj::mv(paf.fulfiller);
+      auto fork = paf.promise.fork();
+      auto result = fork.addBranch();
+      readAbortPromise = kj::mv(fork);
+      return result;
+    }
+  }
+
   void shutdownWrite() override {
     KJ_IF_MAYBE(s, state) {
       s->shutdownWrite();
@@ -284,6 +305,10 @@ private:
   // outstanding, `state` is null.
 
   kj::Own<AsyncIoStream> ownState;
+
+  bool readAborted = false;
+  Maybe<Own<PromiseFulfiller<void>>> readAbortFulfiller = nullptr;
+  Maybe<ForkedPromise<void>> readAbortPromise = nullptr;
 
   void endState(AsyncIoStream& obj) {
     KJ_IF_MAYBE(s, state) {
@@ -443,6 +468,10 @@ private:
       KJ_FAIL_REQUIRE("can't shutdownWrite() until previous write() completes");
     }
 
+    Promise<void> whenWriteDisconnected() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
+    }
+
   private:
     PromiseFulfiller<void>& fulfiller;
     AsyncPipe& pipe;
@@ -560,6 +589,10 @@ private:
     }
     void shutdownWrite() override {
       KJ_FAIL_REQUIRE("can't shutdownWrite() until previous tryPumpFrom() completes");
+    }
+
+    Promise<void> whenWriteDisconnected() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
 
   private:
@@ -733,6 +766,10 @@ private:
       pipe.shutdownWrite();
     }
 
+    Promise<void> whenWriteDisconnected() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
+    }
+
   private:
     PromiseFulfiller<size_t>& fulfiller;
     AsyncPipe& pipe;
@@ -901,6 +938,10 @@ private:
       pipe.shutdownWrite();
     }
 
+    Promise<void> whenWriteDisconnected() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
+    }
+
   private:
     PromiseFulfiller<uint64_t>& fulfiller;
     AsyncPipe& pipe;
@@ -937,6 +978,9 @@ private:
       // ignore -- currently shutdownWrite() actually means that the PipeWriteEnd was dropped,
       // which is not an error even if reads have been aborted.
     }
+    Promise<void> whenWriteDisconnected() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
+    }
   };
 
   class ShutdownedWrite final: public AsyncIoStream {
@@ -965,6 +1009,9 @@ private:
     void shutdownWrite() override {
       // ignore -- currently shutdownWrite() actually means that the PipeWriteEnd was dropped,
       // so it will only be called once anyhow.
+    }
+    Promise<void> whenWriteDisconnected() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
   };
 };
@@ -1013,6 +1060,10 @@ public:
     return pipe->tryPumpFrom(input, amount);
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    return pipe->whenWriteDisconnected();
+  }
+
 private:
   Own<AsyncPipe> pipe;
   UnwindDetector unwind;
@@ -1048,6 +1099,9 @@ public:
   Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount) override {
     return out->tryPumpFrom(input, amount);
+  }
+  Promise<void> whenWriteDisconnected() override {
+    return out->whenWriteDisconnected();
   }
   void shutdownWrite() override {
     out->shutdownWrite();
