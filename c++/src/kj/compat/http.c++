@@ -1760,6 +1760,10 @@ public:
     return fork.addBranch();
   }
 
+  Promise<void> whenWriteDisconnected() {
+    return inner.whenWriteDisconnected();
+  }
+
 private:
   AsyncOutputStream& inner;
   kj::Promise<void> writeQueue = kj::READY_NOW;
@@ -1787,6 +1791,9 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return KJ_EXCEPTION(FAILED, "HTTP message has no entity-body; can't write()");
   }
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
+  }
 };
 
 class HttpDiscardingEntityWriter final: public kj::AsyncOutputStream {
@@ -1796,6 +1803,9 @@ public:
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return kj::READY_NOW;
+  }
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
   }
 };
 
@@ -1875,6 +1885,10 @@ public:
     }
 
     return kj::mv(promise);
+  }
+
+  Promise<void> whenWriteDisconnected() override {
+    return inner.whenWriteDisconnected();
   }
 
 private:
@@ -1958,6 +1972,10 @@ public:
       // Need to use naive read/write loop.
       return nullptr;
     }
+  }
+
+  Promise<void> whenWriteDisconnected() override {
+    return inner.whenWriteDisconnected();
   }
 
 private:
@@ -3382,6 +3400,22 @@ public:
     }
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    KJ_IF_MAYBE(s, stream) {
+      return s->get()->whenWriteDisconnected();
+    } else {
+      return promise.addBranch().then([this]() {
+        return KJ_ASSERT_NONNULL(stream)->whenWriteDisconnected();
+      }, [](kj::Exception&& e) -> kj::Promise<void> {
+        if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+          return kj::READY_NOW;
+        } else {
+          return kj::mv(e);
+        }
+      });
+    }
+  }
+
   void shutdownWrite() override {
     KJ_IF_MAYBE(s, stream) {
       return s->get()->shutdownWrite();
@@ -3452,6 +3486,22 @@ public:
       return promise.addBranch().then([this,&input,amount]() {
         // Call input.pumpTo() on the resolved stream instead.
         return input.pumpTo(*KJ_ASSERT_NONNULL(stream), amount);
+      });
+    }
+  }
+
+  Promise<void> whenWriteDisconnected() override {
+    KJ_IF_MAYBE(s, stream) {
+      return s->get()->whenWriteDisconnected();
+    } else {
+      return promise.addBranch().then([this]() {
+        return KJ_ASSERT_NONNULL(stream)->whenWriteDisconnected();
+      }, [](kj::Exception&& e) -> kj::Promise<void> {
+        if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+          return kj::READY_NOW;
+        } else {
+          return kj::mv(e);
+        }
       });
     }
   }
@@ -3864,6 +3914,9 @@ public:
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return kj::READY_NOW;
+  }
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
   }
 
   // We can't really optimize tryPumpFrom() unless AsyncInputStream grows a skip() method.
