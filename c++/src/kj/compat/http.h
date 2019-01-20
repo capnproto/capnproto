@@ -629,6 +629,9 @@ public:
   //
   // `url` and `headers` are invalidated on the first read from `requestBody` or when the returned
   // promise resolves, whichever comes first.
+  //
+  // Request processing can be canceled by dropping the returned promise. HttpServer may do so if
+  // the client disconnects prematurely.
 
   virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host);
   // Handles CONNECT requests. Only relevant for proxy services. Default implementation throws

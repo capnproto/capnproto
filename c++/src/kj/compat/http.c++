@@ -4849,7 +4849,10 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
     }
   }
 
-  auto promise = obj->loop(true);
+  // Start reading requests and responding to them, but immediately cancel processing if the client
+  // disconnects.
+  auto promise = obj->loop(true)
+      .exclusiveJoin(connection.whenWriteDisconnected().then([]() {return false;}));
 
   // Eagerly evaluate so that we drop the connection when the promise resolves, even if the caller
   // doesn't eagerly evaluate.
