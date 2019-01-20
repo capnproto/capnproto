@@ -180,6 +180,10 @@ public:
     return writeInternal(pieces[0], pieces.slice(1, pieces.size()));
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    return inner.whenWriteDisconnected();
+  }
+
   void shutdownWrite() override {
     KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
 

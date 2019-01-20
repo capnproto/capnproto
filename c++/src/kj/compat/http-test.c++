@@ -288,6 +288,10 @@ public:
     return inner.tryPumpFrom(input, amount);
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    return inner.whenWriteDisconnected();
+  }
+
   void shutdownWrite() override {
     return inner.shutdownWrite();
   }
@@ -1791,6 +1795,10 @@ public:
     return out->tryPumpFrom(input, amount);
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    return out->whenWriteDisconnected();
+  }
+
   void shutdownWrite() override {
     out = nullptr;
   }
@@ -2745,6 +2753,9 @@ public:
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
       kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
     return inner->tryPumpFrom(input, amount);
+  }
+  Promise<void> whenWriteDisconnected() override {
+    return inner->whenWriteDisconnected();
   }
   void shutdownWrite() override {
     return inner->shutdownWrite();
