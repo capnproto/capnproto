@@ -26,6 +26,22 @@
 #include <kj/test.h>
 #include <map>
 
+#if KJ_HTTP_TEST_USE_OS_PIPE
+// Run the test using OS-leve socketpairs. (See http-socketpair-test.c++.)
+#define KJ_HTTP_TEST_SETUP_IO \
+  auto io = kj::setupAsyncIo(); \
+  auto& waitScope = io.waitScope
+#define KJ_HTTP_TEST_CREATE_2PIPE \
+  io.provider->newTwoWayPipe()
+#else
+// Run the test using in-process two-way pipes.
+#define KJ_HTTP_TEST_SETUP_IO \
+  kj::EventLoop eventLoop; \
+  kj::WaitScope waitScope(eventLoop)
+#define KJ_HTTP_TEST_CREATE_2PIPE \
+  kj::newTwoWayPipe()
+#endif
+
 namespace kj {
 namespace {
 
@@ -432,8 +448,8 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::ArrayPtr<const byte> 
   }));
 }
 
-void testHttpClientRequest(kj::WaitScope& waitScope, const HttpRequestTestCase& testCase) {
-  auto pipe = kj::newTwoWayPipe();
+void testHttpClientRequest(kj::WaitScope& waitScope, const HttpRequestTestCase& testCase,
+                           kj::TwoWayPipe pipe) {
 
   auto serverTask = expectRead(*pipe.ends[1], testCase.raw).then([&]() {
     static const char SIMPLE_RESPONSE[] =
@@ -473,8 +489,7 @@ void testHttpClientRequest(kj::WaitScope& waitScope, const HttpRequestTestCase& 
 }
 
 void testHttpClientResponse(kj::WaitScope& waitScope, const HttpResponseTestCase& testCase,
-                            size_t readFragmentSize) {
-  auto pipe = kj::newTwoWayPipe();
+                            size_t readFragmentSize, kj::TwoWayPipe pipe) {
   ReadFragmenter fragmenter(*pipe.ends[0], readFragmentSize);
 
   auto expectedReqText = testCase.method == HttpMethod::GET || testCase.method == HttpMethod::HEAD
@@ -614,9 +629,8 @@ private:
 
 void testHttpServerRequest(kj::WaitScope& waitScope, kj::Timer& timer,
                            const HttpRequestTestCase& requestCase,
-                           const HttpResponseTestCase& responseCase) {
-  auto pipe = kj::newTwoWayPipe();
-
+                           const HttpResponseTestCase& responseCase,
+                           kj::TwoWayPipe pipe) {
   HttpHeaderTable table;
   TestHttpService service(requestCase, responseCase, table);
   HttpServer server(timer, table, service);
@@ -861,35 +875,32 @@ kj::ArrayPtr<const HttpResponseTestCase> responseTestCases() {
 }
 
 KJ_TEST("HttpClient requests") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
 
   for (auto& testCase: requestTestCases()) {
     if (testCase.side == SERVER_ONLY) continue;
     KJ_CONTEXT(testCase.raw);
-    testHttpClientRequest(waitScope, testCase);
+    testHttpClientRequest(waitScope, testCase, KJ_HTTP_TEST_CREATE_2PIPE);
   }
 }
 
 KJ_TEST("HttpClient responses") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   size_t FRAGMENT_SIZES[] = { 1, 2, 3, 4, 5, 6, 7, 8, 16, 31, kj::maxValue };
 
   for (auto& testCase: responseTestCases()) {
     if (testCase.side == SERVER_ONLY) continue;
     for (size_t fragmentSize: FRAGMENT_SIZES) {
       KJ_CONTEXT(testCase.raw, fragmentSize);
-      testHttpClientResponse(waitScope, testCase, fragmentSize);
+      testHttpClientResponse(waitScope, testCase, fragmentSize, KJ_HTTP_TEST_CREATE_2PIPE);
     }
   }
 }
 
 KJ_TEST("HttpClient canceled write") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
 
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto serverPromise = pipe.ends[1]->readAllText();
 
@@ -922,10 +933,9 @@ KJ_TEST("HttpClient canceled write") {
 }
 
 KJ_TEST("HttpClient chunked body gather-write") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
 
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto serverPromise = pipe.ends[1]->readAllText();
 
@@ -973,10 +983,9 @@ KJ_TEST("HttpClient chunked body pump from fixed length stream") {
     kj::StringPtr body = "foo bar baz";
   };
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
 
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto serverPromise = pipe.ends[1]->readAllText();
 
@@ -1025,15 +1034,15 @@ KJ_TEST("HttpServer requests") {
     3, {"foo"}
   };
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
 
   for (auto& testCase: requestTestCases()) {
     if (testCase.side == CLIENT_ONLY) continue;
     KJ_CONTEXT(testCase.raw);
     testHttpServerRequest(waitScope, timer, testCase,
-        testCase.method == HttpMethod::HEAD ? HEAD_RESPONSE : RESPONSE);
+        testCase.method == HttpMethod::HEAD ? HEAD_RESPONSE : RESPONSE,
+        KJ_HTTP_TEST_CREATE_2PIPE);
   }
 }
 
@@ -1058,15 +1067,15 @@ KJ_TEST("HttpServer responses") {
     uint64_t(0), {},
   };
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
 
   for (auto& testCase: responseTestCases()) {
     if (testCase.side == CLIENT_ONLY) continue;
     KJ_CONTEXT(testCase.raw);
     testHttpServerRequest(waitScope, timer,
-        testCase.method == HttpMethod::HEAD ? HEAD_REQUEST : REQUEST, testCase);
+        testCase.method == HttpMethod::HEAD ? HEAD_REQUEST : REQUEST, testCase,
+        KJ_HTTP_TEST_CREATE_2PIPE);
   }
 }
 
@@ -1221,9 +1230,8 @@ kj::ArrayPtr<const HttpTestCase> pipelineTestCases() {
 KJ_TEST("HttpClient pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
   for (auto& testCase: PIPELINE_TESTS) {
@@ -1251,9 +1259,8 @@ KJ_TEST("HttpClient pipeline") {
 KJ_TEST("HttpClient parallel pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   kj::Promise<void> readRequestsPromise = kj::READY_NOW;
   kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
@@ -1315,10 +1322,9 @@ KJ_TEST("HttpClient parallel pipeline") {
 KJ_TEST("HttpServer pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
@@ -1344,10 +1350,9 @@ KJ_TEST("HttpServer pipeline") {
 KJ_TEST("HttpServer parallel pipeline") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto allRequestText =
       kj::strArray(KJ_MAP(testCase, PIPELINE_TESTS) { return testCase.request.raw; }, "");
@@ -1374,10 +1379,9 @@ KJ_TEST("HttpServer parallel pipeline") {
 KJ_TEST("HttpClient <-> HttpServer") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
@@ -1399,8 +1403,7 @@ KJ_TEST("HttpClient <-> HttpServer") {
 // -----------------------------------------------------------------------------
 
 KJ_TEST("HttpInputStream requests") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
 
   kj::HttpHeaderTable table;
 
@@ -1438,8 +1441,7 @@ KJ_TEST("HttpInputStream requests") {
 }
 
 KJ_TEST("HttpInputStream responses") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
 
   kj::HttpHeaderTable table;
 
@@ -1479,8 +1481,7 @@ KJ_TEST("HttpInputStream responses") {
 }
 
 KJ_TEST("HttpInputStream bare messages") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
 
   kj::HttpHeaderTable table;
 
@@ -1534,9 +1535,8 @@ KJ_TEST("HttpInputStream bare messages") {
 // -----------------------------------------------------------------------------
 
 KJ_TEST("WebSocket core protocol") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto client = newWebSocket(kj::mv(pipe.ends[0]), nullptr);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1595,9 +1595,8 @@ KJ_TEST("WebSocket core protocol") {
 }
 
 KJ_TEST("WebSocket fragmented") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1633,9 +1632,8 @@ public:
 };
 
 KJ_TEST("WebSocket masked") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
   FakeEntropySource maskGenerator;
 
   auto client = kj::mv(pipe.ends[0]);
@@ -1661,9 +1659,8 @@ KJ_TEST("WebSocket masked") {
 }
 
 KJ_TEST("WebSocket unsolicited pong") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1688,9 +1685,8 @@ KJ_TEST("WebSocket unsolicited pong") {
 }
 
 KJ_TEST("WebSocket ping") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1726,9 +1722,8 @@ KJ_TEST("WebSocket ping") {
 }
 
 KJ_TEST("WebSocket ping mid-send") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1809,8 +1804,7 @@ private:
 };
 
 KJ_TEST("WebSocket double-ping mid-send") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
 
   auto upPipe = newOneWayPipe();
   auto downPipe = newOneWayPipe();
@@ -1847,9 +1841,8 @@ KJ_TEST("WebSocket double-ping mid-send") {
 }
 
 KJ_TEST("WebSocket ping received during pong send") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
@@ -1883,10 +1876,9 @@ KJ_TEST("WebSocket ping received during pong send") {
 }
 
 KJ_TEST("WebSocket pump disconnect on send") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe1 = kj::newTwoWayPipe();
-  auto pipe2 = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe1 = KJ_HTTP_TEST_CREATE_2PIPE;
+  auto pipe2 = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto client1 = newWebSocket(kj::mv(pipe1.ends[0]), nullptr);
   auto server1 = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
@@ -1908,10 +1900,9 @@ KJ_TEST("WebSocket pump disconnect on send") {
 }
 
 KJ_TEST("WebSocket pump disconnect on receive") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe1 = kj::newTwoWayPipe();
-  auto pipe2 = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe1 = KJ_HTTP_TEST_CREATE_2PIPE;
+  auto pipe2 = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto server1 = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
   auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), nullptr);
@@ -2061,9 +2052,8 @@ void testWebSocketClient(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
 }
 
 KJ_TEST("HttpClient WebSocket handshake") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
 
@@ -2092,9 +2082,8 @@ KJ_TEST("HttpClient WebSocket handshake") {
 }
 
 KJ_TEST("HttpClient WebSocket error") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-  auto pipe = kj::newTwoWayPipe();
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
 
@@ -2139,10 +2128,9 @@ KJ_TEST("HttpClient WebSocket error") {
 }
 
 KJ_TEST("HttpServer WebSocket handshake") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable::Builder tableBuilder;
   HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
@@ -2166,10 +2154,9 @@ KJ_TEST("HttpServer WebSocket handshake") {
 }
 
 KJ_TEST("HttpServer WebSocket handshake error") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable::Builder tableBuilder;
   HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
@@ -2197,10 +2184,9 @@ KJ_TEST("HttpServer WebSocket handshake error") {
 KJ_TEST("HttpServer request timeout") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
@@ -2223,10 +2209,9 @@ KJ_TEST("HttpServer request timeout") {
 KJ_TEST("HttpServer pipeline timeout") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   TestHttpService service(PIPELINE_TESTS, table);
@@ -2277,10 +2262,9 @@ private:
 KJ_TEST("HttpServer no response") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   BrokenHttpService service;
@@ -2305,10 +2289,9 @@ KJ_TEST("HttpServer no response") {
 KJ_TEST("HttpServer disconnected") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(DISCONNECTED, "disconnected"));
@@ -2327,10 +2310,9 @@ KJ_TEST("HttpServer disconnected") {
 KJ_TEST("HttpServer overloaded") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(OVERLOADED, "overloaded"));
@@ -2349,10 +2331,9 @@ KJ_TEST("HttpServer overloaded") {
 KJ_TEST("HttpServer unimplemented") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(UNIMPLEMENTED, "unimplemented"));
@@ -2371,10 +2352,9 @@ KJ_TEST("HttpServer unimplemented") {
 KJ_TEST("HttpServer threw exception") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   BrokenHttpService service(KJ_EXCEPTION(FAILED, "failed"));
@@ -2415,10 +2395,9 @@ private:
 KJ_TEST("HttpServer threw exception after starting response") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   PartialResponseService service;
@@ -2463,10 +2442,9 @@ private:
 KJ_TEST("HttpServer failed to write complete response but didn't throw") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   PartialResponseNoThrowService service;
@@ -2534,10 +2512,9 @@ private:
 KJ_TEST("HttpFixedLengthEntityWriter correctly implements tryPumpFrom") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   PumpResponseService service;
@@ -2589,10 +2566,9 @@ private:
 };
 
 KJ_TEST("HttpServer disconnects ") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable table;
   HangingHttpService service;
@@ -2621,11 +2597,10 @@ KJ_TEST("HttpServer disconnects ") {
 KJ_TEST("newHttpService from HttpClient") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto frontPipe = kj::newTwoWayPipe();
-  auto backPipe = kj::newTwoWayPipe();
+  auto frontPipe = KJ_HTTP_TEST_CREATE_2PIPE;
+  auto backPipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   kj::Promise<void> writeResponsesPromise = kj::READY_NOW;
   for (auto& testCase: PIPELINE_TESTS) {
@@ -2662,11 +2637,10 @@ KJ_TEST("newHttpService from HttpClient") {
 }
 
 KJ_TEST("newHttpService from HttpClient WebSockets") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto frontPipe = kj::newTwoWayPipe();
-  auto backPipe = kj::newTwoWayPipe();
+  auto frontPipe = KJ_HTTP_TEST_CREATE_2PIPE;
+  auto backPipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
   auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
@@ -2705,11 +2679,10 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
 }
 
 KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto frontPipe = kj::newTwoWayPipe();
-  auto backPipe = kj::newTwoWayPipe();
+  auto frontPipe = KJ_HTTP_TEST_CREATE_2PIPE;
+  auto backPipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
   auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
@@ -2749,8 +2722,7 @@ KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
 KJ_TEST("newHttpClient from HttpService") {
   auto PIPELINE_TESTS = pipelineTestCases();
 
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
 
   HttpHeaderTable table;
@@ -2763,10 +2735,9 @@ KJ_TEST("newHttpClient from HttpService") {
 }
 
 KJ_TEST("newHttpClient from HttpService WebSockets") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = kj::newTwoWayPipe();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   HttpHeaderTable::Builder tableBuilder;
   HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
