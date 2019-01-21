@@ -489,6 +489,17 @@ public:
   // shutdown, but is sometimes useful when you want the other end to trigger whatever behavior
   // it normally triggers when a connection is dropped.
 
+  virtual void abort() = 0;
+  // Forcefully close this WebSocket, such that the remote end should get a DISCONNECTED error if
+  // it continues to write. This differs from disconnect(), which only closes the sending
+  // direction, but still allows receives.
+
+  virtual kj::Promise<void> whenAborted() = 0;
+  // Resolves when the remote side aborts the connection such that send() would throw DISCONNECTED,
+  // if this can be detected without actually writing a message. (If not, this promise never
+  // resolves, but send() or receive() will throw DISCONNECTED when appropriate. See also
+  // kj::AsyncOutputStream::whenWriteDisconnected().)
+
   struct Close {
     uint16_t code;
     kj::String reason;
