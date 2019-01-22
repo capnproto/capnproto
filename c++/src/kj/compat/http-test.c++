@@ -1459,7 +1459,7 @@ KJ_TEST("HttpInputStream responses") {
     KJ_CONTEXT(testCase.raw);
 
     KJ_ASSERT(input->awaitNextMessage().wait(waitScope));
-    
+
     auto resp = input->readResponse(testCase.method).wait(waitScope);
     KJ_EXPECT(resp.statusCode == testCase.statusCode);
     KJ_EXPECT(resp.statusText == testCase.statusText);
@@ -2610,13 +2610,6 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
       .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_REPLY_MESSAGE}); })
       .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_CLOSE); })
       .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_REPLY_CLOSE}); })
-      // expect EOF
-      .then([&]() { return backPipe.ends[1]->readAllBytes(); })
-      .then([&](kj::ArrayPtr<byte> content) {
-        KJ_EXPECT(content.size() == 0);
-        // Send EOF.
-        backPipe.ends[1]->shutdownWrite();
-      })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
 
   {

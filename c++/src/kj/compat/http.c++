@@ -2484,9 +2484,9 @@ static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
             .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
       }
       KJ_CASE_ONEOF(close, WebSocket::Close) {
+        // Once a close has passed through, the pump is complete.
         return to.close(close.code, close.reason)
-            .attach(kj::mv(close))
-            .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
+            .attach(kj::mv(close));
       }
     }
     KJ_UNREACHABLE;
