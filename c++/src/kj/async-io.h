@@ -113,7 +113,10 @@ public:
   // work early when it is detected that no one will receive the result.
   //
   // Note that not all streams are able to detect this condition without actually performing a
-  // write(); such stream implementations may return a promise that never resolves.
+  // write(); such stream implementations may return a promise that never resolves. (In particular,
+  // as of this writing, whenWriteDisconnected() is not implemented on Windows. Also, for TCP
+  // streams, not all disconnects are detectable -- a power or network failure may lead the
+  // connection to hang forever, or until configured socket options lead to a timeout.)
   //
   // Unlike most other asynchronous stream methods, it is safe to call whenWriteDisconnected()
   // multiple times without canceling the previous promises.
