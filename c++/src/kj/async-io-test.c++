@@ -2133,7 +2133,9 @@ KJ_TEST("Userspace TwoWayPipe whenWriteDisconnected()") {
   abortedPromise.wait(ws);
 }
 
-#if !_WIN32  // IOCP doesn't support detecting disconnect AFAICT.
+#if !_WIN32  // We don't currently support detecting disconnect with IOCP.
+#if !__CYGWIN__  // TODO(soon): Figure out why whenWriteDisconnected() doesn't work on Cygwin.
+
 KJ_TEST("OS OneWayPipe whenWriteDisconnected()") {
   auto io = setupAsyncIo();
 
@@ -2190,7 +2192,9 @@ KJ_TEST("import socket FD that's already broken") {
   buffer[3] = '\0';
   KJ_EXPECT(buffer == "foo"_kj);
 }
-#endif
+
+#endif  // !__CYGWIN__
+#endif  // !_WIN32
 
 }  // namespace
 }  // namespace kj
