@@ -27,7 +27,7 @@
 #include <map>
 
 #if KJ_HTTP_TEST_USE_OS_PIPE
-// Run the test using OS-leve socketpairs. (See http-socketpair-test.c++.)
+// Run the test using OS-level socketpairs. (See http-socketpair-test.c++.)
 #define KJ_HTTP_TEST_SETUP_IO \
   auto io = kj::setupAsyncIo(); \
   auto& waitScope = io.waitScope
@@ -2565,7 +2565,7 @@ private:
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> onCancelFulfiller;
 };
 
-KJ_TEST("HttpServer disconnects ") {
+KJ_TEST("HttpServer cancels request when client disconnects") {
   KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
