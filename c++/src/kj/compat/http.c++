@@ -1760,6 +1760,10 @@ public:
     return fork.addBranch();
   }
 
+  Promise<void> whenWriteDisconnected() {
+    return inner.whenWriteDisconnected();
+  }
+
 private:
   AsyncOutputStream& inner;
   kj::Promise<void> writeQueue = kj::READY_NOW;
@@ -1787,6 +1791,9 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return KJ_EXCEPTION(FAILED, "HTTP message has no entity-body; can't write()");
   }
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
+  }
 };
 
 class HttpDiscardingEntityWriter final: public kj::AsyncOutputStream {
@@ -1796,6 +1803,9 @@ public:
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return kj::READY_NOW;
+  }
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
   }
 };
 
@@ -1875,6 +1885,10 @@ public:
     }
 
     return kj::mv(promise);
+  }
+
+  Promise<void> whenWriteDisconnected() override {
+    return inner.whenWriteDisconnected();
   }
 
 private:
@@ -1960,6 +1974,10 @@ public:
     }
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    return inner.whenWriteDisconnected();
+  }
+
 private:
   HttpOutputStream& inner;
 };
@@ -2020,6 +2038,18 @@ public:
 
     stream->shutdownWrite();
     return kj::READY_NOW;
+  }
+
+  void abort() override {
+    queuedPong = nullptr;
+    sendingPong = nullptr;
+    disconnected = true;
+    stream->abortRead();
+    stream->shutdownWrite();
+  }
+
+  kj::Promise<void> whenAborted() override {
+    return stream->whenWriteDisconnected();
   }
 
   kj::Promise<Message> receive() override {
@@ -2506,7 +2536,12 @@ kj::Promise<void> WebSocket::pumpTo(WebSocket& other) {
   } else {
     // Fall back to default implementation.
     return kj::evalNow([&]() {
-      return pumpWebSocketLoop(*this, other);
+      auto cancelPromise = other.whenAborted().then([this]() -> kj::Promise<void> {
+        this->abort();
+        return KJ_EXCEPTION(DISCONNECTED,
+            "destination of WebSocket pump disconnected prematurely");
+      });
+      return pumpWebSocketLoop(*this, other).exclusiveJoin(kj::mv(cancelPromise));
     });
   }
 }
@@ -2517,12 +2552,7 @@ kj::Maybe<kj::Promise<void>> WebSocket::tryPumpFrom(WebSocket& other) {
 
 namespace {
 
-class AbortableWebSocket: public WebSocket {
-public:
-  virtual void abort() = 0;
-};
-
-class WebSocketPipeImpl final: public AbortableWebSocket, public kj::Refcounted {
+class WebSocketPipeImpl final: public WebSocket, public kj::Refcounted {
   // Represents one direction of a WebSocket pipe.
   //
   // This class behaves as a "loopback" WebSocket: a message sent using send() is received using
@@ -2548,6 +2578,12 @@ public:
     } else {
       ownState = heap<Aborted>();
       state = *ownState;
+
+      aborted = true;
+      KJ_IF_MAYBE(f, abortedFulfiller) {
+        f->get()->fulfill();
+        abortedFulfiller = nullptr;
+      }
     }
   }
 
@@ -2581,6 +2617,20 @@ public:
       return kj::READY_NOW;
     }
   }
+  kj::Promise<void> whenAborted() override {
+    if (aborted) {
+      return kj::READY_NOW;
+    } else KJ_IF_MAYBE(p, abortedPromise) {
+      return p->addBranch();
+    } else {
+      auto paf = newPromiseAndFulfiller<void>();
+      abortedFulfiller = kj::mv(paf.fulfiller);
+      auto fork = paf.promise.fork();
+      auto result = fork.addBranch();
+      abortedPromise = kj::mv(fork);
+      return result;
+    }
+  }
   kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
     KJ_IF_MAYBE(s, state) {
       return s->tryPumpFrom(other);
@@ -2605,12 +2655,16 @@ public:
   }
 
 private:
-  kj::Maybe<AbortableWebSocket&> state;
+  kj::Maybe<WebSocket&> state;
   // Object-oriented state! If any method call is blocked waiting on activity from the other end,
   // then `state` is non-null and method calls should be forwarded to it. If no calls are
   // outstanding, `state` is null.
 
-  kj::Own<AbortableWebSocket> ownState;
+  kj::Own<WebSocket> ownState;
+
+  bool aborted = false;
+  Maybe<Own<PromiseFulfiller<void>>> abortedFulfiller = nullptr;
+  Maybe<ForkedPromise<void>> abortedPromise = nullptr;
 
   void endState(WebSocket& obj) {
     KJ_IF_MAYBE(s, state) {
@@ -2626,7 +2680,7 @@ private:
   };
   typedef kj::OneOf<kj::ArrayPtr<const char>, kj::ArrayPtr<const byte>, ClosePtr> MessagePtr;
 
-  class BlockedSend final: public AbortableWebSocket {
+  class BlockedSend final: public WebSocket {
   public:
     BlockedSend(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe, MessagePtr message)
         : fulfiller(fulfiller), pipe(pipe), message(kj::mv(message)) {
@@ -2642,6 +2696,9 @@ private:
       fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed"));
       pipe.endState(*this);
       pipe.abort();
+    }
+    kj::Promise<void> whenAborted() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by WebSocketPipeImpl");
     }
 
     kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
@@ -2713,7 +2770,7 @@ private:
     Canceler canceler;
   };
 
-  class BlockedPumpFrom final: public AbortableWebSocket {
+  class BlockedPumpFrom final: public WebSocket {
   public:
     BlockedPumpFrom(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe,
                     WebSocket& input)
@@ -2730,6 +2787,9 @@ private:
       fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed"));
       pipe.endState(*this);
       pipe.abort();
+    }
+    kj::Promise<void> whenAborted() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by WebSocketPipeImpl");
     }
 
     kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
@@ -2788,7 +2848,7 @@ private:
     Canceler canceler;
   };
 
-  class BlockedReceive final: public AbortableWebSocket {
+  class BlockedReceive final: public WebSocket {
   public:
     BlockedReceive(kj::PromiseFulfiller<Message>& fulfiller, WebSocketPipeImpl& pipe)
         : fulfiller(fulfiller), pipe(pipe) {
@@ -2804,6 +2864,9 @@ private:
       fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed"));
       pipe.endState(*this);
       pipe.abort();
+    }
+    kj::Promise<void> whenAborted() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by WebSocketPipeImpl");
     }
 
     kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
@@ -2860,7 +2923,7 @@ private:
     Canceler canceler;
   };
 
-  class BlockedPumpTo final: public AbortableWebSocket {
+  class BlockedPumpTo final: public WebSocket {
   public:
     BlockedPumpTo(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe, WebSocket& output)
         : fulfiller(fulfiller), pipe(pipe), output(output) {
@@ -2880,6 +2943,9 @@ private:
 
       pipe.endState(*this);
       pipe.abort();
+    }
+    kj::Promise<void> whenAborted() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by WebSocketPipeImpl");
     }
 
     kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
@@ -2926,10 +2992,13 @@ private:
     Canceler canceler;
   };
 
-  class Disconnected final: public AbortableWebSocket {
+  class Disconnected final: public WebSocket {
   public:
     void abort() override {
       // can ignore
+    }
+    kj::Promise<void> whenAborted() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by WebSocketPipeImpl");
     }
 
     kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
@@ -2956,10 +3025,13 @@ private:
     }
   };
 
-  class Aborted final: public AbortableWebSocket {
+  class Aborted final: public WebSocket {
   public:
     void abort() override {
       // can ignore
+    }
+    kj::Promise<void> whenAborted() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by WebSocketPipeImpl");
     }
 
     kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
@@ -3008,6 +3080,13 @@ public:
   }
   kj::Promise<void> disconnect() override {
     return out->disconnect();
+  }
+  void abort() override {
+    in->abort();
+    out->abort();
+  }
+  kj::Promise<void> whenAborted() override {
+    return out->whenAborted();
   }
   kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
     return out->tryPumpFrom(other);
@@ -3382,6 +3461,22 @@ public:
     }
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    KJ_IF_MAYBE(s, stream) {
+      return s->get()->whenWriteDisconnected();
+    } else {
+      return promise.addBranch().then([this]() {
+        return KJ_ASSERT_NONNULL(stream)->whenWriteDisconnected();
+      }, [](kj::Exception&& e) -> kj::Promise<void> {
+        if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+          return kj::READY_NOW;
+        } else {
+          return kj::mv(e);
+        }
+      });
+    }
+  }
+
   void shutdownWrite() override {
     KJ_IF_MAYBE(s, stream) {
       return s->get()->shutdownWrite();
@@ -3452,6 +3547,22 @@ public:
       return promise.addBranch().then([this,&input,amount]() {
         // Call input.pumpTo() on the resolved stream instead.
         return input.pumpTo(*KJ_ASSERT_NONNULL(stream), amount);
+      });
+    }
+  }
+
+  Promise<void> whenWriteDisconnected() override {
+    KJ_IF_MAYBE(s, stream) {
+      return s->get()->whenWriteDisconnected();
+    } else {
+      return promise.addBranch().then([this]() {
+        return KJ_ASSERT_NONNULL(stream)->whenWriteDisconnected();
+      }, [](kj::Exception&& e) -> kj::Promise<void> {
+        if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+          return kj::READY_NOW;
+        } else {
+          return kj::mv(e);
+        }
       });
     }
   }
@@ -3865,6 +3976,9 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return kj::READY_NOW;
   }
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
+  }
 
   // We can't really optimize tryPumpFrom() unless AsyncInputStream grows a skip() method.
 };
@@ -4078,6 +4192,13 @@ private:
     }
     kj::Promise<void> disconnect() override {
       return inner->disconnect();
+    }
+    void abort() override {
+      // Don't need to worry about completion task in this case -- cancelling it is reasonable.
+      inner->abort();
+    }
+    kj::Promise<void> whenAborted() override {
+      return inner->whenAborted();
     }
     kj::Promise<Message> receive() override {
       return inner->receive().then([this](Message&& message) -> kj::Promise<Message> {
@@ -4712,6 +4833,12 @@ private:
       kj::Promise<void> disconnect() override {
         return kj::cp(exception);
       }
+      void abort() override {
+        kj::throwRecoverableException(kj::cp(exception));
+      }
+      kj::Promise<void> whenAborted() override {
+        return kj::cp(exception);
+      }
       kj::Promise<Message> receive() override {
         return kj::cp(exception);
       }
@@ -4796,7 +4923,10 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
     }
   }
 
-  auto promise = obj->loop(true);
+  // Start reading requests and responding to them, but immediately cancel processing if the client
+  // disconnects.
+  auto promise = obj->loop(true)
+      .exclusiveJoin(connection.whenWriteDisconnected().then([]() {return false;}));
 
   // Eagerly evaluate so that we drop the connection when the promise resolves, even if the caller
   // doesn't eagerly evaluate.

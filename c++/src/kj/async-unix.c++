@@ -365,6 +365,13 @@ void UnixEventPort::FdObserver::fire(short events) {
     }
   }
 
+  if (events & (EPOLLHUP | EPOLLERR)) {
+    KJ_IF_MAYBE(f, hupFulfiller) {
+      f->get()->fulfill();
+      hupFulfiller = nullptr;
+    }
+  }
+
   if (events & EPOLLPRI) {
     KJ_IF_MAYBE(f, urgentFulfiller) {
       f->get()->fulfill();
@@ -395,6 +402,12 @@ Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
 
   auto paf = newPromiseAndFulfiller<void>();
   urgentFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
+  auto paf = newPromiseAndFulfiller<void>();
+  hupFulfiller = kj::mv(paf.fulfiller);
   return kj::mv(paf.promise);
 }
 
@@ -652,6 +665,13 @@ void UnixEventPort::FdObserver::fire(short events) {
     }
   }
 
+  if (events & (POLLHUP | POLLERR | POLLNVAL)) {
+    KJ_IF_MAYBE(f, hupFulfiller) {
+      f->get()->fulfill();
+      hupFulfiller = nullptr;
+    }
+  }
+
   if (events & POLLPRI) {
     KJ_IF_MAYBE(f, urgentFulfiller) {
       f->get()->fulfill();
@@ -675,7 +695,16 @@ void UnixEventPort::FdObserver::fire(short events) {
 short UnixEventPort::FdObserver::getEventMask() {
   return (readFulfiller == nullptr ? 0 : (POLLIN | POLLRDHUP)) |
          (writeFulfiller == nullptr ? 0 : POLLOUT) |
-         (urgentFulfiller == nullptr ? 0 : POLLPRI);
+         (urgentFulfiller == nullptr ? 0 : POLLPRI) |
+         // The POSIX standard says POLLHUP and POLLERR will be reported even if not requested.
+         // But on MacOS, if `events` is 0, then POLLHUP apparently will not be reported:
+         //   https://openradar.appspot.com/37537852
+         // It seems that by settingc any non-zero value -- even one documented as ignored -- we
+         // cause POLLHUP to be reported. Both POLLHUP and POLLERR are documented as being ignored.
+         // So, we'll go ahead and set them. This has no effect on non-broken OSs, causes MacOS to
+         // do the right thing, and sort of looks as if we're explicitly requesting notification of
+         // these two conditions, which we do after all want to know about.
+         POLLHUP | POLLERR;
 }
 
 Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
@@ -721,6 +750,19 @@ Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
 
   auto paf = newPromiseAndFulfiller<void>();
   urgentFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
+  if (prev == nullptr) {
+    KJ_DASSERT(next == nullptr);
+    prev = eventPort.observersTail;
+    *prev = this;
+    eventPort.observersTail = &next;
+  }
+
+  auto paf = newPromiseAndFulfiller<void>();
+  hupFulfiller = kj::mv(paf.fulfiller);
   return kj::mv(paf.promise);
 }
 

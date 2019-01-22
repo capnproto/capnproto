@@ -311,6 +311,23 @@ public:
     });
   }
 
+  Promise<void> whenWriteDisconnected() override {
+    // Windows IOCP does not provide a direct, documented way to detect when the socket disconnects
+    // without actually doing a read or write. However, there is an undocoumented-but-stable
+    // ioctl called IOCTL_AFD_POLL which can be used for this purpose. In fact, select() is
+    // implemented in terms of this ioctl -- performed synchronously -- but it's entirely possible
+    // to put only one socket into the list and perform the ioctl asynchronously. Here's the
+    // source code for select() in Windows 2000 (not sure how this became public...):
+    //
+    //     https://github.com/pustladi/Windows-2000/blob/661d000d50637ed6fab2329d30e31775046588a9/private/net/sockets/winsock2/wsp/msafd/select.c#L59-L655
+    //
+    // And here's an interesting discussion: https://github.com/python-trio/trio/issues/52
+    //
+    // TODO(soon): Implement this with IOCTL_AFD_POLL. For now I'm leaving it unimplemented because
+    //   I added this method for a Linux-only use case.
+    return NEVER_DONE;
+  }
+
   void shutdownWrite() override {
     // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
     // Win32AsyncIoProvider interface.
