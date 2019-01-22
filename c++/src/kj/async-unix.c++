@@ -695,7 +695,16 @@ void UnixEventPort::FdObserver::fire(short events) {
 short UnixEventPort::FdObserver::getEventMask() {
   return (readFulfiller == nullptr ? 0 : (POLLIN | POLLRDHUP)) |
          (writeFulfiller == nullptr ? 0 : POLLOUT) |
-         (urgentFulfiller == nullptr ? 0 : POLLPRI);
+         (urgentFulfiller == nullptr ? 0 : POLLPRI) |
+         // The POSIX standard says POLLHUP and POLLERR will be reported even if not requested.
+         // But on MacOS, if `events` is 0, then POLLHUP apparently will not be reported:
+         //   https://openradar.appspot.com/37537852
+         // It seems that by settingc any non-zero value -- even one documented as ignored -- we
+         // cause POLLHUP to be reported. Both POLLHUP and POLLERR are documented as being ignored.
+         // So, we'll go ahead and set them. This has no effect on non-broken OSs, causes MacOS to
+         // do the right thing, and sort of looks as if we're explicitly requesting notification of
+         // these two conditions, which we do after all want to know about.
+         POLLHUP | POLLERR;
 }
 
 Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
