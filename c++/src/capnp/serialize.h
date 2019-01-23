@@ -189,7 +189,7 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
 // Specializations for reading from / writing to file descriptors.
 
 class StreamFdMessageReader: private kj::FdInputStream, public InputStreamMessageReader {
-  // A MessageReader that reads from a steam-based file descriptor.
+  // A MessageReader that reads from a stream-based file descriptor.
 
 public:
   StreamFdMessageReader(int fd, ReaderOptions options = ReaderOptions(),
