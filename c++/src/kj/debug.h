@@ -122,7 +122,7 @@ namespace kj {
 //   you to request this behavior with "##__VA_ARGS__".
 // - If __VA_ARGS__ is passed directly as an argument to another macro, it will be treated as a
 //   *single* argument rather than an argument list. This can be worked around by wrapping the
-//   outer macro call in KJ_EXPAND(), which appraently forces __VA_ARGS__ to be expanded before
+//   outer macro call in KJ_EXPAND(), which apparently forces __VA_ARGS__ to be expanded before
 //   the macro is evaluated. I don't understand the C preprocessor.
 // - Using "#__VA_ARGS__" to stringify __VA_ARGS__ expands to zero tokens when __VA_ARGS__ is
 //   empty, rather than expanding to an empty string literal. We can work around by concatenating
