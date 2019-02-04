@@ -3997,8 +3997,10 @@ public:
 
     auto pipe = newOneWayPipe(expectedBodySize);
 
+    // TODO(cleanup): The ownership relationships here are a mess. Can we do something better
+    //   involving a PromiseAdapter, maybe?
     auto paf = kj::newPromiseAndFulfiller<Response>();
-    auto responder = kj::heap<ResponseImpl>(method, kj::mv(paf.fulfiller));
+    auto responder = kj::refcounted<ResponseImpl>(method, kj::mv(paf.fulfiller));
     auto promise = kj::evalLater([this, method,
                                   urlCopy = kj::mv(urlCopy),
                                   headersCopy = kj::mv(headersCopy),
@@ -4027,7 +4029,7 @@ public:
     KJ_DASSERT(headersCopy->isWebSocket());
 
     auto paf = kj::newPromiseAndFulfiller<WebSocketResponse>();
-    auto responder = kj::heap<WebSocketResponseImpl>(kj::mv(paf.fulfiller));
+    auto responder = kj::refcounted<WebSocketResponseImpl>(kj::mv(paf.fulfiller));
     auto promise = kj::evalLater([this,
                                   urlCopy = kj::mv(urlCopy),
                                   headersCopy = kj::mv(headersCopy),
@@ -4105,7 +4107,7 @@ private:
     kj::Maybe<kj::Promise<void>> completionTask;
   };
 
-  class ResponseImpl final: public HttpService::Response {
+  class ResponseImpl final: public HttpService::Response, public kj::Refcounted {
   public:
     ResponseImpl(kj::HttpMethod method,
                  kj::Own<kj::PromiseFulfiller<HttpClient::Response>> fulfiller)
@@ -4150,7 +4152,8 @@ private:
 
         // Wrap the stream in a wrapper that delays the last read (the one that signals EOF) until
         // the service's request promise has finished.
-        auto wrapper = kj::heap<DelayedEofInputStream>(kj::mv(pipe.in), kj::mv(task));
+        auto wrapper = kj::heap<DelayedEofInputStream>(
+            kj::mv(pipe.in), task.attach(kj::addRef(*this)));
 
         fulfiller->fulfill({
           statusCode, statusTextCopy, headersCopy.get(),
@@ -4252,7 +4255,7 @@ private:
     }
   };
 
-  class WebSocketResponseImpl final: public HttpService::Response {
+  class WebSocketResponseImpl final: public HttpService::Response, public kj::Refcounted {
   public:
     WebSocketResponseImpl(kj::Own<kj::PromiseFulfiller<HttpClient::WebSocketResponse>> fulfiller)
         : fulfiller(kj::mv(fulfiller)) {}
@@ -4297,7 +4300,7 @@ private:
         // Wrap the stream in a wrapper that delays the last read (the one that signals EOF) until
         // the service's request promise has finished.
         kj::Own<AsyncInputStream> wrapper =
-            kj::heap<DelayedEofInputStream>(kj::mv(pipe.in), kj::mv(task));
+            kj::heap<DelayedEofInputStream>(kj::mv(pipe.in), task.attach(kj::addRef(*this)));
 
         fulfiller->fulfill({
           statusCode, statusTextCopy, headersCopy.get(),
@@ -4318,7 +4321,7 @@ private:
       // Wrap the client-side WebSocket in a wrapper that delays clean close of the WebSocket until
       // the service's request promise has finished.
       kj::Own<WebSocket> wrapper =
-          kj::heap<DelayedCloseWebSocket>(kj::mv(pipe.ends[0]), kj::mv(task));
+          kj::heap<DelayedCloseWebSocket>(kj::mv(pipe.ends[0]), task.attach(kj::addRef(*this)));
       fulfiller->fulfill({
         101, "Switching Protocols", headersCopy.get(),
         wrapper.attach(kj::mv(headersCopy))
