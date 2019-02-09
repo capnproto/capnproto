@@ -3452,10 +3452,14 @@ public:
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
       kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
     KJ_IF_MAYBE(s, stream) {
-      return s->get()->tryPumpFrom(input, amount);
+      // Call input.pumpTo() on the resolved stream instead, so that if it does some dynamic_casts
+      // or whatnot to detect stream types it can retry those on the inner stream.
+      return input.pumpTo(**s, amount);
     } else {
       return promise.addBranch().then([this,&input,amount]() {
-        // Call input.pumpTo() on the resolved stream instead.
+        // Here we actually have no choice but to call input.pumpTo() because if we called
+        // tryPumpFrom(input, amount) and it returned nullptr, what would we do? It's too late for
+        // us to return nullptr. But the thing about dynamic_cast also applies.
         return input.pumpTo(*KJ_ASSERT_NONNULL(stream), amount);
       });
     }
