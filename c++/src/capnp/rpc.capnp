@@ -614,7 +614,7 @@ struct Resolve {
     #
     # The sender promises that from this point forth, until `promiseId` is released, it shall
     # simply forward all messages to the capability designated by `cap`.  This is true even if
-    # `cap` itself happens to desigate another promise, and that other promise later resolves --
+    # `cap` itself happens to designate another promise, and that other promise later resolves --
     # messages sent to `promiseId` shall still go to that other promise, not to its resolution.
     # This is important in the case that the receiver of the `Resolve` ends up sending a
     # `Disembargo` message towards `promiseId` in order to control message ordering -- that
@@ -855,7 +855,7 @@ struct Join {
   # - Dana receives the first request and sees that the JoinKeyPart is one of two.  She notes that
   #   she doesn't have the other part yet, so she records the request and responds with a
   #   JoinResult.
-  # - Alice relays the JoinAswer back to Bob.
+  # - Alice relays the JoinAnswer back to Bob.
   # - Carol is also proxying a capability from Dana, and so forwards her Join request to Dana as
   #   well.
   # - Dana receives Carol's request and notes that she now has both parts of a JoinKey.  She
@@ -1129,7 +1129,7 @@ struct Exception {
     # start over. This should in turn cause the server to obtain a new copy of the capability that
     # it lost, thus making everything work.
     #
-    # If the client receives another `disconnencted` error in the process of rebuilding the
+    # If the client receives another `disconnected` error in the process of rebuilding the
     # capability and retrying the call, it should treat this as an `overloaded` error: the network
     # is currently unreliable, possibly due to load or other temporary issues.
 
