@@ -631,7 +631,8 @@ struct ArrayDisposer::Dispose_<T, false> {
 
   static void dispose(T* firstElement, size_t elementCount, size_t capacity,
                       const ArrayDisposer& disposer) {
-    disposer.disposeImpl(firstElement, sizeof(T), elementCount, capacity, &destruct);
+    disposer.disposeImpl(const_cast<RemoveConst<T>*>(firstElement),
+                         sizeof(T), elementCount, capacity, &destruct);
   }
 };
 
