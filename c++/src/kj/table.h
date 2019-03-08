@@ -1538,6 +1538,10 @@ class InsertionOrderIndex {
   struct Link;
 public:
   InsertionOrderIndex();
+  InsertionOrderIndex(const InsertionOrderIndex&) = delete;
+  InsertionOrderIndex& operator=(const InsertionOrderIndex&) = delete;
+  InsertionOrderIndex(InsertionOrderIndex&& other);
+  InsertionOrderIndex& operator=(InsertionOrderIndex&& other);
   ~InsertionOrderIndex() noexcept(false);
 
   class Iterator {

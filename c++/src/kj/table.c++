@@ -808,6 +808,19 @@ void BTreeImpl::Parent::eraseAfter(uint i) {
 const InsertionOrderIndex::Link InsertionOrderIndex::EMPTY_LINK = { 0, 0 };
 
 InsertionOrderIndex::InsertionOrderIndex(): capacity(0), links(const_cast<Link*>(&EMPTY_LINK)) {}
+InsertionOrderIndex::InsertionOrderIndex(InsertionOrderIndex&& other)
+    : capacity(other.capacity), links(other.links) {
+  other.capacity = 0;
+  other.links = const_cast<Link*>(&EMPTY_LINK);
+}
+InsertionOrderIndex& InsertionOrderIndex::operator=(InsertionOrderIndex&& other) {
+  KJ_DASSERT(&other != this);
+  capacity = other.capacity;
+  links = other.links;
+  other.capacity = 0;
+  other.links = const_cast<Link*>(&EMPTY_LINK);
+  return *this;
+}
 InsertionOrderIndex::~InsertionOrderIndex() noexcept(false) {
   if (links != &EMPTY_LINK) delete[] links;
 }

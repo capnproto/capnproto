@@ -1101,6 +1101,66 @@ KJ_TEST("insertion order index") {
   }
 }
 
+KJ_TEST("insertion order index is movable") {
+  using UintTable = Table<uint, InsertionOrderIndex>;
+
+  kj::Maybe<UintTable> myTable;
+
+  {
+    UintTable yourTable;
+
+    yourTable.insert(12);
+    yourTable.insert(34);
+    yourTable.insert(56);
+    yourTable.insert(78);
+    yourTable.insert(111);
+    yourTable.insert(222);
+    yourTable.insert(333);
+    yourTable.insert(444);
+    yourTable.insert(555);
+    yourTable.insert(666);
+    yourTable.insert(777);
+    yourTable.insert(888);
+    yourTable.insert(999);
+
+    myTable = kj::mv(yourTable);
+  }
+
+  auto& table = KJ_ASSERT_NONNULL(myTable);
+
+  // At one time the following induced a segfault/double-free, due to incorrect memory management in
+  // InsertionOrderIndex's move ctor and dtor.
+  auto range = table.ordered();
+  auto iter = range.begin();
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 12);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 34);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 56);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 78);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 111);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 222);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 333);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 444);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 555);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 666);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 777);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 888);
+  KJ_ASSERT(iter != range.end());
+  KJ_EXPECT(*iter++ == 999);
+  KJ_EXPECT(iter == range.end());
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace kj
