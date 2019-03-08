@@ -1514,7 +1514,7 @@ public:
     Vector<Entry> results;
     for (uint i = 0; i < 26; i++) {
       if (drives & (1 << i)) {
-        char name[2] = { 'A' + i, ':' };
+        char name[2] = { static_cast<char>('A' + i), ':' };
         results.add(Entry { FsNode::Type::DIRECTORY, kj::heapString(name, 2) });
       }
     }
