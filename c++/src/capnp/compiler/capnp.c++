@@ -78,7 +78,7 @@ public:
       : context(context), disk(kj::newDiskFilesystem()), loader(*this) {}
 
   kj::MainFunc getMain() {
-    if (context.getProgramName().endsWith("capnpc")) {
+    if (context.getProgramName().endsWith("capnpc") || context.getProgramName().endsWith("capnpc.exe")) {
       kj::MainBuilder builder(context, VERSION_STRING,
             "Compiles Cap'n Proto schema files and generates corresponding source code in one or "
             "more languages.");
