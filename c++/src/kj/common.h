@@ -1121,6 +1121,12 @@ public:
     }
   }
   template <typename U>
+  Maybe(Maybe<U&>&& other) {
+    KJ_IF_MAYBE(val, other) {
+      ptr.emplace(*val);
+    }
+  }
+  template <typename U>
   Maybe(const Maybe<U>& other) {
     KJ_IF_MAYBE(val, other) {
       ptr.emplace(*val);

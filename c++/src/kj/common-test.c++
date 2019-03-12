@@ -50,6 +50,15 @@ struct Immovable {
   KJ_DISALLOW_COPY(Immovable);
 };
 
+struct CopyOrMove {
+  // Type that detects the difference between copy and move.
+  CopyOrMove(int i): i(i) {}
+  CopyOrMove(CopyOrMove&& other): i(other.i) { i = -1; }
+  CopyOrMove(const CopyOrMove&) = default;
+
+  int i;
+};
+
 TEST(Common, Maybe) {
   {
     Maybe<int> m = 123;
@@ -247,6 +256,15 @@ TEST(Common, Maybe) {
     KJ_EXPECT(m != nullptr);
     m = nullptr;
     KJ_EXPECT(m == nullptr);
+  }
+
+  {
+    // Test that initializing Maybe<T> from Maybe<T&>&& does a copy, not a move.
+    CopyOrMove x(123);
+    Maybe<CopyOrMove&> m(x);
+    Maybe<CopyOrMove> m2 = kj::mv(m);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m).i == 123);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m2).i == 123);
   }
 }
 
