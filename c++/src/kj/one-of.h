@@ -118,6 +118,14 @@ public:
       return nullptr;
     }
   }
+  template <typename T>
+  Maybe<const T&> tryGet() const {
+    if (is<T>()) {
+      return *reinterpret_cast<const T*>(space);
+    } else {
+      return nullptr;
+    }
+  }
 
   template <uint i>
   KJ_NORETURN(void allHandled());
