@@ -88,6 +88,14 @@ public:
   // entry and insert it. createEntry() must return type `Entry`.
 
   template <typename KeyLike>
+  kj::Maybe<Entry&> findEntry(KeyLike&& key);
+  template <typename KeyLike>
+  kj::Maybe<const Entry&> findEntry(KeyLike&& key) const;
+  template <typename KeyLike, typename Func>
+  Entry& findOrCreateEntry(KeyLike&& key, Func&& createEntry);
+  // Sometimes you need to see the whole matching Entry, not just the Value.
+
+  template <typename KeyLike>
   bool erase(KeyLike&& key);
   // Erase the entry with the matching key.
   //
@@ -175,6 +183,14 @@ public:
   Value& findOrCreate(KeyLike&& key, Func&& createEntry);
   // Like find() but if the key isn't present then call createEntry() to create the corresponding
   // entry and insert it. createEntry() must return type `Entry`.
+
+  template <typename KeyLike>
+  kj::Maybe<Entry&> findEntry(KeyLike&& key);
+  template <typename KeyLike>
+  kj::Maybe<const Entry&> findEntry(KeyLike&& key) const;
+  template <typename KeyLike, typename Func>
+  Entry& findOrCreateEntry(KeyLike&& key, Func&& createEntry);
+  // Sometimes you need to see the whole matching Entry, not just the Value.
 
   template <typename K1, typename K2>
   auto range(K1&& k1, K2&& k2);
@@ -355,6 +371,25 @@ Value& HashMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
 
 template <typename Key, typename Value>
 template <typename KeyLike>
+kj::Maybe<typename HashMap<Key, Value>::Entry&>
+HashMap<Key, Value>::findEntry(KeyLike&& key) {
+  return table.find(kj::fwd<KeyLike>(key));
+}
+template <typename Key, typename Value>
+template <typename KeyLike>
+kj::Maybe<const typename HashMap<Key, Value>::Entry&>
+HashMap<Key, Value>::findEntry(KeyLike&& key) const {
+  return table.find(kj::fwd<KeyLike>(key));
+}
+template <typename Key, typename Value>
+template <typename KeyLike, typename Func>
+typename HashMap<Key, Value>::Entry&
+HashMap<Key, Value>::findOrCreateEntry(KeyLike&& key, Func&& createEntry) {
+  return table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<Func>(createEntry));
+}
+
+template <typename Key, typename Value>
+template <typename KeyLike>
 bool HashMap<Key, Value>::erase(KeyLike&& key) {
   return table.eraseMatch(key);
 }
@@ -443,6 +478,25 @@ template <typename Key, typename Value>
 template <typename KeyLike, typename Func>
 Value& TreeMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
   return table.findOrCreate(key, kj::fwd<Func>(createEntry)).value;
+}
+
+template <typename Key, typename Value>
+template <typename KeyLike>
+kj::Maybe<typename TreeMap<Key, Value>::Entry&>
+TreeMap<Key, Value>::findEntry(KeyLike&& key) {
+  return table.find(kj::fwd<KeyLike>(key));
+}
+template <typename Key, typename Value>
+template <typename KeyLike>
+kj::Maybe<const typename TreeMap<Key, Value>::Entry&>
+TreeMap<Key, Value>::findEntry(KeyLike&& key) const {
+  return table.find(kj::fwd<KeyLike>(key));
+}
+template <typename Key, typename Value>
+template <typename KeyLike, typename Func>
+typename TreeMap<Key, Value>::Entry&
+TreeMap<Key, Value>::findOrCreateEntry(KeyLike&& key, Func&& createEntry) {
+  return table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<Func>(createEntry));
 }
 
 template <typename Key, typename Value>
