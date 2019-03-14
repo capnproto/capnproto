@@ -3089,20 +3089,166 @@ KJ_TEST("HttpClient disable connection reuse") {
     });
   };
 
-  // We can do several requests in a row and only have one connection.
+  // Each serial request gets its own connection.
   doRequest().wait(io.waitScope);
   doRequest().wait(io.waitScope);
   doRequest().wait(io.waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 3);
 
-  // But if we do two in parallel, we'll end up with two connections.
+  // Each parallel request gets its own connection.
   auto req1 = doRequest();
   auto req2 = doRequest();
   req1.wait(io.waitScope);
   req2.wait(io.waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 5);
+}
+
+KJ_TEST("HttpClient concurrency limiting") {
+  auto io = kj::setupAsyncIo();
+
+  kj::TimerImpl serverTimer(kj::origin<kj::TimePoint>());
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable headerTable;
+
+  auto listener = io.provider->getNetwork().parseAddress("localhost", 0)
+      .wait(io.waitScope)->listen();
+  DummyService service(headerTable);
+  HttpServerSettings serverSettings;
+  HttpServer server(serverTimer, headerTable, service, serverSettings);
+  auto listenTask = server.listenHttp(*listener);
+
+  auto addr = io.provider->getNetwork().parseAddress("localhost", listener->getPort())
+      .wait(io.waitScope);
+  uint count = 0;
+  uint cumulative = 0;
+  CountingNetworkAddress countingAddr(*addr, count, cumulative);
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  clientSettings.idleTimout = 0 * kj::SECONDS;
+  auto innerClient = newHttpClient(clientTimer, headerTable, countingAddr, clientSettings);
+
+  struct CallbackEvent {
+    uint runningCount;
+    uint pendingCount;
+
+    bool operator==(const CallbackEvent& other) const {
+      return runningCount == other.runningCount && pendingCount == other.pendingCount;
+    }
+    bool operator!=(const CallbackEvent& other) const { return !(*this == other); }
+    // TODO(someday): Can use default spaceship operator in C++20:
+    //auto operator<=>(const CallbackEvent&) const = default;
+  };
+
+  kj::Vector<CallbackEvent> callbackEvents;
+  auto callback = [&](uint runningCount, uint pendingCount) {
+    callbackEvents.add(CallbackEvent{runningCount, pendingCount});
+  };
+  auto client = newConcurrencyLimitingHttpClient(*innerClient, 1, kj::mv(callback));
+
+  KJ_EXPECT(count == 0);
+  KJ_EXPECT(cumulative == 0);
+
+  uint i = 0;
+  auto doRequest = [&]() {
+    uint n = i++;
+    return client->request(HttpMethod::GET, kj::str("/", n), HttpHeaders(headerTable)).response
+        .then([](HttpClient::Response&& response) {
+      auto promise = response.body->readAllText();
+      return promise.attach(kj::mv(response.body));
+    }).then([n](kj::String body) {
+      KJ_EXPECT(body == kj::str("null:/", n));
+    });
+  };
+
+  // Second connection blocked by first.
+  auto req1 = doRequest();
+
+  KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 0} }));
+  callbackEvents.clear();
+
+  auto req2 = doRequest();
+
+  // TODO(someday): Figure out why this poll() is necessary on Windows and macOS.
+  io.waitScope.poll();
+
+  KJ_EXPECT(req1.poll(io.waitScope));
+  KJ_EXPECT(!req2.poll(io.waitScope));
+  KJ_EXPECT(count == 1);
+  KJ_EXPECT(cumulative == 1);
+  KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 1} }));
+  callbackEvents.clear();
+
+  // Releasing first connection allows second to start.
+  req1.wait(io.waitScope);
+  KJ_EXPECT(req2.poll(io.waitScope));
+  KJ_EXPECT(count == 1);
+  KJ_EXPECT(cumulative == 2);
+  KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 0} }));
+  callbackEvents.clear();
+
+  req2.wait(io.waitScope);
+  KJ_EXPECT(count == 0);
+  KJ_EXPECT(cumulative == 2);
+  KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {0, 0} }));
+  callbackEvents.clear();
+
+  // Using body stream after releasing blocked response promise throws no exception
+  auto req3 = doRequest();
+  {
+    kj::Own<kj::AsyncOutputStream> req4Body;
+    {
+      auto req4 = client->request(HttpMethod::GET, kj::str("/", ++i), HttpHeaders(headerTable));
+      io.waitScope.poll();
+      req4Body = kj::mv(req4.body);
+    }
+    auto writePromise = req4Body->write("a", 1);
+    KJ_EXPECT(!writePromise.poll(io.waitScope));
+  }
+  req3.wait(io.waitScope);
+  KJ_EXPECT(count == 0);
+  KJ_EXPECT(cumulative == 3);
+
+  // Similar connection limiting for web sockets
+#if __linux__
+  // TODO(someday): Figure out why the sequencing of websockets events does
+  // not work correctly on Windows (and maybe macOS?).  The solution is not as
+  // simple as inserting poll()s as above, since doing so puts the websocket in
+  // a state that trips a "previous HTTP message body incomplete" assertion,
+  // while trying to write 500 network response.
+  callbackEvents.clear();
+  auto ws1 = kj::heap(client->openWebSocket(kj::str("/websocket"), HttpHeaders(headerTable)));
+  KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 0} }));
+  callbackEvents.clear();
+  auto ws2 = kj::heap(client->openWebSocket(kj::str("/websocket"), HttpHeaders(headerTable)));
+  KJ_EXPECT(ws1->poll(io.waitScope));
+  KJ_EXPECT(!ws2->poll(io.waitScope));
+  KJ_EXPECT(count == 1);
+  KJ_EXPECT(cumulative == 4);
+  KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 1} }));
+  callbackEvents.clear();
+
+  {
+    auto response1 = ws1->wait(io.waitScope);
+    KJ_EXPECT(!ws2->poll(io.waitScope));
+    KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({}));
+  }
+  KJ_EXPECT(ws2->poll(io.waitScope));
+  KJ_EXPECT(count == 1);
+  KJ_EXPECT(cumulative == 5);
+  KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 0} }));
+  callbackEvents.clear();
+  {
+    auto response2 = ws2->wait(io.waitScope);
+    KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({}));
+  }
+  KJ_EXPECT(count == 0);
+  KJ_EXPECT(cumulative == 5);
+  KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {0, 0} }));
+#endif
 }
 
 KJ_TEST("HttpClient multi host") {
