@@ -221,5 +221,96 @@ TEST(Mutex, LazyException) {
 #endif
 }
 
+class OnlyTouchUnderLock {
+public:
+  OnlyTouchUnderLock(): ptr(nullptr) {}
+  OnlyTouchUnderLock(MutexGuarded<uint>& ref): ptr(&ref) {
+    ptr->getAlreadyLockedExclusive()++;
+  }
+  OnlyTouchUnderLock(OnlyTouchUnderLock&& other): ptr(other.ptr) {
+    other.ptr = nullptr;
+    if (ptr) {
+      // Just verify it's locked. Don't increment because different compilers may or may not
+      // elide moves.
+      ptr->getAlreadyLockedExclusive();
+    }
+  }
+  OnlyTouchUnderLock& operator=(OnlyTouchUnderLock&& other) {
+    if (ptr) {
+      ptr->getAlreadyLockedExclusive()++;
+    }
+    ptr = other.ptr;
+    other.ptr = nullptr;
+    if (ptr) {
+      // Just verify it's locked. Don't increment because different compilers may or may not
+      // elide moves.
+      ptr->getAlreadyLockedExclusive();
+    }
+    return *this;
+  }
+  ~OnlyTouchUnderLock() noexcept(false) {
+    if (ptr != nullptr) {
+      ptr->getAlreadyLockedExclusive()++;
+    }
+  }
+
+  void frob() {
+    ptr->getAlreadyLockedExclusive()++;
+  }
+
+private:
+  MutexGuarded<uint>* ptr;
+};
+
+KJ_TEST("ExternalMutexGuarded<T> destroy after release") {
+  MutexGuarded<uint> guarded(0);
+
+  {
+    ExternalMutexGuarded<OnlyTouchUnderLock> ext;
+
+    {
+      auto lock = guarded.lockExclusive();
+      ext.set(lock, guarded);
+      KJ_EXPECT(*lock == 1, *lock);
+      ext.get(lock).frob();
+      KJ_EXPECT(*lock == 2, *lock);
+    }
+
+    {
+      auto lock = guarded.lockExclusive();
+      auto released = ext.release(lock);
+      KJ_EXPECT(*lock == 2, *lock);
+      released.frob();
+      KJ_EXPECT(*lock == 3, *lock);
+    }
+  }
+
+  {
+    auto lock = guarded.lockExclusive();
+    KJ_EXPECT(*lock == 4, *lock);
+  }
+}
+
+KJ_TEST("ExternalMutexGuarded<T> destroy without release") {
+  MutexGuarded<uint> guarded(0);
+
+  {
+    ExternalMutexGuarded<OnlyTouchUnderLock> ext;
+
+    {
+      auto lock = guarded.lockExclusive();
+      ext.set(lock, guarded);
+      KJ_EXPECT(*lock == 1);
+      ext.get(lock).frob();
+      KJ_EXPECT(*lock == 2);
+    }
+  }
+
+  {
+    auto lock = guarded.lockExclusive();
+    KJ_EXPECT(*lock == 3);
+  }
+}
+
 }  // namespace
 }  // namespace kj
