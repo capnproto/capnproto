@@ -52,7 +52,8 @@ public:
   inline size_t size() const { return builder.size(); }
   inline bool empty() const { return size() == 0; }
   inline size_t capacity() const { return builder.capacity(); }
-  inline T& operator[](size_t index) const { return builder[index]; }
+  inline T& operator[](size_t index) { return builder[index]; }
+  inline const T& operator[](size_t index) const { return builder[index]; }
 
   inline const T* begin() const { return builder.begin(); }
   inline const T* end() const { return builder.end(); }

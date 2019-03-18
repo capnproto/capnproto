@@ -162,7 +162,11 @@ public:
   }
 
   inline size_t size() const { return size_; }
-  inline T& operator[](size_t index) const {
+  inline T& operator[](size_t index) {
+    KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
+    return ptr[index];
+  }
+  inline const T& operator[](size_t index) const {
     KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
     return ptr[index];
   }
@@ -356,7 +360,11 @@ public:
 
   inline size_t size() const { return pos - ptr; }
   inline size_t capacity() const { return endPtr - ptr; }
-  inline T& operator[](size_t index) const {
+  inline T& operator[](size_t index) {
+    KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr), "Out-of-bounds Array access.");
+    return ptr[index];
+  }
+  inline const T& operator[](size_t index) const {
     KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr), "Out-of-bounds Array access.");
     return ptr[index];
   }
