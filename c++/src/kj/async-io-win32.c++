@@ -189,17 +189,6 @@ int win32Socketpair(SOCKET socks[2]) {
 
 namespace {
 
-bool detectWine() {
-  HMODULE hntdll = GetModuleHandle("ntdll.dll");
-  if(hntdll == NULL) return false;
-  return GetProcAddress(hntdll, "wine_get_version") != nullptr;
-}
-
-bool isWine() {
-  static bool result = detectWine();
-  return result;
-}
-
 // =======================================================================================
 
 static constexpr uint NEW_FD_FLAGS = LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
