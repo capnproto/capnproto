@@ -3027,27 +3027,20 @@ KJ_TEST("HttpClient connection management") {
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 7);
 
-#if __linux__
-  // TODO(someday): Figure out why this doesn't work on Windows and is flakey on Mac. My guess is
-  //   that the closing of the TCP connection propagates synchronously on Linux so that by the time
-  //   we poll() the EventPort it reports the client end of the connection has reached EOF, whereas
-  //   on Mac and Windows this propagation probably involves some concurrent process which may or
-  //   may not complete before we poll(). A solution in this case would be to use a dummy in-memory
-  //   ConnectionReceiver that returns in-memory pipes (see UnbufferedPipe earlier in this file),
-  //   so that we don't rely on any non-local behavior. Another solution would be to pause for
-  //   a short time, maybe.
-
   // If the server times out the connection, we figure it out on the client.
   doRequest().wait(io.waitScope);
+
+  // TODO(someday): Figure out why the following poll is necessary for the test to pass on Windows
+  //   and Mac.  Without it, it seems that the request's connection never starts, so the
+  //   subsequent advanceTo() does not actually time out the connection.
+  io.waitScope.poll();
+
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 8);
   serverTimer.advanceTo(serverTimer.now() + serverSettings.pipelineTimeout * 2);
   io.waitScope.poll();
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 8);
-#else
-  ++cumulative;  // hack
-#endif
 
   // Can still make requests.
   doRequest().wait(io.waitScope);
