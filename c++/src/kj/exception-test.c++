@@ -30,9 +30,11 @@ namespace {
 
 TEST(Exception, TrimSourceFilename) {
 #if _WIN32
-  if (trimSourceFilename(__FILE__) != "kj\\exception-test.c++")
-#endif
+  EXPECT_TRUE(trimSourceFilename(__FILE__) == "kj/exception-test.c++" ||
+              trimSourceFilename(__FILE__) == "kj\\exception-test.c++");
+#else
   EXPECT_EQ(trimSourceFilename(__FILE__), "kj/exception-test.c++");
+#endif
 }
 
 TEST(Exception, RunCatchingExceptions) {
