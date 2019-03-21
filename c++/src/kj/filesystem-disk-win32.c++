@@ -22,22 +22,18 @@
 #if _WIN32
 // For Unix implementation, see filesystem-disk-unix.c++.
 
+// Request Vista-level APIs.
+#define WINVER 0x0600
+#define _WIN32_WINNT 0x0600
+
+#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
+
 #include "filesystem.h"
 #include "debug.h"
 #include "encoding.h"
 #include "vector.h"
 #include <algorithm>
 #include <wchar.h>
-
-// Request Vista-level APIs.
-#define WINVER 0x0600
-
-#ifdef _WIN32_WINNT
-#undef _WIN32_WINNT
-#endif
-#define _WIN32_WINNT 0x0600
-
-#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
 
 #include <windows.h>
 #include <winioctl.h>
