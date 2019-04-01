@@ -218,6 +218,8 @@ private:
 
   template <typename U>
   friend class MutexGuarded;
+  template <typename U>
+  friend class ExternalMutexGuarded;
 };
 
 template <typename T>
@@ -306,6 +308,81 @@ class MutexGuarded<const T> {
   // MutexGuarded cannot guard a const type.  This would be pointless anyway, and would complicate
   // the implementation of Locked<T>, which uses constness to decide what kind of lock it holds.
   static_assert(sizeof(T) < 0, "MutexGuarded's type cannot be const.");
+};
+
+template <typename T>
+class ExternalMutexGuarded {
+  // Holds a value that can only be manipulated while some other mutex is locked.
+  //
+  // The ExternalMutexGuarded<T> lives *outside* the scope of any lock on the mutex, but ensures
+  // that the value it holds can only be accessed under lock by forcing the caller to present a
+  // lock before accessing the value.
+  //
+  // Additionally, ExternalMutexGuarded<T>'s destructor will take an exclusive lock on the mutex
+  // while destroying the held value, unless the value has been release()ed before hand.
+  //
+  // The type T must have the following properties (which probably all movable types satisfy):
+  // - T is movable.
+  // - Immediately after any of the following has happened, T's destructor is effectively a no-op
+  //   (hence certainly not requiring locks):
+  //   - The value has been default-constructed.
+  //   - The value has been initialized by-move from a default-constructed T.
+  //   - The value has been moved away.
+  // - If ExternalMutexGuarded<T> is ever moved, then T must have a move constructor and move
+  //   assignment operator that do not follow any pointers, therefore do not need to take a lock.
+
+public:
+  ExternalMutexGuarded() = default;
+  ~ExternalMutexGuarded() noexcept(false) {
+    if (mutex != nullptr) {
+      mutex->lock(_::Mutex::EXCLUSIVE);
+      KJ_DEFER(mutex->unlock(_::Mutex::EXCLUSIVE));
+      value = T();
+    }
+  }
+
+  ExternalMutexGuarded(ExternalMutexGuarded&& other)
+      : mutex(other.mutex), value(kj::mv(other.value)) {
+    other.mutex = nullptr;
+  }
+  ExternalMutexGuarded& operator=(ExternalMutexGuarded&& other) {
+    mutex = other.mutex;
+    value = kj::mv(other.value);
+    other.mutex = nullptr;
+    return *this;
+  }
+
+  template <typename U>
+  void set(Locked<U>& lock, T&& newValue) {
+    KJ_IREQUIRE(mutex == nullptr);
+    mutex = lock.mutex;
+    value = kj::mv(newValue);
+  }
+
+  template <typename U>
+  T& get(Locked<U>& lock) {
+    KJ_IREQUIRE(lock.mutex == mutex);
+    return value;
+  }
+
+  template <typename U>
+  const T& get(Locked<const U>& lock) const {
+    KJ_IREQUIRE(lock.mutex == mutex);
+    return value;
+  }
+
+  template <typename U>
+  T release(Locked<U>& lock) {
+    // Release (move away) the value. This allows the destructor to skip locking the mutex.
+    KJ_IREQUIRE(lock.mutex == mutex);
+    T result = kj::mv(value);
+    mutex = nullptr;
+    return result;
+  }
+
+private:
+  _::Mutex* mutex = nullptr;
+  T value;
 };
 
 template <typename T>
