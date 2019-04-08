@@ -79,8 +79,8 @@ matrix:
             - clang-8
             - libstdc++-8-dev
       env:
-        - MATRIX_CC=clang-8.0
-        - MATRIX_CXX=clang++-8.0
+        - MATRIX_CC=clang-8
+        - MATRIX_CXX=clang++-8
 
     # Mac. We only test Clang because Mac builds are expensive for Travis and probably any
     # compiler-specific problems will be caught on the Linux matrix anyway.
