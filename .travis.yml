@@ -3,7 +3,7 @@ branches:
   - master
   - /release-.*/
 language: cpp
-dist: trusty
+dist: xenial
 sudo: false
 addons:
   apt:
@@ -47,7 +47,7 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-            - llvm-toolchain-trusty-3.6
+            - llvm-toolchain-xenial-3.6
           packages:
             - clang-3.6
             - libc++-dev     # clang-3.6 can't compile C++14 against libstdc++, apparently.
@@ -61,12 +61,26 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-            - llvm-toolchain-trusty-5.0
+            - llvm-toolchain-xenial-5.0
           packages:
             - clang-5.0
       env:
         - MATRIX_CC=clang-5.0
         - MATRIX_CXX=clang++-5.0
+
+    # New Clang 8
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-xenial-8
+          packages:
+            - clang-8
+            - libstdc++-8-dev
+      env:
+        - MATRIX_CC=clang-8.0
+        - MATRIX_CXX=clang++-8.0
 
     # Mac. We only test Clang because Mac builds are expensive for Travis and probably any
     # compiler-specific problems will be caught on the Linux matrix anyway.
