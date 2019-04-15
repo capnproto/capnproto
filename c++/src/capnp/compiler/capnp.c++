@@ -131,7 +131,7 @@ public:
     annotationFlag = Compiler::DROP_ANNOTATIONS;
 
     kj::MainBuilder builder(context, VERSION_STRING,
-          "Convers messages between formats. Reads a stream of messages from stdin in format "
+          "Converts messages between formats. Reads a stream of messages from stdin in format "
           "<from> and writes them to stdout in format <to>. Valid formats are:\n"
           "    binary      standard binary format\n"
           "    packed      packed binary format (deflates zeroes)\n"
