@@ -326,14 +326,13 @@ void VectorOutputStream::grow(size_t minSize) {
 
 AutoCloseFd::~AutoCloseFd() noexcept(false) {
   if (fd >= 0) {
-    unwindDetector.catchExceptionsIfUnwinding([&]() {
-      // Don't use SYSCALL() here because close() should not be repeated on EINTR.
-      if (miniposix::close(fd) < 0) {
-        KJ_FAIL_SYSCALL("close", errno, fd) {
-          break;
-        }
+    // Don't use SYSCALL() here because close() should not be repeated on EINTR.
+    if (miniposix::close(fd) < 0) {
+      KJ_FAIL_SYSCALL("close", errno, fd) {
+        // This ensures we don't throw an exception if unwinding.
+        break;
       }
-    });
+    }
   }
 }
 
