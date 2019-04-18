@@ -1804,6 +1804,25 @@ Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
   return { { mv(branch1), mv(branch2) } };
 }
 
+Promise<void> AsyncCapabilityStream::writeWithFds(
+    ArrayPtr<const byte> data, ArrayPtr<const ArrayPtr<const byte>> moreData,
+    ArrayPtr<const AutoCloseFd> fds) {
+  // HACK: AutoCloseFd actually contains an `int` under the hood. We can reinterpret_cast to avoid
+  //   unnecessary memory allocation.
+  static_assert(sizeof(AutoCloseFd) == sizeof(int));
+  auto intArray = arrayPtr(reinterpret_cast<const int*>(fds.begin()), fds.size());
+
+  // Be extra-paranoid about aliasing rules by injecting a compiler barrier here. Probably
+  // not necessary but also probably doesn't hurt.
+#if _MSC_VER
+  _ReadWriteBarrier();
+#else
+  __asm__ __volatile__("": : :"memory");
+#endif
+
+  return writeWithFds(data, moreData, intArray);
+}
+
 Promise<Own<AsyncCapabilityStream>> AsyncCapabilityStream::receiveStream() {
   return tryReceiveStream()
       .then([](Maybe<Own<AsyncCapabilityStream>>&& result)
@@ -1816,6 +1835,35 @@ Promise<Own<AsyncCapabilityStream>> AsyncCapabilityStream::receiveStream() {
   });
 }
 
+kj::Promise<Maybe<Own<AsyncCapabilityStream>>> AsyncCapabilityStream::tryReceiveStream() {
+  struct ResultHolder {
+    byte b;
+    Own<AsyncCapabilityStream> stream;
+  };
+  auto result = kj::heap<ResultHolder>();
+  auto promise = tryReadWithStreams(&result->b, 1, 1, &result->stream, 1);
+  return promise.then([result = kj::mv(result)](ReadResult actual) mutable
+                      -> Maybe<Own<AsyncCapabilityStream>> {
+    if (actual.byteCount == 0) {
+      return nullptr;
+    }
+
+    KJ_REQUIRE(actual.capCount == 1,
+        "expected to receive a capability (e.g. file descirptor via SCM_RIGHTS), but didn't") {
+      return nullptr;
+    }
+
+    return kj::mv(result->stream);
+  });
+}
+
+Promise<void> AsyncCapabilityStream::sendStream(Own<AsyncCapabilityStream> stream) {
+  static constexpr byte b = 0;
+  auto streams = kj::heapArray<Own<AsyncCapabilityStream>>(1);
+  streams[0] = kj::mv(stream);
+  return writeWithStreams(arrayPtr(&b, 1), nullptr, kj::mv(streams));
+}
+
 Promise<AutoCloseFd> AsyncCapabilityStream::receiveFd() {
   return tryReceiveFd().then([](Maybe<AutoCloseFd>&& result) -> Promise<AutoCloseFd> {
     KJ_IF_MAYBE(r, result) {
@@ -1825,11 +1873,35 @@ Promise<AutoCloseFd> AsyncCapabilityStream::receiveFd() {
     }
   });
 }
-Promise<Maybe<AutoCloseFd>> AsyncCapabilityStream::tryReceiveFd() {
-  return KJ_EXCEPTION(UNIMPLEMENTED, "this stream cannot receive file descriptors");
+
+kj::Promise<kj::Maybe<AutoCloseFd>> AsyncCapabilityStream::tryReceiveFd() {
+  struct ResultHolder {
+    byte b;
+    AutoCloseFd fd;
+  };
+  auto result = kj::heap<ResultHolder>();
+  auto promise = tryReadWithFds(&result->b, 1, 1, &result->fd, 1);
+  return promise.then([result = kj::mv(result)](ReadResult actual) mutable
+                      -> Maybe<AutoCloseFd> {
+    if (actual.byteCount == 0) {
+      return nullptr;
+    }
+
+    KJ_REQUIRE(actual.capCount == 1,
+        "expected to receive a file descriptor (e.g. via SCM_RIGHTS), but didn't") {
+      return nullptr;
+    }
+
+    return kj::mv(result->fd);
+  });
 }
+
 Promise<void> AsyncCapabilityStream::sendFd(int fd) {
-  return KJ_EXCEPTION(UNIMPLEMENTED, "this stream cannot send file descriptors");
+  static constexpr byte b = 0;
+  auto fds = kj::heapArray<int>(1);
+  fds[0] = fd;
+  auto promise = writeWithFds(arrayPtr(&b, 1), nullptr, fds);
+  return promise.attach(kj::mv(fds));
 }
 
 void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length) {

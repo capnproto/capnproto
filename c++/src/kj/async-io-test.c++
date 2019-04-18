@@ -233,6 +233,41 @@ TEST(AsyncIo, CapabilityPipe) {
   EXPECT_EQ("bar", result);
   EXPECT_EQ("foo", result2);
 }
+
+TEST(AsyncIo, CapabilityPipeMultiStreamMessage) {
+  auto ioContext = setupAsyncIo();
+
+  auto pipe = ioContext.provider->newCapabilityPipe();
+  auto pipe2 = ioContext.provider->newCapabilityPipe();
+  auto pipe3 = ioContext.provider->newCapabilityPipe();
+
+  auto streams = heapArrayBuilder<Own<AsyncCapabilityStream>>(2);
+  streams.add(kj::mv(pipe2.ends[0]));
+  streams.add(kj::mv(pipe3.ends[0]));
+
+  ArrayPtr<const byte> secondBuf = "bar"_kj.asBytes();
+  pipe.ends[0]->writeWithStreams("foo"_kj.asBytes(), arrayPtr(&secondBuf, 1), streams.finish())
+      .wait(ioContext.waitScope);
+
+  char receiveBuffer[7];
+  Own<AsyncCapabilityStream> receiveStreams[3];
+  auto result = pipe.ends[1]->tryReadWithStreams(receiveBuffer, 6, 7, receiveStreams, 3)
+      .wait(ioContext.waitScope);
+
+  KJ_EXPECT(result.byteCount == 6);
+  receiveBuffer[6] = '\0';
+  KJ_EXPECT(kj::StringPtr(receiveBuffer) == "foobar");
+
+  KJ_ASSERT(result.capCount == 2);
+
+  receiveStreams[0]->write("baz", 3).wait(ioContext.waitScope);
+  receiveStreams[0] = nullptr;
+  KJ_EXPECT(pipe2.ends[1]->readAllText().wait(ioContext.waitScope) == "baz");
+
+  pipe3.ends[1]->write("qux", 3).wait(ioContext.waitScope);
+  pipe3.ends[1] = nullptr;
+  KJ_EXPECT(receiveStreams[1]->readAllText().wait(ioContext.waitScope) == "qux");
+}
 #endif
 
 TEST(AsyncIo, PipeThread) {

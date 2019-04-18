@@ -135,7 +135,29 @@ public:
   virtual ~AsyncStreamFd() noexcept(false) {}
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tryReadInternal(buffer, minBytes, maxBytes, 0);
+    return tryReadInternal(buffer, minBytes, maxBytes, nullptr, 0, {0,0})
+        .then([](ReadResult r) { return r.byteCount; });
+  }
+
+  Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
+                                     AutoCloseFd* fdBuffer, size_t maxFds) override {
+    return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, {0,0});
+  }
+
+  Promise<ReadResult> tryReadWithStreams(
+      void* buffer, size_t minBytes, size_t maxBytes,
+      Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) override {
+    auto fdBuffer = kj::heapArray<AutoCloseFd>(maxStreams);
+    auto promise = tryReadInternal(buffer, minBytes, maxBytes, fdBuffer.begin(), maxStreams, {0,0});
+
+    return promise.then([this, fdBuffer = kj::mv(fdBuffer), streamBuffer]
+                        (ReadResult result) mutable {
+      for (auto i: kj::zeroTo(result.capCount)) {
+        streamBuffer[i] = kj::heap<AsyncStreamFd>(eventPort, fdBuffer[i].release(),
+            LowLevelAsyncIoProvider::TAKE_OWNERSHIP | LowLevelAsyncIoProvider::ALREADY_CLOEXEC);
+      }
+      return result;
+    });
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
@@ -173,10 +195,26 @@ public:
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     if (pieces.size() == 0) {
-      return writeInternal(nullptr, nullptr);
+      return writeInternal(nullptr, nullptr, nullptr);
     } else {
-      return writeInternal(pieces[0], pieces.slice(1, pieces.size()));
+      return writeInternal(pieces[0], pieces.slice(1, pieces.size()), nullptr);
     }
+  }
+
+  Promise<void> writeWithFds(ArrayPtr<const byte> data,
+                             ArrayPtr<const ArrayPtr<const byte>> moreData,
+                             ArrayPtr<const int> fds) override {
+    return writeInternal(data, moreData, fds);
+  }
+
+  Promise<void> writeWithStreams(ArrayPtr<const byte> data,
+                                 ArrayPtr<const ArrayPtr<const byte>> moreData,
+                                 Array<Own<AsyncCapabilityStream>> streams) override {
+    auto fds = KJ_MAP(stream, streams) {
+      return downcast<AsyncStreamFd>(*stream).fd;
+    };
+    auto promise = writeInternal(data, moreData, fds);
+    return promise.attach(kj::mv(fds));
   }
 
   Promise<void> whenWriteDisconnected() override {
@@ -224,57 +262,6 @@ public:
     *length = socklen;
   }
 
-  kj::Promise<Maybe<Own<AsyncCapabilityStream>>> tryReceiveStream() override {
-    return tryReceiveFdImpl<Own<AsyncCapabilityStream>>();
-  }
-
-  kj::Promise<void> sendStream(Own<AsyncCapabilityStream> stream) override {
-    auto downcasted = stream.downcast<AsyncStreamFd>();
-    auto promise = sendFd(downcasted->fd);
-    return promise.attach(kj::mv(downcasted));
-  }
-
-  kj::Promise<kj::Maybe<AutoCloseFd>> tryReceiveFd() override {
-    return tryReceiveFdImpl<AutoCloseFd>();
-  }
-
-  kj::Promise<void> sendFd(int fdToSend) override {
-    struct msghdr msg;
-    struct iovec iov;
-    union {
-      struct cmsghdr cmsg;
-      char cmsgSpace[CMSG_LEN(sizeof(int))];
-    };
-    memset(&msg, 0, sizeof(msg));
-    memset(&iov, 0, sizeof(iov));
-    memset(cmsgSpace, 0, sizeof(cmsgSpace));
-
-    char c = 0;
-    iov.iov_base = &c;
-    iov.iov_len = 1;
-    msg.msg_iov = &iov;
-    msg.msg_iovlen = 1;
-
-    msg.msg_control = &cmsg;
-    msg.msg_controllen = sizeof(cmsgSpace);
-
-    cmsg.cmsg_len = sizeof(cmsgSpace);
-    cmsg.cmsg_level = SOL_SOCKET;
-    cmsg.cmsg_type = SCM_RIGHTS;
-    *reinterpret_cast<int*>(CMSG_DATA(&cmsg)) = fdToSend;
-
-    ssize_t n;
-    KJ_NONBLOCKING_SYSCALL(n = sendmsg(fd, &msg, 0));
-    if (n < 0) {
-      return observer.whenBecomesWritable().then([this,fdToSend]() {
-        return sendFd(fdToSend);
-      });
-    } else {
-      KJ_ASSERT(n == 1);
-      return kj::READY_NOW;
-    }
-  }
-
   Promise<void> waitConnected() {
     // Wait until initial connection has completed. This actually just waits until it is writable.
 
@@ -303,22 +290,102 @@ private:
   UnixEventPort::FdObserver observer;
   Maybe<ForkedPromise<void>> writeDisconnectedPromise;
 
-  Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
-                                  size_t alreadyRead) {
+  Promise<ReadResult> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
+                                      AutoCloseFd* fdBuffer, size_t maxFds,
+                                      ReadResult alreadyRead) {
     // `alreadyRead` is the number of bytes we have already received via previous reads -- minBytes,
     // maxBytes, and buffer have already been adjusted to account for them, but this count must
     // be included in the final return value.
 
     ssize_t n;
-    KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes)) {
-      // Error.
+    if (maxFds == 0) {
+      KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes)) {
+        // Error.
 
-      // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-      // a bug that exists in both Clang and GCC:
-      //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-      //   http://llvm.org/bugs/show_bug.cgi?id=12286
-      goto error;
+        // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
+        // a bug that exists in both Clang and GCC:
+        //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
+        //   http://llvm.org/bugs/show_bug.cgi?id=12286
+        goto error;
+      }
+    } else {
+      struct msghdr msg;
+      memset(&msg, 0, sizeof(msg));
+
+      struct iovec iov;
+      memset(&iov, 0, sizeof(iov));
+      iov.iov_base = buffer;
+      iov.iov_len = maxBytes;
+      msg.msg_iov = &iov;
+      msg.msg_iovlen = 1;
+
+      // Allocate space to receive a cmsg.
+      size_t msgBytes = CMSG_SPACE(sizeof(int) * maxFds);
+      KJ_ASSERT(msgBytes % sizeof(void*) == 0);  // CMSG_SPACE guarantees alignment
+      KJ_STACK_ARRAY(void*, cmsgSpace, msgBytes / sizeof(void*), 16, 256);
+      auto cmsgBytes = cmsgSpace.asBytes();
+      memset(cmsgBytes.begin(), 0, cmsgBytes.size());
+      msg.msg_control = cmsgBytes.begin();
+      msg.msg_controllen = cmsgBytes.size();
+
+#ifdef MSG_CMSG_CLOEXEC
+      static constexpr int RECVMSG_FLAGS = MSG_CMSG_CLOEXEC;
+#else
+      static constexpr int RECVMSG_FLAGS = 0;
+#endif
+
+      KJ_NONBLOCKING_SYSCALL(n = ::recvmsg(fd, &msg, RECVMSG_FLAGS)) {
+        // Error.
+
+        // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
+        // a bug that exists in both Clang and GCC:
+        //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
+        //   http://llvm.org/bugs/show_bug.cgi?id=12286
+        goto error;
+      }
+
+      if (n >= 0) {
+        // Process all messages.
+        //
+        // WARNING DANGER: We have to be VERY careful not to miss a file descriptor here, because
+        // if we do, then that FD will never be closed, and a malicious peer could exploit this to
+        // fill up our FD table, creating a DoS attack. Some things to keep in mind:
+        // - CMSG_SPACE() could have rounded up the space for alignment purposes, and this could
+        //   mean we permitted the kernel to deliver more file descriptors than `maxFds`. We need
+        //   to close the extras.
+        // - We can receive multiple ancillary messages at once. In particular, there is also
+        //   SCM_CREDENTIALS. The sender decides what to send. They could send SCM_CREDENTIALS
+        //   first followed by SCM_RIGHTS. We need to make sure we see both.
+        size_t nfds = 0;
+        for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+            cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+          if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
+            auto data = arrayPtr(reinterpret_cast<int*>(CMSG_DATA(cmsg)),
+                                 (cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int));
+            kj::Vector<kj::AutoCloseFd> trashFds;
+            for (auto fd: data) {
+              kj::AutoCloseFd ownFd(fd);
+              if (nfds < maxFds) {
+                fdBuffer[nfds++] = kj::mv(ownFd);
+              } else {
+                trashFds.add(kj::mv(ownFd));
+              }
+            }
+          }
+        }
+
+#ifndef MSG_CMSG_CLOEXEC
+        for (size_t i = 0; i < nfds; i++) {
+          setCloseOnExec(fdBuffer[i]);
+        }
+#endif
+
+        alreadyRead.capCount += nfds;
+        fdBuffer += nfds;
+        maxFds -= nfds;
+      }
     }
+
     if (false) {
     error:
       return alreadyRead;
@@ -327,21 +394,22 @@ private:
     if (n < 0) {
       // Read would block.
       return observer.whenBecomesReadable().then([=]() {
-        return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
+        return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
       });
     } else if (n == 0) {
       // EOF -OR- maxBytes == 0.
       return alreadyRead;
     } else if (implicitCast<size_t>(n) >= minBytes) {
       // We read enough to stop here.
-      return alreadyRead + n;
+      alreadyRead.byteCount += n;
+      return alreadyRead;
     } else {
       // The kernel returned fewer bytes than we asked for (and fewer than we need).
 
       buffer = reinterpret_cast<byte*>(buffer) + n;
       minBytes -= n;
       maxBytes -= n;
-      alreadyRead += n;
+      alreadyRead.byteCount += n;
 
       KJ_IF_MAYBE(atEnd, observer.atEndHint()) {
         if (*atEnd) {
@@ -357,20 +425,21 @@ private:
           // let's go ahead and skip calling read() here and instead go straight to waiting for
           // more input.
           return observer.whenBecomesReadable().then([=]() {
-            return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
+            return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
           });
         }
       } else {
         // The kernel has not indicated one way or the other whether we are likely to be at EOF.
         // In this case we *must* keep calling read() until we either get a return of zero or
         // EAGAIN.
-        return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
+        return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
       }
     }
   }
 
   Promise<void> writeInternal(ArrayPtr<const byte> firstPiece,
-                              ArrayPtr<const ArrayPtr<const byte>> morePieces) {
+                              ArrayPtr<const ArrayPtr<const byte>> morePieces,
+                              ArrayPtr<const int> fds) {
     const size_t iovmax = kj::miniposix::iovMax(1 + morePieces.size());
     // If there are more than IOV_MAX pieces, we'll only write the first IOV_MAX for now, and
     // then we'll loop later.
@@ -387,23 +456,80 @@ private:
       iovTotal += iov[i].iov_len;
     }
 
-    ssize_t writeResult;
-    KJ_NONBLOCKING_SYSCALL(writeResult = ::writev(fd, iov.begin(), iov.size())) {
-      // Error.
-
-      // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-      // a bug that exists in both Clang and GCC:
-      //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-      //   http://llvm.org/bugs/show_bug.cgi?id=12286
-      goto error;
+    if (iovTotal == 0) {
+      KJ_REQUIRE(fds.size() == 0, "can't write FDs without bytes");
+      return kj::READY_NOW;
     }
+
+    ssize_t n;
+    if (fds.size() == 0) {
+      KJ_NONBLOCKING_SYSCALL(n = ::writev(fd, iov.begin(), iov.size())) {
+        // Error.
+
+        // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
+        // a bug that exists in both Clang and GCC:
+        //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
+        //   http://llvm.org/bugs/show_bug.cgi?id=12286
+        goto error;
+      }
+    } else {
+      struct msghdr msg;
+      memset(&msg, 0, sizeof(msg));
+      msg.msg_iov = iov.begin();
+      msg.msg_iovlen = iov.size();
+
+      // Allocate space to receive a cmsg.
+      size_t msgBytes = CMSG_SPACE(sizeof(int) * fds.size());
+      KJ_ASSERT(msgBytes % sizeof(void*) == 0);  // CMSG_SPACE guarantees alignment
+      KJ_STACK_ARRAY(void*, cmsgSpace, msgBytes / sizeof(void*), 16, 256);
+      auto cmsgBytes = cmsgSpace.asBytes();
+      memset(cmsgBytes.begin(), 0, cmsgBytes.size());
+      msg.msg_control = cmsgBytes.begin();
+      msg.msg_controllen = cmsgBytes.size();
+
+      struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+      cmsg->cmsg_level = SOL_SOCKET;
+      cmsg->cmsg_type = SCM_RIGHTS;
+      cmsg->cmsg_len = CMSG_LEN(sizeof(int) * fds.size());
+      memcpy(CMSG_DATA(cmsg), fds.begin(), fds.asBytes().size());
+
+      KJ_NONBLOCKING_SYSCALL(n = ::sendmsg(fd, &msg, 0)) {
+        // Error.
+
+        // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
+        // a bug that exists in both Clang and GCC:
+        //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
+        //   http://llvm.org/bugs/show_bug.cgi?id=12286
+        goto error;
+      }
+    }
+
     if (false) {
     error:
       return kj::READY_NOW;
     }
 
-    // A negative result means EAGAIN, which we can treat the same as having written zero bytes.
-    size_t n = writeResult < 0 ? 0 : writeResult;
+    if (n < 0) {
+      // Got EAGAIN. Nothing was written.
+      return observer.whenBecomesWritable().then([=]() {
+        return writeInternal(firstPiece, morePieces, fds);
+      });
+    } else if (n == 0) {
+      // Why would a sendmsg() with a non-empty message ever return 0 when writing to a stream
+      // socket? If there's no room in the send buffer, it should fail with EAGAIN. If the
+      // connection is closed, it should fail with EPIPE. Various documents and forum posts around
+      // the internet claim this can happen but no one seems to know when. My guess is it can only
+      // happen if we try to send an empty message -- which we didn't. So I think this is
+      // impossible. If it is possible, we need to figure out how to correctly handle it, which
+      // depends on what caused it.
+      //
+      // Note in particular that if 0 is a valid return here, and we sent an SCM_RIGHTS message,
+      // we need to know whether the message was sent or not, in order to decide whether to retry
+      // sending it!
+      KJ_FAIL_ASSERT("non-empty sendmsg() returned 0");
+    }
+
+    // Non-zero bytes were written. This also implies that *all* FDs were written.
 
     // Discard all data that was written, then issue a new write for what's left (if any).
     for (;;) {
@@ -414,11 +540,11 @@ private:
 
         if (iovTotal == 0) {
           // Oops, what actually happened is that we hit the IOV_MAX limit. Don't wait.
-          return writeInternal(firstPiece, morePieces);
+          return writeInternal(firstPiece, morePieces, nullptr);
         }
 
         return observer.whenBecomesWritable().then([=]() {
-          return writeInternal(firstPiece, morePieces);
+          return writeInternal(firstPiece, morePieces, nullptr);
         });
       } else if (morePieces.size() == 0) {
         // First piece was fully-consumed and there are no more pieces, so we're done.
