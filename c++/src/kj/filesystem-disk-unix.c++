@@ -396,8 +396,8 @@ public:
 
     static const byte ZEROS[4096] = { 0 };
 
-#if __APPLE__ || __CYGWIN__
-    // Mac & Cygwin doesn't have pwritev().
+#if __APPLE__ || __CYGWIN__ || (defined(__ANDROID__) && __ANDROID_API__ < 24)
+    // Mac & Cygwin & Android API levels 23 and lower doesn't have pwritev().
     while (size > sizeof(ZEROS)) {
       write(offset, ZEROS);
       size -= sizeof(ZEROS);
