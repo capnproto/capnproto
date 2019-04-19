@@ -27,6 +27,7 @@
 #include <kj/debug.h>
 #include <kj/thread.h>
 #include <kj/compat/gtest.h>
+#include <kj/miniposix.h>
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
 namespace capnp {
@@ -418,6 +419,104 @@ TEST(TwoPartyNetwork, BootstrapFactory) {
   EXPECT_EQ(rpc::twoparty::Side::CLIENT, resp.getCaller().getSide());
   EXPECT_TRUE(bootstrapFactory.called);
 }
+
+// =======================================================================================
+
+#if !_WIN32
+KJ_TEST("send FD over RPC") {
+  auto io = kj::setupAsyncIo();
+
+  int callCount = 0;
+  int handleCount = 0;
+  TwoPartyServer server(kj::heap<TestMoreStuffImpl>(callCount, handleCount));
+  auto pipe = io.provider->newCapabilityPipe();
+  server.accept(kj::mv(pipe.ends[0]), 2);
+  TwoPartyClient client(*pipe.ends[1], 2);
+
+  auto cap = client.bootstrap().castAs<test::TestMoreStuff>();
+
+  int pipeFds[2];
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in1(pipeFds[0]);
+  kj::AutoCloseFd out1(pipeFds[1]);
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in2(pipeFds[0]);
+  kj::AutoCloseFd out2(pipeFds[1]);
+
+  capnp::RemotePromise<test::TestMoreStuff::WriteToFdResults> promise = nullptr;
+  {
+    auto req = cap.writeToFdRequest();
+
+    // Order reversal intentional, just trying to mix things up.
+    req.setFdCap1(kj::heap<TestFdCap>(kj::mv(out2)));
+    req.setFdCap2(kj::heap<TestFdCap>(kj::mv(out1)));
+
+    promise = req.send();
+  }
+
+  int in3 = KJ_ASSERT_NONNULL(promise.getFdCap3().getFd().wait(io.waitScope));
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in3))->readAllText().wait(io.waitScope)
+            == "baz");
+
+  {
+    auto promise2 = kj::mv(promise);  // make sure the PipelineHook also goes out of scope
+    auto response = promise2.wait(io.waitScope);
+    KJ_EXPECT(response.getSecondFdPresent());
+  }
+
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in1))->readAllText().wait(io.waitScope)
+            == "bar");
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in2))->readAllText().wait(io.waitScope)
+            == "foo");
+}
+
+KJ_TEST("FD per message limit") {
+  auto io = kj::setupAsyncIo();
+
+  int callCount = 0;
+  int handleCount = 0;
+  TwoPartyServer server(kj::heap<TestMoreStuffImpl>(callCount, handleCount));
+  auto pipe = io.provider->newCapabilityPipe();
+  server.accept(kj::mv(pipe.ends[0]), 1);
+  TwoPartyClient client(*pipe.ends[1], 1);
+
+  auto cap = client.bootstrap().castAs<test::TestMoreStuff>();
+
+  int pipeFds[2];
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in1(pipeFds[0]);
+  kj::AutoCloseFd out1(pipeFds[1]);
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in2(pipeFds[0]);
+  kj::AutoCloseFd out2(pipeFds[1]);
+
+  capnp::RemotePromise<test::TestMoreStuff::WriteToFdResults> promise = nullptr;
+  {
+    auto req = cap.writeToFdRequest();
+
+    // Order reversal intentional, just trying to mix things up.
+    req.setFdCap1(kj::heap<TestFdCap>(kj::mv(out2)));
+    req.setFdCap2(kj::heap<TestFdCap>(kj::mv(out1)));
+
+    promise = req.send();
+  }
+
+  int in3 = KJ_ASSERT_NONNULL(promise.getFdCap3().getFd().wait(io.waitScope));
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in3))->readAllText().wait(io.waitScope)
+            == "baz");
+
+  {
+    auto promise2 = kj::mv(promise);  // make sure the PipelineHook also goes out of scope
+    auto response = promise2.wait(io.waitScope);
+    KJ_EXPECT(!response.getSecondFdPresent());
+  }
+
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in1))->readAllText().wait(io.waitScope)
+            == "");
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in2))->readAllText().wait(io.waitScope)
+            == "foo");
+}
+#endif  // !_WIN32
 
 }  // namespace
 }  // namespace _

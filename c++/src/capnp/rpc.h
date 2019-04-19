@@ -28,6 +28,8 @@
 #include "capability.h"
 #include "rpc-prelude.h"
 
+namespace kj { class AutoCloseFd; }
+
 namespace capnp {
 
 template <typename VatId, typename ProvisionId, typename RecipientId,
@@ -305,6 +307,10 @@ public:
   // Get the message body, which the caller may fill in any way it wants.  (The standard RPC
   // implementation initializes it as a Message as defined in rpc.capnp.)
 
+  virtual void setFds(kj::Array<int> fds) {}
+  // Set the list of file descriptors to send along with this message, if FD passing is supported.
+  // An implementation may ignore this.
+
   virtual void send() = 0;
   // Send the message, or at least put it in a queue to be sent later.  Note that the builder
   // returned by `getBody()` remains valid at least until the `OutgoingRpcMessage` is destroyed.
@@ -317,6 +323,14 @@ public:
   virtual AnyPointer::Reader getBody() = 0;
   // Get the message body, to be interpreted by the caller.  (The standard RPC implementation
   // interprets it as a Message as defined in rpc.capnp.)
+
+  virtual kj::ArrayPtr<kj::AutoCloseFd> getAttachedFds() { return nullptr; }
+  // If the transport supports attached file descriptors and some were attached to this message,
+  // returns them. Otherwise returns an empty array. It is intended that the caller will move the
+  // FDs out of this table when they are consumed, possibly leaving behind a null slot. Callers
+  // should be careful to check if an FD was already consumed by comparing the slot with `nullptr`.
+  // (We don't use Maybe here because moving from a Maybe doesn't make it null, so it would only
+  // add confusion. Moving from an AutoCloseFd does in fact make it null.)
 };
 
 template <typename VatId, typename ProvisionId, typename RecipientId,

@@ -860,6 +860,11 @@ interface TestMoreStuff extends(TestCallOrder) {
 
   getEnormousString @11 () -> (str :Text);
   # Attempts to return an 100MB string. Should always fail.
+
+  writeToFd @13 (fdCap1 :TestInterface, fdCap2 :TestInterface)
+             -> (fdCap3 :TestInterface, secondFdPresent :Bool);
+  # Expects fdCap1 and fdCap2 wrap socket file descriptors. Writes "foo" to the first and "bar" to
+  # the second. Also creates a socketpair, writes "baz" to one end, and returns the other end.
 }
 
 interface TestMembrane {

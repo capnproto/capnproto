@@ -31,6 +31,7 @@
 #include <map>
 #include <queue>
 #include <capnp/rpc.capnp.h>
+#include <kj/io.h>
 
 namespace capnp {
 namespace _ {  // private
@@ -575,7 +576,8 @@ private:
     RpcClient(RpcConnectionState& connectionState)
         : connectionState(kj::addRef(connectionState)) {}
 
-    virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) = 0;
+    virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                                kj::Vector<int>& fds) = 0;
     // Writes a CapDescriptor referencing this client.  The CapDescriptor must be sent as part of
     // the very next message sent on the connection, as it may become invalid if other things
     // happen.
@@ -710,8 +712,9 @@ private:
     // A ClientHook that wraps an entry in the import table.
 
   public:
-    ImportClient(RpcConnectionState& connectionState, ImportId importId)
-        : RpcClient(connectionState), importId(importId) {}
+    ImportClient(RpcConnectionState& connectionState, ImportId importId,
+                 kj::Maybe<kj::AutoCloseFd> fd)
+        : RpcClient(connectionState), importId(importId), fd(kj::mv(fd)) {}
 
     ~ImportClient() noexcept(false) {
       unwindDetector.catchExceptionsIfUnwinding([&]() {
@@ -736,12 +739,19 @@ private:
       });
     }
 
+    void setFdIfMissing(kj::Maybe<kj::AutoCloseFd> newFd) {
+      if (fd == nullptr) {
+        fd = kj::mv(newFd);
+      }
+    }
+
     void addRemoteRef() {
       // Add a new RemoteRef and return a new ref to this client representing it.
       ++remoteRefcount;
     }
 
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
+    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                        kj::Vector<int>& fds) override {
       descriptor.setReceiverHosted(importId);
       return nullptr;
     }
@@ -766,8 +776,13 @@ private:
       return nullptr;
     }
 
+    kj::Maybe<int> getFd() override {
+      return fd.map([](auto& f) { return f.get(); });
+    }
+
   private:
     ImportId importId;
+    kj::Maybe<kj::AutoCloseFd> fd;
 
     uint remoteRefcount = 0;
     // Number of times we've received this import from the peer.
@@ -784,7 +799,8 @@ private:
                    kj::Array<PipelineOp>&& ops)
         : RpcClient(connectionState), questionRef(kj::mv(questionRef)), ops(kj::mv(ops)) {}
 
-   kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
+   kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                       kj::Vector<int>& fds) override {
       auto promisedAnswer = descriptor.initReceiverAnswer();
       promisedAnswer.setQuestionId(questionRef->getId());
       promisedAnswer.adoptTransform(fromPipelineOps(
@@ -811,6 +827,10 @@ private:
     }
 
     kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+      return nullptr;
+    }
+
+    kj::Maybe<int> getFd() override {
       return nullptr;
     }
 
@@ -867,9 +887,10 @@ private:
       }
     }
 
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
+    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                        kj::Vector<int>& fds) override {
       receivedCall = true;
-      return connectionState->writeDescriptor(*cap, descriptor);
+      return connectionState->writeDescriptor(*cap, descriptor, fds);
     }
 
     kj::Maybe<kj::Own<ClientHook>> writeTarget(
@@ -937,6 +958,20 @@ private:
 
     kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
       return fork.addBranch();
+    }
+
+    kj::Maybe<int> getFd() override {
+      if (isResolved) {
+        return cap->getFd();
+      } else {
+        // In theory, before resolution, the ImportClient for the promise could have an FD
+        // attached, if the promise itself was presented with an attached FD. However, we can't
+        // really return that one here because it may be closed when we get the Resolve message
+        // later. In theory we could have the PromiseClient itself take ownership of an FD that
+        // arrived attached to a promise cap, but the use case for that is questionable. I'm
+        // keeping it simple for now.
+        return nullptr;
+      }
     }
 
   private:
@@ -1016,8 +1051,9 @@ private:
         : RpcClient(*inner.connectionState),
           inner(kj::addRef(inner)) {}
 
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
-      return inner->writeDescriptor(descriptor);
+    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                        kj::Vector<int>& fds) override {
+      return inner->writeDescriptor(descriptor, fds);
     }
 
     kj::Maybe<kj::Own<ClientHook>> writeTarget(rpc::MessageTarget::Builder target) override {
@@ -1045,11 +1081,16 @@ private:
       return nullptr;
     }
 
+    kj::Maybe<int> getFd() override {
+      return nullptr;
+    }
+
   private:
     kj::Own<RpcClient> inner;
   };
 
-  kj::Maybe<ExportId> writeDescriptor(ClientHook& cap, rpc::CapDescriptor::Builder descriptor) {
+  kj::Maybe<ExportId> writeDescriptor(ClientHook& cap, rpc::CapDescriptor::Builder descriptor,
+                                      kj::Vector<int>& fds) {
     // Write a descriptor for the given capability.
 
     // Find the innermost wrapped capability.
@@ -1062,8 +1103,13 @@ private:
       }
     }
 
+    KJ_IF_MAYBE(fd, inner->getFd()) {
+      descriptor.setAttachedFd(fds.size());
+      fds.add(kj::mv(*fd));
+    }
+
     if (inner->getBrand() == this) {
-      return kj::downcast<RpcClient>(*inner).writeDescriptor(descriptor);
+      return kj::downcast<RpcClient>(*inner).writeDescriptor(descriptor, fds);
     } else {
       auto iter = exportsByCap.find(inner);
       if (iter != exportsByCap.end()) {
@@ -1094,12 +1140,12 @@ private:
   }
 
   kj::Array<ExportId> writeDescriptors(kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTable,
-                                       rpc::Payload::Builder payload) {
+                                       rpc::Payload::Builder payload, kj::Vector<int>& fds) {
     auto capTableBuilder = payload.initCapTable(capTable.size());
     kj::Vector<ExportId> exports(capTable.size());
     for (uint i: kj::indices(capTable)) {
       KJ_IF_MAYBE(cap, capTable[i]) {
-        KJ_IF_MAYBE(exportId, writeDescriptor(**cap, capTableBuilder[i])) {
+        KJ_IF_MAYBE(exportId, writeDescriptor(**cap, capTableBuilder[i], fds)) {
           exports.add(*exportId);
         }
       } else {
@@ -1199,7 +1245,9 @@ private:
           messageSizeHint<rpc::Resolve>() + sizeInWords<rpc::CapDescriptor>() + 16);
       auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
       resolve.setPromiseId(exportId);
-      writeDescriptor(*exp.clientHook, resolve.initCap());
+      kj::Vector<int> fds;
+      writeDescriptor(*exp.clientHook, resolve.initCap(), fds);
+      message->setFds(fds.releaseAsArray());
       message->send();
 
       return kj::READY_NOW;
@@ -1220,7 +1268,7 @@ private:
   // =====================================================================================
   // Interpreting CapDescriptor
 
-  kj::Own<ClientHook> import(ImportId importId, bool isPromise) {
+  kj::Own<ClientHook> import(ImportId importId, bool isPromise, kj::Maybe<kj::AutoCloseFd> fd) {
     // Receive a new import.
 
     auto& import = imports[importId];
@@ -1229,8 +1277,17 @@ private:
     // Create the ImportClient, or if one already exists, use it.
     KJ_IF_MAYBE(c, import.importClient) {
       importClient = kj::addRef(*c);
+
+      // If the same import is introduced multiple times, and it is missing an FD the first time,
+      // but it has one on a later attempt, we want to attach the later one. This could happen
+      // because the first introduction was part of a message that had too many other FDs and went
+      // over the per-message limit. Perhaps the protocol design is such that this other message
+      // doesn't really care if the FDs are transferred or not, but the later message really does
+      // care; it would be bad if the previous message blocked later messages from delivering the
+      // FD just because it happened to reference the same capability.
+      importClient->setFdIfMissing(kj::mv(fd));
     } else {
-      importClient = kj::refcounted<ImportClient>(*this, importId);
+      importClient = kj::refcounted<ImportClient>(*this, importId, kj::mv(fd));
       import.importClient = *importClient;
     }
 
@@ -1262,15 +1319,22 @@ private:
     }
   }
 
-  kj::Maybe<kj::Own<ClientHook>> receiveCap(rpc::CapDescriptor::Reader descriptor) {
+  kj::Maybe<kj::Own<ClientHook>> receiveCap(rpc::CapDescriptor::Reader descriptor,
+                                            kj::ArrayPtr<kj::AutoCloseFd> fds) {
+    uint fdIndex = descriptor.getAttachedFd();
+    kj::Maybe<kj::AutoCloseFd> fd;
+    if (fdIndex < fds.size() && fds[fdIndex] != nullptr) {
+      fd = kj::mv(fds[fdIndex]);
+    }
+
     switch (descriptor.which()) {
       case rpc::CapDescriptor::NONE:
         return nullptr;
 
       case rpc::CapDescriptor::SENDER_HOSTED:
-        return import(descriptor.getSenderHosted(), false);
+        return import(descriptor.getSenderHosted(), false, kj::mv(fd));
       case rpc::CapDescriptor::SENDER_PROMISE:
-        return import(descriptor.getSenderPromise(), true);
+        return import(descriptor.getSenderPromise(), true, kj::mv(fd));
 
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_MAYBE(exp, exports.find(descriptor.getReceiverHosted())) {
@@ -1299,7 +1363,7 @@ private:
 
       case rpc::CapDescriptor::THIRD_PARTY_HOSTED:
         // We don't support third-party caps, so use the vine instead.
-        return import(descriptor.getThirdPartyHosted().getVineId(), false);
+        return import(descriptor.getThirdPartyHosted().getVineId(), false, kj::mv(fd));
 
       default:
         KJ_FAIL_REQUIRE("unknown CapDescriptor type") { break; }
@@ -1307,10 +1371,11 @@ private:
     }
   }
 
-  kj::Array<kj::Maybe<kj::Own<ClientHook>>> receiveCaps(List<rpc::CapDescriptor>::Reader capTable) {
+  kj::Array<kj::Maybe<kj::Own<ClientHook>>> receiveCaps(List<rpc::CapDescriptor>::Reader capTable,
+                                                        kj::ArrayPtr<kj::AutoCloseFd> fds) {
     auto result = kj::heapArrayBuilder<kj::Maybe<kj::Own<ClientHook>>>(capTable.size());
     for (auto cap: capTable) {
-      result.add(receiveCap(cap));
+      result.add(receiveCap(cap, fds));
     }
     return result.finish();
   }
@@ -1497,8 +1562,10 @@ private:
 
     SendInternalResult sendInternal(bool isTailCall) {
       // Build the cap table.
+      kj::Vector<int> fds;
       auto exports = connectionState->writeDescriptors(
-          capTable.getTable(), callBuilder.getParams());
+          capTable.getTable(), callBuilder.getParams(), fds);
+      message->setFds(fds.releaseAsArray());
 
       // Init the question table.  Do this after writing descriptors to avoid interference.
       QuestionId questionId;
@@ -1691,7 +1758,9 @@ private:
 
       // Build the cap table.
       auto capTable = this->capTable.getTable();
-      auto exports = connectionState.writeDescriptors(capTable, payload);
+      kj::Vector<int> fds;
+      auto exports = connectionState.writeDescriptors(capTable, payload, fds);
+      message->setFds(fds.releaseAsArray());
 
       // Capabilities that we are returning are subject to embargos. See `Disembargo` in rpc.capnp.
       // As explained there, in order to deal with the Tribble 4-way race condition, we need to
@@ -2130,7 +2199,7 @@ private:
         break;
 
       case rpc::Message::RESOLVE:
-        handleResolve(reader.getResolve());
+        handleResolve(kj::mv(message), reader.getResolve());
         break;
 
       case rpc::Message::RELEASE:
@@ -2262,7 +2331,9 @@ private:
 
       auto capTableArray = capTable.getTable();
       KJ_DASSERT(capTableArray.size() == 1);
-      resultExports = writeDescriptors(capTableArray, payload);
+      kj::Vector<int> fds;
+      resultExports = writeDescriptors(capTableArray, payload, fds);
+      response->setFds(fds.releaseAsArray());
       capHook = KJ_ASSERT_NONNULL(capTableArray[0])->addRef();
     })) {
       fromException(*exception, ret.initException());
@@ -2307,7 +2378,7 @@ private:
     }
 
     auto payload = call.getParams();
-    auto capTableArray = receiveCaps(payload.getCapTable());
+    auto capTableArray = receiveCaps(payload.getCapTable(), message->getAttachedFds());
     auto cancelPaf = kj::newPromiseAndFulfiller<void>();
 
     AnswerId answerId = call.getQuestionId();
@@ -2500,7 +2571,7 @@ private:
             }
 
             auto payload = ret.getResults();
-            auto capTableArray = receiveCaps(payload.getCapTable());
+            auto capTableArray = receiveCaps(payload.getCapTable(), message->getAttachedFds());
             questionRef->fulfill(kj::refcounted<RpcResponseImpl>(
                 *this, kj::addRef(*questionRef), kj::mv(message),
                 kj::mv(capTableArray), payload.getContent()));
@@ -2600,14 +2671,14 @@ private:
   // ---------------------------------------------------------------------------
   // Level 1
 
-  void handleResolve(const rpc::Resolve::Reader& resolve) {
+  void handleResolve(kj::Own<IncomingRpcMessage>&& message, const rpc::Resolve::Reader& resolve) {
     kj::Own<ClientHook> replacement;
     kj::Maybe<kj::Exception> exception;
 
     // Extract the replacement capability.
     switch (resolve.which()) {
       case rpc::Resolve::CAP:
-        KJ_IF_MAYBE(cap, receiveCap(resolve.getCap())) {
+        KJ_IF_MAYBE(cap, receiveCap(resolve.getCap(), message->getAttachedFds())) {
           replacement = kj::mv(*cap);
         } else {
           KJ_FAIL_REQUIRE("'Resolve' contained 'CapDescriptor.none'.") { return; }

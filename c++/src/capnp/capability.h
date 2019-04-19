@@ -206,6 +206,19 @@ public:
   // Make a request without knowing the types of the params or results. You specify the type ID
   // and method number manually.
 
+  kj::Promise<kj::Maybe<int>> getFd();
+  // If the capability's server implemented Capability::Server::getFd() returning non-null, and all
+  // RPC links between the client and server support FD passing, returns a file descriptor pointing
+  // to the same undelying file description as the server did. Returns null if the server provided
+  // no FD or if FD passing was unavailable at some intervening link.
+  //
+  // This returns a Promise to handle the case of an unresolved promise capability, e.g. a
+  // pipelined capability. The promise resolves no later than when the capability settles, i.e.
+  // the same time `whenResolved()` would complete.
+  //
+  // The file descriptor will remain open at least as long as the Capability::Client remains alive.
+  // If you need it to last longer, you will need to `dup()` it.
+
   // TODO(someday):  method(s) for Join
 
 protected:
@@ -330,6 +343,11 @@ public:
   // Call the given method.  `params` is the input struct, and should be released as soon as it
   // is no longer needed.  `context` may be used to allocate the output struct and deal with
   // cancellation.
+
+  virtual kj::Maybe<int> getFd() { return nullptr; }
+  // If this capability is backed by a file descriptor that is safe to directly expose to clients,
+  // returns that FD. When FD passing has been enabled in the RPC layer, this FD may be sent to
+  // other processes along with the capability.
 
   // TODO(someday):  Method which can optionally be overridden to implement Join when the object is
   //   a proxy.
@@ -562,6 +580,10 @@ public:
   // If this is a local capability created through `capServerSet`, return the underlying Server.
   // Otherwise, return nullptr. Default implementation (which everyone except LocalClient should
   // use) always returns nullptr.
+
+  virtual kj::Maybe<int> getFd() = 0;
+  // Implements Capability::Client::getFd(). If this returns null but whenMoreResolved() returns
+  // non-null, then Capability::Client::getFd() waits for resolution and tries again.
 
   static kj::Own<ClientHook> from(Capability::Client client) { return kj::mv(client.hook); }
 };
