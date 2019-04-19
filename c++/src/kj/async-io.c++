@@ -1809,7 +1809,7 @@ Promise<void> AsyncCapabilityStream::writeWithFds(
     ArrayPtr<const AutoCloseFd> fds) {
   // HACK: AutoCloseFd actually contains an `int` under the hood. We can reinterpret_cast to avoid
   //   unnecessary memory allocation.
-  static_assert(sizeof(AutoCloseFd) == sizeof(int));
+  static_assert(sizeof(AutoCloseFd) == sizeof(int), "this optimization won't work");
   auto intArray = arrayPtr(reinterpret_cast<const int*>(fds.begin()), fds.size());
 
   // Be extra-paranoid about aliasing rules by injecting a compiler barrier here. Probably
