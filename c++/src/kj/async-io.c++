@@ -532,23 +532,17 @@ private:
         canceler.release();
         pumpedSoFar += actual;
         KJ_ASSERT(pumpedSoFar <= amount);
-        if (pumpedSoFar == amount) {
-          fulfiller.fulfill(kj::cp(amount));
+        if (pumpedSoFar == amount || actual < n) {
+          // Either we pumped all we wanted or we hit EOF.
+          fulfiller.fulfill(kj::cp(pumpedSoFar));
           pipe.endState(*this);
+          return pipe.pumpTo(output, amount2 - actual)
+              .then([actual](uint64_t actual2) { return actual + actual2; });
         }
 
-        KJ_ASSERT(actual <= amount2);
-        if (actual == amount2) {
-          // Completed entire pumpTo amount.
-          return amount2;
-        } else if (actual < n) {
-          // Received less than requested, presumably because EOF.
-          return actual;
-        } else {
-          // We received all the bytes that were requested but it didn't complete the pump.
-          KJ_ASSERT(pumpedSoFar == amount);
-          return pipe.pumpTo(output, amount2 - actual);
-        }
+        // Completed entire pumpTo amount.
+        KJ_ASSERT(actual == amount2);
+        return amount2;
       }));
     }
 
