@@ -161,8 +161,8 @@ public:
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
-    ssize_t writeResult;
-    KJ_NONBLOCKING_SYSCALL(writeResult = ::write(fd, buffer, size)) {
+    ssize_t n;
+    KJ_NONBLOCKING_SYSCALL(n = ::write(fd, buffer, size)) {
       // Error.
 
       // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -176,21 +176,23 @@ public:
       return kj::READY_NOW;
     }
 
-    // A negative result means EAGAIN, which we can treat the same as having written zero bytes.
-    size_t n = writeResult < 0 ? 0 : writeResult;
-
-    if (n == size) {
+    if (n < 0) {
+      // EAGAIN -- need to wait for writability and try again.
+      return observer.whenBecomesWritable().then([=]() {
+        return write(buffer, size);
+      });
+    } else if (n == size) {
+      // All done.
       return READY_NOW;
-    }
-
-    // Fewer than `size` bytes were written, therefore we must be out of buffer space. Wait until
-    // the fd becomes writable again.
-    buffer = reinterpret_cast<const byte*>(buffer) + n;
-    size -= n;
-
-    return observer.whenBecomesWritable().then([=]() {
+    } else {
+      // Fewer than `size` bytes were written, but we CANNOT assume we're out of buffer space, as
+      // Linux is known to return partial reads/writes when interrupted by a signal -- yes, even
+      // for non-blocking operations. So, we'll need to write() again now, even though it will
+      // almost certainly fail with EAGAIN. See comments in the read path for more info.
+      buffer = reinterpret_cast<const byte*>(buffer) + n;
+      size -= n;
       return write(buffer, size);
-    });
+    }
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -411,29 +413,17 @@ private:
       maxBytes -= n;
       alreadyRead.byteCount += n;
 
-      KJ_IF_MAYBE(atEnd, observer.atEndHint()) {
-        if (*atEnd) {
-          // We've already received an indication that the next read() will return EOF, so there's
-          // nothing to wait for.
-          return alreadyRead;
-        } else {
-          // As of the last time the event queue was checked, the kernel reported that we were
-          // *not* at the end of the stream. It's unlikely that this has changed in the short time
-          // it took to handle the event, therefore calling read() now will almost certainly fail
-          // with EAGAIN. Moreover, since EOF had not been received as of the last check, we know
-          // that even if it was received since then, whenBecomesReadable() will catch that. So,
-          // let's go ahead and skip calling read() here and instead go straight to waiting for
-          // more input.
-          return observer.whenBecomesReadable().then([=]() {
-            return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
-          });
-        }
-      } else {
-        // The kernel has not indicated one way or the other whether we are likely to be at EOF.
-        // In this case we *must* keep calling read() until we either get a return of zero or
-        // EAGAIN.
-        return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
-      }
+      // According to David Klempner, who works on Stubby at Google, we sadly CANNOT assume that
+      // we've consumed the whole read buffer here. If a signal is delivered in the middle of a
+      // read() -- yes, even a non-blocking read -- it can cause the kernel to return a partial
+      // result, with data still in the buffer.
+      //     https://bugzilla.kernel.org/show_bug.cgi?id=199131
+      //     https://twitter.com/CaptainSegfault/status/1112622245531144194
+      //
+      // Unfortunately, we have no choice but to issue more read()s until it either tells us EOF
+      // or EAGAIN. We used to have an optimization here using observer.atEndHint() (when it is
+      // non-null) to avoid a redundant call to read(). Alas...
+      return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
     }
   }
 
@@ -543,9 +533,9 @@ private:
           return writeInternal(firstPiece, morePieces, nullptr);
         }
 
-        return observer.whenBecomesWritable().then([=]() {
-          return writeInternal(firstPiece, morePieces, nullptr);
-        });
+        // As with read(), we cannot assume that a short write() really means the write buffer is
+        // full (see comments in the read path above). We have to write again.
+        return writeInternal(firstPiece, morePieces, nullptr);
       } else if (morePieces.size() == 0) {
         // First piece was fully-consumed and there are no more pieces, so we're done.
         KJ_DASSERT(n == firstPiece.size(), n);

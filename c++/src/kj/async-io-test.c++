@@ -2203,9 +2203,11 @@ KJ_TEST("OS TwoWayPipe whenWriteDisconnected()") {
   abortedPromise.wait(io.waitScope);
 
   char buffer[4];
-  KJ_ASSERT(pipe.ends[0]->tryRead(&buffer, sizeof(buffer), sizeof(buffer)).wait(io.waitScope) == 3);
+  KJ_ASSERT(pipe.ends[0]->tryRead(&buffer, 3, 3).wait(io.waitScope) == 3);
   buffer[3] = '\0';
   KJ_EXPECT(buffer == "bar"_kj);
+
+  // Note: Reading any further in pipe.ends[0] would throw "connection reset".
 }
 
 KJ_TEST("import socket FD that's already broken") {
