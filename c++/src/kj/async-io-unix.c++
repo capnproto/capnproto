@@ -335,7 +335,7 @@ private:
       auto cmsgBytes = cmsgSpace.asBytes();
       memset(cmsgBytes.begin(), 0, cmsgBytes.size());
       msg.msg_control = cmsgBytes.begin();
-      msg.msg_controllen = cmsgBytes.size();
+      msg.msg_controllen = msgBytes;
 
 #ifdef MSG_CMSG_CLOEXEC
       static constexpr int RECVMSG_FLAGS = MSG_CMSG_CLOEXEC;
@@ -489,7 +489,7 @@ private:
       auto cmsgBytes = cmsgSpace.asBytes();
       memset(cmsgBytes.begin(), 0, cmsgBytes.size());
       msg.msg_control = cmsgBytes.begin();
-      msg.msg_controllen = cmsgBytes.size();
+      msg.msg_controllen = msgBytes;
 
       struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
       cmsg->cmsg_level = SOL_SOCKET;
