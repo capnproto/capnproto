@@ -366,11 +366,16 @@ private:
         //   SCM_CREDENTIALS. The sender decides what to send. They could send SCM_CREDENTIALS
         //   first followed by SCM_RIGHTS. We need to make sure we see both.
         size_t nfds = 0;
+        size_t spaceLeft = msg.msg_controllen;
         for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
             cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-          if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
+          if (spaceLeft >= CMSG_LEN(0) &&
+              cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
+            // Some operating systems (like MacOS) do not adjust csmg_len when the message is
+            // truncated. We must do so ourselves or risk overrunning the buffer.
+            auto len = kj::min(cmsg->cmsg_len, spaceLeft);
             auto data = arrayPtr(reinterpret_cast<int*>(CMSG_DATA(cmsg)),
-                                 (cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int));
+                                 (len - CMSG_LEN(0)) / sizeof(int));
             kj::Vector<kj::AutoCloseFd> trashFds;
             for (auto fd: data) {
               kj::AutoCloseFd ownFd(fd);
