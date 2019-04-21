@@ -322,9 +322,16 @@ private:
       msg.msg_iovlen = 1;
 
       // Allocate space to receive a cmsg.
+      // On Linux, CMSG_SPACE will align to a word-size boundary, but on Mac it always aligns to a
+      // 32-bit boundary. I guess aligning to 32 bits helps avoid the problem where you
+      // surprisingly end up with space for two file descriptors when you only wanted one. However,
+      // cmsghdr's preferred alignment is word-size (it contains a size_t). If we stack-allocate
+      // the buffer, we need to make sure it is aligned properly (maybe not on x64, but maybe on
+      // other platforms), so we want to allocate an array of words (we use void*). So... we use
+      // CMSG_SPACE() and then additionally round up to deal with Mac.
       size_t msgBytes = CMSG_SPACE(sizeof(int) * maxFds);
-      KJ_ASSERT(msgBytes % sizeof(void*) == 0);  // CMSG_SPACE guarantees alignment
-      KJ_STACK_ARRAY(void*, cmsgSpace, msgBytes / sizeof(void*), 16, 256);
+      size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
+      KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
       auto cmsgBytes = cmsgSpace.asBytes();
       memset(cmsgBytes.begin(), 0, cmsgBytes.size());
       msg.msg_control = cmsgBytes.begin();
@@ -470,8 +477,15 @@ private:
 
       // Allocate space to receive a cmsg.
       size_t msgBytes = CMSG_SPACE(sizeof(int) * fds.size());
-      KJ_ASSERT(msgBytes % sizeof(void*) == 0);  // CMSG_SPACE guarantees alignment
-      KJ_STACK_ARRAY(void*, cmsgSpace, msgBytes / sizeof(void*), 16, 256);
+      // On Linux, CMSG_SPACE will align to a word-size boundary, but on Mac it always aligns to a
+      // 32-bit boundary. I guess aligning to 32 bits helps avoid the problem where you
+      // surprisingly end up with space for two file descriptors when you only wanted one. However,
+      // cmsghdr's preferred alignment is word-size (it contains a size_t). If we stack-allocate
+      // the buffer, we need to make sure it is aligned properly (maybe not on x64, but maybe on
+      // other platforms), so we want to allocate an array of words (we use void*). So... we use
+      // CMSG_SPACE() and then additionally round up to deal with Mac.
+      size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
+      KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
       auto cmsgBytes = cmsgSpace.asBytes();
       memset(cmsgBytes.begin(), 0, cmsgBytes.size());
       msg.msg_control = cmsgBytes.begin();
