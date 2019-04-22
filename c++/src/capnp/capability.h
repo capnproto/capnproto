@@ -209,7 +209,7 @@ public:
   kj::Promise<kj::Maybe<int>> getFd();
   // If the capability's server implemented Capability::Server::getFd() returning non-null, and all
   // RPC links between the client and server support FD passing, returns a file descriptor pointing
-  // to the same undelying file description as the server did. Returns null if the server provided
+  // to the same underlying file description as the server did. Returns null if the server provided
   // no FD or if FD passing was unavailable at some intervening link.
   //
   // This returns a Promise to handle the case of an unresolved promise capability, e.g. a
