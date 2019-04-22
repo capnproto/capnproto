@@ -322,6 +322,26 @@ private:
       msg.msg_iovlen = 1;
 
       // Allocate space to receive a cmsg.
+#if __APPLE__ || __FreeBSD__
+      // Until very recently (late 2018 / early 2019), FreeBSD suffered from a bug in which when
+      // an SCM_RIGHTS message was truncated on delivery, it would not close the FDs that weren't
+      // delivered -- they would simply leak: https://bugs.freebsd.org/131876
+      //
+      // My testing indicates that MacOS has this same bug as of today (April 2019). I don't know
+      // if they plan to fix it or are even aware of it.
+      //
+      // To handle both cases, we will always provide space to receive 512 FDs. Hopefully, this is
+      // greater than the maximum number of FDs that these kernels will transmit in one message
+      // PLUS enough space for any other ancillary messages that could be sent before the
+      // SCM_RIGHTS message to push it back in the buffer. I couldn't find any firm documentation
+      // on these limits, though -- I only know that Linux is limited to 253, and I saw a hint in
+      // a comment in someone else's application that suggested FreeBSD is the same. Hopefully,
+      // then, this is sufficient to prevent attacks. But if not, there's nothing more we can do;
+      // it's really up to the kernel to fix this.
+      size_t msgBytes = CMSG_SPACE(sizeof(int) * 512);
+#else
+      size_t msgBytes = CMSG_SPACE(sizeof(int) * maxFds);
+#endif
       // On Linux, CMSG_SPACE will align to a word-size boundary, but on Mac it always aligns to a
       // 32-bit boundary. I guess aligning to 32 bits helps avoid the problem where you
       // surprisingly end up with space for two file descriptors when you only wanted one. However,
@@ -329,7 +349,6 @@ private:
       // the buffer, we need to make sure it is aligned properly (maybe not on x64, but maybe on
       // other platforms), so we want to allocate an array of words (we use void*). So... we use
       // CMSG_SPACE() and then additionally round up to deal with Mac.
-      size_t msgBytes = CMSG_SPACE(sizeof(int) * maxFds);
       size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
       KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
       auto cmsgBytes = cmsgSpace.asBytes();
