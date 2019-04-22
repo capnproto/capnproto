@@ -282,11 +282,11 @@ TEST(AsyncIo, ScmRightsTruncatedOdd) {
   auto capPipe = io.provider->newCapabilityPipe();
 
   int pipeFds[2];
-  miniposix::pipe(pipeFds);
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
   kj::AutoCloseFd in1(pipeFds[0]);
   kj::AutoCloseFd out1(pipeFds[1]);
 
-  miniposix::pipe(pipeFds);
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
   kj::AutoCloseFd in2(pipeFds[0]);
   kj::AutoCloseFd out2(pipeFds[1]);
 
@@ -345,15 +345,15 @@ TEST(AsyncIo, ScmRightsTruncatedEven) {
   auto capPipe = io.provider->newCapabilityPipe();
 
   int pipeFds[2];
-  miniposix::pipe(pipeFds);
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
   kj::AutoCloseFd in1(pipeFds[0]);
   kj::AutoCloseFd out1(pipeFds[1]);
 
-  miniposix::pipe(pipeFds);
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
   kj::AutoCloseFd in2(pipeFds[0]);
   kj::AutoCloseFd out2(pipeFds[1]);
 
-  miniposix::pipe(pipeFds);
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
   kj::AutoCloseFd in3(pipeFds[0]);
   kj::AutoCloseFd out3(pipeFds[1]);
 
