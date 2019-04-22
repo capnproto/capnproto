@@ -426,7 +426,7 @@ TEST(TwoPartyNetwork, BootstrapFactory) {
 
 // =======================================================================================
 
-#if !_WIN32
+#if !_WIN32 && !__CYGWIN__  // Windows and Cygwin don't support SCM_RIGHTS.
 KJ_TEST("send FD over RPC") {
   auto io = kj::setupAsyncIo();
 
@@ -520,7 +520,7 @@ KJ_TEST("FD per message limit") {
   KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in2))->readAllText().wait(io.waitScope)
             == "foo");
 }
-#endif  // !_WIN32
+#endif  // !_WIN32 && !__CYGWIN__
 
 }  // namespace
 }  // namespace _
