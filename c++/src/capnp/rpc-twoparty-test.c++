@@ -21,6 +21,10 @@
 
 #define CAPNP_TESTING_CAPNP 1
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "rpc-twoparty.h"
 #include "test-util.h"
 #include <capnp/rpc.capnp.h>
