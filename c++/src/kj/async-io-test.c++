@@ -327,7 +327,11 @@ TEST(AsyncIo, ScmRightsTruncatedOdd) {
   // Second pipe should have been closed implicitly because we didn't provide space to receive it.
   KJ_NONBLOCKING_SYSCALL(n = read(in2, buffer, 4));
   if (n < 0) {
-    KJ_FAIL_ASSERT("out2 was not closed");
+    KJ_FAIL_ASSERT("out2 was not closed. This could indicate that your operating system kernel is "
+        "buggy and leaks file descriptors when an SCM_RIGHTS message is truncated. FreeBSD was "
+        "known to do this until late 2018, while MacOS still has this bug as of this writing in "
+        "2019. However, KJ works around the problem on those platforms. You need to enable the "
+        "same work-around for your OS -- search for 'SCM_RIGHTS' in src/kj/async-io-unix.c++.");
   }
   KJ_ASSERT(n == 0);
 }
@@ -409,12 +413,11 @@ TEST(AsyncIo, ScmRightsTruncatedEven) {
   // Third pipe should have been closed implicitly because we didn't provide space to receive it.
   KJ_NONBLOCKING_SYSCALL(n = read(in3, buffer, 4));
   if (n < 0) {
-    KJ_FAIL_ASSERT("out3 was not closed. If ScmRightsTruncatedOdd passed but this test failed "
-        "then your operating system kernel is buggy and leakds file descriptors when an "
-        "SCM_RIGHTS message is truncated. FreeBSD was known to do this until late 2018, while "
-        "MacOS still has this bug as of this writing in 2019. However, KJ works around the "
-        "problem on those platforms. You need to enable the same work-around for your OS -- "
-        "search for 'SCM_RIGHTS' in src/kj/async-io-unix.c++.");
+    KJ_FAIL_ASSERT("out3 was not closed. This could indicate that your operating system kernel is "
+        "buggy and leaks file descriptors when an SCM_RIGHTS message is truncated. FreeBSD was "
+        "known to do this until late 2018, while MacOS still has this bug as of this writing in "
+        "2019. However, KJ works around the problem on those platforms. You need to enable the "
+        "same work-around for your OS -- search for 'SCM_RIGHTS' in src/kj/async-io-unix.c++.");
   }
   KJ_ASSERT(n == 0);
 }

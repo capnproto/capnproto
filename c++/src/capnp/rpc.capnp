@@ -990,7 +990,7 @@ struct CapDescriptor {
   }
 
   attachedFd @6 :UInt8 = 0xff;
-  # If the RPC message in which this CapDescriptor was delivered also had file descirptors
+  # If the RPC message in which this CapDescriptor was delivered also had file descriptors
   # attached, and `fd` is a valid index into the list of attached file descriptors, then
   # that file descriptor should be attached to this capability. If `attachedFd` is out-of-bounds
   # for said list, then no FD is attached.

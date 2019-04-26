@@ -195,12 +195,12 @@ public:
   virtual Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
                                              AutoCloseFd* fdBuffer, size_t maxFds) = 0;
   // Read data from the stream that may have file descriptors attached. Any attached descriptors
-  // will be added to `fds`. If multiple bundles of FDs are encountered in the course of reading
-  // the amount of data requested by minBytes/maxBytes, then they will be concatenated. If more FDs
-  // are received than fit in the buffer, then the excess will be discarded and closed -- this
-  // behavior, while ugly, is important to defend against denial-of-service attacks that may fill
-  // up the FD table with garbage. Applications must think carefully about how many FDs they really
-  // need to receive at once and set a well-defined limit.
+  // will be placed in `fdBuffer`. If multiple bundles of FDs are encountered in the course of
+  // reading the amount of data requested by minBytes/maxBytes, then they will be concatenated. If
+  // more FDs are received than fit in the buffer, then the excess will be discarded and closed --
+  // this behavior, while ugly, is important to defend against denial-of-service attacks that may
+  // fill up the FD table with garbage. Applications must think carefully about how many FDs they
+  // really need to receive at once and set a well-defined limit.
 
   virtual Promise<void> writeWithStreams(ArrayPtr<const byte> data,
                                          ArrayPtr<const ArrayPtr<const byte>> moreData,
