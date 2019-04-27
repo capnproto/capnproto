@@ -818,6 +818,13 @@ interface TestTailCaller {
   foo @0 (i :Int32, callee :TestTailCallee) -> TestTailCallee.TailResult;
 }
 
+interface TestStreaming {
+  doStreamI @0 (i :UInt32) -> stream;
+  doStreamJ @1 (j :UInt32) -> stream;
+  finishStream @2 () -> (totalI :UInt32, totalJ :UInt32);
+  # Test streaming. finishStream() returns the totals of the values streamed to the other calls.
+}
+
 interface TestHandle {}
 
 interface TestMoreStuff extends(TestCallOrder) {

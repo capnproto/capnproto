@@ -28,6 +28,7 @@
 #include <set>
 #include <map>
 #include <stdlib.h>
+#include <capnp/stream.capnp.h>
 
 namespace capnp {
 namespace compiler {
@@ -2384,9 +2385,13 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
       implicitsBuilder[i].setName(implicits[i].getName());
     }
 
+    auto params = methodReader.getParams();
+    if (params.isStream()) {
+      errorReporter.addErrorOn(params, "'stream' can only appear after '->', not before.");
+    }
     methodBuilder.setParamStructType(compileParamList(
         methodDecl.getName().getValue(), ordinal, false,
-        methodReader.getParams(), implicits,
+        params, implicits,
         [&]() { return methodBuilder.initParamBrand(); }));
 
     auto results = methodReader.getResults();
@@ -2478,6 +2483,20 @@ uint64_t NodeTranslator::compileParamList(
         }
       }
       return 0;
+    case Declaration::ParamList::STREAM:
+      KJ_IF_MAYBE(streamCapnp, resolver.resolveImport("/capnp/stream.capnp")) {
+        if (streamCapnp->resolver->resolveMember("StreamResult") == nullptr) {
+          errorReporter.addErrorOn(paramList,
+              "The version of '/capnp/stream.capnp' found in your import path does not appear "
+              "to be the official one; it is missing the declaration of StreamResult.");
+        }
+      } else {
+        errorReporter.addErrorOn(paramList,
+            "A method declaration uses streaming, but '/capnp/stream.capnp' is not found "
+            "in the import path. This is a standard file that should always be installed "
+            "with the Cap'n Proto compiler.");
+      }
+      return typeId<StreamResult>();
   }
   KJ_UNREACHABLE;
 }

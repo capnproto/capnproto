@@ -244,6 +244,9 @@ struct Declaration {
 
       type @1 :Expression;
       # Specified some other struct type instead of a named list.
+
+      stream @4 :Void;
+      # The keyword "stream".
     }
 
     startByte @2 :UInt32;

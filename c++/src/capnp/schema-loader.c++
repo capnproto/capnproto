@@ -29,6 +29,7 @@
 #include <kj/vector.h>
 #include <algorithm>
 #include <kj/map.h>
+#include <capnp/stream.capnp.h>
 
 #if _MSC_VER
 #include <atomic>
@@ -1728,9 +1729,17 @@ void SchemaLoader::Impl::makeDep(_::RawBrandedSchema::Binding& result,
     uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
     schema::Brand::Reader brand, kj::StringPtr scopeName,
     kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
-  const _::RawSchema* schema = loadEmpty(typeId,
-      kj::str("(unknown type; seen as dependency of ", scopeName, ")"),
-      expectedKind, true);
+  const _::RawSchema* schema;
+  if (typeId == capnp::typeId<StreamResult>()) {
+    // StreamResult is a very special type that is used to mark when a method is declared as
+    // streaming ("foo @0 () -> stream;"). We like to auto-load it if we see it as someone's
+    // dependency.
+    schema = loadNative(&_::rawSchema<StreamResult>());
+  } else {
+    schema = loadEmpty(typeId,
+        kj::str("(unknown type; seen as dependency of ", scopeName, ")"),
+        expectedKind, true);
+  }
   result.which = static_cast<uint8_t>(whichType);
   result.schema = makeBranded(schema, brand, brandBindings);
 }

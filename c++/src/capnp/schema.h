@@ -260,6 +260,9 @@ public:
   // there is no such field.  (If the schema does not represent a union or a struct containing
   // an unnamed union, then this always returns null.)
 
+  bool isStreamResult() const;
+  // Convenience method to check if this is the result type of a streaming RPC method.
+
 private:
   StructSchema(Schema base): Schema(base) {}
   template <typename T> static inline StructSchema fromImpl() {
@@ -490,6 +493,9 @@ public:
 
   inline uint16_t getOrdinal() const { return ordinal; }
   inline uint getIndex() const { return ordinal; }
+
+  bool isStreaming() const { return getResultType().isStreamResult(); }
+  // Check if this is a streaming method.
 
   StructSchema getParamType() const;
   StructSchema getResultType() const;
