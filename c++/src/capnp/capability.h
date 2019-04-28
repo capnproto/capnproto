@@ -338,8 +338,18 @@ class Capability::Server {
 public:
   typedef Capability Serves;
 
-  virtual kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
-                                         CallContext<AnyPointer, AnyPointer> context) = 0;
+  struct DispatchCallResult {
+    kj::Promise<void> promise;
+    // Promise for completion of the call.
+
+    bool isStreaming;
+    // If true, this method was declared as `-> stream;`. No other calls should be permitted until
+    // this call finishes, and if this call throws an exception, all future calls will throw the
+    // same exception.
+  };
+
+  virtual DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
+                                          CallContext<AnyPointer, AnyPointer> context) = 0;
   // Call the given method.  `params` is the input struct, and should be released as soon as it
   // is no longer needed.  `context` may be used to allocate the output struct and deal with
   // cancellation.
@@ -367,10 +377,10 @@ protected:
   template <typename Params, typename Results>
   CallContext<Params, Results> internalGetTypedContext(
       CallContext<AnyPointer, AnyPointer> typeless);
-  kj::Promise<void> internalUnimplemented(const char* actualInterfaceName,
-                                          uint64_t requestedTypeId);
-  kj::Promise<void> internalUnimplemented(const char* interfaceName,
-                                          uint64_t typeId, uint16_t methodId);
+  DispatchCallResult internalUnimplemented(const char* actualInterfaceName,
+                                           uint64_t requestedTypeId);
+  DispatchCallResult internalUnimplemented(const char* interfaceName,
+                                           uint64_t typeId, uint16_t methodId);
   kj::Promise<void> internalUnimplemented(const char* interfaceName, const char* methodName,
                                           uint64_t typeId, uint16_t methodId);
 

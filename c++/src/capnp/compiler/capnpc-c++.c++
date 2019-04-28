@@ -37,6 +37,7 @@
 #include <set>
 #include <kj/main.h>
 #include <algorithm>
+#include <capnp/stream.capnp.h>
 
 #if _WIN32
 #define WIN32_LEAN_AND_MEAN  // ::eyeroll::
@@ -2139,6 +2140,8 @@ private:
     auto paramProto = paramSchema.getProto();
     auto resultProto = resultSchema.getProto();
 
+    bool isStreaming = resultProto.getId() == typeId<StreamResult>();
+
     auto implicitParamsReader = proto.getImplicitParameters();
     auto implicitParamsBuilder = kj::heapArrayBuilder<CppTypeName>(implicitParamsReader.size());
     for (auto param: implicitParamsReader) {
@@ -2252,9 +2255,29 @@ private:
           "}\n"),
 
       kj::strTree(
-          "    case ", methodId, ":\n"
-          "      return ", identifierName, "(::capnp::Capability::Server::internalGetTypedContext<\n"
-          "          ", genericParamType, ", ", genericResultType, ">(context));\n")
+          "    case ", methodId, ":\n",
+          isStreaming
+            ? kj::strTree(
+              // For streaming calls, we need to add an evalNow() here so that exceptions thrown
+              // directly from the call can propagate to later calls. If we don't capture the
+              // exception properly then the caller will never find out that this is a streaming
+              // call (indicated by the boolean in the return value) so won't know to propagate
+              // the exception.
+              "      return {\n"
+              "        kj::evalNow([&]() {\n"
+              "          return ", identifierName, "(::capnp::Capability::Server::internalGetTypedContext<\n"
+              "              ", genericParamType, ", ", genericResultType, ">(context));\n"
+              "        }),\n"
+              "        true\n"
+              "      };\n")
+            : kj::strTree(
+              // For non-streaming calls we let exceptions just flow through for a little more
+              // efficiency.
+              "      return {\n"
+              "        ", identifierName, "(::capnp::Capability::Server::internalGetTypedContext<\n"
+              "            ", genericParamType, ", ", genericResultType, ">(context)),\n"
+              "        false\n"
+              "      };\n"))
     };
   }
 
@@ -2403,7 +2426,8 @@ private:
           "public:\n",
           "  typedef ", name, " Serves;\n"
           "\n"
-          "  ::kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,\n"
+          "  ::capnp::Capability::Server::DispatchCallResult dispatchCall(\n"
+          "      uint64_t interfaceId, uint16_t methodId,\n"
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)\n"
           "      override;\n"
           "\n"
@@ -2415,7 +2439,8 @@ private:
           "        .template castAs<", typeName, ">();\n"
           "  }\n"
           "\n"
-          "  ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,\n"
+          "  ::capnp::Capability::Server::DispatchCallResult dispatchCallInternal(\n"
+          "      uint16_t methodId,\n"
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);\n"
           "};\n"
           "#endif  // !CAPNP_LITE\n"
@@ -2459,7 +2484,7 @@ private:
           "#if !CAPNP_LITE\n",
           KJ_MAP(m, methods) { return kj::mv(m.sourceDefs); },
           templateContext.allDecls(),
-          "::kj::Promise<void> ", fullName, "::Server::dispatchCall(\n"
+          "::capnp::Capability::Server::DispatchCallResult ", fullName, "::Server::dispatchCall(\n"
           "    uint64_t interfaceId, uint16_t methodId,\n"
           "    ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {\n"
           "  switch (interfaceId) {\n"
@@ -2476,7 +2501,7 @@ private:
           "  }\n"
           "}\n",
           templateContext.allDecls(),
-          "::kj::Promise<void> ", fullName, "::Server::dispatchCallInternal(\n"
+          "::capnp::Capability::Server::DispatchCallResult ", fullName, "::Server::dispatchCallInternal(\n"
           "    uint16_t methodId,\n"
           "    ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {\n"
           "  switch (methodId) {\n",

@@ -52,15 +52,19 @@ Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
   return newRequest(schema.getMethodByName(methodName), sizeHint);
 }
 
-kj::Promise<void> DynamicCapability::Server::dispatchCall(
+Capability::Server::DispatchCallResult DynamicCapability::Server::dispatchCall(
     uint64_t interfaceId, uint16_t methodId,
     CallContext<AnyPointer, AnyPointer> context) {
   KJ_IF_MAYBE(interface, schema.findSuperclass(interfaceId)) {
     auto methods = interface->getMethods();
     if (methodId < methods.size()) {
       auto method = methods[methodId];
-      return call(method, CallContext<DynamicStruct, DynamicStruct>(*context.hook,
-          method.getParamType(), method.getResultType()));
+      auto resultType = method.getResultType();
+      return {
+        call(method, CallContext<DynamicStruct, DynamicStruct>(*context.hook,
+            method.getParamType(), resultType)),
+        resultType.isStreamResult()
+      };
     } else {
       return internalUnimplemented(
           interface->getProto().getDisplayName().cStr(), interfaceId, methodId);
