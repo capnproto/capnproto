@@ -311,7 +311,7 @@ private:
   friend class Promise;
   friend class EventLoop;
   template <typename U, typename Adapter, typename... Params>
-  friend Promise<U> newAdaptedPromise(Params&&... adapterConstructorParams);
+  friend _::ReducePromises<U> newAdaptedPromise(Params&&... adapterConstructorParams);
   template <typename U>
   friend PromiseFulfillerPair<U> newPromiseAndFulfiller();
   template <typename>
@@ -460,7 +460,7 @@ public:
 };
 
 template <typename T, typename Adapter, typename... Params>
-Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams);
+_::ReducePromises<T> newAdaptedPromise(Params&&... adapterConstructorParams);
 // Creates a new promise which owns an instance of `Adapter` which encapsulates the operation
 // that will eventually fulfill the promise.  This is primarily useful for adapting non-KJ
 // asynchronous APIs to use promises.
