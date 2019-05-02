@@ -946,6 +946,32 @@ KJ_TEST("Userland pipe pumpTo with limit") {
   KJ_EXPECT_THROW_MESSAGE("abortRead() has been called", pipe.out->write("baz", 3).wait(ws));
 }
 
+KJ_TEST("Userland pipe pump into zero-limited pipe, no data to pump") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe(uint64_t(0));
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
+
+  expectRead(*pipe2.in, "");
+  pipe.out = nullptr;
+  KJ_EXPECT(pumpPromise.wait(ws) == 0);
+}
+
+KJ_TEST("Userland pipe pump into zero-limited pipe, data is pumped") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe(uint64_t(0));
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
+
+  expectRead(*pipe2.in, "");
+  auto writePromise = pipe.out->write("foo", 3);
+  KJ_EXPECT_THROW_MESSAGE("abortRead() has been called", pumpPromise.wait(ws));
+}
+
 KJ_TEST("Userland pipe gather write") {
   kj::EventLoop loop;
   WaitScope ws(loop);
