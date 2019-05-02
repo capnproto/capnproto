@@ -407,6 +407,23 @@ public:
   // returns that FD. When FD passing has been enabled in the RPC layer, this FD may be sent to
   // other processes along with the capability.
 
+  virtual kj::Maybe<kj::Promise<Capability::Client>> shortenPath();
+  // If this returns non-null, then it is a promise which, when resolved, points to a new
+  // capability to which future calls can be sent. Use this in cases where an object implementation
+  // might discover a more-optimized path some time after it starts.
+  //
+  // Implementing this (and returning non-null) will cause the capability to be advertised as a
+  // promise at the RPC protocol level. Once the promise returned by shortenPath() resolves, the
+  // remote client will receive a `Resolve` message updating it to point at the new destination.
+  //
+  // `shortenPath()` can also be used as a hack to shut up the client. If shortenPath() returns
+  // a promise that resolves to an exception, then the client will be notified that the capability
+  // is now broken. Assuming the client is using a correct RPC implemnetation, this should cause
+  // all further calls initiated by the client to this capability to immediately fail client-side,
+  // sparing the server's bandwidth.
+  //
+  // The default implementation always returns nullptr.
+
   // TODO(someday):  Method which can optionally be overridden to implement Join when the object is
   //   a proxy.
 

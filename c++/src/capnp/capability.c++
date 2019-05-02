@@ -82,6 +82,10 @@ kj::Promise<kj::Maybe<int>> Capability::Client::getFd() {
   }
 }
 
+kj::Maybe<kj::Promise<Capability::Client>> Capability::Server::shortenPath() {
+  return nullptr;
+}
+
 Capability::Server::DispatchCallResult Capability::Server::internalUnimplemented(
     const char* actualInterfaceName, uint64_t requestedTypeId) {
   return {
@@ -471,6 +475,13 @@ public:
   LocalClient(kj::Own<Capability::Server>&& serverParam)
       : server(kj::mv(serverParam)) {
     server->thisHook = this;
+
+    resolveTask = server->shortenPath().map([this](kj::Promise<Capability::Client> promise) {
+      return promise.then([this](Capability::Client&& cap) {
+        auto hook = ClientHook::from(kj::mv(cap));
+        resolved = hook->addRef();
+      }).fork();
+    });
   }
   LocalClient(kj::Own<Capability::Server>&& serverParam,
               _::CapabilityServerSetBase& capServerSet, void* ptr)
@@ -533,11 +544,19 @@ public:
   }
 
   kj::Maybe<ClientHook&> getResolved() override {
-    return nullptr;
+    return resolved.map([](kj::Own<ClientHook>& hook) -> ClientHook& { return *hook; });
   }
 
   kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-    return nullptr;
+    KJ_IF_MAYBE(r, resolved) {
+      return kj::Promise<kj::Own<ClientHook>>(r->get()->addRef());
+    } else KJ_IF_MAYBE(t, resolveTask) {
+      return t->addBranch().then([this]() {
+        return KJ_ASSERT_NONNULL(resolved)->addRef();
+      });
+    } else {
+      return nullptr;
+    }
   }
 
   kj::Own<ClientHook> addRef() override {
@@ -551,7 +570,7 @@ public:
     return &BRAND;
   }
 
-  kj::Promise<void*> getLocalServer(_::CapabilityServerSetBase& capServerSet) {
+  kj::Maybe<kj::Promise<void*>> getLocalServer(_::CapabilityServerSetBase& capServerSet) {
     // If this is a local capability created through `capServerSet`, return the underlying Server.
     // Otherwise, return nullptr. Default implementation (which everyone except LocalClient should
     // use) always returns nullptr.
@@ -580,10 +599,10 @@ public:
         return kj::newAdaptedPromise<kj::Promise<void>, BlockedCall>(*this)
             .then([this]() { return ptr; });
       } else {
-        return ptr;
+        return kj::Promise<void*>(ptr);
       }
     } else {
-      return (void*)nullptr;
+      return nullptr;
     }
   }
 
@@ -595,6 +614,9 @@ private:
   kj::Own<Capability::Server> server;
   _::CapabilityServerSetBase* capServerSet = nullptr;
   void* ptr = nullptr;
+
+  kj::Maybe<kj::ForkedPromise<void>> resolveTask;
+  kj::Maybe<kj::Own<ClientHook>> resolved;
 
   class BlockedCall {
   public:
@@ -896,21 +918,35 @@ kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::C
   ClientHook* hook = client.hook.get();
 
   // Get the most-resolved-so-far version of the hook.
-  KJ_IF_MAYBE(h, hook->getResolved()) {
-    hook = h;
-  };
+  for (;;) {
+    KJ_IF_MAYBE(h, hook->getResolved()) {
+      hook = h;
+    } else {
+      break;
+    }
+  }
 
+  // Try to unwrap that.
+  if (hook->getBrand() == &LocalClient::BRAND) {
+    KJ_IF_MAYBE(promise, kj::downcast<LocalClient>(*hook).getLocalServer(*this)) {
+      // This is definitely a member of our set and will resolve to non-null. We just have to wait
+      // for any existing streaming calls to complete.
+      return kj::mv(*promise);
+    }
+  }
+
+  // OK, the capability isn't part of this set.
   KJ_IF_MAYBE(p, hook->whenMoreResolved()) {
-    // This hook is an unresolved promise. We need to wait for it.
+    // This hook is an unresolved promise. It might resolve eventually to a local server, so wait
+    // for it.
     return p->attach(hook->addRef())
         .then([this](kj::Own<ClientHook>&& resolved) {
       Capability::Client client(kj::mv(resolved));
       return getLocalServerInternal(client);
     });
-  } else if (hook->getBrand() == &LocalClient::BRAND) {
-    return kj::downcast<LocalClient>(*hook).getLocalServer(*this);
   } else {
-    return (void*)nullptr;
+    // Cap is settled, so it definitely will never resolve to a member of this set.
+    return kj::implicitCast<void*>(nullptr);
   }
 }
 
