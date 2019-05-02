@@ -578,6 +578,16 @@ void HttpHeaders::clear() {
   unindexedHeaders.clear();
 }
 
+size_t HttpHeaders::size() const {
+  size_t result = unindexedHeaders.size();
+  for (auto i: kj::indices(indexedHeaders)) {
+    if (indexedHeaders[i] != nullptr) {
+      ++result;
+    }
+  }
+  return result;
+}
+
 HttpHeaders HttpHeaders::clone() const {
   HttpHeaders result(*table);
 
