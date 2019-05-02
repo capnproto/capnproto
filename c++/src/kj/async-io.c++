@@ -966,7 +966,27 @@ private:
       KJ_FAIL_REQUIRE("abortRead() has been called");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      // There might not actually be any data in `input`, in which case a pump wouldn't actually
+      // write anything and wouldn't fail.
+
+      if (input.tryGetLength().orDefault(1) == 0) {
+        // Yeah a pump would pump nothing.
+        return Promise<uint64_t>(uint64_t(0));
+      } else {
+        // While we *could* just return nullptr here, it would probably then fall back to a normal
+        // buffered pump, which would allocate a big old buffer just to find there's nothing to
+        // read. Let's try reading 1 byte to avoid that allocation.
+        static char c;
+        return input.tryRead(&c, 1, 1).then([](size_t n) {
+          if (n == 0) {
+            // Yay, we're at EOF as hoped.
+            return uint64_t(0);
+          } else {
+            // There was data in the input. The pump would have thrown.
+            KJ_FAIL_REQUIRE("abortRead() has been called");
+          }
+        });
+      }
     }
     void shutdownWrite() override {
       // ignore -- currently shutdownWrite() actually means that the PipeWriteEnd was dropped,
@@ -1112,7 +1132,7 @@ public:
   LimitedInputStream(kj::Own<AsyncInputStream> inner, uint64_t limit)
       : inner(kj::mv(inner)), limit(limit) {
     if (limit == 0) {
-      inner = nullptr;
+      this->inner = nullptr;
     }
   }
 
