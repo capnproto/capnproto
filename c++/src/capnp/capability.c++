@@ -208,10 +208,6 @@ public:
   RemotePromise<AnyPointer> send() override {
     KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
 
-    // For the lambda capture.
-    uint64_t interfaceId = this->interfaceId;
-    uint16_t methodId = this->methodId;
-
     auto cancelPaf = kj::newPromiseAndFulfiller<void>();
 
     auto context = kj::refcounted<LocalCallContext>(
@@ -239,6 +235,12 @@ public:
     // We return the other branch.
     return RemotePromise<AnyPointer>(
         kj::mv(promise), AnyPointer::Pipeline(kj::mv(promiseAndPipeline.pipeline)));
+  }
+
+  kj::Promise<void> sendStreaming() override {
+    // We don't do any special handling of streaming in RequestHook for local requests, because
+    // there is no latency to compensate for between the client and server in this case.
+    return send().ignoreResult();
   }
 
   const void* getBrand() override {
@@ -703,6 +705,10 @@ public:
   RemotePromise<AnyPointer> send() override {
     return RemotePromise<AnyPointer>(kj::cp(exception),
         AnyPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
+  }
+
+  kj::Promise<void> sendStreaming() override {
+    return kj::cp(exception);
   }
 
   const void* getBrand() override {

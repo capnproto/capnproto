@@ -219,6 +219,18 @@ public:
     return RemotePromise<AnyPointer>(kj::mv(newPromise), kj::mv(newPipeline));
   }
 
+  kj::Promise<void> sendStreaming() override {
+    auto promise = inner->sendStreaming();
+
+    KJ_IF_MAYBE(r, policy->onRevoked()) {
+      promise = promise.exclusiveJoin(r->then([]() {
+        KJ_FAIL_REQUIRE("onRevoked() promise resolved; it should only reject");
+      }));
+    }
+
+    return promise;
+  }
+
   const void* getBrand() override {
     return MEMBRANE_BRAND;
   }

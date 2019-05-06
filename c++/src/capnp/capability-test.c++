@@ -1114,19 +1114,19 @@ KJ_TEST("Streaming calls block subsequent calls") {
   {
     auto req = cap.doStreamIRequest();
     req.setI(123);
-    promise1 = req.send().ignoreResult();
+    promise1 = req.send();
   }
 
   {
     auto req = cap.doStreamJRequest();
     req.setJ(321);
-    promise2 = req.send().ignoreResult();
+    promise2 = req.send();
   }
 
   {
     auto req = cap.doStreamIRequest();
     req.setI(456);
-    promise3 = req.send().ignoreResult();
+    promise3 = req.send();
   }
 
   auto promise4 = cap.finishStreamRequest().send();
@@ -1187,19 +1187,19 @@ KJ_TEST("Streaming calls can be canceled") {
   {
     auto req = cap.doStreamIRequest();
     req.setI(123);
-    promise1 = req.send().ignoreResult();
+    promise1 = req.send();
   }
 
   {
     auto req = cap.doStreamJRequest();
     req.setJ(321);
-    promise2 = req.send().ignoreResult();
+    promise2 = req.send();
   }
 
   {
     auto req = cap.doStreamIRequest();
     req.setI(456);
-    promise3 = req.send().ignoreResult();
+    promise3 = req.send();
   }
 
   auto promise4 = cap.finishStreamRequest().send();
@@ -1250,19 +1250,19 @@ KJ_TEST("Streaming call throwing cascades to following calls") {
   {
     auto req = cap.doStreamIRequest();
     req.setI(123);
-    promise1 = req.send().ignoreResult();
+    promise1 = req.send();
   }
 
   {
     auto req = cap.doStreamJRequest();
     req.setJ(321);
-    promise2 = req.send().ignoreResult();
+    promise2 = req.send();
   }
 
   {
     auto req = cap.doStreamIRequest();
     req.setI(456);
-    promise3 = req.send().ignoreResult();
+    promise3 = req.send();
   }
 
   auto promise4 = cap.finishStreamRequest().send();

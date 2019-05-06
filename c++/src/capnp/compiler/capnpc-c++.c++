@@ -830,7 +830,14 @@ private:
   }
 
   kj::Maybe<kj::StringTree> makeBrandDepInitializer(Schema type) {
-    return makeBrandDepInitializer(type, cppFullName(type, nullptr));
+    // Be careful not to invoke cppFullName() if it would just be thrown away, as doing so will
+    // add the type's declaring file to `usedImports`. In particular, this causes `stream.capnp.h`
+    // to be #included unnecessarily.
+    if (type.isBranded()) {
+      return makeBrandDepInitializer(type, cppFullName(type, nullptr));
+    } else {
+      return nullptr;
+    }
   }
 
   kj::Maybe<kj::StringTree> makeBrandDepInitializer(
@@ -2140,7 +2147,7 @@ private:
     auto paramProto = paramSchema.getProto();
     auto resultProto = resultSchema.getProto();
 
-    bool isStreaming = resultProto.getId() == typeId<StreamResult>();
+    bool isStreaming = method.isStreaming();
 
     auto implicitParamsReader = proto.getImplicitParameters();
     auto implicitParamsBuilder = kj::heapArrayBuilder<CppTypeName>(implicitParamsReader.size());
@@ -2178,7 +2185,10 @@ private:
     }
     CppTypeName resultType;
     CppTypeName genericResultType;
-    if (resultProto.getScopeId() == 0) {
+    if (isStreaming) {
+      // We don't use resultType or genericResultType in this case. We want to avoid computing them
+      // at all so that we don't end up marking stream.capnp.h in usedImports.
+    } else if (resultProto.getScopeId() == 0) {
       resultType = interfaceTypeName;
       if (implicitParams.size() == 0) {
         resultType.addMemberType(kj::str(titleCase, "Results"));
@@ -2196,7 +2206,7 @@ private:
 
     kj::String shortParamType = paramProto.getScopeId() == 0 ?
         kj::str(titleCase, "Params") : kj::str(genericParamType);
-    kj::String shortResultType = resultProto.getScopeId() == 0 ?
+    kj::String shortResultType = resultProto.getScopeId() == 0 || isStreaming ?
         kj::str(titleCase, "Results") : kj::str(genericResultType);
 
     auto interfaceProto = method.getContainingInterface().getProto();
@@ -2218,10 +2228,13 @@ private:
         templateContext.allDecls(),
         implicitParamsTemplateDecl,
         templateContext.isGeneric() ? "CAPNP_AUTO_IF_MSVC(" : "",
-        "::capnp::Request<", paramType, ", ", resultType, ">",
+        isStreaming ? kj::strTree("::capnp::StreamingRequest<", paramType, ">")
+                    : kj::strTree("::capnp::Request<", paramType, ", ", resultType, ">"),
         templateContext.isGeneric() ? ")\n" : "\n",
-        interfaceName, "::Client::", name, "Request(::kj::Maybe< ::capnp::MessageSize> sizeHint) {\n"
-        "  return newCall<", paramType, ", ", resultType, ">(\n"
+        interfaceName, "::Client::", name, "Request(::kj::Maybe< ::capnp::MessageSize> sizeHint) {\n",
+        isStreaming
+            ? kj::strTree("  return newStreamingCall<", paramType, ">(\n")
+            : kj::strTree("  return newCall<", paramType, ", ", resultType, ">(\n"),
         "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
         "}\n");
 
@@ -2229,7 +2242,8 @@ private:
       kj::strTree(
           implicitParamsTemplateDecl.size() == 0 ? "" : "  ", implicitParamsTemplateDecl,
           templateContext.isGeneric() ? "  CAPNP_AUTO_IF_MSVC(" : "  ",
-          "::capnp::Request<", paramType, ", ", resultType, ">",
+          isStreaming ? kj::strTree("::capnp::StreamingRequest<", paramType, ">")
+                      : kj::strTree("::capnp::Request<", paramType, ", ", resultType, ">"),
           templateContext.isGeneric() ? ")" : "",
           " ", name, "Request(\n"
           "      ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);\n"),
@@ -2239,8 +2253,11 @@ private:
               "  typedef ", genericParamType, " ", titleCase, "Params;\n"),
           resultProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
               "  typedef ", genericResultType, " ", titleCase, "Results;\n"),
-          "  typedef ::capnp::CallContext<", shortParamType, ", ", shortResultType, "> ",
-                titleCase, "Context;\n"
+          isStreaming
+              ? kj::strTree("  typedef ::capnp::StreamingCallContext<", shortParamType, "> ")
+              : kj::strTree(
+                  "  typedef ::capnp::CallContext<", shortParamType, ", ", shortResultType, "> "),
+              titleCase, "Context;\n"
           "  virtual ::kj::Promise<void> ", identifierName, "(", titleCase, "Context context);\n"),
 
       implicitParams.size() == 0 ? kj::strTree() : kj::mv(requestMethodImpl),
@@ -2265,8 +2282,8 @@ private:
               // the exception.
               "      return {\n"
               "        kj::evalNow([&]() {\n"
-              "          return ", identifierName, "(::capnp::Capability::Server::internalGetTypedContext<\n"
-              "              ", genericParamType, ", ", genericResultType, ">(context));\n"
+              "          return ", identifierName, "(::capnp::Capability::Server::internalGetTypedStreamingContext<\n"
+              "              ", genericParamType, ">(context));\n"
               "        }),\n"
               "        true\n"
               "      };\n")

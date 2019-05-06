@@ -97,6 +97,7 @@ class RequestHook;
 class ResponseHook;
 class PipelineHook;
 class ClientHook;
+class StreamResult;
 
 template <typename Params, typename Results>
 class Request: public Params::Builder {
@@ -114,6 +115,27 @@ public:
 
   RemotePromise<Results> send() KJ_WARN_UNUSED_RESULT;
   // Send the call and return a promise for the results.
+
+private:
+  kj::Own<RequestHook> hook;
+
+  friend class Capability::Client;
+  friend struct DynamicCapability;
+  template <typename, typename>
+  friend class CallContext;
+  friend class RequestHook;
+};
+
+template <typename Params>
+class StreamingRequest: public Params::Builder {
+  // Like `Request` but for streaming requests.
+
+public:
+  inline StreamingRequest(typename Params::Builder builder, kj::Own<RequestHook>&& hook)
+      : Params::Builder(builder), hook(kj::mv(hook)) {}
+  inline StreamingRequest(decltype(nullptr)): Params::Builder(nullptr) {}
+
+  kj::Promise<void> send() KJ_WARN_UNUSED_RESULT;
 
 private:
   kj::Own<RequestHook> hook;
@@ -227,6 +249,9 @@ protected:
   template <typename Params, typename Results>
   Request<Params, Results> newCall(uint64_t interfaceId, uint16_t methodId,
                                    kj::Maybe<MessageSize> sizeHint);
+  template <typename Params>
+  StreamingRequest<Params> newStreamingCall(uint64_t interfaceId, uint16_t methodId,
+                                            kj::Maybe<MessageSize> sizeHint);
 
 private:
   kj::Own<ClientHook> hook;
@@ -330,6 +355,30 @@ private:
   friend struct DynamicCapability;
 };
 
+template <typename Params>
+class StreamingCallContext: public kj::DisallowConstCopy {
+  // Like CallContext but for streaming calls.
+
+public:
+  explicit StreamingCallContext(CallContextHook& hook);
+
+  typename Params::Reader getParams();
+  void releaseParams();
+
+  // Note: tailCall() is not supported because:
+  // - It would significantly complicate the implementation of streaming.
+  // - It wouldn't be particularly useful since streaming calls don't return anything, and they
+  //   already compensate for latency.
+
+  void allowCancellation();
+
+private:
+  CallContextHook* hook;
+
+  friend class Capability::Server;
+  friend struct DynamicCapability;
+};
+
 class Capability::Server {
   // Objects implementing a Cap'n Proto interface must subclass this.  Typically, such objects
   // will instead subclass a typed Server interface which will take care of implementing
@@ -376,6 +425,9 @@ protected:
 
   template <typename Params, typename Results>
   CallContext<Params, Results> internalGetTypedContext(
+      CallContext<AnyPointer, AnyPointer> typeless);
+  template <typename Params>
+  StreamingCallContext<Params> internalGetTypedStreamingContext(
       CallContext<AnyPointer, AnyPointer> typeless);
   DispatchCallResult internalUnimplemented(const char* actualInterfaceName,
                                            uint64_t requestedTypeId);
@@ -496,6 +548,9 @@ class RequestHook {
 public:
   virtual RemotePromise<AnyPointer> send() = 0;
   // Send the call and return a promise for the result.
+
+  virtual kj::Promise<void> sendStreaming() = 0;
+  // Send a streaming call.
 
   virtual const void* getBrand() = 0;
   // Returns a void* that identifies who made this request.  This can be used by an RPC adapter to
@@ -809,6 +864,13 @@ RemotePromise<Results> Request<Params, Results>::send() {
   return RemotePromise<Results>(kj::mv(typedPromise), kj::mv(typedPipeline));
 }
 
+template <typename Params>
+kj::Promise<void> StreamingRequest<Params>::send() {
+  auto promise = hook->sendStreaming();
+  hook = nullptr;  // prevent reuse
+  return promise;
+}
+
 inline Capability::Client::Client(kj::Own<ClientHook>&& hook): hook(kj::mv(hook)) {}
 template <typename T, typename>
 inline Capability::Client::Client(kj::Own<T>&& server)
@@ -839,15 +901,31 @@ inline Request<Params, Results> Capability::Client::newCall(
   auto typeless = hook->newCall(interfaceId, methodId, sizeHint);
   return Request<Params, Results>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
 }
+template <typename Params>
+inline StreamingRequest<Params> Capability::Client::newStreamingCall(
+    uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) {
+  auto typeless = hook->newCall(interfaceId, methodId, sizeHint);
+  return StreamingRequest<Params>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
+}
 
 template <typename Params, typename Results>
 inline CallContext<Params, Results>::CallContext(CallContextHook& hook): hook(&hook) {}
+template <typename Params>
+inline StreamingCallContext<Params>::StreamingCallContext(CallContextHook& hook): hook(&hook) {}
 template <typename Params, typename Results>
 inline typename Params::Reader CallContext<Params, Results>::getParams() {
   return hook->getParams().template getAs<Params>();
 }
+template <typename Params>
+inline typename Params::Reader StreamingCallContext<Params>::getParams() {
+  return hook->getParams().template getAs<Params>();
+}
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::releaseParams() {
+  hook->releaseParams();
+}
+template <typename Params>
+inline void StreamingCallContext<Params>::releaseParams() {
   hook->releaseParams();
 }
 template <typename Params, typename Results>
@@ -885,11 +963,21 @@ template <typename Params, typename Results>
 inline void CallContext<Params, Results>::allowCancellation() {
   hook->allowCancellation();
 }
+template <typename Params>
+inline void StreamingCallContext<Params>::allowCancellation() {
+  hook->allowCancellation();
+}
 
 template <typename Params, typename Results>
 CallContext<Params, Results> Capability::Server::internalGetTypedContext(
     CallContext<AnyPointer, AnyPointer> typeless) {
   return CallContext<Params, Results>(*typeless.hook);
+}
+
+template <typename Params>
+StreamingCallContext<Params> Capability::Server::internalGetTypedStreamingContext(
+    CallContext<AnyPointer, AnyPointer> typeless) {
+  return StreamingCallContext<Params>(*typeless.hook);
 }
 
 Capability::Client Capability::Server::thisCap() {

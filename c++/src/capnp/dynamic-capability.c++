@@ -76,6 +76,7 @@ Capability::Server::DispatchCallResult DynamicCapability::Server::dispatchCall(
 
 RemotePromise<DynamicStruct> Request<DynamicStruct, DynamicStruct>::send() {
   auto typelessPromise = hook->send();
+  hook = nullptr;  // prevent reuse
   auto resultSchemaCopy = resultSchema;
 
   // Convert the Promise to return the correct response type.
@@ -92,6 +93,14 @@ RemotePromise<DynamicStruct> Request<DynamicStruct, DynamicStruct>::send() {
       kj::mv(kj::implicitCast<AnyPointer::Pipeline&>(typelessPromise)));
 
   return RemotePromise<DynamicStruct>(kj::mv(typedPromise), kj::mv(typedPipeline));
+}
+
+kj::Promise<void> Request<DynamicStruct, DynamicStruct>::sendStreaming() {
+  KJ_REQUIRE(resultSchema.isStreamResult());
+
+  auto promise = hook->sendStreaming();
+  hook = nullptr;  // prevent reuse
+  return promise;
 }
 
 }  // namespace capnp
