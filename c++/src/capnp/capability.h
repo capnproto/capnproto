@@ -882,7 +882,7 @@ inline typename T::Client Capability::Client::castAs() {
   return typename T::Client(hook->addRef());
 }
 inline kj::Promise<void> Capability::Client::whenResolved() {
-  return hook->whenResolved();
+  return hook->whenResolved().attach(hook->addRef());
 }
 inline Request<AnyPointer, AnyPointer> Capability::Client::typelessRequest(
     uint64_t interfaceId, uint16_t methodId,
