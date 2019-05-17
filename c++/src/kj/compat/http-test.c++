@@ -307,6 +307,29 @@ KJ_TEST("HttpHeaders validation") {
   KJ_EXPECT_THROW_MESSAGE("invalid header value", headers.add("Valid-Name", "in\nvalid"));
 }
 
+KJ_TEST("HttpHeaders Set-Cookie handling") {
+  HttpHeaderTable::Builder builder;
+  auto hCookie = builder.add("Cookie");
+  auto hSetCookie = builder.add("Set-Cookie");
+  auto table = builder.build();
+
+  HttpHeaders headers(*table);
+  headers.set(hCookie, "Foo");
+  headers.add("Cookie", "Bar");
+  headers.add("Cookie", "Baz");
+  headers.set(hSetCookie, "Foo");
+  headers.add("Set-Cookie", "Bar");
+  headers.add("Set-Cookie", "Baz");
+
+  auto text = headers.toString();
+  KJ_EXPECT(text ==
+      "Cookie: Foo, Bar, Baz\r\n"
+      "Set-Cookie: Foo\r\n"
+      "Set-Cookie: Bar\r\n"
+      "Set-Cookie: Baz\r\n"
+      "\r\n", text);
+}
+
 // =======================================================================================
 
 class ReadFragmenter final: public kj::AsyncIoStream {

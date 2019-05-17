@@ -694,9 +694,18 @@ kj::HttpHeaders HttpOverCapnpFactory::headersToKj(
             result.set(nameCapnpToKj[nameInt], valueCapnpToKj[cvInt]);
             break;
           }
-          case capnp::HttpHeader::Common::VALUE:
-            result.set(nameCapnpToKj[nameInt], nv.getValue());
+          case capnp::HttpHeader::Common::VALUE: {
+            auto headerId = nameCapnpToKj[nameInt];
+            if (result.get(headerId) == nullptr) {
+              result.set(headerId, nv.getValue());
+            } else {
+              // Unusual: This is a duplicate header, so fall back to add(), which may trigger
+              //   comma-concatenation, except in certain cases where comma-concatentaion would
+              //   be problematic.
+              result.add(headerId.toString(), nv.getValue());
+            }
             break;
+          }
         }
         break;
       }
