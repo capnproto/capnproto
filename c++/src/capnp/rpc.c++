@@ -1823,7 +1823,7 @@ private:
           answerId(answerId),
           interfaceId(interfaceId),
           methodId(methodId),
-          requestSize(request->getBody().targetSize().wordCount),
+          requestSize(request->sizeInWords()),
           request(kj::mv(request)),
           paramsCapTable(kj::mv(capTableArray)),
           params(paramsCapTable.imbue(params)),

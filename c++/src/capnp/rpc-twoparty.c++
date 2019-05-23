@@ -128,6 +128,10 @@ public:
       .eagerlyEvaluate(nullptr);
   }
 
+  size_t sizeInWords() override {
+    return message.sizeInWords();
+  }
+
 private:
   TwoPartyVatNetwork& network;
   MallocMessageBuilder message;
@@ -151,6 +155,10 @@ public:
 
   kj::ArrayPtr<kj::AutoCloseFd> getAttachedFds() override {
     return fds;
+  }
+
+  size_t sizeInWords() override {
+    return message->sizeInWords();
   }
 
 private:

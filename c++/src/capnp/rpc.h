@@ -314,6 +314,11 @@ public:
   virtual void send() = 0;
   // Send the message, or at least put it in a queue to be sent later.  Note that the builder
   // returned by `getBody()` remains valid at least until the `OutgoingRpcMessage` is destroyed.
+
+  virtual size_t sizeInWords() = 0;
+  // Get the total size of the message, for flow control purposes. Although the caller could
+  // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
+  // implementations can compute the size more cheaply by summing segment sizes.
 };
 
 class IncomingRpcMessage {
@@ -331,6 +336,11 @@ public:
   // should be careful to check if an FD was already consumed by comparing the slot with `nullptr`.
   // (We don't use Maybe here because moving from a Maybe doesn't make it null, so it would only
   // add confusion. Moving from an AutoCloseFd does in fact make it null.)
+
+  virtual size_t sizeInWords() = 0;
+  // Get the total size of the message, for flow control purposes. Although the caller could
+  // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
+  // implementations can compute the size more cheaply by summing segment sizes.
 };
 
 template <typename VatId, typename ProvisionId, typename RecipientId,

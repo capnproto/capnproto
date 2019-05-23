@@ -80,6 +80,9 @@ bool MessageReader::isCanonical() {
   return rootIsCanonical && allWordsConsumed;
 }
 
+size_t MessageReader::sizeInWords() {
+  return arena()->sizeInWords();
+}
 
 AnyPointer::Reader MessageReader::getRootInternal() {
   if (!allocatedArena) {
@@ -176,6 +179,10 @@ bool MessageBuilder::isCanonical() {
   const word* readHead = segment->getStartPtr() + 1;
   return _::PointerReader::getRoot(segment, nullptr, segment->getStartPtr(), kj::maxValue)
                                   .isCanonical(&readHead);
+}
+
+size_t MessageBuilder::sizeInWords() {
+  return arena()->sizeInWords();
 }
 
 kj::Own<_::CapTableBuilder> MessageBuilder::releaseBuiltinCapTable() {
