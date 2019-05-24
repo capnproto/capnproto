@@ -56,7 +56,9 @@ constexpr const uint CAP_DESCRIPTOR_SIZE_HINT = sizeInWords<rpc::CapDescriptor>(
 constexpr const uint64_t MAX_SIZE_HINT = 1 << 20;
 
 uint copySizeHint(MessageSize size) {
-  uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT;
+  uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT
+                    // if capCount > 0, the cap descriptor list has a 1-word tag
+                    + (size.capCount > 0);
   return kj::min(MAX_SIZE_HINT, sizeHint);
 }
 
@@ -1141,6 +1143,11 @@ private:
 
   kj::Array<ExportId> writeDescriptors(kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTable,
                                        rpc::Payload::Builder payload, kj::Vector<int>& fds) {
+    if (capTable.size() == 0) {
+      // Calling initCapTable(0) will still allocate a 1-word tag, which we'd like to avoid...
+      return nullptr;
+    }
+
     auto capTableBuilder = payload.initCapTable(capTable.size());
     kj::Vector<ExportId> exports(capTable.size());
     for (uint i: kj::indices(capTable)) {
