@@ -32,6 +32,7 @@
 #include <kj/thread.h>
 #include <kj/compat/gtest.h>
 #include <kj/miniposix.h>
+#include <sys/socket.h>
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
 namespace capnp {
@@ -521,6 +522,122 @@ KJ_TEST("FD per message limit") {
             == "foo");
 }
 #endif  // !_WIN32 && !__CYGWIN__
+
+// =======================================================================================
+
+class MockSndbufStream final: public kj::AsyncIoStream {
+public:
+  MockSndbufStream(kj::Own<AsyncIoStream> inner, size_t& window, size_t& written)
+      : inner(kj::mv(inner)), window(window), written(written) {}
+
+  kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return inner->read(buffer, minBytes, maxBytes);
+  }
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return inner->tryRead(buffer, minBytes, maxBytes);
+  }
+  kj::Maybe<uint64_t> tryGetLength() override {
+    return inner->tryGetLength();
+  }
+  kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+    return inner->pumpTo(output, amount);
+  }
+  kj::Promise<void> write(const void* buffer, size_t size) override {
+    written += size;
+    return inner->write(buffer, size);
+  }
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    for (auto& piece: pieces) written += piece.size();
+    return inner->write(pieces);
+  }
+  kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
+      kj::AsyncInputStream& input, uint64_t amount) override {
+    return inner->tryPumpFrom(input, amount);
+  }
+  kj::Promise<void> whenWriteDisconnected() override { return inner->whenWriteDisconnected(); }
+  void shutdownWrite() override { return inner->shutdownWrite(); }
+  void abortRead() override { return inner->abortRead(); }
+
+  void getsockopt(int level, int option, void* value, uint* length) override {
+    if (level == SOL_SOCKET && option == SO_SNDBUF) {
+      KJ_ASSERT(*length == sizeof(int));
+      *reinterpret_cast<int*>(value) = window;
+    } else {
+      KJ_UNIMPLEMENTED("not implemented for test", level, option);
+    }
+  }
+
+private:
+  kj::Own<AsyncIoStream> inner;
+  size_t& window;
+  size_t& written;
+};
+
+KJ_TEST("Streaming over RPC") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  size_t window = 1024;
+  size_t clientWritten = 0;
+  size_t serverWritten = 0;
+
+  pipe.ends[0] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[0]), window, clientWritten);
+  pipe.ends[1] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[1]), window, serverWritten);
+
+  auto ownServer = kj::heap<TestStreamingImpl>();
+  auto& server = *ownServer;
+  test::TestStreaming::Client serverCap(kj::mv(ownServer));
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
+
+  auto cap = tpClient.bootstrap().castAs<test::TestStreaming>();
+
+  // Send stream requests until we can't anymore.
+  kj::Promise<void> promise = kj::READY_NOW;
+  uint count = 0;
+  while (promise.poll(waitScope)) {
+    promise.wait(waitScope);
+
+    auto req = cap.doStreamIRequest();
+    req.setI(++count);
+    promise = req.send();
+  }
+
+  // We should have sent... several.
+  KJ_EXPECT(count > 5);
+
+  // Now, cause calls to finish server-side one-at-a-time and check that this causes the client
+  // side to be willing to send more.
+  uint countReceived = 0;
+  for (uint i = 0; i < 50; i++) {
+    KJ_EXPECT(server.iSum == ++countReceived);
+    server.iSum = 0;
+    KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+    KJ_ASSERT(promise.poll(waitScope));
+    promise.wait(waitScope);
+
+    auto req = cap.doStreamIRequest();
+    req.setI(++count);
+    promise = req.send();
+    if (promise.poll(waitScope)) {
+      // We'll see a couple of instances where completing one request frees up space to make two
+      // more. This is because the first few requests we made are a little bit larger than the
+      // rest due to being pipelined on the bootstrap. Once the bootstrap resolves, the request
+      // size gets smaller.
+      promise.wait(waitScope);
+      req = cap.doStreamIRequest();
+      req.setI(++count);
+      promise = req.send();
+
+      // We definitely shouldn't have freed up stream space for more than two additional requests!
+      KJ_ASSERT(!promise.poll(waitScope));
+    }
+  }
+}
 
 }  // namespace
 }  // namespace _
