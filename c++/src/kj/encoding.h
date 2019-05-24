@@ -213,6 +213,9 @@ EncodingResult<Array<byte>> decodeBase64(ArrayPtr<const char> text);
 // Decode base64 text. This function reports errors required by the WHATWG HTML/Infra specs: see
 // https://html.spec.whatwg.org/multipage/webappapis.html#atob for details.
 
+String encodeBase64Url(ArrayPtr<const byte> bytes);
+// Encode the given bytes as URL-safe base64 text. (RFC 4648, section 5)
+
 // =======================================================================================
 // inline implementation details
 
