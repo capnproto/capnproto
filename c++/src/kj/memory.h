@@ -318,6 +318,13 @@ public:
 
   inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
+  inline Own<T>& emplace(Own<T> value) {
+    // Assign the Maybe to the given value and return the content. This avoids the need to do a
+    // KJ_ASSERT_NONNULL() immediately after setting the Maybe just to read it back again.
+    ptr = kj::mv(value);
+    return ptr;
+  }
+
   inline operator Maybe<T&>() { return ptr.get(); }
   inline operator Maybe<const T&>() const { return ptr.get(); }
 
