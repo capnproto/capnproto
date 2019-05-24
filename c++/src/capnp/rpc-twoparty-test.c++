@@ -639,6 +639,99 @@ KJ_TEST("Streaming over RPC") {
   }
 }
 
+KJ_TEST("Streaming over RPC then unwrap with CapabilitySet") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  CapabilityServerSet<test::TestStreaming> capSet;
+
+  auto ownServer = kj::heap<TestStreamingImpl>();
+  auto& server = *ownServer;
+  auto serverCap = capSet.add(kj::mv(ownServer));
+
+  auto paf = kj::newPromiseAndFulfiller<test::TestStreaming::Client>();
+
+  TwoPartyClient tpClient(*pipe.ends[0], serverCap);
+  TwoPartyClient tpServer(*pipe.ends[1], kj::mv(paf.promise), rpc::twoparty::Side::SERVER);
+
+  auto clientCap = tpClient.bootstrap().castAs<test::TestStreaming>();
+
+  // Send stream requests until we can't anymore.
+  kj::Promise<void> promise = kj::READY_NOW;
+  uint count = 0;
+  while (promise.poll(waitScope)) {
+    promise.wait(waitScope);
+
+    auto req = clientCap.doStreamIRequest();
+    req.setI(++count);
+    promise = req.send();
+  }
+
+  // We should have sent... several.
+  KJ_EXPECT(count > 10);
+
+  // Now try to unwrap.
+  auto unwrapPromise = capSet.getLocalServer(clientCap);
+
+  // It won't work yet, obviously, because we haven't resolved the promise.
+  KJ_EXPECT(!unwrapPromise.poll(waitScope));
+
+  // So do that.
+  paf.fulfiller->fulfill(tpServer.bootstrap().castAs<test::TestStreaming>());
+  clientCap.whenResolved().wait(waitScope);
+
+  // But the unwrap still doesn't resolve because streaming requests are queued up.
+  KJ_EXPECT(!unwrapPromise.poll(waitScope));
+
+  // OK, let's resolve a streaming request.
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+  // All of our call promises have now completed from the client's perspective.
+  promise.wait(waitScope);
+
+  // But we still can't unwrap, because calls are queued server-side.
+  KJ_EXPECT(!unwrapPromise.poll(waitScope));
+
+  // Let's even make one more call now. But this is actually a local call since the promise
+  // resolved.
+  {
+    auto req = clientCap.doStreamIRequest();
+    req.setI(++count);
+    promise = req.send();
+  }
+
+  // Because it's a local call, it doesn't resolve early. The window is no longer in effect.
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  // Our unwrap promise is also still not resolved.
+  KJ_EXPECT(!unwrapPromise.poll(waitScope));
+
+  // Close out stream calls until it does resolve!
+  while (!unwrapPromise.poll(waitScope)) {
+    KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  }
+
+  // Now we can unwrap!
+  KJ_EXPECT(&KJ_ASSERT_NONNULL(unwrapPromise.wait(waitScope)) == &server);
+
+  // But our last stream call still isn't done.
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  // Finish it.
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  promise.wait(waitScope);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

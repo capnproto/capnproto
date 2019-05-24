@@ -544,16 +544,46 @@ public:
     return kj::addRef(*this);
   }
 
+  static const uint BRAND;
+  // Value is irrelevant; used for pointer.
+
   const void* getBrand() override {
-    // We have no need to detect local objects.
-    return nullptr;
+    return &BRAND;
   }
 
-  void* getLocalServer(_::CapabilityServerSetBase& capServerSet) override {
+  kj::Promise<void*> getLocalServer(_::CapabilityServerSetBase& capServerSet) {
+    // If this is a local capability created through `capServerSet`, return the underlying Server.
+    // Otherwise, return nullptr. Default implementation (which everyone except LocalClient should
+    // use) always returns nullptr.
+
     if (this->capServerSet == &capServerSet) {
-      return ptr;
+      if (blocked) {
+        // If streaming calls are in-flight, it could be the case that they were originally sent
+        // over RPC and reflected back, before the capability had resolved to a local object. In
+        // that case, the client may already perceive these calls as "done" because the RPC
+        // implementation caused the client promise to resolve early. However, the capability is
+        // now local, and the app is trying to break through the LocalClient wrapper and access
+        // the server directly, bypassing the stream queue. Since the app thinks that all
+        // previous calls already completed, it may then try to queue a new call directly on the
+        // server, jumping the queue.
+        //
+        // We can solve this by delaying getLocalServer() until all current streaming calls have
+        // finished. Note that if a new streaming call is started *after* this point, we need not
+        // worry about that, because in this case it is presumably a local call and the caller
+        // won't be informed of completion until the call actually does complete. Thus the caller
+        // is well-aware that this call is still in-flight.
+        //
+        // However, the app still cannot assume that there aren't multiple clients, perhaps even
+        // a malicious client that tries to send stream requests that overlap with the app's
+        // direct use of the server... so it's up to the app to check for and guard against
+        // concurrent calls after using getLocalServer().
+        return kj::newAdaptedPromise<kj::Promise<void>, BlockedCall>(*this)
+            .then([this]() { return ptr; });
+      } else {
+        return ptr;
+      }
     } else {
-      return nullptr;
+      return (void*)nullptr;
     }
   }
 
@@ -577,15 +607,26 @@ private:
       client.blockedCallsEnd = &next;
     }
 
+    BlockedCall(kj::PromiseFulfiller<kj::Promise<void>>& fulfiller, LocalClient& client)
+        : fulfiller(fulfiller), client(client), prev(client.blockedCallsEnd) {
+      *prev = *this;
+      client.blockedCallsEnd = &next;
+    }
+
     ~BlockedCall() noexcept(false) {
       unlink();
     }
 
     void unblock() {
       unlink();
-      fulfiller.fulfill(kj::evalNow([this]() {
-        return client.callInternal(interfaceId, methodId, context);
-      }));
+      KJ_IF_MAYBE(c, context) {
+        fulfiller.fulfill(kj::evalNow([&]() {
+          return client.callInternal(interfaceId, methodId, *c);
+        }));
+      } else {
+        // This is just a barrier.
+        fulfiller.fulfill(kj::READY_NOW);
+      }
     }
 
   private:
@@ -593,7 +634,7 @@ private:
     LocalClient& client;
     uint64_t interfaceId;
     uint16_t methodId;
-    CallContextHook& context;
+    kj::Maybe<CallContextHook&> context;
 
     kj::Maybe<BlockedCall&> next;
     kj::Maybe<BlockedCall&>* prev;
@@ -666,6 +707,8 @@ private:
     }
   }
 };
+
+const uint LocalClient::BRAND = 0;
 
 kj::Own<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Server>&& server) {
   return kj::refcounted<LocalClient>(kj::mv(server));
@@ -864,8 +907,10 @@ kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::C
       Capability::Client client(kj::mv(resolved));
       return getLocalServerInternal(client);
     });
+  } else if (hook->getBrand() == &LocalClient::BRAND) {
+    return kj::downcast<LocalClient>(*hook).getLocalServer(*this);
   } else {
-    return hook->getLocalServer(*this);
+    return (void*)nullptr;
   }
 }
 
