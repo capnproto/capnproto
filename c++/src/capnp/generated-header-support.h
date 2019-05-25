@@ -408,6 +408,6 @@ namespace capnp {
 namespace schemas {
 CAPNP_DECLARE_SCHEMA(995f9a3377c0b16e);
 // HACK: Forward-declare the RawSchema for StreamResult, from stream.capnp. This allows capnp
-//   files which declare steraming methods to avoid including stream.capnp.h.
+//   files which declare streaming methods to avoid including stream.capnp.h.
 }
 }

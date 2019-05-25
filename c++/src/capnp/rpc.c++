@@ -611,7 +611,7 @@ private:
         // We don't have any existing flowController so we can adopt this one, yay!
         this->flowController = kj::mv(flowController);
       } else {
-        // Apparently, there is an existing flowController. This is an unusual scenario: Apparenly
+        // Apparently, there is an existing flowController. This is an unusual scenario: Apparently
         // we had two stream capabilities, we were streaming to both of them, and they later
         // resolved to the same capability. This probably never happens because streaming use cases
         // normally call for there to be only one client. But, it's certainly possible, and we need
