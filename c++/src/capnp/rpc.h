@@ -439,7 +439,7 @@ public:
     // connection is ready, so that the caller doesn't need to know the difference.
 
   public:
-    virtual kj::Own<RpcFlowController> newStream()
+    virtual kj::Own<RpcFlowController> newStream() override
         { return RpcFlowController::newFixedWindowController(65536); }
     // Construct a flow controller for a new stream on this connection. The controller can be
     // passed into OutgoingRpcMessage::sendStreaming().
