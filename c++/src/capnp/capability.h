@@ -97,7 +97,6 @@ class RequestHook;
 class ResponseHook;
 class PipelineHook;
 class ClientHook;
-class StreamResult;
 
 template <typename Params, typename Results>
 class Request: public Params::Builder {
