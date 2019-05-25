@@ -32,7 +32,16 @@
 #include <kj/thread.h>
 #include <kj/compat/gtest.h>
 #include <kj/miniposix.h>
+
+// Includes just for need SOL_SOCKET and SO_SNDBUF
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
+#include <winsock2.h>
+#include <mswsock.h>
+#include <kj/windows-sanity.h>
+#else
 #include <sys/socket.h>
+#endif
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
 namespace capnp {

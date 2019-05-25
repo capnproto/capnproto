@@ -23,7 +23,16 @@
 #include "serialize-async.h"
 #include <kj/debug.h>
 #include <kj/io.h>
+
+// Includes just for need SOL_SOCKET and SO_SNDBUF
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
+#include <winsock2.h>
+#include <mswsock.h>
+#include <kj/windows-sanity.h>
+#else
 #include <sys/socket.h>
+#endif
 
 namespace capnp {
 
