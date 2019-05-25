@@ -201,7 +201,7 @@ size_t TwoPartyVatNetwork::getWindow() {
     //   exceptions?
     int bufSize = 0;
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-      socklen_t len = sizeof(int);
+      uint len = sizeof(int);
       KJ_SWITCH_ONEOF(stream) {
         KJ_CASE_ONEOF(s, kj::AsyncIoStream*) {
           s->getsockopt(SOL_SOCKET, SO_SNDBUF, &bufSize, &len);
