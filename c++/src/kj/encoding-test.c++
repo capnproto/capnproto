@@ -507,16 +507,16 @@ KJ_TEST("base64 url encoding") {
 
   {
     // Replaces plusses.
-    ArrayPtr<const byte> data = { 0b11111011, 0b11101111, 0b10111110 };
+    const byte data[] = { 0b11111011, 0b11101111, 0b10111110 };
     auto encoded = encodeBase64Url(data);
-    KJ_EXPECT(encoded == "----", encoded, encoded.size());
+    KJ_EXPECT(encoded == "----", encoded, encoded.size(), data);
   }
 
   {
     // Replaces slashes.
-    ArrayPtr<const byte> data = { 0b11111111, 0b11111111, 0b11111111 };
+    const byte data[] = { 0b11111111, 0b11111111, 0b11111111 };
     auto encoded = encodeBase64Url(data);
-    KJ_EXPECT(encoded == "____", encoded, encoded.size());
+    KJ_EXPECT(encoded == "____", encoded, encoded.size(), data);
   }
 }
 
