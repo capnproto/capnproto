@@ -32,6 +32,7 @@
 
 #if !CAPNP_LITE
 #include "dynamic.h"
+#include <kj/io.h>
 #endif  // !CAPNP_LITE
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
@@ -274,6 +275,8 @@ public:
 
   kj::Promise<void> getEnormousString(GetEnormousStringContext context) override;
 
+  kj::Promise<void> writeToFd(WriteToFdContext context) override;
+
 private:
   int& callCount;
   int& handleCount;
@@ -301,6 +304,18 @@ private:
   kj::Own<kj::PromiseFulfiller<void>> fulfiller;
   int dummy = 0;
   TestInterfaceImpl impl;
+};
+
+class TestFdCap final: public test::TestInterface::Server {
+  // Implementation of TestInterface that wraps a file descriptor.
+
+public:
+  TestFdCap(kj::AutoCloseFd fd): fd(kj::mv(fd)) {}
+
+  kj::Maybe<int> getFd() override { return fd.get(); }
+
+private:
+  kj::AutoCloseFd fd;
 };
 
 #endif  // !CAPNP_LITE

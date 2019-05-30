@@ -69,6 +69,19 @@ Capability::Client::Client(decltype(nullptr))
 Capability::Client::Client(kj::Exception&& exception)
     : hook(newBrokenCap(kj::mv(exception))) {}
 
+kj::Promise<kj::Maybe<int>> Capability::Client::getFd() {
+  auto fd = hook->getFd();
+  if (fd != nullptr) {
+    return fd;
+  } else KJ_IF_MAYBE(promise, hook->whenMoreResolved()) {
+    return promise->attach(hook->addRef()).then([](kj::Own<ClientHook> newHook) {
+      return Client(kj::mv(newHook)).getFd();
+    });
+  } else {
+    return kj::Maybe<int>(nullptr);
+  }
+}
+
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* actualInterfaceName, uint64_t requestedTypeId) {
   return KJ_EXCEPTION(UNIMPLEMENTED, "Requested interface not implemented.",
@@ -374,6 +387,14 @@ public:
     return nullptr;
   }
 
+  kj::Maybe<int> getFd() override {
+    KJ_IF_MAYBE(r, redirect) {
+      return r->get()->getFd();
+    } else {
+      return nullptr;
+    }
+  }
+
 private:
   typedef kj::ForkedPromise<kj::Own<ClientHook>> ClientHookPromiseFork;
 
@@ -524,6 +545,10 @@ public:
     }
   }
 
+  kj::Maybe<int> getFd() override {
+    return server->getFd();
+  }
+
 private:
   kj::Own<Capability::Server> server;
   _::CapabilityServerSetBase* capServerSet = nullptr;
@@ -614,6 +639,10 @@ public:
 
   const void* getBrand() override {
     return brand;
+  }
+
+  kj::Maybe<int> getFd() override {
+    return nullptr;
   }
 
 private:

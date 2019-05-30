@@ -175,15 +175,57 @@ class AsyncCapabilityStream: public AsyncIoStream {
   // broker, or in terms of direct handle passing if at least one process trusts the other.
 
 public:
+  virtual Promise<void> writeWithFds(ArrayPtr<const byte> data,
+                                     ArrayPtr<const ArrayPtr<const byte>> moreData,
+                                     ArrayPtr<const int> fds) = 0;
+  Promise<void> writeWithFds(ArrayPtr<const byte> data,
+                             ArrayPtr<const ArrayPtr<const byte>> moreData,
+                             ArrayPtr<const AutoCloseFd> fds);
+  // Write some data to the stream with some file descriptors attached to it.
+  //
+  // The maximum number of FDs that can be sent at a time is usually subject to an OS-imposed
+  // limit. On Linux, this is 253. In practice, sending more than a handful of FDs at once is
+  // probably a bad idea.
+
+  struct ReadResult {
+    size_t byteCount;
+    size_t capCount;
+  };
+
+  virtual Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
+                                             AutoCloseFd* fdBuffer, size_t maxFds) = 0;
+  // Read data from the stream that may have file descriptors attached. Any attached descriptors
+  // will be placed in `fdBuffer`. If multiple bundles of FDs are encountered in the course of
+  // reading the amount of data requested by minBytes/maxBytes, then they will be concatenated. If
+  // more FDs are received than fit in the buffer, then the excess will be discarded and closed --
+  // this behavior, while ugly, is important to defend against denial-of-service attacks that may
+  // fill up the FD table with garbage. Applications must think carefully about how many FDs they
+  // really need to receive at once and set a well-defined limit.
+
+  virtual Promise<void> writeWithStreams(ArrayPtr<const byte> data,
+                                         ArrayPtr<const ArrayPtr<const byte>> moreData,
+                                         Array<Own<AsyncCapabilityStream>> streams) = 0;
+  virtual Promise<ReadResult> tryReadWithStreams(
+      void* buffer, size_t minBytes, size_t maxBytes,
+      Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) = 0;
+  // Like above, but passes AsyncCapabilityStream objects. The stream implementations must be from
+  // the same AsyncIoProvider.
+
+  // ---------------------------------------------------------------------------
+  // Helpers for sending individual capabilities.
+  //
+  // These are equivalent to the above methods with the constraint that only one FD is
+  // sent/received at a time and the corresponding data is a single zero-valued byte.
+
   Promise<Own<AsyncCapabilityStream>> receiveStream();
-  virtual Promise<Maybe<Own<AsyncCapabilityStream>>> tryReceiveStream() = 0;
-  virtual Promise<void> sendStream(Own<AsyncCapabilityStream> stream) = 0;
-  // Transfer a stream.
+  Promise<Maybe<Own<AsyncCapabilityStream>>> tryReceiveStream();
+  Promise<void> sendStream(Own<AsyncCapabilityStream> stream);
+  // Transfer a single stream.
 
   Promise<AutoCloseFd> receiveFd();
-  virtual Promise<Maybe<AutoCloseFd>> tryReceiveFd();
-  virtual Promise<void> sendFd(int fd);
-  // Transfer a raw file descriptor. Default implementation throws UNIMPLEMENTED.
+  Promise<Maybe<AutoCloseFd>> tryReceiveFd();
+  Promise<void> sendFd(int fd);
+  // Transfer a single raw file descriptor.
 };
 
 struct OneWayPipe {

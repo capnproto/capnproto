@@ -23,11 +23,15 @@
 // Request Vista-level APIs.
 #define WINVER 0x0600
 #define _WIN32_WINNT 0x0600
+#elif !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
 #endif
 
 #include "async-io.h"
 #include "async-io-internal.h"
 #include "debug.h"
+#include "io.h"
+#include "miniposix.h"
 #include <kj/compat/gtest.h>
 #include <sys/types.h>
 #if _WIN32
@@ -232,6 +236,190 @@ TEST(AsyncIo, CapabilityPipe) {
 
   EXPECT_EQ("bar", result);
   EXPECT_EQ("foo", result2);
+}
+
+TEST(AsyncIo, CapabilityPipeMultiStreamMessage) {
+  auto ioContext = setupAsyncIo();
+
+  auto pipe = ioContext.provider->newCapabilityPipe();
+  auto pipe2 = ioContext.provider->newCapabilityPipe();
+  auto pipe3 = ioContext.provider->newCapabilityPipe();
+
+  auto streams = heapArrayBuilder<Own<AsyncCapabilityStream>>(2);
+  streams.add(kj::mv(pipe2.ends[0]));
+  streams.add(kj::mv(pipe3.ends[0]));
+
+  ArrayPtr<const byte> secondBuf = "bar"_kj.asBytes();
+  pipe.ends[0]->writeWithStreams("foo"_kj.asBytes(), arrayPtr(&secondBuf, 1), streams.finish())
+      .wait(ioContext.waitScope);
+
+  char receiveBuffer[7];
+  Own<AsyncCapabilityStream> receiveStreams[3];
+  auto result = pipe.ends[1]->tryReadWithStreams(receiveBuffer, 6, 7, receiveStreams, 3)
+      .wait(ioContext.waitScope);
+
+  KJ_EXPECT(result.byteCount == 6);
+  receiveBuffer[6] = '\0';
+  KJ_EXPECT(kj::StringPtr(receiveBuffer) == "foobar");
+
+  KJ_ASSERT(result.capCount == 2);
+
+  receiveStreams[0]->write("baz", 3).wait(ioContext.waitScope);
+  receiveStreams[0] = nullptr;
+  KJ_EXPECT(pipe2.ends[1]->readAllText().wait(ioContext.waitScope) == "baz");
+
+  pipe3.ends[1]->write("qux", 3).wait(ioContext.waitScope);
+  pipe3.ends[1] = nullptr;
+  KJ_EXPECT(receiveStreams[1]->readAllText().wait(ioContext.waitScope) == "qux");
+}
+
+TEST(AsyncIo, ScmRightsTruncatedOdd) {
+  // Test that if we send two FDs over a unix socket, but the receiving end only receives one, we
+  // don't leak the other FD.
+
+  auto io = setupAsyncIo();
+
+  auto capPipe = io.provider->newCapabilityPipe();
+
+  int pipeFds[2];
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in1(pipeFds[0]);
+  kj::AutoCloseFd out1(pipeFds[1]);
+
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in2(pipeFds[0]);
+  kj::AutoCloseFd out2(pipeFds[1]);
+
+  {
+    AutoCloseFd sendFds[2] = { kj::mv(out1), kj::mv(out2) };
+    capPipe.ends[0]->writeWithFds("foo"_kj.asBytes(), nullptr, sendFds).wait(io.waitScope);
+  }
+
+  {
+    char buffer[4];
+    AutoCloseFd fdBuffer[1];
+    auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 1).wait(io.waitScope);
+    KJ_ASSERT(result.capCount == 1);
+    kj::FdOutputStream(fdBuffer[0].get()).write("bar", 3);
+  }
+
+  // We want to carefully verify that out1 and out2 were closed, without deadlocking if they
+  // weren't. So we manually set nonblocking mode and then issue read()s.
+  KJ_SYSCALL(fcntl(in1, F_SETFL, O_NONBLOCK));
+  KJ_SYSCALL(fcntl(in2, F_SETFL, O_NONBLOCK));
+
+  char buffer[4];
+  ssize_t n;
+
+  // First we read "bar" from in1.
+  KJ_NONBLOCKING_SYSCALL(n = read(in1, buffer, 4));
+  KJ_ASSERT(n == 3);
+  buffer[3] = '\0';
+  KJ_ASSERT(kj::StringPtr(buffer) == "bar");
+
+  // Now it should be EOF.
+  KJ_NONBLOCKING_SYSCALL(n = read(in1, buffer, 4));
+  if (n < 0) {
+    KJ_FAIL_ASSERT("out1 was not closed");
+  }
+  KJ_ASSERT(n == 0);
+
+  // Second pipe should have been closed implicitly because we didn't provide space to receive it.
+  KJ_NONBLOCKING_SYSCALL(n = read(in2, buffer, 4));
+  if (n < 0) {
+    KJ_FAIL_ASSERT("out2 was not closed. This could indicate that your operating system kernel is "
+        "buggy and leaks file descriptors when an SCM_RIGHTS message is truncated. FreeBSD was "
+        "known to do this until late 2018, while MacOS still has this bug as of this writing in "
+        "2019. However, KJ works around the problem on those platforms. You need to enable the "
+        "same work-around for your OS -- search for 'SCM_RIGHTS' in src/kj/async-io-unix.c++.");
+  }
+  KJ_ASSERT(n == 0);
+}
+
+TEST(AsyncIo, ScmRightsTruncatedEven) {
+  // Test that if we send three FDs over a unix socket, but the receiving end only receives two, we
+  // don't leak the third FD. This is different from the send-two-receive-one case in that
+  // CMSG_SPACE() on many systems rounds up such that there is always space for an even number of
+  // FDs. In that case the other test only verifies that our userspace code to close unwanted FDs
+  // is correct, whereas *this* test really verifies that the *kernel* properly closes truncated
+  // FDs.
+
+  auto io = setupAsyncIo();
+
+  auto capPipe = io.provider->newCapabilityPipe();
+
+  int pipeFds[2];
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in1(pipeFds[0]);
+  kj::AutoCloseFd out1(pipeFds[1]);
+
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in2(pipeFds[0]);
+  kj::AutoCloseFd out2(pipeFds[1]);
+
+  KJ_SYSCALL(miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in3(pipeFds[0]);
+  kj::AutoCloseFd out3(pipeFds[1]);
+
+  {
+    AutoCloseFd sendFds[3] = { kj::mv(out1), kj::mv(out2), kj::mv(out3) };
+    capPipe.ends[0]->writeWithFds("foo"_kj.asBytes(), nullptr, sendFds).wait(io.waitScope);
+  }
+
+  {
+    char buffer[4];
+    AutoCloseFd fdBuffer[2];
+    auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 2).wait(io.waitScope);
+    KJ_ASSERT(result.capCount == 2);
+    kj::FdOutputStream(fdBuffer[0].get()).write("bar", 3);
+    kj::FdOutputStream(fdBuffer[1].get()).write("baz", 3);
+  }
+
+  // We want to carefully verify that out1, out2, and out3 were closed, without deadlocking if they
+  // weren't. So we manually set nonblocking mode and then issue read()s.
+  KJ_SYSCALL(fcntl(in1, F_SETFL, O_NONBLOCK));
+  KJ_SYSCALL(fcntl(in2, F_SETFL, O_NONBLOCK));
+  KJ_SYSCALL(fcntl(in3, F_SETFL, O_NONBLOCK));
+
+  char buffer[4];
+  ssize_t n;
+
+  // First we read "bar" from in1.
+  KJ_NONBLOCKING_SYSCALL(n = read(in1, buffer, 4));
+  KJ_ASSERT(n == 3);
+  buffer[3] = '\0';
+  KJ_ASSERT(kj::StringPtr(buffer) == "bar");
+
+  // Now it should be EOF.
+  KJ_NONBLOCKING_SYSCALL(n = read(in1, buffer, 4));
+  if (n < 0) {
+    KJ_FAIL_ASSERT("out1 was not closed");
+  }
+  KJ_ASSERT(n == 0);
+
+  // Next we read "baz" from in2.
+  KJ_NONBLOCKING_SYSCALL(n = read(in2, buffer, 4));
+  KJ_ASSERT(n == 3);
+  buffer[3] = '\0';
+  KJ_ASSERT(kj::StringPtr(buffer) == "baz");
+
+  // Now it should be EOF.
+  KJ_NONBLOCKING_SYSCALL(n = read(in2, buffer, 4));
+  if (n < 0) {
+    KJ_FAIL_ASSERT("out2 was not closed");
+  }
+  KJ_ASSERT(n == 0);
+
+  // Third pipe should have been closed implicitly because we didn't provide space to receive it.
+  KJ_NONBLOCKING_SYSCALL(n = read(in3, buffer, 4));
+  if (n < 0) {
+    KJ_FAIL_ASSERT("out3 was not closed. This could indicate that your operating system kernel is "
+        "buggy and leaks file descriptors when an SCM_RIGHTS message is truncated. FreeBSD was "
+        "known to do this until late 2018, while MacOS still has this bug as of this writing in "
+        "2019. However, KJ works around the problem on those platforms. You need to enable the "
+        "same work-around for your OS -- search for 'SCM_RIGHTS' in src/kj/async-io-unix.c++.");
+  }
+  KJ_ASSERT(n == 0);
 }
 #endif
 
@@ -2239,9 +2427,11 @@ KJ_TEST("OS TwoWayPipe whenWriteDisconnected()") {
   abortedPromise.wait(io.waitScope);
 
   char buffer[4];
-  KJ_ASSERT(pipe.ends[0]->tryRead(&buffer, sizeof(buffer), sizeof(buffer)).wait(io.waitScope) == 3);
+  KJ_ASSERT(pipe.ends[0]->tryRead(&buffer, 3, 3).wait(io.waitScope) == 3);
   buffer[3] = '\0';
   KJ_EXPECT(buffer == "bar"_kj);
+
+  // Note: Reading any further in pipe.ends[0] would throw "connection reset".
 }
 
 KJ_TEST("import socket FD that's already broken") {

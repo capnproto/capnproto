@@ -300,7 +300,6 @@ public:
 
 private:
   int fd;
-  UnwindDetector unwindDetector;
 };
 
 inline auto KJ_STRINGIFY(const AutoCloseFd& fd)

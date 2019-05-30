@@ -469,6 +469,13 @@ public:
     return MEMBRANE_BRAND;
   }
 
+  kj::Maybe<int> getFd() override {
+    // We can't let FDs pass over membranes because we have no way to enforce the membrane policy
+    // on them. If the MembranePolicy wishes to explicitly permit certain FDs to pass, it can
+    // always do so by overriding the appropriate policy methods.
+    return nullptr;
+  }
+
 private:
   kj::Own<ClientHook> inner;
   kj::Own<MembranePolicy> policy;
