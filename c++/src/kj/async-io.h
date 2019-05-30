@@ -181,7 +181,7 @@ public:
   Promise<void> writeWithFds(ArrayPtr<const byte> data,
                              ArrayPtr<const ArrayPtr<const byte>> moreData,
                              ArrayPtr<const AutoCloseFd> fds);
-  // Write some data to the stream with some file descirptors attached to it.
+  // Write some data to the stream with some file descriptors attached to it.
   //
   // The maximum number of FDs that can be sent at a time is usually subject to an OS-imposed
   // limit. On Linux, this is 253. In practice, sending more than a handful of FDs at once is

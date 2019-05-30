@@ -28,7 +28,7 @@ namespace capnp {
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                                        ReaderOptions receiveOptions)
-    : stream(&stream), maxFdsPerMesage(0), side(side), peerVatId(4),
+    : stream(&stream), maxFdsPerMessage(0), side(side), peerVatId(4),
       receiveOptions(receiveOptions), previousWrite(kj::READY_NOW) {
   peerVatId.initRoot<rpc::twoparty::VatId>().setSide(
       side == rpc::twoparty::Side::CLIENT ? rpc::twoparty::Side::SERVER
@@ -39,11 +39,11 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty:
   disconnectFulfiller.fulfiller = kj::mv(paf.fulfiller);
 }
 
-TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMesage,
+TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
                                        rpc::twoparty::Side side, ReaderOptions receiveOptions)
     : TwoPartyVatNetwork(stream, side, receiveOptions) {
   this->stream = &stream;
-  this->maxFdsPerMesage = maxFdsPerMesage;
+  this->maxFdsPerMessage = maxFdsPerMessage;
 }
 
 void TwoPartyVatNetwork::FulfillerDisposer::disposeImpl(void* pointer) const {
@@ -182,7 +182,7 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
         });
       }
       KJ_CASE_ONEOF(capStream, kj::AsyncCapabilityStream*) {
-        auto fdSpace = kj::heapArray<kj::AutoCloseFd>(maxFdsPerMesage);
+        auto fdSpace = kj::heapArray<kj::AutoCloseFd>(maxFdsPerMessage);
         auto promise = tryReadMessage(*capStream, fdSpace, receiveOptions);
         return promise.then([fdSpace = kj::mv(fdSpace)]
                             (kj::Maybe<MessageReaderAndFds>&& messageAndFds) mutable
@@ -237,10 +237,10 @@ struct TwoPartyServer::AcceptedConnection {
 
   explicit AcceptedConnection(Capability::Client bootstrapInterface,
                               kj::Own<kj::AsyncCapabilityStream>&& connectionParam,
-                              uint maxFdsPerMesage)
+                              uint maxFdsPerMessage)
       : connection(kj::mv(connectionParam)),
         network(kj::downcast<kj::AsyncCapabilityStream>(*connection),
-                maxFdsPerMesage, rpc::twoparty::Side::SERVER),
+                maxFdsPerMessage, rpc::twoparty::Side::SERVER),
         rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))) {}
 };
 
@@ -252,9 +252,10 @@ void TwoPartyServer::accept(kj::Own<kj::AsyncIoStream>&& connection) {
   tasks.add(promise.attach(kj::mv(connectionState)));
 }
 
-void TwoPartyServer::accept(kj::Own<kj::AsyncCapabilityStream>&& connection, uint maxFdsPerMesage) {
+void TwoPartyServer::accept(
+    kj::Own<kj::AsyncCapabilityStream>&& connection, uint maxFdsPerMessage) {
   auto connectionState = kj::heap<AcceptedConnection>(
-      bootstrapInterface, kj::mv(connection), maxFdsPerMesage);
+      bootstrapInterface, kj::mv(connection), maxFdsPerMessage);
 
   // Run the connection until disconnect.
   auto promise = connectionState->network.onDisconnect();
@@ -270,11 +271,11 @@ kj::Promise<void> TwoPartyServer::listen(kj::ConnectionReceiver& listener) {
 }
 
 kj::Promise<void> TwoPartyServer::listenCapStreamReceiver(
-      kj::ConnectionReceiver& listener, uint maxFdsPerMesage) {
+      kj::ConnectionReceiver& listener, uint maxFdsPerMessage) {
   return listener.accept()
-      .then([this,&listener,maxFdsPerMesage](kj::Own<kj::AsyncIoStream>&& connection) mutable {
-    accept(connection.downcast<kj::AsyncCapabilityStream>(), maxFdsPerMesage);
-    return listenCapStreamReceiver(listener, maxFdsPerMesage);
+      .then([this,&listener,maxFdsPerMessage](kj::Own<kj::AsyncIoStream>&& connection) mutable {
+    accept(connection.downcast<kj::AsyncCapabilityStream>(), maxFdsPerMessage);
+    return listenCapStreamReceiver(listener, maxFdsPerMessage);
   });
 }
 
@@ -287,8 +288,8 @@ TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection)
       rpcSystem(makeRpcClient(network)) {}
 
 
-TwoPartyClient::TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMesage)
-    : network(connection, maxFdsPerMesage, rpc::twoparty::Side::CLIENT),
+TwoPartyClient::TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage)
+    : network(connection, maxFdsPerMessage, rpc::twoparty::Side::CLIENT),
       rpcSystem(makeRpcClient(network)) {}
 
 TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection,
@@ -297,10 +298,10 @@ TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection,
     : network(connection, side),
       rpcSystem(network, bootstrapInterface) {}
 
-TwoPartyClient::TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMesage,
+TwoPartyClient::TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage,
                                Capability::Client bootstrapInterface,
                                rpc::twoparty::Side side)
-    : network(connection, maxFdsPerMesage, side),
+    : network(connection, maxFdsPerMessage, side),
       rpcSystem(network, bootstrapInterface) {}
 
 Capability::Client TwoPartyClient::bootstrap() {

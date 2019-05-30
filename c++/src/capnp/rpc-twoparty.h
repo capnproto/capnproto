@@ -54,11 +54,11 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
 public:
   TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                      ReaderOptions receiveOptions = ReaderOptions());
-  TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMesage,
+  TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
-  // To support FD passing, pass an AsyncCapabilityStream and `maxFdsPerMesage`, which specifies
+  // To support FD passing, pass an AsyncCapabilityStream and `maxFdsPerMessage`, which specifies
   // the maximum number of file descriptors to accept from the peer in any one RPC message. It is
-  // important to keep maxFdsPerMesage low in order to stop DoS attacks that fill up your FD table.
+  // important to keep maxFdsPerMessage low in order to stop DoS attacks that fill up your FD table.
   //
   // Note that this limit applies only to incoming messages; outgoing messages are allowed to have
   // more FDs. Sometimes it makes sense to enforce a limit of zero in one direction while having
@@ -85,7 +85,7 @@ private:
   class IncomingMessageImpl;
 
   kj::OneOf<kj::AsyncIoStream*, kj::AsyncCapabilityStream*> stream;
-  uint maxFdsPerMesage;
+  uint maxFdsPerMessage;
   rpc::twoparty::Side side;
   MallocMessageBuilder peerVatId;
   ReaderOptions receiveOptions;
@@ -135,7 +135,7 @@ public:
   explicit TwoPartyServer(Capability::Client bootstrapInterface);
 
   void accept(kj::Own<kj::AsyncIoStream>&& connection);
-  void accept(kj::Own<kj::AsyncCapabilityStream>&& connection, uint maxFdsPerMesage);
+  void accept(kj::Own<kj::AsyncCapabilityStream>&& connection, uint maxFdsPerMessage);
   // Accepts the connection for servicing.
 
   kj::Promise<void> listen(kj::ConnectionReceiver& listener);
@@ -143,7 +143,8 @@ public:
   // exception is thrown while trying to accept. You may discard the returned promise to cancel
   // listening.
 
-  kj::Promise<void> listenCapStreamReceiver(kj::ConnectionReceiver& listener, uint maxFdsPerMesage);
+  kj::Promise<void> listenCapStreamReceiver(
+      kj::ConnectionReceiver& listener, uint maxFdsPerMessage);
   // Listen with support for FD transfers. `listener.accept()` must return instances of
   // AsyncCapabilityStream, otherwise this will crash.
 
@@ -161,10 +162,10 @@ class TwoPartyClient {
 
 public:
   explicit TwoPartyClient(kj::AsyncIoStream& connection);
-  explicit TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMesage);
+  explicit TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage);
   TwoPartyClient(kj::AsyncIoStream& connection, Capability::Client bootstrapInterface,
                  rpc::twoparty::Side side = rpc::twoparty::Side::CLIENT);
-  TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMesage,
+  TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage,
                  Capability::Client bootstrapInterface,
                  rpc::twoparty::Side side = rpc::twoparty::Side::CLIENT);
 
