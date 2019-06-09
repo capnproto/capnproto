@@ -809,5 +809,22 @@ TEST(Async, Poll) {
   paf.promise.wait(waitScope);
 }
 
+KJ_TEST("exclusiveJoin both events complete simultaneously") {
+  // Previously, if both branches of an exclusiveJoin() completed simultaneously, then the parent
+  // event could be armed twice. This is an error, but the exact results of this error depend on
+  // the parent PromiseNode type. One case where it matters is ArrayJoinPromiseNode, which counts
+  // events and decides it is done when it has received exactly the number of events expected.
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto builder = kj::heapArrayBuilder<kj::Promise<uint>>(2);
+  builder.add(kj::Promise<uint>(123).exclusiveJoin(kj::Promise<uint>(456)));
+  builder.add(kj::NEVER_DONE);
+  auto joined = kj::joinPromises(builder.finish());
+
+  KJ_EXPECT(!joined.poll(waitScope));
+}
+
 }  // namespace
 }  // namespace kj

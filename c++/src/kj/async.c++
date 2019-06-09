@@ -945,14 +945,19 @@ bool ExclusiveJoinPromiseNode::Branch::get(ExceptionOrValue& output) {
 }
 
 Maybe<Own<Event>> ExclusiveJoinPromiseNode::Branch::fire() {
-  // Cancel the branch that didn't return first.  Ignore exceptions caused by cancellation.
-  if (this == &joinNode.left) {
-    kj::runCatchingExceptions([&]() { joinNode.right.dependency = nullptr; });
-  } else {
-    kj::runCatchingExceptions([&]() { joinNode.left.dependency = nullptr; });
-  }
+  if (dependency) {
+    // Cancel the branch that didn't return first.  Ignore exceptions caused by cancellation.
+    if (this == &joinNode.left) {
+      kj::runCatchingExceptions([&]() { joinNode.right.dependency = nullptr; });
+    } else {
+      kj::runCatchingExceptions([&]() { joinNode.left.dependency = nullptr; });
+    }
 
-  joinNode.onReadyEvent.arm();
+    joinNode.onReadyEvent.arm();
+  } else {
+    // The other branch already fired, and this branch was canceled. It's possible for both
+    // branches to fire if both were armed simultaneously.
+  }
   return nullptr;
 }
 
