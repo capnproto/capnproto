@@ -802,6 +802,36 @@ kj::ArrayPtr<const HttpResponseTestCase> responseTestCases() {
 
     {
       "HTTP/1.1 200 OK\r\n"
+      "Content-Type: text/plain\r\n"
+      "Transfer-Encoding: identity\r\n"
+      "Content-Length: foobar\r\n"  // intentionally wrong
+      "\r\n"
+      "baz qux",
+
+      200, "OK",
+      {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
+      nullptr, {"baz qux"},
+
+      HttpMethod::GET,
+      CLIENT_ONLY,   // Server never sends transfer-encoding: identity
+    },
+
+    {
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "baz qux",
+
+      200, "OK",
+      {{HttpHeaderId::CONTENT_TYPE, "text/plain"}},
+      nullptr, {"baz qux"},
+
+      HttpMethod::GET,
+      CLIENT_ONLY,   // Server never sends non-delimited message
+    },
+
+    {
+      "HTTP/1.1 200 OK\r\n"
       "Content-Length: 123\r\n"
       "Content-Type: text/plain\r\n"
       "\r\n",
