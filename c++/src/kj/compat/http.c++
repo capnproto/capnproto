@@ -1598,6 +1598,10 @@ static_assert(!fastCaseCmp<'f','O','o','B','1','a'>("FooB1"), "");
 kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
     RequestOrResponse type, HttpMethod method, uint statusCode,
     const kj::HttpHeaders& headers) {
+  // Rules to determine how HTTP entity-body is delimited:
+  //   https://tools.ietf.org/html/rfc7230#section-3.3.3
+
+  // #1
   if (type == RESPONSE) {
     if (method == HttpMethod::HEAD) {
       // Body elided.
@@ -1616,35 +1620,68 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
     }
   }
 
+  // #2 deals with the CONNECT method which is handled separately.
+
+  // #3
   KJ_IF_MAYBE(te, headers.get(HttpHeaderId::TRANSFER_ENCODING)) {
     // TODO(someday): Support plugable transfer encodings? Or at least gzip?
     // TODO(someday): Support stacked transfer encodings, e.g. "gzip, chunked".
+
+    // NOTE: #3¶3 is ambiguous about what should happen if Transfer-Encoding and Content-Length are
+    //   both present. It says that Transfer-Encoding takes precedence, but also that the request
+    //   "ought to be handled as an error", and that proxies "MUST" drop the Content-Length before
+    //   forwarding. We ignore the vague "ought to" part and implement the other two. (The
+    //   dropping of Content-Length will happen naturally if/when the message is sent back out to
+    //   the network.)
     if (fastCaseCmp<'c','h','u','n','k','e','d'>(te->cStr())) {
+      // #3¶1
       return kj::heap<HttpChunkedEntityReader>(*this);
+    } else if (fastCaseCmp<'i','d','e','n','t','i','t','y'>(te->cStr())) {
+      // #3¶2
+      KJ_REQUIRE(type != REQUEST, "request body cannot have Transfer-Encoding other than chunked");
+      return kj::heap<HttpConnectionCloseEntityReader>(*this);
     } else {
       KJ_FAIL_REQUIRE("unknown transfer encoding", *te) { break; }
     }
   }
 
+  // #4 and #5
   KJ_IF_MAYBE(cl, headers.get(HttpHeaderId::CONTENT_LENGTH)) {
-    return kj::heap<HttpFixedLengthEntityReader>(*this, strtoull(cl->cStr(), nullptr, 10));
+    // NOTE: By spec, multiple Content-Length values are allowed as long as they are the same, e.g.
+    //   "Content-Length: 5, 5, 5". Hopefully no one actually does that...
+    char* end;
+    uint64_t length = strtoull(cl->cStr(), &end, 10);
+    if (end > cl->begin() && *end == '\0') {
+      // #5
+      return kj::heap<HttpFixedLengthEntityReader>(*this, length);
+    } else {
+      // #4 (bad content-length)
+      KJ_FAIL_REQUIRE("invalid Content-Length header value", *cl);
+    }
   }
 
+  // #6
   if (type == REQUEST) {
     // Lack of a Content-Length or Transfer-Encoding means no body for requests.
     return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
   }
 
-  KJ_IF_MAYBE(c, headers.get(HttpHeaderId::CONNECTION)) {
-    // TODO(someday): Connection header can actually have multiple tokens... but no one ever uses
-    //   that feature?
-    if (fastCaseCmp<'c','l','o','s','e'>(c->cStr())) {
-      return kj::heap<HttpConnectionCloseEntityReader>(*this);
+  // RFC 2616 permitted "multipart/byteranges" responses to be self-delimiting, but this was
+  // mercifully removed in RFC 7230, and new exceptions of this type are disallowed:
+  //   https://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.4
+  //   https://tools.ietf.org/html/rfc7230#page-81
+  // To be extra-safe, we'll reject a multipart/byteranges response that lacks transfer-encoding
+  // and content-length.
+  KJ_IF_MAYBE(type, headers.get(HttpHeaderId::CONTENT_TYPE)) {
+    if (type->startsWith("multipart/byteranges")) {
+      KJ_FAIL_REQUIRE(
+          "refusing to handle multipart/byteranges response without transfer-encoding nor "
+          "content-length due to ambiguity between RFC 2616 vs RFC 7230.");
     }
   }
 
-  KJ_FAIL_REQUIRE("don't know how HTTP body is delimited", headers);
-  return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
+  // #7
+  return kj::heap<HttpConnectionCloseEntityReader>(*this);
 }
 
 }  // namespace
