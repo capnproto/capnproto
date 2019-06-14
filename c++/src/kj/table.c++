@@ -288,7 +288,7 @@ void BTreeImpl::growTree(uint minCapacity) {
   // aligned_alloc() function. Unfortunately, many platforms don't implement it. Luckily, there
   // are usually alternatives.
 
-#if __APPLE__ || __BIONIC__
+#if __APPLE__ || __BIONIC__ || __OpenBSD__
   // OSX and Android lack aligned_alloc(), but have posix_memalign(). Fine.
   void* allocPtr;
   int error = posix_memalign(&allocPtr,
