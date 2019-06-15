@@ -39,6 +39,7 @@ namespace capnp {
 namespace _ {  // private
   class ReaderArena;
   class BuilderArena;
+  struct CloneImpl;
 }
 
 class StructSchema;
@@ -258,8 +259,10 @@ private:
   kj::Own<_::CapTableBuilder> releaseBuiltinCapTable();
   // Hack for clone() to extract the cap table.
 
-  template <typename Reader, typename>
-  friend kj::Own<kj::Decay<Reader>> clone(Reader&& reader);
+  friend struct _::CloneImpl;
+  // We can't declare clone() as a friend directly because old versions of GCC incorrectly demand
+  // that the first declaration (even if it is a friend declaration) specify the default type args,
+  // whereas correct compilers do not permit default type args to be specified on a friend decl.
 };
 
 template <typename RootType>
@@ -516,6 +519,14 @@ static typename Type::Reader defaultValue() {
   return typename Type::Reader(_::StructReader());
 }
 
+namespace _ {
+  struct CloneImpl {
+    static inline kj::Own<_::CapTableBuilder> releaseBuiltinCapTable(MessageBuilder& message) {
+      return message.releaseBuiltinCapTable();
+    }
+  };
+};
+
 template <typename Reader, typename>
 kj::Own<kj::Decay<Reader>> clone(Reader&& reader) {
   auto size = reader.totalSize();
@@ -529,7 +540,7 @@ kj::Own<kj::Decay<Reader>> clone(Reader&& reader) {
     FlatMessageBuilder builder(buffer);
     builder.setRoot(kj::fwd<Reader>(reader));
     builder.requireFilled();
-    auto capTable = builder.releaseBuiltinCapTable();
+    auto capTable = _::CloneImpl::releaseBuiltinCapTable(builder);
     AnyPointer::Reader raw(_::PointerReader::getRootUnchecked(buffer.begin()).imbue(capTable));
     return kj::attachVal(raw.getAs<FromReader<Reader>>(), kj::mv(buffer), kj::mv(capTable));
   }
