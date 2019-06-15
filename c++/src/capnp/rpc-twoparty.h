@@ -148,6 +148,9 @@ public:
   // Listen with support for FD transfers. `listener.accept()` must return instances of
   // AsyncCapabilityStream, otherwise this will crash.
 
+  kj::Promise<void> drain() { return tasks.onEmpty(); }
+  // Resolves when all clients have disconnected.
+
 private:
   Capability::Client bootstrapInterface;
   kj::TaskSet tasks;
