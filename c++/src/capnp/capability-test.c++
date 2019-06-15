@@ -1080,6 +1080,27 @@ KJ_TEST("Promise<RemotePromise<T>> automatically reduces to RemotePromise<T> wit
   EXPECT_EQ(1, chainedCallCount);
 }
 
+KJ_TEST("clone() with caps") {
+  int dummy = 0;
+  MallocMessageBuilder builder(2048);
+  auto root = builder.getRoot<AnyPointer>().initAs<List<test::TestInterface>>(3);
+  root.set(0, kj::heap<TestInterfaceImpl>(dummy));
+  root.set(1, kj::heap<TestInterfaceImpl>(dummy));
+  root.set(2, kj::heap<TestInterfaceImpl>(dummy));
+
+  auto copyPtr = clone(root.asReader());
+  auto& copy = *copyPtr;
+
+  KJ_ASSERT(copy.size() == 3);
+  KJ_EXPECT(ClientHook::from(copy[0]).get() == ClientHook::from(root[0]).get());
+  KJ_EXPECT(ClientHook::from(copy[1]).get() == ClientHook::from(root[1]).get());
+  KJ_EXPECT(ClientHook::from(copy[2]).get() == ClientHook::from(root[2]).get());
+
+  KJ_EXPECT(ClientHook::from(copy[0]).get() != ClientHook::from(root[1]).get());
+  KJ_EXPECT(ClientHook::from(copy[1]).get() != ClientHook::from(root[2]).get());
+  KJ_EXPECT(ClientHook::from(copy[2]).get() != ClientHook::from(root[0]).get());
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

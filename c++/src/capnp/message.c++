@@ -178,6 +178,10 @@ bool MessageBuilder::isCanonical() {
                                   .isCanonical(&readHead);
 }
 
+kj::Own<_::CapTableBuilder> MessageBuilder::releaseBuiltinCapTable() {
+  return arena()->releaseLocalCapTable();
+}
+
 // =======================================================================================
 
 SegmentArrayMessageReader::SegmentArrayMessageReader(

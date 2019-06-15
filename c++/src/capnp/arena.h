@@ -288,6 +288,10 @@ public:
     return &localCapTable;
   }
 
+  kj::Own<_::CapTableBuilder> releaseLocalCapTable() {
+    return kj::heap<LocalCapTable>(kj::mv(localCapTable));
+  }
+
   SegmentBuilder* getSegment(SegmentId id);
   // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
 

@@ -254,6 +254,12 @@ private:
   _::BuilderArena* arena() { return reinterpret_cast<_::BuilderArena*>(arenaSpace); }
   _::SegmentBuilder* getRootSegment();
   AnyPointer::Builder getRootInternal();
+
+  kj::Own<_::CapTableBuilder> releaseBuiltinCapTable();
+  // Hack for clone() to extract the cap table.
+
+  template <typename Reader, typename>
+  friend kj::Own<kj::Decay<Reader>> clone(Reader&& reader);
 };
 
 template <typename RootType>
@@ -314,6 +320,10 @@ static typename Type::Reader defaultValue();
 // Get a default instance of the given struct or list type.
 //
 // TODO(cleanup):  Find a better home for this function?
+
+template <typename Reader, typename = FromReader<Reader>>
+kj::Own<kj::Decay<Reader>> clone(Reader&& reader);
+// Make a deep copy of the given Reader on the heap, producing an owned pointer.
 
 // =======================================================================================
 
@@ -504,6 +514,25 @@ typename kj::ArrayPtr<const word> writeDataStruct(BuilderType builder) {
 template <typename Type>
 static typename Type::Reader defaultValue() {
   return typename Type::Reader(_::StructReader());
+}
+
+template <typename Reader, typename>
+kj::Own<kj::Decay<Reader>> clone(Reader&& reader) {
+  auto size = reader.totalSize();
+  auto buffer = kj::heapArray<capnp::word>(size.wordCount + 1);
+  memset(buffer.asBytes().begin(), 0, buffer.asBytes().size());
+  if (size.capCount == 0) {
+    copyToUnchecked(reader, buffer);
+    auto result = readMessageUnchecked<FromReader<Reader>>(buffer.begin());
+    return kj::attachVal(result, kj::mv(buffer));
+  } else {
+    FlatMessageBuilder builder(buffer);
+    builder.setRoot(kj::fwd<Reader>(reader));
+    builder.requireFilled();
+    auto capTable = builder.releaseBuiltinCapTable();
+    AnyPointer::Reader raw(_::PointerReader::getRootUnchecked(buffer.begin()).imbue(capTable));
+    return kj::attachVal(raw.getAs<FromReader<Reader>>(), kj::mv(buffer), kj::mv(capTable));
+  }
 }
 
 template <typename T>
