@@ -935,10 +935,6 @@ public:
       : isSet(true) {
     ctor(value, t);
   }
-  inline NullableValue(const T* t)
-      : isSet(t != nullptr) {
-    if (isSet) ctor(value, *t);
-  }
   template <typename U>
   inline NullableValue(NullableValue<U>&& other)
       : isSet(other.isSet) {
@@ -1010,14 +1006,6 @@ public:
   inline NullableValue& operator=(T&& other) { emplace(kj::mv(other)); return *this; }
   inline NullableValue& operator=(T& other) { emplace(other); return *this; }
   inline NullableValue& operator=(const T& other) { emplace(other); return *this; }
-  inline NullableValue& operator=(const T* other) {
-    if (other == nullptr) {
-      *this = nullptr;
-    } else {
-      emplace(*other);
-    }
-    return *this;
-  }
   template <typename U>
   inline NullableValue& operator=(NullableValue<U>&& other) {
     if (other.isSet) {
@@ -1055,6 +1043,11 @@ public:
 
   inline bool operator==(decltype(nullptr)) const { return !isSet; }
   inline bool operator!=(decltype(nullptr)) const { return isSet; }
+
+  NullableValue(const T* t) = delete;
+  NullableValue& operator=(const T* other) = delete;
+  // We used to permit assigning a Maybe<T> directly from a T*, and the assignment would check for
+  // nullness. This turned out never to be useful, and sometimes to be dangerous.
 
 private:
   bool isSet;
@@ -1109,7 +1102,6 @@ public:
   Maybe(T&& t): ptr(kj::mv(t)) {}
   Maybe(T& t): ptr(t) {}
   Maybe(const T& t): ptr(t) {}
-  Maybe(const T* t): ptr(t) {}
   Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) {}
   Maybe(const Maybe& other): ptr(other.ptr) {}
   Maybe(Maybe& other): ptr(other.ptr) {}
@@ -1147,7 +1139,6 @@ public:
   inline Maybe& operator=(T&& other) { ptr = kj::mv(other); return *this; }
   inline Maybe& operator=(T& other) { ptr = other; return *this; }
   inline Maybe& operator=(const T& other) { ptr = other; return *this; }
-  inline Maybe& operator=(const T* other) { ptr = other; return *this; }
 
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
   inline Maybe& operator=(Maybe& other) { ptr = other.ptr; return *this; }
@@ -1176,6 +1167,11 @@ public:
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
+
+  Maybe(const T* t) = delete;
+  Maybe& operator=(const T* other) = delete;
+  // We used to permit assigning a Maybe<T> directly from a T*, and the assignment would check for
+  // nullness. This turned out never to be useful, and sometimes to be dangerous.
 
   T& orDefault(T& defaultValue) & {
     if (ptr == nullptr) {
