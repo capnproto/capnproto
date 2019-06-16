@@ -235,10 +235,6 @@ else
 lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la $(MAYBE_KJ_TLS_LA) libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
 endif
 
-# Don't include security release in soname -- we want to replace old binaries
-# in this case.
-SO_VERSION = $(shell echo $(VERSION) | sed -e 's/^\([0-9]*[.][0-9]*[.][0-9]*\)\([.][0-9]*\)*\(-.*\)*$$/\1\3/g')
-
 libkj_la_LIBADD = $(PTHREAD_LIBS)
 libkj_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_la_SOURCES=                                              \
