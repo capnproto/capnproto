@@ -426,6 +426,21 @@ Own<Decay<T>> heap(T&& orig) {
   return Own<T2>(new T2(kj::fwd<T>(orig)), _::HeapDisposer<T2>::instance);
 }
 
+template <typename T, typename... Attachments>
+Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments);
+// Returns an Own<T> that takes ownership of `value` and `attachments`, and points to `value`.
+//
+// This is equivalent to heap(value).attach(attachments), but only does one allocation rather than
+// two.
+
+template <typename T, typename... Attachments>
+Own<T> attachRef(T& value, Attachments&&... attachments);
+// Like attach() but `value` is not moved; the resulting Own<T> points to its existing location.
+// This is preferred if `value` is already owned by one of `attachments`.
+//
+// This is equivalent to Own<T>(&value, kj::NullDisposer::instance).attach(attachments), but
+// is easier to write and allocates slightly less memory.
+
 // =======================================================================================
 // SpaceFor<T> -- assists in manual allocation
 
@@ -517,6 +532,19 @@ Own<T> Own<T>::attach(Attachments&&... attachments) {
   auto bundle = new _::DisposableOwnedBundle<Own<T>, Attachments...>(
       kj::mv(*this), kj::fwd<Attachments>(attachments)...);
   return Own<T>(ptrCopy, *bundle);
+}
+
+template <typename T, typename... Attachments>
+Own<T> attachRef(T& value, Attachments&&... attachments) {
+  auto bundle = new _::DisposableOwnedBundle<Attachments...>(kj::fwd<Attachments>(attachments)...);
+  return Own<T>(&value, *bundle);
+}
+
+template <typename T, typename... Attachments>
+Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments) {
+  auto bundle = new _::DisposableOwnedBundle<T, Attachments...>(
+      kj::fwd<T>(value), kj::fwd<Attachments>(attachments)...);
+  return Own<Decay<T>>(&bundle->first, *bundle);
 }
 
 }  // namespace kj

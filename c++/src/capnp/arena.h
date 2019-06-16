@@ -288,6 +288,10 @@ public:
     return &localCapTable;
   }
 
+  kj::Own<_::CapTableBuilder> releaseLocalCapTable() {
+    return kj::heap<LocalCapTable>(kj::mv(localCapTable));
+  }
+
   SegmentBuilder* getSegment(SegmentId id);
   // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
 
@@ -321,7 +325,7 @@ private:
   MessageBuilder* message;
   ReadLimiter dummyLimiter;
 
-  class LocalCapTable: public CapTableBuilder {
+  class LocalCapTable final: public CapTableBuilder {
 #if !CAPNP_LITE
   public:
     kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
