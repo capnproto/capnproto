@@ -289,7 +289,7 @@ void BTreeImpl::growTree(uint minCapacity) {
   // are usually alternatives.
 
 #if __APPLE__ || __BIONIC__ || __OpenBSD__
-  // OSX and Android lack aligned_alloc(), but have posix_memalign(). Fine.
+  // macOS, OpenBSD, and Android lack aligned_alloc(), but have posix_memalign(). Fine.
   void* allocPtr;
   int error = posix_memalign(&allocPtr,
       sizeof(BTreeImpl::NodeUnion), newCapacity * sizeof(BTreeImpl::NodeUnion));
