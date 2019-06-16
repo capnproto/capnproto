@@ -237,7 +237,10 @@ endif
 
 # Don't include security release in soname -- we want to replace old binaries
 # in this case.
-SO_VERSION = $(shell echo $(VERSION) | sed -e 's/^\([0-9]*[.][0-9]*[.][0-9]*\)\([.][0-9]*\)*\(-.*\)*$$/\1\3/g')
+# NOTE: != is the "shell assignment operator", so the right side will be
+#   evaluated by the shell. We use this instead of $(shell) for compatibility
+#   with BSD make. Note that GNU Make added support for != as of 4.0, in 2013.
+SO_VERSION != echo $(VERSION) | sed -e 's/^\([0-9]*[.][0-9]*[.][0-9]*\)\([.][0-9]*\)*\(-.*\)*$$/\1\3/g'
 
 libkj_la_LIBADD = $(PTHREAD_LIBS)
 libkj_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
