@@ -28,6 +28,11 @@
 #include "mutex.h"
 #include "debug.h"
 
+#if !_WIN32
+#include <time.h>
+#include <errno.h>
+#endif
+
 #if KJ_USE_FUTEX
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -65,6 +70,27 @@ inline void Mutex::removeWaiter(Waiter& waiter) {
     waitersTail = waiter.prev;
   }
 }
+
+#if !_WIN32
+namespace {
+
+TimePoint now() {
+  struct timespec now;
+  KJ_SYSCALL(clock_gettime(CLOCK_MONOTONIC, &now));
+  return kj::origin<TimePoint>() + now.tv_sec * kj::SECONDS + now.tv_nsec * kj::NANOSECONDS;
+}
+struct timespec toRelativeTimespec(Duration timeout) {
+  struct timespec ts;
+  ts.tv_sec = timeout / kj::SECONDS;
+  ts.tv_nsec = timeout % kj::SECONDS / kj::NANOSECONDS;
+  return ts;
+}
+struct timespec toAbsoluteTimespec(TimePoint time) {
+  return toRelativeTimespec(time - kj::origin<TimePoint>());
+}
+
+}  // namespace
+#endif
 
 #if KJ_USE_FUTEX
 // =======================================================================================
@@ -133,7 +159,28 @@ void Mutex::unlock(Exclusivity exclusivity) {
 
           if (waiter->predicate.check()) {
             // This waiter's predicate now evaluates true, so wake it up.
-            __atomic_store_n(&waiter->futex, 1, __ATOMIC_RELEASE);
+            if (waiter->hasTimeout) {
+              // In this case we need to be careful to make sure the target thread isn't already
+              // processing a timeout, so we need to do an atomic CAS rather than just a store.
+              uint expected = 0;
+              if (__atomic_compare_exchange_n(&waiter->futex, &expected, 1, false,
+                                              __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+                // Good, we set it to 1, transferring ownership of the mutex. Continue on below.
+              } else {
+                // Looks like the thread already timed out and set its own futex to 1. In that
+                // case it is going to try to lock the mutex itself, so we should NOT attempt an
+                // ownership transfer as this will deadlock.
+                //
+                // We have two options here: We can continue along the waiter list looking for
+                // another waiter that's ready to be signaled, or we could drop out of the list
+                // immediately since we know that another thread is already waiting for the lock
+                // and will re-evaluate the waiter queue itself when it is done. It feels cleaner
+                // to me to continue.
+                continue;
+              }
+            } else {
+              __atomic_store_n(&waiter->futex, 1, __ATOMIC_RELEASE);
+            }
             syscall(SYS_futex, &waiter->futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
 
             // We transferred ownership of the lock to this waiter, so we're done now.
@@ -191,27 +238,80 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::lockWhen(Predicate& predicate) {
+void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   lock(EXCLUSIVE);
 
+  // Since the predicate might throw, we should be careful to remember if we've locked the mutex
+  // and unlock it on the way out.
+  bool currentlyLocked = true;
+  KJ_ON_SCOPE_FAILURE({
+    if (currentlyLocked) unlock(EXCLUSIVE);
+  });
+
   // Add waiter to list.
-  Waiter waiter { nullptr, waitersTail, predicate, 0 };
+  Waiter waiter { nullptr, waitersTail, predicate, 0, timeout != nullptr };
 
   addWaiter(waiter);
   KJ_DEFER(removeWaiter(waiter));
 
   if (!predicate.check()) {
     unlock(EXCLUSIVE);
+    currentlyLocked = false;
 
-    // Wait for someone to set out futex to 1.
-    while (__atomic_load_n(&waiter.futex, __ATOMIC_ACQUIRE) == 0) {
-      syscall(SYS_futex, &waiter.futex, FUTEX_WAIT_PRIVATE, 0, NULL, NULL, 0);
+    struct timespec ts;
+    struct timespec* tsp = nullptr;
+    KJ_IF_MAYBE(t, timeout) {
+      ts = toAbsoluteTimespec(now() + *t);
+      tsp = &ts;
     }
 
-    // Ownership of an exclusive lock was transferred to us. We can continue.
+    // Wait for someone to set our futex to 1.
+    for (;;) {
+      // Note we use FUTEX_WAIT_BITSET_PRIVATE + FUTEX_BITSET_MATCH_ANY to get the same effect as
+      // FUTEX_WAIT_PRIVATE except that the timeout is specified as an absolute time based on
+      // CLOCK_MONOTONIC. Otherwise, FUTEX_WAIT_PRIVATE interprets it as a relative time, forcing
+      // us to recompute the time after every iteration.
+      KJ_SYSCALL_HANDLE_ERRORS(syscall(SYS_futex,
+          &waiter.futex, FUTEX_WAIT_BITSET_PRIVATE, 0, tsp, NULL, FUTEX_BITSET_MATCH_ANY)) {
+        case EAGAIN:
+          // Indicates that the futex was already non-zero by the time the kernal looked at it.
+          // Not an error.
+          break;
+        case ETIMEDOUT: {
+          // Wait timed out. This leaves us in a bit of a pickle: Ownership of the mutex was not
+          // transferred to us from another thread. So, we need to lock it ourselves. But, another
+          // thread might be in the process of signaling us and transferring ownership. So, we
+          // first must atomically take control of our destiny.
+          KJ_ASSERT(timeout != nullptr);
+          uint expected = 0;
+          if (__atomic_compare_exchange_n(&waiter.futex, &expected, 1, false,
+                                          __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+            // OK, we set our own futex to 1. That means no other thread will, and so we won't be
+            // receiving a mutex ownership transfer. We have to lock the mutex ourselves.
+            lock(EXCLUSIVE);
+            currentlyLocked = true;
+            return;
+          } else {
+            // Oh, someone else actually did signal us, apparently. Let's move on as if the futex
+            // call told us so.
+            break;
+          }
+        }
+        default:
+          KJ_FAIL_SYSCALL("futex(FUTEX_WAIT_PRIVATE)", error);
+      }
+
+      if (__atomic_load_n(&waiter.futex, __ATOMIC_ACQUIRE) != 0) {
+        // We received a lock ownership transfer from another thread.
+        currentlyLocked = true;
+
+        // The other thread checked the predicate before the transfer.
 #ifdef KJ_DEBUG
-    assertLockedByCaller(EXCLUSIVE);
+        assertLockedByCaller(EXCLUSIVE);
 #endif
+        return;
+      }
+    }
   }
 }
 
@@ -345,7 +445,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   // held for debug purposes anyway, we just don't bother.
 }
 
-void Mutex::lockWhen(Predicate& predicate) {
+void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   lock(EXCLUSIVE);
 
   // Add waiter to list.
@@ -357,12 +457,27 @@ void Mutex::lockWhen(Predicate& predicate) {
   addWaiter(waiter);
   KJ_DEFER(removeWaiter(waiter));
 
+  Maybe<TimePoint> endTime = timeout.map([](Duration d) {
+    return kj::origin<TimePoint>() + GetTickCount64() * kj::MILLISECONDS + d;
+  });
+
   while (!predicate.check()) {
-    // SleepConditionVariableSRW(), unlike other modern Win32 synchronization functions, can fail.
-    // However, I'm guessing the only possible error is ERROR_TIMEOUT, which should never happen
-    // to us...
-    KJ_WIN32(SleepConditionVariableSRW(
-        &coercedCondvar(waiter.condvar), &coercedSrwLock, INFINITE, 0));
+    DWORD millis = endTime.map([](TimePoint end) {
+      TimePoint now = kj::origin<TimePoint>() + GetTickCount64() * kj::MILLISECONDS;
+      return kj::max(end - now, 0 * kj::MILLISECONDS) / kj::MILLISECONDS;
+    }).orDefault(INFINITE);
+
+    if (SleepConditionVariableSRW(&coercedCondvar(waiter.condvar), &coercedSrwLock, millis, 0)) {
+      // Normal result. Continue loop to check predicate.
+    } else {
+      DWORD error = GetLastError();
+      if (error == ERROR_TIMEOUT) {
+        // Timed out. Skip predicate check.
+        return;
+      } else {
+        KJ_FAIL_WIN32("SleepConditionVariableSRW()", error);
+      }
+    }
   }
 }
 
@@ -494,7 +609,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::lockWhen(Predicate& predicate) {
+void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   lock(EXCLUSIVE);
 
   // Add waiter to list.
@@ -508,8 +623,25 @@ void Mutex::lockWhen(Predicate& predicate) {
     removeWaiter(waiter);
 
     // Destroy pthread objects.
-    KJ_PTHREAD_CALL(pthread_mutex_destroy(&waiter.stupidMutex));
-    KJ_PTHREAD_CALL(pthread_cond_destroy(&waiter.condvar));
+    KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&waiter.stupidMutex));
+    KJ_PTHREAD_CLEANUP(pthread_cond_destroy(&waiter.condvar));
+  });
+
+#if !__APPLE__
+  if (timeout != nullptr) {
+    // Oops, the default condvar uses the wall clock, which is dumb... fix it to use the monotonic
+    // clock. (Except not on macOS, where pthread_condattr_setclock() is unimplemented, but there's
+    // a bizarre pthread_cond_timedwait_relative_np() method we can use instead...)
+    pthread_condattr_t attr;
+    KJ_PTHREAD_CALL(pthread_condattr_init(&attr));
+    KJ_PTHREAD_CALL(pthread_condattr_setclock(&attr, CLOCK_MONOTONIC));
+    pthread_cond_init(&waiter.condvar, &attr);
+    KJ_PTHREAD_CALL(pthread_condattr_destroy(&attr));
+  }
+#endif
+
+  Maybe<struct timespec> endTime = timeout.map([](Duration d) {
+    return toAbsoluteTimespec(now() + d);
   });
 
   while (!predicate.check()) {
@@ -522,8 +654,31 @@ void Mutex::lockWhen(Predicate& predicate) {
     // OK, now we can unlock the main mutex.
     unlock(EXCLUSIVE);
 
+    bool timedOut = false;
+
     // Wait for someone to signal the condvar.
-    KJ_PTHREAD_CALL(pthread_cond_wait(&waiter.condvar, &waiter.stupidMutex));
+    KJ_IF_MAYBE(t, endTime) {
+#if __APPLE__
+      // On macOS, the absolute timeout can only be specified in wall time, not monotonic time,
+      // which means modifying the system clock will break the wait. However, macOS happens to
+      // provide an alternative relative-time wait function, so I guess we'll use that. It does
+      // require recomputing the time every iteration...
+      struct timespec ts = toRelativeTimespec(
+          kj::max(toAbsoluteTimespec(*t) - now(), 0 * kj::SECONDS));
+      int error = pthread_cond_timedwait_relative_np(&waiter.condvar, &waiter.stupidMutex, &ts);
+#else
+      int error = pthread_cond_timedwait(&waiter.condvar, &waiter.stupidMutex, t);
+#endif
+      if (error != 0) {
+        if (error == ETIMEDOUT) {
+          timedOut = true;
+        } else {
+          KJ_FAIL_SYSCALL("pthread_cond_timedwait", error);
+        }
+      }
+    } else {
+      KJ_PTHREAD_CALL(pthread_cond_wait(&waiter.condvar, &waiter.stupidMutex));
+    }
 
     // We have to be very careful about lock ordering here. We need to unlock stupidMutex before
     // re-locking the main mutex, because another thread may have a lock on the main mutex already
@@ -533,6 +688,10 @@ void Mutex::lockWhen(Predicate& predicate) {
     KJ_PTHREAD_CALL(pthread_mutex_unlock(&waiter.stupidMutex));
 
     lock(EXCLUSIVE);
+
+    if (timedOut) {
+      return;
+    }
   }
 }
 

@@ -19,6 +19,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN 1  // lolz
+#define WINVER 0x0600
+#define _WIN32_WINNT 0x0600
+#define NOGDI  // NOGDI is needed to make EXPECT_EQ(123u, *lock) compile for some reason
+#endif
+
 #include "mutex.h"
 #include "debug.h"
 #include "thread.h"
@@ -26,12 +33,12 @@
 #include <stdlib.h>
 
 #if _WIN32
-#define NOGDI  // NOGDI is needed to make EXPECT_EQ(123u, *lock) compile for some reason
 #include <windows.h>
 #undef NOGDI
 #else
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
 #endif
 
 namespace kj {
@@ -39,8 +46,16 @@ namespace {
 
 #if _WIN32
 inline void delay() { Sleep(10); }
+TimePoint now() {
+  return kj::origin<TimePoint>() + GetTickCount64() * kj::MILLISECONDS;
+}
 #else
 inline void delay() { usleep(10000); }
+TimePoint now() {
+  struct timespec now;
+  KJ_SYSCALL(clock_gettime(CLOCK_MONOTONIC, &now));
+  return kj::origin<TimePoint>() + now.tv_sec * kj::SECONDS + now.tv_nsec * kj::NANOSECONDS;
+}
 #endif
 
 TEST(Mutex, MutexGuarded) {
@@ -167,6 +182,83 @@ TEST(Mutex, When) {
     KJ_EXPECT(m == 100);
 
     KJ_EXPECT(*value.lockShared() == 101);
+  }
+}
+
+TEST(Mutex, WhenWithTimeout) {
+  MutexGuarded<uint> value(123);
+
+  // A timeout that won't expire.
+  static constexpr Duration LONG_TIMEOUT = 10 * kj::SECONDS;
+
+  {
+    uint m = value.when([](uint n) { return n < 200; }, [](uint& n) {
+      ++n;
+      return n + 2;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 126);
+
+    KJ_EXPECT(*value.lockShared() == 124);
+  }
+
+  {
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 321;
+    });
+
+    uint m = value.when([](uint n) { return n > 200; }, [](uint& n) {
+      ++n;
+      return n + 2;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 324);
+
+    KJ_EXPECT(*value.lockShared() == 322);
+  }
+
+  {
+    // Stress test. 100 threads each wait for a value and then set the next value.
+    *value.lockExclusive() = 0;
+
+    auto threads = kj::heapArrayBuilder<kj::Own<kj::Thread>>(100);
+    for (auto i: kj::zeroTo(100)) {
+      threads.add(kj::heap<kj::Thread>([i,&value]() {
+        if (i % 2 == 0) delay();
+        uint m = value.when([i](const uint& n) { return n == i; },
+            [](uint& n) { return n++; }, LONG_TIMEOUT);
+        KJ_ASSERT(m == i);
+      }));
+    }
+
+    uint m = value.when([](uint n) { return n == 100; }, [](uint& n) {
+      return n++;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 100);
+
+    KJ_EXPECT(*value.lockShared() == 101);
+  }
+
+  {
+    auto start = now();
+    uint m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
+      KJ_ASSERT(n == 101);
+      KJ_EXPECT(now() - start >= 10 * kj::MILLISECONDS);
+      return 12;
+    }, 10 * kj::MILLISECONDS);
+    KJ_EXPECT(m == 12);
+
+    m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
+      KJ_ASSERT(n == 101);
+      KJ_EXPECT(now() - start >= 20 * kj::MILLISECONDS);
+      return 34;
+    }, 10 * kj::MILLISECONDS);
+    KJ_EXPECT(m == 34);
+
+    m = value.when([](uint n) { return n > 0; }, [&](uint& n) {
+      KJ_ASSERT(n == 101);
+      return 56;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 56);
   }
 }
 

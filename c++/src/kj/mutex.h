@@ -27,6 +27,7 @@
 
 #include "memory.h"
 #include <inttypes.h>
+#include "time.h"
 
 #if __linux__ && !defined(KJ_USE_FUTEX)
 #define KJ_USE_FUTEX 1
@@ -71,8 +72,10 @@ public:
     virtual bool check() = 0;
   };
 
-  void lockWhen(Predicate& predicate);
-  // Lock (exclusively) when predicate.check() returns true.
+  void lockWhen(Predicate& predicate, Maybe<Duration> timeout = nullptr);
+  // Lock (exclusively) when predicate.check() returns true, or when the timeout (if any) expires.
+  // The mutex is always locked when this returns regardless of whether the timeout expired (and
+  // always unlocked if it throws).
 
 private:
 #if KJ_USE_FUTEX
@@ -100,6 +103,7 @@ private:
     Predicate& predicate;
 #if KJ_USE_FUTEX
     uint futex;
+    bool hasTimeout;
 #elif _WIN32
     uintptr_t condvar;
     // Actually CONDITION_VARIABLE, but don't want to #include <windows.h> in header.
@@ -284,7 +288,8 @@ public:
   // Like `getWithoutLock()`, but asserts that the lock is already held by the calling thread.
 
   template <typename Cond, typename Func>
-  auto when(Cond&& condition, Func&& callback) const -> decltype(callback(instance<T&>())) {
+  auto when(Cond&& condition, Func&& callback, Maybe<Duration> timeout = nullptr) const
+      -> decltype(callback(instance<T&>())) {
     // Waits until condition(state) returns true, then calls callback(state) under lock.
     //
     // `condition`, when called, receives as its parameter a const reference to the state, which is
@@ -295,6 +300,10 @@ public:
     // condition to become true. It may even return true once, but then be called more times.
     // It is guaranteed, though, that at the time `callback()` is finally called, `condition()`
     // would currently return true (assuming it is a pure function of the guarded data).
+    //
+    // If `timeout` is specified, then after the given amount of time, the callback will be called
+    // regardless of whether the condition is true. In this case, when `callback()` is called,
+    // `condition()` may in fact evaluate false, but *only* if the timeout was reached.
 
     struct PredicateImpl final: public _::Mutex::Predicate {
       bool check() override {
@@ -309,7 +318,7 @@ public:
     };
 
     PredicateImpl impl(kj::fwd<Cond>(condition), value);
-    mutex.lockWhen(impl);
+    mutex.lockWhen(impl, timeout);
     KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
     return callback(value);
   }
