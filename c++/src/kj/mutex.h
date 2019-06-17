@@ -101,7 +101,8 @@ private:
 #if KJ_USE_FUTEX
     uint futex;
 #elif _WIN32
-    #error "TODO(now): implement Win32 support before merging"
+    uintptr_t condvar;
+    // Actually CONDITION_VARIABLE, but don't want to #include <windows.h> in header.
 #else
     pthread_cond_t condvar;
 

@@ -280,6 +280,7 @@ void Once::reset() {
 
 #define coercedSrwLock (*reinterpret_cast<SRWLOCK*>(&srwLock))
 #define coercedInitOnce (*reinterpret_cast<INIT_ONCE*>(&initOnce))
+#define coercedCondvar(var) (*reinterpret_cast<CONDITION_VARIABLE*>(&var))
 
 Mutex::Mutex() {
   static_assert(sizeof(SRWLOCK) == sizeof(srwLock), "SRWLOCK is not a pointer?");
@@ -300,9 +301,37 @@ void Mutex::lock(Exclusivity exclusivity) {
 
 void Mutex::unlock(Exclusivity exclusivity) {
   switch (exclusivity) {
-    case EXCLUSIVE:
-      ReleaseSRWLockExclusive(&coercedSrwLock);
+    case EXCLUSIVE: {
+      KJ_DEFER(ReleaseSRWLockExclusive(&coercedSrwLock));
+
+      // Check if there are any conditional waiters. Note we only do this when unlocking an
+      // exclusive lock since under a shared lock the state couldn't have changed.
+      auto nextWaiter = waitersHead;
+      for (;;) {
+        KJ_IF_MAYBE(waiter, nextWaiter) {
+          nextWaiter = waiter->next;
+
+          if (waiter->predicate.check()) {
+            // This waiter's predicate now evaluates true, so wake it up. It doesn't matter if we
+            // use Wake vs. WakeAll here since there's always only one thread waiting.
+            WakeConditionVariable(&coercedCondvar(waiter->condvar));
+
+            // We only need to wake one waiter. Note that unlike the futex-based implementation, we
+            // cannot "transfer ownership" of the lock to the waiter, therefore we cannot guarantee
+            // that the condition is still true when that waiter finally awakes. However, if the
+            // condition is no longer true at that point, the waiter will re-check all other
+            // waiters' conditions and possibly wake up any other waiter who is now ready, hence we
+            // still only need to wake one waiter here.
+            return;
+          }
+        } else {
+          // No more waiters.
+          break;
+        }
+      }
       break;
+    }
+
     case SHARED:
       ReleaseSRWLockShared(&coercedSrwLock);
       break;
@@ -314,6 +343,27 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   // this writing, my version of Wine (1.6.2) doesn't implement these functions and will abort if
   // they are called. Since we were only going to use them as a hacky way to check if the lock is
   // held for debug purposes anyway, we just don't bother.
+}
+
+void Mutex::lockWhen(Predicate& predicate) {
+  lock(EXCLUSIVE);
+
+  // Add waiter to list.
+  Waiter waiter { nullptr, waitersTail, predicate };
+  static_assert(sizeof(waiter.condvar) == sizeof(CONDITION_VARIABLE),
+                "CONDITION_VARIABLE is not a pointer?");
+  InitializeConditionVariable(&coercedCondvar(waiter.condvar));
+
+  addWaiter(waiter);
+  KJ_DEFER(removeWaiter(waiter));
+
+  while (!predicate.check()) {
+    // SleepConditionVariableSRW(), unlike other modern Win32 synchronization functions, can fail.
+    // However, I'm guessing the only possible error is ERROR_TIMEOUT, which should never happen
+    // to us...
+    KJ_WIN32(SleepConditionVariableSRW(
+        &coercedCondvar(waiter.condvar), &coercedSrwLock, INFINITE, 0));
+  }
 }
 
 static BOOL WINAPI nullInitializer(PINIT_ONCE initOnce, PVOID parameter, PVOID* context) {
