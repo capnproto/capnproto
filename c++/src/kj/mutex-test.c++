@@ -183,6 +183,48 @@ TEST(Mutex, When) {
 
     KJ_EXPECT(*value.lockShared() == 101);
   }
+
+#if !KJ_NO_EXCEPTIONS
+  {
+    // Throw from predicate.
+    KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
+      KJ_FAIL_ASSERT("oops threw");
+    }, [](uint& n) {
+      KJ_FAIL_EXPECT("shouldn't get here");
+    }));
+
+    // Throw from predicate later on.
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 321;
+    });
+
+    KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
+      KJ_ASSERT(n != 321, "oops threw");
+      return false;
+    }, [](uint& n) {
+      KJ_FAIL_EXPECT("shouldn't get here");
+    }));
+  }
+
+  {
+    // Verify the exceptions didn't break the mutex.
+    uint m = value.when([](uint n) { return n > 0; }, [](uint& n) {
+      return n;
+    });
+    KJ_EXPECT(m == 321);
+
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 654;
+    });
+
+    m = value.when([](uint n) { return n > 500; }, [](uint& n) {
+      return n;
+    });
+    KJ_EXPECT(m == 654);
+  }
+#endif
 }
 
 TEST(Mutex, WhenWithTimeout) {
@@ -260,6 +302,55 @@ TEST(Mutex, WhenWithTimeout) {
     }, LONG_TIMEOUT);
     KJ_EXPECT(m == 56);
   }
+
+#if !KJ_NO_EXCEPTIONS
+  {
+    // Throw from predicate.
+    KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
+      KJ_FAIL_ASSERT("oops threw");
+    }, [](uint& n) {
+      KJ_FAIL_EXPECT("shouldn't get here");
+    }, LONG_TIMEOUT));
+
+    // Throw from predicate later on.
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 321;
+    });
+
+    KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
+      KJ_ASSERT(n != 321, "oops threw");
+      return false;
+    }, [](uint& n) {
+      KJ_FAIL_EXPECT("shouldn't get here");
+    }, LONG_TIMEOUT));
+  }
+
+  {
+    // Verify the exceptions didn't break the mutex.
+    uint m = value.when([](uint n) { return n > 0; }, [](uint& n) {
+      return n;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 321);
+
+    auto start = now();
+    m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
+      KJ_EXPECT(now() - start >= 10 * kj::MILLISECONDS);
+      return n + 1;
+    }, 10 * kj::MILLISECONDS);
+    KJ_EXPECT(m == 322);
+
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 654;
+    });
+
+    m = value.when([](uint n) { return n > 500; }, [](uint& n) {
+      return n;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 654);
+  }
+#endif
 }
 
 TEST(Mutex, Lazy) {

@@ -41,6 +41,8 @@
 
 namespace kj {
 
+class Exception;
+
 // =======================================================================================
 // Private details -- public interfaces follow below.
 
@@ -101,6 +103,7 @@ private:
     kj::Maybe<Waiter&> next;
     kj::Maybe<Waiter&>* prev;
     Predicate& predicate;
+    Maybe<Own<Exception>> exception;
 #if KJ_USE_FUTEX
     uint futex;
     bool hasTimeout;
@@ -122,6 +125,7 @@ private:
 
   inline void addWaiter(Waiter& waiter);
   inline void removeWaiter(Waiter& waiter);
+  bool checkPredicate(Waiter& waiter);
 };
 
 class Once {

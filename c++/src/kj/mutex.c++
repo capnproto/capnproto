@@ -71,13 +71,34 @@ inline void Mutex::removeWaiter(Waiter& waiter) {
   }
 }
 
+bool Mutex::checkPredicate(Waiter& waiter) {
+  // Run the predicate from a thread other than the waiting thread, returning true if it's time to
+  // signal the waiting thread. This is not only when the predicate passes, but also when it
+  // throws, in which case we want to propagate the exception to the waiting thread.
+
+  if (waiter.exception != nullptr) return true;  // don't run again after an exception
+
+  bool result = false;
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    result = waiter.predicate.check();
+  })) {
+    // Exception thown.
+    result = true;
+    waiter.exception = kj::heap(kj::mv(*exception));
+  };
+  return result;
+}
+
 #if !_WIN32
 namespace {
 
+TimePoint toTimePoint(struct timespec ts) {
+  return kj::origin<TimePoint>() + ts.tv_sec * kj::SECONDS + ts.tv_nsec * kj::NANOSECONDS;
+}
 TimePoint now() {
   struct timespec now;
   KJ_SYSCALL(clock_gettime(CLOCK_MONOTONIC, &now));
-  return kj::origin<TimePoint>() + now.tv_sec * kj::SECONDS + now.tv_nsec * kj::NANOSECONDS;
+  return toTimePoint(now);
 }
 struct timespec toRelativeTimespec(Duration timeout) {
   struct timespec ts;
@@ -157,7 +178,7 @@ void Mutex::unlock(Exclusivity exclusivity) {
         KJ_IF_MAYBE(waiter, nextWaiter) {
           nextWaiter = waiter->next;
 
-          if (waiter->predicate.check()) {
+          if (checkPredicate(*waiter)) {
             // This waiter's predicate now evaluates true, so wake it up.
             if (waiter->hasTimeout) {
               // In this case we need to be careful to make sure the target thread isn't already
@@ -249,7 +270,7 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   });
 
   // Add waiter to list.
-  Waiter waiter { nullptr, waitersTail, predicate, 0, timeout != nullptr };
+  Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0, timeout != nullptr };
 
   addWaiter(waiter);
   KJ_DEFER(removeWaiter(waiter));
@@ -301,7 +322,7 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
           KJ_FAIL_SYSCALL("futex(FUTEX_WAIT_PRIVATE)", error);
       }
 
-      if (__atomic_load_n(&waiter.futex, __ATOMIC_ACQUIRE) != 0) {
+      if (__atomic_load_n(&waiter.futex, __ATOMIC_ACQUIRE)) {
         // We received a lock ownership transfer from another thread.
         currentlyLocked = true;
 
@@ -309,6 +330,16 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
 #ifdef KJ_DEBUG
         assertLockedByCaller(EXCLUSIVE);
 #endif
+
+        KJ_IF_MAYBE(exception, waiter.exception) {
+          // The predicate threw an exception, apparently. Propagate it.
+          // TODO(someday): Could we somehow have this be a recoverable exception? Presumably we'd
+          //   then want MutexGuarded::when() to skip calling the callback, but then what should it
+          //   return, since it normally returns the callback's result? Or maybe people who disable
+          //   exceptions just really should not write predicates that can throw.
+          kj::throwFatalException(kj::mv(**exception));
+        }
+
         return;
       }
     }
@@ -411,7 +442,7 @@ void Mutex::unlock(Exclusivity exclusivity) {
         KJ_IF_MAYBE(waiter, nextWaiter) {
           nextWaiter = waiter->next;
 
-          if (waiter->predicate.check()) {
+          if (checkPredicate(*waiter)) {
             // This waiter's predicate now evaluates true, so wake it up. It doesn't matter if we
             // use Wake vs. WakeAll here since there's always only one thread waiting.
             WakeConditionVariable(&coercedCondvar(waiter->condvar));
@@ -448,8 +479,11 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
 void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   lock(EXCLUSIVE);
 
+  // Any exceptions should leave the mutex unlocked.
+  KJ_ON_SCOPE_FAILURE(unlock(EXCLUSIVE));
+
   // Add waiter to list.
-  Waiter waiter { nullptr, waitersTail, predicate };
+  Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0 };
   static_assert(sizeof(waiter.condvar) == sizeof(CONDITION_VARIABLE),
                 "CONDITION_VARIABLE is not a pointer?");
   InitializeConditionVariable(&coercedCondvar(waiter.condvar));
@@ -477,6 +511,15 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
       } else {
         KJ_FAIL_WIN32("SleepConditionVariableSRW()", error);
       }
+    }
+
+    KJ_IF_MAYBE(exception, waiter.exception) {
+      // The predicate threw an exception, apparently. Propagate it.
+      // TODO(someday): Could we somehow have this be a recoverable exception? Presumably we'd
+      //   then want MutexGuarded::when() to skip calling the callback, but then what should it
+      //   return, since it normally returns the callback's result? Or maybe people who disable
+      //   exceptions just really should not write predicates that can throw.
+      kj::throwFatalException(kj::mv(**exception));
     }
   }
 }
@@ -566,7 +609,7 @@ void Mutex::unlock(Exclusivity exclusivity) {
       KJ_IF_MAYBE(waiter, nextWaiter) {
         nextWaiter = waiter->next;
 
-        if (waiter->predicate.check()) {
+        if (checkPredicate(*waiter)) {
           // This waiter's predicate now evaluates true, so wake it up. It doesn't matter if we
           // use _signal() vs. _broadcast() here since there's always only one thread waiting.
           KJ_PTHREAD_CALL(pthread_mutex_lock(&waiter->stupidMutex));
@@ -612,9 +655,16 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
 void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   lock(EXCLUSIVE);
 
+  // Since the predicate might throw, we should be careful to remember if we've locked the mutex
+  // and unlock it on the way out.
+  bool currentlyLocked = true;
+  KJ_ON_SCOPE_FAILURE({
+    if (currentlyLocked) unlock(EXCLUSIVE);
+  });
+
   // Add waiter to list.
   Waiter waiter {
-    nullptr, waitersTail, predicate,
+    nullptr, waitersTail, predicate, nullptr,
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER
   };
 
@@ -653,6 +703,7 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
 
     // OK, now we can unlock the main mutex.
     unlock(EXCLUSIVE);
+    currentlyLocked = false;
 
     bool timedOut = false;
 
@@ -663,8 +714,7 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
       // which means modifying the system clock will break the wait. However, macOS happens to
       // provide an alternative relative-time wait function, so I guess we'll use that. It does
       // require recomputing the time every iteration...
-      struct timespec ts = toRelativeTimespec(
-          kj::max(toAbsoluteTimespec(*t) - now(), 0 * kj::SECONDS));
+      struct timespec ts = toRelativeTimespec(kj::max(toTimePoint(*t) - now(), 0 * kj::SECONDS));
       int error = pthread_cond_timedwait_relative_np(&waiter.condvar, &waiter.stupidMutex, &ts);
 #else
       int error = pthread_cond_timedwait(&waiter.condvar, &waiter.stupidMutex, t);
@@ -688,6 +738,16 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
     KJ_PTHREAD_CALL(pthread_mutex_unlock(&waiter.stupidMutex));
 
     lock(EXCLUSIVE);
+    currentlyLocked = true;
+
+    KJ_IF_MAYBE(exception, waiter.exception) {
+      // The predicate threw an exception, apparently. Propagate it.
+      // TODO(someday): Could we somehow have this be a recoverable exception? Presumably we'd
+      //   then want MutexGuarded::when() to skip calling the callback, but then what should it
+      //   return, since it normally returns the callback's result? Or maybe people who disable
+      //   exceptions just really should not write predicates that can throw.
+      kj::throwFatalException(kj::mv(**exception));
+    }
 
     if (timedOut) {
       return;
