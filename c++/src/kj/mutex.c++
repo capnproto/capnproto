@@ -374,9 +374,7 @@ void Once::reset() {
     } \
   }
 
-Mutex::Mutex() {
-  KJ_PTHREAD_CALL(pthread_rwlock_init(&mutex, nullptr));
-}
+Mutex::Mutex(): mutex(PTHREAD_RWLOCK_INITIALIZER) {}
 Mutex::~Mutex() {
   KJ_PTHREAD_CLEANUP(pthread_rwlock_destroy(&mutex));
 }
@@ -488,9 +486,9 @@ void Mutex::lockWhen(Predicate& predicate) {
   }
 }
 
-Once::Once(bool startInitialized): state(startInitialized ? INITIALIZED : UNINITIALIZED) {
-  KJ_PTHREAD_CALL(pthread_mutex_init(&mutex, nullptr));
-}
+Once::Once(bool startInitialized)
+    : state(startInitialized ? INITIALIZED : UNINITIALIZED),
+      mutex(PTHREAD_MUTEX_INITIALIZER) {}
 Once::~Once() {
   KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&mutex));
 }
