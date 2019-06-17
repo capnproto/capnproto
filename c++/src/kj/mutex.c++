@@ -52,6 +52,20 @@
 namespace kj {
 namespace _ {  // private
 
+inline void Mutex::addWaiter(Waiter& waiter) {
+  *waitersTail = waiter;
+  waitersTail = &waiter.next;
+}
+inline void Mutex::removeWaiter(Waiter& waiter) {
+  *waiter.prev = waiter.next;
+  KJ_IF_MAYBE(next, waiter.next) {
+    next->prev = waiter.prev;
+  } else {
+    KJ_DASSERT(waitersTail == &waiter.next);
+    waitersTail = waiter.prev;
+  }
+}
+
 #if KJ_USE_FUTEX
 // =======================================================================================
 // Futex-based implementation (Linux-only)
@@ -104,13 +118,6 @@ void Mutex::lock(Exclusivity exclusivity) {
     }
   }
 }
-
-struct Mutex::Waiter {
-  kj::Maybe<Waiter&> next;
-  kj::Maybe<Waiter&>* prev;
-  Predicate& predicate;
-  uint futex;
-};
 
 void Mutex::unlock(Exclusivity exclusivity) {
   switch (exclusivity) {
@@ -189,19 +196,9 @@ void Mutex::lockWhen(Predicate& predicate) {
 
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, 0 };
-  *waitersTail = waiter;
-  waitersTail = &waiter.next;
 
-  KJ_DEFER({
-    // Remove from list.
-    *waiter.prev = waiter.next;
-    KJ_IF_MAYBE(next, waiter.next) {
-      next->prev = waiter.prev;
-    } else {
-      KJ_DASSERT(waitersTail == &waiter.next);
-      waitersTail = waiter.prev;
-    }
-  });
+  addWaiter(waiter);
+  KJ_DEFER(removeWaiter(waiter));
 
   if (!predicate.check()) {
     unlock(EXCLUSIVE);
@@ -396,7 +393,37 @@ void Mutex::lock(Exclusivity exclusivity) {
 }
 
 void Mutex::unlock(Exclusivity exclusivity) {
-  KJ_PTHREAD_CALL(pthread_rwlock_unlock(&mutex));
+  KJ_DEFER(KJ_PTHREAD_CALL(pthread_rwlock_unlock(&mutex)));
+
+  if (exclusivity == EXCLUSIVE) {
+    // Check if there are any conditional waiters. Note we only do this when unlocking an
+    // exclusive lock since under a shared lock the state couldn't have changed.
+    auto nextWaiter = waitersHead;
+    for (;;) {
+      KJ_IF_MAYBE(waiter, nextWaiter) {
+        nextWaiter = waiter->next;
+
+        if (waiter->predicate.check()) {
+          // This waiter's predicate now evaluates true, so wake it up. It doesn't matter if we
+          // use _signal() vs. _broadcast() here since there's always only one thread waiting.
+          KJ_PTHREAD_CALL(pthread_mutex_lock(&waiter->stupidMutex));
+          KJ_PTHREAD_CALL(pthread_cond_signal(&waiter->condvar));
+          KJ_PTHREAD_CALL(pthread_mutex_unlock(&waiter->stupidMutex));
+
+          // We only need to wake one waiter. Note that unlike the futex-based implementation, we
+          // cannot "transfer ownership" of the lock to the waiter, therefore we cannot guarantee
+          // that the condition is still true when that waiter finally awakes. However, if the
+          // condition is no longer true at that point, the waiter will re-check all other waiters'
+          // conditions and possibly wake up any other waiter who is now ready, hence we still only
+          // need to wake one waiter here.
+          break;
+        }
+      } else {
+        // No more waiters.
+        break;
+      }
+    }
+  }
 }
 
 void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
@@ -416,6 +443,48 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
         KJ_FAIL_ASSERT("Tried to call getAlreadyLocked*() but lock is not held.");
       }
       break;
+  }
+}
+
+void Mutex::lockWhen(Predicate& predicate) {
+  lock(EXCLUSIVE);
+
+  // Add waiter to list.
+  Waiter waiter {
+    nullptr, waitersTail, predicate,
+    PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER
+  };
+
+  addWaiter(waiter);
+  KJ_DEFER({
+    removeWaiter(waiter);
+
+    // Destroy pthread objects.
+    KJ_PTHREAD_CALL(pthread_mutex_destroy(&waiter.stupidMutex));
+    KJ_PTHREAD_CALL(pthread_cond_destroy(&waiter.condvar));
+  });
+
+  while (!predicate.check()) {
+    // pthread condvars only work with basic mutexes, not rwlocks. So, we need to lock a basic
+    // mutex before we unlock the real mutex, and the signaling thread also needs to lock this
+    // mutex, in order to ensure that this thread is actually waiting on the condvar before it is
+    // signaled.
+    KJ_PTHREAD_CALL(pthread_mutex_lock(&waiter.stupidMutex));
+
+    // OK, now we can unlock the main mutex.
+    unlock(EXCLUSIVE);
+
+    // Wait for someone to signal the condvar.
+    KJ_PTHREAD_CALL(pthread_cond_wait(&waiter.condvar, &waiter.stupidMutex));
+
+    // We have to be very careful about lock ordering here. We need to unlock stupidMutex before
+    // re-locking the main mutex, because another thread may have a lock on the main mutex already
+    // and be waiting for a lock on stupidMutex. Note that other thread may signal the condvar
+    // right after we unlock stupidMutex but before we re-lock the main mutex. That is fine,
+    // because we've already been signaled.
+    KJ_PTHREAD_CALL(pthread_mutex_unlock(&waiter.stupidMutex));
+
+    lock(EXCLUSIVE);
   }
 }
 

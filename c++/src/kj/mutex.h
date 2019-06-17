@@ -66,7 +66,6 @@ public:
   // non-trivial, assert that the mutex is locked (which should be good enough to catch problems
   // in unit tests).  In non-debug builds, do nothing.
 
-#if KJ_USE_FUTEX    // TODO(someday): Implement on pthread & win32
   class Predicate {
   public:
     virtual bool check() = 0;
@@ -74,7 +73,6 @@ public:
 
   void lockWhen(Predicate& predicate);
   // Lock (exclusively) when predicate.check() returns true.
-#endif
 
 private:
 #if KJ_USE_FUTEX
@@ -89,17 +87,36 @@ private:
   static constexpr uint EXCLUSIVE_REQUESTED = 1u << 30;
   static constexpr uint SHARED_COUNT_MASK = EXCLUSIVE_REQUESTED - 1;
 
-  struct Waiter;
-  kj::Maybe<Waiter&> waitersHead = nullptr;
-  kj::Maybe<Waiter&>* waitersTail = &waitersHead;
-  // linked list of waitUntil()s; can only modify under lock
-
 #elif _WIN32
   uintptr_t srwLock;  // Actually an SRWLOCK, but don't want to #include <windows.h> in header.
 
 #else
   mutable pthread_rwlock_t mutex;
 #endif
+
+  struct Waiter {
+    kj::Maybe<Waiter&> next;
+    kj::Maybe<Waiter&>* prev;
+    Predicate& predicate;
+#if KJ_USE_FUTEX
+    uint futex;
+#elif _WIN32
+    #error "TODO(now): implement Win32 support before merging"
+#else
+    pthread_cond_t condvar;
+
+    pthread_mutex_t stupidMutex;
+    // pthread condvars are only compatible with basic pthread mutexes, not rwlocks, for no
+    // particularly good reason. To work around this, we need an extra mutex per condvar.
+#endif
+  };
+
+  kj::Maybe<Waiter&> waitersHead = nullptr;
+  kj::Maybe<Waiter&>* waitersTail = &waitersHead;
+  // linked list of waitUntil()s; can only modify under lock
+
+  inline void addWaiter(Waiter& waiter);
+  inline void removeWaiter(Waiter& waiter);
 };
 
 class Once {
@@ -265,13 +282,12 @@ public:
   inline T& getAlreadyLockedExclusive() const;
   // Like `getWithoutLock()`, but asserts that the lock is already held by the calling thread.
 
-#if KJ_USE_FUTEX    // TODO(someday): Implement on pthread & win32
   template <typename Cond, typename Func>
   auto when(Cond&& condition, Func&& callback) const -> decltype(callback(instance<T&>())) {
     // Waits until condition(state) returns true, then calls callback(state) under lock.
     //
     // `condition`, when called, receives as its parameter a const reference to the state, which is
-    // locked (either shared or exclusive). `callback` returns a mutable reference, which is
+    // locked (either shared or exclusive). `callback` receives a mutable reference, which is
     // exclusively locked.
     //
     // `condition()` may be called multiple times, from multiple threads, while waiting for the
@@ -296,7 +312,6 @@ public:
     KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
     return callback(value);
   }
-#endif
 
 private:
   mutable _::Mutex mutex;

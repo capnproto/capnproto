@@ -119,7 +119,6 @@ TEST(Mutex, MutexGuarded) {
   EXPECT_EQ(321u, value.getWithoutLock());
 }
 
-#if KJ_USE_FUTEX    // TODO(someday): Implement on pthread & win32
 TEST(Mutex, When) {
   MutexGuarded<uint> value(123);
 
@@ -170,7 +169,6 @@ TEST(Mutex, When) {
     KJ_EXPECT(*value.lockShared() == 101);
   }
 }
-#endif
 
 TEST(Mutex, Lazy) {
   Lazy<uint> lazy;
