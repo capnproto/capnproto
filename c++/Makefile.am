@@ -235,10 +235,6 @@ else
 lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la $(MAYBE_KJ_TLS_LA) libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
 endif
 
-# Don't include security release in soname -- we want to replace old binaries
-# in this case.
-SO_VERSION = $(shell echo $(VERSION) | sed -e 's/^\([0-9]*[.][0-9]*[.][0-9]*\)\([.][0-9]*\)*\(-.*\)*$$/\1\3/g')
-
 libkj_la_LIBADD = $(PTHREAD_LIBS)
 libkj_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_la_SOURCES=                                              \
@@ -426,14 +422,14 @@ if USE_EXTERNAL_CAPNP
 
 test_capnpc_middleman: $(test_capnpc_inputs)
 	@$(MKDIR_P) src
-	$(CAPNP) compile --src-prefix=$(srcdir)/src -o$(CAPNPC_CXX):src -I$(srcdir)/src $^
+	$(CAPNP) compile --src-prefix=$(srcdir)/src -o$(CAPNPC_CXX):src -I$(srcdir)/src $$(for FILE in $(test_capnpc_inputs); do echo $(srcdir)/$$FILE; done)
 	touch test_capnpc_middleman
 
 else
 
 test_capnpc_middleman: capnp$(EXEEXT) capnpc-c++$(EXEEXT) $(test_capnpc_inputs)
 	@$(MKDIR_P) src
-	echo $^ | (read CAPNP CAPNPC_CXX SOURCES && ./$$CAPNP compile --src-prefix=$(srcdir)/src -o./$$CAPNPC_CXX:src -I$(srcdir)/src $$SOURCES)
+	./capnp$(EXEEXT) compile --src-prefix=$(srcdir)/src -o./capnpc-c++$(EXEEXT):src -I$(srcdir)/src $$(for FILE in $(test_capnpc_inputs); do echo $(srcdir)/$$FILE; done)
 	touch test_capnpc_middleman
 
 endif

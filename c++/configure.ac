@@ -129,6 +129,11 @@ AC_DEFUN([CAPNP_CMAKE_CONFIG_FILES], [ \
 AC_SUBST([CAPNP_PKG_CONFIG_FILES])
 AC_SUBST([CAPNP_CMAKE_CONFIG_FILES])
 
+# Don't include security release in soname -- we want to replace old binaries
+# in this case.
+SO_VERSION=$(echo $VERSION | sed -e 's/^\([0-9]*[.][0-9]*[.][0-9]*\)\([.][0-9]*\)*\(-.*\)*$/\1\3/g')
+AC_SUBST([SO_VERSION])
+
 # CapnProtoConfig.cmake.in needs these PACKAGE_* output variables.
 PACKAGE_INIT="set([CAPNP_PKG_CONFIG_FILES] CAPNP_PKG_CONFIG_FILES)"
 PACKAGE_CMAKE_INSTALL_FULL_INCLUDEDIR="\${CMAKE_CURRENT_LIST_DIR}/../../../include"
