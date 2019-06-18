@@ -26,6 +26,8 @@
 #define NOGDI  // NOGDI is needed to make EXPECT_EQ(123u, *lock) compile for some reason
 #endif
 
+#define KJ_MUTEX_TEST 1
+
 #include "mutex.h"
 #include "debug.h"
 #include "thread.h"
@@ -367,6 +369,63 @@ TEST(Mutex, WhenWithTimeout) {
     KJ_EXPECT(m == 654);
   }
 #endif
+}
+
+TEST(Mutex, WhenWithTimeoutPreciseTiming) {
+  // Test that MutexGuarded::when() with a timeout sleeps for precisely the right amount of time.
+
+  for (uint retryCount = 0; retryCount < 20; retryCount++) {
+    MutexGuarded<uint> value(123);
+
+    auto start = now();
+    uint m = value.when([&value](uint n) {
+      // HACK: Reset the value as a way of testing what happens when the waiting thread is woken
+      //   up but then finds it's not ready yet.
+      value.getWithoutLock() = 123;
+      return n == 321;
+    }, [](uint& n) {
+      return 456;
+    }, 20 * kj::MILLISECONDS);
+
+    KJ_EXPECT(m == 456);
+
+    auto t = now() - start;
+    KJ_EXPECT(t >= 20 * kj::MILLISECONDS);
+    if (t <= 22 * kj::MILLISECONDS) {
+      return;
+    }
+  }
+  KJ_FAIL_ASSERT("time not within expected bounds even after retries");
+}
+
+TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
+  // Test that MutexGuarded::when() with a timeout sleeps for precisely the right amount of time,
+  // even if the thread is spuriously woken in the middle.
+
+  for (uint retryCount = 0; retryCount < 20; retryCount++) {
+    MutexGuarded<uint> value(123);
+
+    kj::Thread thread([&]() {
+      delay();
+      value.lockExclusive().induceSpuriousWakeupForTest();
+    });
+
+    auto start = now();
+    uint m = value.when([](uint n) {
+      return n == 321;
+    }, [](uint& n) {
+      return 456;
+    }, 20 * kj::MILLISECONDS);
+
+    KJ_EXPECT(m == 456);
+
+    auto t = now() - start;
+    KJ_EXPECT(t >= 20 * kj::MILLISECONDS, t / kj::MILLISECONDS);
+    if (t <= 22 * kj::MILLISECONDS) {
+      return;
+    }
+  }
+  KJ_FAIL_ASSERT("time not within expected bounds even after retries");
 }
 
 TEST(Mutex, Lazy) {

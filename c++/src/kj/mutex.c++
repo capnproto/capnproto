@@ -346,6 +346,19 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   }
 }
 
+void Mutex::induceSpuriousWakeupForTest() {
+  auto nextWaiter = waitersHead;
+  for (;;) {
+    KJ_IF_MAYBE(waiter, nextWaiter) {
+      nextWaiter = waiter->next;
+      syscall(SYS_futex, &waiter->futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+    } else {
+      // No more waiters.
+      break;
+    }
+  }
+}
+
 void Once::runOnce(Initializer& init) {
 startOver:
   uint state = UNINITIALIZED;
@@ -500,12 +513,21 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   KJ_IF_MAYBE(t, timeout) {
     // Compute initial sleep time.
     sleepMs = *t / kj::MILLISECONDS;
+    if (*t % kj::MILLISECONDS > 0 * kj::SECONDS) {
+      // We guarantee we won't wake up too early.
+      ++sleepMs;
+    }
 
     // Also compute the timeout absolute time in Performance Counter ticks, in case we need to
     // restart the wait later.
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&endTime);
-    endTime.QuadPart += *t / kj::MILLISECONDS * frequency.QuadPart / 1000;
+    auto numerator = *t / kj::MILLISECONDS * frequency.QuadPart;
+    endTime.QuadPart += numerator / 1000;
+    if (numerator % 1000 > 0) {
+      // We guarantee we won't wake up too early.
+      ++endTime.QuadPart;
+    }
   } else {
     sleepMs = INFINITE;
   }
@@ -538,12 +560,29 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
       QueryPerformanceCounter(&now);
 
       if (endTime.QuadPart > now.QuadPart) {
-        uint64_t remaining = endTime.QuadPart - now.QuadPart;
-        sleepMs = remaining * 1000 / frequency.QuadPart;
+        uint64_t numerator = (endTime.QuadPart - now.QuadPart) * 1000;
+        sleepMs = numerator / frequency.QuadPart;
+        if (numerator % frequency.QuadPart > 0) {
+          // We guarantee we won't wake up too early.
+          ++sleepMs;
+        }
       } else {
         // Oops, already timed out.
         return;
       }
+    }
+  }
+}
+
+void Mutex::induceSpuriousWakeupForTest() {
+  auto nextWaiter = waitersHead;
+  for (;;) {
+    KJ_IF_MAYBE(waiter, nextWaiter) {
+      nextWaiter = waiter->next;
+      WakeConditionVariable(&coercedCondvar(waiter->condvar));
+    } else {
+      // No more waiters.
+      break;
     }
   }
 }
@@ -775,6 +814,21 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
 
     if (timedOut) {
       return;
+    }
+  }
+}
+
+void Mutex::induceSpuriousWakeupForTest() {
+  auto nextWaiter = waitersHead;
+  for (;;) {
+    KJ_IF_MAYBE(waiter, nextWaiter) {
+      nextWaiter = waiter->next;
+      KJ_PTHREAD_CALL(pthread_mutex_lock(&waiter->stupidMutex));
+      KJ_PTHREAD_CALL(pthread_cond_signal(&waiter->condvar));
+      KJ_PTHREAD_CALL(pthread_mutex_unlock(&waiter->stupidMutex));
+    } else {
+      // No more waiters.
+      break;
     }
   }
 }

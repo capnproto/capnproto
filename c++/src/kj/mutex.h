@@ -79,6 +79,11 @@ public:
   // The mutex is always locked when this returns regardless of whether the timeout expired (and
   // always unlocked if it throws).
 
+  void induceSpuriousWakeupForTest();
+  // Utility method for mutex-test.c++ which causes a spurious thread wakeup on all threads that
+  // are waiting for a lockWhen() condition. Assuming correct implementation, all those threads
+  // should immediately go back to sleep.
+
 private:
 #if KJ_USE_FUTEX
   uint futex;
@@ -246,6 +251,14 @@ private:
   friend class MutexGuarded;
   template <typename U>
   friend class ExternalMutexGuarded;
+
+#if KJ_MUTEX_TEST
+public:
+#endif
+  void induceSpuriousWakeupForTest() { mutex->induceSpuriousWakeupForTest(); }
+  // Utility method for mutex-test.c++ which causes a spurious thread wakeup on all threads that
+  // are waiting for a when() condition. Assuming correct implementation, all those threads should
+  // immediately go back to sleep.
 };
 
 template <typename T>
