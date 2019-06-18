@@ -46,8 +46,24 @@ namespace {
 
 #if _WIN32
 inline void delay() { Sleep(10); }
+
+LARGE_INTEGER qpcBase;
+LARGE_INTEGER qpcFreq;
+bool qpcInitialized = false;
+
 TimePoint now() {
-  return kj::origin<TimePoint>() + GetTickCount64() * kj::MILLISECONDS;
+  // Use our own time origin so that QPC values are small and don't overflow when we multiply by
+  // 1000000.
+  if (!qpcInitialized) {
+    QueryPerformanceCounter(&qpcBase);
+    QueryPerformanceFrequency(&qpcFreq);
+    qpcInitialized = true;
+  }
+
+  LARGE_INTEGER qpc;
+  QueryPerformanceCounter(&qpc);
+  uint64_t micros = (qpc.QuadPart - qpcBase.QuadPart) * 1000000 / qpcFreq.QuadPart;
+  return kj::origin<TimePoint>() + micros * kj::MICROSECONDS;
 }
 #else
 inline void delay() { usleep(10000); }

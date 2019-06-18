@@ -491,17 +491,27 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   addWaiter(waiter);
   KJ_DEFER(removeWaiter(waiter));
 
-  Maybe<TimePoint> endTime = timeout.map([](Duration d) {
-    return kj::origin<TimePoint>() + GetTickCount64() * kj::MILLISECONDS + d;
-  });
+  DWORD sleepMs;
+
+  // Only initialized if `timeout` is non-null.
+  LARGE_INTEGER frequency;
+  LARGE_INTEGER endTime;
+
+  KJ_IF_MAYBE(t, timeout) {
+    // Compute initial sleep time.
+    sleepMs = *t / kj::MILLISECONDS;
+
+    // Also compute the timeout absolute time in Performance Counter ticks, in case we need to
+    // restart the wait later.
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&endTime);
+    endTime.QuadPart += *t / kj::MILLISECONDS * frequency.QuadPart / 1000;
+  } else {
+    sleepMs = INFINITE;
+  }
 
   while (!predicate.check()) {
-    DWORD millis = endTime.map([](TimePoint end) {
-      TimePoint now = kj::origin<TimePoint>() + GetTickCount64() * kj::MILLISECONDS;
-      return kj::max(end - now, 0 * kj::MILLISECONDS) / kj::MILLISECONDS;
-    }).orDefault(INFINITE);
-
-    if (SleepConditionVariableSRW(&coercedCondvar(waiter.condvar), &coercedSrwLock, millis, 0)) {
+    if (SleepConditionVariableSRW(&coercedCondvar(waiter.condvar), &coercedSrwLock, sleepMs, 0)) {
       // Normal result. Continue loop to check predicate.
     } else {
       DWORD error = GetLastError();
@@ -520,6 +530,20 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
       //   return, since it normally returns the callback's result? Or maybe people who disable
       //   exceptions just really should not write predicates that can throw.
       kj::throwFatalException(kj::mv(**exception));
+    }
+
+    // Recompute sleep time.
+    if (timeout != nullptr) {
+      LARGE_INTEGER now;
+      QueryPerformanceCounter(&now);
+
+      if (endTime.QuadPart > now.QuadPart) {
+        uint64_t remaining = endTime.QuadPart - now.QuadPart;
+        sleepMs = remaining * 1000 / frequency.QuadPart;
+      } else {
+        // Oops, already timed out.
+        return;
+      }
     }
   }
 }
