@@ -216,7 +216,7 @@ public:
       return downcast<AsyncStreamFd>(*stream).fd;
     };
     auto promise = writeInternal(data, moreData, fds);
-    return promise.attach(kj::mv(fds));
+    return promise.attach(kj::mv(fds), kj::mv(streams));
   }
 
   Promise<void> whenWriteDisconnected() override {
