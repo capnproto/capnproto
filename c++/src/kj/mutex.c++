@@ -58,10 +58,16 @@ namespace kj {
 namespace _ {  // private
 
 inline void Mutex::addWaiter(Waiter& waiter) {
+#ifdef KJ_DEBUG
+  assertLockedByCaller(EXCLUSIVE);
+#endif
   *waitersTail = waiter;
   waitersTail = &waiter.next;
 }
 inline void Mutex::removeWaiter(Waiter& waiter) {
+#ifdef KJ_DEBUG
+  assertLockedByCaller(EXCLUSIVE);
+#endif
   *waiter.prev = waiter.next;
   KJ_IF_MAYBE(next, waiter.next) {
     next->prev = waiter.prev;
@@ -273,7 +279,11 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0, timeout != nullptr };
 
   addWaiter(waiter);
-  KJ_DEFER(removeWaiter(waiter));
+  KJ_DEFER({
+    if (!currentlyLocked) lock(EXCLUSIVE);
+    removeWaiter(waiter);
+    if (!currentlyLocked) unlock(EXCLUSIVE);
+  });
 
   if (!predicate.check()) {
     unlock(EXCLUSIVE);
@@ -738,7 +748,9 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
 
   addWaiter(waiter);
   KJ_DEFER({
+    if (!currentlyLocked) lock(EXCLUSIVE);
     removeWaiter(waiter);
+    if (!currentlyLocked) unlock(EXCLUSIVE);
 
     // Destroy pthread objects.
     KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&waiter.stupidMutex));
