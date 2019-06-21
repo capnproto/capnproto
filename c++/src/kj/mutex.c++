@@ -524,7 +524,8 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   KJ_IF_MAYBE(t, timeout) {
     // Windows sleeps are inaccurate -- they can be longer *or shorter* than the requested amount.
     // For many use cases of our API, a too-short sleep would be unacceptable. Experimentally, it
-    // seems like sleeps can be up to half a millisecond short, so we'll add a millisecond.
+    // seems like sleeps can be up to half a millisecond short, so we'll add half a millisecond
+    // (and then we round up, below).
     *t += 500 * kj::MICROSECONDS;
 
     // Compute initial sleep time.
