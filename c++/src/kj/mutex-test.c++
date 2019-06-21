@@ -19,6 +19,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN 1  // lolz
+#define WINVER 0x0600
+#define _WIN32_WINNT 0x0600
+#define NOGDI  // NOGDI is needed to make EXPECT_EQ(123u, *lock) compile for some reason
+#endif
+
+#define KJ_MUTEX_TEST 1
+
 #include "mutex.h"
 #include "debug.h"
 #include "thread.h"
@@ -26,12 +35,12 @@
 #include <stdlib.h>
 
 #if _WIN32
-#define NOGDI  // NOGDI is needed to make EXPECT_EQ(123u, *lock) compile for some reason
 #include <windows.h>
 #undef NOGDI
 #else
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
 #endif
 
 namespace kj {
@@ -39,8 +48,32 @@ namespace {
 
 #if _WIN32
 inline void delay() { Sleep(10); }
+
+LARGE_INTEGER qpcBase;
+LARGE_INTEGER qpcFreq;
+bool qpcInitialized = false;
+
+TimePoint now() {
+  // Use our own time origin so that QPC values are small and don't overflow when we multiply by
+  // 1000000.
+  if (!qpcInitialized) {
+    QueryPerformanceCounter(&qpcBase);
+    QueryPerformanceFrequency(&qpcFreq);
+    qpcInitialized = true;
+  }
+
+  LARGE_INTEGER qpc;
+  QueryPerformanceCounter(&qpc);
+  uint64_t micros = (qpc.QuadPart - qpcBase.QuadPart) * 1000000 / qpcFreq.QuadPart;
+  return kj::origin<TimePoint>() + micros * kj::MICROSECONDS;
+}
 #else
 inline void delay() { usleep(10000); }
+TimePoint now() {
+  struct timespec now;
+  KJ_SYSCALL(clock_gettime(CLOCK_MONOTONIC, &now));
+  return kj::origin<TimePoint>() + now.tv_sec * kj::SECONDS + now.tv_nsec * kj::NANOSECONDS;
+}
 #endif
 
 TEST(Mutex, MutexGuarded) {
@@ -119,7 +152,6 @@ TEST(Mutex, MutexGuarded) {
   EXPECT_EQ(321u, value.getWithoutLock());
 }
 
-#if KJ_USE_FUTEX    // TODO(someday): Implement on pthread & win32
 TEST(Mutex, When) {
   MutexGuarded<uint> value(123);
 
@@ -169,8 +201,232 @@ TEST(Mutex, When) {
 
     KJ_EXPECT(*value.lockShared() == 101);
   }
-}
+
+#if !KJ_NO_EXCEPTIONS
+  {
+    // Throw from predicate.
+    KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
+      KJ_FAIL_ASSERT("oops threw");
+    }, [](uint& n) {
+      KJ_FAIL_EXPECT("shouldn't get here");
+    }));
+
+    // Throw from predicate later on.
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 321;
+    });
+
+    KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
+      KJ_ASSERT(n != 321, "oops threw");
+      return false;
+    }, [](uint& n) {
+      KJ_FAIL_EXPECT("shouldn't get here");
+    }));
+  }
+
+  {
+    // Verify the exceptions didn't break the mutex.
+    uint m = value.when([](uint n) { return n > 0; }, [](uint& n) {
+      return n;
+    });
+    KJ_EXPECT(m == 321);
+
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 654;
+    });
+
+    m = value.when([](uint n) { return n > 500; }, [](uint& n) {
+      return n;
+    });
+    KJ_EXPECT(m == 654);
+  }
 #endif
+}
+
+TEST(Mutex, WhenWithTimeout) {
+  MutexGuarded<uint> value(123);
+
+  // A timeout that won't expire.
+  static constexpr Duration LONG_TIMEOUT = 10 * kj::SECONDS;
+
+  {
+    uint m = value.when([](uint n) { return n < 200; }, [](uint& n) {
+      ++n;
+      return n + 2;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 126);
+
+    KJ_EXPECT(*value.lockShared() == 124);
+  }
+
+  {
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 321;
+    });
+
+    uint m = value.when([](uint n) { return n > 200; }, [](uint& n) {
+      ++n;
+      return n + 2;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 324);
+
+    KJ_EXPECT(*value.lockShared() == 322);
+  }
+
+  {
+    // Stress test. 100 threads each wait for a value and then set the next value.
+    *value.lockExclusive() = 0;
+
+    auto threads = kj::heapArrayBuilder<kj::Own<kj::Thread>>(100);
+    for (auto i: kj::zeroTo(100)) {
+      threads.add(kj::heap<kj::Thread>([i,&value]() {
+        if (i % 2 == 0) delay();
+        uint m = value.when([i](const uint& n) { return n == i; },
+            [](uint& n) { return n++; }, LONG_TIMEOUT);
+        KJ_ASSERT(m == i);
+      }));
+    }
+
+    uint m = value.when([](uint n) { return n == 100; }, [](uint& n) {
+      return n++;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 100);
+
+    KJ_EXPECT(*value.lockShared() == 101);
+  }
+
+  {
+    auto start = now();
+    uint m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
+      KJ_ASSERT(n == 101);
+      KJ_EXPECT(now() - start >= 10 * kj::MILLISECONDS);
+      return 12;
+    }, 10 * kj::MILLISECONDS);
+    KJ_EXPECT(m == 12);
+
+    m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
+      KJ_ASSERT(n == 101);
+      KJ_EXPECT(now() - start >= 20 * kj::MILLISECONDS);
+      return 34;
+    }, 10 * kj::MILLISECONDS);
+    KJ_EXPECT(m == 34);
+
+    m = value.when([](uint n) { return n > 0; }, [&](uint& n) {
+      KJ_ASSERT(n == 101);
+      return 56;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 56);
+  }
+
+#if !KJ_NO_EXCEPTIONS
+  {
+    // Throw from predicate.
+    KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
+      KJ_FAIL_ASSERT("oops threw");
+    }, [](uint& n) {
+      KJ_FAIL_EXPECT("shouldn't get here");
+    }, LONG_TIMEOUT));
+
+    // Throw from predicate later on.
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 321;
+    });
+
+    KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
+      KJ_ASSERT(n != 321, "oops threw");
+      return false;
+    }, [](uint& n) {
+      KJ_FAIL_EXPECT("shouldn't get here");
+    }, LONG_TIMEOUT));
+  }
+
+  {
+    // Verify the exceptions didn't break the mutex.
+    uint m = value.when([](uint n) { return n > 0; }, [](uint& n) {
+      return n;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 321);
+
+    auto start = now();
+    m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
+      KJ_EXPECT(now() - start >= 10 * kj::MILLISECONDS);
+      return n + 1;
+    }, 10 * kj::MILLISECONDS);
+    KJ_EXPECT(m == 322);
+
+    kj::Thread thread([&]() {
+      delay();
+      *value.lockExclusive() = 654;
+    });
+
+    m = value.when([](uint n) { return n > 500; }, [](uint& n) {
+      return n;
+    }, LONG_TIMEOUT);
+    KJ_EXPECT(m == 654);
+  }
+#endif
+}
+
+TEST(Mutex, WhenWithTimeoutPreciseTiming) {
+  // Test that MutexGuarded::when() with a timeout sleeps for precisely the right amount of time.
+
+  for (uint retryCount = 0; retryCount < 20; retryCount++) {
+    MutexGuarded<uint> value(123);
+
+    auto start = now();
+    uint m = value.when([&value](uint n) {
+      // HACK: Reset the value as a way of testing what happens when the waiting thread is woken
+      //   up but then finds it's not ready yet.
+      value.getWithoutLock() = 123;
+      return n == 321;
+    }, [](uint& n) {
+      return 456;
+    }, 20 * kj::MILLISECONDS);
+
+    KJ_EXPECT(m == 456);
+
+    auto t = now() - start;
+    KJ_EXPECT(t >= 20 * kj::MILLISECONDS);
+    if (t <= 22 * kj::MILLISECONDS) {
+      return;
+    }
+  }
+  KJ_FAIL_ASSERT("time not within expected bounds even after retries");
+}
+
+TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
+  // Test that MutexGuarded::when() with a timeout sleeps for precisely the right amount of time,
+  // even if the thread is spuriously woken in the middle.
+
+  for (uint retryCount = 0; retryCount < 20; retryCount++) {
+    MutexGuarded<uint> value(123);
+
+    kj::Thread thread([&]() {
+      delay();
+      value.lockExclusive().induceSpuriousWakeupForTest();
+    });
+
+    auto start = now();
+    uint m = value.when([](uint n) {
+      return n == 321;
+    }, [](uint& n) {
+      return 456;
+    }, 20 * kj::MILLISECONDS);
+
+    KJ_EXPECT(m == 456);
+
+    auto t = now() - start;
+    KJ_EXPECT(t >= 20 * kj::MILLISECONDS, t / kj::MILLISECONDS);
+    if (t <= 22 * kj::MILLISECONDS) {
+      return;
+    }
+  }
+  KJ_FAIL_ASSERT("time not within expected bounds even after retries");
+}
 
 TEST(Mutex, Lazy) {
   Lazy<uint> lazy;
