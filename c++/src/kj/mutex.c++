@@ -151,7 +151,7 @@ void Mutex::lock(Exclusivity exclusivity) {
           state |= EXCLUSIVE_REQUESTED;
         }
 
-        syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, NULL, NULL, 0);
+        syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, nullptr, nullptr, 0);
       }
       break;
     case SHARED: {
@@ -164,7 +164,7 @@ void Mutex::lock(Exclusivity exclusivity) {
 
         // The mutex is exclusively locked by another thread.  Since we incremented the counter
         // already, we just have to wait for it to be unlocked.
-        syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, NULL, NULL, 0);
+        syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, nullptr, nullptr, 0);
         state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
       }
       break;
@@ -208,7 +208,7 @@ void Mutex::unlock(Exclusivity exclusivity) {
             } else {
               __atomic_store_n(&waiter->futex, 1, __ATOMIC_RELEASE);
             }
-            syscall(SYS_futex, &waiter->futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+            syscall(SYS_futex, &waiter->futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
 
             // We transferred ownership of the lock to this waiter, so we're done now.
             return;
@@ -228,7 +228,7 @@ void Mutex::unlock(Exclusivity exclusivity) {
         // the lock, and we must wake them up.  If there are any exclusive waiters, we must wake
         // them up even if readers are waiting so that at the very least they may re-establish the
         // EXCLUSIVE_REQUESTED bit that we just removed.
-        syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+        syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
       }
       break;
     }
@@ -244,7 +244,7 @@ void Mutex::unlock(Exclusivity exclusivity) {
             &futex, &state, 0, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
           // Wake all exclusive waiters.  We have to wake all of them because one of them will
           // grab the lock while the others will re-establish the exclusive-requested bit.
-          syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+          syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
         }
       }
       break;
@@ -303,7 +303,7 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
       // CLOCK_MONOTONIC. Otherwise, FUTEX_WAIT_PRIVATE interprets it as a relative time, forcing
       // us to recompute the time after every iteration.
       KJ_SYSCALL_HANDLE_ERRORS(syscall(SYS_futex,
-          &waiter.futex, FUTEX_WAIT_BITSET_PRIVATE, 0, tsp, NULL, FUTEX_BITSET_MATCH_ANY)) {
+          &waiter.futex, FUTEX_WAIT_BITSET_PRIVATE, 0, tsp, nullptr, FUTEX_BITSET_MATCH_ANY)) {
         case EAGAIN:
           // Indicates that the futex was already non-zero by the time the kernal looked at it.
           // Not an error.
@@ -361,7 +361,7 @@ void Mutex::induceSpuriousWakeupForTest() {
   for (;;) {
     KJ_IF_MAYBE(waiter, nextWaiter) {
       nextWaiter = waiter->next;
-      syscall(SYS_futex, &waiter->futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+      syscall(SYS_futex, &waiter->futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
     } else {
       // No more waiters.
       break;
@@ -381,7 +381,7 @@ startOver:
         if (__atomic_exchange_n(&futex, UNINITIALIZED, __ATOMIC_RELEASE) ==
             INITIALIZING_WITH_WAITERS) {
           // Someone was waiting for us to finish.
-          syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+          syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
         }
       });
 
@@ -390,7 +390,7 @@ startOver:
     if (__atomic_exchange_n(&futex, INITIALIZED, __ATOMIC_RELEASE) ==
         INITIALIZING_WITH_WAITERS) {
       // Someone was waiting for us to finish.
-      syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+      syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
     }
   } else {
     for (;;) {
@@ -408,7 +408,8 @@ startOver:
       }
 
       // Wait for initialization.
-      syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, INITIALIZING_WITH_WAITERS, NULL, NULL, 0);
+      syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, INITIALIZING_WITH_WAITERS,
+                         nullptr, nullptr, 0);
       state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
 
       if (state == UNINITIALIZED) {
