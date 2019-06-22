@@ -142,12 +142,12 @@ private:
   class SignalPromiseAdapter;
   class ChildExitPromiseAdapter;
 
+  const MonotonicClock& clock;
   TimerImpl timerImpl;
 
   SignalPromiseAdapter* signalHead = nullptr;
   SignalPromiseAdapter** signalTail = &signalHead;
 
-  TimePoint readClock();
   void gotSignal(const siginfo_t& siginfo);
 
   friend class TimerPromiseAdapter;
