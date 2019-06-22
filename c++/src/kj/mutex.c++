@@ -518,8 +518,8 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   DWORD sleepMs;
 
   // Only initialized if `timeout` is non-null.
-  LARGE_INTEGER frequency;
-  LARGE_INTEGER endTime;
+  const MonotonicClock* clock = nullptr;
+  kj::Maybe<kj::TimePoint> endTime;
 
   KJ_IF_MAYBE(t, timeout) {
     // Windows sleeps are inaccurate -- they can be longer *or shorter* than the requested amount.
@@ -535,16 +535,8 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
       ++sleepMs;
     }
 
-    // Also compute the timeout absolute time in Performance Counter ticks, in case we need to
-    // restart the wait later.
-    QueryPerformanceFrequency(&frequency);
-    QueryPerformanceCounter(&endTime);
-    auto numerator = *t / kj::MILLISECONDS * frequency.QuadPart;
-    endTime.QuadPart += numerator / 1000;
-    if (numerator % 1000 > 0) {
-      // We guarantee we won't wake up too early.
-      ++endTime.QuadPart;
-    }
+    clock = &systemPreciseMonotonicClock();
+    endTime = clock->now() + *t;
   } else {
     sleepMs = INFINITE;
   }
@@ -572,14 +564,13 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
     }
 
     // Recompute sleep time.
-    if (timeout != nullptr) {
-      LARGE_INTEGER now;
-      QueryPerformanceCounter(&now);
+    KJ_IF_MAYBE(e, endTime) {
+      auto now = clock->now();
 
-      if (endTime.QuadPart > now.QuadPart) {
-        uint64_t numerator = (endTime.QuadPart - now.QuadPart) * 1000;
-        sleepMs = numerator / frequency.QuadPart;
-        if (numerator % frequency.QuadPart > 0) {
+      if (*e > now) {
+        auto sleepTime = *e - now;
+        sleepMs = sleepTime / kj::MILLISECONDS;
+        if (sleepTime % kj::MILLISECONDS > 0 * kj::SECONDS) {
           // We guarantee we won't wake up too early.
           ++sleepMs;
         }
