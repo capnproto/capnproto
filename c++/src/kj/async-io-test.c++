@@ -1683,6 +1683,25 @@ KJ_TEST("Userland pipe tryPumpFrom to pumpTo for same amount fulfills simultaneo
   KJ_EXPECT(pumpPromise2.wait(ws) == 6);
 }
 
+KJ_TEST("Userland pipe multi-part write doesn't quit early") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  auto readPromise = expectRead(*pipe.in, "foo");
+
+  kj::ArrayPtr<const byte> pieces[2] = { "foobar"_kj.asBytes(), "baz"_kj.asBytes() };
+  auto writePromise = pipe.out->write(pieces);
+
+  readPromise.wait(ws);
+  KJ_EXPECT(!writePromise.poll(ws));
+  expectRead(*pipe.in, "bar").wait(ws);
+  KJ_EXPECT(!writePromise.poll(ws));
+  expectRead(*pipe.in, "baz").wait(ws);
+  writePromise.wait(ws);
+}
+
 constexpr static auto TEE_MAX_CHUNK_SIZE = 1 << 14;
 // AsyncTee::MAX_CHUNK_SIZE, 16k as of this writing
 

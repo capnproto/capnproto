@@ -423,6 +423,13 @@ class Absolute {
   //   units, which is actually totally logical and kind of neat.
 
 public:
+  inline constexpr Absolute(MaxValue_): value(maxValue) {}
+  inline constexpr Absolute(MinValue_): value(minValue) {}
+  // Allow initialization from maxValue and minValue.
+  // TODO(msvc): decltype(maxValue) and decltype(minValue) deduce unknown-type for these function
+  // parameters, causing the compiler to complain of a duplicate constructor definition, so we
+  // specify MaxValue_ and MinValue_ types explicitly.
+
   inline constexpr Absolute operator+(const T& other) const { return Absolute(value + other); }
   inline constexpr Absolute operator-(const T& other) const { return Absolute(value - other); }
   inline constexpr T operator-(const Absolute& other) const { return value - other.value; }

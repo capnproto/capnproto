@@ -403,3 +403,11 @@ inline constexpr uint sizeInWords() {
       static constexpr ::capnp::_::RawSchema const* schema = &::capnp::schemas::s_##id;
 
 #endif  // CAPNP_LITE, else
+
+namespace capnp {
+namespace schemas {
+CAPNP_DECLARE_SCHEMA(995f9a3377c0b16e);
+// HACK: Forward-declare the RawSchema for StreamResult, from stream.capnp. This allows capnp
+//   files which declare streaming methods to avoid including stream.capnp.h.
+}
+}

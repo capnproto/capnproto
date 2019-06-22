@@ -692,7 +692,7 @@ private:
             // Unfortunately we have to execute a separate write() for the remaining part of this
             // piece, because we can't modify the pieces array.
             auto promise = pipe.write(restOfPiece.begin(), restOfPiece.size());
-            if (pieces.size() > 0) {
+            if (pieces.size() == 0) {
               // No more pieces so that's it.
               return kj::mv(promise);
             } else {

@@ -125,6 +125,27 @@ private:
   friend class RequestHook;
 };
 
+template <typename Params>
+class StreamingRequest: public Params::Builder {
+  // Like `Request` but for streaming requests.
+
+public:
+  inline StreamingRequest(typename Params::Builder builder, kj::Own<RequestHook>&& hook)
+      : Params::Builder(builder), hook(kj::mv(hook)) {}
+  inline StreamingRequest(decltype(nullptr)): Params::Builder(nullptr) {}
+
+  kj::Promise<void> send() KJ_WARN_UNUSED_RESULT;
+
+private:
+  kj::Own<RequestHook> hook;
+
+  friend class Capability::Client;
+  friend struct DynamicCapability;
+  template <typename, typename>
+  friend class CallContext;
+  friend class RequestHook;
+};
+
 template <typename Results>
 class Response: public Results::Reader {
   // A completed call.  This class extends a Reader for the call's answer structure.  The Response
@@ -227,6 +248,9 @@ protected:
   template <typename Params, typename Results>
   Request<Params, Results> newCall(uint64_t interfaceId, uint16_t methodId,
                                    kj::Maybe<MessageSize> sizeHint);
+  template <typename Params>
+  StreamingRequest<Params> newStreamingCall(uint64_t interfaceId, uint16_t methodId,
+                                            kj::Maybe<MessageSize> sizeHint);
 
 private:
   kj::Own<ClientHook> hook;
@@ -330,6 +354,30 @@ private:
   friend struct DynamicCapability;
 };
 
+template <typename Params>
+class StreamingCallContext: public kj::DisallowConstCopy {
+  // Like CallContext but for streaming calls.
+
+public:
+  explicit StreamingCallContext(CallContextHook& hook);
+
+  typename Params::Reader getParams();
+  void releaseParams();
+
+  // Note: tailCall() is not supported because:
+  // - It would significantly complicate the implementation of streaming.
+  // - It wouldn't be particularly useful since streaming calls don't return anything, and they
+  //   already compensate for latency.
+
+  void allowCancellation();
+
+private:
+  CallContextHook* hook;
+
+  friend class Capability::Server;
+  friend struct DynamicCapability;
+};
+
 class Capability::Server {
   // Objects implementing a Cap'n Proto interface must subclass this.  Typically, such objects
   // will instead subclass a typed Server interface which will take care of implementing
@@ -338,8 +386,18 @@ class Capability::Server {
 public:
   typedef Capability Serves;
 
-  virtual kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
-                                         CallContext<AnyPointer, AnyPointer> context) = 0;
+  struct DispatchCallResult {
+    kj::Promise<void> promise;
+    // Promise for completion of the call.
+
+    bool isStreaming;
+    // If true, this method was declared as `-> stream;`. No other calls should be permitted until
+    // this call finishes, and if this call throws an exception, all future calls will throw the
+    // same exception.
+  };
+
+  virtual DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
+                                          CallContext<AnyPointer, AnyPointer> context) = 0;
   // Call the given method.  `params` is the input struct, and should be released as soon as it
   // is no longer needed.  `context` may be used to allocate the output struct and deal with
   // cancellation.
@@ -367,10 +425,13 @@ protected:
   template <typename Params, typename Results>
   CallContext<Params, Results> internalGetTypedContext(
       CallContext<AnyPointer, AnyPointer> typeless);
-  kj::Promise<void> internalUnimplemented(const char* actualInterfaceName,
-                                          uint64_t requestedTypeId);
-  kj::Promise<void> internalUnimplemented(const char* interfaceName,
-                                          uint64_t typeId, uint16_t methodId);
+  template <typename Params>
+  StreamingCallContext<Params> internalGetTypedStreamingContext(
+      CallContext<AnyPointer, AnyPointer> typeless);
+  DispatchCallResult internalUnimplemented(const char* actualInterfaceName,
+                                           uint64_t requestedTypeId);
+  DispatchCallResult internalUnimplemented(const char* interfaceName,
+                                           uint64_t typeId, uint16_t methodId);
   kj::Promise<void> internalUnimplemented(const char* interfaceName, const char* methodName,
                                           uint64_t typeId, uint16_t methodId);
 
@@ -487,6 +548,9 @@ public:
   virtual RemotePromise<AnyPointer> send() = 0;
   // Send the call and return a promise for the result.
 
+  virtual kj::Promise<void> sendStreaming() = 0;
+  // Send a streaming call.
+
   virtual const void* getBrand() = 0;
   // Returns a void* that identifies who made this request.  This can be used by an RPC adapter to
   // discover when tail call is going to be sent over its own connection and therefore can be
@@ -575,11 +639,6 @@ public:
   inline bool isNull() { return getBrand() == &NULL_CAPABILITY_BRAND; }
   // Returns true if the capability was created as a result of assigning a Client to null or by
   // reading a null pointer out of a Cap'n Proto message.
-
-  virtual void* getLocalServer(_::CapabilityServerSetBase& capServerSet);
-  // If this is a local capability created through `capServerSet`, return the underlying Server.
-  // Otherwise, return nullptr. Default implementation (which everyone except LocalClient should
-  // use) always returns nullptr.
 
   virtual kj::Maybe<int> getFd() = 0;
   // Implements Capability::Client::getFd(). If this returns null but whenMoreResolved() returns
@@ -799,6 +858,13 @@ RemotePromise<Results> Request<Params, Results>::send() {
   return RemotePromise<Results>(kj::mv(typedPromise), kj::mv(typedPipeline));
 }
 
+template <typename Params>
+kj::Promise<void> StreamingRequest<Params>::send() {
+  auto promise = hook->sendStreaming();
+  hook = nullptr;  // prevent reuse
+  return promise;
+}
+
 inline Capability::Client::Client(kj::Own<ClientHook>&& hook): hook(kj::mv(hook)) {}
 template <typename T, typename>
 inline Capability::Client::Client(kj::Own<T>&& server)
@@ -829,15 +895,31 @@ inline Request<Params, Results> Capability::Client::newCall(
   auto typeless = hook->newCall(interfaceId, methodId, sizeHint);
   return Request<Params, Results>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
 }
+template <typename Params>
+inline StreamingRequest<Params> Capability::Client::newStreamingCall(
+    uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) {
+  auto typeless = hook->newCall(interfaceId, methodId, sizeHint);
+  return StreamingRequest<Params>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
+}
 
 template <typename Params, typename Results>
 inline CallContext<Params, Results>::CallContext(CallContextHook& hook): hook(&hook) {}
+template <typename Params>
+inline StreamingCallContext<Params>::StreamingCallContext(CallContextHook& hook): hook(&hook) {}
 template <typename Params, typename Results>
 inline typename Params::Reader CallContext<Params, Results>::getParams() {
   return hook->getParams().template getAs<Params>();
 }
+template <typename Params>
+inline typename Params::Reader StreamingCallContext<Params>::getParams() {
+  return hook->getParams().template getAs<Params>();
+}
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::releaseParams() {
+  hook->releaseParams();
+}
+template <typename Params>
+inline void StreamingCallContext<Params>::releaseParams() {
   hook->releaseParams();
 }
 template <typename Params, typename Results>
@@ -875,11 +957,21 @@ template <typename Params, typename Results>
 inline void CallContext<Params, Results>::allowCancellation() {
   hook->allowCancellation();
 }
+template <typename Params>
+inline void StreamingCallContext<Params>::allowCancellation() {
+  hook->allowCancellation();
+}
 
 template <typename Params, typename Results>
 CallContext<Params, Results> Capability::Server::internalGetTypedContext(
     CallContext<AnyPointer, AnyPointer> typeless) {
   return CallContext<Params, Results>(*typeless.hook);
+}
+
+template <typename Params>
+StreamingCallContext<Params> Capability::Server::internalGetTypedStreamingContext(
+    CallContext<AnyPointer, AnyPointer> typeless) {
+  return StreamingCallContext<Params>(*typeless.hook);
 }
 
 Capability::Client Capability::Server::thisCap() {

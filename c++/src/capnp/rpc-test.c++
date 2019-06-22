@@ -246,6 +246,10 @@ public:
         return message.getRoot<AnyPointer>();
       }
 
+      size_t sizeInWords() override {
+        return data.size();
+      }
+
       kj::Array<word> data;
       FlatArrayMessageReader message;
     };
@@ -289,6 +293,10 @@ public:
             }
           }
         })));
+      }
+
+      size_t sizeInWords() override {
+        return message.sizeInWords();
       }
 
     private:

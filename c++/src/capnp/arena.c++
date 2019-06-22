@@ -85,6 +85,16 @@ ReaderArena::ReaderArena(MessageReader* message)
 
 ReaderArena::~ReaderArena() noexcept(false) {}
 
+size_t ReaderArena::sizeInWords() {
+  size_t total = segment0.getArray().size();
+
+  for (uint i = 0; ; i++) {
+    SegmentReader* segment = tryGetSegment(SegmentId(i));
+    if (segment == nullptr) return total;
+    total += unboundAs<size_t>(segment->getSize() / WORDS);
+  }
+}
+
 SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
   if (id == SegmentId(0)) {
     if (segment0.getArray() == nullptr) {
@@ -164,6 +174,24 @@ BuilderArena::BuilderArena(MessageBuilder* message,
 }
 
 BuilderArena::~BuilderArena() noexcept(false) {}
+
+size_t BuilderArena::sizeInWords() {
+  KJ_IF_MAYBE(segmentState, moreSegments) {
+    size_t total = segment0.currentlyAllocated().size();
+    for (auto& builder: segmentState->get()->builders) {
+      total += builder->currentlyAllocated().size();
+    }
+    return total;
+  } else {
+    if (segment0.getArena() == nullptr) {
+      // We haven't actually allocated any segments yet.
+      return 0;
+    } else {
+      // We have only one segment so far.
+      return segment0.currentlyAllocated().size();
+    }
+  }
+}
 
 SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
   // This method is allowed to fail if the segment ID is not valid.

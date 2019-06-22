@@ -22,6 +22,7 @@
 #include "schema.h"
 #include "message.h"
 #include <kj/debug.h>
+#include <capnp/stream.capnp.h>
 
 namespace capnp {
 
@@ -501,6 +502,11 @@ kj::Maybe<StructSchema::Field> StructSchema::getFieldByDiscriminant(uint16_t dis
   } else {
     return unionFields[discriminant];
   }
+}
+
+bool StructSchema::isStreamResult() const {
+  auto& streamRaw = _::rawSchema<StreamResult>();
+  return raw->generic == &streamRaw || raw->generic->canCastTo == &streamRaw;
 }
 
 Type StructSchema::Field::getType() const {

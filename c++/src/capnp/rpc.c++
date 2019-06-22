@@ -56,7 +56,9 @@ constexpr const uint CAP_DESCRIPTOR_SIZE_HINT = sizeInWords<rpc::CapDescriptor>(
 constexpr const uint64_t MAX_SIZE_HINT = 1 << 20;
 
 uint copySizeHint(MessageSize size) {
-  uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT;
+  uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT
+                    // if capCount > 0, the cap descriptor list has a 1-word tag
+                    + (size.capCount > 0);
   return kj::min(MAX_SIZE_HINT, sizeHint);
 }
 
@@ -600,6 +602,25 @@ private:
     // that other client -- return a reference to the other client, transitively.  Otherwise,
     // return a new reference to *this.
 
+    virtual void adoptFlowController(kj::Own<RpcFlowController> flowController) {
+      // Called when a PromiseClient resolves to another RpcClient. If streaming calls were
+      // outstanding on the old client, we'd like to keep using the same FlowController on the new
+      // client, so as to keep the flow steady.
+
+      if (this->flowController == nullptr) {
+        // We don't have any existing flowController so we can adopt this one, yay!
+        this->flowController = kj::mv(flowController);
+      } else {
+        // Apparently, there is an existing flowController. This is an unusual scenario: Apparently
+        // we had two stream capabilities, we were streaming to both of them, and they later
+        // resolved to the same capability. This probably never happens because streaming use cases
+        // normally call for there to be only one client. But, it's certainly possible, and we need
+        // to handle it. We'll do the conservative thing and just make sure that all the calls
+        // finish. This may mean we'll over-buffer temporarily; oh well.
+        connectionState->tasks.add(flowController->waitAllAcked().attach(kj::mv(flowController)));
+      }
+    }
+
     // implements ClientHook -----------------------------------------
 
     Request<AnyPointer, AnyPointer> newCall(
@@ -706,6 +727,9 @@ private:
     }
 
     kj::Own<RpcConnectionState> connectionState;
+
+    kj::Maybe<kj::Own<RpcFlowController>> flowController;
+    // Becomes non-null the first time a streaming call is made on this capability.
   };
 
   class ImportClient final: public RpcClient {
@@ -845,7 +869,7 @@ private:
 
   public:
     PromiseClient(RpcConnectionState& connectionState,
-                  kj::Own<ClientHook> initial,
+                  kj::Own<RpcClient> initial,
                   kj::Promise<kj::Own<ClientHook>> eventual,
                   kj::Maybe<ImportId> importId)
         : RpcClient(connectionState),
@@ -902,6 +926,17 @@ private:
     kj::Own<ClientHook> getInnermostClient() override {
       receivedCall = true;
       return connectionState->getInnermostClient(*cap);
+    }
+
+    void adoptFlowController(kj::Own<RpcFlowController> flowController) override {
+      if (cap->getBrand() == connectionState.get()) {
+        // Pass the flow controller on to our inner cap.
+        kj::downcast<RpcClient>(*cap).adoptFlowController(kj::mv(flowController));
+      } else {
+        // We resolved to a capability that isn't another RPC capability. We should simply make
+        // sure that all the calls complete.
+        connectionState->tasks.add(flowController->waitAllAcked().attach(kj::mv(flowController)));
+      }
     }
 
     // implements ClientHook -----------------------------------------
@@ -989,6 +1024,25 @@ private:
 
     void resolve(kj::Own<ClientHook> replacement, bool isError) {
       const void* replacementBrand = replacement->getBrand();
+
+      // If the original capability was used for streaming calls, it will have a
+      // `flowController` that might still be shepherding those calls. We'll need make sure that
+      // it doesn't get thrown away. Note that we know that *cap is an RpcClient because resolve()
+      // is only called once and our constructor required that the initial capability is an
+      // RpcClient.
+      KJ_IF_MAYBE(f, kj::downcast<RpcClient>(*cap).flowController) {
+        if (replacementBrand == connectionState.get()) {
+          // The new target is on the same connection. It would make a lot of sense to keep using
+          // the same flow controller if possible.
+          kj::downcast<RpcClient>(*replacement).adoptFlowController(kj::mv(*f));
+        } else {
+          // The new target is something else. The best we can do is wait for the controller to
+          // drain. New calls will be flow-controlled in a new way without knowing about the old
+          // controller.
+          connectionState->tasks.add(f->get()->waitAllAcked().attach(kj::mv(*f)));
+        }
+      }
+
       if (replacementBrand != connectionState.get() &&
           replacementBrand != &ClientHook::NULL_CAPABILITY_BRAND &&
           receivedCall && !isError && connectionState->connection.is<Connected>()) {
@@ -1141,6 +1195,11 @@ private:
 
   kj::Array<ExportId> writeDescriptors(kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTable,
                                        rpc::Payload::Builder payload, kj::Vector<int>& fds) {
+    if (capTable.size() == 0) {
+      // Calling initCapTable(0) will still allocate a 1-word tag, which we'd like to avoid...
+      return nullptr;
+    }
+
     auto capTableBuilder = payload.initCapTable(capTable.size());
     kj::Vector<ExportId> exports(capTable.size());
     for (uint i: kj::indices(capTable)) {
@@ -1503,6 +1562,25 @@ private:
       }
     }
 
+    kj::Promise<void> sendStreaming() override {
+      if (!connectionState->connection.is<Connected>()) {
+        // Connection is broken.
+        return kj::cp(connectionState->connection.get<Disconnected>());
+      }
+
+      KJ_IF_MAYBE(redirect, target->writeTarget(callBuilder.getTarget())) {
+        // Whoops, this capability has been redirected while we were building the request!
+        // We'll have to make a new request and do a copy.  Ick.
+
+        auto replacement = redirect->get()->newCall(
+            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize());
+        replacement.set(paramsBuilder);
+        return RequestHook::from(kj::mv(replacement))->sendStreaming();
+      } else {
+        return sendStreamingInternal(false);
+      }
+    }
+
     struct TailInfo {
       QuestionId questionId;
       kj::Promise<void> promise;
@@ -1560,7 +1638,16 @@ private:
       kj::Promise<kj::Own<RpcResponse>> promise = nullptr;
     };
 
-    SendInternalResult sendInternal(bool isTailCall) {
+    struct SetupSendResult: public SendInternalResult {
+      QuestionId questionId;
+      Question& question;
+
+      SetupSendResult(SendInternalResult&& super, QuestionId questionId, Question& question)
+          : SendInternalResult(kj::mv(super)), questionId(questionId), question(question) {}
+      // TODO(cleanup): This constructor is implicit in C++17.
+    };
+
+    SetupSendResult setupSend(bool isTailCall) {
       // Build the cap table.
       kj::Vector<int> fds;
       auto exports = connectionState->writeDescriptors(
@@ -1582,8 +1669,14 @@ private:
       question.selfRef = *result.questionRef;
       result.promise = paf.promise.attach(kj::addRef(*result.questionRef));
 
+      return { kj::mv(result), questionId, question };
+    }
+
+    SendInternalResult sendInternal(bool isTailCall) {
+      auto result = setupSend(isTailCall);
+
       // Finish and send.
-      callBuilder.setQuestionId(questionId);
+      callBuilder.setQuestionId(result.questionId);
       if (isTailCall) {
         callBuilder.getSendResultsTo().setYourself();
       }
@@ -1594,13 +1687,45 @@ private:
       })) {
         // We can't safely throw the exception from here since we've already modified the question
         // table state. We'll have to reject the promise instead.
-        question.isAwaitingReturn = false;
-        question.skipFinish = true;
+        result.question.isAwaitingReturn = false;
+        result.question.skipFinish = true;
         result.questionRef->reject(kj::mv(*exception));
       }
 
       // Send and return.
       return kj::mv(result);
+    }
+
+    kj::Promise<void> sendStreamingInternal(bool isTailCall) {
+      auto setup = setupSend(isTailCall);
+
+      // Finish and send.
+      callBuilder.setQuestionId(setup.questionId);
+      if (isTailCall) {
+        callBuilder.getSendResultsTo().setYourself();
+      }
+      kj::Promise<void> flowPromise = nullptr;
+      KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+        KJ_CONTEXT("sending RPC call",
+           callBuilder.getInterfaceId(), callBuilder.getMethodId());
+        RpcFlowController* flow;
+        KJ_IF_MAYBE(f, target->flowController) {
+          flow = *f;
+        } else {
+          flow = target->flowController.emplace(
+              connectionState->connection.get<Connected>()->newStream());
+        }
+        flowPromise = flow->send(kj::mv(message), setup.promise.ignoreResult());
+      })) {
+        // We can't safely throw the exception from here since we've already modified the question
+        // table state. We'll have to reject the promise instead.
+        setup.question.isAwaitingReturn = false;
+        setup.question.skipFinish = true;
+        setup.questionRef->reject(kj::cp(*exception));
+        return kj::mv(*exception);
+      }
+
+      return kj::mv(flowPromise);
     }
   };
 
@@ -1823,7 +1948,7 @@ private:
           answerId(answerId),
           interfaceId(interfaceId),
           methodId(methodId),
-          requestSize(request->getBody().targetSize().wordCount),
+          requestSize(request->sizeInWords()),
           request(kj::mv(request)),
           paramsCapTable(kj::mv(capTableArray)),
           params(paramsCapTable.imbue(params)),
@@ -2985,4 +3110,146 @@ void RpcSystemBase::baseSetFlowLimit(size_t words) {
 }
 
 }  // namespace _ (private)
+
+// =======================================================================================
+
+namespace {
+
+class WindowFlowController final: public RpcFlowController, private kj::TaskSet::ErrorHandler {
+public:
+  WindowFlowController(RpcFlowController::WindowGetter& windowGetter)
+      : windowGetter(windowGetter), tasks(*this) {
+    state.init<std::queue<QueuedMessage>>();
+  }
+
+  kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(queue, std::queue<QueuedMessage>) {
+        auto size = message->sizeInWords() * sizeof(capnp::word);
+        maxMessageSize = kj::max(size, maxMessageSize);
+        auto paf = kj::newPromiseAndFulfiller<void>();
+        queue.push({kj::mv(message), kj::mv(ack), kj::mv(paf.fulfiller), size});
+        pumpQueue(queue);
+        return kj::mv(paf.promise);
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        return kj::cp(exception);
+      }
+    }
+    KJ_UNREACHABLE;
+  }
+
+  kj::Promise<void> waitAllAcked() override {
+    KJ_IF_MAYBE(q, state.tryGet<std::queue<QueuedMessage>>()) {
+      if (!q->empty()) {
+        auto paf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+        emptyFulfiller = kj::mv(paf.fulfiller);
+        return kj::mv(paf.promise);
+      }
+    }
+    return tasks.onEmpty();
+  }
+
+private:
+  RpcFlowController::WindowGetter& windowGetter;
+  size_t inFlight = 0;
+  size_t maxMessageSize = 0;
+
+  struct QueuedMessage {
+    kj::Own<OutgoingRpcMessage> message;
+    kj::Promise<void> ack;
+    kj::Own<kj::PromiseFulfiller<void>> sentFulfiller;
+    size_t size;
+  };
+  kj::OneOf<std::queue<QueuedMessage>, kj::Exception> state;
+
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<void>>>> emptyFulfiller;
+
+  kj::TaskSet tasks;
+
+  void pumpQueue(std::queue<QueuedMessage>& queue) {
+    size_t window = windowGetter.getWindow();
+
+    // We extend the window by maxMessageSize to avoid a pathological situation when a message
+    // is larger than the window size. Otherwise, after sending that message, we would end up
+    // not sending any others until the ack was received, wasting a round trip's worth of
+    // bandwidth.
+    while (!queue.empty() && inFlight < window + maxMessageSize) {
+      auto front = kj::mv(queue.front());
+      queue.pop();
+
+      front.sentFulfiller->rejectIfThrows([&]() {
+        front.message->send();
+        inFlight += front.size;
+        tasks.add(front.ack.then([this, size = front.size]() {
+          inFlight -= size;
+          KJ_SWITCH_ONEOF(state) {
+            KJ_CASE_ONEOF(queue, std::queue<QueuedMessage>) {
+              pumpQueue(queue);
+            }
+            KJ_CASE_ONEOF(exception, kj::Exception) {
+              // A previous call failed, but this one -- which was already in-flight at the time --
+              // ended up succeeding. That may indicate that the server side is not properly
+              // handling streaming error propagation. Nothing much we can do about it here though.
+            }
+          }
+        }));
+        front.sentFulfiller->fulfill();
+      });
+    }
+
+    KJ_IF_MAYBE(f, emptyFulfiller) {
+      if (queue.empty()) {
+        f->get()->fulfill(tasks.onEmpty());
+      }
+    }
+  }
+
+  void taskFailed(kj::Exception&& exception) override {
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(queue, std::queue<QueuedMessage>) {
+        // Fail out all pending sends.
+        while (!queue.empty()) {
+          queue.front().sentFulfiller->reject(kj::cp(exception));
+          queue.pop();
+        }
+        // Fail out all future sends.
+        state = kj::mv(exception);
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        // ignore redundant exception
+      }
+    }
+  }
+};
+
+class FixedWindowFlowController final
+    : public RpcFlowController, public RpcFlowController::WindowGetter {
+public:
+  FixedWindowFlowController(size_t windowSize): windowSize(windowSize), inner(*this) {}
+
+  kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
+    return inner.send(kj::mv(message), kj::mv(ack));
+  }
+
+  kj::Promise<void> waitAllAcked() override {
+    return inner.waitAllAcked();
+  }
+
+  size_t getWindow() override { return windowSize; }
+
+private:
+  size_t windowSize;
+  WindowFlowController inner;
+};
+
+}  // namespace
+
+kj::Own<RpcFlowController> RpcFlowController::newFixedWindowController(size_t windowSize) {
+  return kj::heap<FixedWindowFlowController>(windowSize);
+}
+kj::Own<RpcFlowController> RpcFlowController::newVariableWindowController(WindowGetter& getter) {
+  return kj::heap<WindowFlowController>(getter);
+}
+
 }  // namespace capnp

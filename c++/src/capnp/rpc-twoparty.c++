@@ -24,6 +24,16 @@
 #include <kj/debug.h>
 #include <kj/io.h>
 
+// Includes just for need SOL_SOCKET and SO_SNDBUF
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
+#include <winsock2.h>
+#include <mswsock.h>
+#include <kj/windows-sanity.h>
+#else
+#include <sys/socket.h>
+#endif
+
 namespace capnp {
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
@@ -128,6 +138,10 @@ public:
       .eagerlyEvaluate(nullptr);
   }
 
+  size_t sizeInWords() override {
+    return message.sizeInWords();
+  }
+
 private:
   TwoPartyVatNetwork& network;
   MallocMessageBuilder message;
@@ -153,11 +167,69 @@ public:
     return fds;
   }
 
+  size_t sizeInWords() override {
+    return message->sizeInWords();
+  }
+
 private:
   kj::Own<MessageReader> message;
   kj::Array<kj::AutoCloseFd> fdSpace;
   kj::ArrayPtr<kj::AutoCloseFd> fds;
 };
+
+kj::Own<RpcFlowController> TwoPartyVatNetwork::newStream() {
+  return RpcFlowController::newVariableWindowController(*this);
+}
+
+size_t TwoPartyVatNetwork::getWindow() {
+  // The socket's send buffer size -- as returned by getsockopt(SO_SNDBUF) -- tells us how much
+  // data the kernel itself is willing to buffer. The kernel will increase the send buffer size if
+  // needed to fill the connection's congestion window. So we can cheat and use it as our stream
+  // window, too, to make sure we saturate said congestion window.
+  //
+  // TODO(perf): Unfortunately, this hack breaks down in the presence of proxying. What we really
+  //   want is the window all the way to the endpoint, which could cross multiple connections. The
+  //   first-hop window could be either too big or too small: it's too big if the first hop has
+  //   much higher bandwidth than the full path (causing buffering at the bottleneck), and it's
+  //   too small if the first hop has much lower latency than the full path (causing not enough
+  //   data to be sent to saturate the connection). To handle this, we could either:
+  //   1. Have proxies be aware of streaming, by flagging streaming calls in the RPC protocol. The
+  //      proxies would then handle backpressure at each hop. This seems simple to implement but
+  //      requires base RPC protocol changes and might require thinking carefully about e-ordering
+  //      implications. Also, it only fixes underutilization; it does not fix buffer bloat.
+  //   2. Do our own BBR-like computation, where the client measures the end-to-end latency and
+  //      bandwidth based on the observed sends and returns, and then compute the window based on
+  //      that. This seems complicated, but avoids the need for any changes to the RPC protocol.
+  //      In theory it solves both underutilization and buffer bloat. Note that this approach would
+  //      require the RPC system to use a clock, which feels dirty and adds non-determinism.
+
+  if (solSndbufUnimplemented) {
+    return RpcFlowController::DEFAULT_WINDOW_SIZE;
+  } else {
+    // TODO(perf): It might be nice to have a tryGetsockopt() that doesn't require catching
+    //   exceptions?
+    int bufSize = 0;
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      uint len = sizeof(int);
+      KJ_SWITCH_ONEOF(stream) {
+        KJ_CASE_ONEOF(s, kj::AsyncIoStream*) {
+          s->getsockopt(SOL_SOCKET, SO_SNDBUF, &bufSize, &len);
+        }
+        KJ_CASE_ONEOF(s, kj::AsyncCapabilityStream*) {
+          s->getsockopt(SOL_SOCKET, SO_SNDBUF, &bufSize, &len);
+        }
+      }
+      KJ_ASSERT(len == sizeof(bufSize));
+    })) {
+      if (exception->getType() != kj::Exception::Type::UNIMPLEMENTED) {
+        kj::throwRecoverableException(kj::mv(*exception));
+      }
+      solSndbufUnimplemented = true;
+      bufSize = RpcFlowController::DEFAULT_WINDOW_SIZE;
+    }
+    return bufSize;
+  }
+}
 
 rpc::twoparty::VatId::Reader TwoPartyVatNetwork::getPeerVatId() {
   return peerVatId.getRoot<rpc::twoparty::VatId>();

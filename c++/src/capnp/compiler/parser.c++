@@ -218,6 +218,27 @@ constexpr auto op(const char* expected)
   return p::transformOrReject(operatorToken, ExactString(expected));
 }
 
+class LocatedExactString {
+public:
+  constexpr LocatedExactString(const char* expected): expected(expected) {}
+
+  kj::Maybe<Located<Text::Reader>> operator()(Located<Text::Reader>&& text) const {
+    if (text.value == expected) {
+      return kj::mv(text);
+    } else {
+      return nullptr;
+    }
+  }
+
+private:
+  const char* expected;
+};
+
+constexpr auto locatedKeyword(const char* expected)
+    -> decltype(p::transformOrReject(identifier, LocatedExactString(expected))) {
+  return p::transformOrReject(identifier, LocatedExactString(expected));
+}
+
 // =======================================================================================
 
 template <typename ItemParser>
@@ -854,6 +875,14 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                 listBuilder.adoptWithCaveats(i, kj::mv(*param));
               }
             }
+            return decl;
+          }),
+      p::transform(locatedKeyword("stream"),
+          [this](Located<Text::Reader>&& kw) -> Orphan<Declaration::ParamList> {
+            auto decl = orphanage.newOrphan<Declaration::ParamList>();
+            auto builder = decl.get();
+            kw.copyLocationTo(builder);
+            builder.setStream();
             return decl;
           }),
       p::transform(parsers.expression,

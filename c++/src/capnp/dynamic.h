@@ -531,8 +531,8 @@ public:
   virtual kj::Promise<void> call(InterfaceSchema::Method method,
                                  CallContext<DynamicStruct, DynamicStruct> context) = 0;
 
-  kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
-                                 CallContext<AnyPointer, AnyPointer> context) override final;
+  DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
+                                  CallContext<AnyPointer, AnyPointer> context) override final;
 
   inline InterfaceSchema getSchema() const { return schema; }
 
@@ -551,6 +551,10 @@ public:
 
   RemotePromise<DynamicStruct> send();
   // Send the call and return a promise for the results.
+
+  kj::Promise<void> sendStreaming();
+  // Use when the caller is aware that the response type is StreamResult and wants to invoke
+  // streaming behavior. It is an error to call this if the response type is not StreamResult.
 
 private:
   kj::Own<RequestHook> hook;

@@ -230,6 +230,8 @@ public:
   ~ReaderArena() noexcept(false);
   KJ_DISALLOW_COPY(ReaderArena);
 
+  size_t sizeInWords();
+
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
@@ -263,6 +265,8 @@ public:
   BuilderArena(MessageBuilder* message, kj::ArrayPtr<MessageBuilder::SegmentInit> segments);
   ~BuilderArena() noexcept(false);
   KJ_DISALLOW_COPY(BuilderArena);
+
+  size_t sizeInWords();
 
   inline SegmentBuilder* getRootSegment() { return &segment0; }
 

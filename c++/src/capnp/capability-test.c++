@@ -1101,6 +1101,198 @@ KJ_TEST("clone() with caps") {
   KJ_EXPECT(ClientHook::from(copy[2]).get() != ClientHook::from(root[0]).get());
 }
 
+KJ_TEST("Streaming calls block subsequent calls") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto ownServer = kj::heap<TestStreamingImpl>();
+  auto& server = *ownServer;
+  test::TestStreaming::Client cap = kj::mv(ownServer);
+
+  kj::Promise<void> promise1 = nullptr, promise2 = nullptr, promise3 = nullptr;
+
+  {
+    auto req = cap.doStreamIRequest();
+    req.setI(123);
+    promise1 = req.send();
+  }
+
+  {
+    auto req = cap.doStreamJRequest();
+    req.setJ(321);
+    promise2 = req.send();
+  }
+
+  {
+    auto req = cap.doStreamIRequest();
+    req.setI(456);
+    promise3 = req.send();
+  }
+
+  auto promise4 = cap.finishStreamRequest().send();
+
+  KJ_EXPECT(server.iSum == 0);
+  KJ_EXPECT(server.jSum == 0);
+
+  KJ_EXPECT(!promise1.poll(waitScope));
+  KJ_EXPECT(!promise2.poll(waitScope));
+  KJ_EXPECT(!promise3.poll(waitScope));
+  KJ_EXPECT(!promise4.poll(waitScope));
+
+  KJ_EXPECT(server.iSum == 123);
+  KJ_EXPECT(server.jSum == 0);
+
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+  KJ_EXPECT(promise1.poll(waitScope));
+  KJ_EXPECT(!promise2.poll(waitScope));
+  KJ_EXPECT(!promise3.poll(waitScope));
+  KJ_EXPECT(!promise4.poll(waitScope));
+
+  KJ_EXPECT(server.iSum == 123);
+  KJ_EXPECT(server.jSum == 321);
+
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+  KJ_EXPECT(promise1.poll(waitScope));
+  KJ_EXPECT(promise2.poll(waitScope));
+  KJ_EXPECT(!promise3.poll(waitScope));
+  KJ_EXPECT(!promise4.poll(waitScope));
+
+  KJ_EXPECT(server.iSum == 579);
+  KJ_EXPECT(server.jSum == 321);
+
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+  KJ_EXPECT(promise1.poll(waitScope));
+  KJ_EXPECT(promise2.poll(waitScope));
+  KJ_EXPECT(promise3.poll(waitScope));
+  KJ_EXPECT(promise4.poll(waitScope));
+
+  auto result = promise4.wait(waitScope);
+  KJ_EXPECT(result.getTotalI() == 579);
+  KJ_EXPECT(result.getTotalJ() == 321);
+}
+
+KJ_TEST("Streaming calls can be canceled") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto ownServer = kj::heap<TestStreamingImpl>();
+  auto& server = *ownServer;
+  test::TestStreaming::Client cap = kj::mv(ownServer);
+
+  kj::Promise<void> promise1 = nullptr, promise2 = nullptr, promise3 = nullptr;
+
+  {
+    auto req = cap.doStreamIRequest();
+    req.setI(123);
+    promise1 = req.send();
+  }
+
+  {
+    auto req = cap.doStreamJRequest();
+    req.setJ(321);
+    promise2 = req.send();
+  }
+
+  {
+    auto req = cap.doStreamIRequest();
+    req.setI(456);
+    promise3 = req.send();
+  }
+
+  auto promise4 = cap.finishStreamRequest().send();
+
+  // Cancel the streaming calls.
+  promise1 = nullptr;
+  promise2 = nullptr;
+  promise3 = nullptr;
+
+  KJ_EXPECT(server.iSum == 0);
+  KJ_EXPECT(server.jSum == 0);
+
+  KJ_EXPECT(!promise4.poll(waitScope));
+
+  KJ_EXPECT(server.iSum == 123);
+  KJ_EXPECT(server.jSum == 0);
+
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+  KJ_EXPECT(!promise4.poll(waitScope));
+
+  // The call to doStreamJ() opted into cancellation so the next call to doStreamI() happens
+  // immediately.
+  KJ_EXPECT(server.iSum == 579);
+  KJ_EXPECT(server.jSum == 321);
+
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+  KJ_EXPECT(promise4.poll(waitScope));
+
+  auto result = promise4.wait(waitScope);
+  KJ_EXPECT(result.getTotalI() == 579);
+  KJ_EXPECT(result.getTotalJ() == 321);
+}
+
+KJ_TEST("Streaming call throwing cascades to following calls") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto ownServer = kj::heap<TestStreamingImpl>();
+  auto& server = *ownServer;
+  test::TestStreaming::Client cap = kj::mv(ownServer);
+
+  server.jShouldThrow = true;
+
+  kj::Promise<void> promise1 = nullptr, promise2 = nullptr, promise3 = nullptr;
+
+  {
+    auto req = cap.doStreamIRequest();
+    req.setI(123);
+    promise1 = req.send();
+  }
+
+  {
+    auto req = cap.doStreamJRequest();
+    req.setJ(321);
+    promise2 = req.send();
+  }
+
+  {
+    auto req = cap.doStreamIRequest();
+    req.setI(456);
+    promise3 = req.send();
+  }
+
+  auto promise4 = cap.finishStreamRequest().send();
+
+  KJ_EXPECT(server.iSum == 0);
+  KJ_EXPECT(server.jSum == 0);
+
+  KJ_EXPECT(!promise1.poll(waitScope));
+  KJ_EXPECT(!promise2.poll(waitScope));
+  KJ_EXPECT(!promise3.poll(waitScope));
+  KJ_EXPECT(!promise4.poll(waitScope));
+
+  KJ_EXPECT(server.iSum == 123);
+  KJ_EXPECT(server.jSum == 0);
+
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+  KJ_EXPECT(promise1.poll(waitScope));
+  KJ_EXPECT(promise2.poll(waitScope));
+  KJ_EXPECT(promise3.poll(waitScope));
+  KJ_EXPECT(promise4.poll(waitScope));
+
+  KJ_EXPECT(server.iSum == 123);
+  KJ_EXPECT(server.jSum == 321);
+
+  KJ_EXPECT_THROW_MESSAGE("throw requested", promise2.wait(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("throw requested", promise3.wait(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("throw requested", promise4.wait(waitScope));
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

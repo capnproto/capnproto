@@ -1119,9 +1119,12 @@ bool PromiseFulfiller<void>::rejectIfThrows(Func&& func) {
 }
 
 template <typename T, typename Adapter, typename... Params>
-Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
-  return Promise<T>(false, heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
-      kj::fwd<Params>(adapterConstructorParams)...));
+_::ReducePromises<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
+  Own<_::PromiseNode> intermediate(
+      heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
+          kj::fwd<Params>(adapterConstructorParams)...));
+  return _::ReducePromises<T>(false,
+      _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
 }
 
 template <typename T>

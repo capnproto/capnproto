@@ -200,38 +200,6 @@ TEST(Common, Maybe) {
   }
 
   {
-    Maybe<int> m = &i;
-    EXPECT_FALSE(m == nullptr);
-    EXPECT_TRUE(m != nullptr);
-    KJ_IF_MAYBE(v, m) {
-      EXPECT_NE(v, &i);
-      EXPECT_EQ(234, *v);
-    } else {
-      ADD_FAILURE();
-    }
-    KJ_IF_MAYBE(v, mv(m)) {
-      EXPECT_NE(v, &i);
-      EXPECT_EQ(234, *v);
-    } else {
-      ADD_FAILURE();
-    }
-  }
-
-  {
-    Maybe<int> m = implicitCast<int*>(nullptr);
-    EXPECT_TRUE(m == nullptr);
-    EXPECT_FALSE(m != nullptr);
-    KJ_IF_MAYBE(v, m) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, *v);  // avoid unused warning
-    }
-    KJ_IF_MAYBE(v, mv(m)) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, *v);  // avoid unused warning
-    }
-  }
-
-  {
     // Test a case where an implicit conversion didn't used to happen correctly.
     Maybe<ImplicitToInt> m(ImplicitToInt { 123 });
     Maybe<uint> m2(m);
