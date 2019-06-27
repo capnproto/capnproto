@@ -178,7 +178,9 @@ A list value is encoded as a pointer to a flat array of values.
         5 = 8 bytes (non-pointer)
         6 = 8 bytes (pointer)
         7 = composite (see below)
-    D (29 bits) = Number of elements in the list, except when C is 7
+    D (29 bits) = Size of the list:
+        when C <> 7: Number of elements in the list.
+        when C = 7: Number of words in the list, not counting the tag word
         (see below).
 
 The pointed-to values are tightly-packed.  In particular, `Bool`s are packed bit-by-bit in
