@@ -136,6 +136,8 @@ public:
   kj::Maybe<kj::Array<const byte>> readEmbed(const kj::ReadableDirectory& dir, kj::PathPtr path);
   kj::Maybe<kj::Array<const byte>> readEmbedFromSearchPath(kj::PathPtr path);
   GlobalErrorReporter& getErrorReporter() { return errorReporter; }
+  kj::Maybe<kj::Array<const byte>> checkedMmap(const kj::ReadableFile& file, const kj::ReadableDirectory& sourceDir, kj::PathPtr path);
+  // Return a mapping of the entire file, otherwise report an error and return nothing.
 
 private:
   GlobalErrorReporter& errorReporter;
@@ -161,18 +163,20 @@ public:
   }
 
   Orphan<ParsedFile> loadContent(Orphanage orphanage) override {
-    kj::Array<const char> content = file->mmap(0, file->stat().size).releaseAsChars();
+    KJ_IF_MAYBE(byteContent, loader.checkedMmap(*file, sourceDir, path)) {
+      auto content = byteContent->releaseAsChars();
+      lineBreaks = nullptr;  // In case loadContent() is called multiple times.
+      lineBreaks = lineBreaksSpace.construct(content);
 
-    lineBreaks = nullptr;  // In case loadContent() is called multiple times.
-    lineBreaks = lineBreaksSpace.construct(content);
+      MallocMessageBuilder lexedBuilder;
+      auto statements = lexedBuilder.initRoot<LexedStatements>();
+      lex(content, statements, *this);
 
-    MallocMessageBuilder lexedBuilder;
-    auto statements = lexedBuilder.initRoot<LexedStatements>();
-    lex(content, statements, *this);
-
-    auto parsed = orphanage.newOrphan<ParsedFile>();
-    parseFile(statements.getStatements(), parsed.get(), *this);
-    return parsed;
+      auto parsed = orphanage.newOrphan<ParsedFile>();
+      parseFile(statements.getStatements(), parsed.get(), *this);
+      return parsed;
+    }
+    return {};
   }
 
   kj::Maybe<Module&> importRelative(kj::StringPtr importPath) override {
@@ -254,7 +258,7 @@ kj::Maybe<Module&> ModuleLoader::Impl::loadModuleFromSearchPath(kj::PathPtr path
 kj::Maybe<kj::Array<const byte>> ModuleLoader::Impl::readEmbed(
     const kj::ReadableDirectory& dir, kj::PathPtr path) {
   KJ_IF_MAYBE(file, dir.tryOpenFile(path)) {
-    return file->get()->mmap(0, file->get()->stat().size);
+    return checkedMmap(*file->get(), dir, path);
   }
   return nullptr;
 }
@@ -265,6 +269,14 @@ kj::Maybe<kj::Array<const byte>> ModuleLoader::Impl::readEmbedFromSearchPath(kj:
       return kj::mv(*module);
     }
   }
+  return nullptr;
+}
+
+kj::Maybe<kj::Array<const byte>> ModuleLoader::Impl::checkedMmap(const kj::ReadableFile& file, const kj::ReadableDirectory& sourceDir, kj::PathPtr path) {
+  if (auto fileSize = file.stat().size) {
+    return file.mmap(0, fileSize);
+  }
+  errorReporter.addError(sourceDir, path, {}, {}, "the file is empty");
   return nullptr;
 }
 
