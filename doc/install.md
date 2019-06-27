@@ -41,7 +41,7 @@ as well as on Windows. We test every Cap'n Proto release on the following platfo
 * Windows - MinGW-w64
 * Windows - Visual C++
 
-**Windows users:** Cap'n Proto requires Visual Studio 2015 Update 3 or newer. All features
+**Windows users:** Cap'n Proto requires Visual Studio 2017 or newer. All features
 of Cap'n Proto -- including serialization, dynamic API, RPC, and schema parser -- are now supported.
 
 **Mac OS X users:** You should use the latest Xcode with the Xcode command-line
@@ -106,7 +106,7 @@ provided by projects implementing Cap'n Proto in other languages.
 
 If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 
-1. Make sure that you are using Visual Studio 2015 or newer, with all updates installed. Cap'n
+1. Make sure that you are using Visual Studio 2017 or newer, with all updates installed. Cap'n
    Proto uses C++11 language features that did not work in previous versions of Visual Studio,
    and the updates include many bug fixes that Cap'n Proto requires.
 
@@ -115,9 +115,7 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 3. Use CMake to generate Visual Studio project files under `capnproto-c++-0.7.0` in the zip file.
    You can use the CMake UI for this or run this shell command:
 
-       cmake -G "Visual Studio 14 2015"
-
-    (For VS2017, you can use "Visual Studio 15 2017" as the generator name.)
+       cmake -G "Visual Studio 15 2017"
 
 3. Open the "Cap'n Proto" solution in Visual Studio.
 
