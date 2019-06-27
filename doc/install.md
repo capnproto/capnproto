@@ -21,13 +21,13 @@ This package is licensed under the [MIT License](http://opensource.org/licenses/
 Cap'n Proto makes extensive use of C++11 language features. As a result, it requires a relatively
 new version of a well-supported compiler. The minimum versions are:
 
-* GCC 4.8
+* GCC 4.9
 * Clang 3.5
-* Visual C++ 2015
+* Visual C++ 2017
 
 If your system's default compiler is older that the above, you will need to install a newer
 compiler and set the `CXX` environment variable before trying to build Cap'n Proto. For example,
-after installing GCC 4.8, you could set `CXX=g++-4.8` to use this compiler.
+after installing GCC 4.9, you could set `CXX=g++-4.9` to use this compiler.
 
 ### Supported Operating Systems
 
