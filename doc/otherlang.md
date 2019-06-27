@@ -14,6 +14,7 @@ project's documentation for details.
 ##### Serialization + RPC
 
 * [C++](cxx.html) by [@kentonv](https://github.com/kentonv)
+* [C# (.NET Core)](https://github.com/c80k/capnproto-dotnetcore) by [@c80k](https://github.com/c80k)
 * [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
 * [Go](https://github.com/zombiezen/go-capnproto2) by [@zombiezen](https://github.com/zombiezen) (forked from [@glycerine](https://github.com/glycerine)'s serialization-only version, below)
 * [Haskell](https://github.com/zenhack/haskell-capnp) by [@zenhack](https://github.com/zenhack)
@@ -43,8 +44,7 @@ new languages.
 * [Common Test Framework](https://github.com/kaos/capnp_test) by [@kaos](https://github.com/kaos)
 * [Sublime Syntax Highlighting](https://github.com/joshuawarner32/capnproto-sublime) by
   [@joshuawarner32](https://github.com/joshuawarner32)
-* [Vim Syntax Highlighting](https://github.com/peter-edge/vim-capnp) by [@peter-edge](https://github.com/peter-edge)
-  (originally by [@cstrahan](https://github.com/cstrahan))
+* [Vim Syntax Highlighting](https://github.com/cstrahan/vim-capnp) by [@cstrahan](https://github.com/cstrahan)
 * [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
 * [VS Code Syntax Highlighter](https://marketplace.visualstudio.com/items?itemName=xmonader.vscode-capnp) by [@xmonader](https://github.com/xmonader)
 * [IntelliJ Syntax Highlighter](https://github.com/xmonader/sercapnp) by [@xmonader](https://github.com/xmonader)
