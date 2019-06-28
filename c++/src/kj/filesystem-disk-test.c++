@@ -276,6 +276,11 @@ KJ_TEST("DiskFile") {
 
   KJ_EXPECT(file->readAllText() == "");
 
+  // mmaping empty file should work
+  KJ_EXPECT(file->mmap(0, 0).size() == 0);
+  KJ_EXPECT(file->mmapPrivate(0, 0).size() == 0);
+  KJ_EXPECT(file->mmapWritable(0, 0)->get().size() == 0);
+
   file->writeAll("foo");
   KJ_EXPECT(file->readAllText() == "foo");
 
@@ -293,6 +298,14 @@ KJ_TEST("DiskFile") {
 
   file->truncate(18);
   KJ_EXPECT(file->readAllText() == kj::StringPtr("foobaz\0\0\0\0\0\0\0\0\0\0\0\0", 18));
+
+  // empty mappings work, even if useless
+  KJ_EXPECT(file->mmap(0, 0).size() == 0);
+  KJ_EXPECT(file->mmapPrivate(0, 0).size() == 0);
+  KJ_EXPECT(file->mmapWritable(0, 0)->get().size() == 0);
+  KJ_EXPECT(file->mmap(2, 0).size() == 0);
+  KJ_EXPECT(file->mmapPrivate(2, 0).size() == 0);
+  KJ_EXPECT(file->mmapWritable(2, 0)->get().size() == 0);
 
   {
     auto mapping = file->mmap(0, 18);
