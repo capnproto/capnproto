@@ -307,16 +307,7 @@ constexpr MmapDisposer mmapDisposer = MmapDisposer();
 
 void* win32Mmap(HANDLE handle, MmapRange range, DWORD pageProtect, DWORD access) {
   HANDLE mappingHandle;
-  mappingHandle = CreateFileMappingW(handle, NULL, pageProtect, 0, 0, NULL);
-  if (mappingHandle == INVALID_HANDLE_VALUE) {
-    auto error = GetLastError();
-    if (error == ERROR_FILE_INVALID && range.size == 0) {
-      // The documentation says that CreateFileMapping will fail with ERROR_FILE_INVALID if the
-      // file size is zero. Ugh.
-      return nullptr;
-    }
-    KJ_FAIL_WIN32("CreateFileMapping", error);
-  }
+  KJ_WIN32(mappingHandle = CreateFileMappingW(handle, NULL, pageProtect, 0, 0, NULL));
   KJ_DEFER(KJ_WIN32(CloseHandle(mappingHandle)) { break; });
 
   void* mapping = MapViewOfFile(mappingHandle, access,
@@ -428,6 +419,7 @@ public:
   }
 
   Array<const byte> mmap(uint64_t offset, uint64_t size) const {
+    if (size == 0) return nullptr;  // Windows won't allow zero-length mappings
     auto range = getMmapRange(offset, size);
     const void* mapping = win32Mmap(handle, range, PAGE_READONLY, FILE_MAP_READ);
     return Array<const byte>(reinterpret_cast<const byte*>(mapping) + (offset - range.offset),
@@ -435,6 +427,7 @@ public:
   }
 
   Array<byte> mmapPrivate(uint64_t offset, uint64_t size) const {
+    if (size == 0) return nullptr;  // Windows won't allow zero-length mappings
     auto range = getMmapRange(offset, size);
     void* mapping = win32Mmap(handle, range, PAGE_READONLY, FILE_MAP_COPY);
     return Array<byte>(reinterpret_cast<byte*>(mapping) + (offset - range.offset),
@@ -552,7 +545,8 @@ public:
       KJ_REQUIRE(slice.begin() >= bytes.begin() && slice.end() <= bytes.end(),
                  "byte range is not part of this mapping");
 
-      // Zero is treated specially by FlushViewOfFile(), so check for it.
+      // Zero is treated specially by FlushViewOfFile(), so check for it. (This also handles the
+      // case where `bytes` is actually empty and not a real mapping.)
       if (slice.size() > 0) {
         KJ_WIN32(FlushViewOfFile(slice.begin(), slice.size()));
       }
@@ -563,6 +557,10 @@ public:
   };
 
   Own<const WritableFileMapping> mmapWritable(uint64_t offset, uint64_t size) const {
+    if (size == 0) {
+      // Windows won't allow zero-length mappings
+      return heap<WritableFileMappingImpl>(nullptr);
+    }
     auto range = getMmapRange(offset, size);
     void* mapping = win32Mmap(handle, range, PAGE_READWRITE, FILE_MAP_ALL_ACCESS);
     auto array = Array<byte>(reinterpret_cast<byte*>(mapping) + (offset - range.offset),
