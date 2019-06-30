@@ -30,7 +30,6 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
-#include <chrono>
 #include "time.h"
 #ifndef _WIN32
 #include <sys/mman.h>
@@ -185,8 +184,7 @@ private:
 };
 
 TimePoint readClock() {
-  return origin<TimePoint>() + std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count() * NANOSECONDS;
+  return systemPreciseMonotonicClock().now();
 }
 
 }  // namespace

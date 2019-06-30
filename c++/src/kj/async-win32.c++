@@ -28,7 +28,7 @@
 #include "async-win32.h"
 #include "debug.h"
 #include <atomic>
-#include <chrono>
+#include "time.h"
 #include "refcount.h"
 #include <ntsecapi.h>  // NTSTATUS
 #include <ntstatus.h>  // STATUS_SUCCESS
@@ -38,7 +38,8 @@
 namespace kj {
 
 Win32IocpEventPort::Win32IocpEventPort()
-    : iocp(newIocpHandle()), thread(openCurrentThread()), timerImpl(readClock()) {}
+    : clock(systemPreciseMonotonicClock()),
+      iocp(newIocpHandle()), thread(openCurrentThread()), timerImpl(clock.now()) {}
 
 Win32IocpEventPort::~Win32IocpEventPort() noexcept(false) {}
 
@@ -157,17 +158,12 @@ Own<Win32EventPort::SignalObserver> Win32IocpEventPort::observeSignalState(HANDL
   return waitThreads.observeSignalState(handle);
 }
 
-TimePoint Win32IocpEventPort::readClock() {
-  return origin<TimePoint>() + std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count() * NANOSECONDS;
-}
-
 bool Win32IocpEventPort::wait() {
-  waitIocp(timerImpl.timeoutToNextEvent(readClock(), MILLISECONDS, INFINITE - 1)
+  waitIocp(timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, INFINITE - 1)
       .map([](uint64_t t) -> DWORD { return t; })
       .orDefault(INFINITE));
 
-  timerImpl.advanceTo(readClock());
+  timerImpl.advanceTo(clock.now());
 
   return receivedWake();
 }

@@ -40,7 +40,6 @@
 #else
 #include <pthread.h>
 #include <unistd.h>
-#include <time.h>
 #endif
 
 namespace kj {
@@ -48,32 +47,8 @@ namespace {
 
 #if _WIN32
 inline void delay() { Sleep(10); }
-
-LARGE_INTEGER qpcBase;
-LARGE_INTEGER qpcFreq;
-bool qpcInitialized = false;
-
-TimePoint now() {
-  // Use our own time origin so that QPC values are small and don't overflow when we multiply by
-  // 1000000.
-  if (!qpcInitialized) {
-    QueryPerformanceCounter(&qpcBase);
-    QueryPerformanceFrequency(&qpcFreq);
-    qpcInitialized = true;
-  }
-
-  LARGE_INTEGER qpc;
-  QueryPerformanceCounter(&qpc);
-  uint64_t micros = (qpc.QuadPart - qpcBase.QuadPart) * 1000000 / qpcFreq.QuadPart;
-  return kj::origin<TimePoint>() + micros * kj::MICROSECONDS;
-}
 #else
 inline void delay() { usleep(10000); }
-TimePoint now() {
-  struct timespec now;
-  KJ_SYSCALL(clock_gettime(CLOCK_MONOTONIC, &now));
-  return kj::origin<TimePoint>() + now.tv_sec * kj::SECONDS + now.tv_nsec * kj::NANOSECONDS;
-}
 #endif
 
 TEST(Mutex, MutexGuarded) {
@@ -246,6 +221,7 @@ TEST(Mutex, When) {
 }
 
 TEST(Mutex, WhenWithTimeout) {
+  auto& clock = systemPreciseMonotonicClock();
   MutexGuarded<uint> value(123);
 
   // A timeout that won't expire.
@@ -299,17 +275,17 @@ TEST(Mutex, WhenWithTimeout) {
   }
 
   {
-    auto start = now();
+    auto start = clock.now();
     uint m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
       KJ_ASSERT(n == 101);
-      KJ_EXPECT(now() - start >= 10 * kj::MILLISECONDS);
+      KJ_EXPECT(clock.now() - start >= 10 * kj::MILLISECONDS);
       return 12;
     }, 10 * kj::MILLISECONDS);
     KJ_EXPECT(m == 12);
 
     m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
       KJ_ASSERT(n == 101);
-      KJ_EXPECT(now() - start >= 20 * kj::MILLISECONDS);
+      KJ_EXPECT(clock.now() - start >= 20 * kj::MILLISECONDS);
       return 34;
     }, 10 * kj::MILLISECONDS);
     KJ_EXPECT(m == 34);
@@ -351,9 +327,9 @@ TEST(Mutex, WhenWithTimeout) {
     }, LONG_TIMEOUT);
     KJ_EXPECT(m == 321);
 
-    auto start = now();
+    auto start = clock.now();
     m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
-      KJ_EXPECT(now() - start >= 10 * kj::MILLISECONDS);
+      KJ_EXPECT(clock.now() - start >= 10 * kj::MILLISECONDS);
       return n + 1;
     }, 10 * kj::MILLISECONDS);
     KJ_EXPECT(m == 322);
@@ -374,10 +350,12 @@ TEST(Mutex, WhenWithTimeout) {
 TEST(Mutex, WhenWithTimeoutPreciseTiming) {
   // Test that MutexGuarded::when() with a timeout sleeps for precisely the right amount of time.
 
+  auto& clock = systemPreciseMonotonicClock();
+
   for (uint retryCount = 0; retryCount < 20; retryCount++) {
     MutexGuarded<uint> value(123);
 
-    auto start = now();
+    auto start = clock.now();
     uint m = value.when([&value](uint n) {
       // HACK: Reset the value as a way of testing what happens when the waiting thread is woken
       //   up but then finds it's not ready yet.
@@ -389,7 +367,7 @@ TEST(Mutex, WhenWithTimeoutPreciseTiming) {
 
     KJ_EXPECT(m == 456);
 
-    auto t = now() - start;
+    auto t = clock.now() - start;
     KJ_EXPECT(t >= 20 * kj::MILLISECONDS);
     if (t <= 22 * kj::MILLISECONDS) {
       return;
@@ -402,6 +380,8 @@ TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
   // Test that MutexGuarded::when() with a timeout sleeps for precisely the right amount of time,
   // even if the thread is spuriously woken in the middle.
 
+  auto& clock = systemPreciseMonotonicClock();
+
   for (uint retryCount = 0; retryCount < 20; retryCount++) {
     MutexGuarded<uint> value(123);
 
@@ -410,7 +390,7 @@ TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
       value.lockExclusive().induceSpuriousWakeupForTest();
     });
 
-    auto start = now();
+    auto start = clock.now();
     uint m = value.when([](uint n) {
       return n == 321;
     }, [](uint& n) {
@@ -419,7 +399,7 @@ TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
 
     KJ_EXPECT(m == 456);
 
-    auto t = now() - start;
+    auto t = clock.now() - start;
     KJ_EXPECT(t >= 20 * kj::MILLISECONDS, t / kj::MILLISECONDS);
     if (t <= 22 * kj::MILLISECONDS) {
       return;

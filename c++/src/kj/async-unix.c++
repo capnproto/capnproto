@@ -28,7 +28,6 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <limits>
-#include <chrono>
 #include <pthread.h>
 #include <map>
 #include <sys/wait.h>
@@ -43,14 +42,6 @@
 #endif
 
 namespace kj {
-
-// =======================================================================================
-// Timer code common to multiple implementations
-
-TimePoint UnixEventPort::readClock() {
-  return origin<TimePoint>() + std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count() * NANOSECONDS;
-}
 
 // =======================================================================================
 // Signal code common to multiple implementations
@@ -284,7 +275,8 @@ void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
 // epoll FdObserver implementation
 
 UnixEventPort::UnixEventPort()
-    : timerImpl(readClock()),
+    : clock(systemPreciseMonotonicClock()),
+      timerImpl(clock.now()),
       epollFd(-1),
       signalFd(-1),
       eventFd(-1) {
@@ -413,7 +405,7 @@ Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
 
 bool UnixEventPort::wait() {
   return doEpollWait(
-      timerImpl.timeoutToNextEvent(readClock(), MILLISECONDS, int(maxValue))
+      timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
           .map([](uint64_t t) -> int { return t; })
           .orDefault(-1));
 }
@@ -602,7 +594,7 @@ bool UnixEventPort::doEpollWait(int timeout) {
     }
   }
 
-  timerImpl.advanceTo(readClock());
+  timerImpl.advanceTo(clock.now());
 
   return woken;
 }
@@ -616,7 +608,8 @@ bool UnixEventPort::doEpollWait(int timeout) {
 #endif
 
 UnixEventPort::UnixEventPort()
-    : timerImpl(readClock()) {
+    : clock(systemPreciseMonotonicClock()),
+      timerImpl(clock.now()) {
   static_assert(sizeof(threadId) >= sizeof(pthread_t),
                 "pthread_t is larger than a long long on your platform.  Please port.");
   *reinterpret_cast<pthread_t*>(&threadId) = pthread_self();
@@ -854,7 +847,7 @@ bool UnixEventPort::wait() {
   sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
 
   pollContext.run(
-      timerImpl.timeoutToNextEvent(readClock(), MILLISECONDS, int(maxValue))
+      timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
           .map([](uint64_t t) -> int { return t; })
           .orDefault(-1));
 
@@ -863,7 +856,7 @@ bool UnixEventPort::wait() {
 
   // Queue events.
   pollContext.processResults();
-  timerImpl.advanceTo(readClock());
+  timerImpl.advanceTo(clock.now());
 
   return false;
 }
@@ -925,7 +918,7 @@ bool UnixEventPort::poll() {
     pollContext.run(0);
     pollContext.processResults();
   }
-  timerImpl.advanceTo(readClock());
+  timerImpl.advanceTo(clock.now());
 
   return woken;
 }

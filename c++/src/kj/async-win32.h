@@ -209,14 +209,14 @@ private:
   class IoOperationImpl;
   class IoObserverImpl;
 
+  const MonotonicClock& clock;
+
   AutoCloseHandle iocp;
   AutoCloseHandle thread;
   Win32WaitObjectThreadPool waitThreads;
   TimerImpl timerImpl;
   mutable std::atomic<bool> sentWake {false};
   bool isAllowApc = false;
-
-  static TimePoint readClock();
 
   void waitIocp(DWORD timeoutMs);
   // Wait on the I/O completion port for up to timeoutMs and pump events. Does not advance the

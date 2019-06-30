@@ -522,6 +522,7 @@ capnp_test_SOURCES =                                           \
   src/kj/function-test.c++                                     \
   src/kj/io-test.c++                                           \
   src/kj/mutex-test.c++                                        \
+  src/kj/time-test.c++                                         \
   src/kj/threadlocal-test.c++                                  \
   src/kj/threadlocal-pthread-test.c++                          \
   src/kj/filesystem-test.c++                                   \
