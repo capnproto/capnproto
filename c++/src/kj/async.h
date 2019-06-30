@@ -754,7 +754,9 @@ public:
   // Returns true if run() would currently do anything, or false if the queue is empty.
 
 private:
-  EventPort& port;
+  kj::Maybe<EventPort&> port;
+  // If null, this thread doesn't receive I/O events from the OS. It can potentially receive
+  // events from other threads via the Executor.
 
   bool running = false;
   // True while looping -- wait() is then not allowed.

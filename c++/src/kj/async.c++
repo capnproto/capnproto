@@ -268,25 +268,6 @@ public:
 
 LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 
-class NullEventPort: public EventPort {
-public:
-  bool wait() override {
-    KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
-  }
-
-  bool poll() override { return false; }
-
-  void wake() const override {
-    // TODO(someday): Implement using condvar.
-    kj::throwRecoverableException(KJ_EXCEPTION(UNIMPLEMENTED,
-        "Cross-thread events are not yet implemented for EventLoops with no EventPort."));
-  }
-
-  static NullEventPort instance;
-};
-
-NullEventPort NullEventPort::instance = NullEventPort();
-
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -299,8 +280,7 @@ void EventPort::wake() const {
 }
 
 EventLoop::EventLoop()
-    : port(_::NullEventPort::instance),
-      daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
+    : daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::EventLoop(EventPort& port)
     : port(port),
@@ -384,7 +364,9 @@ bool EventLoop::isRunnable() {
 
 void EventLoop::setRunnable(bool runnable) {
   if (runnable != lastRunnableState) {
-    port.setRunnable(runnable);
+    KJ_IF_MAYBE(p, port) {
+      p->setRunnable(runnable);
+    }
     lastRunnableState = runnable;
   }
 }
@@ -412,7 +394,9 @@ void WaitScope::poll() {
   for (;;) {
     if (!loop.turn()) {
       // No events in the queue.  Poll for I/O.
-      loop.port.poll();
+      KJ_IF_MAYBE(p, loop.port) {
+        p->poll();
+      }
 
       if (!loop.isRunnable()) {
         // Still no events in the queue. We're done.
@@ -441,11 +425,17 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     if (!loop.turn()) {
       // No events in the queue.  Wait for callback.
       counter = 0;
-      loop.port.wait();
+      KJ_IF_MAYBE(p, loop.port) {
+        p->wait();
+      } else {
+        KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
+      }
     } else if (++counter > waitScope.busyPollInterval) {
       // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
       counter = 0;
-      loop.port.poll();
+      KJ_IF_MAYBE(p, loop.port) {
+        p->poll();
+      }
     }
   }
 
@@ -473,7 +463,9 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
   while (!doneEvent.fired) {
     if (!loop.turn()) {
       // No events in the queue.  Poll for I/O.
-      loop.port.poll();
+      KJ_IF_MAYBE(p, loop.port) {
+        p->poll();
+      }
 
       if (!doneEvent.fired && !loop.isRunnable()) {
         // No progress. Give up.
