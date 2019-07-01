@@ -1219,6 +1219,8 @@ private:
 
   void done();
 
+  class DelayedDoneHack;
+
   // implements Event ----------------------------------------------------------
   Maybe<Own<Event>> fire() override;
   // If called with promiseNode == nullptr, it's time to call execute(). If promiseNode != nullptr,

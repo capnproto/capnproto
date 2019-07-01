@@ -429,10 +429,33 @@ void XThreadEvent::done() {
   }
 }
 
+class XThreadEvent::DelayedDoneHack: public Disposer {
+  // Crazy hack: In fire(), we want to call done() if the event is finished. But done() signals
+  // the requesting thread to wake up and possibly delete the XThreadEvent. But the caller (the
+  // EventLoop) still has to set `event->firing = false` after `fire()` returns, so this would be
+  // a race condition use-after-free.
+  //
+  // It just so happens, though, that fire() is allowed to return an optional `Own<Event>` to drop,
+  // and the caller drops that pointer immediately after setting event->firing = false. So we
+  // return a pointer whose disposer calls done().
+  //
+  // It's not quite as much of a hack as it seems: The whole reason fire() returns an Own<Event> is
+  // so that the event can delete itself, but do so after the caller sets event->firing = false.
+  // It just happens to be that in this case, the event isn't deleting itself, but rather releasing
+  // itself back to the other thread.
+
+protected:
+  void disposeImpl(void* pointer) const override {
+    reinterpret_cast<XThreadEvent*>(pointer)->done();
+  }
+};
+
 Maybe<Own<Event>> XThreadEvent::fire() {
+  static constexpr DelayedDoneHack DISPOSER;
+
   KJ_IF_MAYBE(n, promiseNode) {
     n->get()->get(result);
-    done();
+    return Own<Event>(this, DISPOSER);
   } else {
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
       promiseNode = execute();
@@ -442,7 +465,7 @@ Maybe<Own<Event>> XThreadEvent::fire() {
     KJ_IF_MAYBE(n, promiseNode) {
       n->get()->onReady(this);
     } else {
-      done();
+      return Own<Event>(this, DISPOSER);
     }
   }
 
