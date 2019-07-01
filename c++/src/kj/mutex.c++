@@ -447,6 +447,36 @@ void Mutex::lock(Exclusivity exclusivity) {
   }
 }
 
+void Mutex::wakeReadyWaiter() {
+  // Look for a waiter whose predicate is now evaluating true, and wake it. We wake no more than
+  // one waiter because only one waiter could get the lock anyway, and once it releases that lock
+  // it will awake the next waiter if necessary.
+
+  auto nextWaiter = waitersHead;
+  for (;;) {
+    KJ_IF_MAYBE(waiter, nextWaiter) {
+      nextWaiter = waiter->next;
+
+      if (checkPredicate(*waiter)) {
+        // This waiter's predicate now evaluates true, so wake it up. It doesn't matter if we
+        // use Wake vs. WakeAll here since there's always only one thread waiting.
+        WakeConditionVariable(&coercedCondvar(waiter->condvar));
+
+        // We only need to wake one waiter. Note that unlike the futex-based implementation, we
+        // cannot "transfer ownership" of the lock to the waiter, therefore we cannot guarantee
+        // that the condition is still true when that waiter finally awakes. However, if the
+        // condition is no longer true at that point, the waiter will re-check all other
+        // waiters' conditions and possibly wake up any other waiter who is now ready, hence we
+        // still only need to wake one waiter here.
+        return;
+      }
+    } else {
+      // No more waiters.
+      break;
+    }
+  }
+}
+
 void Mutex::unlock(Exclusivity exclusivity) {
   switch (exclusivity) {
     case EXCLUSIVE: {
@@ -454,29 +484,7 @@ void Mutex::unlock(Exclusivity exclusivity) {
 
       // Check if there are any conditional waiters. Note we only do this when unlocking an
       // exclusive lock since under a shared lock the state couldn't have changed.
-      auto nextWaiter = waitersHead;
-      for (;;) {
-        KJ_IF_MAYBE(waiter, nextWaiter) {
-          nextWaiter = waiter->next;
-
-          if (checkPredicate(*waiter)) {
-            // This waiter's predicate now evaluates true, so wake it up. It doesn't matter if we
-            // use Wake vs. WakeAll here since there's always only one thread waiting.
-            WakeConditionVariable(&coercedCondvar(waiter->condvar));
-
-            // We only need to wake one waiter. Note that unlike the futex-based implementation, we
-            // cannot "transfer ownership" of the lock to the waiter, therefore we cannot guarantee
-            // that the condition is still true when that waiter finally awakes. However, if the
-            // condition is no longer true at that point, the waiter will re-check all other
-            // waiters' conditions and possibly wake up any other waiter who is now ready, hence we
-            // still only need to wake one waiter here.
-            return;
-          }
-        } else {
-          // No more waiters.
-          break;
-        }
-      }
+      wakeReadyWaiter();
       break;
     }
 
@@ -530,6 +538,10 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   }
 
   while (!predicate.check()) {
+    // SleepConditionVariableSRW() will temporarily release the lock, so we need to signal other
+    // waiters that are now ready.
+    wakeReadyWaiter();
+
     if (SleepConditionVariableSRW(&coercedCondvar(waiter.condvar), &coercedSrwLock, sleepMs, 0)) {
       // Normal result. Continue loop to check predicate.
     } else {

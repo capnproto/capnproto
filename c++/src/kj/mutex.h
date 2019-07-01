@@ -133,6 +133,9 @@ private:
   inline void addWaiter(Waiter& waiter);
   inline void removeWaiter(Waiter& waiter);
   bool checkPredicate(Waiter& waiter);
+#if _WIN32
+  void wakeReadyWaiter();
+#endif
 };
 
 class Once {

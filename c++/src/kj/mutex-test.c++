@@ -408,6 +408,28 @@ TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
   KJ_FAIL_ASSERT("time not within expected bounds even after retries");
 }
 
+KJ_TEST("wait()s wake each other") {
+  MutexGuarded<uint> value(0);
+
+  {
+    kj::Thread thread([&]() {
+      auto lock = value.lockExclusive();
+      ++*lock;
+      lock.wait([](uint value) { return value == 2; });
+      ++*lock;
+      lock.wait([](uint value) { return value == 4; });
+    });
+
+    {
+      auto lock = value.lockExclusive();
+      lock.wait([](uint value) { return value == 1; });
+      ++*lock;
+      lock.wait([](uint value) { return value == 3; });
+      ++*lock;
+    }
+  }
+}
+
 TEST(Mutex, Lazy) {
   Lazy<uint> lazy;
   volatile bool initStarted = false;
