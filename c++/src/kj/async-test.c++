@@ -21,6 +21,8 @@
 
 #include "async.h"
 #include "debug.h"
+#include "thread.h"
+#include "mutex.h"
 #include <kj/compat/gtest.h>
 
 namespace kj {
@@ -824,6 +826,262 @@ KJ_TEST("exclusiveJoin both events complete simultaneously") {
   auto joined = kj::joinPromises(builder.finish());
 
   KJ_EXPECT(!joined.poll(waitScope));
+}
+
+KJ_TEST("synchonous simple cross-thread events") {
+  MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
+  thread_local bool isChild = false;  // to assert which thread we're in
+
+  Thread thread([&]() {
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      isChild = true;
+
+      EventLoop loop;
+      WaitScope waitScope(loop);
+
+      auto paf = newPromiseAndFulfiller<uint>();
+      fulfiller = kj::mv(paf.fulfiller);
+
+      *executor.lockExclusive() = getCurrentThreadExecutor();
+
+      KJ_ASSERT(paf.promise.wait(waitScope) == 123);
+
+      // Wait until parent thread sets executor to null, as a way to tell us to quit.
+      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
+    })) {
+      // Log here because it's likely the parent thread will never join and we'll hang forever
+      // without propagating the exception.
+      KJ_LOG(ERROR, *exception);
+      kj::throwRecoverableException(kj::mv(*exception));
+    }
+  });
+
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    const Executor* exec;
+    {
+      auto lock = executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+      exec = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    KJ_ASSERT(!isChild);
+
+    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeSync([&]() {
+      KJ_ASSERT(isChild);
+      KJ_FAIL_ASSERT("test exception") { break; }
+    }));
+
+    uint i = exec->executeSync([&]() {
+      KJ_ASSERT(isChild);
+      fulfiller->fulfill(123);
+      return 456;
+    });
+    KJ_EXPECT(i == 456);
+
+    *executor.lockExclusive() = nullptr;
+  })) {
+    // Log here because the thread join is likely to hang forever...
+    KJ_FAIL_EXPECT(*exception);
+  }
+}
+
+KJ_TEST("asynchonous simple cross-thread events") {
+  MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
+  thread_local bool isChild = false;  // to assert which thread we're in
+
+  Thread thread([&]() {
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      isChild = true;
+
+      EventLoop loop;
+      WaitScope waitScope(loop);
+
+      auto paf = newPromiseAndFulfiller<uint>();
+      fulfiller = kj::mv(paf.fulfiller);
+
+      *executor.lockExclusive() = getCurrentThreadExecutor();
+
+      KJ_ASSERT(paf.promise.wait(waitScope) == 123);
+
+      // Wait until parent thread sets executor to null, as a way to tell us to quit.
+      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
+    })) {
+      // Log here because it's likely the parent thread will never join and we'll hang forever
+      // without propagating the exception.
+      KJ_LOG(ERROR, *exception);
+      kj::throwRecoverableException(kj::mv(*exception));
+    }
+  });
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    const Executor* exec;
+    {
+      auto lock = executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+      exec = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    KJ_ASSERT(!isChild);
+
+    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeAsync([&]() {
+      KJ_ASSERT(isChild);
+      KJ_FAIL_ASSERT("test exception") { break; }
+    }).wait(waitScope));
+
+    Promise<uint> promise = exec->executeAsync([&]() {
+      KJ_ASSERT(isChild);
+      fulfiller->fulfill(123);
+      return 456u;
+    });
+    KJ_EXPECT(promise.wait(waitScope) == 456);
+
+    *executor.lockExclusive() = nullptr;
+  })) {
+    // Log here because the thread join is likely to hang forever...
+    KJ_FAIL_EXPECT(*exception);
+  }
+}
+
+KJ_TEST("synchonous promise cross-thread events") {
+  MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
+  Promise<uint> promise = nullptr;  // accessed only from the subthread
+  thread_local bool isChild = false;  // to assert which thread we're in
+
+  Thread thread([&]() {
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      isChild = true;
+
+      EventLoop loop;
+      WaitScope waitScope(loop);
+
+      auto paf = newPromiseAndFulfiller<uint>();
+      fulfiller = kj::mv(paf.fulfiller);
+
+      auto paf2 = newPromiseAndFulfiller<uint>();
+      promise = kj::mv(paf2.promise);
+
+      *executor.lockExclusive() = getCurrentThreadExecutor();
+
+      KJ_ASSERT(paf.promise.wait(waitScope) == 123);
+
+      paf2.fulfiller->fulfill(321);
+
+      // Make sure reply gets sent.
+      loop.run();
+
+      // Wait until parent thread sets executor to null, as a way to tell us to quit.
+      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
+    })) {
+      // Log here because it's likely the parent thread will never join and we'll hang forever
+      // without propagating the exception.
+      KJ_LOG(ERROR, *exception);
+      kj::throwRecoverableException(kj::mv(*exception));
+    }
+  });
+
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    const Executor* exec;
+    {
+      auto lock = executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+      exec = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    KJ_ASSERT(!isChild);
+
+    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeSync([&]() {
+      KJ_ASSERT(isChild);
+      return kj::Promise<void>(KJ_EXCEPTION(FAILED, "test exception"));
+    }));
+
+    uint i = exec->executeSync([&]() {
+      KJ_ASSERT(isChild);
+      fulfiller->fulfill(123);
+      return kj::mv(promise);
+    });
+    KJ_EXPECT(i == 321);
+
+    *executor.lockExclusive() = nullptr;
+  })) {
+    // Log here because the thread join is likely to hang forever...
+    KJ_FAIL_EXPECT(*exception);
+  }
+}
+
+KJ_TEST("asynchonous promise cross-thread events") {
+  MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
+  Promise<uint> promise = nullptr;  // accessed only from the subthread
+  thread_local bool isChild = false;  // to assert which thread we're in
+
+  Thread thread([&]() {
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      isChild = true;
+
+      EventLoop loop;
+      WaitScope waitScope(loop);
+
+      auto paf = newPromiseAndFulfiller<uint>();
+      fulfiller = kj::mv(paf.fulfiller);
+
+      auto paf2 = newPromiseAndFulfiller<uint>();
+      promise = kj::mv(paf2.promise);
+
+      *executor.lockExclusive() = getCurrentThreadExecutor();
+
+      KJ_ASSERT(paf.promise.wait(waitScope) == 123);
+
+      paf2.fulfiller->fulfill(321);
+
+      // Make sure reply gets sent.
+      loop.run();
+
+      // Wait until parent thread sets executor to null, as a way to tell us to quit.
+      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
+    })) {
+      // Log here because it's likely the parent thread will never join and we'll hang forever
+      // without propagating the exception.
+      KJ_LOG(ERROR, *exception);
+      kj::throwRecoverableException(kj::mv(*exception));
+    }
+  });
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    const Executor* exec;
+    {
+      auto lock = executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+      exec = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    KJ_ASSERT(!isChild);
+
+    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeAsync([&]() {
+      KJ_ASSERT(isChild);
+      return kj::Promise<void>(KJ_EXCEPTION(FAILED, "test exception"));
+    }).wait(waitScope));
+
+    Promise<uint> promise2 = exec->executeAsync([&]() {
+      KJ_ASSERT(isChild);
+      fulfiller->fulfill(123);
+      return kj::mv(promise);
+    });
+    KJ_EXPECT(promise2.wait(waitScope) == 321);
+
+    *executor.lockExclusive() = nullptr;
+  })) {
+    // Log here because the thread join is likely to hang forever...
+    KJ_FAIL_EXPECT(*exception);
+  }
 }
 
 }  // namespace

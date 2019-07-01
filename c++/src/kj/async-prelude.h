@@ -68,6 +68,12 @@ using ReducePromises = decltype(reducePromiseType((T*)nullptr, false));
 // reduces Promise<T> to something else. In particular this allows Promise<capnp::RemotePromise<U>>
 // to reduce to capnp::RemotePromise<U>.
 
+template <typename T> struct UnwrapPromise_;
+template <typename T> struct UnwrapPromise_<Promise<T>> { typedef T Type; };
+
+template <typename T>
+using UnwrapPromise = typename UnwrapPromise_<T>::Type;
+
 class PropagateException {
   // A functor which accepts a kj::Exception as a parameter and returns a broken promise of
   // arbitrary type which simply propagates the exception.
@@ -186,6 +192,7 @@ template <typename T>
 class ForkHub;
 
 class Event;
+class XThreadEvent;
 
 class PromiseBase {
 public:
@@ -206,6 +213,7 @@ private:
   template <typename U>
   friend Promise<Array<U>> kj::joinPromises(Array<Promise<U>>&& promises);
   friend Promise<void> kj::joinPromises(Array<Promise<void>>&& promises);
+  friend class XThreadEvent;
 };
 
 void detach(kj::Promise<void>&& promise);

@@ -23,6 +23,7 @@
 #include "debug.h"
 #include "vector.h"
 #include "threadlocal.h"
+#include "mutex.h"
 
 #if KJ_USE_FUTEX
 #include <unistd.h>
@@ -272,6 +273,243 @@ LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 
 // =======================================================================================
 
+struct Executor::Impl {
+  typedef Maybe<_::XThreadEvent&> _::XThreadEvent::*NextMember;
+  typedef Maybe<_::XThreadEvent&>* _::XThreadEvent::*PrevMember;
+
+  template <NextMember next, PrevMember prev>
+  struct List {
+    kj::Maybe<_::XThreadEvent&> head;
+    kj::Maybe<_::XThreadEvent&>* tail = &head;
+
+    bool empty() const {
+      return head == nullptr;
+    }
+
+    void insert(_::XThreadEvent& event) {
+      KJ_REQUIRE(event.*prev == nullptr);
+      *tail = event;
+      event.*prev = tail;
+      tail = &(event.*next);
+    }
+
+    void erase(_::XThreadEvent& event) {
+      KJ_REQUIRE(event.*prev != nullptr);
+      *(event.*prev) = event.*next;
+      KJ_IF_MAYBE(n, event.*next) {
+        n->*prev = event.*prev;
+      } else {
+        KJ_DASSERT(tail == &(event.*next));
+        tail = event.*prev;
+      }
+      event.*next = nullptr;
+      event.*prev = nullptr;
+    }
+
+    template <typename Func>
+    void forEach(Func&& func) {
+      kj::Maybe<_::XThreadEvent&> current = head;
+      for (;;) {
+        KJ_IF_MAYBE(c, current) {
+          auto nextItem = c->*next;
+          func(*c);
+          current = nextItem;
+        } else {
+          break;
+        }
+      }
+    }
+  };
+
+  struct State {
+    // Queues of notifications from other threads that need this thread's attention.
+
+    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> run;
+    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> cancel;
+    List<&_::XThreadEvent::replyNext, &_::XThreadEvent::replyPrev> replies;
+
+    bool empty() const {
+      return run.empty() && cancel.empty() && replies.empty();
+    }
+
+    void dispatchAll(Vector<Own<_::PromiseNode>>& nodesToDeleteOutsideLock) {
+      run.forEach([&](_::XThreadEvent& event) {
+        run.erase(event);
+        event.state = _::XThreadEvent::EXECUTING;
+        event.armBreadthFirst();
+      });
+
+      cancel.forEach([&](_::XThreadEvent& event) {
+        cancel.erase(event);
+        if (event.state == _::XThreadEvent::EXECUTING) {
+          KJ_IF_MAYBE(n, event.promiseNode) {
+            nodesToDeleteOutsideLock.add(kj::mv(*n));
+            event.promiseNode = nullptr;
+          }
+          event.disarm();
+          event.state = _::XThreadEvent::DONE;
+        }
+        event.armBreadthFirst();
+      });
+
+      replies.forEach([&](_::XThreadEvent& event) {
+        replies.erase(event);
+        event.onReadyEvent.armBreadthFirst();
+      });
+    }
+  };
+
+  kj::MutexGuarded<State> state;
+  // After modifying state from another thread, the loop's port.wake() must be called.
+};
+
+namespace _ {  // (private)
+
+void XThreadEvent::ensureDoneOrCanceled() {
+#if _MSC_VER
+  {  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
+#else
+  if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != DONE) {
+#endif
+    auto lock = targetExecutor.impl->state.lockExclusive();
+    switch (state) {
+      case UNUSED:
+        // Nothing to do.
+        break;
+      case QUEUED:
+        lock->run.erase(*this);
+        state = DONE;
+        break;
+      case EXECUTING:
+        lock->cancel.insert(*this);
+        lock.wait([&](auto&) { return state == DONE; });
+        KJ_DASSERT(targetPrev == nullptr);
+        break;
+      case DONE:
+        // Became done while we waited for lock. Nothing to do.
+        break;
+    }
+  }
+
+  KJ_IF_MAYBE(e, replyExecutor) {
+    // Since we know we reached the DONE state (or never left UNUSED), we know that the remote
+    // thread is all done playing with our `replyPrev` pointer. Only the current thread could
+    // possibly modify it after this point. So we can skip the lock if it's already null.
+    if (replyPrev != nullptr) {
+      auto lock = e->impl->state.lockExclusive();
+      lock->replies.erase(*this);
+    }
+  }
+}
+
+void XThreadEvent::done() {
+  KJ_IF_MAYBE(e, replyExecutor) {
+    // Queue the reply.
+    auto lock = e->impl->state.lockExclusive();
+    lock->replies.insert(*this);
+  }
+
+  {
+    auto lock = targetExecutor.impl->state.lockExclusive();
+    KJ_DASSERT(state == EXECUTING);
+
+    if (targetPrev != nullptr) {
+      // We must be in the cancel list, because we can't be in the run list during EXECUTING state.
+      // We can remove ourselves from the cancel list because at this point we're done anyway, so
+      // whatever.
+      lock->cancel.erase(*this);
+    }
+
+#if _MSC_VER
+    // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
+    state = DONE;
+#else
+    __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
+#endif
+  }
+}
+
+Maybe<Own<Event>> XThreadEvent::fire() {
+  KJ_IF_MAYBE(n, promiseNode) {
+    n->get()->get(result);
+    done();
+  } else {
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      promiseNode = execute();
+    })) {
+      result.addException(kj::mv(*exception));
+    };
+    KJ_IF_MAYBE(n, promiseNode) {
+      n->get()->onReady(this);
+    } else {
+      done();
+    }
+  }
+
+  return nullptr;
+}
+
+void XThreadEvent::onReady(Event* event) noexcept {
+  onReadyEvent.init(event);
+}
+
+}  // namespace _
+
+Executor::Executor(EventLoop& loop, Badge<EventLoop>): loop(loop), impl(kj::heap<Impl>()) {}
+Executor::~Executor() noexcept(false) {}
+
+void Executor::send(_::XThreadEvent& event, bool sync) const {
+  KJ_ASSERT(event.state == _::XThreadEvent::UNUSED);
+
+  if (!sync) {
+    event.replyExecutor = getCurrentThreadExecutor();
+  }
+
+  auto lock = impl->state.lockExclusive();
+  event.state = _::XThreadEvent::QUEUED;
+  lock->run.insert(event);
+
+  KJ_IF_MAYBE(p, loop.port) {
+    p->wake();
+  } else {
+    // Event loop will be waiting on executor.wait(), which will be woken when we unlock the mutex.
+  }
+
+  if (sync) {
+    lock.wait([&](auto&) { return event.state == _::XThreadEvent::DONE; });
+  }
+}
+
+void Executor::wait() {
+  Vector<Own<_::PromiseNode>> nodesToDeleteOutsideLock;
+
+  auto lock = impl->state.lockExclusive();
+
+  lock.wait([](const Impl::State& state) {
+    return !state.empty();
+  });
+
+  lock->dispatchAll(nodesToDeleteOutsideLock);
+}
+
+bool Executor::poll() {
+  Vector<Own<_::PromiseNode>> nodesToDeleteOutsideLock;
+
+  auto lock = impl->state.lockExclusive();
+  if (lock->empty()) {
+    return false;
+  } else {
+    lock->dispatchAll(nodesToDeleteOutsideLock);
+    return true;
+  }
+}
+
+const Executor& getCurrentThreadExecutor() {
+  return currentEventLoop().getExecutor();
+}
+
+// =======================================================================================
+
 void EventPort::setRunnable(bool runnable) {}
 
 void EventPort::wake() const {
@@ -362,6 +600,14 @@ bool EventLoop::isRunnable() {
   return head != nullptr;
 }
 
+const Executor& EventLoop::getExecutor() {
+  KJ_IF_MAYBE(e, executor) {
+    return *e;
+  } else {
+    return executor.emplace(*this, Badge<EventLoop>());
+  }
+}
+
 void EventLoop::setRunnable(bool runnable) {
   if (runnable != lastRunnableState) {
     KJ_IF_MAYBE(p, port) {
@@ -384,6 +630,34 @@ void EventLoop::leaveScope() {
   threadLocalEventLoop = nullptr;
 }
 
+void EventLoop::wait() {
+  KJ_IF_MAYBE(p, port) {
+    if (p->wait()) {
+      // Another thread called wake(). Check for cross-thread events.
+      KJ_IF_MAYBE(e, executor) {
+        e->poll();
+      }
+    }
+  } else KJ_IF_MAYBE(e, executor) {
+    e->wait();
+  } else {
+    KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
+  }
+}
+
+void EventLoop::poll() {
+  KJ_IF_MAYBE(p, port) {
+    if (p->poll()) {
+      // Another thread called wake(). Check for cross-thread events.
+      KJ_IF_MAYBE(e, executor) {
+        e->poll();
+      }
+    }
+  } else KJ_IF_MAYBE(e, executor) {
+    e->poll();
+  }
+}
+
 void WaitScope::poll() {
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
   KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
@@ -394,9 +668,7 @@ void WaitScope::poll() {
   for (;;) {
     if (!loop.turn()) {
       // No events in the queue.  Poll for I/O.
-      KJ_IF_MAYBE(p, loop.port) {
-        p->poll();
-      }
+      loop.poll();
 
       if (!loop.isRunnable()) {
         // Still no events in the queue. We're done.
@@ -425,17 +697,11 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     if (!loop.turn()) {
       // No events in the queue.  Wait for callback.
       counter = 0;
-      KJ_IF_MAYBE(p, loop.port) {
-        p->wait();
-      } else {
-        KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
-      }
+      loop.wait();
     } else if (++counter > waitScope.busyPollInterval) {
       // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
       counter = 0;
-      KJ_IF_MAYBE(p, loop.port) {
-        p->poll();
-      }
+      loop.poll();
     }
   }
 
@@ -463,9 +729,7 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
   while (!doneEvent.fired) {
     if (!loop.turn()) {
       // No events in the queue.  Poll for I/O.
-      KJ_IF_MAYBE(p, loop.port) {
-        p->poll();
-      }
+      loop.poll();
 
       if (!doneEvent.fired && !loop.isRunnable()) {
         // No progress. Give up.
@@ -503,30 +767,19 @@ void detach(kj::Promise<void>&& promise) {
 Event::Event()
     : loop(currentEventLoop()), next(nullptr), prev(nullptr) {}
 
-Event::~Event() noexcept(false) {
-  if (prev != nullptr) {
-    if (loop.tail == &next) {
-      loop.tail = prev;
-    }
-    if (loop.depthFirstInsertPoint == &next) {
-      loop.depthFirstInsertPoint = prev;
-    }
+Event::Event(kj::EventLoop& loop)
+    : loop(loop), next(nullptr), prev(nullptr) {}
 
-    *prev = next;
-    if (next != nullptr) {
-      next->prev = prev;
-    }
-  }
+Event::~Event() noexcept(false) {
+  disarm();
 
   KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
-  KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
-             "Promise destroyed from a different thread than it was created in.");
 }
 
 void Event::armDepthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
-             "the thread-safe work queue to queue events cross-thread.");
+             "Executor to queue events cross-thread.");
 
   if (prev == nullptr) {
     next = *loop.depthFirstInsertPoint;
@@ -549,7 +802,7 @@ void Event::armDepthFirst() {
 void Event::armBreadthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
-             "the thread-safe work queue to queue events cross-thread.");
+             "Executor to queue events cross-thread.");
 
   if (prev == nullptr) {
     next = *loop.tail;
@@ -562,6 +815,31 @@ void Event::armBreadthFirst() {
     loop.tail = &next;
 
     loop.setRunnable(true);
+  }
+}
+
+void Event::disarm() {
+  if (prev != nullptr) {
+    if (threadLocalEventLoop != &loop && threadLocalEventLoop != nullptr) {
+      KJ_LOG(FATAL, "Promise destroyed from a different thread than it was created in.");
+      // There's no way out of this place without UB, so abort now.
+      abort();
+    }
+
+    if (loop.tail == &next) {
+      loop.tail = prev;
+    }
+    if (loop.depthFirstInsertPoint == &next) {
+      loop.depthFirstInsertPoint = prev;
+    }
+
+    *prev = next;
+    if (next != nullptr) {
+      next->prev = prev;
+    }
+
+    prev = nullptr;
+    next = nullptr;
   }
 }
 
@@ -641,6 +919,17 @@ void PromiseNode::OnReadyEvent::arm() {
     // order so that the event runs immediately after the current one.  This way, chained promises
     // execute together for better cache locality and lower latency.
     event->armDepthFirst();
+  }
+
+  event = _kJ_ALREADY_READY;
+}
+
+void PromiseNode::OnReadyEvent::armBreadthFirst() {
+  KJ_ASSERT(event != _kJ_ALREADY_READY, "armBreadthFirst() should only be called once");
+
+  if (event != nullptr) {
+    // A promise resolved and an event is already waiting on it.
+    event->armBreadthFirst();
   }
 
   event = _kJ_ALREADY_READY;

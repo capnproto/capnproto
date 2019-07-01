@@ -24,6 +24,7 @@
 #include "async-win32.h"
 #include "thread.h"
 #include "test.h"
+#include "mutex.h"
 
 namespace kj {
 namespace {
@@ -160,6 +161,66 @@ KJ_TEST("Win32IocpEventPort APC") {
       reinterpret_cast<ULONG_PTR>(paf.fulfiller.get())));
 
   paf.promise.wait(waitScope);
+}
+
+KJ_TEST("Win32IocpEventPort cross-thread events") {
+  MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
+  Promise<uint> promise = nullptr;  // accessed only from the subthread
+  thread_local bool isChild = false;  // to assert which thread we're in
+
+  Thread thread([&]() {
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      isChild = true;
+
+      Win32IocpEventPort port;
+      EventLoop loop(port);
+      WaitScope waitScope(loop);
+
+      auto paf = newPromiseAndFulfiller<uint>();
+      fulfiller = kj::mv(paf.fulfiller);
+
+      *executor.lockExclusive() = getCurrentThreadExecutor();
+
+      KJ_ASSERT(paf.promise.wait(waitScope) == 123);
+
+      // Wait until parent thread sets executor to null, as a way to tell us to quit.
+      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
+    })) {
+      // Log here because it's likely the parent thread will never join and we'll hang forever
+      // without propagating the exception.
+      KJ_LOG(ERROR, *exception);
+      kj::throwRecoverableException(kj::mv(*exception));
+    }
+  });
+
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    const Executor* exec;
+    {
+      auto lock = executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+      exec = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    KJ_ASSERT(!isChild);
+
+    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeSync([&]() {
+      KJ_ASSERT(isChild);
+      KJ_FAIL_ASSERT("test exception") { break; }
+    }));
+
+    uint i = exec->executeSync([&]() {
+      KJ_ASSERT(isChild);
+      fulfiller->fulfill(123);
+      return 456;
+    });
+    KJ_EXPECT(i == 456);
+
+    *executor.lockExclusive() = nullptr;
+  })) {
+    // Log here because the thread join is likely to hang forever...
+    KJ_FAIL_EXPECT(*exception);
+  }
 }
 
 }  // namespace
