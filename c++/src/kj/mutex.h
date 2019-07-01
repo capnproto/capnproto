@@ -74,14 +74,16 @@ public:
     virtual bool check() = 0;
   };
 
-  void lockWhen(Predicate& predicate, Maybe<Duration> timeout = nullptr);
-  // Lock (exclusively) when predicate.check() returns true, or when the timeout (if any) expires.
-  // The mutex is always locked when this returns regardless of whether the timeout expired (and
-  // always unlocked if it throws).
+  void wait(Predicate& predicate, Maybe<Duration> timeout = nullptr);
+  // If predicate.check() returns false, unlock the mutex until predicate.check() returns true, or
+  // when the timeout (if any) expires. The mutex is always re-locked when this returns regardless
+  // of whether the timeout expired, and including if it throws.
+  //
+  // Requires that the mutex is already exclusively locked before calling.
 
   void induceSpuriousWakeupForTest();
   // Utility method for mutex-test.c++ which causes a spurious thread wakeup on all threads that
-  // are waiting for a lockWhen() condition. Assuming correct implementation, all those threads
+  // are waiting for a wait() condition. Assuming correct implementation, all those threads
   // should immediately go back to sleep.
 
 private:
@@ -241,6 +243,31 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
+  template <typename Cond>
+  void wait(Cond&& condition, Maybe<Duration> timeout = nullptr) {
+    // Unlocks the lock until `condition(state)` evaluates true (where `state` is type `const T&`
+    // referencing the object protected by the lock).
+
+    // We can't wait on a shared lock because the internal bookkeeping needed for a wait requires
+    // the protection of an exclusive lock.
+    static_assert(!isConst<T>(), "cannot wait() on shared lock");
+
+    struct PredicateImpl final: public _::Mutex::Predicate {
+      bool check() override {
+        return condition(value);
+      }
+
+      Cond&& condition;
+      const T& value;
+
+      PredicateImpl(Cond&& condition, const T& value)
+          : condition(kj::fwd<Cond>(condition)), value(value) {}
+    };
+
+    PredicateImpl impl(kj::fwd<Cond>(condition), *ptr);
+    mutex->wait(impl, timeout);
+  }
+
 private:
   _::Mutex* mutex;
   T* ptr;
@@ -321,22 +348,11 @@ public:
     // If `timeout` is specified, then after the given amount of time, the callback will be called
     // regardless of whether the condition is true. In this case, when `callback()` is called,
     // `condition()` may in fact evaluate false, but *only* if the timeout was reached.
+    //
+    // TODO(cleanup): lock->wait() is a better interface. Can we deprecate this one?
 
-    struct PredicateImpl final: public _::Mutex::Predicate {
-      bool check() override {
-        return condition(value);
-      }
-
-      Cond&& condition;
-      const T& value;
-
-      PredicateImpl(Cond&& condition, const T& value)
-          : condition(kj::fwd<Cond>(condition)), value(value) {}
-    };
-
-    PredicateImpl impl(kj::fwd<Cond>(condition), value);
-    mutex.lockWhen(impl, timeout);
-    KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
+    auto lock = lockExclusive();
+    lock.wait(kj::fwd<Cond>(condition), timeout);
     return callback(value);
   }
 

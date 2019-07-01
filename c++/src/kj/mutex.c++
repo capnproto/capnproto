@@ -265,24 +265,17 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
-  lock(EXCLUSIVE);
-
-  // Since the predicate might throw, we should be careful to remember if we've locked the mutex
-  // and unlock it on the way out.
-  bool currentlyLocked = true;
-  KJ_ON_SCOPE_FAILURE({
-    if (currentlyLocked) unlock(EXCLUSIVE);
-  });
-
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0, timeout != nullptr };
-
   addWaiter(waiter);
+
+  // To guarantee that we've re-locked the mutex before scope exit, keep track of whether it is
+  // currently.
+  bool currentlyLocked = true;
   KJ_DEFER({
     if (!currentlyLocked) lock(EXCLUSIVE);
     removeWaiter(waiter);
-    if (!currentlyLocked) unlock(EXCLUSIVE);
   });
 
   if (!predicate.check()) {
@@ -500,12 +493,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   // held for debug purposes anyway, we just don't bother.
 }
 
-void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
-  lock(EXCLUSIVE);
-
-  // Any exceptions should leave the mutex unlocked.
-  KJ_ON_SCOPE_FAILURE(unlock(EXCLUSIVE));
-
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0 };
   static_assert(sizeof(waiter.condvar) == sizeof(CONDITION_VARIABLE),
@@ -723,27 +711,20 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
-  lock(EXCLUSIVE);
-
-  // Since the predicate might throw, we should be careful to remember if we've locked the mutex
-  // and unlock it on the way out.
-  bool currentlyLocked = true;
-  KJ_ON_SCOPE_FAILURE({
-    if (currentlyLocked) unlock(EXCLUSIVE);
-  });
-
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   // Add waiter to list.
   Waiter waiter {
     nullptr, waitersTail, predicate, nullptr,
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER
   };
-
   addWaiter(waiter);
+
+  // To guarantee that we've re-locked the mutex before scope exit, keep track of whether it is
+  // currently.
+  bool currentlyLocked = true;
   KJ_DEFER({
     if (!currentlyLocked) lock(EXCLUSIVE);
     removeWaiter(waiter);
-    if (!currentlyLocked) unlock(EXCLUSIVE);
 
     // Destroy pthread objects.
     KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&waiter.stupidMutex));
