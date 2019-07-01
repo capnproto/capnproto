@@ -38,6 +38,7 @@
 #include <kj/main.h>
 #include <algorithm>
 #include <capnp/stream.capnp.h>
+#include <iostream>
 
 #if _WIN32
 #define WIN32_LEAN_AND_MEAN  // ::eyeroll::
@@ -1156,6 +1157,45 @@ private:
 
   // -----------------------------------------------------------------
 
+  void collectAnnotationNodeIds(StructSchema schema, std::set<uint64_t> &ids) {
+    auto proto = schema.getProto();
+    KJ_REQUIRE(proto.isStruct(), "A StructSchema has non-struct prototype.");
+    for (auto annotation : proto.getAnnotations()) {
+      ids.insert(annotation.getId());
+    }
+    for (auto field : schema.getFields()) {
+      auto proto = field.getProto();
+      for (auto annotation : proto.getAnnotations()) {
+        ids.insert(annotation.getId());
+      }
+      if (proto.isGroup()) {
+        auto groupId = proto.getGroup().getTypeId();
+        auto group = schemaLoader.get(groupId);
+        collectAnnotationNodeIds(group.asStruct(), ids);
+      }
+    }
+  }
+
+  kj::StringTree makeAnnotationText(StructSchema schema) {
+    std::set<uint64_t> ids;
+    collectAnnotationNodeIds(schema, ids);
+    if (!ids.empty()) {
+      auto texts = kj::heapArrayBuilder<kj::String>(ids.size());
+      for (auto id : ids) {
+        texts.add(kj::str("&::capnp::schemas::s_", kj::hex(id)));
+      }
+      return kj::strTree(
+          "    static constexpr uint16_t annotationSchemasCount = ", texts.size(), ";\n"
+          "    static constexpr ::capnp::_::RawSchema const *annotationSchemas[", texts.size(), "] = {\n",
+          "      ", kj::strArray(kj::mv(texts), ",\n      "), "\n"
+          "    };\n"
+      );
+    }
+    return {};
+  }
+
+  // -----------------------------------------------------------------
+
   struct FieldText {
     kj::StringTree readerMethodDecls;
     kj::StringTree builderMethodDecls;
@@ -2046,6 +2086,7 @@ private:
       declareText = kj::strTree(kj::mv(declareText),
           "    #if !CAPNP_LITE\n",
           makeGenericDeclarations(templateContext, hasDeps),
+          makeAnnotationText(schema),
           "    #endif  // !CAPNP_LITE\n");
 
       defineText = kj::strTree(kj::mv(defineText),
@@ -2054,7 +2095,8 @@ private:
     } else {
       declareText = kj::strTree(kj::mv(declareText),
           "    #if !CAPNP_LITE\n"
-          "    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }\n"
+          "    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }\n",
+          makeAnnotationText(schema),
           "    #endif  // !CAPNP_LITE\n");
     }
 
