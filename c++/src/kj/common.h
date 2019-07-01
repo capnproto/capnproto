@@ -503,6 +503,28 @@ constexpr bool canMemcpy() {
   static_assert(kj::canMemcpy<T>(), "this code expects this type to be memcpy()-able");
 #endif
 
+template <typename T>
+class Badge {
+  // A pattern for marking individual methods such that they can only be called from a specific
+  // caller class: Make the method public but give it a parameter of type `Badge<Caller>`. Only
+  // `Caller` can construct one, so only `Caller` can call the method.
+  //
+  //     // We only allow calls from the class `Bar`.
+  //     void foo(Badge<Bar>)
+  //
+  // The call site looks like:
+  //
+  //     foo({});
+  //
+  // This pattern also works well for declaring private constructors, but still being able to use
+  // them with `kj::heap()`, etc.
+  //
+  // Idea from: https://awesomekling.github.io/Serenity-C++-patterns-The-Badge/
+private:
+  Badge() {}
+  friend T;
+};
+
 // =======================================================================================
 // Equivalents to std::move() and std::forward(), since these are very commonly needed and the
 // std header <utility> pulls in lots of other stuff.
