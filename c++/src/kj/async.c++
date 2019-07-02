@@ -349,7 +349,6 @@ struct Executor::Impl {
           event.disarm();
           event.state = _::XThreadEvent::DONE;
         }
-        event.armBreadthFirst();
       });
 
       replies.forEach([&](_::XThreadEvent& event) {
