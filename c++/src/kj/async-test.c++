@@ -842,31 +842,27 @@ KJ_TEST("synchonous simple cross-thread events") {
   Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
   thread_local bool isChild = false;  // to assert which thread we're in
 
-  Thread thread([&]() {
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-      isChild = true;
+  // We use `noexcept` so that any uncaught exceptions immediately terminate the process without
+  // unwinding. Otherwise, the unwind would likely deadlock waiting for some synchronization with
+  // the other thread.
+  Thread thread([&]() noexcept {
+    isChild = true;
 
-      EventLoop loop;
-      WaitScope waitScope(loop);
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-      auto paf = newPromiseAndFulfiller<uint>();
-      fulfiller = kj::mv(paf.fulfiller);
+    auto paf = newPromiseAndFulfiller<uint>();
+    fulfiller = kj::mv(paf.fulfiller);
 
-      *executor.lockExclusive() = getCurrentThreadExecutor();
+    *executor.lockExclusive() = getCurrentThreadExecutor();
 
-      KJ_ASSERT(paf.promise.wait(waitScope) == 123);
+    KJ_ASSERT(paf.promise.wait(waitScope) == 123);
 
-      // Wait until parent thread sets executor to null, as a way to tell us to quit.
-      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
-    })) {
-      // Log here because it's likely the parent thread will never join and we'll hang forever
-      // without propagating the exception.
-      KJ_LOG(ERROR, *exception);
-      kj::throwRecoverableException(kj::mv(*exception));
-    }
+    // Wait until parent thread sets executor to null, as a way to tell us to quit.
+    executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
   });
 
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+  ([&]() noexcept {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
@@ -889,10 +885,7 @@ KJ_TEST("synchonous simple cross-thread events") {
     KJ_EXPECT(i == 456);
 
     *executor.lockExclusive() = nullptr;
-  })) {
-    // Log here because the thread join is likely to hang forever...
-    KJ_FAIL_EXPECT(*exception);
-  }
+  })();
 }
 
 KJ_TEST("asynchonous simple cross-thread events") {
@@ -900,34 +893,30 @@ KJ_TEST("asynchonous simple cross-thread events") {
   Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
   thread_local bool isChild = false;  // to assert which thread we're in
 
-  Thread thread([&]() {
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-      isChild = true;
+  // We use `noexcept` so that any uncaught exceptions immediately terminate the process without
+  // unwinding. Otherwise, the unwind would likely deadlock waiting for some synchronization with
+  // the other thread.
+  Thread thread([&]() noexcept {
+    isChild = true;
 
-      EventLoop loop;
-      WaitScope waitScope(loop);
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-      auto paf = newPromiseAndFulfiller<uint>();
-      fulfiller = kj::mv(paf.fulfiller);
+    auto paf = newPromiseAndFulfiller<uint>();
+    fulfiller = kj::mv(paf.fulfiller);
 
-      *executor.lockExclusive() = getCurrentThreadExecutor();
+    *executor.lockExclusive() = getCurrentThreadExecutor();
 
-      KJ_ASSERT(paf.promise.wait(waitScope) == 123);
+    KJ_ASSERT(paf.promise.wait(waitScope) == 123);
 
-      // Wait until parent thread sets executor to null, as a way to tell us to quit.
-      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
-    })) {
-      // Log here because it's likely the parent thread will never join and we'll hang forever
-      // without propagating the exception.
-      KJ_LOG(ERROR, *exception);
-      kj::throwRecoverableException(kj::mv(*exception));
-    }
+    // Wait until parent thread sets executor to null, as a way to tell us to quit.
+    executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
   });
 
-  EventLoop loop;
-  WaitScope waitScope(loop);
+  ([&]() noexcept {
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
@@ -950,10 +939,7 @@ KJ_TEST("asynchonous simple cross-thread events") {
     KJ_EXPECT(promise.wait(waitScope) == 456);
 
     *executor.lockExclusive() = nullptr;
-  })) {
-    // Log here because the thread join is likely to hang forever...
-    KJ_FAIL_EXPECT(*exception);
-  }
+  })();
 }
 
 KJ_TEST("synchonous promise cross-thread events") {
@@ -962,39 +948,35 @@ KJ_TEST("synchonous promise cross-thread events") {
   Promise<uint> promise = nullptr;  // accessed only from the subthread
   thread_local bool isChild = false;  // to assert which thread we're in
 
-  Thread thread([&]() {
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-      isChild = true;
+  // We use `noexcept` so that any uncaught exceptions immediately terminate the process without
+  // unwinding. Otherwise, the unwind would likely deadlock waiting for some synchronization with
+  // the other thread.
+  Thread thread([&]() noexcept {
+    isChild = true;
 
-      EventLoop loop;
-      WaitScope waitScope(loop);
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-      auto paf = newPromiseAndFulfiller<uint>();
-      fulfiller = kj::mv(paf.fulfiller);
+    auto paf = newPromiseAndFulfiller<uint>();
+    fulfiller = kj::mv(paf.fulfiller);
 
-      auto paf2 = newPromiseAndFulfiller<uint>();
-      promise = kj::mv(paf2.promise);
+    auto paf2 = newPromiseAndFulfiller<uint>();
+    promise = kj::mv(paf2.promise);
 
-      *executor.lockExclusive() = getCurrentThreadExecutor();
+    *executor.lockExclusive() = getCurrentThreadExecutor();
 
-      KJ_ASSERT(paf.promise.wait(waitScope) == 123);
+    KJ_ASSERT(paf.promise.wait(waitScope) == 123);
 
-      paf2.fulfiller->fulfill(321);
+    paf2.fulfiller->fulfill(321);
 
-      // Make sure reply gets sent.
-      loop.run();
+    // Make sure reply gets sent.
+    loop.run();
 
-      // Wait until parent thread sets executor to null, as a way to tell us to quit.
-      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
-    })) {
-      // Log here because it's likely the parent thread will never join and we'll hang forever
-      // without propagating the exception.
-      KJ_LOG(ERROR, *exception);
-      kj::throwRecoverableException(kj::mv(*exception));
-    }
+    // Wait until parent thread sets executor to null, as a way to tell us to quit.
+    executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
   });
 
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+  ([&]() noexcept {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
@@ -1017,10 +999,7 @@ KJ_TEST("synchonous promise cross-thread events") {
     KJ_EXPECT(i == 321);
 
     *executor.lockExclusive() = nullptr;
-  })) {
-    // Log here because the thread join is likely to hang forever...
-    KJ_FAIL_EXPECT(*exception);
-  }
+  })();
 }
 
 KJ_TEST("asynchonous promise cross-thread events") {
@@ -1029,42 +1008,38 @@ KJ_TEST("asynchonous promise cross-thread events") {
   Promise<uint> promise = nullptr;  // accessed only from the subthread
   thread_local bool isChild = false;  // to assert which thread we're in
 
-  Thread thread([&]() {
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-      isChild = true;
+  // We use `noexcept` so that any uncaught exceptions immediately terminate the process without
+  // unwinding. Otherwise, the unwind would likely deadlock waiting for some synchronization with
+  // the other thread.
+  Thread thread([&]() noexcept {
+    isChild = true;
 
-      EventLoop loop;
-      WaitScope waitScope(loop);
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-      auto paf = newPromiseAndFulfiller<uint>();
-      fulfiller = kj::mv(paf.fulfiller);
+    auto paf = newPromiseAndFulfiller<uint>();
+    fulfiller = kj::mv(paf.fulfiller);
 
-      auto paf2 = newPromiseAndFulfiller<uint>();
-      promise = kj::mv(paf2.promise);
+    auto paf2 = newPromiseAndFulfiller<uint>();
+    promise = kj::mv(paf2.promise);
 
-      *executor.lockExclusive() = getCurrentThreadExecutor();
+    *executor.lockExclusive() = getCurrentThreadExecutor();
 
-      KJ_ASSERT(paf.promise.wait(waitScope) == 123);
+    KJ_ASSERT(paf.promise.wait(waitScope) == 123);
 
-      paf2.fulfiller->fulfill(321);
+    paf2.fulfiller->fulfill(321);
 
-      // Make sure reply gets sent.
-      loop.run();
+    // Make sure reply gets sent.
+    loop.run();
 
-      // Wait until parent thread sets executor to null, as a way to tell us to quit.
-      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
-    })) {
-      // Log here because it's likely the parent thread will never join and we'll hang forever
-      // without propagating the exception.
-      KJ_LOG(ERROR, *exception);
-      kj::throwRecoverableException(kj::mv(*exception));
-    }
+    // Wait until parent thread sets executor to null, as a way to tell us to quit.
+    executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
   });
 
-  EventLoop loop;
-  WaitScope waitScope(loop);
+  ([&]() noexcept {
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
@@ -1087,38 +1062,31 @@ KJ_TEST("asynchonous promise cross-thread events") {
     KJ_EXPECT(promise2.wait(waitScope) == 321);
 
     *executor.lockExclusive() = nullptr;
-  })) {
-    // Log here because the thread join is likely to hang forever...
-    KJ_FAIL_EXPECT(*exception);
-  }
+  })();
 }
 
 KJ_TEST("cancel cross-thread event before it runs") {
   MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
 
-  Thread thread([&]() {
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-      EventLoop loop;
-      WaitScope waitScope(loop);
+  // We use `noexcept` so that any uncaught exceptions immediately terminate the process without
+  // unwinding. Otherwise, the unwind would likely deadlock waiting for some synchronization with
+  // the other thread.
+  Thread thread([&]() noexcept {
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-      *executor.lockExclusive() = getCurrentThreadExecutor();
+    *executor.lockExclusive() = getCurrentThreadExecutor();
 
-      // We never run the loop here, so that when the event is canceled, it's still queued.
+    // We never run the loop here, so that when the event is canceled, it's still queued.
 
-      // Wait until parent thread sets executor to null, as a way to tell us to quit.
-      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
-    })) {
-      // Log here because it's likely the parent thread will never join and we'll hang forever
-      // without propagating the exception.
-      KJ_LOG(ERROR, *exception);
-      kj::throwRecoverableException(kj::mv(*exception));
-    }
+    // Wait until parent thread sets executor to null, as a way to tell us to quit.
+    executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
   });
 
-  EventLoop loop;
-  WaitScope waitScope(loop);
+  ([&]() noexcept {
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
@@ -1133,42 +1101,35 @@ KJ_TEST("cancel cross-thread event before it runs") {
     }
 
     *executor.lockExclusive() = nullptr;
-  })) {
-    // Log here because the thread join is likely to hang forever...
-    KJ_FAIL_EXPECT(*exception);
-  }
+  })();
 }
 
 KJ_TEST("cancel cross-thread event while it runs") {
   MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
   Own<PromiseFulfiller<void>> fulfiller;  // accessed only from the subthread
 
-  Thread thread([&]() {
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-      EventLoop loop;
-      WaitScope waitScope(loop);
+  // We use `noexcept` so that any uncaught exceptions immediately terminate the process without
+  // unwinding. Otherwise, the unwind would likely deadlock waiting for some synchronization with
+  // the other thread.
+  Thread thread([&]() noexcept {
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-      auto paf = newPromiseAndFulfiller<void>();
-      fulfiller = kj::mv(paf.fulfiller);
+    auto paf = newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
 
-      *executor.lockExclusive() = getCurrentThreadExecutor();
+    *executor.lockExclusive() = getCurrentThreadExecutor();
 
-      paf.promise.wait(waitScope);
+    paf.promise.wait(waitScope);
 
-      // Wait until parent thread sets executor to null, as a way to tell us to quit.
-      executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
-    })) {
-      // Log here because it's likely the parent thread will never join and we'll hang forever
-      // without propagating the exception.
-      KJ_LOG(ERROR, *exception);
-      kj::throwRecoverableException(kj::mv(*exception));
-    }
+    // Wait until parent thread sets executor to null, as a way to tell us to quit.
+    executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
   });
 
-  EventLoop loop;
-  WaitScope waitScope(loop);
+  ([&]() noexcept {
+    EventLoop loop;
+    WaitScope waitScope(loop);
 
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
@@ -1187,10 +1148,7 @@ KJ_TEST("cancel cross-thread event while it runs") {
     exec->executeSync([&]() { fulfiller->fulfill(); });
 
     *executor.lockExclusive() = nullptr;
-  })) {
-    // Log here because the thread join is likely to hang forever...
-    KJ_FAIL_EXPECT(*exception);
-  }
+  })();
 }
 
 }  // namespace

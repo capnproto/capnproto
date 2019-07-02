@@ -378,6 +378,43 @@ String getStackTrace() {
   return kj::str(stringifyStackTraceAddresses(trace), stringifyStackTrace(trace));
 }
 
+namespace {
+
+void terminateHandler() {
+  void* traceSpace[32];
+
+  // ignoreCount = 3 to ignore std::terminate entry.
+  auto trace = kj::getStackTrace(traceSpace, 3);
+
+  kj::String message;
+
+  auto eptr = std::current_exception();
+  if (eptr != nullptr) {
+    try {
+      std::rethrow_exception(eptr);
+    } catch (const kj::Exception& exception) {
+      message = kj::str("*** Fatal uncaught kj::Exception: ", exception, '\n');
+    } catch (const std::exception& exception) {
+      message = kj::str("*** Fatal uncaught std::exception: ", exception.what(),
+                        "\nstack: ", stringifyStackTraceAddresses(trace),
+                                     stringifyStackTrace(trace), '\n');
+    } catch (...) {
+      message = kj::str("*** Fatal uncaught exception of type: ", kj::getCaughtExceptionType(),
+                        "\nstack: ", stringifyStackTraceAddresses(trace),
+                                     stringifyStackTrace(trace), '\n');
+    }
+  } else {
+    message = kj::str("*** std::terminate() called with no exception"
+                      "\nstack: ", stringifyStackTraceAddresses(trace),
+                                   stringifyStackTrace(trace), '\n');
+  }
+
+  kj::FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  _exit(1);
+}
+
+}  // namespace
+
 #if _WIN32 && _M_X64
 namespace {
 
@@ -461,6 +498,9 @@ void printStackTraceOnCrash() {
   mainThreadId = GetCurrentThreadId();
   KJ_WIN32(SetConsoleCtrlHandler(breakHandler, TRUE));
   SetUnhandledExceptionFilter(&sehHandler);
+
+  // Also override std::terminate() handler with something nicer for KJ.
+  std::set_terminate(&terminateHandler);
 }
 
 #elif KJ_HAS_BACKTRACE
@@ -523,9 +563,13 @@ void printStackTraceOnCrash() {
   // because stack traces on ctrl+c can be obnoxious for, say, command-line tools.
   KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
 #endif
+
+  // Also override std::terminate() handler with something nicer for KJ.
+  std::set_terminate(&terminateHandler);
 }
 #else
 void printStackTraceOnCrash() {
+  std::set_terminate(&terminateHandler);
 }
 #endif
 
