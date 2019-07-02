@@ -604,8 +604,25 @@ Executor::~Executor() noexcept(false) {}
 void Executor::send(_::XThreadEvent& event, bool sync) const {
   KJ_ASSERT(event.state == _::XThreadEvent::UNUSED);
 
-  if (!sync) {
+  if (sync) {
+    if (threadLocalEventLoop == &loop) {
+      // Invoking a sync request on our own thread. Just execute it directly; if we try to queue
+      // it to the loop, we'll deadlock.
+      auto promiseNode = event.execute();
+
+      // If the function returns a promise, we have no way to pump the event loop to wait for it,
+      // because the event loop may already be pumping somewhere up the stack.
+      KJ_ASSERT(promiseNode == nullptr,
+          "can't call executeSync() on own thread's executor with a promise-returning function");
+
+      return;
+    }
+  } else {
     event.replyExecutor = getCurrentThreadExecutor();
+
+    // Note that async requests will "just work" even if the target executor is our own thread's
+    // executor. In theory we could detect this case to avoid some locking and signals but that
+    // would be extra code complexity for probably little benefit.
   }
 
   auto lock = impl->state.lockExclusive();

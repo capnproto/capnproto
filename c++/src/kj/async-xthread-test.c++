@@ -432,5 +432,29 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
   simultaneous(parentExecutor, childExecutor);
 }
 
+KJ_TEST("call own thread's executor") {
+  KJ_XTHREAD_TEST_SETUP_LOOP;
+
+  auto& executor = getCurrentThreadExecutor();
+
+  {
+    uint i = executor.executeSync([]() {
+      return 123u;
+    });
+    KJ_EXPECT(i == 123);
+  }
+
+  KJ_EXPECT_THROW_MESSAGE(
+      "can't call executeSync() on own thread's executor with a promise-returning function",
+      executor.executeSync([]() { return kj::evalLater([]() {}); }));
+
+  {
+    uint i = executor.executeAsync([]() {
+      return 123u;
+    }).wait(waitScope);
+    KJ_EXPECT(i == 123);
+  }
+}
+
 }  // namespace
 }  // namespace kj
