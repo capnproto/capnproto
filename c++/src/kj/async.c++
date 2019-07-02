@@ -412,6 +412,10 @@ void XThreadEvent::ensureDoneOrCanceled() {
         break;
       case EXECUTING: {
         lock->cancel.insert(*this);
+        KJ_IF_MAYBE(p, targetExecutor.loop.port) {
+          p->wake();
+        }
+
         Maybe<Executor&> maybeSelfExecutor = nullptr;
         if (threadLocalEventLoop != nullptr) {
           KJ_IF_MAYBE(e, threadLocalEventLoop->executor) {
@@ -515,8 +519,14 @@ void XThreadEvent::ensureDoneOrCanceled() {
 void XThreadEvent::done() {
   KJ_IF_MAYBE(e, replyExecutor) {
     // Queue the reply.
-    auto lock = e->impl->state.lockExclusive();
-    lock->replies.insert(*this);
+    {
+      auto lock = e->impl->state.lockExclusive();
+      lock->replies.insert(*this);
+    }
+
+    KJ_IF_MAYBE(p, e->loop.port) {
+      p->wake();
+    }
   }
 
   {

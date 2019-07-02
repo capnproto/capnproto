@@ -462,7 +462,9 @@ heavy_tests =                                                  \
   src/kj/async-test.c++                                        \
   src/kj/async-xthread-test.c++                                \
   src/kj/async-unix-test.c++                                   \
+  src/kj/async-unix-xthread-test.c++                           \
   src/kj/async-win32-test.c++                                  \
+  src/kj/async-win32-xthread-test.c++                          \
   src/kj/async-io-test.c++                                     \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \

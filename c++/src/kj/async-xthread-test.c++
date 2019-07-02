@@ -34,6 +34,14 @@ inline void delay() { Sleep(10); }
 inline void delay() { usleep(10000); }
 #endif
 
+// This file is #included from async-unix-xthread-test.c++ and async-win32-xthread-test.c++ after
+// defining KJ_XTHREAD_TEST_SETUP_LOOP to set up a loop with the corresponding EventPort.
+#ifndef KJ_XTHREAD_TEST_SETUP_LOOP
+#define KJ_XTHREAD_TEST_SETUP_LOOP \
+  EventLoop loop; \
+  WaitScope waitScope(loop)
+#endif
+
 namespace kj {
 namespace {
 
@@ -48,8 +56,7 @@ KJ_TEST("synchonous simple cross-thread events") {
   Thread thread([&]() noexcept {
     isChild = true;
 
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     auto paf = newPromiseAndFulfiller<uint>();
     fulfiller = kj::mv(paf.fulfiller);
@@ -99,8 +106,7 @@ KJ_TEST("asynchonous simple cross-thread events") {
   Thread thread([&]() noexcept {
     isChild = true;
 
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     auto paf = newPromiseAndFulfiller<uint>();
     fulfiller = kj::mv(paf.fulfiller);
@@ -114,8 +120,7 @@ KJ_TEST("asynchonous simple cross-thread events") {
   });
 
   ([&]() noexcept {
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     const Executor* exec;
     {
@@ -154,8 +159,7 @@ KJ_TEST("synchonous promise cross-thread events") {
   Thread thread([&]() noexcept {
     isChild = true;
 
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     auto paf = newPromiseAndFulfiller<uint>();
     fulfiller = kj::mv(paf.fulfiller);
@@ -214,8 +218,7 @@ KJ_TEST("asynchonous promise cross-thread events") {
   Thread thread([&]() noexcept {
     isChild = true;
 
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     auto paf = newPromiseAndFulfiller<uint>();
     fulfiller = kj::mv(paf.fulfiller);
@@ -237,8 +240,7 @@ KJ_TEST("asynchonous promise cross-thread events") {
   });
 
   ([&]() noexcept {
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     const Executor* exec;
     {
@@ -272,8 +274,7 @@ KJ_TEST("cancel cross-thread event before it runs") {
   // unwinding. Otherwise, the unwind would likely deadlock waiting for some synchronization with
   // the other thread.
   Thread thread([&]() noexcept {
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     *executor.lockExclusive() = getCurrentThreadExecutor();
 
@@ -284,8 +285,7 @@ KJ_TEST("cancel cross-thread event before it runs") {
   });
 
   ([&]() noexcept {
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     const Executor* exec;
     {
@@ -312,8 +312,7 @@ KJ_TEST("cancel cross-thread event while it runs") {
   // unwinding. Otherwise, the unwind would likely deadlock waiting for some synchronization with
   // the other thread.
   Thread thread([&]() noexcept {
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     auto paf = newPromiseAndFulfiller<void>();
     fulfiller = kj::mv(paf.fulfiller);
@@ -327,8 +326,7 @@ KJ_TEST("cancel cross-thread event while it runs") {
   });
 
   ([&]() noexcept {
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     const Executor* exec;
     {
@@ -364,8 +362,7 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
   // handler, skipping any destructors that would deadlock.
   auto simultaneous = [&](MutexGuarded<kj::Maybe<const Executor&>>& selfExecutor,
                           MutexGuarded<kj::Maybe<const Executor&>>& otherExecutor) noexcept {
-    EventLoop loop;
-    WaitScope waitScope(loop);
+    KJ_XTHREAD_TEST_SETUP_LOOP;
 
     *selfExecutor.lockExclusive() = getCurrentThreadExecutor();
 
