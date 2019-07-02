@@ -451,7 +451,7 @@ protected:
 };
 
 Maybe<Own<Event>> XThreadEvent::fire() {
-  static constexpr DelayedDoneHack DISPOSER;
+  static constexpr DelayedDoneHack DISPOSER {};
 
   KJ_IF_MAYBE(n, promiseNode) {
     n->get()->get(result);
