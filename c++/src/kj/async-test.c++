@@ -1151,5 +1151,71 @@ KJ_TEST("cancel cross-thread event while it runs") {
   })();
 }
 
+KJ_TEST("cross-thread cancellation in both directions at once") {
+  MutexGuarded<kj::Maybe<const Executor&>> childExecutor;
+  MutexGuarded<kj::Maybe<const Executor&>> parentExecutor;
+
+  MutexGuarded<uint> readyCount;
+
+  // Code to execute simultaneously in two threads...
+  // We mark this noexcept so that any exceptions thrown will immediately invoke the termination
+  // handler, skipping any destructors that would deadlock.
+  auto simultaneous = [&](MutexGuarded<kj::Maybe<const Executor&>>& selfExecutor,
+                          MutexGuarded<kj::Maybe<const Executor&>>& otherExecutor) noexcept {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    *selfExecutor.lockExclusive() = getCurrentThreadExecutor();
+
+    const Executor* exec;
+    {
+      auto lock = otherExecutor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+      exec = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    // Create a ton of cross-thread promises to cancel.
+    Vector<Promise<void>> promises;
+    for (uint i = 0; i < 1000; i++) {
+      promises.add(exec->executeAsync([&]() -> kj::Promise<void> {
+        return kj::NEVER_DONE;
+      }));
+    }
+
+    // Signal other thread that we're done queueing, and wait for it to signal same.
+    {
+      auto lock = readyCount.lockExclusive();
+      ++*lock;
+      lock.wait([](uint i) { return i == 2; });
+    }
+
+    // Run event loop to start all executions queued by the other thread.
+    waitScope.poll();
+    loop.run();
+
+    // Signal other thread that we've run the loop, and wait for it to signal same.
+    {
+      auto lock = readyCount.lockExclusive();
+      ++*lock;
+      lock.wait([](uint i) { return i == 4; });
+    }
+
+    // Cancel all the promises.
+    promises.clear();
+
+    // Signal other that we're all done.
+    *otherExecutor.lockExclusive() = nullptr;
+
+    // Wait until other thread sets executor to null, as a way to tell us to quit.
+    selfExecutor.lockExclusive().wait([](auto& val) { return val == nullptr; });
+  };
+
+  Thread thread([&]() {
+    simultaneous(childExecutor, parentExecutor);
+  });
+
+  simultaneous(parentExecutor, childExecutor);
+}
+
 }  // namespace
 }  // namespace kj

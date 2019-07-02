@@ -890,6 +890,7 @@ private:
   friend class _::Event;
   friend class WaitScope;
   friend class Executor;
+  friend class _::XThreadEvent;
 };
 
 class WaitScope {
