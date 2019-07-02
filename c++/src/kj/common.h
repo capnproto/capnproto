@@ -520,6 +520,13 @@ class Badge {
   // them with `kj::heap()`, etc.
   //
   // Idea from: https://awesomekling.github.io/Serenity-C++-patterns-The-Badge/
+  //
+  // Note that some forms of this idea make the copy constructor private as well, in order to
+  // prohibit `Badge<NotMe>(*(Badge<NotMe>*)nullptr)`. However, that would prevent badges from
+  // being passed through forwarding functions like `kj::heap()`, which would ruin one of the main
+  // use cases for this pattern in KJ. In any case, dereferencing a null pointer is UB; there are
+  // plenty of other ways to get access to private members if you're willing to go UB. For one-off
+  // debugging purposes, you might as well use `#define private public` at the top of the file.
 private:
   Badge() {}
   friend T;
