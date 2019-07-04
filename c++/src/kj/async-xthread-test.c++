@@ -354,15 +354,17 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
   MutexGuarded<kj::Maybe<const Executor&>> childExecutor;
   MutexGuarded<kj::Maybe<const Executor&>> parentExecutor;
 
-  MutexGuarded<uint> readyCount;
+  MutexGuarded<uint> readyCount(0);
 
-  thread_local bool isChild = false;
+  thread_local uint threadNumber = 0;
+  thread_local bool receivedFinalCall = false;
 
   // Code to execute simultaneously in two threads...
   // We mark this noexcept so that any exceptions thrown will immediately invoke the termination
   // handler, skipping any destructors that would deadlock.
   auto simultaneous = [&](MutexGuarded<kj::Maybe<const Executor&>>& selfExecutor,
-                          MutexGuarded<kj::Maybe<const Executor&>>& otherExecutor) noexcept {
+                          MutexGuarded<kj::Maybe<const Executor&>>& otherExecutor,
+                          uint threadCount) noexcept {
     KJ_XTHREAD_TEST_SETUP_LOOP;
 
     *selfExecutor.lockExclusive() = getCurrentThreadExecutor();
@@ -379,9 +381,9 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
     for (uint i = 0; i < 1000; i++) {
       promises.add(exec->executeAsync([&]() -> kj::Promise<void> {
         return kj::Promise<void>(kj::NEVER_DONE)
-            .attach(kj::defer([wasChild = isChild]() {
+            .attach(kj::defer([wasThreadNumber = threadNumber]() {
           // Make sure destruction happens in the correct thread.
-          KJ_ASSERT(isChild == wasChild);
+          KJ_ASSERT(threadNumber == wasThreadNumber);
         }));
       }));
     }
@@ -390,7 +392,7 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
     {
       auto lock = readyCount.lockExclusive();
       ++*lock;
-      lock.wait([](uint i) { return i == 2; });
+      lock.wait([&](uint i) { return i == threadCount; });
     }
 
     // Run event loop to start all executions queued by the other thread.
@@ -401,7 +403,7 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
     {
       auto lock = readyCount.lockExclusive();
       ++*lock;
-      lock.wait([](uint i) { return i == 4; });
+      lock.wait([&](uint i) { return i == threadCount * 2; });
     }
 
     // Cancel all the promises.
@@ -412,11 +414,15 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
     // those cancellation requests. In particular we'll queue a function to the other thread and
     // wait for it to complete. The other thread will queue its own function to this thread just
     // before completing the function we queued to it.
-    exec->executeAsync([]() {}).wait(waitScope);
+    receivedFinalCall = false;
+    exec->executeAsync([&]() { receivedFinalCall = true; }).wait(waitScope);
 
     // To be safe, make sure we've actually executed the function that the other thread queued to
-    // us by running the loop one last time.
-    loop.run();
+    // us by repeatedly polling until `receivedFinalCall` becomes true in this thread.
+    while (!receivedFinalCall) {
+      waitScope.poll();
+      loop.run();
+    }
 
     // OK, signal other that we're all done.
     *otherExecutor.lockExclusive() = nullptr;
@@ -425,12 +431,103 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
     selfExecutor.lockExclusive().wait([](auto& val) { return val == nullptr; });
   };
 
-  Thread thread([&]() {
-    isChild = true;
-    simultaneous(childExecutor, parentExecutor);
-  });
+  {
+    Thread thread([&]() {
+      threadNumber = 1;
+      simultaneous(childExecutor, parentExecutor, 2);
+    });
 
-  simultaneous(parentExecutor, childExecutor);
+    threadNumber = 0;
+    simultaneous(parentExecutor, childExecutor, 2);
+  }
+
+  // Let's even have a three-thread version, with cyclic cancellation requests.
+  MutexGuarded<kj::Maybe<const Executor&>> child2Executor;
+  *readyCount.lockExclusive() = 0;
+
+  {
+    Thread thread1([&]() {
+      threadNumber = 1;
+      simultaneous(childExecutor, child2Executor, 3);
+    });
+
+    Thread thread2([&]() {
+      threadNumber = 2;
+      simultaneous(child2Executor, parentExecutor, 3);
+    });
+
+    threadNumber = 0;
+    simultaneous(parentExecutor, childExecutor, 3);
+  }
+}
+
+KJ_TEST("cross-thread cancellation cycle") {
+  // Another multi-way cancellation test where we set up an actual cycle between three threads
+  // waiting on each other to complete a single event.
+
+  MutexGuarded<kj::Maybe<const Executor&>> child1Executor, child2Executor;
+
+  Own<PromiseFulfiller<void>> fulfiller1, fulfiller2;
+
+  auto threadMain = [](MutexGuarded<kj::Maybe<const Executor&>>& executor,
+                       Own<PromiseFulfiller<void>>& fulfiller) noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
+
+    *executor.lockExclusive() = getCurrentThreadExecutor();
+
+    paf.promise.wait(waitScope);
+
+    // Wait until parent thread sets executor to null, as a way to tell us to quit.
+    executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
+  };
+
+  Thread thread1([&]() noexcept { threadMain(child1Executor, fulfiller1); });
+  Thread thread2([&]() noexcept { threadMain(child2Executor, fulfiller2); });
+
+  ([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+    auto& parentExecutor = getCurrentThreadExecutor();
+
+    const Executor* exec1;
+    {
+      auto lock = child1Executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+      exec1 = &KJ_ASSERT_NONNULL(*lock);
+    }
+    const Executor* exec2;
+    {
+      auto lock = child2Executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+      exec2 = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    // Create an event that cycles through both threads and back to this one, and then cancel it.
+    bool cycleAllDestroyed = false;
+    {
+      Promise<uint> promise = exec1->executeAsync([&]() -> kj::Promise<uint> {
+        return exec2->executeAsync([&]() -> kj::Promise<uint> {
+          return parentExecutor.executeAsync([&]() -> kj::Promise<uint> {
+            return kj::Promise<uint>(kj::NEVER_DONE).attach(kj::defer([&]() {
+              cycleAllDestroyed = true;
+            }));
+          });
+        });
+      });
+      delay();
+      KJ_EXPECT(!promise.poll(waitScope));
+    }
+
+    KJ_EXPECT(cycleAllDestroyed);
+
+    exec1->executeSync([&]() { fulfiller1->fulfill(); });
+    exec2->executeSync([&]() { fulfiller2->fulfill(); });
+
+    *child1Executor.lockExclusive() = nullptr;
+    *child2Executor.lockExclusive() = nullptr;
+  })();
 }
 
 KJ_TEST("call own thread's executor") {

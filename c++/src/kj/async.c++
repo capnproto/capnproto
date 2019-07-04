@@ -348,14 +348,14 @@ struct Executor::Impl {
       return run.empty() && cancel.empty() && replies.empty();
     }
 
-    void dispatchAll(Vector<Own<_::PromiseNode>>& nodesToDeleteOutsideLock) {
+    void dispatchAll(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
       run.forEach([&](_::XThreadEvent& event) {
         run.erase(event);
         event.state = _::XThreadEvent::EXECUTING;
         event.armBreadthFirst();
       });
 
-      dispatchCancels(nodesToDeleteOutsideLock);
+      dispatchCancels(eventsToCancelOutsideLock);
 
       replies.forEach([&](_::XThreadEvent& event) {
         replies.erase(event);
@@ -363,25 +363,16 @@ struct Executor::Impl {
       });
     }
 
-    void dispatchCancels(Vector<Own<_::PromiseNode>>& nodesToDeleteOutsideLock) {
+    void dispatchCancels(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
       cancel.forEach([&](_::XThreadEvent& event) {
         cancel.erase(event);
-        if (event.state == _::XThreadEvent::EXECUTING) {
-          KJ_IF_MAYBE(n, event.promiseNode) {
-            // As a precaution, remove the onReady event pointer. This is probably not needed
-            // because it would be unusual for the destructor of a PromiseNode to try to access
-            // the onReady event pointer, but let's avoid having a dangling pointer in the first
-            // place.
-            n->get()->onReady(nullptr);
 
-            // Schedule to delete the node as soon as we drop the lock. It's important to drop the
-            // lock first because we have no idea what the destructor might do -- it's entirely
-            // possible the destructor will want to take the same lock.
-            nodesToDeleteOutsideLock.add(kj::mv(*n));
-
-            event.promiseNode = nullptr;
-          }
-          event.disarm();
+        KJ_IF_MAYBE(n, event.promiseNode) {
+          // We can't destroy the promiseNode while the mutex is locked, because we don't know
+          // what the destructor might do. But, we *must* destroy it before acknowledging
+          // cancellation. So we have to add it to a list to destroy later.
+          eventsToCancelOutsideLock.add(&event);
+        } else {
           event.state = _::XThreadEvent::DONE;
         }
       });
@@ -390,6 +381,25 @@ struct Executor::Impl {
 
   kj::MutexGuarded<State> state;
   // After modifying state from another thread, the loop's port.wake() must be called.
+
+  void processAsyncCancellations(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
+    // After calling dispatchAll() or dispatchCancels() with the lock held, it may be that some
+    // cancellations require dropping the lock before destroying the promiseNode. In that case
+    // those cancellations will be added to the eventsToCancelOutsideLock Vector passed to the
+    // method. That vector must then be passed to processAsyncCancellations() as soon as the lock
+    // is released.
+
+    for (auto& event: eventsToCancelOutsideLock) {
+      event->promiseNode = nullptr;
+      event->disarm();
+    }
+
+    // Now we need to mark all the events "done" under lock.
+    auto lock = state.lockExclusive();
+    for (auto& event: eventsToCancelOutsideLock) {
+      event->state = _::XThreadEvent::DONE;
+    }
+  }
 };
 
 namespace _ {  // (private)
@@ -400,7 +410,6 @@ void XThreadEvent::ensureDoneOrCanceled() {
 #else
   if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != DONE) {
 #endif
-    Vector<Own<_::PromiseNode>> nodesToDeleteOutsideLock;
     auto lock = targetExecutor.impl->state.lockExclusive();
     switch (state) {
       case UNUSED:
@@ -442,9 +451,12 @@ void XThreadEvent::ensureDoneOrCanceled() {
           KJ_DEFER({
             lock = {};
 
+            Vector<_::XThreadEvent*> eventsToCancelOutsideLock;
+            KJ_DEFER(selfExecutor->impl->processAsyncCancellations(eventsToCancelOutsideLock));
+
             auto selfLock = selfExecutor->impl->state.lockExclusive();
             selfLock->waitingForCancel = false;
-            selfLock->dispatchCancels(nodesToDeleteOutsideLock);
+            selfLock->dispatchCancels(eventsToCancelOutsideLock);
 
             // We don't need to re-take the lock on the other executor here; it's not used again
             // after this scope.
@@ -457,13 +469,16 @@ void XThreadEvent::ensureDoneOrCanceled() {
             // thread.
             lock = {};
             {
+              Vector<_::XThreadEvent*> eventsToCancelOutsideLock;
+              KJ_DEFER(selfExecutor->impl->processAsyncCancellations(eventsToCancelOutsideLock));
+
               auto selfLock = selfExecutor->impl->state.lockExclusive();
               selfLock->waitingForCancel = true;
 
               // Note that we don't have to proactively delete the PromiseNodes extracted from
               // the canceled events because those nodes belong to this thread and can't possibly
               // continue executing while we're blocked here.
-              selfLock->dispatchCancels(nodesToDeleteOutsideLock);
+              selfLock->dispatchCancels(eventsToCancelOutsideLock);
             }
 
             if (otherThreadIsWaiting) {
@@ -576,6 +591,7 @@ Maybe<Own<Event>> XThreadEvent::fire() {
 
   KJ_IF_MAYBE(n, promiseNode) {
     n->get()->get(result);
+    promiseNode = nullptr;  // make sure to destroy in the thread that created it
     return Own<Event>(this, DISPOSER);
   } else {
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
@@ -642,7 +658,8 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
 }
 
 void Executor::wait() {
-  Vector<Own<_::PromiseNode>> nodesToDeleteOutsideLock;
+  Vector<_::XThreadEvent*> eventsToCancelOutsideLock;
+  KJ_DEFER(impl->processAsyncCancellations(eventsToCancelOutsideLock));
 
   auto lock = impl->state.lockExclusive();
 
@@ -650,17 +667,18 @@ void Executor::wait() {
     return !state.empty();
   });
 
-  lock->dispatchAll(nodesToDeleteOutsideLock);
+  lock->dispatchAll(eventsToCancelOutsideLock);
 }
 
 bool Executor::poll() {
-  Vector<Own<_::PromiseNode>> nodesToDeleteOutsideLock;
+  Vector<_::XThreadEvent*> eventsToCancelOutsideLock;
+  KJ_DEFER(impl->processAsyncCancellations(eventsToCancelOutsideLock));
 
   auto lock = impl->state.lockExclusive();
   if (lock->empty()) {
     return false;
   } else {
-    lock->dispatchAll(nodesToDeleteOutsideLock);
+    lock->dispatchAll(eventsToCancelOutsideLock);
     return true;
   }
 }
