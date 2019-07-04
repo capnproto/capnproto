@@ -367,13 +367,13 @@ struct Executor::Impl {
       cancel.forEach([&](_::XThreadEvent& event) {
         cancel.erase(event);
 
-        KJ_IF_MAYBE(n, event.promiseNode) {
+        if (event.promiseNode == nullptr) {
+          event.state = _::XThreadEvent::DONE;
+        } else {
           // We can't destroy the promiseNode while the mutex is locked, because we don't know
           // what the destructor might do. But, we *must* destroy it before acknowledging
           // cancellation. So we have to add it to a list to destroy later.
           eventsToCancelOutsideLock.add(&event);
-        } else {
-          event.state = _::XThreadEvent::DONE;
         }
       });
     }
