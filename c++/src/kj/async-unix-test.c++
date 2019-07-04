@@ -742,7 +742,7 @@ struct TestChild {
       sigset_t sigs;
       sigemptyset(&sigs);
       sigaddset(&sigs, SIGTERM);
-      sigprocmask(SIG_UNBLOCK, &sigs, nullptr);
+      pthread_sigmask(SIG_UNBLOCK, &sigs, nullptr);
 
       for (;;) pause();
     }
@@ -775,8 +775,8 @@ TEST(AsyncUnixTest, ChildProcess) {
   sigset_t sigs, oldsigs;
   KJ_SYSCALL(sigemptyset(&sigs));
   KJ_SYSCALL(sigaddset(&sigs, SIGTERM));
-  KJ_SYSCALL(sigprocmask(SIG_BLOCK, &sigs, &oldsigs));
-  KJ_DEFER(KJ_SYSCALL(sigprocmask(SIG_SETMASK, &oldsigs, nullptr)) { break; });
+  KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &sigs, &oldsigs));
+  KJ_DEFER(KJ_SYSCALL(pthread_sigmask(SIG_SETMASK, &oldsigs, nullptr)) { break; });
 
   TestChild child1(port, 123);
   KJ_EXPECT(!child1.promise.poll(waitScope));

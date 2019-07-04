@@ -56,6 +56,19 @@ bool threadClaimedChildExits = false;
 struct SignalCapture {
   sigjmp_buf jumpTo;
   siginfo_t siginfo;
+
+  sigset_t originalMask;
+  // The signal mask to be restored when jumping out of the signal handler.
+  //
+  // "But wait!" you say, "Isn't the whole point of siglongjmp() that it does this for you?" Well,
+  // yes, that is supposed to be the point. However, Apple implemented in wrong. On macOS,
+  // siglongjmp() uses sigprocmask() -- not pthread_sigmask() -- to restore the signal mask.
+  // Unfortunately, sigprocmask() on macOS affects threads other than the current thread. Arguably
+  // this is conformant: sigprocmask() is documented as having unspecified behavior in the presence
+  // of threads, and pthread_sigmask() must be used instead. However, this means siglongjmp()
+  // cannot be used in the presence of threads.
+  //
+  // We'll just have to restore the signal mask ourselves, rather than rely on siglongjmp()...
 };
 
 #if !KJ_USE_EPOLL  // on Linux we'll use signalfd
@@ -65,7 +78,14 @@ void signalHandler(int, siginfo_t* siginfo, void*) {
   SignalCapture* capture = threadCapture;
   if (capture != nullptr) {
     capture->siginfo = *siginfo;
-    siglongjmp(capture->jumpTo, 1);
+
+    // See comments on SignalCapture::originalMask, above: We can't rely on siglongjmp() to restore
+    // the signal mask; we must do it ourselves using pthread_sigmask(). We pass false as the
+    // second parameter to siglongjmp() so that it skips changing the signal mask. This makes it
+    // equivalent to `longjmp()` on Linux or `_longjmp()` on BSD/macOS. See comments on
+    // SignalCapture::originalMask for explanation.
+    pthread_sigmask(SIG_SETMASK, &capture->originalMask, nullptr);
+    siglongjmp(capture->jumpTo, false);
   }
 }
 #endif
@@ -76,7 +96,7 @@ void registerSignalHandler(int signum) {
   sigset_t mask;
   KJ_SYSCALL(sigemptyset(&mask));
   KJ_SYSCALL(sigaddset(&mask, signum));
-  KJ_SYSCALL(sigprocmask(SIG_BLOCK, &mask, nullptr));
+  KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &mask, nullptr));
 
 #if !KJ_USE_EPOLL  // on Linux we'll use signalfd
   struct sigaction action;
@@ -839,7 +859,7 @@ bool UnixEventPort::wait() {
   // Capture signals.
   SignalCapture capture;
 
-  if (sigsetjmp(capture.jumpTo, true)) {
+  if (sigsetjmp(capture.jumpTo, false)) {
     // We received a signal and longjmp'd back out of the signal handler.
     threadCapture = nullptr;
 
@@ -852,16 +872,15 @@ bool UnixEventPort::wait() {
   }
 
   // Enable signals, run the poll, then mask them again.
-  sigset_t origMask;
   threadCapture = &capture;
-  sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
+  pthread_sigmask(SIG_UNBLOCK, &newMask, &capture.originalMask);
 
   pollContext.run(
       timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
           .map([](uint64_t t) -> int { return t; })
           .orDefault(-1));
 
-  sigprocmask(SIG_SETMASK, &origMask, nullptr);
+  pthread_sigmask(SIG_SETMASK, &capture.originalMask, nullptr);
   threadCapture = nullptr;
 
   // Queue events.
@@ -904,23 +923,26 @@ bool UnixEventPort::poll() {
 
   // Wait for each pending signal.  It would be nice to use sigtimedwait() here but it is not
   // available on OSX.  :(  Instead, we call sigsuspend() once per expected signal.
-  while (signalCount-- > 0) {
+  {
     SignalCapture capture;
+    pthread_sigmask(SIG_SETMASK, nullptr, &capture.originalMask);
     threadCapture = &capture;
-    if (sigsetjmp(capture.jumpTo, true)) {
-      // We received a signal and longjmp'd back out of the signal handler.
-      sigdelset(&waitMask, capture.siginfo.si_signo);
-      if (capture.siginfo.si_signo == reservedSignal) {
-        woken = true;
+    KJ_DEFER(threadCapture = nullptr);
+    while (signalCount-- > 0) {
+      if (sigsetjmp(capture.jumpTo, false)) {
+        // We received a signal and longjmp'd back out of the signal handler.
+        sigdelset(&waitMask, capture.siginfo.si_signo);
+        if (capture.siginfo.si_signo == reservedSignal) {
+          woken = true;
+        } else {
+          gotSignal(capture.siginfo);
+        }
       } else {
-        gotSignal(capture.siginfo);
+        sigsuspend(&waitMask);
+        KJ_FAIL_ASSERT("sigsuspend() shouldn't return because the signal handler should "
+                      "have siglongjmp()ed.");
       }
-    } else {
-      sigsuspend(&waitMask);
-      KJ_FAIL_ASSERT("sigsuspend() shouldn't return because the signal handler should "
-                     "have siglongjmp()ed.");
     }
-    threadCapture = nullptr;
   }
 
   {
