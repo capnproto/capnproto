@@ -775,6 +775,46 @@ TEST(AsyncUnixTest, ChildProcess) {
   // child3 will be killed and synchronously waited on the way out.
 }
 
+KJ_TEST("UnixEventPort whenWriteDisconnected()") {
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  int fds_[2];
+  KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds_));
+  kj::AutoCloseFd fds[2] = { kj::AutoCloseFd(fds_[0]), kj::AutoCloseFd(fds_[1]) };
+
+  UnixEventPort::FdObserver observer(port, fds[0], UnixEventPort::FdObserver::OBSERVE_READ);
+
+  // At one point, the poll()-based version of UnixEventPort had a bug where if some other event
+  // had completed previously, whenWriteDisconnected() would stop being watched for. So we watch
+  // for readability as well and check that that goes away first.
+  auto readablePromise = observer.whenBecomesReadable();
+  auto hupPromise = observer.whenWriteDisconnected();
+
+  KJ_EXPECT(!readablePromise.poll(waitScope));
+  KJ_EXPECT(!hupPromise.poll(waitScope));
+
+  KJ_SYSCALL(write(fds[1], "foo", 3));
+
+  KJ_ASSERT(readablePromise.poll(waitScope));
+  readablePromise.wait(waitScope);
+
+  {
+    char junk[16];
+    ssize_t n;
+    KJ_SYSCALL(n = read(fds[0], junk, 16));
+    KJ_EXPECT(n == 3);
+  }
+
+  KJ_EXPECT(!hupPromise.poll(waitScope));
+
+  fds[1] = nullptr;
+  KJ_ASSERT(hupPromise.poll(waitScope));
+  hupPromise.wait(waitScope);
+}
+
 }  // namespace
 }  // namespace kj
 

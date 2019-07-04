@@ -681,7 +681,8 @@ void UnixEventPort::FdObserver::fire(short events) {
     }
   }
 
-  if (readFulfiller == nullptr && writeFulfiller == nullptr && urgentFulfiller == nullptr) {
+  if (readFulfiller == nullptr && writeFulfiller == nullptr && urgentFulfiller == nullptr &&
+      hupFulfiller == nullptr) {
     // Remove from list.
     if (next == nullptr) {
       eventPort.observersTail = prev;
