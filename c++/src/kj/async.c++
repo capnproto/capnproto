@@ -31,6 +31,7 @@
 
 #if _WIN32
 #include <windows.h>  // just for Sleep(0)
+#include "windows-sanity.h"
 #else
 #include <sched.h>    // just for sched_yield()
 #endif
