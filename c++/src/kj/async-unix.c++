@@ -100,8 +100,6 @@ void registerReservedSignal() {
   }
 }
 
-pthread_once_t registerReservedSignalOnce = PTHREAD_ONCE_INIT;
-
 }  // namespace
 
 struct UnixEventPort::ChildSet {
@@ -280,7 +278,10 @@ UnixEventPort::UnixEventPort()
       epollFd(-1),
       signalFd(-1),
       eventFd(-1) {
-  pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
+  // TODO(cleanup): We don't use the reserved signal on Linux; we use an eventfd instead. Should we
+  //   skip registering it? Note that registerReservedSignal() also takes care of blocking SIGPIPE
+  //   which is important.
+  registerReservedSignal();
 
   int fd;
   KJ_SYSCALL(fd = epoll_create1(EPOLL_CLOEXEC));
@@ -614,7 +615,15 @@ UnixEventPort::UnixEventPort()
                 "pthread_t is larger than a long long on your platform.  Please port.");
   *reinterpret_cast<pthread_t*>(&threadId) = pthread_self();
 
-  pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
+  // Note: We used to use a pthread_once to call registerReservedSignal() only once per process.
+  //   This didn't work correctly because registerReservedSignal() not only registers the
+  //   (process-wide) signal handler, but also sets the (per-thread) signal mask to block the
+  //   signal. Thus, if threads were spawned before the first UnixEventPort was created, and then
+  //   multiple threads created UnixEventPorts, only one of them would have the signal properly
+  //   blocked. We could have changed things so that only the handler registration was protected
+  //   by the pthread_once and the mask update happened in every thread, but registering a signal
+  //   handler is not an expensive operation, so whatever... we'll do it in every thread.
+  registerReservedSignal();
 }
 
 UnixEventPort::~UnixEventPort() noexcept(false) {}
