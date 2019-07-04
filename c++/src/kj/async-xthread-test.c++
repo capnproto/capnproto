@@ -295,11 +295,13 @@ KJ_TEST("cancel cross-thread event before it runs") {
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
+    volatile bool called = false;
     {
-      Promise<uint> promise = exec->executeAsync([&]() { return 123u; });
+      Promise<uint> promise = exec->executeAsync([&]() { called = true; return 123u; });
       delay();
       KJ_EXPECT(!promise.poll(waitScope));
     }
+    KJ_EXPECT(!called);
 
     *executor.lockExclusive() = nullptr;
   })();
@@ -336,13 +338,16 @@ KJ_TEST("cancel cross-thread event while it runs") {
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
+    volatile bool called = false;
     {
       Promise<uint> promise = exec->executeAsync([&]() -> kj::Promise<uint> {
+        called = true;
         return kj::NEVER_DONE;
       });
       delay();
       KJ_EXPECT(!promise.poll(waitScope));
     }
+    KJ_EXPECT(called);
 
     exec->executeSync([&]() { fulfiller->fulfill(); });
 
