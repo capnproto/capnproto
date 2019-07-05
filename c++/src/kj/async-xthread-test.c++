@@ -397,7 +397,7 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
     {
       auto lock = readyCount.lockExclusive();
       ++*lock;
-      lock.wait([&](uint i) { return i == threadCount; });
+      lock.wait([&](uint i) { return i >= threadCount; });
     }
 
     // Run event loop to start all executions queued by the other thread.
@@ -408,7 +408,7 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
     {
       auto lock = readyCount.lockExclusive();
       ++*lock;
-      lock.wait([&](uint i) { return i == threadCount * 2; });
+      lock.wait([&](uint i) { return i >= threadCount * 2; });
     }
 
     // Cancel all the promises.
