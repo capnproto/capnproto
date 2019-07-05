@@ -2,7 +2,11 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-AUTOMAKE_OPTIONS = foreign subdir-objects
+# We use serial-tests so that test output will be written directly to stdout
+# which is much preferred in CI environments where the test logs may be hard
+# to get at after the fact. Most of our tests are bundled into a single
+# executable anyway so cannot easily be parallelized.
+AUTOMAKE_OPTIONS = foreign subdir-objects serial-tests
 
 # When running distcheck, verify that we've included all the files needed by
 # the cmake build.
