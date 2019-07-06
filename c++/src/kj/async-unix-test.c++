@@ -679,14 +679,48 @@ TEST(AsyncUnixTest, Wake) {
     EXPECT_FALSE(port.wait());
   }
 
-  bool woken = false;
-  Thread thread([&]() {
-    delay();
-    woken = true;
-    port.wake();
-  });
+  // Test wake() when already wait()ing.
+  {
+    Thread thread([&]() {
+      delay();
+      port.wake();
+    });
 
-  EXPECT_TRUE(port.wait());
+    EXPECT_TRUE(port.wait());
+  }
+
+  // Test wait() after wake() already happened.
+  {
+    Thread thread([&]() {
+      port.wake();
+    });
+
+    delay();
+    EXPECT_TRUE(port.wait());
+  }
+
+  // Test wake() during poll() busy loop.
+  {
+    Thread thread([&]() {
+      delay();
+      port.wake();
+    });
+
+    EXPECT_FALSE(port.poll());
+    while (!port.poll()) {}
+  }
+
+  // Test poll() when wake() already delivered.
+  {
+    EXPECT_FALSE(port.poll());
+
+    Thread thread([&]() {
+      port.wake();
+    });
+
+    delay();
+    EXPECT_TRUE(port.poll());
+  }
 }
 
 int exitCodeForSignal = 0;
@@ -813,6 +847,30 @@ KJ_TEST("UnixEventPort whenWriteDisconnected()") {
   fds[1] = nullptr;
   KJ_ASSERT(hupPromise.poll(waitScope));
   hupPromise.wait(waitScope);
+}
+
+KJ_TEST("UnixEventPort poll for signals") {
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  auto promise1 = port.onSignal(SIGURG);
+  auto promise2 = port.onSignal(SIGIO);
+
+  KJ_EXPECT(!promise1.poll(waitScope));
+  KJ_EXPECT(!promise2.poll(waitScope));
+
+  KJ_SYSCALL(raise(SIGURG));
+  KJ_SYSCALL(raise(SIGIO));
+  port.wake();
+
+  KJ_EXPECT(port.poll());
+  KJ_EXPECT(promise1.poll(waitScope));
+  KJ_EXPECT(promise2.poll(waitScope));
+
+  promise1.wait(waitScope);
+  promise2.wait(waitScope);
 }
 
 }  // namespace
