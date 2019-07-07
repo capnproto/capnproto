@@ -512,16 +512,21 @@ KJ_TEST("cross-thread cancellation cycle") {
     // Create an event that cycles through both threads and back to this one, and then cancel it.
     bool cycleAllDestroyed = false;
     {
+      auto paf = kj::newPromiseAndFulfiller<void>();
       Promise<uint> promise = exec1->executeAsync([&]() -> kj::Promise<uint> {
         return exec2->executeAsync([&]() -> kj::Promise<uint> {
           return parentExecutor.executeAsync([&]() -> kj::Promise<uint> {
+            paf.fulfiller->fulfill();
             return kj::Promise<uint>(kj::NEVER_DONE).attach(kj::defer([&]() {
               cycleAllDestroyed = true;
             }));
           });
         });
       });
-      delay();
+
+      // Wait until the cycle has come all the way around.
+      paf.promise.wait(waitScope);
+
       KJ_EXPECT(!promise.poll(waitScope));
     }
 
