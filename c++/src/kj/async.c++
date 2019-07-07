@@ -36,12 +36,6 @@
 #include <sched.h>    // just for sched_yield()
 #endif
 
-#if KJ_USE_FUTEX
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <linux/futex.h>
-#endif
-
 #if !KJ_NO_RTTI
 #include <typeinfo>
 #if __GNUC__
