@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#if _WIN32
+#if _WIN32 || __CYGWIN__
 #define WIN32_LEAN_AND_MEAN 1  // lolz
 #define WINVER 0x0600
 #define _WIN32_WINNT 0x0600
@@ -28,7 +28,7 @@
 #include "mutex.h"
 #include "debug.h"
 
-#if !_WIN32
+#if !_WIN32 && !__CYGWIN__
 #include <time.h>
 #include <errno.h>
 #endif
@@ -50,7 +50,7 @@
 #define FUTEX_WAKE_PRIVATE FUTEX_WAKE
 #endif
 
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
 #include <windows.h>
 #endif
 
@@ -95,7 +95,7 @@ bool Mutex::checkPredicate(Waiter& waiter) {
   return result;
 }
 
-#if !_WIN32
+#if !_WIN32 && !__CYGWIN__
 namespace {
 
 TimePoint toTimePoint(struct timespec ts) {
@@ -422,7 +422,7 @@ void Once::reset() {
   }
 }
 
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
 // =======================================================================================
 // Win32 implementation
 

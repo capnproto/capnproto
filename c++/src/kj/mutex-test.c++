@@ -120,7 +120,7 @@ TEST(Mutex, MutexGuarded) {
 
   EXPECT_EQ(321u, *value.lockExclusive());
 
-#if !_WIN32  // Not checked on win32.
+#if !_WIN32 && !__CYGWIN__  // Not checked on win32.
   EXPECT_DEBUG_ANY_THROW(value.getAlreadyLockedExclusive());
   EXPECT_DEBUG_ANY_THROW(value.getAlreadyLockedShared());
 #endif

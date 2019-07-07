@@ -33,8 +33,14 @@
 #define KJ_USE_FUTEX 1
 #endif
 
-#if !KJ_USE_FUTEX && !_WIN32
-// On Linux we use futex.  On other platforms we wrap pthreads.
+#if !KJ_USE_FUTEX && !_WIN32 && !__CYGWIN__
+// We fall back to pthreads when we don't have a better platform-specific primitive. pthreads
+// mutexes are bloated, though, so we like to avoid them. Hence on Linux we use futex(), and on
+// Windows we use SRW locks and friends. On Cygwin we prefer the Win32 primitives both because they
+// are more efficient and because I ran into problems with Cygwin's implementation of RW locks
+// seeming to allow multiple threads to lock the same mutex (but I didn't investigate very
+// closely).
+//
 // TODO(someday):  Write efficient low-level locking primitives for other platforms.
 #include <pthread.h>
 #endif
@@ -101,7 +107,7 @@ private:
   static constexpr uint EXCLUSIVE_REQUESTED = 1u << 30;
   static constexpr uint SHARED_COUNT_MASK = EXCLUSIVE_REQUESTED - 1;
 
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
   uintptr_t srwLock;  // Actually an SRWLOCK, but don't want to #include <windows.h> in header.
 
 #else
@@ -116,7 +122,7 @@ private:
 #if KJ_USE_FUTEX
     uint futex;
     bool hasTimeout;
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
     uintptr_t condvar;
     // Actually CONDITION_VARIABLE, but don't want to #include <windows.h> in header.
 #else
@@ -135,7 +141,7 @@ private:
   inline void addWaiter(Waiter& waiter);
   inline void removeWaiter(Waiter& waiter);
   bool checkPredicate(Waiter& waiter);
-#if _WIN32
+#if _WIN32 || __CYGWIN__
   void wakeReadyWaiter(Waiter* waiterToSkip);
 #endif
 };
@@ -160,7 +166,7 @@ public:
 
   void runOnce(Initializer& init);
 
-#if _WIN32  // TODO(perf): Can we make this inline on win32 somehow?
+#if _WIN32 || __CYGWIN__  // TODO(perf): Can we make this inline on win32 somehow?
   bool isInitialized() noexcept;
 
 #else
@@ -190,7 +196,7 @@ private:
     INITIALIZED
   };
 
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
   uintptr_t initOnce;  // Actually an INIT_ONCE, but don't want to #include <windows.h> in header.
 
 #else
