@@ -51,6 +51,8 @@ namespace _ {  // private
 class Mutex {
   // Internal implementation details.  See `MutexGuarded<T>`.
 
+  struct Waiter;
+
 public:
   Mutex();
   ~Mutex();
@@ -62,7 +64,7 @@ public:
   };
 
   void lock(Exclusivity exclusivity);
-  void unlock(Exclusivity exclusivity);
+  void unlock(Exclusivity exclusivity, Waiter* waiterToSkip = nullptr);
 
   void assertLockedByCaller(Exclusivity exclusivity);
   // In debug mode, assert that the mutex is locked by the calling thread, or if that is
@@ -134,7 +136,7 @@ private:
   inline void removeWaiter(Waiter& waiter);
   bool checkPredicate(Waiter& waiter);
 #if _WIN32
-  void wakeReadyWaiter();
+  void wakeReadyWaiter(Waiter* waiterToSkip);
 #endif
 };
 

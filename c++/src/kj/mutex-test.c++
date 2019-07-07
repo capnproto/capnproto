@@ -570,5 +570,27 @@ KJ_TEST("ExternalMutexGuarded<T> destroy without release") {
   }
 }
 
+KJ_TEST("condvar wait with flapping predicate") {
+  // This used to deadlock under some implementations due to a wait() checking its own predicate
+  // as part of unlock()ing the mutex. Adding `waiterToSkip` fixed this (and also eliminated a
+  // redundant call to the predicate).
+
+  MutexGuarded<uint> guarded(0);
+
+  Thread thread([&]() {
+    delay();
+    *guarded.lockExclusive() = 1;
+  });
+
+  {
+    auto lock = guarded.lockExclusive();
+    bool flap = true;
+    lock.wait([&](uint i) {
+      flap = !flap;
+      return i == 1 || flap;
+    });
+  }
+}
+
 }  // namespace
 }  // namespace kj
