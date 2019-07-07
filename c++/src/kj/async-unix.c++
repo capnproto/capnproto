@@ -938,9 +938,24 @@ bool UnixEventPort::poll() {
           gotSignal(capture.siginfo);
         }
       } else {
+#if __CYGWIN__
+        // Cygwin's sigpending() incorrectly reports signals pending for any thread, not just our
+        // own thread. As a work-around, instead of using sigsuspend() (which would block forever
+        // if the signal is not pending on *this* thread), we un-mask the signals and immediately
+        // mask them again. If any signals are pending, they *should* be delivered before the first
+        // sigprocmask() returns, and the handler will then longjmp() to the block above. If it
+        // turns out no signal is pending, we'll block the signals again and break out of the
+        // loop.
+        //
+        // Bug reported here: https://cygwin.com/ml/cygwin/2019-07/msg00051.html
+        sigprocmask(SIG_SETMASK, &waitMask, nullptr);
+        sigprocmask(SIG_SETMASK, &capture.originalMask, nullptr);
+        break;
+#else
         sigsuspend(&waitMask);
         KJ_FAIL_ASSERT("sigsuspend() shouldn't return because the signal handler should "
                       "have siglongjmp()ed.");
+#endif
       }
     }
   }
