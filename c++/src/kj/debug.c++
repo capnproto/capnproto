@@ -25,8 +25,10 @@
 #include <string.h>
 #include <errno.h>
 
-#if _WIN32
+#if _WIN32 || __CYGWIN__
+#if !__CYGWIN__
 #define strerror_r(errno,buf,len) strerror_s(buf,len,errno)
+#endif
 #define NOMINMAX 1
 #define WIN32_LEAN_AND_MEAN 1
 #define NOSERVICE 1
@@ -35,6 +37,7 @@
 #include <windows.h>
 #include "windows-sanity.h"
 #include "encoding.h"
+#include <wchar.h>
 #endif
 
 namespace kj {
@@ -133,7 +136,7 @@ Exception::Type typeOfErrno(int error) {
   }
 }
 
-#if _WIN32
+#if _WIN32 || __CYGWIN__
 
 Exception::Type typeOfWin32Error(DWORD error) {
   switch (error) {
@@ -355,7 +358,7 @@ void Debug::Fault::init(
       makeDescriptionImpl(SYSCALL, condition, osErrorNumber, nullptr, macroArgs, argValues));
 }
 
-#if _WIN32
+#if _WIN32 || __CYGWIN__
 void Debug::Fault::init(
     const char* file, int line, Win32Result osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
@@ -401,7 +404,7 @@ int Debug::getOsErrorNumber(bool nonblocking) {
        : result;
 }
 
-#if _WIN32
+#if _WIN32 || __CYGWIN__
 uint Debug::getWin32ErrorCode() {
   return ::GetLastError();
 }

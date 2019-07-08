@@ -215,8 +215,11 @@ if(BUILD_TESTING)
   if(NOT CAPNP_LITE)
     add_executable(kj-heavy-tests
       async-test.c++
+      async-xthread-test.c++
       async-unix-test.c++
+      async-unix-xthread-test.c++
       async-win32-test.c++
+      async-win32-xthread-test.c++
       async-io-test.c++
       refcount-test.c++
       string-tree-test.c++

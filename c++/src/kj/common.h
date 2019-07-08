@@ -503,6 +503,35 @@ constexpr bool canMemcpy() {
   static_assert(kj::canMemcpy<T>(), "this code expects this type to be memcpy()-able");
 #endif
 
+template <typename T>
+class Badge {
+  // A pattern for marking individual methods such that they can only be called from a specific
+  // caller class: Make the method public but give it a parameter of type `Badge<Caller>`. Only
+  // `Caller` can construct one, so only `Caller` can call the method.
+  //
+  //     // We only allow calls from the class `Bar`.
+  //     void foo(Badge<Bar>)
+  //
+  // The call site looks like:
+  //
+  //     foo({});
+  //
+  // This pattern also works well for declaring private constructors, but still being able to use
+  // them with `kj::heap()`, etc.
+  //
+  // Idea from: https://awesomekling.github.io/Serenity-C++-patterns-The-Badge/
+  //
+  // Note that some forms of this idea make the copy constructor private as well, in order to
+  // prohibit `Badge<NotMe>(*(Badge<NotMe>*)nullptr)`. However, that would prevent badges from
+  // being passed through forwarding functions like `kj::heap()`, which would ruin one of the main
+  // use cases for this pattern in KJ. In any case, dereferencing a null pointer is UB; there are
+  // plenty of other ways to get access to private members if you're willing to go UB. For one-off
+  // debugging purposes, you might as well use `#define private public` at the top of the file.
+private:
+  Badge() {}
+  friend T;
+};
+
 // =======================================================================================
 // Equivalents to std::move() and std::forward(), since these are very commonly needed and the
 // std header <utility> pulls in lots of other stuff.

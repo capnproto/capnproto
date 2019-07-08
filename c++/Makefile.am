@@ -2,7 +2,11 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-AUTOMAKE_OPTIONS = foreign subdir-objects
+# We use serial-tests so that test output will be written directly to stdout
+# which is much preferred in CI environments where the test logs may be hard
+# to get at after the fact. Most of our tests are bundled into a single
+# executable anyway so cannot easily be parallelized.
+AUTOMAKE_OPTIONS = foreign subdir-objects serial-tests
 
 # When running distcheck, verify that we've included all the files needed by
 # the cmake build.
@@ -460,8 +464,11 @@ else !LITE_MODE
 check_PROGRAMS = capnp-test capnp-evolution-test capnp-afl-testcase
 heavy_tests =                                                  \
   src/kj/async-test.c++                                        \
+  src/kj/async-xthread-test.c++                                \
   src/kj/async-unix-test.c++                                   \
+  src/kj/async-unix-xthread-test.c++                           \
   src/kj/async-win32-test.c++                                  \
+  src/kj/async-win32-xthread-test.c++                          \
   src/kj/async-io-test.c++                                     \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \

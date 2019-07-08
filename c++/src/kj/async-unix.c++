@@ -31,14 +31,15 @@
 #include <pthread.h>
 #include <map>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #if KJ_USE_EPOLL
-#include <unistd.h>
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
 #include <sys/eventfd.h>
 #else
 #include <poll.h>
+#include <fcntl.h>
 #endif
 
 namespace kj {
@@ -56,6 +57,19 @@ bool threadClaimedChildExits = false;
 struct SignalCapture {
   sigjmp_buf jumpTo;
   siginfo_t siginfo;
+
+  sigset_t originalMask;
+  // The signal mask to be restored when jumping out of the signal handler.
+  //
+  // "But wait!" you say, "Isn't the whole point of siglongjmp() that it does this for you?" Well,
+  // yes, that is supposed to be the point. However, Apple implemented in wrong. On macOS,
+  // siglongjmp() uses sigprocmask() -- not pthread_sigmask() -- to restore the signal mask.
+  // Unfortunately, sigprocmask() on macOS affects threads other than the current thread. Arguably
+  // this is conformant: sigprocmask() is documented as having unspecified behavior in the presence
+  // of threads, and pthread_sigmask() must be used instead. However, this means siglongjmp()
+  // cannot be used in the presence of threads.
+  //
+  // We'll just have to restore the signal mask ourselves, rather than rely on siglongjmp()...
 };
 
 #if !KJ_USE_EPOLL  // on Linux we'll use signalfd
@@ -65,7 +79,14 @@ void signalHandler(int, siginfo_t* siginfo, void*) {
   SignalCapture* capture = threadCapture;
   if (capture != nullptr) {
     capture->siginfo = *siginfo;
-    siglongjmp(capture->jumpTo, 1);
+
+    // See comments on SignalCapture::originalMask, above: We can't rely on siglongjmp() to restore
+    // the signal mask; we must do it ourselves using pthread_sigmask(). We pass false as the
+    // second parameter to siglongjmp() so that it skips changing the signal mask. This makes it
+    // equivalent to `longjmp()` on Linux or `_longjmp()` on BSD/macOS. See comments on
+    // SignalCapture::originalMask for explanation.
+    pthread_sigmask(SIG_SETMASK, &capture->originalMask, nullptr);
+    siglongjmp(capture->jumpTo, false);
   }
 }
 #endif
@@ -76,7 +97,7 @@ void registerSignalHandler(int signum) {
   sigset_t mask;
   KJ_SYSCALL(sigemptyset(&mask));
   KJ_SYSCALL(sigaddset(&mask, signum));
-  KJ_SYSCALL(sigprocmask(SIG_BLOCK, &mask, nullptr));
+  KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &mask, nullptr));
 
 #if !KJ_USE_EPOLL  // on Linux we'll use signalfd
   struct sigaction action;
@@ -88,10 +109,14 @@ void registerSignalHandler(int signum) {
 #endif
 }
 
+#if !KJ_USE_EPOLL && !KJ_USE_PIPE_FOR_WAKEUP
 void registerReservedSignal() {
   registerSignalHandler(reservedSignal);
+}
+#endif
 
-  // We also disable SIGPIPE because users of UnixEventPort almost certainly don't want it.
+void ignoreSigpipe() {
+  // We disable SIGPIPE because users of UnixEventPort almost certainly don't want it.
   while (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
     int error = errno;
     if (error != EINTR) {
@@ -99,8 +124,6 @@ void registerReservedSignal() {
     }
   }
 }
-
-pthread_once_t registerReservedSignalOnce = PTHREAD_ONCE_INIT;
 
 }  // namespace
 
@@ -280,7 +303,7 @@ UnixEventPort::UnixEventPort()
       epollFd(-1),
       signalFd(-1),
       eventFd(-1) {
-  pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
+  ignoreSigpipe();
 
   int fd;
   KJ_SYSCALL(fd = epoll_create1(EPOLL_CLOEXEC));
@@ -610,11 +633,31 @@ bool UnixEventPort::doEpollWait(int timeout) {
 UnixEventPort::UnixEventPort()
     : clock(systemPreciseMonotonicClock()),
       timerImpl(clock.now()) {
+#if KJ_USE_PIPE_FOR_WAKEUP
+  // Allocate a pipe to which we'll write a byte in order to wake this thread.
+  int fds[2];
+  KJ_SYSCALL(pipe(fds));
+  wakePipeIn = kj::AutoCloseFd(fds[0]);
+  wakePipeOut = kj::AutoCloseFd(fds[1]);
+  KJ_SYSCALL(fcntl(wakePipeIn, F_SETFD, FD_CLOEXEC));
+  KJ_SYSCALL(fcntl(wakePipeOut, F_SETFD, FD_CLOEXEC));
+#else
   static_assert(sizeof(threadId) >= sizeof(pthread_t),
                 "pthread_t is larger than a long long on your platform.  Please port.");
   *reinterpret_cast<pthread_t*>(&threadId) = pthread_self();
 
-  pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
+  // Note: We used to use a pthread_once to call registerReservedSignal() only once per process.
+  //   This didn't work correctly because registerReservedSignal() not only registers the
+  //   (process-wide) signal handler, but also sets the (per-thread) signal mask to block the
+  //   signal. Thus, if threads were spawned before the first UnixEventPort was created, and then
+  //   multiple threads created UnixEventPorts, only one of them would have the signal properly
+  //   blocked. We could have changed things so that only the handler registration was protected
+  //   by the pthread_once and the mask update happened in every thread, but registering a signal
+  //   handler is not an expensive operation, so whatever... we'll do it in every thread.
+  registerReservedSignal();
+#endif
+
+  ignoreSigpipe();
 }
 
 UnixEventPort::~UnixEventPort() noexcept(false) {}
@@ -672,7 +715,8 @@ void UnixEventPort::FdObserver::fire(short events) {
     }
   }
 
-  if (readFulfiller == nullptr && writeFulfiller == nullptr && urgentFulfiller == nullptr) {
+  if (readFulfiller == nullptr && writeFulfiller == nullptr && urgentFulfiller == nullptr &&
+      hupFulfiller == nullptr) {
     // Remove from list.
     if (next == nullptr) {
       eventPort.observersTail = prev;
@@ -761,16 +805,25 @@ Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
 
 class UnixEventPort::PollContext {
 public:
-  PollContext(FdObserver* ptr) {
-    while (ptr != nullptr) {
+  PollContext(UnixEventPort& port) {
+    for (FdObserver* ptr = port.observersHead; ptr != nullptr; ptr = ptr->next) {
       struct pollfd pollfd;
       memset(&pollfd, 0, sizeof(pollfd));
       pollfd.fd = ptr->fd;
       pollfd.events = ptr->getEventMask();
       pollfds.add(pollfd);
       pollEvents.add(ptr);
-      ptr = ptr->next;
     }
+
+#if KJ_USE_PIPE_FOR_WAKEUP
+    {
+      struct pollfd pollfd;
+      memset(&pollfd, 0, sizeof(pollfd));
+      pollfd.fd = port.wakePipeIn;
+      pollfd.events = POLLIN;
+      pollfds.add(pollfd);
+    }
+#endif
   }
 
   void run(int timeout) {
@@ -786,19 +839,36 @@ public:
     }
   }
 
-  void processResults() {
+  bool processResults() {
     if (pollResult < 0) {
       KJ_FAIL_SYSCALL("poll()", pollError);
     }
 
+    bool woken = false;
     for (auto i: indices(pollfds)) {
       if (pollfds[i].revents != 0) {
-        pollEvents[i]->fire(pollfds[i].revents);
+#if KJ_USE_PIPE_FOR_WAKEUP
+        if (i == pollEvents.size()) {
+          // The last pollfd is our cross-thread wake pipe.
+          woken = true;
+          // Discard junk in the wake pipe.
+          char junk[256];
+          ssize_t n;
+          do {
+            KJ_NONBLOCKING_SYSCALL(n = read(pollfds[i].fd, junk, sizeof(junk)));
+          } while (n >= 256);
+        } else {
+#endif
+          pollEvents[i]->fire(pollfds[i].revents);
+#if KJ_USE_PIPE_FOR_WAKEUP
+        }
+#endif
         if (--pollResult <= 0) {
           break;
         }
       }
     }
+    return woken;
   }
 
 private:
@@ -811,7 +881,10 @@ private:
 bool UnixEventPort::wait() {
   sigset_t newMask;
   sigemptyset(&newMask);
+
+#if !KJ_USE_PIPE_FOR_WAKEUP
   sigaddset(&newMask, reservedSignal);
+#endif
 
   {
     auto ptr = signalHead;
@@ -824,41 +897,44 @@ bool UnixEventPort::wait() {
     }
   }
 
-  PollContext pollContext(observersHead);
+  PollContext pollContext(*this);
 
   // Capture signals.
   SignalCapture capture;
 
-  if (sigsetjmp(capture.jumpTo, true)) {
+  if (sigsetjmp(capture.jumpTo, false)) {
     // We received a signal and longjmp'd back out of the signal handler.
     threadCapture = nullptr;
 
+#if !KJ_USE_PIPE_FOR_WAKEUP
     if (capture.siginfo.si_signo == reservedSignal) {
       return true;
     } else {
+#endif
       gotSignal(capture.siginfo);
       return false;
+#if !KJ_USE_PIPE_FOR_WAKEUP
     }
+#endif
   }
 
   // Enable signals, run the poll, then mask them again.
-  sigset_t origMask;
   threadCapture = &capture;
-  sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
+  pthread_sigmask(SIG_UNBLOCK, &newMask, &capture.originalMask);
 
   pollContext.run(
       timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
           .map([](uint64_t t) -> int { return t; })
           .orDefault(-1));
 
-  sigprocmask(SIG_SETMASK, &origMask, nullptr);
+  pthread_sigmask(SIG_SETMASK, &capture.originalMask, nullptr);
   threadCapture = nullptr;
 
   // Queue events.
-  pollContext.processResults();
+  bool result = pollContext.processResults();
   timerImpl.advanceTo(clock.now());
 
-  return false;
+  return result;
 }
 
 bool UnixEventPort::poll() {
@@ -874,11 +950,13 @@ bool UnixEventPort::poll() {
   KJ_SYSCALL(sigpending(&pending));
   uint signalCount = 0;
 
+#if !KJ_USE_PIPE_FOR_WAKEUP
   if (sigismember(&pending, reservedSignal)) {
     ++signalCount;
     sigdelset(&pending, reservedSignal);
     sigdelset(&waitMask, reservedSignal);
   }
+#endif
 
   {
     auto ptr = signalHead;
@@ -894,29 +972,53 @@ bool UnixEventPort::poll() {
 
   // Wait for each pending signal.  It would be nice to use sigtimedwait() here but it is not
   // available on OSX.  :(  Instead, we call sigsuspend() once per expected signal.
-  while (signalCount-- > 0) {
+  {
     SignalCapture capture;
+    pthread_sigmask(SIG_SETMASK, nullptr, &capture.originalMask);
     threadCapture = &capture;
-    if (sigsetjmp(capture.jumpTo, true)) {
-      // We received a signal and longjmp'd back out of the signal handler.
-      sigdelset(&waitMask, capture.siginfo.si_signo);
-      if (capture.siginfo.si_signo == reservedSignal) {
-        woken = true;
+    KJ_DEFER(threadCapture = nullptr);
+    while (signalCount-- > 0) {
+      if (sigsetjmp(capture.jumpTo, false)) {
+        // We received a signal and longjmp'd back out of the signal handler.
+        sigdelset(&waitMask, capture.siginfo.si_signo);
+#if !KJ_USE_PIPE_FOR_WAKEUP
+        if (capture.siginfo.si_signo == reservedSignal) {
+          woken = true;
+        } else {
+#endif
+          gotSignal(capture.siginfo);
+#if !KJ_USE_PIPE_FOR_WAKEUP
+        }
+#endif
       } else {
-        gotSignal(capture.siginfo);
+#if __CYGWIN__
+        // Cygwin's sigpending() incorrectly reports signals pending for any thread, not just our
+        // own thread. As a work-around, instead of using sigsuspend() (which would block forever
+        // if the signal is not pending on *this* thread), we un-mask the signals and immediately
+        // mask them again. If any signals are pending, they *should* be delivered before the first
+        // sigprocmask() returns, and the handler will then longjmp() to the block above. If it
+        // turns out no signal is pending, we'll block the signals again and break out of the
+        // loop.
+        //
+        // Bug reported here: https://cygwin.com/ml/cygwin/2019-07/msg00051.html
+        sigprocmask(SIG_SETMASK, &waitMask, nullptr);
+        sigprocmask(SIG_SETMASK, &capture.originalMask, nullptr);
+        break;
+#else
+        sigsuspend(&waitMask);
+        KJ_FAIL_ASSERT("sigsuspend() shouldn't return because the signal handler should "
+                      "have siglongjmp()ed.");
+#endif
       }
-    } else {
-      sigsuspend(&waitMask);
-      KJ_FAIL_ASSERT("sigsuspend() shouldn't return because the signal handler should "
-                     "have siglongjmp()ed.");
     }
-    threadCapture = nullptr;
   }
 
   {
-    PollContext pollContext(observersHead);
+    PollContext pollContext(*this);
     pollContext.run(0);
-    pollContext.processResults();
+    if (pollContext.processResults()) {
+      woken = true;
+    }
   }
   timerImpl.advanceTo(clock.now());
 
@@ -924,10 +1026,20 @@ bool UnixEventPort::poll() {
 }
 
 void UnixEventPort::wake() const {
+#if KJ_USE_PIPE_FOR_WAKEUP
+  // We're going to write() a single byte to our wake pipe in order to cause poll() to complete in
+  // the target thread.
+  //
+  // If this write() fails with EWOULDBLOCK, we don't care, because the target thread is already
+  // scheduled to wake up.
+  char c = 0;
+  KJ_NONBLOCKING_SYSCALL(write(wakePipeOut, &c, 1));
+#else
   int error = pthread_kill(*reinterpret_cast<const pthread_t*>(&threadId), reservedSignal);
   if (error != 0) {
     KJ_FAIL_SYSCALL("pthread_kill", error);
   }
+#endif
 }
 
 #endif  // KJ_USE_EPOLL, else

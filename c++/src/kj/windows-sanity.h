@@ -36,7 +36,7 @@
 // windows-sanity.h, we can be sure that no conflicts will occur regardless of in what order the
 // application chooses to include these headers vs. windows.h.
 
-#if !_WIN32
+#if !_WIN32 && !__CYGWIN__
 
 // Not on Windows. Tell the compiler never to try to include this again.
 #pragma once

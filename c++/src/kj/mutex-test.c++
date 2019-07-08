@@ -120,7 +120,7 @@ TEST(Mutex, MutexGuarded) {
 
   EXPECT_EQ(321u, *value.lockExclusive());
 
-#if !_WIN32  // Not checked on win32.
+#if !_WIN32 && !__CYGWIN__  // Not checked on win32.
   EXPECT_DEBUG_ANY_THROW(value.getAlreadyLockedExclusive());
   EXPECT_DEBUG_ANY_THROW(value.getAlreadyLockedShared());
 #endif
@@ -363,13 +363,15 @@ TEST(Mutex, WhenWithTimeoutPreciseTiming) {
       return n == 321;
     }, [](uint& n) {
       return 456;
-    }, 20 * kj::MILLISECONDS);
+    }, 100 * kj::MILLISECONDS);
 
     KJ_EXPECT(m == 456);
 
     auto t = clock.now() - start;
-    KJ_EXPECT(t >= 20 * kj::MILLISECONDS);
-    if (t <= 22 * kj::MILLISECONDS) {
+    KJ_EXPECT(t >= 100 * kj::MILLISECONDS);
+    // Provide a large margin of error here because some operating systems (e.g. Windows) can have
+    // long timeslices (13ms) and won't schedule more precisely than a timeslice.
+    if (t <= 120 * kj::MILLISECONDS) {
       return;
     }
   }
@@ -395,17 +397,41 @@ TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
       return n == 321;
     }, [](uint& n) {
       return 456;
-    }, 20 * kj::MILLISECONDS);
+    }, 100 * kj::MILLISECONDS);
 
     KJ_EXPECT(m == 456);
 
     auto t = clock.now() - start;
-    KJ_EXPECT(t >= 20 * kj::MILLISECONDS, t / kj::MILLISECONDS);
-    if (t <= 22 * kj::MILLISECONDS) {
+    KJ_EXPECT(t >= 100 * kj::MILLISECONDS, t / kj::MILLISECONDS);
+    // Provide a large margin of error here because some operating systems (e.g. Windows) can have
+    // long timeslices (13ms) and won't schedule more precisely than a timeslice.
+    if (t <= 120 * kj::MILLISECONDS) {
       return;
     }
   }
   KJ_FAIL_ASSERT("time not within expected bounds even after retries");
+}
+
+KJ_TEST("wait()s wake each other") {
+  MutexGuarded<uint> value(0);
+
+  {
+    kj::Thread thread([&]() {
+      auto lock = value.lockExclusive();
+      ++*lock;
+      lock.wait([](uint value) { return value == 2; });
+      ++*lock;
+      lock.wait([](uint value) { return value == 4; });
+    });
+
+    {
+      auto lock = value.lockExclusive();
+      lock.wait([](uint value) { return value == 1; });
+      ++*lock;
+      lock.wait([](uint value) { return value == 3; });
+      ++*lock;
+    }
+  }
 }
 
 TEST(Mutex, Lazy) {
@@ -545,6 +571,28 @@ KJ_TEST("ExternalMutexGuarded<T> destroy without release") {
   {
     auto lock = guarded.lockExclusive();
     KJ_EXPECT(*lock == 3);
+  }
+}
+
+KJ_TEST("condvar wait with flapping predicate") {
+  // This used to deadlock under some implementations due to a wait() checking its own predicate
+  // as part of unlock()ing the mutex. Adding `waiterToSkip` fixed this (and also eliminated a
+  // redundant call to the predicate).
+
+  MutexGuarded<uint> guarded(0);
+
+  Thread thread([&]() {
+    delay();
+    *guarded.lockExclusive() = 1;
+  });
+
+  {
+    auto lock = guarded.lockExclusive();
+    bool flap = true;
+    lock.wait([&](uint i) {
+      flap = !flap;
+      return i == 1 || flap;
+    });
   }
 }
 

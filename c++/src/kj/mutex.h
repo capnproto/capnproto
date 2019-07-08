@@ -33,8 +33,14 @@
 #define KJ_USE_FUTEX 1
 #endif
 
-#if !KJ_USE_FUTEX && !_WIN32
-// On Linux we use futex.  On other platforms we wrap pthreads.
+#if !KJ_USE_FUTEX && !_WIN32 && !__CYGWIN__
+// We fall back to pthreads when we don't have a better platform-specific primitive. pthreads
+// mutexes are bloated, though, so we like to avoid them. Hence on Linux we use futex(), and on
+// Windows we use SRW locks and friends. On Cygwin we prefer the Win32 primitives both because they
+// are more efficient and because I ran into problems with Cygwin's implementation of RW locks
+// seeming to allow multiple threads to lock the same mutex (but I didn't investigate very
+// closely).
+//
 // TODO(someday):  Write efficient low-level locking primitives for other platforms.
 #include <pthread.h>
 #endif
@@ -51,6 +57,8 @@ namespace _ {  // private
 class Mutex {
   // Internal implementation details.  See `MutexGuarded<T>`.
 
+  struct Waiter;
+
 public:
   Mutex();
   ~Mutex();
@@ -62,7 +70,7 @@ public:
   };
 
   void lock(Exclusivity exclusivity);
-  void unlock(Exclusivity exclusivity);
+  void unlock(Exclusivity exclusivity, Waiter* waiterToSkip = nullptr);
 
   void assertLockedByCaller(Exclusivity exclusivity);
   // In debug mode, assert that the mutex is locked by the calling thread, or if that is
@@ -74,14 +82,16 @@ public:
     virtual bool check() = 0;
   };
 
-  void lockWhen(Predicate& predicate, Maybe<Duration> timeout = nullptr);
-  // Lock (exclusively) when predicate.check() returns true, or when the timeout (if any) expires.
-  // The mutex is always locked when this returns regardless of whether the timeout expired (and
-  // always unlocked if it throws).
+  void wait(Predicate& predicate, Maybe<Duration> timeout = nullptr);
+  // If predicate.check() returns false, unlock the mutex until predicate.check() returns true, or
+  // when the timeout (if any) expires. The mutex is always re-locked when this returns regardless
+  // of whether the timeout expired, and including if it throws.
+  //
+  // Requires that the mutex is already exclusively locked before calling.
 
   void induceSpuriousWakeupForTest();
   // Utility method for mutex-test.c++ which causes a spurious thread wakeup on all threads that
-  // are waiting for a lockWhen() condition. Assuming correct implementation, all those threads
+  // are waiting for a wait() condition. Assuming correct implementation, all those threads
   // should immediately go back to sleep.
 
 private:
@@ -97,7 +107,7 @@ private:
   static constexpr uint EXCLUSIVE_REQUESTED = 1u << 30;
   static constexpr uint SHARED_COUNT_MASK = EXCLUSIVE_REQUESTED - 1;
 
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
   uintptr_t srwLock;  // Actually an SRWLOCK, but don't want to #include <windows.h> in header.
 
 #else
@@ -112,7 +122,7 @@ private:
 #if KJ_USE_FUTEX
     uint futex;
     bool hasTimeout;
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
     uintptr_t condvar;
     // Actually CONDITION_VARIABLE, but don't want to #include <windows.h> in header.
 #else
@@ -131,6 +141,9 @@ private:
   inline void addWaiter(Waiter& waiter);
   inline void removeWaiter(Waiter& waiter);
   bool checkPredicate(Waiter& waiter);
+#if _WIN32 || __CYGWIN__
+  void wakeReadyWaiter(Waiter* waiterToSkip);
+#endif
 };
 
 class Once {
@@ -153,7 +166,7 @@ public:
 
   void runOnce(Initializer& init);
 
-#if _WIN32  // TODO(perf): Can we make this inline on win32 somehow?
+#if _WIN32 || __CYGWIN__  // TODO(perf): Can we make this inline on win32 somehow?
   bool isInitialized() noexcept;
 
 #else
@@ -183,7 +196,7 @@ private:
     INITIALIZED
   };
 
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
   uintptr_t initOnce;  // Actually an INIT_ONCE, but don't want to #include <windows.h> in header.
 
 #else
@@ -240,6 +253,31 @@ public:
   inline const T* get() const { return ptr; }
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
+
+  template <typename Cond>
+  void wait(Cond&& condition, Maybe<Duration> timeout = nullptr) {
+    // Unlocks the lock until `condition(state)` evaluates true (where `state` is type `const T&`
+    // referencing the object protected by the lock).
+
+    // We can't wait on a shared lock because the internal bookkeeping needed for a wait requires
+    // the protection of an exclusive lock.
+    static_assert(!isConst<T>(), "cannot wait() on shared lock");
+
+    struct PredicateImpl final: public _::Mutex::Predicate {
+      bool check() override {
+        return condition(value);
+      }
+
+      Cond&& condition;
+      const T& value;
+
+      PredicateImpl(Cond&& condition, const T& value)
+          : condition(kj::fwd<Cond>(condition)), value(value) {}
+    };
+
+    PredicateImpl impl(kj::fwd<Cond>(condition), *ptr);
+    mutex->wait(impl, timeout);
+  }
 
 private:
   _::Mutex* mutex;
@@ -321,22 +359,11 @@ public:
     // If `timeout` is specified, then after the given amount of time, the callback will be called
     // regardless of whether the condition is true. In this case, when `callback()` is called,
     // `condition()` may in fact evaluate false, but *only* if the timeout was reached.
+    //
+    // TODO(cleanup): lock->wait() is a better interface. Can we deprecate this one?
 
-    struct PredicateImpl final: public _::Mutex::Predicate {
-      bool check() override {
-        return condition(value);
-      }
-
-      Cond&& condition;
-      const T& value;
-
-      PredicateImpl(Cond&& condition, const T& value)
-          : condition(kj::fwd<Cond>(condition)), value(value) {}
-    };
-
-    PredicateImpl impl(kj::fwd<Cond>(condition), value);
-    mutex.lockWhen(impl, timeout);
-    KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
+    auto lock = lockExclusive();
+    lock.wait(kj::fwd<Cond>(condition), timeout);
     return callback(value);
   }
 

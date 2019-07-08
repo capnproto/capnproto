@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#if _WIN32
+#if _WIN32 || __CYGWIN__
 #define WIN32_LEAN_AND_MEAN 1  // lolz
 #define WINVER 0x0600
 #define _WIN32_WINNT 0x0600
@@ -28,7 +28,7 @@
 #include "mutex.h"
 #include "debug.h"
 
-#if !_WIN32
+#if !_WIN32 && !__CYGWIN__
 #include <time.h>
 #include <errno.h>
 #endif
@@ -50,7 +50,7 @@
 #define FUTEX_WAKE_PRIVATE FUTEX_WAKE
 #endif
 
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
 #include <windows.h>
 #endif
 
@@ -95,7 +95,7 @@ bool Mutex::checkPredicate(Waiter& waiter) {
   return result;
 }
 
-#if !_WIN32
+#if !_WIN32 && !__CYGWIN__
 namespace {
 
 TimePoint toTimePoint(struct timespec ts) {
@@ -172,7 +172,7 @@ void Mutex::lock(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::unlock(Exclusivity exclusivity) {
+void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   switch (exclusivity) {
     case EXCLUSIVE: {
       KJ_DASSERT(futex & EXCLUSIVE_HELD, "Unlocked a mutex that wasn't locked.");
@@ -184,7 +184,7 @@ void Mutex::unlock(Exclusivity exclusivity) {
         KJ_IF_MAYBE(waiter, nextWaiter) {
           nextWaiter = waiter->next;
 
-          if (checkPredicate(*waiter)) {
+          if (waiter != waiterToSkip && checkPredicate(*waiter)) {
             // This waiter's predicate now evaluates true, so wake it up.
             if (waiter->hasTimeout) {
               // In this case we need to be careful to make sure the target thread isn't already
@@ -265,28 +265,21 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
-  lock(EXCLUSIVE);
-
-  // Since the predicate might throw, we should be careful to remember if we've locked the mutex
-  // and unlock it on the way out.
-  bool currentlyLocked = true;
-  KJ_ON_SCOPE_FAILURE({
-    if (currentlyLocked) unlock(EXCLUSIVE);
-  });
-
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0, timeout != nullptr };
-
   addWaiter(waiter);
+
+  // To guarantee that we've re-locked the mutex before scope exit, keep track of whether it is
+  // currently.
+  bool currentlyLocked = true;
   KJ_DEFER({
     if (!currentlyLocked) lock(EXCLUSIVE);
     removeWaiter(waiter);
-    if (!currentlyLocked) unlock(EXCLUSIVE);
   });
 
   if (!predicate.check()) {
-    unlock(EXCLUSIVE);
+    unlock(EXCLUSIVE, &waiter);
     currentlyLocked = false;
 
     struct timespec ts;
@@ -429,7 +422,7 @@ void Once::reset() {
   }
 }
 
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
 // =======================================================================================
 // Win32 implementation
 
@@ -454,36 +447,44 @@ void Mutex::lock(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::unlock(Exclusivity exclusivity) {
+void Mutex::wakeReadyWaiter(Waiter* waiterToSkip) {
+  // Look for a waiter whose predicate is now evaluating true, and wake it. We wake no more than
+  // one waiter because only one waiter could get the lock anyway, and once it releases that lock
+  // it will awake the next waiter if necessary.
+
+  auto nextWaiter = waitersHead;
+  for (;;) {
+    KJ_IF_MAYBE(waiter, nextWaiter) {
+      nextWaiter = waiter->next;
+
+      if (waiter != waiterToSkip && checkPredicate(*waiter)) {
+        // This waiter's predicate now evaluates true, so wake it up. It doesn't matter if we
+        // use Wake vs. WakeAll here since there's always only one thread waiting.
+        WakeConditionVariable(&coercedCondvar(waiter->condvar));
+
+        // We only need to wake one waiter. Note that unlike the futex-based implementation, we
+        // cannot "transfer ownership" of the lock to the waiter, therefore we cannot guarantee
+        // that the condition is still true when that waiter finally awakes. However, if the
+        // condition is no longer true at that point, the waiter will re-check all other
+        // waiters' conditions and possibly wake up any other waiter who is now ready, hence we
+        // still only need to wake one waiter here.
+        return;
+      }
+    } else {
+      // No more waiters.
+      break;
+    }
+  }
+}
+
+void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   switch (exclusivity) {
     case EXCLUSIVE: {
       KJ_DEFER(ReleaseSRWLockExclusive(&coercedSrwLock));
 
       // Check if there are any conditional waiters. Note we only do this when unlocking an
       // exclusive lock since under a shared lock the state couldn't have changed.
-      auto nextWaiter = waitersHead;
-      for (;;) {
-        KJ_IF_MAYBE(waiter, nextWaiter) {
-          nextWaiter = waiter->next;
-
-          if (checkPredicate(*waiter)) {
-            // This waiter's predicate now evaluates true, so wake it up. It doesn't matter if we
-            // use Wake vs. WakeAll here since there's always only one thread waiting.
-            WakeConditionVariable(&coercedCondvar(waiter->condvar));
-
-            // We only need to wake one waiter. Note that unlike the futex-based implementation, we
-            // cannot "transfer ownership" of the lock to the waiter, therefore we cannot guarantee
-            // that the condition is still true when that waiter finally awakes. However, if the
-            // condition is no longer true at that point, the waiter will re-check all other
-            // waiters' conditions and possibly wake up any other waiter who is now ready, hence we
-            // still only need to wake one waiter here.
-            return;
-          }
-        } else {
-          // No more waiters.
-          break;
-        }
-      }
+      wakeReadyWaiter(waiterToSkip);
       break;
     }
 
@@ -500,12 +501,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   // held for debug purposes anyway, we just don't bother.
 }
 
-void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
-  lock(EXCLUSIVE);
-
-  // Any exceptions should leave the mutex unlocked.
-  KJ_ON_SCOPE_FAILURE(unlock(EXCLUSIVE));
-
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0 };
   static_assert(sizeof(waiter.condvar) == sizeof(CONDITION_VARIABLE),
@@ -542,6 +538,10 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
   }
 
   while (!predicate.check()) {
+    // SleepConditionVariableSRW() will temporarily release the lock, so we need to signal other
+    // waiters that are now ready.
+    wakeReadyWaiter(&waiter);
+
     if (SleepConditionVariableSRW(&coercedCondvar(waiter.condvar), &coercedSrwLock, sleepMs, 0)) {
       // Normal result. Continue loop to check predicate.
     } else {
@@ -669,7 +669,7 @@ void Mutex::lock(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::unlock(Exclusivity exclusivity) {
+void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   KJ_DEFER(KJ_PTHREAD_CALL(pthread_rwlock_unlock(&mutex)));
 
   if (exclusivity == EXCLUSIVE) {
@@ -680,7 +680,7 @@ void Mutex::unlock(Exclusivity exclusivity) {
       KJ_IF_MAYBE(waiter, nextWaiter) {
         nextWaiter = waiter->next;
 
-        if (checkPredicate(*waiter)) {
+        if (waiter != waiterToSkip && checkPredicate(*waiter)) {
           // This waiter's predicate now evaluates true, so wake it up. It doesn't matter if we
           // use _signal() vs. _broadcast() here since there's always only one thread waiting.
           KJ_PTHREAD_CALL(pthread_mutex_lock(&waiter->stupidMutex));
@@ -723,27 +723,20 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
-  lock(EXCLUSIVE);
-
-  // Since the predicate might throw, we should be careful to remember if we've locked the mutex
-  // and unlock it on the way out.
-  bool currentlyLocked = true;
-  KJ_ON_SCOPE_FAILURE({
-    if (currentlyLocked) unlock(EXCLUSIVE);
-  });
-
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   // Add waiter to list.
   Waiter waiter {
     nullptr, waitersTail, predicate, nullptr,
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER
   };
-
   addWaiter(waiter);
+
+  // To guarantee that we've re-locked the mutex before scope exit, keep track of whether it is
+  // currently.
+  bool currentlyLocked = true;
   KJ_DEFER({
     if (!currentlyLocked) lock(EXCLUSIVE);
     removeWaiter(waiter);
-    if (!currentlyLocked) unlock(EXCLUSIVE);
 
     // Destroy pthread objects.
     KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&waiter.stupidMutex));
@@ -775,7 +768,7 @@ void Mutex::lockWhen(Predicate& predicate, Maybe<Duration> timeout) {
     KJ_PTHREAD_CALL(pthread_mutex_lock(&waiter.stupidMutex));
 
     // OK, now we can unlock the main mutex.
-    unlock(EXCLUSIVE);
+    unlock(EXCLUSIVE, &waiter);
     currentlyLocked = false;
 
     bool timedOut = false;
