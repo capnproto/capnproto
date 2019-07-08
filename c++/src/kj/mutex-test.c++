@@ -363,13 +363,15 @@ TEST(Mutex, WhenWithTimeoutPreciseTiming) {
       return n == 321;
     }, [](uint& n) {
       return 456;
-    }, 20 * kj::MILLISECONDS);
+    }, 100 * kj::MILLISECONDS);
 
     KJ_EXPECT(m == 456);
 
     auto t = clock.now() - start;
-    KJ_EXPECT(t >= 20 * kj::MILLISECONDS);
-    if (t <= 22 * kj::MILLISECONDS) {
+    KJ_EXPECT(t >= 100 * kj::MILLISECONDS);
+    // Provide a large margin of error here because some operating systems (e.g. Windows) can have
+    // long timeslices (13ms) and won't schedule more precisely than a timeslice.
+    if (t <= 120 * kj::MILLISECONDS) {
       return;
     }
   }
@@ -395,13 +397,15 @@ TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
       return n == 321;
     }, [](uint& n) {
       return 456;
-    }, 20 * kj::MILLISECONDS);
+    }, 100 * kj::MILLISECONDS);
 
     KJ_EXPECT(m == 456);
 
     auto t = clock.now() - start;
-    KJ_EXPECT(t >= 20 * kj::MILLISECONDS, t / kj::MILLISECONDS);
-    if (t <= 22 * kj::MILLISECONDS) {
+    KJ_EXPECT(t >= 100 * kj::MILLISECONDS, t / kj::MILLISECONDS);
+    // Provide a large margin of error here because some operating systems (e.g. Windows) can have
+    // long timeslices (13ms) and won't schedule more precisely than a timeslice.
+    if (t <= 120 * kj::MILLISECONDS) {
       return;
     }
   }
