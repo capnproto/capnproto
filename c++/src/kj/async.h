@@ -698,9 +698,6 @@ public:
   // Alternatively, the app can perhaps arrange to send the return value back to the original
   // thread for destruction, if needed.
   //
-  // TODO(now): Decide if we should automatically wrap the return value such that it will be
-  //   returned to its own thread for destruction.
-  //
   // If the requesting thread destroys the returned Promise, the destructor will block waiting for
   // the executor thread to acknowledge cancellation. This ensures that `func` can be destroyed
   // before the Promise's destructor returns.
