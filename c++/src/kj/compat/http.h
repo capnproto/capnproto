@@ -751,6 +751,8 @@ WebSocketPipe newWebSocketPipe();
 // end. No buffering occurs -- a message send does not complete until a corresponding receive
 // accepts the message.
 
+class HttpServerErrorHandler;
+
 struct HttpServerSettings {
   kj::Duration headerTimeout = 15 * kj::SECONDS;
   // After initial connection open, or after receiving the first byte of a pipelined request,
@@ -767,6 +769,44 @@ struct HttpServerSettings {
   // request so that it can pipeline the next one. We'll give them a grace period defined by the
   // above two values -- if they hit either one, we'll close the socket, but if the request
   // completes, we'll let the connection stay open to handle more requests.
+
+  kj::Maybe<HttpServerErrorHandler&> errorHandler = nullptr;
+  // Customize how client protocol errors and service application exceptions are handled by the
+  // HttpServer. If null, HttpServerErrorHandler's default implementation will be used.
+};
+
+class HttpServerErrorHandler {
+public:
+  virtual kj::Promise<void> handleClientProtocolError(
+      kj::StringPtr message, kj::HttpService::Response& response);
+  virtual kj::Promise<void> handleApplicationError(
+      kj::Exception exception, kj::Maybe<kj::HttpService::Response&> response);
+  virtual kj::Promise<void> handleNoResponse(kj::HttpService::Response& response);
+  // Override these functions to customize error handling during the request/response cycle.
+  //
+  // Client protocol errors arise when the server receives an HTTP message that fails to parse. As
+  // such, HttpService::request() will not have been called yet, and the handler is always
+  // guaranteed an opportunity to send a response. The default implementation of
+  // handleClientProtocolError() replies with a 400 Bad Request response.
+  //
+  // Application errors arise when HttpService::request() throws an exception. The default
+  // implementation of handleApplicationError() maps the following exception types to HTTP statuses,
+  // and generates bodies from the stringified exceptions:
+  //
+  //   - OVERLOADED: 503 Service Unavailable
+  //   - UNIMPLEMENTED: 501 Not Implemented
+  //   - DISCONNECTED: (no response)
+  //   - FAILED: 500 Internal Server Error
+  //
+  // No-response errors occur when HttpService::request() allows its promise to settle before
+  // sending a response. The default implementation of handleNoResponse() replies with a 500
+  // Internal Server Error response.
+  //
+  // Unlike `HttpService::request()`, when calling `response.send()` in the context of one of these
+  // functions, a "Connection: close" header will be added, and the connection will be closed.
+  //
+  // Also unlike `HttpService::request()`, it is okay to return kj::READY_NOW without calling
+  // `response.send()`. In this case, no response will be sent, and the connection will be closed.
 };
 
 class HttpServer final: private kj::TaskSet::ErrorHandler {
