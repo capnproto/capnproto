@@ -2400,6 +2400,34 @@ KJ_TEST("HttpServer threw exception") {
   KJ_EXPECT(text.startsWith("HTTP/1.1 500 Internal Server Error"), text);
 }
 
+KJ_TEST("HttpServer bad request") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  static constexpr auto request = "bad request\r\n\r\n"_kj;
+  auto writePromise = pipe.ends[1]->write(request.begin(), request.size());
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+  KJ_EXPECT(writePromise.poll(waitScope));
+  writePromise.wait(waitScope);
+
+  static constexpr auto expectedResponse =
+      "HTTP/1.1 400 Bad Request\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 54\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "ERROR: The headers sent by your client were not valid."_kj;
+
+  KJ_EXPECT(expectedResponse == response, expectedResponse, response);
+}
+
 class PartialResponseService final: public HttpService {
   // HttpService that sends a partial response then throws.
 public:
