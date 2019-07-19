@@ -5176,7 +5176,7 @@ kj::Promise<void> HttpServer::drain() {
   } else {
     auto paf = kj::newPromiseAndFulfiller<void>();
     zeroConnectionsFulfiller = kj::mv(paf.fulfiller);
-    return kj::mv(paf.promise);
+    return paf.promise.then([this]() { return tasks.onEmpty(); });
   }
 }
 
