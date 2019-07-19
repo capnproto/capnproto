@@ -91,6 +91,8 @@ static constexpr uint NEW_FD_FLAGS =
 class OwnedFileDescriptor {
 public:
   OwnedFileDescriptor(int fd, uint flags): fd(fd), flags(flags) {
+    KJ_REQUIRE(fd >= 0);
+
     if (flags & LowLevelAsyncIoProvider::ALREADY_NONBLOCK) {
       KJ_DREQUIRE(fcntl(fd, F_GETFL) & O_NONBLOCK, "You claimed you set NONBLOCK, but you didn't.");
     } else {
@@ -108,6 +110,13 @@ public:
   }
 
   ~OwnedFileDescriptor() noexcept(false) {
+    if (!isClosed()) {
+      closeSelf();
+    }
+  }
+
+protected:
+  void closeSelf() {
     // Don't use SYSCALL() here because close() should not be repeated on EINTR.
     if ((flags & LowLevelAsyncIoProvider::TAKE_OWNERSHIP) && close(fd) < 0) {
       KJ_FAIL_SYSCALL("close", errno, fd) {
@@ -115,12 +124,24 @@ public:
         break;
       }
     }
+
+    fd = -1;
+    flags = 0;
   }
 
-protected:
-  const int fd;
+  inline bool isClosed() {
+    return fd == -1;
+  }
+
+  inline int getFd() {
+    if (isClosed()) {
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "stream has been aborted"));
+    }
+    return fd;
+  }
 
 private:
+  int fd;
   uint flags;
 };
 
@@ -131,7 +152,8 @@ public:
   AsyncStreamFd(UnixEventPort& eventPort, int fd, uint flags)
       : OwnedFileDescriptor(fd, flags),
         eventPort(eventPort),
-        observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ_WRITE) {}
+        observer(observerSpace.construct(
+            eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ_WRITE)) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -162,7 +184,7 @@ public:
 
   Promise<void> write(const void* buffer, size_t size) override {
     ssize_t n;
-    KJ_NONBLOCKING_SYSCALL(n = ::write(fd, buffer, size)) {
+    KJ_NONBLOCKING_SYSCALL(n = ::write(getFd(), buffer, size)) {
       // Error.
 
       // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -178,7 +200,7 @@ public:
 
     if (n < 0) {
       // EAGAIN -- need to wait for writability and try again.
-      return observer.whenBecomesWritable().then([=]() {
+      return observer->whenBecomesWritable().then([=]() {
         return write(buffer, size);
       });
     } else if (n == size) {
@@ -213,7 +235,7 @@ public:
                                  ArrayPtr<const ArrayPtr<const byte>> moreData,
                                  Array<Own<AsyncCapabilityStream>> streams) override {
     auto fds = KJ_MAP(stream, streams) {
-      return downcast<AsyncStreamFd>(*stream).fd;
+      return downcast<AsyncStreamFd>(*stream).getFd();
     };
     auto promise = writeInternal(data, moreData, fds);
     return promise.attach(kj::mv(fds), kj::mv(streams));
@@ -223,7 +245,7 @@ public:
     KJ_IF_MAYBE(p, writeDisconnectedPromise) {
       return p->addBranch();
     } else {
-      auto fork = observer.whenWriteDisconnected().fork();
+      auto fork = observer->whenWriteDisconnected().fork();
       auto result = fork.addBranch();
       writeDisconnectedPromise = kj::mv(fork);
       return kj::mv(result);
@@ -233,46 +255,46 @@ public:
   void shutdownWrite() override {
     // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
     // UnixAsyncIoProvider interface.
-    KJ_SYSCALL(shutdown(fd, SHUT_WR));
+    KJ_SYSCALL(shutdown(getFd(), SHUT_WR));
   }
 
   void abortRead() override {
     // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
     // UnixAsyncIoProvider interface.
-    KJ_SYSCALL(shutdown(fd, SHUT_RD));
+    KJ_SYSCALL(shutdown(getFd(), SHUT_RD));
   }
 
   void getsockopt(int level, int option, void* value, uint* length) override {
     socklen_t socklen = *length;
-    KJ_SYSCALL(::getsockopt(fd, level, option, value, &socklen));
+    KJ_SYSCALL(::getsockopt(getFd(), level, option, value, &socklen));
     *length = socklen;
   }
 
   void setsockopt(int level, int option, const void* value, uint length) override {
-    KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
+    KJ_SYSCALL(::setsockopt(getFd(), level, option, value, length));
   }
 
   void getsockname(struct sockaddr* addr, uint* length) override {
     socklen_t socklen = *length;
-    KJ_SYSCALL(::getsockname(fd, addr, &socklen));
+    KJ_SYSCALL(::getsockname(getFd(), addr, &socklen));
     *length = socklen;
   }
 
   void getpeername(struct sockaddr* addr, uint* length) override {
     socklen_t socklen = *length;
-    KJ_SYSCALL(::getpeername(fd, addr, &socklen));
+    KJ_SYSCALL(::getpeername(getFd(), addr, &socklen));
     *length = socklen;
   }
 
   Promise<void> waitConnected() {
     // Wait until initial connection has completed. This actually just waits until it is writable.
 
-    // Can't just go directly to writeObserver.whenBecomesWritable() because of edge triggering. We
+    // Can't just go directly to observer->whenBecomesWritable() because of edge triggering. We
     // need to explicitly check if the socket is already connected.
 
     struct pollfd pollfd;
     memset(&pollfd, 0, sizeof(pollfd));
-    pollfd.fd = fd;
+    pollfd.fd = getFd();
     pollfd.events = POLLOUT;
 
     int pollResult;
@@ -280,7 +302,7 @@ public:
 
     if (pollResult == 0) {
       // Not ready yet. We can safely use the edge-triggered observer.
-      return observer.whenBecomesWritable();
+      return observer->whenBecomesWritable();
     } else {
       // Ready now.
       return kj::READY_NOW;
@@ -289,7 +311,8 @@ public:
 
 private:
   UnixEventPort& eventPort;
-  UnixEventPort::FdObserver observer;
+  SpaceFor<UnixEventPort::FdObserver> observerSpace;
+  Own<UnixEventPort::FdObserver> observer;
   Maybe<ForkedPromise<void>> writeDisconnectedPromise;
 
   Promise<ReadResult> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
@@ -301,7 +324,7 @@ private:
 
     ssize_t n;
     if (maxFds == 0) {
-      KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes)) {
+      KJ_NONBLOCKING_SYSCALL(n = ::read(getFd(), buffer, maxBytes)) {
         // Error.
 
         // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -362,7 +385,7 @@ private:
       static constexpr int RECVMSG_FLAGS = 0;
 #endif
 
-      KJ_NONBLOCKING_SYSCALL(n = ::recvmsg(fd, &msg, RECVMSG_FLAGS)) {
+      KJ_NONBLOCKING_SYSCALL(n = ::recvmsg(getFd(), &msg, RECVMSG_FLAGS)) {
         // Error.
 
         // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -426,7 +449,7 @@ private:
 
     if (n < 0) {
       // Read would block.
-      return observer.whenBecomesReadable().then([=]() {
+      return observer->whenBecomesReadable().then([=]() {
         return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
       });
     } else if (n == 0) {
@@ -484,7 +507,7 @@ private:
 
     ssize_t n;
     if (fds.size() == 0) {
-      KJ_NONBLOCKING_SYSCALL(n = ::writev(fd, iov.begin(), iov.size())) {
+      KJ_NONBLOCKING_SYSCALL(n = ::writev(getFd(), iov.begin(), iov.size())) {
         // Error.
 
         // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -521,7 +544,7 @@ private:
       cmsg->cmsg_len = CMSG_LEN(sizeof(int) * fds.size());
       memcpy(CMSG_DATA(cmsg), fds.begin(), fds.asBytes().size());
 
-      KJ_NONBLOCKING_SYSCALL(n = ::sendmsg(fd, &msg, 0)) {
+      KJ_NONBLOCKING_SYSCALL(n = ::sendmsg(getFd(), &msg, 0)) {
         // Error.
 
         // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -539,7 +562,7 @@ private:
 
     if (n < 0) {
       // Got EAGAIN. Nothing was written.
-      return observer.whenBecomesWritable().then([=]() {
+      return observer->whenBecomesWritable().then([=]() {
         return writeInternal(firstPiece, morePieces, fds);
       });
     } else if (n == 0) {
@@ -1066,10 +1089,10 @@ public:
 
   retry:
 #if __linux__ && !__BIONIC__
-    newFd = ::accept4(fd, reinterpret_cast<struct sockaddr*>(&addr), &addrlen,
+    newFd = ::accept4(getFd(), reinterpret_cast<struct sockaddr*>(&addr), &addrlen,
                       SOCK_NONBLOCK | SOCK_CLOEXEC);
 #else
-    newFd = ::accept(fd, reinterpret_cast<struct sockaddr*>(&addr), &addrlen);
+    newFd = ::accept(getFd(), reinterpret_cast<struct sockaddr*>(&addr), &addrlen);
 #endif
 
     if (newFd >= 0) {
@@ -1118,16 +1141,16 @@ public:
   }
 
   uint getPort() override {
-    return SocketAddress::getLocalAddress(fd).getPort();
+    return SocketAddress::getLocalAddress(getFd()).getPort();
   }
 
   void getsockopt(int level, int option, void* value, uint* length) override {
     socklen_t socklen = *length;
-    KJ_SYSCALL(::getsockopt(fd, level, option, value, &socklen));
+    KJ_SYSCALL(::getsockopt(getFd(), level, option, value, &socklen));
     *length = socklen;
   }
   void setsockopt(int level, int option, const void* value, uint length) override {
-    KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
+    KJ_SYSCALL(::setsockopt(getFd(), level, option, value, length));
   }
 
 public:
@@ -1153,16 +1176,16 @@ public:
   Own<DatagramReceiver> makeReceiver(DatagramReceiver::Capacity capacity) override;
 
   uint getPort() override {
-    return SocketAddress::getLocalAddress(fd).getPort();
+    return SocketAddress::getLocalAddress(getFd()).getPort();
   }
 
   void getsockopt(int level, int option, void* value, uint* length) override {
     socklen_t socklen = *length;
-    KJ_SYSCALL(::getsockopt(fd, level, option, value, &socklen));
+    KJ_SYSCALL(::getsockopt(getFd(), level, option, value, &socklen));
     *length = socklen;
   }
   void setsockopt(int level, int option, const void* value, uint length) override {
-    KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
+    KJ_SYSCALL(::setsockopt(getFd(), level, option, value, length));
   }
 
 public:
@@ -1399,7 +1422,7 @@ Promise<size_t> DatagramPortImpl::send(
   auto& addr = downcast<NetworkAddressImpl>(destination).chooseOneAddress();
 
   ssize_t n;
-  KJ_NONBLOCKING_SYSCALL(n = sendto(fd, buffer, size, 0, addr.getRaw(), addr.getRawSize()));
+  KJ_NONBLOCKING_SYSCALL(n = sendto(getFd(), buffer, size, 0, addr.getRaw(), addr.getRawSize()));
   if (n < 0) {
     // Write buffer full.
     return observer.whenBecomesWritable().then([this, buffer, size, &destination]() {
@@ -1453,7 +1476,7 @@ Promise<size_t> DatagramPortImpl::send(
   msg.msg_iovlen = iov.size();
 
   ssize_t n;
-  KJ_NONBLOCKING_SYSCALL(n = sendmsg(fd, &msg, 0));
+  KJ_NONBLOCKING_SYSCALL(n = sendmsg(getFd(), &msg, 0));
   if (n < 0) {
     // Write buffer full.
     return observer.whenBecomesWritable().then([this, pieces, &destination]() {
@@ -1492,7 +1515,7 @@ public:
     msg.msg_controllen = ancillaryBuffer.size();
 
     ssize_t n;
-    KJ_NONBLOCKING_SYSCALL(n = recvmsg(port.fd, &msg, 0));
+    KJ_NONBLOCKING_SYSCALL(n = recvmsg(port.getFd(), &msg, 0));
 
     if (n < 0) {
       // No data available. Wait.
