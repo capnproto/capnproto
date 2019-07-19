@@ -130,6 +130,9 @@ public:
     }
     return kj::READY_NOW;
   }
+  Promise<void> end() override {
+    return kj::READY_NOW;
+  }
 
   Promise<void> whenWriteDisconnected() override { KJ_UNIMPLEMENTED("not used"); }
 

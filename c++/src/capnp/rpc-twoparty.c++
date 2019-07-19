@@ -56,6 +56,20 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint m
   this->maxFdsPerMessage = maxFdsPerMessage;
 }
 
+TwoPartyVatNetwork::~TwoPartyVatNetwork() noexcept(false) {
+  // TODO(cleanup): It's kind of unclear if TwoPartyVatNetwork should auto-abort its stream on
+  //   destruction or if it should have an abort() method that the application is required to call
+  //   explicitly, much like AsyncOutputStream itself.
+  KJ_SWITCH_ONEOF(stream) {
+    KJ_CASE_ONEOF(ioStream, kj::AsyncIoStream*) {
+      ioStream->abortWrite();
+    }
+    KJ_CASE_ONEOF(capStream, kj::AsyncCapabilityStream*) {
+      capStream->abortWrite();
+    }
+  }
+}
+
 void TwoPartyVatNetwork::FulfillerDisposer::disposeImpl(void* pointer) const {
   if (--refcount == 0) {
     fulfiller->fulfill();
@@ -280,12 +294,13 @@ kj::Promise<void> TwoPartyVatNetwork::shutdown() {
   kj::Promise<void> result = KJ_ASSERT_NONNULL(previousWrite, "already shut down").then([this]() {
     KJ_SWITCH_ONEOF(stream) {
       KJ_CASE_ONEOF(ioStream, kj::AsyncIoStream*) {
-        ioStream->shutdownWrite();
+        return ioStream->end();
       }
       KJ_CASE_ONEOF(capStream, kj::AsyncCapabilityStream*) {
-        capStream->shutdownWrite();
+        return capStream->end();
       }
     }
+    KJ_UNREACHABLE;
   });
   previousWrite = nullptr;
   return kj::mv(result);

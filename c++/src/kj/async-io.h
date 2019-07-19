@@ -78,6 +78,8 @@ public:
   //
   // The default implementation first tries calling output.tryPumpFrom(), but if that fails, it
   // performs a naive pump by allocating a buffer and reading to it / writing from it in a loop.
+  //
+  // pumpTo() never calls output->end().
 
   Promise<Array<byte>> readAllBytes(uint64_t limit = kj::maxValue);
   Promise<String> readAllText(uint64_t limit = kj::maxValue);
@@ -110,15 +112,34 @@ public:
   virtual Promise<void> write(const void* buffer, size_t size) KJ_WARN_UNUSED_RESULT = 0;
   virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces)
       KJ_WARN_UNUSED_RESULT = 0;
+  // Write some data to the output stream.
+  //
+  // The caller must ensure that the provided buffer/arrays remain valid until the returned Promise
+  // either resolves or is canceled. The caller must not begin a new write() until the previous
+  // write() has completed. If a write() fails (rejects / throws an exception) or is canceled, then
+  // the state of the stream is unspecified, and the caller should stop writing.
+  //
+  // Note that the returned promise resolving does not mean that the bytes have been delivered.
+  // In the case of network sockets, the write promise resolves as soon as all bytes have been
+  // copied into the OS's socket buffer.
+
+  virtual Promise<void> end() KJ_WARN_UNUSED_RESULT = 0;
+  // Indicates no more bytes will be written. The receiving end will receive an end-of-stream
+  // indication.
+  //
+  // If the stream is destroyed without having called end() nor abortWrite(), and is not destroyed
+  // during unwind from an exception, then the destructor may itself throw an exception. This is
+  // intended to catch errors where streams were not properly terminated, which might otherwise
+  // lead to subtle data loss. When intentionally canceling a stream early, use abortWrite().
 
   virtual void abortWrite() = 0;
-  // Indicates that the data is not complete but, due to an error, no further write()s will be
-  // called. If possible, this will propagate to the receiver, causing a DISCONNECTED error
+  // Indicates that the data is not complete but, due to an error, no further write()s nor end()
+  // will be called. If possible, this will propagate to the receiver, causing a DISCONNECTED error
   // when they try to read() -- however, many network protocols do not provide a way to distinguish
   // between a regular EOF vs. an erroneous one, in which case the receiver will not see an
   // explicit error.
   //
-  // abortWrite() after EOF has no effect.
+  // abortWrite() after end() has no effect.
   //
   // abortWrite() may be called while a write() is in progress; it will throw DISCONNECTED, as will
   // further writes thereafter. (You must still wait for the write() promise to settle, or you must
@@ -154,9 +175,6 @@ class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
   // A combination input and output stream.
 
 public:
-  virtual void shutdownWrite() = 0;
-  // Cleanly shut down just the write end of the stream, while keeping the read end open.
-
   virtual void getsockopt(int level, int option, void* value, uint* length);
   virtual void setsockopt(int level, int option, const void* value, uint length);
   // Corresponds to getsockopt() and setsockopt() syscalls. Will throw an "unimplemented" exception

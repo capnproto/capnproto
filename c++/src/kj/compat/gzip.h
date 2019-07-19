@@ -127,12 +127,10 @@ public:
   }
   // Call if you need to flush a stream at an arbitrary data point.
 
-  Promise<void> end() {
+  Promise<void> end() override {
     return pump(Z_FINISH);
   }
   // Must call to flush and finish the stream, since some data may be buffered.
-  //
-  // TODO(cleanup): This should be a virtual method on AsyncOutputStream.
 
   void abortWrite() override { inner.abortWrite(); }
 

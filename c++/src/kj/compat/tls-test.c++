@@ -343,6 +343,12 @@ KJ_TEST("TLS basics") {
   buf[3] = '\0';
 
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
+
+  auto endPromise = client->end();
+  KJ_EXPECT(server->tryRead(&buf, 1, 1).wait(test.io.waitScope) == 0);
+  endPromise.wait(test.io.waitScope);
+
+  // server -> client doesn't require end() because no data was written.
 }
 
 KJ_TEST("TLS multiple messages") {
@@ -383,6 +389,13 @@ KJ_TEST("TLS multiple messages") {
 
   readPromise.wait(test.io.waitScope);
   KJ_ASSERT(kj::StringPtr(buf) == "qux");
+
+  writePromise = writePromise
+      .then([&]() { return client->end(); });
+  KJ_EXPECT(server->tryRead(&buf, 1, 1).wait(test.io.waitScope) == 0);
+  writePromise.wait(test.io.waitScope);
+
+  // server -> client doesn't require end() because no data was written.
 }
 
 kj::Promise<void> writeN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t count) {
@@ -429,6 +442,15 @@ KJ_TEST("TLS full duplex") {
   readDown.wait(test.io.waitScope);
   writeUp.wait(test.io.waitScope);
   writeDown.wait(test.io.waitScope);
+
+  // Do shutdowns in both directions.
+  auto clientEnd = client->end();
+  KJ_EXPECT(server->readAllText().wait(test.io.waitScope) == "");
+  clientEnd.wait(test.io.waitScope);
+
+  auto serverEnd = server->end();
+  KJ_EXPECT(client->readAllText().wait(test.io.waitScope) == "");
+  serverEnd.wait(test.io.waitScope);
 }
 
 class TestSniCallback: public TlsSniCallback {
@@ -470,6 +492,8 @@ KJ_TEST("TLS SNI") {
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
 
   KJ_ASSERT(callback.callCount == 1);
+
+  client->abortWrite();
 }
 
 void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert, kj::StringPtr message) {
@@ -582,6 +606,8 @@ KJ_TEST("TLS client certificate verification") {
     buf[3] = '\0';
 
     KJ_ASSERT(kj::StringPtr(buf) == "foo");
+
+    client->abortWrite();
   }
 }
 

@@ -291,6 +291,8 @@ TEST(SerializeAsyncTest, WriteAsync) {
   });
 
   writeMessage(*output, message).wait(ioContext.waitScope);
+
+  output->abortWrite();
 }
 
 TEST(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
@@ -316,6 +318,8 @@ TEST(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
   });
 
   writeMessage(*output, message).wait(ioContext.waitScope);
+
+  output->abortWrite();
 }
 
 TEST(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
@@ -341,6 +345,8 @@ TEST(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
   });
 
   writeMessage(*output, message).wait(ioContext.waitScope);
+
+  output->abortWrite();
 }
 
 }  // namespace

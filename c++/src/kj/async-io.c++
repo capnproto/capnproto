@@ -201,6 +201,10 @@ public:
     }
   }
 
+  bool isWriteDisconnected() {
+    return readAborted;
+  }
+
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     if (minBytes == 0) {
       return size_t(0);
@@ -234,6 +238,18 @@ public:
         f->get()->fulfill();
         readAbortFulfiller = nullptr;
       }
+    }
+  }
+
+  void expectEnd() {
+    // Called by LimitedInputStream when it has read up to the limit.
+
+    KJ_IF_MAYBE(s, state) {
+      // EndedWrite will ignore this call, but other states will propagate an error.
+      s->abortRead();
+    } else {
+      ownState = kj::heap<ExpectingEnd>();
+      state = *ownState;
     }
   }
 
@@ -289,12 +305,13 @@ public:
     }
   }
 
-  void shutdownWrite() override {
+  kj::Promise<void> end() override {
     KJ_IF_MAYBE(s, state) {
-      s->shutdownWrite();
+      return s->end();
     } else {
-      ownState = kj::heap<ShutdownedWrite>();
+      ownState = kj::heap<EndedWrite>();
       state = *ownState;
+      return kj::READY_NOW;
     }
   }
 
@@ -466,8 +483,8 @@ private:
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
       KJ_FAIL_REQUIRE("can't tryPumpFrom() again until previous write() completes");
     }
-    void shutdownWrite() override {
-      KJ_FAIL_REQUIRE("can't shutdownWrite() until previous write() completes");
+    kj::Promise<void> end() override {
+      KJ_FAIL_REQUIRE("can't end() until previous write() completes");
     }
 
     void abortRead() override {
@@ -560,6 +577,19 @@ private:
       }));
     }
 
+    Promise<void> write(const void* buffer, size_t size) override {
+      KJ_FAIL_REQUIRE("can't write() again until previous tryPumpFrom() completes");
+    }
+    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      KJ_FAIL_REQUIRE("can't write() again until previous tryPumpFrom() completes");
+    }
+    Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+      KJ_FAIL_REQUIRE("can't tryPumpFrom() again until previous tryPumpFrom() completes");
+    }
+    kj::Promise<void> end() override {
+      KJ_FAIL_REQUIRE("can't end() until previous tryPumpFrom() completes");
+    }
+
     void abortRead() override {
       canceler.cancel("abortRead() was called");
 
@@ -585,27 +615,12 @@ private:
       pipe.endState(*this);
       pipe.abortRead();
     }
-
-    Promise<void> write(const void* buffer, size_t size) override {
-      KJ_FAIL_REQUIRE("can't write() again until previous tryPumpFrom() completes");
-    }
-    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      KJ_FAIL_REQUIRE("can't write() again until previous tryPumpFrom() completes");
-    }
-    Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-      KJ_FAIL_REQUIRE("can't tryPumpFrom() again until previous tryPumpFrom() completes");
-    }
-    void shutdownWrite() override {
-      KJ_FAIL_REQUIRE("can't shutdownWrite() until previous tryPumpFrom() completes");
-    }
-
     void abortWrite() override {
       canceler.cancel("abortWrite() was called");
       fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "write end of pipe was aborted"));
       pipe.endState(*this);
       pipe.abortWrite();
     }
-
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
@@ -767,11 +782,11 @@ private:
       }));
     }
 
-    void shutdownWrite() override {
-      canceler.cancel("shutdownWrite() was called");
+    kj::Promise<void> end() override {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
       fulfiller.fulfill(kj::cp(readSoFar));
       pipe.endState(*this);
-      pipe.shutdownWrite();
+      return pipe.end();
     }
 
     void abortRead() override {
@@ -944,11 +959,12 @@ private:
       });
     }
 
-    void shutdownWrite() override {
-      canceler.cancel("shutdownWrite() was called");
+    kj::Promise<void> end() override {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
+
       fulfiller.fulfill(kj::cp(pumpedSoFar));
       pipe.endState(*this);
-      pipe.shutdownWrite();
+      return pipe.end();
     }
 
     void abortRead() override {
@@ -1024,9 +1040,12 @@ private:
         });
       }
     }
-    void shutdownWrite() override {
-      // ignore -- currently shutdownWrite() actually means that the PipeWriteEnd was dropped,
-      // which is not an error even if reads have been aborted.
+    kj::Promise<void> end() override {
+      // We don't consider it a bug to end() when the other side has already abortRead()ed. It is
+      // normal for this to happen when the underlying protocol is self-delimited, and so the
+      // receiving end doesn't need to see EOF to know the stream is done. The receiver may go
+      // ahead and close its end before the sender manages to call end().
+      return kj::READY_NOW;
     }
     void abortWrite() override {
       // ignore abort from other end
@@ -1066,10 +1085,8 @@ private:
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
       return Promise<uint64_t>(KJ_EXCEPTION(DISCONNECTED, "writes have been aborted"));
     }
-    void shutdownWrite() override {
-      // TODO(now): We currently ignore shutdown after abort because the destructor of AsyncPipe
-      //   calls shutdownWrite() and shouldn't throw. A subsequent commit will remove this method
-      //   entirely.
+    kj::Promise<void> end() override {
+      return KJ_EXCEPTION(DISCONNECTED, "writes have been aborted");
     }
     void abortWrite() override {
       // ignore repeated abort
@@ -1079,7 +1096,7 @@ private:
     }
   };
 
-  class ShutdownedWrite final: public AsyncIoStream {
+  class EndedWrite final: public AsyncIoStream {
     // AsyncPipe state when shutdownWrite() has been called.
 
   public:
@@ -1094,17 +1111,16 @@ private:
     }
 
     Promise<void> write(const void* buffer, size_t size) override {
-      KJ_FAIL_REQUIRE("shutdownWrite() has been called");
+      KJ_FAIL_REQUIRE("end() has been called");
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      KJ_FAIL_REQUIRE("shutdownWrite() has been called");
+      KJ_FAIL_REQUIRE("end() has been called");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-      KJ_FAIL_REQUIRE("shutdownWrite() has been called");
+      KJ_FAIL_REQUIRE("end() has been called");
     }
-    void shutdownWrite() override {
-      // ignore -- currently shutdownWrite() actually means that the PipeWriteEnd was dropped,
-      // so it will only be called once anyhow.
+    kj::Promise<void> end() override {
+      KJ_FAIL_REQUIRE("end() has already been called");
     }
     void abortWrite() override {
       // ignore abort after end
@@ -1112,6 +1128,52 @@ private:
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
+  };
+
+  class ExpectingEnd final: public AsyncIoStream {
+    // AsyncPipe state when LimitedInputStream is expecting end() to be called.
+
+  public:
+    Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+    }
+    Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+    }
+    void abortRead() override {
+      // ignore
+    }
+
+    Promise<void> write(const void* buffer, size_t size) override {
+      if (size == 0) return kj::READY_NOW;
+      return KJ_EXCEPTION(DISCONNECTED, "wrote more bytes than expected");
+    }
+    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      size_t total = 0;
+      for (auto p: pieces) {
+        total += p.size();
+      }
+      if (total == 0) return kj::READY_NOW;
+      return KJ_EXCEPTION(DISCONNECTED, "wrote more bytes than expected");
+    }
+    Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+      if (amount == 0) return Promise<uint64_t>(uint64_t(0));
+      return Promise<uint64_t>(KJ_EXCEPTION(DISCONNECTED, "wrote more bytes than expected"));
+    }
+    kj::Promise<void> end() override {
+      KJ_REQUIRE(!ended, "already called end()");
+      ended = true;
+      return kj::READY_NOW;
+    }
+    void abortWrite() override {
+      // ignore
+    }
+    Promise<void> whenWriteDisconnected() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
+    }
+
+  private:
+    bool ended = false;
   };
 };
 
@@ -1136,6 +1198,11 @@ public:
     pipe->abortRead();
   }
 
+  void expectEnd() {
+    // Used by LimitedInputStream.
+    pipe->expectEnd();
+  }
+
 private:
   Own<AsyncPipe> pipe;
   UnwindDetector unwind;
@@ -1146,7 +1213,10 @@ public:
   PipeWriteEnd(kj::Own<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
   ~PipeWriteEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
-      pipe->shutdownWrite();
+      pipe->abortWrite();
+
+      KJ_REQUIRE(ended || pipe->isWriteDisconnected(),
+          "failed to call end() or abortWrite() on write end of AsyncPipe");
     });
   }
 
@@ -1167,13 +1237,20 @@ public:
     return pipe->whenWriteDisconnected();
   }
 
+  Promise<void> end() override {
+    auto result = pipe->end();
+    ended = true;
+    return result;
+  }
   void abortWrite() override {
     pipe->abortWrite();
+    ended = true;
   }
 
 private:
   Own<AsyncPipe> pipe;
   UnwindDetector unwind;
+  bool ended = false;
 };
 
 class TwoWayPipeEnd final: public AsyncIoStream {
@@ -1182,8 +1259,12 @@ public:
       : in(kj::mv(in)), out(kj::mv(out)) {}
   ~TwoWayPipeEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
-      out->shutdownWrite();
+      out->abortWrite();
       in->abortRead();
+
+      if (requireEnd) {
+        KJ_REQUIRE(ended, "failed to call end() or abortWrite() on end of two-way AsyncPipe");
+      }
     });
   }
 
@@ -1198,9 +1279,11 @@ public:
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
+    requireEnd = true;
     return out->write(buffer, size);
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    requireEnd = true;
     return out->write(pieces);
   }
   Maybe<Promise<uint64_t>> tryPumpFrom(
@@ -1210,22 +1293,27 @@ public:
   Promise<void> whenWriteDisconnected() override {
     return out->whenWriteDisconnected();
   }
-  void shutdownWrite() override {
-    out->shutdownWrite();
+  Promise<void> end() override {
+    auto result = out->end();
+    ended = true;
+    return result;
   }
   void abortWrite() override {
     out->abortWrite();
+    ended = true;
   }
 
 private:
   kj::Own<AsyncPipe> in;
   kj::Own<AsyncPipe> out;
   UnwindDetector unwind;
+  bool requireEnd = false;
+  bool ended = false;
 };
 
 class LimitedInputStream final: public AsyncInputStream {
 public:
-  LimitedInputStream(kj::Own<AsyncInputStream> inner, uint64_t limit)
+  LimitedInputStream(kj::Own<PipeReadEnd> inner, uint64_t limit)
       : inner(kj::mv(inner)), limit(limit) {
     if (limit == 0) {
       this->inner = nullptr;
@@ -1260,13 +1348,14 @@ public:
   }
 
 private:
-  Own<AsyncInputStream> inner;
+  Own<PipeReadEnd> inner;
   uint64_t limit;
 
   void decreaseLimit(uint64_t amount, uint64_t requested) {
     KJ_ASSERT(limit >= amount);
     limit -= amount;
     if (limit == 0) {
+      inner->expectEnd();
       inner = nullptr;
     } else if (amount < requested) {
       KJ_FAIL_REQUIRE("pipe ended prematurely");
@@ -1278,12 +1367,15 @@ private:
 
 OneWayPipe newOneWayPipe(kj::Maybe<uint64_t> expectedLength) {
   auto impl = kj::refcounted<AsyncPipe>();
-  Own<AsyncInputStream> readEnd = kj::heap<PipeReadEnd>(kj::addRef(*impl));
+  auto readEnd = kj::heap<PipeReadEnd>(kj::addRef(*impl));
+  Own<AsyncInputStream> wrappedReadEnd;
   KJ_IF_MAYBE(l, expectedLength) {
-    readEnd = kj::heap<LimitedInputStream>(kj::mv(readEnd), *l);
+    wrappedReadEnd = kj::heap<LimitedInputStream>(kj::mv(readEnd), *l);
+  } else {
+    wrappedReadEnd = kj::mv(readEnd);
   }
   Own<AsyncOutputStream> writeEnd = kj::heap<PipeWriteEnd>(kj::mv(impl));
-  return { kj::mv(readEnd), kj::mv(writeEnd) };
+  return { kj::mv(wrappedReadEnd), kj::mv(writeEnd) };
 }
 
 TwoWayPipe newTwoWayPipe() {

@@ -71,6 +71,9 @@ public:
   kj::Promise<void> whenReady();
   // Returns a promise that resolves when write() will return non-null.
 
+  kj::Promise<void> end();
+  // Finish writing all data and then send EOF.
+
 private:
   AsyncOutputStream& output;
   ArrayPtr<const byte> segments[2];

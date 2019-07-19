@@ -47,6 +47,9 @@ KJ_TEST("json-rpc basics") {
   KJ_EXPECT(resp.getX() == "foo");
 
   KJ_EXPECT(callCount == 1);
+
+  pipe.ends[0]->abortWrite();
+  pipe.ends[1]->abortWrite();
 }
 
 KJ_TEST("json-rpc error") {
@@ -63,6 +66,9 @@ KJ_TEST("json-rpc error") {
 
   auto cap = client.getPeer<test::TestInterface>();
   KJ_EXPECT_THROW_MESSAGE("Method not implemented", cap.barRequest().send().wait(io.waitScope));
+
+  pipe.ends[0]->abortWrite();
+  pipe.ends[1]->abortWrite();
 }
 
 KJ_TEST("json-rpc multiple calls") {
@@ -93,6 +99,9 @@ KJ_TEST("json-rpc multiple calls") {
   auto resp2 = promise2.wait(io.waitScope);
 
   KJ_EXPECT(callCount == 2);
+
+  pipe.ends[0]->abortWrite();
+  pipe.ends[1]->abortWrite();
 }
 
 }  // namespace

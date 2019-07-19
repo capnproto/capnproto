@@ -110,6 +110,16 @@ kj::Promise<void> ReadyOutputStreamWrapper::whenReady() {
   return pumpTask.addBranch();
 }
 
+kj::Promise<void> ReadyOutputStreamWrapper::end() {
+  if (isPumping) {
+    return pumpTask.addBranch().then([this]() {
+      return output.end();
+    });
+  } else {
+    return output.end();
+  }
+}
+
 kj::Promise<void> ReadyOutputStreamWrapper::pump() {
   uint oldFilled = filled;
   uint end = start + filled;

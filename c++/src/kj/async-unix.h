@@ -258,6 +258,10 @@ public:
   //
   // This hint may be useful as an optimization to avoid an unnecessary system call.
 
+  inline bool isWriteDisconnected() { return writeDisconnected; }
+  // Returns true if the system has indicated that the socket is totally disconnected, i.e. it has
+  // received POLLHUP or POLLERR.
+
   Promise<void> whenBecomesWritable();
   // Resolves the next time the file descriptor transitions from having no space available in the
   // write buffer to having some space available.
@@ -307,6 +311,7 @@ private:
   // null every time an event is fired.
 
   Maybe<bool> atEnd;
+  bool writeDisconnected = false;
 
   void fire(short events);
 

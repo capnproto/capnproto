@@ -166,6 +166,11 @@ public:
 
   ~TlsConnection() noexcept(false) {
     SSL_free(ssl);
+
+    if (!wroteData || (ended && !receivedEnd)) {
+      // Prevent lower layer from complaining about missing end().
+      inner.abortWrite();
+    }
   }
 
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -184,19 +189,22 @@ public:
     return inner.whenWriteDisconnected();
   }
 
-  void shutdownWrite() override {
-    KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
+  Promise<void> end() override {
+    KJ_REQUIRE(!ended, "already called end()");
 
-    // TODO(0.8): shutdownWrite() is problematic because it doesn't return a promise. It was
-    //   designed to assume that it would only be called after all writes are finished and that
-    //   there was no reason to block at that point, but SSL sessions don't fit this since they
-    //   actually have to send a shutdown message.
-    shutdownTask = sslCall([this]() {
+    return sslCall([this]() {
       // The first SSL_shutdown() call is expected to return 0 and may flag a misleading error.
       int result = SSL_shutdown(ssl);
       return result == 0 ? 1 : result;
-    }).ignoreResult().eagerlyEvaluate([](kj::Exception&& e) {
-      KJ_LOG(ERROR, e);
+    }).then([this](size_t) -> kj::Promise<void> {
+      ended = true;
+      if (receivedEnd) {
+        // Both ways shut down, we can end the underlying stream now.
+        return writeBuffer.end();
+      } else {
+        // We are still receiving data. We can't end.
+        return kj::READY_NOW;
+      }
     });
   }
 
@@ -227,8 +235,10 @@ private:
   kj::AsyncIoStream& inner;
   kj::Own<kj::AsyncIoStream> ownInner;
 
+  bool ended = false;
+  bool receivedEnd = false;
   bool disconnected = false;
-  kj::Maybe<kj::Promise<void>> shutdownTask;
+  bool wroteData = false;
 
   ReadyInputStreamWrapper readBuffer;
   ReadyOutputStreamWrapper writeBuffer;
@@ -240,6 +250,13 @@ private:
     return sslCall([this,buffer,maxBytes]() { return SSL_read(ssl, buffer, maxBytes); })
         .then([this,buffer,minBytes,maxBytes,alreadyDone](size_t n) -> kj::Promise<size_t> {
       if (n >= minBytes || n == 0) {
+        if (n == 0) {
+          receivedEnd = true;
+          if (ended) {
+            // Both ways shut down, we can end the underlying steram now.
+            return writeBuffer.end().then([result = alreadyDone + n]() { return result; });
+          }
+        }
         return alreadyDone + n;
       } else {
         return tryReadInternal(reinterpret_cast<byte*>(buffer) + n,
@@ -250,7 +267,17 @@ private:
 
   Promise<void> writeInternal(kj::ArrayPtr<const byte> first,
                               kj::ArrayPtr<const kj::ArrayPtr<const byte>> rest) {
-    KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
+    KJ_REQUIRE(!ended, "already called end()");
+
+    if (first == nullptr) {
+      if (rest == nullptr) {
+        return kj::READY_NOW;
+      } else {
+        return writeInternal(rest.front(), rest.slice(1, rest.size()));
+      }
+    }
+
+    wroteData = true;
 
     return sslCall([this,first]() { return SSL_write(ssl, first.begin(), first.size()); })
         .then([this,first,rest](size_t n) -> kj::Promise<void> {

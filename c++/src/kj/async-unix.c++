@@ -381,6 +381,7 @@ void UnixEventPort::FdObserver::fire(short events) {
   }
 
   if (events & (EPOLLHUP | EPOLLERR)) {
+    writeDisconnected = true;
     KJ_IF_MAYBE(f, hupFulfiller) {
       f->get()->fulfill();
       hupFulfiller = nullptr;
@@ -702,6 +703,7 @@ void UnixEventPort::FdObserver::fire(short events) {
   }
 
   if (events & (POLLHUP | POLLERR | POLLNVAL)) {
+    writeDisconnected = true;
     KJ_IF_MAYBE(f, hupFulfiller) {
       f->get()->fulfill();
       hupFulfiller = nullptr;

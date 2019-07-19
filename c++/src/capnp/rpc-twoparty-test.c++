@@ -564,7 +564,7 @@ public:
     return inner->tryPumpFrom(input, amount);
   }
   kj::Promise<void> whenWriteDisconnected() override { return inner->whenWriteDisconnected(); }
-  void shutdownWrite() override { return inner->shutdownWrite(); }
+  kj::Promise<void> end() override { return inner->end(); }
   void abortWrite() override { inner->abortWrite(); }
   void abortRead() override { inner->abortRead(); }
 

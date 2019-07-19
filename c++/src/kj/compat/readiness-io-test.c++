@@ -39,6 +39,8 @@ KJ_TEST("readiness IO: write small") {
   KJ_ASSERT(readPromise.wait(io.waitScope) == 3);
   buf[3] = '\0';
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
+
+  pipe.out->abortWrite();
 }
 
 KJ_TEST("readiness IO: write many odd") {
@@ -65,6 +67,8 @@ KJ_TEST("readiness IO: write many odd") {
   for (size_t i = 0; i < totalWritten; i++) {
     KJ_ASSERT(buf[i] == "bar"[i%3]);
   }
+
+  pipe.out->abortWrite();
 }
 
 KJ_TEST("readiness IO: write even") {
@@ -91,6 +95,8 @@ KJ_TEST("readiness IO: write even") {
   for (size_t i = 0; i < totalWritten; i++) {
     KJ_ASSERT(buf[i] == "ba"[i%2]);
   }
+
+  pipe.out->abortWrite();
 }
 
 KJ_TEST("readiness IO: read small") {
@@ -108,7 +114,7 @@ KJ_TEST("readiness IO: read small") {
   buf[3] = '\0';
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
 
-  pipe.out = nullptr;
+  pipe.out->end().wait(io.waitScope);
 
   kj::Maybe<size_t> finalRead;
   for (;;) {

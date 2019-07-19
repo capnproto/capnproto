@@ -69,6 +69,7 @@ public:
   // risk of DoS attacks.
 
   KJ_DISALLOW_COPY(TwoPartyVatNetwork);
+  ~TwoPartyVatNetwork() noexcept(false);
 
   kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
   // Returns a promise that resolves when the peer disconnects.

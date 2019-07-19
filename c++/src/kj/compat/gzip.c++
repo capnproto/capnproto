@@ -256,9 +256,15 @@ kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
   auto chunk = get<1>(result);
   auto promise = inner.write(chunk.begin(), chunk.size());
   if (ok) {
-    promise = promise.then([this, flush]() { return pump(flush); });
+    // Z_OK status means there's still more data to write.
+    return promise.then([this, flush]() { return pump(flush); });
+  } else if (flush == Z_FINISH) {
+    // Caller called end(), and this is the last write, so when it's done, call end() on the inner
+    // stream.
+    return promise.then([this]() { return inner.end(); });
+  } else {
+    return promise;
   }
-  return promise;
 }
 
 }  // namespace kj

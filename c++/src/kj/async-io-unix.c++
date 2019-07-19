@@ -154,7 +154,35 @@ public:
         eventPort(eventPort),
         observer(observerSpace.construct(
             eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ_WRITE)) {}
-  virtual ~AsyncStreamFd() noexcept(false) {}
+  virtual ~AsyncStreamFd() noexcept(false) {
+    // Failure to call end() could cause data loss, which should never be silent. If a caller
+    // destroyed the stream without calling end(), we want to complain loudly. However, there are
+    // several situations where this might not actually indicate any mistake, in which case we
+    // avoid throwing:
+    // - If the caller called abortWrite(), then they already acknowledged the possibility of data
+    //   loss. In fact, in this case, calling end() would be an error.
+    // - If the caller never wrote any data to the stream, then probably this is a one-way
+    //   protocol and we are the receiving end. It's annoying to force shutdown of the sending end
+    //   when it was never actually used anyway.
+    // - If the FD was delegated to another process (i.e. sent via SCM_RIGHTS) then that other
+    //   process is responsible for shutdown, not us.
+    // - If the destructor is called while unwinding the stack due to some other exception, then
+    //   we shouldn't throw, not just because it will terminate the process (ugh), but because the
+    //   other exception is probably exactly the reason that end() wasn't called. The caller
+    //   doesn't need to be told twice.
+    // - If the FdObserver indicates that POLLHUP was seen (i.e. the other end already
+    //   disconnected), then the application is probably already aware of data loss. Probably a
+    //   read() or a write() threw a DISCONNECTED exception already, or whenWriteDisconnected()
+    //   signaled the problem. (Note that we don't have to worry about `observer` being null here
+    //   because that only happens on pipes that have been aborted -- either abortedWrite would be
+    //   true or, for a read pipe, wroteData wolud be false.)
+    if (!ended && !abortedWrite && wroteData && !delegated && !unwindDetector.isUnwinding() &&
+        !observer->isWriteDisconnected()) {
+      KJ_FAIL_REQUIRE("output stream destroyed without calling end() nor abortWrite()") {
+        break;
+      };
+    }
+  }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return tryReadInternal(buffer, minBytes, maxBytes, nullptr, 0, {0,0})
@@ -183,6 +211,8 @@ public:
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
+    KJ_REQUIRE(!ended, "can't write() after end()");
+
     ssize_t n;
     KJ_NONBLOCKING_SYSCALL(n = ::write(getFd(), buffer, size)) {
       // Error.
@@ -197,6 +227,9 @@ public:
     error:
       return kj::READY_NOW;
     }
+
+    // Once we've written some data to the stream, it's an error if end() is never called.
+    wroteData = true;
 
     if (n < 0) {
       // EAGAIN -- need to wait for writability and try again.
@@ -218,6 +251,8 @@ public:
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    KJ_REQUIRE(!ended, "can't write() after end()");
+
     if (pieces.size() == 0) {
       return writeInternal(nullptr, nullptr, nullptr);
     } else {
@@ -235,7 +270,13 @@ public:
                                  ArrayPtr<const ArrayPtr<const byte>> moreData,
                                  Array<Own<AsyncCapabilityStream>> streams) override {
     auto fds = KJ_MAP(stream, streams) {
-      return downcast<AsyncStreamFd>(*stream).getFd();
+      auto& downcasted = downcast<AsyncStreamFd>(*stream);
+
+      // Typically, once an FD has been handed off to another process, the receiving process becomes
+      // responsible for eventually shutting down the socket. Set a flag at our end to indicate that
+      // end() is not required.
+      downcasted.delegated = true;
+      return downcasted.getFd();
     };
     auto promise = writeInternal(data, moreData, fds);
     return promise.attach(kj::mv(fds), kj::mv(streams));
@@ -252,14 +293,32 @@ public:
     }
   }
 
-  void shutdownWrite() override {
-    // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
-    // UnixAsyncIoProvider interface.
-    KJ_SYSCALL(shutdown(getFd(), SHUT_WR));
+  Promise<void> end() override {
+    KJ_REQUIRE(!ended, "end() can only be called once");
+
+    if (abortedWrite) {
+      // write() will naturally throw DISCONNECTED after abortWrite() has been called, because
+      // the underlying socket writes will fail with ENOTCONN or whatever. But shutdown() will NOT
+      // fail if the socket is already shut down, so we check explicitly.
+      return KJ_EXCEPTION(DISCONNECTED, "abortWrite() was called");
+    }
+
+    KJ_SYSCALL_HANDLE_ERRORS(shutdown(getFd(), SHUT_WR)) {
+      case ENOTSOCK:
+        // If not a socket, then we must be a one-way output stream, e.g. a pipe. Just close.
+        observer = nullptr;
+        closeSelf();
+        break;
+      default:
+        KJ_FAIL_SYSCALL("shutdown(fd, SHUT_WR)", error) { break; }
+        break;
+    }
+    ended = true;
+    return READY_NOW;
   }
 
   void abortWrite() override {
-    if (isClosed()) return;
+    if (ended || abortedWrite || isClosed()) return;
 
     // Unfortunately, there is no way to tell the other side that this is an erroneous shutdown.
     KJ_SYSCALL_HANDLE_ERRORS(shutdown(getFd(), SHUT_WR)) {
@@ -272,6 +331,7 @@ public:
         KJ_FAIL_SYSCALL("shutdown(fd, SHUT_WR)", error) { break; }
         break;
     }
+    abortedWrite = true;
   }
 
   void abortRead() override {
@@ -339,6 +399,12 @@ private:
   SpaceFor<UnixEventPort::FdObserver> observerSpace;
   Own<UnixEventPort::FdObserver> observer;
   Maybe<ForkedPromise<void>> writeDisconnectedPromise;
+
+  UnwindDetector unwindDetector;
+  bool wroteData = false;
+  bool delegated = false;
+  bool abortedWrite = false;
+  bool ended = false;
 
   Promise<ReadResult> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                       AutoCloseFd* fdBuffer, size_t maxFds,
@@ -584,6 +650,9 @@ private:
     error:
       return kj::READY_NOW;
     }
+
+    // Once we've written some data to the stream, it's an error if end() is never called.
+    wroteData = true;
 
     if (n < 0) {
       // Got EAGAIN. Nothing was written.

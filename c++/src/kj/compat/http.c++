@@ -1806,6 +1806,10 @@ public:
     return fork.addBranch();
   }
 
+  kj::Promise<void> endConnection() {
+    return inner.end();
+  }
+
   Promise<void> whenWriteDisconnected() {
     return inner.whenWriteDisconnected();
   }
@@ -1839,6 +1843,10 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return KJ_EXCEPTION(FAILED, "HTTP message has no entity-body; can't write()");
   }
+  Promise<void> end() override {
+    // For an empty body, we don't cane whether or not end() is called.
+    return kj::READY_NOW;
+  }
   void abortWrite() override {}
   Promise<void> whenWriteDisconnected() override {
     return kj::NEVER_DONE;
@@ -1853,6 +1861,26 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return kj::READY_NOW;
   }
+  Promise<void> end() override {
+    return kj::READY_NOW;
+  }
+  void abortWrite() override {}
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
+  }
+};
+
+class HttpZeroSizeBody final: public kj::AsyncOutputStream {
+public:
+  Promise<void> write(const void* buffer, size_t size) override {
+    KJ_FAIL_REQUIRE("overwrote Content-Length");
+  }
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    KJ_FAIL_REQUIRE("overwrote Content-Length");
+  }
+  Promise<void> end() override {
+    return kj::READY_NOW;
+  }
   void abortWrite() override {}
   Promise<void> whenWriteDisconnected() override {
     return kj::NEVER_DONE;
@@ -1863,16 +1891,17 @@ class HttpFixedLengthEntityWriter final: public kj::AsyncOutputStream {
 public:
   HttpFixedLengthEntityWriter(HttpOutputStream& inner, uint64_t length)
       : inner(inner), length(length) {
-    if (length == 0) inner.finishBody();
+    KJ_REQUIRE(length > 0, "use HttpNullEntityWriter");
   }
   ~HttpFixedLengthEntityWriter() noexcept(false) {
-    if (length > 0 && !aborted) {
+    if (!ended && !aborted) {
       inner.abortBody();
+      KJ_FAIL_REQUIRE("must call end() or abortWrite() on non-empty HTTP body stream") { break; }
     }
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
-    KJ_REQUIRE(!aborted);
+    KJ_REQUIRE(!ended && !aborted);
     if (size == 0) return kj::READY_NOW;
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
@@ -1880,7 +1909,7 @@ public:
     return maybeFinishAfter(inner.writeBodyData(buffer, size));
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    KJ_REQUIRE(!aborted);
+    KJ_REQUIRE(!ended && !aborted);
     uint64_t size = 0;
     for (auto& piece: pieces) size += piece.size();
 
@@ -1891,14 +1920,21 @@ public:
     return maybeFinishAfter(inner.writeBodyData(pieces));
   }
 
+  Promise<void> end() override {
+    KJ_REQUIRE(!ended && !aborted);
+    KJ_REQUIRE(length == 0, "end()ing fixed-length HTTP entity-body too early", length);
+    inner.finishBody();
+    ended = true;
+    return kj::READY_NOW;
+  }
   void abortWrite() override {
-    if (aborted) return;
+    if (ended || aborted) return;
     inner.abortBody();
     aborted = true;
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-    KJ_REQUIRE(!aborted);
+    KJ_REQUIRE(!ended && !aborted);
 
     if (amount == 0) return Promise<uint64_t>(uint64_t(0));
 
@@ -1924,7 +1960,6 @@ public:
         : inner.pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
       // Adjust for bytes not written.
       length += amount - actual;
-      if (length == 0) inner.finishBody();
       return actual;
     });
 
@@ -1956,14 +1991,11 @@ public:
 private:
   HttpOutputStream& inner;
   uint64_t length;
+  bool ended = false;
   bool aborted = false;
 
   kj::Promise<void> maybeFinishAfter(kj::Promise<void> promise) {
-    if (length == 0) {
-      return promise.then([this]() { inner.finishBody(); });
-    } else {
-      return kj::mv(promise);
-    }
+    return kj::mv(promise);
   }
 };
 
@@ -1972,16 +2004,14 @@ public:
   HttpChunkedEntityWriter(HttpOutputStream& inner)
       : inner(inner) {}
   ~HttpChunkedEntityWriter() noexcept(false) {
-    if (inner.canWriteBodyData()) {
-      inner.writeBodyData(kj::str("0\r\n\r\n"));
-      inner.finishBody();
-    } else if (!aborted) {
+    if (!ended && !aborted) {
       inner.abortBody();
+      KJ_FAIL_REQUIRE("must call end() or abortWrite() on non-empty HTTP body stream") { break; }
     }
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
-    KJ_REQUIRE(!aborted);
+    KJ_REQUIRE(!ended && !aborted);
 
     if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
 
@@ -1996,7 +2026,7 @@ public:
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    KJ_REQUIRE(!aborted);
+    KJ_REQUIRE(!ended && !aborted);
 
     uint64_t size = 0;
     for (auto& piece: pieces) size += piece.size();
@@ -2016,13 +2046,22 @@ public:
     return promise.attach(kj::mv(header), kj::mv(parts));
   }
 
+  Promise<void> end() override {
+    KJ_REQUIRE(!ended && !aborted);
+
+    inner.writeBodyData(kj::str("0\r\n\r\n"));
+    inner.finishBody();
+    ended = true;
+    return kj::READY_NOW;
+  }
+
   void abortWrite() override {
     inner.abortBody();
     aborted = true;
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-    KJ_REQUIRE(!aborted);
+    KJ_REQUIRE(!ended && !aborted);
 
     KJ_IF_MAYBE(l, input.tryGetLength()) {
       // Hey, we know exactly how large the input is, so we can write just one chunk.
@@ -2054,6 +2093,7 @@ public:
 
 private:
   HttpOutputStream& inner;
+  bool ended = false;
   bool aborted = false;
 };
 
@@ -2069,6 +2109,20 @@ public:
       : stream(kj::mv(stream)), maskKeyGenerator(maskKeyGenerator),
         sendingPong(kj::mv(waitBeforeSend)),
         recvBuffer(kj::mv(buffer)), recvData(leftover) {}
+
+  ~WebSocketImpl() noexcept(false) {
+    if (!sentAny && !disconnected) {
+      // We didn't send any WebSocket messages, but we didn't abort or disconnect. Because we did
+      // send a WebSocket handshake, though, we have written to the underlying stream. Thus the
+      // stream will demand that either end() or abortWrite() is called. But for the same reason
+      // we don't require such things for a stream that has not been written at all, we don't want
+      // to require it for a WebSocket that has not sent anything. So we use abortWrite() to
+      // suppress the error.
+      // TODO(now): Remove this when flush() is added; the stream will have been flushed at the
+      //   start of the WebSocket connection.
+      stream->abortWrite();
+    }
+  }
 
   kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
     return sendImpl(OPCODE_BINARY, message);
@@ -2111,8 +2165,7 @@ public:
 
     disconnected = true;
 
-    stream->shutdownWrite();
-    return kj::READY_NOW;
+    return stream->end();
   }
 
   void abort() override {
@@ -2236,16 +2289,26 @@ public:
           return Message(kj::String(message.releaseAsChars()));
         case OPCODE_BINARY:
           return Message(message.releaseAsBytes());
-        case OPCODE_CLOSE:
+        case OPCODE_CLOSE: {
+          Message result;
           if (message.size() < 2) {
-            return Message(Close { 1005, nullptr });
+            result = Close { 1005, nullptr };
           } else {
             uint16_t status = (static_cast<uint16_t>(message[0]) << 8)
                             | (static_cast<uint16_t>(message[1])     );
-            return Message(Close {
+            result = Close {
               status, kj::heapString(message.slice(2, message.size()).asChars())
-            });
+            };
           }
+
+          hasReceivedClose = true;
+          if (hasSentClose) {
+            return disconnect()
+                .then([result = kj::mv(result)]() mutable { return kj::mv(result); });
+          } else {
+            return kj::mv(result);
+          }
+        }
         case OPCODE_PING:
           // Send back a pong.
           queuePong(kj::mv(message));
@@ -2452,8 +2515,10 @@ private:
   kj::Maybe<EntropySource&> maskKeyGenerator;
 
   bool hasSentClose = false;
+  bool hasReceivedClose = false;
   bool disconnected = false;
   bool currentlySending = false;
+  bool sentAny = false;
   Header sendHeader;
   kj::ArrayPtr<const byte> sendParts[2];
 
@@ -2482,6 +2547,7 @@ private:
     KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
     KJ_REQUIRE(!currentlySending, "another message send is already in progress");
 
+    sentAny = true;
     currentlySending = true;
 
     KJ_IF_MAYBE(p, sendingPong) {
@@ -2516,14 +2582,19 @@ private:
     if (!mask.isZero()) {
       promise = promise.attach(kj::mv(ownMessage));
     }
-    return promise.then([this]() {
+    return promise.then([this]() -> kj::Promise<void> {
       currentlySending = false;
 
-      // Send queued pong if needed.
-      KJ_IF_MAYBE(q, queuedPong) {
-        kj::Array<byte> payload = kj::mv(*q);
-        queuedPong = nullptr;
-        queuePong(kj::mv(payload));
+      if (hasSentClose && hasReceivedClose) {
+        return disconnect();
+      } else {
+        // Send queued pong if needed.
+        KJ_IF_MAYBE(q, queuedPong) {
+          kj::Array<byte> payload = kj::mv(*q);
+          queuedPong = nullptr;
+          queuePong(kj::mv(payload));
+        }
+        return kj::READY_NOW;
       }
     });
   }
@@ -3198,11 +3269,21 @@ namespace {
 class HttpClientImpl final: public HttpClient {
 public:
   HttpClientImpl(HttpHeaderTable& responseHeaderTable, kj::Own<kj::AsyncIoStream> rawStream,
-                 HttpClientSettings settings)
+                 HttpClientSettings settings, bool abortStreamOnDestruction)
       : httpInput(*rawStream, responseHeaderTable),
         httpOutput(*rawStream),
         ownStream(kj::mv(rawStream)),
-        settings(kj::mv(settings)) {}
+        settings(kj::mv(settings)),
+        abortStreamOnDestruction(abortStreamOnDestruction) {}
+  ~HttpClientImpl() noexcept(false) {
+    // TODO(cleanup): This feels like cheating. Maybe we should really have a flush() and say that
+    //   it's fine to drop the stream after flush() without aborting.
+    // Note that ownStream is null if it was upgraded to WebSocket, in which case that'll take care
+    // of close...
+    if (abortStreamOnDestruction && ownStream.get() != nullptr) {
+      ownStream->abortWrite();
+    }
+  }
 
   bool canReuse() {
     // Returns true if we can immediately reuse this HttpClient for another message (so all
@@ -3260,7 +3341,12 @@ public:
       httpOutput.finishBody();
       bodyStream = heap<HttpNullEntityWriter>();
     } else KJ_IF_MAYBE(s, expectedBodySize) {
-      bodyStream = heap<HttpFixedLengthEntityWriter>(httpOutput, *s);
+      if (*s == 0) {
+        httpOutput.finishBody();
+        bodyStream = heap<HttpNullEntityWriter>();
+      } else {
+        bodyStream = heap<HttpFixedLengthEntityWriter>(httpOutput, *s);
+      }
     } else {
       bodyStream = heap<HttpChunkedEntityWriter>(httpOutput);
     }
@@ -3394,6 +3480,7 @@ private:
   kj::Own<AsyncIoStream> ownStream;
   HttpClientSettings settings;
   kj::Maybe<kj::Promise<void>> closeWatcherTask;
+  bool abortStreamOnDestruction;
   bool upgraded = false;
   bool closed = false;
 
@@ -3429,6 +3516,9 @@ private:
             // destroy the socket now.
             // TODO(cleanup): Maybe we should arrange to proactively remove ourselves? Seems
             //   like the code will be awkward.
+            if (abortStreamOnDestruction) {
+              ownStream->abortWrite();
+            }
             ownStream = nullptr;
           });
         }
@@ -3464,7 +3554,7 @@ kj::Own<HttpClient> newHttpClient(
     HttpClientSettings settings) {
   return kj::heap<HttpClientImpl>(responseHeaderTable,
       kj::Own<kj::AsyncIoStream>(&stream, kj::NullDisposer::instance),
-      kj::mv(settings));
+      kj::mv(settings), false);
 }
 
 // =======================================================================================
@@ -3572,13 +3662,13 @@ public:
     }
   }
 
-  void shutdownWrite() override {
+  Promise<void> end() override {
     KJ_IF_MAYBE(s, stream) {
-      return s->get()->shutdownWrite();
+      return s->get()->end();
     } else {
-      tasks.add(promise.addBranch().then([this]() {
-        return KJ_ASSERT_NONNULL(stream)->shutdownWrite();
-      }));
+      return promise.addBranch().then([this]() {
+        return KJ_ASSERT_NONNULL(stream)->end();
+      });
     }
   }
 
@@ -3641,6 +3731,16 @@ public:
     } else {
       return promise.addBranch().then([this,pieces]() {
         return KJ_ASSERT_NONNULL(stream)->write(pieces);
+      });
+    }
+  }
+
+  Promise<void> end() override {
+    KJ_IF_MAYBE(s, stream) {
+      return s->get()->end();
+    } else {
+      return promise.addBranch().then([this]() {
+        return KJ_ASSERT_NONNULL(stream)->end();
       });
     }
   }
@@ -3792,7 +3892,7 @@ private:
       if (availableClients.empty()) {
         auto stream = kj::heap<PromiseIoStream>(address->connect());
         return kj::refcounted<RefcountedClient>(*this,
-          kj::heap<HttpClientImpl>(responseHeaderTable, kj::mv(stream), settings));
+          kj::heap<HttpClientImpl>(responseHeaderTable, kj::mv(stream), settings, true));
       } else {
         auto client = kj::mv(availableClients.back().client);
         availableClients.pop_back();
@@ -4264,6 +4364,9 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return kj::READY_NOW;
   }
+  Promise<void> end() override {
+    return kj::READY_NOW;
+  }
   void abortWrite() override {}
   Promise<void> whenWriteDisconnected() override {
     return kj::NEVER_DONE;
@@ -4649,7 +4752,8 @@ public:
       auto innerReq = client.request(method, url, headers, requestBody.tryGetLength());
 
       auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
-      promises.add(requestBody.pumpTo(*innerReq.body).ignoreResult()
+      promises.add(requestBody.pumpTo(*innerReq.body)
+          .then([&body = *innerReq.body](size_t) { return body.end(); })
           .attach(kj::mv(innerReq.body)).eagerlyEvaluate(nullptr));
 
       promises.add(innerReq.response
@@ -4657,8 +4761,9 @@ public:
         auto out = response.send(
             innerResponse.statusCode, innerResponse.statusText, *innerResponse.headers,
             innerResponse.body->tryGetLength());
-        auto promise = innerResponse.body->pumpTo(*out);
-        return promise.ignoreResult().attach(kj::mv(out), kj::mv(innerResponse.body));
+        auto promise = innerResponse.body->pumpTo(*out)
+            .then([&out = *out](size_t) { return out.end(); });
+        return promise.attach(kj::mv(out), kj::mv(innerResponse.body));
       }));
 
       return kj::joinPromises(promises.finish());
@@ -4671,14 +4776,21 @@ public:
             auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
             promises.add(ws->pumpTo(*ws2));
             promises.add(ws2->pumpTo(*ws));
-            return kj::joinPromises(promises.finish()).attach(kj::mv(ws), kj::mv(ws2));
+            return kj::joinPromises(promises.finish())
+                .attach(kj::defer([ws = kj::mv(ws), ws2 = kj::mv(ws2)]() mutable {
+              // If the pumps completed normally, these aborts are no-ops. They are only needed if
+              // the request was canceled prematurely.
+              ws->abort();
+              ws2->abort();
+            }));
           }
           KJ_CASE_ONEOF(body, kj::Own<kj::AsyncInputStream>) {
             auto out = response.send(
                 innerResponse.statusCode, innerResponse.statusText, *innerResponse.headers,
                 body->tryGetLength());
-            auto promise = body->pumpTo(*out);
-            return promise.ignoreResult().attach(kj::mv(out), kj::mv(body));
+            auto promise = body->pumpTo(*out)
+                .then([&out = *out](size_t) { return out.end(); });
+            return promise.attach(kj::mv(out), kj::mv(body));
           }
         }
         KJ_UNREACHABLE;
@@ -4820,8 +4932,10 @@ public:
       }
 
       if (closed) {
-        // Client closed connection. Close our end too.
-        return httpOutput.flush().then([]() { return false; });
+        // Client closed connection. Cleanly close our end too.
+        return httpOutput.flush()
+            .then([this]() { return httpOutput.endConnection(); })
+            .then([]() { return false; });
       }
 
       KJ_IF_MAYBE(req, request) {
@@ -5039,7 +5153,12 @@ private:
       httpOutput.finishBody();
       return heap<HttpNullEntityWriter>();
     } else KJ_IF_MAYBE(s, expectedBodySize) {
-      return heap<HttpFixedLengthEntityWriter>(httpOutput, *s);
+      if (*s == 0) {
+        httpOutput.finishBody();
+        return heap<HttpNullEntityWriter>();
+      } else {
+        return heap<HttpFixedLengthEntityWriter>(httpOutput, *s);
+      }
     } else {
       return heap<HttpChunkedEntityWriter>(httpOutput);
     }
@@ -5102,7 +5221,9 @@ private:
     httpOutput.writeHeaders(failed.serializeResponse(statusCode, statusText));
     httpOutput.writeBodyData(kj::mv(body));
     httpOutput.finishBody();
-    return httpOutput.flush().then([]() { return false; });  // loop ends after flush
+    return httpOutput.flush()
+        .then([this]() { return httpOutput.endConnection(); })
+        .then([]() { return false; });  // loop ends after flush
   }
 
   kj::Own<WebSocket> sendWebSocketError(
@@ -5200,6 +5321,11 @@ kj::Promise<void> HttpServer::listenLoop(kj::ConnectionReceiver& port) {
 kj::Promise<void> HttpServer::listenHttp(kj::Own<kj::AsyncIoStream> connection) {
   auto promise = listenHttpCleanDrain(*connection).ignoreResult();
 
+  // Close connection on completion. Note we already do end() where appropriate, and abortWrite()
+  // after end() has no effect.
+  auto& connRef = *connection;
+  promise = promise.then([&connRef]() { return connRef.abortWrite(); });
+
   // eagerlyEvaluate() to maintain historical guarantee that this method eagerly closes the
   // connection when done.
   return promise.attach(kj::mv(connection)).eagerlyEvaluate(nullptr);
@@ -5222,7 +5348,7 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
   // Start reading requests and responding to them, but immediately cancel processing if the client
   // disconnects.
   auto promise = obj->loop(true)
-      .exclusiveJoin(connection.whenWriteDisconnected().then([]() {return false;}));
+      .exclusiveJoin(connection.whenWriteDisconnected().then([]() { return false; }));
 
   // Eagerly evaluate so that we drop the connection when the promise resolves, even if the caller
   // doesn't eagerly evaluate.
