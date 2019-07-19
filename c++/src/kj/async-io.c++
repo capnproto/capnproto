@@ -298,6 +298,15 @@ public:
     }
   }
 
+  void abortWrite() override {
+    KJ_IF_MAYBE(s, state) {
+      s->abortWrite();
+    } else {
+      ownState = kj::heap<AbortedWrite>();
+      state = *ownState;
+    }
+  }
+
 private:
   Maybe<AsyncIoStream&> state;
   // Object-oriented state! If any method call is blocked waiting on activity from the other end,
@@ -448,13 +457,6 @@ private:
       }
     }
 
-    void abortRead() override {
-      canceler.cancel("abortRead() was called");
-      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
-      pipe.endState(*this);
-      pipe.abortRead();
-    }
-
     Promise<void> write(const void* buffer, size_t size) override {
       KJ_FAIL_REQUIRE("can't write() again until previous write() completes");
     }
@@ -468,6 +470,18 @@ private:
       KJ_FAIL_REQUIRE("can't shutdownWrite() until previous write() completes");
     }
 
+    void abortRead() override {
+      canceler.cancel("abortRead() was called");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
+      pipe.endState(*this);
+      pipe.abortRead();
+    }
+    void abortWrite() override {
+      canceler.cancel("abortWrite() was called");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "write end of pipe was aborted"));
+      pipe.endState(*this);
+      pipe.abortWrite();
+    }
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
@@ -585,6 +599,13 @@ private:
       KJ_FAIL_REQUIRE("can't shutdownWrite() until previous tryPumpFrom() completes");
     }
 
+    void abortWrite() override {
+      canceler.cancel("abortWrite() was called");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "write end of pipe was aborted"));
+      pipe.endState(*this);
+      pipe.abortWrite();
+    }
+
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
@@ -619,13 +640,6 @@ private:
     }
     Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
       KJ_FAIL_REQUIRE("can't read() again until previous read() completes");
-    }
-
-    void abortRead() override {
-      canceler.cancel("abortRead() was called");
-      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
-      pipe.endState(*this);
-      pipe.abortRead();
     }
 
     Promise<void> write(const void* writeBuffer, size_t size) override {
@@ -760,6 +774,18 @@ private:
       pipe.shutdownWrite();
     }
 
+    void abortRead() override {
+      canceler.cancel("abortRead() was called");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
+      pipe.endState(*this);
+      pipe.abortRead();
+    }
+    void abortWrite() override {
+      canceler.cancel("abortWrite() was called");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "write end of pipe was aborted"));
+      pipe.endState(*this);
+      pipe.abortWrite();
+    }
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
@@ -793,13 +819,6 @@ private:
     }
     Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
       KJ_FAIL_REQUIRE("can't read() again until previous pumpTo() completes");
-    }
-
-    void abortRead() override {
-      canceler.cancel("abortRead() was called");
-      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
-      pipe.endState(*this);
-      pipe.abortRead();
     }
 
     Promise<void> write(const void* writeBuffer, size_t size) override {
@@ -932,6 +951,18 @@ private:
       pipe.shutdownWrite();
     }
 
+    void abortRead() override {
+      canceler.cancel("abortRead() was called");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
+      pipe.endState(*this);
+      pipe.abortRead();
+    }
+    void abortWrite() override {
+      canceler.cancel("abortWrite() was called");
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "write end of pipe was aborted"));
+      pipe.endState(*this);
+      pipe.abortWrite();
+    }
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
@@ -946,24 +977,29 @@ private:
   };
 
   class AbortedRead final: public AsyncIoStream {
-    // AsyncPipe state when abortRead() has been called.
+    // AsyncPipe state when abortRead() has been called, or when the read end was dropped.
+    //
+    // We throw DISCONNECTED exceptions to the writer, even though no network is involved.
+    // Rationale: AsyncPipe is intended to be an optimization that replaces an actual pipe when the
+    // two ends happen to be in the same process. With an actual pipe, if the read end was closed,
+    // the write end would get an EPIPE which is a DISCONNECTED.
 
   public:
     Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     void abortRead() override {
       // ignore repeated abort
     }
 
     Promise<void> write(const void* buffer, size_t size) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "reader stopped reading");
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "reader stopped reading");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
       // There might not actually be any data in `input`, in which case a pump wouldn't actually
@@ -977,13 +1013,13 @@ private:
         // buffered pump, which would allocate a big old buffer just to find there's nothing to
         // read. Let's try reading 1 byte to avoid that allocation.
         static char c;
-        return input.tryRead(&c, 1, 1).then([](size_t n) {
+        return input.tryRead(&c, 1, 1).then([](size_t n) -> Promise<uint64_t> {
           if (n == 0) {
             // Yay, we're at EOF as hoped.
             return uint64_t(0);
           } else {
             // There was data in the input. The pump would have thrown.
-            KJ_FAIL_REQUIRE("abortRead() has been called");
+            return Promise<uint64_t>(KJ_EXCEPTION(DISCONNECTED, "reader stopped reading"));
           }
         });
       }
@@ -991,6 +1027,52 @@ private:
     void shutdownWrite() override {
       // ignore -- currently shutdownWrite() actually means that the PipeWriteEnd was dropped,
       // which is not an error even if reads have been aborted.
+    }
+    void abortWrite() override {
+      // ignore abort from other end
+    }
+    Promise<void> whenWriteDisconnected() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
+    }
+  };
+
+  class AbortedWrite final: public AsyncIoStream {
+    // AsyncPipe state when write end was dropped without calling end().
+    //
+    // We throw DISCONNECTED exceptions to the reader, even though no network is involved.
+    // Rationale: AsyncPipe is intended to be an optimization that replaces an actual pipe when the
+    // two ends happen to be in the same process. With an actual pipe, if the write end was closed,
+    // the read end would get EOF -- however, this is essentially a missing feature in the sockets
+    // API; in a better world, we'd be able to tell the difference between a crashed peer vs. a
+    // clean close, and certainly in the case of a crashed peer we'd want to get DISCONNECTED.
+
+  public:
+    Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
+      return KJ_EXCEPTION(DISCONNECTED, "other end of pipe was destroyed without calling end()");
+    }
+    Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+      return KJ_EXCEPTION(DISCONNECTED, "other end of pipe was destroyed without calling end()");
+    }
+    void abortRead() override {
+      // ignore abort from other end
+    }
+
+    Promise<void> write(const void* buffer, size_t size) override {
+      return KJ_EXCEPTION(DISCONNECTED, "writes have been aborted");
+    }
+    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      return KJ_EXCEPTION(DISCONNECTED, "writes have been aborted");
+    }
+    Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+      return Promise<uint64_t>(KJ_EXCEPTION(DISCONNECTED, "writes have been aborted"));
+    }
+    void shutdownWrite() override {
+      // TODO(now): We currently ignore shutdown after abort because the destructor of AsyncPipe
+      //   calls shutdownWrite() and shouldn't throw. A subsequent commit will remove this method
+      //   entirely.
+    }
+    void abortWrite() override {
+      // ignore repeated abort
     }
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
@@ -1024,6 +1106,9 @@ private:
       // ignore -- currently shutdownWrite() actually means that the PipeWriteEnd was dropped,
       // so it will only be called once anyhow.
     }
+    void abortWrite() override {
+      // ignore abort after end
+    }
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
@@ -1045,6 +1130,10 @@ public:
 
   Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
     return pipe->pumpTo(output, amount);
+  }
+
+  void abortRead() override {
+    pipe->abortRead();
   }
 
 private:
@@ -1076,6 +1165,10 @@ public:
 
   Promise<void> whenWriteDisconnected() override {
     return pipe->whenWriteDisconnected();
+  }
+
+  void abortWrite() override {
+    pipe->abortWrite();
   }
 
 private:
@@ -1120,6 +1213,9 @@ public:
   void shutdownWrite() override {
     out->shutdownWrite();
   }
+  void abortWrite() override {
+    out->abortWrite();
+  }
 
 private:
   kj::Own<AsyncPipe> in;
@@ -1157,6 +1253,10 @@ public:
       decreaseLimit(actual, requested);
       return actual;
     });
+  }
+
+  void abortRead() override {
+    inner->abortRead();
   }
 
 private:
@@ -1227,6 +1327,12 @@ public:
     }
 
     branches[branch] = nullptr;
+
+    for (auto& branch: branches) {
+      if (branch != nullptr) return;
+    }
+    // All branches are gone, so popagate abort back to inner stream.
+    inner->abortRead();
   }
 
   Promise<size_t> tryRead(BranchId branch, void* buffer, size_t minBytes, size_t maxBytes)  {
@@ -1801,6 +1907,10 @@ public:
 
   Maybe<uint64_t> tryGetLength() override {
     return tee->tryGetLength(branch);
+  }
+
+  void abortRead() override {
+    tee->removeBranch(branch);
   }
 
 private:

@@ -312,6 +312,7 @@ public:
     return inner.shutdownWrite();
   }
 
+  void abortWrite() override { return inner.abortWrite(); }
   void abortRead() override { return inner.abortRead(); }
 
   void getsockopt(int level, int option, void* value, uint* length) override {
@@ -1009,6 +1010,8 @@ KJ_TEST("HttpClient chunked body pump from fixed length stream") {
     }
 
     Maybe<uint64_t> tryGetLength() override { return body.size(); }
+
+    void abortRead() override {}
 
     kj::StringPtr body = "foo bar baz";
   };
@@ -1828,6 +1831,16 @@ public:
     out = nullptr;
   }
 
+  void abortWrite() override {
+    out->abortWrite();
+    out = nullptr;
+  }
+
+  void abortRead() override {
+    in->abortRead();
+    in = nullptr;
+  }
+
 private:
   kj::Own<kj::AsyncInputStream> in;
   kj::Own<kj::AsyncOutputStream> out;
@@ -2508,6 +2521,8 @@ public:
     return amount;
   }
 
+  void abortRead() override {}
+
 private:
   kj::ArrayPtr<const byte> unread;
 };
@@ -2818,6 +2833,9 @@ public:
   }
   void shutdownWrite() override {
     return inner->shutdownWrite();
+  }
+  void abortWrite() override {
+    return inner->abortWrite();
   }
   void abortRead() override {
     return inner->abortRead();

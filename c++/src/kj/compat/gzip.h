@@ -97,6 +97,8 @@ public:
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
+  void abortRead() override { inner.abortRead(); }
+
 private:
   AsyncInputStream& inner;
   z_stream ctx = {};
@@ -131,6 +133,8 @@ public:
   // Must call to flush and finish the stream, since some data may be buffered.
   //
   // TODO(cleanup): This should be a virtual method on AsyncOutputStream.
+
+  void abortWrite() override { inner.abortWrite(); }
 
 private:
   AsyncOutputStream& inner;

@@ -258,10 +258,35 @@ public:
     KJ_SYSCALL(shutdown(getFd(), SHUT_WR));
   }
 
+  void abortWrite() override {
+    if (isClosed()) return;
+
+    // Unfortunately, there is no way to tell the other side that this is an erroneous shutdown.
+    KJ_SYSCALL_HANDLE_ERRORS(shutdown(getFd(), SHUT_WR)) {
+      case ENOTSOCK:
+        // If not a socket, then we must be a one-way output stream, e.g. a pipe. Just close.
+        observer = nullptr;
+        closeSelf();
+        break;
+      default:
+        KJ_FAIL_SYSCALL("shutdown(fd, SHUT_WR)", error) { break; }
+        break;
+    }
+  }
+
   void abortRead() override {
-    // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
-    // UnixAsyncIoProvider interface.
-    KJ_SYSCALL(shutdown(getFd(), SHUT_RD));
+    if (isClosed()) return;
+
+    KJ_SYSCALL_HANDLE_ERRORS(shutdown(getFd(), SHUT_RD)) {
+      case ENOTSOCK:
+        // If not a socket, then we must be a one-way input stream, e.g. a pipe. Just close.
+        observer = nullptr;
+        closeSelf();
+        break;
+      default:
+        KJ_FAIL_SYSCALL("shutdown(fd, SHUT_RD)", error) { break; }
+        break;
+    }
   }
 
   void getsockopt(int level, int option, void* value, uint* length) override {

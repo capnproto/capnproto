@@ -36,7 +36,7 @@ static const byte FOOBAR_GZIP[] = {
   0x00, 0x00,
 };
 
-class MockInputStream: public InputStream {
+class MockInputStream final: public InputStream {
 public:
   MockInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
@@ -61,7 +61,7 @@ private:
   size_t blockSize;
 };
 
-class MockAsyncInputStream: public AsyncInputStream {
+class MockAsyncInputStream final: public AsyncInputStream {
 public:
   MockAsyncInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
@@ -81,12 +81,16 @@ public:
     return n;
   }
 
+  void abortRead() override {
+    // ignore
+  }
+
 private:
   kj::ArrayPtr<const byte> bytes;
   size_t blockSize;
 };
 
-class MockOutputStream: public OutputStream {
+class MockOutputStream final: public OutputStream {
 public:
   kj::Vector<byte> bytes;
 
@@ -106,7 +110,7 @@ public:
   }
 };
 
-class MockAsyncOutputStream: public AsyncOutputStream {
+class MockAsyncOutputStream final: public AsyncOutputStream {
 public:
   kj::Vector<byte> bytes;
 
@@ -128,6 +132,10 @@ public:
   }
 
   Promise<void> whenWriteDisconnected() override { KJ_UNIMPLEMENTED("not used"); }
+
+  void abortWrite() override {
+    // ignore
+  }
 };
 
 KJ_TEST("gzip decompression") {

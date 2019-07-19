@@ -204,6 +204,10 @@ public:
     inner.abortRead();
   }
 
+  void abortWrite() override {
+    inner.abortWrite();
+  }
+
   void getsockopt(int level, int option, void* value, uint* length) override {
     inner.getsockopt(level, option, value, length);
   }

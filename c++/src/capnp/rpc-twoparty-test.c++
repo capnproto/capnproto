@@ -210,7 +210,7 @@ TEST(TwoPartyNetwork, Pipelining) {
     EXPECT_FALSE(disconnected);
 
     // What if we disconnect?
-    serverThread.pipe->shutdownWrite();
+    serverThread.pipe->abortWrite();
 
     // The other side should also disconnect.
     disconnectPromise.wait(ioContext.waitScope);
@@ -565,7 +565,8 @@ public:
   }
   kj::Promise<void> whenWriteDisconnected() override { return inner->whenWriteDisconnected(); }
   void shutdownWrite() override { return inner->shutdownWrite(); }
-  void abortRead() override { return inner->abortRead(); }
+  void abortWrite() override { inner->abortWrite(); }
+  void abortRead() override { inner->abortRead(); }
 
   void getsockopt(int level, int option, void* value, uint* length) override {
     if (level == SOL_SOCKET && option == SO_SNDBUF) {

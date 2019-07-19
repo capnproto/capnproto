@@ -1418,6 +1418,10 @@ public:
     }
   }
 
+  void abortRead() override {
+    if (!finished) inner.abortRead();
+  }
+
 protected:
   HttpInputStreamImpl& inner;
 
@@ -1829,6 +1833,7 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return KJ_EXCEPTION(FAILED, "HTTP message has no entity-body; can't write()");
   }
+  void abortWrite() override {}
   Promise<void> whenWriteDisconnected() override {
     return kj::NEVER_DONE;
   }
@@ -1842,6 +1847,7 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return kj::READY_NOW;
   }
+  void abortWrite() override {}
   Promise<void> whenWriteDisconnected() override {
     return kj::NEVER_DONE;
   }
@@ -1854,10 +1860,13 @@ public:
     if (length == 0) inner.finishBody();
   }
   ~HttpFixedLengthEntityWriter() noexcept(false) {
-    if (length > 0) inner.abortBody();
+    if (length > 0 && !aborted) {
+      inner.abortBody();
+    }
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
+    KJ_REQUIRE(!aborted);
     if (size == 0) return kj::READY_NOW;
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
@@ -1865,6 +1874,7 @@ public:
     return maybeFinishAfter(inner.writeBodyData(buffer, size));
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    KJ_REQUIRE(!aborted);
     uint64_t size = 0;
     for (auto& piece: pieces) size += piece.size();
 
@@ -1875,7 +1885,15 @@ public:
     return maybeFinishAfter(inner.writeBodyData(pieces));
   }
 
+  void abortWrite() override {
+    if (aborted) return;
+    inner.abortBody();
+    aborted = true;
+  }
+
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+    KJ_REQUIRE(!aborted);
+
     if (amount == 0) return Promise<uint64_t>(uint64_t(0));
 
     bool overshot = amount > length;
@@ -1932,6 +1950,7 @@ public:
 private:
   HttpOutputStream& inner;
   uint64_t length;
+  bool aborted = false;
 
   kj::Promise<void> maybeFinishAfter(kj::Promise<void> promise) {
     if (length == 0) {
@@ -1950,12 +1969,14 @@ public:
     if (inner.canWriteBodyData()) {
       inner.writeBodyData(kj::str("0\r\n\r\n"));
       inner.finishBody();
-    } else {
+    } else if (!aborted) {
       inner.abortBody();
     }
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
+    KJ_REQUIRE(!aborted);
+
     if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
 
     auto header = kj::str(kj::hex(size), "\r\n");
@@ -1969,6 +1990,8 @@ public:
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    KJ_REQUIRE(!aborted);
+
     uint64_t size = 0;
     for (auto& piece: pieces) size += piece.size();
 
@@ -1987,7 +2010,14 @@ public:
     return promise.attach(kj::mv(header), kj::mv(parts));
   }
 
+  void abortWrite() override {
+    inner.abortBody();
+    aborted = true;
+  }
+
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+    KJ_REQUIRE(!aborted);
+
     KJ_IF_MAYBE(l, input.tryGetLength()) {
       // Hey, we know exactly how large the input is, so we can write just one chunk.
 
@@ -2018,6 +2048,7 @@ public:
 
 private:
   HttpOutputStream& inner;
+  bool aborted = false;
 };
 
 // =======================================================================================
@@ -2083,7 +2114,7 @@ public:
     sendingPong = nullptr;
     disconnected = true;
     stream->abortRead();
-    stream->shutdownWrite();
+    stream->abortWrite();
   }
 
   kj::Promise<void> whenAborted() override {
@@ -3529,6 +3560,16 @@ public:
     }
   }
 
+  void abortWrite() override {
+    KJ_IF_MAYBE(s, stream) {
+      return s->get()->abortWrite();
+    } else {
+      tasks.add(promise.addBranch().then([this]() {
+        return KJ_ASSERT_NONNULL(stream)->abortWrite();
+      }));
+    }
+  }
+
   void abortRead() override {
     KJ_IF_MAYBE(s, stream) {
       return s->get()->abortRead();
@@ -3549,7 +3590,7 @@ public:
   }
 };
 
-class PromiseOutputStream final: public kj::AsyncOutputStream {
+class PromiseOutputStream final: public kj::AsyncOutputStream, private kj::TaskSet::ErrorHandler {
   // An AsyncOutputStream which waits for a promise to resolve then forwards all calls to the
   // promised stream.
   //
@@ -3560,7 +3601,8 @@ public:
   PromiseOutputStream(kj::Promise<kj::Own<AsyncOutputStream>> promise)
       : promise(promise.then([this](kj::Own<AsyncOutputStream> result) {
           stream = kj::mv(result);
-        }).fork()) {}
+        }).fork()),
+        tasks(*this) {}
 
   kj::Promise<void> write(const void* buffer, size_t size) override {
     KJ_IF_MAYBE(s, stream) {
@@ -3578,6 +3620,16 @@ public:
       return promise.addBranch().then([this,pieces]() {
         return KJ_ASSERT_NONNULL(stream)->write(pieces);
       });
+    }
+  }
+
+  void abortWrite() override {
+    KJ_IF_MAYBE(s, stream) {
+      return s->get()->abortWrite();
+    } else {
+      tasks.add(promise.addBranch().then([this]() {
+        return KJ_ASSERT_NONNULL(stream)->abortWrite();
+      }));
     }
   }
 
@@ -3612,6 +3664,11 @@ public:
 public:
   kj::ForkedPromise<void> promise;
   kj::Maybe<kj::Own<AsyncOutputStream>> stream;
+  kj::TaskSet tasks;
+
+  void taskFailed(kj::Exception&& exception) override {
+    KJ_LOG(ERROR, exception);
+  }
 };
 
 class NetworkAddressHttpClient final: public HttpClient {
@@ -4171,6 +4228,8 @@ public:
     return uint64_t(0);
   }
 
+  void abortRead() override {}
+
 private:
   kj::Maybe<size_t> expectedLength;
 };
@@ -4183,6 +4242,7 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return kj::READY_NOW;
   }
+  void abortWrite() override {}
   Promise<void> whenWriteDisconnected() override {
     return kj::NEVER_DONE;
   }
@@ -4307,6 +4367,10 @@ private:
           return amount;
         }
       });
+    }
+
+    void abortRead() override {
+      inner->abortRead();
     }
 
   private:

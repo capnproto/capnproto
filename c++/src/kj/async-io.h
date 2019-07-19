@@ -86,6 +86,21 @@ public:
   //
   // To prevent runaway memory allocation, consider using a more conservative value for `limit` than
   // the default, particularly on untrusted data streams which may never see EOF.
+
+  virtual void abortRead() = 0;
+  // Indicates that the caller will not read any more data from this stream. If possible, this will
+  // propagate back to the sender, causing a DISCONNECTED error when they try to write, and buffers
+  // in between can be freed.
+  //
+  // If end-of-stream has already been received, then abortRead() has no effect.
+  //
+  // abortRead() may be called while a read() is in progress; it will throw DISCONNECTED, as will
+  // further reads thereafter. (You must still wait for the read() promise to settle, or you must
+  // cancel it, before destroying the AsyncInputStream.)
+  //
+  // Typically, abortRead() will be invoked implicitly by the stream's destructor if you do not
+  // call it explicitly. However, when using AsyncIoStream, calling abortRead() allows you to
+  // shutdown the read direction without also shutting down writes.
 };
 
 class AsyncOutputStream {
@@ -95,6 +110,19 @@ public:
   virtual Promise<void> write(const void* buffer, size_t size) KJ_WARN_UNUSED_RESULT = 0;
   virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces)
       KJ_WARN_UNUSED_RESULT = 0;
+
+  virtual void abortWrite() = 0;
+  // Indicates that the data is not complete but, due to an error, no further write()s will be
+  // called. If possible, this will propagate to the receiver, causing a DISCONNECTED error
+  // when they try to read() -- however, many network protocols do not provide a way to distinguish
+  // between a regular EOF vs. an erroneous one, in which case the receiver will not see an
+  // explicit error.
+  //
+  // abortWrite() after EOF has no effect.
+  //
+  // abortWrite() may be called while a write() is in progress; it will throw DISCONNECTED, as will
+  // further writes thereafter. (You must still wait for the write() promise to settle, or you must
+  // cancel it, before destroying the AsyncOutputStream.)
 
   virtual Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount = kj::maxValue);
@@ -128,10 +156,6 @@ class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
 public:
   virtual void shutdownWrite() = 0;
   // Cleanly shut down just the write end of the stream, while keeping the read end open.
-
-  virtual void abortRead() {}
-  // Similar to shutdownWrite, but this will shut down the read end of the stream, and should only
-  // be called when an error has occurred.
 
   virtual void getsockopt(int level, int option, void* value, uint* length);
   virtual void setsockopt(int level, int option, const void* value, uint length);

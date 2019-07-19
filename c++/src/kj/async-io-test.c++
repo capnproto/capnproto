@@ -938,6 +938,8 @@ public:
     return n;
   }
 
+  void abortRead() override {}
+
 private:
   kj::ArrayPtr<const byte> bytes;
   size_t blockSize;
@@ -985,6 +987,52 @@ KJ_TEST("AsyncInputStream::readAllText() / readAllBytes()") {
 }
 
 KJ_TEST("Userland pipe") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  auto promise = pipe.out->write("foo", 3);
+  KJ_EXPECT(!promise.poll(ws));
+
+  char buf[4];
+  KJ_EXPECT(pipe.in->tryRead(buf, 1, 4).wait(ws) == 3);
+  buf[3] = '\0';
+  KJ_EXPECT(buf == "foo"_kj);
+
+  promise.wait(ws);
+
+  auto promise2 = pipe.in->readAllText();
+  KJ_EXPECT(!promise2.poll(ws));
+
+  pipe.out = nullptr;
+  KJ_EXPECT(promise2.wait(ws) == "");
+}
+
+KJ_TEST("Userland pipe abortWrite()") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  auto promise = pipe.out->write("foo", 3);
+  KJ_EXPECT(!promise.poll(ws));
+
+  char buf[4];
+  KJ_EXPECT(pipe.in->tryRead(buf, 1, 4).wait(ws) == 3);
+  buf[3] = '\0';
+  KJ_EXPECT(buf == "foo"_kj);
+
+  promise.wait(ws);
+
+  auto promise2 = pipe.in->readAllText();
+  KJ_EXPECT(!promise2.poll(ws));
+
+  pipe.out->abortWrite();
+  KJ_EXPECT_THROW(DISCONNECTED, promise2.wait(ws));
+}
+
+KJ_TEST("Userland pipe drop write end") {
   kj::EventLoop loop;
   WaitScope ws(loop);
 
@@ -1147,11 +1195,11 @@ KJ_TEST("Userland pipe with limit") {
     KJ_EXPECT(!promise.poll(ws));
     auto promise2 = pipe.out->write("barbaz", 6);
     KJ_EXPECT(promise.wait(ws) == "bar");
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
+    KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, promise2.wait(ws));
   }
 
   // Further writes throw and reads return EOF.
-  KJ_EXPECT_THROW_MESSAGE("abortRead() has been called", pipe.out->write("baz", 3).wait(ws));
+  KJ_EXPECT_THROW(DISCONNECTED, pipe.out->write("baz", 3).wait(ws));
   KJ_EXPECT(pipe.in->readAllText().wait(ws) == "");
 }
 
@@ -1176,11 +1224,11 @@ KJ_TEST("Userland pipe pumpTo with limit") {
     auto promise2 = pipe.out->write("barbaz", 6);
     promise.wait(ws);
     pumpPromise.wait(ws);
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
+    KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, promise2.wait(ws));
   }
 
   // Further writes throw.
-  KJ_EXPECT_THROW_MESSAGE("abortRead() has been called", pipe.out->write("baz", 3).wait(ws));
+  KJ_EXPECT_THROW(DISCONNECTED, pipe.out->write("baz", 3).wait(ws));
 }
 
 KJ_TEST("Userland pipe pump into zero-limited pipe, no data to pump") {
@@ -1206,7 +1254,7 @@ KJ_TEST("Userland pipe pump into zero-limited pipe, data is pumped") {
 
   expectRead(*pipe2.in, "");
   auto writePromise = pipe.out->write("foo", 3);
-  KJ_EXPECT_THROW_MESSAGE("abortRead() has been called", pumpPromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("reader stopped reading", pumpPromise.wait(ws));
 }
 
 KJ_TEST("Userland pipe gather write") {
