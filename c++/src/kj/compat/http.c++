@@ -1702,6 +1702,10 @@ class HttpOutputStream {
 public:
   HttpOutputStream(AsyncOutputStream& inner): inner(inner) {}
 
+  bool isInBody() {
+    return inBody;
+  }
+
   bool canReuse() {
     return !inBody && !broken && !writeInProgress;
   }
@@ -1818,6 +1822,8 @@ private:
   // underlying stream is in an inconsistent state and cannot be reused.
 
   void queueWrite(kj::String content) {
+    // TODO(now): Queuing writes means cancellation doesn't work and potentially uses buffers after
+    //   free.
     writeQueue = writeQueue.then(kj::mvCapture(content, [this](kj::String&& content) {
       auto promise = inner.write(content.begin(), content.size());
       return promise.attach(kj::mv(content));
@@ -3396,20 +3402,36 @@ private:
   // point in history.
 
   void watchForClose() {
-    closeWatcherTask = httpInput.awaitNextMessage().then([this](bool hasData) {
+    closeWatcherTask = httpInput.awaitNextMessage()
+        .then([this](bool hasData) -> kj::Promise<void> {
       if (hasData) {
         // Uhh... The server sent some data before we asked for anything. Perhaps due to properties
         // of this application, the server somehow already knows what the next request will be, and
         // it is trying to optimize. Or maybe this is some sort of test and the server is just
         // replaying a script. In any case, we will humor it -- leave the data in the buffer and
         // let it become the response to the next request.
+        return kj::READY_NOW;
       } else {
         // EOF -- server disconnected.
-
-        // Proactively free up the socket.
-        ownStream = nullptr;
-
         closed = true;
+        if (httpOutput.isInBody()) {
+          // Huh, the application is still sending a request. We should let it finish. We do not
+          // need to proactively free the socket in this case because we know that we're not
+          // sitting in a reusable connection pool, because we know the application is still
+          // actively using the connection.
+          return kj::READY_NOW;
+        } else {
+          return httpOutput.flush().then([this]() {
+            // We might be sitting in NetworkAddressHttpClient's `availableClients` pool. We don't
+            // have a way to notify it to remove this client from the pool; instead, when it tries
+            // to pull this client from the pool later, it will notice the client is dead and will
+            // discard it then. But, we would like to avoid holding on to a socket forever. So,
+            // destroy the socket now.
+            // TODO(cleanup): Maybe we should arrange to proactively remove ourselves? Seems
+            //   like the code will be awkward.
+            ownStream = nullptr;
+          });
+        }
       }
     }).eagerlyEvaluate(nullptr);
   }
