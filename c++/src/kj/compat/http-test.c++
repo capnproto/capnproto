@@ -2428,6 +2428,133 @@ KJ_TEST("HttpServer bad request") {
   KJ_EXPECT(expectedResponse == response, expectedResponse, response);
 }
 
+// Ensure that HttpServerSettings can continue to be constexpr.
+KJ_UNUSED static constexpr HttpServerSettings STATIC_CONSTEXPR_SETTINGS {};
+
+class TestErrorHandler: public HttpServerErrorHandler {
+public:
+  kj::Promise<void> handleClientProtocolError(
+      kj::StringPtr message, kj::HttpService::Response& response) override {
+    return sendError(400, "Bad Request", kj::str("Saw protocol error: ", message), response);
+  }
+
+  kj::Promise<void> handleApplicationError(
+      kj::Exception exception, kj::Maybe<kj::HttpService::Response&> response) override {
+    return sendError(500, "Internal Server Error",
+        kj::str("Saw application error: ", exception.getDescription()), response);
+  }
+
+  kj::Promise<void> handleNoResponse(kj::HttpService::Response& response) override {
+    return sendError(500, "Internal Server Error", kj::str("Saw no response."), response);
+  }
+
+  static TestErrorHandler instance;
+
+private:
+  kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText, String message,
+      Maybe<HttpService::Response&> response) {
+    KJ_IF_MAYBE(r, response) {
+      HttpHeaderTable headerTable;
+      HttpHeaders headers(headerTable);
+      auto body = r->send(statusCode, statusText, headers, message.size());
+      return body->write(message.begin(), message.size()).attach(kj::mv(body), kj::mv(message));
+    } else {
+      KJ_LOG(ERROR, "Saw an error but too late to report to client.");
+      return kj::READY_NOW;
+    }
+  }
+};
+
+TestErrorHandler TestErrorHandler::instance {};
+
+KJ_TEST("HttpServer no response, custom error handler") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpServerSettings settings {};
+  settings.errorHandler = TestErrorHandler::instance;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service, settings);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
+
+  KJ_EXPECT(text ==
+      "HTTP/1.1 500 Internal Server Error\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 16\r\n"
+      "\r\n"
+      "Saw no response.", text);
+}
+
+KJ_TEST("HttpServer threw exception, custom error handler") {
+  auto PIPELINE_TESTS = pipelineTestCases();
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpServerSettings settings {};
+  settings.errorHandler = TestErrorHandler::instance;
+
+  HttpHeaderTable table;
+  BrokenHttpService service(KJ_EXCEPTION(FAILED, "failed"));
+  HttpServer server(timer, table, service, settings);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Do one request.
+  pipe.ends[1]->write(PIPELINE_TESTS[0].request.raw.begin(), PIPELINE_TESTS[0].request.raw.size())
+      .wait(waitScope);
+  auto text = pipe.ends[1]->readAllText().wait(waitScope);
+
+  KJ_EXPECT(text ==
+      "HTTP/1.1 500 Internal Server Error\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 29\r\n"
+      "\r\n"
+      "Saw application error: failed", text);
+}
+
+KJ_TEST("HttpServer bad request, custom error handler") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpServerSettings settings {};
+  settings.errorHandler = TestErrorHandler::instance;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service, settings);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  static constexpr auto request = "bad request\r\n\r\n"_kj;
+  auto writePromise = pipe.ends[1]->write(request.begin(), request.size());
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+  KJ_EXPECT(writePromise.poll(waitScope));
+  writePromise.wait(waitScope);
+
+  static constexpr auto expectedResponse =
+      "HTTP/1.1 400 Bad Request\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 74\r\n"
+      "\r\n"
+      "Saw protocol error: ERROR: The headers sent by your client were not valid."_kj;
+
+  KJ_EXPECT(expectedResponse == response, expectedResponse, response);
+}
+
 class PartialResponseService final: public HttpService {
   // HttpService that sends a partial response then throws.
 public:
