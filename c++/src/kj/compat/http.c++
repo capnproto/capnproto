@@ -4632,7 +4632,8 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> HttpService::connect(kj::StringPtr host)
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpService");
 }
 
-class HttpServer::Connection final: private HttpService::Response {
+class HttpServer::Connection final: private HttpService::Response,
+                                    private HttpServerErrorHandler {
 public:
   Connection(HttpServer& server, kj::AsyncIoStream& stream,
              HttpService& service)
@@ -4777,8 +4778,7 @@ public:
           }
 
           if (currentMethod != nullptr) {
-            return sendError(500, "Internal Server Error", kj::str(
-                "ERROR: The HttpService did not generate a response."));
+            return sendError();
           }
 
           if (httpOutput.isBroken()) {
@@ -4846,49 +4846,23 @@ public:
       } else {
         // Bad request.
 
-        return sendError(400, "Bad Request", kj::str(
-            "ERROR: The headers sent by your client were not valid."));
+        // sendError() uses Response::send(), which requires that we have a currentMethod, but we
+        // never read one. GET seems like the correct choice here.
+        currentMethod = HttpMethod::GET;
+        return sendError("ERROR: The headers sent by your client were not valid.");
       }
     }).catch_([this](kj::Exception&& e) -> kj::Promise<bool> {
-      // Exception; report 500.
+      // Exception; report 5xx.
 
-      if (currentMethod == nullptr) {
-        // Dang, already sent a partial response. Can't do anything else.
-
-        KJ_IF_MAYBE(p, webSocketError) {
-          // sendWebSocketError() was called. Finish sending and close the connection. Don't log
-          // the exception because it's probably a side-effect of this.
-          auto promise = kj::mv(*p);
-          webSocketError = nullptr;
-          return kj::mv(promise);
-        }
-
-        // If it's a DISCONNECTED exception, it's probably that the client disconnected, which is
-        // not really worth logging.
-        if (e.getType() != kj::Exception::Type::DISCONNECTED) {
-          KJ_LOG(ERROR, "HttpService threw exception after generating a partial response",
-                        "too late to report error to client", e);
-        }
-        return false;
+      KJ_IF_MAYBE(p, webSocketError) {
+        // sendWebSocketError() was called. Finish sending and close the connection. Don't log
+        // the exception because it's probably a side-effect of this.
+        auto promise = kj::mv(*p);
+        webSocketError = nullptr;
+        return kj::mv(promise);
       }
 
-      if (e.getType() == kj::Exception::Type::OVERLOADED) {
-        return sendError(503, "Service Unavailable", kj::str(
-            "ERROR: The server is temporarily unable to handle your request. Details:\n\n", e));
-      } else if (e.getType() == kj::Exception::Type::UNIMPLEMENTED) {
-        return sendError(501, "Not Implemented", kj::str(
-            "ERROR: The server does not implement this operation. Details:\n\n", e));
-      } else if (e.getType() == kj::Exception::Type::DISCONNECTED) {
-        // How do we tell an HTTP client that there was a transient network error, and it should
-        // try again immediately? There's no HTTP status code for this (503 is meant for "try
-        // again later, not now"). Here's an idea: Don't send any response; just close the
-        // connection, so that it looks like the connection between the HTTP client and server
-        // was dropped. A good client should treat this exactly the way we want.
-        return false;
-      } else {
-        return sendError(500, "Internal Server Error", kj::str(
-            "ERROR: The server threw an exception. Details:\n\n", e));
-      }
+      return sendError(kj::mv(e));
     });
   }
 
@@ -4903,6 +4877,7 @@ private:
   bool closed = false;
   bool upgraded = false;
   bool webSocketClosed = false;
+  bool closeAfterSend = false;  // True if send() should set Connection: close.
   kj::Maybe<kj::Promise<bool>> webSocketError;
 
   kj::Own<kj::AsyncOutputStream> send(
@@ -4913,6 +4888,10 @@ private:
 
     kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
     kj::String lengthStr;
+
+    if (closeAfterSend) {
+      connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "close";
+    }
 
     if (statusCode == 204 || statusCode == 205 || statusCode == 304) {
       // No entity-body.
@@ -4965,24 +4944,23 @@ private:
         "can't call acceptWebSocket() if the request headers didn't have Upgrade: WebSocket");
 
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
-    currentMethod = nullptr;
+    // Unlike send(), we neither need nor want to null out currentMethod. The error cases below
+    // depend on it being non-null to allow error responses to be sent, and the happy path expects
+    // it to be GET.
 
     if (method != HttpMethod::GET) {
-      return sendWebSocketError(400, "Bad Request", kj::str(
-          "ERROR: WebSocket must be initiated with a GET request."));
+      return sendWebSocketError("ERROR: WebSocket must be initiated with a GET request.");
     }
 
     if (requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_VERSION).orDefault(nullptr) != "13") {
-      return sendWebSocketError(400, "Bad Request", kj::str(
-          "ERROR: The requested WebSocket version is not supported."));
+      return sendWebSocketError("ERROR: The requested WebSocket version is not supported.");
     }
 
     kj::String key;
     KJ_IF_MAYBE(k, requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_KEY)) {
-      currentMethod = HttpMethod::GET;
       key = kj::str(*k);
     } else {
-      return sendWebSocketError(400, "Bad Request", kj::str("ERROR: Missing Sec-WebSocket-Key"));
+      return sendWebSocketError("ERROR: Missing Sec-WebSocket-Key");
     }
 
     auto websocketAccept = generateWebSocketAccept(key);
@@ -5006,24 +4984,43 @@ private:
                               httpInput, httpOutput, nullptr);
   }
 
-  kj::Promise<bool> sendError(uint statusCode, kj::StringPtr statusText, kj::String body) {
-    HttpHeaders failed(server.requestHeaderTable);
-    failed.set(HttpHeaderId::CONNECTION, "close");
-    failed.set(HttpHeaderId::CONTENT_LENGTH, kj::str(body.size()));
+  kj::Promise<bool> sendError(kj::StringPtr message) {
+    closeAfterSend = true;
 
-    failed.set(HttpHeaderId::CONTENT_TYPE, "text/plain");
+    // Client protocol errors always happen on request headers parsing, before we call into the
+    // HttpService, meaning no response has been sent and we can provide a Response object.
+    auto promise = server.settings.errorHandler.orDefault(*this).handleClientProtocolError(
+        message, *this);
 
-    httpOutput.writeHeaders(failed.serializeResponse(statusCode, statusText));
-    httpOutput.writeBodyData(kj::mv(body));
-    httpOutput.finishBody();
-    return httpOutput.flush().then([]() { return false; });  // loop ends after flush
+    return promise.then([this]() { return httpOutput.flush(); })
+                  .then([]() { return false; });  // loop ends after flush
   }
 
-  kj::Own<WebSocket> sendWebSocketError(
-      uint statusCode, kj::StringPtr statusText, kj::String errorMessage) {
+  kj::Promise<bool> sendError(kj::Exception&& exception) {
+    closeAfterSend = true;
+
+    // We only provide the Response object if we know we haven't already sent a response.
+    auto promise = server.settings.errorHandler.orDefault(*this).handleApplicationError(
+        kj::mv(exception), currentMethod.map([this](auto&&) -> Response& { return *this; }));
+
+    return promise.then([this]() { return httpOutput.flush(); })
+                  .then([]() { return false; });  // loop ends after flush
+  }
+
+  kj::Promise<bool> sendError() {
+    closeAfterSend = true;
+
+    // We can provide a Response object, since none has already been sent.
+    auto promise = server.settings.errorHandler.orDefault(*this).handleNoResponse(*this);
+
+    return promise.then([this]() { return httpOutput.flush(); })
+                  .then([]() { return false; });  // loop ends after flush
+  }
+
+  kj::Own<WebSocket> sendWebSocketError(StringPtr errorMessage) {
     kj::Exception exception = KJ_EXCEPTION(FAILED,
         "received bad WebSocket handshake", errorMessage);
-    webSocketError = sendError(statusCode, statusText, kj::mv(errorMessage));
+    webSocketError = sendError(errorMessage);
     kj::throwRecoverableException(kj::mv(exception));
 
     // Fallback path when exceptions are disabled.
@@ -5145,6 +5142,78 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
 
 void HttpServer::taskFailed(kj::Exception&& exception) {
   KJ_LOG(ERROR, "unhandled exception in HTTP server", exception);
+}
+
+kj::Promise<void> HttpServerErrorHandler::handleClientProtocolError(
+    kj::StringPtr message, kj::HttpService::Response& response) {
+  // Default error handler implementation.
+
+  HttpHeaderTable headerTable {};
+  HttpHeaders headers(headerTable);
+  headers.set(HttpHeaderId::CONTENT_TYPE, "text/plain");
+
+  auto errorMessage = kj::str(message);
+  auto body = response.send(400, "Bad Request", headers, errorMessage.size());
+
+  return body->write(errorMessage.begin(), errorMessage.size())
+      .attach(kj::mv(errorMessage), kj::mv(body));
+}
+
+kj::Promise<void> HttpServerErrorHandler::handleApplicationError(
+    kj::Exception exception, kj::Maybe<kj::HttpService::Response&> response) {
+  // Default error handler implementation.
+
+  if (exception.getType() == kj::Exception::Type::DISCONNECTED) {
+    // How do we tell an HTTP client that there was a transient network error, and it should
+    // try again immediately? There's no HTTP status code for this (503 is meant for "try
+    // again later, not now"). Here's an idea: Don't send any response; just close the
+    // connection, so that it looks like the connection between the HTTP client and server
+    // was dropped. A good client should treat this exactly the way we want.
+    //
+    // We also bail here to avoid logging the disconnection, which isn't very interesting.
+    return kj::READY_NOW;
+  }
+
+  KJ_IF_MAYBE(r, response) {
+    HttpHeaderTable headerTable {};
+    HttpHeaders headers(headerTable);
+    headers.set(HttpHeaderId::CONTENT_TYPE, "text/plain");
+
+    kj::String errorMessage;
+    kj::Own<AsyncOutputStream> body;
+
+    if (exception.getType() == kj::Exception::Type::OVERLOADED) {
+      errorMessage = kj::str(
+          "ERROR: The server is temporarily unable to handle your request. Details:\n\n", exception);
+      body = r->send(503, "Service Unavailable", headers, errorMessage.size());
+    } else if (exception.getType() == kj::Exception::Type::UNIMPLEMENTED) {
+      errorMessage = kj::str(
+          "ERROR: The server does not implement this operation. Details:\n\n", exception);
+      body = r->send(501, "Not Implemented", headers, errorMessage.size());
+    } else {
+      errorMessage = kj::str(
+          "ERROR: The server threw an exception. Details:\n\n", exception);
+      body = r->send(500, "Internal Server Error", headers, errorMessage.size());
+    }
+
+    return body->write(errorMessage.begin(), errorMessage.size())
+        .attach(kj::mv(errorMessage), kj::mv(body));
+  }
+
+  KJ_LOG(ERROR, "HttpService threw exception after generating a partial response",
+                "too late to report error to client", exception);
+  return kj::READY_NOW;
+}
+
+kj::Promise<void> HttpServerErrorHandler::handleNoResponse(kj::HttpService::Response& response) {
+  HttpHeaderTable headerTable {};
+  HttpHeaders headers(headerTable);
+  headers.set(HttpHeaderId::CONTENT_TYPE, "text/plain");
+
+  constexpr auto errorMessage = "ERROR: The HttpService did not generate a response."_kj;
+  auto body = response.send(500, "Internal Server Error", headers, errorMessage.size());
+
+  return body->write(errorMessage.begin(), errorMessage.size()).attach(kj::mv(body));
 }
 
 } // namespace kj

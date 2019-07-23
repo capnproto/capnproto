@@ -1283,15 +1283,15 @@ private:
 template <typename T>
 class Maybe<T&>: public DisallowConstCopyIfNotConst<T> {
 public:
-  Maybe(): ptr(nullptr) {}
-  Maybe(T& t): ptr(&t) {}
-  Maybe(T* t): ptr(t) {}
+  constexpr Maybe(): ptr(nullptr) {}
+  constexpr Maybe(T& t): ptr(&t) {}
+  constexpr Maybe(T* t): ptr(t) {}
 
   template <typename U>
-  inline Maybe(Maybe<U&>& other): ptr(other.ptr) {}
+  inline constexpr Maybe(Maybe<U&>& other): ptr(other.ptr) {}
   template <typename U>
-  inline Maybe(const Maybe<U&>& other): ptr(const_cast<const U*>(other.ptr)) {}
-  inline Maybe(decltype(nullptr)): ptr(nullptr) {}
+  inline constexpr Maybe(const Maybe<U&>& other): ptr(const_cast<const U*>(other.ptr)) {}
+  inline constexpr Maybe(decltype(nullptr)): ptr(nullptr) {}
 
   inline Maybe& operator=(T& other) { ptr = &other; return *this; }
   inline Maybe& operator=(T* other) { ptr = other; return *this; }
