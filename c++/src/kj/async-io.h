@@ -749,7 +749,7 @@ public:
     // On Linux, all system calls which yield new file descriptors have flags or variants which
     // set the close-on-exec flag immediately.  Unfortunately, other OS's do not.
 
-    ALREADY_NONBLOCK = 1 << 2
+    ALREADY_NONBLOCK = 1 << 2,
     // Indicates that the file descriptor is known already to be in non-blocking mode, so the flag
     // need not be set again.  Otherwise, all wrap*Fd() methods will enable non-blocking mode
     // automatically.
@@ -757,6 +757,12 @@ public:
     // On Linux, all system calls which yield new file descriptors have flags or variants which
     // enable non-blocking mode immediately.  Unfortunately, other OS's do not.
 #endif
+
+    ALREADY_NODELAY = 1 << 3
+    // Indicates that the caller has already taken care of disabling Nagle's algorithm. For TCP
+    // sockets this means TCP_NODELAY socket option has been set. For other socket types, no action
+    // is necessary to disable Nagle; you can pass ALREADY_NODELAY to save a syscall but it has
+    // no other effect.
   };
 
 #if _WIN32

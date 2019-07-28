@@ -80,6 +80,23 @@ void setCloseOnExec(int fd) {
 #endif
 }
 
+inline void requireNodelay(int fd) {
+#ifdef KJ_DEBUG
+  int val = 0;
+  socklen_t len = sizeof(val);
+  KJ_SYSCALL_HANDLE_ERRORS(::getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char*)&val, &len)) {
+    case ENOTSOCK:
+    case EOPNOTSUPP:
+    case ENOPROTOOPT:
+      // not TCP or not a socket; ignore
+      return;
+    default:
+      KJ_FAIL_SYSCALL("getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)", error);
+  }
+  KJ_REQUIRE(val, "ALREADY_NODELAY was used but the socket does not have TCP_NODELAY set");
+#endif
+}
+
 static constexpr uint NEW_FD_FLAGS =
 #if __linux__ && !__BIONIC__
     LowLevelAsyncIoProvider::ALREADY_CLOEXEC | LowLevelAsyncIoProvider::ALREADY_NONBLOCK |
@@ -153,7 +170,14 @@ public:
       : OwnedFileDescriptor(fd, flags),
         eventPort(eventPort),
         observer(observerSpace.construct(
-            eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ_WRITE)) {}
+            eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ_WRITE)) {
+    if (flags & LowLevelAsyncIoProvider::ALREADY_NODELAY) {
+      requireNodelay(fd);
+    } else {
+      nagleOn = true;  // assume worst
+      setNagle(false);
+    }
+  }
   virtual ~AsyncStreamFd() noexcept(false) {}
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -309,6 +333,10 @@ private:
   Maybe<ForkedPromise<void>> writeDisconnectedPromise;
 
   bool notASocket = false;  // set true on first ENOTSOCK
+  bool notTcp = false;    // set true if TCP option-setting fails
+
+  bool nagleOn = false;
+  // Is Nagle's algorithm currently enabled? We flip it on and off to implement partial writes.
 
   Promise<ReadResult> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                       AutoCloseFd* fdBuffer, size_t maxFds,
@@ -476,6 +504,47 @@ private:
     }
   }
 
+  void setNagle(bool desiredNagleOn) {
+    if (!notASocket && !notTcp && (nagleOn != desiredNagleOn)) {
+      int val = desiredNagleOn ? 0 : 1;  // Nagle on = TCP_NODELAY off
+      KJ_SYSCALL_HANDLE_ERRORS(::setsockopt(getFd(),
+          IPPROTO_TCP, TCP_NODELAY, (char*)&val, sizeof(val))) {
+        case ENOTSOCK:
+          notASocket = true;
+          break;
+        case EOPNOTSUPP:
+        case ENOPROTOOPT:
+          notTcp = true;
+          break;
+        default:
+          KJ_FAIL_SYSCALL("setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, ...)", error);
+      }
+      nagleOn = desiredNagleOn;
+    }
+  }
+
+  void applyWriteType(WriteType type) {
+    // Call after completing a write to perform any needed flushes.
+
+    switch (type) {
+      case WriteType::PARTIAL:
+        // Nothing to do.
+        break;
+      case WriteType::FLUSH:
+#ifdef MSG_MORE
+        // Nothing to do -- we always disable Nagle, use MSG_MORE on partial writes, and omit it on
+        // flushing writes, so we're good.
+#else
+        // Disable Nagle's algorithm to force data to be written out now.
+        setNagle(false);
+#endif
+        break;
+      case WriteType::END:
+        shutdownWrite();
+        break;
+    }
+  }
+
   Promise<void> writeInternal(WriteType type, ArrayPtr<const byte> firstPiece,
                               ArrayPtr<const ArrayPtr<const byte>> morePieces,
                               ArrayPtr<const int> fds) {
@@ -497,22 +566,21 @@ private:
 
     if (iovTotal == 0) {
       KJ_REQUIRE(fds.size() == 0, "can't write FDs without bytes");
-      if (type == WriteType::END) {
-        shutdownWrite();
-      }
+      applyWriteType(type);
       return kj::READY_NOW;
     }
 
     int sendFlags = 0;
-#ifdef MSG_MORE
     if (type == WriteType::PARTIAL) {
+#ifdef MSG_MORE
       // Hint to kernel that more data is coming soon, so don't send out partial packets.
       // TODO(now): We can't set this flag on non-sockets...
       sendFlags |= MSG_MORE;
-    }
 #else
-    // TODO(perf): Turn on TCP_NODELAY for partial writes, then turn it off to flush.
+      // Turn on Nagle's algorithm to coalesce this write with later writes.
+      setNagle(true);
 #endif
+    }
 
     ssize_t n;
     if (notASocket || (fds.size() == 0 && sendFlags == 0)) {
@@ -625,9 +693,7 @@ private:
       } else if (morePieces.size() == 0) {
         // First piece was fully-consumed and there are no more pieces, so we're done.
         KJ_DASSERT(n == firstPiece.size(), n);
-        if (type == WriteType::END) {
-          shutdownWrite();
-        }
+        applyWriteType(type);
         return READY_NOW;
       } else {
         // First piece was fully consumed, so move on to the next piece.
@@ -665,27 +731,22 @@ public:
   socklen_t getRawSize() const { return addrlen; }
 
   int socket(int type) const {
-    bool isStream = type == SOCK_STREAM;
-
     int result;
 #if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
 #endif
     KJ_SYSCALL(result = ::socket(addr.generic.sa_family, type, 0));
 
-    if (isStream && (addr.generic.sa_family == AF_INET ||
-                     addr.generic.sa_family == AF_INET6)) {
-      // TODO(perf):  As a hack for the 0.4 release we are always setting
-      //   TCP_NODELAY because Nagle's algorithm pretty much kills Cap'n Proto's
-      //   RPC protocol.  Later, we should extend the interface to provide more
-      //   control over this.  Perhaps write() should have a flag which
-      //   specifies whether to pass MSG_MORE.
-      int one = 1;
-      KJ_SYSCALL(setsockopt(
-          result, IPPROTO_TCP, TCP_NODELAY, (char*)&one, sizeof(one)));
-    }
-
     return result;
+  }
+
+  uint getWrappingFlags() {
+    if (addr.generic.sa_family == AF_INET || addr.generic.sa_family == AF_INET6) {
+      return NEW_FD_FLAGS;
+    } else {
+      // No need to set TCP_NODELAY on a non-TCP socket.
+      return NEW_FD_FLAGS | LowLevelAsyncIoProvider::ALREADY_NODELAY;
+    }
   }
 
   void bind(int sockfd) const {
@@ -1107,7 +1168,22 @@ public:
   FdConnectionReceiver(UnixEventPort& eventPort, int fd,
                        LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags)
       : OwnedFileDescriptor(fd, flags), eventPort(eventPort), filter(filter),
-        observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ) {}
+        observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ) {
+    if (flags & LowLevelAsyncIoProvider::ALREADY_NODELAY) {
+      requireNodelay(fd);
+    } else {
+      int val = 1;
+      KJ_SYSCALL_HANDLE_ERRORS(::setsockopt(
+          getFd(), IPPROTO_TCP, TCP_NODELAY, (char*)&val, sizeof(val))) {
+        case EOPNOTSUPP:
+        case ENOPROTOOPT:
+          // not TCP; ignore
+          break;
+        default:
+          KJ_FAIL_SYSCALL("setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)", error);
+      }
+    }
+  }
 
   Promise<Own<AsyncIoStream>> accept() override {
     int newFd;
@@ -1129,7 +1205,9 @@ public:
         close(newFd);
         return accept();
       } else {
-        return Own<AsyncIoStream>(heap<AsyncStreamFd>(eventPort, newFd, NEW_FD_FLAGS));
+        // TCP_NODELAY is inherited from the listen socket.
+        return Own<AsyncIoStream>(heap<AsyncStreamFd>(eventPort, newFd,
+            NEW_FD_FLAGS | LowLevelAsyncIoProvider::ALREADY_NODELAY));
       }
     } else {
       int error = errno;
@@ -1231,16 +1309,16 @@ public:
   inline WaitScope& getWaitScope() { return waitScope; }
 
   Own<AsyncInputStream> wrapInputFd(int fd, uint flags = 0) override {
-    return heap<AsyncStreamFd>(eventPort, fd, flags);
+    return heap<AsyncStreamFd>(eventPort, fd, flags | ALREADY_NODELAY);
   }
   Own<AsyncOutputStream> wrapOutputFd(int fd, uint flags = 0) override {
-    return heap<AsyncStreamFd>(eventPort, fd, flags);
+    return heap<AsyncStreamFd>(eventPort, fd, flags | ALREADY_NODELAY);
   }
   Own<AsyncIoStream> wrapSocketFd(int fd, uint flags = 0) override {
     return heap<AsyncStreamFd>(eventPort, fd, flags);
   }
   Own<AsyncCapabilityStream> wrapUnixSocketFd(Fd fd, uint flags = 0) override {
-    return heap<AsyncStreamFd>(eventPort, fd, flags);
+    return heap<AsyncStreamFd>(eventPort, fd, flags | ALREADY_NODELAY);
   }
   Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
       int fd, const struct sockaddr* addr, uint addrlen, uint flags = 0) override {
@@ -1334,7 +1412,7 @@ public:
       KJ_SYSCALL(::listen(fd, SOMAXCONN));
     }
 
-    return lowLevel.wrapListenSocketFd(fd, filter, NEW_FD_FLAGS);
+    return lowLevel.wrapListenSocketFd(fd, filter, addrs[0].getWrappingFlags());
   }
 
   Own<DatagramPort> bindDatagramPort() override {
@@ -1391,7 +1469,7 @@ private:
       } else {
         int fd = addrs[0].socket(SOCK_STREAM);
         return lowLevel.wrapConnectingSocketFd(
-            fd, addrs[0].getRaw(), addrs[0].getRawSize(), NEW_FD_FLAGS);
+            fd, addrs[0].getRaw(), addrs[0].getRawSize(), addrs[0].getWrappingFlags());
       }
     }).then([](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
       // Success, pass along.
@@ -1662,8 +1740,8 @@ public:
 #endif
     KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
     return TwoWayPipe { {
-      lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS),
-      lowLevel.wrapSocketFd(fds[1], NEW_FD_FLAGS)
+      lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS | LowLevelAsyncIoProvider::ALREADY_NODELAY),
+      lowLevel.wrapSocketFd(fds[1], NEW_FD_FLAGS | LowLevelAsyncIoProvider::ALREADY_NODELAY)
     } };
   }
 
@@ -1696,12 +1774,14 @@ public:
     int threadFd = fds[1];
     KJ_ON_SCOPE_FAILURE(close(threadFd));
 
-    auto pipe = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
+    auto pipe = lowLevel.wrapSocketFd(fds[0],
+        NEW_FD_FLAGS | LowLevelAsyncIoProvider::ALREADY_NODELAY);
 
     auto thread = heap<Thread>(kj::mvCapture(startFunc,
         [threadFd](Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)>&& startFunc) {
       LowLevelAsyncIoProviderImpl lowLevel;
-      auto stream = lowLevel.wrapSocketFd(threadFd, NEW_FD_FLAGS);
+      auto stream = lowLevel.wrapSocketFd(threadFd,
+          NEW_FD_FLAGS | LowLevelAsyncIoProvider::ALREADY_NODELAY);
       AsyncIoProviderImpl ioProvider(lowLevel);
       startFunc(ioProvider, *stream, lowLevel.getWaitScope());
     }));

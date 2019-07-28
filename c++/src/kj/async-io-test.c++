@@ -47,6 +47,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #endif
 
 namespace kj {
@@ -2581,6 +2582,24 @@ KJ_TEST("non-flushing TCP send is delayed") {
 
   auto listenAddr = network.parseAddress("*").wait(io.waitScope);
   auto listener = listenAddr->listen();
+
+#ifdef TCP_QUICKACK
+  // On systems that don't have MSG_MORE, non-flushing writes enable Nagle's algorithm. In order
+  // to detect this in a test, we look for the pathological behavior of Nagle's algorithm combined
+  // with delayed ACKs. On some systems, though, delayed ACKs are not used by default, or are
+  // adaptive. If TCP_QUICKACK is defined, we try to use it to tell the system that we really do
+  // want delayed ACKs.
+  //
+  // (In particular this allows the test to pass on Linux even when MSG_MORE is disabled, forcing
+  // it to use the Nagle code path. In order to disable MSG_MORE, do `#undef MSG_MORE` in
+  // `async-io-unix.c++` immediately after the #includes.)
+  {
+    // Disable QUICKACK = enable delayed ACK
+    int val = 0;
+    listener->setsockopt(IPPROTO_TCP, TCP_QUICKACK, &val, sizeof(val));
+  }
+#endif
+
   auto connectAddr = network.parseAddress("localhost", listener->getPort()).wait(io.waitScope);
   auto client = connectAddr->connect().wait(io.waitScope);
   auto server = listener->accept().wait(io.waitScope);
