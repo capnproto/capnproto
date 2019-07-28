@@ -65,22 +65,44 @@ public:
   KJ_DISALLOW_COPY(ReadyOutputStreamWrapper);
 
   kj::Maybe<size_t> write(kj::ArrayPtr<const byte> src);
-  // Writes bytes from `src`, returning the number of bytes written. Never returns zero. Returns
-  // nullptr if not ready.
+  // Writes bytes from `src`, returning the number of bytes written. Only returns zero if
+  // `src.size()` is zero. Returns nullptr if not ready.
 
   kj::Promise<void> whenReady();
   // Returns a promise that resolves when write() will return non-null.
 
+  kj::Promise<void> flush(AsyncOutputStream::WriteType type = AsyncOutputStream::WriteType::FLUSH);
+  // Flush all buffers (including in the underlying stream) and wait for all writes to complete.
+  //
+  // The given WriteType will be used for the last write to the underlying stream. The default is
+  // appropriate to force a flush all the way down the stack.
+  //
+  // Dropping the returned promise does not cancel the flush; it will continue running in the
+  // background as long as ReadyOutputStreamWrapper still exists. So, a caller that doesn't care
+  // about completion can ignore the return value.
+
+  inline kj::Promise<void> softFlush() { return flush(AsyncOutputStream::WriteType::PARTIAL); }
+  // Shortcut for flush(PARTIAL). This has the effect of flushing ReadyOutputStreamWrapper's own
+  // buffer but does not force flushing of any buffers below it.
+
+  inline kj::Promise<void> end() { return flush(AsyncOutputStream::WriteType::END); }
+  // Writes EOF and waits for all writes to finish. Shortcut for flush(END);
+
 private:
   AsyncOutputStream& output;
-  ArrayPtr<const byte> segments[2];
+  ArrayPtr<const byte> moreData[1];
   kj::ForkedPromise<void> pumpTask = nullptr;
   bool isPumping = false;
+  bool ended = false;
+
+  AsyncOutputStream::WriteType nextWriteType = AsyncOutputStream::WriteType::PARTIAL;
 
   uint start = 0;   // index of first byte
   uint filled = 0;  // number of bytes currently in buffer
 
   byte buffer[8192];
+
+  inline bool shouldPump();
 
   kj::Promise<void> pump();
   // Asyncronously push the buffer out to the underlying stream.

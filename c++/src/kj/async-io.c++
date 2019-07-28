@@ -86,6 +86,11 @@ public:
         .then([this](size_t amount) -> Promise<uint64_t> {
       if (amount == 0) return doneSoFar;  // EOF
       doneSoFar += amount;
+      // TODO(now): How do we decide the write type? I guess if the input stream has more data
+      //   available, we should use PARTIAL to allow coalescing. If not, then we must conservatively
+      //   assume we reached a message boundary, and use FLUSH. This requires some way to check
+      //   if there is more data without blocking... maybe officially define that minBytes can be
+      //   0?
       return output.write(buffer, amount)
           .then([this]() {
         return pump();
@@ -237,29 +242,37 @@ public:
     }
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    if (size == 0) {
-      return READY_NOW;
-    } else KJ_IF_MAYBE(s, state) {
-      return s->write(buffer, size);
-    } else {
-      return newAdaptedPromise<void, BlockedWrite>(
-          *this, arrayPtr(reinterpret_cast<const byte*>(buffer), size), nullptr);
+  Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                      ArrayPtr<const ArrayPtr<const byte>> moreData) override {
+    while (data.size() == 0) {
+      if (moreData.size() == 0) {
+        KJ_IF_MAYBE(s, state) {
+          return s->write(type, data, moreData);
+        } else {
+          switch (type) {
+            case WriteType::PARTIAL:
+              // No-op write.
+              break;
+            case WriteType::FLUSH:
+              // Flush. We don't have any buffers, so nothing to do here.
+              break;
+            case WriteType::END:
+              // EOF. This is a state change.
+              ownState = kj::heap<ShutdownedWrite>();
+              state = *ownState;
+              break;
+          }
+          return READY_NOW;
+        }
+      }
+      data = moreData[0];
+      moreData = moreData.slice(1, moreData.size());
     }
-  }
 
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    while (pieces.size() > 0 && pieces[0].size() == 0) {
-      pieces = pieces.slice(1, pieces.size());
-    }
-
-    if (pieces.size() == 0) {
-      return kj::READY_NOW;
-    } else KJ_IF_MAYBE(s, state) {
-      return s->write(pieces);
+    KJ_IF_MAYBE(s, state) {
+      return s->write(type, data, moreData);
     } else {
-      return newAdaptedPromise<void, BlockedWrite>(
-          *this, pieces[0], pieces.slice(1, pieces.size()));
+      return newAdaptedPromise<void, BlockedWrite>(*this, type, data, moreData);
     }
   }
 
@@ -332,9 +345,10 @@ private:
 
   public:
     BlockedWrite(PromiseFulfiller<void>& fulfiller, AsyncPipe& pipe,
-                 ArrayPtr<const byte> writeBuffer,
+                 WriteType type, ArrayPtr<const byte> writeBuffer,
                  ArrayPtr<const ArrayPtr<const byte>> morePieces)
-        : fulfiller(fulfiller), pipe(pipe), writeBuffer(writeBuffer), morePieces(morePieces) {
+        : fulfiller(fulfiller), pipe(pipe), type(type),
+          writeBuffer(writeBuffer), morePieces(morePieces) {
       KJ_REQUIRE(pipe.state == nullptr);
       pipe.state = *this;
     }
@@ -364,8 +378,12 @@ private:
           fulfiller.fulfill();
           pipe.endState(*this);
 
-          if (totalRead >= minBytes) {
-            // Also all done reading.
+          if (type == WriteType::END) {
+            // EOF.
+            pipe.shutdownWrite();
+            return totalRead;
+          } else if (totalRead >= minBytes) {
+            // Received enough to complete the read.
             return totalRead;
           } else {
             return pipe.tryRead(readBuffer.begin(), minBytes - totalRead, readBuffer.size())
@@ -389,16 +407,19 @@ private:
       return totalRead;
     }
 
-    Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+    Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t requested) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
 
-      if (amount < writeBuffer.size()) {
+      // TODO(now): endWriteType should be provided as parameter to pumpTo().
+      WriteType endWriteType = WriteType::FLUSH;
+
+      if (requested < writeBuffer.size()) {
         // Consume a portion of the write buffer.
-        return canceler.wrap(output.write(writeBuffer.begin(), amount)
-            .then([this,amount]() {
-          writeBuffer = writeBuffer.slice(amount, writeBuffer.size());
+        return canceler.wrap(output.writePartial(writeBuffer)
+            .then([this,requested]() {
+          writeBuffer = writeBuffer.slice(requested, writeBuffer.size());
           // We pumped the full amount, so we're done pumping.
-          return amount;
+          return requested;
         }));
       }
 
@@ -406,61 +427,56 @@ private:
       uint64_t actual = writeBuffer.size();
       size_t i = 0;
       while (i < morePieces.size() &&
-             amount >= actual + morePieces[i].size()) {
+             requested >= actual + morePieces[i].size()) {
         actual += morePieces[i++].size();
       }
 
-      // Write the first piece.
-      auto promise = output.write(writeBuffer.begin(), writeBuffer.size());
-
-      // Write full pieces as a single gather-write.
-      if (i > 0) {
-        auto more = morePieces.slice(0, i);
-        promise = promise.then([&output,more]() { return output.write(more); });
-      }
-
       if (i == morePieces.size()) {
-        // This will complete the write.
-        return canceler.wrap(promise.then([this,&output,amount,actual]() -> Promise<uint64_t> {
-          canceler.release();
-          fulfiller.fulfill();
-          pipe.endState(*this);
-
-          if (actual == amount) {
-            // Oh, we had exactly enough.
+        // Pump consumes entire write.
+        if (actual == requested || type == WriteType::END) {
+          // This is the last write of the pump.
+          return canceler.wrap(output.write(endWriteType, writeBuffer, morePieces)
+              .then([this, actual]() mutable {
+            canceler.release();
+            fulfiller.fulfill();
+            pipe.endState(*this);
             return actual;
-          } else {
-            return pipe.pumpTo(output, amount - actual)
+          }));
+        } else {
+          // The pump continues after this write.
+          return canceler.wrap(output.write(type, writeBuffer, morePieces)
+              .then([this, requested, actual, &output]() mutable {
+            canceler.release();
+            fulfiller.fulfill();
+            pipe.endState(*this);
+            return pipe.pumpTo(output, requested - actual)
                 .then([actual](uint64_t actual2) { return actual + actual2; });
-          }
-        }));
+          }));
+        }
       } else {
-        // Pump ends mid-piece. Write the last, partial piece.
-        auto n = amount - actual;
-        auto splitPiece = morePieces[i];
-        KJ_ASSERT(n <= splitPiece.size());
-        auto newWriteBuffer = splitPiece.slice(n, splitPiece.size());
-        auto newMorePieces = morePieces.slice(i + 1, morePieces.size());
-        auto prefix = splitPiece.slice(0, n);
-        if (prefix.size() > 0) {
-          promise = promise.then([&output,prefix]() {
-            return output.write(prefix.begin(), prefix.size());
+        // Pump consumes part of the write.
+        auto remaining = requested - actual;
+        auto promise = output.write(
+            remaining > 0 ? WriteType::PARTIAL : type,
+            writeBuffer, morePieces.slice(0, i));
+
+        writeBuffer = morePieces[i];
+        morePieces = morePieces.slice(i + 1);
+
+        if (remaining > 0) {
+          // Ugh, the pump ends in the middle of a piece that isn't the first piece. In this case
+          // we actually need to do an additional write.
+          promise = promise.then([this, &output, remaining]() {
+            return output.write(type, writeBuffer.slice(0, remaining));
           });
         }
 
-        return canceler.wrap(promise.then([this,newWriteBuffer,newMorePieces,amount]() {
-          writeBuffer = newWriteBuffer;
-          morePieces = newMorePieces;
-          canceler.release();
-          return amount;
-        }));
+        return canceler.wrap(promise.then([requested]() { return requested; }));
       }
     }
 
-    Promise<void> write(const void* buffer, size_t size) override {
-      KJ_FAIL_REQUIRE("can't write() again until previous write() completes");
-    }
-    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                        ArrayPtr<const ArrayPtr<const byte>> moreData) override {
       KJ_FAIL_REQUIRE("can't write() again until previous write() completes");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -489,6 +505,7 @@ private:
   private:
     PromiseFulfiller<void>& fulfiller;
     AsyncPipe& pipe;
+    WriteType type;
     ArrayPtr<const byte> writeBuffer;
     ArrayPtr<const ArrayPtr<const byte>> morePieces;
     Canceler canceler;
@@ -586,10 +603,8 @@ private:
       pipe.abortRead();
     }
 
-    Promise<void> write(const void* buffer, size_t size) override {
-      KJ_FAIL_REQUIRE("can't write() again until previous tryPumpFrom() completes");
-    }
-    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                        ArrayPtr<const ArrayPtr<const byte>> moreData) override {
       KJ_FAIL_REQUIRE("can't write() again until previous tryPumpFrom() completes");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -642,92 +657,50 @@ private:
       KJ_FAIL_REQUIRE("can't read() again until previous read() completes");
     }
 
-    Promise<void> write(const void* writeBuffer, size_t size) override {
+    Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                        ArrayPtr<const ArrayPtr<const byte>> moreData) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
 
-      if (size < readBuffer.size()) {
+      if (data.size() < readBuffer.size()) {
         // Consume a portion of the read buffer.
-        memcpy(readBuffer.begin(), writeBuffer, size);
-        readSoFar += size;
-        readBuffer = readBuffer.slice(size, readBuffer.size());
-        if (readSoFar >= minBytes) {
-          // We've read enough to close out this read.
-          fulfiller.fulfill(kj::cp(readSoFar));
-          pipe.endState(*this);
+        auto n = data.size();
+        memcpy(readBuffer.begin(), data.begin(), n);
+        readSoFar += n;
+        readBuffer = readBuffer.slice(n, readBuffer.size());
+
+        if (moreData.size() == 0) {
+          // Consumed all written pieces.
+          if (readSoFar >= minBytes || type == WriteType::END) {
+            // This read is complete.
+            fulfiller.fulfill(kj::cp(readSoFar));
+            pipe.endState(*this);
+
+            switch (type) {
+              case WriteType::PARTIAL:
+              case WriteType::FLUSH:
+                return READY_NOW;
+
+              case WriteType::END:
+                // Need to change state to EOF.
+                return pipe.write(type, nullptr, nullptr);;
+            }
+            KJ_UNREACHABLE;
+          } else {
+            return READY_NOW;
+          }
+        } else {
+          return write(type, moreData[0], moreData.slice(1));
         }
-        return READY_NOW;
       } else {
         // Consume entire read buffer.
         auto n = readBuffer.size();
         fulfiller.fulfill(readSoFar + n);
         pipe.endState(*this);
-        memcpy(readBuffer.begin(), writeBuffer, n);
-        if (n == size) {
-          // That's it.
-          return READY_NOW;
-        } else {
-          return pipe.write(reinterpret_cast<const byte*>(writeBuffer) + n, size - n);
-        }
+        memcpy(readBuffer.begin(), data.begin(), n);
+
+        data = data.slice(n);
+        return pipe.write(type, data, moreData);
       }
-    }
-
-    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
-
-      while (pieces.size() > 0) {
-        if (pieces[0].size() < readBuffer.size()) {
-          // Consume a portion of the read buffer.
-          auto n = pieces[0].size();
-          memcpy(readBuffer.begin(), pieces[0].begin(), n);
-          readSoFar += n;
-          readBuffer = readBuffer.slice(n, readBuffer.size());
-          pieces = pieces.slice(1, pieces.size());
-          // loop
-        } else {
-          // Consume entire read buffer.
-          auto n = readBuffer.size();
-          fulfiller.fulfill(readSoFar + n);
-          pipe.endState(*this);
-          memcpy(readBuffer.begin(), pieces[0].begin(), n);
-
-          auto restOfPiece = pieces[0].slice(n, pieces[0].size());
-          pieces = pieces.slice(1, pieces.size());
-          if (restOfPiece.size() == 0) {
-            // We exactly finished the current piece, so just issue a write for the remaining
-            // pieces.
-            if (pieces.size() == 0) {
-              // Nothing left.
-              return READY_NOW;
-            } else {
-              // Write remaining pieces.
-              return pipe.write(pieces);
-            }
-          } else {
-            // Unfortunately we have to execute a separate write() for the remaining part of this
-            // piece, because we can't modify the pieces array.
-            auto promise = pipe.write(restOfPiece.begin(), restOfPiece.size());
-            if (pieces.size() == 0) {
-              // No more pieces so that's it.
-              return kj::mv(promise);
-            } else {
-              // Also need to write the remaining pieces.
-              auto& pipeRef = pipe;
-              return promise.then([pieces,&pipeRef]() {
-                return pipeRef.write(pieces);
-              });
-            }
-          }
-        }
-      }
-
-      // Consumed all written pieces.
-      if (readSoFar >= minBytes) {
-        // We've read enough to close out this read.
-        fulfiller.fulfill(kj::cp(readSoFar));
-        pipe.endState(*this);
-      }
-
-      return READY_NOW;
     }
 
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -805,7 +778,9 @@ private:
   public:
     BlockedPumpTo(PromiseFulfiller<uint64_t>& fulfiller, AsyncPipe& pipe,
                   AsyncOutputStream& output, uint64_t amount)
-        : fulfiller(fulfiller), pipe(pipe), output(output), amount(amount) {
+        : fulfiller(fulfiller), pipe(pipe), output(output), amount(amount),
+          // TODO(now): endWriteType should be provided as parameter to pumpTo().
+          endWriteType(WriteType::FLUSH) {
       KJ_REQUIRE(pipe.state == nullptr);
       pipe.state = *this;
     }
@@ -821,95 +796,85 @@ private:
       KJ_FAIL_REQUIRE("can't read() again until previous pumpTo() completes");
     }
 
-    Promise<void> write(const void* writeBuffer, size_t size) override {
+    Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                        ArrayPtr<const ArrayPtr<const byte>> moreData) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
 
-      auto actual = kj::min(amount - pumpedSoFar, size);
-      return canceler.wrap(output.write(writeBuffer, actual)
-          .then([this,size,actual,writeBuffer]() -> kj::Promise<void> {
-        canceler.release();
-        pumpedSoFar += actual;
-
-        KJ_ASSERT(pumpedSoFar <= amount);
-        KJ_ASSERT(actual <= size);
-
-        if (pumpedSoFar == amount) {
-          // Done with pump.
-          fulfiller.fulfill(kj::cp(pumpedSoFar));
-          pipe.endState(*this);
-        }
-
-        if (actual == size) {
-          return kj::READY_NOW;
-        } else {
-          KJ_ASSERT(pumpedSoFar == amount);
-          return pipe.write(reinterpret_cast<const byte*>(writeBuffer) + actual, size - actual);
-        }
-      }));
-    }
-
-    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
-
-      size_t size = 0;
       size_t needed = amount - pumpedSoFar;
-      for (auto i: kj::indices(pieces)) {
-        if (pieces[i].size() > needed) {
-          // The pump ends in the middle of this write.
 
-          auto promise = output.write(pieces.slice(0, i));
+      if (data.size() > needed) {
+        // The pump ends in the middle of the first piece.
+        auto first = data.slice(0, needed);
+        data = data.slice(needed);
+        return canceler.wrap(output.write(endWriteType, first)
+            .then([this, type, data, moreData]() mutable {
+          canceler.release();
+          fulfiller.fulfill(kj::cp(amount));
+          pipe.endState(*this);
+          return pipe.write(type, data, moreData);
+        }));
+      }
 
-          if (needed > 0) {
-            // The pump includes part of this piece, but not all. Unfortunately we need to split
-            // writes.
-            auto partial = pieces[i].slice(0, needed);
-            promise = promise.then([this,partial]() {
-              return output.write(partial.begin(), partial.size());
-            });
-            auto partial2 = pieces[i].slice(needed, pieces[i].size());
-            promise = canceler.wrap(promise.then([this,partial2]() {
+      size_t size = data.size();
+      needed -= data.size();
+
+      for (auto i: kj::indices(moreData)) {
+        if (moreData[i].size() > needed) {
+          // The pump ends before the end of this piece.
+
+          if (needed == 0) {
+            // The pump nicely ended between two pieces, which makes things easier.
+            auto rest = moreData.slice(i);
+            return canceler.wrap(output.write(endWriteType, data, moreData.slice(0, i))
+                .then([this, type, rest]() mutable {
               canceler.release();
               fulfiller.fulfill(kj::cp(amount));
               pipe.endState(*this);
-              return pipe.write(partial2.begin(), partial2.size());
+              return pipe.write(type, rest[0], rest.slice(1));
             }));
-            ++i;
           } else {
-            // The pump ends exactly at the end of a piece, how nice.
-            promise = canceler.wrap(promise.then([this]() {
+            // The pump includes part of this piece, but not all. Unfortunately, we don't have an
+            // easy way to split a buffer other than the first one. We'll need to issue two writes.
+
+            auto partial = moreData[i].slice(0, needed);
+            auto partial2 = moreData[i].slice(needed);
+            auto rest = moreData.slice(i + 1);
+
+            return canceler.wrap(output.writePartial(data, moreData.slice(0, i))
+                .then([this, partial]() mutable {
+              return output.write(endWriteType, partial);
+            }).then([this, type, partial2, rest]() mutable {
               canceler.release();
               fulfiller.fulfill(kj::cp(amount));
               pipe.endState(*this);
+              return pipe.write(type, partial2, rest);
             }));
           }
-
-          auto remainder = pieces.slice(i, pieces.size());
-          if (remainder.size() > 0) {
-            auto& pipeRef = pipe;
-            promise = promise.then([&pipeRef,remainder]() {
-              return pipeRef.write(remainder);
-            });
-          }
-
-          return promise;
         } else {
-          size += pieces[i].size();
-          needed -= pieces[i].size();
+          size += moreData[i].size();
+          needed -= moreData[i].size();
         }
       }
 
       // Turns out we can forward this whole write.
       KJ_ASSERT(size <= amount - pumpedSoFar);
-      return canceler.wrap(output.write(pieces).then([this,size]() {
-        pumpedSoFar += size;
-        KJ_ASSERT(pumpedSoFar <= amount);
-        if (pumpedSoFar == amount) {
+      pumpedSoFar += size;
+
+      if (pumpedSoFar == amount || type == WriteType::END) {
+        // This is the last write of the pump, either because it'll exactly reach the limit or
+        // because it's an EOF.
+        return canceler.wrap(output.write(endWriteType, data, moreData)
+            .then([this]() {
           // Done pumping.
           canceler.release();
-          fulfiller.fulfill(kj::cp(amount));
+          fulfiller.fulfill(kj::cp(pumpedSoFar));
           pipe.endState(*this);
-        }
-      }));
+        }));
+      } else {
+        // This write will not complete the pump. We forward through the write type (which is
+        // either PARTIAL or FLUSH) to keep the pump as transparent as possible.
+        return canceler.wrap(output.write(type, data, moreData));
+      }
     }
 
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount2) override {
@@ -972,6 +937,7 @@ private:
     AsyncPipe& pipe;
     AsyncOutputStream& output;
     uint64_t amount;
+    WriteType endWriteType;
     size_t pumpedSoFar = 0;
     Canceler canceler;
   };
@@ -995,10 +961,8 @@ private:
       // ignore repeated abort
     }
 
-    Promise<void> write(const void* buffer, size_t size) override {
-      return KJ_EXCEPTION(DISCONNECTED, "reader stopped reading");
-    }
-    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                        ArrayPtr<const ArrayPtr<const byte>> moreData) override {
       return KJ_EXCEPTION(DISCONNECTED, "reader stopped reading");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -1057,10 +1021,8 @@ private:
       // ignore abort from other end
     }
 
-    Promise<void> write(const void* buffer, size_t size) override {
-      return KJ_EXCEPTION(DISCONNECTED, "writes have been aborted");
-    }
-    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                        ArrayPtr<const ArrayPtr<const byte>> moreData) override {
       return KJ_EXCEPTION(DISCONNECTED, "writes have been aborted");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -1093,10 +1055,8 @@ private:
       // ignore
     }
 
-    Promise<void> write(const void* buffer, size_t size) override {
-      KJ_FAIL_REQUIRE("shutdownWrite() has been called");
-    }
-    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                        ArrayPtr<const ArrayPtr<const byte>> moreData) override {
       KJ_FAIL_REQUIRE("shutdownWrite() has been called");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -1150,12 +1110,9 @@ public:
     });
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    return pipe->write(buffer, size);
-  }
-
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    return pipe->write(pieces);
+  Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                      ArrayPtr<const ArrayPtr<const byte>> moreData) override {
+    return pipe->write(type, data, moreData);
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(
@@ -1197,11 +1154,9 @@ public:
     in->abortRead();
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    return out->write(buffer, size);
-  }
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    return out->write(pieces);
+  Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                      ArrayPtr<const ArrayPtr<const byte>> moreData) override {
+    return out->write(type, data, moreData);
   }
   Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount) override {
@@ -1562,10 +1517,6 @@ private:
 
       uint64_t amount = 0;
 
-      // TODO(someday): This consumes data from the buffer, but we cannot know if the stream to
-      //   which we're pumping will accept it until after the write() promise completes. If the
-      //   write() promise rejects, we lose this data. We should consume the data from the buffer
-      //   only after successful writes.
       auto writeBuffer = inBuffer.asArray(limit, amount);
       KJ_ASSERT(limit >= amount);
       if (amount > 0) {
@@ -1573,8 +1524,13 @@ private:
 
         // TODO(soon): Replace try/catch with kj::evalNow() to work with -fno-exceptions.
         try {
-          promise = output.write(writeBuffer).attach(mv(writeBuffer));
+          promise = output.write(
+              inBuffer.empty() ? AsyncOutputStream::WriteType::FLUSH
+                               : AsyncOutputStream::WriteType::PARTIAL,
+              writeBuffer[0], writeBuffer.slice(1)).attach(mv(writeBuffer));
         } catch (const Exception& exception) {
+          // Write failed. Note that we don't know, in this case, whether the bytes were actually
+          // written out to the stream or not (or even partially).
           reject(cp(exception));
           return READY_NOW;
         }

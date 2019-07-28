@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "readiness-io.h"
+#include <kj/debug.h>
 
 namespace kj {
 
@@ -70,7 +71,7 @@ ReadyOutputStreamWrapper::ReadyOutputStreamWrapper(AsyncOutputStream& output): o
 ReadyOutputStreamWrapper::~ReadyOutputStreamWrapper() noexcept(false) {}
 
 kj::Maybe<size_t> ReadyOutputStreamWrapper::write(kj::ArrayPtr<const byte> data) {
-  if (data.size() == 0) return size_t(0);
+  KJ_REQUIRE(!ended, "already ended");
 
   if (filled == sizeof(buffer)) {
     // No space.
@@ -96,7 +97,7 @@ kj::Maybe<size_t> ReadyOutputStreamWrapper::write(kj::ArrayPtr<const byte> data)
 
   filled += result;
 
-  if (!isPumping) {
+  if (!isPumping && shouldPump()) {
     isPumping = true;
     pumpTask = kj::evalNow([&]() {
       return pump();
@@ -106,8 +107,39 @@ kj::Maybe<size_t> ReadyOutputStreamWrapper::write(kj::ArrayPtr<const byte> data)
   return result;
 }
 
+kj::Promise<void> ReadyOutputStreamWrapper::flush(AsyncOutputStream::WriteType type) {
+  KJ_REQUIRE(!ended, "already ended");
+
+  ended = type == AsyncOutputStream::WriteType::END;
+
+  nextWriteType = kj::max(type, nextWriteType);
+  if (!isPumping && shouldPump()) {
+    isPumping = true;
+    pumpTask = kj::evalNow([&]() {
+      return pump();
+    }).fork();
+  }
+
+  if (isPumping) {
+    return pumpTask.addBranch();
+  } else {
+    return kj::READY_NOW;
+  }
+}
+
 kj::Promise<void> ReadyOutputStreamWrapper::whenReady() {
-  return pumpTask.addBranch();
+  if (isPumping) {
+    // While there might be space in the buffer now, it's best if the caller waits until the
+    // underlying output signals that it wants more data.
+    return pumpTask.addBranch();
+  } else {
+    return kj::READY_NOW;
+  }
+}
+
+inline bool ReadyOutputStreamWrapper::shouldPump() {
+  // Only actively pump if the buffer is more than half full or we need to apply a writeType.
+  return nextWriteType != AsyncOutputStream::WriteType::PARTIAL || filled > sizeof(buffer) / 2;
 }
 
 kj::Promise<void> ReadyOutputStreamWrapper::pump() {
@@ -116,19 +148,21 @@ kj::Promise<void> ReadyOutputStreamWrapper::pump() {
 
   kj::Promise<void> promise = nullptr;
   if (end <= sizeof(buffer)) {
-    promise = output.write(buffer + start, filled);
+    promise = output.write(nextWriteType, kj::arrayPtr(buffer + start, filled));
   } else {
     end = end % sizeof(buffer);
-    segments[0] = kj::arrayPtr(buffer + start, buffer + sizeof(buffer));
-    segments[1] = kj::arrayPtr(buffer, buffer + end);
-    promise = output.write(segments);
+    kj::ArrayPtr<const byte> data = kj::arrayPtr(buffer + start, buffer + sizeof(buffer));
+    moreData[0] = kj::arrayPtr(buffer, buffer + end);
+    promise = output.write(nextWriteType, data, moreData);
   }
+
+  nextWriteType = AsyncOutputStream::WriteType::PARTIAL;
 
   return promise.then([this,oldFilled,end]() -> kj::Promise<void> {
     filled -= oldFilled;
     start = end;
 
-    if (filled > 0) {
+    if (shouldPump()) {
       return pump();
     } else {
       isPumping = false;

@@ -337,7 +337,7 @@ KJ_TEST("TLS basics") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  auto writePromise = client->write("foo", 3);
+  auto writePromise = client->writeFlush("foo"_kj.asBytes());
   char buf[4];
   server->read(&buf, 3).wait(test.io.waitScope);
   buf[3] = '\0';
@@ -357,8 +357,8 @@ KJ_TEST("TLS multiple messages") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  auto writePromise = client->write("foo", 3)
-      .then([&]() { return client->write("bar", 3); });
+  auto writePromise = client->writePartial("foo"_kj.asBytes())
+      .then([&]() { return client->writeFlush("bar"_kj.asBytes()); });
 
   char buf[4];
   buf[3] = '\0';
@@ -367,7 +367,7 @@ KJ_TEST("TLS multiple messages") {
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
 
   writePromise = writePromise
-      .then([&]() { return client->write("baz", 3); });
+      .then([&]() { return client->writeFlush("baz"_kj.asBytes()); });
 
   server->read(&buf, 3).wait(test.io.waitScope);
   KJ_ASSERT(kj::StringPtr(buf) == "bar");
@@ -379,23 +379,30 @@ KJ_TEST("TLS multiple messages") {
   KJ_EXPECT(!readPromise.poll(test.io.waitScope));
 
   writePromise = writePromise
-      .then([&]() { return client->write("qux", 3); });
+      .then([&]() { return client->writeFlush("qux"_kj.asBytes()); });
 
   readPromise.wait(test.io.waitScope);
   KJ_ASSERT(kj::StringPtr(buf) == "qux");
 }
 
 kj::Promise<void> writeN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t count) {
-  if (count == 0) return kj::READY_NOW;
+  if (count == 0) {
+    return stream.end();
+  }
   --count;
-  return stream.write(text.begin(), text.size())
+  return stream.writePartial(text.asBytes())
       .then([&stream, text, count]() {
     return writeN(stream, text, count);
   });
 }
 
 kj::Promise<void> readN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t count) {
-  if (count == 0) return kj::READY_NOW;
+  if (count == 0) {
+    static char c;
+    return stream.tryRead(&c, 1, 1).then([](size_t n) {
+      KJ_EXPECT(n == 0);
+    });
+  }
   --count;
   auto buf = kj::heapString(text.size());
   auto promise = stream.read(buf.begin(), buf.size());
@@ -406,6 +413,32 @@ kj::Promise<void> readN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t co
 }
 
 KJ_TEST("TLS full duplex") {
+  TlsTest test;
+  ErrorNexus e;
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
+  auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
+
+  auto client = clientPromise.wait(test.io.waitScope);
+  auto server = serverPromise.wait(test.io.waitScope);
+
+  auto writeUp = writeN(*client, "foo", 10000);
+  auto readDown = readN(*client, "bar", 10000);
+  KJ_EXPECT(!writeUp.poll(test.io.waitScope));
+  KJ_EXPECT(!readDown.poll(test.io.waitScope));
+
+  auto writeDown = writeN(*server, "bar", 10000);
+  auto readUp = readN(*server, "foo", 10000);
+
+  writeUp.wait(test.io.waitScope);
+  writeDown.wait(test.io.waitScope);
+  readUp.wait(test.io.waitScope);
+  readDown.wait(test.io.waitScope);
+}
+
+KJ_TEST("TLS full duplex OS pipe") {
   TlsTest test;
   ErrorNexus e;
 
@@ -425,10 +458,10 @@ KJ_TEST("TLS full duplex") {
   auto writeDown = writeN(*server, "bar", 10000);
   auto readUp = readN(*server, "foo", 10000);
 
-  readUp.wait(test.io.waitScope);
-  readDown.wait(test.io.waitScope);
   writeUp.wait(test.io.waitScope);
   writeDown.wait(test.io.waitScope);
+  readUp.wait(test.io.waitScope);
+  readDown.wait(test.io.waitScope);
 }
 
 class TestSniCallback: public TlsSniCallback {
@@ -462,7 +495,7 @@ KJ_TEST("TLS SNI") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  auto writePromise = client->write("foo", 3);
+  auto writePromise = client->writeFlush("foo"_kj.asBytes());
   char buf[4];
   server->read(&buf, 3).wait(test.io.waitScope);
   buf[3] = '\0';
@@ -576,7 +609,7 @@ KJ_TEST("TLS client certificate verification") {
     auto client = clientPromise.wait(test.io.waitScope);
     auto server = serverPromise.wait(test.io.waitScope);
 
-    auto writePromise = client->write("foo", 3);
+    auto writePromise = client->writeFlush("foo"_kj.asBytes());
     char buf[4];
     server->read(&buf, 3).wait(test.io.waitScope);
     buf[3] = '\0';
@@ -601,7 +634,7 @@ KJ_TEST("TLS to capnproto.org") {
       "User-Agent: capnp-test/0.6\r\n"
       "\r\n";
 
-  stream->write(request.begin(), request.size()).wait(io.waitScope);
+  stream->writeFlush(request.asBytes()).wait(io.waitScope);
 
   char buffer[4096];
   size_t n = stream->tryRead(buffer, sizeof(buffer) - 1, sizeof(buffer) - 1).wait(io.waitScope);

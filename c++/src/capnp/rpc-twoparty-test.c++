@@ -551,13 +551,11 @@ public:
   kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
     return inner->pumpTo(output, amount);
   }
-  kj::Promise<void> write(const void* buffer, size_t size) override {
-    written += size;
-    return inner->write(buffer, size);
-  }
-  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
-    for (auto& piece: pieces) written += piece.size();
-    return inner->write(pieces);
+  kj::Promise<void> write(WriteType type, kj::ArrayPtr<const byte> data,
+                          kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData) override {
+    written += data.size();
+    for (auto& piece: moreData) written += piece.size();
+    return inner->write(type, data, moreData);
   }
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
       kj::AsyncInputStream& input, uint64_t amount) override {

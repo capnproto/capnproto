@@ -27,8 +27,9 @@ namespace kj {
 namespace {
 
 KJ_TEST("readiness IO: write small") {
-  auto io = setupAsyncIo();
-  auto pipe = io.provider->newOneWayPipe();
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
+  auto pipe = kj::newOneWayPipe();
 
   char buf[4];
   auto readPromise = pipe.in->read(buf, 3, 4);
@@ -36,14 +37,22 @@ KJ_TEST("readiness IO: write small") {
   ReadyOutputStreamWrapper out(*pipe.out);
   KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("foo").asBytes())) == 3);
 
-  KJ_ASSERT(readPromise.wait(io.waitScope) == 3);
+  // Without a flush, the data is still in the buffer.
+  KJ_EXPECT(!readPromise.poll(ws));
+
+  // So try flushing.
+  out.flush().wait(ws);
+
+  // Now our read has completed.
+  KJ_ASSERT(readPromise.wait(ws) == 3);
   buf[3] = '\0';
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
 }
 
 KJ_TEST("readiness IO: write many odd") {
-  auto io = setupAsyncIo();
-  auto pipe = io.provider->newOneWayPipe();
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
+  auto pipe = kj::newOneWayPipe();
 
   ReadyOutputStreamWrapper out(*pipe.out);
 
@@ -60,7 +69,17 @@ KJ_TEST("readiness IO: write many odd") {
   }
 
   auto buf = kj::heapArray<char>(totalWritten + 1);
-  size_t n = pipe.in->read(buf.begin(), totalWritten, buf.size()).wait(io.waitScope);
+
+  // Some data will have been written to the underlying stream even though we didn't flush.
+  size_t n = pipe.in->read(buf.begin(), 1, buf.size()).wait(ws);
+
+  // We may need an explicit flush to get all the data.
+  if (n < totalWritten) {
+    auto flushPromise = out.flush();
+    n += pipe.in->read(buf.begin() + n, totalWritten - n, buf.size() - n).wait(ws);
+    flushPromise.wait(ws);
+  }
+
   KJ_ASSERT(n == totalWritten);
   for (size_t i = 0; i < totalWritten; i++) {
     KJ_ASSERT(buf[i] == "bar"[i%3]);
@@ -68,8 +87,9 @@ KJ_TEST("readiness IO: write many odd") {
 }
 
 KJ_TEST("readiness IO: write even") {
-  auto io = setupAsyncIo();
-  auto pipe = io.provider->newOneWayPipe();
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
+  auto pipe = kj::newOneWayPipe();
 
   ReadyOutputStreamWrapper out(*pipe.out);
 
@@ -86,7 +106,17 @@ KJ_TEST("readiness IO: write even") {
   }
 
   auto buf = kj::heapArray<char>(totalWritten + 1);
-  size_t n = pipe.in->read(buf.begin(), totalWritten, buf.size()).wait(io.waitScope);
+
+  // Some data will have been written to the underlying stream even though we didn't flush.
+  size_t n = pipe.in->read(buf.begin(), 1, buf.size()).wait(ws);
+
+  // We may need an explicit flush to get all the data.
+  if (n < totalWritten) {
+    auto flushPromise = out.flush();
+    n += pipe.in->read(buf.begin() + n, totalWritten - n, buf.size() - n).wait(ws);
+    flushPromise.wait(ws);
+  }
+
   KJ_ASSERT(n == totalWritten);
   for (size_t i = 0; i < totalWritten; i++) {
     KJ_ASSERT(buf[i] == "ba"[i%2]);
@@ -94,16 +124,17 @@ KJ_TEST("readiness IO: write even") {
 }
 
 KJ_TEST("readiness IO: read small") {
-  auto io = setupAsyncIo();
-  auto pipe = io.provider->newOneWayPipe();
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
+  auto pipe = kj::newOneWayPipe();
 
   ReadyInputStreamWrapper in(*pipe.in);
   char buf[4];
   KJ_ASSERT(in.read(kj::ArrayPtr<char>(buf).asBytes()) == nullptr);
 
-  pipe.out->write("foo", 3).wait(io.waitScope);
+  pipe.out->writePartial("foo"_kj.asBytes()).wait(ws);
 
-  in.whenReady().wait(io.waitScope);
+  in.whenReady().wait(ws);
   KJ_ASSERT(KJ_ASSERT_NONNULL(in.read(kj::ArrayPtr<char>(buf).asBytes())) == 3);
   buf[3] = '\0';
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
@@ -117,23 +148,21 @@ KJ_TEST("readiness IO: read small") {
       KJ_ASSERT(*n == 0);
       break;
     } else {
-      in.whenReady().wait(io.waitScope);
+      in.whenReady().wait(ws);
     }
   }
 }
 
 KJ_TEST("readiness IO: read many odd") {
-  auto io = setupAsyncIo();
-  auto pipe = io.provider->newOneWayPipe();
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
+  auto pipe = kj::newOneWayPipe();
 
-  char dummy[8192];
+  byte dummy[8192];
   for (auto i: kj::indices(dummy)) {
     dummy[i] = "bar"[i%3];
   }
-  auto writeTask = pipe.out->write(dummy, sizeof(dummy)).then([&]() {
-    // shutdown
-    pipe.out = nullptr;
-  }).eagerlyEvaluate(nullptr);
+  auto writeTask = pipe.out->writeEnd(dummy).eagerlyEvaluate(nullptr);
 
   ReadyInputStreamWrapper in(*pipe.in);
   char buf[3];
@@ -149,7 +178,7 @@ KJ_TEST("readiness IO: read many odd") {
         break;
       }
     } else {
-      in.whenReady().wait(io.waitScope);
+      in.whenReady().wait(ws);
     }
   }
 
@@ -160,23 +189,21 @@ KJ_TEST("readiness IO: read many odd") {
       KJ_ASSERT(*n == 0);
       break;
     } else {
-      in.whenReady().wait(io.waitScope);
+      in.whenReady().wait(ws);
     }
   }
 }
 
 KJ_TEST("readiness IO: read many even") {
-  auto io = setupAsyncIo();
-  auto pipe = io.provider->newOneWayPipe();
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
+  auto pipe = kj::newOneWayPipe();
 
-  char dummy[8192];
+  byte dummy[8192];
   for (auto i: kj::indices(dummy)) {
     dummy[i] = "ba"[i%2];
   }
-  auto writeTask = pipe.out->write(dummy, sizeof(dummy)).then([&]() {
-    // shutdown
-    pipe.out = nullptr;
-  }).eagerlyEvaluate(nullptr);
+  auto writeTask = pipe.out->writeEnd(dummy);
 
   ReadyInputStreamWrapper in(*pipe.in);
   char buf[2];
@@ -192,7 +219,7 @@ KJ_TEST("readiness IO: read many even") {
       }
       KJ_ASSERT(*n == 2, "ended at wrong spot");
     } else {
-      in.whenReady().wait(io.waitScope);
+      in.whenReady().wait(ws);
     }
   }
 
@@ -203,7 +230,7 @@ KJ_TEST("readiness IO: read many even") {
       KJ_ASSERT(*n == 0);
       break;
     } else {
-      in.whenReady().wait(io.waitScope);
+      in.whenReady().wait(ws);
     }
   }
 }

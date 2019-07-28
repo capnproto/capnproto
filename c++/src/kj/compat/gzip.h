@@ -36,7 +36,16 @@ public:
   KJ_DISALLOW_COPY(GzipOutputContext);
 
   void setInput(const void* in, size_t size);
-  kj::Tuple<bool, kj::ArrayPtr<const byte>> pumpOnce(int flush);
+
+  struct PumpResult {
+    kj::ArrayPtr<const byte> data;
+    // Data to write. Pointer is invalidated on next call to pumpOnce().
+
+    bool done;
+    // True if all available input has been consumed and any flush request has been completely
+    // written out as of this data chunk.
+  };
+  PumpResult pumpOnce(int flush, bool async);
 
 private:
   bool compressing;
@@ -117,22 +126,10 @@ public:
   GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS));
   KJ_DISALLOW_COPY(GzipAsyncOutputStream);
 
-  Promise<void> write(const void* buffer, size_t size) override;
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
+  Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                      ArrayPtr<const ArrayPtr<const byte>> moreData) override;
 
   Promise<void> whenWriteDisconnected() override { return inner.whenWriteDisconnected(); }
-
-  inline Promise<void> flush() {
-    return pump(Z_SYNC_FLUSH);
-  }
-  // Call if you need to flush a stream at an arbitrary data point.
-
-  Promise<void> end() {
-    return pump(Z_FINISH);
-  }
-  // Must call to flush and finish the stream, since some data may be buffered.
-  //
-  // TODO(cleanup): This should be a virtual method on AsyncOutputStream.
 
   void abortWrite() override { inner.abortWrite(); }
 
@@ -140,7 +137,7 @@ private:
   AsyncOutputStream& inner;
   _::GzipOutputContext ctx;
 
-  kj::Promise<void> pump(int flush);
+  kj::Promise<void> pump(WriteType type);
 };
 
 }  // namespace kj

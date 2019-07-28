@@ -172,12 +172,56 @@ public:
     return tryReadInternal(buffer, minBytes, maxBytes, 0);
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    return writeInternal(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size), nullptr);
-  }
+  Promise<void> write(WriteType type, ArrayPtr<const byte> first,
+                      ArrayPtr<const ArrayPtr<const byte>> rest) override {
+    KJ_REQUIRE(!ended, "already ended");
+    KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
 
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    return writeInternal(pieces[0], pieces.slice(1, pieces.size()));
+    // TODO(perf): OpenSSL has no writev(), and each write() creates a separate TLS record. Would
+    //   it be worth concatenating small buffers ourselves?
+
+    // HACK: Don't issue a zero-size write to SSL_write().
+    kj::Promise<size_t> promise = first.size() > 0
+        ? sslCall([this,first]() { return SSL_write(ssl, first.begin(), first.size()); })
+        : size_t(0);
+
+    return promise.then([this,type,first,rest](size_t n) -> kj::Promise<void> {
+      if (n == 0 && first.size() != 0) {
+        return KJ_EXCEPTION(DISCONNECTED, "ssl connection ended during write");
+      } else if (n < first.size()) {
+        return write(type, first.slice(n, first.size()), rest);
+      } else if (rest.size() > 0) {
+        return write(type, rest[0], rest.slice(1, rest.size()));
+      } else {
+        switch (type) {
+          case WriteType::PARTIAL:
+            // Let's push the bytes down to the socket buffer, at least, so that they'll eventually
+            // be written out if nothing else happens.
+            return writeBuffer.softFlush();
+          case WriteType::FLUSH:
+            return writeBuffer.flush();
+          case WriteType::END:
+            return sslCall([this]() {
+              // The first SSL_shutdown() call is expected to return 0 and may flag a misleading
+              // error.
+              int result = SSL_shutdown(ssl);
+              return result == 0 ? 1 : result;
+            }).then([this](size_t) {
+              ended = true;
+
+              if (receivedEnd) {
+                // Both ways shut down; we can end the underlying stream now.
+                return writeBuffer.end();
+              } else {
+                // We can't end() the underlying stream because the TLS layer may still require
+                // transmission in both directions in order to implement encrypted transport in one
+                // direction. We should, however, flush.
+                return writeBuffer.flush();
+              }
+            });
+        }
+      }
+    });
   }
 
   Promise<void> whenWriteDisconnected() override {
@@ -185,19 +229,14 @@ public:
   }
 
   void shutdownWrite() override {
+    KJ_REQUIRE(!ended, "already ended");
     KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
 
     // TODO(0.8): shutdownWrite() is problematic because it doesn't return a promise. It was
     //   designed to assume that it would only be called after all writes are finished and that
     //   there was no reason to block at that point, but SSL sessions don't fit this since they
     //   actually have to send a shutdown message.
-    shutdownTask = sslCall([this]() {
-      // The first SSL_shutdown() call is expected to return 0 and may flag a misleading error.
-      int result = SSL_shutdown(ssl);
-      return result == 0 ? 1 : result;
-    }).ignoreResult().eagerlyEvaluate([](kj::Exception&& e) {
-      KJ_LOG(ERROR, e);
-    });
+    shutdownTask = end();
   }
 
   void abortRead() override {
@@ -227,6 +266,8 @@ private:
   kj::AsyncIoStream& inner;
   kj::Own<kj::AsyncIoStream> ownInner;
 
+  bool ended = false;
+  bool receivedEnd = false;
   bool disconnected = false;
   kj::Maybe<kj::Promise<void>> shutdownTask;
 
@@ -240,28 +281,17 @@ private:
     return sslCall([this,buffer,maxBytes]() { return SSL_read(ssl, buffer, maxBytes); })
         .then([this,buffer,minBytes,maxBytes,alreadyDone](size_t n) -> kj::Promise<size_t> {
       if (n >= minBytes || n == 0) {
+        if (n == 0) {
+          receivedEnd = true;
+          if (ended) {
+            // Both ways shut down; we can end the underlying stream now.
+            return writeBuffer.end().then([result = alreadyDone + n]() { return result; });
+          }
+        }
         return alreadyDone + n;
       } else {
         return tryReadInternal(reinterpret_cast<byte*>(buffer) + n,
                                minBytes - n, maxBytes - n, alreadyDone + n);
-      }
-    });
-  }
-
-  Promise<void> writeInternal(kj::ArrayPtr<const byte> first,
-                              kj::ArrayPtr<const kj::ArrayPtr<const byte>> rest) {
-    KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
-
-    return sslCall([this,first]() { return SSL_write(ssl, first.begin(), first.size()); })
-        .then([this,first,rest](size_t n) -> kj::Promise<void> {
-      if (n == 0) {
-        return KJ_EXCEPTION(DISCONNECTED, "ssl connection ended during write");
-      } else if (n < first.size()) {
-        return writeInternal(first.slice(n, first.size()), rest);
-      } else if (rest.size() > 0) {
-        return writeInternal(rest[0], rest.slice(1, rest.size()));
-      } else {
-        return kj::READY_NOW;
       }
     });
   }
@@ -278,7 +308,8 @@ private:
       int error = SSL_get_error(ssl, result);
       switch (error) {
         case SSL_ERROR_ZERO_RETURN:
-          disconnected = true;
+          // Probably this was an SSL_read() that reached EOF. Note that we should NOT set
+          // disconnected = true because the write direction may still be active.
           return size_t(0);
         case SSL_ERROR_WANT_READ:
           return readBuffer.whenReady().then(kj::mvCapture(func,
@@ -329,6 +360,7 @@ private:
   static long bioCtrl(BIO* b, int cmd, long num, void* ptr) {
     switch (cmd) {
       case BIO_CTRL_FLUSH:
+        reinterpret_cast<TlsConnection*>(BIO_get_data(b))->writeBuffer.flush();
         return 1;
       case BIO_CTRL_PUSH:
       case BIO_CTRL_POP:

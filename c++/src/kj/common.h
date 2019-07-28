@@ -1431,6 +1431,10 @@ public:
     return ArrayPtr(ptr + start, end - start);
   }
 
+  inline ArrayPtr slice(size_t start) { return slice(start, size()); }
+  inline ArrayPtr<const T> slice(size_t start) const { return slice(start, size()); }
+  // Shorthand for slice(start, size()), which is very common.
+
   inline ArrayPtr<PropagateConst<T, byte>> asBytes() const {
     // Reinterpret the array as a byte array. This is explicitly legal under C++ aliasing
     // rules.

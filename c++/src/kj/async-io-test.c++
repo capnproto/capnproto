@@ -32,6 +32,7 @@
 #include "debug.h"
 #include "io.h"
 #include "miniposix.h"
+#include "time.h"
 #include <kj/compat/gtest.h>
 #include <sys/types.h>
 #if _WIN32
@@ -2572,6 +2573,77 @@ KJ_TEST("import socket FD that's already broken") {
 
 #endif  // !__CYGWIN__
 #endif  // !_WIN32
+
+KJ_TEST("non-flushing TCP send is delayed") {
+  auto io = setupAsyncIo();
+
+  auto& network = io.provider->getNetwork();
+
+  auto listenAddr = network.parseAddress("*").wait(io.waitScope);
+  auto listener = listenAddr->listen();
+  auto connectAddr = network.parseAddress("localhost", listener->getPort()).wait(io.waitScope);
+  auto client = connectAddr->connect().wait(io.waitScope);
+  auto server = listener->accept().wait(io.waitScope);
+
+  auto& clock = systemPreciseMonotonicClock();
+
+  {
+    auto start = clock.now();
+
+    // Write two packets to make sure Nagle kicks in.
+    client->writePartial("foo"_kj.asBytes()).wait(io.waitScope);
+    client->writePartial("bar"_kj.asBytes()).wait(io.waitScope);
+
+    expectRead(*server, "foobar").wait(io.waitScope);
+
+    auto end = clock.now();
+
+    // Use of MSG_MORE or Nagle's algorithm should have made this slow.
+    KJ_EXPECT(end - start > 10 * kj::MILLISECONDS, (end - start) / kj::MILLISECONDS);
+  }
+
+  {
+    uint retryCount = 0;
+  retry1:
+    auto start = clock.now();
+
+    // Write two packets to make sure Nagle kicks in.
+    client->writePartial("foo"_kj.asBytes()).wait(io.waitScope);
+    client->writeFlush("bar"_kj.asBytes()).wait(io.waitScope);
+
+    expectRead(*server, "foobar").wait(io.waitScope);
+
+    auto end = clock.now();
+
+    if (end - start >= 10 * kj::MILLISECONDS && retryCount++ < 10) {
+      goto retry1;
+    }
+
+    // This time we eagerly flushed.
+    KJ_EXPECT(end - start < 10 * kj::MILLISECONDS, (end - start) / kj::MILLISECONDS);
+  }
+
+  {
+    uint retryCount = 0;
+  retry2:
+    auto start = clock.now();
+
+    // Write two packets to make sure Nagle kicks in.
+    client->writePartial("foo"_kj.asBytes()).wait(io.waitScope);
+    client->writeEnd("bar"_kj.asBytes()).wait(io.waitScope);
+
+    KJ_EXPECT(server->readAllText().wait(io.waitScope) == "foobar");
+
+    auto end = clock.now();
+
+    if (end - start >= 10 * kj::MILLISECONDS && retryCount++ < 10) {
+      goto retry2;
+    }
+
+    // END implies eager flush.
+    KJ_EXPECT(end - start < 10 * kj::MILLISECONDS, (end - start) / kj::MILLISECONDS);
+  }
+}
 
 }  // namespace
 }  // namespace kj

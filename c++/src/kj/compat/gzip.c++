@@ -57,19 +57,98 @@ void GzipOutputContext::setInput(const void* in, size_t size) {
   ctx.avail_in = size;
 }
 
-kj::Tuple<bool, kj::ArrayPtr<const byte>> GzipOutputContext::pumpOnce(int flush) {
+GzipOutputContext::PumpResult GzipOutputContext::pumpOnce(int flush, bool async) {
   ctx.next_out = buffer;
   ctx.avail_out = sizeof(buffer);
 
   auto result = compressing ? deflate(&ctx, flush) : inflate(&ctx, flush);
-  if (result != Z_OK && result != Z_BUF_ERROR && result != Z_STREAM_END) {
-    fail(result);
+
+  bool done;
+  switch (result) {
+    case Z_OK:
+    case Z_BUF_ERROR:
+      // Z_OK means we made forward progress -- hopefully as much progress as possible given the
+      // buffer states. Z_BUF_ERROR means we couldn't make progress either because the input buffer
+      // is empty or the output buffer is full. From our point of view, these are really the same
+      // state: we now need to attend to the buffers before making further progress.
+      if (ctx.avail_in > 0) {
+        // We didn't consume all input, so we definitely aren't done yet.
+        done = false;
+      } else {
+        switch (flush) {
+          case Z_NO_FLUSH:
+            // Caller did not request a flush. The only important thing is that we consumed the
+            // whole input buffer. It's possible that zlib could cough up some more data if we gave
+            // it more output buffer space, but it's OK if we leave that for a later write.
+            done = true;
+            break;
+          case Z_SYNC_FLUSH:
+            // Caller asked for a flush. While all input was consumed, it's possible that zlib ran
+            // out of output space before finalizing the flush, in which case we have to keep
+            // pumping. If we *didn't* run out of output space... the documentation is ambiguous.
+            // Probably in that case we're done, but the docs only really say that Z_OK means some
+            // progress was made, not that all possible progress was made. We really need to run
+            // deflate again until Z_BUF_ERROR occurs.
+            if (ctx.avail_out == 0) {
+              // We probably ran out of output space. We don't really know, and we have no way to
+              // check without providing more space, so we'll need to pump again later.
+              done = false;
+            } else {
+              // We didn't run out of space. The documentation is ambiguous here. Z_OK means
+              // "progress was made", but not "all possible progress was made". But Z_SYNC_FLUSH is
+              // documented as "all pending output is flushed to the output buffer". One might
+              // argue that, to be correct, you really need to call deflate()/inflate() again and
+              // check that it returns Z_BUF_ERROR to indicate that everything has been written.
+              // However, it seems completely silly to imagine zlib would not have written
+              // everything if it had space to do so. Plus, Z_SYNC_FLUSH is documented to add an
+              // empty block in order to align to a byte boundary -- would calling Z_SYNC_FLUSH
+              // again not cause another empty block?
+              done = true;
+            }
+            break;
+          case Z_FINISH:
+            // Caller asked for EOF. If we were truly done, then we would have received
+            // Z_STREAM_END.
+            if (result == Z_BUF_ERROR && ctx.avail_out > 0) {
+              // Hmm this shouldn't happen: We asked to finish, and we have available output buffer
+              // space, but zlib says it can't make progress.
+              if (compressing) {
+                KJ_FAIL_ASSERT("Z_FINISH produced Z_BUF_ERROR despite having buffer space??");
+              } else {
+                // We're decompressing. zlib is telling us that the compressed data did not
+                // actually end cleanly. We want to treat this the same as a read() in which
+                // minBytes wasn't reached, so for async streams it is DISCONNECTED, while for
+                // sync streams it's a require failure.
+                if (async) {
+                  kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED,
+                      "gzip stream ended prematurely"));
+                } else {
+                  KJ_FAIL_REQUIRE("gzip stream ended prematurely") { break; }
+                }
+
+                // When exceptions are disabled we'll recover by signaling EOF.
+                done = true;
+              }
+            } else {
+              // Keep going until Z_STREAM_END.
+              done = false;
+            }
+            break;
+          default:
+            KJ_FAIL_REQUIRE("unknown flush type", flush);
+        }
+      }
+      break;
+    case Z_STREAM_END:
+      // EOF was reached and the stream is done.
+      done = true;
+      break;
+    default:
+      fail(result);
+      KJ_UNREACHABLE;
   }
 
-  // - Z_STREAM_END means we have finished the stream successfully.
-  // - Z_BUF_ERROR means we didn't have any more input to process
-  //   (but still have to make a call to write to potentially flush data).
-  return kj::tuple(result == Z_OK, kj::arrayPtr(buffer, sizeof(buffer) - ctx.avail_out));
+  return { kj::arrayPtr(buffer, ctx.next_out), done };
 }
 
 void GzipOutputContext::fail(int result) {
@@ -158,13 +237,13 @@ void GzipOutputStream::write(const void* in, size_t size) {
 }
 
 void GzipOutputStream::pump(int flush) {
-  bool ok;
-  do {
-    auto result = ctx.pumpOnce(flush);
-    ok = get<0>(result);
-    auto chunk = get<1>(result);
-    inner.write(chunk.begin(), chunk.size());
-  } while (ok);
+  for (;;) {
+    auto result = ctx.pumpOnce(flush, false);
+    inner.write(result.data.begin(), result.data.size());
+    if (result.done) {
+      break;
+    }
+  }
 }
 
 // =======================================================================================
@@ -237,26 +316,38 @@ GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compr
 GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS))
     : inner(inner), ctx(nullptr) {}
 
-Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
-  ctx.setInput(in, size);
-  return pump(Z_NO_FLUSH);
+Promise<void> GzipAsyncOutputStream::write(
+    WriteType type, ArrayPtr<const byte> data,
+    ArrayPtr<const ArrayPtr<const byte>> moreData) {
+  ctx.setInput(data.begin(), data.size());
+  if (moreData.size() > 0) {
+    return pump(WriteType::PARTIAL)
+        .then([this, type, moreData]() {
+      return write(type, moreData[0], moreData.slice(1));
+    });
+  } else {
+    return pump(type);
+  }
 }
 
-Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  if (pieces.size() == 0) return kj::READY_NOW;
-  return write(pieces[0].begin(), pieces[0].size())
-      .then([this,pieces]() {
-    return write(pieces.slice(1, pieces.size()));
-  });
-}
+kj::Promise<void> GzipAsyncOutputStream::pump(WriteType type) {
+  int flush = Z_NO_FLUSH;
+  switch (type) {
+    case WriteType::PARTIAL:
+      flush = Z_NO_FLUSH;
+      break;
+    case WriteType::FLUSH:
+      flush = Z_SYNC_FLUSH;
+      break;
+    case WriteType::END:
+      flush = Z_FINISH;
+      break;
+  }
 
-kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
-  auto result = ctx.pumpOnce(flush);
-  auto ok = get<0>(result);
-  auto chunk = get<1>(result);
-  auto promise = inner.write(chunk.begin(), chunk.size());
-  if (ok) {
-    promise = promise.then([this, flush]() { return pump(flush); });
+  auto result = ctx.pumpOnce(flush, true);
+  auto promise = inner.write(result.done ? type : WriteType::PARTIAL, result.data);
+  if (!result.done) {
+    promise = promise.then([this, type]() { return pump(type); });
   }
   return promise;
 }

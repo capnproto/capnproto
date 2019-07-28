@@ -194,6 +194,10 @@ public:
     return ArrayPtr<const T>(ptr + start, end - start);
   }
 
+  inline ArrayPtr<T> slice(size_t start) { return slice(start, size()); }
+  inline ArrayPtr<const T> slice(size_t start) const { return slice(start, size()); }
+  // Shorthand for slice(start, size()), which is very common.
+
   inline ArrayPtr<const byte> asBytes() const { return asPtr().asBytes(); }
   inline ArrayPtr<PropagateConst<T, byte>> asBytes() { return asPtr().asBytes(); }
   inline ArrayPtr<const char> asChars() const { return asPtr().asChars(); }

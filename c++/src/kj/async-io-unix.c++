@@ -135,7 +135,7 @@ protected:
 
   inline int getFd() {
     if (isClosed()) {
-      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "stream has been aborted"));
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "stream has been closed"));
     }
     return fd;
   }
@@ -182,53 +182,15 @@ public:
     });
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    ssize_t n;
-    KJ_NONBLOCKING_SYSCALL(n = ::write(getFd(), buffer, size)) {
-      // Error.
-
-      // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-      // a bug that exists in both Clang and GCC:
-      //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-      //   http://llvm.org/bugs/show_bug.cgi?id=12286
-      goto error;
-    }
-    if (false) {
-    error:
-      return kj::READY_NOW;
-    }
-
-    if (n < 0) {
-      // EAGAIN -- need to wait for writability and try again.
-      return observer->whenBecomesWritable().then([=]() {
-        return write(buffer, size);
-      });
-    } else if (n == size) {
-      // All done.
-      return READY_NOW;
-    } else {
-      // Fewer than `size` bytes were written, but we CANNOT assume we're out of buffer space, as
-      // Linux is known to return partial reads/writes when interrupted by a signal -- yes, even
-      // for non-blocking operations. So, we'll need to write() again now, even though it will
-      // almost certainly fail with EAGAIN. See comments in the read path for more info.
-      buffer = reinterpret_cast<const byte*>(buffer) + n;
-      size -= n;
-      return write(buffer, size);
-    }
-  }
-
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    if (pieces.size() == 0) {
-      return writeInternal(nullptr, nullptr, nullptr);
-    } else {
-      return writeInternal(pieces[0], pieces.slice(1, pieces.size()), nullptr);
-    }
+  Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                      ArrayPtr<const ArrayPtr<const byte>> moreData) override {
+    return writeInternal(type, data, moreData, nullptr);
   }
 
   Promise<void> writeWithFds(ArrayPtr<const byte> data,
                              ArrayPtr<const ArrayPtr<const byte>> moreData,
                              ArrayPtr<const int> fds) override {
-    return writeInternal(data, moreData, fds);
+    return writeInternal(WriteType::FLUSH, data, moreData, fds);
   }
 
   Promise<void> writeWithStreams(ArrayPtr<const byte> data,
@@ -237,7 +199,7 @@ public:
     auto fds = KJ_MAP(stream, streams) {
       return downcast<AsyncStreamFd>(*stream).getFd();
     };
-    auto promise = writeInternal(data, moreData, fds);
+    auto promise = writeInternal(WriteType::FLUSH, data, moreData, fds);
     return promise.attach(kj::mv(fds), kj::mv(streams));
   }
 
@@ -253,39 +215,45 @@ public:
   }
 
   void shutdownWrite() override {
-    // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
-    // UnixAsyncIoProvider interface.
-    KJ_SYSCALL(shutdown(getFd(), SHUT_WR));
+    if (isClosed()) return;
+
+    if (notASocket) {
+    notsock:
+      // If not a socket, then we must be a one-way output stream, e.g. a pipe. Just close.
+      observer = nullptr;
+      closeSelf();
+    } else {
+      KJ_SYSCALL_HANDLE_ERRORS(shutdown(getFd(), SHUT_WR)) {
+        case ENOTSOCK:
+          goto notsock;
+        default:
+          KJ_FAIL_SYSCALL("shutdown(fd, SHUT_WR)", error) { break; }
+          break;
+      }
+    }
   }
 
   void abortWrite() override {
-    if (isClosed()) return;
-
     // Unfortunately, there is no way to tell the other side that this is an erroneous shutdown.
-    KJ_SYSCALL_HANDLE_ERRORS(shutdown(getFd(), SHUT_WR)) {
-      case ENOTSOCK:
-        // If not a socket, then we must be a one-way output stream, e.g. a pipe. Just close.
-        observer = nullptr;
-        closeSelf();
-        break;
-      default:
-        KJ_FAIL_SYSCALL("shutdown(fd, SHUT_WR)", error) { break; }
-        break;
-    }
+    shutdownWrite();
   }
 
   void abortRead() override {
     if (isClosed()) return;
 
-    KJ_SYSCALL_HANDLE_ERRORS(shutdown(getFd(), SHUT_RD)) {
-      case ENOTSOCK:
-        // If not a socket, then we must be a one-way input stream, e.g. a pipe. Just close.
-        observer = nullptr;
-        closeSelf();
-        break;
-      default:
-        KJ_FAIL_SYSCALL("shutdown(fd, SHUT_RD)", error) { break; }
-        break;
+    if (notASocket) {
+    notsock:
+      // If not a socket, then we must be a one-way output stream, e.g. a pipe. Just close.
+      observer = nullptr;
+      closeSelf();
+    } else {
+      KJ_SYSCALL_HANDLE_ERRORS(shutdown(getFd(), SHUT_RD)) {
+        case ENOTSOCK:
+          goto notsock;
+        default:
+          KJ_FAIL_SYSCALL("shutdown(fd, SHUT_RD)", error) { break; }
+          break;
+      }
     }
   }
 
@@ -339,6 +307,8 @@ private:
   SpaceFor<UnixEventPort::FdObserver> observerSpace;
   Own<UnixEventPort::FdObserver> observer;
   Maybe<ForkedPromise<void>> writeDisconnectedPromise;
+
+  bool notASocket = false;  // set true on first ENOTSOCK
 
   Promise<ReadResult> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                       AutoCloseFd* fdBuffer, size_t maxFds,
@@ -506,7 +476,7 @@ private:
     }
   }
 
-  Promise<void> writeInternal(ArrayPtr<const byte> firstPiece,
+  Promise<void> writeInternal(WriteType type, ArrayPtr<const byte> firstPiece,
                               ArrayPtr<const ArrayPtr<const byte>> morePieces,
                               ArrayPtr<const int> fds) {
     const size_t iovmax = kj::miniposix::iovMax(1 + morePieces.size());
@@ -527,11 +497,26 @@ private:
 
     if (iovTotal == 0) {
       KJ_REQUIRE(fds.size() == 0, "can't write FDs without bytes");
+      if (type == WriteType::END) {
+        shutdownWrite();
+      }
       return kj::READY_NOW;
     }
 
+    int sendFlags = 0;
+#ifdef MSG_MORE
+    if (type == WriteType::PARTIAL) {
+      // Hint to kernel that more data is coming soon, so don't send out partial packets.
+      // TODO(now): We can't set this flag on non-sockets...
+      sendFlags |= MSG_MORE;
+    }
+#else
+    // TODO(perf): Turn on TCP_NODELAY for partial writes, then turn it off to flush.
+#endif
+
     ssize_t n;
-    if (fds.size() == 0) {
+    if (notASocket || (fds.size() == 0 && sendFlags == 0)) {
+    plainWrite:
       KJ_NONBLOCKING_SYSCALL(n = ::writev(getFd(), iov.begin(), iov.size())) {
         // Error.
 
@@ -548,7 +533,7 @@ private:
       msg.msg_iovlen = iov.size();
 
       // Allocate space to receive a cmsg.
-      size_t msgBytes = CMSG_SPACE(sizeof(int) * fds.size());
+      size_t msgBytes = fds.size() == 0 ? 0 : CMSG_SPACE(sizeof(int) * fds.size());
       // On Linux, CMSG_SPACE will align to a word-size boundary, but on Mac it always aligns to a
       // 32-bit boundary. I guess aligning to 32 bits helps avoid the problem where you
       // surprisingly end up with space for two file descriptors when you only wanted one. However,
@@ -558,25 +543,40 @@ private:
       // CMSG_SPACE() and then additionally round up to deal with Mac.
       size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
       KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
-      auto cmsgBytes = cmsgSpace.asBytes();
-      memset(cmsgBytes.begin(), 0, cmsgBytes.size());
-      msg.msg_control = cmsgBytes.begin();
-      msg.msg_controllen = msgBytes;
 
-      struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
-      cmsg->cmsg_level = SOL_SOCKET;
-      cmsg->cmsg_type = SCM_RIGHTS;
-      cmsg->cmsg_len = CMSG_LEN(sizeof(int) * fds.size());
-      memcpy(CMSG_DATA(cmsg), fds.begin(), fds.asBytes().size());
+      if (fds.size() > 0) {
+        auto cmsgBytes = cmsgSpace.asBytes();
+        memset(cmsgBytes.begin(), 0, cmsgBytes.size());
+        msg.msg_control = cmsgBytes.begin();
+        msg.msg_controllen = msgBytes;
 
-      KJ_NONBLOCKING_SYSCALL(n = ::sendmsg(getFd(), &msg, 0)) {
-        // Error.
+        struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+        cmsg->cmsg_level = SOL_SOCKET;
+        cmsg->cmsg_type = SCM_RIGHTS;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(int) * fds.size());
+        memcpy(CMSG_DATA(cmsg), fds.begin(), fds.asBytes().size());
+      }
 
-        // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-        // a bug that exists in both Clang and GCC:
-        //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-        //   http://llvm.org/bugs/show_bug.cgi?id=12286
-        goto error;
+      KJ_SYSCALL_HANDLE_ERRORS(n = ::sendmsg(getFd(), &msg, sendFlags)) {
+        case EAGAIN:
+#if EWOULDBLOCK != EAGAIN
+        case EWOULDBLOCK:
+#endif
+          // No space in write buffer; handled below.
+          break;
+
+        case ENOTSOCK:
+          // Whoops, this isn't a socket... Flag this so we don't try sendmsg() again, and go
+          // directly to the plain-write path.
+          notASocket = true;
+          goto plainWrite;
+
+        default:
+          // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due
+          // to a bug that exists in both Clang and GCC:
+          //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
+          //   http://llvm.org/bugs/show_bug.cgi?id=12286
+          goto error;
       }
     }
 
@@ -588,7 +588,7 @@ private:
     if (n < 0) {
       // Got EAGAIN. Nothing was written.
       return observer->whenBecomesWritable().then([=]() {
-        return writeInternal(firstPiece, morePieces, fds);
+        return writeInternal(type, firstPiece, morePieces, fds);
       });
     } else if (n == 0) {
       // Why would a sendmsg() with a non-empty message ever return 0 when writing to a stream
@@ -616,15 +616,18 @@ private:
 
         if (iovTotal == 0) {
           // Oops, what actually happened is that we hit the IOV_MAX limit. Don't wait.
-          return writeInternal(firstPiece, morePieces, nullptr);
+          return writeInternal(type, firstPiece, morePieces, nullptr);
         }
 
         // As with read(), we cannot assume that a short write() really means the write buffer is
         // full (see comments in the read path above). We have to write again.
-        return writeInternal(firstPiece, morePieces, nullptr);
+        return writeInternal(type, firstPiece, morePieces, nullptr);
       } else if (morePieces.size() == 0) {
         // First piece was fully-consumed and there are no more pieces, so we're done.
         KJ_DASSERT(n == firstPiece.size(), n);
+        if (type == WriteType::END) {
+          shutdownWrite();
+        }
         return READY_NOW;
       } else {
         // First piece was fully consumed, so move on to the next piece.

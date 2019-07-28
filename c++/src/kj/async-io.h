@@ -107,9 +107,102 @@ class AsyncOutputStream {
   // Asynchronous equivalent of OutputStream (from io.h).
 
 public:
-  virtual Promise<void> write(const void* buffer, size_t size) KJ_WARN_UNUSED_RESULT = 0;
-  virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces)
-      KJ_WARN_UNUSED_RESULT = 0;
+  enum class WriteType: unsigned char {
+    PARTIAL,
+    // This is just one chunk of a bigger overall message or stream. More data is expected in the
+    // future. The stream is allowed, as an optimization, to place this chunk in a buffer
+    // temporarily in order to coalesce it with a later write.
+    //
+    // In particular:
+    // - For sockets, a partial write may use MSG_MORE, TCP_CORK, or similar methods to hint to the
+    //   OS that more data is coming, and that it should hold off on sending any partial packets.
+    //   It may also use Nagle-like algorithms or instruct the OS to do so.
+    // - For buffered streams, especially including compression streams, a partial write can leave
+    //   data in an in-process buffer indefinately.
+    //
+    // If you perform a partial write without ever following it with a FLUSH or END, data loss may
+    // occur. To help detect such data loss, many stream implementations' destructors will throw an
+    // exception or log an error in this case. You can prevent such an error either by performing
+    // the necessary write() with class FLUSH or END, or by calling abortWrite() to explicitly
+    // acknowledge data loss.
+
+    FLUSH,
+    // This write should be proactively pushed out to the destination. The stream should not
+    // attempt to wait for more data even if coalescing chunks would be more efficient.
+    //
+    // This means:
+    // - For sockets, MSG_MORE/TCP_CORK/etc. will NOT be used, and Nagle's algorithm will be
+    //   disabled.
+    // - For buffered streams, the buffer will be flushed immediately. For compression streams, this
+    //   may force a compression block to be closed prematurely, hurting overall compression ratio.
+    //
+    // If the write has zero size, the effect is to flush all existing buffered data.
+
+    END
+    // This is the last write of the stream. This has all the same effects as FLUSH *and* will
+    // signal EOF. No further writes will be permitted after this one.
+    //
+    // If the write has zero size, the effect is to flush all existing buffered data and write EOF.
+  };
+
+  virtual Promise<void> write(WriteType type, ArrayPtr<const byte> data,
+                              ArrayPtr<const ArrayPtr<const byte>> moreData = nullptr)
+                              KJ_WARN_UNUSED_RESULT = 0;
+  // Write some data to the stream.
+  //
+  // `type` controls buffering/flushing behavior. See the `WriteType` enum above. (Most callers
+  // will want to use the convenience methods writePartial(), writeFlush(), and writeEnd() to avoid
+  // typing out fully-qualified enum values.)
+  //
+  // The bytes in `data` as well as the bytes in each element of `moreData` will be concatenated
+  // and written out. Thus `moreData` enables gather-writes. Zero-size writes are allowed and are
+  // not necessarily no-ops (depends on the write type).
+  //
+  // Only one write() may be active at a time; you must wait for the returned promise to complete
+  // before starting the next write(). A successful write() always writes all data, but the method
+  // returns a Promise rather than simply returning void for the following purposes:
+  // - To let the application know when it is safe to free the arrays that were passed to write().
+  // - To apply backpressure on the app.
+  // - In the case of types FLUSH or END, to indicate that the stream object may now be destroyed
+  //   without causing data loss. However, note that this does NOT mean that bytes have been
+  //   delivered to the final destination. They may still be in kernel buffers, in-flight on the
+  //   network, etc., and could still fail to be delivered. As with any networking scenario, you
+  //   must arrange to receive explicit acknowledgement from the recipient if you want to be sure
+  //   the data was received.
+  //
+  // If a write() is canceled (by destroying the returned promise before it resolves), the stream
+  // is left in an unspecified state -- some bytes may have been written while others weren't.
+  // Generally, you should not try to write more data after cancelling a write; you should probably
+  // call abortWrite() and then destroy the stream. The same applies after write() throws an
+  // exception.
+
+  Promise<void> writePartial(ArrayPtr<const byte> data,
+                             ArrayPtr<const ArrayPtr<const byte>> moreData = nullptr)
+                             KJ_WARN_UNUSED_RESULT;
+  Promise<void> writeFlush(ArrayPtr<const byte> data,
+                           ArrayPtr<const ArrayPtr<const byte>> moreData = nullptr)
+                           KJ_WARN_UNUSED_RESULT;
+  Promise<void> writeEnd(ArrayPtr<const byte> data,
+                         ArrayPtr<const ArrayPtr<const byte>> moreData = nullptr)
+                         KJ_WARN_UNUSED_RESULT;
+  // Shortcuts for write() with type PARTIAL, FLUSH, or END.
+
+  Promise<void> flush() KJ_WARN_UNUSED_RESULT;
+  // Flush all buffers owned by this object and ensure that data will be proactively delivered to
+  // the destination without delay.
+  //
+  // This is equivalent to a zero-sized write of type FLUSH.
+
+  Promise<void> end() KJ_WARN_UNUSED_RESULT;
+  // Send EOF on the stream (after flushing buffers).
+  //
+  // This is equivalent to a zero-sized write of type END.
+
+  Promise<void> write(const void* buffer, size_t size) KJ_WARN_UNUSED_RESULT
+      KJ_DEPRECATED("use writePartial(), writeFlush(), or writeEnd() instead");
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) KJ_WARN_UNUSED_RESULT
+      KJ_DEPRECATED("use writePartial(), writeFlush(), or writeEnd() instead");
+  // These default to writeFlush() for backwards-compatibility. They will be removed before 1.0.
 
   virtual void abortWrite() = 0;
   // Indicates that the data is not complete but, due to an error, no further write()s will be
@@ -210,6 +303,8 @@ public:
   // The maximum number of FDs that can be sent at a time is usually subject to an OS-imposed
   // limit. On Linux, this is 253. In practice, sending more than a handful of FDs at once is
   // probably a bad idea.
+  //
+  // writeWithFds() always behaves according to WriteType::FLUSH.
 
   struct ReadResult {
     size_t byteCount;
@@ -867,6 +962,39 @@ inline Maybe<const T&> AncillaryMessage::as() {
 template <typename T>
 inline ArrayPtr<const T> AncillaryMessage::asArray() {
   return arrayPtr(reinterpret_cast<const T*>(data.begin()), data.size() / sizeof(T));
+}
+
+inline Promise<void> AsyncOutputStream::writePartial(
+    ArrayPtr<const byte> data, ArrayPtr<const ArrayPtr<const byte>> moreData) {
+  return write(WriteType::PARTIAL, data, moreData);
+}
+inline Promise<void> AsyncOutputStream::writeFlush(
+    ArrayPtr<const byte> data, ArrayPtr<const ArrayPtr<const byte>> moreData) {
+  return write(WriteType::FLUSH, data, moreData);
+}
+inline Promise<void> AsyncOutputStream::writeEnd(
+    ArrayPtr<const byte> data, ArrayPtr<const ArrayPtr<const byte>> moreData) {
+  return write(WriteType::END, data, moreData);
+}
+
+inline Promise<void> AsyncOutputStream::flush() {
+  return write(WriteType::FLUSH, nullptr);
+}
+inline Promise<void> AsyncOutputStream::end() {
+  return write(WriteType::END, nullptr);
+}
+
+inline Promise<void> AsyncOutputStream::write(const void *buffer, size_t size) {
+  return writeFlush(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+}
+inline Promise<void> AsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte> > pieces) {
+  if (pieces.size() == 0) {
+    // Historically all write()s were flushing writes, therefore a zero-sized write is a no-op
+    // because the previous write would already have flushed the data.
+    return kj::READY_NOW;
+  } else {
+    return writeFlush(pieces[0], pieces.slice(1, pieces.size()));
+  }
 }
 
 }  // namespace kj
