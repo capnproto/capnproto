@@ -24,6 +24,7 @@
 #include "http.h"
 #include <kj/debug.h>
 #include <kj/test.h>
+#include <kj/encoding.h>
 #include <map>
 
 #if KJ_HTTP_TEST_USE_OS_PIPE
@@ -126,7 +127,7 @@ KJ_TEST("HttpHeaders::parseRequest") {
       "DATE:     early\r\n"
       "other-Header: yep\r\n"
       "\r\n");
-  auto result = KJ_ASSERT_NONNULL(headers.tryParseRequest(text.asArray()));
+  auto result = headers.tryParseRequest(text.asArray()).get<HttpHeaders::Request>();
 
   KJ_EXPECT(result.method == HttpMethod::POST);
   KJ_EXPECT(result.url == "/some/path");
@@ -176,7 +177,7 @@ KJ_TEST("HttpHeaders::parseResponse") {
       "DATE:     early\r\n"
       "other-Header: yep\r\n"
       "\r\n");
-  auto result = KJ_ASSERT_NONNULL(headers.tryParseResponse(text.asArray()));
+  auto result = headers.tryParseResponse(text.asArray()).get<HttpHeaders::Response>();
 
   KJ_EXPECT(result.statusCode == 418);
   KJ_EXPECT(result.statusText == "I'm a teapot");
@@ -215,40 +216,72 @@ KJ_TEST("HttpHeaders parse invalid") {
   HttpHeaders headers(*table);
 
   // NUL byte in request.
-  KJ_EXPECT(headers.tryParseRequest(kj::heapString(
-      "POST  \0 /some/path \t   HTTP/1.1\r\n"
-      "Foo-BaR: Baz\r\n"
-      "Host: example.com\r\n"
-      "DATE:     early\r\n"
-      "other-Header: yep\r\n"
-      "\r\n")) == nullptr);
+  {
+    auto input = kj::heapString(
+        "POST  \0 /some/path \t   HTTP/1.1\r\n"
+        "Foo-BaR: Baz\r\n"
+        "Host: example.com\r\n"
+        "DATE:     early\r\n"
+        "other-Header: yep\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+
+    KJ_EXPECT(protocolError.description == "ERROR: Request headers have no terminal newline.",
+        protocolError.description);
+    KJ_EXPECT(protocolError.rawContent.asChars() == input);
+  }
 
   // Control character in header name.
-  KJ_EXPECT(headers.tryParseRequest(kj::heapString(
-      "POST   /some/path \t   HTTP/1.1\r\n"
-      "Foo-BaR: Baz\r\n"
-      "Cont\001ent-Length: 123\r\n"
-      "DATE:     early\r\n"
-      "other-Header: yep\r\n"
-      "\r\n")) == nullptr);
+  {
+    auto input = kj::heapString(
+        "POST   /some/path \t   HTTP/1.1\r\n"
+        "Foo-BaR: Baz\r\n"
+        "Cont\001ent-Length: 123\r\n"
+        "DATE:     early\r\n"
+        "other-Header: yep\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+
+    KJ_EXPECT(protocolError.description == "ERROR: The headers sent by your client are not valid.",
+        protocolError.description);
+    KJ_EXPECT(protocolError.rawContent.asChars() == input);
+  }
 
   // Separator character in header name.
-  KJ_EXPECT(headers.tryParseRequest(kj::heapString(
-      "POST   /some/path \t   HTTP/1.1\r\n"
-      "Foo-BaR: Baz\r\n"
-      "Host: example.com\r\n"
-      "DATE/:     early\r\n"
-      "other-Header: yep\r\n"
-      "\r\n")) == nullptr);
+  {
+     auto input = kj::heapString(
+        "POST   /some/path \t   HTTP/1.1\r\n"
+        "Foo-BaR: Baz\r\n"
+        "Host: example.com\r\n"
+        "DATE/:     early\r\n"
+        "other-Header: yep\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+
+    KJ_EXPECT(protocolError.description == "ERROR: The headers sent by your client are not valid.",
+        protocolError.description);
+    KJ_EXPECT(protocolError.rawContent.asChars() == input);
+  }
 
   // Response status code not numeric.
-  KJ_EXPECT(headers.tryParseResponse(kj::heapString(
+  {
+     auto input = kj::heapString(
       "HTTP/1.1\t\t  abc\t    I'm a teapot\r\n"
       "Foo-BaR: Baz\r\n"
       "Host: example.com\r\n"
       "DATE:     early\r\n"
       "other-Header: yep\r\n"
-      "\r\n")) == nullptr);
+      "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+
+    KJ_EXPECT(protocolError.description == "ERROR: Unrecognized request method.",
+        protocolError.description);
+    KJ_EXPECT(protocolError.rawContent.asChars() == input);
+  }
 }
 
 KJ_TEST("HttpHeaders validation") {
@@ -2420,10 +2453,10 @@ KJ_TEST("HttpServer bad request") {
   static constexpr auto expectedResponse =
       "HTTP/1.1 400 Bad Request\r\n"
       "Connection: close\r\n"
-      "Content-Length: 54\r\n"
+      "Content-Length: 35\r\n"
       "Content-Type: text/plain\r\n"
       "\r\n"
-      "ERROR: The headers sent by your client were not valid."_kj;
+      "ERROR: Unrecognized request method."_kj;
 
   KJ_EXPECT(expectedResponse == response, expectedResponse, response);
 }
@@ -2434,8 +2467,11 @@ KJ_UNUSED static constexpr HttpServerSettings STATIC_CONSTEXPR_SETTINGS {};
 class TestErrorHandler: public HttpServerErrorHandler {
 public:
   kj::Promise<void> handleClientProtocolError(
-      kj::StringPtr message, kj::HttpService::Response& response) override {
-    return sendError(400, "Bad Request", kj::str("Saw protocol error: ", message), response);
+      HttpHeaders::ProtocolError protocolError, kj::HttpService::Response& response) override {
+    // In a real error handler, you should redact `protocolError.rawContent`.
+    auto message = kj::str("Saw protocol error: ", protocolError.description, "; rawContent = ",
+        encodeCEscape(protocolError.rawContent));
+    return sendError(400, "Bad Request", kj::mv(message), response);
   }
 
   kj::Promise<void> handleApplicationError(
@@ -2548,9 +2584,10 @@ KJ_TEST("HttpServer bad request, custom error handler") {
   static constexpr auto expectedResponse =
       "HTTP/1.1 400 Bad Request\r\n"
       "Connection: close\r\n"
-      "Content-Length: 74\r\n"
+      "Content-Length: 87\r\n"
       "\r\n"
-      "Saw protocol error: ERROR: The headers sent by your client were not valid."_kj;
+      "Saw protocol error: ERROR: Unrecognized request method.; "
+      "rawContent = bad request\\000\\n"_kj;
 
   KJ_EXPECT(expectedResponse == response, expectedResponse, response);
 }
