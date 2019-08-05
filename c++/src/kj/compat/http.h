@@ -321,8 +321,34 @@ public:
     kj::StringPtr statusText;
   };
 
-  kj::Maybe<Request> tryParseRequest(kj::ArrayPtr<char> content);
-  kj::Maybe<Response> tryParseResponse(kj::ArrayPtr<char> content);
+  struct ProtocolError {
+    // Represents a protocol error, such as a bad request method or invalid headers. Debugging such
+    // errors is difficult without a copy of the data which we tried to parse, but this data is
+    // sensitive, so we can't just lump it into the error description directly. ProtocolError
+    // provides this sensitive data separate from the error description.
+    //
+    // TODO(cleanup): Should maybe not live in HttpHeaders? HttpServerErrorHandler::ProtocolError?
+    //   Or HttpProtocolError? Or maybe we need a more general way of attaching sensitive context to
+    //   kj::Exceptions?
+
+    kj::StringPtr description;
+    // An error description safe for all the world to see.
+
+    kj::ArrayPtr<char> rawContent;
+    // Unredacted data which led to the error condition. This may contain anything transported over
+    // HTTP, to include sensitive PII, so you must take care to sanitize this before using it in any
+    // error report that may leak to unprivileged eyes.
+    //
+    // This ArrayPtr is merely a copy of the `content` parameter passed to `tryParseRequest()` /
+    // `tryParseResponse()`, thus it remains valid for as long as a successfully-parsed HttpHeaders
+    // object would remain valid.
+  };
+
+  using RequestOrProtocolError = kj::OneOf<Request, ProtocolError>;
+  using ResponseOrProtocolError = kj::OneOf<Response, ProtocolError>;
+
+  RequestOrProtocolError tryParseRequest(kj::ArrayPtr<char> content);
+  ResponseOrProtocolError tryParseResponse(kj::ArrayPtr<char> content);
   // Parse an HTTP header blob and add all the headers to this object.
   //
   // `content` should be all text from the start of the request to the first occurrance of two
@@ -778,7 +804,7 @@ struct HttpServerSettings {
 class HttpServerErrorHandler {
 public:
   virtual kj::Promise<void> handleClientProtocolError(
-      kj::StringPtr message, kj::HttpService::Response& response);
+      HttpHeaders::ProtocolError protocolError, kj::HttpService::Response& response);
   virtual kj::Promise<void> handleApplicationError(
       kj::Exception exception, kj::Maybe<kj::HttpService::Response&> response);
   virtual kj::Promise<void> handleNoResponse(kj::HttpService::Response& response);

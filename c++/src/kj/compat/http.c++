@@ -845,9 +845,11 @@ static char* trimHeaderEnding(kj::ArrayPtr<char> content) {
   return end;
 }
 
-kj::Maybe<HttpHeaders::Request> HttpHeaders::tryParseRequest(kj::ArrayPtr<char> content) {
+HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<char> content) {
   char* end = trimHeaderEnding(content);
-  if (end == nullptr) return nullptr;
+  if (end == nullptr) {
+    return ProtocolError { "ERROR: Request headers have no terminal newline.", content };
+  }
 
   char* ptr = content.begin();
 
@@ -856,50 +858,58 @@ kj::Maybe<HttpHeaders::Request> HttpHeaders::tryParseRequest(kj::ArrayPtr<char> 
   KJ_IF_MAYBE(method, consumeHttpMethod(ptr)) {
     request.method = *method;
     if (*ptr != ' ' && *ptr != '\t') {
-      return nullptr;
+      return ProtocolError { "ERROR: Unrecognized request method.", content };
     }
     ++ptr;
   } else {
-    return nullptr;
+    return ProtocolError { "ERROR: Unrecognized request method.", content };
   }
 
   KJ_IF_MAYBE(path, consumeWord(ptr)) {
     request.url = *path;
   } else {
-    return nullptr;
+    return ProtocolError { "ERROR: Invalid request line.", content };
   }
 
   // Ignore rest of line. Don't care about "HTTP/1.1" or whatever.
   consumeLine(ptr);
 
-  if (!parseHeaders(ptr, end)) return nullptr;
+  if (!parseHeaders(ptr, end)) {
+    return ProtocolError { "ERROR: The headers sent by your client are not valid.", content };
+  }
 
   return request;
 }
 
-kj::Maybe<HttpHeaders::Response> HttpHeaders::tryParseResponse(kj::ArrayPtr<char> content) {
+HttpHeaders::ResponseOrProtocolError HttpHeaders::tryParseResponse(kj::ArrayPtr<char> content) {
   char* end = trimHeaderEnding(content);
-  if (end == nullptr) return nullptr;
+  if (end == nullptr) {
+    return ProtocolError { "ERROR: Response headers have no terminal newline.", content };
+  }
 
   char* ptr = content.begin();
 
   HttpHeaders::Response response;
 
   KJ_IF_MAYBE(version, consumeWord(ptr)) {
-    if (!version->startsWith("HTTP/")) return nullptr;
+    if (!version->startsWith("HTTP/")) {
+      return ProtocolError { "ERROR: Invalid response status line.", content };
+    }
   } else {
-    return nullptr;
+    return ProtocolError { "ERROR: Invalid response status line.", content };
   }
 
   KJ_IF_MAYBE(code, consumeNumber(ptr)) {
     response.statusCode = *code;
   } else {
-    return nullptr;
+    return ProtocolError { "ERROR: Invalid response status code.", content };
   }
 
   response.statusText = consumeLine(ptr);
 
-  if (!parseHeaders(ptr, end)) return nullptr;
+  if (!parseHeaders(ptr, end)) {
+    return ProtocolError { "ERROR: The headers sent by the server are not valid.", content };
+  }
 
   return response;
 }
@@ -1012,8 +1022,10 @@ public:
 
   kj::Promise<Request> readRequest() override {
     return readRequestHeaders()
-        .then([this](kj::Maybe<HttpHeaders::Request>&& maybeRequest) -> HttpInputStream::Request {
-      auto request = KJ_REQUIRE_NONNULL(maybeRequest, "bad request");
+        .then([this](HttpHeaders::RequestOrProtocolError&& requestOrProtocolError)
+            -> HttpInputStream::Request {
+      auto request = KJ_REQUIRE_NONNULL(
+          requestOrProtocolError.tryGet<HttpHeaders::Request>(), "bad request");
       auto body = getEntityBody(HttpInputStreamImpl::REQUEST, request.method, 0, headers);
 
       return { request.method, request.url, headers, kj::mv(body) };
@@ -1022,9 +1034,10 @@ public:
 
   kj::Promise<Response> readResponse(HttpMethod requestMethod) override {
     return readResponseHeaders()
-        .then([this,requestMethod](kj::Maybe<HttpHeaders::Response>&& maybeResponse)
+        .then([this,requestMethod](HttpHeaders::ResponseOrProtocolError&& responseOrProtocolError)
               -> HttpInputStream::Response {
-      auto response = KJ_REQUIRE_NONNULL(maybeResponse, "bad response");
+      auto response = KJ_REQUIRE_NONNULL(
+          responseOrProtocolError.tryGet<HttpHeaders::Response>(), "bad response");
       auto body = getEntityBody(HttpInputStreamImpl::RESPONSE, requestMethod, 0, headers);
 
       return { response.statusCode, response.statusText, headers, kj::mv(body) };
@@ -1148,14 +1161,14 @@ public:
     });
   }
 
-  inline kj::Promise<kj::Maybe<HttpHeaders::Request>> readRequestHeaders() {
+  inline kj::Promise<HttpHeaders::RequestOrProtocolError> readRequestHeaders() {
     return readMessageHeaders().then([this](kj::ArrayPtr<char> text) {
       headers.clear();
       return headers.tryParseRequest(text);
     });
   }
 
-  inline kj::Promise<kj::Maybe<HttpHeaders::Response>> readResponseHeaders() {
+  inline kj::Promise<HttpHeaders::ResponseOrProtocolError> readResponseHeaders() {
     // Note: readResponseHeaders() could be called multiple times concurrently when pipelining
     //   requests. readMessageHeaders() will serialize these, but it's important not to mess with
     //   state (like calling headers.clear()) before said serialization has taken place.
@@ -1276,7 +1289,7 @@ private:
       readPromise = leftover.size();
       leftover = nullptr;
     } else {
-      // Need to read more data from the unfderlying stream.
+      // Need to read more data from the underlying stream.
 
       if (bufferEnd == headerBuffer.size()) {
         // Out of buffer space.
@@ -3231,31 +3244,41 @@ public:
     auto id = ++counter;
 
     auto responsePromise = httpInput.readResponseHeaders().then(
-          [this,method,id](kj::Maybe<HttpHeaders::Response>&& response) -> HttpClient::Response {
-      KJ_IF_MAYBE(r, response) {
-        auto& headers = httpInput.getHeaders();
-        HttpClient::Response result {
-          r->statusCode,
-          r->statusText,
-          &headers,
-          httpInput.getEntityBody(HttpInputStreamImpl::RESPONSE, method, r->statusCode, headers)
-        };
+        [this,method,id](HttpHeaders::ResponseOrProtocolError&& responseOrProtocolError)
+            -> HttpClient::Response {
+      KJ_SWITCH_ONEOF(responseOrProtocolError) {
+        KJ_CASE_ONEOF(response, HttpHeaders::Response) {
+          auto& responseHeaders = httpInput.getHeaders();
+          HttpClient::Response result {
+            response.statusCode,
+            response.statusText,
+            &responseHeaders,
+            httpInput.getEntityBody(
+                HttpInputStreamImpl::RESPONSE, method, response.statusCode, responseHeaders)
+          };
 
-        if (fastCaseCmp<'c', 'l', 'o', 's', 'e'>(
-            headers.get(HttpHeaderId::CONNECTION).orDefault(nullptr).cStr())) {
-          closed = true;
-        } else if (counter == id) {
-          watchForClose();
-        } else {
-          // Anothe request was already queued after this one, so we don't want to watch for
-          // stream closure because we're fully expecting another response.
+          if (fastCaseCmp<'c', 'l', 'o', 's', 'e'>(
+              responseHeaders.get(HttpHeaderId::CONNECTION).orDefault(nullptr).cStr())) {
+            closed = true;
+          } else if (counter == id) {
+            watchForClose();
+          } else {
+            // Another request was already queued after this one, so we don't want to watch for
+            // stream closure because we're fully expecting another response.
+          }
+          return result;
         }
-        return result;
-      } else {
-        closed = true;
-        KJ_FAIL_REQUIRE("received invalid HTTP response") { break; }
-        return HttpClient::Response();
+        KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+          closed = true;
+          // TODO(someday): Do something with ProtocolError::rawContent. Exceptions feel like the
+          //   most idiomatic way to report errors when using HttpClient::request(), but we don't
+          //   have a good way of attaching the raw content to the exception.
+          KJ_FAIL_REQUIRE(protocolError.description) { break; }
+          return HttpClient::Response();
+        }
       }
+
+      KJ_UNREACHABLE;
     });
 
     return { kj::mv(bodyStream), kj::mv(responsePromise) };
@@ -3294,61 +3317,69 @@ public:
     auto id = ++counter;
 
     return httpInput.readResponseHeaders()
-        .then(kj::mvCapture(keyBase64,
-            [this,id](kj::StringPtr keyBase64, kj::Maybe<HttpHeaders::Response>&& response)
+        .then([this,id,keyBase64 = kj::mv(keyBase64)](
+            HttpHeaders::ResponseOrProtocolError&& responseOrProtocolError)
             -> HttpClient::WebSocketResponse {
-      KJ_IF_MAYBE(r, response) {
-        auto& headers = httpInput.getHeaders();
-        if (r->statusCode == 101) {
-          if (!fastCaseCmp<'w', 'e', 'b', 's', 'o', 'c', 'k', 'e', 't'>(
-                  headers.get(HttpHeaderId::UPGRADE).orDefault(nullptr).cStr())) {
-            KJ_FAIL_REQUIRE("server returned incorrect Upgrade header; should be 'websocket'",
-                            headers.get(HttpHeaderId::UPGRADE).orDefault("(null)")) {
-              break;
+      KJ_SWITCH_ONEOF(responseOrProtocolError) {
+        KJ_CASE_ONEOF(response, HttpHeaders::Response) {
+          auto& responseHeaders = httpInput.getHeaders();
+          if (response.statusCode == 101) {
+            if (!fastCaseCmp<'w', 'e', 'b', 's', 'o', 'c', 'k', 'e', 't'>(
+                    responseHeaders.get(HttpHeaderId::UPGRADE).orDefault(nullptr).cStr())) {
+              KJ_FAIL_REQUIRE("server returned incorrect Upgrade header; should be 'websocket'",
+                              responseHeaders.get(HttpHeaderId::UPGRADE).orDefault("(null)")) {
+                break;
+              }
+              return HttpClient::WebSocketResponse();
             }
-            return HttpClient::WebSocketResponse();
-          }
 
-          auto expectedAccept = generateWebSocketAccept(keyBase64);
-          if (headers.get(HttpHeaderId::SEC_WEBSOCKET_ACCEPT).orDefault(nullptr)
-                != expectedAccept) {
-            KJ_FAIL_REQUIRE("server returned incorrect Sec-WebSocket-Accept header",
-                headers.get(HttpHeaderId::SEC_WEBSOCKET_ACCEPT).orDefault("(null)"),
-                expectedAccept) { break; }
-            return HttpClient::WebSocketResponse();
-          }
+            auto expectedAccept = generateWebSocketAccept(keyBase64);
+            if (responseHeaders.get(HttpHeaderId::SEC_WEBSOCKET_ACCEPT).orDefault(nullptr)
+                  != expectedAccept) {
+              KJ_FAIL_REQUIRE("server returned incorrect Sec-WebSocket-Accept header",
+                  responseHeaders.get(HttpHeaderId::SEC_WEBSOCKET_ACCEPT).orDefault("(null)"),
+                  expectedAccept) { break; }
+              return HttpClient::WebSocketResponse();
+            }
 
-          return {
-            r->statusCode,
-            r->statusText,
-            &httpInput.getHeaders(),
-            upgradeToWebSocket(kj::mv(ownStream), httpInput, httpOutput, settings.entropySource),
-          };
-        } else {
-          upgraded = false;
-          HttpClient::WebSocketResponse result {
-            r->statusCode,
-            r->statusText,
-            &headers,
-            httpInput.getEntityBody(HttpInputStreamImpl::RESPONSE, HttpMethod::GET, r->statusCode,
-                                    headers)
-          };
-          if (fastCaseCmp<'c', 'l', 'o', 's', 'e'>(
-              headers.get(HttpHeaderId::CONNECTION).orDefault(nullptr).cStr())) {
-            closed = true;
-          } else if (counter == id) {
-            watchForClose();
+            return {
+              response.statusCode,
+              response.statusText,
+              &httpInput.getHeaders(),
+              upgradeToWebSocket(kj::mv(ownStream), httpInput, httpOutput, settings.entropySource),
+            };
           } else {
-            // Anothe request was already queued after this one, so we don't want to watch for
-            // stream closure because we're fully expecting another response.
+            upgraded = false;
+            HttpClient::WebSocketResponse result {
+              response.statusCode,
+              response.statusText,
+              &responseHeaders,
+              httpInput.getEntityBody(HttpInputStreamImpl::RESPONSE, HttpMethod::GET,
+                                      response.statusCode, responseHeaders)
+            };
+            if (fastCaseCmp<'c', 'l', 'o', 's', 'e'>(
+                responseHeaders.get(HttpHeaderId::CONNECTION).orDefault(nullptr).cStr())) {
+              closed = true;
+            } else if (counter == id) {
+              watchForClose();
+            } else {
+              // Another request was already queued after this one, so we don't want to watch for
+              // stream closure because we're fully expecting another response.
+            }
+            return result;
           }
-          return result;
         }
-      } else {
-        KJ_FAIL_REQUIRE("received invalid HTTP response") { break; }
-        return HttpClient::WebSocketResponse();
+        KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+          // TODO(someday): Do something with ProtocolError::rawContent. Exceptions feel like the
+          //   most idiomatic way to report errors when using HttpClient::request(), but we don't
+          //   have a good way of attaching the raw content to the exception.
+          KJ_FAIL_REQUIRE(protocolError.description) { break; }
+          return HttpClient::WebSocketResponse();
+        }
       }
-    }));
+
+      KJ_UNREACHABLE;
+    });
   }
 
 private:
@@ -4679,7 +4710,8 @@ public:
     }
 
     auto receivedHeaders = firstByte
-        .then([this,firstRequest](bool hasData)-> kj::Promise<kj::Maybe<HttpHeaders::Request>> {
+        .then([this,firstRequest](bool hasData)
+            -> kj::Promise<HttpHeaders::RequestOrProtocolError> {
       if (hasData) {
         auto readHeaders = httpInput.readRequestHeaders();
         if (!firstRequest) {
@@ -4687,9 +4719,11 @@ public:
           // the first byte of a pipeline response.
           readHeaders = readHeaders.exclusiveJoin(
               server.timer.afterDelay(server.settings.headerTimeout)
-              .then([this]() -> kj::Maybe<HttpHeaders::Request> {
+              .then([this]() -> HttpHeaders::RequestOrProtocolError {
             timedOut = true;
-            return nullptr;
+            return HttpHeaders::ProtocolError {
+              "ERROR: Timed out waiting for next request headers.", nullptr
+            };
           }));
         }
         return kj::mv(readHeaders);
@@ -4697,7 +4731,10 @@ public:
         // Client closed connection or pipeline timed out with no bytes received. This is not an
         // error, so don't report one.
         this->closed = true;
-        return kj::Maybe<HttpHeaders::Request>(nullptr);
+        return HttpHeaders::RequestOrProtocolError(HttpHeaders::ProtocolError {
+          "ERROR: Client closed connection or connection timeout "
+          "while waiting for request headers.", nullptr
+        });
       }
     });
 
@@ -4705,15 +4742,18 @@ public:
       // On the first request, the header timeout starts ticking immediately upon request opening.
       auto timeoutPromise = server.timer.afterDelay(server.settings.headerTimeout)
           .exclusiveJoin(server.onDrain.addBranch())
-          .then([this]() -> kj::Maybe<HttpHeaders::Request> {
+          .then([this]() -> HttpHeaders::RequestOrProtocolError {
         timedOut = true;
-        return nullptr;
+        return HttpHeaders::ProtocolError {
+          "ERROR: Timed out waiting for initial request headers.", nullptr
+        };
       });
       receivedHeaders = receivedHeaders.exclusiveJoin(kj::mv(timeoutPromise));
     }
 
     return receivedHeaders
-        .then([this](kj::Maybe<HttpHeaders::Request>&& request) -> kj::Promise<bool> {
+        .then([this](HttpHeaders::RequestOrProtocolError&& requestOrProtocolError)
+            -> kj::Promise<bool> {
       if (timedOut) {
         // Client took too long to send anything, so we're going to close the connection. In
         // theory, we should send back an HTTP 408 error -- it is designed exactly for this
@@ -4739,118 +4779,122 @@ public:
         return httpOutput.flush().then([]() { return false; });
       }
 
-      KJ_IF_MAYBE(req, request) {
-        auto& headers = httpInput.getHeaders();
+      KJ_SWITCH_ONEOF(requestOrProtocolError) {
+        KJ_CASE_ONEOF(request, HttpHeaders::Request) {
+          auto& headers = httpInput.getHeaders();
 
-        currentMethod = req->method;
-        auto body = httpInput.getEntityBody(
-            HttpInputStreamImpl::REQUEST, req->method, 0, headers);
+          currentMethod = request.method;
+          auto body = httpInput.getEntityBody(
+              HttpInputStreamImpl::REQUEST, request.method, 0, headers);
 
-        // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
-        //   prevent permanent deadlock. It's slightly weird in that arguably the client should
-        //   be able to shutdown the upstream but still wait on the downstream, but I believe many
-        //   other HTTP servers do similar things.
+          // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
+          //   prevent permanent deadlock. It's slightly weird in that arguably the client should
+          //   be able to shutdown the upstream but still wait on the downstream, but I believe many
+          //   other HTTP servers do similar things.
 
-        auto promise = service.request(
-            req->method, req->url, headers, *body, *this);
-        return promise.then(kj::mvCapture(body,
-            [this](kj::Own<kj::AsyncInputStream> body) -> kj::Promise<bool> {
-          // Response done. Await next request.
+          auto promise = service.request(
+              request.method, request.url, headers, *body, *this);
+          return promise.then([this, body = kj::mv(body)]() mutable -> kj::Promise<bool> {
+            // Response done. Await next request.
 
-          KJ_IF_MAYBE(p, webSocketError) {
-            // sendWebSocketError() was called. Finish sending and close the connection.
-            auto promise = kj::mv(*p);
-            webSocketError = nullptr;
-            return kj::mv(promise);
-          }
-
-          if (upgraded) {
-            // We've upgraded to WebSocket, and by now we should have closed the WebSocket.
-            if (!webSocketClosed) {
-              // This is gonna segfault later so abort now instead.
-              KJ_LOG(FATAL, "Accepted WebSocket object must be destroyed before HttpService "
-                            "request handler completes.");
-              abort();
+            KJ_IF_MAYBE(p, webSocketError) {
+              // sendWebSocketError() was called. Finish sending and close the connection.
+              auto promise = kj::mv(*p);
+              webSocketError = nullptr;
+              return kj::mv(promise);
             }
 
-            // Once we start a WebSocket there's no going back to HTTP.
-            return false;
-          }
+            if (upgraded) {
+              // We've upgraded to WebSocket, and by now we should have closed the WebSocket.
+              if (!webSocketClosed) {
+                // This is gonna segfault later so abort now instead.
+                KJ_LOG(FATAL, "Accepted WebSocket object must be destroyed before HttpService "
+                              "request handler completes.");
+                abort();
+              }
 
-          if (currentMethod != nullptr) {
-            return sendError();
-          }
-
-          if (httpOutput.isBroken()) {
-            // We started a response but didn't finish it. But HttpService returns success? Perhaps
-            // it decided that it doesn't want to finish this response. We'll have to disconnect
-            // here. If the response body is not complete (e.g. Content-Length not reached), the
-            // client should notice. We don't want to log an error because this condition might be
-            // intentional on the service's part.
-            return false;
-          }
-
-          return httpOutput.flush().then(kj::mvCapture(body,
-              [this](kj::Own<kj::AsyncInputStream> body) -> kj::Promise<bool> {
-            if (httpInput.canReuse()) {
-              // Things look clean. Go ahead and accept the next request.
-
-              // Note that we don't have to handle server.draining here because we'll take care of
-              // it the next time around the loop.
-              return loop(false);
-            } else {
-              // Apparently, the application did not read the request body. Maybe this is a bug,
-              // or maybe not: maybe the client tried to upload too much data and the application
-              // legitimately wants to cancel the upload without reading all it it.
-              //
-              // We have a problem, though: We did send a response, and we didn't send
-              // `Connection: close`, so the client may expect that it can send another request.
-              // Perhaps the client has even finished sending the previous request's body, in
-              // which case the moment it finishes receiving the response, it could be completely
-              // within its rights to start a new request. If we close the socket now, we might
-              // interrupt that new request.
-              //
-              // There's no way we can get out of this perfectly cleanly. HTTP just isn't good
-              // enough at connection management. The best we can do is give the client some grace
-              // period and then abort the connection.
-
-              auto dummy = kj::heap<HttpDiscardingEntityWriter>();
-              auto lengthGrace = body->pumpTo(*dummy, server.settings.canceledUploadGraceBytes)
-                  .then([this](size_t amount) {
-                if (httpInput.canReuse()) {
-                  // Success, we can continue.
-                  return true;
-                } else {
-                  // Still more data. Give up.
-                  return false;
-                }
-              });
-              lengthGrace = lengthGrace.attach(kj::mv(dummy), kj::mv(body));
-
-              auto timeGrace = server.timer.afterDelay(server.settings.canceledUploadGacePeriod)
-                  .then([]() { return false; });
-
-              return lengthGrace.exclusiveJoin(kj::mv(timeGrace))
-                  .then([this](bool clean) -> kj::Promise<bool> {
-                if (clean) {
-                  // We recovered. Continue loop.
-                  return loop(false);
-                } else {
-                  // Client still not done. Return broken.
-                  return false;
-                }
-              });
+              // Once we start a WebSocket there's no going back to HTTP.
+              return false;
             }
-          }));
-        }));
-      } else {
-        // Bad request.
 
-        // sendError() uses Response::send(), which requires that we have a currentMethod, but we
-        // never read one. GET seems like the correct choice here.
-        currentMethod = HttpMethod::GET;
-        return sendError("ERROR: The headers sent by your client were not valid.");
+            if (currentMethod != nullptr) {
+              return sendError();
+            }
+
+            if (httpOutput.isBroken()) {
+              // We started a response but didn't finish it. But HttpService returns success?
+              // Perhaps it decided that it doesn't want to finish this response. We'll have to
+              // disconnect here. If the response body is not complete (e.g. Content-Length not
+              // reached), the client should notice. We don't want to log an error because this
+              // condition might be intentional on the service's part.
+              return false;
+            }
+
+            return httpOutput.flush().then(
+                [this, body = kj::mv(body)]() mutable -> kj::Promise<bool> {
+              if (httpInput.canReuse()) {
+                // Things look clean. Go ahead and accept the next request.
+
+                // Note that we don't have to handle server.draining here because we'll take care of
+                // it the next time around the loop.
+                return loop(false);
+              } else {
+                // Apparently, the application did not read the request body. Maybe this is a bug,
+                // or maybe not: maybe the client tried to upload too much data and the application
+                // legitimately wants to cancel the upload without reading all it it.
+                //
+                // We have a problem, though: We did send a response, and we didn't send
+                // `Connection: close`, so the client may expect that it can send another request.
+                // Perhaps the client has even finished sending the previous request's body, in
+                // which case the moment it finishes receiving the response, it could be completely
+                // within its rights to start a new request. If we close the socket now, we might
+                // interrupt that new request.
+                //
+                // There's no way we can get out of this perfectly cleanly. HTTP just isn't good
+                // enough at connection management. The best we can do is give the client some grace
+                // period and then abort the connection.
+
+                auto dummy = kj::heap<HttpDiscardingEntityWriter>();
+                auto lengthGrace = body->pumpTo(*dummy, server.settings.canceledUploadGraceBytes)
+                    .then([this](size_t amount) {
+                  if (httpInput.canReuse()) {
+                    // Success, we can continue.
+                    return true;
+                  } else {
+                    // Still more data. Give up.
+                    return false;
+                  }
+                });
+                lengthGrace = lengthGrace.attach(kj::mv(dummy), kj::mv(body));
+
+                auto timeGrace = server.timer.afterDelay(server.settings.canceledUploadGacePeriod)
+                    .then([]() { return false; });
+
+                return lengthGrace.exclusiveJoin(kj::mv(timeGrace))
+                    .then([this](bool clean) -> kj::Promise<bool> {
+                  if (clean) {
+                    // We recovered. Continue loop.
+                    return loop(false);
+                  } else {
+                    // Client still not done. Return broken.
+                    return false;
+                  }
+                });
+              }
+            });
+          });
+        }
+        KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+          // Bad request.
+
+          // sendError() uses Response::send(), which requires that we have a currentMethod, but we
+          // never read one. GET seems like the correct choice here.
+          currentMethod = HttpMethod::GET;
+          return sendError(kj::mv(protocolError));
+        }
       }
+
+      KJ_UNREACHABLE;
     }).catch_([this](kj::Exception&& e) -> kj::Promise<bool> {
       // Exception; report 5xx.
 
@@ -4984,13 +5028,13 @@ private:
                               httpInput, httpOutput, nullptr);
   }
 
-  kj::Promise<bool> sendError(kj::StringPtr message) {
+  kj::Promise<bool> sendError(HttpHeaders::ProtocolError protocolError) {
     closeAfterSend = true;
 
     // Client protocol errors always happen on request headers parsing, before we call into the
     // HttpService, meaning no response has been sent and we can provide a Response object.
     auto promise = server.settings.errorHandler.orDefault(*this).handleClientProtocolError(
-        message, *this);
+        kj::mv(protocolError), *this);
 
     return promise.then([this]() { return httpOutput.flush(); })
                   .then([]() { return false; });  // loop ends after flush
@@ -5020,7 +5064,7 @@ private:
   kj::Own<WebSocket> sendWebSocketError(StringPtr errorMessage) {
     kj::Exception exception = KJ_EXCEPTION(FAILED,
         "received bad WebSocket handshake", errorMessage);
-    webSocketError = sendError(errorMessage);
+    webSocketError = sendError(HttpHeaders::ProtocolError { errorMessage, nullptr });
     kj::throwRecoverableException(kj::mv(exception));
 
     // Fallback path when exceptions are disabled.
@@ -5145,14 +5189,14 @@ void HttpServer::taskFailed(kj::Exception&& exception) {
 }
 
 kj::Promise<void> HttpServerErrorHandler::handleClientProtocolError(
-    kj::StringPtr message, kj::HttpService::Response& response) {
+    HttpHeaders::ProtocolError protocolError, kj::HttpService::Response& response) {
   // Default error handler implementation.
 
   HttpHeaderTable headerTable {};
   HttpHeaders headers(headerTable);
   headers.set(HttpHeaderId::CONTENT_TYPE, "text/plain");
 
-  auto errorMessage = kj::str(message);
+  auto errorMessage = kj::str(protocolError.description);
   auto body = response.send(400, "Bad Request", headers, errorMessage.size());
 
   return body->write(errorMessage.begin(), errorMessage.size())
