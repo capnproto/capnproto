@@ -951,20 +951,20 @@ private:
 
   public:
     Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     void abortRead() override {
       // ignore repeated abort
     }
 
     Promise<void> write(const void* buffer, size_t size) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
       // There might not actually be any data in `input`, in which case a pump wouldn't actually
@@ -984,7 +984,9 @@ private:
             return uint64_t(0);
           } else {
             // There was data in the input. The pump would have thrown.
-            KJ_FAIL_REQUIRE("abortRead() has been called");
+            kj::throwRecoverableException(
+                KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+            return uint64_t(0);
           }
         });
       }
