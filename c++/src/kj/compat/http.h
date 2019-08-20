@@ -331,6 +331,14 @@ public:
     //   Or HttpProtocolError? Or maybe we need a more general way of attaching sensitive context to
     //   kj::Exceptions?
 
+    uint statusCode;
+    // Suggested HTTP status code that should be used when returning an error to the client.
+    //
+    // Most errors are 400. An unrecognized method will be 501.
+
+    kj::StringPtr statusMessage;
+    // HTTP status message to go with `statusCode`, e.g. "Bad Request".
+
     kj::StringPtr description;
     // An error description safe for all the world to see.
 

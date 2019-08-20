@@ -2448,7 +2448,7 @@ KJ_TEST("HttpServer bad request") {
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
-  static constexpr auto request = "bad request\r\n\r\n"_kj;
+  static constexpr auto request = "GET / HTTP/1.1\r\nbad request\r\n\r\n"_kj;
   auto writePromise = pipe.ends[1]->write(request.begin(), request.size());
   auto response = pipe.ends[1]->readAllText().wait(waitScope);
   KJ_EXPECT(writePromise.poll(waitScope));
@@ -2456,6 +2456,34 @@ KJ_TEST("HttpServer bad request") {
 
   static constexpr auto expectedResponse =
       "HTTP/1.1 400 Bad Request\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 53\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "ERROR: The headers sent by your client are not valid."_kj;
+
+  KJ_EXPECT(expectedResponse == response, expectedResponse, response);
+}
+
+KJ_TEST("HttpServer invalid method") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  static constexpr auto request = "bad request\r\n\r\n"_kj;
+  auto writePromise = pipe.ends[1]->write(request.begin(), request.size());
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+  KJ_EXPECT(writePromise.poll(waitScope));
+  writePromise.wait(waitScope);
+
+  static constexpr auto expectedResponse =
+      "HTTP/1.1 501 Not Implemented\r\n"
       "Connection: close\r\n"
       "Content-Length: 35\r\n"
       "Content-Type: text/plain\r\n"
