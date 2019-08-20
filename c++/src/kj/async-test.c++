@@ -380,7 +380,9 @@ TEST(Async, Ordering) {
   WaitScope waitScope(loop);
 
   int counter = 0;
-  Promise<void> promises[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+  Promise<void> promises[10] = {
+    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr
+  };
 
   promises[1] = evalLater([&]() {
     EXPECT_EQ(0, counter++);
@@ -401,12 +403,24 @@ TEST(Async, Ordering) {
       EXPECT_EQ(4, counter++);
     }).then([&]() {
       EXPECT_EQ(5, counter++);
+      promises[8] = kj::evalLast([&]() {
+        EXPECT_EQ(9, counter++);
+        promises[9] = kj::evalLater([&]() {
+          EXPECT_EQ(10, counter++);
+        });
+      });
     }).eagerlyEvaluate(nullptr);
 
     {
       auto paf = kj::newPromiseAndFulfiller<void>();
       promises[4] = paf.promise.then([&]() {
         EXPECT_EQ(2, counter++);
+        promises[6] = kj::evalLast([&]() {
+          EXPECT_EQ(7, counter++);
+          promises[7] = kj::evalLater([&]() {
+            EXPECT_EQ(8, counter++);
+          });
+        });
       }).eagerlyEvaluate(nullptr);
       paf.fulfiller->fulfill();
     }
@@ -429,7 +443,7 @@ TEST(Async, Ordering) {
     kj::mv(promises[i]).wait(waitScope);
   }
 
-  EXPECT_EQ(7, counter);
+  EXPECT_EQ(11, counter);
 }
 
 TEST(Async, Fork) {

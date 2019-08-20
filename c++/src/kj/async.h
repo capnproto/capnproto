@@ -318,6 +318,7 @@ private:
   friend class _::ForkHub;
   friend class TaskSet;
   friend Promise<void> _::yield();
+  friend Promise<void> _::yieldHarder();
   friend class _::NeverDone;
   template <typename U>
   friend Promise<Array<U>> joinPromises(Array<Promise<U>>&& promises);
@@ -378,6 +379,25 @@ PromiseForResult<Func, void> evalNow(Func&& func) KJ_WARN_UNUSED_RESULT;
 // Run `func()` and return a promise for its result. `func()` executes before `evalNow()` returns.
 // If `func()` throws an exception, the exception is caught and wrapped in a promise -- this is the
 // main reason why `evalNow()` is useful.
+
+template <typename Func>
+PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
+// Like `evalLater()`, except that the function doesn't run until the event queue is otherwise
+// completely empty and the thread is about to suspend waiting for I/O.
+//
+// This is useful when you need to perform some disruptive action and you want to make sure that
+// you don't interrupt some other task between two .then() continuations. For example, say you want
+// to cancel a read() operation on a socket and know for sure that if any bytes were read, you saw
+// them. It could be that a read() has completed and bytes have been transferred to the target
+// buffer, but the .then() callback that handles the read result hasn't executed yet. If you
+// cancel the promise at this inopportune moment, the bytes in the buffer are lost. If you do
+// evalLast(), then you can be sure that any pending .then() callbacks had a chance to finish out
+// and if you didn't receive the read result yet, then you know nothing has been read, and you can
+// simply drop the promise.
+//
+// If evalLast() is called multiple times, functions are executed in LIFO order. If the first
+// callback enqueues new events, then latter callbacks will not execute until those events are
+// drained.
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
@@ -866,6 +886,7 @@ private:
   _::Event* head = nullptr;
   _::Event** tail = &head;
   _::Event** depthFirstInsertPoint = &head;
+  _::Event** breadthFirstInsertPoint = &head;
 
   kj::Maybe<Executor> executor;
   // Allocated the first time getExecutor() is requested, making cross-thread request possible.
