@@ -2895,9 +2895,9 @@ private:
 
         EmbargoId embargoId = context.getSenderLoopback();
 
-        // We need to insert an evalLater() here to make sure that any pending calls towards this
+        // We need to insert an evalLast() here to make sure that any pending calls towards this
         // cap have had time to find their way through the event loop.
-        tasks.add(kj::evalLater(kj::mvCapture(
+        tasks.add(kj::evalLast(kj::mvCapture(
             target, [this,embargoId](kj::Own<ClientHook>&& target) {
           if (!connection.is<Connected>()) {
             return;
