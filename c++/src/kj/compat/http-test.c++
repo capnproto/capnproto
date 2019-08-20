@@ -976,6 +976,10 @@ KJ_TEST("HttpClient canceled write") {
 
     auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table), uint64_t(4096));
 
+    // Note: This poll() forces the server to receive what was written so far. Otherwise,
+    //   cancelling the write below may in fact cancel the previous write as well.
+    KJ_EXPECT(!serverPromise.poll(waitScope));
+
     // Start a write and immediately cancel it.
     {
       auto ignore KJ_UNUSED = req.body->write(body.begin(), body.size());
