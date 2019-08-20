@@ -459,9 +459,24 @@ String Url::toString(Context context) const {
 
   for (auto& pathPart: path) {
     // Protect against path injection.
-    KJ_REQUIRE((pathPart != "" || options.allowEmpty) && pathPart != "." && pathPart != "..",
-               "invalid name in URL path", path) {
-      continue;
+    if (!options.allowEmpty) {
+      KJ_REQUIRE(pathPart != "" || options.allowEmpty, "invalid name in URL path", path) {
+        continue;
+      }
+    }
+    if (options.percentDecode) {
+      // Raw "." and ".." have special meanings, so percent-encode them.
+      if (pathPart == ".") {
+        chars.addAll("/%2E"_kj);
+        continue;
+      } else if (pathPart == "..") {
+        chars.addAll("/%2E%2E"_kj);
+        continue;
+      }
+    } else {
+      KJ_REQUIRE(pathPart != "." && pathPart != "..", "invalid name in URL path", path) {
+        continue;
+      }
     }
     chars.add('/');
     chars.addAll(options.percentDecode ? encodeUriPath(pathPart) : kj::str(pathPart));
