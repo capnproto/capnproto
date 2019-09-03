@@ -78,6 +78,16 @@ public:
   }
 };
 
+class YieldHarderPromiseNode final: public _::PromiseNode {
+public:
+  void onReady(_::Event* event) noexcept override {
+    if (event) event->armLast();
+  }
+  void get(_::ExceptionOrValue& output) noexcept override {
+    output.as<_::Void>() = _::Void();
+  }
+};
+
 class NeverDonePromiseNode final: public _::PromiseNode {
 public:
   void onReady(_::Event* event) noexcept override {
@@ -750,6 +760,9 @@ bool EventLoop::turn() {
     }
 
     depthFirstInsertPoint = &head;
+    if (breadthFirstInsertPoint == &event->next) {
+      breadthFirstInsertPoint = &head;
+    }
     if (tail == &event->next) {
       tail = &head;
     }
@@ -921,6 +934,10 @@ Promise<void> yield() {
   return Promise<void>(false, kj::heap<YieldPromiseNode>());
 }
 
+Promise<void> yieldHarder() {
+  return Promise<void>(false, kj::heap<YieldHarderPromiseNode>());
+}
+
 Own<PromiseNode> neverDone() {
   return kj::heap<NeverDonePromiseNode>();
 }
@@ -964,6 +981,9 @@ void Event::armDepthFirst() {
 
     loop.depthFirstInsertPoint = &next;
 
+    if (loop.breadthFirstInsertPoint == prev) {
+      loop.breadthFirstInsertPoint = &next;
+    }
     if (loop.tail == prev) {
       loop.tail = &next;
     }
@@ -978,14 +998,42 @@ void Event::armBreadthFirst() {
              "Executor to queue events cross-thread.");
 
   if (prev == nullptr) {
-    next = *loop.tail;
-    prev = loop.tail;
+    next = *loop.breadthFirstInsertPoint;
+    prev = loop.breadthFirstInsertPoint;
     *prev = this;
     if (next != nullptr) {
       next->prev = &next;
     }
 
-    loop.tail = &next;
+    loop.breadthFirstInsertPoint = &next;
+
+    if (loop.tail == prev) {
+      loop.tail = &next;
+    }
+
+    loop.setRunnable(true);
+  }
+}
+
+void Event::armLast() {
+  KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
+             "Event armed from different thread than it was created in.  You must use "
+             "Executor to queue events cross-thread.");
+
+  if (prev == nullptr) {
+    next = *loop.breadthFirstInsertPoint;
+    prev = loop.breadthFirstInsertPoint;
+    *prev = this;
+    if (next != nullptr) {
+      next->prev = &next;
+    }
+
+    // We don't update loop.breadthFirstInsertPoint because we want further inserts to go *before*
+    // this event.
+
+    if (loop.tail == prev) {
+      loop.tail = &next;
+    }
 
     loop.setRunnable(true);
   }
@@ -1004,6 +1052,9 @@ void Event::disarm() {
     }
     if (loop.depthFirstInsertPoint == &next) {
       loop.depthFirstInsertPoint = prev;
+    }
+    if (loop.breadthFirstInsertPoint == &next) {
+      loop.breadthFirstInsertPoint = prev;
     }
 
     *prev = next;

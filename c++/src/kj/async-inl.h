@@ -136,6 +136,10 @@ public:
   void armBreadthFirst();
   // Like `armDepthFirst()` except that the event is placed at the end of the queue.
 
+  void armLast();
+  // Enqueues this event to happen after all other events have run to completion and there is
+  // really nothing left to do except wait for I/O.
+
   void disarm();
   // If the event is armed but hasn't fired, cancel it. (Destroying the event does this
   // implicitly.)
@@ -971,6 +975,11 @@ kj::String Promise<T>::trace() {
 template <typename Func>
 inline PromiseForResult<Func, void> evalLater(Func&& func) {
   return _::yield().then(kj::fwd<Func>(func), _::PropagateException());
+}
+
+template <typename Func>
+inline PromiseForResult<Func, void> evalLast(Func&& func) {
+  return _::yieldHarder().then(kj::fwd<Func>(func), _::PropagateException());
 }
 
 template <typename Func>

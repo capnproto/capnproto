@@ -220,6 +220,7 @@ void detach(kj::Promise<void>&& promise);
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope);
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope);
 Promise<void> yield();
+Promise<void> yieldHarder();
 Own<PromiseNode> neverDone();
 
 class NeverDone {

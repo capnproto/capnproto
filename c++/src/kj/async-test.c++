@@ -379,57 +379,75 @@ TEST(Async, Ordering) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  int counter = 0;
-  Promise<void> promises[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+  class ErrorHandlerImpl: public TaskSet::ErrorHandler {
+  public:
+    void taskFailed(kj::Exception&& exception) override {
+      KJ_FAIL_EXPECT(exception);
+    }
+  };
 
-  promises[1] = evalLater([&]() {
+  int counter = 0;
+  ErrorHandlerImpl errorHandler;
+  kj::TaskSet tasks(errorHandler);
+
+  tasks.add(evalLater([&]() {
     EXPECT_EQ(0, counter++);
 
     {
       // Use a promise and fulfiller so that we can fulfill the promise after waiting on it in
       // order to induce depth-first scheduling.
       auto paf = kj::newPromiseAndFulfiller<void>();
-      promises[2] = paf.promise.then([&]() {
+      tasks.add(paf.promise.then([&]() {
         EXPECT_EQ(1, counter++);
-      }).eagerlyEvaluate(nullptr);
+      }));
       paf.fulfiller->fulfill();
     }
 
     // .then() is scheduled breadth-first if the promise has already resolved, but depth-first
     // if the promise resolves later.
-    promises[3] = Promise<void>(READY_NOW).then([&]() {
+    tasks.add(Promise<void>(READY_NOW).then([&]() {
       EXPECT_EQ(4, counter++);
     }).then([&]() {
       EXPECT_EQ(5, counter++);
-    }).eagerlyEvaluate(nullptr);
+      tasks.add(kj::evalLast([&]() {
+        EXPECT_EQ(7, counter++);
+        tasks.add(kj::evalLater([&]() {
+          EXPECT_EQ(8, counter++);
+        }));
+      }));
+    }));
 
     {
       auto paf = kj::newPromiseAndFulfiller<void>();
-      promises[4] = paf.promise.then([&]() {
+      tasks.add(paf.promise.then([&]() {
         EXPECT_EQ(2, counter++);
-      }).eagerlyEvaluate(nullptr);
+        tasks.add(kj::evalLast([&]() {
+          EXPECT_EQ(9, counter++);
+          tasks.add(kj::evalLater([&]() {
+            EXPECT_EQ(10, counter++);
+          }));
+        }));
+      }));
       paf.fulfiller->fulfill();
     }
 
     // evalLater() is like READY_NOW.then().
-    promises[5] = evalLater([&]() {
+    tasks.add(evalLater([&]() {
       EXPECT_EQ(6, counter++);
-    }).eagerlyEvaluate(nullptr);
-  }).eagerlyEvaluate(nullptr);
+    }));
+  }));
 
-  promises[0] = evalLater([&]() {
+  tasks.add(evalLater([&]() {
     EXPECT_EQ(3, counter++);
 
-    // Making this a chain should NOT cause it to preempt promises[1].  (This was a problem at one
-    // point.)
+    // Making this a chain should NOT cause it to preempt the first promise.  (This was a problem
+    // at one point.)
     return Promise<void>(READY_NOW);
-  }).eagerlyEvaluate(nullptr);
+  }));
 
-  for (auto i: indices(promises)) {
-    kj::mv(promises[i]).wait(waitScope);
-  }
+  tasks.onEmpty().wait(waitScope);
 
-  EXPECT_EQ(7, counter);
+  EXPECT_EQ(11, counter);
 }
 
 TEST(Async, Fork) {
