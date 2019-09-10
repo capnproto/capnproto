@@ -900,18 +900,18 @@ HttpHeaders::ResponseOrProtocolError HttpHeaders::tryParseResponse(kj::ArrayPtr<
   KJ_IF_MAYBE(version, consumeWord(ptr)) {
     if (!version->startsWith("HTTP/")) {
       return ProtocolError { 502, "Bad Gateway",
-          "ERROR: Invalid response status line.", content };
+          "ERROR: Invalid response status line (invalid protocol).", content };
     }
   } else {
     return ProtocolError { 502, "Bad Gateway",
-        "ERROR: Invalid response status line.", content };
+        "ERROR: Invalid response status line (no spaces).", content };
   }
 
   KJ_IF_MAYBE(code, consumeNumber(ptr)) {
     response.statusCode = *code;
   } else {
     return ProtocolError { 502, "Bad Gateway",
-        "ERROR: Invalid response status code.", content };
+        "ERROR: Invalid response status line (invalid status code).", content };
   }
 
   response.statusText = consumeLine(ptr);
