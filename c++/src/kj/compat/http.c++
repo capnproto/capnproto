@@ -679,7 +679,12 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
       indexedHeaders[id->id] = value;
     } else {
       // Duplicate HTTP headers are equivalent to the values being separated by a comma.
+
+#if _MSC_VER
+      if (_stricmp(name.cStr(), "set-cookie") == 0) {
+#else
       if (strcasecmp(name.cStr(), "set-cookie") == 0) {
+#endif
         // Uh-oh, Set-Cookie will be corrupted if we try to concatenate it. We'll make it an
         // unindexed header, which is weird, but the alternative is guaranteed corruption, so...
         // TODO(cleanup): Maybe HttpHeaders should just special-case set-cookie in general?
