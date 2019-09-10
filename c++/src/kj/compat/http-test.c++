@@ -2118,6 +2118,10 @@ void testWebSocketClient(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
   }
 }
 
+inline kj::Promise<void> writeA(kj::AsyncOutputStream& out, kj::ArrayPtr<const byte> data) {
+  return out.write(data.begin(), data.size());
+}
+
 KJ_TEST("HttpClient WebSocket handshake") {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
@@ -2125,12 +2129,12 @@ KJ_TEST("HttpClient WebSocket handshake") {
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return pipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)}); })
-      .then([&]() { return pipe.ends[1]->write({WEBSOCKET_FIRST_MESSAGE_INLINE}); })
+      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE); })
       .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_MESSAGE); })
-      .then([&]() { return pipe.ends[1]->write({WEBSOCKET_REPLY_MESSAGE}); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_REPLY_MESSAGE); })
       .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_CLOSE); })
-      .then([&]() { return pipe.ends[1]->write({WEBSOCKET_REPLY_CLOSE}); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE); })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
 
   HttpHeaderTable::Builder tableBuilder;
@@ -2155,9 +2159,9 @@ KJ_TEST("HttpClient WebSocket error") {
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return pipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE_ERROR)}); })
+      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE_ERROR)); })
       .then([&]() { return expectRead(*pipe.ends[1], request); })
-      .then([&]() { return pipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE_ERROR)}); })
+      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE_ERROR)); })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
 
   HttpHeaderTable::Builder tableBuilder;
@@ -2208,13 +2212,13 @@ KJ_TEST("HttpServer WebSocket handshake") {
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
-  pipe.ends[1]->write({request.asBytes()}).wait(waitScope);
+  writeA(*pipe.ends[1], request.asBytes()).wait(waitScope);
   expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE).wait(waitScope);
 
   expectRead(*pipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(waitScope);
-  pipe.ends[1]->write({WEBSOCKET_SEND_MESSAGE}).wait(waitScope);
+  writeA(*pipe.ends[1], WEBSOCKET_SEND_MESSAGE).wait(waitScope);
   expectRead(*pipe.ends[1], WEBSOCKET_REPLY_MESSAGE).wait(waitScope);
-  pipe.ends[1]->write({WEBSOCKET_SEND_CLOSE}).wait(waitScope);
+  writeA(*pipe.ends[1], WEBSOCKET_SEND_CLOSE).wait(waitScope);
   expectRead(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE).wait(waitScope);
 
   listenTask.wait(waitScope);
@@ -2234,11 +2238,11 @@ KJ_TEST("HttpServer WebSocket handshake error") {
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   auto request = kj::str("GET /return-error", WEBSOCKET_REQUEST_HANDSHAKE);
-  pipe.ends[1]->write({request.asBytes()}).wait(waitScope);
+  writeA(*pipe.ends[1], request.asBytes()).wait(waitScope);
   expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE_ERROR).wait(waitScope);
 
   // Can send more requests!
-  pipe.ends[1]->write({request.asBytes()}).wait(waitScope);
+  writeA(*pipe.ends[1], request.asBytes()).wait(waitScope);
   expectRead(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE_ERROR).wait(waitScope);
 
   pipe.ends[1]->shutdownWrite();
@@ -2898,12 +2902,12 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
   auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
-      .then([&]() { return backPipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)}); })
-      .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_FIRST_MESSAGE_INLINE}); })
+      .then([&]() { return writeA(*backPipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE); })
       .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_MESSAGE); })
-      .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_REPLY_MESSAGE}); })
+      .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_REPLY_MESSAGE); })
       .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_CLOSE); })
-      .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_REPLY_CLOSE}); })
+      .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_REPLY_CLOSE); })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
 
   {
@@ -2916,13 +2920,13 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
     HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
 
-    frontPipe.ends[0]->write({request.asBytes()}).wait(waitScope);
+    writeA(*frontPipe.ends[0], request.asBytes()).wait(waitScope);
     expectRead(*frontPipe.ends[0], WEBSOCKET_RESPONSE_HANDSHAKE).wait(waitScope);
 
     expectRead(*frontPipe.ends[0], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(waitScope);
-    frontPipe.ends[0]->write({WEBSOCKET_SEND_MESSAGE}).wait(waitScope);
+    writeA(*frontPipe.ends[0], WEBSOCKET_SEND_MESSAGE).wait(waitScope);
     expectRead(*frontPipe.ends[0], WEBSOCKET_REPLY_MESSAGE).wait(waitScope);
-    frontPipe.ends[0]->write({WEBSOCKET_SEND_CLOSE}).wait(waitScope);
+    writeA(*frontPipe.ends[0], WEBSOCKET_SEND_CLOSE).wait(waitScope);
     expectRead(*frontPipe.ends[0], WEBSOCKET_REPLY_CLOSE).wait(waitScope);
 
     frontPipe.ends[0]->shutdownWrite();
@@ -2940,8 +2944,8 @@ KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
   auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
-      .then([&]() { return backPipe.ends[1]->write({asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)}); })
-      .then([&]() { return backPipe.ends[1]->write({WEBSOCKET_FIRST_MESSAGE_INLINE}); })
+      .then([&]() { return writeA(*backPipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE); })
       .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_MESSAGE); })
       .then([&]() { backPipe.ends[1]->shutdownWrite(); })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
@@ -2956,11 +2960,11 @@ KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
     HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
 
-    frontPipe.ends[0]->write({request.asBytes()}).wait(waitScope);
+    writeA(*frontPipe.ends[0], request.asBytes()).wait(waitScope);
     expectRead(*frontPipe.ends[0], WEBSOCKET_RESPONSE_HANDSHAKE).wait(waitScope);
 
     expectRead(*frontPipe.ends[0], WEBSOCKET_FIRST_MESSAGE_INLINE).wait(waitScope);
-    frontPipe.ends[0]->write({WEBSOCKET_SEND_MESSAGE}).wait(waitScope);
+    writeA(*frontPipe.ends[0], WEBSOCKET_SEND_MESSAGE).wait(waitScope);
 
     KJ_EXPECT(frontPipe.ends[0]->readAllText().wait(waitScope) == "");
 
