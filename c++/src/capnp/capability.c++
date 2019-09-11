@@ -121,6 +121,10 @@ kj::Promise<void> ClientHook::whenResolved() {
   }
 }
 
+kj::Promise<void> Capability::Client::whenResolved() {
+  return hook->whenResolved().attach(hook->addRef());
+}
+
 // =======================================================================================
 
 static inline uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint) {
