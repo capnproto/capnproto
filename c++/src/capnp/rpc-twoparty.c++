@@ -222,7 +222,12 @@ size_t TwoPartyVatNetwork::getWindow() {
       KJ_ASSERT(len == sizeof(bufSize));
     })) {
       if (exception->getType() != kj::Exception::Type::UNIMPLEMENTED) {
-        kj::throwRecoverableException(kj::mv(*exception));
+        // TODO(someday): Figure out why getting SO_SNDBUF sometimes throws EINVAL. I suspect it
+        //   happens when the remote side has closed their read end, meaning we no longer have
+        //   a send buffer, but I don't know what is the best way to verify that that was actually
+        //   the reason. I'd prefer not to ignore EINVAL errors in general.
+
+        // kj::throwRecoverableException(kj::mv(*exception));
       }
       solSndbufUnimplemented = true;
       bufSize = RpcFlowController::DEFAULT_WINDOW_SIZE;

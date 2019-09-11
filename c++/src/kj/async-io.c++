@@ -724,32 +724,33 @@ private:
       auto maxToRead = kj::min(amount, readBuffer.size());
 
       return canceler.wrap(input.tryRead(readBuffer.begin(), minToRead, maxToRead)
-          .then([this,&input,amount,minToRead](size_t actual) -> Promise<uint64_t> {
+          .then([this,&input,amount](size_t actual) -> Promise<uint64_t> {
         readBuffer = readBuffer.slice(actual, readBuffer.size());
         readSoFar += actual;
 
-        if (readSoFar >= minBytes || actual < minToRead) {
-          // We've read enough to close out this read (readSoFar >= minBytes)
-          // OR we reached EOF and couldn't complete the read (actual < minToRead)
-          // Either way, we want to close out this read.
+        if (readSoFar >= minBytes) {
+          // We've read enough to close out this read (readSoFar >= minBytes).
           canceler.release();
           fulfiller.fulfill(kj::cp(readSoFar));
           pipe.endState(*this);
 
           if (actual < amount) {
-            // We din't complete pumping. Restart from the pipe.
+            // We didn't read as much data as the pump requested, but we did fulfill the read, so
+            // we don't know whether we reached EOF on the input. We need to continue the pump,
+            // replacing the BlockedRead state.
             return input.pumpTo(pipe, amount - actual)
                 .then([actual](uint64_t actual2) -> uint64_t { return actual + actual2; });
+          } else {
+            // We pumped as much data as was requested, so we can return that now.
+            return actual;
           }
+        } else {
+          // The pump completed without fulfilling the read. This either means that the pump
+          // reached EOF or the `amount` requested was not enough to satisfy the read in the first
+          // place. Pumps do not propagate EOF, so either way we want to leave the BlockedRead in
+          // place waiting for more data.
+          return actual;
         }
-
-        // If we read less than `actual`, but more than `minToRead`, it can only have been
-        // because we reached `minBytes`, so the conditional above would have executed. So, here
-        // we know that actual == amount.
-        KJ_ASSERT(actual == amount);
-
-        // We pumped the full amount, so we're done pumping.
-        return amount;
       }));
     }
 
@@ -950,20 +951,20 @@ private:
 
   public:
     Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     void abortRead() override {
       // ignore repeated abort
     }
 
     Promise<void> write(const void* buffer, size_t size) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      KJ_FAIL_REQUIRE("abortRead() has been called");
+      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
       // There might not actually be any data in `input`, in which case a pump wouldn't actually
@@ -983,7 +984,9 @@ private:
             return uint64_t(0);
           } else {
             // There was data in the input. The pump would have thrown.
-            KJ_FAIL_REQUIRE("abortRead() has been called");
+            kj::throwRecoverableException(
+                KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+            return uint64_t(0);
           }
         });
       }

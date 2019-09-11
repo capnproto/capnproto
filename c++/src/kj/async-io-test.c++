@@ -1702,6 +1702,36 @@ KJ_TEST("Userland pipe multi-part write doesn't quit early") {
   writePromise.wait(ws);
 }
 
+KJ_TEST("Userland pipe BlockedRead gets empty tryPumpFrom") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+
+  // First start a read from the back end.
+  char buffer[4];
+  auto readPromise = pipe2.in->tryRead(buffer, 1, 4);
+
+  // Now arrange a pump between the pipes, using tryPumpFrom().
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
+
+  // Disconnect the front pipe, causing EOF on the pump.
+  pipe.out = nullptr;
+
+  // The pump should have produced zero bytes.
+  KJ_EXPECT(pumpPromise.wait(ws) == 0);
+
+  // The read is incomplete.
+  KJ_EXPECT(!readPromise.poll(ws));
+
+  // A subsequent write() completes the read.
+  pipe2.out->write("foo", 3).wait(ws);
+  KJ_EXPECT(readPromise.wait(ws) == 3);
+  buffer[3] = '\0';
+  KJ_EXPECT(kj::StringPtr(buffer, 3) == "foo");
+}
+
 constexpr static auto TEE_MAX_CHUNK_SIZE = 1 << 14;
 // AsyncTee::MAX_CHUNK_SIZE, 16k as of this writing
 

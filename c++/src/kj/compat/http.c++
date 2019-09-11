@@ -578,6 +578,16 @@ void HttpHeaders::clear() {
   unindexedHeaders.clear();
 }
 
+size_t HttpHeaders::size() const {
+  size_t result = unindexedHeaders.size();
+  for (auto i: kj::indices(indexedHeaders)) {
+    if (indexedHeaders[i] != nullptr) {
+      ++result;
+    }
+  }
+  return result;
+}
+
 HttpHeaders HttpHeaders::clone() const {
   HttpHeaders result(*table);
 
@@ -669,9 +679,21 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
       indexedHeaders[id->id] = value;
     } else {
       // Duplicate HTTP headers are equivalent to the values being separated by a comma.
-      auto concat = kj::str(indexedHeaders[id->id], ", ", value);
-      indexedHeaders[id->id] = concat;
-      ownedStrings.add(concat.releaseArray());
+
+#if _MSC_VER
+      if (_stricmp(name.cStr(), "set-cookie") == 0) {
+#else
+      if (strcasecmp(name.cStr(), "set-cookie") == 0) {
+#endif
+        // Uh-oh, Set-Cookie will be corrupted if we try to concatenate it. We'll make it an
+        // unindexed header, which is weird, but the alternative is guaranteed corruption, so...
+        // TODO(cleanup): Maybe HttpHeaders should just special-case set-cookie in general?
+        unindexedHeaders.add(Header {name, value});
+      } else {
+        auto concat = kj::str(indexedHeaders[id->id], ", ", value);
+        indexedHeaders[id->id] = concat;
+        ownedStrings.add(concat.releaseArray());
+      }
     }
   } else {
     unindexedHeaders.add(Header {name, value});

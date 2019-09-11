@@ -117,6 +117,8 @@ public:
   inline bool operator>=(const HttpHeaderId& other) const { return id >= other.id; }
 
   inline size_t hashCode() const { return id; }
+  // Returned value is guaranteed to be small and never collide with other headers on the same
+  // table.
 
   kj::StringPtr toString() const;
 
@@ -251,6 +253,9 @@ public:
   HttpHeaders(HttpHeaders&&) = default;
   HttpHeaders& operator=(HttpHeaders&&) = default;
 
+  size_t size() const;
+  // Returns the number of headers that forEach() would iterate over.
+
   void clear();
   // Clears all contents, as if the object was freshly-allocated. However, calling this rather
   // than actually re-allocating the object may avoid re-allocation of internal objects.
@@ -276,6 +281,12 @@ public:
   void forEach(Func&& func) const;
   // Calls `func(name, value)` for each header in the set -- including headers that aren't mapped
   // to IDs in the header table. Both inputs are of type kj::StringPtr.
+
+  template <typename Func1, typename Func2>
+  void forEach(Func1&& func1, Func2&& func2) const;
+  // Calls `func1(id, value)` for each header in the set that has a registered HttpHeaderId, and
+  // `func2(name, value)` for each header that does not. All calls to func1() preceed all calls to
+  // func2().
 
   void set(HttpHeaderId id, kj::StringPtr value);
   void set(HttpHeaderId id, kj::String&& value);
@@ -954,6 +965,19 @@ inline void HttpHeaders::forEach(Func&& func) const {
 
   for (auto& header: unindexedHeaders) {
     func(header.name, header.value);
+  }
+}
+
+template <typename Func1, typename Func2>
+inline void HttpHeaders::forEach(Func1&& func1, Func2&& func2) const {
+  for (auto i: kj::indices(indexedHeaders)) {
+    if (indexedHeaders[i] != nullptr) {
+      func1(HttpHeaderId(table, i), indexedHeaders[i]);
+    }
+  }
+
+  for (auto& header: unindexedHeaders) {
+    func2(header.name, header.value);
   }
 }
 
