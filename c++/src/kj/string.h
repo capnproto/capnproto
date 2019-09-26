@@ -488,7 +488,7 @@ inline _::Delimited<ArrayPtr<const T>> Stringifier::operator*(const Array<T>& ar
 //    class Foo {...};
 //    inline StringPtr KJ_STRINGIFY(const Foo& foo) { return foo.name(); }
 //      // or perhaps
-//    inline String KJ_STRINGIFY(const Foo& foo) { return kj::str(foo.field1(), ",", foo.field2()); }
+//    inline String KJ_STRINGIFY(const Foo& foo) { return kj::str(foo.fld1(), ",", foo.fld2()); }
 //
 // This allows Foo to be passed to str().
 //
