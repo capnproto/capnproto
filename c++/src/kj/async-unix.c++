@@ -601,6 +601,14 @@ bool UnixEventPort::doEpollWait(int timeout) {
         KJ_ASSERT(n == sizeof(siginfo));
 
         gotSignal(toRegularSiginfo(siginfo));
+
+        if (siginfo.ssi_signo >= __SIGRTMIN) {
+          // HACK: This is an RT signal. There could be multiple RT signals with the same code
+          //   queued, but the SignalPromiseAdapter was just satisfied and hasn't been given a
+          //   chance to be re-upped. So if we keep reading signals right now we might read another
+          //   instance of this signal which would be dropped on the floor.
+          break;
+        }
       }
     } else if (events[i].data.u64 == 1) {
       // Someone called wake() from another thread. Consume the event.
