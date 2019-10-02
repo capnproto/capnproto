@@ -62,6 +62,10 @@ void captureSignals() {
     UnixEventPort::captureSignal(SIGURG);
     UnixEventPort::captureSignal(SIGIO);
 
+#ifdef SIGRTMIN
+    UnixEventPort::captureSignal(SIGRTMIN);
+#endif
+
     UnixEventPort::captureChildExit();
   }
 }
@@ -877,6 +881,45 @@ KJ_TEST("UnixEventPort poll for signals") {
   promise1.wait(waitScope);
   promise2.wait(waitScope);
 }
+
+#ifdef SIGRTMIN
+void testRtSignals(UnixEventPort& port, WaitScope& waitScope, bool doPoll) {
+  union sigval value;
+  memset(&value, 0, sizeof(value));
+
+  // Queue three copies of the signal upfront.
+  for (uint i = 0; i < 3; i++) {
+    value.sival_int = 123 + i;
+    KJ_SYSCALL(sigqueue(getpid(), SIGRTMIN, value));
+  }
+
+  // Now wait for them.
+  for (uint i = 0; i < 3; i++) {
+    auto promise = port.onSignal(SIGRTMIN);
+    if (doPoll) {
+      KJ_ASSERT(promise.poll(waitScope));
+    }
+    auto info = promise.wait(waitScope);
+    KJ_EXPECT(info.si_value.sival_int == 123 + i);
+  }
+
+  KJ_EXPECT(!port.onSignal(SIGRTMIN).poll(waitScope));
+}
+
+KJ_TEST("UnixEventPort can receive multiple queued instances of an RT signal") {
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  testRtSignals(port, waitScope, true);
+
+  // Test again, but don't poll() the promises. This may test a different code path, if poll() and
+  // wait() are very different in how they read signals. (For the poll(2)-based implementation of
+  // UnixEventPort, they are indeed pretty different.)
+  testRtSignals(port, waitScope, false);
+}
+#endif
 
 }  // namespace
 }  // namespace kj
