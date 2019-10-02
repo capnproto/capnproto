@@ -382,7 +382,9 @@ TwoPartyClient::TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFd
       rpcSystem(network, bootstrapInterface) {}
 
 Capability::Client TwoPartyClient::bootstrap() {
-  MallocMessageBuilder message(4);
+  capnp::word scratch[4];
+  memset(&scratch, 0, sizeof(scratch));
+  capnp::MallocMessageBuilder message(scratch);
   auto vatId = message.getRoot<rpc::twoparty::VatId>();
   vatId.setSide(network.getSide() == rpc::twoparty::Side::CLIENT
                 ? rpc::twoparty::Side::SERVER
