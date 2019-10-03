@@ -882,7 +882,12 @@ KJ_TEST("UnixEventPort poll for signals") {
   promise2.wait(waitScope);
 }
 
-#ifdef SIGRTMIN
+#if defined(SIGRTMIN) && !__CYGWIN__
+// TODO(someday): Figure out why RT signals don't seem to work correctly on Cygwin. It looks like
+//   only the first signal is delivered, like how non-RT signals work. Is it possible Cygwin
+//   advertites RT signal support but doesn't actually implement them correctly? I can't find any
+//   information on the internet about this and TBH I don't care about Cygwin enough to dig in.
+
 void testRtSignals(UnixEventPort& port, WaitScope& waitScope, bool doPoll) {
   union sigval value;
   memset(&value, 0, sizeof(value));
