@@ -405,6 +405,12 @@ private:
               }
             }
           }
+
+          if (spaceLeft >= CMSG_LEN(0) && spaceLeft >= cmsg->cmsg_len) {
+            spaceLeft -= cmsg->cmsg_len;
+          } else {
+            spaceLeft = 0;
+          }
         }
 
 #ifndef MSG_CMSG_CLOEXEC

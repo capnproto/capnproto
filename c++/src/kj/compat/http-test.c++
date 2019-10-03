@@ -126,6 +126,7 @@ KJ_TEST("HttpHeaders::parseRequest") {
       "Content-Length: 123\r\n"
       "DATE:     early\r\n"
       "other-Header: yep\r\n"
+      "with.dots: sure\r\n"
       "\r\n");
   auto result = headers.tryParseRequest(text.asArray()).get<HttpHeaders::Request>();
 
@@ -143,12 +144,13 @@ KJ_TEST("HttpHeaders::parseRequest") {
   headers.forEach([&](kj::StringPtr name, kj::StringPtr value) {
     KJ_EXPECT(unpackedHeaders.insert(std::make_pair(name, value)).second);
   });
-  KJ_EXPECT(unpackedHeaders.size() == 5);
+  KJ_EXPECT(unpackedHeaders.size() == 6);
   KJ_EXPECT(unpackedHeaders["Content-Length"] == "123");
   KJ_EXPECT(unpackedHeaders["Host"] == "example.com");
   KJ_EXPECT(unpackedHeaders["Date"] == "early");
   KJ_EXPECT(unpackedHeaders["Foo-Bar"] == "Baz");
   KJ_EXPECT(unpackedHeaders["other-Header"] == "yep");
+  KJ_EXPECT(unpackedHeaders["with.dots"] == "sure");
 
   KJ_EXPECT(headers.serializeRequest(result.method, result.url) ==
       "POST /some/path HTTP/1.1\r\n"
@@ -157,6 +159,7 @@ KJ_TEST("HttpHeaders::parseRequest") {
       "Date: early\r\n"
       "Foo-Bar: Baz\r\n"
       "other-Header: yep\r\n"
+      "with.dots: sure\r\n"
       "\r\n");
 }
 

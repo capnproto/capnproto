@@ -601,6 +601,19 @@ bool UnixEventPort::doEpollWait(int timeout) {
         KJ_ASSERT(n == sizeof(siginfo));
 
         gotSignal(toRegularSiginfo(siginfo));
+
+#ifdef SIGRTMIN
+        if (siginfo.ssi_signo >= SIGRTMIN) {
+          // This is an RT signal. There could be multiple copies queued. We need to remove it from
+          // the signalfd's signal mask before we continue, to avoid accidentally reading and
+          // discarding the extra copies.
+          // TODO(perf): If high throughput of RT signals is desired then perhaps we should read
+          //   them all into userspace and queue them here. Maybe we even need a better interface
+          //   than onSignal() for receiving high-volume RT signals.
+          KJ_SYSCALL(sigdelset(&signalFdSigset, siginfo.ssi_signo));
+          KJ_SYSCALL(signalfd(signalFd, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
+        }
+#endif
       }
     } else if (events[i].data.u64 == 1) {
       // Someone called wake() from another thread. Consume the event.
