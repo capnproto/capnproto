@@ -1899,7 +1899,9 @@ private:
       auto remainder = path.slice(i, path.size());
 
       KJ_IF_MAYBE(sdir, sourceDirectories.find(prefix)) {
-        return { *sdir->dir, remainder.clone() };
+        if (sdir->isSourcePrefix) {
+          return { *sdir->dir, remainder.clone() };
+        }
       }
     }
 
