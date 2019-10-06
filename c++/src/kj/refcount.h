@@ -134,10 +134,16 @@ public:
   KJ_DISALLOW_COPY(AtomicRefcounted);
 
   inline bool isShared() const {
+    return getRefcount() > 1;
+  }
+
+  inline uint getRefcount() const {
+    // This value can be useful for heuristic purposes, such as estimating the load on a resource.
+
 #if _MSC_VER
-    return KJ_MSVC_INTERLOCKED(Or, acq)(&refcount, 0) > 1;
+    return KJ_MSVC_INTERLOCKED(Or, acq)(&refcount, 0);
 #else
-    return __atomic_load_n(&refcount, __ATOMIC_ACQUIRE) > 1;
+    return __atomic_load_n(&refcount, __ATOMIC_ACQUIRE);
 #endif
   }
 
