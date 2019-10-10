@@ -24,13 +24,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "common.h"
 #include "../string.h"
 #include <inttypes.h>
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace parse {
@@ -364,3 +362,5 @@ constexpr auto doubleQuotedHexBinary = sequence(
 
 }  // namespace parse
 }  // namespace kj
+
+KJ_END_HEADER

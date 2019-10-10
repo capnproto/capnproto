@@ -21,11 +21,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "common.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -555,3 +553,5 @@ Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments) {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

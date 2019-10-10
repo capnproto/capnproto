@@ -21,11 +21,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "string.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace _ {  // private
@@ -176,3 +174,5 @@ inline uint HashCoder::operator*(const Array<T>& arr) const {
 
 }  // namespace _ (private)
 } // namespace kj
+
+KJ_END_HEADER

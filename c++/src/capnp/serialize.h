@@ -40,12 +40,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "message.h"
 #include <kj/io.h>
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -258,3 +256,5 @@ inline void writeMessageToFd(int fd, MessageBuilder& builder) {
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

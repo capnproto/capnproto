@@ -25,12 +25,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "../io.h"
 #include <iostream>
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace std {
@@ -83,3 +81,5 @@ private:
 
 }  // namespace std
 }  // namespace kj
+
+KJ_END_HEADER

@@ -22,9 +22,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
 // This file declares a macro `KJ_THREADLOCAL_PTR` for declaring thread-local pointer-typed
 // variables.  Use like:
 //     KJ_THREADLOCAL_PTR(MyType) foo = nullptr;
@@ -57,6 +54,8 @@
 #if KJ_USE_PTHREAD_TLS
 #include <pthread.h>
 #endif
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -131,3 +130,5 @@ private:
 #endif // KJ_USE_PTHREAD_TLS
 
 }  // namespace kj
+
+KJ_END_HEADER

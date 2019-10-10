@@ -22,12 +22,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "units.h"
 #include <inttypes.h>
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace _ {  // private
@@ -109,3 +107,5 @@ const MonotonicClock& systemPreciseMonotonicClock();
 // a reasonable operating system the difference is usually negligible.
 
 }  // namespace kj
+
+KJ_END_HEADER

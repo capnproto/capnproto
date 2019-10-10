@@ -25,15 +25,13 @@
 #error "This file is Unix-specific. On Windows, include async-win32.h instead."
 #endif
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "async.h"
 #include "timer.h"
 #include "vector.h"
 #include "io.h"
 #include <signal.h>
+
+KJ_BEGIN_HEADER
 
 #if __linux__ && !__BIONIC__ && !defined(KJ_USE_EPOLL)
 // Default to epoll on Linux, except on Bionic (Android) which doesn't have signalfd.h.
@@ -323,3 +321,5 @@ private:
 };
 
 }  // namespace kj
+
+KJ_END_HEADER

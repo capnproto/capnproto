@@ -21,10 +21,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #if CAPNP_LITE
 #error "Reflection APIs, including this header, are not available in lite mode."
 #endif
@@ -32,6 +28,8 @@
 #include <capnp/schema.capnp.h>
 #include <kj/hash.h>
 #include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -980,3 +978,5 @@ inline Type Type::wrapInList(uint depth) const {
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

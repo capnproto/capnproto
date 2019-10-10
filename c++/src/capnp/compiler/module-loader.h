@@ -21,16 +21,14 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "compiler.h"
 #include "error-reporter.h"
 #include <kj/memory.h>
 #include <kj/array.h>
 #include <kj/string.h>
 #include <kj/filesystem.h>
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 namespace compiler {
@@ -60,3 +58,5 @@ private:
 
 }  // namespace compiler
 }  // namespace capnp
+
+CAPNP_END_HEADER

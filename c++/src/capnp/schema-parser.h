@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "schema-loader.h"
 #include <kj/string.h>
 #include <kj/filesystem.h>
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -243,3 +241,5 @@ private:
 };
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

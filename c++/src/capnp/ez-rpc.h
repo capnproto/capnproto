@@ -21,12 +21,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "rpc.h"
 #include "message.h"
+
+CAPNP_BEGIN_HEADER
 
 struct sockaddr;
 
@@ -249,3 +247,5 @@ inline typename Type::Client EzRpcClient::importCap(kj::StringPtr name) {
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

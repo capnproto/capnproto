@@ -26,11 +26,9 @@
 // - URI encoding
 // - Base64
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "string.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -368,3 +366,5 @@ EncodingResult<Array<byte>> decodeBase64(const char (&text)[s]) {
 }
 
 } // namespace kj
+
+KJ_END_HEADER

@@ -37,11 +37,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "common.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace _ {  // private
@@ -441,3 +439,5 @@ template <size_t i, typename Tuple>
 using TypeOfIndex = typename TypeOfIndex_<i, Tuple>::Type;
 
 }  // namespace kj
+
+KJ_END_HEADER

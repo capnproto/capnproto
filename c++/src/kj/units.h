@@ -25,12 +25,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "common.h"
 #include <inttypes.h>
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -1174,3 +1172,5 @@ inline constexpr Range<Quantity<Bounded<value, uint>, Unit>>
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

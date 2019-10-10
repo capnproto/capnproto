@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#pragma once
+
 #include <kj/common.h>
 #include <kj/memory.h>
 #include <kj/mutex.h>
@@ -28,11 +30,7 @@
 #include "layout.h"
 #include "any.h"
 
-#pragma once
-
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -564,3 +562,5 @@ kj::Array<word> canonicalize(T&& reader) {
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

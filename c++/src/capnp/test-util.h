@@ -21,10 +21,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include <capnp/test.capnp.h>
 #include <iostream>
 #include "blob.h"
@@ -34,6 +30,8 @@
 #include "dynamic.h"
 #include <kj/io.h>
 #endif  // !CAPNP_LITE
+
+CAPNP_BEGIN_HEADER
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
 namespace capnproto_test {
@@ -358,3 +356,5 @@ public:
 
 }  // namespace _ (private)
 }  // namespace capnp
+
+CAPNP_END_HEADER

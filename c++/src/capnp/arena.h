@@ -21,10 +21,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #ifndef CAPNP_PRIVATE
 #error "This header is only meant to be included by Cap'n Proto's own source code."
 #endif
@@ -42,6 +38,8 @@
 #if !CAPNP_LITE
 #include "capability.h"
 #endif  // !CAPNP_LITE
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -499,3 +497,5 @@ inline bool SegmentBuilder::tryExtend(word* from, word* to) {
 
 }  // namespace _ (private)
 }  // namespace capnp
+
+CAPNP_END_HEADER

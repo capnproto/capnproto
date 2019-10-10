@@ -21,14 +21,12 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include <kj/common.h>
 #include <kj/string.h>
 #include "common.h"
 #include <string.h>
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -217,3 +215,5 @@ inline kj::ArrayPtr<char> Text::Builder::slice(size_t start, size_t end) {
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

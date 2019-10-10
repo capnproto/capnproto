@@ -21,12 +21,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "table.h"
 #include "hash.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -534,3 +532,5 @@ size_t TreeMap<Key, Value>::eraseRange(K1&& k1, K2&& k2) {
 }
 
 } // namespace kj
+
+KJ_END_HEADER

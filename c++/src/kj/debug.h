@@ -106,13 +106,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "string.h"
 #include "exception.h"
 #include "windows-sanity.h"  // work-around macro conflict with `ERROR`
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -581,3 +579,5 @@ inline String Debug::makeDescription<>(const char* macroArgs) {
 
 }  // namespace _ (private)
 }  // namespace kj
+
+KJ_END_HEADER

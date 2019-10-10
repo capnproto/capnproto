@@ -21,12 +21,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "layout.h"
 #include "list.h"
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 namespace _ {  // private
@@ -155,3 +153,5 @@ struct PointerHelpers<UncheckedMessage> {
 
 }  // namespace _ (private)
 }  // namespace capnp
+
+CAPNP_END_HEADER

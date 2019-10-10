@@ -32,16 +32,14 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "schema.h"
 #include "layout.h"
 #include "message.h"
 #include "any.h"
 #include "capability.h"
 #include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -1678,3 +1676,5 @@ ReaderFor<T> ConstSchema::as() const {
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

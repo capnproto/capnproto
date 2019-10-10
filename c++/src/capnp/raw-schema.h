@@ -21,15 +21,13 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "common.h"  // for uint and friends
 
 #if _MSC_VER
 #include <atomic>
 #endif
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 namespace _ {  // private
@@ -237,3 +235,5 @@ inline bool RawBrandedSchema::isUnbound() const {
 
 }  // namespace _ (private)
 }  // namespace capnp
+
+CAPNP_END_HEADER
