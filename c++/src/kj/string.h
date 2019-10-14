@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include <initializer_list>
 #include "array.h"
 #include <string.h>
+
+KJ_BEGIN_HEADER
 
 namespace kj {
   class StringPtr;
@@ -702,3 +700,5 @@ _::Delimited<T> delimited(T&& arr, kj::StringPtr delim) {
 constexpr kj::StringPtr operator "" _kj(const char* str, size_t n) {
   return kj::StringPtr(kj::ArrayPtr<const char>(str, n + 1));
 };
+
+KJ_END_HEADER

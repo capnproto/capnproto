@@ -25,9 +25,30 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
+#ifdef __GNUC__
+#define KJ_BEGIN_SYSTEM_HEADER _Pragma("GCC system_header")
+#elif defined(_MSC_VER)
+#define KJ_BEGIN_SYSTEM_HEADER __pragma(warning(push, 0))
+#define KJ_END_SYSTEM_HEADER __pragma(warning(pop))
 #endif
+
+#ifndef KJ_BEGIN_SYSTEM_HEADER
+#define KJ_BEGIN_SYSTEM_HEADER
+#endif
+
+#ifndef KJ_END_SYSTEM_HEADER
+#define KJ_END_SYSTEM_HEADER
+#endif
+
+#if !defined(KJ_HEADER_WARNINGS) || !KJ_HEADER_WARNINGS
+#define KJ_BEGIN_HEADER KJ_BEGIN_SYSTEM_HEADER
+#define KJ_END_HEADER KJ_END_SYSTEM_HEADER
+#else
+#define KJ_BEGIN_HEADER
+#define KJ_END_HEADER
+#endif
+
+KJ_BEGIN_HEADER
 
 #ifndef KJ_NO_COMPILER_CHECK
 // Technically, __cplusplus should be 201402L for C++14, but GCC 4.9 -- which is supported -- still
@@ -1577,3 +1598,5 @@ _::Deferred<Func> defer(Func&& func) {
 // Run the given code when the function exits, whether by return or exception.
 
 }  // namespace kj
+
+KJ_END_HEADER

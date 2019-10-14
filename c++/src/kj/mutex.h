@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "memory.h"
 #include <inttypes.h>
 #include "time.h"
+
+KJ_BEGIN_HEADER
 
 #if __linux__ && !defined(KJ_USE_FUTEX)
 #define KJ_USE_FUTEX 1
@@ -558,3 +556,5 @@ inline const T& Lazy<T>::get(Func&& init) const {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

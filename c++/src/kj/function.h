@@ -21,11 +21,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "memory.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -291,3 +289,5 @@ BoundMethod<T, Func, ConstFunc> boundMethod(T&& t, Func&& func, ConstFunc&& cons
 // contain a copy (by move) of it. The method is allowed to be overloaded.
 
 }  // namespace kj
+
+KJ_END_HEADER

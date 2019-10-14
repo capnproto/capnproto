@@ -26,14 +26,12 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #ifndef KJ_ASYNC_H_INCLUDED
 #error "Do not include this directly; include kj/async.h."
 #include "async.h"  // help IDE parse this file
 #endif
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace _ {  // private
@@ -1306,3 +1304,5 @@ PromiseForResult<Func, void> Executor::executeAsync(Func&& func) const {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

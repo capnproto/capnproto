@@ -22,12 +22,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "time.h"
 #include "async.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -130,3 +128,5 @@ Promise<T> Timer::timeoutAfter(Duration delay, Promise<T>&& promise) {
 inline TimePoint TimerImpl::now() const { return time; }
 
 }  // namespace kj
+
+KJ_END_HEADER

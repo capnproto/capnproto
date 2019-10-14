@@ -21,12 +21,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include <kj/async-io.h>
 #include "message.h"
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -90,3 +88,5 @@ inline kj::Promise<void> writeMessage(
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

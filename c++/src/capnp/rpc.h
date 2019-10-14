@@ -21,12 +21,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "capability.h"
 #include "rpc-prelude.h"
+
+CAPNP_BEGIN_HEADER
 
 namespace kj { class AutoCloseFd; }
 
@@ -653,3 +651,5 @@ RpcSystem<VatId> makeRpcClient(
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "layout.h"
 #include "orphan.h"
 #include <initializer_list>
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 namespace _ {  // private
@@ -550,3 +548,5 @@ private:
 #ifdef KJ_STD_COMPAT
 #include "compat/std-iterator.h"
 #endif  // KJ_STD_COMPAT
+
+CAPNP_END_HEADER

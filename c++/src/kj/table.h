@@ -21,10 +21,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "common.h"
 #include "tuple.h"
 #include "vector.h"
@@ -38,6 +34,8 @@
 #include <intrin0.h>
 #endif
 #endif
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -1627,3 +1625,5 @@ private:
 };
 
 } // namespace kj
+
+KJ_END_HEADER

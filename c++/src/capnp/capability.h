@@ -21,10 +21,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #if CAPNP_LITE
 #error "RPC APIs, including this header, are not available in lite mode."
 #endif
@@ -34,6 +30,8 @@
 #include "raw-schema.h"
 #include "any.h"
 #include "pointer-helpers.h"
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -1033,3 +1031,5 @@ struct Orphanage::GetInnerReader<T, Kind::INTERFACE> {
 #define CAPNP_CAPABILITY_H_INCLUDED  // for testing includes in unit test
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

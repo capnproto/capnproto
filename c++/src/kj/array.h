@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "memory.h"
 #include <string.h>
 #include <initializer_list>
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -903,3 +901,5 @@ Array<T> ArrayPtr<T>::attach(Attachments&&... attachments) const {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

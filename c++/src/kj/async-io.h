@@ -21,14 +21,12 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "async.h"
 #include "function.h"
 #include "thread.h"
 #include "timer.h"
+
+KJ_BEGIN_HEADER
 
 struct sockaddr;
 
@@ -846,3 +844,5 @@ inline ArrayPtr<const T> AncillaryMessage::asArray() {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

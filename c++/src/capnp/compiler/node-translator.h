@@ -21,10 +21,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include <capnp/orphan.h>
 #include <capnp/compiler/grammar.capnp.h>
 #include <capnp/schema.capnp.h>
@@ -33,6 +29,8 @@
 #include <kj/one-of.h>
 #include "error-reporter.h"
 #include <map>
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 namespace compiler {
@@ -318,3 +316,5 @@ private:
 
 }  // namespace compiler
 }  // namespace capnp
+
+CAPNP_END_HEADER

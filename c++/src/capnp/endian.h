@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "common.h"
 #include <inttypes.h>
 #include <string.h>  // memcpy
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 namespace _ {  // private
@@ -304,3 +302,5 @@ using WireValue = ShiftingWireValue<T>;
 
 }  // namespace _ (private)
 }  // namespace capnp
+
+CAPNP_END_HEADER

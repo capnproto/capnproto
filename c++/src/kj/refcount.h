@@ -23,10 +23,6 @@
 
 #include "memory.h"
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #if _MSC_VER
 #if _MSC_VER < 1910
 #include <intrin.h>
@@ -34,6 +30,8 @@
 #include <intrin0.h>
 #endif
 #endif
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -225,3 +223,5 @@ kj::Own<const T> AtomicRefcounted::addRefInternal(const T* object) {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

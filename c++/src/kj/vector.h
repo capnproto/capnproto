@@ -21,11 +21,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "array.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -151,3 +149,5 @@ inline auto KJ_STRINGIFY(const Vector<T>& v) -> decltype(toCharSequence(v.asPtr(
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

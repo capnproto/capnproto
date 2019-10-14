@@ -23,10 +23,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "raw-schema.h"
 #include "layout.h"
 #include "list.h"
@@ -36,6 +32,8 @@
 #include <kj/string.h>
 #include <kj/string-tree.h>
 #include <kj/hash.h>
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -411,3 +409,5 @@ CAPNP_DECLARE_SCHEMA(995f9a3377c0b16e);
 //   files which declare streaming methods to avoid including stream.capnp.h.
 }
 }
+
+CAPNP_END_HEADER

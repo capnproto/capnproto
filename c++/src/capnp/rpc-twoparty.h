@@ -21,15 +21,13 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "rpc.h"
 #include "message.h"
 #include <kj/async-io.h>
 #include <capnp/rpc-twoparty.capnp.h>
 #include <kj/one-of.h>
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -192,3 +190,5 @@ private:
 };
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

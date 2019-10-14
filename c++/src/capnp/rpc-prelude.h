@@ -24,12 +24,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "capability.h"
 #include "persistent.capnp.h"
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -127,3 +125,5 @@ using ExternalRefFromRealmGatewayClient = ExternalRefFromRealmGateway<typename T
 
 }  // namespace _ (private)
 }  // namespace capnp
+
+CAPNP_END_HEADER

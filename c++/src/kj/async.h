@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "async-prelude.h"
 #include "exception.h"
 #include "refcount.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -945,3 +943,5 @@ private:
 
 #define KJ_ASYNC_H_INCLUDED
 #include "async-inl.h"
+
+KJ_END_HEADER

@@ -25,10 +25,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include <inttypes.h>
 #include <kj/string.h>
 #include <kj/memory.h>
@@ -37,6 +33,16 @@
 #if CAPNP_DEBUG_TYPES
 #include <kj/units.h>
 #endif
+
+#if !defined(CAPNP_HEADER_WARNINGS) || !CAPNP_HEADER_WARNINGS
+#define CAPNP_BEGIN_HEADER KJ_BEGIN_SYSTEM_HEADER
+#define CAPNP_END_HEADER KJ_END_SYSTEM_HEADER
+#else
+#define CAPNP_BEGIN_HEADER
+#define CAPNP_END_HEADER
+#endif
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -741,3 +747,5 @@ inline constexpr kj::ArrayPtr<U> arrayPtr(U* ptr, T size) {
 #endif
 
 }  // namespace capnp
+
+CAPNP_END_HEADER
