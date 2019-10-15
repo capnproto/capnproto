@@ -403,7 +403,7 @@ Cap'n Proto generics work very similarly to Java generics or C++ templates. Some
   substituting the type parameters manually. For example, `Map(Text, Person)` is encoded exactly
   the same as:
 
-  <div>{% highlight capnp %}
+  {% highlight capnp %}
   struct PersonMap {
     # Encoded the same as Map(Text, Person).
     entries @0 :List(Entry);
@@ -413,7 +413,6 @@ Cap'n Proto generics work very similarly to Java generics or C++ templates. Some
     }
   }
   {% endhighlight %}
-  </div>
 
   Therefore, it is possible to upgrade non-generic types to generic types while retaining
   backwards-compatibility.
@@ -733,7 +732,7 @@ without changing the [canonical](encoding.html#canonicalization) encoding of a m
   be replaced with the new generic parameter so long as all existing users of the type are updated
   to bind that generic parameter to the type it replaced. For example:
 
-  <div>{% highlight capnp %}
+  {% highlight capnp %}
   struct Map {
     entries @0 :List(Entry);
     struct Entry {
@@ -742,11 +741,10 @@ without changing the [canonical](encoding.html#canonicalization) encoding of a m
     }
   }
   {% endhighlight %}
-  </div>
-
+  
   Can change to:
 
-  <div>{% highlight capnp %}
+  {% highlight capnp %}
   struct Map(Key, Value) {
     entries @0 :List(Entry);
     struct Entry {
@@ -755,7 +753,6 @@ without changing the [canonical](encoding.html#canonicalization) encoding of a m
     }
   }
   {% endhighlight %}
-  </div>
 
   As long as all existing uses of `Map` are replaced with `Map(Text, Text)` (and any uses of
   `Map.Entry` are replaced with `Map(Text, Text).Entry`).
