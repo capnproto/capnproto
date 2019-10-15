@@ -1,0 +1,32 @@
+name: manylinux2010
+
+on: [push, pull_request]
+
+jobs:
+  manylinux2010:
+
+    runs-on: ubuntu-latest
+    container: ${{ matrix.container-image }}
+    strategy:
+      matrix:
+          container-image: ['quay.io/pypa/manylinux2010_x86_64', 'quay.io/pypa/manylinux2010_i686']
+
+    steps:
+    - uses: actions/checkout@v1
+    # capnproto build requires cmake 3+, CentOS 6 (manylinux2010) defaults to cmake 2.8
+    - name: Install dependencies
+      run: |
+        yum install -y cmake3 ninja-build
+        ln -sf /usr/bin/cmake3 /usr/local/bin/cmake
+        ln -s /usr/bin/ninja-build /usr/local/bin/ninja
+    # -lrt is required for glibc 2.16 and older
+    - name: Build capnproto
+      run: |
+        mkdir build
+        cd build
+        LDFLAGS="-lrt" cmake .. -G Ninja -DCMAKE_POSITION_INDEPENDENT_CODE=1
+        cmake --build .
+    - name: Build test
+      run: |
+        cd build/c++/src
+        ctest -V -C debug

@@ -1,0 +1,28 @@
+name: Build Test
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      max-parallel: 4
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+    steps:
+    - uses: actions/checkout@v1
+    - name: CMake Setup
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_POSITION_INDEPENDENT_CODE=1
+    - name: Build
+      run: |
+        cd build
+        cmake --build .
+    - name: Build test
+      run: |
+        cd build/c++/src
+        ctest -V -C debug
+
