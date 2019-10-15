@@ -225,7 +225,8 @@ includecapnp_HEADERS =                                         \
 
 includecapnpcompat_HEADERS =                                   \
   src/capnp/compat/json.h                                      \
-  src/capnp/compat/json.capnp.h
+  src/capnp/compat/json.capnp.h                                \
+  src/capnp/compat/std-iterator.h
 
 if BUILD_KJ_TLS
 MAYBE_KJ_TLS_LA=libkj-tls.la

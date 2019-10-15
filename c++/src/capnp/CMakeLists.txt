@@ -29,6 +29,7 @@ endif()
 set(capnp_headers
   c++.capnp.h
   common.h
+  compat/std-iterator.h
   blob.h
   endian.h
   layout.h
