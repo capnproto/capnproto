@@ -115,7 +115,26 @@ public:
         shorteningPromise(kj::mv(shorteningPromise)) {}
 
   ~CapnpToKjWebSocketAdapter() noexcept(false) {
+    KJ_IF_MAYBE(f, closeFulfiller) {
+      if (f->get()->isWaiting()) {
+        f->get()->fulfill(webSocket.disconnect());
+        return;
+      }
+    }
+
     state->disconnectWebSocket();
+  }
+
+  kj::Promise<void> onComplete() {
+    // Returns a promise that completes at the same time as a WebSocket pumpTo() would complete,
+    // i.e. after either a close message or a disconnect. This is used to make sure the HTTP
+    // request is held open until all WebSocket frames are received. The promise returned by this
+    // method is safe to keep beyond the lifetime of the CapnpToKjWebSocketAdapter object itself.
+
+    KJ_REQUIRE(closeFulfiller == nullptr, "onComplete() can only be called once");
+    auto paf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+    closeFulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
   }
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
@@ -130,13 +149,22 @@ public:
   }
   kj::Promise<void> close(CloseContext context) override {
     auto params = context.getParams();
-    return state->wrap(webSocket.close(params.getCode(), params.getReason()));
+    auto promise = state->wrap(webSocket.close(params.getCode(), params.getReason()));
+    KJ_IF_MAYBE(f, closeFulfiller) {
+      if (f->get()->isWaiting()) {
+        promise = promise.then([&fulfiller = **f]() {
+          fulfiller.fulfill(kj::READY_NOW);
+        });
+      }
+    }
+    return promise;
   }
 
 private:
   kj::Own<RequestState> state;
   kj::WebSocket& webSocket;
   kj::Promise<Capability::Client> shorteningPromise;
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<void>>>> closeFulfiller;
 };
 
 class HttpOverCapnpFactory::KjToCapnpWebSocketAdapter final: public kj::WebSocket {
@@ -300,8 +328,10 @@ public:
     }));
 
     auto results = context.getResults(MessageSize { 16, 1 });
-    results.setDownSocket(kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::addRef(*state), webSocket, kj::mv(shorteningPaf.promise)));
+    auto down = kj::heap<CapnpToKjWebSocketAdapter>(
+        kj::addRef(*state), webSocket, kj::mv(shorteningPaf.promise));
+    state->addTask(down->onComplete());
+    results.setDownSocket(kj::mv(down));
 
     return kj::READY_NOW;
   }
@@ -527,16 +557,18 @@ public:
     auto dummyState = kj::refcounted<RequestState>();
     auto& pipeEnd0Ref = *pipe.ends[0];
     dummyState->holdWebSocket(kj::mv(pipe.ends[0]));
-    req.setUpSocket(kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::mv(dummyState), pipeEnd0Ref, kj::mv(shorteningPaf.promise)));
+    auto up = kj::heap<CapnpToKjWebSocketAdapter>(
+        kj::mv(dummyState), pipeEnd0Ref, kj::mv(shorteningPaf.promise));
+    auto upComplete = up->onComplete();
+    req.setUpSocket(kj::mv(up));
 
     auto pipeline = req.send();
     auto result = kj::heap<KjToCapnpWebSocketAdapter>(
         kj::mv(pipe.ends[1]), pipeline.getDownSocket(), kj::mv(shorteningPaf.fulfiller));
 
-    // Note we need eagerlyEvaluate() here to force proactively discarding the response object,
-    // since it holds a reference to `downSocket`.
-    replyTask = pipeline.ignoreResult().eagerlyEvaluate(nullptr);
+    replyTask = pipeline.then([upComplete = kj::mv(upComplete)](auto response) mutable {
+      return kj::mv(upComplete);
+    });
 
     return result;
   }
