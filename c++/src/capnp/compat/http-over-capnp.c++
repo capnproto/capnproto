@@ -449,12 +449,13 @@ public:
                            kj::HttpService& kjService)
       : factory(factory),
         method(validateMethod(request.getMethod())),
+        url(kj::str(request.getUrl())),
         headers(factory.headersToKj(request.getHeaders()).clone()),
         clientContext(kj::mv(clientContext)),
         // Note we attach `requestBodyIn` to `task` so that we will implicitly cancel reading
         // the request body as soon as the service returns. This is important in particular when
         // the request body is not fully consumed, in order to propagate cancellation.
-        task(kjService.request(method, request.getUrl(), headers, *requestBodyIn, *this)
+        task(kjService.request(method, url, headers, *requestBodyIn, *this)
                       .attach(kj::mv(requestBodyIn))) {}
 
   KJ_DISALLOW_COPY(ServerRequestContextImpl);
@@ -544,6 +545,7 @@ public:
 private:
   HttpOverCapnpFactory& factory;
   kj::HttpMethod method;
+  kj::String url;
   kj::HttpHeaders headers;
   capnp::HttpService::ClientRequestContext::Client clientContext;
   kj::Promise<void> task;
