@@ -3059,7 +3059,12 @@ private:
     }
     kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
       KJ_REQUIRE(canceler.isEmpty(), "another message send is already in progress");
-      return canceler.wrap(output.close(code, reason));
+      return canceler.wrap(output.close(code, reason).then([this]() {
+        // A pump is expected to end upon seeing a Close message.
+        canceler.release();
+        pipe.endState(*this);
+        fulfiller.fulfill();
+      }));
     }
     kj::Promise<void> disconnect() override {
       KJ_REQUIRE(canceler.isEmpty(), "another message send is already in progress");

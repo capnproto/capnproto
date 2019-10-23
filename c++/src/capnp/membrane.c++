@@ -262,7 +262,7 @@ public:
   }
 
   void releaseParams() override {
-    KJ_REQUIRE(!releasedParams);
+    // Note that releaseParams() is idempotent -- it can be called multiple times.
     releasedParams = true;
     inner->releaseParams();
   }

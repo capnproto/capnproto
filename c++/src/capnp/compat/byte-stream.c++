@@ -603,6 +603,8 @@ protected:
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
         auto params = context.getParams();
         auto req = capnpStream.getSubstreamRequest(params.totalSize());
+        req.setCallback(params.getCallback());
+        req.setLimit(params.getLimit());
         return context.tailCall(kj::mv(req));
       }
       KJ_CASE_ONEOF(b, Borrowed) {
