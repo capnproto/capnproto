@@ -1080,8 +1080,12 @@ private:
       delete this;
     } else {
       if (inner->isWaiting()) {
-        inner->reject(kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
-            kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
+        KJ_IF_MAYBE(e, kj::tryGetUncaughtException()) {
+          inner->reject(kj::mv(*e));
+        } else {
+          inner->reject(kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
+              kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
+        }
       }
       inner = nullptr;
     }

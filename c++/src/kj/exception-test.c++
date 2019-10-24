@@ -90,6 +90,38 @@ TEST(Exception, RunCatchingExceptionsOtherException) {
 #endif
 
 #if !KJ_NO_EXCEPTIONS
+TEST(Exception, TryGetUncaughtException) {
+  Maybe<Exception> maybeCaught, maybeUncaught;
+
+  maybeCaught = kj::runCatchingExceptions([&] {
+    KJ_DEFER(maybeUncaught = kj::tryGetUncaughtException());
+    KJ_FAIL_ASSERT("foo");
+  });
+
+  auto caught = KJ_ASSERT_NONNULL(kj::mv(maybeCaught));
+  auto uncaught = KJ_ASSERT_NONNULL(kj::mv(maybeUncaught));
+
+  EXPECT_EQ("foo", uncaught.getDescription());
+  EXPECT_EQ(caught.getDescription(), uncaught.getDescription());
+  EXPECT_EQ(caught.getType(), uncaught.getType());
+  EXPECT_EQ(caught.getStackTrace(), uncaught.getStackTrace());
+}
+
+TEST(Exception, TryGetUncaughtExceptionStdException) {
+  Maybe<Exception> maybeUncaught;
+
+  kj::runCatchingExceptions([&] {
+    KJ_DEFER(maybeUncaught = kj::tryGetUncaughtException());
+    throw std::runtime_error("foo");
+  });
+
+  auto uncaught = KJ_ASSERT_NONNULL(kj::mv(maybeUncaught));
+
+  EXPECT_EQ("std::exception: foo", uncaught.getDescription());
+}
+#endif
+
+#if !KJ_NO_EXCEPTIONS
 // We skip this test when exceptions are disabled because making it no-exceptions-safe defeats
 // the purpose of the test: recoverable exceptions won't throw inside a destructor in the first
 // place.

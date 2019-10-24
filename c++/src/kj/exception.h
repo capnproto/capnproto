@@ -379,6 +379,11 @@ kj::String getCaughtExceptionType();
 // for the purpose of error logging. This function is best-effort; on some platforms it may simply
 // return "(unknown)".
 
+kj::Maybe<kj::Exception> tryGetUncaughtException();
+// Returns a copy of the current uncaught exception if one exists, otherwise null.
+// Non-kj::Exceptions will be translated to kj::Exceptions in the same way that
+// `runCatchingExceptions()` does. Always returns null if exceptions are disabled.
+
 }  // namespace kj
 
 KJ_END_HEADER

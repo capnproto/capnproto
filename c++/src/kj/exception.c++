@@ -1132,4 +1132,25 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
 
 }  // namespace _ (private)
 
+kj::Maybe<kj::Exception> tryGetUncaughtException() {
+#if KJ_NO_EXCEPTIONS
+  return nullptr;
+#else
+  auto eptr = std::current_exception();
+  if (eptr == nullptr) return nullptr;
+
+  return runCatchingExceptions([eptr] {
+    try {
+      std::rethrow_exception(eptr);
+    } catch (kj::Exception& e) {
+      // Shenanigans required because `runCatchingExceptions()` expects to be able to safely move
+      // the exception if it's a kj::Exception. However, `std::rethrow_exception()` doesn't make a
+      // copy, so if we're not careful, we could allow the final landing pad in user code to see a
+      // moved-from exception. Fortunately, `throw e` copy-initializes a new exception object.
+      throw e;
+    }
+  });
+#endif
+}
+
 }  // namespace kj
