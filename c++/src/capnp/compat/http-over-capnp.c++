@@ -548,8 +548,8 @@ private:
   kj::String url;
   kj::HttpHeaders headers;
   capnp::HttpService::ClientRequestContext::Client clientContext;
-  kj::Promise<void> task;
   kj::Maybe<kj::Promise<void>> replyTask;
+  kj::Promise<void> task;
 
   static kj::HttpMethod validateMethod(capnp::HttpMethod method) {
     KJ_REQUIRE(method <= capnp::HttpMethod::UNSUBSCRIBE, "unknown method", method);
