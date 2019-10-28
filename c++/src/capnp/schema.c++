@@ -896,12 +896,24 @@ uint Type::hashCode() const {
     case schema::Type::FLOAT64:
     case schema::Type::TEXT:
     case schema::Type::DATA:
-      return kj::hashCode(baseType, listDepth);
+      if (listDepth == 0) {
+        // Make sure that hashCode(Type(baseType)) == hashCode(baseType), otherwise HashMap lookups
+        // keyed by `Type` won't work when the caller passes `baseType` as the key.
+        return kj::hashCode(baseType);
+      } else {
+        return kj::hashCode(baseType, listDepth);
+      }
 
     case schema::Type::STRUCT:
     case schema::Type::ENUM:
     case schema::Type::INTERFACE:
-      return kj::hashCode(schema, listDepth);
+      if (listDepth == 0) {
+        // Make sure that hashCode(Type(schema)) == hashCode(schema), otherwise HashMap lookups
+        // keyed by `Type` won't work when the caller passes `schema` as the key.
+        return kj::hashCode(schema);
+      } else {
+        return kj::hashCode(schema, listDepth);
+      }
 
     case schema::Type::LIST:
       KJ_UNREACHABLE;
@@ -911,7 +923,7 @@ uint Type::hashCode() const {
       // both branches compile to the same instructions and can optimize it away.
       uint16_t val = scopeId != 0 || isImplicitParam ?
           paramIndex : static_cast<uint16_t>(anyPointerKind);
-      return kj::hashCode(val, isImplicitParam, scopeId);
+      return kj::hashCode(val, isImplicitParam, scopeId, listDepth);
     }
   }
 

@@ -161,15 +161,29 @@ kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t t
   auto newBuckets = kj::heapArray<HashBucket>(size);
   memset(newBuckets.begin(), 0, sizeof(HashBucket) * size);
 
+  uint entryCount = 0;
+  uint collisionCount = 0;
+
   for (auto& oldBucket: oldBuckets) {
     if (oldBucket.isOccupied()) {
+      ++entryCount;
       for (uint i = oldBucket.hash % newBuckets.size();; i = probeHash(newBuckets, i)) {
         auto& newBucket = newBuckets[i];
         if (newBucket.isEmpty()) {
           newBucket = oldBucket;
           break;
         }
+        ++collisionCount;
       }
+    }
+  }
+
+  if (collisionCount > 16 + entryCount * 4) {
+    static bool warned = false;
+    if (!warned) {
+      KJ_LOG(WARNING, "detected excessive collisions in hash table; is your hash function OK?",
+          entryCount, collisionCount, kj::getStackTrace());
+      warned = true;
     }
   }
 
