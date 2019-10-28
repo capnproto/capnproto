@@ -123,7 +123,7 @@ private:
       return e.key == key;
     }
     template <typename KeyLike>
-    inline bool hashCode(KeyLike&& key) const {
+    inline auto hashCode(KeyLike&& key) const {
       return kj::hashCode(key);
     }
   };
@@ -252,7 +252,7 @@ public:
   template <typename T, typename U>
   inline bool matches(T& a, U& b) const { return a == b; }
   template <typename KeyLike>
-  inline bool hashCode(KeyLike&& key) const {
+  inline auto hashCode(KeyLike&& key) const {
     return kj::hashCode(key);
   }
 };
