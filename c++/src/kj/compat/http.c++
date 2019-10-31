@@ -4294,15 +4294,13 @@ public:
     //   involving a PromiseAdapter, maybe?
     auto paf = kj::newPromiseAndFulfiller<Response>();
     auto responder = kj::refcounted<ResponseImpl>(method, kj::mv(paf.fulfiller));
-    auto promise = kj::evalLater([this, method,
-                                  urlCopy = kj::mv(urlCopy),
-                                  headersCopy = kj::mv(headersCopy),
-                                  pipeIn = kj::mv(pipe.in),
-                                  &responder = *responder]() mutable {
-      auto promise = service.request(method, urlCopy, *headersCopy, *pipeIn, responder);
-      return promise.attach(kj::mv(pipeIn), kj::mv(urlCopy), kj::mv(headersCopy));
-    });
-    responder->setPromise(kj::mv(promise));
+
+    auto requestPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+    responder->setPromise(kj::mv(requestPaf.promise));
+
+    auto promise = service.request(method, urlCopy, *headersCopy, *pipe.in, *responder)
+        .attach(kj::mv(pipe.in), kj::mv(urlCopy), kj::mv(headersCopy));
+    requestPaf.fulfiller->fulfill(kj::mv(promise));
 
     return {
       kj::mv(pipe.out),
@@ -4323,15 +4321,14 @@ public:
 
     auto paf = kj::newPromiseAndFulfiller<WebSocketResponse>();
     auto responder = kj::refcounted<WebSocketResponseImpl>(kj::mv(paf.fulfiller));
-    auto promise = kj::evalLater([this,
-                                  urlCopy = kj::mv(urlCopy),
-                                  headersCopy = kj::mv(headersCopy),
-                                  &responder = *responder]() mutable {
-      auto in = kj::heap<NullInputStream>();
-      auto promise = service.request(HttpMethod::GET, urlCopy, *headersCopy, *in, responder);
-      return promise.attach(kj::mv(in), kj::mv(urlCopy), kj::mv(headersCopy));
-    });
-    responder->setPromise(kj::mv(promise));
+
+    auto requestPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+    responder->setPromise(kj::mv(requestPaf.promise));
+
+    auto in = kj::heap<NullInputStream>();
+    auto promise = service.request(HttpMethod::GET, urlCopy, *headersCopy, *in, *responder)
+        .attach(kj::mv(in), kj::mv(urlCopy), kj::mv(headersCopy));
+    requestPaf.fulfiller->fulfill(kj::mv(promise));
 
     return paf.promise.attach(kj::mv(responder));
   }
