@@ -3032,6 +3032,39 @@ KJ_TEST("newHttpClient from HttpService WebSockets") {
   testWebSocketClient(waitScope, *headerTable, hMyHeader, *client);
 }
 
+KJ_TEST("adapted client/server propagates request exceptions like non-adapted client") {
+  auto io = kj::setupAsyncIo();
+
+  HttpHeaderTable table;
+  HttpHeaders headers(table);
+
+  class FailingHttpClient final: public HttpClient {
+  public:
+    Request request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
+      KJ_FAIL_ASSERT("request_fail");
+    }
+
+    kj::Promise<WebSocketResponse> openWebSocket(
+        kj::StringPtr url, const HttpHeaders& headers) override {
+      KJ_FAIL_ASSERT("websocket_fail");
+    }
+  };
+
+  auto rawClient = kj::heap<FailingHttpClient>();
+
+  auto innerClient = kj::heap<FailingHttpClient>();
+  auto adaptedService = kj::newHttpService(*innerClient).attach(kj::mv(innerClient));
+  auto adaptedClient = kj::newHttpClient(*adaptedService).attach(kj::mv(adaptedService));
+
+  KJ_EXPECT_THROW_MESSAGE("request_fail", rawClient->request(HttpMethod::POST, "/"_kj, headers));
+  KJ_EXPECT_THROW_MESSAGE("request_fail", adaptedClient->request(HttpMethod::POST, "/"_kj, headers));
+
+  KJ_EXPECT_THROW_MESSAGE("websocket_fail", rawClient->openWebSocket("/"_kj, headers));
+  KJ_EXPECT_THROW_MESSAGE("websocket_fail", adaptedClient->openWebSocket("/"_kj, headers));
+}
+
 // -----------------------------------------------------------------------------
 
 class CountingIoStream final: public kj::AsyncIoStream {
