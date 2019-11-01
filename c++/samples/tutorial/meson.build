@@ -20,22 +20,20 @@ project('capnp_sample', 'cpp', default_options : [
 
 add_global_arguments('-Wno-non-virtual-dtor', '-Wno-unused-parameter', '-Wno-unused-variable', language: 'cpp')
 
-clientSources = files('client.c++')
-serviceSources = files('service.c++')
+#src = '../../src/'
+src = '../../../../capnproto-c++-0.7.0/src'	 #BUG: remove this when possible
 
 executable('client'
 , sources: ['client.c++', 'interface.capnp.c++']
-, include_directories: ['.', '../../src/']
+, include_directories: [src]
 , cpp_pch: '.pch/pch.h'
 , link_args: ['-lcapnp', '-lcapnp-rpc', '-lkj', '-lkj-async'])
-#, link_args: ['-L ../../src/capnp', '-lcapnp', '-lcapnp-rpc', '-lcapnpc', '-lcapnp-json', '-lkj', '-lkj-async', '-lpthread'])
 
-#executable('service'
-#, sources: ['service.c++', 'interface.capnp.c++']
-#, include_directories: ['../../src/']
-#, cpp_pch: '.pch/pch.h'
-#, link_args: ['-lcapnp', '-lcapnp-rpc', '-lkj', '-lkj-async'])
-#, link_args: ['-lcapnp', '-lcapnp-rpc', '-lcapnpc', '-lcapnp-json', '-lkj', '-lkj-async', '-lkj-http', '-lkj-tls', '-lpthread'])
+executable('service'
+, sources: ['service.c++', 'interface.capnp.c++']
+, include_directories: [src]
+, cpp_pch: '.pch/pch.h'
+, link_args: ['-lcapnp', '-lcapnp-rpc', '-lkj', '-lkj-async'])
 
 
 #BUG: link_args only works on linux due to -lpthread

@@ -1,5 +1,6 @@
 #include "pch.h"
 
+bool g_terminate = false;
 
 struct CSample final: public Sample::Server
 {
@@ -82,12 +83,32 @@ struct CSample final: public Sample::Server
 	void doSomething(){}	// stub function, fill in however you like
 };
 
+struct CSecure final: public Secure::Server
+{
+	// shutdownService @0 ();
+	kj::Promise<void> shutdownService(ShutdownServiceContext context)
+	{
+		g_terminate = true;
+		return kj::READY_NOW;
+	}
+};
+
 struct CRoot final: public Root::Server
 {
 	// getSample @0 () -> (v :Sample);
 	kj::Promise<void> getSample(GetSampleContext context)
 	{
 		context.getResults().setV(kj::heap<CSample>());
+		return kj::READY_NOW;
+	}
+
+	// getSecure @1 (password :UInt64) -> (v :Secure);
+	kj::Promise<void> getSecure(GetSecureContext context)
+	{
+		uint64_t password = context.getParams().getPassword();
+		if (password != 42)
+			KJ_FAIL_REQUIRE("bad password");
+		context.getResults().setV(kj::heap<CSecure>());
 		return kj::READY_NOW;
 	}
 };
@@ -99,5 +120,13 @@ int main()
 	auto address = ioContext.provider->getNetwork().parseAddress("127.0.0.1", 2000).wait(ioContext.waitScope);
 	auto listener = address->listen();
 	auto listenPromise = server.listen(*listener);
-	listenPromise.wait(ioContext.waitScope);
+	
+	// The normal way, but how do you end the loop?
+	// listenPromise.wait(ioContext.waitScope);
+
+	// BUG: this uses 100% CPU on one core
+	do
+	{
+		ioContext.waitScope.poll();
+	} while (!g_terminate);
 }
