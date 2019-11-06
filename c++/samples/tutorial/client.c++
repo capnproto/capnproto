@@ -10,6 +10,7 @@ int main()
 
 	std::cout << "connecting" << std::endl;
 	kj::Own<kj::AsyncIoStream> connection;
+	bool proxy = true;
 	try
 	{
 		connection = address->connect().wait(wait);
@@ -19,6 +20,7 @@ int main()
 		std::cout << "Caught exception connecting to proxy. Trying to connect directly to service" << std::endl;
 		address = ioContext.provider->getNetwork().parseAddress("127.0.0.1", 2001).wait(wait);
 		connection = address->connect().wait(wait);
+		proxy = false;
 	}
 	capnp::TwoPartyClient client(*connection);
 
@@ -119,8 +121,18 @@ int main()
 
 		// shutdownService @0 ();
 		std::cout << "ShutdownServiceRequest()" << std::endl;
-		try {secure.shutdownServiceRequest().send().wait(wait);}
+		try { secure.shutdownServiceRequest().send().wait(wait); }
 		catch (const kj::Exception&){ std::cout << "... Caught exception as expected" << std::endl;}
+	}
+
+	if (proxy)
+	{
+		// In there's a proxy running, let it shut down with this extra request
+		std::cout << "shut down proxy" << std::endl;
+		auto var = root.getSecureRequest();
+		var.setPassword(42);
+		try { Secure::Client secure = var.send().wait(wait).getV(); }
+		catch (const kj::Exception& e){ std::cout << "... Caught exception as expected: " << e.getDescription().cStr() << std::endl;}
 	}
 
 	std::cout << "done" << std::endl;

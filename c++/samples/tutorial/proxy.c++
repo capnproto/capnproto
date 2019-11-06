@@ -2,6 +2,7 @@
 #include "secure.h"
 
 // This is a proxy service that passes along capabilities (interfaces) and forwards all messages
+// You don't need to use this, the client and service will work without the proxy
 
 extern kj::Own<kj::PromiseFulfiller<void>> g_terminate;
 
@@ -40,7 +41,9 @@ namespace
 
 struct CRoot final: public Root::Server
 {
-	template <typename TC, typename TR>
+	bool shutdown = false;
+
+	template <typename TC, typename TR, bool terminate = false>
 	struct ThenPassInterface
 	{
 		ThenPassInterface(TC& context)
@@ -50,6 +53,8 @@ struct CRoot final: public Root::Server
 		void operator()(capnp::Response<TR> response)
 		{
 			context.getResults().setV(response.getV());
+			// if (terminate)
+			// 	g_terminate->fulfill();
 		}
 		TC context;
 	};
@@ -58,22 +63,24 @@ struct CRoot final: public Root::Server
 	{
 		void operator()(kj::Exception e)
 		{
-			std::cout << "ErrorHandler" << std::endl;
+			std::cout << "ErrorHandler " << e.getDescription().cStr() << std::endl;
+			g_terminate->fulfill();
 		}
 	};
 
 	// getSample @0 () -> (v :Sample);
 	kj::Promise<void> getSample(GetSampleContext context)
 	{
-		auto promise = client.root.getSampleRequest().send().then(ThenPassInterface<GetSampleContext, GetSampleResults>(context), ErrorHandler());
-		return kj::READY_NOW;
+		return client.root.getSampleRequest().send().then(ThenPassInterface<GetSampleContext, GetSampleResults>(context), ErrorHandler());
 	}
 
 	// getSecure @1 (password :UInt64) -> (v :Secure);
 	kj::Promise<void> getSecure(GetSecureContext context)
 	{
-		auto promise = client.root.getSecureRequest().send().then(ThenPassInterface<GetSecureContext, GetSecureResults>(context), ErrorHandler());
-		return kj::READY_NOW;
+		auto request = client.root.getSecureRequest();
+		request.setPassword(context.getParams().getPassword());
+		auto promise = request.send().then(ThenPassInterface<GetSecureContext, GetSecureResults, true>(context), ErrorHandler());
+		return promise.eagerlyEvaluate(ErrorHandler());
 	}
 };
 
