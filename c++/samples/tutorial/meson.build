@@ -20,18 +20,23 @@ project('capnp_sample', 'cpp', default_options : [
 
 add_global_arguments('-Wno-non-virtual-dtor', '-Wno-unused-parameter', '-Wno-unused-variable', language: 'cpp')
 
-#src = '../../src/'
-src = '../../../../capnproto-c++-0.7.0/src'	 #BUG: remove this when possible
+inc = '../../../../capnproto-c++-0.7.0/src'	 #BUG: should be '../../src/' but it's not linking properly ATM
 
 executable('client'
 , sources: ['client.c++', 'interface.capnp.c++']
-, include_directories: [src]
+, include_directories: [inc]
+, cpp_pch: '.pch/pch.h'
+, link_args: ['-lcapnp', '-lcapnp-rpc', '-lkj', '-lkj-async'])
+
+executable('proxy'
+, sources: ['proxy.c++', 'secure.c++', 'interface.capnp.c++']
+, include_directories: [inc]
 , cpp_pch: '.pch/pch.h'
 , link_args: ['-lcapnp', '-lcapnp-rpc', '-lkj', '-lkj-async'])
 
 executable('service'
-, sources: ['service.c++', 'interface.capnp.c++']
-, include_directories: [src]
+, sources: ['service.c++', 'secure.c++', 'interface.capnp.c++']
+, include_directories: [inc]
 , cpp_pch: '.pch/pch.h'
 , link_args: ['-lcapnp', '-lcapnp-rpc', '-lkj', '-lkj-async'])
 

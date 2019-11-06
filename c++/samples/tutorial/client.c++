@@ -5,15 +5,25 @@ int main()
 	std::cout << "starting" << std::endl;
 
 	kj::AsyncIoContext ioContext(kj::setupAsyncIo());
-	auto address = ioContext.provider->getNetwork().parseAddress("127.0.0.1", 2000).wait(ioContext.waitScope);
+	kj::WaitScope& wait = ioContext.waitScope;
+	auto address = ioContext.provider->getNetwork().parseAddress("127.0.0.1", 2000).wait(wait);
 
 	std::cout << "connecting" << std::endl;
-	auto connection = address->connect().wait(ioContext.waitScope);
+	kj::Own<kj::AsyncIoStream> connection;
+	try
+	{
+		connection = address->connect().wait(wait);
+	}
+	catch (kj::Exception)
+	{
+		std::cout << "Caught exception connecting to proxy. Trying to connect directly to service" << std::endl;
+		address = ioContext.provider->getNetwork().parseAddress("127.0.0.1", 2001).wait(wait);
+		connection = address->connect().wait(wait);
+	}
 	capnp::TwoPartyClient client(*connection);
 
 	std::cout << "get root interface" << std::endl;
 	Root::Client root = client.bootstrap().castAs<Root>();
-	kj::WaitScope& wait = ioContext.waitScope;
 
 	std::cout << "get sample interface" << std::endl;
 	// getSample @0 () -> (v :Sample);
@@ -26,9 +36,9 @@ int main()
 	// oneParam @1 (variable :UInt16);
 	{
 		std::cout << "oneParam()" << std::endl;
-		auto var = sample.oneParamRequest();
-		var.setVariable(5);
-		var.send().wait(wait);
+		auto var = sample.oneParamRequest();	// When passing a variable, get the request...
+		var.setVariable(5);						// then fill it out...
+		var.send().wait(wait);					// and send it
 	}
 
 	// responder @3 () -> (answer :UInt32);
@@ -92,6 +102,14 @@ int main()
 		std::cout << happy << std::endl;
 	}
 
+	// getStruct @9 () -> str :ExampleStruct);
+	{
+		std::cout << "getStruct() -> ";
+		auto response = sample.getStructRequest().send().wait(wait);
+		auto str = response.getStr();
+		std::cout << '{' << str.getA() << ", \"" << str.getB().cStr() << "\"}" << std::endl;
+	}
+
 	{
 		// getSecure @1 (password :UInt64) -> (v :Secure);
 		std::cout << "get secure interface using secret password" << std::endl;
@@ -101,7 +119,8 @@ int main()
 
 		// shutdownService @0 ();
 		std::cout << "ShutdownServiceRequest()" << std::endl;
-		secure.shutdownServiceRequest().send().wait(wait);
+		try {secure.shutdownServiceRequest().send().wait(wait);}
+		catch (const kj::Exception&){ std::cout << "... Caught exception as expected" << std::endl;}
 	}
 
 	std::cout << "done" << std::endl;

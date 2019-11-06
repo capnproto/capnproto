@@ -18,6 +18,13 @@ interface Sample
 	separate @6 (param :List(UInt64)) -> (v1 :UInt64, v2 :UInt64, v3 :UInt64);
 	setState @7 (happy :Bool);
 	getState @8 () -> (happy :Bool);
+	getStruct @9 () -> (str :ExampleStruct);
+
+	struct ExampleStruct
+	{
+		a @0 :UInt32;
+		b @1 :Text;
+	}
 }
 
 interface Secure
