@@ -1939,6 +1939,9 @@ void ConnectionReceiver::getsockopt(int level, int option, void* value, uint* le
 void ConnectionReceiver::setsockopt(int level, int option, const void* value, uint length) {
   KJ_UNIMPLEMENTED("Not a socket.");
 }
+void ConnectionReceiver::getsockname(struct sockaddr* addr, uint* length) {
+  KJ_UNIMPLEMENTED("Not a socket.");
+}
 void DatagramPort::getsockopt(int level, int option, void* value, uint* length) {
   KJ_UNIMPLEMENTED("Not a socket.");
 }

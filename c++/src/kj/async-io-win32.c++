@@ -955,6 +955,11 @@ public:
     KJ_WINSOCK(::setsockopt(fd, level, option,
                             reinterpret_cast<const char*>(value), length));
   }
+  void getsockname(struct sockaddr* addr, uint* length) override {
+    socklen_t socklen = *length;
+    KJ_WINSOCK(::getsockname(fd, addr, &socklen));
+    *length = socklen;
+  }
 
 public:
   Win32EventPort& eventPort;
