@@ -1135,6 +1135,11 @@ public:
   void setsockopt(int level, int option, const void* value, uint length) override {
     KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
   }
+  void getsockname(struct sockaddr* addr, uint* length) override {
+    socklen_t socklen = *length;
+    KJ_SYSCALL(::getsockname(fd, addr, &socklen));
+    *length = socklen;
+  }
 
 public:
   UnixEventPort& eventPort;
