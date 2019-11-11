@@ -531,7 +531,7 @@ KJ_TEST("TLS client certificate verification") {
         serverPromise.wait(test.io.waitScope));
     KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE("alert",  // "alert handshake failure" or "alert certificate required"
-                    "SSLV3_ALERT_HANDSHAKE_FAILURE"),
+                    "TLSV1_CERTIFICATE_REQUIRED"),
         clientPromise.wait(test.io.waitScope));
   }
 
