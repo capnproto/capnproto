@@ -125,7 +125,7 @@ int main()
 		const size_t count = 4;
 		context.initD(count);
 		auto out = context.getD();
-		for (size_t i = 0; i < count; ++i)
+		for (size_t i = 0; i < out.size(); ++i)
 			out[i] = i;
 		std::cout << "echoData(";
 		for (size_t i = 0; i < count; ++i)
