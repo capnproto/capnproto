@@ -80,11 +80,14 @@ int main()
 		uint64_t v2 = 2;
 		uint64_t v3 = 3;
 		std::cout << "separate(" << v1 << ' ' << v2 << ' ' << v3  << ") -> ";
+
 		auto var = sample.separateRequest();
+		// List size must be initialized before anything is written
 		auto list = var.initParam(3);
 		list.set(0, v1);
 		list.set(1, v2);
 		list.set(2, v3);
+
 		auto reply = var.send().wait(wait);
 		std::cout << reply.getV1() << ' ' << reply.getV2() << ' ' << reply.getV3() << std::endl;
 	}
@@ -104,12 +107,36 @@ int main()
 		std::cout << happy << std::endl;
 	}
 
-	// getStruct @9 () -> str :ExampleStruct);
+	// echoStruct @9 (str :ExampleStruct);
 	{
-		std::cout << "getStruct() -> ";
-		auto response = sample.getStructRequest().send().wait(wait);
-		auto str = response.getStr();
-		std::cout << '{' << str.getA() << ", \"" << str.getB().cStr() << "\"}" << std::endl;
+		auto context = sample.echoStructRequest();
+		auto out = context.getStr();
+		out.setA(8);
+		out.setB("message");
+		std::cout << "echoStruct(" << out.getA() << ", \"" << out.getB().cStr() << "\") -> ";
+		auto reply = context.send().wait(wait);	// if reply goes out of scope, str will have dangling pointers.
+		auto str = reply.getStr();
+		std::cout << '(' << str.getA() << ", \"" << str.getB().cStr() << "\")" << std::endl;
+	}
+
+	// echoData @10 (d :Data) -> (d :Data);
+	{
+		auto context = sample.echoDataRequest();
+		const size_t count = 4;
+		context.initD(count);
+		auto out = context.getD();
+		for (size_t i = 0; i < count; ++i)
+			out[i] = i;
+		std::cout << "echoData(";
+		for (size_t i = 0; i < count; ++i)
+			std::cout << size_t(out[i]);
+		std::cout << ") -> ";
+		auto reply = context.send().wait(wait);
+		auto in = reply.getD();
+		std::cout << "(";
+		for (size_t i = 0; i < in.size(); ++i)
+			std::cout << size_t(in[i]);
+		std::cout << ")" << std::endl;
 	}
 
 	{

@@ -87,14 +87,26 @@ struct CSample final: public Sample::Server
 		return kj::READY_NOW;
 	}
 
-	// getStruct @9 () -> str :ExampleStruct);
-	kj::Promise<void> getStruct(GetStructContext context)
+	// echoStruct @9 (str :ExampleStruct);
+	kj::Promise<void> echoStruct(EchoStructContext context)
 	{
+		auto reader = context.getParams().getStr();
+		auto writer = context.getResults().getStr();
+		writer.setA(reader.getA());
+		writer.setB(reader.getB());
+		return kj::READY_NOW;
+	}
+
+	// echoData @10 (d :Data) -> (d :Data);
+	kj::Promise<void> echoData(EchoDataContext context)
+	{
+		auto in = context.getParams().getD().asBytes();
 		auto results = context.getResults();
-		auto str = results.getStr();
-		str.setA(5);
-		str.setB("text string");
-		//results.
+		results.initD(in.size());
+		auto out = results.getD();
+
+		for (size_t i = 0; i < in.size(); ++i)
+			out[i] = in[i];
 		return kj::READY_NOW;
 	}
 

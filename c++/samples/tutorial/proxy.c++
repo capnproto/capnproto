@@ -53,8 +53,6 @@ struct CRoot final: public Root::Server
 		void operator()(capnp::Response<TR> response)
 		{
 			context.getResults().setV(response.getV());
-			// if (terminate)
-			// 	g_terminate->fulfill();
 		}
 		TC context;
 	};
