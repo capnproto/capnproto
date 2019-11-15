@@ -2999,11 +2999,16 @@ public:
     KJ_IF_MAYBE(connection, network.baseConnect(vatId)) {
       auto& state = getConnectionState(kj::mv(*connection));
       return Capability::Client(state.restore(objectId));
+    } else if (objectId.isNull()) {
+      // Turns out `vatId` refers to ourselves, so we can also pass it as the client ID for
+      // baseCreateFor().
+      return bootstrapFactory.baseCreateFor(vatId);
     } else KJ_IF_MAYBE(r, restorer) {
       return r->baseRestore(objectId);
     } else {
       return Capability::Client(newBrokenCap(
-          "SturdyRef referred to a local object but there is no local SturdyRef restorer."));
+          "This vat only supports a bootstrap interface, not the old Cap'n-Proto-0.4-style "
+          "named exports."));
     }
   }
 
