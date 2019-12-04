@@ -871,6 +871,77 @@ private:
   }
 };
 
+// -------------------------------------------------------------------
+
+class FiberBase: public PromiseNode, private Event {
+  // Base class for the outer PromiseNode representing a fiber.
+
+public:
+  FiberBase(size_t stackSize, _::ExceptionOrValue& result);
+  ~FiberBase() noexcept(false);
+
+  void start() { armDepthFirst(); }
+  // Call immediately after construction to begin executing the fiber.
+
+  class WaitDoneEvent;
+
+  void onReady(_::Event* event) noexcept override;
+  PromiseNode* getInnerForTrace() override;
+
+protected:
+  bool isFinished() { return state == FINISHED; }
+
+private:
+  enum { WAITING, RUNNING, CANCELED, FINISHED } state;
+
+  size_t stackSize;
+
+  struct Impl;
+  Impl& impl;
+
+  _::PromiseNode* currentInner = nullptr;
+  OnReadyEvent onReadyEvent;
+  _::ExceptionOrValue& result;
+
+  void run();
+  virtual void runImpl(WaitScope& waitScope) = 0;
+
+  struct StartRoutine;
+
+  void switchToFiber();
+  void switchToMain();
+
+  Maybe<Own<Event>> fire() override;
+  // Implements Event. Each time the event is fired, switchToFiber() is called.
+
+  friend class WaitScope;
+  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+                          WaitScope& waitScope);
+  friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
+};
+
+template <typename Func>
+class Fiber final: public FiberBase {
+public:
+  Fiber(size_t stackSize, Func&& func): FiberBase(stackSize, result), func(kj::fwd<Func>(func)) {}
+
+  typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
+
+  void get(ExceptionOrValue& output) noexcept override {
+    KJ_IREQUIRE(isFinished());
+    output.as<ResultType>() = kj::mv(result);
+  }
+
+private:
+  Func func;
+  ExceptionOr<ResultType> result;
+
+  void runImpl(WaitScope& waitScope) override {
+    result.template as<ResultType>() =
+        MaybeVoidCaller<WaitScope&, ResultType>::apply(func, waitScope);
+  }
+};
+
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -1012,6 +1083,17 @@ inline PromiseForResult<Func, void> evalNow(Func&& func) {
     result = kj::mv(*e);
   }
   return result;
+}
+
+template <typename Func>
+inline PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) {
+  typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
+
+  Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(stackSize, kj::fwd<Func>(func));
+  intermediate->start();
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
+  return _::maybeReduce(kj::mv(result), false);
 }
 
 template <typename T>

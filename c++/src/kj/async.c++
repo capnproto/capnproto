@@ -21,6 +21,16 @@
 
 #if _WIN32
 #define WIN32_LEAN_AND_MEAN 1  // lolz
+#elif __APPLE__
+// getcontext() and friends are marked deprecated on MacOS but seemingly no replacement is
+// provided. It appears as if they deprecated it solely because the standards bodies deprecated it,
+// which they seemingly did mainly because the proper sematics are too difficult for them to
+// define. I doubt MacOS would actually remove these functions as they are widely used. But if they
+// do, then I guess we'll need to fall back to using setjmp()/longjmp(), and some sort of hack
+// involving sigaltstack() (and generating a fake signal I guess) in order to initialize the fiber
+// in the first place. Or we could use assembly, I suppose. Either way, ick.
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#define _XOPEN_SOURCE  // Must be defined to see getcontext() on MacOS.
 #endif
 
 #include "async.h"
@@ -34,6 +44,10 @@
 #include "windows-sanity.h"
 #else
 #include <sched.h>    // just for sched_yield()
+#include <ucontext.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <errno.h>
 #endif
 
 #if !KJ_NO_RTTI
@@ -692,6 +706,182 @@ const Executor& getCurrentThreadExecutor() {
 }
 
 // =======================================================================================
+// Fiber implementation.
+
+namespace _ {  // private
+
+struct FiberBase::Impl {
+  // This struct serves two purposes:
+  // - It contains OS-specific state that we don't want to declare in the header.
+  // - It is allocated at the top of the fiber's stack area, so the Impl pointer also serves to
+  //   track where the stack was allocated.
+
+  ucontext_t fiberContext;
+  ucontext_t originalContext;
+
+  static Impl& alloc(size_t stackSize) {
+    // TODO(perf): Freelist stacks to avoid TLB flushes.
+
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+#ifndef MAP_STACK
+#define MAP_STACK 0
+#endif
+
+    size_t pageSize = getPageSize();
+    size_t allocSize = stackSize + pageSize;  // size plus guard page
+
+    // Allocate virtual address space for the stack but make it inaccessible initially.
+    // TODO(someday): Does it make sense to use MAP_GROWSDOWN on Linux? It's a kind of bizarre flag
+    //   that causes the mapping to automatically allocate extra pages (beyond the range specified)
+    //   until it hits something...
+    void* stack = mmap(nullptr, allocSize, PROT_NONE,
+        MAP_ANONYMOUS | MAP_PRIVATE | MAP_STACK, -1, 0);
+    if (stack == MAP_FAILED) {
+      KJ_FAIL_SYSCALL("mmap(new stack)", errno);
+    }
+    KJ_ON_SCOPE_FAILURE({
+      KJ_SYSCALL(munmap(stack, allocSize)) { break; }
+    });
+
+    // Now mark everything except the guard page as read-write. We assume the stack grows down, so
+    // the guard page is at the beginning. No modern architecture uses stacks that grow up.
+    KJ_SYSCALL(mprotect(reinterpret_cast<byte*>(stack) + pageSize,
+                        stackSize, PROT_READ | PROT_WRITE));
+
+    // Stick `Impl` at the top of the stack.
+    Impl& impl = *(reinterpret_cast<Impl*>(reinterpret_cast<byte*>(stack) + allocSize) - 1);
+
+    // Note: mmap() allocates zero'd pages so we don't have to memset() anything here.
+
+    KJ_SYSCALL(getcontext(&impl.fiberContext));
+    impl.fiberContext.uc_stack.ss_size = allocSize - sizeof(Impl);
+    impl.fiberContext.uc_stack.ss_sp = reinterpret_cast<char*>(stack);
+    impl.fiberContext.uc_stack.ss_flags = 0;
+    impl.fiberContext.uc_link = &impl.originalContext;
+
+    return impl;
+  }
+
+  static void free(Impl& impl, size_t stackSize) {
+    size_t allocSize = stackSize + getPageSize();
+    void* stack = reinterpret_cast<byte*>(&impl + 1) - allocSize;
+    KJ_SYSCALL(munmap(stack, allocSize)) { break; }
+  }
+
+  static size_t getPageSize() {
+#ifndef _SC_PAGESIZE
+#define _SC_PAGESIZE _SC_PAGE_SIZE
+#endif
+    static size_t result = sysconf(_SC_PAGE_SIZE);
+    return result;
+  }
+};
+
+struct FiberBase::StartRoutine {
+  static void run(int arg1, int arg2) {
+    // This is the static C-style function we pass to makeContext().
+
+    // POSIX says the arguments are ints, not pointers. So we split our pointer in half in order to
+    // work correctly on 64-bit machines. Gross.
+    uintptr_t ptr = static_cast<uint>(arg1);
+    ptr |= static_cast<uintptr_t>(static_cast<uint>(arg2)) << (sizeof(ptr) * 4);
+    reinterpret_cast<FiberBase*>(ptr)->run();
+  }
+};
+
+FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
+    : state(WAITING),
+      // Force stackSize to a reasonable minimum.
+      stackSize(kj::max(stackSizeParam, 65536)),
+      impl(Impl::alloc(stackSize)),
+      result(result) {
+  // Note: Nothing below here can throw. If that changes then we need to call Impl::free(impl)
+  //   on exceptions...
+
+  // POSIX says the arguments are ints, not pointers. So we split our pointer in half in order to
+  // work correctly on 64-bit machines. Gross.
+  uintptr_t ptr = reinterpret_cast<uintptr_t>(this);
+  int arg1 = ptr & ((uintptr_t(1) << (sizeof(ptr) * 4)) - 1);
+  int arg2 = ptr >> (sizeof(ptr) * 4);
+
+  makecontext(&impl.fiberContext, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
+}
+
+FiberBase::~FiberBase() noexcept(false) {
+  KJ_DEFER({
+    Impl::free(impl, stackSize);
+  });
+
+  switch (state) {
+    case WAITING:
+      // We can't just free the stack while the fiber is running. We need to force it to execute
+      // until finished, so we cause it to throw an exception.
+      state = CANCELED;
+      switchToFiber();
+
+      // The fiber should only switch back to the main stack on completion, because any further
+      // calls to wait() would throw before trying to switch.
+      KJ_ASSERT(state == FINISHED);
+      break;
+
+    case RUNNING:
+    case CANCELED:
+      // Bad news.
+      KJ_LOG(FATAL, "fiber tried to destroy itself");
+      ::abort();
+      break;
+
+    case FINISHED:
+      // Normal completion, yay.
+      break;
+  }
+}
+
+Maybe<Own<Event>> FiberBase::fire() {
+  KJ_ASSERT(state == WAITING);
+  state = RUNNING;
+  switchToFiber();
+  return nullptr;
+}
+
+void FiberBase::switchToFiber() {
+  // Switch from the main stack to the fiber. Returns once the fiber either calls switchToMain()
+  // or returns from its main function.
+  KJ_SYSCALL(swapcontext(&impl.originalContext, &impl.fiberContext));
+}
+void FiberBase::switchToMain() {
+  // Switch from the fiber to the main stack. Returns the next time the main stack calls
+  // switchToFiber().
+  KJ_SYSCALL(swapcontext(&impl.fiberContext, &impl.originalContext));
+}
+
+void FiberBase::run() {
+  state = RUNNING;
+  KJ_DEFER(state = FINISHED);
+
+  WaitScope waitScope(currentEventLoop(), *this);
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    runImpl(waitScope);
+  })) {
+    result.addException(kj::mv(*exception));
+  }
+
+  onReadyEvent.arm();
+}
+
+void FiberBase::onReady(_::Event* event) noexcept {
+  onReadyEvent.init(event);
+}
+
+PromiseNode* FiberBase::getInnerForTrace() {
+  return currentInner;
+}
+
+}  // namespace _ (private)
+
+// =======================================================================================
 
 void EventPort::setRunnable(bool runnable) {}
 
@@ -866,32 +1056,71 @@ void WaitScope::poll() {
 
 namespace _ {  // private
 
+static kj::Exception fiberCanceledException() {
+  // Construct the exception to throw from wait() when the fiber has been canceled (because the
+  // promise returned by startFiber() was dropped before completion).
+  //
+  // TODO(someday): Should we have a dedicated exception type for cancellation? Do we even want
+  //   to build stack traces and such for these?
+  return KJ_EXCEPTION(FAILED, "This fiber is being canceled.");
+};
+
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
-  KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
-  BoolEvent doneEvent;
-  node->setSelfPointer(&node);
-  node->onReady(&doneEvent);
-
-  loop.running = true;
-  KJ_DEFER(loop.running = false);
-
-  uint counter = 0;
-  while (!doneEvent.fired) {
-    if (!loop.turn()) {
-      // No events in the queue.  Wait for callback.
-      counter = 0;
-      loop.wait();
-    } else if (++counter > waitScope.busyPollInterval) {
-      // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
-      counter = 0;
-      loop.poll();
+  KJ_IF_MAYBE(fiber, waitScope.fiber) {
+    if (fiber->state == FiberBase::CANCELED) {
+      result.addException(fiberCanceledException());
+      return;
     }
-  }
+    KJ_REQUIRE(fiber->state == FiberBase::RUNNING,
+        "This WaitScope can only be used within the fiber that created it.");
 
-  loop.setRunnable(loop.isRunnable());
+    node->setSelfPointer(&node);
+    node->onReady(fiber);
+
+    fiber->currentInner = node;
+    KJ_DEFER(fiber->currentInner = nullptr);
+
+    // Switch to the main stack to run the event loop.
+    fiber->state = FiberBase::WAITING;
+    fiber->switchToMain();
+
+    // The main stack switched back to us, meaning either the event we registered with
+    // node->onReady() fired, or we are being canceled by FiberBase's destructor.
+
+    if (fiber->state == FiberBase::CANCELED) {
+      result.addException(fiberCanceledException());
+      return;
+    }
+
+    KJ_ASSERT(fiber->state == FiberBase::RUNNING);
+  } else {
+    KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
+
+    BoolEvent doneEvent;
+    node->setSelfPointer(&node);
+    node->onReady(&doneEvent);
+
+    loop.running = true;
+    KJ_DEFER(loop.running = false);
+
+    uint counter = 0;
+    while (!doneEvent.fired) {
+      if (!loop.turn()) {
+        // No events in the queue.  Wait for callback.
+        counter = 0;
+        loop.wait();
+      } else if (++counter > waitScope.busyPollInterval) {
+        // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
+        counter = 0;
+        loop.poll();
+      }
+    }
+
+    loop.setRunnable(loop.isRunnable());
+  }
 
   node->get(result);
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
@@ -904,6 +1133,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
+  KJ_REQUIRE(waitScope.fiber == nullptr, "poll() is not supported in fibers.");
   KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
 
   BoolEvent doneEvent;

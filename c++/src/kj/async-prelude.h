@@ -188,6 +188,7 @@ class PromiseNode;
 class ChainPromiseNode;
 template <typename T>
 class ForkHub;
+class FiberBase;
 
 class Event;
 class XThreadEvent;
