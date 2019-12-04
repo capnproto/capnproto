@@ -896,8 +896,12 @@ private:
 
   size_t stackSize;
 
+#if _WIN32
+  void* osFiber;
+#else
   struct Impl;
   Impl& impl;
+#endif
 
   _::PromiseNode* currentInner = nullptr;
   OnReadyEvent onReadyEvent;

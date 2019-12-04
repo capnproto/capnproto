@@ -907,6 +907,10 @@ private:
 
   Own<TaskSet> daemons;
 
+#if _WIN32
+  void* mainFiber = nullptr;
+#endif
+
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
@@ -923,6 +927,7 @@ private:
   friend class WaitScope;
   friend class Executor;
   friend class _::XThreadEvent;
+  friend class _::FiberBase;
 };
 
 class WaitScope {

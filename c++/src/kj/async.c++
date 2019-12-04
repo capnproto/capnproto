@@ -40,7 +40,7 @@
 #include "mutex.h"
 
 #if _WIN32
-#include <windows.h>  // just for Sleep(0)
+#include <windows.h>  // for Sleep(0) and fibers
 #include "windows-sanity.h"
 #else
 #include <sched.h>    // just for sched_yield()
@@ -710,6 +710,7 @@ const Executor& getCurrentThreadExecutor() {
 
 namespace _ {  // private
 
+#if !_WIN32
 struct FiberBase::Impl {
   // This struct serves two purposes:
   // - It contains OS-specific state that we don't want to declare in the header.
@@ -778,8 +779,20 @@ struct FiberBase::Impl {
     return result;
   }
 };
+#endif
 
 struct FiberBase::StartRoutine {
+#if _WIN32
+  static void WINAPI run(LPVOID ptr) {
+    // This is the static C-style function we pass to CreateFiber().
+    auto& fiber = *reinterpret_cast<FiberBase*>(ptr);
+    fiber.run();
+
+    // On Windows, if the fiber main function returns, the thread exits. We need to explicitly switch
+    // back to the main stack.
+    fiber.switchToMain();
+  }
+#else
   static void run(int arg1, int arg2) {
     // This is the static C-style function we pass to makeContext().
 
@@ -789,14 +802,28 @@ struct FiberBase::StartRoutine {
     ptr |= static_cast<uintptr_t>(static_cast<uint>(arg2)) << (sizeof(ptr) * 4);
     reinterpret_cast<FiberBase*>(ptr)->run();
   }
+#endif
 };
 
 FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
     : state(WAITING),
       // Force stackSize to a reasonable minimum.
       stackSize(kj::max(stackSizeParam, 65536)),
+#if !_WIN32
       impl(Impl::alloc(stackSize)),
+#endif
       result(result) {
+#if _WIN32
+  auto& eventLoop = currentEventLoop();
+  if (eventLoop.mainFiber == nullptr) {
+    // First time we've created a fiber. We need to convert the main stack into a fiber as well
+    // before we can start switching.
+    eventLoop.mainFiber = ConvertThreadToFiber(nullptr);
+  }
+
+  KJ_WIN32(osFiber = CreateFiber(stackSize, &StartRoutine::run, this));
+
+#else
   // Note: Nothing below here can throw. If that changes then we need to call Impl::free(impl)
   //   on exceptions...
 
@@ -807,12 +834,15 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
   int arg2 = ptr >> (sizeof(ptr) * 4);
 
   makecontext(&impl.fiberContext, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
+#endif
 }
 
 FiberBase::~FiberBase() noexcept(false) {
-  KJ_DEFER({
-    Impl::free(impl, stackSize);
-  });
+#if _WIN32
+  KJ_DEFER(DeleteFiber(osFiber));
+#else
+  KJ_DEFER(Impl::free(impl, stackSize));
+#endif
 
   switch (state) {
     case WAITING:
@@ -849,12 +879,20 @@ Maybe<Own<Event>> FiberBase::fire() {
 void FiberBase::switchToFiber() {
   // Switch from the main stack to the fiber. Returns once the fiber either calls switchToMain()
   // or returns from its main function.
+#if _WIN32
+  SwitchToFiber(osFiber);
+#else
   KJ_SYSCALL(swapcontext(&impl.originalContext, &impl.fiberContext));
+#endif
 }
 void FiberBase::switchToMain() {
   // Switch from the fiber to the main stack. Returns the next time the main stack calls
   // switchToFiber().
+#if _WIN32
+  SwitchToFiber(currentEventLoop().mainFiber);
+#else
   KJ_SYSCALL(swapcontext(&impl.fiberContext, &impl.originalContext));
+#endif
 }
 
 void FiberBase::run() {
@@ -898,6 +936,15 @@ EventLoop::EventLoop(EventPort& port)
       daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
+#if _WIN32
+  KJ_DEFER({
+    if (mainFiber != nullptr) {
+      // We converted the thread to a fiber, need to convert it back.
+      KJ_WIN32(ConvertFiberToThread());
+    }
+  });
+#endif
+
   // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
   // some more.
   daemons = nullptr;
