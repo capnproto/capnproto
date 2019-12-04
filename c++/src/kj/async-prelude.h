@@ -203,15 +203,9 @@ private:
   PromiseBase() = default;
   PromiseBase(Own<PromiseNode>&& node): node(kj::mv(node)) {}
 
-  friend class kj::EventLoop;
-  friend class ChainPromiseNode;
   template <typename>
   friend class kj::Promise;
-  friend class kj::TaskSet;
-  template <typename U>
-  friend Promise<Array<U>> kj::joinPromises(Array<Promise<U>>&& promises);
-  friend Promise<void> kj::joinPromises(Array<Promise<void>>&& promises);
-  friend class XThreadEvent;
+  friend class PromiseNode;
 };
 
 void detach(kj::Promise<void>&& promise);
@@ -224,9 +218,7 @@ Own<PromiseNode> neverDone();
 class NeverDone {
 public:
   template <typename T>
-  operator Promise<T>() const {
-    return Promise<T>(false, neverDone());
-  }
+  operator Promise<T>() const;
 
   KJ_NORETURN(void wait(WaitScope& waitScope) const);
 };

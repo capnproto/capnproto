@@ -234,7 +234,7 @@ private:
 };
 
 void TaskSet::add(Promise<void>&& promise) {
-  auto task = heap<Task>(*this, kj::mv(promise.node));
+  auto task = heap<Task>(*this, _::PromiseNode::from(kj::mv(promise)));
   KJ_IF_MAYBE(head, tasks) {
     head->get()->prev = &task->next;
     task->next = kj::mv(tasks);
@@ -931,11 +931,11 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
 }
 
 Promise<void> yield() {
-  return Promise<void>(false, kj::heap<YieldPromiseNode>());
+  return _::PromiseNode::to<Promise<void>>(kj::heap<YieldPromiseNode>());
 }
 
 Promise<void> yieldHarder() {
-  return Promise<void>(false, kj::heap<YieldHarderPromiseNode>());
+  return _::PromiseNode::to<Promise<void>>(kj::heap<YieldHarderPromiseNode>());
 }
 
 Own<PromiseNode> neverDone() {
@@ -1379,7 +1379,7 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
   } else KJ_IF_MAYBE(value, intermediate.value) {
     // There is a value and no exception.  The value is itself a promise.  Adopt it as our
     // step2.
-    inner = kj::mv(value->node);
+    inner = _::PromiseNode::from(kj::mv(*value));
   } else {
     // We can only get here if inner->get() returned neither an exception nor a
     // value, which never actually happens.
@@ -1551,8 +1551,8 @@ void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
 }  // namespace _ (private)
 
 Promise<void> joinPromises(Array<Promise<void>>&& promises) {
-  return Promise<void>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
-      KJ_MAP(p, promises) { return kj::mv(p.node); },
+  return _::PromiseNode::to<Promise<void>>(kj::heap<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<_::Void>>(promises.size())));
 }
 

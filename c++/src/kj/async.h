@@ -305,24 +305,7 @@ private:
   Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
 
-  template <typename>
-  friend class Promise;
-  friend class EventLoop;
-  template <typename U, typename Adapter, typename... Params>
-  friend _::ReducePromises<U> newAdaptedPromise(Params&&... adapterConstructorParams);
-  template <typename U>
-  friend PromiseFulfillerPair<U> newPromiseAndFulfiller();
-  template <typename>
-  friend class _::ForkHub;
-  friend class TaskSet;
-  friend Promise<void> _::yield();
-  friend Promise<void> _::yieldHarder();
-  friend class _::NeverDone;
-  template <typename U>
-  friend Promise<Array<U>> joinPromises(Array<Promise<U>>&& promises);
-  friend Promise<void> joinPromises(Array<Promise<void>>&& promises);
-  friend class _::XThreadEvent;
-  friend class Executor;
+  friend class _::PromiseNode;
 };
 
 template <typename T>
