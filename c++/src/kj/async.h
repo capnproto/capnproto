@@ -907,7 +907,7 @@ private:
 
   Own<TaskSet> daemons;
 
-#if _WIN32
+#if _WIN32 || __CYGWIN__
   void* mainFiber = nullptr;
 #endif
 

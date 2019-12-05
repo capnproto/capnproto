@@ -896,7 +896,7 @@ private:
 
   size_t stackSize;
 
-#if _WIN32
+#if _WIN32 || __CYGWIN__
   void* osFiber;
 #else
   struct Impl;
