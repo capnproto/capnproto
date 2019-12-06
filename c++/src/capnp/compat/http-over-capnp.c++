@@ -236,9 +236,8 @@ class HttpOverCapnpFactory::ClientRequestContextImpl final
 public:
   ClientRequestContextImpl(HttpOverCapnpFactory& factory,
                            kj::Own<RequestState> state,
-                           kj::HttpMethod method,
                            kj::HttpService::Response& kjResponse)
-      : factory(factory), state(kj::mv(state)), method(method), kjResponse(kjResponse) {}
+      : factory(factory), state(kj::mv(state)), kjResponse(kjResponse) {}
 
   ~ClientRequestContextImpl() noexcept(false) {
     // Note this implicitly cancels the upstream pump task.
@@ -261,25 +260,8 @@ public:
       hasBody = size > 0;
     }
 
-    auto headers = factory.headersToKj(rpcResponse.getHeaders());
-
-    // Some apps rely on content-length and transfer-encoding actually reflecting the underlying
-    // stream, so overwrite them here to reflect what the RPC layer says.
-    if (method == kj::HttpMethod::HEAD) {
-      // On a HEAD response, there is no body, but the server is allowed to send arbitrary
-      // values for content-length and transfer-encoding.
-    } else KJ_IF_MAYBE(s, expectedSize) {
-      // Known body size, set content-length.
-      headers.set(kj::HttpHeaderId::CONTENT_LENGTH, kj::str(*s));
-      headers.unset(kj::HttpHeaderId::TRANSFER_ENCODING);
-    } else {
-      // Unknown body size, set transfer-encoding: chunked.
-      headers.set(kj::HttpHeaderId::TRANSFER_ENCODING, "chunked"_kj);
-      headers.unset(kj::HttpHeaderId::CONTENT_LENGTH);
-    }
-
     auto bodyStream = kjResponse.send(rpcResponse.getStatusCode(), rpcResponse.getStatusText(),
-                                      headers, expectedSize);
+        factory.headersToKj(rpcResponse.getHeaders()), expectedSize);
 
     auto results = context.getResults(MessageSize { 16, 1 });
     if (hasBody) {
@@ -327,7 +309,6 @@ public:
 private:
   HttpOverCapnpFactory& factory;
   kj::Own<RequestState> state;
-  kj::HttpMethod method;
   bool sent = false;
 
   kj::HttpService::Response& kjResponse;
@@ -374,7 +355,7 @@ public:
     });
 
     rpcRequest.setContext(
-        kj::heap<ClientRequestContextImpl>(factory, kj::addRef(*state), method, kjResponse));
+        kj::heap<ClientRequestContextImpl>(factory, kj::addRef(*state), kjResponse));
 
     auto pipeline = rpcRequest.send();
 
@@ -463,14 +444,13 @@ class HttpOverCapnpFactory::ServerRequestContextImpl final
 public:
   ServerRequestContextImpl(HttpOverCapnpFactory& factory,
                            capnp::HttpRequest::Reader request,
-                           kj::HttpHeaders&& headersParam,
                            capnp::HttpService::ClientRequestContext::Client clientContext,
                            kj::Own<kj::AsyncInputStream> requestBodyIn,
                            kj::HttpService& kjService)
       : factory(factory),
         method(validateMethod(request.getMethod())),
         url(kj::str(request.getUrl())),
-        headers(kj::mv(headersParam)),
+        headers(factory.headersToKj(request.getHeaders()).clone()),
         clientContext(kj::mv(clientContext)),
         // Note we attach `requestBodyIn` to `task` so that we will implicitly cancel reading
         // the request body as soon as the service returns. This is important in particular when
@@ -604,27 +584,8 @@ public:
     } else {
       requestBody = kj::heap<NullInputStream>();
     }
-
-    // Some apps rely on content-length and transfer-encoding actually reflecting the underlying
-    // stream, so overwrite them here to reflect what the RPC layer says.
-    kj::HttpHeaders headers = factory.headersToKj(metadata.getHeaders()).clone();
-    auto method = metadata.getMethod();
-    if ((method == HttpMethod::HEAD || method == HttpMethod::GET) && !hasBody) {
-      // When a GET or HEAD request has no body, we set neither header.
-      headers.unset(kj::HttpHeaderId::CONTENT_LENGTH);
-      headers.unset(kj::HttpHeaderId::TRANSFER_ENCODING);
-    } else KJ_IF_MAYBE(s, expectedSize) {
-      // Known body size, set content-length.
-      headers.set(kj::HttpHeaderId::CONTENT_LENGTH, kj::str(*s));
-      headers.unset(kj::HttpHeaderId::TRANSFER_ENCODING);
-    } else {
-      // Unknown body size, set transfer-encoding: chunked.
-      headers.set(kj::HttpHeaderId::TRANSFER_ENCODING, "chunked"_kj);
-      headers.unset(kj::HttpHeaderId::CONTENT_LENGTH);
-    }
-
     results.setContext(kj::heap<ServerRequestContextImpl>(
-        factory, metadata, kj::mv(headers), params.getContext(), kj::mv(requestBody), *inner));
+        factory, metadata, params.getContext(), kj::mv(requestBody), *inner));
 
     return kj::READY_NOW;
   }
