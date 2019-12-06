@@ -194,6 +194,22 @@ public:
   // If this node wraps some other PromiseNode, get the wrapped node.  Used for debug tracing.
   // Default implementation returns nullptr.
 
+  template <typename T>
+  static Own<PromiseNode> from(T&& promise) {
+    // Given a Promise, extract the PromiseNode.
+    return kj::mv(promise.node);
+  }
+  template <typename T>
+  static PromiseNode& from(T& promise) {
+    // Given a Promise, extract the PromiseNode.
+    return *promise.node;
+  }
+  template <typename T>
+  static T to(Own<PromiseNode>&& node) {
+    // Construct a Promise from a PromiseNode. (T should be a Promise type.)
+    return T(false, kj::mv(node));
+  }
+
 protected:
   class OnReadyEvent {
     // Helper class for implementing onReady().
@@ -210,6 +226,13 @@ protected:
     Event* event = nullptr;
   };
 };
+
+// -------------------------------------------------------------------
+
+template <typename T>
+inline NeverDone::operator Promise<T>() const {
+  return PromiseNode::to<Promise<T>>(neverDone());
+}
 
 // -------------------------------------------------------------------
 
@@ -557,7 +580,7 @@ public:
   ForkHub(Own<PromiseNode>&& inner): ForkHubBase(kj::mv(inner), result) {}
 
   Promise<_::UnfixVoid<T>> addBranch() {
-    return Promise<_::UnfixVoid<T>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
+    return _::PromiseNode::to<Promise<_::UnfixVoid<T>>>(kj::heap<ForkBranch<T>>(addRef(*this)));
   }
 
   _::SplitTuplePromise<T> split() {
@@ -574,9 +597,9 @@ private:
 
   template <size_t index>
   ReducePromises<typename SplitBranch<T, index>::Element> addSplit() {
-    return ReducePromises<typename SplitBranch<T, index>::Element>(
-        false, maybeChain(kj::heap<SplitBranch<T, index>>(addRef(*this)),
-                          implicitCast<typename SplitBranch<T, index>::Element*>(nullptr)));
+    return _::PromiseNode::to<ReducePromises<typename SplitBranch<T, index>::Element>>(
+        maybeChain(kj::heap<SplitBranch<T, index>>(addRef(*this)),
+                   implicitCast<typename SplitBranch<T, index>::Element*>(nullptr)));
   }
 };
 
@@ -848,6 +871,81 @@ private:
   }
 };
 
+// -------------------------------------------------------------------
+
+class FiberBase: public PromiseNode, private Event {
+  // Base class for the outer PromiseNode representing a fiber.
+
+public:
+  FiberBase(size_t stackSize, _::ExceptionOrValue& result);
+  ~FiberBase() noexcept(false);
+
+  void start() { armDepthFirst(); }
+  // Call immediately after construction to begin executing the fiber.
+
+  class WaitDoneEvent;
+
+  void onReady(_::Event* event) noexcept override;
+  PromiseNode* getInnerForTrace() override;
+
+protected:
+  bool isFinished() { return state == FINISHED; }
+
+private:
+  enum { WAITING, RUNNING, CANCELED, FINISHED } state;
+
+  size_t stackSize;
+
+#if _WIN32 || __CYGWIN__
+  void* osFiber;
+#else
+  struct Impl;
+  Impl& impl;
+#endif
+
+  _::PromiseNode* currentInner = nullptr;
+  OnReadyEvent onReadyEvent;
+  _::ExceptionOrValue& result;
+
+  void run();
+  virtual void runImpl(WaitScope& waitScope) = 0;
+
+  struct StartRoutine;
+
+  void switchToFiber();
+  void switchToMain();
+
+  Maybe<Own<Event>> fire() override;
+  // Implements Event. Each time the event is fired, switchToFiber() is called.
+
+  friend class WaitScope;
+  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+                          WaitScope& waitScope);
+  friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
+};
+
+template <typename Func>
+class Fiber final: public FiberBase {
+public:
+  Fiber(size_t stackSize, Func&& func): FiberBase(stackSize, result), func(kj::fwd<Func>(func)) {}
+
+  typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
+
+  void get(ExceptionOrValue& output) noexcept override {
+    KJ_IREQUIRE(isFinished());
+    output.as<ResultType>() = kj::mv(result);
+  }
+
+private:
+  Func func;
+  ExceptionOr<ResultType> result;
+
+  void runImpl(WaitScope& waitScope) override {
+    result.template as<ResultType>() =
+        MaybeVoidCaller<WaitScope&, ResultType>::apply(func, waitScope);
+  }
+};
+
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -868,7 +966,7 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
   Own<_::PromiseNode> intermediate =
       heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
           kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
-  auto result = _::ChainPromises<_::ReturnType<Func, T>>(false,
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
   return _::maybeReduce(kj::mv(result), false);
 }
@@ -991,6 +1089,17 @@ inline PromiseForResult<Func, void> evalNow(Func&& func) {
   return result;
 }
 
+template <typename Func>
+inline PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) {
+  typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
+
+  Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(stackSize, kj::fwd<Func>(func));
+  intermediate->start();
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
+  return _::maybeReduce(kj::mv(result), false);
+}
+
 template <typename T>
 template <typename ErrorFunc>
 void Promise<T>::detach(ErrorFunc&& errorHandler) {
@@ -1005,8 +1114,8 @@ void Promise<void>::detach(ErrorFunc&& errorHandler) {
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises) {
-  return Promise<Array<T>>(false, kj::heap<_::ArrayJoinPromiseNode<T>>(
-      KJ_MAP(p, promises) { return kj::mv(p.node); },
+  return _::PromiseNode::to<Promise<Array<T>>>(kj::heap<_::ArrayJoinPromiseNode<T>>(
+      KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<T>>(promises.size())));
 }
 
@@ -1134,7 +1243,7 @@ _::ReducePromises<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
   Own<_::PromiseNode> intermediate(
       heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
           kj::fwd<Params>(adapterConstructorParams)...));
-  return _::ReducePromises<T>(false,
+  return _::PromiseNode::to<_::ReducePromises<T>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
 }
 
@@ -1144,7 +1253,7 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller() {
 
   Own<_::PromiseNode> intermediate(
       heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
-  _::ReducePromises<T> promise(false,
+  auto promise = _::PromiseNode::to<_::ReducePromises<T>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
 
   return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
@@ -1170,9 +1279,6 @@ protected:
   virtual kj::Maybe<Own<PromiseNode>> execute() = 0;
   // Run the function. If the function returns a promise, returns the inner PromiseNode, otherwise
   // returns null.
-
-  template <typename T>
-  Own<PromiseNode> extractNode(Promise<T> promise) { return kj::mv(promise.node); }
 
   // implements PromiseNode ----------------------------------------------------
   void onReady(Event* event) noexcept override;
@@ -1271,7 +1377,7 @@ public:
   typedef _::FixVoid<_::UnwrapPromise<PromiseForResult<Func, void>>> ResultT;
 
   kj::Maybe<Own<_::PromiseNode>> execute() override {
-    auto result = extractNode(func());
+    auto result = _::PromiseNode::from(func());
     KJ_IREQUIRE(result.get() != nullptr);
     return kj::mv(result);
   }
@@ -1300,7 +1406,7 @@ template <typename Func>
 PromiseForResult<Func, void> Executor::executeAsync(Func&& func) const {
   auto event = kj::heap<_::XThreadEventImpl<Func>>(kj::fwd<Func>(func), *this);
   send(*event, false);
-  return PromiseForResult<Func, void>(false, kj::mv(event));
+  return _::PromiseNode::to<PromiseForResult<Func, void>>(kj::mv(event));
 }
 
 }  // namespace kj

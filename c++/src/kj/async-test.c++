@@ -844,5 +844,93 @@ KJ_TEST("exclusiveJoin both events complete simultaneously") {
   KJ_EXPECT(!joined.poll(waitScope));
 }
 
+KJ_TEST("start a fiber") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<int>();
+
+  Promise<StringPtr> fiber = startFiber(65536,
+      [promise = kj::mv(paf.promise)](WaitScope& fiberScope) mutable {
+    int i = promise.wait(fiberScope);
+    KJ_EXPECT(i == 123);
+    return "foo"_kj;
+  });
+
+  KJ_EXPECT(!fiber.poll(waitScope));
+
+  paf.fulfiller->fulfill(123);
+
+  KJ_ASSERT(fiber.poll(waitScope));
+  KJ_EXPECT(fiber.wait(waitScope) == "foo");
+}
+
+KJ_TEST("fiber promise chaining") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<int>();
+  bool ran = false;
+
+  Promise<int> fiber = startFiber(65536,
+      [promise = kj::mv(paf.promise), &ran](WaitScope& fiberScope) mutable {
+    ran = true;
+    return kj::mv(promise);
+  });
+
+  KJ_EXPECT(!ran);
+  KJ_EXPECT(!fiber.poll(waitScope));
+  KJ_EXPECT(ran);
+
+  paf.fulfiller->fulfill(123);
+
+  KJ_ASSERT(fiber.poll(waitScope));
+  KJ_EXPECT(fiber.wait(waitScope) == 123);
+}
+
+KJ_TEST("throw from a fiber") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<void>();
+
+  Promise<void> fiber = startFiber(65536,
+      [promise = kj::mv(paf.promise)](WaitScope& fiberScope) mutable {
+    promise.wait(fiberScope);
+    KJ_FAIL_EXPECT("wait() should have thrown");
+  });
+
+  KJ_EXPECT(!fiber.poll(waitScope));
+
+  paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "test exception"));
+
+  KJ_ASSERT(fiber.poll(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("test exception", fiber.wait(waitScope));
+}
+
+KJ_TEST("cancel a fiber") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<int>();
+
+  bool exited = false;
+
+  {
+    Promise<StringPtr> fiber = startFiber(65536,
+        [promise = kj::mv(paf.promise), &exited](WaitScope& fiberScope) mutable {
+      KJ_DEFER(exited = true);
+      int i = promise.wait(fiberScope);
+      KJ_EXPECT(i == 123);
+      return "foo"_kj;
+    });
+
+    KJ_EXPECT(!fiber.poll(waitScope));
+    KJ_EXPECT(!exited);
+  }
+
+  KJ_EXPECT(exited);
+}
+
 }  // namespace
 }  // namespace kj

@@ -229,8 +229,16 @@ public:
   //   around them in arbitrary ways.  Therefore, callers really need to know if a function they
   //   are calling might wait(), and the `WaitScope&` parameter makes this clear.
   //
-  // TODO(someday):  Implement fibers, and let them call wait() even when they are handling an
-  //   event.
+  // Usually, there is only one `WaitScope` for each `EventLoop`, and it can only be used at the
+  // top level of the thread owning the loop. Calling `wait()` with this `WaitScope` is what
+  // actually causes the event loop to run at all. This top-level `WaitScope` cannot be used
+  // recursively, so cannot be used within an event callback.
+  //
+  // However, it is possible to obtain a `WaitScope` in lower-level code by using fibers. Use
+  // kj::startFiber() to start some code executing on an alternate call stack. That code will get
+  // its own `WaitScope` allowing it to operate in a synchronous style. In this case, `wait()`
+  // switches back to the main stack in order to run the event loop, returning to the fiber's stack
+  // once the awaited promise resolves.
 
   bool poll(WaitScope& waitScope);
   // Returns true if a call to wait() would complete without blocking, false if it would block.
@@ -244,6 +252,8 @@ public:
   // The first poll() verifies that the promise doesn't resolve early, which would otherwise be
   // hard to do deterministically. The second poll() allows you to check that the promise has
   // resolved and avoid a wait() that might deadlock in the case that it hasn't.
+  //
+  // poll() is not supported in fibers; it will throw an exception.
 
   ForkedPromise<T> fork() KJ_WARN_UNUSED_RESULT;
   // Forks the promise, so that multiple different clients can independently wait on the result.
@@ -305,24 +315,7 @@ private:
   Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
 
-  template <typename>
-  friend class Promise;
-  friend class EventLoop;
-  template <typename U, typename Adapter, typename... Params>
-  friend _::ReducePromises<U> newAdaptedPromise(Params&&... adapterConstructorParams);
-  template <typename U>
-  friend PromiseFulfillerPair<U> newPromiseAndFulfiller();
-  template <typename>
-  friend class _::ForkHub;
-  friend class TaskSet;
-  friend Promise<void> _::yield();
-  friend Promise<void> _::yieldHarder();
-  friend class _::NeverDone;
-  template <typename U>
-  friend Promise<Array<U>> joinPromises(Array<Promise<U>>&& promises);
-  friend Promise<void> joinPromises(Array<Promise<void>>&& promises);
-  friend class _::XThreadEvent;
-  friend class Executor;
+  friend class _::PromiseNode;
 };
 
 template <typename T>
@@ -396,6 +389,29 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // If evalLast() is called multiple times, functions are executed in LIFO order. If the first
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
+
+template <typename Func>
+PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) KJ_WARN_UNUSED_RESULT;
+// Executes `func()` in a fiber, returning a promise for the eventual reseult. `func()` will be
+// passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on promises. Thus, `func()`
+// can be written in a synchronous, blocking style, instead of using `.then()`. This is often much
+// easier to write and read, and may even be significantly faster if it allows the use of stack
+// allocation rather than heap allocation.
+//
+// However, fibers have a major disadvantage: memory must be allocated for the fiber's call stack.
+// The entire stack must be allocated at once, making it necessary to choose a stack size upfront
+// that is big enough for whatever the fiber needs to do. Estimating this is often difficult. That
+// said, over-estimating is not too terrible since pages of the stack will actually be allocated
+// lazily when first accessed; actual memory usage will correspond to the "high watermark" of the
+// actual stack usage. That said, this lazy allocation forces page faults, which can be quite slow.
+// Worse, freeing a stack forces a TLB flush and shootdown -- all currently-executing threads will
+// have to be interrupted to flush their CPU cores' TLB caches.
+//
+// In short, when performance matters, you should try to avoid creating fibers very frequently.
+//
+// TODO(perf): We should add a mechanism for freelisting stacks. However, this improves CPU usage
+//   at the expense of memory usage: stacks on the freelist will consume however many pages they
+//   used at their high watermark, forever.
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
@@ -891,6 +907,10 @@ private:
 
   Own<TaskSet> daemons;
 
+#if _WIN32 || __CYGWIN__
+  void* mainFiber = nullptr;
+#endif
+
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
@@ -907,6 +927,7 @@ private:
   friend class WaitScope;
   friend class Executor;
   friend class _::XThreadEvent;
+  friend class _::FiberBase;
 };
 
 class WaitScope {
@@ -920,20 +941,31 @@ class WaitScope {
 
 public:
   inline explicit WaitScope(EventLoop& loop): loop(loop) { loop.enterScope(); }
-  inline ~WaitScope() { loop.leaveScope(); }
+  inline ~WaitScope() { if (fiber == nullptr) loop.leaveScope(); }
   KJ_DISALLOW_COPY(WaitScope);
 
   void poll();
   // Pumps the event queue and polls for I/O until there's nothing left to do (without blocking).
+  //
+  // Not supported in fibers.
 
   void setBusyPollInterval(uint count) { busyPollInterval = count; }
   // Set the maximum number of events to run in a row before calling poll() on the EventPort to
   // check for new I/O.
+  //
+  // This has no effect when used in a fiber.
 
 private:
   EventLoop& loop;
   uint busyPollInterval = kj::maxValue;
+
+  kj::Maybe<_::FiberBase&> fiber;
+
+  explicit WaitScope(EventLoop& loop, _::FiberBase& fiber)
+      : loop(loop), fiber(fiber) {}
+
   friend class EventLoop;
+  friend class _::FiberBase;
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
