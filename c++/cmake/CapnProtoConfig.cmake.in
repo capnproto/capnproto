@@ -65,7 +65,7 @@ set(CAPNP_INCLUDE_DIRS ${CAPNP_INCLUDE_DIRECTORY})
 # No need to list all libraries, just the leaves of the dependency tree.
 set(CAPNP_LIBRARIES_LITE CapnProto::capnp)
 set(CAPNP_LIBRARIES CapnProto::capnp-rpc CapnProto::capnp-json
-                    CapnProto::kj-http CapnProto::kj-test)
+                    CapnProto::kj-http)
 
 set(CAPNP_DEFINITIONS)
 if(TARGET CapnProto::capnp AND NOT TARGET CapnProto::capnp-rpc)
