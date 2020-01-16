@@ -33,3 +33,15 @@ If you have permission, after you've pushed your changes back to github, you can
     ./push-site.sh
 
 Otherwise, send a pull request and let someone else actually push the new site.
+
+# Package Managers
+
+You can download and install capnproto using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
+
+    git clone https://github.com/Microsoft/vcpkg.git
+    cd vcpkg
+    ./bootstrap-vcpkg.sh
+    ./vcpkg integrate install
+    ./vcpkg install capnproto
+
+The capnproto port in vcpkg is kept up to date by Microsoft team members and community contributors. If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
