@@ -139,7 +139,7 @@ Cap'n Proto can also be built with MinGW or Cygwin, using the Unix/autotools bui
 The C++ sources are located under `c++` directory in the git repository. The build instructions are
 otherwise the same as for the release zip.
 
-# Installation: vcpkg
+## Installation: vcpkg
 
 You can download and install capnproto using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
 
