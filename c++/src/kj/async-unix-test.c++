@@ -856,6 +856,33 @@ KJ_TEST("UnixEventPort whenWriteDisconnected()") {
   hupPromise.wait(waitScope);
 }
 
+KJ_TEST("UnixEventPort FdObserver(..., flags=0)::whenWriteDisconnected()") {
+  // Verifies that given `0' as a `flags' argument,
+  // FdObserver still observes whenWriteDisconnected().
+  //
+  // This can be useful to watch disconnection on a blocking file descriptor.
+  // See discussion: https://github.com/capnproto/capnproto/issues/924
+
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  int pipefds[2];
+  KJ_SYSCALL(pipe(pipefds));
+  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+
+  UnixEventPort::FdObserver observer(port, outfd, 0);
+
+  auto hupPromise = observer.whenWriteDisconnected();
+
+  KJ_EXPECT(!hupPromise.poll(waitScope));
+
+  infd = nullptr;
+  KJ_ASSERT(hupPromise.poll(waitScope));
+  hupPromise.wait(waitScope);
+}
+
 #endif
 
 KJ_TEST("UnixEventPort poll for signals") {
