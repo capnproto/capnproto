@@ -925,7 +925,7 @@ public:
       // * Named unions, which are special cases of named groups. In this case, the union may be
       //   annotated by annotating the field. In this case, we receive a non-null `discriminator`
       //   as a constructor parameter, and schemaProto.getAnnotations() must be empty because
-      //   it's not possible to annotate a group's type (becaues the type is anonymous).
+      //   it's not possible to annotate a group's type (because the type is anonymous).
       // * Unnamed unions, of which there can only be one in any particular scope. In this case,
       //   the parent struct type itself is annotated.
       // So if we received `null` as the constructor parameter, check for annotations on the struct

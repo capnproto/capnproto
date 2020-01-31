@@ -69,7 +69,7 @@ namespace _ {  // private
 
 #if __GNUC__ >= 8 && !__clang__
 // GCC 8 introduced a warning which complains whenever we try to memset() or memcpy() a
-// WirePointer, becaues we deleted the regular copy constructor / assignment operator. Weirdly, if
+// WirePointer, because we deleted the regular copy constructor / assignment operator. Weirdly, if
 // I remove those deletions, GCC *still* complains that WirePointer is non-trivial. I don't
 // understand why -- maybe because WireValue has private members? We don't want to make WireValue's
 // member public, but memset() and memcpy() on it are certainly valid and desirable, so we'll just

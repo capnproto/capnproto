@@ -263,7 +263,7 @@ TEST(TwoPartyNetwork, Release) {
 
   // There once was a bug where the last outgoing message (and any capabilities attached) would
   // not get cleaned up (until a new message was sent). This appeared to be a bug in Release,
-  // becaues if a client received a message and then released a capability from it but then did
+  // because if a client received a message and then released a capability from it but then did
   // not make any further calls, then the capability would not be released because the message
   // introducing it remained the last server -> client message (because a "Release" message has
   // no reply). Here we are explicitly trying to catch this bug. This proves tricky, because when

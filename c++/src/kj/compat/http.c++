@@ -41,7 +41,7 @@ namespace kj {
 // verbatim. But NO, they decided to throw a whole complicated hash algorithm in there, AND
 // THEY CHOSE A BROKEN ONE THAT WE OTHERWISE WOULDN'T NEED ANYMORE.
 //
-// TODO(cleanup): Move this to a shared hashing library. Maybe. Or maybe don't, becaues no one
+// TODO(cleanup): Move this to a shared hashing library. Maybe. Or maybe don't, because no one
 //   should be using SHA-1 anymore.
 //
 // THIS USAGE IS NOT SECURITY SENSITIVE. IF YOU REPORT A SECURITY ISSUE BECAUSE YOU SAW SHA1 IN THE
