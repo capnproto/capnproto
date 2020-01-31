@@ -1275,7 +1275,7 @@ private:
   // Parsed headers, after a call to parseAwaited*().
 
   bool lineBreakBeforeNextHeader = false;
-  // If true, the next await should expect to start with a spurrious '\n' or '\r\n'. This happens
+  // If true, the next await should expect to start with a spurious '\n' or '\r\n'. This happens
   // as a side-effect of HTTP chunked encoding, where such a newline is added to the end of each
   // chunk, for no good reason.
 
