@@ -58,7 +58,7 @@ public:
   // the `importPath` array must remain valid. `path` will be copied; it need not remain valid.
   //
   // This method is a shortcut, equivalent to:
-  //     parser.parseFromDirectory(SchemaFile::newDiskFile(baseDir, path, importPath))`;
+  //     parser.parseFile(SchemaFile::newDiskFile(baseDir, path, importPath))`;
   //
   // This method throws an exception if any errors are encountered in the file or in anything the
   // file depends on.  Note that merely importing another file does not count as a dependency on
@@ -71,7 +71,7 @@ public:
   //
   //     auto fs = kj::newDiskFilesystem();
   //     SchemaParser parser;
-  //     auto schema = parser->parseFromDirectory(fs->getCurrent(),
+  //     auto schema = parser.parseFromDirectory(fs->getCurrent(),
   //         kj::Path::parse("foo/bar.capnp"), nullptr);
   //
   // Hint: To use in-memory data rather than real disk, you can use kj::newInMemoryDirectory(),
@@ -81,7 +81,7 @@ public:
   //     auto path = kj::Path::parse("foo/bar.capnp");
   //     dir->openFile(path, kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT)
   //        ->writeAll("struct Foo {}");
-  //     auto schema = parser->parseFromDirectory(*dir, path, nullptr);
+  //     auto schema = parser.parseFromDirectory(*dir, path, nullptr);
   //
   // Hint: You can create an in-memory directory but then populate it with real files from disk,
   //   in order to control what is visible while also avoiding reading files yourself or making
@@ -93,7 +93,7 @@ public:
   //     auto realPath = kj::Path::parse("path/to/some/file.capnp");
   //     dir->transfer(fakePath, kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT,
   //                   fs->getCurrent(), realPath, kj::TransferMode::LINK);
-  //     auto schema = parser->parseFromDirectory(*dir, fakePath, nullptr);
+  //     auto schema = parser.parseFromDirectory(*dir, fakePath, nullptr);
   //
   //   In this example, note that any imports in the file will fail, since the in-memory directory
   //   you created contains no files except the specific one you linked in.
