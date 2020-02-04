@@ -5,7 +5,7 @@ if(BUILD_TESTING)
   include(CTest)
 
   if(EXTERNAL_CAPNP)
-    # Setup CAPNP_GENERATE_CPP for compiling test schemas
+    # Set up CAPNP_GENERATE_CPP for compiling test schemas
     find_package(CapnProto CONFIG QUIET)
     if(NOT CapnProto_FOUND)
       # No working installation of Cap'n Proto found, so fall back to searching the environment.

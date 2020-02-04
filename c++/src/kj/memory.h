@@ -174,7 +174,7 @@ public:
   ~Own() noexcept(false) { dispose(); }
 
   inline Own& operator=(Own&& other) {
-    // Move-assingnment operator.
+    // Move-assignnment operator.
 
     // Careful, this might own `other`.  Therefore we have to transfer the pointers first, then
     // dispose.

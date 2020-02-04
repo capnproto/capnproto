@@ -3279,7 +3279,7 @@ KJ_TEST("HttpClient connection management") {
   KJ_EXPECT(cumulative == 2);
 
   // Advance time for half the timeout, then exercise one of the connections.
-  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout / 2);
+  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimeout / 2);
   doRequest().wait(io.waitScope);
   doRequest().wait(io.waitScope);
   io.waitScope.poll();
@@ -3287,13 +3287,13 @@ KJ_TEST("HttpClient connection management") {
   KJ_EXPECT(cumulative == 2);
 
   // Advance time past when the other connection should time out. It should be dropped.
-  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout * 3 / 4);
+  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimeout * 3 / 4);
   io.waitScope.poll();
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 2);
 
   // Wait for the other to drop.
-  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout / 2);
+  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimeout / 2);
   io.waitScope.poll();
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 2);
@@ -3388,7 +3388,7 @@ KJ_TEST("HttpClient disable connection reuse") {
   FakeEntropySource entropySource;
   HttpClientSettings clientSettings;
   clientSettings.entropySource = entropySource;
-  clientSettings.idleTimout = 0 * kj::SECONDS;
+  clientSettings.idleTimeout = 0 * kj::SECONDS;
   auto client = newHttpClient(clientTimer, headerTable, countingAddr, clientSettings);
 
   KJ_EXPECT(count == 0);
@@ -3445,7 +3445,7 @@ KJ_TEST("HttpClient concurrency limiting") {
   FakeEntropySource entropySource;
   HttpClientSettings clientSettings;
   clientSettings.entropySource = entropySource;
-  clientSettings.idleTimout = 0 * kj::SECONDS;
+  clientSettings.idleTimeout = 0 * kj::SECONDS;
   auto innerClient = newHttpClient(clientTimer, headerTable, countingAddr, clientSettings);
 
   struct CallbackEvent {
@@ -3655,7 +3655,7 @@ KJ_TEST("HttpClient multi host") {
   KJ_EXPECT(tlsAddrCount == 1);
 
   // Let everything expire.
-  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimout * 2);
+  clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimeout * 2);
   io.waitScope.poll();
   KJ_EXPECT(count == 0);
   KJ_EXPECT(tlsCount == 0);
