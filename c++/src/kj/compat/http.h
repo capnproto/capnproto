@@ -512,7 +512,7 @@ class WebSocket {
   // Each side can send and receive data and "close" messages.
   //
   // Ping/Pong and message fragmentation are not exposed through this interface. These features of
-  // the underlying WebSocket protocol are not exposed by the browser-level Javascript API either,
+  // the underlying WebSocket protocol are not exposed by the browser-level JavaScript API either,
   // and thus applications typically need to implement these features at the application protocol
   // level instead. The implementation is, however, expected to reply to Ping messages it receives.
 

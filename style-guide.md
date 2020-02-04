@@ -449,7 +449,7 @@ As a code reviewer, when you see a violation of formatting rules, think carefull
 
 **Rationale:** There has never been broad agreement on C++ naming style. The closest we have is the C++ standard library. Unfortunately, the C++ standard library made the awful decision of naming types and values in the same style, losing a highly useful visual cue that makes programming more pleasant, and preventing variables from being named after their type (which in many contexts is perfectly appropriate).
 
-Meanwhile, the Java style, which KJ emulates, has been broadly adopted to varying degrees in other languages, from Javascript to Haskell. Using a similar style in KJ code makes it less jarring to switch between C++ and those other languages. Being consistent with Javascript is especially useful because it is the one language that everyone pretty much has to use, due to its use in the web platform.
+Meanwhile, the Java style, which KJ emulates, has been broadly adopted to varying degrees in other languages, from JavaScript to Haskell. Using a similar style in KJ code makes it less jarring to switch between C++ and those other languages. Being consistent with JavaScript is especially useful because it is the one language that everyone pretty much has to use, due to its use in the web platform.
 
 There has also never been any agreement on C++ file extensions, for some reason. The extension `.c++`, though not widely used, is accepted by all reasonable tools and is clearly the most precise choice.
 
