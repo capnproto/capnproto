@@ -695,7 +695,7 @@ public:
 };
 
 struct HttpClientSettings {
-  kj::Duration idleTimout = 5 * kj::SECONDS;
+  kj::Duration idleTimeout = 5 * kj::SECONDS;
   // For clients which automatically create new connections, any connection idle for at least this
   // long will be closed. Set this to 0 to prevent connection reuse entirely.
 
@@ -807,7 +807,7 @@ struct HttpServerSettings {
   // After one request/response completes, we'll wait up to this long for a pipelined request to
   // arrive.
 
-  kj::Duration canceledUploadGacePeriod = 1 * kj::SECONDS;
+  kj::Duration canceledUploadGracePeriod = 1 * kj::SECONDS;
   size_t canceledUploadGraceBytes = 65536;
   // If the HttpService sends a response and returns without having read the entire request body,
   // then we have to decide whether to close the connection or wait for the client to finish the

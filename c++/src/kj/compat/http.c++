@@ -3618,9 +3618,9 @@ private:
   void returnClientToAvailable(kj::Own<HttpClientImpl> client) {
     // Only return the connection to the pool if it is reusable and if our settings indicate we
     // should reuse connections.
-    if (client->canReuse() && settings.idleTimout > 0 * kj::SECONDS) {
+    if (client->canReuse() && settings.idleTimeout > 0 * kj::SECONDS) {
       availableClients.push_back(AvailableClient {
-        kj::mv(client), timer.now() + settings.idleTimout
+        kj::mv(client), timer.now() + settings.idleTimeout
       });
     }
 
@@ -4726,7 +4726,7 @@ public:
                 });
                 lengthGrace = lengthGrace.attach(kj::mv(dummy), kj::mv(body));
 
-                auto timeGrace = server.timer.afterDelay(server.settings.canceledUploadGacePeriod)
+                auto timeGrace = server.timer.afterDelay(server.settings.canceledUploadGracePeriod)
                     .then([]() { return false; });
 
                 return lengthGrace.exclusiveJoin(kj::mv(timeGrace))
