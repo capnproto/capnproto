@@ -127,7 +127,7 @@ public:
     // an exception.
 
     virtual Promise<bool> onSignaledOrAbandoned() = 0;
-    // Like onSingaled(), but instead of throwing when a mutex is abandoned, resolves to `true`.
+    // Like onSignaled(), but instead of throwing when a mutex is abandoned, resolves to `true`.
     // Resolves to `false` for non-abandoned signals.
   };
 

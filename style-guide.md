@@ -67,7 +67,7 @@ KJ code is RAII-strict. Whenever it is the case that "this block of code cannot 
 
 Use the macros `KJ_DEFER`, `KJ_ON_SCOPE_SUCCESS`, and `KJ_ON_SCOPE_FAILURE` to easily specify some code that must be executed on exit from the current scope, without the need to define a whole class with a destructor.
 
-Be careful when writing complicated destructors. If a destructor performs multiple cleanup actions, you generally need to make sure that the latter actions occur even if the former ones throw an exception. For this reason, a destructor should generally perform no more than one cleanup action. If you need to clean up multiple things, have you class contain multiple members representing the different things that need cleanup, each with its own destructor. This way, if one member's destructor throws, the others still run.
+Be careful when writing complicated destructors. If a destructor performs multiple cleanup actions, you generally need to make sure that the latter actions occur even if the former ones throw an exception. For this reason, a destructor should generally perform no more than one cleanup action. If you need to clean up multiple things, have your class contain multiple members representing the different things that need cleanup, each with its own destructor. This way, if one member's destructor throws, the others still run.
 
 ### Ownership
 

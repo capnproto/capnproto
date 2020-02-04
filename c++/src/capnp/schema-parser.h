@@ -44,7 +44,7 @@ public:
   ParsedSchema parseFromDirectory(
       const kj::ReadableDirectory& baseDir, kj::Path path,
       kj::ArrayPtr<const kj::ReadableDirectory* const> importPath) const;
-  // Parse a file from the KJ filesystem API.  Throws an exception if the file dosen't exist.
+  // Parse a file from the KJ filesystem API.  Throws an exception if the file doesn't exist.
   //
   // `baseDir` and `path` are used together to resolve relative imports. `path` is the source
   // file's path within `baseDir`. Relative imports will be interpreted relative to `path` and

@@ -54,7 +54,7 @@ namespace kj {
   MACRO(TRACE) \
   /* standard methods */ \
   /* */ \
-  /* (CONNECT is intentionally omitted since it is handled specially in HttpHandler) */ \
+  /* (CONNECT is intentionally omitted since it should be handled specially in HttpServer) */ \
   \
   MACRO(COPY) \
   MACRO(LOCK) \

@@ -424,7 +424,7 @@ public:
           // in cases involving unions nested in other unions. The bug could lead to multiple
           // fields in a group incorrectly being assigned overlapping offsets. Although the bug
           // is now fixed by adding the `newHoles` parameter, this silently breaks
-          // backwards-compatibilty with affected schemas. Therefore, for now, we throw an
+          // backwards-compatibility with affected schemas. Therefore, for now, we throw an
           // exception to alert developers of the problem.
           //
           // TODO(cleanup): Once sufficient time has elapsed, remove this assert.

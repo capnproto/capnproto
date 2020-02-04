@@ -83,7 +83,7 @@ private:
   byte buffer[8192];
 
   kj::Promise<void> pump();
-  // Asyncronously push the buffer out to the underlying stream.
+  // Asynchronously push the buffer out to the underlying stream.
 };
 
 } // namespace kj

@@ -807,7 +807,7 @@ class CapabilityStreamNetworkAddress final: public NetworkAddress {
   //
   // listen().accept() is implemented by receiving new streams over the original stream.
   //
-  // Note that clone() dosen't work (due to ownership issues) and toString() returns a static
+  // Note that clone() doesn't work (due to ownership issues) and toString() returns a static
   // string.
 
 public:
