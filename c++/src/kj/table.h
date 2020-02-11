@@ -638,11 +638,15 @@ public:
       return table.rows[*existing];
     } else {
       bool success = false;
+      KJ_DEFER({
+        if (!success) {
+          get<index>(table.indexes).erase(table.rows.asPtr(), pos, params...);
+        }
+      });
       auto& newRow = table.rows.add(createFunc());
       KJ_DEFER({
         if (!success) {
           table.rows.removeLast();
-          get<index>(table.indexes).erase(table.rows.asPtr(), pos, params...);
         }
       });
       if (Table<Row, Indexes...>::template Impl<>::insert(table, pos, newRow, index) == nullptr) {
