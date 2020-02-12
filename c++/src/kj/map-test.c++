@@ -148,6 +148,25 @@ KJ_TEST("TreeMap range") {
   }
 }
 
+KJ_TEST("HashMap findOrCreate throws") {
+  HashMap<int, String> m;
+  try {
+    m.findOrCreate(1, []() -> HashMap<int, String>::Entry {
+      throw "foo";
+    });
+    KJ_FAIL_ASSERT("shouldn't get here");
+  } catch (const char*) {
+    // expected
+  }
+
+  KJ_EXPECT(m.find(1) == nullptr);
+  m.findOrCreate(1, []() {
+    return HashMap<int, String>::Entry { 1, kj::str("ok") };
+  });
+
+  KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(1)) == "ok");
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace kj
