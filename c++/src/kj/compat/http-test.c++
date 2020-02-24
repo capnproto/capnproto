@@ -3033,7 +3033,7 @@ KJ_TEST("newHttpClient from HttpService WebSockets") {
 }
 
 KJ_TEST("adapted client/server propagates request exceptions like non-adapted client") {
-  auto io = kj::setupAsyncIo();
+  KJ_HTTP_TEST_SETUP_IO;
 
   HttpHeaderTable table;
   HttpHeaders headers(table);
@@ -3063,6 +3063,193 @@ KJ_TEST("adapted client/server propagates request exceptions like non-adapted cl
 
   KJ_EXPECT_THROW_MESSAGE("websocket_fail", rawClient->openWebSocket("/"_kj, headers));
   KJ_EXPECT_THROW_MESSAGE("websocket_fail", adaptedClient->openWebSocket("/"_kj, headers));
+}
+
+class DelayedCompletionHttpService final: public HttpService {
+public:
+  DelayedCompletionHttpService(HttpHeaderTable& table, kj::Maybe<uint64_t> expectedLength)
+      : table(table), expectedLength(expectedLength) {}
+
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    auto stream = response.send(200, "OK", HttpHeaders(table), expectedLength);
+    auto promise = stream->write("foo", 3);
+    return promise.attach(kj::mv(stream)).then([this]() {
+      return kj::mv(paf.promise);
+    });
+  }
+
+  kj::PromiseFulfiller<void>& getFulfiller() { return *paf.fulfiller; }
+
+private:
+  HttpHeaderTable& table;
+  kj::Maybe<uint64_t> expectedLength;
+  kj::PromiseFulfillerPair<void> paf = kj::newPromiseAndFulfiller<void>();
+};
+
+void doDelayedCompletionTest(bool exception, kj::Maybe<uint64_t> expectedLength) noexcept {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  HttpHeaderTable table;
+
+  DelayedCompletionHttpService service(table, expectedLength);
+  auto client = newHttpClient(service);
+
+  auto resp = client->request(HttpMethod::GET, "/", HttpHeaders(table), uint64_t(0))
+      .response.wait(waitScope);
+  KJ_EXPECT(resp.statusCode == 200);
+
+  // Read "foo" from the response body: works
+  char buffer[16];
+  KJ_ASSERT(resp.body->tryRead(buffer, 1, sizeof(buffer)).wait(waitScope) == 3);
+  buffer[3] = '\0';
+  KJ_EXPECT(buffer == "foo"_kj);
+
+  // But reading any more hangs.
+  auto promise = resp.body->tryRead(buffer, 1, sizeof(buffer));
+
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  // Until we cause the service to return.
+  if (exception) {
+    service.getFulfiller().reject(KJ_EXCEPTION(FAILED, "service-side failure"));
+  } else {
+    service.getFulfiller().fulfill();
+  }
+
+  KJ_ASSERT(promise.poll(waitScope));
+
+  if (exception) {
+    KJ_EXPECT_THROW_MESSAGE("service-side failure", promise.wait(waitScope));
+  } else {
+    promise.wait(waitScope);
+  }
+};
+
+KJ_TEST("adapted client waits for service to complete before returning EOF on response stream") {
+  doDelayedCompletionTest(false, uint64_t(3));
+}
+
+KJ_TEST("adapted client waits for service to complete before returning EOF on chunked response") {
+  doDelayedCompletionTest(false, nullptr);
+}
+
+KJ_TEST("adapted client propagates throw from service after complete response body sent") {
+  doDelayedCompletionTest(true, uint64_t(3));
+}
+
+KJ_TEST("adapted client propagates throw from service after incomplete response body sent") {
+  doDelayedCompletionTest(true, uint64_t(6));
+}
+
+KJ_TEST("adapted client propagates throw from service after chunked response body sent") {
+  doDelayedCompletionTest(true, nullptr);
+}
+
+class DelayedCompletionWebSocketHttpService final: public HttpService {
+public:
+  DelayedCompletionWebSocketHttpService(HttpHeaderTable& table, bool closeUpstreamFirst)
+      : table(table), closeUpstreamFirst(closeUpstreamFirst) {}
+
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    KJ_ASSERT(headers.isWebSocket());
+
+    auto ws = response.acceptWebSocket(HttpHeaders(table));
+    kj::Promise<void> promise = kj::READY_NOW;
+    if (closeUpstreamFirst) {
+      // Wait for a close message from the client before starting.
+      promise = promise.then([&ws = *ws]() { return ws.receive(); }).ignoreResult();
+    }
+    promise = promise
+        .then([&ws = *ws]() { return ws.send("foo"_kj); })
+        .then([&ws = *ws]() { return ws.close(1234, "closed"_kj); });
+    if (!closeUpstreamFirst) {
+      // Wait for a close message from the client at the end.
+      promise = promise.then([&ws = *ws]() { return ws.receive(); }).ignoreResult();
+    }
+    return promise.attach(kj::mv(ws)).then([this]() {
+      return kj::mv(paf.promise);
+    });
+  }
+
+  kj::PromiseFulfiller<void>& getFulfiller() { return *paf.fulfiller; }
+
+private:
+  HttpHeaderTable& table;
+  bool closeUpstreamFirst;
+  kj::PromiseFulfillerPair<void> paf = kj::newPromiseAndFulfiller<void>();
+};
+
+void doDelayedCompletionWebSocketTest(bool exception, bool closeUpstreamFirst) noexcept {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  HttpHeaderTable table;
+
+  DelayedCompletionWebSocketHttpService service(table, closeUpstreamFirst);
+  auto client = newHttpClient(service);
+
+  auto resp = client->openWebSocket("/", HttpHeaders(table)).wait(waitScope);
+  auto ws = kj::mv(KJ_ASSERT_NONNULL(resp.webSocketOrBody.tryGet<kj::Own<WebSocket>>()));
+
+  if (closeUpstreamFirst) {
+    // Send "close" immediately.
+    ws->close(1234, "whatever"_kj).wait(waitScope);
+  }
+
+  // Read "foo" from the WebSocket: works
+  {
+    auto msg = ws->receive().wait(waitScope);
+    KJ_ASSERT(msg.is<kj::String>());
+    KJ_ASSERT(msg.get<kj::String>() == "foo");
+  }
+
+  kj::Promise<void> promise = nullptr;
+  if (closeUpstreamFirst) {
+    // Receiving the close hangs.
+    promise = ws->receive()
+        .then([](WebSocket::Message&& msg) { KJ_EXPECT(msg.is<WebSocket::Close>()); });
+  } else {
+    auto msg = ws->receive().wait(waitScope);
+    KJ_ASSERT(msg.is<WebSocket::Close>());
+
+    // Sending a close hangs.
+    promise = ws->close(1234, "whatever"_kj);
+  }
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  // Until we cause the service to return.
+  if (exception) {
+    service.getFulfiller().reject(KJ_EXCEPTION(FAILED, "service-side failure"));
+  } else {
+    service.getFulfiller().fulfill();
+  }
+
+  KJ_ASSERT(promise.poll(waitScope));
+
+  if (exception) {
+    KJ_EXPECT_THROW_MESSAGE("service-side failure", promise.wait(waitScope));
+  } else {
+    promise.wait(waitScope);
+  }
+};
+
+KJ_TEST("adapted client waits for service to complete before completing upstream close on WebSocket") {
+  doDelayedCompletionWebSocketTest(false, false);
+}
+
+KJ_TEST("adapted client waits for service to complete before returning downstream close on WebSocket") {
+  doDelayedCompletionWebSocketTest(false, true);
+}
+
+KJ_TEST("adapted client propagates throw from service after WebSocket upstream close sent") {
+  doDelayedCompletionWebSocketTest(true, false);
+}
+
+KJ_TEST("adapted client propagates throw from service after WebSocket downstream close sent") {
+  doDelayedCompletionWebSocketTest(true, true);
 }
 
 // -----------------------------------------------------------------------------
