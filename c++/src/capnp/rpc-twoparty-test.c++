@@ -602,6 +602,9 @@ KJ_TEST("Streaming over RPC") {
   TwoPartyClient tpClient(*pipe.ends[0]);
   TwoPartyClient tpServer(*pipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
 
+  tpClient.onDisconnect().attach(kj::mv(pipe.ends[0])).detach([](kj::Exception&&) {});
+  tpServer.onDisconnect().attach(kj::mv(pipe.ends[1])).detach([](kj::Exception&&) {});
+
   auto cap = tpClient.bootstrap().castAs<test::TestStreaming>();
 
   // Send stream requests until we can't anymore.
@@ -664,6 +667,9 @@ KJ_TEST("Streaming over RPC then unwrap with CapabilitySet") {
 
   TwoPartyClient tpClient(*pipe.ends[0], serverCap);
   TwoPartyClient tpServer(*pipe.ends[1], kj::mv(paf.promise), rpc::twoparty::Side::SERVER);
+
+  tpClient.onDisconnect().attach(kj::mv(pipe.ends[0])).detach([](kj::Exception&&) {});
+  tpServer.onDisconnect().attach(kj::mv(pipe.ends[1])).detach([](kj::Exception&&) {});
 
   auto clientCap = tpClient.bootstrap().castAs<test::TestStreaming>();
 
