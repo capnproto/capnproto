@@ -400,6 +400,7 @@ public:
           return kj::READY_NOW;
         });
     disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
+    canceler.cancel(networkException);
     connection.init<Disconnected>(kj::mv(networkException));
   }
 
@@ -544,6 +545,11 @@ private:
   kj::OneOf<Connected, Disconnected> connection;
   // Once the connection has failed, we drop it and replace it with an exception, which will be
   // thrown from all further calls.
+
+  kj::Canceler canceler;
+  // Will be canceled if and when `connection` is changed from `Connected` to `Disconnected`.
+  // TODO(cleanup): `Connected` should be a struct that contains the connection and the Canceler,
+  //   but that's more refactoring than I want to do right now.
 
   kj::Own<kj::PromiseFulfiller<DisconnectInfo>> disconnectFulfiller;
 
@@ -2277,7 +2283,7 @@ private:
       });
     }
 
-    return connection.get<Connected>()->receiveIncomingMessage().then(
+    return canceler.wrap(connection.get<Connected>()->receiveIncomingMessage()).then(
         [this](kj::Maybe<kj::Own<IncomingRpcMessage>>&& message) {
       KJ_IF_MAYBE(m, message) {
         handleMessage(kj::mv(*m));
