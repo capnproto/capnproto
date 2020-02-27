@@ -4153,23 +4153,7 @@ private:
         : inner(kj::mv(inner)), completionTask(kj::mv(completionTask)) {}
 
     kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return inner->tryRead(buffer, minBytes, maxBytes)
-          .then([this, minBytes](size_t amount) -> kj::Promise<size_t> {
-        if (amount < minBytes) {
-          // Must have reached EOF.
-          KJ_IF_MAYBE(t, completionTask) {
-            // Delay until completion.
-            auto result = t->then([amount]() { return amount; });
-            completionTask = nullptr;
-            return result;
-          } else {
-            // Must have called tryRead() again after we already signaled EOF. Fine.
-            return amount;
-          }
-        } else {
-          return amount;
-        }
-      });
+      return wrap(minBytes, inner->tryRead(buffer, minBytes, maxBytes));
     }
 
     kj::Maybe<uint64_t> tryGetLength() override {
@@ -4177,28 +4161,49 @@ private:
     }
 
     kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
-      return inner->pumpTo(output, amount)
-          .then([this,amount](uint64_t actual) -> kj::Promise<uint64_t> {
-        if (actual < amount) {
-          // Must have reached EOF.
-          KJ_IF_MAYBE(t, completionTask) {
-            // Delay until completion.
-            auto result = t->then([amount]() { return amount; });
-            completionTask = nullptr;
-            return result;
-          } else {
-            // Must have called tryRead() again after we already signaled EOF. Fine.
-            return amount;
-          }
-        } else {
-          return amount;
-        }
-      });
+      return wrap(amount, inner->pumpTo(output, amount));
     }
 
   private:
     kj::Own<kj::AsyncInputStream> inner;
     kj::Maybe<kj::Promise<void>> completionTask;
+
+    template <typename T>
+    kj::Promise<T> wrap(T requested, kj::Promise<T> innerPromise) {
+      return innerPromise.then([this,requested](T actual) -> kj::Promise<T> {
+        if (actual < requested) {
+          // Must have reached EOF.
+          KJ_IF_MAYBE(t, completionTask) {
+            // Delay until completion.
+            auto result = t->then([actual]() { return actual; });
+            completionTask = nullptr;
+            return result;
+          } else {
+            // Must have called tryRead() again after we already signaled EOF. Fine.
+            return actual;
+          }
+        } else {
+          return actual;
+        }
+      }, [this](kj::Exception&& e) -> kj::Promise<T> {
+        // The stream threw an exception, but this exception is almost certainly just complaining
+        // that the other end of the stream was dropped. In all likelihood, the HttpService
+        // request() call itself will throw a much more interesting error -- we'd rather propagate
+        // that one, if so.
+        KJ_IF_MAYBE(t, completionTask) {
+          auto result = t->then([e = kj::mv(e)]() mutable -> kj::Promise<T> {
+            // Looks like the service didn't throw. I guess we should propagate the stream error
+            // after all.
+            return kj::mv(e);
+          });
+          completionTask = nullptr;
+          return result;
+        } else {
+          // Must have called tryRead() again after we already signaled EOF or threw. Fine.
+          return kj::mv(e);
+        }
+      });
+    }
   };
 
   class ResponseImpl final: public HttpService::Response, public kj::Refcounted {
@@ -4212,8 +4217,8 @@ private:
         if (fulfiller->isWaiting()) {
           fulfiller->reject(kj::mv(exception));
         } else {
-          KJ_LOG(ERROR, "HttpService threw an exception after having already started responding",
-                        exception);
+          // We need to cause the response stream's read() to throw this, so we should propagate it.
+          kj::throwRecoverableException(kj::mv(exception));
         }
       });
     }
@@ -4359,8 +4364,9 @@ private:
         if (fulfiller->isWaiting()) {
           fulfiller->reject(kj::mv(exception));
         } else {
-          KJ_LOG(ERROR, "HttpService threw an exception after having already started responding",
-                        exception);
+          // We need to cause the client-side WebSocket to throw on close, so propagate the
+          // exception.
+          kj::throwRecoverableException(kj::mv(exception));
         }
       });
     }
