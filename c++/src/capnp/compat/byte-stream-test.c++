@@ -21,6 +21,7 @@
 
 #include "byte-stream.h"
 #include <kj/test.h>
+#include <capnp/rpc-twoparty.h>
 
 namespace capnp {
 namespace {
@@ -222,6 +223,77 @@ KJ_TEST("KJ -> ByteStream -> KJ pipe -> ByteStream -> KJ with shortening") {
   KJ_EXPECT(!writePromise.poll(waitScope));
   KJ_EXPECT(exactPointerWriter2.receivedBuffer.begin() == buffer2);
   KJ_EXPECT(exactPointerWriter2.receivedBuffer.size() == 3);
+  KJ_ASSERT_NONNULL(exactPointerWriter2.fulfiller)->fulfill();
+
+  KJ_EXPECT(midPumpPormise.wait(waitScope) == 6);
+  writePromise.wait(waitScope);
+}
+
+KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream RPC -> KJ with shortening") {
+  // For this test, we're going to verify that if we have ByteStreams over RPC in both directions
+  // and we pump a ByteStream to another ByteStream at one end of the connection, it gets shortened
+  // all the way to the other end!
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory clientFactory;
+  ByteStreamFactory serverFactory;
+
+  auto backPipe = kj::newOneWayPipe();
+  auto middlePipe = kj::newOneWayPipe();
+
+  ExactPointerWriter exactPointerWriter;
+  auto backPumpPromise = backPipe.in->pumpTo(exactPointerWriter);
+
+  auto rpcConnection = kj::newTwoWayPipe();
+  capnp::TwoPartyClient client(*rpcConnection.ends[0],
+      clientFactory.kjToCapnp(kj::mv(backPipe.out)),
+      rpc::twoparty::Side::CLIENT);
+  capnp::TwoPartyClient server(*rpcConnection.ends[1],
+      serverFactory.kjToCapnp(kj::mv(middlePipe.out)),
+      rpc::twoparty::Side::CLIENT);
+
+  auto backWrapped = serverFactory.capnpToKj(server.bootstrap().castAs<ByteStream>());
+  auto midPumpPormise = middlePipe.in->pumpTo(*backWrapped, 3);
+
+  auto wrapped = clientFactory.capnpToKj(client.bootstrap().castAs<ByteStream>());
+
+  // Poll whenWriteDisconnected(), mainly as a way to let all the path-shortening settle.
+  auto disconnectPromise = wrapped->whenWriteDisconnected();
+  KJ_EXPECT(!disconnectPromise.poll(waitScope));
+
+  char buffer[7] = "foobar";
+  auto writePromise = wrapped->write(buffer, 6);
+
+  // The server side did a 3-byte pump. Path-shortening magic kicks in, and the first three bytes
+  // of the write on the client side go *directly* to the endpoint without a copy!
+  KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer);
+  KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 3);
+  KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+
+  KJ_EXPECT(midPumpPormise.wait(waitScope) == 3);
+
+  ExactPointerWriter exactPointerWriter2;
+  midPumpPormise = middlePipe.in->pumpTo(exactPointerWriter2, 6);
+  midPumpPormise.poll(waitScope);
+
+  // The second half of the "foobar" write will have taken a slow path, because the write was
+  // restarted in the middle of the stream re-resolving itself.
+  KJ_EXPECT(kj::str(exactPointerWriter2.receivedBuffer) == "bar");
+  KJ_ASSERT_NONNULL(exactPointerWriter2.fulfiller)->fulfill();
+  exactPointerWriter2.fulfiller = nullptr;
+
+  // Now that write is done.
+  writePromise.wait(waitScope);
+  KJ_EXPECT(!midPumpPormise.poll(waitScope));
+
+  // If we write again, it'll finish the server-side pump (but won't be a zero-copy write since
+  // it has to go over RPC).
+  char buffer2[4] = "baz";
+  writePromise = wrapped->write(buffer2, 3);
+  KJ_EXPECT(!midPumpPormise.poll(waitScope));
+  KJ_EXPECT(kj::str(exactPointerWriter2.receivedBuffer) == "baz");
   KJ_ASSERT_NONNULL(exactPointerWriter2.fulfiller)->fulfill();
 
   KJ_EXPECT(midPumpPormise.wait(waitScope) == 6);

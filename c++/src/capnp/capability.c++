@@ -479,18 +479,13 @@ public:
   LocalClient(kj::Own<Capability::Server>&& serverParam)
       : server(kj::mv(serverParam)) {
     server->thisHook = this;
-
-    resolveTask = server->shortenPath().map([this](kj::Promise<Capability::Client> promise) {
-      return promise.then([this](Capability::Client&& cap) {
-        auto hook = ClientHook::from(kj::mv(cap));
-        resolved = hook->addRef();
-      }).fork();
-    });
+    startResolveTask();
   }
   LocalClient(kj::Own<Capability::Server>&& serverParam,
               _::CapabilityServerSetBase& capServerSet, void* ptr)
       : server(kj::mv(serverParam)), capServerSet(&capServerSet), ptr(ptr) {
     server->thisHook = this;
+    startResolveTask();
   }
 
   ~LocalClient() noexcept(false) {
@@ -621,6 +616,15 @@ private:
 
   kj::Maybe<kj::ForkedPromise<void>> resolveTask;
   kj::Maybe<kj::Own<ClientHook>> resolved;
+
+  void startResolveTask() {
+    resolveTask = server->shortenPath().map([this](kj::Promise<Capability::Client> promise) {
+      return promise.then([this](Capability::Client&& cap) {
+        auto hook = ClientHook::from(kj::mv(cap));
+        resolved = hook->addRef();
+      }).fork();
+    });
+  }
 
   class BlockedCall {
   public:
