@@ -447,6 +447,10 @@ public:
     // where the bandwidth-delay product is high, while conversely providing too much buffer when
     // the bandwidth-delay product is low.
     //
+    // WARNING: The RPC system may keep the `RpcFlowController` object alive past the lifetime of
+    //   the `Connection` itself. However, it will not call `send()` any more after the
+    //   `Connection` is destroyed.
+    //
     // TODO(perf): We should introduce a flow controller implementation that uses a clock to
     //   measure RTT and bandwidth and dynamically update the window size, like BBR.
 
@@ -463,10 +467,17 @@ public:
     // If `firstSegmentWordSize` is non-zero, it should be treated as a hint suggesting how large
     // to make the first segment.  This is entirely a hint and the connection may adjust it up or
     // down.  If it is zero, the connection should choose the size itself.
+    //
+    // WARNING: The RPC system may keep the `OutgoingRpcMessage` object alive past the lifetime of
+    //   the `Connection` itself. However, it will not call `send()` any more after the
+    //   `Connection` is destroyed.
 
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override = 0;
     // Wait for a message to be received and return it.  If the read stream cleanly terminates,
     // return null.  If any other problem occurs, throw an exception.
+    //
+    // WARNING: The RPC system may keep the `IncomingRpcMessage` object alive past the lifetime of
+    //   the `Connection` itself.
 
     virtual kj::Promise<void> shutdown() override KJ_WARN_UNUSED_RESULT = 0;
     // Waits until all outgoing messages have been sent, then shuts down the outgoing stream. The
