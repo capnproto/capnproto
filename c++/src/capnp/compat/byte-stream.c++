@@ -730,6 +730,7 @@ public:
         }
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client*) {
+        // TODO(perf): Split very large writes into many smaller writes.
         auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word), 0 });
         req.setBytes(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size));
         return req.send();
@@ -794,6 +795,7 @@ public:
         }
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client*) {
+        // TODO(perf): Split very large writes into many smaller writes.
         size_t size = 0;
         for (auto& piece: pieces) size += piece.size();
         auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word), 0 });
