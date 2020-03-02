@@ -300,6 +300,78 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream RPC -> KJ with shortening
   writePromise.wait(waitScope);
 }
 
+KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream RPC -> KJ with concurrent shortening") {
+  // This is similar to the previous test, but we start writing before the path-shortening has
+  // settled. This should result in some writes optimistically bouncing back and forth before
+  // the stream settles in.
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory clientFactory;
+  ByteStreamFactory serverFactory;
+
+  auto backPipe = kj::newOneWayPipe();
+  auto middlePipe = kj::newOneWayPipe();
+
+  ExactPointerWriter exactPointerWriter;
+  auto backPumpPromise = backPipe.in->pumpTo(exactPointerWriter);
+
+  auto rpcConnection = kj::newTwoWayPipe();
+  capnp::TwoPartyClient client(*rpcConnection.ends[0],
+      clientFactory.kjToCapnp(kj::mv(backPipe.out)),
+      rpc::twoparty::Side::CLIENT);
+  capnp::TwoPartyClient server(*rpcConnection.ends[1],
+      serverFactory.kjToCapnp(kj::mv(middlePipe.out)),
+      rpc::twoparty::Side::CLIENT);
+
+  auto backWrapped = serverFactory.capnpToKj(server.bootstrap().castAs<ByteStream>());
+  auto midPumpPormise = middlePipe.in->pumpTo(*backWrapped);
+
+  auto wrapped = clientFactory.capnpToKj(client.bootstrap().castAs<ByteStream>());
+
+  char buffer[7] = "foobar";
+  auto writePromise = wrapped->write(buffer, 6);
+
+  // The write went to RPC so it's not immediately received.
+  KJ_EXPECT(exactPointerWriter.fulfiller == nullptr);
+
+  // Write should be received after we turn the event loop.
+  waitScope.poll();
+  KJ_EXPECT(exactPointerWriter.fulfiller != nullptr);
+
+  // Note that the promise that write() returned above has already resolved, because it hit RPC
+  // and went into the streaming window.
+  KJ_ASSERT(writePromise.poll(waitScope));
+  writePromise.wait(waitScope);
+
+  // Let's start a second write. Even though the first write technically isn't done yet, it's
+  // legal for us to start a second one because the first write's returned promise optimistically
+  // resolved for streaming window reasons. This ends up being a very tricky case for our code!
+  char buffer2[7] = "bazqux";
+  auto writePromise2 = wrapped->write(buffer2, 6);
+
+  // Now check the first write was correct, and close it out.
+  KJ_EXPECT(kj::str(exactPointerWriter.receivedBuffer) == "foobar");
+  KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+  exactPointerWriter.fulfiller = nullptr;
+
+  // Turn event loop again. Now the second write arrives.
+  waitScope.poll();
+  KJ_EXPECT(kj::str(exactPointerWriter.receivedBuffer) == "bazqux");
+  KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+  writePromise2.wait(waitScope);
+
+  // If we do another write now, it should be zero-copy, because everything has settled.
+  char buffer3[6] = "corge";
+  auto writePromise3 = wrapped->write(buffer3, 5);
+  KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer3);
+  KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 5);
+  KJ_EXPECT(!writePromise3.poll(waitScope));
+  KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+  writePromise3.wait(waitScope);
+}
+
 KJ_TEST("Two Substreams on one destination") {
   kj::EventLoop eventLoop;
   kj::WaitScope waitScope(eventLoop);

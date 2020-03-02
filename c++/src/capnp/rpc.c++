@@ -882,24 +882,19 @@ private:
           isResolved(false),
           cap(kj::mv(initial)),
           importId(importId),
-          fork(eventual.fork()),
-          resolveSelfPromise(fork.addBranch().then(
+          fork(eventual.then(
               [this](kj::Own<ClientHook>&& resolution) {
-                resolve(kj::mv(resolution), false);
+                return resolve(kj::mv(resolution), false);
               }, [this](kj::Exception&& exception) {
-                resolve(newBrokenCap(kj::mv(exception)), true);
-              }).eagerlyEvaluate([&](kj::Exception&& e) {
+                return resolve(newBrokenCap(kj::mv(exception)), true);
+              }).catch_([&](kj::Exception&& e) {
                 // Make any exceptions thrown from resolve() go to the connection's TaskSet which
                 // will cause the connection to be terminated.
-                connectionState.tasks.add(kj::mv(e));
-              })) {
-      // Create a client that starts out forwarding all calls to `initial` but, once `eventual`
-      // resolves, will forward there instead.  In addition, `whenMoreResolved()` will return a fork
-      // of `eventual`.  Note that this means the application could hold on to `eventual` even after
-      // the `PromiseClient` is destroyed; `eventual` must therefore make sure to hold references to
-      // anything that needs to stay alive in order to resolve it correctly (such as making sure the
-      // import ID is not released).
-    }
+                connectionState.tasks.add(kj::cp(e));
+                return newBrokenCap(kj::mv(e));
+              }).fork()) {}
+    // Create a client that starts out forwarding all calls to `initial` but, once `eventual`
+    // resolves, will forward there instead.
 
     ~PromiseClient() noexcept(false) {
       KJ_IF_MAYBE(id, importId) {
@@ -1022,13 +1017,9 @@ private:
     kj::Maybe<ImportId> importId;
     kj::ForkedPromise<kj::Own<ClientHook>> fork;
 
-    // Keep this last, because the continuation uses *this, so it should be destroyed first to
-    // ensure the continuation is not still running.
-    kj::Promise<void> resolveSelfPromise;
-
     bool receivedCall = false;
 
-    void resolve(kj::Own<ClientHook> replacement, bool isError) {
+    kj::Promise<kj::Own<ClientHook>> resolve(kj::Own<ClientHook> replacement, bool isError) {
       const void* replacementBrand = replacement->getBrand();
 
       // If the original capability was used for streaming calls, it will have a
@@ -1090,8 +1081,10 @@ private:
         message->send();
       }
 
-      cap = kj::mv(replacement);
+      cap = replacement->addRef();
       isResolved = true;
+
+      return kj::mv(replacement);
     }
   };
 

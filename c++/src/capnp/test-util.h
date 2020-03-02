@@ -221,6 +221,8 @@ class TestCallOrderImpl final: public test::TestCallOrder::Server {
 public:
   kj::Promise<void> getCallSequence(GetCallSequenceContext context) override;
 
+  uint getCount() { return count; }
+
 private:
   uint count = 0;
 };
