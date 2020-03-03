@@ -518,21 +518,21 @@ class FixedArray {
   // A fixed-width array whose storage is allocated inline rather than on the heap.
 
 public:
-  inline size_t size() const { return fixedSize; }
-  inline T* begin() { return content; }
-  inline T* end() { return content + fixedSize; }
-  inline const T* begin() const { return content; }
-  inline const T* end() const { return content + fixedSize; }
+  inline constexpr size_t size() const { return fixedSize; }
+  inline constexpr T* begin() { return content; }
+  inline constexpr T* end() { return content + fixedSize; }
+  inline constexpr const T* begin() const { return content; }
+  inline constexpr const T* end() const { return content + fixedSize; }
 
-  inline operator ArrayPtr<T>() {
+  inline constexpr operator ArrayPtr<T>() {
     return arrayPtr(content, fixedSize);
   }
-  inline operator ArrayPtr<const T>() const {
+  inline constexpr operator ArrayPtr<const T>() const {
     return arrayPtr(content, fixedSize);
   }
 
-  inline T& operator[](size_t index) { return content[index]; }
-  inline const T& operator[](size_t index) const { return content[index]; }
+  inline constexpr T& operator[](size_t index) { return content[index]; }
+  inline constexpr const T& operator[](size_t index) const { return content[index]; }
 
 private:
   T content[fixedSize];
