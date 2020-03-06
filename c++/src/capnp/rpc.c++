@@ -884,9 +884,9 @@ private:
           importId(importId),
           fork(eventual.then(
               [this](kj::Own<ClientHook>&& resolution) {
-                return resolve(kj::mv(resolution), false);
+                return resolve(kj::mv(resolution));
               }, [this](kj::Exception&& exception) {
-                return resolve(newBrokenCap(kj::mv(exception)), true);
+                return resolve(newBrokenCap(kj::mv(exception)));
               }).catch_([&](kj::Exception&& e) {
                 // Make any exceptions thrown from resolve() go to the connection's TaskSet which
                 // will cause the connection to be terminated.
@@ -1021,7 +1021,7 @@ private:
 
     bool receivedCall = false;
 
-    kj::Promise<kj::Own<ClientHook>> resolve(kj::Own<ClientHook> replacement, bool isError) {
+    kj::Promise<kj::Own<ClientHook>> resolve(kj::Own<ClientHook> replacement) {
       const void* replacementBrand = replacement->getBrand();
 
       // If the original capability was used for streaming calls, it will have a
@@ -1044,7 +1044,8 @@ private:
 
       if (replacementBrand != connectionState.get() &&
           replacementBrand != &ClientHook::NULL_CAPABILITY_BRAND &&
-          receivedCall && !isError && connectionState->connection.is<Connected>()) {
+          replacementBrand != &ClientHook::BROKEN_CAPABILITY_BRAND &&
+          receivedCall && connectionState->connection.is<Connected>()) {
         // The new capability is hosted locally, not on the remote machine.  And, we had made calls
         // to the promise.  We need to make sure those calls echo back to us before we allow new
         // calls to go directly to the local capability, so we need to set a local embargo and send

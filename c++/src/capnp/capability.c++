@@ -794,9 +794,9 @@ public:
 
 class BrokenClient final: public ClientHook, public kj::Refcounted {
 public:
-  BrokenClient(const kj::Exception& exception, bool resolved, const void* brand = nullptr)
+  BrokenClient(const kj::Exception& exception, bool resolved, const void* brand)
       : exception(exception), resolved(resolved), brand(brand) {}
-  BrokenClient(const kj::StringPtr description, bool resolved, const void* brand = nullptr)
+  BrokenClient(const kj::StringPtr description, bool resolved, const void* brand)
       : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)),
         resolved(resolved), brand(brand) {}
 
@@ -841,7 +841,7 @@ private:
 };
 
 kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
-  return kj::refcounted<BrokenClient>(exception, false);
+  return kj::refcounted<BrokenClient>(exception, false, &ClientHook::BROKEN_CAPABILITY_BRAND);
 }
 
 kj::Own<ClientHook> newNullCap() {
@@ -853,11 +853,11 @@ kj::Own<ClientHook> newNullCap() {
 }  // namespace
 
 kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason) {
-  return kj::refcounted<BrokenClient>(reason, false);
+  return kj::refcounted<BrokenClient>(reason, false, &ClientHook::BROKEN_CAPABILITY_BRAND);
 }
 
 kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason) {
-  return kj::refcounted<BrokenClient>(kj::mv(reason), false);
+  return kj::refcounted<BrokenClient>(kj::mv(reason), false, &ClientHook::BROKEN_CAPABILITY_BRAND);
 }
 
 kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
