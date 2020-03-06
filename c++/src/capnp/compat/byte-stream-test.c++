@@ -71,9 +71,15 @@ KJ_TEST("KJ -> ByteStream -> KJ without shortening") {
 class ExactPointerWriter: public kj::AsyncOutputStream {
 public:
   kj::ArrayPtr<const char> receivedBuffer;
-  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
+
+  void fulfill() {
+    KJ_ASSERT_NONNULL(fulfiller)->fulfill();
+    fulfiller = nullptr;
+    receivedBuffer = nullptr;
+  }
 
   kj::Promise<void> write(const void* buffer, size_t size) override {
+    KJ_ASSERT(fulfiller == nullptr);
     receivedBuffer = kj::arrayPtr(reinterpret_cast<const char*>(buffer), size);
     auto paf = kj::newPromiseAndFulfiller<void>();
     fulfiller = kj::mv(paf.fulfiller);
@@ -85,6 +91,9 @@ public:
   kj::Promise<void> whenWriteDisconnected() override {
     return kj::NEVER_DONE;
   }
+
+private:
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
 };
 
 KJ_TEST("KJ -> ByteStream -> KJ with shortening") {
@@ -109,7 +118,7 @@ KJ_TEST("KJ -> ByteStream -> KJ with shortening") {
     // path yet when it started.
     KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() != buffer);
     KJ_EXPECT(kj::str(exactPointerWriter.receivedBuffer) == "foo");
-    KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+    exactPointerWriter.fulfill();
     promise.wait(waitScope);
   }
 
@@ -121,7 +130,7 @@ KJ_TEST("KJ -> ByteStream -> KJ with shortening") {
     // The second write was path-shortened so passes through the exact buffer!
     KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer);
     KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 3);
-    KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+    exactPointerWriter.fulfill();
     promise.wait(waitScope);
   }
 
@@ -152,7 +161,7 @@ KJ_TEST("KJ -> ByteStream -> KJ -> ByteStream -> KJ with shortening") {
     // path yet when it started.
     KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() != buffer);
     KJ_EXPECT(kj::str(exactPointerWriter.receivedBuffer) == "foo");
-    KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+    exactPointerWriter.fulfill();
     promise.wait(waitScope);
   }
 
@@ -164,7 +173,7 @@ KJ_TEST("KJ -> ByteStream -> KJ -> ByteStream -> KJ with shortening") {
     // The second write was path-shortened so passes through the exact buffer!
     KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer);
     KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 3);
-    KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+    exactPointerWriter.fulfill();
     promise.wait(waitScope);
   }
 
@@ -200,7 +209,7 @@ KJ_TEST("KJ -> ByteStream -> KJ pipe -> ByteStream -> KJ with shortening") {
   // The first three bytes will tunnel all the way down to the destination.
   KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer);
   KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 3);
-  KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+  exactPointerWriter.fulfill();
 
   KJ_EXPECT(midPumpPormise.wait(waitScope) == 3);
 
@@ -211,7 +220,7 @@ KJ_TEST("KJ -> ByteStream -> KJ pipe -> ByteStream -> KJ with shortening") {
   // The second half of the "foobar" write will have taken a slow path, because the write was
   // restarted in the middle of the stream re-resolving itself.
   KJ_EXPECT(kj::str(exactPointerWriter2.receivedBuffer) == "bar");
-  KJ_ASSERT_NONNULL(exactPointerWriter2.fulfiller)->fulfill();
+  exactPointerWriter2.fulfill();
 
   // Now that write is done.
   writePromise.wait(waitScope);
@@ -223,7 +232,7 @@ KJ_TEST("KJ -> ByteStream -> KJ pipe -> ByteStream -> KJ with shortening") {
   KJ_EXPECT(!writePromise.poll(waitScope));
   KJ_EXPECT(exactPointerWriter2.receivedBuffer.begin() == buffer2);
   KJ_EXPECT(exactPointerWriter2.receivedBuffer.size() == 3);
-  KJ_ASSERT_NONNULL(exactPointerWriter2.fulfiller)->fulfill();
+  exactPointerWriter2.fulfill();
 
   KJ_EXPECT(midPumpPormise.wait(waitScope) == 6);
   writePromise.wait(waitScope);
@@ -270,7 +279,7 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream RPC -> KJ with shortening
   // of the write on the client side go *directly* to the endpoint without a copy!
   KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer);
   KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 3);
-  KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+  exactPointerWriter.fulfill();
 
   KJ_EXPECT(midPumpPormise.wait(waitScope) == 3);
 
@@ -281,8 +290,7 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream RPC -> KJ with shortening
   // The second half of the "foobar" write will have taken a slow path, because the write was
   // restarted in the middle of the stream re-resolving itself.
   KJ_EXPECT(kj::str(exactPointerWriter2.receivedBuffer) == "bar");
-  KJ_ASSERT_NONNULL(exactPointerWriter2.fulfiller)->fulfill();
-  exactPointerWriter2.fulfiller = nullptr;
+  exactPointerWriter2.fulfill();
 
   // Now that write is done.
   writePromise.wait(waitScope);
@@ -294,7 +302,7 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream RPC -> KJ with shortening
   writePromise = wrapped->write(buffer2, 3);
   KJ_EXPECT(!midPumpPormise.poll(waitScope));
   KJ_EXPECT(kj::str(exactPointerWriter2.receivedBuffer) == "baz");
-  KJ_ASSERT_NONNULL(exactPointerWriter2.fulfiller)->fulfill();
+  exactPointerWriter2.fulfill();
 
   KJ_EXPECT(midPumpPormise.wait(waitScope) == 6);
   writePromise.wait(waitScope);
@@ -334,11 +342,11 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream RPC -> KJ with concurrent
   auto writePromise = wrapped->write(buffer, 6);
 
   // The write went to RPC so it's not immediately received.
-  KJ_EXPECT(exactPointerWriter.fulfiller == nullptr);
+  KJ_EXPECT(exactPointerWriter.receivedBuffer == nullptr);
 
   // Write should be received after we turn the event loop.
   waitScope.poll();
-  KJ_EXPECT(exactPointerWriter.fulfiller != nullptr);
+  KJ_EXPECT(exactPointerWriter.receivedBuffer != nullptr);
 
   // Note that the promise that write() returned above has already resolved, because it hit RPC
   // and went into the streaming window.
@@ -353,13 +361,12 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream RPC -> KJ with concurrent
 
   // Now check the first write was correct, and close it out.
   KJ_EXPECT(kj::str(exactPointerWriter.receivedBuffer) == "foobar");
-  KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
-  exactPointerWriter.fulfiller = nullptr;
+  exactPointerWriter.fulfill();
 
   // Turn event loop again. Now the second write arrives.
   waitScope.poll();
   KJ_EXPECT(kj::str(exactPointerWriter.receivedBuffer) == "bazqux");
-  KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+  exactPointerWriter.fulfill();
   writePromise2.wait(waitScope);
 
   // If we do another write now, it should be zero-copy, because everything has settled.
@@ -368,7 +375,7 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream RPC -> KJ with concurrent
   KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer3);
   KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 5);
   KJ_EXPECT(!writePromise3.poll(waitScope));
-  KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+  exactPointerWriter.fulfill();
   writePromise3.wait(waitScope);
 }
 
@@ -410,7 +417,7 @@ KJ_TEST("Two Substreams on one destination") {
     // The first write will tunnel all the way down to the destination.
     KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer1);
     KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 3);
-    KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+    exactPointerWriter.fulfill();
 
     writePromise.wait(waitScope);
     KJ_EXPECT(midPumpPormise.wait(waitScope) == 3);
@@ -432,7 +439,7 @@ KJ_TEST("Two Substreams on one destination") {
     // The second write will also tunnel all the way down to the destination.
     KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer2);
     KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 3);
-    KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+    exactPointerWriter.fulfill();
 
     writePromise.wait(waitScope);
     KJ_EXPECT(midPumpPormise.wait(waitScope) == 3);
@@ -477,7 +484,7 @@ KJ_TEST("Two Substreams on one destination no limits (pump to EOF)") {
     // The first write will tunnel all the way down to the destination.
     KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer1);
     KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 3);
-    KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+    exactPointerWriter.fulfill();
 
     writePromise.wait(waitScope);
     { auto drop = kj::mv(wrapped); }
@@ -500,7 +507,7 @@ KJ_TEST("Two Substreams on one destination no limits (pump to EOF)") {
     // The second write will also tunnel all the way down to the destination.
     KJ_EXPECT(exactPointerWriter.receivedBuffer.begin() == buffer2);
     KJ_EXPECT(exactPointerWriter.receivedBuffer.size() == 3);
-    KJ_ASSERT_NONNULL(exactPointerWriter.fulfiller)->fulfill();
+    exactPointerWriter.fulfill();
 
     writePromise.wait(waitScope);
     { auto drop = kj::mv(wrapped); }
