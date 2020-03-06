@@ -1149,10 +1149,9 @@ private:
         embargo.fulfiller = kj::mv(paf.fulfiller);
 
         // Make a promise which resolves to `replacement` as soon as the `Disembargo` comes back.
-        auto embargoPromise = paf.promise.then(
-            kj::mvCapture(replacement, [](kj::Own<ClientHook>&& replacement) {
-              return kj::mv(replacement);
-            }));
+        auto embargoPromise = paf.promise.then([replacement = kj::mv(replacement)]() mutable {
+          return kj::mv(replacement);
+        });
 
         // We need to queue up calls in the meantime, so we'll resolve ourselves to a local promise
         // client instead.
