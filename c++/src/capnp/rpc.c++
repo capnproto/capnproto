@@ -400,8 +400,8 @@ public:
           return kj::READY_NOW;
         });
     disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
-    canceler.cancel(networkException);
     connection.init<Disconnected>(kj::mv(networkException));
+    canceler.cancel(networkException);
   }
 
   void setFlowLimit(size_t words) {
