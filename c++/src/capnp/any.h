@@ -26,6 +26,7 @@
 #include "orphan.h"
 #include "list.h"
 #include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+#include <kj/hash.h>
 
 CAPNP_BEGIN_HEADER
 
@@ -734,6 +735,25 @@ struct PipelineOp {
     uint16_t pointerIndex;  // for GET_POINTER_FIELD
   };
 };
+
+inline uint KJ_HASHCODE(const PipelineOp& op) {
+  switch (op.type) {
+    case PipelineOp::NOOP: return kj::hashCode(op.type);
+    case PipelineOp::GET_POINTER_FIELD: return kj::hashCode(op.type, op.pointerIndex);
+  }
+}
+
+inline bool operator==(const PipelineOp& a, const PipelineOp& b) {
+  if (a.type != b.type) return false;
+  switch (a.type) {
+    case PipelineOp::NOOP: return true;
+    case PipelineOp::GET_POINTER_FIELD: return a.pointerIndex == b.pointerIndex;
+  }
+}
+
+inline bool operator!=(const PipelineOp& a, const PipelineOp& b) {
+  return !(a == b);
+}
 
 class PipelineHook {
   // Represents a currently-running call, and implements pipelined requests on its result.
