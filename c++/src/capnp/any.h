@@ -741,6 +741,7 @@ inline uint KJ_HASHCODE(const PipelineOp& op) {
     case PipelineOp::NOOP: return kj::hashCode(op.type);
     case PipelineOp::GET_POINTER_FIELD: return kj::hashCode(op.type, op.pointerIndex);
   }
+  KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT
 }
 
 inline bool operator==(const PipelineOp& a, const PipelineOp& b) {
@@ -749,6 +750,7 @@ inline bool operator==(const PipelineOp& a, const PipelineOp& b) {
     case PipelineOp::NOOP: return true;
     case PipelineOp::GET_POINTER_FIELD: return a.pointerIndex == b.pointerIndex;
   }
+  KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT
 }
 
 inline bool operator!=(const PipelineOp& a, const PipelineOp& b) {
