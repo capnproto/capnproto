@@ -2058,6 +2058,7 @@ private:
         // We haven't sent a return yet, so we must have been canceled.  Send a cancellation return.
         unwindDetector.catchExceptionsIfUnwinding([&]() {
           // Don't send anything if the connection is broken.
+          bool shouldFreePipeline = true;
           if (connectionState->connection.is<Connected>()) {
             auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
                 messageSizeHint<rpc::Return>() + sizeInWords<rpc::Payload>());
@@ -2070,6 +2071,9 @@ private:
               // The reason we haven't sent a return is because the results were sent somewhere
               // else.
               builder.setResultsSentElsewhere();
+
+              // The pipeline could still be valid and in-use in this case.
+              shouldFreePipeline = false;
             } else {
               builder.setCanceled();
             }
@@ -2077,7 +2081,7 @@ private:
             message->send();
           }
 
-          cleanupAnswerTable(nullptr, true);
+          cleanupAnswerTable(nullptr, shouldFreePipeline);
         });
       }
     }
@@ -2825,6 +2829,7 @@ private:
             KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherQuestion())) {
               KJ_IF_MAYBE(response, answer->redirectedResults) {
                 questionRef->fulfill(kj::mv(*response));
+                answer->redirectedResults = nullptr;
               } else {
                 KJ_FAIL_REQUIRE("`Return.takeFromOtherQuestion` referenced a call that did not "
                                 "use `sendResultsTo.yourself`.") { return; }
