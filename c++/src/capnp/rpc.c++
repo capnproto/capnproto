@@ -1455,6 +1455,90 @@ private:
     }
   }
 
+  class TribbleRaceBlocker: public ClientHook, public kj::Refcounted {
+    // Hack to work around a problem that arises during the Tribble 4-way Race Condition as
+    // described in rpc.capnp in the documentation for the `Disembargo` message.
+    //
+    // Consider a remote promise that is resolved by a `Resolve` message. PromiseClient::resolve()
+    // is eventually called and given the `ClientHook` for the resolution. Imagine that the
+    // `ClientHook` it receives turns out to be an `ImportClient`. There are two ways this could
+    // have happened:
+    //
+    // 1. The `Resolve` message contained a `CapDescriptor` of type `senderHosted`, naming an entry
+    //    in the sender's export table, and the `ImportClient` refers to the corresponding slot on
+    //    the receiver's import table. In this case, no embargo is needed, because messages to the
+    //    resolved location traverse the same path as messages to the promise would have.
+    //
+    // 2. The `Resolve` message contained a `CapDescriptor` of type `receiverHosted`, naming an
+    //    entry in the receiver's export table. That entry just happened to contain an
+    //    `ImportClient` refering back to the sender. This specifically happens when the entry
+    //    in question had previously itself referred to a promise, and that promise has since
+    //    resolved to a remote capability, at which point the export table entry was replaced by
+    //    the appropriate `ImportClient` representing that. Presumably, the peer *did not yet know*
+    //    about this resolution, which is why it sent a `receiverHosted` pointing to something that
+    //    reflects back to the sender, rather than sending `senderHosted` in the first place.
+    //
+    //    In this case, an embargo *is* required, because peer may still be reflecting messages
+    //    sent to this promise back to us. In fact, the peer *must* continue reflecting messages,
+    //    even when it eventually learns that the eventual destination is one of its own
+    //    capabilities, due to the Tribble 4-way Race Condition rule.
+    //
+    //    Since this case requires an embargo, somehow PromiseClient::resolve() must be able to
+    //    distinguish it from the case (1). One solution would be for us to pass some extra flag
+    //    all the way from where the `Resolve` messages is received to `PromiseClient::resolve()`.
+    //    That solution is reasonably easy in the `Resolve` case, but gets notably more difficult
+    //    in the case of `Return`s, which also resolve promises and are subject to all the same
+    //    problems. In the case of a `Return`, some non-RPC-specific code is involved in the
+    //    resolution, making it harder to pass along a flag.
+    //
+    //    Instead, we use this hack: When we read an entry in the export table and discover that
+    //    it actually contains an `ImportClient` or a `PipelineClient` reflecting back over our
+    //    own connection, then we wrap it in a `TribbleRaceBlocker`. This wrapper prevents
+    //    `PromiseClient` from recognizing the capability as being remote, so it instead treats it
+    //    as local. That causes it to set up an embargo as desired.
+    //
+    // TODO(perf): This actually blocks further promise resolution in the case where the
+    //   ImportClient or PipelineClient itself ends up being yet another promise that resolves
+    //   back over the connection again. What we probably really need to do here is, instead of
+    //   placing `ImportClient` or `PipelineClient` on the export table, place a special type there
+    //   that both knows what to do with future incoming messages to that export ID, but also knows
+    //   what to do when that export is the subject of a `Resolve`.
+
+  public:
+    TribbleRaceBlocker(kj::Own<ClientHook> inner): inner(kj::mv(inner)) {}
+
+    Request<AnyPointer, AnyPointer> newCall(
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+      return inner->newCall(interfaceId, methodId, sizeHint);
+    }
+    VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                                kj::Own<CallContextHook>&& context) override {
+      return inner->call(interfaceId, methodId, kj::mv(context));
+    }
+    kj::Maybe<ClientHook&> getResolved() override {
+      // We always wrap either PipelineClient or ImportClient, both of which return null for this
+      // anyway.
+      return nullptr;
+    }
+    kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+      // We always wrap either PipelineClient or ImportClient, both of which return null for this
+      // anyway.
+      return nullptr;
+    }
+    kj::Own<ClientHook> addRef() override {
+      return kj::addRef(*this);
+    }
+    const void* getBrand() override {
+      return nullptr;
+    }
+    kj::Maybe<int> getFd() override {
+      return inner->getFd();
+    }
+
+  private:
+    kj::Own<ClientHook> inner;
+  };
+
   kj::Maybe<kj::Own<ClientHook>> receiveCap(rpc::CapDescriptor::Reader descriptor,
                                             kj::ArrayPtr<kj::AutoCloseFd> fds) {
     uint fdIndex = descriptor.getAttachedFd();
@@ -1474,7 +1558,11 @@ private:
 
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_MAYBE(exp, exports.find(descriptor.getReceiverHosted())) {
-          return exp->clientHook->addRef();
+          auto result = exp->clientHook->addRef();
+          if (result->getBrand() == this) {
+            result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
+          }
+          return result;
         } else {
           return newBrokenCap("invalid 'receiverHosted' export ID");
         }
@@ -1486,7 +1574,11 @@ private:
           if (answer->active) {
             KJ_IF_MAYBE(pipeline, answer->pipeline) {
               KJ_IF_MAYBE(ops, toPipelineOps(promisedAnswer.getTransform())) {
-                return pipeline->get()->getPipelinedCap(*ops);
+                auto result = pipeline->get()->getPipelinedCap(*ops);
+                if (result->getBrand() == this) {
+                  result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
+                }
+                return result;
               } else {
                 return newBrokenCap("unrecognized pipeline ops");
               }
