@@ -774,6 +774,9 @@ public:
   template <typename Pipeline, typename = FromPipeline<Pipeline>>
   static inline kj::Own<PipelineHook> from(Pipeline&& pipeline);
 
+  template <typename Pipeline, typename = FromPipeline<Pipeline>>
+  static inline PipelineHook& from(Pipeline& pipeline);
+
 private:
   template <typename T> struct FromImpl;
 };
@@ -1096,6 +1099,9 @@ struct PipelineHook::FromImpl {
   static inline kj::Own<PipelineHook> apply(typename T::Pipeline&& pipeline) {
     return from(kj::mv(pipeline._typeless));
   }
+  static inline PipelineHook& apply(typename T::Pipeline& pipeline) {
+    return from(pipeline._typeless);
+  }
 };
 
 template <>
@@ -1103,11 +1109,19 @@ struct PipelineHook::FromImpl<AnyPointer> {
   static inline kj::Own<PipelineHook> apply(AnyPointer::Pipeline&& pipeline) {
     return kj::mv(pipeline.hook);
   }
+  static inline PipelineHook& apply(AnyPointer::Pipeline& pipeline) {
+    return *pipeline.hook;
+  }
 };
 
 template <typename Pipeline, typename T>
 inline kj::Own<PipelineHook> PipelineHook::from(Pipeline&& pipeline) {
   return FromImpl<T>::apply(kj::fwd<Pipeline>(pipeline));
+}
+
+template <typename Pipeline, typename T>
+inline PipelineHook& PipelineHook::from(Pipeline& pipeline) {
+  return FromImpl<T>::apply(pipeline);
 }
 
 #endif  // !CAPNP_LITE
