@@ -2390,7 +2390,19 @@ private:
       //
       // (We do this in a separate continuation to handle the case where exceptions are
       // disabled.)
-      if (keepGoing) tasks.add(messageLoop());
+      //
+      // TODO(perf): We add an evalLater() here so that anything we needed to do in reaction to
+      //   the previous message has a chance to complete before the next message is handled. In
+      //   paticular, without this, I observed an ordering problem: I saw a case where a `Return`
+      //   message was followed by a `Resolve` message, but the `PromiseClient` associated with the
+      //   `Resolve` had its `resolve()` method invoked _before_ any `PromiseClient`s associated
+      //   with pipelined capabilities resolved by the `Return`. This could lead to an
+      //   incorrectly-ordered interaction between `PromiseClient`s when they resolve to each
+      //   other. This is probably really a bug in the way `Return`s are handled -- apparently,
+      //   resolution of `PromiseClient`s based on returned capabilites does not occur in a
+      //   depth-first way, when it should. If we could fix that then we can probably remove this
+      //   `evalLater()`. However, the `evalLater()` is not that bad and solves the problem...
+      if (keepGoing) tasks.add(kj::evalLater([this]() { return messageLoop(); }));
     });
   }
 
