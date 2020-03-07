@@ -1456,6 +1456,48 @@ private:
     }
   }
 
+  class TribbleRaceBlocker: public ClientHook, public kj::Refcounted {
+  public:
+    TribbleRaceBlocker(kj::Own<ClientHook> inner): inner(kj::mv(inner)) {}
+
+    Request<AnyPointer, AnyPointer> newCall(
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+      return inner->newCall(interfaceId, methodId, sizeHint);
+    }
+    VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                                kj::Own<CallContextHook>&& context) override {
+      return inner->call(interfaceId, methodId, kj::mv(context));
+    }
+    kj::Maybe<ClientHook&> getResolved() override {
+      return nullptr;
+      // KJ_IF_MAYBE(r, inner->getResolved()) {
+      //   return r;
+      // } else {
+      //   return *inner;
+      // }
+    }
+    kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+      return nullptr;
+      // KJ_IF_MAYBE(p, inner->whenMoreResolved()) {
+      //   return kj::mv(*p);
+      // } else {
+      //   return kj::Promise<kj::Own<ClientHook>>(inner->addRef());
+      // }
+    }
+    kj::Own<ClientHook> addRef() override {
+      return kj::addRef(*this);
+    }
+    const void* getBrand() override {
+      return nullptr;
+    }
+    kj::Maybe<int> getFd() override {
+      return inner->getFd();
+    }
+
+  private:
+    kj::Own<ClientHook> inner;
+  };
+
   kj::Maybe<kj::Own<ClientHook>> receiveCap(rpc::CapDescriptor::Reader descriptor,
                                             kj::ArrayPtr<kj::AutoCloseFd> fds) {
     uint fdIndex = descriptor.getAttachedFd();
@@ -1475,7 +1517,11 @@ private:
 
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_MAYBE(exp, exports.find(descriptor.getReceiverHosted())) {
-          return exp->clientHook->addRef();
+          auto result = exp->clientHook->addRef();
+          if (result->getBrand() == this) {
+            result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
+          }
+          return result;
         } else {
           return newBrokenCap("invalid 'receiverHosted' export ID");
         }
@@ -1487,7 +1533,11 @@ private:
           if (answer->active) {
             KJ_IF_MAYBE(pipeline, answer->pipeline) {
               KJ_IF_MAYBE(ops, toPipelineOps(promisedAnswer.getTransform())) {
-                return pipeline->get()->getPipelinedCap(*ops);
+                auto result = pipeline->get()->getPipelinedCap(*ops);
+                if (result->getBrand() == this) {
+                  result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
+                }
+                return result;
               } else {
                 return newBrokenCap("unrecognized pipeline ops");
               }
@@ -2369,7 +2419,7 @@ private:
       //
       // (We do this in a separate continuation to handle the case where exceptions are
       // disabled.)
-      if (keepGoing) tasks.add(messageLoop());
+      if (keepGoing) tasks.add(kj::evalLater([this]() { return messageLoop(); }));
     });
   }
 
@@ -2805,9 +2855,11 @@ private:
             break;
 
           case rpc::Return::TAKE_FROM_OTHER_QUESTION:
+            KJ_DBG("tail call");
             KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherQuestion())) {
               KJ_IF_MAYBE(response, answer->redirectedResults) {
                 questionRef->fulfill(kj::mv(*response));
+                answer->redirectedResults = nullptr;
               } else {
                 KJ_FAIL_REQUIRE("`Return.takeFromOtherQuestion` referenced a call that did not "
                                 "use `sendResultsTo.yourself`.") { return; }

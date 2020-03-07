@@ -51,7 +51,7 @@ inline bool doubleAlmostEqual(double a, double b) {
 
 #define EXPECT_FALSE(x) KJ_EXPECT(!(x))
 #define EXPECT_TRUE(x) KJ_EXPECT(x)
-#define EXPECT_EQ(x, y) KJ_EXPECT((x) == (y), x, y)
+#define EXPECT_EQ(x, y) {auto _x = (x); auto _y = (y); KJ_EXPECT(_x == _y, _x, _y);}
 #define EXPECT_NE(x, y) KJ_EXPECT((x) != (y), x, y)
 #define EXPECT_LE(x, y) KJ_EXPECT((x) <= (y), x, y)
 #define EXPECT_GE(x, y) KJ_EXPECT((x) >= (y), x, y)
