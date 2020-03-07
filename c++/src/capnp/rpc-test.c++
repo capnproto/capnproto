@@ -652,10 +652,21 @@ TEST(Rpc, TailCall) {
 
   auto dependentCall1 = promise.getC().getCallSequenceRequest().send();
 
-  auto dependentCall2 = response.getC().getCallSequenceRequest().send();
-
   EXPECT_EQ(0, dependentCall0.wait(context.waitScope).getN());
   EXPECT_EQ(1, dependentCall1.wait(context.waitScope).getN());
+
+  // TODO(someday): We used to initiate dependentCall2 here before waiting on the first two calls,
+  //   and the ordering was still "correct". But this was apparently by accident. Calling getC() on
+  //   the final response returns a different capability from calling getC() on the promise. There
+  //   are no guarantees on the ordering of calls on the response capability vs. the earlier
+  //   promise. When ordering matters, applications should take the original promise capability and
+  //   keep using that. In theory the RPC system could create continuity here, but it would be
+  //   annoying: for each capability that had been fetched on the promise, it would need to
+  //   traverse to the same capability in the final response and swap it out in-place for the
+  //   pipelined cap returned earlier. Maybe we'll determine later that that's really needed but
+  //   for now I'm not gonna do it.
+  auto dependentCall2 = response.getC().getCallSequenceRequest().send();
+
   EXPECT_EQ(2, dependentCall2.wait(context.waitScope).getN());
 
   EXPECT_EQ(1, calleeCallCount);

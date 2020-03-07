@@ -32,6 +32,7 @@
 #include <queue>
 #include <capnp/rpc.capnp.h>
 #include <kj/io.h>
+#include <kj/map.h>
 
 namespace capnp {
 namespace _ {  // private
@@ -1849,28 +1850,40 @@ private:
     }
 
     kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override {
-      if (state.is<Waiting>()) {
-        // Wrap a PipelineClient in a PromiseClient.
-        auto pipelineClient = kj::refcounted<PipelineClient>(
-            *connectionState, kj::addRef(*state.get<Waiting>()), kj::heapArray(ops.asPtr()));
+      return clientMap.findOrCreate(ops.asPtr(), [&]() {
+        if (state.is<Waiting>()) {
+          // Wrap a PipelineClient in a PromiseClient.
+          auto pipelineClient = kj::refcounted<PipelineClient>(
+              *connectionState, kj::addRef(*state.get<Waiting>()), kj::heapArray(ops.asPtr()));
 
-        KJ_IF_MAYBE(r, redirectLater) {
-          auto resolutionPromise = r->addBranch().then(kj::mvCapture(ops,
-              [](kj::Array<PipelineOp> ops, kj::Own<RpcResponse>&& response) {
-                return response->getResults().getPipelinedCap(ops);
-              }));
+          KJ_IF_MAYBE(r, redirectLater) {
+            auto resolutionPromise = r->addBranch().then(
+                [ops = kj::heapArray(ops.asPtr())](kj::Own<RpcResponse>&& response) {
+                  return response->getResults().getPipelinedCap(kj::mv(ops));
+                });
 
-          return kj::refcounted<PromiseClient>(
-              *connectionState, kj::mv(pipelineClient), kj::mv(resolutionPromise), nullptr);
+            return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
+              kj::mv(ops),
+              kj::refcounted<PromiseClient>(
+                  *connectionState, kj::mv(pipelineClient), kj::mv(resolutionPromise), nullptr)
+            };
+          } else {
+            // Oh, this pipeline will never get redirected, so just return the PipelineClient.
+            return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
+              kj::mv(ops), kj::mv(pipelineClient)
+            };
+          }
+        } else if (state.is<Resolved>()) {
+          auto pipelineClient = state.get<Resolved>()->getResults().getPipelinedCap(ops);
+          return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
+            kj::mv(ops), kj::mv(pipelineClient)
+          };
         } else {
-          // Oh, this pipeline will never get redirected, so just return the PipelineClient.
-          return kj::mv(pipelineClient);
+          return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
+            kj::mv(ops), newBrokenCap(kj::cp(state.get<Broken>()))
+          };
         }
-      } else if (state.is<Resolved>()) {
-        return state.get<Resolved>()->getResults().getPipelinedCap(ops);
-      } else {
-        return newBrokenCap(kj::cp(state.get<Broken>()));
-      }
+      })->addRef();
     }
 
   private:
@@ -1881,6 +1894,12 @@ private:
     typedef kj::Own<RpcResponse> Resolved;
     typedef kj::Exception Broken;
     kj::OneOf<Waiting, Resolved, Broken> state;
+
+    kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>> clientMap;
+    // See QueuedPipeline::clientMap in capability.c++ for a discussion of why we must memoize
+    // the results of getPipelinedCap(). RpcPipeline has a similar problem when a capability we
+    // return is later subject to an embargo. It's important that the embargo is correctly applied
+    // across all calls to the same capability.
 
     // Keep this last, because the continuation uses *this, so it should be destroyed first to
     // ensure the continuation is not still running.
