@@ -1562,7 +1562,7 @@ private:
           if (result->getBrand() == this) {
             result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
           }
-          return result;
+          return kj::mv(result);
         } else {
           return newBrokenCap("invalid 'receiverHosted' export ID");
         }
@@ -1578,7 +1578,7 @@ private:
                 if (result->getBrand() == this) {
                   result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
                 }
-                return result;
+                return kj::mv(result);
               } else {
                 return newBrokenCap("unrecognized pipeline ops");
               }
