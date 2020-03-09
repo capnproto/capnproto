@@ -53,6 +53,7 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
 }  // namespace _ (private)
 
 const uint ClientHook::NULL_CAPABILITY_BRAND = 0;
+const uint ClientHook::BROKEN_CAPABILITY_BRAND = 0;
 // Defined here rather than capability.c++ so that we can safely call isNull() in this file.
 
 namespace _ {  // private
