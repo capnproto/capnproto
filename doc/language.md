@@ -393,7 +393,7 @@ Cap'n Proto generics work very similarly to Java generics or C++ templates. Some
   a type is wire-compatible with any specific parameterization, so long as you interpret the
   `AnyPointer`s as the correct type at runtime.
 
-* Relatedly, it is safe to cast an generic interface of a specific parameterization to a generic
+* Relatedly, it is safe to cast a generic interface of a specific parameterization to a generic
   interface where all parameters are `AnyPointer` and vice versa, as long as the `AnyPointer`s are
   treated as the correct type at runtime. This means that e.g. you can implement a server in a
   generic way that is correct for all parameterizations but call it from clients using a specific
