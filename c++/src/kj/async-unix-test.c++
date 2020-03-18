@@ -722,8 +722,9 @@ TEST(AsyncUnixTest, Wake) {
       port.wake();
     });
 
-    delay();
-    EXPECT_TRUE(port.poll());
+    do {
+      delay();
+    } while (!port.poll());
   }
 }
 
