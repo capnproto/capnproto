@@ -154,7 +154,8 @@ void Canceler::release() {
 }
 
 Canceler::AdapterBase::AdapterBase(Canceler& canceler)
-    : prev(canceler.list),
+    : loop(currentEventLoop()),
+      prev(canceler.list),
       next(canceler.list) {
   canceler.list = *this;
   KJ_IF_MAYBE(n, next) {
@@ -163,6 +164,11 @@ Canceler::AdapterBase::AdapterBase(Canceler& canceler)
 }
 
 Canceler::AdapterBase::~AdapterBase() noexcept(false) {
+  if (threadLocalEventLoop != &loop && threadLocalEventLoop != nullptr) {
+    KJ_LOG(FATAL, "cancelable promise destroyed from wrong thread", kj::getStackTrace());
+    // We're probably screwed, abort.
+    abort();
+  }
   KJ_IF_MAYBE(p, prev) {
     *p = next;
   }

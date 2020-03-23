@@ -595,6 +595,7 @@ private:
     virtual void cancel(Exception&& e) = 0;
 
   private:
+    EventLoop& loop;
     Maybe<Maybe<AdapterBase&>&> prev;
     Maybe<AdapterBase&> next;
     friend class Canceler;
