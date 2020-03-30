@@ -88,13 +88,13 @@ public_capnpc_inputs =                                         \
   src/capnp/stream.capnp                                       \
   src/capnp/rpc.capnp                                          \
   src/capnp/rpc-twoparty.capnp                                 \
-  src/capnp/persistent.capnp                                   \
-  src/capnp/compat/json.capnp
+  src/capnp/persistent.capnp
 
 capnpc_inputs =                                                \
   $(public_capnpc_inputs)                                      \
   src/capnp/compiler/lexer.capnp                               \
-  src/capnp/compiler/grammar.capnp
+  src/capnp/compiler/grammar.capnp                             \
+  src/capnp/compat/json.capnp
 
 capnpc_outputs =                                               \
   src/capnp/c++.capnp.c++                                      \
@@ -124,6 +124,7 @@ includekjstddir = $(includekjdir)/std
 includekjcompatdir = $(includekjdir)/compat
 
 dist_includecapnp_DATA = $(public_capnpc_inputs)
+dist_includecapnpcompat_DATA = src/capnp/compat/json.capnp
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = $(CAPNP_PKG_CONFIG_FILES)
