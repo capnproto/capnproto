@@ -621,6 +621,16 @@ TEST(Async, Canceler) {
   KJ_EXPECT(nowI.wait(waitScope) == 123u);
 }
 
+TEST(Async, CancelerDoubleWrap) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // This used to crash.
+  Canceler canceler;
+  auto promise = canceler.wrap(canceler.wrap(kj::Promise<void>(kj::NEVER_DONE)));
+  canceler.cancel("whoops");
+}
+
 class ErrorHandlerImpl: public TaskSet::ErrorHandler {
 public:
   uint exceptionCount = 0;

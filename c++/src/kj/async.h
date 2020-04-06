@@ -594,6 +594,8 @@ private:
 
     virtual void cancel(Exception&& e) = 0;
 
+    void unlink();
+
   private:
     Maybe<Maybe<AdapterBase&>&> prev;
     Maybe<AdapterBase&> next;

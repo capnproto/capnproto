@@ -131,9 +131,7 @@ void Canceler::cancel(StringPtr cancelReason) {
 void Canceler::cancel(const Exception& exception) {
   for (;;) {
     KJ_IF_MAYBE(a, list) {
-      list = a->next;
-      a->prev = nullptr;
-      a->next = nullptr;
+      a->unlink();
       a->cancel(kj::cp(exception));
     } else {
       break;
@@ -144,9 +142,7 @@ void Canceler::cancel(const Exception& exception) {
 void Canceler::release() {
   for (;;) {
     KJ_IF_MAYBE(a, list) {
-      list = a->next;
-      a->prev = nullptr;
-      a->next = nullptr;
+      a->unlink();
     } else {
       break;
     }
@@ -163,12 +159,18 @@ Canceler::AdapterBase::AdapterBase(Canceler& canceler)
 }
 
 Canceler::AdapterBase::~AdapterBase() noexcept(false) {
+  unlink();
+}
+
+void Canceler::AdapterBase::unlink() {
   KJ_IF_MAYBE(p, prev) {
     *p = next;
   }
   KJ_IF_MAYBE(n, next) {
     n->prev = prev;
   }
+  next = nullptr;
+  prev = nullptr;
 }
 
 Canceler::AdapterImpl<void>::AdapterImpl(kj::PromiseFulfiller<void>& fulfiller,
