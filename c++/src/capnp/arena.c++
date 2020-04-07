@@ -339,28 +339,38 @@ void BuilderArena::reportReadLimitReached() {
   }
 }
 
-#if !CAPNP_LITE
 kj::Maybe<kj::Own<ClientHook>> BuilderArena::LocalCapTable::extractCap(uint index) {
+#if CAPNP_LITE
+  KJ_UNIMPLEMENTED("no cap tables in lite mode");
+#else
   if (index < capTable.size()) {
     return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
   } else {
     return nullptr;
   }
+#endif
 }
 
 uint BuilderArena::LocalCapTable::injectCap(kj::Own<ClientHook>&& cap) {
+#if CAPNP_LITE
+  KJ_UNIMPLEMENTED("no cap tables in lite mode");
+#else
   uint result = capTable.size();
   capTable.add(kj::mv(cap));
   return result;
+#endif
 }
 
 void BuilderArena::LocalCapTable::dropCap(uint index) {
+#if CAPNP_LITE
+  KJ_UNIMPLEMENTED("no cap tables in lite mode");
+#else
   KJ_ASSERT(index < capTable.size(), "Invalid capability descriptor in message.") {
     return;
   }
   capTable[index] = nullptr;
+#endif
 }
-#endif  // !CAPNP_LITE
 
 }  // namespace _ (private)
 }  // namespace capnp
