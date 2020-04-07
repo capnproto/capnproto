@@ -406,6 +406,8 @@ String getStackTrace() {
 
 namespace {
 
+#if !KJ_NO_EXCEPTIONS
+
 void terminateHandler() {
   void* traceSpace[32];
 
@@ -438,6 +440,8 @@ void terminateHandler() {
   kj::FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
   _exit(1);
 }
+
+#endif
 
 }  // namespace
 
@@ -525,8 +529,10 @@ void printStackTraceOnCrash() {
   KJ_WIN32(SetConsoleCtrlHandler(breakHandler, TRUE));
   SetUnhandledExceptionFilter(&sehHandler);
 
+#if !KJ_NO_EXCEPTIONS
   // Also override std::terminate() handler with something nicer for KJ.
   std::set_terminate(&terminateHandler);
+#endif
 }
 
 #elif _WIN32
@@ -534,7 +540,9 @@ void printStackTraceOnCrash() {
 // try to catch SEH nor ctrl+C.
 
 void printStackTraceOnCrash() {
+#if !KJ_NO_EXCEPTIONS
   std::set_terminate(&terminateHandler);
+#endif
 }
 
 #else
@@ -612,8 +620,10 @@ void printStackTraceOnCrash() {
   KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
 #endif
 
+#if !KJ_NO_EXCEPTIONS
   // Also override std::terminate() handler with something nicer for KJ.
   std::set_terminate(&terminateHandler);
+#endif
 }
 #endif
 

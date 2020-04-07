@@ -1172,7 +1172,7 @@ private:
     if (limit == 0) {
       inner = nullptr;
     } else if (amount < requested) {
-      KJ_FAIL_REQUIRE("pipe ended prematurely");
+      KJ_FAIL_REQUIRE("pipe ended prematurely") { break; }
     }
   }
 };
@@ -1466,17 +1466,9 @@ private:
       auto writeBuffer = inBuffer.asArray(limit, amount);
       KJ_ASSERT(limit >= amount);
       if (amount > 0) {
-        Promise<void> promise = nullptr;
-
-        // TODO(soon): Replace try/catch with kj::evalNow() to work with -fno-exceptions.
-        try {
-          promise = output.write(writeBuffer).attach(mv(writeBuffer));
-        } catch (const Exception& exception) {
-          reject(cp(exception));
-          return READY_NOW;
-        }
-
-        promise = promise.then([this, amount]() {
+        Promise<void> promise = kj::evalNow([&]() {
+          return output.write(writeBuffer).attach(mv(writeBuffer));
+        }).then([this, amount]() {
           limit -= amount;
           pumpedSoFar += amount;
           if (limit == 0) {
@@ -1631,53 +1623,47 @@ private:
       // correct value for `heapBuffer.size()`... I dunno, man.
       auto destination = heapBuffer.begin();
 
-      try {
-        return inner->tryRead(destination, n.minBytes, n.maxBytes)
-            .then([this, heapBuffer = mv(heapBuffer), minBytes = n.minBytes](size_t amount) mutable
-                -> Promise<void> {
-          length = length.map([amount](uint64_t n) {
-            KJ_ASSERT(n >= amount);
-            return n - amount;
-          });
+      return kj::evalNow([&]() { return inner->tryRead(destination, n.minBytes, n.maxBytes); })
+          .then([this, heapBuffer = mv(heapBuffer), minBytes = n.minBytes](size_t amount) mutable
+              -> Promise<void> {
+        length = length.map([amount](uint64_t n) {
+          KJ_ASSERT(n >= amount);
+          return n - amount;
+        });
 
-          if (amount < heapBuffer.size()) {
-            heapBuffer = heapBuffer.slice(0, amount).attach(mv(heapBuffer));
-          }
+        if (amount < heapBuffer.size()) {
+          heapBuffer = heapBuffer.slice(0, amount).attach(mv(heapBuffer));
+        }
 
-          KJ_ASSERT(stoppage == nullptr);
-          Maybe<ArrayPtr<byte>> bufferPtr = nullptr;
-          for (auto& state: branches) {
-            KJ_IF_MAYBE(s, state) {
-              // Prefer to move the buffer into the receiving branch's deque, rather than memcpy.
-              //
-              // TODO(perf): For the 2-branch case, this is fine, since the majority of the time
-              //   only one buffer will be in use. If we generalize to the n-branch case, this would
-              //   become memcpy-heavy.
-              KJ_IF_MAYBE(ptr, bufferPtr) {
-                s->buffer.produce(heapArray(*ptr));
-              } else {
-                bufferPtr = ArrayPtr<byte>(heapBuffer);
-                s->buffer.produce(mv(heapBuffer));
-              }
+        KJ_ASSERT(stoppage == nullptr);
+        Maybe<ArrayPtr<byte>> bufferPtr = nullptr;
+        for (auto& state: branches) {
+          KJ_IF_MAYBE(s, state) {
+            // Prefer to move the buffer into the receiving branch's deque, rather than memcpy.
+            //
+            // TODO(perf): For the 2-branch case, this is fine, since the majority of the time
+            //   only one buffer will be in use. If we generalize to the n-branch case, this would
+            //   become memcpy-heavy.
+            KJ_IF_MAYBE(ptr, bufferPtr) {
+              s->buffer.produce(heapArray(*ptr));
+            } else {
+              bufferPtr = ArrayPtr<byte>(heapBuffer);
+              s->buffer.produce(mv(heapBuffer));
             }
           }
+        }
 
-          if (amount < minBytes) {
-            // Short read, EOF.
-            stoppage = Stoppage(Eof());
-          }
+        if (amount < minBytes) {
+          // Short read, EOF.
+          stoppage = Stoppage(Eof());
+        }
 
-          return pull();
-        }, [this](Exception&& exception) {
-          // Exception from the inner tryRead(). Propagate.
-          stoppage = Stoppage(mv(exception));
-          return pull();
-        });
-      } catch (const Exception& exception) {
-        // Exception from the inner tryRead(). Propagate.
-        stoppage = Stoppage(cp(exception));
         return pull();
-      }
+      }, [this](Exception&& exception) {
+        // Exception from the inner tryRead(). Propagate.
+        stoppage = Stoppage(mv(exception));
+        return pull();
+      });
     }).eagerlyEvaluate([this](Exception&& exception) {
       // Exception from our loop, not from inner tryRead(). Something is broken; tell everybody!
       pulling = false;
@@ -2126,31 +2112,31 @@ Promise<void> AsyncCapabilityStream::sendFd(int fd) {
 }
 
 void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
+  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
 }
 void AsyncIoStream::setsockopt(int level, int option, const void* value, uint length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
+  KJ_UNIMPLEMENTED("Not a socket.") { break; }
 }
 void AsyncIoStream::getsockname(struct sockaddr* addr, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
+  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
 }
 void AsyncIoStream::getpeername(struct sockaddr* addr, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
+  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
 }
 void ConnectionReceiver::getsockopt(int level, int option, void* value, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
+  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
 }
 void ConnectionReceiver::setsockopt(int level, int option, const void* value, uint length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
+  KJ_UNIMPLEMENTED("Not a socket.") { break; }
 }
 void ConnectionReceiver::getsockname(struct sockaddr* addr, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
+  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
 }
 void DatagramPort::getsockopt(int level, int option, void* value, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
+  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
 }
 void DatagramPort::setsockopt(int level, int option, const void* value, uint length) {
-  KJ_UNIMPLEMENTED("Not a socket.");
+  KJ_UNIMPLEMENTED("Not a socket.") { break; }
 }
 Own<DatagramPort> NetworkAddress::bindDatagramPort() {
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");

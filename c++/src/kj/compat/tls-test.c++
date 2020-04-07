@@ -529,10 +529,13 @@ KJ_TEST("TLS client certificate verification") {
         SSL_MESSAGE("peer did not return a certificate",
                     "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
         serverPromise.wait(test.io.waitScope));
+#if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
+                       // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE("alert",  // "alert handshake failure" or "alert certificate required"
                     "TLSV1_CERTIFICATE_REQUIRED"),
         clientPromise.wait(test.io.waitScope));
+#endif
   }
 
   // Self-signed certificate loaded in the client: fail
@@ -555,10 +558,13 @@ KJ_TEST("TLS client certificate verification") {
         SSL_MESSAGE("certificate verify failed",
                     "CERTIFICATE_VERIFY_FAILED"),
         serverPromise.wait(test.io.waitScope));
+#if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
+                       // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE("alert unknown ca",
                     "TLSV1_ALERT_UNKNOWN_CA"),
         clientPromise.wait(test.io.waitScope));
+#endif
   }
 
   // Trusted certificate loaded in the client: success.
