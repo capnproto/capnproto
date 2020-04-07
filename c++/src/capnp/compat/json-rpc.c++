@@ -196,8 +196,7 @@ kj::Promise<void> JsonRpc::readLoop() {
 
       case json::RpcMessage::PARAMS: {
         // a call
-        auto schema = interface.getSchema();
-        KJ_IF_MAYBE(method, schema.findMethodByName(rpcMessage.getMethod())) {
+        KJ_IF_MAYBE(method, methodMap.find(rpcMessage.getMethod())) {
           auto req = interface.newRequest(*method);
           KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
             codec.decode(rpcMessage.getParams(), req);
