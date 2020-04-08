@@ -1413,12 +1413,13 @@ NodeTranslator::NodeSet NodeTranslator::getBootstrapNode() {
   }
 }
 
-NodeTranslator::NodeSet NodeTranslator::finish() {
+NodeTranslator::NodeSet NodeTranslator::finish(Schema selfBootstrapSchema) {
   // Careful about iteration here:  compileFinalValue() may actually add more elements to
   // `unfinishedValues`, invalidating iterators in the process.
   for (size_t i = 0; i < unfinishedValues.size(); i++) {
     auto& value = unfinishedValues[i];
-    compileValue(value.source, value.type, value.typeScope, value.target, false);
+    compileValue(value.source, value.type, value.typeScope.orDefault(selfBootstrapSchema),
+                 value.target, false);
   }
 
   return getBootstrapNode();
@@ -2651,7 +2652,7 @@ void NodeTranslator::compileDefaultDefaultValue(
 
 void NodeTranslator::compileBootstrapValue(
     Expression::Reader source, schema::Type::Reader type, schema::Value::Builder target,
-    Schema typeScope) {
+    kj::Maybe<Schema> typeScope) {
   // Start by filling in a default default value so that if for whatever reason we don't end up
   // initializing the value, this won't cause schema validation to fail.
   compileDefaultDefaultValue(type, target);
@@ -2665,8 +2666,9 @@ void NodeTranslator::compileBootstrapValue(
       break;
 
     default:
-      // Primitive value.
-      compileValue(source, type, typeScope, target, true);
+      // Primitive value. (Note that the scope can't possibly matter since primitives are not
+      // generic.)
+      compileValue(source, type, typeScope.orDefault(Schema()), target, true);
       break;
   }
 }
@@ -2710,7 +2712,20 @@ void NodeTranslator::compileValue(Expression::Reader source, schema::Type::Reade
 }
 
 kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader src, Type type) {
+  if (type.isAnyPointer()) {
+    if (type.getBrandParameter() != nullptr || type.getImplicitParameter() != nullptr) {
+      errorReporter.addErrorOn(src,
+          "Cannot interpret value because the type is a generic type parameter which is not "
+          "yet bound. We don't know what type to expect here.");
+      return nullptr;
+    }
+  }
+
   Orphan<DynamicValue> result = compileValueInner(src, type);
+
+  // compileValueInner() evaluated `src` and only used `type` as a hint in interpreting `src` if
+  // `src`'s type wasn't already obvious. So, now we need to check that the resulting value
+  // actually matches `type`.
 
   switch (result.getType()) {
     case DynamicValue::UNKNOWN:

@@ -589,7 +589,16 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
       if (minimumState <= Content::BOOTSTRAP) break;
 
       // Create the final schema.
-      auto nodeSet = content.translator->finish();
+      NodeTranslator::NodeSet nodeSet;
+      if (content.bootstrapSchema == nullptr) {
+        // Must have failed in an earlier stage.
+        KJ_ASSERT(module->getErrorReporter().hadErrors());
+        nodeSet = content.translator->getBootstrapNode();
+      } else {
+        nodeSet = content.translator->finish(
+            module->getCompiler().getWorkspace().bootstrapLoader.getUnbound(id));
+      }
+
       content.finalSchema = nodeSet.node;
       content.auxSchemas = kj::mv(nodeSet.auxNodes);
       content.sourceInfo = kj::mv(nodeSet.sourceInfo);
