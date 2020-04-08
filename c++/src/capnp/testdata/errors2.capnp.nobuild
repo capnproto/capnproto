@@ -29,9 +29,7 @@ const dummyValue :DummyType = ();
 
 struct TestDefaultValueForGeneric(A) {
   single @0 :A = .dummyValue;
-
   nested @1 :Box(A) = (val = .dummyValue);
-  # TODO(now): This should fail too, but currently doesn't.
 }
 
 struct Box(B) {
