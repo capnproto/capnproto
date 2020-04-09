@@ -63,16 +63,16 @@ KJ_BEGIN_HEADER
 
 #ifdef __GNUC__
   #if __clang__
-    #if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 4)
-      #warning "This library requires at least Clang 3.4."
+    #if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 6)
+      #warning "This library requires at least Clang 3.6."
     #elif __cplusplus >= 201402L && !__has_include(<initializer_list>)
       #warning "Your compiler supports C++14 but your C++ standard library does not.  If your "\
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\
                "-stdlib=libc++ to your CXXFLAGS."
     #endif
   #else
-    #if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 9)
-      #warning "This library requires at least GCC 4.9."
+    #if __GNUC__ < 5
+      #warning "This library requires at least GCC 5.0."
     #endif
   #endif
 #elif defined(_MSC_VER)
