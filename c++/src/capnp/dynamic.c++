@@ -1467,6 +1467,14 @@ DynamicValue::Reader::Reader(ConstSchema constant): type(VOID) {
   }
 }
 
+#if __GNUC__ && !__clang__ && __GNUC__ >= 9
+// In the copy constructors below, we use memcpy() to copy only after verifying that it is safe.
+// But GCC 9 doesn't know we've checked, and whines. I suppose GCC is probably right: our checks
+// probably don't technically make memcpy safe according to the standard. But it works in practice,
+// and if it ever stops working, the tests will catch it.
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+
 DynamicValue::Reader::Reader(const Reader& other) {
   switch (other.type) {
     case UNKNOWN:
