@@ -57,9 +57,10 @@
 #include <typeinfo>
 #if __GNUC__
 #include <cxxabi.h>
+#endif
+#endif
+
 #include <stdlib.h>
-#endif
-#endif
 
 namespace kj {
 

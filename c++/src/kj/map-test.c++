@@ -148,6 +148,7 @@ KJ_TEST("TreeMap range") {
   }
 }
 
+#if !KJ_NO_EXCEPTIONS
 KJ_TEST("HashMap findOrCreate throws") {
   HashMap<int, String> m;
   try {
@@ -166,6 +167,7 @@ KJ_TEST("HashMap findOrCreate throws") {
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(1)) == "ok");
 }
+#endif
 
 template <typename MapType>
 void testEraseAll(MapType& m) {

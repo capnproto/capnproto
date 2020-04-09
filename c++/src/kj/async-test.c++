@@ -907,7 +907,9 @@ KJ_TEST("throw from a fiber") {
   Promise<void> fiber = startFiber(65536,
       [promise = kj::mv(paf.promise)](WaitScope& fiberScope) mutable {
     promise.wait(fiberScope);
+#if !KJ_NO_EXCEPTIONS
     KJ_FAIL_EXPECT("wait() should have thrown");
+#endif
   });
 
   KJ_EXPECT(!fiber.poll(waitScope));
@@ -915,14 +917,19 @@ KJ_TEST("throw from a fiber") {
   paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "test exception"));
 
   KJ_ASSERT(fiber.poll(waitScope));
-  KJ_EXPECT_THROW_MESSAGE("test exception", fiber.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", fiber.wait(waitScope));
 }
 
 KJ_TEST("cancel a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
+#if KJ_NO_EXCEPTIONS
+  // When exceptions are disabled we can't wait() on a non-void promise that throws.
+  auto paf = newPromiseAndFulfiller<void>();
+#else
   auto paf = newPromiseAndFulfiller<int>();
+#endif
 
   bool exited = false;
 
@@ -930,8 +937,12 @@ KJ_TEST("cancel a fiber") {
     Promise<StringPtr> fiber = startFiber(65536,
         [promise = kj::mv(paf.promise), &exited](WaitScope& fiberScope) mutable {
       KJ_DEFER(exited = true);
+#if KJ_NO_EXCEPTIONS
+      promise.wait(fiberScope);
+#else
       int i = promise.wait(fiberScope);
       KJ_EXPECT(i == 123);
+#endif
       return "foo"_kj;
     });
 

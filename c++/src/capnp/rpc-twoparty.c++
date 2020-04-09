@@ -219,7 +219,7 @@ size_t TwoPartyVatNetwork::getWindow() {
           s->getsockopt(SOL_SOCKET, SO_SNDBUF, &bufSize, &len);
         }
       }
-      KJ_ASSERT(len == sizeof(bufSize));
+      KJ_ASSERT(len == sizeof(bufSize)) { break; }
     })) {
       if (exception->getType() != kj::Exception::Type::UNIMPLEMENTED) {
         // TODO(someday): Figure out why getting SO_SNDBUF sometimes throws EINVAL. I suspect it

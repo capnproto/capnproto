@@ -33,11 +33,13 @@ namespace {
 
 class DummyCapTableReader: public _::CapTableReader {
 public:
-#if !CAPNP_LITE
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override {
+#if CAPNP_LITE
+    KJ_UNIMPLEMENTED("no cap tables in lite mode");
+#else
     return nullptr;
-  }
 #endif
+  }
 };
 static KJ_CONSTEXPR(const) DummyCapTableReader dummyCapTableReader = DummyCapTableReader();
 

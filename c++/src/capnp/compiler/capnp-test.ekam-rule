@@ -42,6 +42,8 @@ echo findProvider file:capnp/testdata/pretty.txt; read JUNK
 echo findProvider file:capnp/testdata/short.txt; read JUNK
 echo findProvider file:capnp/testdata/errors.capnp.nobuild; read JUNK
 echo findProvider file:capnp/testdata/errors.txt; read JUNK
+echo findProvider file:capnp/testdata/errors2.capnp.nobuild; read JUNK
+echo findProvider file:capnp/testdata/errors2.txt; read JUNK
 
 # Register our interest in the schema files.
 echo findProvider file:capnp/c++.capnp

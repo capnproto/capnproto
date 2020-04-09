@@ -1288,9 +1288,9 @@ KJ_TEST("Streaming call throwing cascades to following calls") {
   KJ_EXPECT(server.iSum == 123);
   KJ_EXPECT(server.jSum == 321);
 
-  KJ_EXPECT_THROW_MESSAGE("throw requested", promise2.wait(waitScope));
-  KJ_EXPECT_THROW_MESSAGE("throw requested", promise3.wait(waitScope));
-  KJ_EXPECT_THROW_MESSAGE("throw requested", promise4.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("throw requested", promise2.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("throw requested", promise3.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("throw requested", promise4.ignoreResult().wait(waitScope));
 }
 
 }  // namespace

@@ -3230,7 +3230,7 @@ void doDelayedCompletionWebSocketTest(bool exception, bool closeUpstreamFirst) n
   KJ_ASSERT(promise.poll(waitScope));
 
   if (exception) {
-    KJ_EXPECT_THROW_MESSAGE("service-side failure", promise.wait(waitScope));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("service-side failure", promise.wait(waitScope));
   } else {
     promise.wait(waitScope);
   }
