@@ -338,7 +338,20 @@ echo "Building c++"
 echo "========================================================================="
 
 # Apple now aliases gcc to clang, so probe to find out what compiler we're really using.
-if (${CXX:-g++} -dM -E -x c++ /dev/null 2>&1 | grep -q '__clang__'); then
+#
+# NOTE: You might be tempted to use `grep -q` here instead of sending output to /dev/null. However,
+#   we cannot, because `grep -q` exits immediately upon seeing a match. If it exits too soon, the
+#   first stage of the pipeline gets killed, and the whole expression is considered to have failed
+#   since we are running bash with the `pipefail` option enabled.
+# FUN STORY: We used to use grep -q. One day, we found that Clang 9 when running under GitHub
+#   Actions was detected as *not* Clang. But if we ran it twice, it would succeed on the second
+#   try. It turns out that under previous versions of Clang, the `__clang__` define was pretty
+#   close to the end of the list, so it always managed to write the whole list before `grep -q`
+#   exited. But under Clang 9, there's a bunch more defines after this one, giving more time for
+#   `grep -q` to exit and break everything. But if the compiler had executed once recently then
+#   the second run would go faster due to caching (I guess) and manage to get all the data out
+#   to the buffer in time.
+if (${CXX:-g++} -dM -E -x c++ /dev/null 2>&1 | grep '__clang__' > /dev/null); then
   IS_CLANG=yes
   DISABLE_OPTIMIZATION_IF_GCC=
 else
