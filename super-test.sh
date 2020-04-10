@@ -15,8 +15,8 @@ function test_samples() {
   ./calculator-server unix:/tmp/capnp-calculator-example-$$ &
   sleep 0.1
   ./calculator-client unix:/tmp/capnp-calculator-example-$$
-  kill %+
-  wait %+ || true
+  kill %./calculator-server
+  wait %./calculator-server || true
   rm -f /tmp/capnp-calculator-example-$$
 }
 
