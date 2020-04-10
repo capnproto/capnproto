@@ -358,7 +358,7 @@ fi
 
 cd c++
 doit autoreconf -i
-doit ./configure --prefix="$STAGING"
+doit ./configure --prefix="$STAGING" || (cat config.log && exit 1)
 doit make -j$PARALLEL check
 
 if [ $IS_CLANG = no ]; then
