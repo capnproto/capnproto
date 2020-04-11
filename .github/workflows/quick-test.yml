@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++-5, g++-8, clang-4.0, clang-9]
+        compiler: [g++-5, g++-8, clang-5.0, clang-9]
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies

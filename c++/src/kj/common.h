@@ -63,8 +63,8 @@ KJ_BEGIN_HEADER
 
 #ifdef __GNUC__
   #if __clang__
-    #if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 6)
-      #warning "This library requires at least Clang 3.6."
+    #if __clang_major__ < 5
+      #warning "This library requires at least Clang 5.0."
     #elif __cplusplus >= 201402L && !__has_include(<initializer_list>)
       #warning "Your compiler supports C++14 but your C++ standard library does not.  If your "\
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\

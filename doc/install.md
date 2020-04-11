@@ -22,7 +22,7 @@ Cap'n Proto makes extensive use of C++14 language features. As a result, it requ
 new version of a well-supported compiler. The minimum versions are:
 
 * GCC 5.0
-* Clang 3.6
+* Clang 5.0
 * Visual C++ 2017
 
 If your system's default compiler is older that the above, you will need to install a newer
