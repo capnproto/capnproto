@@ -547,8 +547,8 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
     } else {
       DWORD error = GetLastError();
       if (error == ERROR_TIMEOUT) {
-        // Timed out. Skip predicate check.
-        return;
+        // Windows may have woken us up too early, so don't return yet. Instead, proceed through the
+        // loop and rely on our sleep time recalculation to detect if we timed out.
       } else {
         KJ_FAIL_WIN32("SleepConditionVariableSRW()", error);
       }
