@@ -38,6 +38,16 @@
 namespace kj {
 namespace {
 
+KJ_TEST("stringify times") {
+  KJ_EXPECT(kj::str(50 * kj::SECONDS) == "50s");
+  KJ_EXPECT(kj::str(5 * kj::SECONDS + 2 * kj::MILLISECONDS) == "5.002s");
+  KJ_EXPECT(kj::str(256 * kj::MILLISECONDS) == "256ms");
+  KJ_EXPECT(kj::str(5 * kj::MILLISECONDS + 2 * kj::NANOSECONDS) == "5.000002ms");
+  KJ_EXPECT(kj::str(50 * kj::MICROSECONDS) == "50μs");
+  KJ_EXPECT(kj::str(5 * kj::MICROSECONDS + 300 * kj::NANOSECONDS) == "5.3μs");
+  KJ_EXPECT(kj::str(50 * kj::NANOSECONDS) == "50ns");
+}
+
 #if _WIN32
 void delay(kj::Duration d) {
   Sleep(d / kj::MILLISECONDS);

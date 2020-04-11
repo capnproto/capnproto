@@ -256,4 +256,46 @@ const MonotonicClock& systemPreciseMonotonicClock() {
 
 #endif
 
+kj::String KJ_STRINGIFY(TimePoint t) {
+  return kj::toCharSequence(t - kj::origin<TimePoint>());
+}
+kj::String KJ_STRINGIFY(Date d) {
+  return kj::toCharSequence(d - UNIX_EPOCH);
+}
+kj::String KJ_STRINGIFY(Duration d) {
+  auto digits = kj::toCharSequence(d / kj::NANOSECONDS);
+  ArrayPtr<char> arr = digits;
+
+  size_t point;
+  kj::StringPtr suffix;
+  kj::Duration unit;
+  if (digits.size() > 9) {
+    point = arr.size() - 9;
+    suffix = "s";
+    unit = kj::SECONDS;
+  } else if (digits.size() > 6) {
+    point = arr.size() - 6;
+    suffix = "ms";
+    unit = kj::MILLISECONDS;
+  } else if (digits.size() > 3) {
+    point = arr.size() - 3;
+    suffix = "μs";
+    unit = kj::MICROSECONDS;
+  } else {
+    point = arr.size();
+    suffix = "ns";
+    unit = kj::NANOSECONDS;
+  }
+
+  if (d % unit == 0 * kj::NANOSECONDS) {
+    return kj::str(arr.slice(0, point), suffix);
+  } else {
+    while (arr.back() == '0') {
+      arr = arr.slice(0, arr.size() - 1);
+    }
+    KJ_ASSERT(arr.size() > point);
+    return kj::str(arr.slice(0, point), ".", arr.slice(point, arr.size()), suffix);
+  }
+}
+
 }  // namespace kj
