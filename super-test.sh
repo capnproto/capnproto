@@ -91,17 +91,14 @@ while [ $# -gt 0 ]; do
       export CXX="$2"
       shift
       ;;
-    clang )
-      export CXX=clang++
+    clang* )
+      export CXX=clang++${1#clang}
       ;;
-    gcc-4.9 )
-      export CXX=g++-4.9
+    gcc* )
+      export CXX=g++${1#gcc}
       ;;
-    gcc-4.8 )
-      export CXX=g++-4.8
-      ;;
-    gcc-4.7 )
-      export CXX=g++-4.7
+    g++* )
+      export CXX=$1
       ;;
     mingw )
       if [ "$#" -ne 2 ]; then
