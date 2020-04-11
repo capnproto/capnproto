@@ -87,8 +87,8 @@ KJ_TEST("monotonic clocks match each other") {
   TimePoint c = coarse.now();
 
   // 20ms tolerance due to Windows timeslices being quite long.
-  KJ_EXPECT(p < c + 20 * kj::MILLISECONDS);
-  KJ_EXPECT(p > c - 20 * kj::MILLISECONDS);
+  KJ_EXPECT(p < c + 20 * kj::MILLISECONDS, p - c);
+  KJ_EXPECT(p > c - 20 * kj::MILLISECONDS, c - p);
 }
 
 KJ_TEST("all clocks advance in real time") {
