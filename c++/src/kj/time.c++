@@ -89,6 +89,13 @@ private:
   static GetSystemTimePreciseAsFileTimeFunc* getGetSystemTimePreciseAsFileTime() {
     // Dynamically look up the function GetSystemTimePreciseAsFileTimeFunc(). This was only
     // introduced as of Windows 8, so it might be missing.
+#if __GNUC__ && !__clang__ && __GNUC__ >= 8
+// GCC 8 warns that our reinterpret_cast of a function pointer below is casting between
+// incompatible types. Yes, GCC, we know that. This is the nature of GetProcAddress(); it returns
+// everything as `long long int (*)()` and we have to cast to the actual type.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif
     return reinterpret_cast<GetSystemTimePreciseAsFileTimeFunc*>(GetProcAddress(
       GetModuleHandleA("kernel32.dll"),
       "GetSystemTimePreciseAsFileTime"));

@@ -115,8 +115,8 @@ struct Dbghelp {
   BOOL (WINAPI *symGetLineFromAddr64)(
       HANDLE hProcess,DWORD64 qwAddr,PDWORD pdwDisplacement,PIMAGEHLP_LINE64 Line64);
 
-#if __GNUC__ && !__clang__ && __GNUC__ >= 9
-// GCC 9 warns that our reinterpret_casts of function pointers below are casting between
+#if __GNUC__ && !__clang__ && __GNUC__ >= 8
+// GCC 8 warns that our reinterpret_casts of function pointers below are casting between
 // incompatible types. Yes, GCC, we know that. This is the nature of GetProcAddress(); it returns
 // everything as `long long int (*)()` and we have to cast to the actual type.
 #pragma GCC diagnostic push
