@@ -3613,6 +3613,14 @@ KJ_TEST("HttpClient disable connection reuse") {
 }
 
 KJ_TEST("HttpClient concurrency limiting") {
+#if KJ_HTTP_TEST_USE_OS_PIPE && !__linux__
+  // On Windows and Mac, OS event delivery is not always immediate, and that seems to make this
+  // test flakey. On Linux, events are always immediately delivered. For now, we compile the test
+  // but we don't run it outside of Linux. We do run the in-memory-pipes version on all OSs since
+  // that mode shouldn't depend on kernel behavior at all.
+  return;
+#endif
+
   KJ_HTTP_TEST_SETUP_IO;
   KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR;
 
@@ -3717,7 +3725,6 @@ KJ_TEST("HttpClient concurrency limiting") {
   KJ_EXPECT(cumulative == 3);
 
   // Similar connection limiting for web sockets
-#if __linux__
   // TODO(someday): Figure out why the sequencing of websockets events does
   // not work correctly on Windows (and maybe macOS?).  The solution is not as
   // simple as inserting poll()s as above, since doing so puts the websocket in
@@ -3752,7 +3759,6 @@ KJ_TEST("HttpClient concurrency limiting") {
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 5);
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {0, 0} }));
-#endif
 }
 
 #if KJ_HTTP_TEST_USE_OS_PIPE
