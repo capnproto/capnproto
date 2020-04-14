@@ -24,6 +24,7 @@
 
 #include "units.h"
 #include <inttypes.h>
+#include "string.h"
 
 KJ_BEGIN_HEADER
 
@@ -54,6 +55,10 @@ using TimePoint = Absolute<Duration, _::TimeLabel>;
 
 using Date = Absolute<Duration, _::DateLabel>;
 // A point in real-world time, measured relative to the Unix epoch (Jan 1, 1970 00:00:00 UTC).
+
+kj::String KJ_STRINGIFY(TimePoint);
+kj::String KJ_STRINGIFY(Date);
+kj::String KJ_STRINGIFY(Duration);
 
 constexpr Date UNIX_EPOCH = origin<Date>();
 // The `Date` representing Jan 1, 1970 00:00:00 UTC.

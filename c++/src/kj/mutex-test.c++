@@ -278,14 +278,16 @@ TEST(Mutex, WhenWithTimeout) {
     auto start = clock.now();
     uint m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
       KJ_ASSERT(n == 101);
-      KJ_EXPECT(clock.now() - start >= 10 * kj::MILLISECONDS);
+      auto t = clock.now() - start;
+      KJ_EXPECT(t >= 10 * kj::MILLISECONDS, t);
       return 12;
     }, 10 * kj::MILLISECONDS);
     KJ_EXPECT(m == 12);
 
     m = value.when([](uint n) { return n == 0; }, [&](uint& n) {
       KJ_ASSERT(n == 101);
-      KJ_EXPECT(clock.now() - start >= 20 * kj::MILLISECONDS);
+      auto t = clock.now() - start;
+      KJ_EXPECT(t >= 20 * kj::MILLISECONDS, t);
       return 34;
     }, 10 * kj::MILLISECONDS);
     KJ_EXPECT(m == 34);

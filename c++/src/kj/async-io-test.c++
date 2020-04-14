@@ -703,6 +703,10 @@ TEST(AsyncIo, Udp) {
       }
     }
 
+#if __APPLE__
+// On MacOS, `CMSG_SPACE(0)` triggers a bogus warning.
+#pragma GCC diagnostic ignored "-Wnull-pointer-arithmetic"
+#endif
     // See what happens if there's not enough space even for the cmsghdr.
     capacity.ancillary = CMSG_SPACE(0) - 8;
     recv1 = port1->makeReceiver(capacity);
