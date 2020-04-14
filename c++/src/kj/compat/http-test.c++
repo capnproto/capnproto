@@ -31,7 +31,12 @@
 // Run the test using OS-level socketpairs. (See http-socketpair-test.c++.)
 #define KJ_HTTP_TEST_SETUP_IO \
   auto io = kj::setupAsyncIo(); \
-  auto& waitScope = io.waitScope
+  auto& waitScope KJ_UNUSED = io.waitScope
+#define KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR \
+  auto listener = io.provider->getNetwork().parseAddress("localhost", 0) \
+      .wait(waitScope)->listen(); \
+  auto addr = io.provider->getNetwork().parseAddress("localhost", listener->getPort()) \
+      .wait(waitScope)
 #define KJ_HTTP_TEST_CREATE_2PIPE \
   io.provider->newTwoWayPipe()
 #else
@@ -39,6 +44,10 @@
 #define KJ_HTTP_TEST_SETUP_IO \
   kj::EventLoop eventLoop; \
   kj::WaitScope waitScope(eventLoop)
+#define KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR \
+  auto capPipe = newCapabilityPipe(); \
+  auto listener = kj::heap<kj::CapabilityStreamConnectionReceiver>(*capPipe.ends[0]); \
+  auto addr = kj::heap<kj::CapabilityStreamNetworkAddress>(nullptr, *capPipe.ends[1])
 #define KJ_HTTP_TEST_CREATE_2PIPE \
   kj::newTwoWayPipe()
 #endif
@@ -3398,21 +3407,18 @@ private:
 };
 
 KJ_TEST("HttpClient connection management") {
-  auto io = kj::setupAsyncIo();
+  KJ_HTTP_TEST_SETUP_IO;
+  KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR;
 
   kj::TimerImpl serverTimer(kj::origin<kj::TimePoint>());
   kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
   HttpHeaderTable headerTable;
 
-  auto listener = io.provider->getNetwork().parseAddress("localhost", 0)
-      .wait(io.waitScope)->listen();
   DummyService service(headerTable);
   HttpServerSettings serverSettings;
   HttpServer server(serverTimer, headerTable, service, serverSettings);
   auto listenTask = server.listenHttp(*listener);
 
-  auto addr = io.provider->getNetwork().parseAddress("localhost", listener->getPort())
-      .wait(io.waitScope);
   uint count = 0;
   uint cumulative = 0;
   CountingNetworkAddress countingAddr(*addr, count, cumulative);
@@ -3438,17 +3444,17 @@ KJ_TEST("HttpClient connection management") {
   };
 
   // We can do several requests in a row and only have one connection.
-  doRequest().wait(io.waitScope);
-  doRequest().wait(io.waitScope);
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
+  doRequest().wait(waitScope);
+  doRequest().wait(waitScope);
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 1);
 
   // But if we do two in parallel, we'll end up with two connections.
   auto req1 = doRequest();
   auto req2 = doRequest();
-  req1.wait(io.waitScope);
-  req2.wait(io.waitScope);
+  req1.wait(waitScope);
+  req2.wait(waitScope);
   KJ_EXPECT(count == 2);
   KJ_EXPECT(cumulative == 2);
 
@@ -3456,66 +3462,66 @@ KJ_TEST("HttpClient connection management") {
   {
     auto req = client->request(
         HttpMethod::POST, kj::str("/foo"), HttpHeaders(headerTable), size_t(6));
-    req.body->write("foobar", 6).wait(io.waitScope);
-    req.response.wait(io.waitScope).body->readAllBytes().wait(io.waitScope);
+    req.body->write("foobar", 6).wait(waitScope);
+    req.response.wait(waitScope).body->readAllBytes().wait(waitScope);
   }
   KJ_EXPECT(count == 2);
   KJ_EXPECT(cumulative == 2);
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
   KJ_EXPECT(count == 2);
   KJ_EXPECT(cumulative == 2);
 
   // Advance time for half the timeout, then exercise one of the connections.
   clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimeout / 2);
-  doRequest().wait(io.waitScope);
-  doRequest().wait(io.waitScope);
-  io.waitScope.poll();
+  doRequest().wait(waitScope);
+  doRequest().wait(waitScope);
+  waitScope.poll();
   KJ_EXPECT(count == 2);
   KJ_EXPECT(cumulative == 2);
 
   // Advance time past when the other connection should time out. It should be dropped.
   clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimeout * 3 / 4);
-  io.waitScope.poll();
+  waitScope.poll();
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 2);
 
   // Wait for the other to drop.
   clientTimer.advanceTo(clientTimer.now() + clientSettings.idleTimeout / 2);
-  io.waitScope.poll();
+  waitScope.poll();
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 2);
 
   // New request creates a new connection again.
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 3);
 
   // WebSocket connections are not reused.
   client->openWebSocket(kj::str("/websocket"), HttpHeaders(headerTable))
-      .wait(io.waitScope);
+      .wait(waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 3);
 
   // Errored connections are not reused.
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 4);
   client->request(HttpMethod::GET, kj::str("/throw"), HttpHeaders(headerTable)).response
-      .wait(io.waitScope).body->readAllBytes().wait(io.waitScope);
+      .wait(waitScope).body->readAllBytes().wait(waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 4);
 
   // Connections where we failed to read the full response body are not reused.
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 5);
   client->request(HttpMethod::GET, kj::str("/foo"), HttpHeaders(headerTable)).response
-      .wait(io.waitScope);
+      .wait(waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 5);
 
   // Connections where we didn't even wait for the response headers are not reused.
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 6);
   client->request(HttpMethod::GET, kj::str("/foo"), HttpHeaders(headerTable));
@@ -3523,51 +3529,48 @@ KJ_TEST("HttpClient connection management") {
   KJ_EXPECT(cumulative == 6);
 
   // Connections where we failed to write the full request body are not reused.
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 7);
   client->request(HttpMethod::POST, kj::str("/foo"), HttpHeaders(headerTable), size_t(6)).response
-      .wait(io.waitScope).body->readAllBytes().wait(io.waitScope);
+      .wait(waitScope).body->readAllBytes().wait(waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 7);
 
   // If the server times out the connection, we figure it out on the client.
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
 
   // TODO(someday): Figure out why the following poll is necessary for the test to pass on Windows
   //   and Mac.  Without it, it seems that the request's connection never starts, so the
   //   subsequent advanceTo() does not actually time out the connection.
-  io.waitScope.poll();
+  waitScope.poll();
 
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 8);
   serverTimer.advanceTo(serverTimer.now() + serverSettings.pipelineTimeout * 2);
-  io.waitScope.poll();
+  waitScope.poll();
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 8);
 
   // Can still make requests.
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 9);
 }
 
 KJ_TEST("HttpClient disable connection reuse") {
-  auto io = kj::setupAsyncIo();
+  KJ_HTTP_TEST_SETUP_IO;
+  KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR;
 
   kj::TimerImpl serverTimer(kj::origin<kj::TimePoint>());
   kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
   HttpHeaderTable headerTable;
 
-  auto listener = io.provider->getNetwork().parseAddress("localhost", 0)
-      .wait(io.waitScope)->listen();
   DummyService service(headerTable);
   HttpServerSettings serverSettings;
   HttpServer server(serverTimer, headerTable, service, serverSettings);
   auto listenTask = server.listenHttp(*listener);
 
-  auto addr = io.provider->getNetwork().parseAddress("localhost", listener->getPort())
-      .wait(io.waitScope);
   uint count = 0;
   uint cumulative = 0;
   CountingNetworkAddress countingAddr(*addr, count, cumulative);
@@ -3594,37 +3597,34 @@ KJ_TEST("HttpClient disable connection reuse") {
   };
 
   // Each serial request gets its own connection.
-  doRequest().wait(io.waitScope);
-  doRequest().wait(io.waitScope);
-  doRequest().wait(io.waitScope);
+  doRequest().wait(waitScope);
+  doRequest().wait(waitScope);
+  doRequest().wait(waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 3);
 
   // Each parallel request gets its own connection.
   auto req1 = doRequest();
   auto req2 = doRequest();
-  req1.wait(io.waitScope);
-  req2.wait(io.waitScope);
+  req1.wait(waitScope);
+  req2.wait(waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 5);
 }
 
 KJ_TEST("HttpClient concurrency limiting") {
-  auto io = kj::setupAsyncIo();
+  KJ_HTTP_TEST_SETUP_IO;
+  KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR;
 
   kj::TimerImpl serverTimer(kj::origin<kj::TimePoint>());
   kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
   HttpHeaderTable headerTable;
 
-  auto listener = io.provider->getNetwork().parseAddress("localhost", 0)
-      .wait(io.waitScope)->listen();
   DummyService service(headerTable);
   HttpServerSettings serverSettings;
   HttpServer server(serverTimer, headerTable, service, serverSettings);
   auto listenTask = server.listenHttp(*listener);
 
-  auto addr = io.provider->getNetwork().parseAddress("localhost", listener->getPort())
-      .wait(io.waitScope);
   uint count = 0;
   uint cumulative = 0;
   CountingNetworkAddress countingAddr(*addr, count, cumulative);
@@ -3677,24 +3677,24 @@ KJ_TEST("HttpClient concurrency limiting") {
   auto req2 = doRequest();
 
   // TODO(someday): Figure out why this poll() is necessary on Windows and macOS.
-  io.waitScope.poll();
+  waitScope.poll();
 
-  KJ_EXPECT(req1.poll(io.waitScope));
-  KJ_EXPECT(!req2.poll(io.waitScope));
+  KJ_EXPECT(req1.poll(waitScope));
+  KJ_EXPECT(!req2.poll(waitScope));
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 1);
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 1} }));
   callbackEvents.clear();
 
   // Releasing first connection allows second to start.
-  req1.wait(io.waitScope);
-  KJ_EXPECT(req2.poll(io.waitScope));
+  req1.wait(waitScope);
+  KJ_EXPECT(req2.poll(waitScope));
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 2);
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 0} }));
   callbackEvents.clear();
 
-  req2.wait(io.waitScope);
+  req2.wait(waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 2);
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {0, 0} }));
@@ -3706,13 +3706,13 @@ KJ_TEST("HttpClient concurrency limiting") {
     kj::Own<kj::AsyncOutputStream> req4Body;
     {
       auto req4 = client->request(HttpMethod::GET, kj::str("/", ++i), HttpHeaders(headerTable));
-      io.waitScope.poll();
+      waitScope.poll();
       req4Body = kj::mv(req4.body);
     }
     auto writePromise = req4Body->write("a", 1);
-    KJ_EXPECT(!writePromise.poll(io.waitScope));
+    KJ_EXPECT(!writePromise.poll(waitScope));
   }
-  req3.wait(io.waitScope);
+  req3.wait(waitScope);
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 3);
 
@@ -3728,25 +3728,25 @@ KJ_TEST("HttpClient concurrency limiting") {
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 0} }));
   callbackEvents.clear();
   auto ws2 = kj::heap(client->openWebSocket(kj::str("/websocket"), HttpHeaders(headerTable)));
-  KJ_EXPECT(ws1->poll(io.waitScope));
-  KJ_EXPECT(!ws2->poll(io.waitScope));
+  KJ_EXPECT(ws1->poll(waitScope));
+  KJ_EXPECT(!ws2->poll(waitScope));
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 4);
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 1} }));
   callbackEvents.clear();
 
   {
-    auto response1 = ws1->wait(io.waitScope);
-    KJ_EXPECT(!ws2->poll(io.waitScope));
+    auto response1 = ws1->wait(waitScope);
+    KJ_EXPECT(!ws2->poll(waitScope));
     KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({}));
   }
-  KJ_EXPECT(ws2->poll(io.waitScope));
+  KJ_EXPECT(ws2->poll(waitScope));
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 5);
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {1, 0} }));
   callbackEvents.clear();
   {
-    auto response2 = ws2->wait(io.waitScope);
+    auto response2 = ws2->wait(waitScope);
     KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({}));
   }
   KJ_EXPECT(count == 0);
@@ -3755,6 +3755,8 @@ KJ_TEST("HttpClient concurrency limiting") {
 #endif
 }
 
+#if KJ_HTTP_TEST_USE_OS_PIPE
+// TODO(someday): Implement mock kj::Network for userspace version of this test?
 KJ_TEST("HttpClient multi host") {
   auto io = kj::setupAsyncIo();
 
@@ -3856,9 +3858,12 @@ KJ_TEST("HttpClient multi host") {
   KJ_EXPECT(addrCount == 1);
   KJ_EXPECT(tlsAddrCount == 0);
 }
+#endif
 
 // -----------------------------------------------------------------------------
 
+#if KJ_HTTP_TEST_USE_OS_PIPE
+// This test only makes sense using the real network.
 KJ_TEST("HttpClient to capnproto.org") {
   auto io = kj::setupAsyncIo();
 
@@ -3891,6 +3896,7 @@ KJ_TEST("HttpClient to capnproto.org") {
     auto body = response.body->readAllText().wait(io.waitScope);
   }
 }
+#endif
 
 }  // namespace
 }  // namespace kj
