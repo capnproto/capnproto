@@ -419,27 +419,29 @@ private:
     Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
                                        AutoCloseFd* fdBuffer, size_t maxFds) override {
       size_t capCount = 0;
-      KJ_SWITCH_ONEOF(capBuffer) {
-        KJ_CASE_ONEOF(fds, ArrayPtr<const int>) {
-          capCount = kj::max(fds.size(), maxFds);
-          // Unfortunately, we have to dup() each FD, because the writer doesn't release ownership
-          // by default.
-          // TODO(perf): Should we add an ownership-releasing version of writeWithFds()?
-          for (auto i: kj::zeroTo(capCount)) {
-            int duped;
-            KJ_SYSCALL(duped = dup(fds[i]));
-            fdBuffer[i] = kj::AutoCloseFd(fds[i]);
+      {  // TODO(cleanup): Remove redundant braces when we update to C++17.
+        KJ_SWITCH_ONEOF(capBuffer) {
+          KJ_CASE_ONEOF(fds, ArrayPtr<const int>) {
+            capCount = kj::max(fds.size(), maxFds);
+            // Unfortunately, we have to dup() each FD, because the writer doesn't release ownership
+            // by default.
+            // TODO(perf): Should we add an ownership-releasing version of writeWithFds()?
+            for (auto i: kj::zeroTo(capCount)) {
+              int duped;
+              KJ_SYSCALL(duped = dup(fds[i]));
+              fdBuffer[i] = kj::AutoCloseFd(fds[i]);
+            }
+            fdBuffer += capCount;
+            maxFds -= capCount;
           }
-          fdBuffer += capCount;
-          maxFds -= capCount;
-        }
-        KJ_CASE_ONEOF(streams, Array<Own<AsyncCapabilityStream>>) {
-          if (streams.size() > 0 && maxFds > 0) {
-            // TODO(someday): We could let people pass a LowLevelAsyncIoProvider to newTwoWayPipe()
-            //   if we wanted to auto-wrap FDs, but does anyone care?
-            KJ_FAIL_REQUIRE(
-                "async pipe message was written with streams attached, but corresponding read "
-                "asked for FDs, and we don't know how to convert here");
+          KJ_CASE_ONEOF(streams, Array<Own<AsyncCapabilityStream>>) {
+            if (streams.size() > 0 && maxFds > 0) {
+              // TODO(someday): We could let people pass a LowLevelAsyncIoProvider to
+              //   newTwoWayPipe() if we wanted to auto-wrap FDs, but does anyone care?
+              KJ_FAIL_REQUIRE(
+                  "async pipe message was written with streams attached, but corresponding read "
+                  "asked for FDs, and we don't know how to convert here");
+            }
           }
         }
       }
@@ -469,22 +471,24 @@ private:
         void* buffer, size_t minBytes, size_t maxBytes,
         Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) override {
       size_t capCount = 0;
-      KJ_SWITCH_ONEOF(capBuffer) {
-        KJ_CASE_ONEOF(fds, ArrayPtr<const int>) {
-          if (fds.size() > 0 && maxStreams > 0) {
-            // TODO(someday): Maybe AsyncIoStream should have a `Maybe<int> getFd()` method?
-            KJ_FAIL_REQUIRE(
-                "async pipe message was written with FDs attached, but corresponding read "
-                "asked for streams, and we don't know how to convert here");
+      {  // TODO(cleanup): Remove redundant braces when we update to C++17.
+        KJ_SWITCH_ONEOF(capBuffer) {
+          KJ_CASE_ONEOF(fds, ArrayPtr<const int>) {
+            if (fds.size() > 0 && maxStreams > 0) {
+              // TODO(someday): Maybe AsyncIoStream should have a `Maybe<int> getFd()` method?
+              KJ_FAIL_REQUIRE(
+                  "async pipe message was written with FDs attached, but corresponding read "
+                  "asked for streams, and we don't know how to convert here");
+            }
           }
-        }
-        KJ_CASE_ONEOF(streams, Array<Own<AsyncCapabilityStream>>) {
-          capCount = kj::max(streams.size(), maxStreams);
-          for (auto i: kj::zeroTo(capCount)) {
-            streamBuffer[i] = kj::mv(streams[i]);
+          KJ_CASE_ONEOF(streams, Array<Own<AsyncCapabilityStream>>) {
+            capCount = kj::max(streams.size(), maxStreams);
+            for (auto i: kj::zeroTo(capCount)) {
+              streamBuffer[i] = kj::mv(streams[i]);
+            }
+            streamBuffer += capCount;
+            maxStreams -= capCount;
           }
-          streamBuffer += capCount;
-          maxStreams -= capCount;
         }
       }
 
@@ -917,26 +921,28 @@ private:
                                ArrayPtr<const int> fds) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
 
-      KJ_SWITCH_ONEOF(capBuffer) {
-        KJ_CASE_ONEOF(fdBuffer, ArrayPtr<AutoCloseFd>) {
-          size_t count = kj::max(fdBuffer.size(), fds.size());
-          // Unfortunately, we have to dup() each FD, because the writer doesn't release ownership
-          // by default.
-          // TODO(perf): Should we add an ownership-releasing version of writeWithFds()?
-          for (auto i: kj::zeroTo(count)) {
-            int duped;
-            KJ_SYSCALL(duped = dup(fds[i]));
-            fdBuffer[i] = kj::AutoCloseFd(duped);
+      {  // TODO(cleanup): Remove redundant braces when we update to C++17.
+        KJ_SWITCH_ONEOF(capBuffer) {
+          KJ_CASE_ONEOF(fdBuffer, ArrayPtr<AutoCloseFd>) {
+            size_t count = kj::max(fdBuffer.size(), fds.size());
+            // Unfortunately, we have to dup() each FD, because the writer doesn't release ownership
+            // by default.
+            // TODO(perf): Should we add an ownership-releasing version of writeWithFds()?
+            for (auto i: kj::zeroTo(count)) {
+              int duped;
+              KJ_SYSCALL(duped = dup(fds[i]));
+              fdBuffer[i] = kj::AutoCloseFd(duped);
+            }
+            capBuffer = fdBuffer.slice(count, fdBuffer.size());
+            readSoFar.capCount += count;
           }
-          capBuffer = fdBuffer.slice(count, fdBuffer.size());
-          readSoFar.capCount += count;
-        }
-        KJ_CASE_ONEOF(streamBuffer, ArrayPtr<Own<AsyncCapabilityStream>>) {
-          if (streamBuffer.size() > 0 && fds.size() > 0) {
-            // TODO(someday): Maybe AsyncIoStream should have a `Maybe<int> getFd()` method?
-            KJ_FAIL_REQUIRE(
-                "async pipe message was written with FDs attached, but corresponding read "
-                "asked for streams, and we don't know how to convert here");
+          KJ_CASE_ONEOF(streamBuffer, ArrayPtr<Own<AsyncCapabilityStream>>) {
+            if (streamBuffer.size() > 0 && fds.size() > 0) {
+              // TODO(someday): Maybe AsyncIoStream should have a `Maybe<int> getFd()` method?
+              KJ_FAIL_REQUIRE(
+                  "async pipe message was written with FDs attached, but corresponding read "
+                  "asked for streams, and we don't know how to convert here");
+            }
           }
         }
       }
@@ -961,23 +967,25 @@ private:
                                    Array<Own<AsyncCapabilityStream>> streams) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
 
-      KJ_SWITCH_ONEOF(capBuffer) {
-        KJ_CASE_ONEOF(fdBuffer, ArrayPtr<AutoCloseFd>) {
-          if (fdBuffer.size() > 0 && streams.size() > 0) {
-            // TODO(someday): We could let people pass a LowLevelAsyncIoProvider to newTwoWayPipe()
-            //   if we wanted to auto-wrap FDs, but does anyone care?
-            KJ_FAIL_REQUIRE(
-                "async pipe message was written with streams attached, but corresponding read "
-                "asked for FDs, and we don't know how to convert here");
+      {  // TODO(cleanup): Remove redundant braces when we update to C++17.
+        KJ_SWITCH_ONEOF(capBuffer) {
+          KJ_CASE_ONEOF(fdBuffer, ArrayPtr<AutoCloseFd>) {
+            if (fdBuffer.size() > 0 && streams.size() > 0) {
+              // TODO(someday): We could let people pass a LowLevelAsyncIoProvider to newTwoWayPipe()
+              //   if we wanted to auto-wrap FDs, but does anyone care?
+              KJ_FAIL_REQUIRE(
+                  "async pipe message was written with streams attached, but corresponding read "
+                  "asked for FDs, and we don't know how to convert here");
+            }
           }
-        }
-        KJ_CASE_ONEOF(streamBuffer, ArrayPtr<Own<AsyncCapabilityStream>>) {
-          size_t count = kj::max(streamBuffer.size(), streams.size());
-          for (auto i: kj::zeroTo(count)) {
-            streamBuffer[i] = kj::mv(streams[i]);
+          KJ_CASE_ONEOF(streamBuffer, ArrayPtr<Own<AsyncCapabilityStream>>) {
+            size_t count = kj::max(streamBuffer.size(), streams.size());
+            for (auto i: kj::zeroTo(count)) {
+              streamBuffer[i] = kj::mv(streams[i]);
+            }
+            capBuffer = streamBuffer.slice(count, streamBuffer.size());
+            readSoFar.capCount += count;
           }
-          capBuffer = streamBuffer.slice(count, streamBuffer.size());
-          readSoFar.capCount += count;
         }
       }
 
