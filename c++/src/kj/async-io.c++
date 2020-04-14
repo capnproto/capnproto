@@ -513,56 +513,6 @@ private:
       KJ_UNREACHABLE;
     }
 
-  private:
-    struct Done { size_t result; };
-    struct Retry { void* buffer; size_t minBytes; size_t maxBytes; size_t alreadyRead; };
-
-    OneOf<Done, Retry> tryReadImpl(void* readBufferPtr, size_t minBytes, size_t maxBytes) {
-      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
-
-      auto readBuffer = arrayPtr(reinterpret_cast<byte*>(readBufferPtr), maxBytes);
-
-      size_t totalRead = 0;
-      while (readBuffer.size() >= writeBuffer.size()) {
-        // The whole current write buffer can be copied into the read buffer.
-
-        {
-          auto n = writeBuffer.size();
-          memcpy(readBuffer.begin(), writeBuffer.begin(), n);
-          totalRead += n;
-          readBuffer = readBuffer.slice(n, readBuffer.size());
-        }
-
-        if (morePieces.size() == 0) {
-          // All done writing.
-          fulfiller.fulfill();
-          pipe.endState(*this);
-
-          if (totalRead >= minBytes) {
-            // Also all done reading.
-            return Done { totalRead };
-          } else {
-            return Retry { readBuffer.begin(), minBytes - totalRead, readBuffer.size(), totalRead };
-          }
-        }
-
-        writeBuffer = morePieces[0];
-        morePieces = morePieces.slice(1, morePieces.size());
-      }
-
-      // At this point, the read buffer is smaller than the current write buffer, so we can fill
-      // it completely.
-      {
-        auto n = readBuffer.size();
-        memcpy(readBuffer.begin(), writeBuffer.begin(), n);
-        writeBuffer = writeBuffer.slice(n, writeBuffer.size());
-        totalRead += n;
-      }
-
-      return Done { totalRead };
-    }
-
-  public:
     Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
       // Note: Pumps drop all capabilities.
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
@@ -673,6 +623,54 @@ private:
     ArrayPtr<const ArrayPtr<const byte>> morePieces;
     kj::OneOf<ArrayPtr<const int>, Array<Own<AsyncCapabilityStream>>> capBuffer;
     Canceler canceler;
+
+    struct Done { size_t result; };
+    struct Retry { void* buffer; size_t minBytes; size_t maxBytes; size_t alreadyRead; };
+
+    OneOf<Done, Retry> tryReadImpl(void* readBufferPtr, size_t minBytes, size_t maxBytes) {
+      KJ_REQUIRE(canceler.isEmpty(), "already pumping");
+
+      auto readBuffer = arrayPtr(reinterpret_cast<byte*>(readBufferPtr), maxBytes);
+
+      size_t totalRead = 0;
+      while (readBuffer.size() >= writeBuffer.size()) {
+        // The whole current write buffer can be copied into the read buffer.
+
+        {
+          auto n = writeBuffer.size();
+          memcpy(readBuffer.begin(), writeBuffer.begin(), n);
+          totalRead += n;
+          readBuffer = readBuffer.slice(n, readBuffer.size());
+        }
+
+        if (morePieces.size() == 0) {
+          // All done writing.
+          fulfiller.fulfill();
+          pipe.endState(*this);
+
+          if (totalRead >= minBytes) {
+            // Also all done reading.
+            return Done { totalRead };
+          } else {
+            return Retry { readBuffer.begin(), minBytes - totalRead, readBuffer.size(), totalRead };
+          }
+        }
+
+        writeBuffer = morePieces[0];
+        morePieces = morePieces.slice(1, morePieces.size());
+      }
+
+      // At this point, the read buffer is smaller than the current write buffer, so we can fill
+      // it completely.
+      {
+        auto n = readBuffer.size();
+        memcpy(readBuffer.begin(), writeBuffer.begin(), n);
+        writeBuffer = writeBuffer.slice(n, writeBuffer.size());
+        totalRead += n;
+      }
+
+      return Done { totalRead };
+    }
   };
 
   class BlockedPumpFrom final: public AsyncCapabilityStream {
