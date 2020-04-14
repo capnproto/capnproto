@@ -422,16 +422,7 @@ if [ "$QUICK" = quick ]; then
 fi
 
 echo "========================================================================="
-echo "Testing --with-external-capnp"
-echo "========================================================================="
-
-doit make distclean
-doit ./configure --prefix="$STAGING" --disable-shared \
-    --with-external-capnp CAPNP=$STAGING/bin/capnp
-doit make -j$PARALLEL check
-
-echo "========================================================================="
-echo "Testing --disable-reflection"
+echo "Testing --with-external-capnp and --disable-reflection"
 echo "========================================================================="
 
 doit make distclean
@@ -441,32 +432,17 @@ doit make -j$PARALLEL check
 doit make distclean
 
 # Test 32-bit build now while we have $STAGING available for cross-compiling.
-if [ "x`uname -m`" = "xx86_64" ]; then
+#
+# Cygwin64 can cross-compile to Cygwin32 but can't actually run the cross-compiled binaries. Let's
+# just skip this test on Cygwin since it's so slow and honestly no one cares.
+if [ "x`uname -m`" = "xx86_64" ] && ! [[ "`uname`" =~ CYGWIN ]]; then
   echo "========================================================================="
   echo "Testing 32-bit build"
   echo "========================================================================="
 
-  if [[ "`uname`" =~ CYGWIN ]]; then
-    # It's just not possible to run cygwin32 binaries from within cygwin64.
-
-    # Build as if we are cross-compiling, using the capnp we installed to $STAGING.
-    doit ./configure --prefix="$STAGING" --disable-shared --host=i686-pc-cygwin \
-        --with-external-capnp CAPNP=$STAGING/bin/capnp
-    doit make -j$PARALLEL
-    doit make -j$PARALLEL capnp-test.exe
-
-    # Expect a cygwin32 sshd to be listening at localhost port 2222, and use it
-    # to run the tests.
-    doit scp -P 2222 capnp-test.exe localhost:~/tmp-capnp-test.exe
-    doit ssh -p 2222 localhost './tmp-capnp-test.exe && rm tmp-capnp-test.exe'
-
-    doit make distclean
-
-  elif [ "x${CXX:-g++}" != "xg++-4.8" ]; then
-    doit ./configure CXX="${CXX:-g++} -m32" CXXFLAGS="$CXXFLAGS ${ADDL_M32_FLAGS:-}" --disable-shared
-    doit make -j$PARALLEL check
-    doit make distclean
-  fi
+  doit ./configure CXX="${CXX:-g++} -m32" CXXFLAGS="$CXXFLAGS ${ADDL_M32_FLAGS:-}" --disable-shared
+  doit make -j$PARALLEL check
+  doit make distclean
 fi
 
 echo "========================================================================="
@@ -503,19 +479,10 @@ echo "========================================================================="
 # is inlined in hundreds of other places without issue, so I have no idea how to narrow down the
 # bug. Clang works fine. So, for now, we disable optimizations on GCC for -fno-exceptions tests.
 
-doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti"
-doit make -j$PARALLEL check
-doit make distclean
-doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-exceptions $DISABLE_OPTIMIZATION_IF_GCC"
-doit make -j$PARALLEL check
-doit make distclean
 doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti -fno-exceptions $DISABLE_OPTIMIZATION_IF_GCC"
 doit make -j$PARALLEL check
 
-# Valgrind is currently "experimental and mostly broken" on OSX and fails to run the full test
-# suite, but I have it installed because it did manage to help me track down a bug or two.  Anyway,
-# skip it on OSX for now.
-if [ "x`uname`" != xDarwin ] && which valgrind > /dev/null; then
+if [ "x`uname`" = xLinux ]; then
   doit make distclean
 
   echo "========================================================================="
