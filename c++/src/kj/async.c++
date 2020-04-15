@@ -716,7 +716,7 @@ const Executor& getCurrentThreadExecutor() {
 
 namespace _ {  // private
 
-#if !(_WIN32 || __CYGWIN__)
+#if !(_WIN32 || __CYGWIN__ || __BIONIC__)
 struct FiberBase::Impl {
   // This struct serves two purposes:
   // - It contains OS-specific state that we don't want to declare in the header.
@@ -815,7 +815,7 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
     : state(WAITING),
       // Force stackSize to a reasonable minimum.
       stackSize(kj::max(stackSizeParam, 65536)),
-#if !(_WIN32 || __CYGWIN__)
+#if !(_WIN32 || __CYGWIN__ || __BIONIC__)
       impl(Impl::alloc(stackSize)),
 #endif
       result(result) {
@@ -829,7 +829,7 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
 
   KJ_WIN32(osFiber = CreateFiber(stackSize, &StartRoutine::run, this));
 
-#else
+#elif !__BIONIC__
   // Note: Nothing below here can throw. If that changes then we need to call Impl::free(impl)
   //   on exceptions...
 
@@ -840,13 +840,20 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
   int arg2 = ptr >> (sizeof(ptr) * 4);
 
   makecontext(&impl.fiberContext, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
+
+#else
+  KJ_UNIMPLEMENTED(
+      "Fibers are not implemented on this platform because its C library lacks setcontext() "
+      "and friends. If you'd like to see fiber support added, file a bug to let us know. "
+      "We can likely make it happen using assembly, but didn't want to try unless it was "
+      "actually needed.");
 #endif
 }
 
 FiberBase::~FiberBase() noexcept(false) {
 #if _WIN32 || __CYGWIN__
   KJ_DEFER(DeleteFiber(osFiber));
-#else
+#elif !__BIONIC__
   KJ_DEFER(Impl::free(impl, stackSize));
 #endif
 
@@ -887,7 +894,7 @@ void FiberBase::switchToFiber() {
   // or returns from its main function.
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
-#else
+#elif !__BIONIC__
   KJ_SYSCALL(swapcontext(&impl.originalContext, &impl.fiberContext));
 #endif
 }
@@ -896,7 +903,7 @@ void FiberBase::switchToMain() {
   // switchToFiber().
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(currentEventLoop().mainFiber);
-#else
+#elif !__BIONIC__
   KJ_SYSCALL(swapcontext(&impl.fiberContext, &impl.originalContext));
 #endif
 }

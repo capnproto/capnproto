@@ -898,7 +898,7 @@ private:
 
 #if _WIN32 || __CYGWIN__
   void* osFiber;
-#else
+#elif !__BIONIC__
   struct Impl;
   Impl& impl;
 #endif

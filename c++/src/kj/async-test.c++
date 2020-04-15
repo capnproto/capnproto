@@ -854,6 +854,7 @@ KJ_TEST("exclusiveJoin both events complete simultaneously") {
   KJ_EXPECT(!joined.poll(waitScope));
 }
 
+#if !__BIONIC__
 KJ_TEST("start a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);
@@ -952,6 +953,7 @@ KJ_TEST("cancel a fiber") {
 
   KJ_EXPECT(exited);
 }
+#endif
 
 }  // namespace
 }  // namespace kj
