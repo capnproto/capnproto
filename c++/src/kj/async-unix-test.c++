@@ -39,6 +39,12 @@
 #include <errno.h>
 #include "mutex.h"
 
+#if __BIONIC__
+// Android's Bionic defines SIGRTMIN but using it in sigaddset() throws EINVAL, which means we
+// definitely can't actually use RT signals.
+#undef SIGRTMIN
+#endif
+
 namespace kj {
 namespace {
 
@@ -54,8 +60,6 @@ inline void delay() { usleep(10000); }
 void captureSignals() {
   static bool captured = false;
   if (!captured) {
-    captured = true;
-
     // We use SIGIO and SIGURG as our test signals because they're two signals that we can be
     // reasonably confident won't otherwise be delivered to any KJ or Cap'n Proto test.  We can't
     // use SIGUSR1 because it is reserved by UnixEventPort and SIGUSR2 is used by Valgrind on OSX.
@@ -67,6 +71,8 @@ void captureSignals() {
 #endif
 
     UnixEventPort::captureChildExit();
+
+    captured = true;
   }
 }
 
