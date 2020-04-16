@@ -123,18 +123,19 @@ while [ $# -gt 0 ]; do
     android )
       # To install Android SDK:
       # - Download command-line tools: https://developer.android.com/studio/index.html#command-tools
-      # - export SDKMANAGER_OPTS="--add-modules java.se.ee"
       # - Run $SDK_HOME/tools/bin/sdkmanager platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
-      # - export AVDMANAGER_OPTS="--add-modules java.se.ee"
       # - Run $SDK_HOME/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
-      # - Run $SDK_HOME/ndk-bundle/build/tools/make_standalone_toolchain.py --arch arm --api 24 --install-dir $TOOLCHAIN_HOME
       if [ "$#" -ne 4 ]; then
-        echo "usage: $0 android SDK_HOME TOOLCHAIN_HOME CROSS_HOST" >&2
+        echo "usage: $0 android SDK_HOME CROSS_HOST COMPILER_PREFIX" >&2
+        echo
+        echo "SDK_HOME: Location where android-sdk is installed." >&2
+        echo "CROSS_HOST: E.g. arm-linux-androideabi" >&2
+        echo "COMPILER_PREFIX: E.g. armv7a-linux-androideabi24" >&2
         exit 1
       fi
       SDK_HOME=$2
-      TOOLCHAIN_HOME=$3
-      CROSS_HOST=$4
+      CROSS_HOST=$3
+      COMPILER_PREFIX=$4
 
       cd c++
       test -e configure || doit autoreconf -i
@@ -145,9 +146,9 @@ while [ $# -gt 0 ]; do
       cp capnp capnp-host
       cp capnpc-c++ capnpc-c++-host
 
-      export PATH="$TOOLCHAIN_HOME/bin:$PATH"
+      export PATH="$SDK_HOME/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
       doit make distclean
-      doit ./configure --host="$CROSS_HOST" CC=clang CXX=clang++ --with-external-capnp --disable-shared CXXFLAGS='-fPIE' LDFLAGS='-pie' LIBS='-static-libstdc++ -static-libgcc -ldl' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
+      doit ./configure --host="$CROSS_HOST" CC="$COMPILER_PREFIX-clang" CXX="$COMPILER_PREFIX-clang++" --with-external-capnp --disable-shared CXXFLAGS='-fPIE' LDFLAGS='-pie' LIBS='-static-libstdc++ -static-libgcc -ldl' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
 
       doit make -j$PARALLEL
       doit make -j$PARALLEL capnp-test
