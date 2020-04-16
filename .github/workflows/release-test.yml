@@ -1,9 +1,9 @@
 name: Release Tests
 
 on:
-  push:
-    branches:
-    - 'release-*'
+  pull_request:
+    paths-ignore:
+    - 'doc/**'
 
 jobs:
   Linux:
@@ -59,7 +59,7 @@ jobs:
         shell: cmd
         run: |
           C:\tools\cygwin\bin\bash -lc 'export PATH=/usr/local/bin:/usr/bin:/bin; cd /cygdrive/d/a/capnproto/capnproto; ./super-test.sh'
-  MinGW+Wine:
+  MinGW-Wine:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -77,7 +77,7 @@ jobs:
         shell: cmd
         run: |
             ./super-test.sh mingw i686-w64-mingw32
-  cmake packaging:
+  cmake-packaging:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
