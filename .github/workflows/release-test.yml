@@ -68,13 +68,11 @@ jobs:
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git cmake mingw-w64 wine wine64 wine-binfmt
+            sudo apt-get install -y build-essential git cmake mingw-w64 wine-stable wine64 wine-binfmt
       - name: 64-bit Build and Test
-        shell: cmd
         run: |
             ./super-test.sh mingw x86_64-w64-mingw32
       - name: 32-bit Build and Test
-        shell: cmd
         run: |
             ./super-test.sh mingw i686-w64-mingw32
   cmake-packaging:
@@ -88,19 +86,15 @@ jobs:
             export DEBIAN_FRONTEND=noninteractive
             sudo apt-get install -y build-essential git cmake
       - name: autotools-shared
-        shell: cmd
         run: |
             ./super-test.sh cmake-package autotools-shared
       - name: autotools-static
-        shell: cmd
         run: |
             ./super-test.sh cmake-package autotools-static
       - name: cmake-shared
-        shell: cmd
         run: |
             ./super-test.sh cmake-package cmake-shared
       - name: cmake-static
-        shell: cmd
         run: |
             ./super-test.sh cmake-package cmake-static
   Android:
@@ -112,7 +106,7 @@ jobs:
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git cmake mingw-w64 wine wine64 wine-binfmt
+            sudo apt-get install -y build-essential git
       - name: cache Android SDK
         id: cache-android-sdk
         uses: actions/cache@v1
