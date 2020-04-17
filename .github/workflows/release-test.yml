@@ -11,9 +11,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Run extended tests with old compilers only on assumption that new compilers probably
-        # haven't broken in a way that quick-test won't catch.
-        compiler: [g++-5, clang-5.0]
+        # We can only run extended tests with the default version of g++, because it has to match
+        # the verison of g++-multilib for 32-bit cross-compilation, and alternate versions of
+        # g++-multilib generally aren't available. Clang is more lenient, but we might as well be
+        # consistent. The quick tests should be able to catch issues with older and newer compiler
+        # versions.
+        compiler: [g++, clang]
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
@@ -69,8 +72,8 @@ jobs:
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            dpkg --add-architecture i386
-            apt-get update
+            sudo dpkg --add-architecture i386
+            sudo apt-get update
             sudo apt-get install -y build-essential git cmake mingw-w64 wine-stable wine64 wine32 wine-binfmt
             sudo update-binfmts --import wine
       - name: 64-bit Build and Test
