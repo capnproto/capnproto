@@ -436,7 +436,10 @@ doit make distclean
 #
 # Cygwin64 can cross-compile to Cygwin32 but can't actually run the cross-compiled binaries. Let's
 # just skip this test on Cygwin since it's so slow and honestly no one cares.
-if [ "x`uname -m`" = "xx86_64" ] && ! [[ "`uname`" =~ CYGWIN ]]; then
+#
+# MacOS apparently no longer distributes 32-bit standard libraries. OK fine let's restrict this to
+# Linux.
+if [ "x`uname -m`" = "xx86_64" ] && [ "x`uname`" = xLinux ]; then
   echo "========================================================================="
   echo "Testing 32-bit build"
   echo "========================================================================="
