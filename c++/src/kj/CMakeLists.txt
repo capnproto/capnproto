@@ -229,7 +229,6 @@ if(BUILD_TESTING)
       tuple-test.c++
       one-of-test.c++
       function-test.c++
-      threadlocal-pthread-test.c++
       filesystem-test.c++
       filesystem-disk-test.c++
       parse/common-test.c++

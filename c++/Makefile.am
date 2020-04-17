@@ -535,7 +535,6 @@ capnp_test_SOURCES =                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/time-test.c++                                         \
   src/kj/threadlocal-test.c++                                  \
-  src/kj/threadlocal-pthread-test.c++                          \
   src/kj/filesystem-test.c++                                   \
   src/kj/filesystem-disk-test.c++                              \
   src/kj/test-test.c++                                         \
