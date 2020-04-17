@@ -2769,12 +2769,23 @@ bool PointerReader::isCanonical(const word **readHead) {
       // The pointer is null, we are canonical and do not read
       return true;
     case PointerType::STRUCT: {
-      bool dataTrunc, ptrTrunc;
+      bool dataTrunc = false, ptrTrunc = false;
       auto structReader = this->getStruct(nullptr);
       if (structReader.getDataSectionSize() == ZERO * BITS &&
           structReader.getPointerSectionSize() == ZERO * POINTERS) {
         return reinterpret_cast<const word*>(this->pointer) == structReader.getLocation();
       } else {
+        // Fun fact: Once this call to isCanonical() returns, Clang may re-order the evaluation of
+        //   the && operators. In theory this is wrong because && is short-circuiting, but Clang
+        //   apparently sees that there are no side effects to the right of &&, so decides it is
+        //   safe to skip short-circuiting. It turns out, though, this is observable under
+        //   valgrind: if we don't initialize `dataTrunc` when declaring it above, then valgrind
+        //   reports "Conditional jump or move depends on uninitialised value(s)". Specifically
+        //   this happens in cases where structReader.isCanonical() returns false -- it is allowed
+        //   to skip initializing `dataTrunc` in that case. The short-circuiting && should mean
+        //   that we don't read `dataTrunc` in that case, except Clang's optimizations. Ultimately
+        //   the uninitialized read is fine because eventually the whole expression evaluates false
+        //   either way. But, to make valgrind happy, we initialize the bools above...
         return structReader.isCanonical(readHead, readHead, &dataTrunc, &ptrTrunc) && dataTrunc && ptrTrunc;
       }
     }
