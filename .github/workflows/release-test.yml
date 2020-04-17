@@ -19,6 +19,7 @@ jobs:
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
+            sudo apt-get update
             sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev valgrind gcc-multilib g++-multilib ${{ matrix.compiler }}
       - name: super-test
         run: |
@@ -68,7 +69,9 @@ jobs:
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git cmake mingw-w64 wine-stable wine64 wine-binfmt
+            dpkg --add-architecture i386
+            apt-get update
+            sudo apt-get install -y build-essential git cmake mingw-w64 wine-stable wine64 wine32 wine-binfmt
             sudo update-binfmts --import wine
       - name: 64-bit Build and Test
         run: |
@@ -124,5 +127,5 @@ jobs:
             yes | tools/bin/sdkmanager --sdk_root=$PWD platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
       - name: 32-bit Build and Test
         run: |
-            echo | tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
+            echo | android-sdk/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
             ./super-test.sh android $PWD/android-sdk arm-linux-androideabi armv7a-linux-androideabi24
