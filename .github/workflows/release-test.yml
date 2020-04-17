@@ -99,6 +99,7 @@ jobs:
       - name: fetch Android tools
         if: steps.cache-android-sdk.outputs.cache-hit != 'true'
         run: |
+            export ANDROID_SDK_ROOT=$PWD/android-sdk
             mkdir android-sdk
             cd android-sdk
             curl -o commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-6200805_latest.zip
@@ -106,5 +107,6 @@ jobs:
             yes | tools/bin/sdkmanager --sdk_root=$PWD platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
       - name: 32-bit Build and Test
         run: |
+            export ANDROID_SDK_ROOT=$PWD/android-sdk
             echo | android-sdk/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
             ./super-test.sh android $PWD/android-sdk arm-linux-androideabi armv7a-linux-androideabi24
