@@ -13,7 +13,7 @@ function test_samples() {
   ./addressbook dwrite | ./addressbook dread
   rm -f /tmp/capnp-calculator-example-$$
   ./calculator-server unix:/tmp/capnp-calculator-example-$$ &
-  sleep 0.1
+  sleep 1
   ./calculator-client unix:/tmp/capnp-calculator-example-$$
   kill %./calculator-server
   wait %./calculator-server || true
