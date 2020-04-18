@@ -104,7 +104,8 @@ KJ_TEST("VectorOutputStream") {
   KJ_ASSERT(kj::str(output.getArray().asChars()) == "abcdefghijklmnopABCD");
 
   output.write(junk + 4, 20);
-  KJ_ASSERT(output.getArray().begin() != buf.begin());
+  // (We can't assert output.getArray().begin() != buf.begin() because the memory allocator could
+  // legitimately have allocated a new array in the same space.)
   KJ_ASSERT(output.getArray().end() != buf3.begin() + 24);
   KJ_ASSERT(kj::str(output.getArray().asChars()) == "abcdefghijklmnopABCDEFGHIJKLMNOPQRSTUVWX");
 
