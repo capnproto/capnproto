@@ -105,6 +105,10 @@ jobs:
             curl -o commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-6200805_latest.zip
             unzip commandlinetools.zip
             yes | tools/bin/sdkmanager --sdk_root=$PWD platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
+            # If I don't add this weird loopy symlink, then later when we try to run the emulator,
+            # we get: PANIC: Cannot find AVD system path. Please define ANDROID_SDK_ROOT
+            # No, setting ANDROID_SDK_ROOT to various reasonable values does not help.
+            ln -s . android-sdk/android-sdk
       - name: 32-bit Build and Test
         run: |
             export ANDROID_SDK_ROOT=$PWD/android-sdk
