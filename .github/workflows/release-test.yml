@@ -106,10 +106,11 @@ jobs:
             (yes || true) | tools/bin/sdkmanager --sdk_root=$PWD platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
       - name: 32-bit Build and Test
         run: |
-            rm -f android-sdk/android-sdk
             echo | android-sdk/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
-            # If I don't add this weird loopy symlink, then later when we try to run the emulator,
-            # we get: PANIC: Cannot find AVD system path. Please define ANDROID_SDK_ROOT
-            # No, setting ANDROID_SDK_ROOT to various reasonable values does not help.
-            ln -s . android-sdk/android-sdk
+
+            # avdmanager seems to set image.sysdir.1 incorrectly in the AVD's config.ini, which
+            # causes the emulator to fail. I don't know why. I don't know how to fix it, other than
+            # to patch the config like so.
+            sed -i -re 's,^image\.sysdir\.1=android-sdk/,image.sysdir.1=,g' $HOME/.android/avd/capnp.avd/config.ini
+
             ./super-test.sh android $PWD/android-sdk arm-linux-androideabi armv7a-linux-androideabi24
