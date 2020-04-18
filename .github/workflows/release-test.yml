@@ -92,7 +92,7 @@ jobs:
             sudo apt-get install -y build-essential git
       - name: 32-bit Build and Test
         run: |
-            find $ANDROID_SDK_ROOT
+            ls -l $ANDROID_SDK_ROOT/tools/bin
 
             echo | $ANDROID_SDK_ROOT/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
 
