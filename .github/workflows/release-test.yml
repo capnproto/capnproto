@@ -115,4 +115,4 @@ jobs:
             # to patch the config like so.
             sed -i -re 's,^image\.sysdir\.1=android-sdk/,image.sysdir.1=,g' $HOME/.android/avd/capnp.avd/config.ini
 
-            ./super-test.sh android $PWD/android-sdk arm-linux-androideabi armv7a-linux-androideabi25
+            ./super-test.sh android $PWD/android-sdk arm-linux-androideabi armv7a-linux-androideabi24
