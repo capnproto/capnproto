@@ -108,7 +108,7 @@ jobs:
             # If I don't add this weird loopy symlink, then later when we try to run the emulator,
             # we get: PANIC: Cannot find AVD system path. Please define ANDROID_SDK_ROOT
             # No, setting ANDROID_SDK_ROOT to various reasonable values does not help.
-            ln -s . android-sdk/android-sdk
+            ln -s . android-sdk
       - name: 32-bit Build and Test
         run: |
             export ANDROID_SDK_ROOT=$PWD/android-sdk
