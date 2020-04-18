@@ -108,9 +108,4 @@ jobs:
         run: |
             echo | android-sdk/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
 
-            # avdmanager seems to set image.sysdir.1 incorrectly in the AVD's config.ini, which
-            # causes the emulator to fail. I don't know why. I don't know how to fix it, other than
-            # to patch the config like so.
-            sed -i -re 's,^image\.sysdir\.1=android-sdk/,image.sysdir.1=,g' $HOME/.android/avd/capnp.avd/config.ini
-
-            ./super-test.sh android $PWD/android-sdk arm-linux-androideabi armv7a-linux-androideabi24
+            cat $HOME/.android/avd/capnp.avd/config.ini
