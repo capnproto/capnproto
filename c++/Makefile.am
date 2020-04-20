@@ -26,10 +26,12 @@ EXTRA_DIST =                                                                 \
   src/capnp/compiler/capnp-test.sh                                           \
   src/capnp/testdata/segmented-packed                                        \
   src/capnp/testdata/errors.capnp.nobuild                                    \
+  src/capnp/testdata/errors2.capnp.nobuild                                   \
   src/capnp/testdata/short.txt                                               \
   src/capnp/testdata/flat                                                    \
   src/capnp/testdata/binary                                                  \
   src/capnp/testdata/errors.txt                                              \
+  src/capnp/testdata/errors2.txt                                             \
   src/capnp/testdata/segmented                                               \
   src/capnp/testdata/packed                                                  \
   src/capnp/testdata/pretty.txt                                              \
@@ -533,7 +535,6 @@ capnp_test_SOURCES =                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/time-test.c++                                         \
   src/kj/threadlocal-test.c++                                  \
-  src/kj/threadlocal-pthread-test.c++                          \
   src/kj/filesystem-test.c++                                   \
   src/kj/filesystem-disk-test.c++                              \
   src/kj/test-test.c++                                         \

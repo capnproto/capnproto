@@ -917,8 +917,8 @@ private:
     Promise<void> writeWithFds(ArrayPtr<const byte> data,
                                ArrayPtr<const ArrayPtr<const byte>> moreData,
                                ArrayPtr<const int> fds) override {
-#if __GNUC__ && !__clang__ && __GNUC__ >= 8
-// GCC 8 decides the open-brace below is "misleadingly indented" as if it were guarded by the `for`
+#if __GNUC__ && !__clang__ && __GNUC__ >= 7
+// GCC 7 decides the open-brace below is "misleadingly indented" as if it were guarded by the `for`
 // that appears in the implementation of KJ_REQUIRE(). Shut up shut up shut up.
 #pragma GCC diagnostic ignored "-Wmisleading-indentation"
 #endif

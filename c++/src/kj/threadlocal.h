@@ -43,85 +43,17 @@
 
 #include "common.h"
 
-#if !defined(KJ_USE_PTHREAD_THREADLOCAL) && defined(__APPLE__)
-#include "TargetConditionals.h"
-#if TARGET_OS_IPHONE
-// iOS apparently does not support __thread (nor C++11 thread_local).
-#define KJ_USE_PTHREAD_TLS 1
-#endif
-#endif
-
-#if KJ_USE_PTHREAD_TLS
-#include <pthread.h>
-#endif
-
 KJ_BEGIN_HEADER
 
 namespace kj {
 
-#if KJ_USE_PTHREAD_TLS
-// If __thread is unavailable, we'll fall back to pthreads.
-
-#define KJ_THREADLOCAL_PTR(type) \
-  namespace { struct KJ_UNIQUE_NAME(_kj_TlpTag); } \
-  static ::kj::_::ThreadLocalPtr< type, KJ_UNIQUE_NAME(_kj_TlpTag)>
-// Hack:  In order to ensure each thread-local results in a unique template instance, we declare
-//   a one-off dummy type to use as the second type parameter.
-
-namespace _ {  // private
-
-template <typename T, typename>
-class ThreadLocalPtr {
-  // Hacky type to emulate __thread T*.  We need a separate instance of the ThreadLocalPtr template
-  // for every thread-local variable, because we don't want to require a global constructor, and in
-  // order to initialize the TLS on first use we need to use a local static variable (in getKey()).
-  // Each template instance will get a separate such local static variable, fulfilling our need.
-
-public:
-  ThreadLocalPtr() = default;
-  constexpr ThreadLocalPtr(decltype(nullptr)) {}
-  // Allow initialization to nullptr without a global constructor.
-
-  inline ThreadLocalPtr& operator=(T* val) {
-    pthread_setspecific(getKey(), val);
-    return *this;
-  }
-
-  inline operator T*() const {
-    return get();
-  }
-
-  inline T& operator*() const {
-    return *get();
-  }
-
-  inline T* operator->() const {
-    return get();
-  }
-
-private:
-  inline T* get() const {
-    return reinterpret_cast<T*>(pthread_getspecific(getKey()));
-  }
-
-  inline static pthread_key_t getKey() {
-    static pthread_key_t key = createKey();
-    return key;
-  }
-
-  static pthread_key_t createKey() {
-    pthread_key_t key;
-    pthread_key_create(&key, 0);
-    return key;
-  }
-};
-
-}  // namespace _ (private)
-
-#elif __GNUC__
+#if __GNUC__
 
 #define KJ_THREADLOCAL_PTR(type) static __thread type*
 // GCC's __thread is lighter-weight than thread_local and is good enough for our purposes.
+//
+// TODO(cleanup): The above comment was written many years ago. Is it still true? Shouldn't the
+//   compiler be smart enough to optimize a thread_local of POD type?
 
 #else
 

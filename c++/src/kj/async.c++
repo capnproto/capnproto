@@ -852,10 +852,15 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
 
 FiberBase::~FiberBase() noexcept(false) {
 #if _WIN32 || __CYGWIN__
-  KJ_DEFER(DeleteFiber(osFiber));
+  DeleteFiber(osFiber);
 #elif !__BIONIC__
-  KJ_DEFER(Impl::free(impl, stackSize));
+  Impl::free(impl, stackSize);
 #endif
+}
+
+void FiberBase::destroy() {
+  // Called by `~Fiber()` to begin teardown. We can't do this work in `~FiberBase()` because the
+  // `Fiber` subclass contains members that may still be in-use until the fiber stops.
 
   switch (state) {
     case WAITING:

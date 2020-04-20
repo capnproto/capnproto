@@ -4,6 +4,9 @@ on:
   pull_request:
     paths-ignore:
     - 'doc/**'
+  push:
+    branches:
+    - 'release-*'
 
 jobs:
   Linux:
