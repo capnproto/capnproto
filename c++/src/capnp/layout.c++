@@ -3128,6 +3128,11 @@ StructReader ListReader::getStructElement(ElementCount index) const {
   const WirePointer* structPointers =
       reinterpret_cast<const WirePointer*>(structData + structDataSize / BITS_PER_BYTE);
 
+  // This check should pass if there are no bugs in the list pointer validation code.
+  KJ_DASSERT(structPointerCount == ZERO * POINTERS ||
+         (uintptr_t)structPointers % sizeof(void*) == 0,
+         "Pointer section of struct list element not aligned.");
+
   KJ_DASSERT(indexBit % BITS_PER_BYTE == ZERO * BITS);
   return StructReader(
       segment, capTable, structData, structPointers,
@@ -3508,8 +3513,6 @@ OrphanBuilder OrphanBuilder::concat(
 }
 
 OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Reader data) {
-  // TODO(someday): We now allow unaligned segments on architectures thata support it. We could
-  //   consider relaxing this check as well?
   KJ_REQUIRE(reinterpret_cast<uintptr_t>(data.begin()) % sizeof(void*) == 0,
              "Cannot referenceExternalData() that is not aligned.");
 

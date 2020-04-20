@@ -47,30 +47,7 @@ CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
-class UnalignedFlatArrayMessageReader: public MessageReader {
-  // Like FlatArrayMessageReader, but skips checking that the array is properly-aligned.
-  //
-  // WARNING: This only works on architectures that support unaligned reads, like x86/x64 and
-  //   modern ARM. Unaligned access may incur a performance penalty on these platforms. On many
-  //   other platforms, the program will simply crash on unaligned reads. Also note that unaligned
-  //   data access may be considered undefined behavior by compilers; use at your own risk. If at
-  //   all possible, try to ensure your data ends up in aligned buffers rather than rely on this
-  //   class.
-
-public:
-  UnalignedFlatArrayMessageReader(
-      kj::ArrayPtr<const word> array, ReaderOptions options = ReaderOptions());
-  kj::ArrayPtr<const word> getSegment(uint id) override;
-  const word* getEnd() const { return end; }
-
-private:
-  // Optimize for single-segment case.
-  kj::ArrayPtr<const word> segment0;
-  kj::Array<kj::ArrayPtr<const word>> moreSegments;
-  const word* end;
-};
-
-class FlatArrayMessageReader: public UnalignedFlatArrayMessageReader {
+class FlatArrayMessageReader: public MessageReader {
   // Parses a message from a flat array.  Note that it makes sense to use this together with mmap()
   // for extremely fast parsing.
 
@@ -78,14 +55,19 @@ public:
   FlatArrayMessageReader(kj::ArrayPtr<const word> array, ReaderOptions options = ReaderOptions());
   // The array must remain valid until the MessageReader is destroyed.
 
-  const word* getEnd() const { return UnalignedFlatArrayMessageReader::getEnd(); }
+  kj::ArrayPtr<const word> getSegment(uint id) override;
+
+  const word* getEnd() const { return end; }
   // Get a pointer just past the end of the message as determined by reading the message header.
   // This could actually be before the end of the input array.  This pointer is useful e.g. if
   // you know that the input array has extra stuff appended after the message and you want to
   // get at it.
 
 private:
-  static kj::ArrayPtr<const word> checkAlignment(kj::ArrayPtr<const word> array);
+  // Optimize for single-segment case.
+  kj::ArrayPtr<const word> segment0;
+  kj::Array<kj::ArrayPtr<const word>> moreSegments;
+  const word* end;
 };
 
 kj::ArrayPtr<const word> initMessageBuilderFromFlatArrayCopy(
@@ -230,14 +212,6 @@ void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segme
 
 // =======================================================================================
 // inline stuff
-
-inline FlatArrayMessageReader::FlatArrayMessageReader(
-    kj::ArrayPtr<const word> array, ReaderOptions options)
-#ifdef KJ_DEBUG
-    : UnalignedFlatArrayMessageReader(checkAlignment(array), options) {}
-#else
-    : UnalignedFlatArrayMessageReader(array, options) {}
-#endif
 
 inline kj::Array<word> messageToFlatArray(MessageBuilder& builder) {
   return messageToFlatArray(builder.getSegmentsForOutput());
