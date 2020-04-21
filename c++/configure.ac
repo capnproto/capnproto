@@ -122,6 +122,8 @@ AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
   pkgconfig/kj.pc \
   pkgconfig/kj-async.pc \
   pkgconfig/kj-http.pc \
+  pkgconfig/kj-gzip.pc \
+  pkgconfig/kj-tls.pc \
   pkgconfig/kj-test.pc \
 ])
 AC_DEFUN([CAPNP_CMAKE_CONFIG_FILES], [ \
