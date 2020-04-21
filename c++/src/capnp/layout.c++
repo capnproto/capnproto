@@ -3128,11 +3128,6 @@ StructReader ListReader::getStructElement(ElementCount index) const {
   const WirePointer* structPointers =
       reinterpret_cast<const WirePointer*>(structData + structDataSize / BITS_PER_BYTE);
 
-  // This check should pass if there are no bugs in the list pointer validation code.
-  KJ_DASSERT(structPointerCount == ZERO * POINTERS ||
-         (uintptr_t)structPointers % sizeof(void*) == 0,
-         "Pointer section of struct list element not aligned.");
-
   KJ_DASSERT(indexBit % BITS_PER_BYTE == ZERO * BITS);
   return StructReader(
       segment, capTable, structData, structPointers,
