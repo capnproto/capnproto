@@ -22,6 +22,11 @@ AC_ARG_WITH([external-capnp],
      one (useful for cross-compiling)])],
   [external_capnp=yes],[external_capnp=no])
 
+AC_ARG_WITH([zlib],
+  [AS_HELP_STRING([--with-zlib],
+    [build libkj-gzip by linking against zlib @<:@default=check@:>@])],
+  [],[with_zlib=check])
+
 AC_ARG_WITH([openssl],
   [AS_HELP_STRING([--with-openssl],
     [build libkj-tls by linking against openssl @<:@default=check@:>@])],
@@ -117,6 +122,8 @@ AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
   pkgconfig/kj.pc \
   pkgconfig/kj-async.pc \
   pkgconfig/kj-http.pc \
+  pkgconfig/kj-gzip.pc \
+  pkgconfig/kj-tls.pc \
   pkgconfig/kj-test.pc \
 ])
 AC_DEFUN([CAPNP_CMAKE_CONFIG_FILES], [ \
@@ -144,6 +151,25 @@ AC_SUBST([PACKAGE_CMAKE_INSTALL_FULL_INCLUDEDIR])
 # CMAKE_SIZEOF_VOID_P output variables.
 AC_CHECK_SIZEOF([void *])
 AC_SUBST(CMAKE_SIZEOF_VOID_P, $ac_cv_sizeof_void_p)
+
+# Detect presence of zlib, if it was not specified explicitly.
+AS_IF([test "$with_zlib" = check], [
+  AC_CHECK_LIB(z, deflate, [:], [
+    with_zlib=no
+  ])
+  AC_CHECK_HEADER([zlib.h], [:], [
+    with_zlib=no
+  ])
+  AS_IF([test "$with_zlib" = no], [
+    AC_MSG_WARN("could not find zlib -- won't build libkj-gzip")
+  ], [
+    with_zlib=yes
+  ])
+])
+AS_IF([test "$with_zlib" != no], [
+  CXXFLAGS="$CXXFLAGS -DKJ_HAS_ZLIB"
+])
+AM_CONDITIONAL([BUILD_KJ_GZIP], [test "$with_zlib" != no])
 
 # Detect presence of OpenSSL, if it was not specified explicitly.
 AS_IF([test "$with_openssl" = check], [
