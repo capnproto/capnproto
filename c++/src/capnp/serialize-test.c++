@@ -102,20 +102,6 @@ TEST(Serialize, FlatArray) {
     EXPECT_EQ(serializedWithSuffix.end() - 5, reader.getEnd());
   }
 
-#if __i386__ || __x86_64__ || __aarch64__ || _MSC_VER
-  // Try unaligned.
-  {
-    auto bytes = kj::heapArray<byte>(serializedWithSuffix.size() * sizeof(word) + 1);
-    auto unalignedWords = kj::arrayPtr(
-        reinterpret_cast<word*>(bytes.begin() + 1), serializedWithSuffix.size());
-    memcpy(unalignedWords.asBytes().begin(), serializedWithSuffix.asBytes().begin(),
-        serializedWithSuffix.asBytes().size());
-    UnalignedFlatArrayMessageReader reader(unalignedWords);
-    checkTestMessage(reader.getRoot<TestAllTypes>());
-    EXPECT_EQ(unalignedWords.end() - 5, reader.getEnd());
-  }
-#endif
-
   {
     MallocMessageBuilder builder2;
     auto remaining = initMessageBuilderFromFlatArrayCopy(serializedWithSuffix, builder2);

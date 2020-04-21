@@ -3508,8 +3508,6 @@ OrphanBuilder OrphanBuilder::concat(
 }
 
 OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Reader data) {
-  // TODO(someday): We now allow unaligned segments on architectures thata support it. We could
-  //   consider relaxing this check as well?
   KJ_REQUIRE(reinterpret_cast<uintptr_t>(data.begin()) % sizeof(void*) == 0,
              "Cannot referenceExternalData() that is not aligned.");
 
