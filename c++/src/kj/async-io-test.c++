@@ -2543,7 +2543,7 @@ KJ_TEST("Userspace TwoWayPipe whenWriteDisconnected()") {
 }
 
 #if !_WIN32  // We don't currently support detecting disconnect with IOCP.
-#if !__CYGWIN__  // TODO(soon): Figure out why whenWriteDisconnected() doesn't work on Cygwin.
+#if !__CYGWIN__  // TODO(someday): Figure out why whenWriteDisconnected() doesn't work on Cygwin.
 
 KJ_TEST("OS OneWayPipe whenWriteDisconnected()") {
   auto io = setupAsyncIo();

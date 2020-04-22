@@ -312,8 +312,8 @@ public:
     //
     // And here's an interesting discussion: https://github.com/python-trio/trio/issues/52
     //
-    // TODO(soon): Implement this with IOCTL_AFD_POLL. For now I'm leaving it unimplemented because
-    //   I added this method for a Linux-only use case.
+    // TODO(someday): Implement this with IOCTL_AFD_POLL. For now I'm leaving it unimplemented
+    //   because I added this method for a Linux-only use case.
     return NEVER_DONE;
   }
 
