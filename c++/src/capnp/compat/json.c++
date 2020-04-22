@@ -1171,7 +1171,7 @@ private:
       // The parent struct is a flattened union, and some of the union's members are flattened
       // structs or groups, and this field is possibly a member of one or more of them. `index`
       // is not used, because it's possible that the same field name appears in multiple variants.
-      // Intsead, the parser must find the union tag, and then can descend and attempt to parse
+      // Instead, the parser must find the union tag, and then can descend and attempt to parse
       // the field in the context of whichever variant is selected.
 
       UNION_VALUE
