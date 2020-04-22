@@ -6,6 +6,7 @@ on:
     - 'doc/**'
   push:
     branches:
+    - master
     - 'release-*'
 
 jobs:
