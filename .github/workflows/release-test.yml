@@ -3,6 +3,7 @@ name: Release Tests
 on:
   push:
     branches:
+    - master
     - 'release-*'
 
 jobs:
