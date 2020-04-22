@@ -29,7 +29,6 @@ endif()
 set(capnp_headers
   c++.capnp.h
   common.h
-  compat/std-iterator.h
   blob.h
   endian.h
   layout.h
@@ -55,6 +54,9 @@ set(capnp_headers
   generated-header-support.h
   raw-schema.h
 )
+set(capnp_compat_headers
+  compat/std-iterator.h
+)
 set(capnp_schemas
   c++.capnp
   schema.capnp
@@ -72,6 +74,7 @@ target_include_directories(capnp INTERFACE
 set_target_properties(capnp PROPERTIES VERSION ${VERSION})
 install(TARGETS capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${capnp_headers} ${capnp_schemas} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp")
+install(FILES ${capnp_compat_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp/compat")
 
 set(capnp-rpc_sources
   serialize-async.c++
