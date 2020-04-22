@@ -1880,7 +1880,7 @@ private:
     // We only use queueWrite() in cases where we can take ownership of the write buffer, and where
     // it is convenient if we can return `void` rather than a promise.  In particular, this is used
     // to write headers and chunk boundaries. Writes of application data do not go into
-    // `writeQueue` because this would prevent cancellation. Intsead, they wait until `writeQueue`
+    // `writeQueue` because this would prevent cancellation. Instead, they wait until `writeQueue`
     // is empty, then they make the write directly, using `writeInProgress` to detect and block
     // concurrent writes.
 

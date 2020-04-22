@@ -285,7 +285,7 @@ public:
   template <typename Func1, typename Func2>
   void forEach(Func1&& func1, Func2&& func2) const;
   // Calls `func1(id, value)` for each header in the set that has a registered HttpHeaderId, and
-  // `func2(name, value)` for each header that does not. All calls to func1() preceed all calls to
+  // `func2(name, value)` for each header that does not. All calls to func1() precede all calls to
   // func2().
 
   void set(HttpHeaderId id, kj::StringPtr value);

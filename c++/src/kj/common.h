@@ -700,7 +700,7 @@ inline constexpr float inf() { return (float)(1e300 * 1e300); }
 #pragma warning(pop)
 
 float nan();
-// Unfortunatley, inf() * 0.0f produces a NaN with the sign bit set, whereas our preferred
+// Unfortunately, inf() * 0.0f produces a NaN with the sign bit set, whereas our preferred
 // canonical NaN should not have the sign bit set. std::numeric_limits<float>::quiet_NaN()
 // returns the correct NaN, but we don't want to #include that here. So, we give up and make
 // this out-of-line on MSVC.
