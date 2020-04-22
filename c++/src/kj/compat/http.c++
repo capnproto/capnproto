@@ -1783,8 +1783,6 @@ public:
     KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return kj::READY_NOW; }
     KJ_REQUIRE(inBody) { return kj::READY_NOW; }
 
-    // TODO(soon): Queueing writes this way is flawed, because it means the caller cannot cancel
-    //   the write.
     writeInProgress = true;
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
@@ -1879,8 +1877,13 @@ private:
   // underlying stream is in an inconsistent state and cannot be reused.
 
   void queueWrite(kj::String content) {
-    // TODO(now): Queuing writes means cancellation doesn't work and potentially uses buffers after
-    //   free.
+    // We only use queueWrite() in cases where we can take ownership of the write buffer, and where
+    // it is convenient if we can return `void` rather than a promise.  In particular, this is used
+    // to write headers and chunk boundaries. Writes of application data do not go into
+    // `writeQueue` because this would prevent cancellation. Intsead, they wait until `writeQueue`
+    // is empty, then they make the write directly, using `writeInProgress` to detect and block
+    // concurrent writes.
+
     writeQueue = writeQueue.then(kj::mvCapture(content, [this](kj::String&& content) {
       auto promise = inner.write(content.begin(), content.size());
       return promise.attach(kj::mv(content));
