@@ -399,9 +399,9 @@ struct Brand {
 
       inherit @2 :Void;
       # The place where the Brand appears is within this scope or a sub-scope, and bindings
-      # for this scope are deferred to later Brand applications. This is equivalent to an
-      # identity binding list, where each of this scope's parameters is bound to itself. For
-      # example:
+      # for this scope are deferred to later Brand applications. This is equivalent to a
+      # pass-through binding list, where each of this scope's parameters is bound to itself.
+      # For example:
       #
       #   struct Outer(T) {
       #     struct Inner {
