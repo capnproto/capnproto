@@ -407,8 +407,8 @@ struct Brand {
       #     struct Inner {
       #       value @0 :T;
       #     }
-      #     innerInherit @0 :Inner;            # Outer scope is `inherit`.
-      #     innerBindSelf @1 :Outer(T).Inner;  # Outer scope explicitly binds T to T.
+      #     innerInherit @0 :Inner;            # Outer Brand.Scope is `inherit`.
+      #     innerBindSelf @1 :Outer(T).Inner;  # Outer Brand.Scope explicitly binds T to T.
       #   }
       #
       # The innerInherit and innerBindSelf fields have equivalent types, but different Brand
