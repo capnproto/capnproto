@@ -248,6 +248,16 @@ private:
                               kj::ArrayPtr<const kj::ArrayPtr<const byte>> rest) {
     KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
 
+    // SSL_write() with a zero-sized input returns 0, but a 0 return is documented as indicating
+    // an error. So, we need to avoid zero-sized writes entirely.
+    while (first.size() == 0) {
+      if (rest.size() == 0) {
+        return kj::READY_NOW;
+      }
+      first = rest.front();
+      rest = rest.slice(1, rest.size());
+    }
+
     return sslCall([this,first]() { return SSL_write(ssl, first.begin(), first.size()); })
         .then([this,first,rest](size_t n) -> kj::Promise<void> {
       if (n == 0) {
