@@ -385,6 +385,32 @@ KJ_TEST("TLS multiple messages") {
   KJ_ASSERT(kj::StringPtr(buf) == "qux");
 }
 
+KJ_TEST("TLS zero-sized write") {
+  TlsTest test;
+  ErrorNexus e;
+
+  auto pipe = test.io.provider->newTwoWayPipe();
+
+  auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
+  auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
+
+  auto client = clientPromise.wait(test.io.waitScope);
+  auto server = serverPromise.wait(test.io.waitScope);
+
+  char buf[7];
+  auto readPromise = server->read(&buf, 6);
+
+  client->write("", 0).wait(test.io.waitScope);
+  client->write("foo", 3).wait(test.io.waitScope);
+  client->write("", 0).wait(test.io.waitScope);
+  client->write("bar", 3).wait(test.io.waitScope);
+
+  readPromise.wait(test.io.waitScope);
+  buf[6] = '\0';
+
+  KJ_ASSERT(kj::StringPtr(buf) == "foobar");
+}
+
 kj::Promise<void> writeN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t count) {
   if (count == 0) return kj::READY_NOW;
   --count;
