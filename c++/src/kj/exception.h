@@ -132,8 +132,15 @@ private:
   friend class ExceptionImpl;
 };
 
+struct CanceledException { };
+  // This exception is thrown to force-unwind a stack in order to immediately cancel whatever that
+  // stack was doing. It is used in the implementation of fibers in praticular. Application code
+  // should almost never catch this exception, unless you need to modify stack unwinding for some
+  // reason. kj::runCatchingExceptions() does not catch it.
+
 StringPtr KJ_STRINGIFY(Exception::Type type);
 String KJ_STRINGIFY(const Exception& e);
+StringPtr KJ_STRINGIFY(CanceledException e);
 
 // =======================================================================================
 
@@ -248,7 +255,7 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
 namespace _ { class Runnable; }
 
 template <typename Func>
-Maybe<Exception> runCatchingExceptions(Func&& func) noexcept;
+Maybe<Exception> runCatchingExceptions(Func&& func);
 // Executes the given function (usually, a lambda returning nothing) catching any exceptions that
 // are thrown.  Returns the Exception if there was one, or null if the operation completed normally.
 // Non-KJ exceptions will be wrapped.
@@ -303,12 +310,12 @@ private:
   Func func;
 };
 
-Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept;
+Maybe<Exception> runCatchingExceptions(Runnable& runnable);
 
 }  // namespace _ (private)
 
 template <typename Func>
-Maybe<Exception> runCatchingExceptions(Func&& func) noexcept {
+Maybe<Exception> runCatchingExceptions(Func&& func) {
   _::RunnableImpl<Decay<Func>> runnable(kj::fwd<Func>(func));
   return _::runCatchingExceptions(runnable);
 }

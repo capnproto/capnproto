@@ -733,6 +733,10 @@ String KJ_STRINGIFY(const Exception& e) {
              stringifyStackTrace(e.getStackTrace()));
 }
 
+StringPtr KJ_STRINGIFY(CanceledException e) {
+  return "This fiber is being canceled.";
+}
+
 Exception::Exception(Type type, const char* file, int line, String description) noexcept
     : file(trimSourceFilename(file).cStr()), line(line), type(type), description(mv(description)),
       traceCount(0) {}
@@ -1118,7 +1122,7 @@ public:
   Maybe<Exception> caught;
 };
 
-Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
+Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
 #if KJ_NO_EXCEPTIONS
   RecoverableExceptionCatcher catcher;
   runnable.run();
@@ -1133,6 +1137,8 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
   } catch (Exception& e) {
     e.truncateCommonTrace();
     return kj::mv(e);
+  } catch (CanceledException) {
+    throw;
   } catch (std::bad_alloc& e) {
     return Exception(Exception::Type::OVERLOADED,
                      "(unknown)", -1, str("std::bad_alloc: ", e.what()));

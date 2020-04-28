@@ -1121,13 +1121,10 @@ void WaitScope::poll() {
 
 namespace _ {  // private
 
-static kj::Exception fiberCanceledException() {
+static kj::CanceledException fiberCanceledException() {
   // Construct the exception to throw from wait() when the fiber has been canceled (because the
   // promise returned by startFiber() was dropped before completion).
-  //
-  // TODO(someday): Should we have a dedicated exception type for cancellation? Do we even want
-  //   to build stack traces and such for these?
-  return KJ_EXCEPTION(FAILED, "This fiber is being canceled.");
+  return kj::CanceledException { };
 };
 
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope) {
@@ -1136,8 +1133,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 
   KJ_IF_MAYBE(fiber, waitScope.fiber) {
     if (fiber->state == FiberBase::CANCELED) {
-      result.addException(fiberCanceledException());
-      return;
+      throw fiberCanceledException();
     }
     KJ_REQUIRE(fiber->state == FiberBase::RUNNING,
         "This WaitScope can only be used within the fiber that created it.");
@@ -1156,8 +1152,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     // node->onReady() fired, or we are being canceled by FiberBase's destructor.
 
     if (fiber->state == FiberBase::CANCELED) {
-      result.addException(fiberCanceledException());
-      return;
+      throw fiberCanceledException();
     }
 
     KJ_ASSERT(fiber->state == FiberBase::RUNNING);

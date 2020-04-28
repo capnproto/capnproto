@@ -854,7 +854,7 @@ KJ_TEST("exclusiveJoin both events complete simultaneously") {
   KJ_EXPECT(!joined.poll(waitScope));
 }
 
-#if !__BIONIC__
+#if !__BIONIC__ && !KJ_NO_EXCEPTIONS
 KJ_TEST("start a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);
@@ -908,9 +908,7 @@ KJ_TEST("throw from a fiber") {
   Promise<void> fiber = startFiber(65536,
       [promise = kj::mv(paf.promise)](WaitScope& fiberScope) mutable {
     promise.wait(fiberScope);
-#if !KJ_NO_EXCEPTIONS
     KJ_FAIL_EXPECT("wait() should have thrown");
-#endif
   });
 
   KJ_EXPECT(!fiber.poll(waitScope));
@@ -925,33 +923,31 @@ KJ_TEST("cancel a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-#if KJ_NO_EXCEPTIONS
   // When exceptions are disabled we can't wait() on a non-void promise that throws.
   auto paf = newPromiseAndFulfiller<void>();
-#else
-  auto paf = newPromiseAndFulfiller<int>();
-#endif
 
   bool exited = false;
+  bool canceled = false;
 
   {
     Promise<StringPtr> fiber = startFiber(65536,
-        [promise = kj::mv(paf.promise), &exited](WaitScope& fiberScope) mutable {
+        [promise = kj::mv(paf.promise), &exited, &canceled](WaitScope& fiberScope) mutable {
       KJ_DEFER(exited = true);
-#if KJ_NO_EXCEPTIONS
-      promise.wait(fiberScope);
-#else
-      int i = promise.wait(fiberScope);
-      KJ_EXPECT(i == 123);
-#endif
+      try {
+        promise.wait(fiberScope);
+      } catch (kj::CanceledException) {
+        canceled = true;
+      }
       return "foo"_kj;
     });
 
     KJ_EXPECT(!fiber.poll(waitScope));
     KJ_EXPECT(!exited);
+    KJ_EXPECT(!canceled);
   }
 
   KJ_EXPECT(exited);
+  KJ_EXPECT(canceled);
 }
 #endif
 

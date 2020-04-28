@@ -1093,13 +1093,17 @@ inline PromiseForResult<Func, void> evalNow(Func&& func) {
 
 template <typename Func>
 inline PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) {
-  typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
+  #if KJ_NO_EXCEPTIONS
+    KJ_UNIMPLEMENTED("Fibers require exceptions");
+  #else
+    typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
 
-  Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(stackSize, kj::fwd<Func>(func));
-  intermediate->start();
-  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
-      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
-  return _::maybeReduce(kj::mv(result), false);
+    Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(stackSize, kj::fwd<Func>(func));
+    intermediate->start();
+    auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
+        _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
+    return _::maybeReduce(kj::mv(result), false);
+  #endif
 }
 
 template <typename T>
