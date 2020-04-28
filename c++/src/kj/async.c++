@@ -829,6 +829,9 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
 
   KJ_WIN32(osFiber = CreateFiber(stackSize, &StartRoutine::run, this));
 
+#elif KJ_NO_EXCEPTIONS
+  KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
+
 #elif !__BIONIC__
   // Note: Nothing below here can throw. If that changes then we need to call Impl::free(impl)
   //   on exceptions...
@@ -914,14 +917,29 @@ void FiberBase::switchToMain() {
 }
 
 void FiberBase::run() {
+  bool caughtCanceled = false;
   state = RUNNING;
   KJ_DEFER(state = FINISHED);
 
   WaitScope waitScope(currentEventLoop(), *this);
+  
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    runImpl(waitScope);
+    try {
+      runImpl(waitScope);
+    } catch (CanceledException) {
+      if (state != CANCELED) {
+        // no idea who would throw this but it's not really our problem
+        throw;
+      }
+      caughtCanceled = true;
+    }
   })) {
     result.addException(kj::mv(*exception));
+  }
+
+  if (state == CANCELED && !caughtCanceled) {
+    // if the fiber caught the canceled exception, throw it again
+    throw CanceledException { };
   }
 
   onReadyEvent.arm();
@@ -1131,6 +1149,8 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
 
+#if !KJ_NO_EXCEPTIONS
+  // we don't support fibers when running without exceptions, so just remove the whole block
   KJ_IF_MAYBE(fiber, waitScope.fiber) {
     if (fiber->state == FiberBase::CANCELED) {
       throw fiberCanceledException();
@@ -1150,13 +1170,14 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 
     // The main stack switched back to us, meaning either the event we registered with
     // node->onReady() fired, or we are being canceled by FiberBase's destructor.
-
+    
     if (fiber->state == FiberBase::CANCELED) {
       throw fiberCanceledException();
     }
 
     KJ_ASSERT(fiber->state == FiberBase::RUNNING);
   } else {
+#endif
     KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
     BoolEvent doneEvent;
@@ -1180,7 +1201,9 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     }
 
     loop.setRunnable(loop.isRunnable());
+#if !KJ_NO_EXCEPTIONS
   }
+#endif
 
   node->get(result);
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {

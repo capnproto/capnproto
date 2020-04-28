@@ -937,6 +937,7 @@ KJ_TEST("cancel a fiber") {
         promise.wait(fiberScope);
       } catch (kj::CanceledException) {
         canceled = true;
+        throw;
       }
       return "foo"_kj;
     });
