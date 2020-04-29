@@ -27,6 +27,14 @@
 #include <stdlib.h>
 #include <openssl/opensslv.h>
 
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <kj/windows-sanity.h>
+#else
+#include <sys/socket.h>
+#endif
+
 namespace kj {
 namespace {
 
@@ -436,6 +444,16 @@ KJ_TEST("TLS full duplex") {
   ErrorNexus e;
 
   auto pipe = test.io.provider->newTwoWayPipe();
+
+#if _WIN32
+  // On Windows we observe that `writeUp`, below, completes before the other end has started
+  // reading, failing the `!writeUp.poll()` expectation. I guess Windows has big buffers. We can
+  // fix this by requesting small buffers here. (Worth keeping in mind that Windows doesn't have
+  // socketpairs, so `newTwoWayPipe()` is implemented in terms of loopback TCP, ugh.)
+  uint small = 256;
+  pipe.ends[0]->setsockopt(SOL_SOCKET, SO_SNDBUF, &small, sizeof(small));
+  pipe.ends[0]->setsockopt(SOL_SOCKET, SO_RCVBUF, &small, sizeof(small));
+#endif
 
   auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
   auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
