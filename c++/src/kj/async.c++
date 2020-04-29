@@ -917,6 +917,7 @@ void FiberBase::switchToMain() {
 }
 
 void FiberBase::run() {
+#if !KJ_NO_EXCEPTIONS
   bool caughtCanceled = false;
   state = RUNNING;
   KJ_DEFER(state = FINISHED);
@@ -943,6 +944,7 @@ void FiberBase::run() {
   }
 
   onReadyEvent.arm();
+#endif
 }
 
 void FiberBase::onReady(_::Event* event) noexcept {
