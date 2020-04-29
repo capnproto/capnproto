@@ -819,7 +819,10 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
       impl(Impl::alloc(stackSize)),
 #endif
       result(result) {
-#if _WIN32 || __CYGWIN__
+#if KJ_NO_EXCEPTIONS
+  KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
+
+#elif _WIN32 || __CYGWIN__
   auto& eventLoop = currentEventLoop();
   if (eventLoop.mainFiber == nullptr) {
     // First time we've created a fiber. We need to convert the main stack into a fiber as well
@@ -828,9 +831,6 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
   }
 
   KJ_WIN32(osFiber = CreateFiber(stackSize, &StartRoutine::run, this));
-
-#elif KJ_NO_EXCEPTIONS
-  KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
 
 #elif !__BIONIC__
   // Note: Nothing below here can throw. If that changes then we need to call Impl::free(impl)
