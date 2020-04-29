@@ -819,7 +819,10 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
       impl(Impl::alloc(stackSize)),
 #endif
       result(result) {
-#if _WIN32 || __CYGWIN__
+#if KJ_NO_EXCEPTIONS
+  KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
+
+#elif _WIN32 || __CYGWIN__
   auto& eventLoop = currentEventLoop();
   if (eventLoop.mainFiber == nullptr) {
     // First time we've created a fiber. We need to convert the main stack into a fiber as well
@@ -914,17 +917,34 @@ void FiberBase::switchToMain() {
 }
 
 void FiberBase::run() {
+#if !KJ_NO_EXCEPTIONS
+  bool caughtCanceled = false;
   state = RUNNING;
   KJ_DEFER(state = FINISHED);
 
   WaitScope waitScope(currentEventLoop(), *this);
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    runImpl(waitScope);
-  })) {
-    result.addException(kj::mv(*exception));
+
+  try {
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      runImpl(waitScope);
+    })) {
+      result.addException(kj::mv(*exception));
+    }
+  } catch (CanceledException) {
+    if (state != CANCELED) {
+      // no idea who would throw this but it's not really our problem
+      result.addException(KJ_EXCEPTION(FAILED, "Caught CanceledException, but fiber wasn't canceled"));
+    }
+    caughtCanceled = true;
+  }
+
+  if (state == CANCELED && !caughtCanceled) {
+    KJ_LOG(ERROR, "Canceled fiber apparently caught CanceledException and didn't rethrow it. "
+      "Generally, applications should not catch CanceledException, but if they do, they must always rethrow.");
   }
 
   onReadyEvent.arm();
+#endif
 }
 
 void FiberBase::onReady(_::Event* event) noexcept {
@@ -1121,23 +1141,21 @@ void WaitScope::poll() {
 
 namespace _ {  // private
 
-static kj::Exception fiberCanceledException() {
+static kj::CanceledException fiberCanceledException() {
   // Construct the exception to throw from wait() when the fiber has been canceled (because the
   // promise returned by startFiber() was dropped before completion).
-  //
-  // TODO(someday): Should we have a dedicated exception type for cancellation? Do we even want
-  //   to build stack traces and such for these?
-  return KJ_EXCEPTION(FAILED, "This fiber is being canceled.");
+  return kj::CanceledException { };
 };
 
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
 
+#if !KJ_NO_EXCEPTIONS
+  // we don't support fibers when running without exceptions, so just remove the whole block
   KJ_IF_MAYBE(fiber, waitScope.fiber) {
     if (fiber->state == FiberBase::CANCELED) {
-      result.addException(fiberCanceledException());
-      return;
+      throw fiberCanceledException();
     }
     KJ_REQUIRE(fiber->state == FiberBase::RUNNING,
         "This WaitScope can only be used within the fiber that created it.");
@@ -1156,12 +1174,12 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     // node->onReady() fired, or we are being canceled by FiberBase's destructor.
 
     if (fiber->state == FiberBase::CANCELED) {
-      result.addException(fiberCanceledException());
-      return;
+      throw fiberCanceledException();
     }
 
     KJ_ASSERT(fiber->state == FiberBase::RUNNING);
   } else {
+#endif
     KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
     BoolEvent doneEvent;
@@ -1185,7 +1203,9 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     }
 
     loop.setRunnable(loop.isRunnable());
+#if !KJ_NO_EXCEPTIONS
   }
+#endif
 
   node->get(result);
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {

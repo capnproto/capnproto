@@ -1118,7 +1118,7 @@ public:
   Maybe<Exception> caught;
 };
 
-Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
+Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
 #if KJ_NO_EXCEPTIONS
   RecoverableExceptionCatcher catcher;
   runnable.run();
@@ -1133,6 +1133,8 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
   } catch (Exception& e) {
     e.truncateCommonTrace();
     return kj::mv(e);
+  } catch (CanceledException) {
+    throw;
   } catch (std::bad_alloc& e) {
     return Exception(Exception::Type::OVERLOADED,
                      "(unknown)", -1, str("std::bad_alloc: ", e.what()));
