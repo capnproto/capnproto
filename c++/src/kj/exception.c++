@@ -733,10 +733,6 @@ String KJ_STRINGIFY(const Exception& e) {
              stringifyStackTrace(e.getStackTrace()));
 }
 
-StringPtr KJ_STRINGIFY(CanceledException e) {
-  return "This fiber is being canceled.";
-}
-
 Exception::Exception(Type type, const char* file, int line, String description) noexcept
     : file(trimSourceFilename(file).cStr()), line(line), type(type), description(mv(description)),
       traceCount(0) {}

@@ -133,14 +133,13 @@ private:
 };
 
 struct CanceledException { };
-  // This exception is thrown to force-unwind a stack in order to immediately cancel whatever that
-  // stack was doing. It is used in the implementation of fibers in particular. Application code
-  // should almost never catch this exception, unless you need to modify stack unwinding for some
-  // reason. kj::runCatchingExceptions() does not catch it.
+// This exception is thrown to force-unwind a stack in order to immediately cancel whatever that
+// stack was doing. It is used in the implementation of fibers in particular. Application code
+// should almost never catch this exception, unless you need to modify stack unwinding for some
+// reason. kj::runCatchingExceptions() does not catch it.
 
 StringPtr KJ_STRINGIFY(Exception::Type type);
 String KJ_STRINGIFY(const Exception& e);
-StringPtr KJ_STRINGIFY(CanceledException e);
 
 // =======================================================================================
 

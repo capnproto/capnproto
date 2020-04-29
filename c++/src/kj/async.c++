@@ -923,24 +923,24 @@ void FiberBase::run() {
   KJ_DEFER(state = FINISHED);
 
   WaitScope waitScope(currentEventLoop(), *this);
-  
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    try {
+
+  try {
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
       runImpl(waitScope);
-    } catch (CanceledException) {
-      if (state != CANCELED) {
-        // no idea who would throw this but it's not really our problem
-        throw;
-      }
-      caughtCanceled = true;
+    })) {
+      result.addException(kj::mv(*exception));
     }
-  })) {
-    result.addException(kj::mv(*exception));
+  } catch (CanceledException) {
+    if (state != CANCELED) {
+      // no idea who would throw this but it's not really our problem
+      result.addException(KJ_EXCEPTION(FAILED, "Caught CanceledException, but fiber wasn't canceled"));
+    }
+    caughtCanceled = true;
   }
 
   if (state == CANCELED && !caughtCanceled) {
-    // if the fiber caught the canceled exception, throw it again
-    throw CanceledException { };
+    KJ_LOG(ERROR, "Canceled fiber apparently caught CanceledException and didn't rethrow it. "
+      "Generally, applications should not catch CanceledException, but if they do, they must always rethrow.");
   }
 
   onReadyEvent.arm();
@@ -1172,7 +1172,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 
     // The main stack switched back to us, meaning either the event we registered with
     // node->onReady() fired, or we are being canceled by FiberBase's destructor.
-    
+
     if (fiber->state == FiberBase::CANCELED) {
       throw fiberCanceledException();
     }
