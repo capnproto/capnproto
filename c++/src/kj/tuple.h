@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// This file defines a notion of tuples that is simpler that `std::tuple`.  It works as follows:
+// This file defines a notion of tuples that is simpler than `std::tuple`.  It works as follows:
 // - `kj::Tuple<A, B, C> is the type of a tuple of an A, a B, and a C.
 // - `kj::tuple(a, b, c)` returns a tuple containing a, b, and c.  If any of these are themselves
 //   tuples, they are flattened, so `tuple(a, tuple(b, c), d)` is equivalent to `tuple(a, b, c, d)`.
