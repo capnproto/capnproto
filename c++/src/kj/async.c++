@@ -1141,11 +1141,13 @@ void WaitScope::poll() {
 
 namespace _ {  // private
 
+#if !KJ_NO_EXCEPTIONS
 static kj::CanceledException fiberCanceledException() {
   // Construct the exception to throw from wait() when the fiber has been canceled (because the
   // promise returned by startFiber() was dropped before completion).
   return kj::CanceledException { };
 };
+#endif
 
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope) {
   EventLoop& loop = waitScope.loop;
