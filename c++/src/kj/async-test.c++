@@ -919,6 +919,9 @@ KJ_TEST("throw from a fiber") {
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", fiber.wait(waitScope));
 }
 
+#if !__MINGW32__ || __MINGW64__
+// This test fails on MinGW 32-bit builds due to a compiler bug with exceptions + fibers:
+//     https://sourceforge.net/p/mingw-w64/bugs/835/
 KJ_TEST("cancel a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);
@@ -950,6 +953,7 @@ KJ_TEST("cancel a fiber") {
   KJ_EXPECT(exited);
   KJ_EXPECT(canceled);
 }
+#endif
 #endif
 
 }  // namespace
