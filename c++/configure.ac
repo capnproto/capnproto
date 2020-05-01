@@ -193,5 +193,8 @@ AS_IF([test "$with_openssl" != no], [
 ])
 AM_CONDITIONAL([BUILD_KJ_TLS], [test "$with_openssl" != no])
 
+# CapnProtoConfig.cmake.in needs this variable.
+AC_SUBST(WITH_OPENSSL, $with_openssl)
+
 AC_CONFIG_FILES([Makefile] CAPNP_PKG_CONFIG_FILES CAPNP_CMAKE_CONFIG_FILES)
 AC_OUTPUT

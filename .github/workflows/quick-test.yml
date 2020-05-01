@@ -45,21 +45,28 @@ jobs:
         os: ['windows-2016', 'windows-latest']
         include:
           - os: windows-2016
-            target: 'Visual Studio 15 2017'
           - os: windows-latest
-            target: 'Visual Studio 16 2019'
     steps:
       - uses: actions/checkout@v2
+      - name: Include $CONDA in $PATH
+        run: |
+          echo "::add-path::$Env:CONDA\condabin"
+      - name: Install dependencies via Conda
+        run: |
+          conda update -n base -c defaults -q conda
+          conda install -n base -c defaults -q ninja openssl zlib
       - name: Build and test
         shell: cmd
         run: |
+            echo "Activate conda base environment"
+            call activate base
             echo "Building Cap'n Proto with ${{ matrix.target }}"
-            cmake -Hc++ -Bbuild-output -G "${{ matrix.target }}" -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install
-            cmake --build build-output --config debug --target install
+            cmake -Hc++ -Bbuild-output -G Ninja -DCMAKE_BUILD_TYPE=debug -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%" -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install
+            cmake --build build-output --target install
 
             echo "Building Cap'n Proto samples with ${{ matrix.target }}"
-            cmake -Hc++/samples -Bbuild-output-samples -G "${{ matrix.target }}" -DCMAKE_PREFIX_PATH=%CD%\capnproto-c++-install
-            cmake --build build-output-samples --config debug
+            cmake -Hc++/samples -Bbuild-output-samples -G Ninja -DCMAKE_BUILD_TYPE=debug -DCMAKE_PREFIX_PATH=%CD%\capnproto-c++-install
+            cmake --build build-output-samples
 
             cd build-output\src
             ctest -V -C debug
