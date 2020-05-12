@@ -1333,6 +1333,12 @@ private:
   friend class kj::Executor;
 
   void done();
+  // Sets the state to `DONE` and notifies the originating thread that this event is done. Do NOT
+  // call under lock.
+
+  void setDoneState();
+  // Assigns `state` to `DONE`, being careful to use an atomic-release-store if needed. Must be
+  // called under lock.
 
   class DelayedDoneHack;
 

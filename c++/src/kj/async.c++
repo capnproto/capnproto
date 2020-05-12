@@ -392,7 +392,7 @@ struct Executor::Impl {
         cancel.erase(event);
 
         if (event.promiseNode == nullptr) {
-          event.state = _::XThreadEvent::DONE;
+          event.setDoneState();
         } else {
           // We can't destroy the promiseNode while the mutex is locked, because we don't know
           // what the destructor might do. But, we *must* destroy it before acknowledging
@@ -421,7 +421,7 @@ struct Executor::Impl {
     // Now we need to mark all the events "done" under lock.
     auto lock = state.lockExclusive();
     for (auto& event: eventsToCancelOutsideLock) {
-      event->state = _::XThreadEvent::DONE;
+      event->setDoneState();
     }
   }
 };
@@ -580,13 +580,17 @@ void XThreadEvent::done() {
       lock->cancel.erase(*this);
     }
 
-#if _MSC_VER
-    // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
-    state = DONE;
-#else
-    __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
-#endif
+    setDoneState();
   }
+}
+
+inline void XThreadEvent::setDoneState() {
+#if _MSC_VER
+  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
+  state = DONE;
+#else
+  __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
+#endif
 }
 
 class XThreadEvent::DelayedDoneHack: public Disposer {
