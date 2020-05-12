@@ -408,10 +408,32 @@ PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) KJ_
 // have to be interrupted to flush their CPU cores' TLB caches.
 //
 // In short, when performance matters, you should try to avoid creating fibers very frequently.
-//
-// TODO(perf): We should add a mechanism for freelisting stacks. However, this improves CPU usage
-//   at the expense of memory usage: stacks on the freelist will consume however many pages they
-//   used at their high watermark, forever.
+
+class FiberPool final {
+  // A freelist pool of fibers with a set stack size. This improves CPU usage with fibers at
+  // the expense of memory usage. Fibers in this pool will always use the max amount of memory
+  // used until the pool is destroyed.
+
+public:
+  explicit FiberPool(size_t stackSize);
+  ~FiberPool() noexcept(false);
+  KJ_DISALLOW_COPY(FiberPool);
+
+  template <typename Func>
+  PromiseForResult<Func, WaitScope&> startFiber(Func&& func) KJ_WARN_UNUSED_RESULT;
+  // Executes `func()` in a fiber from this pool, returning a promise for the eventual result.
+  // `func()` will be passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on
+  // promises. Thus, `func()` can be written in a synchronous, blocking style, instead of
+  // using `.then()`. This is often much easier to write and read, and may even be significantly
+  // faster if it allows the use of stack allocation rather than heap allocation.
+
+private:
+  struct Impl;
+  Own<Impl> impl;
+
+  friend class _::FiberStack;
+  friend class _::FiberBase;
+};
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
@@ -954,6 +976,7 @@ private:
   friend class Executor;
   friend class _::XThreadEvent;
   friend class _::FiberBase;
+  friend class _::FiberStack;
 };
 
 class WaitScope {

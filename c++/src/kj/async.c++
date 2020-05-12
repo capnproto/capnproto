@@ -291,6 +291,73 @@ Promise<void> TaskSet::onEmpty() {
   }
 }
 
+namespace _ {
+
+class FiberStack final {
+  // A class containing a fiber stack impl. This is seperate from fiber
+  // promises since it lets us move the stack itself around and reuse it.
+
+public:
+  FiberStack(size_t stackSize);
+  ~FiberStack() noexcept(false);
+
+  void initialize(FiberBase& fiber);
+
+  void reset() {
+    fiber = nullptr;
+  }
+
+  void switchToFiber();
+  void switchToMain();
+private:
+  size_t stackSize;
+  Maybe<FiberBase&> fiber;
+  Maybe<Own<FiberStack>> freelistNext;
+
+  friend class FiberBase;
+  friend struct FiberPool::Impl;
+
+  struct StartRoutine;
+
+#if _WIN32 || __CYGWIN__
+  void* osFiber;
+#elif !__BIONIC__
+  struct Impl;
+  Impl& impl;
+#endif
+};
+
+}
+
+struct FiberPool::Impl {
+  Impl(size_t stackSize): stackSize(stackSize) {}
+
+  size_t stackSize;
+  MutexGuarded<Maybe<Own<_::FiberStack>>> start;
+
+  void returnStack(Own<_::FiberStack> stack) {
+    stack->reset();
+    auto lock = start.lockExclusive();
+    stack->freelistNext = kj::mv(*lock);
+    *lock = kj::mv(stack);
+  }
+
+  Own<_::FiberStack> takeStack() {
+    auto lock = start.lockExclusive();
+    auto& value = *lock;
+    KJ_IF_MAYBE(current, value) {
+      auto moved = kj::mv(*current);
+      *lock = kj::mv(moved->freelistNext);
+      return kj::mv(moved);
+    } else {
+      return kj::heap<_::FiberStack>(stackSize);
+    }
+  }
+};
+
+FiberPool::FiberPool(size_t stackSize) : impl(kj::heap<FiberPool::Impl>(stackSize)) {}
+FiberPool::~FiberPool() noexcept(false) {}
+
 namespace _ {  // private
 
 class LoggingErrorHandler: public TaskSet::ErrorHandler {
@@ -859,7 +926,7 @@ const Executor& getCurrentThreadExecutor() {
 namespace _ {  // private
 
 #if !(_WIN32 || __CYGWIN__ || __BIONIC__)
-struct FiberBase::Impl {
+struct FiberStack::Impl {
   // This struct serves two purposes:
   // - It contains OS-specific state that we don't want to declare in the header.
   // - It is allocated at the top of the fiber's stack area, so the Impl pointer also serves to
@@ -929,16 +996,19 @@ struct FiberBase::Impl {
 };
 #endif
 
-struct FiberBase::StartRoutine {
+struct FiberStack::StartRoutine {
 #if _WIN32 || __CYGWIN__
   static void WINAPI run(LPVOID ptr) {
     // This is the static C-style function we pass to CreateFiber().
-    auto& fiber = *reinterpret_cast<FiberBase*>(ptr);
-    fiber.run();
+    auto& stack = *reinterpret_cast<FiberStack*>(ptr);
 
-    // On Windows, if the fiber main function returns, the thread exits. We need to explicitly switch
-    // back to the main stack.
-    fiber.switchToMain();
+    // use an infinite loop to reuse this fiber if we ever re-enter it
+    while (true) {
+      KJ_ASSERT_NONNULL(stack.fiber).run();
+      // On Windows, if the fiber main function returns, the thread exits. We need to explicitly switch
+      // back to the main stack.
+      stack.switchToMain();
+    }
   }
 #else
   static void run(int arg1, int arg2) {
@@ -948,30 +1018,30 @@ struct FiberBase::StartRoutine {
     // work correctly on 64-bit machines. Gross.
     uintptr_t ptr = static_cast<uint>(arg1);
     ptr |= static_cast<uintptr_t>(static_cast<uint>(arg2)) << (sizeof(ptr) * 4);
-    reinterpret_cast<FiberBase*>(ptr)->run();
+    auto stack = reinterpret_cast<FiberStack*>(ptr);
+
+    while (true) {
+      KJ_ASSERT_NONNULL(stack->fiber).run();
+      // use an explicit switch back and infinite loop to keep from
+      // having to remake the context every time
+      stack->switchToMain();
+    }
   }
 #endif
 };
 
-FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
-    : state(WAITING),
-      // Force stackSize to a reasonable minimum.
-      stackSize(kj::max(stackSizeParam, 65536)),
+FiberStack::FiberStack(size_t stackSizeParam)
+    // Force stackSize to a reasonable minimum.
+    : stackSize(kj::max(stackSizeParam, 65536))
 #if !(_WIN32 || __CYGWIN__ || __BIONIC__)
-      impl(Impl::alloc(stackSize)),
+    , impl(Impl::alloc(stackSize))
 #endif
-      result(result) {
+{
 #if KJ_NO_EXCEPTIONS
   KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
 
 #elif _WIN32 || __CYGWIN__
-  auto& eventLoop = currentEventLoop();
-  if (eventLoop.mainFiber == nullptr) {
-    // First time we've created a fiber. We need to convert the main stack into a fiber as well
-    // before we can start switching.
-    eventLoop.mainFiber = ConvertThreadToFiber(nullptr);
-  }
-
+  // We can create fibers before we convert the main thread into a fiber in FiberBase
   KJ_WIN32(osFiber = CreateFiber(stackSize, &StartRoutine::run, this));
 
 #elif !__BIONIC__
@@ -995,12 +1065,50 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
 #endif
 }
 
-FiberBase::~FiberBase() noexcept(false) {
+FiberStack::~FiberStack() noexcept(false) {
 #if _WIN32 || __CYGWIN__
   DeleteFiber(osFiber);
 #elif !__BIONIC__
   Impl::free(impl, stackSize);
 #endif
+}
+
+void FiberStack::initialize(FiberBase& fiber) {
+  KJ_REQUIRE(this->fiber == nullptr);
+  this->fiber = fiber;
+}
+
+FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result)
+    : state(WAITING), stack(kj::heap<FiberStack>(stackSize)), result(result) {
+  stack->initialize(*this);
+#if _WIN32 || __CYGWIN__
+  auto& eventLoop = currentEventLoop();
+  if (eventLoop.mainFiber == nullptr) {
+    // First time we've created a fiber. We need to convert the main stack into a fiber as well
+    // before we can start switching.
+    eventLoop.mainFiber = ConvertThreadToFiber(nullptr);
+  }
+#endif
+}
+
+FiberBase::FiberBase(FiberPool& pool, _::ExceptionOrValue& result)
+    : state(WAITING), pool(pool), result(result) {
+  stack = pool.impl->takeStack();
+  stack->initialize(*this);
+#if _WIN32 || __CYGWIN__
+  auto& eventLoop = currentEventLoop();
+  if (eventLoop.mainFiber == nullptr) {
+    // First time we've created a fiber. We need to convert the main stack into a fiber as well
+    // before we can start switching.
+    eventLoop.mainFiber = ConvertThreadToFiber(nullptr);
+  }
+#endif
+}
+
+FiberBase::~FiberBase() noexcept(false) {
+  KJ_IF_MAYBE(fiberPool, pool) {
+    fiberPool->impl->returnStack(kj::mv(stack));
+  }
 }
 
 void FiberBase::destroy() {
@@ -1012,7 +1120,7 @@ void FiberBase::destroy() {
       // We can't just free the stack while the fiber is running. We need to force it to execute
       // until finished, so we cause it to throw an exception.
       state = CANCELED;
-      switchToFiber();
+      stack->switchToFiber();
 
       // The fiber should only switch back to the main stack on completion, because any further
       // calls to wait() would throw before trying to switch.
@@ -1035,11 +1143,11 @@ void FiberBase::destroy() {
 Maybe<Own<Event>> FiberBase::fire() {
   KJ_ASSERT(state == WAITING);
   state = RUNNING;
-  switchToFiber();
+  stack->switchToFiber();
   return nullptr;
 }
 
-void FiberBase::switchToFiber() {
+void FiberStack::switchToFiber() {
   // Switch from the main stack to the fiber. Returns once the fiber either calls switchToMain()
   // or returns from its main function.
 #if _WIN32 || __CYGWIN__
@@ -1048,7 +1156,7 @@ void FiberBase::switchToFiber() {
   KJ_SYSCALL(swapcontext(&impl.originalContext, &impl.fiberContext));
 #endif
 }
-void FiberBase::switchToMain() {
+void FiberStack::switchToMain() {
   // Switch from the fiber to the main stack. Returns the next time the main stack calls
   // switchToFiber().
 #if _WIN32 || __CYGWIN__
@@ -1317,7 +1425,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 
     // Switch to the main stack to run the event loop.
     fiber->state = FiberBase::WAITING;
-    fiber->switchToMain();
+    fiber->stack->switchToMain();
 
     // The main stack switched back to us, meaning either the event we registered with
     // node->onReady() fired, or we are being canceled by FiberBase's destructor.
