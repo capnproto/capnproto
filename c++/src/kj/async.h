@@ -701,6 +701,30 @@ public:
   Executor(EventLoop& loop, Badge<EventLoop>);
   ~Executor() noexcept(false);
 
+  virtual kj::Own<const Executor> addRef() const = 0;
+  // Add a reference to this Executor. The Executor will not be destroyed until all references are
+  // dropped. This uses atomic refcounting for thread-safety.
+  //
+  // Use this when you can't guarantee that the target thread's event loop won't concurrently exit
+  // (including due to an uncaught exception!) while another thread is still using the Executor.
+  // Otherwise, the Executor object is destroyed when the owning event loop exits.
+  //
+  // If the target event loop has exited, then `execute{Async,Sync}` will throw DISCONNECTED
+  // exceptions.
+
+  bool isLive() const;
+  // Returns true if the remote event loop still exists, false if it has been destroyed. In the
+  // latter case, `execute{Async,Sync}()` will definitely throw. Of course, if this returns true,
+  // it could still change to false at any moment, and `execute{Async,Sync}()` could still throw as
+  // a result.
+  //
+  // TODO(cleanup): Should we have tryExecute{Async,Sync}() that return Maybes that are null if
+  //   the remote event loop exited? Currently there are multiple known use cases that check
+  //   isLive() after catching a DISCONNECTED exception to decide whether it is due to the executor
+  //   exiting, and then handling that case. This is borderline in violation of KJ exception
+  //   philosophy, but right now I'm not excited about the extra template metaprogramming needed
+  //   for "try" versions...
+
   template <typename Func>
   PromiseForResult<Func, void> executeAsync(Func&& func) const;
   // Call from any thread to request that the given function be executed on the executor's thread,
@@ -757,8 +781,6 @@ public:
   // executor thread has signaled completion. The return value is transferred between threads.
 
 private:
-  EventLoop& loop;
-
   struct Impl;
   Own<Impl> impl;
   // To avoid including mutex.h...
@@ -769,6 +791,8 @@ private:
   void send(_::XThreadEvent& event, bool sync) const;
   void wait();
   bool poll();
+
+  EventLoop& getLoop() const;
 };
 
 const Executor& getCurrentThreadExecutor();
@@ -904,7 +928,7 @@ private:
   _::Event** depthFirstInsertPoint = &head;
   _::Event** breadthFirstInsertPoint = &head;
 
-  kj::Maybe<Executor> executor;
+  kj::Maybe<Own<Executor>> executor;
   // Allocated the first time getExecutor() is requested, making cross-thread request possible.
 
   Own<TaskSet> daemons;

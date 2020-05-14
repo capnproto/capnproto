@@ -309,6 +309,8 @@ LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 // =======================================================================================
 
 struct Executor::Impl {
+  Impl(EventLoop& loop): state(loop) {}
+
   typedef Maybe<_::XThreadEvent&> _::XThreadEvent::*NextMember;
   typedef Maybe<_::XThreadEvent&>* _::XThreadEvent::*PrevMember;
 
@@ -359,22 +361,33 @@ struct Executor::Impl {
   struct State {
     // Queues of notifications from other threads that need this thread's attention.
 
-    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> run;
+    State(EventLoop& loop): loop(loop) {}
+
+    kj::Maybe<EventLoop&> loop;
+    // Becomes null when the loop is destroyed.
+
+    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> start;
     List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> cancel;
     List<&_::XThreadEvent::replyNext, &_::XThreadEvent::replyPrev> replies;
+    // Lists of events that need actioning by this thread.
+
+    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> executing;
+    // Events that have already been dispatched and are happily executing. This list is maintained
+    // so that they can be canceled if the event loop exits.
 
     bool waitingForCancel = false;
     // True if this thread is currently blocked waiting for some other thread to pump its
     // cancellation queue. If that other thread tries to block on *this* thread, then it could
     // deadlock -- it must take precautions against this.
 
-    bool empty() const {
-      return run.empty() && cancel.empty() && replies.empty();
+    bool isDispatchNeeded() const {
+      return !start.empty() || !cancel.empty() || !replies.empty();
     }
 
     void dispatchAll(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
-      run.forEach([&](_::XThreadEvent& event) {
-        run.erase(event);
+      start.forEach([&](_::XThreadEvent& event) {
+        start.erase(event);
+        executing.insert(event);
         event.state = _::XThreadEvent::EXECUTING;
         event.armBreadthFirst();
       });
@@ -392,7 +405,7 @@ struct Executor::Impl {
         cancel.erase(event);
 
         if (event.promiseNode == nullptr) {
-          event.state = _::XThreadEvent::DONE;
+          event.setDoneState();
         } else {
           // We can't destroy the promiseNode while the mutex is locked, because we don't know
           // what the destructor might do. But, we *must* destroy it before acknowledging
@@ -421,12 +434,59 @@ struct Executor::Impl {
     // Now we need to mark all the events "done" under lock.
     auto lock = state.lockExclusive();
     for (auto& event: eventsToCancelOutsideLock) {
-      event->state = _::XThreadEvent::DONE;
+      event->setDoneState();
     }
   }
-};
+
+  void disconnect() {
+    state.lockExclusive()->loop = nullptr;
+
+    // Now that `loop` is set null in `state`, other threads will no longer try to manipulate our
+    // lists, so we can access them without a lock. That's convenient because a bunch of the things
+    // we want to do with them would require dropping the lock to avoid deadlocks. We'd end up
+    // copying all the lists over into separate vectors first, dropping the lock, operating on
+    // them, and then locking again.
+    auto& s = state.getWithoutLock();
+
+    // We do, however, take and release the lock on the way out, to make sure anyone performing
+    // a conditional wait for state changes gets a chance to have their wait condition re-checked.
+    KJ_DEFER(state.lockExclusive());
+
+    s.start.forEach([&](_::XThreadEvent& event) {
+      s.start.erase(event);
+      event.setDisconnected();
+      event.sendReply();
+      event.setDoneState();
+    });
+
+    s.executing.forEach([&](_::XThreadEvent& event) {
+      s.executing.erase(event);
+      event.promiseNode = nullptr;
+      event.setDisconnected();
+      event.sendReply();
+      event.setDoneState();
+    });
+
+    s.cancel.forEach([&](_::XThreadEvent& event) {
+      s.executing.erase(event);
+      event.promiseNode = nullptr;
+      event.setDoneState();
+    });
+
+    // The replies list "should" be empty, because any locally-initiated tasks should have been
+    // canceled before destroying the EventLoop.
+    if (!s.replies.empty()) {
+      KJ_LOG(ERROR, "EventLoop destroyed with cross-thread event replies outstanding");
+      s.replies.forEach([&](_::XThreadEvent& event) {
+        s.replies.erase(event);
+      });
+    }
+  }};
 
 namespace _ {  // (private)
+
+XThreadEvent::XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor)
+    : Event(targetExecutor.getLoop()), result(result), targetExecutor(targetExecutor.addRef()) {}
 
 void XThreadEvent::ensureDoneOrCanceled() {
 #if _MSC_VER
@@ -434,26 +494,39 @@ void XThreadEvent::ensureDoneOrCanceled() {
 #else
   if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != DONE) {
 #endif
-    auto lock = targetExecutor.impl->state.lockExclusive();
+    auto lock = targetExecutor->impl->state.lockExclusive();
+
+    const EventLoop* loop;
+    KJ_IF_MAYBE(l, lock->loop) {
+      loop = l;
+    } else {
+      // Target event loop is already dead, so we know it's already working on transitioning all
+      // events to the DONE state. We can just wait.
+      lock.wait([&](auto&) { return state == DONE; });
+      return;
+    }
+
     switch (state) {
       case UNUSED:
         // Nothing to do.
         break;
       case QUEUED:
-        lock->run.erase(*this);
+        lock->start.erase(*this);
         // No wake needed since we removed work rather than adding it.
         state = DONE;
         break;
       case EXECUTING: {
+        lock->executing.erase(*this);
         lock->cancel.insert(*this);
-        KJ_IF_MAYBE(p, targetExecutor.loop.port) {
+        state = CANCELING;
+        KJ_IF_MAYBE(p, loop->port) {
           p->wake();
         }
 
         Maybe<Executor&> maybeSelfExecutor = nullptr;
         if (threadLocalEventLoop != nullptr) {
           KJ_IF_MAYBE(e, threadLocalEventLoop->executor) {
-            maybeSelfExecutor = *e;
+            maybeSelfExecutor = **e;
           }
         }
 
@@ -520,7 +593,7 @@ void XThreadEvent::ensureDoneOrCanceled() {
             }
 
             // OK now we can take the original lock again.
-            lock = targetExecutor.impl->state.lockExclusive();
+            lock = targetExecutor->impl->state.lockExclusive();
 
             // OK, now we can wait for the other thread to either process our cancellation or
             // indicate that it is waiting for remote cancellation.
@@ -539,6 +612,8 @@ void XThreadEvent::ensureDoneOrCanceled() {
         KJ_DASSERT(targetPrev == nullptr);
         break;
       }
+      case CANCELING:
+        KJ_FAIL_ASSERT("impossible state: CANCELING should only be set within the above case");
       case DONE:
         // Became done while we waited for lock. Nothing to do.
         break;
@@ -556,37 +631,73 @@ void XThreadEvent::ensureDoneOrCanceled() {
   }
 }
 
-void XThreadEvent::done() {
+void XThreadEvent::sendReply() {
   KJ_IF_MAYBE(e, replyExecutor) {
     // Queue the reply.
+    const EventLoop* replyLoop;
     {
       auto lock = e->impl->state.lockExclusive();
-      lock->replies.insert(*this);
+      KJ_IF_MAYBE(l, lock->loop) {
+        lock->replies.insert(*this);
+        replyLoop = l;
+      } else {
+        // Calling thread exited without cancelling the promise. This is UB. In fact,
+        // `replyExecutor` is probably already destroyed and we are in use-after-free territory
+        // already. Better abort.
+        KJ_LOG(FATAL,
+            "the thread which called kj::Executor::executeAsync() apparently exited its own "
+            "event loop without canceling the cross-thread promise first; this is undefined "
+            "behavior so I will crash now");
+        abort();
+      }
     }
 
-    KJ_IF_MAYBE(p, e->loop.port) {
+    // Note that it's safe to assume `replyLoop` still exists even though we dropped the lock
+    // because that thread would have had to cancel any promises before destroying its own
+    // EventLoop, and when it tries to destroy this promise, it will wait for `state` to become
+    // `DONE`, which we don't set until later on. That's nice because wake() probably makes a
+    // syscall and we'd rather not hold the lock through syscalls.
+    KJ_IF_MAYBE(p, replyLoop->port) {
       p->wake();
     }
   }
+}
+
+void XThreadEvent::done() {
+  sendReply();
 
   {
-    auto lock = targetExecutor.impl->state.lockExclusive();
-    KJ_DASSERT(state == EXECUTING);
+    auto lock = targetExecutor->impl->state.lockExclusive();
 
-    if (targetPrev != nullptr) {
-      // We must be in the cancel list, because we can't be in the run list during EXECUTING state.
-      // We can remove ourselves from the cancel list because at this point we're done anyway, so
-      // whatever.
-      lock->cancel.erase(*this);
+    switch (state) {
+      case EXECUTING:
+        lock->executing.erase(*this);
+        break;
+      case CANCELING:
+        // Sending thread requested cancelation, but we're done anyway, so it doesn't matter at this
+        // point.
+        lock->cancel.erase(*this);
+        break;
+      default:
+        KJ_FAIL_ASSERT("can't call done() from this state", (uint)state);
     }
 
-#if _MSC_VER
-    // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
-    state = DONE;
-#else
-    __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
-#endif
+    setDoneState();
   }
+}
+
+inline void XThreadEvent::setDoneState() {
+#if _MSC_VER
+  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
+  state = DONE;
+#else
+  __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
+#endif
+}
+
+void XThreadEvent::setDisconnected() {
+  result.addException(KJ_EXCEPTION(DISCONNECTED,
+      "Executor's event loop exited before cross-thread event could complete"));
 }
 
 class XThreadEvent::DelayedDoneHack: public Disposer {
@@ -637,16 +748,31 @@ void XThreadEvent::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
+class ExecutorImpl: public Executor, public AtomicRefcounted {
+public:
+  using Executor::Executor;
+
+  kj::Own<const Executor> addRef() const override {
+    return kj::atomicAddRef(static_cast<const _::ExecutorImpl&>(*this));
+  }
+};
+
 }  // namespace _
 
-Executor::Executor(EventLoop& loop, Badge<EventLoop>): loop(loop), impl(kj::heap<Impl>()) {}
+Executor::Executor(EventLoop& loop, Badge<EventLoop>): impl(kj::heap<Impl>(loop)) {}
 Executor::~Executor() noexcept(false) {}
+
+bool Executor::isLive() const {
+  return impl->state.lockShared()->loop != nullptr;
+}
 
 void Executor::send(_::XThreadEvent& event, bool sync) const {
   KJ_ASSERT(event.state == _::XThreadEvent::UNUSED);
 
   if (sync) {
-    if (threadLocalEventLoop == &loop) {
+    EventLoop* thisThread = threadLocalEventLoop;
+    if (thisThread != nullptr &&
+        thisThread->executor.map([this](auto& e) { return e == this; }).orDefault(false)) {
       // Invoking a sync request on our own thread. Just execute it directly; if we try to queue
       // it to the loop, we'll deadlock.
       auto promiseNode = event.execute();
@@ -667,10 +793,18 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
   }
 
   auto lock = impl->state.lockExclusive();
-  event.state = _::XThreadEvent::QUEUED;
-  lock->run.insert(event);
+  const EventLoop* loop;
+  KJ_IF_MAYBE(l, lock->loop) {
+    loop = l;
+  } else {
+    event.setDisconnected();
+    return;
+  }
 
-  KJ_IF_MAYBE(p, loop.port) {
+  event.state = _::XThreadEvent::QUEUED;
+  lock->start.insert(event);
+
+  KJ_IF_MAYBE(p, loop->port) {
     p->wake();
   } else {
     // Event loop will be waiting on executor.wait(), which will be woken when we unlock the mutex.
@@ -688,7 +822,7 @@ void Executor::wait() {
   auto lock = impl->state.lockExclusive();
 
   lock.wait([](const Impl::State& state) {
-    return !state.empty();
+    return state.isDispatchNeeded();
   });
 
   lock->dispatchAll(eventsToCancelOutsideLock);
@@ -699,11 +833,19 @@ bool Executor::poll() {
   KJ_DEFER(impl->processAsyncCancellations(eventsToCancelOutsideLock));
 
   auto lock = impl->state.lockExclusive();
-  if (lock->empty()) {
-    return false;
-  } else {
+  if (lock->isDispatchNeeded()) {
     lock->dispatchAll(eventsToCancelOutsideLock);
     return true;
+  } else {
+    return false;
+  }
+}
+
+EventLoop& Executor::getLoop() const {
+  KJ_IF_MAYBE(l, impl->state.lockShared()->loop) {
+    return *l;
+  } else {
+    kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "Executor's event loop has exited"));
   }
 }
 
@@ -983,6 +1125,11 @@ EventLoop::~EventLoop() noexcept(false) {
   });
 #endif
 
+  KJ_IF_MAYBE(e, executor) {
+    // Cancel all outstanding cross-thread events.
+    e->get()->impl->disconnect();
+  }
+
   // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
   // some more.
   daemons = nullptr;
@@ -1063,9 +1210,9 @@ bool EventLoop::isRunnable() {
 
 const Executor& EventLoop::getExecutor() {
   KJ_IF_MAYBE(e, executor) {
-    return *e;
+    return **e;
   } else {
-    return executor.emplace(*this, Badge<EventLoop>());
+    return *executor.emplace(kj::atomicRefcounted<_::ExecutorImpl>(*this, Badge<EventLoop>()));
   }
 }
 
@@ -1096,11 +1243,11 @@ void EventLoop::wait() {
     if (p->wait()) {
       // Another thread called wake(). Check for cross-thread events.
       KJ_IF_MAYBE(e, executor) {
-        e->poll();
+        e->get()->poll();
       }
     }
   } else KJ_IF_MAYBE(e, executor) {
-    e->wait();
+    e->get()->wait();
   } else {
     KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
   }
@@ -1111,11 +1258,11 @@ void EventLoop::poll() {
     if (p->poll()) {
       // Another thread called wake(). Check for cross-thread events.
       KJ_IF_MAYBE(e, executor) {
-        e->poll();
+        e->get()->poll();
       }
     }
   } else KJ_IF_MAYBE(e, executor) {
-    e->poll();
+    e->get()->poll();
   }
 }
 
