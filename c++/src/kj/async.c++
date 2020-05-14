@@ -441,7 +441,7 @@ struct Executor::Impl {
   void disconnect() {
     state.lockExclusive()->loop = nullptr;
 
-    // Now that `loop` is set null is `state`, other threads will no longer try to manipulate our
+    // Now that `loop` is set null in `state`, other threads will no longer try to manipulate our
     // lists, so we can access them without a lock. That's convenient because a bunch of the things
     // we want to do with them would require dropping the lock to avoid deadlocks. We'd end up
     // copying all the lists over into separate vectors first, dropping the lock, operating on
