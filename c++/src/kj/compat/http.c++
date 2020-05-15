@@ -4570,7 +4570,37 @@ public:
     }
   }
 
+public:
+  kj::Promise<bool> startLoop(bool firstRequest) {
+    return loop(firstRequest).catch_([this](kj::Exception&& e) -> kj::Promise<bool> {
+      // Exception; report 5xx.
+
+      KJ_IF_MAYBE(p, webSocketError) {
+        // sendWebSocketError() was called. Finish sending and close the connection. Don't log
+        // the exception because it's probably a side-effect of this.
+        auto promise = kj::mv(*p);
+        webSocketError = nullptr;
+        return kj::mv(promise);
+      }
+
+      return sendError(kj::mv(e));
+    });
+  }
+
 private:
+  HttpServer& server;
+  kj::AsyncIoStream& stream;
+  HttpService& service;
+  HttpInputStreamImpl httpInput;
+  HttpOutputStream httpOutput;
+  kj::Maybe<HttpMethod> currentMethod;
+  bool timedOut = false;
+  bool closed = false;
+  bool upgraded = false;
+  bool webSocketClosed = false;
+  bool closeAfterSend = false;  // True if send() should set Connection: close.
+  kj::Maybe<kj::Promise<bool>> webSocketError;
+
   kj::Promise<bool> loop(bool firstRequest) {
     if (!firstRequest && server.draining && httpInput.isCleanDrain()) {
       // Don't call awaitNextMessage() in this case because that will initiate a read() which will
@@ -4788,37 +4818,6 @@ private:
       KJ_UNREACHABLE;
     });
   }
-
-public:
-  kj::Promise<bool> startLoop(bool firstRequest) {
-    return loop(firstRequest).catch_([this](kj::Exception&& e) -> kj::Promise<bool> {
-      // Exception; report 5xx.
-
-      KJ_IF_MAYBE(p, webSocketError) {
-        // sendWebSocketError() was called. Finish sending and close the connection. Don't log
-        // the exception because it's probably a side-effect of this.
-        auto promise = kj::mv(*p);
-        webSocketError = nullptr;
-        return kj::mv(promise);
-      }
-
-      return sendError(kj::mv(e));
-    });
-  }
-
-private:
-  HttpServer& server;
-  kj::AsyncIoStream& stream;
-  HttpService& service;
-  HttpInputStreamImpl httpInput;
-  HttpOutputStream httpOutput;
-  kj::Maybe<HttpMethod> currentMethod;
-  bool timedOut = false;
-  bool closed = false;
-  bool upgraded = false;
-  bool webSocketClosed = false;
-  bool closeAfterSend = false;  // True if send() should set Connection: close.
-  kj::Maybe<kj::Promise<bool>> webSocketError;
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
