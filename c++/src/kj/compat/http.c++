@@ -4570,6 +4570,7 @@ public:
     }
   }
 
+private:
   kj::Promise<bool> loop(bool firstRequest) {
     if (!firstRequest && server.draining && httpInput.isCleanDrain()) {
       // Don't call awaitNextMessage() in this case because that will initiate a read() which will
@@ -4785,7 +4786,12 @@ public:
       }
 
       KJ_UNREACHABLE;
-    }).catch_([this](kj::Exception&& e) -> kj::Promise<bool> {
+    });
+  }
+
+public:
+  kj::Promise<bool> startLoop(bool firstRequest) {
+    return loop(firstRequest).catch_([this](kj::Exception&& e) -> kj::Promise<bool> {
       // Exception; report 5xx.
 
       KJ_IF_MAYBE(p, webSocketError) {
@@ -5067,7 +5073,7 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
 
   // Start reading requests and responding to them, but immediately cancel processing if the client
   // disconnects.
-  auto promise = obj->loop(true)
+  auto promise = obj->startLoop(true)
       .exclusiveJoin(connection.whenWriteDisconnected().then([]() {return false;}));
 
   // Eagerly evaluate so that we drop the connection when the promise resolves, even if the caller
