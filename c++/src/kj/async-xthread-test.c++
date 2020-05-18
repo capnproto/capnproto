@@ -602,7 +602,7 @@ KJ_TEST("synchronous cross-thread event disconnected") {
 
     KJ_EXPECT(exec->isLive());
 
-    KJ_EXPECT_THROW_MESSAGE(
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
         "Executor's event loop exited before cross-thread event could complete",
         exec->executeSync([&]() -> Promise<void> {
           fulfiller->fulfill();
@@ -658,7 +658,7 @@ KJ_TEST("asynchronous cross-thread event disconnected") {
 
     KJ_EXPECT(exec->isLive());
 
-    KJ_EXPECT_THROW_MESSAGE(
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
         "Executor's event loop exited before cross-thread event could complete",
         exec->executeAsync([&]() -> Promise<void> {
           fulfiller->fulfill();
@@ -711,7 +711,7 @@ KJ_TEST("cross-thread event disconnected before it runs") {
 
     *executor.lockExclusive() = nullptr;
 
-    KJ_EXPECT_THROW_MESSAGE(
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
         "Executor's event loop exited before cross-thread event could complete",
         promise.wait(waitScope));
 
@@ -756,7 +756,7 @@ KJ_TEST("cross-thread event disconnected without holding Executor ref") {
 
     KJ_EXPECT(exec->isLive());
 
-    KJ_EXPECT_THROW_MESSAGE(
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
         "Executor's event loop exited before cross-thread event could complete",
         exec->executeSync([&]() -> Promise<void> {
           fulfiller->fulfill();
