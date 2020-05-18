@@ -955,7 +955,11 @@ private:
       }
 
       receivedCall = true;
-      return cap->newCall(interfaceId, methodId, sizeHint);
+
+      // IMPORTANT: We must call our superclass's version of newCall(), NOT cap->newCall(), because
+      //   the Request object we create needs to check at send() time whether the promise has
+      //   resolved and, if so, redirect to the new target.
+      return RpcClient::newCall(interfaceId, methodId, sizeHint);
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
