@@ -19,6 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#undef _FORTIFY_SOURCE
+// If _FORTIFY_SOURCE is defined, longjmp will complain when it detects the stack
+// pointer moving in the "wrong direction", thinking you're jumping to a non-existent
+// stack frame. But we use longjmp to jump between different stacks to implement fibers,
+// so this check isn't appropriate for us.
+
 #if _WIN32 || __CYGWIN__
 #define WIN32_LEAN_AND_MEAN 1  // lolz
 #elif __APPLE__
@@ -44,6 +50,7 @@
 #include "windows-sanity.h"
 #else
 #include <ucontext.h>
+#include <setjmp.h>    // for fibers
 #include <sys/mman.h>  // mmap(), for allocating new stacks
 #include <unistd.h>    // sysconf()
 #include <errno.h>
@@ -294,7 +301,7 @@ Promise<void> TaskSet::onEmpty() {
 namespace _ {
 
 class FiberStack final {
-  // A class containing a fiber stack impl. This is seperate from fiber
+  // A class containing a fiber stack impl. This is separate from fiber
   // promises since it lets us move the stack itself around and reuse it.
 
 public:
@@ -323,7 +330,7 @@ private:
   void* osFiber;
 #elif !__BIONIC__
   struct Impl;
-  Impl& impl;
+  Impl* impl;
 #endif
 };
 
@@ -932,12 +939,10 @@ struct FiberStack::Impl {
   // - It is allocated at the top of the fiber's stack area, so the Impl pointer also serves to
   //   track where the stack was allocated.
 
-  ucontext_t fiberContext;
-  ucontext_t originalContext;
+  jmp_buf fiberJmpBuf;
+  jmp_buf originalJmpBuf;
 
-  static Impl& alloc(size_t stackSize) {
-    // TODO(perf): Freelist stacks to avoid TLB flushes.
-
+  static Impl* alloc(size_t stackSize, ucontext_t* context) {
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif
@@ -967,22 +972,26 @@ struct FiberStack::Impl {
                         stackSize, PROT_READ | PROT_WRITE));
 
     // Stick `Impl` at the top of the stack.
-    Impl& impl = *(reinterpret_cast<Impl*>(reinterpret_cast<byte*>(stack) + allocSize) - 1);
+    Impl* impl = (reinterpret_cast<Impl*>(reinterpret_cast<byte*>(stack) + allocSize) - 1);
 
     // Note: mmap() allocates zero'd pages so we don't have to memset() anything here.
 
-    KJ_SYSCALL(getcontext(&impl.fiberContext));
-    impl.fiberContext.uc_stack.ss_size = allocSize - sizeof(Impl);
-    impl.fiberContext.uc_stack.ss_sp = reinterpret_cast<char*>(stack);
-    impl.fiberContext.uc_stack.ss_flags = 0;
-    impl.fiberContext.uc_link = &impl.originalContext;
+    KJ_SYSCALL(getcontext(context));
+    context->uc_stack.ss_size = allocSize - sizeof(Impl);
+    context->uc_stack.ss_sp = reinterpret_cast<char*>(stack);
+    context->uc_stack.ss_flags = 0;
+    // We don't use uc_link since our fiber start routine runs forever in a loop to allow for
+    // reuse. When we're done with the fiber, we just destroy it, without switching to it's
+    // stack. This is safe since the start routine doesn't allocate any memory or RAII objects
+    // before looping.
+    context->uc_link = 0;
 
     return impl;
   }
 
-  static void free(Impl& impl, size_t stackSize) {
+  static void free(Impl* impl, size_t stackSize) {
     size_t allocSize = stackSize + getPageSize();
-    void* stack = reinterpret_cast<byte*>(&impl + 1) - allocSize;
+    void* stack = reinterpret_cast<byte*>(impl + 1) - allocSize;
     KJ_SYSCALL(munmap(stack, allocSize)) { break; }
   }
 
@@ -1020,6 +1029,9 @@ struct FiberStack::StartRoutine {
     ptr |= static_cast<uintptr_t>(static_cast<uint>(arg2)) << (sizeof(ptr) * 4);
     auto stack = reinterpret_cast<FiberStack*>(ptr);
 
+    // Jump back into the fiber stack constructor
+    stack->switchToMain();
+
     while (true) {
       KJ_ASSERT_NONNULL(stack->fiber).run();
       // use an explicit switch back and infinite loop to keep from
@@ -1033,9 +1045,6 @@ struct FiberStack::StartRoutine {
 FiberStack::FiberStack(size_t stackSizeParam)
     // Force stackSize to a reasonable minimum.
     : stackSize(kj::max(stackSizeParam, 65536))
-#if !(_WIN32 || __CYGWIN__ || __BIONIC__)
-    , impl(Impl::alloc(stackSize))
-#endif
 {
 #if KJ_NO_EXCEPTIONS
   KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
@@ -1047,6 +1056,8 @@ FiberStack::FiberStack(size_t stackSizeParam)
 #elif !__BIONIC__
   // Note: Nothing below here can throw. If that changes then we need to call Impl::free(impl)
   //   on exceptions...
+  ucontext_t context;
+  impl = Impl::alloc(stackSize, &context);
 
   // POSIX says the arguments are ints, not pointers. So we split our pointer in half in order to
   // work correctly on 64-bit machines. Gross.
@@ -1054,8 +1065,11 @@ FiberStack::FiberStack(size_t stackSizeParam)
   int arg1 = ptr & ((uintptr_t(1) << (sizeof(ptr) * 4)) - 1);
   int arg2 = ptr >> (sizeof(ptr) * 4);
 
-  makecontext(&impl.fiberContext, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
+  makecontext(&context, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
 
+  if (_setjmp(impl->originalJmpBuf) == 0) {
+    setcontext(&context);
+  }
 #else
   KJ_UNIMPLEMENTED(
       "Fibers are not implemented on this platform because its C library lacks setcontext() "
@@ -1153,7 +1167,9 @@ void FiberStack::switchToFiber() {
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
 #elif !__BIONIC__
-  KJ_SYSCALL(swapcontext(&impl.originalContext, &impl.fiberContext));
+  if (_setjmp(impl->originalJmpBuf) == 0) {
+    _longjmp(impl->fiberJmpBuf, 1);
+  }
 #endif
 }
 void FiberStack::switchToMain() {
@@ -1162,7 +1178,9 @@ void FiberStack::switchToMain() {
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(currentEventLoop().mainFiber);
 #elif !__BIONIC__
-  KJ_SYSCALL(swapcontext(&impl.fiberContext, &impl.originalContext));
+  if (_setjmp(impl->fiberJmpBuf) == 0) {
+    _longjmp(impl->originalJmpBuf, 1);
+  }
 #endif
 }
 
