@@ -877,7 +877,8 @@ class FiberBase: public PromiseNode, private Event {
   // Base class for the outer PromiseNode representing a fiber.
 
 public:
-  FiberBase(size_t stackSize, _::ExceptionOrValue& result);
+  explicit FiberBase(size_t stackSize, _::ExceptionOrValue& result);
+  explicit FiberBase(FiberPool& pool, _::ExceptionOrValue& result);
   ~FiberBase() noexcept(false);
 
   void start() { armDepthFirst(); }
@@ -895,31 +896,20 @@ protected:
 private:
   enum { WAITING, RUNNING, CANCELED, FINISHED } state;
 
-  size_t stackSize;
-
-#if _WIN32 || __CYGWIN__
-  void* osFiber;
-#elif !__BIONIC__
-  struct Impl;
-  Impl& impl;
-#endif
-
   _::PromiseNode* currentInner = nullptr;
   OnReadyEvent onReadyEvent;
+  Own<FiberStack> stack;
+  Maybe<FiberPool&> pool;
   _::ExceptionOrValue& result;
 
   void run();
   virtual void runImpl(WaitScope& waitScope) = 0;
 
-  struct StartRoutine;
-
-  void switchToFiber();
-  void switchToMain();
-
   Maybe<Own<Event>> fire() override;
   // Implements Event. Each time the event is fired, switchToFiber() is called.
 
   friend class WaitScope;
+  friend class FiberStack;
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
@@ -928,7 +918,8 @@ private:
 template <typename Func>
 class Fiber final: public FiberBase {
 public:
-  Fiber(size_t stackSize, Func&& func): FiberBase(stackSize, result), func(kj::fwd<Func>(func)) {}
+  explicit Fiber(size_t stackSize, Func&& func): FiberBase(stackSize, result), func(kj::fwd<Func>(func)) {}
+  explicit Fiber(FiberPool& pool, Func&& func): FiberBase(pool, result), func(kj::fwd<Func>(func)) {}
   ~Fiber() noexcept(false) { destroy(); }
 
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
@@ -1096,6 +1087,17 @@ inline PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& fu
   typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
 
   Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(stackSize, kj::fwd<Func>(func));
+  intermediate->start();
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
+  return _::maybeReduce(kj::mv(result), false);
+}
+
+template <typename Func>
+inline PromiseForResult<Func, WaitScope&> FiberPool::startFiber(Func&& func) {
+  typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
+
+  Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(*this, kj::fwd<Func>(func));
   intermediate->start();
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));

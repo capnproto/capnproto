@@ -954,6 +954,64 @@ KJ_TEST("cancel a fiber") {
   KJ_EXPECT(canceled);
 }
 #endif
+
+KJ_TEST("fiber pool") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  FiberPool pool(65536);
+
+  int* i1_local = nullptr;
+  int* i2_local = nullptr;
+
+  auto run = [&]() mutable {
+    auto paf1 = newPromiseAndFulfiller<int>();
+    auto paf2 = newPromiseAndFulfiller<int>();
+
+    {
+      Promise<int> fiber1 = pool.startFiber([&, promise = kj::mv(paf1.promise)](WaitScope& scope) mutable {
+        int i = promise.wait(scope);
+        KJ_EXPECT(i == 123);
+        if (i1_local == nullptr) {
+            i1_local = &i;
+          } else {
+            KJ_ASSERT(i1_local == &i);
+          }
+        return i;
+      });
+      {
+        Promise<int> fiber2 = pool.startFiber([&, promise = kj::mv(paf2.promise)](WaitScope& scope) mutable {
+          int i = promise.wait(scope);
+          KJ_EXPECT(i == 456);
+          if (i2_local == nullptr) {
+            i2_local = &i;
+          } else {
+            KJ_ASSERT(i2_local == &i);
+          }
+          return i;
+        });
+
+        KJ_EXPECT(!fiber1.poll(waitScope));
+        KJ_EXPECT(!fiber2.poll(waitScope));
+
+        paf2.fulfiller->fulfill(456);
+
+        KJ_EXPECT(!fiber1.poll(waitScope));
+        KJ_ASSERT(fiber2.poll(waitScope));
+        KJ_EXPECT(fiber2.wait(waitScope) == 456);
+      }
+
+      paf1.fulfiller->fulfill(123);
+
+      KJ_ASSERT(fiber1.poll(waitScope));
+      KJ_EXPECT(fiber1.wait(waitScope) == 123);
+    }
+  };
+  run();
+  KJ_ASSERT_NONNULL(i1_local);
+  KJ_ASSERT_NONNULL(i2_local);
+  // run the same thing and reuse the fibers
+  run();
+}
 #endif
 
 }  // namespace
