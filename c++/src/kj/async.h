@@ -420,7 +420,7 @@ public:
   KJ_DISALLOW_COPY(FiberPool);
 
   template <typename Func>
-  PromiseForResult<Func, WaitScope&> startFiber(Func&& func) KJ_WARN_UNUSED_RESULT;
+  PromiseForResult<Func, WaitScope&> startFiber(Func&& func) const KJ_WARN_UNUSED_RESULT;
   // Executes `func()` in a fiber from this pool, returning a promise for the eventual result.
   // `func()` will be passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on
   // promises. Thus, `func()` can be written in a synchronous, blocking style, instead of
