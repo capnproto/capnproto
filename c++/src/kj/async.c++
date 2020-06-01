@@ -342,14 +342,14 @@ struct FiberPool::Impl {
   size_t stackSize;
   MutexGuarded<Maybe<Own<_::FiberStack>>> start;
 
-  void returnStack(Own<_::FiberStack> stack) {
+  void returnStack(Own<_::FiberStack> stack) const {
     stack->reset();
     auto lock = start.lockExclusive();
     stack->freelistNext = kj::mv(*lock);
     *lock = kj::mv(stack);
   }
 
-  Own<_::FiberStack> takeStack() {
+  Own<_::FiberStack> takeStack() const {
     auto lock = start.lockExclusive();
     auto& value = *lock;
     KJ_IF_MAYBE(current, value) {
@@ -1105,7 +1105,7 @@ FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result)
 #endif
 }
 
-FiberBase::FiberBase(FiberPool& pool, _::ExceptionOrValue& result)
+FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result)
     : state(WAITING), pool(pool), result(result) {
   stack = pool.impl->takeStack();
   stack->initialize(*this);

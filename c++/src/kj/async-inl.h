@@ -878,7 +878,7 @@ class FiberBase: public PromiseNode, private Event {
 
 public:
   explicit FiberBase(size_t stackSize, _::ExceptionOrValue& result);
-  explicit FiberBase(FiberPool& pool, _::ExceptionOrValue& result);
+  explicit FiberBase(const FiberPool& pool, _::ExceptionOrValue& result);
   ~FiberBase() noexcept(false);
 
   void start() { armDepthFirst(); }
@@ -899,7 +899,7 @@ private:
   _::PromiseNode* currentInner = nullptr;
   OnReadyEvent onReadyEvent;
   Own<FiberStack> stack;
-  Maybe<FiberPool&> pool;
+  Maybe<const FiberPool&> pool;
   _::ExceptionOrValue& result;
 
   void run();
@@ -919,7 +919,7 @@ template <typename Func>
 class Fiber final: public FiberBase {
 public:
   explicit Fiber(size_t stackSize, Func&& func): FiberBase(stackSize, result), func(kj::fwd<Func>(func)) {}
-  explicit Fiber(FiberPool& pool, Func&& func): FiberBase(pool, result), func(kj::fwd<Func>(func)) {}
+  explicit Fiber(const FiberPool& pool, Func&& func): FiberBase(pool, result), func(kj::fwd<Func>(func)) {}
   ~Fiber() noexcept(false) { destroy(); }
 
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
@@ -1094,7 +1094,7 @@ inline PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& fu
 }
 
 template <typename Func>
-inline PromiseForResult<Func, WaitScope&> FiberPool::startFiber(Func&& func) {
+inline PromiseForResult<Func, WaitScope&> FiberPool::startFiber(Func&& func) const {
   typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
 
   Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(*this, kj::fwd<Func>(func));
