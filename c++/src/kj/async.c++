@@ -1265,31 +1265,44 @@ void FiberStack::initialize(SynchronousFunc& func) {
   this->main = &func;
 }
 
+namespace {
+
+#if _WIN32 || __CYGWIN__
+thread_local void* threadMainFiber = nullptr;
+
+void* getMainWin32Fiber() {
+  return threadMainFiber;
+}
+#endif
+
+inline void ensureThreadCanRunFibers() {
+#if _WIN32 || __CYGWIN__
+  // Make sure the current thread has been converted to a fiber.
+  void* fiber = threadMainFiber;
+  if (fiber == nullptr) {
+    // Thread not initialized. Convert it to a fiber now.
+    // Note: Unfortunately, if the application has already converted the thread to a fiber, I
+    //   guess this will fail. But trying to call GetCurrentFiber() when the thread isn't a fiber
+    //   doesn't work (it returns null on WINE but not on real windows, ugh). So I guess we're
+    //   just incompatible with the application doing anything with fibers, which is sad.
+    threadMainFiber = fiber = ConvertThreadToFiber(nullptr);
+  }
+#endif
+}
+
+}  // namespace
+
 FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result)
     : state(WAITING), stack(kj::heap<FiberStack>(stackSize)), result(result) {
   stack->initialize(*this);
-#if _WIN32 || __CYGWIN__
-  auto& eventLoop = currentEventLoop();
-  if (eventLoop.mainFiber == nullptr) {
-    // First time we've created a fiber. We need to convert the main stack into a fiber as well
-    // before we can start switching.
-    eventLoop.mainFiber = ConvertThreadToFiber(nullptr);
-  }
-#endif
+  ensureThreadCanRunFibers();
 }
 
 FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result)
     : state(WAITING), result(result) {
   stack = pool.impl->takeStack();
   stack->initialize(*this);
-#if _WIN32 || __CYGWIN__
-  auto& eventLoop = currentEventLoop();
-  if (eventLoop.mainFiber == nullptr) {
-    // First time we've created a fiber. We need to convert the main stack into a fiber as well
-    // before we can start switching.
-    eventLoop.mainFiber = ConvertThreadToFiber(nullptr);
-  }
-#endif
+  ensureThreadCanRunFibers();
 }
 
 FiberBase::~FiberBase() noexcept(false) {}
@@ -1349,7 +1362,7 @@ void FiberStack::switchToMain() {
   // Switch from the fiber to the main stack. Returns the next time the main stack calls
   // switchToFiber().
 #if _WIN32 || __CYGWIN__
-  SwitchToFiber(currentEventLoop().mainFiber);
+  SwitchToFiber(getMainWin32Fiber());
 #elif !__BIONIC__
   if (_setjmp(impl->fiberJmpBuf) == 0) {
     _longjmp(impl->originalJmpBuf, 1);
@@ -1415,15 +1428,6 @@ EventLoop::EventLoop(EventPort& port)
       daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
-#if _WIN32 || __CYGWIN__
-  KJ_DEFER({
-    if (mainFiber != nullptr) {
-      // We converted the thread to a fiber, need to convert it back.
-      KJ_WIN32(ConvertFiberToThread());
-    }
-  });
-#endif
-
   KJ_IF_MAYBE(e, executor) {
     // Cancel all outstanding cross-thread events.
     e->get()->impl->disconnect();
