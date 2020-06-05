@@ -2003,7 +2003,8 @@ private:
     }
   }
 
-  Promise<void> pull() {
+private:
+  Promise<void> pullLoop() {
     // Use evalLater() so that two pump sinks added on the same turn of the event loop will not
     // cause buffering.
     return evalLater([this] {
@@ -2110,7 +2111,12 @@ private:
         stoppage = Stoppage(mv(exception));
         return pull();
       });
-    }).eagerlyEvaluate([this](Exception&& exception) {
+    });
+  }
+
+public:
+  Promise<void> pull() {
+    return pullLoop().eagerlyEvaluate([this](Exception&& exception) {
       // Exception from our loop, not from inner tryRead(). Something is broken; tell everybody!
       pulling = false;
       for (auto& state: branches) {
