@@ -2004,6 +2004,31 @@ private:
   }
 
   Promise<void> pull() {
+    return pullLoop().eagerlyEvaluate([this](Exception&& exception) {
+      // Exception from our loop, not from inner tryRead(). Something is broken; tell everybody!
+      pulling = false;
+      for (auto& state: branches) {
+        KJ_IF_MAYBE(s, state) {
+          KJ_IF_MAYBE(sink, s->sink) {
+            sink->reject(KJ_EXCEPTION(FAILED, "Exception in tee loop", exception));
+          }
+        }
+      }
+    });
+  }
+
+  constexpr static size_t MAX_BLOCK_SIZE = 1 << 14;  // 16k
+
+  Own<AsyncInputStream> inner;
+  const uint64_t bufferSizeLimit = kj::maxValue;
+  Maybe<uint64_t> length;
+  Maybe<Branch> branches[2];
+  Maybe<Stoppage> stoppage;
+  Promise<void> pullPromise = READY_NOW;
+  bool pulling = false;
+
+private:
+  Promise<void> pullLoop() {
     // Use evalLater() so that two pump sinks added on the same turn of the event loop will not
     // cause buffering.
     return evalLater([this] {
@@ -2110,28 +2135,8 @@ private:
         stoppage = Stoppage(mv(exception));
         return pull();
       });
-    }).eagerlyEvaluate([this](Exception&& exception) {
-      // Exception from our loop, not from inner tryRead(). Something is broken; tell everybody!
-      pulling = false;
-      for (auto& state: branches) {
-        KJ_IF_MAYBE(s, state) {
-          KJ_IF_MAYBE(sink, s->sink) {
-            sink->reject(KJ_EXCEPTION(FAILED, "Exception in tee loop", exception));
-          }
-        }
-      }
     });
   }
-
-  constexpr static size_t MAX_BLOCK_SIZE = 1 << 14;  // 16k
-
-  Own<AsyncInputStream> inner;
-  const uint64_t bufferSizeLimit = kj::maxValue;
-  Maybe<uint64_t> length;
-  Maybe<Branch> branches[2];
-  Maybe<Stoppage> stoppage;
-  Promise<void> pullPromise = READY_NOW;
-  bool pulling = false;
 };
 
 constexpr size_t AsyncTee::MAX_BLOCK_SIZE;
