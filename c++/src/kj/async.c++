@@ -1440,17 +1440,19 @@ void WaitScope::poll() {
   loop.running = true;
   KJ_DEFER(loop.running = false);
 
-  for (;;) {
-    if (!loop.turn()) {
-      // No events in the queue.  Poll for I/O.
-      loop.poll();
+  runOnStackPool([&]() {
+    for (;;) {
+      if (!loop.turn()) {
+        // No events in the queue.  Poll for I/O.
+        loop.poll();
 
-      if (!loop.isRunnable()) {
-        // Still no events in the queue. We're done.
-        return;
+        if (!loop.isRunnable()) {
+          // Still no events in the queue. We're done.
+          return;
+        }
       }
     }
-  }
+  });
 }
 
 namespace _ {  // private
@@ -1505,16 +1507,25 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     loop.running = true;
     KJ_DEFER(loop.running = false);
 
-    uint counter = 0;
-    while (!doneEvent.fired) {
-      if (!loop.turn()) {
-        // No events in the queue.  Wait for callback.
-        counter = 0;
+    for (;;) {
+      waitScope.runOnStackPool([&]() {
+        uint counter = 0;
+        while (!doneEvent.fired) {
+          if (!loop.turn()) {
+            // No events in the queue.  Wait for callback.
+            return;
+          } else if (++counter > waitScope.busyPollInterval) {
+            // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
+            counter = 0;
+            loop.poll();
+          }
+        }
+      });
+
+      if (doneEvent.fired) {
+        break;
+      } else {
         loop.wait();
-      } else if (++counter > waitScope.busyPollInterval) {
-        // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
-        counter = 0;
-        loop.poll();
       }
     }
 
@@ -1523,12 +1534,14 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
   }
 #endif
 
-  node->get(result);
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    node = nullptr;
-  })) {
-    result.addException(kj::mv(*exception));
-  }
+  waitScope.runOnStackPool([&]() {
+    node->get(result);
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      node = nullptr;
+    })) {
+      result.addException(kj::mv(*exception));
+    }
+  });
 }
 
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
@@ -1543,18 +1556,24 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
   loop.running = true;
   KJ_DEFER(loop.running = false);
 
-  while (!doneEvent.fired) {
-    if (!loop.turn()) {
-      // No events in the queue.  Poll for I/O.
-      loop.poll();
+  waitScope.runOnStackPool([&]() {
+    while (!doneEvent.fired) {
+      if (!loop.turn()) {
+        // No events in the queue.  Poll for I/O.
+        loop.poll();
 
-      if (!doneEvent.fired && !loop.isRunnable()) {
-        // No progress. Give up.
-        node.onReady(nullptr);
-        loop.setRunnable(false);
-        return false;
+        if (!doneEvent.fired && !loop.isRunnable()) {
+          // No progress. Give up.
+          node.onReady(nullptr);
+          loop.setRunnable(false);
+          break;
+        }
       }
     }
+  });
+
+  if (!doneEvent.fired) {
+    return false;
   }
 
   loop.setRunnable(loop.isRunnable());

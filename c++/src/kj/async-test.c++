@@ -1053,6 +1053,115 @@ KJ_TEST("fiber pool runSynchronously()") {
   KJ_EXPECT_THROW_MESSAGE("test exception",
       pool.runSynchronously([&]() { KJ_FAIL_ASSERT("test exception"); }));
 }
+
+KJ_TEST("run event loop on freelisted stacks") {
+  FiberPool pool(65536);
+
+  class MockEventPort: public EventPort {
+  public:
+    bool wait() override {
+      char c;
+      waitStack = &c;
+      KJ_IF_MAYBE(f, fulfiller) {
+        f->get()->fulfill();
+        fulfiller = nullptr;
+      }
+      return false;
+    }
+    bool poll() override {
+      char c;
+      pollStack = &c;
+      KJ_IF_MAYBE(f, fulfiller) {
+        f->get()->fulfill();
+        fulfiller = nullptr;
+      }
+      return false;
+    }
+
+    char* waitStack = nullptr;
+    char* pollStack = nullptr;
+
+    kj::Maybe<kj::Own<PromiseFulfiller<void>>> fulfiller;
+  };
+
+  MockEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+  waitScope.runEventCallbacksOnStackPool(pool);
+
+  {
+    auto paf = newPromiseAndFulfiller<void>();
+    port.fulfiller = kj::mv(paf.fulfiller);
+
+    char* ptr1 = nullptr;
+    char* ptr2 = nullptr;
+    kj::evalLater([&]() {
+      char c;
+      ptr1 = &c;
+      return kj::mv(paf.promise);
+    }).then([&]() {
+      char c;
+      ptr2 = &c;
+    }).wait(waitScope);
+
+    KJ_EXPECT(ptr1 != nullptr);
+    KJ_EXPECT(ptr2 != nullptr);
+    KJ_EXPECT(port.waitStack != nullptr);
+    KJ_EXPECT(port.pollStack == nullptr);
+
+    // The event callbacks should have run on a different stack, but the wait should have been on
+    // the main stack.
+    KJ_EXPECT(!onOurStack(ptr1));
+    KJ_EXPECT(!onOurStack(ptr2));
+    KJ_EXPECT(onOurStack(port.waitStack));
+
+    pool.runSynchronously([&]() {
+      // This should run on the same stack where the event callbacks ran.
+      KJ_EXPECT(onOurStack(ptr1));
+      KJ_EXPECT(onOurStack(ptr2));
+      KJ_EXPECT(!onOurStack(port.waitStack));
+    });
+  }
+
+  port.waitStack = nullptr;
+  port.pollStack = nullptr;
+
+  // Now try poll() instead of wait(). Note that since poll() doesn't block, we let it run on the
+  // event stack.
+  {
+    auto paf = newPromiseAndFulfiller<void>();
+    port.fulfiller = kj::mv(paf.fulfiller);
+
+    char* ptr1 = nullptr;
+    char* ptr2 = nullptr;
+    auto promise = kj::evalLater([&]() {
+      char c;
+      ptr1 = &c;
+      return kj::mv(paf.promise);
+    }).then([&]() {
+      char c;
+      ptr2 = &c;
+    });
+
+    KJ_EXPECT(promise.poll(waitScope));
+
+    KJ_EXPECT(ptr1 != nullptr);
+    KJ_EXPECT(ptr2 == nullptr);  // didn't run because of lazy continuation evaluation
+    KJ_EXPECT(port.waitStack == nullptr);
+    KJ_EXPECT(port.pollStack != nullptr);
+
+    // The event callback should have run on a different stack, and poll() should have run on
+    // a separate stack too.
+    KJ_EXPECT(!onOurStack(ptr1));
+    KJ_EXPECT(!onOurStack(port.pollStack));
+
+    pool.runSynchronously([&]() {
+      // This should run on the same stack where the event callbacks ran.
+      KJ_EXPECT(onOurStack(ptr1));
+      KJ_EXPECT(onOurStack(port.pollStack));
+    });
+  }
+}
 #endif
 
 }  // namespace

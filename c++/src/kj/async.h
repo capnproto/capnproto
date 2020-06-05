@@ -1021,14 +1021,43 @@ public:
   //
   // This has no effect when used in a fiber.
 
+  void runEventCallbacksOnStackPool(kj::Maybe<const FiberPool&> pool) { runningStacksPool = pool; }
+  // Arranges to switch stacks while event callbacks are executing. This is an optimization that
+  // is useful for programs that use extremely high thread counts, where each thread has its own
+  // event loop, but each thread has relatively low event throughput, i.e. each thread spends
+  // most of its time waiting for I/O. Normally, the biggest problem with having lots of threads
+  // is that each thread must allocate a stack, and stacks can take a lot of memory if the
+  // application commonly makes deep calls. But, most of that stack space is only needed while
+  // the thread is executing, not while it's sleeping. So, if threads only switch to a big stack
+  // during execution, switching back when it's time to sleep, and if those stacks are freelisted
+  // so that they can be shared among threads, then a lot of memory is saved.
+  //
+  // We use the `FiberPool` type here because it implements a freelist of stacks, which is exactly
+  // what we happen to want! In our case, though, we don't use those stacks to implement fibers;
+  // we use them as the main thread stack.
+  //
+  // This has no effect if this WaitScope itself is for a fiber.
+  //
+  // Pass `nullptr` as the parameter to go back to running events on the main stack.
+
 private:
   EventLoop& loop;
   uint busyPollInterval = kj::maxValue;
 
   kj::Maybe<_::FiberBase&> fiber;
+  kj::Maybe<const FiberPool&> runningStacksPool;
 
   explicit WaitScope(EventLoop& loop, _::FiberBase& fiber)
       : loop(loop), fiber(fiber) {}
+
+  template <typename Func>
+  inline void runOnStackPool(Func&& func) {
+    KJ_IF_MAYBE(pool, runningStacksPool) {
+      pool->runSynchronously(kj::fwd<Func>(func));
+    } else {
+      func();
+    }
+  }
 
   friend class EventLoop;
   friend class _::FiberBase;
