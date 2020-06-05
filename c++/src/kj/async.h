@@ -445,7 +445,7 @@ public:
   //   doesn't need it.
 
 private:
-  struct Impl;
+  class Impl;
   Own<Impl> impl;
 
   friend class _::FiberStack;

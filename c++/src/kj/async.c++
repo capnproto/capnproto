@@ -324,13 +324,13 @@ public:
 
   void switchToFiber();
   void switchToMain();
+
 private:
   size_t stackSize;
   OneOf<FiberBase*, SynchronousFunc*> main;
-  Maybe<Own<FiberStack>> freelistNext;
 
   friend class FiberBase;
-  friend struct FiberPool::Impl;
+  friend class FiberPool::Impl;
 
   struct StartRoutine;
 
@@ -342,32 +342,47 @@ private:
 #endif
 
   void run();
+
+  bool isReset() { return main == nullptr; }
 };
 
 }  // namespace _
 
-struct FiberPool::Impl {
+class FiberPool::Impl final: private Disposer {
+public:
   Impl(size_t stackSize): stackSize(stackSize) {}
 
-  size_t stackSize;
-  MutexGuarded<Maybe<Own<_::FiberStack>>> start;
+  Own<_::FiberStack> takeStack() const {
+    // Get a stack from the pool. The disposer on the returned Own pointer will return the stack
+    // to the pool, provided that reset() has been called to indicate that the stack is not in
+    // a weird state.
 
-  void returnStack(Own<_::FiberStack> stack) const {
-    stack->reset();
-    auto lock = start.lockExclusive();
-    stack->freelistNext = kj::mv(*lock);
-    *lock = kj::mv(stack);
+    {
+      auto lock = freelist.lockExclusive();
+      if (!lock->empty()) {
+        _::FiberStack* result = lock->back();
+        lock->removeLast();
+        return { result, *this };
+      }
+    }
+
+    _::FiberStack* result = new _::FiberStack(stackSize);
+    return { result, *this };
   }
 
-  Own<_::FiberStack> takeStack() const {
-    auto lock = start.lockExclusive();
-    auto& value = *lock;
-    KJ_IF_MAYBE(current, value) {
-      auto moved = kj::mv(*current);
-      *lock = kj::mv(moved->freelistNext);
-      return kj::mv(moved);
-    } else {
-      return kj::heap<_::FiberStack>(stackSize);
+private:
+  size_t stackSize;
+  MutexGuarded<kj::Vector<_::FiberStack*>> freelist;
+
+  void disposeImpl(void* pointer) const {
+    _::FiberStack* stack = reinterpret_cast<_::FiberStack*>(pointer);
+    KJ_DEFER(delete stack);
+
+    // Verify that the stack was reset before returning, otherwise it might be in a weird state
+    // where we don't want to reuse it.
+    if (stack->isReset()) {
+      freelist.lockExclusive()->add(stack);
+      stack = nullptr;
     }
   }
 };
@@ -382,7 +397,7 @@ void FiberPool::runSynchronously(kj::FunctionParam<void()> func) const {
     auto stack = impl->takeStack();
     stack->initialize(syncFunc);
     stack->switchToFiber();
-    impl->returnStack(kj::mv(stack));
+    stack->reset();  // safe to reuse
   }
 
   KJ_IF_MAYBE(e, syncFunc.exception) {
@@ -1147,7 +1162,7 @@ FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result)
 }
 
 FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result)
-    : state(WAITING), pool(pool), result(result) {
+    : state(WAITING), result(result) {
   stack = pool.impl->takeStack();
   stack->initialize(*this);
 #if _WIN32 || __CYGWIN__
@@ -1160,11 +1175,7 @@ FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result)
 #endif
 }
 
-FiberBase::~FiberBase() noexcept(false) {
-  KJ_IF_MAYBE(fiberPool, pool) {
-    fiberPool->impl->returnStack(kj::mv(stack));
-  }
-}
+FiberBase::~FiberBase() noexcept(false) {}
 
 void FiberBase::destroy() {
   // Called by `~Fiber()` to begin teardown. We can't do this work in `~FiberBase()` because the
@@ -1180,6 +1191,9 @@ void FiberBase::destroy() {
       // The fiber should only switch back to the main stack on completion, because any further
       // calls to wait() would throw before trying to switch.
       KJ_ASSERT(state == FINISHED);
+
+      // The fiber shut down properly so the stack is safe to reuse.
+      stack->reset();
       break;
 
     case RUNNING:
@@ -1191,6 +1205,7 @@ void FiberBase::destroy() {
 
     case FINISHED:
       // Normal completion, yay.
+      stack->reset();
       break;
   }
 }
