@@ -44,6 +44,8 @@
 #include "vector.h"
 #include "threadlocal.h"
 #include "mutex.h"
+#include "one-of.h"
+#include "function.h"
 
 #if _WIN32 || __CYGWIN__
 #include <windows.h>  // for Sleep(0) and fibers
@@ -308,17 +310,23 @@ public:
   FiberStack(size_t stackSize);
   ~FiberStack() noexcept(false);
 
+  struct SynchronousFunc {
+    kj::FunctionParam<void()>& func;
+    kj::Maybe<kj::Exception> exception;
+  };
+
   void initialize(FiberBase& fiber);
+  void initialize(SynchronousFunc& syncFunc);
 
   void reset() {
-    fiber = nullptr;
+    main = {};
   }
 
   void switchToFiber();
   void switchToMain();
 private:
   size_t stackSize;
-  Maybe<FiberBase&> fiber;
+  OneOf<FiberBase*, SynchronousFunc*> main;
   Maybe<Own<FiberStack>> freelistNext;
 
   friend class FiberBase;
@@ -332,9 +340,11 @@ private:
   struct Impl;
   Impl* impl;
 #endif
+
+  void run();
 };
 
-}
+}  // namespace _
 
 struct FiberPool::Impl {
   Impl(size_t stackSize): stackSize(stackSize) {}
@@ -364,6 +374,21 @@ struct FiberPool::Impl {
 
 FiberPool::FiberPool(size_t stackSize) : impl(kj::heap<FiberPool::Impl>(stackSize)) {}
 FiberPool::~FiberPool() noexcept(false) {}
+
+void FiberPool::runSynchronously(kj::FunctionParam<void()> func) const {
+  _::FiberStack::SynchronousFunc syncFunc { func, nullptr };
+
+  {
+    auto stack = impl->takeStack();
+    stack->initialize(syncFunc);
+    stack->switchToFiber();
+    impl->returnStack(kj::mv(stack));
+  }
+
+  KJ_IF_MAYBE(e, syncFunc.exception) {
+    kj::throwRecoverableException(kj::mv(*e));
+  }
+}
 
 namespace _ {  // private
 
@@ -1009,15 +1034,7 @@ struct FiberStack::StartRoutine {
 #if _WIN32 || __CYGWIN__
   static void WINAPI run(LPVOID ptr) {
     // This is the static C-style function we pass to CreateFiber().
-    auto& stack = *reinterpret_cast<FiberStack*>(ptr);
-
-    // use an infinite loop to reuse this fiber if we ever re-enter it
-    while (true) {
-      KJ_ASSERT_NONNULL(stack.fiber).run();
-      // On Windows, if the fiber main function returns, the thread exits. We need to explicitly switch
-      // back to the main stack.
-      stack.switchToMain();
-    }
+    reinterpret_cast<FiberStack*>(ptr)->run();
   }
 #else
   static void run(int arg1, int arg2) {
@@ -1027,20 +1044,39 @@ struct FiberStack::StartRoutine {
     // work correctly on 64-bit machines. Gross.
     uintptr_t ptr = static_cast<uint>(arg1);
     ptr |= static_cast<uintptr_t>(static_cast<uint>(arg2)) << (sizeof(ptr) * 4);
-    auto stack = reinterpret_cast<FiberStack*>(ptr);
 
-    // Jump back into the fiber stack constructor
-    stack->switchToMain();
+    auto& stack = *reinterpret_cast<FiberStack*>(ptr);
 
-    while (true) {
-      KJ_ASSERT_NONNULL(stack->fiber).run();
-      // use an explicit switch back and infinite loop to keep from
-      // having to remake the context every time
-      stack->switchToMain();
-    }
+    // We first switch to the fiber inside of the FiberStack constructor. This is just for
+    // initialization purposes, and we're expected to switch back immediately.
+    stack.switchToMain();
+
+    // OK now have a real job.
+    stack.run();
   }
 #endif
 };
+
+void FiberStack::run() {
+  // Loop forever so that the fiber can be reused.
+  for (;;) {
+    KJ_SWITCH_ONEOF(main) {
+      KJ_CASE_ONEOF(event, FiberBase*) {
+        event->run();
+      }
+      KJ_CASE_ONEOF(func, SynchronousFunc*) {
+        KJ_IF_MAYBE(exception, kj::runCatchingExceptions(func->func)) {
+          func->exception.emplace(kj::mv(*exception));
+        }
+      }
+    }
+
+    // Wait for the fiber to be used again. Note the fiber might simply be destroyed without this
+    // ever returning. That's OK because we don't have any nontrivial destructors on the stack
+    // at this point.
+    switchToMain();
+  }
+}
 
 FiberStack::FiberStack(size_t stackSizeParam)
     // Force stackSize to a reasonable minimum.
@@ -1088,8 +1124,13 @@ FiberStack::~FiberStack() noexcept(false) {
 }
 
 void FiberStack::initialize(FiberBase& fiber) {
-  KJ_REQUIRE(this->fiber == nullptr);
-  this->fiber = fiber;
+  KJ_REQUIRE(this->main == nullptr);
+  this->main = &fiber;
+}
+
+void FiberStack::initialize(SynchronousFunc& func) {
+  KJ_REQUIRE(this->main == nullptr);
+  this->main = &func;
 }
 
 FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result)

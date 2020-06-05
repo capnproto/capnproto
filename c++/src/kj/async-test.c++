@@ -1012,6 +1012,47 @@ KJ_TEST("fiber pool") {
   // run the same thing and reuse the fibers
   run();
 }
+
+bool onOurStack(char* p) {
+  // If p points less than 64k away from a random stack variable, then it must be on the same
+  // stack, since we never allocate stacks smaller than 64k.
+  char c;
+  ptrdiff_t diff = p - &c;
+  return diff < 65536 && diff > -65536;
+}
+
+KJ_TEST("fiber pool runSynchronously()") {
+  FiberPool pool(65536);
+
+  {
+    char c;
+    KJ_EXPECT(onOurStack(&c));  // sanity check...
+  }
+
+  char* ptr1 = nullptr;
+  char* ptr2 = nullptr;
+
+  pool.runSynchronously([&]() {
+    char c;
+    ptr1 = &c;
+  });
+  KJ_ASSERT(ptr1 != nullptr);
+
+  pool.runSynchronously([&]() {
+    char c;
+    ptr2 = &c;
+  });
+  KJ_ASSERT(ptr2 != nullptr);
+
+  // Should have used the same stack both times, so local var would be in the same place.
+  KJ_EXPECT(ptr1 == ptr2);
+
+  // Should have been on a different stack from the main stack.
+  KJ_EXPECT(!onOurStack(ptr1));
+
+  KJ_EXPECT_THROW_MESSAGE("test exception",
+      pool.runSynchronously([&]() { KJ_FAIL_ASSERT("test exception"); }));
+}
 #endif
 
 }  // namespace

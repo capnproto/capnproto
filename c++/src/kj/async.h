@@ -41,6 +41,9 @@ class PromiseFulfiller;
 template <typename T>
 struct PromiseFulfillerPair;
 
+template <typename Func>
+class FunctionParam;
+
 template <typename Func, typename T>
 using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
@@ -426,6 +429,20 @@ public:
   // promises. Thus, `func()` can be written in a synchronous, blocking style, instead of
   // using `.then()`. This is often much easier to write and read, and may even be significantly
   // faster if it allows the use of stack allocation rather than heap allocation.
+
+  void runSynchronously(kj::FunctionParam<void()> func) const;
+  // Use one of the stacks in the pool to synchronously execute func(), returning the result that
+  // func() returns. This is not the usual use case for fibers, but can be a nice optimization
+  // in programs that have many threads that mostly only need small stacks, but occasionally need
+  // a much bigger stack to run some deeply recursive algorithm. If the algorithm is run on each
+  // thread's normal call stack, then every thread's stack will tend to grow to be very big
+  // (usually, stacks automatically grow as needed, but do not shrink until the thread exits
+  // completely). If the thread can share a small set of big stacks that they use only when calling
+  // the deeply recursive algorithm, and use small stacks for everything else, overall memory usage
+  // is reduced.
+  //
+  // TODO(someday): If func() returns a value, return it from runSynchronously? Current use case
+  //   doesn't need it.
 
 private:
   struct Impl;
