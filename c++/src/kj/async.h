@@ -422,6 +422,12 @@ public:
   ~FiberPool() noexcept(false);
   KJ_DISALLOW_COPY(FiberPool);
 
+  void useCoreLocalFreelists();
+  // EXPERIMENTAL: Call to tell FiberPool to try to use core-local stack freelists, which
+  //   in theory should increase L1/L2 cache efficacy for freelisted stacks. In practice, as of
+  //   this writing, no performance advantage has yet been demonstrated. Note that currently this
+  //   feature is only supported on Linux (the flag has no effect on other operating systems).
+
   template <typename Func>
   PromiseForResult<Func, WaitScope&> startFiber(Func&& func) const KJ_WARN_UNUSED_RESULT;
   // Executes `func()` in a fiber from this pool, returning a promise for the eventual result.

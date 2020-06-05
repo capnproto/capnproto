@@ -348,14 +348,75 @@ private:
 
 }  // namespace _
 
+#if __linux__
+// TODO(someday): Support core-local freelists on OSs other than Linux. The only tricky part is
+//   finding what to use instead of sched_getcpu() to get the current CPU ID.
+#define USE_CORE_LOCAL_FREELISTS 1
+#endif
+
+#if USE_CORE_LOCAL_FREELISTS
+static const size_t CACHE_LINE_SIZE = 64;
+// Most modern architectures have 64-byte cache lines.
+#endif
+
 class FiberPool::Impl final: private Disposer {
 public:
   Impl(size_t stackSize): stackSize(stackSize) {}
+  ~Impl() noexcept(false) {
+#if USE_CORE_LOCAL_FREELISTS
+    if (coreLocalFreelists != nullptr) {
+      KJ_DEFER(free(coreLocalFreelists));
+
+      for (uint i: kj::zeroTo(nproc)) {
+        for (auto stack: coreLocalFreelists[i].stacks) {
+          if (stack != nullptr) {
+            delete stack;
+          }
+        }
+      }
+    }
+#endif
+  }
+
+  void useCoreLocalFreelists() {
+#if USE_CORE_LOCAL_FREELISTS
+    if (coreLocalFreelists != nullptr) {
+      // Ignore repeat call.
+      return;
+    }
+
+    int nproc_;
+    KJ_SYSCALL(nproc_ = sysconf(_SC_NPROCESSORS_CONF));
+    nproc = nproc_;
+
+    void* allocPtr;
+    size_t totalSize = nproc * sizeof(CoreLocalFreelist);
+    int error = posix_memalign(&allocPtr, CACHE_LINE_SIZE, totalSize);
+    if (error != 0) {
+      KJ_FAIL_SYSCALL("posix_memalign", error);
+    }
+    memset(allocPtr, 0, totalSize);
+    coreLocalFreelists = reinterpret_cast<CoreLocalFreelist*>(allocPtr);
+#endif
+  }
 
   Own<_::FiberStack> takeStack() const {
     // Get a stack from the pool. The disposer on the returned Own pointer will return the stack
     // to the pool, provided that reset() has been called to indicate that the stack is not in
     // a weird state.
+
+#if USE_CORE_LOCAL_FREELISTS
+    KJ_IF_MAYBE(core, lookupCoreLocalFreelist()) {
+      for (auto& stackPtr: core->stacks) {
+        _::FiberStack* result = __atomic_exchange_n(&stackPtr, nullptr, __ATOMIC_ACQUIRE);
+        if (result != nullptr) {
+          // Found a stack in this slot!
+          return { result, *this };
+        }
+      }
+      // No stacks found, fall back to global freelist.
+    }
+#endif
 
     {
       auto lock = freelist.lockExclusive();
@@ -374,6 +435,43 @@ private:
   size_t stackSize;
   MutexGuarded<kj::Vector<_::FiberStack*>> freelist;
 
+#if USE_CORE_LOCAL_FREELISTS
+  struct CoreLocalFreelist {
+    union {
+      _::FiberStack* stacks[2];
+      // For now, we don't try to freelist more than 2 stacks per core. If you have three or more
+      // threads interleaved on a core, chances are you have bigger problems...
+
+      byte padToCacheLine[CACHE_LINE_SIZE];
+      // We don't want two core-local freelists to live in the same cache line, otherwise the
+      // cores will fight over ownership of that line.
+    };
+  };
+
+  uint nproc;
+  CoreLocalFreelist* coreLocalFreelists = nullptr;
+
+  kj::Maybe<CoreLocalFreelist&> lookupCoreLocalFreelist() const {
+    if (coreLocalFreelists == nullptr) {
+      return nullptr;
+    } else {
+      int cpu = sched_getcpu();
+      if (cpu >= 0) {
+        // TODO(perf): Perhaps two hyperthreads on the same physical core should share a freelist?
+        //   But I don't know how to find out if the system uses hyperthreading.
+        return coreLocalFreelists[cpu];
+      } else {
+        static bool logged = false;
+        if (!logged) {
+          KJ_LOG(ERROR, "invalid cpu number from sched_getcpu()?", cpu, nproc);
+          logged = true;
+        }
+        return nullptr;
+      }
+    }
+  }
+#endif
+
   void disposeImpl(void* pointer) const {
     _::FiberStack* stack = reinterpret_cast<_::FiberStack*>(pointer);
     KJ_DEFER(delete stack);
@@ -381,6 +479,21 @@ private:
     // Verify that the stack was reset before returning, otherwise it might be in a weird state
     // where we don't want to reuse it.
     if (stack->isReset()) {
+#if USE_CORE_LOCAL_FREELISTS
+      KJ_IF_MAYBE(core, lookupCoreLocalFreelist()) {
+        for (auto& stackPtr: core->stacks) {
+          stack = __atomic_exchange_n(&stackPtr, stack, __ATOMIC_RELEASE);
+          if (stack == nullptr) {
+            // Cool, we inserted the stack into an unused slot. We're done.
+            return;
+          }
+        }
+        // All slots were occupied, so we inserted the new stack in the front, pushed the rest back,
+        // and now `stack` refers to the stack that fell off the end of the core-local list. That
+        // needs to go into the global freelist.
+      }
+#endif
+
       freelist.lockExclusive()->add(stack);
       stack = nullptr;
     }
@@ -389,6 +502,10 @@ private:
 
 FiberPool::FiberPool(size_t stackSize) : impl(kj::heap<FiberPool::Impl>(stackSize)) {}
 FiberPool::~FiberPool() noexcept(false) {}
+
+void FiberPool::useCoreLocalFreelists() {
+  impl->useCoreLocalFreelists();
+}
 
 void FiberPool::runSynchronously(kj::FunctionParam<void()> func) const {
   _::FiberStack::SynchronousFunc syncFunc { func, nullptr };
