@@ -972,10 +972,10 @@ KJ_TEST("fiber pool") {
         int i = promise.wait(scope);
         KJ_EXPECT(i == 123);
         if (i1_local == nullptr) {
-            i1_local = &i;
-          } else {
-            KJ_ASSERT(i1_local == &i);
-          }
+          i1_local = &i;
+        } else {
+          KJ_ASSERT(i1_local == &i);
+        }
         return i;
       });
       {
