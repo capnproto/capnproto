@@ -1011,6 +1011,8 @@ KJ_TEST("fiber pool") {
   KJ_ASSERT_NONNULL(i2_local);
   // run the same thing and reuse the fibers
   run();
+
+  KJ_DBG("dummy change");
 }
 #endif
 
