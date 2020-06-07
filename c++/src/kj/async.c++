@@ -301,6 +301,35 @@ Promise<void> TaskSet::onEmpty() {
   }
 }
 
+// =======================================================================================
+
+namespace {
+
+#if _WIN32 || __CYGWIN__
+thread_local void* threadMainFiber = nullptr;
+
+void* getMainWin32Fiber() {
+  return threadMainFiber;
+}
+#endif
+
+inline void ensureThreadCanRunFibers() {
+#if _WIN32 || __CYGWIN__
+  // Make sure the current thread has been converted to a fiber.
+  void* fiber = threadMainFiber;
+  if (fiber == nullptr) {
+    // Thread not initialized. Convert it to a fiber now.
+    // Note: Unfortunately, if the application has already converted the thread to a fiber, I
+    //   guess this will fail. But trying to call GetCurrentFiber() when the thread isn't a fiber
+    //   doesn't work (it returns null on WINE but not on real windows, ugh). So I guess we're
+    //   just incompatible with the application doing anything with fibers, which is sad.
+    threadMainFiber = fiber = ConvertThreadToFiber(nullptr);
+  }
+#endif
+}
+
+}  // namespace
+
 namespace _ {
 
 class FiberStack final {
@@ -532,6 +561,8 @@ void FiberPool::useCoreLocalFreelists() {
 }
 
 void FiberPool::runSynchronously(kj::FunctionParam<void()> func) const {
+  ensureThreadCanRunFibers();
+
   _::FiberStack::SynchronousFunc syncFunc { func, nullptr };
 
   {
@@ -1288,33 +1319,6 @@ void FiberStack::initialize(SynchronousFunc& func) {
   KJ_REQUIRE(this->main == nullptr);
   this->main = &func;
 }
-
-namespace {
-
-#if _WIN32 || __CYGWIN__
-thread_local void* threadMainFiber = nullptr;
-
-void* getMainWin32Fiber() {
-  return threadMainFiber;
-}
-#endif
-
-inline void ensureThreadCanRunFibers() {
-#if _WIN32 || __CYGWIN__
-  // Make sure the current thread has been converted to a fiber.
-  void* fiber = threadMainFiber;
-  if (fiber == nullptr) {
-    // Thread not initialized. Convert it to a fiber now.
-    // Note: Unfortunately, if the application has already converted the thread to a fiber, I
-    //   guess this will fail. But trying to call GetCurrentFiber() when the thread isn't a fiber
-    //   doesn't work (it returns null on WINE but not on real windows, ugh). So I guess we're
-    //   just incompatible with the application doing anything with fibers, which is sad.
-    threadMainFiber = fiber = ConvertThreadToFiber(nullptr);
-  }
-#endif
-}
-
-}  // namespace
 
 FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result)
     : state(WAITING), stack(kj::heap<FiberStack>(stackSize)), result(result) {
