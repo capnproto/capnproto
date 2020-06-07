@@ -46,6 +46,7 @@
 #include "mutex.h"
 #include "one-of.h"
 #include "function.h"
+#include <deque>
 
 #if _WIN32 || __CYGWIN__
 #include <windows.h>  // for Sleep(0) and fibers
@@ -378,6 +379,14 @@ public:
 #endif
   }
 
+  void setMaxFreelist(size_t count) {
+    maxFreelist = count;
+  }
+
+  size_t getFreelistSize() const {
+    return freelist.lockShared()->size();
+  }
+
   void useCoreLocalFreelists() {
 #if USE_CORE_LOCAL_FREELISTS
     if (coreLocalFreelists != nullptr) {
@@ -422,7 +431,7 @@ public:
       auto lock = freelist.lockExclusive();
       if (!lock->empty()) {
         _::FiberStack* result = lock->back();
-        lock->removeLast();
+        lock->pop_back();
         return { result, *this };
       }
     }
@@ -433,7 +442,8 @@ public:
 
 private:
   size_t stackSize;
-  MutexGuarded<kj::Vector<_::FiberStack*>> freelist;
+  size_t maxFreelist = kj::maxValue;
+  MutexGuarded<std::deque<_::FiberStack*>> freelist;
 
 #if USE_CORE_LOCAL_FREELISTS
   struct CoreLocalFreelist {
@@ -494,14 +504,28 @@ private:
       }
 #endif
 
-      freelist.lockExclusive()->add(stack);
-      stack = nullptr;
+      auto lock = freelist.lockExclusive();
+      lock->push_back(stack);
+      if (lock->size() > maxFreelist) {
+        stack = lock->front();
+        lock->pop_front();
+      } else {
+        stack = nullptr;
+      }
     }
   }
 };
 
 FiberPool::FiberPool(size_t stackSize) : impl(kj::heap<FiberPool::Impl>(stackSize)) {}
 FiberPool::~FiberPool() noexcept(false) {}
+
+void FiberPool::setMaxFreelist(size_t count) {
+  impl->setMaxFreelist(count);
+}
+
+size_t FiberPool::getFreelistSize() const {
+  return impl->getFreelistSize();
+}
 
 void FiberPool::useCoreLocalFreelists() {
   impl->useCoreLocalFreelists();

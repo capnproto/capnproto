@@ -22,6 +22,8 @@
 #include "async.h"
 #include "debug.h"
 #include <kj/compat/gtest.h>
+#include "mutex.h"
+#include "thread.h"
 
 namespace kj {
 namespace {
@@ -993,17 +995,23 @@ KJ_TEST("fiber pool") {
         KJ_EXPECT(!fiber1.poll(waitScope));
         KJ_EXPECT(!fiber2.poll(waitScope));
 
+        KJ_EXPECT(pool.getFreelistSize() == 0);
+
         paf2.fulfiller->fulfill(456);
 
         KJ_EXPECT(!fiber1.poll(waitScope));
         KJ_ASSERT(fiber2.poll(waitScope));
         KJ_EXPECT(fiber2.wait(waitScope) == 456);
+
+        KJ_EXPECT(pool.getFreelistSize() == 1);
       }
 
       paf1.fulfiller->fulfill(123);
 
       KJ_ASSERT(fiber1.poll(waitScope));
       KJ_EXPECT(fiber1.wait(waitScope) == 123);
+
+      KJ_EXPECT(pool.getFreelistSize() == 2);
     }
   };
   run();
@@ -1052,6 +1060,64 @@ KJ_TEST("fiber pool runSynchronously()") {
 
   KJ_EXPECT_THROW_MESSAGE("test exception",
       pool.runSynchronously([&]() { KJ_FAIL_ASSERT("test exception"); }));
+}
+
+KJ_TEST("fiber pool limit") {
+  FiberPool pool(65536);
+
+  pool.setMaxFreelist(1);
+
+  kj::MutexGuarded<uint> state;
+
+  char* ptr1;
+  char* ptr2;
+
+  // Run some code that uses two stacks in separate threads at the same time.
+  {
+    kj::Thread thread([&]() noexcept {
+      auto lock = state.lockExclusive();
+      lock.wait([](uint val) { return val == 1; });
+
+      pool.runSynchronously([&]() {
+        char c;
+        ptr2 = &c;
+
+        *lock = 2;
+        lock.wait([](uint val) { return val == 3; });
+      });
+    });
+
+    ([&]() noexcept {
+      auto lock = state.lockExclusive();
+
+      pool.runSynchronously([&]() {
+        char c;
+        ptr1 = &c;
+
+        *lock = 1;
+        lock.wait([](uint val) { return val == 2; });
+      });
+
+      *lock = 3;
+    })();
+  }
+
+  KJ_EXPECT(pool.getFreelistSize() == 1);
+
+  // We expect that if we reuse a stack from the pool, it will be the last one that exited, which
+  // is the one from the thread.
+  pool.runSynchronously([&]() {
+    KJ_EXPECT(onOurStack(ptr2));
+    KJ_EXPECT(!onOurStack(ptr1));
+
+    KJ_EXPECT(pool.getFreelistSize() == 0);
+  });
+
+  KJ_EXPECT(pool.getFreelistSize() == 1);
+
+  // Note that it would NOT work to try to allocate two stacks at the same time again and verify
+  // that the second stack doesn't match the previously-deleted stack, because there's a high
+  // likelihood that the new stack would be allocated in the same location.
 }
 
 KJ_TEST("run event loop on freelisted stacks") {

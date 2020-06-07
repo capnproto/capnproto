@@ -422,6 +422,10 @@ public:
   ~FiberPool() noexcept(false);
   KJ_DISALLOW_COPY(FiberPool);
 
+  void setMaxFreelist(size_t count);
+  // Set the maximum number of stacks to add to the freelist. If the freelist is full, stacks will
+  // be deleted rather than returned to the freelist.
+
   void useCoreLocalFreelists();
   // EXPERIMENTAL: Call to tell FiberPool to try to use core-local stack freelists, which
   //   in theory should increase L1/L2 cache efficacy for freelisted stacks. In practice, as of
@@ -449,6 +453,9 @@ public:
   //
   // TODO(someday): If func() returns a value, return it from runSynchronously? Current use case
   //   doesn't need it.
+
+  size_t getFreelistSize() const;
+  // Get the number of stacks currently in the freelist. Does not count stacks that are active.
 
 private:
   class Impl;
