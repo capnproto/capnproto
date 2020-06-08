@@ -899,7 +899,6 @@ private:
   _::PromiseNode* currentInner = nullptr;
   OnReadyEvent onReadyEvent;
   Own<FiberStack> stack;
-  Maybe<const FiberPool&> pool;
   _::ExceptionOrValue& result;
 
   void run();
