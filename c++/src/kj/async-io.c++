@@ -2059,7 +2059,7 @@ private:
 
       if (stoppage != nullptr) {
         // We're eof or errored, don't read, but loop so we can fill the sink(s).
-        return pull();
+        return pullLoop();
       }
 
       auto& n = KJ_ASSERT_NONNULL(need);
@@ -2079,7 +2079,7 @@ private:
           // TODO(perf): buffer.size() is O(n) where n = # of individual heap-allocated byte arrays.
           if (s->buffer.size() + n.maxBytes > bufferSizeLimit) {
             stoppage = Stoppage(KJ_EXCEPTION(FAILED, "tee buffer size limit exceeded"));
-            return pull();
+            return pullLoop();
           }
         }
       }
@@ -2129,11 +2129,11 @@ private:
           stoppage = Stoppage(Eof());
         }
 
-        return pull();
+        return pullLoop();
       }, [this](Exception&& exception) {
         // Exception from the inner tryRead(). Propagate.
         stoppage = Stoppage(mv(exception));
-        return pull();
+        return pullLoop();
       });
     });
   }
