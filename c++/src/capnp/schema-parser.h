@@ -169,6 +169,9 @@ public:
   // Gets the nested node with the given name, or throws an exception if there is no such nested
   // declaration.
 
+  kj::Array<ParsedSchema> getAllNested() const;
+  // Get all the nested nodes
+
   schema::Node::SourceInfo::Reader getSourceInfo() const;
   // Get the source info for this schema.
 

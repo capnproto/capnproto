@@ -328,6 +328,15 @@ ParsedSchema ParsedSchema::getNested(kj::StringPtr nestedName) const {
   }
 }
 
+kj::Array<ParsedSchema> ParsedSchema::getAllNested() const {
+  kj::ArrayBuilder<ParsedSchema> builder
+    = kj::heapArrayBuilder<ParsedSchema>(getProto().getNestedNodes().size());
+  for (auto nestedNode : getProto().getNestedNodes()) {
+    builder.add( ParsedSchema(parser->impl->compiler.getLoader().get(nestedNode.getId()), *parser) );
+  }
+  return builder.finish();
+}
+
 schema::Node::SourceInfo::Reader ParsedSchema::getSourceInfo() const {
   return KJ_ASSERT_NONNULL(parser->getSourceInfo(*this));
 }
