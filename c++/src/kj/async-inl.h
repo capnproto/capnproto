@@ -1082,6 +1082,40 @@ inline PromiseForResult<Func, void> evalNow(Func&& func) {
 }
 
 template <typename Func>
+struct RetryOnDisconnect_ {
+  static inline PromiseForResult<Func, void> apply(Func&& func) {
+    auto promise = evalNow(func);
+    return promise.catch_([func = kj::mv(func)](kj::Exception&& e) -> PromiseForResult<Func, void> {
+      if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+        return func();
+      } else {
+        return kj::mv(e);
+      }
+    });
+  }
+};
+template <typename Func>
+struct RetryOnDisconnect_<Func&> {
+  // Specialization for references. Needed because the syntax for capturing references in a
+  // lambda is different. :(
+  static inline PromiseForResult<Func, void> apply(Func& func) {
+    auto promise = evalNow(func);
+    return promise.catch_([&func](kj::Exception&& e) -> PromiseForResult<Func, void> {
+      if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+        return func();
+      } else {
+        return kj::mv(e);
+      }
+    });
+  }
+};
+
+template <typename Func>
+inline PromiseForResult<Func, void> retryOnDisconnect(Func&& func) {
+  return RetryOnDisconnect_<Func>::apply(kj::fwd<Func>(func));
+}
+
+template <typename Func>
 inline PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) {
   typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
 
