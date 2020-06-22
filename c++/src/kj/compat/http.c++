@@ -1070,7 +1070,8 @@ public:
               -> HttpInputStream::Response {
       auto response = KJ_REQUIRE_NONNULL(
           responseOrProtocolError.tryGet<HttpHeaders::Response>(), "bad response");
-      auto body = getEntityBody(HttpInputStreamImpl::RESPONSE, requestMethod, 0, headers);
+      auto body = getEntityBody(HttpInputStreamImpl::RESPONSE, requestMethod,
+                                response.statusCode, headers);
 
       return { response.statusCode, response.statusText, headers, kj::mv(body) };
     });
@@ -1662,7 +1663,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
         length = uint64_t(0);
       }
       return kj::heap<HttpNullEntityReader>(*this, length);
-    } else if (statusCode == 204 || statusCode == 205 || statusCode == 304) {
+    } else if (statusCode == 204 || statusCode == 304) {
       // No body.
       return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
     }
@@ -4832,8 +4833,16 @@ private:
       connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "close";
     }
 
-    if (statusCode == 204 || statusCode == 205 || statusCode == 304) {
+    if (statusCode == 204 || statusCode == 304) {
       // No entity-body.
+    } else if (statusCode == 205) {
+      // Status code 205 also has no body, but unlike 204 and 304, it must explicitly encode an
+      // empty body, e.g. using content-length: 0. I'm guessing this is one of those things, where
+      // some early clients expected an explicit body while others assumed an empty body, and so
+      // the standard had to choose the common denominator.
+      //
+      // Spec: https://tools.ietf.org/html/rfc7231#section-6.3.6
+      connectionHeaders[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = "0";
     } else KJ_IF_MAYBE(s, expectedBodySize) {
       // HACK: We interpret a zero-length expected body length on responses to HEAD requests to mean
       //   "don't set a Content-Length header at all." This provides a way to omit a body header on
