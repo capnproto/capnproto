@@ -1230,5 +1230,70 @@ KJ_TEST("run event loop on freelisted stacks") {
 }
 #endif
 
+KJ_TEST("retryOnDisconnect") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  {
+    uint i = 0;
+    auto promise = retryOnDisconnect([&]() -> Promise<int> {
+      i++;
+      return 123;
+    });
+    KJ_EXPECT(i == 1);
+    KJ_EXPECT(promise.wait(waitScope) == 123);
+    KJ_EXPECT(i == 1);
+  }
+
+  {
+    uint i = 0;
+    auto promise = retryOnDisconnect([&]() -> Promise<int> {
+      if (i++ == 0) {
+        return KJ_EXCEPTION(DISCONNECTED, "test disconnect");
+      } else {
+        return 123;
+      }
+    });
+    KJ_EXPECT(i == 1);
+    KJ_EXPECT(promise.wait(waitScope) == 123);
+    KJ_EXPECT(i == 2);
+  }
+
+
+  {
+    uint i = 0;
+    auto promise = retryOnDisconnect([&]() -> Promise<int> {
+      if (i++ <= 1) {
+        return KJ_EXCEPTION(DISCONNECTED, "test disconnect", i);
+      } else {
+        return 123;
+      }
+    });
+    KJ_EXPECT(i == 1);
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test disconnect; i = 2", promise.wait(waitScope));
+    KJ_EXPECT(i == 2);
+  }
+
+  {
+    // Test passing a reference to a function.
+    struct Func {
+      uint i = 0;
+      Promise<int> operator()() {
+        if (i++ == 0) {
+          return KJ_EXCEPTION(DISCONNECTED, "test disconnect");
+        } else {
+          return 123;
+        }
+      }
+    };
+    Func func;
+
+    auto promise = retryOnDisconnect(func);
+    KJ_EXPECT(func.i == 1);
+    KJ_EXPECT(promise.wait(waitScope) == 123);
+    KJ_EXPECT(func.i == 2);
+  }
+}
+
 }  // namespace
 }  // namespace kj
