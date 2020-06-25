@@ -328,13 +328,8 @@ ParsedSchema ParsedSchema::getNested(kj::StringPtr nestedName) const {
   }
 }
 
-kj::Array<ParsedSchema> ParsedSchema::getAllNested() const {
-  kj::ArrayBuilder<ParsedSchema> builder
-    = kj::heapArrayBuilder<ParsedSchema>(getProto().getNestedNodes().size());
-  for (auto nestedNode : getProto().getNestedNodes()) {
-    builder.add( ParsedSchema(parser->impl->compiler.getLoader().get(nestedNode.getId()), *parser) );
-  }
-  return builder.finish();
+ParsedSchema::ParsedSchemaList ParsedSchema::getAllNested() const {
+  return ParsedSchemaList(*this, getProto().getNestedNodes());
 }
 
 schema::Node::SourceInfo::Reader ParsedSchema::getSourceInfo() const {
@@ -351,6 +346,14 @@ const kj::StringPtr ParsedSchema::getNodeName() const {
   return nullptr;
 }
 
+// -------------------------------------------------------------------
+
+ParsedSchema ParsedSchema::ParsedSchemaList::operator[](uint index) const {
+  return ParsedSchema(
+    parent.parser->impl->compiler.getLoader().get(
+      parent.getProto().getNestedNodes()[index].getId()),
+    *parent.parser);
+}
 
 // -------------------------------------------------------------------
 

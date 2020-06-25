@@ -158,6 +158,9 @@ class ParsedSchema: public Schema {
   // ParsedSchema is an extension of Schema which also has the ability to look up nested nodes
   // by name.  See `SchemaParser`.
 
+  class ParsedSchemaList;
+  friend class ParsedSchemaList;
+
 public:
   inline ParsedSchema(): parser(nullptr) {}
 
@@ -169,7 +172,7 @@ public:
   // Gets the nested node with the given name, or throws an exception if there is no such nested
   // declaration.
 
-  kj::Array<ParsedSchema> getAllNested() const;
+  ParsedSchemaList getAllNested() const;
   // Get all the nested nodes
 
   schema::Node::SourceInfo::Reader getSourceInfo() const;
@@ -183,6 +186,27 @@ private:
 
   const SchemaParser* parser;
   friend class SchemaParser;
+};
+
+class ParsedSchema::ParsedSchemaList {
+public:
+  ParsedSchemaList() = default;  // empty list
+
+  inline uint size() const { return list.size(); }
+  ParsedSchema operator[](uint index) const;
+
+  typedef _::IndexingIterator<const ParsedSchemaList, ParsedSchema> Iterator;
+  inline Iterator begin() const { return Iterator(this, 0); }
+  inline Iterator end() const { return Iterator(this, size()); }
+
+private:
+  ParsedSchema parent;
+  List<schema::Node::NestedNode>::Reader list;
+
+  inline ParsedSchemaList(ParsedSchema parent, List<schema::Node::NestedNode>::Reader list)
+      : parent(parent), list(list) {}
+
+  friend class ParsedSchema;
 };
 
 // =======================================================================================
