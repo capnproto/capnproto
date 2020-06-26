@@ -755,7 +755,7 @@ public:
     if (!quiet) {
       auto result = checkPlausibility(convertFrom, input.getReadBuffer());
       if (result.getError() != nullptr) {
-        return kj::mv(result);
+        return result;
       }
     }
 

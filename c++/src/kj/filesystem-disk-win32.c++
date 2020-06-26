@@ -699,7 +699,7 @@ public:
     KJ_WIN32(GetFileInformationByHandle(ownHandle, &info));
 
     KJ_REQUIRE(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY, "not a directory", path);
-    return kj::mv(ownHandle);
+    return ownHandle;
   }
 
   Maybe<Own<const ReadableDirectory>> tryOpenSubdir(PathPtr path) const {
@@ -822,7 +822,7 @@ public:
         return nullptr;
     }
 
-    return kj::mv(path);
+    return path;
   }
 
   kj::Maybe<Array<wchar_t>> createNamedTemporary(

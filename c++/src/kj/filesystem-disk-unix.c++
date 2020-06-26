@@ -784,7 +784,7 @@ public:
     setCloexec(result);
 #endif
 
-    return kj::mv(result);
+    return result;
   }
 
   Maybe<Own<const ReadableDirectory>> tryOpenSubdir(PathPtr path) const {
@@ -915,7 +915,7 @@ public:
         return nullptr;
     }
 
-    return kj::mv(path);
+    return path;
   }
 
   bool tryReplaceNode(PathPtr path, WriteMode mode, Function<int(StringPtr)> tryCreate) const {
@@ -1057,7 +1057,7 @@ public:
     setCloexec(result);
 #endif
 
-    return kj::mv(result);
+    return result;
   }
 
   bool tryCommitReplacement(StringPtr toPath, int fromDirFd, StringPtr fromPath, WriteMode mode,
@@ -1363,7 +1363,7 @@ public:
 #endif
       auto result = newDiskFile(kj::mv(newFd));
       KJ_SYSCALL(unlinkat(fd, temp->cStr(), 0)) { break; }
-      return kj::mv(result);
+      return result;
     } else {
       // threw, but exceptions are disabled
       return newInMemoryFile(nullClock());
@@ -1685,7 +1685,7 @@ private:
       } else {
         if (pwdStat.st_ino == dotStat.st_ino &&
             pwdStat.st_dev == dotStat.st_dev) {
-          return kj::mv(result);
+          return result;
         } else {
           KJ_LOG(WARNING, "PWD environment variable doesn't match current directory", pwd);
         }

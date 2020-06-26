@@ -663,7 +663,7 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapClient(
   auto promise = conn->connect(expectedServerHostname);
   return promise.then(kj::mvCapture(conn, [](kj::Own<TlsConnection> conn)
       -> kj::Own<kj::AsyncIoStream> {
-    return kj::mv(conn);
+    return conn;
   }));
 }
 
@@ -672,7 +672,7 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::Async
   auto promise = conn->accept();
   return promise.then(kj::mvCapture(conn, [](kj::Own<TlsConnection> conn)
       -> kj::Own<kj::AsyncIoStream> {
-    return kj::mv(conn);
+    return conn;
   }));
 }
 

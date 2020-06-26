@@ -1995,7 +1995,7 @@ public:
       });
     }
 
-    return kj::mv(promise);
+    return promise;
   }
 
   Promise<void> whenWriteDisconnected() override {
@@ -2010,7 +2010,7 @@ private:
     if (length == 0) {
       return promise.then([this]() { inner.finishBody(); });
     } else {
-      return kj::mv(promise);
+      return promise;
     }
   }
 };
@@ -2870,6 +2870,7 @@ private:
         canceler.release();
         fulfiller.reject(kj::cp(e));
         pipe.endState(*this);
+        // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
         return kj::mv(e);
       }));
     }
@@ -2928,7 +2929,7 @@ private:
           fulfiller.fulfill();
           pipe.endState(*this);
         }
-        return kj::mv(message);
+        return message;
       }, [this](kj::Exception&& e) -> Message {
         canceler.release();
         fulfiller.reject(kj::cp(e));
@@ -3017,6 +3018,7 @@ private:
         canceler.release();
         fulfiller.reject(kj::cp(e));
         pipe.endState(*this);
+        // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
         return kj::mv(e);
       }));
     }
@@ -3559,6 +3561,7 @@ public:
     result.response = result.response.then(kj::mvCapture(refcounted,
         [](kj::Own<RefcountedClient>&& refcounted, Response&& response) {
       response.body = response.body.attach(kj::mv(refcounted));
+      // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
       return kj::mv(response);
     }));
     return result;
@@ -3583,6 +3586,7 @@ public:
           response.webSocketOrBody = ws.attach(kj::mv(refcounted));
         }
       }
+      // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
       return kj::mv(response);
     }));
   }
@@ -3965,7 +3969,7 @@ public:
 
     pendingRequests.push(kj::mv(paf.fulfiller));
     fireCountChanged();
-    return kj::mv(promise);
+    return promise;
   }
 
 private:
@@ -4226,6 +4230,7 @@ private:
           return result;
         } else {
           // Must have called tryRead() again after we already signaled EOF or threw. Fine.
+          // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
           return kj::mv(e);
         }
       });
@@ -4334,6 +4339,7 @@ private:
           return afterReceiveClosed()
               .then([message = kj::mv(message)]() mutable { return kj::mv(message); });
         }
+        // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
         return kj::mv(message);
       });
     }
@@ -4581,7 +4587,7 @@ public:
         // the exception because it's probably a side-effect of this.
         auto promise = kj::mv(*p);
         webSocketError = nullptr;
-        return kj::mv(promise);
+        return promise;
       }
 
       return sendError(kj::mv(e));
@@ -4646,7 +4652,7 @@ private:
             };
           }));
         }
-        return kj::mv(readHeaders);
+        return readHeaders;
       } else {
         // Client closed connection or pipeline timed out with no bytes received. This is not an
         // error, so don't report one.
@@ -4723,7 +4729,7 @@ private:
               // sendWebSocketError() was called. Finish sending and close the connection.
               auto promise = kj::mv(*p);
               webSocketError = nullptr;
-              return kj::mv(promise);
+              return promise;
             }
 
             if (upgraded) {

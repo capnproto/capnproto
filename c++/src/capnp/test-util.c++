@@ -1069,7 +1069,7 @@ kj::Promise<void> TestMoreStuffImpl::neverReturn(NeverReturnContext context) {
   context.getResults().setCapCopy(context.getParams().getCap());
 
   context.allowCancellation();
-  return kj::mv(promise);
+  return promise;
 }
 
 kj::Promise<void> TestMoreStuffImpl::hold(HoldContext context) {

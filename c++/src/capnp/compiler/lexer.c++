@@ -283,7 +283,7 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
         }
         builder.setStartByte(loc.begin());
         builder.setEndByte(loc.end());
-        return kj::mv(statement);
+        return statement;
       }));
 
   parsers.statementSequence = arena.copy(sequence(

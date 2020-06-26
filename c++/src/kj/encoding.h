@@ -224,6 +224,7 @@ NullableValue<T> readMaybe(EncodingResult<T>&& value) {
   if (value.hadErrors) {
     return nullptr;
   } else {
+    // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
     return kj::mv(value);
   }
 }

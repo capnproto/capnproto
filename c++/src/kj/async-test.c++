@@ -189,7 +189,7 @@ TEST(Async, DeepChain) {
   // Create a ridiculous chain of promises.
   for (uint i = 0; i < 1000; i++) {
     promise = evalLater(mvCapture(promise, [](Promise<void> promise) {
-      return kj::mv(promise);
+      return promise;
     }));
   }
 
@@ -226,7 +226,7 @@ TEST(Async, DeepChain2) {
   // Create a ridiculous chain of promises.
   for (uint i = 0; i < 1000; i++) {
     promise = evalLater(mvCapture(promise, [](Promise<void> promise) {
-      return kj::mv(promise);
+      return promise;
     }));
   }
 
@@ -268,7 +268,7 @@ Promise<void> makeChain2(uint i, Promise<void> promise) {
       return makeChain2(i - 1, kj::mv(promise));
     }));
   } else {
-    return kj::mv(promise);
+    return promise;
   }
 }
 

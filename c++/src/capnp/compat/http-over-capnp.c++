@@ -198,6 +198,7 @@ public:
         return kj::READY_NOW;
       } else {
         // Some other error... propagate it.
+        // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
         return kj::mv(e);
       }
     });
@@ -296,6 +297,7 @@ public:
       // to propagate the problem back to the client. If the error came from the client, then
       // .abort() probably is a noop.
       webSocket.abort();
+      // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
       return kj::mv(e);
     }));
 

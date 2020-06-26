@@ -144,7 +144,7 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
 
   KJ_DASSERT(dst == result.end(), "Buffer overrun/underrun bug in code above.");
 
-  return kj::mv(result);
+  return result;
 }
 
 size_t computeSerializedSizeInWords(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {

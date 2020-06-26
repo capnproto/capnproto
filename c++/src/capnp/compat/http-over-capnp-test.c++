@@ -327,7 +327,7 @@ public:
   kj::Promise<kj::Own<kj::AsyncIoStream>> connect() override {
     auto result = KJ_ASSERT_NONNULL(kj::mv(stream));
     stream = nullptr;
-    return kj::mv(result);
+    return result;
   }
 
   kj::Own<kj::ConnectionReceiver> listen() override { KJ_UNIMPLEMENTED("test"); }

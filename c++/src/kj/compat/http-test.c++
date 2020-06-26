@@ -3906,7 +3906,7 @@ KJ_TEST("HttpClient to capnproto.org") {
     auto promise = addr->connect();
     return promise.attach(kj::mv(addr));
   }).then([](kj::Own<kj::AsyncIoStream>&& connection) -> kj::Maybe<kj::Own<kj::AsyncIoStream>> {
-    return kj::mv(connection);
+    return connection;
   }, [](kj::Exception&& e) -> kj::Maybe<kj::Own<kj::AsyncIoStream>> {
     KJ_LOG(WARNING, "skipping test because couldn't connect to capnproto.org");
     return nullptr;

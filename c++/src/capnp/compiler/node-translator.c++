@@ -2734,13 +2734,13 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
 
     case DynamicValue::VOID:
       if (type.isVoid()) {
-        return kj::mv(result);
+        return result;
       }
       break;
 
     case DynamicValue::BOOL:
       if (type.isBool()) {
-        return kj::mv(result);
+        return result;
       }
       break;
 
@@ -2772,7 +2772,7 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
           errorReporter.addErrorOn(src, "Integer value out of range.");
           result = minValue;
         }
-        return kj::mv(result);
+        return result;
       }
 
     } // fallthrough -- value is positive, so we can just go on to the uint case below.
@@ -2803,37 +2803,37 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
         errorReporter.addErrorOn(src, "Integer value out of range.");
         result = maxValue;
       }
-      return kj::mv(result);
+      return result;
     }
 
     case DynamicValue::FLOAT:
       if (type.isFloat32() || type.isFloat64()) {
-        return kj::mv(result);
+        return result;
       }
       break;
 
     case DynamicValue::TEXT:
       if (type.isText()) {
-        return kj::mv(result);
+        return result;
       }
       break;
 
     case DynamicValue::DATA:
       if (type.isData()) {
-        return kj::mv(result);
+        return result;
       }
       break;
 
     case DynamicValue::LIST:
       if (type.isList()) {
         if (result.getReader().as<DynamicList>().getSchema() == type.asList()) {
-          return kj::mv(result);
+          return result;
         }
       } else if (type.isAnyPointer()) {
         switch (type.whichAnyPointerKind()) {
           case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
           case schema::Type::AnyPointer::Unconstrained::LIST:
-            return kj::mv(result);
+            return result;
           case schema::Type::AnyPointer::Unconstrained::STRUCT:
           case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
             break;
@@ -2844,7 +2844,7 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
     case DynamicValue::ENUM:
       if (type.isEnum()) {
         if (result.getReader().as<DynamicEnum>().getSchema() == type.asEnum()) {
-          return kj::mv(result);
+          return result;
         }
       }
       break;
@@ -2852,13 +2852,13 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
     case DynamicValue::STRUCT:
       if (type.isStruct()) {
         if (result.getReader().as<DynamicStruct>().getSchema() == type.asStruct()) {
-          return kj::mv(result);
+          return result;
         }
       } else if (type.isAnyPointer()) {
         switch (type.whichAnyPointerKind()) {
           case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
           case schema::Type::AnyPointer::Unconstrained::STRUCT:
-            return kj::mv(result);
+            return result;
           case schema::Type::AnyPointer::Unconstrained::LIST:
           case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
             break;
@@ -3026,7 +3026,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(Expression::Reader src, 
           dstList.adopt(i, kj::mv(*value));
         }
       }
-      return kj::mv(result);
+      return result;
     }
 
     case Expression::TUPLE: {
@@ -3037,7 +3037,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(Expression::Reader src, 
       auto structSchema = type.asStruct();
       Orphan<DynamicStruct> result = orphanage.newOrphan(structSchema);
       fillStructValue(result.get(), src.getTuple());
-      return kj::mv(result);
+      return result;
     }
 
     case Expression::UNKNOWN:

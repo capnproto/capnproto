@@ -293,7 +293,7 @@ String concat(Params&&... params) {
 }
 
 inline String concat(String&& arr) {
-  return kj::mv(arr);
+  return arr;
 }
 
 template <typename First, typename... Rest>

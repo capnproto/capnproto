@@ -539,7 +539,7 @@ kj::Promise<kj::Own<_::VatNetworkBase::Connection>>
     VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::baseAccept() {
   return accept().then(
       [](kj::Own<Connection>&& connection) -> kj::Own<_::VatNetworkBase::Connection> {
-    return kj::mv(connection);
+    return connection;
   });
 }
 

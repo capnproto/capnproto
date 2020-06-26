@@ -1239,6 +1239,7 @@ public:
   }
   T&& orDefault(T&& defaultValue) && {
     if (ptr == nullptr) {
+      // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
       return kj::mv(defaultValue);
     } else {
       return kj::mv(*ptr);
@@ -1246,6 +1247,7 @@ public:
   }
   const T&& orDefault(const T&& defaultValue) const && {
     if (ptr == nullptr) {
+      // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
       return kj::mv(defaultValue);
     } else {
       return kj::mv(*ptr);

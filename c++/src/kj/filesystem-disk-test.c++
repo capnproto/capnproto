@@ -112,6 +112,7 @@ public:
           default:
             KJ_FAIL_WIN32("CreateDirectoryW", error);
         }
+        // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
         return kj::mv(candidatePath);
       })) {}
 

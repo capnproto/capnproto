@@ -398,7 +398,7 @@ public:
     } else {
       auto result = kj::mv(connectionQueue.front());
       connectionQueue.pop();
-      return kj::mv(result);
+      return result;
     }
   }
 

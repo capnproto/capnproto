@@ -878,7 +878,7 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
         case schema::Type::ENUM: {
           auto result = Orphan<DynamicValue>(get(field), _::OrphanBuilder());
           clear(field);
-          return kj::mv(result);
+          return result;
         }
 
         case schema::Type::TEXT:
@@ -918,7 +918,7 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
         }
       }
 
-      return kj::mv(result);
+      return result;
     }
   }
 
@@ -1388,7 +1388,7 @@ Orphan<DynamicValue> DynamicList::Builder::disown(uint index) {
         case ElementSize::INLINE_COMPOSITE:
           KJ_UNREACHABLE;
       }
-      return kj::mv(result);
+      return result;
     }
 
     case schema::Type::TEXT:
@@ -1407,7 +1407,7 @@ Orphan<DynamicValue> DynamicList::Builder::disown(uint index) {
       auto element = builder.getStructElement(bounded(index) * ELEMENTS);
       result.get().builder.transferContentFrom(element);
       element.clearAll();
-      return kj::mv(result);
+      return result;
     }
   }
   KJ_UNREACHABLE;

@@ -477,7 +477,7 @@ private:
     if ('a' <= result[0] && result[0] <= 'z') {
       result[0] = result[0] - 'a' + 'A';
     }
-    return kj::mv(result);
+    return result;
   }
 
   CppTypeName typeName(Type type, kj::Maybe<InterfaceSchema::Method> method) {

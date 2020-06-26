@@ -1086,7 +1086,7 @@ static kj::String demangleTypeName(const char* name) {
   char* buf = abi::__cxa_demangle(name, nullptr, nullptr, &status);
   kj::String result = kj::heapString(buf == nullptr ? name : buf);
   free(buf);
-  return kj::mv(result);
+  return result;
 }
 
 kj::String getCaughtExceptionType() {

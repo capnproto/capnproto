@@ -493,7 +493,7 @@ Orphan<DynamicValue> makeExampleValue(
             orphanage, ordinal, field.getType(), sharedOrdinalCount));
       }
 
-      return kj::mv(result);
+      return result;
     }
     case schema::Type::ENUM: {
       auto enumerants = type.asEnum().getEnumerants();
@@ -505,7 +505,7 @@ Orphan<DynamicValue> makeExampleValue(
       auto result = orphanage.newOrphan(listType, 1);
       result.get().adopt(0, makeExampleValue(
           orphanage, ordinal, elementType, sharedOrdinalCount));
-      return kj::mv(result);
+      return result;
     }
     default:
       KJ_FAIL_ASSERT("You added a new possible field type!");
@@ -613,7 +613,7 @@ Orphan<DynamicStruct> makeExampleStruct(
     setExampleField(builder, field, sharedOrdinalCount);
   }
 
-  return kj::mv(result);
+  return result;
 }
 
 void checkExampleStruct(DynamicStruct::Reader reader, uint sharedOrdinalCount) {

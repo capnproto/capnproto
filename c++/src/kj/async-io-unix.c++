@@ -226,7 +226,7 @@ public:
       auto fork = observer.whenWriteDisconnected().fork();
       auto result = fork.addBranch();
       writeDisconnectedPromise = kj::mv(fork);
-      return kj::mv(result);
+      return result;
     }
   }
 
@@ -1234,7 +1234,7 @@ public:
       if (err != 0) {
         KJ_FAIL_SYSCALL("connect()", err) { break; }
       }
-      return kj::mv(stream);
+      return stream;
     }));
   }
   Own<ConnectionReceiver> wrapListenSocketFd(
@@ -1355,7 +1355,7 @@ private:
       }
     }).then([](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
       // Success, pass along.
-      return kj::mv(stream);
+      return stream;
     }, [&lowLevel,&filter,addrs](Exception&& exception) mutable -> Promise<Own<AsyncIoStream>> {
       // Connect failed.
       if (addrs.size() > 1) {
@@ -1363,6 +1363,7 @@ private:
         return connectImpl(lowLevel, filter, addrs.slice(1, addrs.size()));
       } else {
         // No more addresses to try, so propagate the exception.
+        // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
         return kj::mv(exception);
       }
     });

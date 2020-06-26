@@ -900,7 +900,7 @@ private:
             auto promise = pipe.write(retry.data.begin(), retry.data.size());
             if (retry.moreData.size() == 0) {
               // No more pieces so that's it.
-              return kj::mv(promise);
+              return promise;
             } else {
               // Also need to write the remaining pieces.
               auto& pipeRef = pipe;
@@ -2353,6 +2353,7 @@ public:
         if (e.getType() == kj::Exception::Type::DISCONNECTED) {
           return kj::READY_NOW;
         } else {
+          // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
           return kj::mv(e);
         }
       });
@@ -2442,6 +2443,7 @@ public:
         if (e.getType() == kj::Exception::Type::DISCONNECTED) {
           return kj::READY_NOW;
         } else {
+          // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
           return kj::mv(e);
         }
       });
@@ -2659,7 +2661,7 @@ LowLevelAsyncIoProvider::NetworkFilter& LowLevelAsyncIoProvider::NetworkFilter::
 Promise<Own<AsyncIoStream>> CapabilityStreamConnectionReceiver::accept() {
   return inner.receiveStream()
       .then([](Own<AsyncCapabilityStream>&& stream) -> Own<AsyncIoStream> {
-    return kj::mv(stream);
+    return stream;
   });
 }
 
@@ -2677,7 +2679,7 @@ Promise<Own<AsyncIoStream>> CapabilityStreamNetworkAddress::connect() {
   auto result = kj::mv(pipe.ends[0]);
   return inner.sendStream(kj::mv(pipe.ends[1]))
       .then(kj::mvCapture(result, [](Own<AsyncIoStream>&& result) {
-    return kj::mv(result);
+    return result;
   }));
 }
 Own<ConnectionReceiver> CapabilityStreamNetworkAddress::listen() {

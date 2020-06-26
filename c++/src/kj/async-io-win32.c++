@@ -934,7 +934,7 @@ public:
       // getpeername() to get the address.
       auto addr = SocketAddress::getPeerAddress(newFd);
       if (addr.allowedBy(filter)) {
-        return kj::mv(stream);
+        return stream;
       } else {
         return accept();
       }
@@ -996,7 +996,7 @@ public:
 
     auto connected = result->connect(addr, addrlen);
     return connected.then(kj::mvCapture(result, [](Own<AsyncIoStream>&& result) {
-      return kj::mv(result);
+      return result;
     }));
   }
   Own<ConnectionReceiver> wrapListenSocketFd(
@@ -1116,7 +1116,7 @@ private:
       }
     }).then([](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
       // Success, pass along.
-      return kj::mv(stream);
+      return stream;
     }, [&lowLevel,&filter,KJ_CPCAP(addrs)](Exception&& exception) mutable
         -> Promise<Own<AsyncIoStream>> {
       // Connect failed.
@@ -1125,6 +1125,7 @@ private:
         return connectImpl(lowLevel, filter, addrs.slice(1, addrs.size()));
       } else {
         // No more addresses to try, so propagate the exception.
+        // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
         return kj::mv(exception);
       }
     });

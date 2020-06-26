@@ -291,6 +291,7 @@ public:
   kj::Promise<T> wrap(kj::Promise<T>&& promise) {
     return promise.catch_([this](kj::Exception&& e) -> kj::Promise<T> {
       fulfiller->reject(kj::cp(e));
+      // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
       return kj::mv(e);
     }).exclusiveJoin(failurePromise.addBranch().then([]() -> T { KJ_UNREACHABLE; }));
   }

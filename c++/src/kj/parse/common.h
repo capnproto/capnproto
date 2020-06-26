@@ -613,7 +613,7 @@ public:
 
       if (firstResult != nullptr) {
         subInput.advanceParent();
-        return kj::mv(firstResult);
+        return firstResult;
       }
     }
 

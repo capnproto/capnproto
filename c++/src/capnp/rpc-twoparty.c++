@@ -293,7 +293,7 @@ kj::Promise<void> TwoPartyVatNetwork::shutdown() {
     }
   });
   previousWrite = nullptr;
-  return kj::mv(result);
+  return result;
 }
 
 // =======================================================================================

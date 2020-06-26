@@ -224,6 +224,7 @@ public:
 
   kj::Maybe<Located<Text::Reader>> operator()(Located<Text::Reader>&& text) const {
     if (text.value == expected) {
+      // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
       return kj::mv(text);
     } else {
       return nullptr;
@@ -312,7 +313,7 @@ Orphan<List<T>> arrayToList(Orphanage& orphanage, kj::Array<Orphan<T>>&& element
   for (size_t i = 0; i < elements.size(); i++) {
     builder.adoptWithCaveats(i, kj::mv(elements[i]));
   }
-  return kj::mv(result);
+  return result;
 }
 
 static void initGenericParams(Declaration::Builder builder,
@@ -388,7 +389,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
           builder.setUnnamed();
         }
         builder.adoptValue(kj::mv(fieldValue));
-        return kj::mv(result);
+        return result;
       }));
 
   auto& tuple = arena.copy<Parser<Located<Orphan<List<Expression::Param>>>>>(
@@ -571,7 +572,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
           builder.setStartByte(startByte);
           base = kj::mv(suffix);
         }
-        return kj::mv(base);
+        return base;
       }));
 
   parsers.annotation = arena.copy(p::transform(
@@ -859,7 +860,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
           builder.getDefaultValue().setNone();
         }
 
-        return kj::mv(result);
+        return result;
       }));
 
   auto& paramList = arena.copy(p::oneOf(

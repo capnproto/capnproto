@@ -396,6 +396,7 @@ public:
               [](kj::Exception&& e) -> kj::Promise<void> {
           // Don't report disconnects as an error.
           if (e.getType() != kj::Exception::Type::DISCONNECTED) {
+            // TODO(optimization): Will removing kj::mv still degrade to a move if NVRO isn't possible?
             return kj::mv(e);
           }
           return kj::READY_NOW;
@@ -1166,7 +1167,7 @@ private:
 
       cap = replacement->addRef();
 
-      return kj::mv(replacement);
+      return replacement;
     }
   };
 
@@ -1451,11 +1452,11 @@ private:
         auto result = kj::refcounted<PromiseClient>(
             *this, kj::mv(importClient), kj::mv(paf.promise), importId);
         import.appClient = *result;
-        return kj::mv(result);
+        return result;
       }
     } else {
       import.appClient = *importClient;
-      return kj::mv(importClient);
+      return importClient;
     }
   }
 
@@ -1566,7 +1567,7 @@ private:
           if (result->getBrand() == this) {
             result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
           }
-          return kj::mv(result);
+          return result;
         } else {
           return newBrokenCap("invalid 'receiverHosted' export ID");
         }
@@ -1582,7 +1583,7 @@ private:
                 if (result->getBrand() == this) {
                   result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
                 }
-                return kj::mv(result);
+                return result;
               } else {
                 return newBrokenCap("unrecognized pipeline ops");
               }
@@ -1866,7 +1867,7 @@ private:
       }
 
       // Send and return.
-      return kj::mv(result);
+      return result;
     }
 
     kj::Promise<void> sendStreamingInternal(bool isTailCall) {
@@ -2093,7 +2094,7 @@ private:
       if (capTable.size() == 0) {
         return nullptr;
       } else {
-        return kj::mv(exports);
+        return exports;
       }
     }
 

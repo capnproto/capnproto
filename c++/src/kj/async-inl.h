@@ -1439,7 +1439,7 @@ public:
   kj::Maybe<Own<_::PromiseNode>> execute() override {
     auto result = _::PromiseNode::from(func());
     KJ_IREQUIRE(result.get() != nullptr);
-    return kj::mv(result);
+    return result;
   }
 
   // implements PromiseNode ----------------------------------------------------

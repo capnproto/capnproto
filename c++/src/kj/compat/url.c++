@@ -121,7 +121,7 @@ String percentDecode(ArrayPtr<const char> text, bool& hadErrors, const Url::Opti
   if (options.percentDecode) {
     auto result = decodeUriComponent(text);
     if (result.hadErrors) hadErrors = true;
-    return kj::mv(result);
+    return result;
   }
   return kj::str(text);
 }
@@ -130,7 +130,7 @@ String percentDecodeQuery(ArrayPtr<const char> text, bool& hadErrors, const Url:
   if (options.percentDecode) {
     auto result = decodeWwwForm(text);
     if (result.hadErrors) hadErrors = true;
-    return kj::mv(result);
+    return result;
   }
   return kj::str(text);
 }
@@ -272,7 +272,7 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
 
   if (err) return nullptr;
 
-  return kj::mv(result);
+  return result;
 }
 
 Url Url::parseRelative(StringPtr url) const {
@@ -419,7 +419,7 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
 
   if (err) return nullptr;
 
-  return kj::mv(result);
+  return result;
 }
 
 String Url::toString(Context context) const {

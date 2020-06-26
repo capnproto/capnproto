@@ -425,7 +425,7 @@ private:
   kj::Array<decltype(kj::instance<MemberList>()[0])> sortByCodeOrder(MemberList&& list) {
     auto sorted = KJ_MAP(item, list) { return item; };
     std::sort(sorted.begin(), sorted.end(), OrderByCodeOrder());
-    return kj::mv(sorted);
+    return sorted;
   }
 
   kj::Array<kj::StringTree> genStructFields(StructSchema schema, Indent indent) {

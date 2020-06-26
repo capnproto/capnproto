@@ -81,7 +81,7 @@ public:
       auto sproto = context.getResultsType().getProto().getStruct();
       MessageSize size { sproto.getDataWordCount(), sproto.getPointerCount() };
       context.initResults(size);
-      return kj::mv(writePromise);
+      return writePromise;
     } else {
       auto paf = kj::newPromiseAndFulfiller<void>();
       parent.awaitedResponses.insert(callId, AwaitedResponse { context, kj::mv(paf.fulfiller) });
