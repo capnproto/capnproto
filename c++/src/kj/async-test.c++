@@ -1240,7 +1240,7 @@ KJ_TEST("retryOnDisconnect") {
       i++;
       return 123;
     });
-    KJ_EXPECT(i == 1);
+    KJ_EXPECT(i == 0);
     KJ_EXPECT(promise.wait(waitScope) == 123);
     KJ_EXPECT(i == 1);
   }
@@ -1254,7 +1254,7 @@ KJ_TEST("retryOnDisconnect") {
         return 123;
       }
     });
-    KJ_EXPECT(i == 1);
+    KJ_EXPECT(i == 0);
     KJ_EXPECT(promise.wait(waitScope) == 123);
     KJ_EXPECT(i == 2);
   }
@@ -1269,7 +1269,7 @@ KJ_TEST("retryOnDisconnect") {
         return 123;
       }
     });
-    KJ_EXPECT(i == 1);
+    KJ_EXPECT(i == 0);
     KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test disconnect; i = 2", promise.wait(waitScope));
     KJ_EXPECT(i == 2);
   }
@@ -1289,7 +1289,7 @@ KJ_TEST("retryOnDisconnect") {
     Func func;
 
     auto promise = retryOnDisconnect(func);
-    KJ_EXPECT(func.i == 1);
+    KJ_EXPECT(func.i == 0);
     KJ_EXPECT(promise.wait(waitScope) == 123);
     KJ_EXPECT(func.i == 2);
   }

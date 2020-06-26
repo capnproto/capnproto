@@ -1084,13 +1084,15 @@ inline PromiseForResult<Func, void> evalNow(Func&& func) {
 template <typename Func>
 struct RetryOnDisconnect_ {
   static inline PromiseForResult<Func, void> apply(Func&& func) {
-    auto promise = evalNow(func);
-    return promise.catch_([func = kj::mv(func)](kj::Exception&& e) -> PromiseForResult<Func, void> {
-      if (e.getType() == kj::Exception::Type::DISCONNECTED) {
-        return func();
-      } else {
-        return kj::mv(e);
-      }
+    return evalLater([func = kj::mv(func)]() mutable -> PromiseForResult<Func, void> {
+      auto promise = evalNow(func);
+      return promise.catch_([func = kj::mv(func)](kj::Exception&& e) mutable -> PromiseForResult<Func, void> {
+        if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+          return func();
+        } else {
+          return kj::mv(e);
+        }
+      });
     });
   }
 };
@@ -1099,7 +1101,7 @@ struct RetryOnDisconnect_<Func&> {
   // Specialization for references. Needed because the syntax for capturing references in a
   // lambda is different. :(
   static inline PromiseForResult<Func, void> apply(Func& func) {
-    auto promise = evalNow(func);
+    auto promise = evalLater(func);
     return promise.catch_([&func](kj::Exception&& e) -> PromiseForResult<Func, void> {
       if (e.getType() == kj::Exception::Type::DISCONNECTED) {
         return func();

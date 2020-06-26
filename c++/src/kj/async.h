@@ -395,14 +395,11 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 
 template <typename Func>
 PromiseForResult<Func, void> retryOnDisconnect(Func&& func) KJ_WARN_UNUSED_RESULT;
-// Runs `func()`, retrying once if it fails with a DISCONNECTED exception. If the retry also
-// fails, the exception is passed through.
+// Promises to run `func()` asynchronously, retrying once if it fails with a DISCONNECTED exception.
+// If the retry also fails, the exception is passed through.
 //
 // `func()` should return a `Promise`. `retryOnDisconnect(func)` returns the same promise, except
 // with the retry logic added.
-//
-// Synchronous exceptions from `func()` are captured and turned into rejected promises (or retries
-// if the failure is a disconnect).
 
 template <typename Func>
 PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) KJ_WARN_UNUSED_RESULT;
