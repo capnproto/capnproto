@@ -2663,6 +2663,12 @@ Promise<Own<AsyncIoStream>> CapabilityStreamConnectionReceiver::accept() {
   });
 }
 
+Promise<AuthenticatedStream> CapabilityStreamConnectionReceiver::acceptAuthenticated() {
+  return accept().then([](Own<AsyncIoStream>&& stream) {
+    return AuthenticatedStream { kj::mv(stream), UnknownPeerIdentity::newInstance() };
+  });
+}
+
 uint CapabilityStreamConnectionReceiver::getPort() {
   return 0;
 }
@@ -2679,6 +2685,11 @@ Promise<Own<AsyncIoStream>> CapabilityStreamNetworkAddress::connect() {
       .then(kj::mvCapture(result, [](Own<AsyncIoStream>&& result) {
     return kj::mv(result);
   }));
+}
+Promise<AuthenticatedStream> CapabilityStreamNetworkAddress::connectAuthenticated() {
+  return connect().then([](Own<AsyncIoStream>&& stream) {
+    return AuthenticatedStream { kj::mv(stream), UnknownPeerIdentity::newInstance() };
+  });
 }
 Own<ConnectionReceiver> CapabilityStreamNetworkAddress::listen() {
   return kj::heap<CapabilityStreamConnectionReceiver>(inner);
@@ -3033,4 +3044,81 @@ bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr, uint addrlen) 
 }
 
 }  // namespace _ (private)
+
+// =======================================================================================
+// PeerIdentity implementations
+
+namespace {
+
+class NetworkPeerIdentityImpl final: public NetworkPeerIdentity {
+public:
+  NetworkPeerIdentityImpl(kj::Own<NetworkAddress> addr): addr(kj::mv(addr)) {}
+
+  kj::String toString() override { return addr->toString(); }
+  NetworkAddress& getAddress() override { return *addr; }
+
+private:
+  kj::Own<NetworkAddress> addr;
+};
+
+class LocalPeerIdentityImpl final: public LocalPeerIdentity {
+public:
+  LocalPeerIdentityImpl(Credentials creds): creds(creds) {}
+
+  kj::String toString() override {
+    char pidBuffer[16];
+    kj::StringPtr pidStr = nullptr;
+    KJ_IF_MAYBE(p, creds.pid) {
+      pidStr = strPreallocated(pidBuffer, " pid:", *p);
+    }
+
+    char uidBuffer[16];
+    kj::StringPtr uidStr = nullptr;
+    KJ_IF_MAYBE(u, creds.uid) {
+      uidStr = strPreallocated(uidBuffer, " uid:", *u);
+    }
+
+    return kj::str("(local peer", pidStr, uidStr, ")");
+  }
+
+  Credentials getCredentials() override { return creds; }
+
+private:
+  Credentials creds;
+};
+
+class UnknownPeerIdentityImpl final: public UnknownPeerIdentity {
+public:
+  kj::String toString() override {
+    return kj::str("(unknown peer)");
+  }
+};
+
+}  // namespace
+
+kj::Own<NetworkPeerIdentity> NetworkPeerIdentity::newInstance(kj::Own<NetworkAddress> addr) {
+  return kj::heap<NetworkPeerIdentityImpl>(kj::mv(addr));
+}
+
+kj::Own<LocalPeerIdentity> LocalPeerIdentity::newInstance(LocalPeerIdentity::Credentials creds) {
+  return kj::heap<LocalPeerIdentityImpl>(creds);
+}
+
+kj::Own<UnknownPeerIdentity> UnknownPeerIdentity::newInstance() {
+  static UnknownPeerIdentityImpl instance;
+  return { &instance, NullDisposer::instance };
+}
+
+Promise<AuthenticatedStream> ConnectionReceiver::acceptAuthenticated() {
+  return accept().then([](Own<AsyncIoStream> stream) {
+    return AuthenticatedStream { kj::mv(stream), UnknownPeerIdentity::newInstance() };
+  });
+}
+
+Promise<AuthenticatedStream> NetworkAddress::connectAuthenticated() {
+  return connect().then([](Own<AsyncIoStream> stream) {
+    return AuthenticatedStream { kj::mv(stream), UnknownPeerIdentity::newInstance() };
+  });
+}
+
 }  // namespace kj
