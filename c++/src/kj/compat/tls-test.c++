@@ -443,6 +443,51 @@ KJ_TEST("TLS basics") {
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
 }
 
+KJ_TEST("TLS peer identity") {
+  TlsTest test;
+  ErrorNexus e;
+
+  auto pipe = test.io.provider->newTwoWayPipe();
+
+  auto innerClientId = kj::LocalPeerIdentity::newInstance({});
+  auto& innerClientIdRef = *innerClientId;
+  auto clientPromise = e.wrap(test.tlsClient.wrapClient(
+      kj::AuthenticatedStream { kj::mv(pipe.ends[0]), kj::mv(innerClientId) },
+      "example.com"));
+
+  auto innerServerId = kj::LocalPeerIdentity::newInstance({});
+  auto& innerServerIdRef = *innerServerId;
+  auto serverPromise = e.wrap(test.tlsServer.wrapServer(
+    kj::AuthenticatedStream { kj::mv(pipe.ends[1]), kj::mv(innerServerId) }));
+
+  auto client = clientPromise.wait(test.io.waitScope);
+  auto server = serverPromise.wait(test.io.waitScope);
+
+  {
+    auto id = client.peerIdentity.downcast<TlsPeerIdentity>();
+    KJ_ASSERT(id->hasCertificate());
+    KJ_EXPECT(id->getCommonName() == "example.com");
+    KJ_EXPECT(&id->getNetworkIdentity() == &innerClientIdRef);
+    KJ_EXPECT(id->toString() == "example.com");
+  }
+
+  {
+    auto id = server.peerIdentity.downcast<TlsPeerIdentity>();
+    KJ_EXPECT(!id->hasCertificate());
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+        "client did not provide a certificate", id->getCommonName());
+    KJ_EXPECT(&id->getNetworkIdentity() == &innerServerIdRef);
+    KJ_EXPECT(id->toString() == "(anonymous client)");
+  }
+
+  auto writePromise = client.stream->write("foo", 3);
+  char buf[4];
+  server.stream->read(&buf, 3).wait(test.io.waitScope);
+  buf[3] = '\0';
+
+  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+}
+
 KJ_TEST("TLS multiple messages") {
   TlsTest test;
   ErrorNexus e;
@@ -713,17 +758,60 @@ KJ_TEST("TLS client certificate verification") {
     auto pipe = test.io.provider->newTwoWayPipe();
 
     auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
-    auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
+    auto serverPromise = e.wrap(test.tlsServer.wrapServer(
+        kj::AuthenticatedStream { kj::mv(pipe.ends[1]), kj::UnknownPeerIdentity::newInstance() }));
 
     auto client = clientPromise.wait(test.io.waitScope);
     auto server = serverPromise.wait(test.io.waitScope);
 
+    auto id = server.peerIdentity.downcast<TlsPeerIdentity>();
+    KJ_ASSERT(id->hasCertificate());
+    KJ_EXPECT(id->getCommonName() == "example.net");
+
     auto writePromise = client->write("foo", 3);
     char buf[4];
-    server->read(&buf, 3).wait(test.io.waitScope);
+    server.stream->read(&buf, 3).wait(test.io.waitScope);
     buf[3] = '\0';
 
     KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  }
+
+  // If verifyClients is off, client certificate is ignored, even if trusted.
+  serverOptions.verifyClients = false;
+  {
+    TlsTest test(clientOptions, serverOptions);
+    ErrorNexus e;
+
+    auto pipe = test.io.provider->newTwoWayPipe();
+
+    auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
+    auto serverPromise = e.wrap(test.tlsServer.wrapServer(
+        kj::AuthenticatedStream { kj::mv(pipe.ends[1]), kj::UnknownPeerIdentity::newInstance() }));
+
+    auto client = clientPromise.wait(test.io.waitScope);
+    auto server = serverPromise.wait(test.io.waitScope);
+
+    auto id = server.peerIdentity.downcast<TlsPeerIdentity>();
+    KJ_EXPECT(!id->hasCertificate());
+  }
+
+  // Non-trusted keys are ignored too (not errors).
+  clientOptions.defaultKeypair = selfSignedKeypair;
+  {
+    TlsTest test(clientOptions, serverOptions);
+    ErrorNexus e;
+
+    auto pipe = test.io.provider->newTwoWayPipe();
+
+    auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
+    auto serverPromise = e.wrap(test.tlsServer.wrapServer(
+        kj::AuthenticatedStream { kj::mv(pipe.ends[1]), kj::UnknownPeerIdentity::newInstance() }));
+
+    auto client = clientPromise.wait(test.io.waitScope);
+    auto server = serverPromise.wait(test.io.waitScope);
+
+    auto id = server.peerIdentity.downcast<TlsPeerIdentity>();
+    KJ_EXPECT(!id->hasCertificate());
   }
 }
 
