@@ -45,7 +45,7 @@ jobs:
         os: ['windows-2016', 'windows-latest']
         include:
           - os: windows-2016
-            target: 'Ninja'
+            target: 'Visual Studio 15 2017'
             arch:
           - os: windows-latest
             target: 'Visual Studio 16 2019'
@@ -58,7 +58,7 @@ jobs:
       - name: Install dependencies via Conda
         run: |
           conda update -n base -c defaults -q conda
-          conda install -n base -c defaults -q ninja openssl zlib
+          conda install -n base -c defaults -q openssl zlib
       - name: Build and test
         shell: cmd
         run: |
