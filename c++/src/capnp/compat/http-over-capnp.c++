@@ -489,7 +489,7 @@ public:
     auto req = clientContext.startResponseRequest();
 
     if (method == kj::HttpMethod::HEAD ||
-        statusCode == 204 || statusCode == 205 || statusCode == 304) {
+        statusCode == 204 || statusCode == 304) {
       expectedBodySize = uint64_t(0);
     }
 
