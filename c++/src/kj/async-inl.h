@@ -907,7 +907,6 @@ private:
   Maybe<Own<Event>> fire() override;
   // Implements Event. Each time the event is fired, switchToFiber() is called.
 
-  friend class WaitScope;
   friend class FiberStack;
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);
