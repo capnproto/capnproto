@@ -59,6 +59,9 @@ TEST(Mutex, MutexGuarded) {
     EXPECT_EQ(123u, *lock);
     EXPECT_EQ(123u, value.getAlreadyLockedExclusive());
 
+    EXPECT_TRUE(value.lockExclusiveWithTimeout(MILLISECONDS * 50) == nullptr);
+    EXPECT_TRUE(value.lockSharedWithTimeout(MILLISECONDS * 50) == nullptr);
+
     Thread thread([&]() {
       Locked<uint> threadLock = value.lockExclusive();
       EXPECT_EQ(456u, *threadLock);
@@ -71,6 +74,8 @@ TEST(Mutex, MutexGuarded) {
     auto earlyRelease = kj::mv(lock);
   }
 
+  EXPECT_TRUE(value.lockExclusiveWithTimeout(MILLISECONDS * 50) != nullptr);
+  EXPECT_TRUE(value.lockSharedWithTimeout(MILLISECONDS * 50) != nullptr);
   EXPECT_EQ(789u, *value.lockExclusive());
 
   {
