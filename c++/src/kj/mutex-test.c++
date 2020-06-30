@@ -59,8 +59,10 @@ TEST(Mutex, MutexGuarded) {
     EXPECT_EQ(123u, *lock);
     EXPECT_EQ(123u, value.getAlreadyLockedExclusive());
 
+#if !(_WIN32 || __CYGWIN__)
     EXPECT_TRUE(value.lockExclusiveWithTimeout(MILLISECONDS * 50) == nullptr);
     EXPECT_TRUE(value.lockSharedWithTimeout(MILLISECONDS * 50) == nullptr);
+#endif
 
     Thread thread([&]() {
       Locked<uint> threadLock = value.lockExclusive();
@@ -74,9 +76,13 @@ TEST(Mutex, MutexGuarded) {
     auto earlyRelease = kj::mv(lock);
   }
 
+#if !(_WIN32 || __CYGWIN__)
   EXPECT_TRUE(value.lockExclusiveWithTimeout(MILLISECONDS * 50) != nullptr);
   EXPECT_TRUE(value.lockSharedWithTimeout(MILLISECONDS * 50) != nullptr);
+#endif
+
   EXPECT_EQ(789u, *value.lockExclusive());
+
 
   {
     auto rlock1 = value.lockShared();

@@ -734,14 +734,34 @@ void Mutex::lock(Exclusivity exclusivity) {
 
 bool Mutex::lockWithTimeout(Exclusivity exclusivity, Duration timeout) {
   struct timespec duration = toRelativeTimespec(timeout);
+  int result;
   switch (exclusivity) {
     case EXCLUSIVE:
-      KJ_PTHREAD_CALL(pthread_rwlock_timed_wrlock(&mutex, &duration));
+      result = pthread_rwlock_timed_wrlock(&mutex, &duration);
+      switch (result) {
+        case 0:
+          break;
+        case ETIMEDOUT:
+          return false;
+        default:
+          KJ_FAIL_SYSCALL("pthread_rwlock_timed_wrlock(&mutex, &duration)", result);
+          break;
+      }
       break;
     case SHARED:
-      KJ_PTHREAD_CALL(pthread_rwlock_timedrdlock(&mutex, &duration));
+      result = pthread_rwlock_timedrdlock(&mutex, &duration);
+      switch (result) {
+        case 0:
+          break;
+        case ETIMEDOUT:
+          return false;
+        default:
+          KJ_FAIL_SYSCALL("pthread_rwlock_timedrdlock(&mutex, &duration)", result);
+          break;
+      }
       break;
   }
+  return true;
 }
 
 void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
