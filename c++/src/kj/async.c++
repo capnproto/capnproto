@@ -26,7 +26,7 @@
 // so this check isn't appropriate for us.
 
 #if _WIN32 || __CYGWIN__
-#define WIN32_LEAN_AND_MEAN 1  // lolz
+#include "win32-api-version.h"
 #elif __APPLE__
 // getcontext() and friends are marked deprecated on MacOS but seemingly no replacement is
 // provided. It appears as if they deprecated it solely because the standards bodies deprecated it,

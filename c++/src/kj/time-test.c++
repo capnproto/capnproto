@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #if _WIN32
-#define WIN32_LEAN_AND_MEAN 1  // lolz
+#include "win32-api-version.h"
 #endif
 
 #include "time.h"

@@ -23,10 +23,7 @@
 // For Unix implementation, see filesystem-disk-unix.c++.
 
 // Request Vista-level APIs.
-#define WINVER 0x0600
-#define _WIN32_WINNT 0x0600
-
-#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
+#include "win32-api-version.h"
 
 #include "filesystem.h"
 #include "debug.h"

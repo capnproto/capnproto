@@ -21,8 +21,7 @@
 
 #if _WIN32
 // Request Vista-level APIs.
-#define WINVER 0x0600
-#define _WIN32_WINNT 0x0600
+#include "win32-api-version.h"
 #elif !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif

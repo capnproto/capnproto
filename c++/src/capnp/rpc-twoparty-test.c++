@@ -25,6 +25,11 @@
 #define _GNU_SOURCE
 #endif
 
+// Includes just for need SOL_SOCKET and SO_SNDBUF
+#if _WIN32
+#include <kj/win32-api-version.h>
+#endif
+
 #include "rpc-twoparty.h"
 #include "test-util.h"
 #include <capnp/rpc.capnp.h>
@@ -33,9 +38,7 @@
 #include <kj/compat/gtest.h>
 #include <kj/miniposix.h>
 
-// Includes just for need SOL_SOCKET and SO_SNDBUF
 #if _WIN32
-#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
 #include <winsock2.h>
 #include <mswsock.h>
 #include <kj/windows-sanity.h>

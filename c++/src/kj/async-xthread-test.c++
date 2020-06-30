@@ -19,6 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if _WIN32
+#include "win32-api-version.h"
+#endif
+
 #include "async.h"
 #include "debug.h"
 #include "thread.h"
@@ -26,7 +30,6 @@
 #include <kj/test.h>
 
 #if _WIN32
-#define WIN32_LEAN_AND_MEAN 1  // lolz
 #include <windows.h>
 #include "windows-sanity.h"
 inline void delay() { Sleep(10); }

@@ -23,6 +23,10 @@
 #define _GNU_SOURCE
 #endif
 
+#if _WIN32
+#include <kj/win32-api-version.h>
+#endif
+
 #include "lexer.h"
 #include "parser.h"
 #include "compiler.h"
@@ -50,10 +54,8 @@
 
 #if _WIN32
 #include <process.h>
-#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
 #include <windows.h>
 #include <kj/windows-sanity.h>
-#undef VOID
 #undef CONST
 #else
 #include <sys/wait.h>

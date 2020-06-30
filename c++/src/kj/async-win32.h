@@ -25,18 +25,16 @@
 #error "This file is Windows-specific. On Unix, include async-unix.h instead."
 #endif
 
+// Include windows.h as lean as possible. (If you need more of the Windows API for your app,
+// #include windows.h yourself before including this header.)
+#include "win32-api-version.h"
+
 #include "async.h"
 #include "timer.h"
 #include "io.h"
 #include <atomic>
 #include <inttypes.h>
 
-// Include windows.h as lean as possible. (If you need more of the Windows API for your app,
-// #include windows.h yourself before including this header.)
-#define WIN32_LEAN_AND_MEAN 1
-#define NOSERVICE 1
-#define NOMCX 1
-#define NOIME 1
 #include <windows.h>
 #include "windows-sanity.h"
 
