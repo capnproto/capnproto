@@ -159,9 +159,9 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
 
         auto result = syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, specp, nullptr, 0);
         if (result < 0) {
-          // We timed out, we can't remove the exclusive request flag (since others might be waiting)
-          // so we just return false.
           if (errno == ETIMEDOUT) {
+            // We timed out, we can't remove the exclusive request flag (since others might be waiting)
+            // so we just return false.
             return false;
           }
         }
