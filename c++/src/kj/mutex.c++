@@ -182,6 +182,17 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
           // If we timeout though, we need to signal that we're not waiting anymore.
           if (errno == ETIMEDOUT) {
             state = __atomic_sub_fetch(&futex, 1, __ATOMIC_RELAXED);
+
+            // We may have unlocked since we timed out. So act like we just unlocked the mutex
+            // and maybe send a wait signal if needed. See Mutex::unlock SHARED case.
+            if (KJ_UNLIKELY(state == EXCLUSIVE_REQUESTED)) {
+              if (__atomic_compare_exchange_n(
+                  &futex, &state, 0, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+                // Wake all exclusive waiters.  We have to wake all of them because one of them will
+                // grab the lock while the others will re-establish the exclusive-requested bit.
+                syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
+              }
+            }
             return false;
           }
         }
@@ -458,7 +469,7 @@ Mutex::Mutex() {
 Mutex::~Mutex() {}
 
 bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
-  KJ_IF_MAYBE(t, timeout) {
+  if (timeout != nullptr) {
     KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
   }
   switch (exclusivity) {
@@ -469,6 +480,7 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
       AcquireSRWLockShared(&coercedSrwLock);
       break;
   }
+  return true;
 }
 
 void Mutex::wakeReadyWaiter(Waiter* waiterToSkip) {
@@ -683,7 +695,7 @@ Mutex::~Mutex() {
 }
 
 bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
-  KJ_IF_MAYBE(t, timeout) {
+  if (timeout != nullptr) {
     KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
   }
   switch (exclusivity) {
