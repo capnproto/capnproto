@@ -67,8 +67,7 @@ public:
     SHARED
   };
 
-  void lock(Exclusivity exclusivity);
-  bool lockWithTimeout(Exclusivity exclusivity, Duration timeout);
+  bool lock(Exclusivity exclusivity, Maybe<Duration> timeout = nullptr);
   void unlock(Exclusivity exclusivity, Waiter* waiterToSkip = nullptr);
 
   void assertLockedByCaller(Exclusivity exclusivity);
@@ -509,7 +508,7 @@ inline Locked<const T> MutexGuarded<T>::lockShared() const {
 
 template <typename T>
 inline Maybe<Locked<T>> MutexGuarded<T>::lockExclusiveWithTimeout(Duration timeout) const {
-  if (mutex.lockWithTimeout(_::Mutex::EXCLUSIVE, timeout)) {
+  if (mutex.lock(_::Mutex::EXCLUSIVE, timeout)) {
     return Locked<T>(mutex, value);
   } else {
     return nullptr;
@@ -518,7 +517,7 @@ inline Maybe<Locked<T>> MutexGuarded<T>::lockExclusiveWithTimeout(Duration timeo
 
 template <typename T>
 inline Maybe<Locked<const T>> MutexGuarded<T>::lockSharedWithTimeout(Duration timeout) const {
-  if (mutex.lockWithTimeout(_::Mutex::SHARED, timeout)) {
+  if (mutex.lock(_::Mutex::SHARED, timeout)) {
     return Locked<const T>(mutex, value);
   } else {
     return nullptr;

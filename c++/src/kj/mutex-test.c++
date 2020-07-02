@@ -59,7 +59,7 @@ TEST(Mutex, MutexGuarded) {
     EXPECT_EQ(123u, *lock);
     EXPECT_EQ(123u, value.getAlreadyLockedExclusive());
 
-#if !(_WIN32 || __CYGWIN__)
+#if KJ_USE_FUTEX
     EXPECT_TRUE(value.lockExclusiveWithTimeout(MILLISECONDS * 50) == nullptr);
     EXPECT_TRUE(value.lockSharedWithTimeout(MILLISECONDS * 50) == nullptr);
 #endif
@@ -76,7 +76,7 @@ TEST(Mutex, MutexGuarded) {
     auto earlyRelease = kj::mv(lock);
   }
 
-#if !(_WIN32 || __CYGWIN__)
+#if KJ_USE_FUTEX
   EXPECT_TRUE(value.lockExclusiveWithTimeout(MILLISECONDS * 50) != nullptr);
   EXPECT_TRUE(value.lockSharedWithTimeout(MILLISECONDS * 50) != nullptr);
 #endif

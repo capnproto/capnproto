@@ -129,51 +129,13 @@ Mutex::~Mutex() {
   KJ_ASSERT(futex == 0, "Mutex destroyed while locked.") { break; }
 }
 
-void Mutex::lock(Exclusivity exclusivity) {
-  switch (exclusivity) {
-    case EXCLUSIVE:
-      for (;;) {
-        uint state = 0;
-        if (KJ_LIKELY(__atomic_compare_exchange_n(&futex, &state, EXCLUSIVE_HELD, false,
-                                                  __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))) {
-          // Acquired.
-          break;
-        }
-
-        // The mutex is contended.  Set the exclusive-requested bit and wait.
-        if ((state & EXCLUSIVE_REQUESTED) == 0) {
-          if (!__atomic_compare_exchange_n(&futex, &state, state | EXCLUSIVE_REQUESTED, false,
-                                           __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-            // Oops, the state changed before we could set the request bit.  Start over.
-            continue;
-          }
-
-          state |= EXCLUSIVE_REQUESTED;
-        }
-
-        syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, nullptr, nullptr, 0);
-      }
-      break;
-    case SHARED: {
-      uint state = __atomic_add_fetch(&futex, 1, __ATOMIC_ACQUIRE);
-      for (;;) {
-        if (KJ_LIKELY((state & EXCLUSIVE_HELD) == 0)) {
-          // Acquired.
-          break;
-        }
-
-        // The mutex is exclusively locked by another thread.  Since we incremented the counter
-        // already, we just have to wait for it to be unlocked.
-        syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, nullptr, nullptr, 0);
-        state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
-      }
-      break;
-    }
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+  auto spec = timeout.map([](Duration d) { return toRelativeTimespec(d); });
+  struct timespec* specp = nullptr;
+  KJ_IF_MAYBE(s, spec) {
+    specp = s;
   }
-}
 
-bool Mutex::lockWithTimeout(Exclusivity exclusivity, Duration timeout) {
-  auto spec = toRelativeTimespec(timeout);
   switch (exclusivity) {
     case EXCLUSIVE:
       for (;;) {
@@ -195,11 +157,11 @@ bool Mutex::lockWithTimeout(Exclusivity exclusivity, Duration timeout) {
           state |= EXCLUSIVE_REQUESTED;
         }
 
-        auto result = syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, &spec, nullptr, 0);
+        auto result = syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, specp, nullptr, 0);
         if (result < 0) {
-          // We timed out, remove exclusive requested flag.
+          // We timed out, we can't remove the exclusive request flag (since others might be waiting)
+          // so we just return false.
           if (errno == ETIMEDOUT) {
-            __atomic_fetch_and(&futex, ~EXCLUSIVE_REQUESTED, __ATOMIC_RELEASE);
             return false;
           }
         }
@@ -215,11 +177,11 @@ bool Mutex::lockWithTimeout(Exclusivity exclusivity, Duration timeout) {
 
         // The mutex is exclusively locked by another thread.  Since we incremented the counter
         // already, we just have to wait for it to be unlocked.
-        auto result = syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, &spec, nullptr, 0);
+        auto result = syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, specp, nullptr, 0);
         if (result < 0) {
           // If we timeout though, we need to signal that we're not waiting anymore.
           if (errno == ETIMEDOUT) {
-            state = __atomic_sub_fetch(&futex, 1, __ATOMIC_ACQUIRE);
+            state = __atomic_sub_fetch(&futex, 1, __ATOMIC_RELAXED);
             return false;
           }
         }
@@ -495,7 +457,10 @@ Mutex::Mutex() {
 }
 Mutex::~Mutex() {}
 
-void Mutex::lock(Exclusivity exclusivity) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+  KJ_IF_MAYBE(t, timeout) {
+    KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
+  }
   switch (exclusivity) {
     case EXCLUSIVE:
       AcquireSRWLockExclusive(&coercedSrwLock);
@@ -504,10 +469,6 @@ void Mutex::lock(Exclusivity exclusivity) {
       AcquireSRWLockShared(&coercedSrwLock);
       break;
   }
-}
-
-bool Mutex::lockWithTimeout(Exclusivity exclusivity, Duration duration) {
-  KJ_UNIMPLEMENTED("Locking a mutex with a timeout is not supported on Windows.");
 }
 
 void Mutex::wakeReadyWaiter(Waiter* waiterToSkip) {
@@ -721,44 +682,16 @@ Mutex::~Mutex() {
   KJ_PTHREAD_CLEANUP(pthread_rwlock_destroy(&mutex));
 }
 
-void Mutex::lock(Exclusivity exclusivity) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+  KJ_IF_MAYBE(t, timeout) {
+    KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
+  }
   switch (exclusivity) {
     case EXCLUSIVE:
       KJ_PTHREAD_CALL(pthread_rwlock_wrlock(&mutex));
       break;
     case SHARED:
       KJ_PTHREAD_CALL(pthread_rwlock_rdlock(&mutex));
-      break;
-  }
-}
-
-bool Mutex::lockWithTimeout(Exclusivity exclusivity, Duration timeout) {
-  struct timespec absTime = toAbsoluteTimespec(now() + timeout);
-  int result;
-  switch (exclusivity) {
-    case EXCLUSIVE:
-      result = pthread_rwlock_timed_wrlock(&mutex, &absTime);
-      switch (result) {
-        case 0:
-          break;
-        case ETIMEDOUT:
-          return false;
-        default:
-          KJ_FAIL_SYSCALL("pthread_rwlock_timed_wrlock(&mutex, &absTime)", result);
-          break;
-      }
-      break;
-    case SHARED:
-      result = pthread_rwlock_timedrdlock(&mutex, &absTime);
-      switch (result) {
-        case 0:
-          break;
-        case ETIMEDOUT:
-          return false;
-        default:
-          KJ_FAIL_SYSCALL("pthread_rwlock_timedrdlock(&mutex, &absTime)", result);
-          break;
-      }
       break;
   }
   return true;
@@ -830,7 +763,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   // currently.
   bool currentlyLocked = true;
   KJ_DEFER({
-    if (!currentlyLocked) lock(EXCLUSIVE);
+    if (!currentlyLocked) lock(EXCLUSIVE, nullptr);
     removeWaiter(waiter);
 
     // Destroy pthread objects.
