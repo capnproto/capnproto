@@ -324,7 +324,7 @@ struct AuthenticatedStream {
   //
   // Different subclasses of `PeerIdentity` are used in different situations:
   // - TCP connections will use NetworkPeerIdentity, which gives the network address of the client.
-  // - Local (unix) socket connections will use LocalPeerIdentity, which identifies the UID, GID,
+  // - Local (unix) socket connections will use LocalPeerIdentity, which identifies the UID
   //   and PID of the process that initiated the connection.
   // - TLS connections will use TlsPeerIdentity which provides details of the client certificate,
   //   if any was provided.
@@ -340,7 +340,7 @@ class NetworkPeerIdentity: public PeerIdentity {
   // PeerIdentity used for network protocols like TCP/IP. This identifies the remote peer.
   //
   // This is only "authenticated" to the extent that we know data written to the stream will be
-  // routed to the given address. This doesn not preclude the possibility of man-in-the-middle
+  // routed to the given address. This does not preclude the possibility of man-in-the-middle
   // attacks by attackers who are able to manipulate traffic along the route.
 public:
   virtual NetworkAddress& getAddress() = 0;
