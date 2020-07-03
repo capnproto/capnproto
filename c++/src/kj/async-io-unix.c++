@@ -51,6 +51,10 @@
 #include <limits.h>
 #include <sys/ioctl.h>
 
+#if !defined(SO_PEERCRED) && defined(LOCAL_PEERCRED)
+#include <sys/ucred.h>
+#endif
+
 namespace kj {
 
 namespace {
@@ -1439,15 +1443,15 @@ kj::Own<PeerIdentity> SocketAddress::getIdentity(kj::LowLevelAsyncIoProvider& ll
       uint length = sizeof(creds);
       stream.getsockopt(SOL_LOCAL, LOCAL_PEERCRED, &creds, &length);
       KJ_ASSERT(length == sizeof(creds));
-      if (creds.sc_uid != static_cast<uid_t>(-1)) {
-        result.uid = creds.sc_uid;
+      if (creds.cr_uid != static_cast<uid_t>(-1)) {
+        result.uid = creds.cr_uid;
       }
 
 #if defined(LOCAL_PEERPID)
       // MacOS only?
       pid_t pid;
       length = sizeof(pid);
-      stream.getsockopt(socketFd, SOL_LOCAL, LOCAL_PEERCRED, &creds, &length);
+      stream.getsockopt(SOL_LOCAL, LOCAL_PEERPID, &pid, &length);
       KJ_ASSERT(length == sizeof(pid));
       if (pid > 0) {
         result.pid = pid;
