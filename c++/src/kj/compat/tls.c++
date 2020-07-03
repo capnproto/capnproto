@@ -927,12 +927,6 @@ kj::String TlsPeerIdentity::getCommonName() {
   return kj::heapString(reinterpret_cast<char*>(out), len);
 }
 
-bool TlsPeerIdentity::matchesHostname(kj::StringPtr hostname) {
-  if (cert == nullptr) {
-    return false;
-  }
-}
-
 }  // namespace kj
 
 #endif  // KJ_HAS_OPENSSL

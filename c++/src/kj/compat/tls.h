@@ -262,7 +262,8 @@ public:
   // Check if the certificate authenticates the given hostname, considering wildcards and SAN
   // extensions. If no certificate was provided, always returns false.
 
-  // TODO(someday): Methods for other things. Key fingerprint? Other certificate fields?
+  // TODO(someday): Methods for other things. Match hostnames (i.e. evaluate wildcards and SAN)?
+  //   Key fingerprint? Other certificate fields?
 
 private:
   void* cert;  // actually type X509*, but we don't want to #include the OpenSSL headers here.
