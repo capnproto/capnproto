@@ -1409,9 +1409,12 @@ kj::Own<PeerIdentity> SocketAddress::getIdentity(kj::LowLevelAsyncIoProvider& ll
                                                  AsyncIoStream& stream) const {
   switch (addr.generic.sa_family) {
     case AF_INET:
-    case AF_INET6:
+    case AF_INET6: {
+      auto builder = kj::heapArrayBuilder<SocketAddress>(1);
+      builder.add(*this);
       return NetworkPeerIdentity::newInstance(
-          kj::heap<NetworkAddressImpl>(llaiop, filter, kj::arr(*this)));
+          kj::heap<NetworkAddressImpl>(llaiop, filter, builder.finish()));
+    }
     case AF_UNIX: {
       LocalPeerIdentity::Credentials result;
 
