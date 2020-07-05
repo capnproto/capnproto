@@ -129,7 +129,13 @@ Mutex::~Mutex() {
   KJ_ASSERT(futex == 0, "Mutex destroyed while locked.") { break; }
 }
 
-void Mutex::lock(Exclusivity exclusivity) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+  auto spec = timeout.map([](Duration d) { return toRelativeTimespec(d); });
+  struct timespec* specp = nullptr;
+  KJ_IF_MAYBE(s, spec) {
+    specp = s;
+  }
+
   switch (exclusivity) {
     case EXCLUSIVE:
       for (;;) {
@@ -151,7 +157,14 @@ void Mutex::lock(Exclusivity exclusivity) {
           state |= EXCLUSIVE_REQUESTED;
         }
 
-        syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, nullptr, nullptr, 0);
+        auto result = syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, specp, nullptr, 0);
+        if (result < 0) {
+          if (errno == ETIMEDOUT) {
+            // We timed out, we can't remove the exclusive request flag (since others might be waiting)
+            // so we just return false.
+            return false;
+          }
+        }
       }
       break;
     case SHARED: {
@@ -164,12 +177,31 @@ void Mutex::lock(Exclusivity exclusivity) {
 
         // The mutex is exclusively locked by another thread.  Since we incremented the counter
         // already, we just have to wait for it to be unlocked.
-        syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, nullptr, nullptr, 0);
+        auto result = syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, specp, nullptr, 0);
+        if (result < 0) {
+          // If we timeout though, we need to signal that we're not waiting anymore.
+          if (errno == ETIMEDOUT) {
+            state = __atomic_sub_fetch(&futex, 1, __ATOMIC_RELAXED);
+
+            // We may have unlocked since we timed out. So act like we just unlocked the mutex
+            // and maybe send a wait signal if needed. See Mutex::unlock SHARED case.
+            if (KJ_UNLIKELY(state == EXCLUSIVE_REQUESTED)) {
+              if (__atomic_compare_exchange_n(
+                  &futex, &state, 0, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+                // Wake all exclusive waiters.  We have to wake all of them because one of them will
+                // grab the lock while the others will re-establish the exclusive-requested bit.
+                syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
+              }
+            }
+            return false;
+          }
+        }
         state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
       }
       break;
     }
   }
+  return true;
 }
 
 void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
@@ -436,7 +468,10 @@ Mutex::Mutex() {
 }
 Mutex::~Mutex() {}
 
-void Mutex::lock(Exclusivity exclusivity) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+  if (timeout != nullptr) {
+    KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
+  }
   switch (exclusivity) {
     case EXCLUSIVE:
       AcquireSRWLockExclusive(&coercedSrwLock);
@@ -445,6 +480,7 @@ void Mutex::lock(Exclusivity exclusivity) {
       AcquireSRWLockShared(&coercedSrwLock);
       break;
   }
+  return true;
 }
 
 void Mutex::wakeReadyWaiter(Waiter* waiterToSkip) {
@@ -658,7 +694,10 @@ Mutex::~Mutex() {
   KJ_PTHREAD_CLEANUP(pthread_rwlock_destroy(&mutex));
 }
 
-void Mutex::lock(Exclusivity exclusivity) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+  if (timeout != nullptr) {
+    KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
+  }
   switch (exclusivity) {
     case EXCLUSIVE:
       KJ_PTHREAD_CALL(pthread_rwlock_wrlock(&mutex));
@@ -667,6 +706,7 @@ void Mutex::lock(Exclusivity exclusivity) {
       KJ_PTHREAD_CALL(pthread_rwlock_rdlock(&mutex));
       break;
   }
+  return true;
 }
 
 void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
@@ -735,7 +775,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   // currently.
   bool currentlyLocked = true;
   KJ_DEFER({
-    if (!currentlyLocked) lock(EXCLUSIVE);
+    if (!currentlyLocked) lock(EXCLUSIVE, nullptr);
     removeWaiter(waiter);
 
     // Destroy pthread objects.
