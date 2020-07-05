@@ -163,7 +163,7 @@ TEST(AsyncIo, SimpleNetworkAuthentication) {
 }
 #endif
 
-#if !_WIN32
+#if !_WIN32 && !__CYGWIN__  // TODO(someday): Debug why this deadlocks on Cygwin.
 TEST(AsyncIo, UnixSocket) {
   auto ioContext = setupAsyncIo();
   auto& network = ioContext.provider->getNetwork();
