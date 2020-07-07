@@ -350,8 +350,7 @@ const kj::StringPtr ParsedSchema::getNodeName() const {
 
 ParsedSchema ParsedSchema::ParsedSchemaList::operator[](uint index) const {
   return ParsedSchema(
-    parent.parser->impl->compiler.getLoader().get(
-      parent.getProto().getNestedNodes()[index].getId()),
+    parent.parser->impl->compiler.getLoader().get(list[index].getId()),
     *parent.parser);
 }
 
