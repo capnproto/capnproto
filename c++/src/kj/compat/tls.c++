@@ -42,10 +42,11 @@
 #endif
 
 namespace kj {
-namespace {
 
 // =======================================================================================
 // misc helpers
+
+namespace {
 
 KJ_NORETURN(void throwOpensslError());
 void throwOpensslError() {
@@ -95,6 +96,8 @@ inline void ensureOpenSslInitialized() {
   // As of 1.1.0, no initialization is needed.
 }
 #endif
+
+}  // namespace
 
 // =======================================================================================
 // Implementation of kj::AsyncIoStream that applies TLS on top of some other AsyncIoStream.
@@ -162,6 +165,11 @@ public:
     SSL_set_options(ssl, SSL_OP_CIPHER_SERVER_PREFERENCE);
 
     return sslCall([this]() { return SSL_accept(ssl); }).ignoreResult();
+  }
+
+  kj::Own<TlsPeerIdentity> getIdentity(kj::Own<kj::PeerIdentity> inner) {
+    return kj::heap<TlsPeerIdentity>(SSL_get_peer_certificate(ssl), kj::mv(inner),
+                                     kj::Badge<TlsConnection>());
   }
 
   ~TlsConnection() noexcept(false) {
@@ -403,6 +411,12 @@ public:
     });
   }
 
+  Promise<kj::AuthenticatedStream> acceptAuthenticated() override {
+    return inner->acceptAuthenticated().then([this](kj::AuthenticatedStream stream) {
+      return tls.wrapServer(kj::mv(stream));
+    });
+  }
+
   uint getPort() override {
     return inner->getPort();
   }
@@ -435,6 +449,18 @@ public:
         [&tlsRef](kj::String&& hostname, Own<AsyncIoStream>&& stream) {
       return tlsRef.wrapClient(kj::mv(stream), hostname);
     }));
+  }
+
+  Promise<kj::AuthenticatedStream> connectAuthenticated() override {
+    // Note: It's unfortunately pretty common for people to assume they can drop the NetworkAddress
+    //   as soon as connect() returns, and this works with the native network implementation.
+    //   So, we make some copies here.
+    auto& tlsRef = tls;
+    auto hostnameCopy = kj::str(hostname);
+    return inner->connectAuthenticated().then(
+        [&tlsRef, hostname = kj::mv(hostnameCopy)](kj::AuthenticatedStream stream) {
+      return tlsRef.wrapClient(kj::mv(stream), hostname);
+    });
   }
 
   Own<ConnectionReceiver> listen() override {
@@ -494,8 +520,6 @@ private:
   kj::Network& inner;
   kj::Own<kj::Network> ownInner;
 };
-
-}  // namespace
 
 // =======================================================================================
 // class TlsContext
@@ -676,6 +700,25 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::Async
   }));
 }
 
+kj::Promise<kj::AuthenticatedStream> TlsContext::wrapClient(
+    kj::AuthenticatedStream stream, kj::StringPtr expectedServerHostname) {
+  auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), reinterpret_cast<SSL_CTX*>(ctx));
+  auto promise = conn->connect(expectedServerHostname);
+  return promise.then([conn=kj::mv(conn),innerId=kj::mv(stream.peerIdentity)]() mutable {
+    auto id = conn->getIdentity(kj::mv(innerId));
+    return kj::AuthenticatedStream { kj::mv(conn), kj::mv(id) };
+  });
+}
+
+kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStream stream) {
+  auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), reinterpret_cast<SSL_CTX*>(ctx));
+  auto promise = conn->accept();
+  return promise.then([conn=kj::mv(conn),innerId=kj::mv(stream.peerIdentity)]() mutable {
+    auto id = conn->getIdentity(kj::mv(innerId));
+    return kj::AuthenticatedStream { kj::mv(conn), kj::mv(id) };
+  });
+}
+
 kj::Own<kj::ConnectionReceiver> TlsContext::wrapPort(kj::Own<kj::ConnectionReceiver> port) {
   return kj::heap<TlsConnectionReceiver>(*this, kj::mv(port));
 }
@@ -843,6 +886,45 @@ TlsCertificate::~TlsCertificate() noexcept(false) {
     if (p == nullptr) break;  // end of chain; quit early
     X509_free(reinterpret_cast<X509*>(p));
   }
+}
+
+// =======================================================================================
+// class TlsPeerIdentity
+
+TlsPeerIdentity::~TlsPeerIdentity() noexcept(false) {
+  if (cert != nullptr) {
+    X509_free(reinterpret_cast<X509*>(cert));
+  }
+}
+
+kj::String TlsPeerIdentity::toString() {
+  if (hasCertificate()) {
+    return getCommonName();
+  } else {
+    return kj::str("(anonymous client)");
+  }
+}
+
+kj::String TlsPeerIdentity::getCommonName() {
+  if (cert == nullptr) {
+    KJ_FAIL_REQUIRE("client did not provide a certificate") { return nullptr; }
+  }
+
+  X509_NAME* subj = X509_get_subject_name(reinterpret_cast<X509*>(cert));
+
+  int index = X509_NAME_get_index_by_NID(subj, NID_commonName, -1);
+  KJ_ASSERT(index != -1, "certificate has no common name?");
+  X509_NAME_ENTRY* entry = X509_NAME_get_entry(subj, index);
+  KJ_ASSERT(entry != nullptr);
+  ASN1_STRING* data = X509_NAME_ENTRY_get_data(entry);
+  KJ_ASSERT(data != nullptr);
+
+  unsigned char* out = nullptr;
+  int len = ASN1_STRING_to_UTF8(&out, data);
+  KJ_ASSERT(len >= 0);
+  KJ_DEFER(OPENSSL_free(out));
+
+  return kj::heapString(reinterpret_cast<char*>(out), len);
 }
 
 }  // namespace kj

@@ -89,6 +89,155 @@ TEST(AsyncIo, SimpleNetwork) {
   EXPECT_EQ("foo", result);
 }
 
+#if !_WIN32  // TODO(soon): Implement NetworkPeerIdentity for Win32.
+TEST(AsyncIo, SimpleNetworkAuthentication) {
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
+
+  Own<ConnectionReceiver> listener;
+  Own<AsyncIoStream> server;
+  Own<AsyncIoStream> client;
+
+  char receiveBuffer[4];
+
+  auto port = newPromiseAndFulfiller<uint>();
+
+  port.promise.then([&](uint portnum) {
+    return network.parseAddress("localhost", portnum);
+  }).then([&](Own<NetworkAddress>&& addr) {
+    auto promise = addr->connectAuthenticated();
+    return promise.then([&,addr=kj::mv(addr)](AuthenticatedStream result) mutable {
+      auto id = result.peerIdentity.downcast<NetworkPeerIdentity>();
+
+      // `addr` was resolved from `localhost` and may contain multiple addresses, but
+      // result.peerIdentity tells us the specific address that was used. So it should be one
+      // of the ones on the list, but only one.
+      KJ_EXPECT(strstr(addr->toString().cStr(), id->getAddress().toString().cStr()) != nullptr);
+      KJ_EXPECT(id->getAddress().toString().findFirst(',') == nullptr);
+
+      client = kj::mv(result.stream);
+
+      // `id` should match client->getpeername().
+      union {
+        struct sockaddr generic;
+        struct sockaddr_in ip4;
+        struct sockaddr_in6 ip6;
+      } rawAddr;
+      uint len = sizeof(rawAddr);
+      client->getpeername(&rawAddr.generic, &len);
+      auto peername = network.getSockaddr(&rawAddr.generic, len);
+      KJ_EXPECT(id->toString() == peername->toString());
+
+      return client->write("foo", 3);
+    });
+  }).detach([](kj::Exception&& exception) {
+    KJ_FAIL_EXPECT(exception);
+  });
+
+  kj::String result = network.parseAddress("*").then([&](Own<NetworkAddress>&& result) {
+    listener = result->listen();
+    port.fulfiller->fulfill(listener->getPort());
+    return listener->acceptAuthenticated();
+  }).then([&](AuthenticatedStream result) {
+    auto id = result.peerIdentity.downcast<NetworkPeerIdentity>();
+    server = kj::mv(result.stream);
+
+    // `id` should match server->getpeername().
+    union {
+      struct sockaddr generic;
+      struct sockaddr_in ip4;
+      struct sockaddr_in6 ip6;
+    } addr;
+    uint len = sizeof(addr);
+    server->getpeername(&addr.generic, &len);
+    auto peername = network.getSockaddr(&addr.generic, len);
+    KJ_EXPECT(id->toString() == peername->toString());
+
+    return server->tryRead(receiveBuffer, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer, n);
+  }).wait(ioContext.waitScope);
+
+  EXPECT_EQ("foo", result);
+}
+#endif
+
+#if !_WIN32 && !__CYGWIN__  // TODO(someday): Debug why this deadlocks on Cygwin.
+TEST(AsyncIo, UnixSocket) {
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
+
+  auto path = kj::str("/tmp/kj-async-io-test.", getpid());
+  KJ_DEFER(unlink(path.cStr()));
+
+  Own<ConnectionReceiver> listener;
+  Own<AsyncIoStream> server;
+  Own<AsyncIoStream> client;
+
+  char receiveBuffer[4];
+
+  auto ready = newPromiseAndFulfiller<void>();
+
+  ready.promise.then([&]() {
+    return network.parseAddress(kj::str("unix:", path));
+  }).then([&](Own<NetworkAddress>&& addr) {
+    auto promise = addr->connectAuthenticated();
+    return promise.then([&,addr=kj::mv(addr)](AuthenticatedStream result) mutable {
+      auto id = result.peerIdentity.downcast<LocalPeerIdentity>();
+      auto creds = id->getCredentials();
+      KJ_IF_MAYBE(p, creds.pid) {
+        KJ_EXPECT(*p == getpid());
+#if __linux__ || __APPLE__
+      } else {
+        KJ_FAIL_EXPECT("LocalPeerIdentity for unix socket had null PID");
+#endif
+      }
+      KJ_IF_MAYBE(u, creds.uid) {
+        KJ_EXPECT(*u == getuid());
+      } else {
+        KJ_FAIL_EXPECT("LocalPeerIdentity for unix socket had null UID");
+      }
+
+      client = kj::mv(result.stream);
+      return client->write("foo", 3);
+    });
+  }).detach([](kj::Exception&& exception) {
+    KJ_FAIL_EXPECT(exception);
+  });
+
+  kj::String result = network.parseAddress(kj::str("unix:", path))
+      .then([&](Own<NetworkAddress>&& result) {
+    listener = result->listen();
+    ready.fulfiller->fulfill();
+    return listener->acceptAuthenticated();
+  }).then([&](AuthenticatedStream result) {
+    auto id = result.peerIdentity.downcast<LocalPeerIdentity>();
+    auto creds = id->getCredentials();
+    KJ_IF_MAYBE(p, creds.pid) {
+      KJ_EXPECT(*p == getpid());
+#if __linux__ || __APPLE__
+    } else {
+      KJ_FAIL_EXPECT("LocalPeerIdentity for unix socket had null PID");
+#endif
+    }
+    KJ_IF_MAYBE(u, creds.uid) {
+      KJ_EXPECT(*u == getuid());
+    } else {
+      KJ_FAIL_EXPECT("LocalPeerIdentity for unix socket had null UID");
+    }
+
+    server = kj::mv(result.stream);
+    return server->tryRead(receiveBuffer, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer, n);
+  }).wait(ioContext.waitScope);
+
+  EXPECT_EQ("foo", result);
+}
+#endif
+
 String tryParse(WaitScope& waitScope, Network& network, StringPtr text, uint portHint = 0) {
   return network.parseAddress(text, portHint).wait(waitScope)->toString();
 }
