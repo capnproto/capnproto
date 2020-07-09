@@ -178,9 +178,6 @@ public:
   schema::Node::SourceInfo::Reader getSourceInfo() const;
   // Get the source info for this schema.
 
-  const kj::StringPtr getNodeName() const;
-  // Get the name of this node as defined by the parent nodes nestedNode list
-
 private:
   inline ParsedSchema(Schema inner, const SchemaParser& parser): Schema(inner), parser(&parser) {}
 

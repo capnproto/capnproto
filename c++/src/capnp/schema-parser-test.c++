@@ -114,7 +114,7 @@ TEST(SchemaParser, Basic) {
 
   auto barStructs = barSchema.getAllNested();
   ASSERT_EQ(1, barStructs.size());
-  EXPECT_EQ("Bar", barStructs[0].getNodeName());
+  EXPECT_EQ("Bar", barStructs[0].getUnqualifiedName());
   barFields = barStructs[0].asStruct().getFields();
   ASSERT_EQ(4u, barFields.size());
   EXPECT_EQ("baz", barFields[0].getProto().getName());

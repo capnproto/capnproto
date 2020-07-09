@@ -336,16 +336,6 @@ schema::Node::SourceInfo::Reader ParsedSchema::getSourceInfo() const {
   return KJ_ASSERT_NONNULL(parser->getSourceInfo(*this));
 }
 
-const kj::StringPtr ParsedSchema::getNodeName() const {
-  const auto& scopeNode = parser->impl->compiler.getLoader().get(getProto().getScopeId());
-  for (auto nestedNode : scopeNode.getProto().getNestedNodes()) {
-    if (nestedNode.getId() == getProto().getId()) {
-      return nestedNode.getName();
-    }
-  }
-  return nullptr;
-}
-
 // -------------------------------------------------------------------
 
 ParsedSchema ParsedSchema::ParsedSchemaList::operator[](uint index) const {
