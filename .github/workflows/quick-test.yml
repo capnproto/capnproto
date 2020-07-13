@@ -48,13 +48,16 @@ jobs:
             target: 'Visual Studio 15 2017'
             arch:
             install_deps: false
+            cmake_args:
           - os: windows-latest
             target: 'Visual Studio 16 2019'
             arch: -A x64
             install_deps: true
+            cmake_args: -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%"
     steps:
       - uses: actions/checkout@v2
       - name: Include $CONDA in $PATH
+        if: ${{ matrix.install_deps }}
         run: |
           echo "::add-path::$Env:CONDA\condabin"
       - name: Install dependencies via Conda
@@ -68,7 +71,7 @@ jobs:
             echo "Activate conda base environment"
             call activate base
             echo "Building Cap'n Proto with ${{ matrix.target }}"
-            cmake -Hc++ -Bbuild-output ${{ matrix.arch }} -G "${{ matrix.target }}" -DCMAKE_BUILD_TYPE=debug -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%" -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install
+            cmake -Hc++ -Bbuild-output ${{ matrix.arch }} -G "${{ matrix.target }}" ${{ matrix.cmake_args }} -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install
             cmake --build build-output --config debug --target install
 
             echo "Building Cap'n Proto samples with ${{ matrix.target }}"
