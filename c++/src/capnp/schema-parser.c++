@@ -328,8 +328,20 @@ ParsedSchema ParsedSchema::getNested(kj::StringPtr nestedName) const {
   }
 }
 
+ParsedSchema::ParsedSchemaList ParsedSchema::getAllNested() const {
+  return ParsedSchemaList(*this, getProto().getNestedNodes());
+}
+
 schema::Node::SourceInfo::Reader ParsedSchema::getSourceInfo() const {
   return KJ_ASSERT_NONNULL(parser->getSourceInfo(*this));
+}
+
+// -------------------------------------------------------------------
+
+ParsedSchema ParsedSchema::ParsedSchemaList::operator[](uint index) const {
+  return ParsedSchema(
+    parent.parser->impl->compiler.getLoader().get(list[index].getId()),
+    *parent.parser);
 }
 
 // -------------------------------------------------------------------

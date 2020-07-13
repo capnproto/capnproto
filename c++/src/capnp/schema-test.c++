@@ -52,6 +52,7 @@ TEST(Schema, Structs) {
   EXPECT_TRUE(schema.asStruct() == schema);
   EXPECT_NONFATAL_FAILURE(schema.asEnum());
   EXPECT_NONFATAL_FAILURE(schema.asInterface());
+  ASSERT_EQ("TestAllTypes", schema.getUnqualifiedName());
 
   ASSERT_EQ(schema.getFields().size(), schema.getProto().getStruct().getFields().size());
   StructSchema::Field field = schema.getFields()[0];
