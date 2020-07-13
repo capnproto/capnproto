@@ -47,15 +47,18 @@ jobs:
           - os: windows-2016
             target: 'Visual Studio 15 2017'
             arch:
+            install_deps: false
           - os: windows-latest
             target: 'Visual Studio 16 2019'
             arch: -A x64
+            install_deps: true
     steps:
       - uses: actions/checkout@v2
       - name: Include $CONDA in $PATH
         run: |
           echo "::add-path::$Env:CONDA\condabin"
       - name: Install dependencies via Conda
+        if: ${{ matrix.install_deps }}
         run: |
           conda update -n base -c defaults -q conda
           conda install -n base -c defaults -q openssl zlib
