@@ -582,12 +582,18 @@ class HttpClient {
   //   The `url` specified in a request is a full URL including protocol and hostname.
 
 public:
+  enum class ResponseBodyEncoding {
+    AUTO,
+    MANUAL
+  };
+
   struct Response {
     uint statusCode;
     kj::StringPtr statusText;
     const HttpHeaders* headers;
     kj::Own<kj::AsyncInputStream> body;
     // `statusText` and `headers` remain valid until `body` is dropped or read from.
+    ResponseBodyEncoding bodyEncoding;
   };
 
   struct Request {
