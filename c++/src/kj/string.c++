@@ -29,7 +29,7 @@
 
 namespace kj {
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 #pragma warning(disable: 4996)
 // Warns that sprintf() is buffer-overrunny. We know that, it's cool.
 #endif

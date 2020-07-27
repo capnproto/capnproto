@@ -40,7 +40,7 @@
 #include <sys/wait.h>
 #endif
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 #pragma warning(disable: 4996)
 // Warns that sprintf() is buffer-overrunny. Yeah, I know, it's cool.
 #endif

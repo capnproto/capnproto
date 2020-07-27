@@ -117,7 +117,7 @@ Own<T> Refcounted::addRefInternal(T* object) {
 //
 // Warning: Atomic ops are SLOW.
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 #if _M_ARM
 #define KJ_MSVC_INTERLOCKED(OP, MEM) _Interlocked##OP##_##MEM
 #else
@@ -132,7 +132,7 @@ public:
   KJ_DISALLOW_COPY(AtomicRefcounted);
 
   inline bool isShared() const {
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
     return KJ_MSVC_INTERLOCKED(Or, acq)(&refcount, 0) > 1;
 #else
     return __atomic_load_n(&refcount, __ATOMIC_ACQUIRE) > 1;
@@ -140,7 +140,7 @@ public:
   }
 
 private:
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
   mutable volatile long refcount = 0;
 #else
   mutable volatile uint refcount = 0;
@@ -203,7 +203,7 @@ kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object) {
 template <typename T>
 kj::Own<T> AtomicRefcounted::addRefInternal(T* object) {
   AtomicRefcounted* refcounted = object;
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
   KJ_MSVC_INTERLOCKED(Increment, nf)(&refcounted->refcount);
 #else
   __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
@@ -214,7 +214,7 @@ kj::Own<T> AtomicRefcounted::addRefInternal(T* object) {
 template <typename T>
 kj::Own<const T> AtomicRefcounted::addRefInternal(const T* object) {
   const AtomicRefcounted* refcounted = object;
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
   KJ_MSVC_INTERLOCKED(Increment, nf)(&refcounted->refcount);
 #else
   __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
