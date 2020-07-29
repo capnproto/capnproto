@@ -389,7 +389,7 @@ void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphana
     KJ_IF_MAYBE(fieldSchema, type.findFieldByName(field.getName())) {
       decodeField(*fieldSchema, field.getValue(), orphanage, output);
     } else {
-      KJ_REQUIRE(impl->ignoreUnrecognizedFields, "Unrecognized field.", field.getName());
+      KJ_REQUIRE(impl->ignoreUnrecognizedFields, "Unrecognized field", field.getName());
     }
   }
 }
