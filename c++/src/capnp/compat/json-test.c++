@@ -647,6 +647,18 @@ KJ_TEST("maximum nesting depth") {
   }
 }
 
+KJ_TEST("unrecognized fields") {
+  JsonCodec json;
+  MallocMessageBuilder message;
+  auto root = message.initRoot<TestJsonAnnotations>();
+  auto valid = R"({"foo": "a"})"_kj;
+  auto unrecognized = R"({"foo": "a", "unrecognize-bar": "pun"})"_kj;
+  json.decode(valid, root);
+  json.decode(unrecognized, root);
+  json.setIgnoreUnrecognizedFields(false);
+  KJ_EXPECT_THROW_MESSAGE("Unrecognized field", json.decode(valid, root));
+}
+
 class TestCallHandler: public JsonCodec::Handler<Text> {
 public:
   void encode(const JsonCodec& codec, Text::Reader input,
