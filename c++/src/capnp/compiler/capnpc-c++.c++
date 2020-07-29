@@ -1785,7 +1785,7 @@ private:
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS), kj::mv(value));\n"
             "}\n",
             COND(type.hasDisambiguatedTemplate(),
-                "#ifndef _MSC_VER\n"
+                "#if !defined(_MSC_VER) || defined(__clang__)\n"
                 "// Excluded under MSVC because bugs may make it unable to compile this method.\n"),
             templateContext.allDecls(),
             "inline ::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
@@ -1793,7 +1793,7 @@ private:
             "  return ::capnp::_::PointerHelpers<", type, ">::disown(_builder.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS));\n"
             "}\n",
-            COND(type.hasDisambiguatedTemplate(), "#endif  // !_MSC_VER\n"),
+            COND(type.hasDisambiguatedTemplate(), "#endif  // !_MSC_VER || __clang__\n"),
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n")
       };
@@ -2573,7 +2573,7 @@ private:
           scope.size() == 0 ? kj::strTree() : kj::strTree(
               // TODO(msvc): MSVC doesn't like definitions of constexprs, but other compilers and
               //   the standard require them.
-              "#ifndef _MSC_VER\n"
+              "#if !defined(_MSC_VER) || defined(__clang__)\n"
               "constexpr ", typeName_, ' ', scope, upperCase, ";\n"
               "#endif\n")
         };

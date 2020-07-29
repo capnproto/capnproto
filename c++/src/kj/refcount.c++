@@ -22,7 +22,7 @@
 #include "refcount.h"
 #include "debug.h"
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 // Annoyingly, MSVC only implements the C++ atomic libs, not the C libs, so the only useful
 // thing we can get from <atomic> seems to be atomic_thread_fence... but that one function is
 // indeed not implemented by the intrinsics, so...
@@ -52,7 +52,7 @@ AtomicRefcounted::~AtomicRefcounted() noexcept(false) {
 }
 
 void AtomicRefcounted::disposeImpl(void* pointer) const {
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
   if (KJ_MSVC_INTERLOCKED(Decrement, rel)(&refcount) == 0) {
     std::atomic_thread_fence(std::memory_order_acquire);
     delete this;
@@ -66,7 +66,7 @@ void AtomicRefcounted::disposeImpl(void* pointer) const {
 }
 
 bool AtomicRefcounted::addRefWeakInternal() const {
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
   long orig = refcount;
 
   for (;;) {

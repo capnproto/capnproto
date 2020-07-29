@@ -315,7 +315,7 @@ inline constexpr uint sizeInWords() {
 
 }  // namespace capnp
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 // MSVC doesn't understand floating-point constexpr yet.
 //
 // TODO(msvc): Remove this hack when MSVC is fixed.
@@ -326,7 +326,7 @@ inline constexpr uint sizeInWords() {
 #define CAPNP_NON_INT_CONSTEXPR_DEF_INIT(value)
 #endif
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 // TODO(msvc): A little hack to allow MSVC to use C++14 return type deduction in cases where the
 // explicit type exposes bugs in the compiler.
 #define CAPNP_AUTO_IF_MSVC(...) auto
@@ -349,7 +349,7 @@ inline constexpr uint sizeInWords() {
       static inline ::capnp::word const* encodedSchema() { return bp_##id; } \
     }
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 // TODO(msvc): MSVC doesn't expect constexprs to have definitions.
 #define CAPNP_DEFINE_ENUM(type, id)
 #else

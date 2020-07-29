@@ -171,7 +171,7 @@ TEST(Exception, ScopeSuccessFail) {
 }
 #endif
 
-#if __GNUG__
+#if __GNUG__ || defined(__clang__)
 kj::String testStackTrace() __attribute__((noinline));
 #elif _MSC_VER
 __declspec(noinline) kj::String testStackTrace();

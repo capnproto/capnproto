@@ -508,7 +508,7 @@ public:
   inline Builder(decltype(nullptr)) {}
   inline Builder(_::StructBuilder builder): _builder(builder) {}
 
-#if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
+#if !_MSC_VER || defined(__clang__) // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
   template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromBuilder<T>) == Kind::STRUCT>>
   inline Builder(T&& value)
       : _builder(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::fwd<T>(value))) {}
@@ -640,7 +640,7 @@ public:
   inline Reader(): _reader(ElementSize::VOID) {}
   inline Reader(_::ListReader reader): _reader(reader) {}
 
-#if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
+#if !_MSC_VER || defined(__clang__) // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
   template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromReader<T>) == Kind::LIST>>
   inline Reader(T&& value)
       : _reader(_::PointerHelpers<FromReader<T>>::getInternalReader(kj::fwd<T>(value))) {}
@@ -680,7 +680,7 @@ public:
   inline Builder(decltype(nullptr)): _builder(ElementSize::VOID) {}
   inline Builder(_::ListBuilder builder): _builder(builder) {}
 
-#if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
+#if !_MSC_VER || defined(__clang__) // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
   template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromBuilder<T>) == Kind::LIST>>
   inline Builder(T&& value)
       : _builder(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::fwd<T>(value))) {}
