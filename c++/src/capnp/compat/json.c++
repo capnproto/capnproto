@@ -37,6 +37,7 @@ struct JsonCodec::Impl {
   bool prettyPrint = false;
   HasMode hasMode = HasMode::NON_NULL;
   size_t maxNestingDepth = 64;
+  bool ignoreUnrecognizedFields = true;
 
   kj::HashMap<Type, HandlerBase*> typeHandlers;
   kj::HashMap<StructSchema::Field, HandlerBase*> fieldHandlers;
@@ -184,6 +185,8 @@ void JsonCodec::setMaxNestingDepth(size_t maxNestingDepth) {
 }
 
 void JsonCodec::setHasMode(HasMode mode) { impl->hasMode = mode; }
+
+void JsonCodec::setIgnoreUnrecognizedFields(bool ignore) { impl->ignoreUnrecognizedFields = ignore; }
 
 kj::String JsonCodec::encode(DynamicValue::Reader value, Type type) const {
   MallocMessageBuilder message;
@@ -386,7 +389,7 @@ void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphana
     KJ_IF_MAYBE(fieldSchema, type.findFieldByName(field.getName())) {
       decodeField(*fieldSchema, field.getValue(), orphanage, output);
     } else {
-      // Unknown json fields are ignored to allow schema evolution
+      KJ_REQUIRE(impl->ignoreUnrecognizedFields, "Unrecognized field.", field.getName());
     }
   }
 }
