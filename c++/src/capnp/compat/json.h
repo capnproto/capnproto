@@ -60,7 +60,7 @@ class JsonCodec {
   //   different ways people do this.
   // - Encoding/decoding capabilities and AnyPointers requires registering a Handler, since there's
   //   no obvious default behavior.
-  // - When decoding, unrecognized field names are ignored by default to allow schema evolution.
+  // - When decoding, unknown field names are ignored by default to allow schema evolution.
 
 public:
   JsonCodec();
@@ -83,10 +83,10 @@ public:
   // setHasMode(HasMode::NON_DEFAULT) to specify that default-valued primitive fields should be
   // omitted as well.
 
-  void setIgnoreUnrecognizedFields(bool ignore);
-  // Choose whether decoding JSON with unrecognized fields should produce an error. You may trade
+  void setRejectUnknownFields(bool enable);
+  // Choose whether decoding JSON with unknown fields should produce an error. You may trade
   // allowing schema evolution against a guarantee that all data is preserved when decoding JSON
-  // by toggling this option. The default is to ignore unrecognized fields.
+  // by toggling this option. The default is to ignore unknown fields.
 
   template <typename T>
   kj::String encode(T&& value) const;
