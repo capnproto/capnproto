@@ -84,9 +84,9 @@ public:
   // omitted as well.
 
   void setIgnoreUnrecognizedFields(bool ignore);
-  // Choose whether decoding JSON with unrecognized field names results in an error. You may trade
-  // allowing schema evolution against a guarantee that all data is preserved depending on this
-  // option. The default is to ignore unrecognized fields.
+  // Choose whether decoding JSON with unrecognized fields should produce an error. You may trade
+  // allowing schema evolution against a guarantee that all data is preserved when decoding JSON
+  // by toggling this option. The default is to ignore unrecognized fields.
 
   template <typename T>
   kj::String encode(T&& value) const;
