@@ -60,7 +60,7 @@ class JsonCodec {
   //   different ways people do this.
   // - Encoding/decoding capabilities and AnyPointers requires registering a Handler, since there's
   //   no obvious default behavior.
-  // - When decoding, unknown field names are ignored by default to allow schema evolution.
+  // - When decoding, fields with unknown names are ignored by default to allow schema evolution.
 
 public:
   JsonCodec();
