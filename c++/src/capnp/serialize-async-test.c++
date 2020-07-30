@@ -23,6 +23,10 @@
 #define _GNU_SOURCE
 #endif
 
+#if _WIN32
+#include <kj/win32-api-version.h>
+#endif
+
 #include "serialize-async.h"
 #include "serialize.h"
 #include <kj/debug.h>
@@ -33,7 +37,6 @@
 #include <kj/compat/gtest.h>
 
 #if _WIN32
-#define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <kj/windows-sanity.h>
 namespace kj {

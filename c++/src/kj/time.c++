@@ -21,9 +21,7 @@
 // THE SOFTWARE.
 
 #if _WIN32
-#define WIN32_LEAN_AND_MEAN 1  // lolz
-#define WINVER 0x0600
-#define _WIN32_WINNT 0x0600
+#include "win32-api-version.h"
 #endif
 
 #include "time.h"

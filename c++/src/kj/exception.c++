@@ -23,6 +23,10 @@
 #define _GNU_SOURCE
 #endif
 
+#if _WIN32 || __CYGWIN__
+#include "win32-api-version.h"
+#endif
+
 #if (_WIN32 && _M_X64) || (__CYGWIN__ && __x86_64__)
 // Currently the Win32 stack-trace code only supports x86_64. We could easily extend it to support
 // i386 as well but it requires some code changes around how we read the context to start the
@@ -59,7 +63,6 @@
 #endif
 
 #if _WIN32 || __CYGWIN__
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "windows-sanity.h"
 #include <dbghelp.h>
