@@ -5,6 +5,7 @@ on:
     branches:
     - master
     - 'release-*'
+    - 'fix-release*'
 
 jobs:
   Linux:

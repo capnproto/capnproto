@@ -1270,7 +1270,8 @@ KJ_TEST("retryOnDisconnect") {
       }
     });
     KJ_EXPECT(i == 0);
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test disconnect; i = 2", promise.wait(waitScope));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test disconnect; i = 2",
+        promise.ignoreResult().wait(waitScope));
     KJ_EXPECT(i == 2);
   }
 
