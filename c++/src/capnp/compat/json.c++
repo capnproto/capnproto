@@ -20,9 +20,6 @@
 // THE SOFTWARE.
 
 #include "json.h"
-#include <math.h>    // for HUGEVAL to check for overflow in strtod
-#include <stdlib.h>  // strtod
-#include <errno.h>   // for strtod errors
 #include <capnp/orphan.h>
 #include <kj/debug.h>
 #include <kj/function.h>
