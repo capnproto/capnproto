@@ -68,6 +68,8 @@ enum class Variants8 { _variant0, _variant1, _variant2, _variant3, _variant4, _v
                        _variant7 };
 enum class Variants9 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
                        _variant7, _variant8 };
+enum class Variants10 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9 };
 
 template <uint i> struct Variants_;
 template <> struct Variants_<0> { typedef Variants0 Type; };
@@ -80,6 +82,7 @@ template <> struct Variants_<6> { typedef Variants6 Type; };
 template <> struct Variants_<7> { typedef Variants7 Type; };
 template <> struct Variants_<8> { typedef Variants8 Type; };
 template <> struct Variants_<9> { typedef Variants9 Type; };
+template <> struct Variants_<10> { typedef Variants10 Type; };
 
 template <uint i>
 using Variants = typename Variants_<i>::Type;
