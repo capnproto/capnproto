@@ -772,5 +772,61 @@ KJ_TEST("cross-thread event disconnected without holding Executor ref") {
   })();
 }
 
+KJ_TEST("detached cross-thread event doesn't cause crash") {
+  MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  Own<PromiseFulfiller<void>> fulfiller;  // accessed only from the subthread
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
+
+    *executor.lockExclusive() = getCurrentThreadExecutor();
+
+    paf.promise.wait(waitScope);
+
+    // Without this poll(), we don't attempt to reply to the other thread? But this isn't required
+    // in other tests, for some reason? Oh well.
+    waitScope.poll();
+
+    executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
+  });
+
+  ([&]() noexcept {
+    {
+      KJ_XTHREAD_TEST_SETUP_LOOP;
+
+      const Executor* exec;
+      {
+        auto lock = executor.lockExclusive();
+        lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+        exec = &KJ_ASSERT_NONNULL(*lock);
+      }
+
+      exec->executeAsync([&]() -> kj::Promise<void> {
+        // Make sure other thread gets time to exit its EventLoop.
+        delay();
+        delay();
+        delay();
+        fulfiller->fulfill();
+        return kj::READY_NOW;
+      }).detach([&](kj::Exception&& e) {
+        KJ_LOG(ERROR, e);
+      });
+
+      // Give the other thread a chance to wake up and start working on the event.
+      delay();
+
+      // Now we'll destroy our EventLoop. That *should* cause detached promises to be destroyed,
+      // thereby cancelling it, before disabling our own executor. However, at one point in the
+      // past, our executor was shut down first, followed by destroying detached promises, which
+      // led to an abort because the other thread had no way to reply back to this thread.
+    }
+
+    *executor.lockExclusive() = nullptr;
+  })();
+}
+
 }  // namespace
 }  // namespace kj
