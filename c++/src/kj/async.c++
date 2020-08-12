@@ -1456,14 +1456,14 @@ EventLoop::EventLoop(EventPort& port)
       daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
+  // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
+  // some more.
+  daemons = nullptr;
+
   KJ_IF_MAYBE(e, executor) {
     // Cancel all outstanding cross-thread events.
     e->get()->impl->disconnect();
   }
-
-  // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
-  // some more.
-  daemons = nullptr;
 
   // The application _should_ destroy everything using the EventLoop before destroying the
   // EventLoop itself, so if there are events on the loop, this indicates a memory leak.
