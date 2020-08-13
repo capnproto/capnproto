@@ -290,7 +290,11 @@ kj::String TaskSet::trace() {
 }
 
 Promise<void> TaskSet::onEmpty() {
-  KJ_REQUIRE(emptyFulfiller == nullptr, "onEmpty() can only be called once at a time");
+  KJ_IF_MAYBE(fulfiller, emptyFulfiller) {
+    if (fulfiller->get()->isWaiting()) {
+      KJ_FAIL_REQUIRE("onEmpty() can only be called once at a time");
+    }
+  }
 
   if (tasks == nullptr) {
     return READY_NOW;
