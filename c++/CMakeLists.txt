@@ -152,6 +152,7 @@ if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
   set(CAPNP_PKG_CONFIG_FILES
     pkgconfig/kj.pc
     pkgconfig/capnp.pc
+    pkgconfig/capnpc.pc
   )
 
   if(NOT CAPNP_LITE)
