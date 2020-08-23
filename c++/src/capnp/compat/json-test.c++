@@ -658,6 +658,10 @@ KJ_TEST("unknown fields") {
   json.setRejectUnknownFields(true);
   json.decode(valid, root);
   KJ_EXPECT_THROW_MESSAGE("Unknown field", json.decode(unknown, root));
+
+  // Verify unknown field rejection still works when handling by annotation.
+  json.handleByAnnotation<TestJsonAnnotations2>();
+  KJ_EXPECT_THROW_MESSAGE("Unknown field", json.decode(unknown, root));
 }
 
 class TestCallHandler: public JsonCodec::Handler<Text> {

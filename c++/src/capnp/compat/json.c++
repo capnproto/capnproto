@@ -1316,7 +1316,8 @@ private:
 
       KJ_UNREACHABLE;
     } else {
-      // Ignore undefined field.
+      // Ignore undefined field -- unless the flag is set to reject them.
+      KJ_REQUIRE(!codec.impl->rejectUnknownFields, "Unknown field", name);
       return true;
     }
   }
