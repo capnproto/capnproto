@@ -1,5 +1,5 @@
 ###
-FROM ubuntu:19.10 as filament
+FROM ubuntu:19.10
 
 RUN apt-get update
 
@@ -16,9 +16,9 @@ RUN update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++ 100
 
 ### capnproto linux
 
-WORKDIR /tmp
+WORKDIR /tmp/capnproto.linux
 RUN git clone https://github.com/capnproto/capnproto.git
-WORKDIR /tmp/capnproto/c++
+WORKDIR /tmp/capnproto.linux/capnproto/c++
 RUN autoreconf -i
 RUN ./configure
 RUN make -j6 check
@@ -26,9 +26,9 @@ RUN make install
 
 ### capnproto linux example
 
-WORKDIR /tmp/capnproto
+WORKDIR /tmp/capnproto.linux/capnproto
 RUN mkdir build-samples
-WORKDIR /tmp/capnproto/build-samples
+WORKDIR /tmp/capnproto.linux/capnproto/build-samples
 RUN cmake ../c++/samples
 RUN cmake --build .
 
@@ -44,20 +44,22 @@ ENV PATH="/tmp/emsdk:/tmp/emsdk/upstream/emscripten:/tmp/emsdk/node/12.9.1_64bit
 ENV EMSDK /tmp/emsdk
 ENV EM_CONFIG /root/.emscripten
 ENV EMSDK_NODE /tmp/emsdk/node/12.9.1_64bit/bin/node
-RUN ./emsdk install latest
-RUN ./emsdk activate latest
+RUN ./emsdk install latest && ./emsdk activate latest && . ./emsdk_env.sh && echo 'source "/tmp/emsdk/emsdk_env.sh"' >> $HOME/.bash_profile
 
 ### capnproto emscripten
 
-WORKDIR /tmp/filament/third_party/capnproto/c++
+WORKDIR /tmp/capnproto.emscripten
+RUN git clone https://github.com/capnproto/capnproto.git
+WORKDIR /tmp/capnproto.emscripten/capnproto/c++
 RUN autoreconf -i
 RUN ./configure
-RUN make -j6 check
+RUN /bin/bash -c "source ~/.bash_profile && make -j6 check"
 
 ### capnproto emscripten example
 
-WORKDIR /tmp/filament/third_party/capnproto
+WORKDIR /tmp/capnproto.emscripten/capnproto
 RUN mkdir build-samples
-WORKDIR /tmp/filament/third_party/capnproto/build-samples
+WORKDIR /tmp/capnproto.emscripten/capnproto/build-samples
 RUN cmake ../c++/samples
-RUN cmake --build .
+RUN /bin/bash -c "source ~/.bash_profile && cmake --build ."
+
