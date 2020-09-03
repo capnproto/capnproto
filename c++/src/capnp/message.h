@@ -137,7 +137,7 @@ private:
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
   // other headers.  We don't use a pointer to a ReaderArena because that would require an
   // extra malloc on every message which could be expensive when processing small messages.
-  void* arenaSpace[arenaSpacePadding + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
+  alignas(8) void* arenaSpace[arenaSpacePadding + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
   bool allocatedArena;
 
   _::ReaderArena* arena() { return reinterpret_cast<_::ReaderArena*>(arenaSpace); }
@@ -241,7 +241,7 @@ public:
   // Add up the allocated space from all segments.
 
 private:
-  void* arenaSpace[22];
+  alignas(8) void* arenaSpace[22];
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
   // big STL headers.  We don't use a pointer to a BuilderArena because that would require an
