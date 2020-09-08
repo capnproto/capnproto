@@ -1,0 +1,41 @@
+# Generated from `vagrant init StefanScherer/windows_10`, then modified.
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "StefanScherer/windows_10"
+  # Share an additional folder to the guest VM. The first argument is
+  # the path on the host to the actual folder. The second argument is
+  # the path on the guest to mount the folder. And the optional third
+  # argument is a set of non-required options.
+  config.vm.synced_folder "../../", "/capnproto"
+
+  config.vm.provider "virtualbox" do |vb|
+     vb.memory = 16384
+     vb.cpus = 8
+  end
+
+  config.vm.provision "shell", name: "sshd", path: "./sshd.ps1"
+  config.vm.provision "shell", name: "choco", path: "./choco.ps1"
+  config.vm.provision "shell", name: "vs", path: "./vs.ps1"
+
+  # Hacky way to import vagrant's default private key into the vagrant user's authorized_keys.
+  pub_key = `ssh-keygen -y -f '/home/harris/.vagrant.d/insecure_private_key'`
+  config.vm.provision "shell", name: "authorized_keys", inline: <<-SHELL
+    # Write the authorized_keys file.
+    New-Item -ItemType Directory -Force -Path "C:\\Users\\vagrant\\.ssh"
+    $authorizedKeys = "C:\\Users\\vagrant\\.ssh\\authorized_keys"
+    '#{pub_key}' > $authorizedKeys
+
+    # Convert Unix line endings to CRLF.
+    (Get-Content $authorizedKeys) | Set-Content $authorizedKeys
+
+    # Set the owner to the vagrant user and remove inherited permissions.
+    $acl = Get-Acl $authorizedKeys
+    $vagrantUser = New-Object System.Security.Principal.Ntaccount("VAGRANT-10\\vagrant")
+    $acl.SetOwner($vagrantUser)
+    $acl.SetAccessRuleProtection($True, $True)
+    $acl | Set-Acl $authorizedKeys
+  SHELL
+
+  # TODO(someday): Only need to do this if one of the provision steps actually requested it.
+  config.vm.provision "shell", name: "reboot", reboot: true
+end
