@@ -3045,6 +3045,8 @@ private:
             }
           },
           "\n"
+          "CAPNP_BEGIN_HEADER\n"
+          "\n"
           "namespace capnp {\n"
           "namespace schemas {\n"
           "\n",
@@ -3052,6 +3054,8 @@ private:
           "\n"
           "}  // namespace schemas\n"
           "}  // namespace capnp\n"
+          "\n"
+          "CAPNP_END_HEADER\n"
           "\n",
 
           KJ_MAP(n, namespaceParts) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
