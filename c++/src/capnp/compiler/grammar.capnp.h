@@ -11,6 +11,8 @@
 #endif
 
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 namespace schemas {
 
@@ -6867,4 +6869,6 @@ inline ::capnp::Orphan< ::capnp::compiler::Declaration> ParsedFile::Builder::dis
 
 }  // namespace
 }  // namespace
+
+CAPNP_END_HEADER
 

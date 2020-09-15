@@ -11,6 +11,8 @@
 #endif
 
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 namespace schemas {
 
@@ -29,4 +31,6 @@ namespace annotations {
 
 }  // namespace
 }  // namespace
+
+CAPNP_END_HEADER
 

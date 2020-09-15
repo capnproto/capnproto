@@ -11,6 +11,8 @@
 #endif
 
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 namespace schemas {
 
@@ -722,4 +724,6 @@ inline ::capnp::AnyPointer::Builder JoinResult::Builder::initCap() {
 }  // namespace
 }  // namespace
 }  // namespace
+
+CAPNP_END_HEADER
 
