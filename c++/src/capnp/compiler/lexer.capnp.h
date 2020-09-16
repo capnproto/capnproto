@@ -11,6 +11,8 @@
 #endif
 
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 namespace schemas {
 
@@ -1238,4 +1240,6 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Statement,  ::capnp::K
 
 }  // namespace
 }  // namespace
+
+CAPNP_END_HEADER
 

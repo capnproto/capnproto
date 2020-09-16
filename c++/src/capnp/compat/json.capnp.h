@@ -14,6 +14,8 @@
 #endif
 
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 namespace schemas {
 
@@ -1172,4 +1174,6 @@ inline ::capnp::Orphan< ::capnp::Text> DiscriminatorOptions::Builder::disownValu
 
 }  // namespace
 }  // namespace
+
+CAPNP_END_HEADER
 
