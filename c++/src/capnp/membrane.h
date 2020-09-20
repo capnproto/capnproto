@@ -114,6 +114,24 @@ public:
   // invoked for new calls, but the `target` passed to them will be a capability that always
   // rethrows the revocation exception.
 
+  virtual bool shouldResolveBeforeRedirecting() { return true; }
+  // If this returns true, then when inboundCall() or outboundCall() returns a redirect, but the
+  // original target is a promise, then the membrane will discard the redirect and instead wait
+  // for the promise to become more resolved and try again.
+  //
+  // This behavior is important in particular when implementing a membrane that wants to intercept
+  // calls that would otherwise terminate inside the membrane, but needs to be careful not to
+  // intercept calls that might be reflected back out of the membrane. If the promise eventually
+  // resolves to a capability outside the membrane, then the call will be forwarded to that
+  // capability without applying the policy at all.
+  //
+  // However, some membranes don't need this behavior, and may be negatively impacted by the
+  // unnecessary waiting. Such membranes should override this to return false.
+  //
+  // TODO(cleanup): Consider a backwards-incompatible revamp of the MembranePolicy API with a
+  //   better design here. Maybe we should more carefully distinguish between MembranePolicies
+  //   which are reversible vs. those which are one-way?
+
   // ---------------------------------------------------------------------------
   // Control over importing and exporting.
   //
