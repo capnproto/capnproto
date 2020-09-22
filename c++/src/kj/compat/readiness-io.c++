@@ -147,6 +147,9 @@ kj::Promise<void> ReadyOutputStreamWrapper::pump() {
       return pump();
     } else {
       isPumping = false;
+      // As a small optimization, reset to the start of the buffer when it's empty so we can provide
+      // the underlying layer just one contiguous chunk of memory instead of two when possible.
+      start = 0;
       return kj::READY_NOW;
     }
   });
