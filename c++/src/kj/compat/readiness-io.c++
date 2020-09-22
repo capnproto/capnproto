@@ -96,7 +96,7 @@ kj::Maybe<size_t> ReadyOutputStreamWrapper::write(kj::ArrayPtr<const byte> data)
 
   filled += result;
 
-  if (!isPumping) {
+  if (!isPumping && (!corked || filled == sizeof(buffer))) {
     isPumping = true;
     pumpTask = kj::evalNow([&]() {
       return pump();
@@ -108,6 +108,21 @@ kj::Maybe<size_t> ReadyOutputStreamWrapper::write(kj::ArrayPtr<const byte> data)
 
 kj::Promise<void> ReadyOutputStreamWrapper::whenReady() {
   return pumpTask.addBranch();
+}
+
+ReadyOutputStreamWrapper::Cork ReadyOutputStreamWrapper::cork() {
+  corked = true;
+  return Cork(*this);
+}
+
+void ReadyOutputStreamWrapper::uncork() {
+  corked = false;
+  if (!isPumping && filled > 0) {
+    isPumping = true;
+    pumpTask = kj::evalNow([&]() {
+      return pump();
+    }).fork();
+  }
 }
 
 kj::Promise<void> ReadyOutputStreamWrapper::pump() {
