@@ -71,19 +71,54 @@ public:
   kj::Promise<void> whenReady();
   // Returns a promise that resolves when write() will return non-null.
 
+  class Cork;
+  // An object that, when destructed, will uncork its parent stream.
+
+  Cork cork();
+  // After calling, data won't be pumped until either the internal buffer fills up or the returned
+  // object is destructed. Use this if you know multiple small write() calls will be happening in
+  // the near future and want to flush them all at once.
+  // Once the returned object is destructed, behavior goes back to normal. The returned object
+  // must be destructed before the ReadyOutputStreamWrapper.
+  // TODO(perf): This is an ugly hack to avoid sending lots of tiny packets when using TLS, which
+  // has to work around OpenSSL's readiness-based I/O layer. We could certainly do better here.
+
 private:
   AsyncOutputStream& output;
   ArrayPtr<const byte> segments[2];
   kj::ForkedPromise<void> pumpTask = nullptr;
   bool isPumping = false;
+  bool corked = false;
 
   uint start = 0;   // index of first byte
   uint filled = 0;  // number of bytes currently in buffer
 
   byte buffer[8192];
 
+  void uncork();
+
   kj::Promise<void> pump();
   // Asynchronously push the buffer out to the underlying stream.
+};
+
+class ReadyOutputStreamWrapper::Cork {
+  // An object that, when destructed, will uncork its parent stream.
+public:
+  ~Cork() {
+    KJ_IF_MAYBE(p, parent) {
+      p->uncork();
+    }
+  }
+  Cork(Cork&& other) : parent(kj::mv(other.parent)) {
+    other.parent = nullptr;
+  }
+  KJ_DISALLOW_COPY(Cork);
+
+private:
+  Cork(ReadyOutputStreamWrapper& parent) : parent(parent) {}
+
+  kj::Maybe<ReadyOutputStreamWrapper&> parent;
+  friend class ReadyOutputStreamWrapper;
 };
 
 } // namespace kj

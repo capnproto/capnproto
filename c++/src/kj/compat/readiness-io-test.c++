@@ -93,6 +93,101 @@ KJ_TEST("readiness IO: write even") {
   }
 }
 
+KJ_TEST("readiness IO: write while corked") {
+  auto io = setupAsyncIo();
+  auto pipe = io.provider->newOneWayPipe();
+
+  char buf[7];
+  auto readPromise = pipe.in->read(buf, 3, 7);
+
+  ReadyOutputStreamWrapper out(*pipe.out);
+  auto cork = out.cork();
+  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("foo").asBytes())) == 3);
+
+  // Data hasn't been written yet.
+  KJ_ASSERT(!readPromise.poll(io.waitScope));
+
+  // Write some more, and observe it still isn't flushed out yet.
+  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("bar").asBytes())) == 3);
+  KJ_ASSERT(!readPromise.poll(io.waitScope));
+
+  // After reenabling pumping, the full read should succeed.
+  // We start this block with `if (true) {` instead of just `{` to avoid g++-8 compiler warnings
+  // telling us that this block isn't treated as part of KJ_ASSERT's internal `for` loop.
+  if (true) {
+    auto tmp = kj::mv(cork);
+  }
+  KJ_ASSERT(readPromise.wait(io.waitScope) == 6);
+  buf[6] = '\0';
+  KJ_ASSERT(kj::StringPtr(buf) == "foobar");
+}
+
+KJ_TEST("readiness IO: write many odd while corked") {
+  auto io = setupAsyncIo();
+  auto pipe = io.provider->newOneWayPipe();
+
+  // The even/odd tests should work just as before even with automatic pumping
+  // corked, since we should still pump when the buffer fills up.
+  ReadyOutputStreamWrapper out(*pipe.out);
+  auto cork = out.cork();
+
+  size_t totalWritten = 0;
+  for (;;) {
+    KJ_IF_MAYBE(n, out.write(kj::StringPtr("bar").asBytes())) {
+      totalWritten += *n;
+      if (*n < 3) {
+        break;
+      }
+    } else {
+      KJ_FAIL_ASSERT("pipe buffer is divisible by 3? really?");
+    }
+  }
+
+  auto buf = kj::heapArray<char>(totalWritten + 1);
+  size_t n = pipe.in->read(buf.begin(), totalWritten, buf.size()).wait(io.waitScope);
+  KJ_ASSERT(n == totalWritten);
+  for (size_t i = 0; i < totalWritten; i++) {
+    KJ_ASSERT(buf[i] == "bar"[i%3]);
+  }
+
+  // Eager pumping should still be corked.
+  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("bar").asBytes())) == 3);
+  auto readPromise = pipe.in->read(buf.begin(), 3, buf.size());
+  KJ_ASSERT(!readPromise.poll(io.waitScope));
+}
+
+KJ_TEST("readiness IO: write many even while corked") {
+  auto io = setupAsyncIo();
+  auto pipe = io.provider->newOneWayPipe();
+
+  ReadyOutputStreamWrapper out(*pipe.out);
+  auto cork = out.cork();
+
+  size_t totalWritten = 0;
+  for (;;) {
+    KJ_IF_MAYBE(n, out.write(kj::StringPtr("ba").asBytes())) {
+      totalWritten += *n;
+      if (*n < 2) {
+        KJ_FAIL_ASSERT("pipe buffer is not divisible by 2? really?");
+      }
+    } else {
+      break;
+    }
+  }
+
+  auto buf = kj::heapArray<char>(totalWritten + 1);
+  size_t n = pipe.in->read(buf.begin(), totalWritten, buf.size()).wait(io.waitScope);
+  KJ_ASSERT(n == totalWritten);
+  for (size_t i = 0; i < totalWritten; i++) {
+    KJ_ASSERT(buf[i] == "ba"[i%2]);
+  }
+
+  // Eager pumping should still be corked.
+  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("ba").asBytes())) == 2);
+  auto readPromise = pipe.in->read(buf.begin(), 2, buf.size());
+  KJ_ASSERT(!readPromise.poll(io.waitScope));
+}
+
 KJ_TEST("readiness IO: read small") {
   auto io = setupAsyncIo();
   auto pipe = io.provider->newOneWayPipe();

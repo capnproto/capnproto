@@ -185,7 +185,8 @@ public:
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    return writeInternal(pieces[0], pieces.slice(1, pieces.size()));
+    auto cork = writeBuffer.cork();
+    return writeInternal(pieces[0], pieces.slice(1, pieces.size())).attach(kj::mv(cork));
   }
 
   Promise<void> whenWriteDisconnected() override {

@@ -96,7 +96,7 @@ kj::Maybe<size_t> ReadyOutputStreamWrapper::write(kj::ArrayPtr<const byte> data)
 
   filled += result;
 
-  if (!isPumping) {
+  if (!isPumping && (!corked || filled == sizeof(buffer))) {
     isPumping = true;
     pumpTask = kj::evalNow([&]() {
       return pump();
@@ -108,6 +108,21 @@ kj::Maybe<size_t> ReadyOutputStreamWrapper::write(kj::ArrayPtr<const byte> data)
 
 kj::Promise<void> ReadyOutputStreamWrapper::whenReady() {
   return pumpTask.addBranch();
+}
+
+ReadyOutputStreamWrapper::Cork ReadyOutputStreamWrapper::cork() {
+  corked = true;
+  return Cork(*this);
+}
+
+void ReadyOutputStreamWrapper::uncork() {
+  corked = false;
+  if (!isPumping && filled > 0) {
+    isPumping = true;
+    pumpTask = kj::evalNow([&]() {
+      return pump();
+    }).fork();
+  }
 }
 
 kj::Promise<void> ReadyOutputStreamWrapper::pump() {
@@ -132,6 +147,9 @@ kj::Promise<void> ReadyOutputStreamWrapper::pump() {
       return pump();
     } else {
       isPumping = false;
+      // As a small optimization, reset to the start of the buffer when it's empty so we can provide
+      // the underlying layer just one contiguous chunk of memory instead of two when possible.
+      start = 0;
       return kj::READY_NOW;
     }
   });
