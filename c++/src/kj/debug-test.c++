@@ -322,7 +322,7 @@ TEST(Debug, Catch) {
     // Catch as std::exception.
     try {
       line = __LINE__; KJ_FAIL_ASSERT("foo");
-      ADD_FAILURE() << "Expected exception.";
+      KJ_KNOWN_UNREACHABLE(ADD_FAILURE() << "Expected exception.");
     } catch (const std::exception& e) {
       kj::StringPtr what = e.what();
       std::string text;

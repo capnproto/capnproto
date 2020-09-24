@@ -44,7 +44,7 @@ void unreachable() {
   KJ_FAIL_ASSERT("Supposedly-unreachable branch executed.");
 
   // Really make sure we abort.
-  abort();
+  KJ_KNOWN_UNREACHABLE(abort());
 }
 
 }  // namespace _ (private)
