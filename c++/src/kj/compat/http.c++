@@ -1617,10 +1617,8 @@ template <char first, char... rest>
 struct FastCaseCmp<first, rest...> {
   static constexpr bool apply(const char* actual) {
     return
-      'a' <= first && first <= 'z'
-        ? (*actual | 0x20) == first && FastCaseCmp<rest...>::apply(actual + 1)
-      : 'A' <= first && first <= 'Z'
-        ? (*actual & ~0x20) == first && FastCaseCmp<rest...>::apply(actual + 1)
+      ('a' <= first && first <= 'z') || ('A' <= first && first <= 'Z')
+        ? (*actual | 0x20) == (first | 0x20) && FastCaseCmp<rest...>::apply(actual + 1)
         : *actual == first && FastCaseCmp<rest...>::apply(actual + 1);
   }
 };
