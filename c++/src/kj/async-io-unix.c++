@@ -1110,6 +1110,7 @@ public:
         KJ_SYSCALL_HANDLE_ERRORS(::setsockopt(
               ownFd.get(), IPPROTO_TCP, TCP_NODELAY, (char*)&one, sizeof(one))) {
           case EOPNOTSUPP:
+          case ENOPROTOOPT: // (returned for AF_UNIX in cygwin)
             break;
           default:
             KJ_FAIL_SYSCALL("setsocketopt(IPPROTO_TCP, TCP_NODELAY)", error);
