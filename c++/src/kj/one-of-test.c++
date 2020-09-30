@@ -71,10 +71,10 @@ TEST(OneOf, Basic) {
   EXPECT_EQ("foo", var.get<String>());
   EXPECT_EQ("", var2.get<String>());
 
-  if (false) {
+  auto canCompile KJ_UNUSED = [&]() {
     var.allHandled<3>();
     // var.allHandled<2>();  // doesn't compile
-  }
+  };
 }
 
 TEST(OneOf, Copy) {

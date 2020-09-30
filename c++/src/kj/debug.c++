@@ -340,7 +340,7 @@ void Debug::Fault::fatal() {
   delete exception;
   exception = nullptr;
   throwFatalException(mv(copy), 2);
-  abort();
+  KJ_KNOWN_UNREACHABLE(abort());
 }
 
 void Debug::Fault::init(
