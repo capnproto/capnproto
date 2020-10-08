@@ -1197,7 +1197,7 @@ public:
 
   template <typename... Params>
   inline T& emplace(Params&&... params) {
-    // Replace this Maybe's content with a new value constructed by passing the given parametrs to
+    // Replace this Maybe's content with a new value constructed by passing the given parameters to
     // T's constructor. This can be used to initialize a Maybe without copying or even moving a T.
     // Returns a reference to the newly-constructed value.
 
