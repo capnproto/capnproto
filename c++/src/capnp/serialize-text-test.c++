@@ -32,7 +32,7 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
-KJ_TEST("TestAllTypes") {
+KJ_TEST("TextCodec TestAllTypes") {
   MallocMessageBuilder builder;
   initTestMessage(builder.initRoot<TestAllTypes>());
 
@@ -66,7 +66,7 @@ KJ_TEST("TestAllTypes") {
   }
 }
 
-KJ_TEST("TestDefaults") {
+KJ_TEST("TextCodec TestDefaults") {
   MallocMessageBuilder builder;
   initTestMessage(builder.initRoot<TestDefaults>());
 
@@ -79,7 +79,7 @@ KJ_TEST("TestDefaults") {
   checkTestMessage(structReader);
 }
 
-KJ_TEST("TestListDefaults") {
+KJ_TEST("TextCodec TestListDefaults") {
   MallocMessageBuilder builder;
   initTestMessage(builder.initRoot<TestListDefaults>());
 
@@ -92,7 +92,7 @@ KJ_TEST("TestListDefaults") {
   checkTestMessage(structReader);
 }
 
-KJ_TEST("raw text") {
+KJ_TEST("TextCodec raw text") {
   using TestType = capnproto_test::capnp::test::TestLateUnion;
 
   kj::String message =
