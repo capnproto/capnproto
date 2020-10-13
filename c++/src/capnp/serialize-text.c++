@@ -29,6 +29,8 @@
 #include "compiler/node-translator.h"
 #include "compiler/parser.h"
 
+namespace capnp {
+
 namespace {
 
 class ThrowingErrorReporter final: public capnp::compiler::ErrorReporter {
@@ -107,8 +109,6 @@ void lexAndParseExpression(kj::StringPtr input, Function f) {
 }
 
 }  // namespace
-
-namespace capnp {
 
 TextCodec::TextCodec() : prettyPrint(false) {}
 TextCodec::~TextCodec() noexcept(true) {}
