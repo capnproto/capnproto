@@ -144,6 +144,7 @@ set(capnpc_sources
   compiler/lexer.c++
   compiler/grammar.capnp.c++
   compiler/parser.c++
+  compiler/generics.c++
   compiler/node-translator.c++
   compiler/compiler.c++
   schema-parser.c++
