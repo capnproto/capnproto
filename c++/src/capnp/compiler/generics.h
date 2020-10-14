@@ -146,153 +146,23 @@ class BrandScope: public kj::Refcounted {
 
 public:
   BrandScope(ErrorReporter& errorReporter, uint64_t startingScopeId,
-             uint startingScopeParamCount, Resolver& startingScope)
-      : errorReporter(errorReporter), parent(nullptr), leafId(startingScopeId),
-        leafParamCount(startingScopeParamCount), inherited(true) {
-    // Create all lexical parent scopes, all with no brand bindings.
-    KJ_IF_MAYBE(p, startingScope.getParent()) {
-      parent = kj::refcounted<BrandScope>(
-          errorReporter, p->id, p->genericParamCount, *p->resolver);
-    }
-  }
+             uint startingScopeParamCount, Resolver& startingScope);
 
-  bool isGeneric() {
-    if (leafParamCount > 0) return true;
+  bool isGeneric();
 
-    KJ_IF_MAYBE(p, parent) {
-      return p->get()->isGeneric();
-    } else {
-      return false;
-    }
-  }
-
-  kj::Own<BrandScope> push(uint64_t typeId, uint paramCount) {
-    return kj::refcounted<BrandScope>(kj::addRef(*this), typeId, paramCount);
-  }
+  kj::Own<BrandScope> push(uint64_t typeId, uint paramCount);
 
   kj::Maybe<kj::Own<BrandScope>> setParams(
-      kj::Array<BrandedDecl> params, Declaration::Which genericType, Expression::Reader source) {
-    if (this->params.size() != 0) {
-      errorReporter.addErrorOn(source, "Double-application of generic parameters.");
-      return nullptr;
-    } else if (params.size() > leafParamCount) {
-      if (leafParamCount == 0) {
-        errorReporter.addErrorOn(source, "Declaration does not accept generic parameters.");
-      } else {
-        errorReporter.addErrorOn(source, "Too many generic parameters.");
-      }
-      return nullptr;
-    } else if (params.size() < leafParamCount) {
-      errorReporter.addErrorOn(source, "Not enough generic parameters.");
-      return nullptr;
-    } else {
-      if (genericType != Declaration::BUILTIN_LIST) {
-        for (auto& param: params) {
-          KJ_IF_MAYBE(kind, param.getKind()) {
-            switch (*kind) {
-              case Declaration::BUILTIN_LIST:
-              case Declaration::BUILTIN_TEXT:
-              case Declaration::BUILTIN_DATA:
-              case Declaration::BUILTIN_ANY_POINTER:
-              case Declaration::STRUCT:
-              case Declaration::INTERFACE:
-                break;
+      kj::Array<BrandedDecl> params, Declaration::Which genericType, Expression::Reader source);
 
-              default:
-                param.addError(errorReporter,
-                    "Sorry, only pointer types can be used as generic parameters.");
-                break;
-            }
-          }
-        }
-      }
+  kj::Own<BrandScope> pop(uint64_t newLeafId);
 
-      return kj::refcounted<BrandScope>(*this, kj::mv(params));
-    }
-  }
+  kj::Maybe<BrandedDecl> lookupParameter(Resolver& resolver, uint64_t scopeId, uint index);
 
-  kj::Own<BrandScope> pop(uint64_t newLeafId) {
-    if (leafId == newLeafId) {
-      return kj::addRef(*this);
-    }
-    KJ_IF_MAYBE(p, parent) {
-      return (*p)->pop(newLeafId);
-    } else {
-      // Looks like we're moving into a whole top-level scope.
-      return kj::refcounted<BrandScope>(errorReporter, newLeafId);
-    }
-  }
-
-  kj::Maybe<BrandedDecl> lookupParameter(Resolver& resolver, uint64_t scopeId, uint index) {
-    // Returns null if the param should be inherited from the client scope.
-
-    if (scopeId == leafId) {
-      if (index < params.size()) {
-        return params[index];
-      } else if (inherited) {
-        return nullptr;
-      } else {
-        // Unbound and not inherited, so return AnyPointer.
-        auto decl = resolver.resolveBuiltin(Declaration::BUILTIN_ANY_POINTER);
-        return BrandedDecl(decl,
-            evaluateBrand(resolver, decl, List<schema::Brand::Scope>::Reader()),
-            Expression::Reader());
-      }
-    } else KJ_IF_MAYBE(p, parent) {
-      return p->get()->lookupParameter(resolver, scopeId, index);
-    } else {
-      KJ_FAIL_REQUIRE("scope is not a parent");
-    }
-  }
-
-  kj::Maybe<kj::ArrayPtr<BrandedDecl>> getParams(uint64_t scopeId) {
-    // Returns null if params at the requested scope should be inherited from the client scope.
-
-    if (scopeId == leafId) {
-      if (inherited) {
-        return nullptr;
-      } else {
-        return params.asPtr();
-      }
-    } else KJ_IF_MAYBE(p, parent) {
-      return p->get()->getParams(scopeId);
-    } else {
-      KJ_FAIL_REQUIRE("scope is not a parent");
-    }
-  }
+  kj::Maybe<kj::ArrayPtr<BrandedDecl>> getParams(uint64_t scopeId);
 
   template <typename InitBrandFunc>
-  void compile(InitBrandFunc&& initBrand) {
-    kj::Vector<BrandScope*> levels;
-    BrandScope* ptr = this;
-    for (;;) {
-      if (ptr->params.size() > 0 || (ptr->inherited && ptr->leafParamCount > 0)) {
-        levels.add(ptr);
-      }
-      KJ_IF_MAYBE(p, ptr->parent) {
-        ptr = *p;
-      } else {
-        break;
-      }
-    }
-
-    if (levels.size() > 0) {
-      auto scopes = initBrand().initScopes(levels.size());
-      for (uint i: kj::indices(levels)) {
-        auto scope = scopes[i];
-        scope.setScopeId(levels[i]->leafId);
-
-        if (levels[i]->inherited) {
-          scope.setInherit();
-        } else {
-          auto bindings = scope.initBind(levels[i]->params.size());
-          for (uint j: kj::indices(bindings)) {
-            levels[i]->params[j].compileAsType(errorReporter, bindings[j].initType());
-          }
-        }
-      }
-    }
-  }
+  void compile(InitBrandFunc&& initBrand);
 
   kj::Maybe<BrandedDecl> compileDeclExpression(
       Expression::Reader source, Resolver& resolver,
@@ -342,6 +212,39 @@ uint64_t BrandedDecl::getIdAndFillBrand(InitBrandFunc&& initBrand) {
 
   brand->compile(kj::fwd<InitBrandFunc>(initBrand));
   return body.get<Resolver::ResolvedDecl>().id;
+}
+
+template <typename InitBrandFunc>
+void BrandScope::compile(InitBrandFunc&& initBrand) {
+  kj::Vector<BrandScope*> levels;
+  BrandScope* ptr = this;
+  for (;;) {
+    if (ptr->params.size() > 0 || (ptr->inherited && ptr->leafParamCount > 0)) {
+      levels.add(ptr);
+    }
+    KJ_IF_MAYBE(p, ptr->parent) {
+      ptr = *p;
+    } else {
+      break;
+    }
+  }
+
+  if (levels.size() > 0) {
+    auto scopes = initBrand().initScopes(levels.size());
+    for (uint i: kj::indices(levels)) {
+      auto scope = scopes[i];
+      scope.setScopeId(levels[i]->leafId);
+
+      if (levels[i]->inherited) {
+        scope.setInherit();
+      } else {
+        auto bindings = scope.initBind(levels[i]->params.size());
+        for (uint j: kj::indices(bindings)) {
+          levels[i]->params[j].compileAsType(errorReporter, bindings[j].initType());
+        }
+      }
+    }
+  }
 }
 
 }  // namespace compiler

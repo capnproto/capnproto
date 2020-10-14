@@ -236,6 +236,123 @@ kj::String BrandedDecl::toDebugString() {
   }
 }
 
+BrandScope::BrandScope(ErrorReporter& errorReporter, uint64_t startingScopeId,
+                       uint startingScopeParamCount, Resolver& startingScope)
+    : errorReporter(errorReporter), parent(nullptr), leafId(startingScopeId),
+      leafParamCount(startingScopeParamCount), inherited(true) {
+  // Create all lexical parent scopes, all with no brand bindings.
+  KJ_IF_MAYBE(p, startingScope.getParent()) {
+    parent = kj::refcounted<BrandScope>(
+        errorReporter, p->id, p->genericParamCount, *p->resolver);
+  }
+}
+
+bool BrandScope::isGeneric() {
+  if (leafParamCount > 0) return true;
+
+  KJ_IF_MAYBE(p, parent) {
+    return p->get()->isGeneric();
+  } else {
+    return false;
+  }
+}
+
+kj::Own<BrandScope> BrandScope::push(uint64_t typeId, uint paramCount) {
+  return kj::refcounted<BrandScope>(kj::addRef(*this), typeId, paramCount);
+}
+
+kj::Maybe<kj::Own<BrandScope>> BrandScope::setParams(
+    kj::Array<BrandedDecl> params, Declaration::Which genericType, Expression::Reader source) {
+  if (this->params.size() != 0) {
+    errorReporter.addErrorOn(source, "Double-application of generic parameters.");
+    return nullptr;
+  } else if (params.size() > leafParamCount) {
+    if (leafParamCount == 0) {
+      errorReporter.addErrorOn(source, "Declaration does not accept generic parameters.");
+    } else {
+      errorReporter.addErrorOn(source, "Too many generic parameters.");
+    }
+    return nullptr;
+  } else if (params.size() < leafParamCount) {
+    errorReporter.addErrorOn(source, "Not enough generic parameters.");
+    return nullptr;
+  } else {
+    if (genericType != Declaration::BUILTIN_LIST) {
+      for (auto& param: params) {
+        KJ_IF_MAYBE(kind, param.getKind()) {
+          switch (*kind) {
+            case Declaration::BUILTIN_LIST:
+            case Declaration::BUILTIN_TEXT:
+            case Declaration::BUILTIN_DATA:
+            case Declaration::BUILTIN_ANY_POINTER:
+            case Declaration::STRUCT:
+            case Declaration::INTERFACE:
+              break;
+
+            default:
+              param.addError(errorReporter,
+                  "Sorry, only pointer types can be used as generic parameters.");
+              break;
+          }
+        }
+      }
+    }
+
+    return kj::refcounted<BrandScope>(*this, kj::mv(params));
+  }
+}
+
+kj::Own<BrandScope> BrandScope::pop(uint64_t newLeafId) {
+  if (leafId == newLeafId) {
+    return kj::addRef(*this);
+  }
+  KJ_IF_MAYBE(p, parent) {
+    return (*p)->pop(newLeafId);
+  } else {
+    // Looks like we're moving into a whole top-level scope.
+    return kj::refcounted<BrandScope>(errorReporter, newLeafId);
+  }
+}
+
+kj::Maybe<BrandedDecl> BrandScope::lookupParameter(
+    Resolver& resolver, uint64_t scopeId, uint index) {
+  // Returns null if the param should be inherited from the client scope.
+
+  if (scopeId == leafId) {
+    if (index < params.size()) {
+      return params[index];
+    } else if (inherited) {
+      return nullptr;
+    } else {
+      // Unbound and not inherited, so return AnyPointer.
+      auto decl = resolver.resolveBuiltin(Declaration::BUILTIN_ANY_POINTER);
+      return BrandedDecl(decl,
+          evaluateBrand(resolver, decl, List<schema::Brand::Scope>::Reader()),
+          Expression::Reader());
+    }
+  } else KJ_IF_MAYBE(p, parent) {
+    return p->get()->lookupParameter(resolver, scopeId, index);
+  } else {
+    KJ_FAIL_REQUIRE("scope is not a parent");
+  }
+}
+
+kj::Maybe<kj::ArrayPtr<BrandedDecl>> BrandScope::getParams(uint64_t scopeId) {
+  // Returns null if params at the requested scope should be inherited from the client scope.
+
+  if (scopeId == leafId) {
+    if (inherited) {
+      return nullptr;
+    } else {
+      return params.asPtr();
+    }
+  } else KJ_IF_MAYBE(p, parent) {
+    return p->get()->getParams(scopeId);
+  } else {
+    KJ_FAIL_REQUIRE("scope is not a parent");
+  }
+}
+
 BrandedDecl BrandScope::interpretResolve(
     Resolver& resolver, Resolver::ResolveResult& result, Expression::Reader source) {
   if (result.is<Resolver::ResolvedDecl>()) {
