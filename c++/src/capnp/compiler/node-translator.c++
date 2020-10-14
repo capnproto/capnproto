@@ -573,7 +573,11 @@ private:
 
 // =======================================================================================
 
-class NodeTranslator::BrandedDecl {
+typedef NodeTranslator::Resolver Resolver;
+typedef NodeTranslator::ImplicitParams ImplicitParams;
+// TODO(now): Move Resolver and ImplicitParams out of NodeTranslator.
+
+class BrandedDecl {
   // Represents a declaration possibly with generic parameter bindings.
   //
   // TODO(cleaup): This is too complicated to live here. We should refactor this class and
@@ -581,7 +585,7 @@ class NodeTranslator::BrandedDecl {
 
 public:
   inline BrandedDecl(Resolver::ResolvedDecl decl,
-                     kj::Own<NodeTranslator::BrandScope>&& brand,
+                     kj::Own<BrandScope>&& brand,
                      Expression::Reader source)
       : brand(kj::mv(brand)), source(source) {
     body.init<Resolver::ResolvedDecl>(kj::mv(decl));
@@ -650,11 +654,11 @@ public:
 
 private:
   Resolver::ResolveResult body;
-  kj::Own<NodeTranslator::BrandScope> brand;  // null if parameter
+  kj::Own<BrandScope> brand;  // null if parameter
   Expression::Reader source;
 };
 
-class NodeTranslator::BrandScope: public kj::Refcounted {
+class BrandScope: public kj::Refcounted {
   // Tracks the brand parameter bindings affecting the current scope. For example, if we are
   // interpreting the type expression "Foo(Text).Bar", we would start with the current scopes
   // BrandScope, create a new child BrandScope representing "Foo", add the "(Text)" parameter
@@ -814,14 +818,14 @@ public:
     }
   }
 
-  kj::Maybe<NodeTranslator::BrandedDecl> compileDeclExpression(
+  kj::Maybe<BrandedDecl> compileDeclExpression(
       Expression::Reader source, Resolver& resolver,
       ImplicitParams implicitMethodParams);
 
-  NodeTranslator::BrandedDecl interpretResolve(
+  BrandedDecl interpretResolve(
       Resolver& resolver, Resolver::ResolveResult& result, Expression::Reader source);
 
-  kj::Own<NodeTranslator::BrandScope> evaluateBrand(
+  kj::Own<BrandScope> evaluateBrand(
       Resolver& resolver, Resolver::ResolvedDecl decl,
       List<schema::Brand::Scope>::Reader brand, uint index = 0);
 
@@ -831,13 +835,13 @@ public:
 
 private:
   ErrorReporter& errorReporter;
-  kj::Maybe<kj::Own<NodeTranslator::BrandScope>> parent;
+  kj::Maybe<kj::Own<BrandScope>> parent;
   uint64_t leafId;                     // zero = this is the root
   uint leafParamCount;                 // number of generic parameters on this leaf
   bool inherited;
   kj::Array<BrandedDecl> params;
 
-  BrandScope(kj::Own<NodeTranslator::BrandScope> parent, uint64_t leafId, uint leafParamCount)
+  BrandScope(kj::Own<BrandScope> parent, uint64_t leafId, uint leafParamCount)
       : errorReporter(parent->errorReporter),
         parent(kj::mv(parent)), leafId(leafId), leafParamCount(leafParamCount),
         inherited(false) {}
@@ -856,7 +860,7 @@ private:
   friend kj::Own<T> kj::refcounted(Params&&... params);
 };
 
-NodeTranslator::BrandedDecl::BrandedDecl(BrandedDecl& other)
+BrandedDecl::BrandedDecl(BrandedDecl& other)
     : body(other.body),
       source(other.source) {
   if (body.is<Resolver::ResolvedDecl>()) {
@@ -864,7 +868,7 @@ NodeTranslator::BrandedDecl::BrandedDecl(BrandedDecl& other)
   }
 }
 
-NodeTranslator::BrandedDecl& NodeTranslator::BrandedDecl::operator=(BrandedDecl& other) {
+BrandedDecl& BrandedDecl::operator=(BrandedDecl& other) {
   body = other.body;
   source = other.source;
   if (body.is<Resolver::ResolvedDecl>()) {
@@ -873,7 +877,7 @@ NodeTranslator::BrandedDecl& NodeTranslator::BrandedDecl::operator=(BrandedDecl&
   return *this;
 }
 
-kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandedDecl::applyParams(
+kj::Maybe<BrandedDecl> BrandedDecl::applyParams(
     kj::Array<BrandedDecl> params, Expression::Reader subSource) {
   if (body.is<Resolver::ResolvedParameter>()) {
     return nullptr;
@@ -888,7 +892,7 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandedDecl::applyParams(
   }
 }
 
-kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandedDecl::getMember(
+kj::Maybe<BrandedDecl> BrandedDecl::getMember(
     kj::StringPtr memberName, Expression::Reader subSource) {
   if (body.is<Resolver::ResolvedParameter>()) {
     return nullptr;
@@ -899,7 +903,7 @@ kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandedDecl::getMember(
   }
 }
 
-kj::Maybe<Declaration::Which> NodeTranslator::BrandedDecl::getKind() {
+kj::Maybe<Declaration::Which> BrandedDecl::getKind() {
   if (body.is<Resolver::ResolvedParameter>()) {
     return nullptr;
   } else {
@@ -908,14 +912,14 @@ kj::Maybe<Declaration::Which> NodeTranslator::BrandedDecl::getKind() {
 }
 
 template <typename InitBrandFunc>
-uint64_t NodeTranslator::BrandedDecl::getIdAndFillBrand(InitBrandFunc&& initBrand) {
+uint64_t BrandedDecl::getIdAndFillBrand(InitBrandFunc&& initBrand) {
   KJ_REQUIRE(body.is<Resolver::ResolvedDecl>());
 
   brand->compile(kj::fwd<InitBrandFunc>(initBrand));
   return body.get<Resolver::ResolvedDecl>().id;
 }
 
-kj::Maybe<NodeTranslator::BrandedDecl&> NodeTranslator::BrandedDecl::getListParam() {
+kj::Maybe<BrandedDecl&> BrandedDecl::getListParam() {
   KJ_REQUIRE(body.is<Resolver::ResolvedDecl>());
 
   auto& decl = body.get<Resolver::ResolvedDecl>();
@@ -929,13 +933,13 @@ kj::Maybe<NodeTranslator::BrandedDecl&> NodeTranslator::BrandedDecl::getListPara
   }
 }
 
-NodeTranslator::Resolver::ResolvedParameter NodeTranslator::BrandedDecl::asVariable() {
+NodeTranslator::Resolver::ResolvedParameter BrandedDecl::asVariable() {
   KJ_REQUIRE(body.is<Resolver::ResolvedParameter>());
 
   return body.get<Resolver::ResolvedParameter>();
 }
 
-bool NodeTranslator::BrandedDecl::compileAsType(
+bool BrandedDecl::compileAsType(
     ErrorReporter& errorReporter, schema::Type::Builder target) {
   KJ_IF_MAYBE(kind, getKind()) {
     switch (*kind) {
@@ -1045,7 +1049,7 @@ bool NodeTranslator::BrandedDecl::compileAsType(
   }
 }
 
-NodeTranslator::Resolver::ResolveResult NodeTranslator::BrandedDecl::asResolveResult(
+NodeTranslator::Resolver::ResolveResult BrandedDecl::asResolveResult(
     uint64_t scopeId, schema::Brand::Builder brandBuilder) {
   auto result = body;
   if (result.is<Resolver::ResolvedDecl>()) {
@@ -1063,11 +1067,11 @@ NodeTranslator::Resolver::ResolveResult NodeTranslator::BrandedDecl::asResolveRe
 
 static kj::String expressionString(Expression::Reader name);  // defined later
 
-kj::String NodeTranslator::BrandedDecl::toString() {
+kj::String BrandedDecl::toString() {
   return expressionString(source);
 }
 
-kj::String NodeTranslator::BrandedDecl::toDebugString() {
+kj::String BrandedDecl::toDebugString() {
   if (body.is<Resolver::ResolvedParameter>()) {
     auto variable = body.get<Resolver::ResolvedParameter>();
     return kj::str("variable(", variable.id, ", ", variable.index, ")");
@@ -1077,7 +1081,7 @@ kj::String NodeTranslator::BrandedDecl::toDebugString() {
   }
 }
 
-NodeTranslator::BrandedDecl NodeTranslator::BrandScope::interpretResolve(
+BrandedDecl BrandScope::interpretResolve(
     Resolver& resolver, Resolver::ResolveResult& result, Expression::Reader source) {
   if (result.is<Resolver::ResolvedDecl>()) {
     auto& decl = result.get<Resolver::ResolvedDecl>();
@@ -1100,7 +1104,7 @@ NodeTranslator::BrandedDecl NodeTranslator::BrandScope::interpretResolve(
   }
 }
 
-kj::Own<NodeTranslator::BrandScope> NodeTranslator::BrandScope::evaluateBrand(
+kj::Own<BrandScope> BrandScope::evaluateBrand(
     Resolver& resolver, Resolver::ResolvedDecl decl,
     List<schema::Brand::Scope>::Reader brand, uint index) {
   auto result = kj::refcounted<BrandScope>(errorReporter, decl.id);
@@ -1159,7 +1163,7 @@ kj::Own<NodeTranslator::BrandScope> NodeTranslator::BrandScope::evaluateBrand(
   return result;
 }
 
-NodeTranslator::BrandedDecl NodeTranslator::BrandScope::decompileType(
+BrandedDecl BrandScope::decompileType(
     Resolver& resolver, schema::Type::Reader type) {
   auto builtin = [&](Declaration::Which which) -> BrandedDecl {
     auto decl = resolver.resolveBuiltin(which);
@@ -1242,7 +1246,7 @@ NodeTranslator::BrandedDecl NodeTranslator::BrandScope::decompileType(
   KJ_UNREACHABLE;
 }
 
-kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandScope::compileDeclExpression(
+kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
     Expression::Reader source, Resolver& resolver,
     ImplicitParams implicitMethodParams) {
   switch (source.which()) {
@@ -2594,7 +2598,7 @@ static kj::String expressionString(Expression::Reader name) {
 
 // -------------------------------------------------------------------
 
-kj::Maybe<NodeTranslator::BrandedDecl>
+kj::Maybe<BrandedDecl>
 NodeTranslator::compileDeclExpression(
     Expression::Reader source, ImplicitParams implicitMethodParams) {
   return localBrand->compileDeclExpression(source, resolver, implicitMethodParams);
@@ -3116,7 +3120,7 @@ kj::String ValueTranslator::makeTypeName(Type type) {
 kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     Expression::Reader source, bool isBootstrap) {
   // Look up the constant decl.
-  NodeTranslator::BrandedDecl constDecl = nullptr;
+  BrandedDecl constDecl = nullptr;
   KJ_IF_MAYBE(decl, compileDeclExpression(source, noImplicitParams())) {
     constDecl = *decl;
   } else {

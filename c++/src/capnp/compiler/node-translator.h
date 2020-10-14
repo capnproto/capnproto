@@ -35,6 +35,9 @@ CAPNP_BEGIN_HEADER
 namespace capnp {
 namespace compiler {
 
+class BrandScope;
+class BrandedDecl;
+
 class NodeTranslator {
   // Translates one node in the schema from AST form to final schema form.  A "node" is anything
   // that has a unique ID, such as structs, enums, constants, and annotations, but not fields,
@@ -169,8 +172,6 @@ private:
   class DuplicateOrdinalDetector;
   class StructLayout;
   class StructTranslator;
-  class BrandedDecl;
-  class BrandScope;
 
   Resolver& resolver;
   ErrorReporter& errorReporter;
@@ -224,6 +225,7 @@ private:
   // The `members` arrays contain only members with ordinal numbers, in code order.  Other members
   // are handled elsewhere.
 
+public:  // TODO(now): move ImplicitParams elsewhere
   struct ImplicitParams {
     // Represents a set of implicit parameters visible in the current context.
 
@@ -239,6 +241,7 @@ private:
     return { 0, List<Declaration::BrandParameter>::Reader() };
   }
 
+private:
   template <typename InitBrandFunc>
   uint64_t compileParamList(kj::StringPtr methodName, uint16_t ordinal, bool isResults,
                             Declaration::ParamList::Reader paramList,
