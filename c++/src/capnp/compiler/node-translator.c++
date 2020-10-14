@@ -573,9 +573,8 @@ private:
 
 // =======================================================================================
 
-typedef NodeTranslator::Resolver Resolver;
 typedef NodeTranslator::ImplicitParams ImplicitParams;
-// TODO(now): Move Resolver and ImplicitParams out of NodeTranslator.
+// TODO(now): Move ImplicitParams out of NodeTranslator.
 
 class BrandedDecl {
   // Represents a declaration possibly with generic parameter bindings.
@@ -933,7 +932,7 @@ kj::Maybe<BrandedDecl&> BrandedDecl::getListParam() {
   }
 }
 
-NodeTranslator::Resolver::ResolvedParameter BrandedDecl::asVariable() {
+Resolver::ResolvedParameter BrandedDecl::asVariable() {
   KJ_REQUIRE(body.is<Resolver::ResolvedParameter>());
 
   return body.get<Resolver::ResolvedParameter>();
@@ -1049,7 +1048,7 @@ bool BrandedDecl::compileAsType(
   }
 }
 
-NodeTranslator::Resolver::ResolveResult BrandedDecl::asResolveResult(
+Resolver::ResolveResult BrandedDecl::asResolveResult(
     uint64_t scopeId, schema::Brand::Builder brandBuilder) {
   auto result = body;
   if (result.is<Resolver::ResolvedDecl>()) {
@@ -2604,7 +2603,7 @@ NodeTranslator::compileDeclExpression(
   return localBrand->compileDeclExpression(source, resolver, implicitMethodParams);
 }
 
-/* static */ kj::Maybe<NodeTranslator::Resolver::ResolveResult> NodeTranslator::compileDecl(
+/* static */ kj::Maybe<Resolver::ResolveResult> NodeTranslator::compileDecl(
     uint64_t scopeId, uint scopeParameterCount, Resolver& resolver, ErrorReporter& errorReporter,
     Expression::Reader expression, schema::Brand::Builder brandBuilder) {
   auto scope = kj::refcounted<BrandScope>(errorReporter, scopeId, scopeParameterCount, resolver);

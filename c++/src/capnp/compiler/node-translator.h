@@ -38,88 +38,87 @@ namespace compiler {
 class BrandScope;
 class BrandedDecl;
 
+class Resolver {
+  // Callback class used to find other nodes relative to this one.
+  //
+  // TODO(cleanup): This has evolved into being a full interface for traversing the node tree.
+  //   Maybe we should rename it as such, and move it out of NodeTranslator. See also
+  //   TODO(cleanup) on NodeTranslator::BrandedDecl.
+
+public:
+  struct ResolvedDecl {
+    uint64_t id;
+    uint genericParamCount;
+    uint64_t scopeId;
+    Declaration::Which kind;
+    Resolver* resolver;
+
+    kj::Maybe<schema::Brand::Reader> brand;
+    // If present, then it is necessary to replace the brand scope with the given brand before
+    // using the target type. This happens when the decl resolved to an alias; all other fields
+    // of `ResolvedDecl` refer to the target of the alias, except for `scopeId` which is the
+    // scope that contained the alias.
+  };
+
+  struct ResolvedParameter {
+    uint64_t id;  // ID of the node declaring the parameter.
+    uint index;   // Index of the parameter.
+  };
+
+  typedef kj::OneOf<ResolvedDecl, ResolvedParameter> ResolveResult;
+
+  virtual kj::Maybe<ResolveResult> resolve(kj::StringPtr name) = 0;
+  // Look up the given name, relative to this node, and return basic information about the
+  // target.
+
+  virtual kj::Maybe<ResolveResult> resolveMember(kj::StringPtr name) = 0;
+  // Look up a member of this node.
+
+  virtual ResolvedDecl resolveBuiltin(Declaration::Which which) = 0;
+  virtual ResolvedDecl resolveId(uint64_t id) = 0;
+
+  virtual kj::Maybe<ResolvedDecl> getParent() = 0;
+  // Returns the parent of this scope, or null if this is the top scope.
+
+  virtual ResolvedDecl getTopScope() = 0;
+  // Get the top-level scope containing this node.
+
+  virtual kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id, schema::Brand::Reader brand) = 0;
+  // Get the schema for the given ID.  If a schema is returned, it must be safe to traverse its
+  // dependencies via the Schema API.  A schema that is only at the bootstrap stage is
+  // acceptable.
+  //
+  // Throws an exception if the id is not one that was found by calling resolve() or by
+  // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
+  // schema node failed to be built for reasons that were already reported.
+
+  virtual kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) = 0;
+  // Get the final schema for the given ID.  A bootstrap schema is not acceptable.  A raw
+  // node reader is returned rather than a Schema object because using a Schema object built
+  // by the final schema loader could trigger lazy initialization of dependencies which could
+  // lead to a cycle and deadlock.
+  //
+  // Throws an exception if the id is not one that was found by calling resolve() or by
+  // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
+  // schema node failed to be built for reasons that were already reported.
+
+  virtual kj::Maybe<ResolvedDecl> resolveImport(kj::StringPtr name) = 0;
+  // Get the ID of an imported file given the import path.
+
+  virtual kj::Maybe<kj::Array<const byte>> readEmbed(kj::StringPtr name) = 0;
+  // Read and return the contents of a file for an `embed` expression.
+
+  virtual kj::Maybe<Type> resolveBootstrapType(schema::Type::Reader type, Schema scope) = 0;
+  // Compile a schema::Type into a Type whose dependencies may safely be traversed via the schema
+  // API. These dependencies may have only bootstrap schemas. Returns null if the type could not
+  // be constructed due to already-reported errors.
+};
+
 class NodeTranslator {
   // Translates one node in the schema from AST form to final schema form.  A "node" is anything
   // that has a unique ID, such as structs, enums, constants, and annotations, but not fields,
   // unions, enumerants, or methods (the latter set have 16-bit ordinals but not 64-bit global IDs).
-
 public:
-  class Resolver {
-    // Callback class used to find other nodes relative to this one.
-    //
-    // TODO(cleanup): This has evolved into being a full interface for traversing the node tree.
-    //   Maybe we should rename it as such, and move it out of NodeTranslator. See also
-    //   TODO(cleanup) on NodeTranslator::BrandedDecl.
-
-  public:
-    struct ResolvedDecl {
-      uint64_t id;
-      uint genericParamCount;
-      uint64_t scopeId;
-      Declaration::Which kind;
-      Resolver* resolver;
-
-      kj::Maybe<schema::Brand::Reader> brand;
-      // If present, then it is necessary to replace the brand scope with the given brand before
-      // using the target type. This happens when the decl resolved to an alias; all other fields
-      // of `ResolvedDecl` refer to the target of the alias, except for `scopeId` which is the
-      // scope that contained the alias.
-    };
-
-    struct ResolvedParameter {
-      uint64_t id;  // ID of the node declaring the parameter.
-      uint index;   // Index of the parameter.
-    };
-
-    typedef kj::OneOf<ResolvedDecl, ResolvedParameter> ResolveResult;
-
-    virtual kj::Maybe<ResolveResult> resolve(kj::StringPtr name) = 0;
-    // Look up the given name, relative to this node, and return basic information about the
-    // target.
-
-    virtual kj::Maybe<ResolveResult> resolveMember(kj::StringPtr name) = 0;
-    // Look up a member of this node.
-
-    virtual ResolvedDecl resolveBuiltin(Declaration::Which which) = 0;
-    virtual ResolvedDecl resolveId(uint64_t id) = 0;
-
-    virtual kj::Maybe<ResolvedDecl> getParent() = 0;
-    // Returns the parent of this scope, or null if this is the top scope.
-
-    virtual ResolvedDecl getTopScope() = 0;
-    // Get the top-level scope containing this node.
-
-    virtual kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id, schema::Brand::Reader brand) = 0;
-    // Get the schema for the given ID.  If a schema is returned, it must be safe to traverse its
-    // dependencies via the Schema API.  A schema that is only at the bootstrap stage is
-    // acceptable.
-    //
-    // Throws an exception if the id is not one that was found by calling resolve() or by
-    // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
-    // schema node failed to be built for reasons that were already reported.
-
-    virtual kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) = 0;
-    // Get the final schema for the given ID.  A bootstrap schema is not acceptable.  A raw
-    // node reader is returned rather than a Schema object because using a Schema object built
-    // by the final schema loader could trigger lazy initialization of dependencies which could
-    // lead to a cycle and deadlock.
-    //
-    // Throws an exception if the id is not one that was found by calling resolve() or by
-    // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
-    // schema node failed to be built for reasons that were already reported.
-
-    virtual kj::Maybe<ResolvedDecl> resolveImport(kj::StringPtr name) = 0;
-    // Get the ID of an imported file given the import path.
-
-    virtual kj::Maybe<kj::Array<const byte>> readEmbed(kj::StringPtr name) = 0;
-    // Read and return the contents of a file for an `embed` expression.
-
-    virtual kj::Maybe<Type> resolveBootstrapType(schema::Type::Reader type, Schema scope) = 0;
-    // Compile a schema::Type into a Type whose dependencies may safely be traversed via the schema
-    // API. These dependencies may have only bootstrap schemas. Returns null if the type could not
-    // be constructed due to already-reported errors.
-  };
-
   NodeTranslator(Resolver& resolver, ErrorReporter& errorReporter,
                  const Declaration::Reader& decl, Orphan<schema::Node> wipNode,
                  bool compileAnnotations);
