@@ -1234,10 +1234,6 @@ Compiler::Node& Compiler::Impl::getBuiltin(Declaration::Which which) {
   return *iter->second;
 }
 
-uint64_t Compiler::Impl::add(Module& module) {
-  return addInternal(module).getRootNode().getId();
-}
-
 kj::Maybe<uint64_t> Compiler::Impl::lookup(uint64_t parent, kj::StringPtr childName) {
   // Looking up members does not use the workspace, so we don't need to lock it.
   KJ_IF_MAYBE(parentNode, findNode(parent)) {
@@ -1326,8 +1322,9 @@ Compiler::Compiler(AnnotationFlag annotationFlag)
       loader(*this) {}
 Compiler::~Compiler() noexcept(false) {}
 
-uint64_t Compiler::add(Module& module) const {
-  return impl.lockExclusive()->get()->add(module);
+Compiler::ModuleScope Compiler::add(Module& module) const {
+  Node& root = impl.lockExclusive()->get()->addInternal(module).getRootNode();
+  return ModuleScope(*this, root.getId(), root);
 }
 
 kj::Maybe<uint64_t> Compiler::lookup(uint64_t parent, kj::StringPtr childName) const {
@@ -1357,6 +1354,117 @@ void Compiler::clearWorkspace() const {
 
 void Compiler::load(const SchemaLoader& loader, uint64_t id) const {
   impl.lockExclusive()->get()->loadFinal(loader, id);
+}
+
+// -----------------------------------------------------------------------------
+
+class Compiler::ErrorIgnorer: public ErrorReporter {
+public:
+  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {}
+  bool hadErrors() override { return false; }
+
+  static ErrorIgnorer instance;
+};
+Compiler::ErrorIgnorer Compiler::ErrorIgnorer::instance;
+
+kj::Maybe<Type> Compiler::CompiledType::getSchema() {
+  capnp::word scratch[32];
+  memset(&scratch, 0, sizeof(scratch));
+  capnp::MallocMessageBuilder message(scratch);
+  auto builder = message.getRoot<schema::Type>();
+
+  {
+    auto lock = compiler.impl.lockShared();
+    decl.get(lock).compileAsType(ErrorIgnorer::instance, builder);
+  }
+
+  // No need to pass `scope` as second parameter since CompiledType always represents a type
+  // expression evaluated free-standing, not in any scope.
+  return compiler.loader.getType(builder.asReader());
+}
+
+Compiler::CompiledType Compiler::CompiledType::clone() {
+  kj::ExternalMutexGuarded<BrandedDecl> newDecl;
+  {
+    auto lock = compiler.impl.lockExclusive();
+    newDecl.set(lock, kj::cp(decl.get(lock)));
+  }
+  return CompiledType(compiler, kj::mv(newDecl));
+}
+
+kj::Maybe<Compiler::CompiledType> Compiler::CompiledType::getMember(kj::StringPtr name) {
+  kj::ExternalMutexGuarded<BrandedDecl> newDecl;
+  bool found = false;
+
+  {
+    auto lock = compiler.impl.lockShared();
+    KJ_IF_MAYBE(member, decl.get(lock).getMember(name, {})) {
+      newDecl.set(lock, kj::mv(*member));
+      found = true;
+    }
+  }
+
+  if (found) {
+    return CompiledType(compiler, kj::mv(newDecl));
+  } else {
+    return nullptr;
+  }
+}
+
+kj::Maybe<Compiler::CompiledType> Compiler::CompiledType::applyBrand(
+    kj::Array<CompiledType> arguments) {
+  kj::ExternalMutexGuarded<BrandedDecl> newDecl;
+  bool found = false;
+
+  {
+    auto lock = compiler.impl.lockShared();
+    auto args = KJ_MAP(arg, arguments) { return kj::mv(arg.decl.get(lock)); };
+    KJ_IF_MAYBE(member, decl.get(lock).applyParams(kj::mv(args), {})) {
+      newDecl.set(lock, kj::mv(*member));
+      found = true;
+    }
+  }
+
+  if (found) {
+    return CompiledType(compiler, kj::mv(newDecl));
+  } else {
+    return nullptr;
+  }
+}
+
+Compiler::CompiledType Compiler::ModuleScope::getRoot() {
+  kj::ExternalMutexGuarded<BrandedDecl> newDecl;
+
+  {
+    auto lock = compiler.impl.lockExclusive();
+    auto brandScope = kj::refcounted<BrandScope>(ErrorIgnorer::instance, node.getId(), 0, node);
+    Resolver::ResolvedDecl decl { node.getId(), 0, 0, node.getKind(), &node, nullptr };
+    newDecl.set(lock, BrandedDecl(kj::mv(decl), kj::mv(brandScope), {}));
+  }
+
+  return CompiledType(compiler, kj::mv(newDecl));
+}
+
+kj::Maybe<Compiler::CompiledType> Compiler::ModuleScope::evalType(
+    Expression::Reader expression, ErrorReporter& errorReporter) {
+  kj::ExternalMutexGuarded<BrandedDecl> newDecl;
+  bool found = false;
+
+  {
+    auto lock = compiler.impl.lockExclusive();
+    auto brandScope = kj::refcounted<BrandScope>(errorReporter, node.getId(), 0, node);
+    KJ_IF_MAYBE(result, brandScope->compileDeclExpression(
+        expression, node, ImplicitParams::none())) {
+      newDecl.set(lock, kj::mv(*result));
+      found = true;
+    };
+  }
+
+  if (found) {
+    return CompiledType(compiler, kj::mv(newDecl));
+  } else {
+    return nullptr;
+  }
 }
 
 }  // namespace compiler

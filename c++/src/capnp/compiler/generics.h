@@ -87,6 +87,7 @@ public:
     body.init<Resolver::ResolvedParameter>(kj::mv(variable));
   }
   inline BrandedDecl(decltype(nullptr)) {}
+  inline BrandedDecl() {}  // exists only for ExternalMutexGuarded<BrandedDecl> to work...
 
   static BrandedDecl implicitMethodParam(uint index) {
     // Get a BrandedDecl referring to an implicit method parameter.
