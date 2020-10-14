@@ -573,9 +573,6 @@ private:
 
 // =======================================================================================
 
-typedef NodeTranslator::ImplicitParams ImplicitParams;
-// TODO(now): Move ImplicitParams out of NodeTranslator.
-
 class BrandedDecl {
   // Represents a declaration possibly with generic parameter bindings.
   //
@@ -1653,14 +1650,14 @@ void NodeTranslator::DuplicateNameDetector::check(
 void NodeTranslator::compileConst(Declaration::Const::Reader decl,
                                   schema::Node::Const::Builder builder) {
   auto typeBuilder = builder.initType();
-  if (compileType(decl.getType(), typeBuilder, noImplicitParams())) {
+  if (compileType(decl.getType(), typeBuilder, ImplicitParams::none())) {
     compileBootstrapValue(decl.getValue(), typeBuilder.asReader(), builder.initValue());
   }
 }
 
 void NodeTranslator::compileAnnotation(Declaration::Annotation::Reader decl,
                                        schema::Node::Annotation::Builder builder) {
-  compileType(decl.getType(), builder.initType(), noImplicitParams());
+  compileType(decl.getType(), builder.initType(), ImplicitParams::none());
 
   // Dynamically copy over the values of all of the "targets" members.
   DynamicStruct::Reader src = decl;
@@ -2314,7 +2311,8 @@ private:
 
 void NodeTranslator::compileStruct(Void decl, List<Declaration>::Reader members,
                                    schema::Node::Builder builder) {
-  StructTranslator(*this, noImplicitParams()).translate(decl, members, builder, sourceInfo.get());
+  StructTranslator(*this, ImplicitParams::none())
+      .translate(decl, members, builder, sourceInfo.get());
 }
 
 // -------------------------------------------------------------------
@@ -2331,7 +2329,7 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
   for (uint i: kj::indices(superclassesDecl)) {
     auto superclass = superclassesDecl[i];
 
-    KJ_IF_MAYBE(decl, compileDeclExpression(superclass, noImplicitParams())) {
+    KJ_IF_MAYBE(decl, compileDeclExpression(superclass, ImplicitParams::none())) {
       KJ_IF_MAYBE(kind, decl->getKind()) {
         if (*kind == Declaration::INTERFACE) {
           auto s = superclassesBuilder[i];
@@ -2607,7 +2605,7 @@ NodeTranslator::compileDeclExpression(
     uint64_t scopeId, uint scopeParameterCount, Resolver& resolver, ErrorReporter& errorReporter,
     Expression::Reader expression, schema::Brand::Builder brandBuilder) {
   auto scope = kj::refcounted<BrandScope>(errorReporter, scopeId, scopeParameterCount, resolver);
-  KJ_IF_MAYBE(decl, scope->compileDeclExpression(expression, resolver, noImplicitParams())) {
+  KJ_IF_MAYBE(decl, scope->compileDeclExpression(expression, resolver, ImplicitParams::none())) {
     return decl->asResolveResult(scope->getScopeId(), brandBuilder);
   } else {
     return nullptr;
@@ -3120,7 +3118,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     Expression::Reader source, bool isBootstrap) {
   // Look up the constant decl.
   BrandedDecl constDecl = nullptr;
-  KJ_IF_MAYBE(decl, compileDeclExpression(source, noImplicitParams())) {
+  KJ_IF_MAYBE(decl, compileDeclExpression(source, ImplicitParams::none())) {
     constDecl = *decl;
   } else {
     // Lookup will have reported an error.
@@ -3241,7 +3239,7 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
     annotationBuilder.initValue().setVoid();
 
     auto name = annotation.getName();
-    KJ_IF_MAYBE(decl, compileDeclExpression(name, noImplicitParams())) {
+    KJ_IF_MAYBE(decl, compileDeclExpression(name, ImplicitParams::none())) {
       KJ_IF_MAYBE(kind, decl->getKind()) {
         if (*kind != Declaration::ANNOTATION) {
           errorReporter.addErrorOn(name, kj::str(
