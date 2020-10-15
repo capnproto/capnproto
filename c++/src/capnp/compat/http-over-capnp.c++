@@ -46,7 +46,7 @@ public:
 
   void cancel() {
     if (tasks != nullptr) {
-      if (canceler.isEmpty()) {
+      if (!canceler.isEmpty()) {
         canceler.cancel(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
       }
       tasks = nullptr;
