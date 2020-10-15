@@ -32,19 +32,38 @@ namespace capnp {
 namespace compiler {
 
 class Resolver {
-  // Callback class used to find other nodes relative to this one.
+  // Callback class used to find other nodes relative to some existing node.
   //
-  // TODO(cleanup): This has evolved into being a full interface for traversing the node tree.
-  //   Maybe we should rename it as such, and move it out of NodeTranslator. See also
-  //   TODO(cleanup) on NodeTranslator::BrandedDecl.
+  // `Resolver` is used when compiling one declaration requires inspecting the compiled versions
+  // of other declarations it depends on. For example, if struct type Foo contains a field of type
+  // Bar, and specifies a default value for that field, then to parse that default value we need
+  // the compiled version of `Bar`. Or, more commonly, if a struct type Foo refers to some other
+  // type `Bar.Baz`, this requires doing a lookup that depends on at least partial compilation of
+  // `Bar`, in order to discover its nested type `Baz`.
+  //
+  // Note that declarations are often compiled just-in-time the first time they are resolved. So,
+  // the methods of Resolver may recurse back into other parts of the compiler. It must detect when
+  // a dependency cycle occurs and report an error in order to prevent an infinite loop.
 
 public:
   struct ResolvedDecl {
+    // Information about a resolved declaration.
+
     uint64_t id;
+    // Type ID / node ID of the resolved declaration.
+
     uint genericParamCount;
+    // If non-zero, the declaration is a generic with the given number of parameters.
+
     uint64_t scopeId;
+    // The ID of the parent scope of this declaration.
+
     Declaration::Which kind;
+    // What basic kind of declaration is this? E.g. struct, interface, const, etc.
+
     Resolver* resolver;
+    // `Resolver` instance that can be used to further resolve other declarations relative to this
+    // one.
 
     kj::Maybe<schema::Brand::Reader> brand;
     // If present, then it is necessary to replace the brand scope with the given brand before
