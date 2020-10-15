@@ -643,7 +643,7 @@ public:
   // happens to this Canceler.
 
   bool isEmpty() const { return list == nullptr; }
-  // Indicates if any previously-wrapped promises are still executing. (If this returns false, then
+  // Indicates if any previously-wrapped promises are still executing. (If this returns true, then
   // cancel() would be a no-op.)
 
 private:
