@@ -250,7 +250,6 @@ private:
   SchemaLoader loader;
 
   class CompiledModule;
-  class Node;
   class Alias;
   class ErrorIgnorer;
 
