@@ -34,7 +34,7 @@ namespace capnp {
 namespace _ {  // private
 
 #if !CAPNP_LITE
-static BrokenCapFactory* brokenCapFactory = nullptr;
+static BrokenCapFactory* globalBrokenCapFactory = nullptr;
 // Horrible hack:  We need to be able to construct broken caps without any capability context,
 // but we can't have a link-time dependency on libcapnp-rpc.
 
@@ -42,11 +42,21 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
   // Called from capability.c++ when the capability API is used, to make sure that layout.c++
   // is ready for it.  May be called multiple times but always with the same value.
 #if __GNUC__ || defined(__clang__)
-  __atomic_store_n(&brokenCapFactory, &factory, __ATOMIC_RELAXED);
+  __atomic_store_n(&globalBrokenCapFactory, &factory, __ATOMIC_RELAXED);
 #elif _MSC_VER
-  *static_cast<BrokenCapFactory* volatile*>(&brokenCapFactory) = &factory;
+  *static_cast<BrokenCapFactory* volatile*>(&globalBrokenCapFactory) = &factory;
 #else
 #error "Platform not supported"
+#endif
+}
+
+static BrokenCapFactory* readGlobalBrokenCapFactoryForLayoutCpp() {
+#if __GNUC__ || defined(__clang__)
+  // Thread-sanitizer doesn't have the right information to know this is safe without doing an
+  // atomic read. https://groups.google.com/g/capnproto/c/634juhn5ap0/m/pyRiwWl1AAAJ
+  return __atomic_load_n(&globalBrokenCapFactory, __ATOMIC_RELAXED);
+#else
+  return globalBrokenCapFactory;
 #endif
 }
 
@@ -2184,6 +2194,8 @@ struct WireHelpers {
       SegmentReader* segment, CapTableReader* capTable,
       const WirePointer* ref, int nestingLimit)) {
     kj::Maybe<kj::Own<ClientHook>> maybeCap;
+
+    auto brokenCapFactory = readGlobalBrokenCapFactoryForLayoutCpp();
 
     KJ_REQUIRE(brokenCapFactory != nullptr,
                "Trying to read capabilities without ever having created a capability context.  "
