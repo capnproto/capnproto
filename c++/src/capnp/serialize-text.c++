@@ -131,7 +131,7 @@ kj::String TextCodec::encode(DynamicValue::Reader value) const {
 
 void TextCodec::decode(kj::StringPtr input, DynamicStruct::Builder output) const {
   lexAndParseExpression(input, [&](compiler::Expression::Reader expression) {
-    KJ_REQUIRE(expression.isTuple(), "Input does not contain a struct.");
+    KJ_REQUIRE(expression.isTuple(), "Input does not contain a struct.") { return; }
 
     ThrowingErrorReporter errorReporter(input);
     ExternalResolver nullResolver;
