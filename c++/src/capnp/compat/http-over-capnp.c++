@@ -35,12 +35,12 @@ public:
     tasks.emplace(*this);
   }
 
-  template <typename T>
-  kj::Promise<T> wrap(kj::Promise<T>&& promise) {
+  template <typename Func>
+  auto wrap(Func&& func) -> decltype(func()) {
     if (tasks == nullptr) {
       return KJ_EXCEPTION(DISCONNECTED, "client canceled HTTP request");
     } else {
-      return canceler.wrap(kj::mv(promise));
+      return canceler.wrap(func());
     }
   }
 
@@ -123,14 +123,14 @@ public:
   }
 
   kj::Promise<void> sendText(SendTextContext context) override {
-    return state->wrap(webSocket.send(context.getParams().getText()));
+    return state->wrap([&]() { return webSocket.send(context.getParams().getText()); });
   }
   kj::Promise<void> sendData(SendDataContext context) override {
-    return state->wrap(webSocket.send(context.getParams().getData()));
+    return state->wrap([&]() { return webSocket.send(context.getParams().getData()); });
   }
   kj::Promise<void> close(CloseContext context) override {
     auto params = context.getParams();
-    return state->wrap(webSocket.close(params.getCode(), params.getReason()));
+    return state->wrap([&]() { return webSocket.close(params.getCode(), params.getReason()); });
   }
 
 private:
