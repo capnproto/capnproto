@@ -1623,6 +1623,17 @@ void WaitScope::poll() {
   });
 }
 
+void WaitScope::cancelAllDetached() {
+  KJ_REQUIRE(fiber == nullptr,
+      "can't call cancelAllDetached() on a fiber WaitScope, only top-level");
+
+  while (!loop.daemons->isEmpty()) {
+    auto oldDaemons = kj::mv(loop.daemons);
+    loop.daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
+    // Destroying `oldDaemons` could theoretically add new ones.
+  }
+}
+
 namespace _ {  // private
 
 #if !KJ_NO_EXCEPTIONS

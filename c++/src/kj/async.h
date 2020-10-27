@@ -1057,6 +1057,16 @@ public:
   //
   // Pass `nullptr` as the parameter to go back to running events on the main stack.
 
+  void cancelAllDetached();
+  // HACK: Immediately cancel all detached promises.
+  //
+  // New code should not use detached promises, and therefore should not need this.
+  //
+  // This method exists to help existing code deal with the problems of detached promises,
+  // especially at teardown time.
+  //
+  // This method may be removed in the future.
+
 private:
   EventLoop& loop;
   uint busyPollInterval = kj::maxValue;
