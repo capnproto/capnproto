@@ -177,7 +177,7 @@ struct BrandBindingFor_<AnyList, Kind::OTHER> {
 };
 
 template <>
-struct BrandBindingFor_<Capability, Kind::OTHER> {
+struct BrandBindingFor_<Capability, Kind::INTERFACE> {
   static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
     return { 18, listDepth, 0, 3 };
   }

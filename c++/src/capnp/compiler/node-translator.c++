@@ -970,10 +970,19 @@ bool NodeTranslator::BrandedDecl::compileAsType(
         }
 
         if (elementType.isAnyPointer()) {
-          addError(errorReporter, "'List(AnyPointer)' is not supported.");
-          // Seeing List(AnyPointer) later can mess things up, so change the type to Void.
-          elementType.setVoid();
-          return false;
+          auto unconstrained = elementType.getAnyPointer().getUnconstrained();
+
+          if (unconstrained.isAnyKind()) {
+            addError(errorReporter, "'List(AnyKind)' is not supported.");
+            // Seeing List(AnyKind) later can mess things up, so change the type to Void.
+            elementType.setVoid();
+            return false;
+          } else if (unconstrained.isStruct()) {
+            addError(errorReporter, "'List(Struct)' is not supported.");
+            // Seeing List(Struct) later can mess things up, so change the type to Void.
+            elementType.setVoid();
+            return false;
+          }
         }
 
         return true;

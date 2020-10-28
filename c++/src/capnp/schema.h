@@ -926,7 +926,20 @@ inline Type::Type(ImplicitParameter param)
       paramIndex(param.index), scopeId(0) {}
 
 inline schema::Type::Which Type::which() const {
-  return listDepth > 0 ? schema::Type::LIST : baseType;
+  if (listDepth > 0) {
+      return schema::Type::LIST;
+  }
+
+  if (baseType != schema::Type::ANY_POINTER) {
+      return baseType;
+  }
+
+  switch (whichAnyPointerKind()) {
+      case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+          return schema::Type::INTERFACE;
+      default:
+          return schema::Type::ANY_POINTER;
+  }
 }
 
 inline schema::Type::AnyPointer::Unconstrained::Which Type::whichAnyPointerKind() const {
