@@ -587,6 +587,9 @@ struct TestGenerics(Foo, Bar) {
   }
 }
 
+struct BoxedText { text @0 :Text; }
+using BrandedAlias = TestGenerics(BoxedText, Text);
+
 struct TestGenericsWrapper(Foo, Bar) {
   value @0 :TestGenerics(Foo, Bar);
 }

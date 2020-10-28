@@ -142,6 +142,9 @@ private:
   Parsers parsers;
 };
 
+kj::String expressionString(Expression::Reader name);
+// Stringify the expression as code.
+
 }  // namespace compiler
 }  // namespace capnp
 

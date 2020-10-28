@@ -25,6 +25,7 @@
 #include <capnp/schema.capnp.h>
 #include <capnp/schema-loader.h>
 #include "error-reporter.h"
+#include "generics.h"
 
 CAPNP_BEGIN_HEADER
 
@@ -54,6 +55,8 @@ class Compiler final: private SchemaLoader::LazyLoadCallback {
   //
   // This class is thread-safe, hence all its methods are const.
 
+  class Node;
+
 public:
   enum AnnotationFlag {
     COMPILE_ANNOTATIONS,
@@ -75,11 +78,66 @@ public:
   ~Compiler() noexcept(false);
   KJ_DISALLOW_COPY(Compiler);
 
-  uint64_t add(Module& module) const;
-  // Add a module to the Compiler, returning the module's file ID.  The ID can then be looked up in
-  // the `SchemaLoader` returned by `getLoader()`.  However, the SchemaLoader may behave as if the
-  // schema node doesn't exist if any compilation errors occur (reported via the module's
-  // ErrorReporter).  The module is parsed at the time `add()` is called, but not fully compiled --
+  class CompiledType {
+    // Represents a compiled type expression, from which you can traverse to nested types, apply
+    // generics, etc.
+
+  public:
+    CompiledType clone();
+    // Make another CompiledType pointing to the same type.
+
+    kj::Maybe<Type> getSchema();
+    // Evaluate to a type schema. Returns null if this "type" cannot actually be used as a field
+    // type, e.g. because it's the pseudo-type representing a file's top-level scope.
+
+    kj::Maybe<CompiledType> getMember(kj::StringPtr name);
+    // Look up a nested declaration. Returns null if there is no such member, or if the member is
+    // not a type.
+
+    kj::Maybe<CompiledType> applyBrand(kj::Array<CompiledType> arguments);
+    // If this is a generic type, specializes apply a brand to it. Returns null if this is
+    // not a generic type or too many arguments were specified.
+
+  private:
+    const Compiler& compiler;
+    kj::ExternalMutexGuarded<BrandedDecl> decl;
+
+    CompiledType(const Compiler& compiler, kj::ExternalMutexGuarded<BrandedDecl> decl)
+        : compiler(compiler), decl(kj::mv(decl)) {}
+
+    friend class Compiler;
+  };
+
+  class ModuleScope {
+    // Result of compiling a module.
+
+  public:
+    uint64_t getId() { return id; }
+
+    CompiledType getRoot();
+    // Get a CompiledType representing the root, which can be used to programmatically look up
+    // declarations.
+
+    kj::Maybe<CompiledType> evalType(Expression::Reader expression, ErrorReporter& errorReporter);
+    // Evaluate some type expression within the scope of this module.
+    //
+    // Returns null if errors prevented evaluation; the errors will have been reported to
+    // `errorReporter`.
+
+  private:
+    const Compiler& compiler;
+    uint64_t id;
+    Node& node;
+
+    ModuleScope(const Compiler& compiler, uint64_t id, Node& node)
+        : compiler(compiler), id(id), node(node) {}
+
+    friend class Compiler;
+  };
+
+  ModuleScope add(Module& module) const;
+  // Add a module to the Compiler, returning a CompiledType representing the top-level scope of
+  // the module.  The module is parsed at the time `add()` is called, but not fully compiled --
   // individual schema nodes are compiled lazily.  If you want to force eager compilation,
   // see `eagerlyCompile()`, below.
 
@@ -87,6 +145,9 @@ public:
   // Given the type ID of a schema node, find the ID of a node nested within it.  Throws an
   // exception if the parent ID is not recognized; returns null if the parent has no child of the
   // given name.  Neither the parent nor the child schema node is actually compiled.
+  //
+  // TODO(cleanup): This interface does not handle generics correctly. Use the
+  //   ModuleScope/CompiledType interface instead.
 
   kj::Maybe<schema::Node::SourceInfo::Reader> getSourceInfo(uint64_t id) const;
   // Get the SourceInfo for the given type ID, if available.
@@ -189,8 +250,8 @@ private:
   SchemaLoader loader;
 
   class CompiledModule;
-  class Node;
   class Alias;
+  class ErrorIgnorer;
 
   void load(const SchemaLoader& loader, uint64_t id) const override;
 };
