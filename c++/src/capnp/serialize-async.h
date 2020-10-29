@@ -76,6 +76,107 @@ kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<c
     KJ_WARN_UNUSED_RESULT;
 // Write a message with FDs attached, e.g. to a Unix socket with SCM_RIGHTS.
 
+// -----------------------------------------------------------------------------
+// Versions virtualized over an interface.
+
+class MessageTransport {
+  // Interface over which messages can be sent and received; virtualizes
+  // the functionality above.
+  //
+  // The methods exposed by this class have the same contracts as the corresponding
+  // FD-oriented functions above, except that the first argument (of type
+  // AsyncCapabilityStream) is omitted.
+  //
+  // Only the most general variants are exposed here; callers can use the
+  // functions below for the other variants.
+  //
+  // Implementations which do not support FD passing may simply ignore the relevant
+  // arguments.
+public:
+  virtual kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) = 0;
+
+  virtual kj::Promise<void> writeMessage(
+      kj::ArrayPtr<const int> fds,
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) = 0;
+    KJ_WARN_UNUSED_RESULT;
+};
+
+class AsyncIoTransport: public MessageTransport {
+  // A MessageTransport that wraps an AsyncIoStream.
+public:
+  explicit AsyncIoTransport(kj::AsyncIoStream& stream);
+
+  // Implements MessageTransport
+  kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
+  kj::Promise<void> writeMessage(
+      kj::ArrayPtr<const int> fds,
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+private:
+  kj::AsyncIoStream& stream;
+};
+
+class AsyncCapabilityTransport: public MessageTransport {
+  // A MessageTransport that wraps an AsyncCapabilityStream.
+public:
+  explicit AsyncCapabilityTransport(kj::AsyncCapabilityStream& stream);
+
+  // Implements MessageTransport
+  kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
+  kj::Promise<void> writeMessage(
+      kj::ArrayPtr<const int> fds,
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+private:
+  kj::AsyncCapabilityStream& stream;
+};
+
+kj::Promise<kj::Own<MessageReader>> readMessage(
+    MessageTransport& input, ReaderOptions options = ReaderOptions(),
+    kj::ArrayPtr<word> scratchSpace = nullptr);
+// Read a message asynchronously.
+//
+// `input` must remain valid until the returned promise resolves (or is canceled).
+//
+// `scratchSpace`, if provided, must remain valid until the returned MessageReader is destroyed.
+
+kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
+    MessageTransport& input,
+    ReaderOptions options = ReaderOptions(),
+    kj::ArrayPtr<word> scratchSpace = nullptr);
+// Like `readMessage` but returns null on EOF.
+
+kj::Promise<void> writeMessage(MessageTransport& output,
+                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
+    KJ_WARN_UNUSED_RESULT;
+kj::Promise<void> writeMessage(MessageTransport& output, MessageBuilder& builder)
+    KJ_WARN_UNUSED_RESULT;
+// Write asynchronously.  The parameters must remain valid until the returned promise resolves.
+
+kj::Promise<MessageReaderAndFds> readMessage(
+    MessageTransport& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr);
+// Read a message that may also have file descriptors attached, e.g. from a Unix socket with
+// SCM_RIGHTS.
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+    MessageTransport& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr);
+// Like `readMessage` but returns null on EOF.
+//
+    KJ_WARN_UNUSED_RESULT;
+kj::Promise<void> writeMessage(MessageTransport& output, kj::ArrayPtr<const int> fds,
+                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
+    KJ_WARN_UNUSED_RESULT;
+kj::Promise<void> writeMessage(MessageTransport& output, kj::ArrayPtr<const int> fds,
+                               MessageBuilder& builder)
+    KJ_WARN_UNUSED_RESULT;
+// Write a message with FDs attached, e.g. to a Unix socket with SCM_RIGHTS.
+
 // =======================================================================================
 // inline implementation details
 
@@ -84,6 +185,23 @@ inline kj::Promise<void> writeMessage(kj::AsyncOutputStream& output, MessageBuil
 }
 inline kj::Promise<void> writeMessage(
     kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds, MessageBuilder& builder) {
+  return writeMessage(output, fds, builder.getSegmentsForOutput());
+}
+inline kj::Promise<void> writeMessage(
+    MessageTransport& output, kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)  {
+  return output.writeMessage(fds, segments);
+}
+inline kj::Promise<void> writeMessage(
+    MessageTransport& output,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return writeMessage(output, nullptr, segments);
+}
+inline kj::Promise<void> writeMessage(MessageTransport& output, MessageBuilder& builder) {
+  return writeMessage(output, builder.getSegmentsForOutput());
+}
+inline kj::Promise<void> writeMessage(
+    MessageTransport& output, kj::ArrayPtr<const int> fds, MessageBuilder& builder) {
   return writeMessage(output, fds, builder.getSegmentsForOutput());
 }
 

@@ -292,4 +292,90 @@ kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<c
   });
 }
 
+AsyncIoTransport::AsyncIoTransport(kj::AsyncIoStream& stream)
+  : stream(stream) {};
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncIoTransport::tryReadMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options,
+    kj::ArrayPtr<word> scratchSpace) {
+  return capnp::tryReadMessage(stream, options, scratchSpace)
+    .then([](kj::Maybe<kj::Own<MessageReader>> maybeReader) -> kj::Maybe<MessageReaderAndFds> {
+      KJ_IF_MAYBE(reader, maybeReader) {
+        return MessageReaderAndFds { kj::mv(*reader), nullptr };
+      } else {
+        return nullptr;
+      }
+    });
+}
+
+kj::Promise<void> AsyncIoTransport::writeMessage(
+    kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return capnp::writeMessage(stream, segments);
+}
+
+AsyncCapabilityTransport::AsyncCapabilityTransport(kj::AsyncCapabilityStream& stream)
+  : stream(stream) {};
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncCapabilityTransport::tryReadMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options,
+    kj::ArrayPtr<word> scratchSpace) {
+  return capnp::tryReadMessage(stream, fdSpace, options, scratchSpace);
+}
+
+kj::Promise<void> AsyncCapabilityTransport::writeMessage(
+    kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return capnp::writeMessage(stream, fds, segments);
+}
+
+kj::Promise<kj::Own<MessageReader>> readMessage(
+    MessageTransport& input, ReaderOptions options,
+    kj::ArrayPtr<word> scratchSpace) {
+  return tryReadMessage(input, options, scratchSpace).then([](auto maybeResult) {
+    KJ_IF_MAYBE(result, maybeResult) {
+        return kj::mv(*result);
+    } else {
+        kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+        KJ_UNREACHABLE;
+    }
+  });
+}
+
+kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
+    MessageTransport& input,
+    ReaderOptions options,
+    kj::ArrayPtr<word> scratchSpace) {
+  return tryReadMessage(input, nullptr, options, scratchSpace)
+    .then([](auto maybeReaderAndFds) -> kj::Maybe<kj::Own<MessageReader>> {
+      KJ_IF_MAYBE(readerAndFds, maybeReaderAndFds) {
+        return kj::mv(readerAndFds->reader);
+      } else {
+        return nullptr;
+      }
+  });
+}
+
+kj::Promise<MessageReaderAndFds> readMessage(
+    MessageTransport& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  return tryReadMessage(input, fdSpace, options, scratchSpace).then([](auto maybeResult) {
+      KJ_IF_MAYBE(result, maybeResult) {
+        return kj::mv(*result);
+      } else {
+        kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+        KJ_UNREACHABLE;
+      }
+  });
+}
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+    MessageTransport& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  return input.tryReadMessage(fdSpace, options, scratchSpace);
+}
+
+
 }  // namespace capnp
