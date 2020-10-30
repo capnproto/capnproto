@@ -116,7 +116,7 @@ public:
 
 };
 
-class AsyncIoTransport: public MessageTransport {
+class AsyncIoTransport final: public MessageTransport {
   // A MessageTransport that wraps an AsyncIoStream.
 public:
   explicit AsyncIoTransport(kj::AsyncIoStream& stream);
@@ -135,7 +135,7 @@ private:
   kj::AsyncIoStream& stream;
 };
 
-class AsyncCapabilityTransport: public MessageTransport {
+class AsyncCapabilityTransport final: public MessageTransport {
   // A MessageTransport that wraps an AsyncCapabilityStream.
 public:
   explicit AsyncCapabilityTransport(kj::AsyncCapabilityStream& stream);
