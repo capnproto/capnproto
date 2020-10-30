@@ -89,8 +89,8 @@ public:
 
   virtual kj::Promise<void> writeMessage(
       kj::ArrayPtr<const int> fds,
-      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) = 0;
-    KJ_WARN_UNUSED_RESULT;
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
+    KJ_WARN_UNUSED_RESULT = 0;
   // The tryReadMessage & writeMessages methods have the same contracts as
   // the corresponding FD-oriented stand-alone functions above, except that the
   // first argument (of type AsyncCapabilityStream) is omitted.
