@@ -185,8 +185,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
     MessageTransport& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr);
 // Like `readMessage` but returns null on EOF.
-//
-    KJ_WARN_UNUSED_RESULT;
+
 kj::Promise<void> writeMessage(MessageTransport& output, kj::ArrayPtr<const int> fds,
                                kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
     KJ_WARN_UNUSED_RESULT;
