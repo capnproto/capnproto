@@ -19,6 +19,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Includes just for need SOL_SOCKET and SO_SNDBUF
+#if _WIN32
+#include <kj/win32-api-version.h>
+
+#include <winsock2.h>
+#include <mswsock.h>
+#include <kj/windows-sanity.h>
+#else
+#include <sys/socket.h>
+#endif
+
 #include "serialize-async.h"
 #include <kj/debug.h>
 #include <kj/io.h>
@@ -315,6 +326,37 @@ kj::Promise<void> AsyncIoTransport::writeMessage(
   return capnp::writeMessage(stream, segments);
 }
 
+kj::Maybe<int> getSendBufferSize(kj::AsyncIoStream& stream) {
+  // TODO(perf): It might be nice to have a tryGetsockopt() that doesn't require catching
+  //   exceptions?
+  int bufSize = 0;
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    uint len = sizeof(int);
+    stream.getsockopt(SOL_SOCKET, SO_SNDBUF, &bufSize, &len);
+    KJ_ASSERT(len == sizeof(bufSize)) { break; }
+  })) {
+    if (exception->getType() != kj::Exception::Type::UNIMPLEMENTED) {
+      // TODO(someday): Figure out why getting SO_SNDBUF sometimes throws EINVAL. I suspect it
+      //   happens when the remote side has closed their read end, meaning we no longer have
+      //   a send buffer, but I don't know what is the best way to verify that that was actually
+      //   the reason. I'd prefer not to ignore EINVAL errors in general.
+
+      // kj::throwRecoverableException(kj::mv(*exception));
+    }
+    return nullptr;
+  }
+  return bufSize;
+}
+
+kj::Promise<void> AsyncIoTransport::shutdownWrite() {
+  stream.shutdownWrite();
+  return kj::READY_NOW;
+}
+
+kj::Maybe<int> AsyncIoTransport::getSendBufferSize() {
+  return capnp::getSendBufferSize(stream);
+}
+
 AsyncCapabilityTransport::AsyncCapabilityTransport(kj::AsyncCapabilityStream& stream)
   : stream(stream) {};
 
@@ -329,6 +371,15 @@ kj::Promise<void> AsyncCapabilityTransport::writeMessage(
     kj::ArrayPtr<const int> fds,
     kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   return capnp::writeMessage(stream, fds, segments);
+}
+
+kj::Maybe<int> AsyncCapabilityTransport::getSendBufferSize() {
+  return capnp::getSendBufferSize(stream);
+}
+
+kj::Promise<void> AsyncCapabilityTransport::shutdownWrite() {
+  stream.shutdownWrite();
+  return kj::READY_NOW;
 }
 
 kj::Promise<kj::Own<MessageReader>> readMessage(

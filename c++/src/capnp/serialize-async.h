@@ -82,16 +82,6 @@ kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<c
 class MessageTransport {
   // Interface over which messages can be sent and received; virtualizes
   // the functionality above.
-  //
-  // The methods exposed by this class have the same contracts as the corresponding
-  // FD-oriented functions above, except that the first argument (of type
-  // AsyncCapabilityStream) is omitted.
-  //
-  // Only the most general variants are exposed here; callers can use the
-  // functions below for the other variants.
-  //
-  // Implementations which do not support FD passing may simply ignore the relevant
-  // arguments.
 public:
   virtual kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
       kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
@@ -101,6 +91,29 @@ public:
       kj::ArrayPtr<const int> fds,
       kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) = 0;
     KJ_WARN_UNUSED_RESULT;
+  // The tryReadMessage & writeMessages methods have the same contracts as
+  // the corresponding FD-oriented stand-alone functions above, except that the
+  // first argument (of type AsyncCapabilityStream) is omitted.
+  //
+  // Below, we provide helper functions that correspond to the rest of the top-level
+  // functions above, but take a MessageTransport& as their first argument.
+  //
+  // Implementations which do not support FD passing may simply ignore the relevant
+  // arguments.
+
+  virtual kj::Maybe<int> getSendBufferSize() = 0;
+  // Get the size of the underlying send buffer, if applicable. The RPC
+  // system uses this as a hint for flow control purposes; see:
+  //
+  // https://capnproto.org/news/#multi-stream-flow-control
+  //
+  // ...for a more thorough explanation of how this is used. Implementations
+  // may return nullptr if they do not have access to this information, or if
+  // the underlying transport does not use a congestion window.
+
+  virtual kj::Promise<void> shutdownWrite() = 0;
+  // Cleanly shut down just the write end of the transport, while keeping the read end open.
+
 };
 
 class AsyncIoTransport: public MessageTransport {
@@ -115,6 +128,9 @@ public:
   kj::Promise<void> writeMessage(
       kj::ArrayPtr<const int> fds,
       kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+  kj::Maybe<int> getSendBufferSize() override;
+
+  kj::Promise<void> shutdownWrite() override;
 private:
   kj::AsyncIoStream& stream;
 };
@@ -131,6 +147,8 @@ public:
   kj::Promise<void> writeMessage(
       kj::ArrayPtr<const int> fds,
       kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+  kj::Maybe<int> getSendBufferSize() override;
+  kj::Promise<void> shutdownWrite() override;
 private:
   kj::AsyncCapabilityStream& stream;
 };
