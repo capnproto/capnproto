@@ -131,10 +131,19 @@ bool BrandedDecl::compileAsType(
         }
 
         if (elementType.isAnyPointer()) {
-          addError(errorReporter, "'List(AnyPointer)' is not supported.");
-          // Seeing List(AnyPointer) later can mess things up, so change the type to Void.
-          elementType.setVoid();
-          return false;
+          auto unconstrained = elementType.getAnyPointer().getUnconstrained();
+
+          if (unconstrained.isAnyKind()) {
+            addError(errorReporter, "'List(AnyPointer)' is not supported.");
+            // Seeing List(AnyPointer) later can mess things up, so change the type to Void.
+            elementType.setVoid();
+            return false;
+          } else if (unconstrained.isStruct()) {
+            addError(errorReporter, "'List(AnyStruct)' is not supported.");
+            // Seeing List(AnyStruct) later can mess things up, so change the type to Void.
+            elementType.setVoid();
+            return false;
+          }
         }
 
         return true;

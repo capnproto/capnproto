@@ -304,7 +304,7 @@ kj::String KJ_STRINGIFY(const CppTypeName& typeName) {
   }
 }
 
-CppTypeName whichKind(schema::Type::Which which) {
+CppTypeName whichKind(Type type) {
   // Make a CppTypeName representing the capnp::Kind value for the given schema type. This makes
   // CppTypeName conflate types and values, but this is all just a hack for MSVC's benefit. Its
   // primary use is as a non-type template parameter to `capnp::List<T, K>` -- normally the Kind K
@@ -312,7 +312,7 @@ CppTypeName whichKind(schema::Type::Which which) {
   // of `capnp::List<T, K>` is the return type of a function, and the element type T is a template
   // instantiation.
 
-  switch (which) {
+  switch (type.which()) {
       case schema::Type::VOID: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
 
       case schema::Type::BOOL: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
@@ -335,7 +335,14 @@ CppTypeName whichKind(schema::Type::Which which) {
       case schema::Type::INTERFACE: return CppTypeName::makePrimitive(" ::capnp::Kind::INTERFACE");
 
       case schema::Type::LIST: return CppTypeName::makePrimitive(" ::capnp::Kind::LIST");
-      case schema::Type::ANY_POINTER: return CppTypeName::makePrimitive(" ::capnp::Kind::OTHER");
+      case schema::Type::ANY_POINTER: {
+        switch (type.whichAnyPointerKind()) {
+          case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+            return CppTypeName::makePrimitive(" ::capnp::Kind::INTERFACE");
+          default:
+            return CppTypeName::makePrimitive(" ::capnp::Kind::OTHER");
+        }
+      }
   }
 
   KJ_UNREACHABLE;
@@ -516,7 +523,7 @@ private:
         auto params = kj::heapArrayBuilder<CppTypeName>(2);
         auto list = type.asList();
         params.add(typeName(list.getElementType(), method));
-        params.add(whichKind(list.whichElementType()));
+        params.add(whichKind(list.getElementType()));
         result.addMemberTemplate("List", params.finish());
         return result;
       }
