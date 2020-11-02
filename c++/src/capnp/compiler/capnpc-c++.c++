@@ -313,36 +313,36 @@ CppTypeName whichKind(Type type) {
   // instantiation.
 
   switch (type.which()) {
-      case schema::Type::VOID: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::VOID: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
 
-      case schema::Type::BOOL: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::INT8: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::INT16: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::INT32: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::INT64: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::UINT8: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::UINT16: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::UINT32: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::UINT64: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::FLOAT32: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
-      case schema::Type::FLOAT64: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::BOOL: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::INT8: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::INT16: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::INT32: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::INT64: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::UINT8: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::UINT16: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::UINT32: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::UINT64: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::FLOAT32: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
+    case schema::Type::FLOAT64: return CppTypeName::makePrimitive(" ::capnp::Kind::PRIMITIVE");
 
-      case schema::Type::TEXT: return CppTypeName::makePrimitive(" ::capnp::Kind::BLOB");
-      case schema::Type::DATA: return CppTypeName::makePrimitive(" ::capnp::Kind::BLOB");
+    case schema::Type::TEXT: return CppTypeName::makePrimitive(" ::capnp::Kind::BLOB");
+    case schema::Type::DATA: return CppTypeName::makePrimitive(" ::capnp::Kind::BLOB");
 
-      case schema::Type::ENUM: return CppTypeName::makePrimitive(" ::capnp::Kind::ENUM");
-      case schema::Type::STRUCT: return CppTypeName::makePrimitive(" ::capnp::Kind::STRUCT");
-      case schema::Type::INTERFACE: return CppTypeName::makePrimitive(" ::capnp::Kind::INTERFACE");
+    case schema::Type::ENUM: return CppTypeName::makePrimitive(" ::capnp::Kind::ENUM");
+    case schema::Type::STRUCT: return CppTypeName::makePrimitive(" ::capnp::Kind::STRUCT");
+    case schema::Type::INTERFACE: return CppTypeName::makePrimitive(" ::capnp::Kind::INTERFACE");
 
-      case schema::Type::LIST: return CppTypeName::makePrimitive(" ::capnp::Kind::LIST");
-      case schema::Type::ANY_POINTER: {
-        switch (type.whichAnyPointerKind()) {
-          case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
-            return CppTypeName::makePrimitive(" ::capnp::Kind::INTERFACE");
-          default:
-            return CppTypeName::makePrimitive(" ::capnp::Kind::OTHER");
-        }
+    case schema::Type::LIST: return CppTypeName::makePrimitive(" ::capnp::Kind::LIST");
+    case schema::Type::ANY_POINTER: {
+      switch (type.whichAnyPointerKind()) {
+        case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+          return CppTypeName::makePrimitive(" ::capnp::Kind::INTERFACE");
+        default:
+          return CppTypeName::makePrimitive(" ::capnp::Kind::OTHER");
       }
+    }
   }
 
   KJ_UNREACHABLE;
