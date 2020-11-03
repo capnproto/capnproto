@@ -763,7 +763,6 @@ struct TestAnyPointerConstants {
   anyStructAsStruct @1 :AnyStruct;
   anyKindAsList @2 :AnyPointer;
   anyListAsList @3 :AnyList;
-
 }
 
 const anyPointerConstants :TestAnyPointerConstants = (
@@ -772,6 +771,11 @@ const anyPointerConstants :TestAnyPointerConstants = (
   anyKindAsList = TestConstants.int32ListConst,
   anyListAsList = TestConstants.int32ListConst,
 );
+
+struct TestListOfAny {
+  capList @0 :List(Capability);
+  #listList @1 :List(AnyList); # TODO(soon): Make List(AnyList) work correctly in C++ generated code.
+}
 
 interface TestInterface {
   foo @0 (i :UInt32, j :Bool) -> (x :Text);
