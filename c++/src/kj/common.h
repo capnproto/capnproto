@@ -705,25 +705,9 @@ struct ThrowOverflow {
   void operator()() const;
 };
 
-#if __GNUC__ || __clang__
+#if __GNUC__ || __clang__ || _MSC_VER
 inline constexpr float inf() { return __builtin_huge_valf(); }
 inline constexpr float nan() { return __builtin_nanf(""); }
-
-#elif _MSC_VER
-
-// Do what MSVC math.h does
-#pragma warning(push)
-#pragma warning(disable: 4756)  // "overflow in constant arithmetic"
-inline constexpr float inf() { return (float)(1e300 * 1e300); }
-#pragma warning(pop)
-
-float nan();
-// Unfortunately, inf() * 0.0f produces a NaN with the sign bit set, whereas our preferred
-// canonical NaN should not have the sign bit set. std::numeric_limits<float>::quiet_NaN()
-// returns the correct NaN, but we don't want to #include that here. So, we give up and make
-// this out-of-line on MSVC.
-//
-// TODO(msvc): Can we do better?
 
 #else
 #error "Not sure how to support your compiler."
