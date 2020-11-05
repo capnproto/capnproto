@@ -80,6 +80,39 @@ TEST(Capability, Basic) {
   EXPECT_TRUE(barFailed);
 }
 
+TEST(Capability, CapabilityList) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestListOfAny>();
+  auto initCapList = root.initCapList(2);
+
+  int callCount0 = 0;
+  int callCount1 = 0;
+  initCapList.set(0, kj::heap<TestInterfaceImpl>(callCount0));
+  initCapList.set(1, kj::heap<TestInterfaceImpl>(callCount1));
+
+  auto capList = root.getCapList();
+  auto cap0 = capList[0].castAs<test::TestInterface>();
+  auto cap1 = capList[1].castAs<test::TestInterface>();
+
+  EXPECT_EQ(2u, root.getCapList().size());
+
+  auto request0 = cap0.fooRequest();
+  request0.setI(123);
+  request0.setJ(true);
+  EXPECT_EQ("foo", request0.send().wait(waitScope).getX());
+
+  auto request1 = cap1.fooRequest();
+  request1.setI(123);
+  request1.setJ(true);
+  EXPECT_EQ("foo", request1.send().wait(waitScope).getX());
+
+  EXPECT_EQ(1, callCount0);
+  EXPECT_EQ(1, callCount1);
+}
+
 TEST(Capability, Inheritance) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
