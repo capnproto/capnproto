@@ -2248,6 +2248,23 @@ private:
         cleanupAnswerTable(nullptr, false);
       }
     }
+    void sendRedirectReturn() {
+      KJ_ASSERT(redirectResults);
+
+      if (isFirstResponder()) {
+        auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+            messageSizeHint<rpc::Return>());
+        auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+
+        builder.setAnswerId(answerId);
+        builder.setReleaseParamCaps(false);
+        builder.setResultsSentElsewhere();
+
+        message->send();
+
+        cleanupAnswerTable(nullptr, false);
+      }
+    }
 
     void requestCancel() {
       // Hints that the caller wishes to cancel this call.  At the next time when cancellation is
@@ -2938,6 +2955,22 @@ private:
               KJ_IF_MAYBE(response, answer->redirectedResults) {
                 questionRef->fulfill(kj::mv(*response));
                 answer->redirectedResults = nullptr;
+
+                KJ_IF_MAYBE(context, answer->callContext) {
+                  // Send the `Return` message  for the call of which we're taking ownership, so
+                  // that the peer knows it can now tear down the call state.
+                  context->sendRedirectReturn();
+
+                  // There are three conditions, all of which must be true, before a call is
+                  // canceled:
+                  // 1. The RPC opts in by calling context->allowCancellation().
+                  // 2. We request cancellation with context->requestCancel().
+                  // 3. The final response promise -- which we passed to questionRef->fulfill()
+                  //    above -- must be dropped.
+                  //
+                  // We would like #3 to imply #2. So... we can just make #2 be true.
+                  context->requestCancel();
+                }
               } else {
                 KJ_FAIL_REQUIRE("`Return.takeFromOtherQuestion` referenced a call that did not "
                                 "use `sendResultsTo.yourself`.") { return; }
@@ -2952,10 +2985,27 @@ private:
             KJ_FAIL_REQUIRE("Unknown 'Return' type.") { return; }
         }
       } else {
+        // This is a response to a question that we canceled earlier.
+
         if (ret.isTakeFromOtherQuestion()) {
-          // Be sure to release the tail call's promise.
+          // This turned out to be a tail call back to us! We now take ownership of the tail call.
+          // Since the caller canceled, we need to cancel out the tail call, if it still exists.
+
           KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherQuestion())) {
+            // Indeed, it does still exist.
+
+            // Throw away the result promise.
             promiseToRelease = kj::mv(answer->redirectedResults);
+
+            KJ_IF_MAYBE(context, answer->callContext) {
+              // Send the `Return` message  for the call of which we're taking ownership, so
+              // that the peer knows it can now tear down the call state.
+              context->sendRedirectReturn();
+
+              // Since the caller has been canceled, make sure the callee that we're tailing to
+              // gets canceled.
+              context->requestCancel();
+            }
           }
         }
 
