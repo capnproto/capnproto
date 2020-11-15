@@ -1762,4 +1762,290 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
 
 }  // namespace kj
 
+#if KJ_HAS_COROUTINE
+
+// =======================================================================================
+// Coroutines TS integration with kj::Promise<T>.
+//
+// Here's a simple coroutine:
+//
+//   Promise<Own<AsyncIoStream>> connectToService(Network& n) {
+//     auto a = co_await n.parseAddress(IP, PORT);
+//     auto c = co_await a->connect();
+//     co_return kj::mv(c);
+//   }
+//
+// The presence of the co_await and co_return keywords tell the compiler it is a coroutine.
+// Although it looks similar to a function, it has a couple large differences. First, everything
+// that would normally live in the stack frame lives instead in a heap-based coroutine frame.
+// Second, the coroutine has the ability to return from its scope without deallocating this frame
+// (to suspend, in other words), and the ability to resume from its last suspension point.
+//
+// In order to know how to suspend, resume, and return from a coroutine, the compiler looks up a
+// coroutine implementation type via a traits class parameterized by the coroutine return and
+// parameter types. We'll name our coroutine implementation `kj::_::Coroutine<T>`,
+
+namespace kj::_ { template <typename T> class Coroutine; }
+
+// Specializing the appropriate traits class tells the compiler about `kj::_::Coroutine<T>`.
+
+namespace KJ_COROUTINE_STD_NAMESPACE {
+
+template <class T, class... Args>
+struct coroutine_traits<kj::Promise<T>, Args...> {
+  // `Args...` are the coroutine's parameter types.
+
+  using promise_type = kj::_::Coroutine<T>;
+  // The Coroutines TS calls this the "promise type". This makes sense when thinking of coroutines
+  // returning `std::future<T>`, since the coroutine implementation would be a wrapper around
+  // a `std::promise<T>`. It's extremely confusing from a KJ perspective, however, so I call it
+  // the "coroutine implementation type" instead.
+};
+
+}  // namespace KJ_COROUTINE_STD_NAMESPACE
+
+// Now when the compiler sees our `connectToService()` coroutine above, it default-constructs a
+// `coroutine_traits<Promise<Own<AsyncIoStream>>, Network&>::promise_type`, or
+// `kj::_::Coroutine<Own<AsyncIoStream>>`.
+//
+// The implementation object lives in the heap-allocated coroutine frame. It gets destroyed and
+// deallocated when the frame does.
+
+namespace kj::_ {
+
+namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
+
+template <typename Self, typename T>
+class CoroutineBase;
+// CRTP mixin, covered later.
+
+template <typename T>
+class Coroutine: public CoroutineBase<Coroutine<T>, T> {
+  // The standard calls this the `promise_type` object. We can call this the "coroutine
+  // implementation object" since the word promise means different things in KJ and std styles. This
+  // is where we implement how a `kj::Promise<T>` is returned from a coroutine, and how that promise
+  // is later fulfilled. We also fill in a few lifetime-related details.
+  //
+  // The implementation object is also where we can customize memory allocation of coroutine frames,
+  // by implementing a member `operator new(size_t, Args...)` (same `Args...` as in
+  // coroutine_traits).
+  //
+  // We can also customize how await-expressions are transformed within `kj::Promise<T>`-based
+  // coroutines by implementing an `await_transform(P)` member function, where `P` is some type for
+  // which we want to implement co_await support, e.g. `kj::Promise<U>`. This feature is useful
+  // to provide a more optimized `kj::EventLoop` integration when the coroutine's return type and
+  // the await-expression's type are both `kj::Promise` instantiations.
+
+public:
+  using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
+
+  Coroutine() = default;
+  KJ_DISALLOW_COPY(Coroutine);
+
+  ~Coroutine() { if (adapter) adapter->coroutineDestroyed(); }
+  // The implementation object (*this) lives inside the coroutine's frame, so if it is being
+  // destroyed, then that means the frame is being destroyed. Since the frame might be destroyed
+  // *before* the adapter (e.g., the coroutine resumes from its last suspension point before the
+  // user destroys the owning promise), we need to tell the adapter not to try to double-free the
+  // frame with coroutine.destroy().
+
+  Promise<T> get_return_object() {
+    // Called after coroutine frame construction and before initial_suspend() to create the
+    // coroutine's return object.
+    return newAdaptedPromise<T, Adapter>(Handle::from_promise(*this));
+  }
+
+  auto initial_suspend() { return stdcoro::suspend_never(); }
+  auto final_suspend() noexcept { return stdcoro::suspend_never(); }
+  // These adjust the suspension behavior of coroutines immediately upon initiation, and immediately
+  // after completion.
+  //
+  // The initial suspension point could allow us to defer the initial execution of a coroutine with
+  // evalLater(), for instance.
+  //
+  // The final suspension point could be useful to delay deallocation of the coroutine frame to
+  // match the lifetime of the enclosing promise.
+
+  void unhandled_exception() {
+    // Pretty self-explanatory, we just propagate the exception to the promise which owns us. Note
+    // that all unhandled exceptions end up here, not just ones after the first co_await.
+    adapter->fulfiller.rejectIfThrows([] { throw; });
+  }
+
+  template <typename U>
+  class Awaiter;
+
+  template <typename U>
+  Awaiter<U> await_transform(kj::Promise<U>& promise) { return Awaiter<U>(kj::mv(promise)); }
+  template <typename U>
+  Awaiter<U> await_transform(kj::Promise<U>&& promise) { return Awaiter<U>(kj::mv(promise)); }
+  // Called when someone writes `co_await promise`, where `promise` is a kj::Promise<U>. We return
+  // an Awaiter<U>, which implements coroutine suspension and resumption in terms of the KJ async
+  // event system.
+  //
+  // There is another hook we could implement: an `operator co_await()` free function. However, a
+  // free function would be unaware of the type of the enclosing coroutine. Since Awaiter<U> is a
+  // member class template of Coroutine<T>, it is able to implement an
+  // `await_suspend(Coroutine<T>::Handle)` override, providing it type-safe access to our enclosing
+  // coroutine's promise adapter. An `operator co_await()` free function would have to implement
+  // a type-erased `await_suspend(stdcoro::coroutine_handle<void>)` override, and implement
+  // suspension and resumption in terms of .then(). Yuck!
+
+private:
+  friend class CoroutineBase<Coroutine<T>, T>;
+
+  class Adapter;
+  Adapter* adapter = nullptr;
+  // Set by Adapter's ctor in `get_return_object()`. Nulled out again by Adapter's dtor, if the
+  // promise returned from `get_return_object()` is destroyed while this coroutine is suspended.
+};
+
+template <typename Self, typename T>
+class CoroutineBase {
+public:
+  void return_value(T value) {
+    static_cast<Self*>(this)->adapter->fulfiller.fulfill(kj::mv(value));
+  }
+};
+template <typename Self>
+class CoroutineBase<Self, void> {
+public:
+  void return_void() {
+    static_cast<Self*>(this)->adapter->fulfiller.fulfill();
+  }
+};
+// The Coroutines spec has no `_::FixVoid<T>` equivalent to unify valueful and valueless co_return
+// statements, and programs are ill-formed if the coroutine implementation object (Coroutine<T>) has
+// both a `return_value()` and `return_void()`. No amount of EnableIffery can get around it, so
+// these return_* functions live in a CRTP mixin.
+
+template <typename T>
+class Coroutine<T>::Adapter: private Event {
+public:
+  explicit Adapter(PromiseFulfiller<T>& f, Coroutine::Handle coroutine)
+      : fulfiller(f), coroutine(coroutine) {
+    coroutine.promise().adapter = this;
+  }
+  KJ_DISALLOW_COPY(Adapter);
+
+  ~Adapter() noexcept(false) {
+    // If a coroutine runs to completion, its frame will already have been destroyed by the time the
+    // adapter is destroyed, so this if-condition will almost always be false.
+    if (coroutine) {
+      // coroutine.promise() is a reference to our implementation object, Coroutine<T>.
+      coroutine.promise().adapter = nullptr;
+      coroutine.destroy();
+    }
+  }
+
+  void coroutineDestroyed() {
+    // The coroutine was destroyed before the adapter.
+    coroutine = nullptr;
+  }
+
+  void awaitSuspend(PromiseNode& nodeParam, ExceptionOrValue& resultParam) {
+    // Called by Awaiter::await_suspend() to tell us to wait for `node` to become ready, then store
+    // the node's result in `result`.
+
+    // We'll need to save these references for fire(). Note that Awaiter is movable, and `result` is
+    // its subobject, but it is safe to store a reference to `result` in Adapter, because by the
+    // time `await_suspend()` is called, Awaiter has already been returned from `await_transform()`
+    // and stored in its final resting place in the coroutine's frame.
+    node = &nodeParam;
+    result = &resultParam;
+
+    // We use the promise adapter as an Event, because we must be able to destroy the coroutine from
+    // within the fire() callback. The promise adapter can do this, because it lives outside of the
+    // coroutine's frame, unlike Coroutine<T> or Awaiter<U>.
+    node->onReady(this);
+  }
+
+  PromiseFulfiller<T>& fulfiller;
+  // Used to fulfill/reject the enclosing coroutine's kj::Promise<T>.
+
+private:
+  Maybe<Own<Event>> fire() override {
+    // The promise this coroutine is currently waiting on is ready. Extract its result and check for
+    // exceptions.
+
+    // Destroying or resuming the coroutine will leave these pointers dangling, so we call this
+    // function before either action.
+    auto nullifyPointers = [&]() {
+      node = nullptr;
+      result = nullptr;
+    };
+
+    node->get(*result);
+
+    // Note: the Promise::wait() implementation throws a recoverable exception if both a value and
+    // an exception are set. We only have visibility on the exception here, so the following might
+    // not have quite the same semantics.
+
+    // Check for exceptions. We could let Awaiter::await_resume() do it, but then we'd resume the
+    // coroutine just for it to rethrow, which seems pointless.
+    KJ_IF_MAYBE(exception, result->exception) {
+      nullifyPointers();
+      fulfiller.reject(kj::mv(*exception));
+      // The coroutine threw an exception. Our only choice is to destroy it.
+      //
+      // TODO(now): Should we ignore exceptions from destroy()?
+      coroutine.destroy();
+    } else {
+      nullifyPointers();
+      // Call Awaiter::await_resume() and proceed with the coroutine. Note that if this was the last
+      // co_await in the coroutine, control will flow off the end of the coroutine and it will be
+      // destroyed -- as part of the execution of coroutine.resume().
+      coroutine.resume();
+    }
+
+    return nullptr;
+  }
+
+  Coroutine::Handle coroutine;
+
+  PromiseNode* node = nullptr;
+  ExceptionOrValue* result = nullptr;
+  // Set by awaitSuspend(), used (and reset) in fire().
+};
+
+template <typename T>
+template <typename U>
+class Coroutine<T>::Awaiter {
+  // Wrapper around a co_await'ed promise and some storage space for the result of that promise.
+  // The compiler arranges to call our await_suspend() to suspend, and we forward the call to the
+  // enclosing coroutine's promise adapter, which arranges to be woken up when the awaited promise
+  // is settled. Once that happens, the enclosing coroutine's promise adapter resumes the coroutine,
+  // which transitively calls await_resume() to unwrap the awaited promise result.
+
+public:
+  explicit Awaiter(Promise<U> promise): promise(kj::mv(promise)) {}
+
+  bool await_ready() const { return false; }
+  // This could return "`promise.node.get()` is safe to call" instead, which would make suspension-
+  // less co_awaits possible for immediately-fulfilled promises. However, that's probably unwise,
+  // since it is explicitly not how .then() works.
+
+  U await_resume() {
+    auto value = kj::_::readMaybe(result.value);
+    KJ_IASSERT(value != nullptr, "Coroutine::Adapter::fire() should have checked for exceptions "
+                                 "before resuming the coroutine.");
+    return U(kj::mv(*value));
+  }
+
+  void await_suspend(Coroutine::Handle coroutine) {
+    auto adapter = coroutine.promise().adapter;
+    adapter->awaitSuspend(PromiseNode::from(promise), result);
+  }
+
+private:
+  Promise<U> promise;
+  ExceptionOr<FixVoid<U>> result;
+};
+
+#undef KJ_COROUTINE_STD_NAMESPACE
+
+}  // namespace kj::_ (private)
+
+#endif  // KJ_HAS_COROUTINE
+
 KJ_END_HEADER

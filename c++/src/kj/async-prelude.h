@@ -27,6 +27,20 @@
 #include "exception.h"
 #include "tuple.h"
 
+// Detect whether or not we should enable kj::Promise<T> coroutine integration.
+#ifdef __has_include
+// For now, we only support the Coroutines TS.
+//
+// TODO(someday): Also support standardized C++20 Coroutines. The latest VS2019 and GCC 10 both have
+//   support, though MSVC hides it behind /std:c++latest, which brings an ICE with it.
+#if __has_include(<experimental/coroutine>) && defined(__cpp_coroutines) && __cpp_coroutines
+// Coroutines TS detected.
+#include <experimental/coroutine>
+#define KJ_HAS_COROUTINE 1
+#define KJ_COROUTINE_STD_NAMESPACE std::experimental
+#endif
+#endif
+
 KJ_BEGIN_HEADER
 
 namespace kj {
