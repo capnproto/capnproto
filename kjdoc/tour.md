@@ -938,7 +938,34 @@ kj::Promise<int> promise =
 
 **CAUTION:** Fibers produce attractive-looking code, but have serious drawbacks. Every fiber must allocate a new call stack, which is typically rather large. The above example allocates a 64kb stack, which is the _minimum_ supported size. Some programs and libraries expect to be able to allocate megabytes of data on the stack. On modern Linux systems, a default stack size of 8MB is typical. Stack space is allocated lazily on page faults, but just setting up the memory mapping is much more expensive than a typical `malloc()`. If you create lots of fibers, you should use `kj::FiberPool` to reduce allocation costs -- but while this reduces allocation overhead, it will increase memory usage.
 
-Because of this, fibers should not be used just to make code look nice (C++20's `co_await`, which KJ will soon support, is a better way to do that). Instead, the main use case for fibers is to be able to call into existing libraries that are not designed to operate in an asynchronous way. For example, say you find a library that performs stream I/O, and lets you provide your own `read()`/`write()` implementations, but expects those implementations to operate in a blocking fashion. With fibers, you can use such a library within the asynchronous KJ event loop.
+Because of this, fibers should not be used just to make code look nice (C++20's `co_await`, described below, is a better way to do that). Instead, the main use case for fibers is to be able to call into existing libraries that are not designed to operate in an asynchronous way. For example, say you find a library that performs stream I/O, and lets you provide your own `read()`/`write()` implementations, but expects those implementations to operate in a blocking fashion. With fibers, you can use such a library within the asynchronous KJ event loop.
+
+### Coroutines
+
+C++20 brings us coroutines, which, like fibers, allow code to be written in a synchronous / blocking style while running inside the KJ event loop. Coroutines accomplish this with a different strategy than fibers: instead of running code on an alternate stack and switching stacks on suspension, coroutines save local variables and temporary objects in a heap-allocated "coroutine frame" and always unwind the stack on suspension.
+
+A C++ function is a KJ coroutine if it follows these two rules:
+- The function returns a `kj::Promise<T>`.
+- The function uses a `co_await` or `co_return` keyword in its implementation.
+
+```c++
+kj::Promise<int> aCoroutine() {
+  int i = co_await someAsyncFunc();
+  i += co_await anotherAsyncFunc();
+  co_return i;
+});
+
+// Call like any regular promise-returning function.
+auto promise = aCoroutine();
+```
+
+The promise returned by a coroutine owns the coroutine frame. If you destroy the promise, any objects alive in the frame will be destroyed, and the frame freed, thus cancellation works exactly as you'd expect.
+
+There are some caveats one should be aware of while writing coroutines:
+- Holding a mutex lock across a `co_await` is almost always a bad idea, with essentially the same problems as holding a lock while calling `promise.wait(waitScope)`. This would cause the coroutine to hold the lock for however many turns of the event loop is required to drive the coroutine to release the lock; if I/O is involved, this could cause significant problems. Additionally, a reentrant call to the coroutine on the same thread would deadlock. Instead, if a coroutine must temporarily hold a lock, always keep the lock in a new lexical scope without any `co_await`.
+- Attempting to define (and use) a variable-length array will cause a compile error, because the size of coroutine frames must be knowable at compile-time. The error message that clang emits for this, "Coroutines cannot handle non static allocas yet", suggests this may be relaxed in the future.
+
+As of this writing, KJ does not support actual C++20 coroutines because no compiler appears to have a fully working implementation. Instead, KJ supports Coroutines TS coroutines, which are the experimental precursor to C++20 coroutines. They are functionally the same thing, but enabled with different compiler/linker flags: clang supports them in C++17 with `-fcoroutines-ts`, and MSVC supports them in C++17 with `/await`.
 
 ### Unit testing tips
 
