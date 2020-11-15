@@ -39,7 +39,13 @@
 
 #ifndef SYS_futex
 // Missing on Android/Bionic.
+#ifdef __NR_futex
 #define SYS_futex __NR_futex
+#elif defined(SYS_futex_time64)
+#define SYS_futex SYS_futex_time64
+#else
+#error "Need working SYS_futex"
+#endif
 #endif
 
 #ifndef FUTEX_WAIT_PRIVATE
