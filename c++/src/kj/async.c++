@@ -136,7 +136,7 @@ Canceler::~Canceler() noexcept(false) {
 
 void Canceler::cancel(StringPtr cancelReason) {
   if (isEmpty()) return;
-  cancel(Exception(Exception::Type::FAILED, __FILE__, __LINE__, kj::str(cancelReason)));
+  cancel(Exception(Exception::Type::DISCONNECTED, __FILE__, __LINE__, kj::str(cancelReason)));
 }
 
 void Canceler::cancel(const Exception& exception) {
