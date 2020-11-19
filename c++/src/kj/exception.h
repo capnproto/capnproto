@@ -410,6 +410,13 @@ private:
 
 #endif  // !KJ_NO_EXCEPTIONS
 
+kj::ArrayPtr<void* const> computeRelativeTrace(
+    kj::ArrayPtr<void* const> trace, kj::ArrayPtr<void* const> relativeTo);
+// Given two traces expected to have started from the same root, try to find the part of `trace`
+// that is different from `relativeTo`, considering that either or both traces might be truncated.
+//
+// This is useful for debugging, when reporting several related traces at once.
+
 }  // namespace kj
 
 KJ_END_HEADER

@@ -1146,6 +1146,51 @@ kj::String getCaughtExceptionType() {
 }
 #endif
 
+namespace {
+
+size_t sharedSuffixLength(kj::ArrayPtr<void* const> a, kj::ArrayPtr<void* const> b) {
+  size_t result = 0;
+  while (a.size() > 0 && b.size() > 0 && a.back() == b.back())  {
+    ++result;
+    a = a.slice(0, a.size() - 1);
+    b = b.slice(0, b.size() - 1);
+  }
+  return result;
+}
+
+}  // namespace
+
+kj::ArrayPtr<void* const> computeRelativeTrace(
+    kj::ArrayPtr<void* const> trace, kj::ArrayPtr<void* const> relativeTo) {
+  static constexpr size_t MIN_MATCH_LEN = 4;
+  if (trace.size() < MIN_MATCH_LEN || relativeTo.size() < MIN_MATCH_LEN) {
+    return trace;
+  }
+
+  kj::ArrayPtr<void* const> bestMatch = trace;
+  uint bestMatchLen = MIN_MATCH_LEN - 1;  // must beat this to choose something else
+
+  // `trace` and `relativeTrace` may have been truncated at different points. We iterate through
+  // truncating various suffixes from one of the two and then seeing if the remaining suffixes
+  // match.
+  for (ssize_t i = -(ssize_t)(trace.size() - MIN_MATCH_LEN);
+       i <= (ssize_t)(relativeTo.size() - MIN_MATCH_LEN);
+       i++) {
+    // Negative values truncate `trace`, positive values truncate `relativeTo`.
+    kj::ArrayPtr<void* const> subtrace = trace.slice(0, trace.size() - kj::max<ssize_t>(0, -i));
+    kj::ArrayPtr<void* const> subrt = relativeTo
+        .slice(0, relativeTo.size() - kj::max<ssize_t>(0, i));
+
+    uint matchLen = sharedSuffixLength(subtrace, subrt);
+    if (matchLen > bestMatchLen) {
+      bestMatchLen = matchLen;
+      bestMatch = subtrace.slice(0, subtrace.size() - matchLen + 1);
+    }
+  }
+
+  return bestMatch;
+}
+
 namespace _ {  // private
 
 class RecoverableExceptionCatcher: public ExceptionCallback {

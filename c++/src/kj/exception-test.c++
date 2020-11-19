@@ -23,6 +23,7 @@
 #include "debug.h"
 #include <kj/compat/gtest.h>
 #include <stdexcept>
+#include <stdint.h>
 
 namespace kj {
 namespace _ {  // private
@@ -238,6 +239,51 @@ KJ_TEST("InFlightExceptionIterator works") {
   }
 
   KJ_EXPECT(caught);
+}
+
+KJ_TEST("computeRelativeTrace") {
+  auto testCase = [](uint expectedPrefix,
+                     ArrayPtr<const uintptr_t> trace, ArrayPtr<const uintptr_t> relativeTo) {
+    auto tracePtr = KJ_MAP(x, trace) { return (void*)x; };
+    auto relativeToPtr = KJ_MAP(x, relativeTo) { return (void*)x; };
+
+    auto result = computeRelativeTrace(tracePtr, relativeToPtr);
+    KJ_EXPECT(result.begin() == tracePtr.begin());
+
+    KJ_EXPECT(result.size() == expectedPrefix, trace, relativeTo, result);
+  };
+
+  testCase(8,
+      {1, 2, 3, 4, 5, 6, 7, 8},
+      {8, 7, 6, 5, 4, 3, 2, 1});
+
+  testCase(5,
+      {1, 2, 3, 4, 5, 6, 7, 8},
+      {8, 7, 6, 5, 5, 6, 7, 8});
+
+  testCase(5,
+      {1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+      {8, 7, 6, 5, 5, 6, 7, 8});
+
+  testCase(5,
+      {1, 2, 3, 4, 5, 6, 7, 8, 6, 7, 8},
+      {8, 7, 6, 5, 5, 6, 7, 8});
+
+  testCase(9,
+      {1, 2, 3, 4, 5, 6, 7, 8, 5, 5, 6, 7, 8},
+      {8, 7, 6, 5, 5, 6, 7, 8});
+
+  testCase(5,
+      {1, 2, 3, 4, 5, 5, 6, 7, 8, 5, 6, 7, 8},
+      {8, 7, 6, 5, 5, 6, 7, 8});
+
+  testCase(5,
+      {1, 2, 3, 4, 5, 6, 7, 8},
+      {8, 7, 6, 5, 5, 6, 7, 8, 7, 8});
+
+  testCase(5,
+      {1, 2, 3, 4, 5, 6, 7, 8},
+      {8, 7, 6, 5, 6, 7, 8, 7, 8});
 }
 
 }  // namespace
