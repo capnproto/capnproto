@@ -758,7 +758,7 @@ struct Executor::Impl {
     });
 
     s.cancel.forEach([&](_::XThreadEvent& event) {
-      s.executing.erase(event);
+      s.cancel.erase(event);
       event.promiseNode = nullptr;
       event.setDoneState();
     });
