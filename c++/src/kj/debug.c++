@@ -331,7 +331,7 @@ Debug::Fault::~Fault() noexcept(false) {
   if (exception != nullptr) {
     Exception copy = mv(*exception);
     delete exception;
-    throwRecoverableException(mv(copy), 2);
+    throwRecoverableException(mv(copy), 1);
   }
 }
 
@@ -339,7 +339,7 @@ void Debug::Fault::fatal() {
   Exception copy = mv(*exception);
   delete exception;
   exception = nullptr;
-  throwFatalException(mv(copy), 2);
+  throwFatalException(mv(copy), 1);
   KJ_KNOWN_UNREACHABLE(abort());
 }
 
