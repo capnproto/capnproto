@@ -830,23 +830,68 @@ void Exception::addTrace(void* ptr) {
   }
 }
 
+#if !KJ_NO_EXCEPTIONS
+
+namespace {
+
+KJ_THREADLOCAL_PTR(ExceptionImpl) currentException = nullptr;
+
+}  // namespace
+
 class ExceptionImpl: public Exception, public std::exception {
 public:
-  inline ExceptionImpl(Exception&& other): Exception(mv(other)) {}
+  inline ExceptionImpl(Exception&& other): Exception(mv(other)) {
+    insertIntoCurrentExceptions();
+  }
   ExceptionImpl(const ExceptionImpl& other): Exception(other) {
     // No need to copy whatBuffer since it's just to hold the return value of what().
+    insertIntoCurrentExceptions();
+  }
+  ~ExceptionImpl() {
+    // Look for ourselves in the list.
+    for (auto* ptr = &currentException; *ptr != nullptr; ptr = &(*ptr)->nextCurrentException) {
+      if (*ptr == this) {
+        *ptr = nextCurrentException;
+        return;
+      }
+    }
+
+    // Possibly the ExceptionImpl was destroyed on a different thread than created it? That's
+    // pretty bad, we'd better abort.
+    abort();
   }
 
   const char* what() const noexcept override;
 
 private:
   mutable String whatBuffer;
+  ExceptionImpl* nextCurrentException = nullptr;
+
+  void insertIntoCurrentExceptions() {
+    nextCurrentException = currentException;
+    currentException = this;
+  }
+
+  friend class InFlightExceptionIterator;
 };
 
 const char* ExceptionImpl::what() const noexcept {
   whatBuffer = str(*this);
   return whatBuffer.begin();
 }
+
+InFlightExceptionIterator::InFlightExceptionIterator()
+    : ptr(currentException) {}
+
+Maybe<const Exception&> InFlightExceptionIterator::next() {
+  if (ptr == nullptr) return nullptr;
+
+  const ExceptionImpl& result = *static_cast<const ExceptionImpl*>(ptr);
+  ptr = result.nextCurrentException;
+  return result;
+}
+
+#endif  // !KJ_NO_EXCEPTIONS
 
 // =======================================================================================
 

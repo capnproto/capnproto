@@ -207,6 +207,39 @@ KJ_TEST("getStackTrace() returns correct line number, not line + 1") {
   KJ_ASSERT(strstr(trace.cStr(), wrong.cStr()) == nullptr, trace, wrong);
 }
 
+KJ_TEST("InFlightExceptionIterator works") {
+  bool caught = false;
+  try {
+    KJ_DEFER({
+      try {
+        KJ_FAIL_ASSERT("bar");
+      } catch (const kj::Exception& e) {
+        InFlightExceptionIterator iter;
+        KJ_IF_MAYBE(e2, iter.next()) {
+          KJ_EXPECT(e2 == &e, e2->getDescription());
+        } else {
+          KJ_FAIL_EXPECT("missing first exception");
+        }
+
+        KJ_IF_MAYBE(e2, iter.next()) {
+          KJ_EXPECT(e2->getDescription() == "foo", e2->getDescription());
+        } else {
+          KJ_FAIL_EXPECT("missing second exception");
+        }
+
+        KJ_EXPECT(iter.next() == nullptr, "more than two exceptions");
+
+        caught = true;
+      }
+    });
+    KJ_FAIL_ASSERT("foo");
+  } catch (const kj::Exception& e) {
+    // expected
+  }
+
+  KJ_EXPECT(caught);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

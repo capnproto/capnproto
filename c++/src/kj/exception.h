@@ -385,6 +385,31 @@ kj::String getCaughtExceptionType();
 // for the purpose of error logging. This function is best-effort; on some platforms it may simply
 // return "(unknown)".
 
+#if !KJ_NO_EXCEPTIONS
+
+class InFlightExceptionIterator {
+  // A class that can be used to iterate over exceptions that are in-flight in the current thread,
+  // meaning they are either uncaught, or caught by a catch block that is current executing.
+  //
+  // This is meant for debugging purposes, and the results are best-effort. The C++ standard
+  // library does not provide any way to inspect uncaught exceptions, so this class can only
+  // discover KJ exceptions thrown using throwFatalException() or throwRecoverableException().
+  // All KJ code uses those two functions to throw exceptions, but if your own code uses a bare
+  // `throw`, or if the standard library throws an exception, these cannot be inspected.
+  //
+  // This class is safe to use in a signal handler.
+
+public:
+  InFlightExceptionIterator();
+
+  Maybe<const Exception&> next();
+
+private:
+  const Exception* ptr;
+};
+
+#endif  // !KJ_NO_EXCEPTIONS
+
 }  // namespace kj
 
 KJ_END_HEADER
