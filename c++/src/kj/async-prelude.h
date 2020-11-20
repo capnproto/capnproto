@@ -33,7 +33,7 @@
 //
 // TODO(someday): Also support standardized C++20 Coroutines. The latest VS2019 and GCC 10 both have
 //   support, though MSVC hides it behind /std:c++latest, which brings an ICE with it.
-#if __has_include(<experimental/coroutine>) && defined(__cpp_coroutines) && __cpp_coroutines
+#if __cpp_coroutines && __has_include(<experimental/coroutine>)
 // Coroutines TS detected.
 #include <experimental/coroutine>
 #define KJ_HAS_COROUTINE 1
