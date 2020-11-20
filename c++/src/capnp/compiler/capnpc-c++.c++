@@ -339,6 +339,8 @@ CppTypeName whichKind(Type type) {
       switch (type.whichAnyPointerKind()) {
         case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
           return CppTypeName::makePrimitive(" ::capnp::Kind::INTERFACE");
+        case schema::Type::AnyPointer::Unconstrained::LIST:
+          return CppTypeName::makePrimitive(" ::capnp::Kind::LIST");
         default:
           return CppTypeName::makePrimitive(" ::capnp::Kind::OTHER");
       }

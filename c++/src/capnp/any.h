@@ -48,6 +48,14 @@ struct AnyList {
   class Builder;
 };
 
+template<>
+struct List<AnyList, Kind::LIST> {
+    List() = delete;
+
+    class Reader;
+    class Builder;
+};
+
 struct AnyStruct {
   AnyStruct() = delete;
 
@@ -710,6 +718,103 @@ private:
 
   friend class Orphanage;
 };
+
+class List<AnyList, Kind::LIST>::Reader {
+public:
+  typedef List<AnyList> Reads;
+
+  inline Reader(): reader(ElementSize::INLINE_COMPOSITE) {}
+  inline explicit Reader(_::ListReader reader): reader(reader) {}
+
+  inline uint size() const { return unbound(reader.size() / ELEMENTS); }
+  inline AnyList::Reader operator[](uint index) const {
+    KJ_IREQUIRE(index < size());
+    return AnyList::Reader(_::ListReader(reader.getElementSize()));
+  }
+
+  typedef _::IndexingIterator<const Reader, typename AnyList::Reader> Iterator;
+  inline Iterator begin() const { return Iterator(this, 0); }
+  inline Iterator end() const { return Iterator(this, size()); }
+
+  inline MessageSize totalSize() const {
+      return reader.totalSize().asPublic();
+  }
+
+private:
+  _::ListReader reader;
+  template <typename U, Kind K>
+  friend struct _::PointerHelpers;
+  template <typename U, Kind K>
+  friend struct List;
+  friend class Orphanage;
+  template <typename U, Kind K>
+  friend struct ToDynamic_;
+};
+
+class List<AnyList, Kind::LIST>::Builder {
+public:
+  typedef List<AnyList> Builds;
+
+  Builder() = delete;
+  inline Builder(decltype(nullptr)): builder(ElementSize::INLINE_COMPOSITE) {}
+  inline explicit Builder(_::ListBuilder builder): builder(builder) {}
+
+  inline operator Reader() const { return Reader(builder.asReader()); }
+  inline Reader asReader() const { return Reader(builder.asReader()); }
+
+  inline uint size() const { return unbound(builder.size() / ELEMENTS); }
+  inline AnyList::Builder operator[](uint index) {
+    KJ_IREQUIRE(index < size());
+    return AnyList::Builder(_::ListBuilder(builder.getElementSize()));
+  }
+  inline void set(uint index, typename List<AnyList, Kind::LIST>::Reader value) {
+      KJ_IREQUIRE(index < size());
+      builder.getPointerElement(bounded(index) * ELEMENTS).setList(value.reader);
+  }
+
+  typedef _::IndexingIterator<Builder, typename AnyList::Builder> Iterator;
+  inline Iterator begin() { return Iterator(this, 0); }
+  inline Iterator end() { return Iterator(this, size()); }
+
+private:
+    _::ListBuilder builder;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
+};
+
+// =======================================================================================
+// Extend PointerHelpers for List<AnyLists>
+
+namespace _ {  // private
+
+  template <>
+  struct PointerHelpers<List<AnyList, Kind::LIST>, Kind::LIST> {
+    static inline typename List<AnyList, Kind::LIST>::Reader get(PointerReader reader,
+                                                                 const word* defaultValue = nullptr) {
+      return typename List<AnyList, Kind::LIST>::Reader(reader.getListAnySize(defaultValue));
+    }
+    static inline typename List<AnyList, Kind::LIST>::Builder get(PointerBuilder builder,
+                                                                  const word* defaultValue = nullptr) {
+      return typename List<AnyList, Kind::LIST>::Builder(builder.getListAnySize(defaultValue));
+    }
+    static inline void set(PointerBuilder builder, typename List<AnyList, Kind::LIST>::Reader value) {
+      builder.setList(value.reader);
+    }
+    static inline typename List<AnyList, Kind::LIST>::Builder init(PointerBuilder builder, uint size) {
+        return typename List<AnyList, Kind::LIST>::Builder(builder.initList(ElementSize::POINTER, size));
+    }
+    static inline void adopt(PointerBuilder builder, Orphan<List<AnyList, Kind::LIST>>&& value) {
+      builder.adopt(kj::mv(value.builder));
+    }
+    static inline Orphan<List<AnyList, Kind::LIST>> disown(PointerBuilder builder) {
+      return Orphan<List<AnyList, Kind::LIST>>(builder.disown());
+    }
+  };
+
+}  // namespace _ (private)
 
 // =======================================================================================
 // Pipeline helpers
