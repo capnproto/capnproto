@@ -743,6 +743,7 @@ struct Executor::Impl {
     KJ_DEFER(state.lockExclusive());
 
     s.start.forEach([&](_::XThreadEvent& event) {
+      KJ_ASSERT(event.state == _::XThreadEvent::QUEUED, event.state) { break; }
       s.start.erase(event);
       event.setDisconnected();
       event.sendReply();
@@ -750,6 +751,7 @@ struct Executor::Impl {
     });
 
     s.executing.forEach([&](_::XThreadEvent& event) {
+      KJ_ASSERT(event.state == _::XThreadEvent::EXECUTING, event.state) { break; }
       s.executing.erase(event);
       event.promiseNode = nullptr;
       event.setDisconnected();
@@ -758,7 +760,8 @@ struct Executor::Impl {
     });
 
     s.cancel.forEach([&](_::XThreadEvent& event) {
-      s.executing.erase(event);
+      KJ_ASSERT(event.state == _::XThreadEvent::CANCELING, event.state) { break; }
+      s.cancel.erase(event);
       event.promiseNode = nullptr;
       event.setDoneState();
     });
@@ -954,6 +957,9 @@ void XThreadEvent::sendReply() {
 }
 
 void XThreadEvent::done() {
+  KJ_ASSERT(targetExecutor.get() == &currentEventLoop().getExecutor(),
+      "calling done() from wrong thread?");
+
   sendReply();
 
   {
