@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Include $CONDA in $PATH
         run: |
-          echo "::add-path::$Env:CONDA\condabin"
+          echo "$Env:CONDA\condabin" >> $env:GITHUB_PATH
       - name: Install dependencies via Conda
         run: |
           conda update -n base -c defaults -q conda
