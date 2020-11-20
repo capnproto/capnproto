@@ -1162,6 +1162,8 @@ size_t sharedSuffixLength(kj::ArrayPtr<void* const> a, kj::ArrayPtr<void* const>
 
 kj::ArrayPtr<void* const> computeRelativeTrace(
     kj::ArrayPtr<void* const> trace, kj::ArrayPtr<void* const> relativeTo) {
+  using miniposix::ssize_t;
+
   static constexpr size_t MIN_MATCH_LEN = 4;
   if (trace.size() < MIN_MATCH_LEN || relativeTo.size() < MIN_MATCH_LEN) {
     return trace;
