@@ -1968,13 +1968,6 @@ private:
     // The promise this coroutine is currently waiting on is ready. Extract its result and check for
     // exceptions.
 
-    // Destroying or resuming the coroutine will leave these pointers dangling, so we call this
-    // function before either action.
-    auto nullifyPointers = [&]() {
-      node = nullptr;
-      result = nullptr;
-    };
-
     node->get(*result);
 
     // Note: the Promise::wait() implementation throws a recoverable exception if both a value and
@@ -1984,14 +1977,12 @@ private:
     // Check for exceptions. We could let Awaiter::await_resume() do it, but then we'd resume the
     // coroutine just for it to rethrow, which seems pointless.
     KJ_IF_MAYBE(exception, result->exception) {
-      nullifyPointers();
       fulfiller.reject(kj::mv(*exception));
       // The coroutine threw an exception. Our only choice is to destroy it.
       //
       // TODO(now): Should we ignore exceptions from destroy()?
       coroutine.destroy();
     } else {
-      nullifyPointers();
       // Call Awaiter::await_resume() and proceed with the coroutine. Note that if this was the last
       // co_await in the coroutine, control will flow off the end of the coroutine and it will be
       // destroyed -- as part of the execution of coroutine.resume().
