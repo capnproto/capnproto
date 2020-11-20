@@ -1968,26 +1968,21 @@ private:
     // The promise this coroutine is currently waiting on is ready. Extract its result and check for
     // exceptions.
 
+    // TODO(now): I'm leaving this here because we'll need this in the -fno-exceptions change.
     node->get(*result);
 
-    // Note: the Promise::wait() implementation throws a recoverable exception if both a value and
-    // an exception are set. We only have visibility on the exception here, so the following might
-    // not have quite the same semantics.
-
-    // Check for exceptions. We could let Awaiter::await_resume() do it, but then we'd resume the
-    // coroutine just for it to rethrow, which seems pointless.
-    KJ_IF_MAYBE(exception, result->exception) {
-      fulfiller.reject(kj::mv(*exception));
-      // The coroutine threw an exception. Our only choice is to destroy it.
-      //
-      // TODO(now): Should we ignore exceptions from destroy()?
-      coroutine.destroy();
-    } else {
-      // Call Awaiter::await_resume() and proceed with the coroutine. Note that if this was the last
-      // co_await in the coroutine, control will flow off the end of the coroutine and it will be
-      // destroyed -- as part of the execution of coroutine.resume().
-      coroutine.resume();
-    }
+    // Call Awaiter::await_resume() and proceed with the coroutine. Note that if this was the last
+    // co_await in the coroutine, control will flow off the end of the coroutine and it will be
+    // destroyed -- as part of the execution of coroutine.resume().
+    //
+    // It's tempting to check for exceptions right now and reject the coroutine's fulfiller without
+    // resuming the coroutine, which would save us from throwing an exception when we already know
+    // where it's going. But, we don't really know: the `co_await` might be in a try-catch block, so
+    // we have no choice but to resume and throw in this case.
+    //
+    // TODO(now): Check for exceptions right here if we're compiled with -fno-exceptions, in which
+    //   case we know for sure there's no try-catch block around us.
+    coroutine.resume();
 
     return nullptr;
   }
@@ -2017,9 +2012,13 @@ public:
   // since it is explicitly not how .then() works.
 
   U await_resume() {
+    KJ_IF_MAYBE(exception, result.exception) {
+      // TODO(now): Throw recoverable exception if both exception and value are set?
+      kj::throwFatalException(kj::mv(*exception));
+    }
+
     auto value = kj::_::readMaybe(result.value);
-    KJ_IASSERT(value != nullptr, "Coroutine::Adapter::fire() should have checked for exceptions "
-                                 "before resuming the coroutine.");
+    KJ_IASSERT(value != nullptr, "Neither exception nor value present.");
     return U(kj::mv(*value));
   }
 

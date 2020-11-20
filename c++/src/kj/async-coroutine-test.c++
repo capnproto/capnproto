@@ -69,10 +69,8 @@ KJ_TEST("Exceptions propagate through layered coroutines") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  // This exercises the Coroutine<T>::unhandled_exception() path.
   auto throwy = simpleCoroutine(kj::Promise<int>(kj::NEVER_DONE), false);
 
-  // And this exercises the exception short-circuit in Adapter::fire().
   KJ_EXPECT_THROW_RECOVERABLE(FAILED, simpleCoroutine(kj::mv(throwy)).wait(waitScope));
 }
 
@@ -88,6 +86,37 @@ KJ_TEST("Exceptions before the first co_await don't leak, but reject the promise
   auto throwy = throwEarly();
 
   KJ_EXPECT_THROW_RECOVERABLE(FAILED, throwy.wait(waitScope));
+}
+
+KJ_TEST("Coroutines can catch exceptions from co_await") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  kj::String description;
+
+  auto tryCatch = [&](kj::Promise<void> promise) -> kj::Promise<kj::String> {
+    try {
+      co_await promise;
+    } catch (const kj::Exception& exception) {
+      co_return kj::str(exception.getDescription());
+    }
+    KJ_FAIL_EXPECT("should have thrown");
+    KJ_UNREACHABLE;
+  };
+
+  {
+    // Immediately ready case.
+    auto promise = kj::Promise<void>(KJ_EXCEPTION(FAILED, "catch me"));
+    KJ_EXPECT(tryCatch(kj::mv(promise)).wait(waitScope) == "catch me");
+  }
+
+  {
+    // Ready later case.
+    auto promise = kj::evalLater([]() -> kj::Promise<void> {
+      return KJ_EXCEPTION(FAILED, "catch me");
+    });
+    KJ_EXPECT(tryCatch(kj::mv(promise)).wait(waitScope) == "catch me");
+  }
 }
 
 KJ_TEST("Coroutines can be canceled while suspended") {
