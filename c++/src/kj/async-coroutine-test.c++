@@ -132,13 +132,22 @@ KJ_TEST("Coroutines can be canceled while suspended") {
     KJ_DISALLOW_COPY(Counter);
   };
 
+  auto coro = [&](kj::Promise<int> promise) -> kj::Promise<void> {
+    Counter counter1(count);
+    co_await kj::evalLater([](){});
+    Counter counter2(count);
+    co_await promise;
+  };
+
   {
     auto neverDone = kj::Promise<int>(kj::NEVER_DONE);
     neverDone = neverDone.attach(kj::heap<Counter>(count));
-    auto promise = simpleCoroutine(kj::mv(neverDone));
+    auto promise = coro(kj::mv(neverDone));
+    promise.poll(waitScope);
   }
 
-  KJ_EXPECT(count == 1);
+  // Stack variables on both sides of a co_await, plus coroutine arguments are destroyed.
+  KJ_EXPECT(count == 3);
 }
 
 Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
