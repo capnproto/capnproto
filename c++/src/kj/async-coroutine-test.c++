@@ -74,7 +74,7 @@ KJ_TEST("Exceptions propagate through layered coroutines") {
   KJ_EXPECT_THROW_RECOVERABLE(FAILED, simpleCoroutine(kj::mv(throwy)).wait(waitScope));
 }
 
-KJ_TEST("Exceptions before the first co_await don't leak, but reject the promise") {
+KJ_TEST("Exceptions before the first co_await don't escape, but reject the promise") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -119,18 +119,18 @@ KJ_TEST("Coroutines can catch exceptions from co_await") {
   }
 }
 
+struct Counter {
+  size_t& count;
+  Counter(size_t& count): count(count) {}
+  ~Counter() { ++count; }
+  KJ_DISALLOW_COPY(Counter);
+};
+
 KJ_TEST("Coroutines can be canceled while suspended") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
   size_t count = 0;
-
-  struct Counter {
-    size_t& count;
-    Counter(size_t& count): count(count) {}
-    ~Counter() { ++count; }
-    KJ_DISALLOW_COPY(Counter);
-  };
 
   auto coro = [&](kj::Promise<int> promise) -> kj::Promise<void> {
     Counter counter1(count);
@@ -143,11 +143,80 @@ KJ_TEST("Coroutines can be canceled while suspended") {
     auto neverDone = kj::Promise<int>(kj::NEVER_DONE);
     neverDone = neverDone.attach(kj::heap<Counter>(count));
     auto promise = coro(kj::mv(neverDone));
-    promise.poll(waitScope);
+    KJ_EXPECT(!promise.poll(waitScope));
   }
 
   // Stack variables on both sides of a co_await, plus coroutine arguments are destroyed.
   KJ_EXPECT(count == 3);
+}
+
+kj::Promise<void> deferredThrowCoroutine(kj::Promise<void> awaitMe) {
+  KJ_DEFER(kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind")));
+  co_await awaitMe;
+  co_return;
+};
+
+KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destructor") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    deferredThrowCoroutine(kj::NEVER_DONE);
+  }));
+
+  KJ_EXPECT(exception.getDescription() == "thrown during unwind");
+};
+
+KJ_TEST("Exceptions during suspended coroutine frame-unwind do not cause a memory leak") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // We can't easily test for memory leaks without hooking operator new and delete. However, we can
+  // arrange for the test to crash on failure, by having the coroutine suspend at a promise that we
+  // later fulfill, thus arming the Coroutine's Event. If we destroy the coroutine in this state,
+  // EventLoop will throw on destruction because it can still see the Event in its list.
+
+  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    auto paf = kj::newPromiseAndFulfiller<void>();
+
+    auto coroPromise = deferredThrowCoroutine(kj::mv(paf.promise));
+
+    // Arm the Coroutine's Event.
+    paf.fulfiller->fulfill();
+
+    // If destroying `coroPromise` does not run ~Event(), then ~EventLoop() will crash later.
+  }));
+
+  KJ_EXPECT(exception.getDescription() == "thrown during unwind");
+};
+
+KJ_TEST("Exceptions during completed coroutine frame-unwind propagate via returned Promise") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  {
+    // First, prove that exceptions don't escape the destructor of a completed coroutine.
+    auto promise = deferredThrowCoroutine(kj::READY_NOW);
+    KJ_EXPECT(promise.poll(waitScope));
+  }
+
+  {
+    // Next, prove that they show up via the returned Promise.
+    auto promise = deferredThrowCoroutine(kj::READY_NOW);
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("thrown during unwind", promise.wait(waitScope));
+  }
+}
+
+KJ_TEST("Coroutine destruction exceptions are ignored if there is another exception in flight") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    auto promise = deferredThrowCoroutine(kj::NEVER_DONE);
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown before destroying throwy promise"));
+  }));
+
+  KJ_EXPECT(exception.getDescription() == "thrown before destroying throwy promise");
 }
 
 Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {

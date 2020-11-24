@@ -1843,6 +1843,7 @@ public:
   using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
 
   Coroutine() = default;
+  ~Coroutine() noexcept(false) { readMaybe(maybeDisposalResults)->destructorRan = true; }
   KJ_DISALLOW_COPY(Coroutine);
 
   Promise<T> get_return_object() {
@@ -1859,11 +1860,53 @@ private:
 
   void disposeImpl(void* pointer) const override {
     KJ_IASSERT(pointer == this);
+
     // const_cast okay -- every Own<PromiseNode> that we build in get_return_object() uses itself
     // as the disposer, thus every disposer is unique and there are no thread-safety concerns.
-    auto coroutine = Handle::from_promise(const_cast<Coroutine<T>&>(*this));
-    // TODO(now): Handle exceptions, somehow.
-    coroutine.destroy();
+    const_cast<Coroutine&>(*this).destroy();
+  }
+
+  void destroy() {
+    // Mutable helper function for disposeImpl(). Basically a wrapper around coroutine.destroy()
+    // with some stuff to propagate exceptions appropriately.
+
+    auto coroutine = Handle::from_promise(*this);
+
+    // Objects in the coroutine frame might throw from their destructors, so unhandled_exception()
+    // will need some way to communicate those exceptions back to us. Separately, we also want
+    // confirmation that our own ~Coroutine() destructor ran. To solve this, we put a
+    // DisposalResults object on the stack and set a pointer to it in the Coroutine object. This
+    // indicates to unhandled_exception() and ~Coroutine() where to store the results of the
+    // destruction operation.
+    DisposalResults disposalResults;
+    maybeDisposalResults = &disposalResults;
+
+    // Need to save this while `unwindDetector` is still valid.
+    bool shouldRethrow = !unwindDetector.isUnwinding();
+
+    do {
+      // Clang's implementation of the Coroutines TS does not destroy the Coroutine object or
+      // deallocate the coroutine frame if a destructor of an object on the frame threw an
+      // exception. This is despite the fact that it delivered the exception to _us_ via
+      // unhandled_exception(). Anyway, it appears we can work around this by running
+      // coroutine.destroy() a second time.
+      //
+      // On Clang, `disposalResults.exception != nullptr` implies `!disposalResults.destructorRan`.
+      // We could optimize out the separate `destructorRan` flag if we verify that other compilers
+      // behave the same way.
+      coroutine.destroy();
+    } while (!disposalResults.destructorRan);
+
+    // WARNING: `this` is now a dangling pointer.
+
+    KJ_IF_MAYBE(exception, disposalResults.exception) {
+      if (shouldRethrow) {
+        kj::throwFatalException(kj::mv(*exception));
+      } else {
+        // An exception is already unwinding the stack, so throwing this secondary exception would
+        // call std::terminate().
+      }
+    }
   }
 
 public:
@@ -1879,10 +1922,45 @@ public:
   // lifetime of the enclosing promise.
 
   void unhandled_exception() {
-    // Pretty self-explanatory, we just propagate the exception to the promise which owns us. Note
-    // that all unhandled exceptions end up here, not just ones after the first co_await.
+    // Pretty self-explanatory, we propagate the exception to the promise which owns us, unless
+    // we're being destroyed, in which case we propagate it back to our disposer. Note that all
+    // unhandled exceptions end up here, not just ones after the first co_await.
+
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([] { throw; })) {
-      reject(kj::mv(*exception));
+      KJ_IF_MAYBE(disposalResults, maybeDisposalResults) {
+        // Exception during coroutine destruction. Only record the first one.
+        if (disposalResults->exception == nullptr) {
+          disposalResults->exception = kj::mv(*exception);
+        }
+      } else if (waiting) {
+        // Exception during coroutine execution.
+        result.addException(kj::mv(*exception));
+        waiting = false;
+        onReadyEvent.arm();
+      } else {
+        // Okay, what could this mean? We've already been fulfilled or rejected, but we aren't being
+        // destroyed yet. The only possibility is that we are unwinding the coroutine frame due to a
+        // successful completion, and something in the frame threw. We can't already be rejected,
+        // because rejecting a coroutine involves throwing, which would have unwound the frame prior
+        // to setting `waiting = false`.
+        //
+        // Since we know we're unwinding due to a successful completion, we also know that whatever
+        // Event we may have armed has not yet fired, because we haven't had a chance to return to
+        // the event loop.
+        //
+        // TODO(now): Will the above be true (throwing being the only way to reject a coroutine)
+        //  with -fno-exceptions?
+
+        // return_value()/return_void() has already been called.
+        KJ_IASSERT(result.value != nullptr);
+
+        // But final_suspend() has not.
+        KJ_IASSERT(!Handle::from_promise(*this).done());
+
+        // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
+        // and will see this exception.
+        result.addException(kj::mv(*exception));
+      }
     } else {
       KJ_UNREACHABLE;
     }
@@ -1961,16 +2039,10 @@ private:
   }
 
   void fulfill(FixVoid<T>&& value) {
+    // Called by the return_value()/return_void() functions in our base class.
+
     if (waiting) {
       result = kj::mv(value);
-      onReadyEvent.arm();
-      waiting = false;
-    }
-  }
-
-  void reject(kj::Exception&& exception) {
-    if (waiting) {
-      result.addException(kj::mv(exception));
       onReadyEvent.arm();
       waiting = false;
     }
@@ -1979,6 +2051,18 @@ private:
   OnReadyEvent onReadyEvent;
   ExceptionOr<FixVoid<T>> result;
   bool waiting = true;
+
+  UnwindDetector unwindDetector;
+
+  struct DisposalResults {
+    bool destructorRan = false;
+    Maybe<Exception> exception;
+  };
+  Maybe<DisposalResults&> maybeDisposalResults;
+  // Only non-null during destruction. Before calling coroutine.destroy(), our disposer sets this
+  // to point to a DisposalResults on the stack so unhandled_exception() will have some place to
+  // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
+  // coroutine.destroy() has returned. Our disposer then rethrows as needed.
 
   PromiseNode* node = nullptr;
   ExceptionOrValue* awaitResult = nullptr;
