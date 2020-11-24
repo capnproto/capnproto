@@ -219,6 +219,38 @@ KJ_TEST("Coroutine destruction exceptions are ignored if there is another except
   KJ_EXPECT(exception.getDescription() == "thrown before destroying throwy promise");
 }
 
+KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not rejected") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // throwyDtorPromise is an immediate void promise that will throw when it's destroyed, which
+  // we expect to be able to catch from a coroutine which co_awaits it.
+  auto throwyDtorPromise = kj::Promise<void>(kj::READY_NOW)
+      .attach(kj::defer([]() {
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind"));
+  }));
+
+  // rejectedThrowyDtorPromise is a rejected promise. When co_awaited in a coroutine,
+  // Awaiter::await_resume() will throw that exception for us to catch, but before we can catch it,
+  // the temporary promise will be destroyed. The exception it throws during unwind will be ignored,
+  // and the caller of the coroutine will see only the "thrown during execution" exception.
+  auto rejectedThrowyDtorPromise = kj::evalNow([&]() -> kj::Promise<void> {
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during execution"));
+  }).attach(kj::defer([]() {
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind"));
+  }));
+
+  auto awaitPromise = [](kj::Promise<void> promise) -> kj::Promise<void> {
+    co_await promise;
+  };
+
+  KJ_EXPECT_THROW_MESSAGE("thrown during unwind",
+      awaitPromise(kj::mv(throwyDtorPromise)).wait(waitScope));
+
+  KJ_EXPECT_THROW_MESSAGE("thrown during execution",
+      awaitPromise(kj::mv(rejectedThrowyDtorPromise)).wait(waitScope));
+}
+
 Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
   auto address = co_await addressPromise;
   auto client = co_await address->connect();

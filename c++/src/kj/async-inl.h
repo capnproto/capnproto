@@ -2101,6 +2101,14 @@ class Coroutine<T>::Awaiter {
 
 public:
   explicit Awaiter(Promise<U> promise): promise(kj::mv(promise)) {}
+  Awaiter(Awaiter&&) = default;
+  ~Awaiter() noexcept(false) {
+    unwindDetector.catchExceptionsIfUnwinding([this]() {
+      // No need to check for a moved-from state, promise will just ignore the nullification.
+      promise = nullptr;
+    });
+  }
+  KJ_DISALLOW_COPY(Awaiter);
 
   bool await_ready() const { return false; }
   // This could return "`promise.node.get()` is safe to call" instead, which would make suspension-
@@ -2123,6 +2131,7 @@ public:
   }
 
 private:
+  UnwindDetector unwindDetector;
   Promise<U> promise;
   ExceptionOr<FixVoid<U>> result;
 };
