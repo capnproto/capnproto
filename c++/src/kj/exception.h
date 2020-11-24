@@ -80,6 +80,13 @@ public:
   StringPtr getDescription() const { return description; }
   ArrayPtr<void* const> getStackTrace() const { return arrayPtr(trace, traceCount); }
 
+  StringPtr getRemoteTrace() const { return remoteTrace; }
+  void setRemoteTrace(kj::String&& value) { remoteTrace = kj::mv(value); }
+  // Additional stack trace data originating from a remote server. If present, then
+  // `getStackTrace()` only traces up until entry into the RPC system, and the remote trace
+  // contains any trace information returned over the wire. This string is human-readable but the
+  // format is otherwise unspecified.
+
   struct Context {
     // Describes a bit about what was going on when the exception was thrown.
 
@@ -126,6 +133,7 @@ private:
   Type type;
   String description;
   Maybe<Own<Context>> context;
+  String remoteTrace;
   void* trace[32];
   uint traceCount;
 
