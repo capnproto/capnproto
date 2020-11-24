@@ -1820,7 +1820,10 @@ class CoroutineBase;
 // CRTP mixin, covered later.
 
 template <typename T>
-class Coroutine: public CoroutineBase<Coroutine<T>, T> {
+class Coroutine: public CoroutineBase<Coroutine<T>, T>,
+                 private PromiseNode,
+                 private Event,
+                 private Disposer {
   // The standard calls this the `promise_type` object. We can call this the "coroutine
   // implementation object" since the word promise means different things in KJ and std styles. This
   // is where we implement how a `kj::Promise<T>` is returned from a coroutine, and how that promise
@@ -1842,35 +1845,44 @@ public:
   Coroutine() = default;
   KJ_DISALLOW_COPY(Coroutine);
 
-  ~Coroutine() { if (adapter) adapter->coroutineDestroyed(); }
-  // The implementation object (*this) lives inside the coroutine's frame, so if it is being
-  // destroyed, then that means the frame is being destroyed. Since the frame might be destroyed
-  // *before* the adapter (e.g., the coroutine resumes from its last suspension point before the
-  // user destroys the owning promise), we need to tell the adapter not to try to double-free the
-  // frame with coroutine.destroy().
-
   Promise<T> get_return_object() {
     // Called after coroutine frame construction and before initial_suspend() to create the
-    // coroutine's return object.
-    return PromiseNode::to<Promise<T>>(heap<Adapter>(Handle::from_promise(*this)));
+    // coroutine's return object. `this` itself lives inside the coroutine frame, and we arrange for
+    // the returned Promise<T> to own `this` via a custom Disposer and by always leaving the
+    // coroutine in a suspended state.
+    return PromiseNode::to<Promise<T>>(Own<PromiseNode>(this, *this));
   }
 
+private:
+  // -------------------------------------------------------
+  // Disposer implementation
+
+  void disposeImpl(void* pointer) const override {
+    KJ_IASSERT(pointer == this);
+    // const_cast okay -- every Own<PromiseNode> that we build in get_return_object() uses itself
+    // as the disposer, thus every disposer is unique and there are no thread-safety concerns.
+    auto coroutine = Handle::from_promise(const_cast<Coroutine<T>&>(*this));
+    // TODO(now): Handle exceptions, somehow.
+    coroutine.destroy();
+  }
+
+public:
   auto initial_suspend() { return stdcoro::suspend_never(); }
-  auto final_suspend() noexcept { return stdcoro::suspend_never(); }
+  auto final_suspend() noexcept { return stdcoro::suspend_always(); }
   // These adjust the suspension behavior of coroutines immediately upon initiation, and immediately
   // after completion.
   //
   // The initial suspension point could allow us to defer the initial execution of a coroutine with
   // evalLater(), for instance.
   //
-  // The final suspension point could be useful to delay deallocation of the coroutine frame to
-  // match the lifetime of the enclosing promise.
+  // The final suspension point is useful to delay deallocation of the coroutine frame to match the
+  // lifetime of the enclosing promise.
 
   void unhandled_exception() {
     // Pretty self-explanatory, we just propagate the exception to the promise which owns us. Note
     // that all unhandled exceptions end up here, not just ones after the first co_await.
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([] { throw; })) {
-      adapter->reject(kj::mv(*exception));
+      reject(kj::mv(*exception));
     } else {
       KJ_UNREACHABLE;
     }
@@ -1891,62 +1903,25 @@ public:
   // free function would be unaware of the type of the enclosing coroutine. Since Awaiter<U> is a
   // member class template of Coroutine<T>, it is able to implement an
   // `await_suspend(Coroutine<T>::Handle)` override, providing it type-safe access to our enclosing
-  // coroutine's promise adapter. An `operator co_await()` free function would have to implement
+  // coroutine's PromiseNode. An `operator co_await()` free function would have to implement
   // a type-erased `await_suspend(stdcoro::coroutine_handle<void>)` override, and implement
   // suspension and resumption in terms of .then(). Yuck!
 
+  void awaitSuspend(PromiseNode& nodeParam, ExceptionOrValue& awaitResultParam) {
+    // Called by Awaiter::await_suspend() to tell us to wait for `node` to become ready, then store
+    // the node's result in `awaitResult`.
+
+    // We'll need to save these references for fire(). Note that Awaiter is movable, and
+    // `awaitResult` is its subobject, but it is safe to store a reference to `awaitResult`, because
+    // by the time `await_suspend()` is called, Awaiter has already been returned from
+    // `await_transform()` and stored in its final resting place in the coroutine's frame.
+    node = &nodeParam;
+    awaitResult = &awaitResultParam;
+
+    node->onReady(this);
+  }
+
 private:
-  friend class CoroutineBase<Coroutine<T>, T>;
-
-  class Adapter;
-  Adapter* adapter = nullptr;
-  // Set by Adapter's ctor in `get_return_object()`. Nulled out again by Adapter's dtor, if the
-  // promise returned from `get_return_object()` is destroyed while this coroutine is suspended.
-};
-
-template <typename Self, typename T>
-class CoroutineBase {
-public:
-  void return_value(T value) {
-    static_cast<Self*>(this)->adapter->fulfill(kj::mv(value));
-  }
-};
-template <typename Self>
-class CoroutineBase<Self, void> {
-public:
-  void return_void() {
-    static_cast<Self*>(this)->adapter->fulfill(_::Void());
-  }
-};
-// The Coroutines spec has no `_::FixVoid<T>` equivalent to unify valueful and valueless co_return
-// statements, and programs are ill-formed if the coroutine implementation object (Coroutine<T>) has
-// both a `return_value()` and `return_void()`. No amount of EnableIffery can get around it, so
-// these return_* functions live in a CRTP mixin.
-
-template <typename T>
-class Coroutine<T>::Adapter: public PromiseNode, private Event {
-public:
-  explicit Adapter(Coroutine::Handle coroutine)
-      : coroutine(coroutine) {
-    coroutine.promise().adapter = this;
-  }
-  KJ_DISALLOW_COPY(Adapter);
-
-  ~Adapter() noexcept(false) {
-    // If a coroutine runs to completion, its frame will already have been destroyed by the time the
-    // adapter is destroyed, so this if-condition will almost always be false.
-    if (coroutine) {
-      // coroutine.promise() is a reference to our implementation object, Coroutine<T>.
-      coroutine.promise().adapter = nullptr;
-      coroutine.destroy();
-    }
-  }
-
-  void coroutineDestroyed() {
-    // The coroutine was destroyed before the adapter.
-    coroutine = nullptr;
-  }
-
   // -------------------------------------------------------
   // PromiseNode implementation
 
@@ -1958,21 +1933,31 @@ public:
     output.as<FixVoid<T>>() = kj::mv(result);
   }
 
-  void awaitSuspend(PromiseNode& nodeParam, ExceptionOrValue& awaitResultParam) {
-    // Called by Awaiter::await_suspend() to tell us to wait for `node` to become ready, then store
-    // the node's result in `awaitResult`.
+  // -------------------------------------------------------
+  // Event implementation
 
-    // We'll need to save these references for fire(). Note that Awaiter is movable, and
-    // `awaitResult` is its subobject, but it is safe to store a reference to `result` in Adapter,
-    // because by the time `await_suspend()` is called, Awaiter has already been returned from
-    // `await_transform()` and stored in its final resting place in the coroutine's frame.
-    node = &nodeParam;
-    awaitResult = &awaitResultParam;
+  Maybe<Own<Event>> fire() override {
+    // The promise this coroutine is currently waiting on is ready. Extract its result and check for
+    // exceptions.
 
-    // We use the promise adapter as an Event, because we must be able to destroy the coroutine from
-    // within the fire() callback. The promise adapter can do this, because it lives outside of the
-    // coroutine's frame, unlike Coroutine<T> or Awaiter<U>.
-    node->onReady(this);
+    // TODO(now): I'm leaving this here because we'll need this in the -fno-exceptions change.
+    node->get(*awaitResult);
+
+    // Call Awaiter::await_resume() and proceed with the coroutine. Note that this will not destroy
+    // the coroutine if control flows off the end of it, because we return suspend_always() from
+    // final_suspend().
+    //
+    // It's tempting to check for exceptions right now and reject the promise that owns us without
+    // resuming the coroutine, which would save us from throwing an exception when we already know
+    // where it's going. But, we don't really know: the `co_await` might be in a try-catch block, so
+    // we have no choice but to resume and throw in this case.
+    //
+    // TODO(now): Check for exceptions right here if we're compiled with -fno-exceptions, in which
+    //   case we know for sure there's no try-catch block around us.
+    auto coroutine = Handle::from_promise(*this);
+    coroutine.resume();
+
+    return nullptr;
   }
 
   void fulfill(FixVoid<T>&& value) {
@@ -1991,40 +1976,35 @@ public:
     }
   }
 
-private:
-  Maybe<Own<Event>> fire() override {
-    // The promise this coroutine is currently waiting on is ready. Extract its result and check for
-    // exceptions.
-
-    // TODO(now): I'm leaving this here because we'll need this in the -fno-exceptions change.
-    node->get(*awaitResult);
-
-    // Call Awaiter::await_resume() and proceed with the coroutine. Note that if this was the last
-    // co_await in the coroutine, control will flow off the end of the coroutine and it will be
-    // destroyed -- as part of the execution of coroutine.resume().
-    //
-    // It's tempting to check for exceptions right now and reject the promise that owns us without
-    // resuming the coroutine, which would save us from throwing an exception when we already know
-    // where it's going. But, we don't really know: the `co_await` might be in a try-catch block, so
-    // we have no choice but to resume and throw in this case.
-    //
-    // TODO(now): Check for exceptions right here if we're compiled with -fno-exceptions, in which
-    //   case we know for sure there's no try-catch block around us.
-    coroutine.resume();
-
-    return nullptr;
-  }
-
   OnReadyEvent onReadyEvent;
   ExceptionOr<FixVoid<T>> result;
   bool waiting = true;
 
-  Coroutine::Handle coroutine;
-
   PromiseNode* node = nullptr;
   ExceptionOrValue* awaitResult = nullptr;
   // Set by awaitSuspend(), used (and reset) in fire().
+
+  friend class CoroutineBase<Coroutine<T>, T>;
 };
+
+template <typename Self, typename T>
+class CoroutineBase {
+public:
+  void return_value(T value) {
+    static_cast<Self*>(this)->fulfill(kj::mv(value));
+  }
+};
+template <typename Self>
+class CoroutineBase<Self, void> {
+public:
+  void return_void() {
+    static_cast<Self*>(this)->fulfill(_::Void());
+  }
+};
+// The Coroutines spec has no `_::FixVoid<T>` equivalent to unify valueful and valueless co_return
+// statements, and programs are ill-formed if the coroutine implementation object (Coroutine<T>) has
+// both a `return_value()` and `return_void()`. No amount of EnableIffery can get around it, so
+// these return_* functions live in a CRTP mixin.
 
 template <typename T>
 template <typename U>
@@ -2055,8 +2035,7 @@ public:
   }
 
   void await_suspend(Coroutine::Handle coroutine) {
-    auto adapter = coroutine.promise().adapter;
-    adapter->awaitSuspend(PromiseNode::from(promise), result);
+    coroutine.promise().awaitSuspend(PromiseNode::from(promise), result);
   }
 
 private:
