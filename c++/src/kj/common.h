@@ -1314,6 +1314,10 @@ public:
   inline constexpr Maybe(Maybe<U&>& other): ptr(other.ptr) {}
   template <typename U>
   inline constexpr Maybe(const Maybe<U&>& other): ptr(const_cast<const U*>(other.ptr)) {}
+  template <typename U>
+  constexpr Maybe(Maybe<U>& other): ptr(other.ptr.operator U*()) {}
+  template <typename U>
+  constexpr Maybe(const Maybe<U>& other): ptr(other.ptr.operator const U*()) {}
   inline constexpr Maybe(decltype(nullptr)): ptr(nullptr) {}
 
   inline Maybe& operator=(T& other) { ptr = &other; return *this; }
