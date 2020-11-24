@@ -141,6 +141,18 @@ public:
   // order to prevent a grain from inundating the system with in-flight calls. In practice, the
   // main time this happens is when a grain is pushing a large file download and doesn't implement
   // proper cooperative flow control.
+
+  // void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
+  //
+  // (Inherited from _::RpcSystemBase)
+  //
+  // Set a function to call to encode exception stack traces for transmission to remote parties.
+  // By default, traces are not transmitted at all. If a callback is provided, then the returned
+  // string will be sent with the exception. If the remote end is KJ/C++ based, then this trace
+  // text ends up being accessible as kj::Exception::getRemoteTrace().
+  //
+  // Stack traces can sometimes contain sensitive information, so you should think carefully about
+  // what information you are willing to reveal to the remote party.
 };
 
 template <typename VatId, typename ProvisionId, typename RecipientId,

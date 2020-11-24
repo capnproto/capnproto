@@ -112,14 +112,16 @@ Orphan<List<rpc::PromisedAnswer::Op>> fromPipelineOps(
 }
 
 kj::Exception toException(const rpc::Exception::Reader& exception) {
-  return kj::Exception(static_cast<kj::Exception::Type>(exception.getType()),
+  kj::Exception result(static_cast<kj::Exception::Type>(exception.getType()),
       "(remote)", 0, kj::str("remote exception: ", exception.getReason()));
+  if (exception.hasTrace()) {
+    result.setRemoteTrace(kj::str(exception.getTrace()));
+  }
+  return result;
 }
 
-void fromException(const kj::Exception& exception, rpc::Exception::Builder builder) {
-  // TODO(someday):  Indicate the remote server name as part of the stack trace.  Maybe even
-  //   transmit stack traces?
-
+void fromException(const kj::Exception& exception, rpc::Exception::Builder builder,
+                   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder) {
   kj::StringPtr description = exception.getDescription();
 
   // Include context, if any.
@@ -140,6 +142,10 @@ void fromException(const kj::Exception& exception, rpc::Exception::Builder build
 
   builder.setReason(description);
   builder.setType(static_cast<rpc::Exception::Type>(exception.getType()));
+
+  KJ_IF_MAYBE(t, traceEncoder) {
+    builder.setTrace((*t)(exception));
+  }
 
   if (exception.getType() == kj::Exception::Type::FAILED &&
       !exception.getDescription().startsWith("remote exception:")) {
@@ -273,10 +279,11 @@ public:
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller,
-                     size_t flowLimit)
+                     size_t flowLimit,
+                     kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder)
       : bootstrapFactory(bootstrapFactory), gateway(kj::mv(gateway)),
         restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), flowLimit(flowLimit),
-        tasks(*this) {
+        traceEncoder(traceEncoder), tasks(*this) {
     connection.init<Connected>(kj::mv(connectionParam));
     tasks.add(messageLoop());
   }
@@ -319,6 +326,11 @@ public:
   }
 
   void disconnect(kj::Exception&& exception) {
+    // After disconnect(), the RpcSystem could be destroyed, making `traceEncoder` a dangling
+    // reference, so null it out before we return from here. We don't need it anymore once
+    // disconnected anyway.
+    KJ_DEFER(traceEncoder = nullptr);
+
     if (!connection.is<Connected>()) {
       // Already disconnected.
       return;
@@ -574,6 +586,8 @@ private:
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> flowWaiter;
   // If non-null, we're currently blocking incoming messages waiting for callWordsInFlight to drop
   // below flowLimit. Fulfill this to un-block.
+
+  kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder;
 
   kj::TaskSet tasks;
 
@@ -1403,6 +1417,10 @@ private:
       // Put the exception on the TaskSet which will cause the connection to be terminated.
       tasks.add(kj::mv(exception));
     });
+  }
+
+  void fromException(const kj::Exception& exception, rpc::Exception::Builder builder) {
+    _::fromException(exception, builder, traceEncoder);
   }
 
   // =====================================================================================
@@ -2238,7 +2256,7 @@ private:
 
           builder.setAnswerId(answerId);
           builder.setReleaseParamCaps(false);
-          fromException(exception, builder.initException());
+          connectionState->fromException(exception, builder.initException());
 
           message->send();
         }
@@ -3278,6 +3296,10 @@ public:
     }
   }
 
+  void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func) {
+    traceEncoder = kj::mv(func);
+  }
+
 private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
@@ -3285,6 +3307,7 @@ private:
   kj::Maybe<RealmGateway<>::Client> gateway;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
   size_t flowLimit = kj::maxValue;
+  kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder;
   kj::TaskSet tasks;
 
   typedef std::unordered_map<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>
@@ -3305,7 +3328,7 @@ private:
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
           bootstrapFactory, gateway, restorer, kj::mv(connection),
-          kj::mv(onDisconnect.fulfiller), flowLimit);
+          kj::mv(onDisconnect.fulfiller), flowLimit, traceEncoder);
       RpcConnectionState& result = *newState;
       connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
       return result;
@@ -3370,6 +3393,10 @@ Capability::Client RpcSystemBase::baseRestore(
 
 void RpcSystemBase::baseSetFlowLimit(size_t words) {
   return impl->setFlowLimit(words);
+}
+
+void RpcSystemBase::setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func) {
+  impl->setTraceEncoder(kj::mv(func));
 }
 
 }  // namespace _ (private)

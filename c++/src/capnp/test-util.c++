@@ -1178,6 +1178,10 @@ kj::Promise<void> TestMoreStuffImpl::writeToFd(WriteToFdContext context) {
   return kj::joinPromises(promises.finish());
 }
 
+kj::Promise<void> TestMoreStuffImpl::throwException(ThrowExceptionContext context) {
+  return KJ_EXCEPTION(FAILED, "test exception");
+}
+
 #endif  // !CAPNP_LITE
 
 }  // namespace _ (private)

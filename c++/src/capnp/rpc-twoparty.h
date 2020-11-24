@@ -197,6 +197,9 @@ public:
 
   inline kj::Promise<void> onDisconnect() { return network.onDisconnect(); }
 
+  void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
+  // Forwarded to rpcSystem.setTraceEncoder().
+
 private:
   TwoPartyVatNetwork network;
   RpcSystem<rpc::twoparty::VatId> rpcSystem;

@@ -1456,6 +1456,44 @@ KJ_TEST("loopback bootstrap()") {
   KJ_EXPECT(callCount == 1);
 }
 
+KJ_TEST("method throws exception") {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Maybe<kj::Exception> maybeException;
+  client.throwExceptionRequest().send().ignoreResult()
+      .catch_([&](kj::Exception&& e) {
+    maybeException = kj::mv(e);
+  }).wait(context.waitScope);
+
+  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
+  KJ_EXPECT(exception.getRemoteTrace() == nullptr);
+}
+
+KJ_TEST("method throws exception with trace encoder") {
+  TestContext context;
+
+  context.rpcServer.setTraceEncoder([](const kj::Exception& e) {
+    return kj::str("trace for ", e.getDescription());
+  });
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Maybe<kj::Exception> maybeException;
+  client.throwExceptionRequest().send().ignoreResult()
+      .catch_([&](kj::Exception&& e) {
+    maybeException = kj::mv(e);
+  }).wait(context.waitScope);
+
+  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
+  KJ_EXPECT(exception.getRemoteTrace() == "trace for test exception");
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
