@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include <kj/async.h>
+#include <kj/array.h>
 #include <kj/compat/http.h>
 #include <kj/debug.h>
 #include <kj/test.h>
@@ -63,6 +64,193 @@ KJ_TEST("Simple coroutine test") {
   simpleCoroutine(kj::Promise<void>(kj::READY_NOW)).wait(waitScope);
 
   KJ_EXPECT(simpleCoroutine(kj::Promise<int>(123)).wait(waitScope) == 123);
+}
+
+struct Counter {
+  size_t& count;
+  Counter(size_t& count): count(count) {}
+  ~Counter() { ++count; }
+  KJ_DISALLOW_COPY(Counter);
+};
+
+kj::Promise<void> countDtorsAroundAwait(size_t& count, kj::Promise<void> promise) {
+  Counter counter1(count);
+  co_await promise;
+  Counter counter2(count);
+  co_return;
+};
+
+KJ_TEST("co_awaiting an immediate promise does not suspend if the event loop is empty and running") {
+  // Some PromiseNode implementations contain optimizations which allow us to avoid suspending the
+  // coroutine and instead immediately call PromiseNode::get() and proceed with execution.
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // The immediate-execution optimization is only enabled when the event loop is running, so use an
+  // eagerly-evaluated evalLater() to perform the test from within the event loop. (If we didn't
+  // eagerly-evaluate the promise, the result would be extracted after the loop finished.)
+  kj::evalLater([&]() {
+    size_t count = 0;
+
+    auto promise = kj::Promise<void>(kj::READY_NOW);
+    auto coroPromise = countDtorsAroundAwait(count, kj::READY_NOW);
+
+    // `coro` has not been destroyed yet, but it completed and unwound its frame.
+    KJ_EXPECT(count == 2);
+  }).eagerlyEvaluate(nullptr).wait(waitScope);
+
+  kj::evalLater([&]() {
+    // If there are no background tasks in the queue, coroutines execute through an evalLater()
+    // without suspending.
+
+    size_t count = 0;
+    bool evalLaterRan = false;
+
+    auto promise = kj::evalLater([&]() { evalLaterRan = true; });
+    auto coroPromise = countDtorsAroundAwait(count, kj::mv(promise));
+
+    KJ_EXPECT(evalLaterRan == true);
+    KJ_EXPECT(count == 2);
+  }).eagerlyEvaluate(nullptr).wait(waitScope);
+
+  kj::evalLater([&]() {
+    // ArrayPromiseNode implements the optimization.
+
+    size_t count = 0;
+
+    // Try a more complex example.
+    auto builder = kj::heapArrayBuilder<kj::Promise<void>>(4);
+    builder.add(kj::Promise<void>(kj::READY_NOW));
+    builder.add(kj::Promise<int>(123).ignoreResult());
+    builder.add(kj::evalNow([](){ return kj::Promise<void>(kj::READY_NOW); }).then([](){}));
+    builder.add(countDtorsAroundAwait(count, kj::READY_NOW));
+
+    auto promise = kj::joinPromises(builder.finish());
+    auto coroPromise = countDtorsAroundAwait(count, kj::mv(promise));
+
+    // Both coroutines completed and unwound their frames.
+    KJ_EXPECT(count == 4, count);
+  }).eagerlyEvaluate(nullptr).wait(waitScope);
+
+  kj::evalLater([&]() {
+    // ChainPromiseNode implements the optimization.
+
+    size_t count = 0;
+    int lastSeenArg = 0;
+
+    auto promise = kj::Promise<int>(123).then([&](int arg) -> kj::Promise<int> {
+      lastSeenArg = arg;
+      return arg + 123;
+    }).then([&](int arg) -> kj::Promise<void> {
+      lastSeenArg = arg;
+      return kj::READY_NOW;
+    });
+
+    auto coroPromise = countDtorsAroundAwait(count, kj::mv(promise));
+
+    KJ_EXPECT(count == 2);
+    KJ_EXPECT(lastSeenArg == 246);
+  }).eagerlyEvaluate(nullptr).wait(waitScope);
+
+  kj::evalLater([&]() {
+    // EagerPromiseNode implements the optimization.
+
+    size_t count = 0;
+
+    auto promise = kj::Promise<void>(READY_NOW).eagerlyEvaluate(nullptr);
+    auto coroPromise = countDtorsAroundAwait(count, kj::mv(promise));
+
+    KJ_EXPECT(count == 2);
+  }).eagerlyEvaluate(nullptr).wait(waitScope);
+
+  kj::evalLater([&]() {
+    // ExclusiveJoinPromiseNode implements the optimization (left).
+
+    size_t count = 0;
+
+    auto promise = kj::Promise<void>(READY_NOW).exclusiveJoin(NEVER_DONE);
+    auto coroPromise = countDtorsAroundAwait(count, kj::mv(promise));
+
+    KJ_EXPECT(count == 2);
+  }).eagerlyEvaluate(nullptr).wait(waitScope);
+
+  kj::evalLater([&]() {
+    // ExclusiveJoinPromiseNode implements the optimization (right).
+
+    size_t count = 0;
+
+    auto promise = kj::Promise<void>(NEVER_DONE).exclusiveJoin(READY_NOW);
+    auto coroPromise = countDtorsAroundAwait(count, kj::mv(promise));
+
+    KJ_EXPECT(count == 2);
+  }).eagerlyEvaluate(nullptr).wait(waitScope);
+}
+
+KJ_TEST("co_awaiting an immediate promise suspends if the event loop is not running") {
+  // We only want to enable the immediate-execution optimization if the event loop is running, or
+  // else a whole bunch of RPC tests break, because some .then()s get evaluated on promise
+  // construction, before any .wait() call.
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  size_t count = 0;
+
+  auto promise = kj::Promise<void>(kj::READY_NOW);
+  auto coroPromise = countDtorsAroundAwait(count, kj::READY_NOW);
+
+  // In the previous test, this exact same code executed immediately because the event loop was
+  // running.
+  KJ_EXPECT(count == 0);
+}
+
+KJ_TEST("co_awaiting immediate promises suspends if the event loop is not empty") {
+  // We want to make sure that we can still return to the event loop when we need to.
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // The immediate-execution optimization is only enabled when the event loop is running, so use an
+  // eagerly-evaluated evalLater() to perform the test from within the event loop. (If we didn't
+  // eagerly-evaluate the promise, the result would be extracted after the loop finished.)
+  kj::evalLater([&]() {
+    size_t count = 0;
+
+    // We need to enqueue an Event on the event loop to inhibit the immediate-execution
+    // optimization. Creating and then immediately fulfilling an EagerPromiseNode is a convenient
+    // way to do so.
+    auto paf = newPromiseAndFulfiller<void>();
+    paf.promise = paf.promise.eagerlyEvaluate(nullptr);
+    paf.fulfiller->fulfill();
+
+    auto promise = kj::Promise<void>(kj::READY_NOW);
+    auto coroPromise = countDtorsAroundAwait(count, kj::READY_NOW);
+
+    // We didn't immediately extract the READY_NOW.
+    KJ_EXPECT(count == 0);
+  }).eagerlyEvaluate(nullptr).wait(waitScope);
+
+  kj::evalLater([&]() {
+    size_t count = 0;
+    bool evalLaterRan = false;
+
+    // We need to enqueue an Event on the event loop to inhibit the immediate-execution
+    // optimization. Creating and then immediately fulfilling an EagerPromiseNode is a convenient
+    // way to do so.
+    auto paf = newPromiseAndFulfiller<void>();
+    paf.promise = paf.promise.eagerlyEvaluate(nullptr);
+    paf.fulfiller->fulfill();
+
+    auto promise = kj::evalLater([&]() { evalLaterRan = true; });
+    auto coroPromise = countDtorsAroundAwait(count, kj::mv(promise));
+
+    // We didn't continue through the evalLater() promise, because the background promise's
+    // continuation was next in the event loop's queue.
+    KJ_EXPECT(evalLaterRan == false);
+    // No Counter destructor has run.
+    KJ_EXPECT(count == 0, count);
+  }).eagerlyEvaluate(nullptr).wait(waitScope);
 }
 
 KJ_TEST("Exceptions propagate through layered coroutines") {
@@ -118,13 +306,6 @@ KJ_TEST("Coroutines can catch exceptions from co_await") {
     KJ_EXPECT(tryCatch(kj::mv(promise)).wait(waitScope) == "catch me");
   }
 }
-
-struct Counter {
-  size_t& count;
-  Counter(size_t& count): count(count) {}
-  ~Counter() { ++count; }
-  KJ_DISALLOW_COPY(Counter);
-};
 
 KJ_TEST("Coroutines can be canceled while suspended") {
   EventLoop loop;

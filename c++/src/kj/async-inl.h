@@ -166,6 +166,15 @@ public:
   // Enqueues this event to happen after all other events have run to completion and there is
   // really nothing left to do except wait for I/O.
 
+  bool isNext();
+  // True if the Event has been armed and is next in line to be fired. This can be used after
+  // calling PromiseNode::onReady(event) to determine if a promise being waited is immediately
+  // ready, in which case continuations may be optimistically run without returning to the event
+  // loop.
+  //
+  // Note that this returns false if the event loop is not currently running. This ensures that
+  // promise continuations don't execute except under a call to .wait().
+
   void disarm();
   // If the event is armed but hasn't fired, cancel it. (Destroying the event does this
   // implicitly.)
@@ -1985,20 +1994,6 @@ public:
   // a type-erased `await_suspend(stdcoro::coroutine_handle<void>)` override, and implement
   // suspension and resumption in terms of .then(). Yuck!
 
-  void awaitSuspend(PromiseNode& nodeParam, ExceptionOrValue& awaitResultParam) {
-    // Called by Awaiter::await_suspend() to tell us to wait for `node` to become ready, then store
-    // the node's result in `awaitResult`.
-
-    // We'll need to save these references for fire(). Note that Awaiter is movable, and
-    // `awaitResult` is its subobject, but it is safe to store a reference to `awaitResult`, because
-    // by the time `await_suspend()` is called, Awaiter has already been returned from
-    // `await_transform()` and stored in its final resting place in the coroutine's frame.
-    node = &nodeParam;
-    awaitResult = &awaitResultParam;
-
-    node->onReady(this);
-  }
-
 private:
   // -------------------------------------------------------
   // PromiseNode implementation
@@ -2112,8 +2107,13 @@ public:
 
   bool await_ready() const { return false; }
   // This could return "`promise.node.get()` is safe to call" instead, which would make suspension-
-  // less co_awaits possible for immediately-fulfilled promises. However, that's probably unwise,
-  // since it is explicitly not how .then() works.
+  // less co_awaits possible for immediately-fulfilled promises. However, we need an Event to figure
+  // that out, and we won't have access to the Coroutine Event until await_suspend() is called. So,
+  // we must return false here. But read on, because await_suspend() has a trick up its sleeve to
+  // enable suspension-less co_awaits!
+  //
+  // We could also solve this by giving Awaiters a dummy Event that get immediately disarmed, or by
+  // adding a new isReady() virtual function to PromiseNode which everyone would have to implement.
 
   U await_resume() {
     KJ_IF_MAYBE(exception, result.exception) {
@@ -2126,8 +2126,24 @@ public:
     return U(kj::mv(*value));
   }
 
-  void await_suspend(Coroutine::Handle coroutine) {
-    coroutine.promise().awaitSuspend(PromiseNode::from(promise), result);
+  bool await_suspend(Coroutine::Handle coroutine) {
+    auto& node = PromiseNode::from(promise);
+    auto& coroutineEvent = coroutine.promise();
+
+  // TODO(now): Should we call node.setSelfPointer() here?
+    node.onReady(&coroutineEvent);
+
+    if (coroutineEvent.isNext()) {
+      // The result is immediately ready! Let's cancel our event.
+      coroutineEvent.disarm();
+
+      // We can resume ourselves by returning false. This accomplishes the same thing as if we had
+      // returned true from await_ready().
+      return false;
+    } else {
+      // Otherwise, we must suspend.
+      return true;
+    }
   }
 
 private:
