@@ -879,6 +879,8 @@ interface TestMoreStuff extends(TestCallOrder) {
              -> (fdCap3 :TestInterface, secondFdPresent :Bool);
   # Expects fdCap1 and fdCap2 wrap socket file descriptors. Writes "foo" to the first and "bar" to
   # the second. Also creates a socketpair, writes "baz" to one end, and returns the other end.
+
+  throwException @14 ();
 }
 
 interface TestMembrane {

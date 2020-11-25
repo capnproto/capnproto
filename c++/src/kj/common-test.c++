@@ -193,6 +193,60 @@ TEST(Common, Maybe) {
   }
 
   {
+    Maybe<int> mi = i;
+    Maybe<int&> m = mi;
+    EXPECT_FALSE(m == nullptr);
+    EXPECT_TRUE(m != nullptr);
+    KJ_IF_MAYBE(v, m) {
+      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), v);
+    } else {
+      ADD_FAILURE();
+    }
+    KJ_IF_MAYBE(v, mv(m)) {
+      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), v);
+    } else {
+      ADD_FAILURE();
+    }
+    EXPECT_EQ(234, m.orDefault(456));
+  }
+
+  {
+    Maybe<int> mi = nullptr;
+    Maybe<int&> m = mi;
+    EXPECT_TRUE(m == nullptr);
+    KJ_IF_MAYBE(v, m) {
+      KJ_FAIL_EXPECT(*v);
+    }
+  }
+
+  {
+    const Maybe<int> mi = i;
+    Maybe<const int&> m = mi;
+    EXPECT_FALSE(m == nullptr);
+    EXPECT_TRUE(m != nullptr);
+    KJ_IF_MAYBE(v, m) {
+      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), v);
+    } else {
+      ADD_FAILURE();
+    }
+    KJ_IF_MAYBE(v, mv(m)) {
+      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), v);
+    } else {
+      ADD_FAILURE();
+    }
+    EXPECT_EQ(234, m.orDefault(456));
+  }
+
+  {
+    const Maybe<int> mi = nullptr;
+    Maybe<const int&> m = mi;
+    EXPECT_TRUE(m == nullptr);
+    KJ_IF_MAYBE(v, m) {
+      KJ_FAIL_EXPECT(*v);
+    }
+  }
+
+  {
     // Verify orDefault() works with move-only types.
     Maybe<kj::String> m = nullptr;
     kj::String s = kj::mv(m).orDefault(kj::str("foo"));

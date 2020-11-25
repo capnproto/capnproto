@@ -1201,6 +1201,11 @@ struct Exception {
 
   obsoleteDurability @2 :UInt16;
   # OBSOLETE. See `type` instead.
+
+  trace @4 :Text;
+  # Stack trace text from the remote server. The format is not specified. By default,
+  # implementations do not provide stack traces; the application must explicitly enable them
+  # when desired.
 }
 
 # ========================================================================================

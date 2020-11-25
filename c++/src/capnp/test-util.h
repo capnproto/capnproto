@@ -277,6 +277,8 @@ public:
 
   kj::Promise<void> writeToFd(WriteToFdContext context) override;
 
+  kj::Promise<void> throwException(ThrowExceptionContext context) override;
+
 private:
   int& callCount;
   int& handleCount;

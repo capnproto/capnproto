@@ -728,9 +728,13 @@ String KJ_STRINGIFY(const Exception& e) {
     }
   }
 
+  // Note that we put "remote" before "stack" because trace frames are ordered callee before
+  // caller, so this is the most natural presentation ordering.
   return str(strArray(contextText, ""),
              e.getFile(), ":", e.getLine(), ": ", e.getType(),
              e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
+             e.getRemoteTrace().size() > 0 ? "\nremote: " : "",
+             e.getRemoteTrace(),
              e.getStackTrace().size() > 0 ? "\nstack: " : "",
              stringifyStackTraceAddresses(e.getStackTrace()),
              stringifyStackTrace(e.getStackTrace()));
@@ -750,6 +754,10 @@ Exception::Exception(const Exception& other) noexcept
   if (file == other.ownFile.cStr()) {
     ownFile = heapString(other.ownFile);
     file = ownFile.cStr();
+  }
+
+  if (other.remoteTrace != nullptr) {
+    remoteTrace = kj::str(other.remoteTrace);
   }
 
   memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
@@ -1010,6 +1018,8 @@ private:
     // anyway.
     getExceptionCallback().logMessage(severity, e.getFile(), e.getLine(), 0, str(
         e.getType(), e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
+        e.getRemoteTrace().size() > 0 ? "\nremote: " : "",
+        e.getRemoteTrace(),
         e.getStackTrace().size() > 0 ? "\nstack: " : "",
         stringifyStackTraceAddresses(e.getStackTrace()),
         stringifyStackTrace(e.getStackTrace()), "\n"));
