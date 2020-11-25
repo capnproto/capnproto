@@ -317,12 +317,29 @@ private:
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
 #endif
 
+template <typename T, typename ReturnType, typename... ParamTypes>
+void* getMethodStartAddress(T& obj, ReturnType (T::*method)(ParamTypes...));
+template <typename T, typename ReturnType, typename... ParamTypes>
+void* getMethodStartAddress(const T& obj, ReturnType (T::*method)(ParamTypes...) const);
+// Given an object and a pointer-to-method, return the start address of the method's code. The
+// intent is that this address can be used in a trace; addr2line should map it to the start of
+// the function's definition. For virtual methods, this does a vtable lookup on `obj` to determine
+// the address of the specific implementation (otherwise, `obj` wouldn't be needed).
+//
+// Note that if the method is overloaded or is a template, you will need to explicitly specify
+// the param and return types, otherwise the compiler won't know which overload / template
+// specialization you are requesting.
+
 class PtmfHelper {
-  // This class is a private helper for GetFunctorStartAddress. The class represents the internal
-  // representation of a pointer-to-member-function.
+  // This class is a private helper for GetFunctorStartAddress and getMethodStartAddress(). The
+  // class represents the internal representation of a pointer-to-member-function.
 
   template <typename... ParamTypes>
   friend struct GetFunctorStartAddress;
+  template <typename T, typename ReturnType, typename... ParamTypes>
+  friend void* getMethodStartAddress(T& obj, ReturnType (T::*method)(ParamTypes...));
+  template <typename T, typename ReturnType, typename... ParamTypes>
+  friend void* getMethodStartAddress(const T& obj, ReturnType (T::*method)(ParamTypes...) const);
 
 #if __GNUG__
 
@@ -381,6 +398,15 @@ class PtmfHelper {
 #if __GNUC__ >= 8 && !__clang__
 #pragma GCC diagnostic pop
 #endif
+
+template <typename T, typename ReturnType, typename... ParamTypes>
+void* getMethodStartAddress(T& obj, ReturnType (T::*method)(ParamTypes...)) {
+  return PtmfHelper::from<ReturnType, T, ParamTypes...>(method).apply(&obj);
+}
+template <typename T, typename ReturnType, typename... ParamTypes>
+void* getMethodStartAddress(const T& obj, ReturnType (T::*method)(ParamTypes...) const) {
+  return PtmfHelper::from<ReturnType, T, ParamTypes...>(method).apply(&obj);
+}
 
 template <typename... ParamTypes>
 struct GetFunctorStartAddress {
