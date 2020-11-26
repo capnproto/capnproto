@@ -28,6 +28,9 @@
 #include "tuple.h"
 
 // Detect whether or not we should enable kj::Promise<T> coroutine integration.
+//
+// TODO(someday): Support coroutines with -fno-exceptions.
+#if !KJ_NO_EXCEPTIONS
 #ifdef __has_include
 // For now, we only support the Coroutines TS.
 //
@@ -38,6 +41,7 @@
 #include <experimental/coroutine>
 #define KJ_HAS_COROUTINE 1
 #define KJ_COROUTINE_STD_NAMESPACE std::experimental
+#endif
 #endif
 #endif
 
