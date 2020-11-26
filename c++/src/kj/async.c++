@@ -2575,8 +2575,22 @@ void WeakFulfillerBase::disposeImpl(void* pointer) const {
     delete this;
   } else {
     if (inner->isWaiting()) {
-      inner->reject(kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
-          kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
+      // Let's find out if there's an exception being thrown. If so, we'll use it to reject the
+      // promise.
+#if !KJ_NO_EXCEPTIONS
+      InFlightExceptionIterator iter;
+      KJ_IF_MAYBE(e, iter.next()) {
+        auto copy = kj::cp(*e);
+        copy.truncateCommonTrace();
+        inner->reject(kj::mv(copy));
+      } else {
+#endif
+        // Darn, use a generic exception.
+        inner->reject(kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
+            kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
+#if !KJ_NO_EXCEPTIONS
+      }
+#endif
     }
     inner = nullptr;
   }
