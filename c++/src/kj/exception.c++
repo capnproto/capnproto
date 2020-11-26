@@ -780,8 +780,8 @@ void Exception::wrapContext(const char* file, int line, String&& description) {
   context = heap<Context>(file, line, mv(description), mv(context));
 }
 
-void Exception::extendTrace(uint ignoreCount) {
-  KJ_STACK_ARRAY(void*, newTraceSpace, kj::size(trace) + ignoreCount + 1,
+void Exception::extendTrace(uint ignoreCount, uint limit) {
+  KJ_STACK_ARRAY(void*, newTraceSpace, kj::min(kj::size(trace), limit) + ignoreCount + 1,
       sizeof(trace)/sizeof(trace[0]) + 8, 128);
 
   auto newTrace = kj::getStackTrace(newTraceSpace, ignoreCount + 1);

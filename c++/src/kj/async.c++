@@ -2569,6 +2569,10 @@ void AdapterPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNext
   builder.add(getMethodStartAddress(implicitCast<PromiseNode&>(*this), &PromiseNode::get));
 }
 
+void END_FULFILLER_STACK_START_LISTENER_STACK() {}
+// Dummy symbol used when reporting how a PromiseFulfiller was destroyed without fulfilling the
+// promise. We end up combining two stack traces into one and we use this as a separator.
+
 void WeakFulfillerBase::disposeImpl(void* pointer) const {
   if (inner == nullptr) {
     // Already detached.
@@ -2586,8 +2590,16 @@ void WeakFulfillerBase::disposeImpl(void* pointer) const {
       } else {
 #endif
         // Darn, use a generic exception.
-        inner->reject(kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
-            kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
+        kj::Exception exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
+            kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise."));
+
+        // Let's give some context on where the PromiseFulfiller was destroyed.
+        exception.extendTrace(1, 16);
+
+        // Add a separator that hopefully makes this understandable...
+        exception.addTrace(reinterpret_cast<void*>(&END_FULFILLER_STACK_START_LISTENER_STACK));
+
+        inner->reject(kj::mv(exception));
 #if !KJ_NO_EXCEPTIONS
       }
 #endif

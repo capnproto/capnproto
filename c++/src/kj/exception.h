@@ -113,9 +113,11 @@ public:
   // is expected that contexts will be added in reverse order as the exception passes up the
   // callback stack.
 
-  KJ_NOINLINE void extendTrace(uint ignoreCount);
+  KJ_NOINLINE void extendTrace(uint ignoreCount, uint limit = kj::maxValue);
   // Append the current stack trace to the exception's trace, ignoring the first `ignoreCount`
   // frames (see `getStackTrace()` for discussion of `ignoreCount`).
+  //
+  // If `limit` is set, limit the number of frames added to the given number.
 
   KJ_NOINLINE void truncateCommonTrace();
   // Remove the part of the stack trace which the exception shares with the caller of this method.
