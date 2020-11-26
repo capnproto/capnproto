@@ -1261,8 +1261,28 @@ Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises) {
 
 namespace _ {  // private
 
+class WeakFulfillerBase: protected kj::Disposer {
+protected:
+  WeakFulfillerBase(): inner(nullptr) {}
+  virtual ~WeakFulfillerBase() noexcept(false) {}
+
+  template <typename T>
+  inline PromiseFulfiller<T>* getInner() {
+    return static_cast<PromiseFulfiller<T>*>(inner);
+  };
+  template <typename T>
+  inline void setInner(PromiseFulfiller<T>* ptr) {
+    inner = ptr;
+  };
+
+private:
+  mutable PromiseRejector* inner;
+
+  void disposeImpl(void* pointer) const override;
+};
+
 template <typename T>
-class WeakFulfiller final: public PromiseFulfiller<T>, private kj::Disposer {
+class WeakFulfiller final: public PromiseFulfiller<T>, public WeakFulfillerBase {
   // A wrapper around PromiseFulfiller which can be detached.
   //
   // There are a couple non-trivialities here:
@@ -1285,54 +1305,37 @@ public:
   }
 
   void fulfill(FixVoid<T>&& value) override {
-    if (inner != nullptr) {
-      inner->fulfill(kj::mv(value));
+    if (getInner<T>() != nullptr) {
+      getInner<T>()->fulfill(kj::mv(value));
     }
   }
 
   void reject(Exception&& exception) override {
-    if (inner != nullptr) {
-      inner->reject(kj::mv(exception));
+    if (getInner<T>() != nullptr) {
+      getInner<T>()->reject(kj::mv(exception));
     }
   }
 
   bool isWaiting() override {
-    return inner != nullptr && inner->isWaiting();
+    return getInner<T>() != nullptr && getInner<T>()->isWaiting();
   }
 
   void attach(PromiseFulfiller<T>& newInner) {
-    inner = &newInner;
+    setInner<T>(&newInner);
   }
 
   void detach(PromiseFulfiller<T>& from) {
-    if (inner == nullptr) {
+    if (getInner<T>() == nullptr) {
       // Already disposed.
       delete this;
     } else {
-      KJ_IREQUIRE(inner == &from);
-      inner = nullptr;
+      KJ_IREQUIRE(getInner<T>() == &from);
+      setInner<T>(nullptr);
     }
   }
 
 private:
-  mutable PromiseFulfiller<T>* inner;
-
-  WeakFulfiller(): inner(nullptr) {}
-
-  void disposeImpl(void* pointer) const override {
-    // TODO(perf): Factor some of this out so it isn't regenerated for every fulfiller type?
-
-    if (inner == nullptr) {
-      // Already detached.
-      delete this;
-    } else {
-      if (inner->isWaiting()) {
-        inner->reject(kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
-            kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
-      }
-      inner = nullptr;
-    }
-  }
+  WeakFulfiller() {}
 };
 
 template <typename T>

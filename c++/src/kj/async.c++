@@ -2569,6 +2569,19 @@ void AdapterPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNext
   builder.add(getMethodStartAddress(implicitCast<PromiseNode&>(*this), &PromiseNode::get));
 }
 
+void WeakFulfillerBase::disposeImpl(void* pointer) const {
+  if (inner == nullptr) {
+    // Already detached.
+    delete this;
+  } else {
+    if (inner->isWaiting()) {
+      inner->reject(kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
+          kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
+    }
+    inner = nullptr;
+  }
+}
+
 // -------------------------------------------------------------------
 
 Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW; }
