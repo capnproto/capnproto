@@ -86,14 +86,29 @@ EventLoop& currentEventLoop() {
   return *loop;
 }
 
-class BoolEvent: public _::Event {
+class RootEvent: public _::Event {
 public:
+  RootEvent(_::PromiseNode* node, void* traceAddr): node(node), traceAddr(traceAddr) {}
+
   bool fired = false;
 
   Maybe<Own<_::Event>> fire() override {
     fired = true;
     return nullptr;
   }
+
+  void traceEvent(_::TraceBuilder& builder) override {
+    node->tracePromise(builder, true);
+    builder.add(traceAddr);
+  }
+
+private:
+  _::PromiseNode* node;
+  void* traceAddr;
+};
+
+struct DummyFunctor {
+  void operator()() {};
 };
 
 class YieldPromiseNode final: public _::PromiseNode {
@@ -103,6 +118,9 @@ public:
   }
   void get(_::ExceptionOrValue& output) noexcept override {
     output.as<_::Void>() = _::Void();
+  }
+  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+    builder.add(reinterpret_cast<void*>(&kj::evalLater<DummyFunctor>));
   }
 };
 
@@ -114,6 +132,9 @@ public:
   void get(_::ExceptionOrValue& output) noexcept override {
     output.as<_::Void>() = _::Void();
   }
+  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+    builder.add(reinterpret_cast<void*>(&kj::evalLast<DummyFunctor>));
+  }
 };
 
 class NeverDonePromiseNode final: public _::PromiseNode {
@@ -123,6 +144,9 @@ public:
   }
   void get(_::ExceptionOrValue& output) noexcept override {
     KJ_FAIL_REQUIRE("Not ready.");
+  }
+  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+    builder.add(_::getMethodStartAddress(kj::NEVER_DONE, &_::NeverDone::wait));
   }
 };
 
@@ -216,6 +240,13 @@ public:
   Maybe<Own<Task>> next;
   Maybe<Own<Task>>* prev = nullptr;
 
+  kj::String trace() {
+    void* space[32];
+    _::TraceBuilder builder(space);
+    node->tracePromise(builder, false);
+    return kj::str("task: ", builder);
+  }
+
 protected:
   Maybe<Own<Event>> fire() override {
     // Get the result.
@@ -254,8 +285,10 @@ protected:
     return mv(self);
   }
 
-  _::PromiseNode* getInnerForTrace() override {
-    return node;
+  void traceEvent(_::TraceBuilder& builder) override {
+    // Pointing out the ErrorHandler's taskFailed() implementation will usually identify the
+    // particular TaskSet that contains this event.
+    builder.add(_::getMethodStartAddress(taskSet.errorHandler, &ErrorHandler::taskFailed));
   }
 
 private:
@@ -286,7 +319,7 @@ kj::String TaskSet::trace() {
     }
   }
 
-  return kj::strArray(traces, "\n============================================\n");
+  return kj::strArray(traces, "\n");
 }
 
 Promise<void> TaskSet::onEmpty() {
@@ -358,6 +391,11 @@ public:
 
   void switchToFiber();
   void switchToMain();
+
+  void trace(TraceBuilder& builder) {
+    // TODO(someday): Trace through fiber stack? Can it be done???
+    builder.add(getMethodStartAddress(*this, &FiberStack::trace));
+  }
 
 private:
   size_t stackSize;
@@ -778,8 +816,15 @@ struct Executor::Impl {
 
 namespace _ {  // (private)
 
-XThreadEvent::XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor)
-    : Event(targetExecutor.getLoop()), result(result), targetExecutor(targetExecutor.addRef()) {}
+XThreadEvent::XThreadEvent(
+    ExceptionOrValue& result, const Executor& targetExecutor, void* funcTracePtr)
+    : Event(targetExecutor.getLoop()), result(result), funcTracePtr(funcTracePtr),
+      targetExecutor(targetExecutor.addRef()) {}
+
+void XThreadEvent::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // We can't safely trace into another thread, so we'll stop here.
+  builder.add(funcTracePtr);
+}
 
 void XThreadEvent::ensureDoneOrCanceled() {
 #if _MSC_VER && !defined(__clang__)
@@ -1038,6 +1083,15 @@ Maybe<Own<Event>> XThreadEvent::fire() {
   }
 
   return nullptr;
+}
+
+void XThreadEvent::traceEvent(TraceBuilder& builder) {
+  KJ_IF_MAYBE(n, promiseNode) {
+    n->get()->tracePromise(builder, true);
+  }
+
+  // We can't safely trace into another thread, so we'll stop here.
+  builder.add(funcTracePtr);
 }
 
 void XThreadEvent::onReady(Event* event) noexcept {
@@ -1443,8 +1497,16 @@ void FiberBase::onReady(_::Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
-PromiseNode* FiberBase::getInnerForTrace() {
-  return currentInner;
+void FiberBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  if (stopAtNextEvent) return;
+  currentInner->tracePromise(builder, false);
+  stack->trace(builder);
+}
+
+void FiberBase::traceEvent(TraceBuilder& builder) {
+  currentInner->tracePromise(builder, true);
+  stack->trace(builder);
+  onReadyEvent.traceEvent(builder);
 }
 
 }  // namespace _ (private)
@@ -1478,7 +1540,7 @@ EventLoop::~EventLoop() noexcept(false) {
   // The application _should_ destroy everything using the EventLoop before destroying the
   // EventLoop itself, so if there are events on the loop, this indicates a memory leak.
   KJ_REQUIRE(head == nullptr, "EventLoop destroyed with events still in the queue.  Memory leak?",
-             head->trace()) {
+             head->traceEvent()) {
     // Unlink all the events and hope that no one ever fires them...
     _::Event* event = head;
     while (event != nullptr) {
@@ -1537,6 +1599,8 @@ bool EventLoop::turn() {
     {
       event->firing = true;
       KJ_DEFER(event->firing = false);
+      currentlyFiring = event;
+      KJ_DEFER(currentlyFiring = nullptr);
       eventToDestroy = event->fire();
     }
 
@@ -1685,7 +1749,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 #endif
     KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
-    BoolEvent doneEvent;
+    RootEvent doneEvent(node, reinterpret_cast<void*>(&waitImpl));
     node->setSelfPointer(&node);
     node->onReady(&doneEvent);
 
@@ -1735,7 +1799,7 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
   KJ_REQUIRE(waitScope.fiber == nullptr, "poll() is not supported in fibers.");
   KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
 
-  BoolEvent doneEvent;
+  RootEvent doneEvent(&node, reinterpret_cast<void*>(&pollImpl));
   node.onReady(&doneEvent);
 
   loop.running = true;
@@ -1902,62 +1966,49 @@ void Event::disarm() {
   }
 }
 
-_::PromiseNode* Event::getInnerForTrace() {
-  return nullptr;
+String Event::traceEvent() {
+  void* space[32];
+  TraceBuilder builder(space);
+  traceEvent(builder);
+  return kj::str(builder);
 }
 
-#if !KJ_NO_RTTI
-#if __GNUC__
-static kj::String demangleTypeName(const char* name) {
-  int status;
-  char* buf = abi::__cxa_demangle(name, nullptr, nullptr, &status);
-  kj::String result = kj::heapString(buf == nullptr ? name : buf);
-  free(buf);
-  return kj::mv(result);
-}
-#else
-static kj::String demangleTypeName(const char* name) {
-  return kj::heapString(name);
-}
-#endif
-#endif
-
-static kj::String traceImpl(Event* event, _::PromiseNode* node) {
-#if KJ_NO_RTTI
-  return heapString("Trace not available because RTTI is disabled.");
-#else
-  kj::Vector<kj::String> trace;
-
-  if (event != nullptr) {
-    trace.add(demangleTypeName(typeid(*event).name()));
-  }
-
-  while (node != nullptr) {
-    trace.add(demangleTypeName(typeid(*node).name()));
-    node = node->getInnerForTrace();
-  }
-
-  return strArray(trace, "\n");
-#endif
-}
-
-kj::String Event::trace() {
-  return traceImpl(this, getInnerForTrace());
+String TraceBuilder::toString() {
+  auto result = finish();
+  return kj::str(stringifyStackTraceAddresses(result),
+                 stringifyStackTrace(result));
 }
 
 }  // namespace _ (private)
+
+ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space) {
+  EventLoop* loop = threadLocalEventLoop;
+  if (loop == nullptr) return nullptr;
+  if (loop->currentlyFiring == nullptr) return nullptr;
+
+  _::TraceBuilder builder(space);
+  loop->currentlyFiring->traceEvent(builder);
+  return builder.finish();
+}
+
+kj::String getAsyncTrace() {
+  void* space[32];
+  auto trace = getAsyncTrace(space);
+  return kj::str(stringifyStackTraceAddresses(trace), stringifyStackTrace(trace));
+}
 
 // =======================================================================================
 
 namespace _ {  // private
 
 kj::String PromiseBase::trace() {
-  return traceImpl(nullptr, node);
+  void* space[32];
+  TraceBuilder builder(space);
+  node->tracePromise(builder, false);
+  return kj::str(builder);
 }
 
 void PromiseNode::setSelfPointer(Own<PromiseNode>* selfPtr) noexcept {}
-
-PromiseNode* PromiseNode::getInnerForTrace() { return nullptr; }
 
 void PromiseNode::OnReadyEvent::init(Event* newEvent) {
   if (event == _kJ_ALREADY_READY) {
@@ -2003,6 +2054,12 @@ void ImmediatePromiseNodeBase::onReady(Event* event) noexcept {
   if (event) event->armBreadthFirst();
 }
 
+void ImmediatePromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // Maybe returning the address of get() will give us a function name with meaningful type
+  // information.
+  builder.add(getMethodStartAddress(implicitCast<PromiseNode&>(*this), &PromiseNode::get));
+}
+
 ImmediateBrokenPromiseNode::ImmediateBrokenPromiseNode(Exception&& exception)
     : exception(kj::mv(exception)) {}
 
@@ -2025,8 +2082,11 @@ void AttachmentPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   dependency->get(output);
 }
 
-PromiseNode* AttachmentPromiseNodeBase::getInnerForTrace() {
-  return dependency;
+void AttachmentPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  dependency->tracePromise(builder, stopAtNextEvent);
+
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called fork() and
+  //   addBranch()?
 }
 
 void AttachmentPromiseNodeBase::dropDependency() {
@@ -2054,8 +2114,15 @@ void TransformPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   }
 }
 
-PromiseNode* TransformPromiseNodeBase::getInnerForTrace() {
-  return dependency;
+void TransformPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // Note that we null out the dependency just before calling our own continuation, which
+  // conveniently means that if we're currently executing the continuation when the trace is
+  // requested, it won't trace into the obsolete dependency. Nice.
+  if (dependency.get() != nullptr) {
+    dependency->tracePromise(builder, stopAtNextEvent);
+  }
+
+  builder.add(continuationTracePtr);
 }
 
 void TransformPromiseNodeBase::dropDependency() {
@@ -2113,8 +2180,15 @@ void ForkBranchBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
-PromiseNode* ForkBranchBase::getInnerForTrace() {
-  return hub->getInnerForTrace();
+void ForkBranchBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  if (stopAtNextEvent) return;
+
+  if (hub.get() != nullptr) {
+    hub->inner->tracePromise(builder, false);
+  }
+
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called fork() and
+  //   addBranch()?
 }
 
 // -------------------------------------------------------------------
@@ -2147,8 +2221,11 @@ Maybe<Own<Event>> ForkHubBase::fire() {
   return nullptr;
 }
 
-_::PromiseNode* ForkHubBase::getInnerForTrace() {
-  return inner;
+void ForkHubBase::traceEvent(TraceBuilder& builder) {
+  if (headBranch != nullptr) {
+    // We'll trace down the first branch, I guess.
+    headBranch->onReadyEvent.traceEvent(builder);
+  }
 }
 
 // -------------------------------------------------------------------
@@ -2187,8 +2264,15 @@ void ChainPromiseNode::get(ExceptionOrValue& output) noexcept {
   return inner->get(output);
 }
 
-PromiseNode* ChainPromiseNode::getInnerForTrace() {
-  return inner;
+void ChainPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  if (stopAtNextEvent && state == STEP1) {
+    // In STEP1, we are an Event -- when the inner node resolves, it will arm *this* object.
+    // In STEP2, we are not an Event -- when the inner node resolves, it directly arms our parent
+    // event.
+    return;
+  }
+
+  inner->tracePromise(builder, stopAtNextEvent);
 }
 
 Maybe<Own<Event>> ChainPromiseNode::fire() {
@@ -2243,6 +2327,25 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
   }
 }
 
+void ChainPromiseNode::traceEvent(TraceBuilder& builder) {
+  switch (state) {
+    case STEP1:
+      if (inner.get() != nullptr) {
+        inner->tracePromise(builder, true);
+      }
+      if (!builder.full() && onReadyEvent != nullptr) {
+        onReadyEvent->traceEvent(builder);
+      }
+      break;
+    case STEP2:
+      // This probably never happens -- a trace being generated after the meat of fire() already
+      // executed. If it does, though, we probably can't do anything here. We don't know if
+      // `onReadyEvent` is still valid because we passed it on to the phase-2 promise, and tracing
+      // just `inner` would probably be confusing. Let's just do nothing.
+      break;
+  }
+}
+
 // -------------------------------------------------------------------
 
 ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right)
@@ -2258,12 +2361,18 @@ void ExclusiveJoinPromiseNode::get(ExceptionOrValue& output) noexcept {
   KJ_REQUIRE(left.get(output) || right.get(output), "get() called before ready.");
 }
 
-PromiseNode* ExclusiveJoinPromiseNode::getInnerForTrace() {
-  auto result = left.getInnerForTrace();
-  if (result == nullptr) {
-    result = right.getInnerForTrace();
+void ExclusiveJoinPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called
+  //   exclusiveJoin()?
+
+  if (stopAtNextEvent) return;
+
+  // Trace the left branch I guess.
+  if (left.dependency.get() != nullptr) {
+    left.dependency->tracePromise(builder, false);
+  } else if (right.dependency.get() != nullptr) {
+    right.dependency->tracePromise(builder, false);
   }
-  return result;
 }
 
 ExclusiveJoinPromiseNode::Branch::Branch(
@@ -2301,8 +2410,11 @@ Maybe<Own<Event>> ExclusiveJoinPromiseNode::Branch::fire() {
   return nullptr;
 }
 
-PromiseNode* ExclusiveJoinPromiseNode::Branch::getInnerForTrace() {
-  return dependency;
+void ExclusiveJoinPromiseNode::Branch::traceEvent(TraceBuilder& builder) {
+  if (dependency.get() != nullptr) {
+    dependency->tracePromise(builder, true);
+  }
+  joinNode.onReadyEvent.traceEvent(builder);
 }
 
 // -------------------------------------------------------------------
@@ -2343,8 +2455,16 @@ void ArrayJoinPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   }
 }
 
-PromiseNode* ArrayJoinPromiseNodeBase::getInnerForTrace() {
-  return branches.size() == 0 ? nullptr : branches[0].getInnerForTrace();
+void ArrayJoinPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called
+  //   joinPromises()?
+
+  if (stopAtNextEvent) return;
+
+  // Trace the first branch I guess.
+  if (branches != nullptr) {
+    branches[0].dependency->tracePromise(builder, false);
+  }
 }
 
 ArrayJoinPromiseNodeBase::Branch::Branch(
@@ -2363,8 +2483,9 @@ Maybe<Own<Event>> ArrayJoinPromiseNodeBase::Branch::fire() {
   return nullptr;
 }
 
-_::PromiseNode* ArrayJoinPromiseNodeBase::Branch::getInnerForTrace() {
-  return dependency->getInnerForTrace();
+void ArrayJoinPromiseNodeBase::Branch::traceEvent(TraceBuilder& builder) {
+  dependency->tracePromise(builder, true);
+  joinNode.onReadyEvent.traceEvent(builder);
 }
 
 Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
@@ -2406,8 +2527,22 @@ void EagerPromiseNodeBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
-PromiseNode* EagerPromiseNodeBase::getInnerForTrace() {
-  return dependency;
+void EagerPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called
+  //   eagerlyEvaluate()? But note that if a non-null exception handler was passed to it, that
+  //   creates a TransformPromiseNode which will report the location anyhow.
+
+  if (stopAtNextEvent) return;
+  if (dependency.get() != nullptr) {
+    dependency->tracePromise(builder, stopAtNextEvent);
+  }
+}
+
+void EagerPromiseNodeBase::traceEvent(TraceBuilder& builder) {
+  if (dependency.get() != nullptr) {
+    dependency->tracePromise(builder, true);
+  }
+  onReadyEvent.traceEvent(builder);
 }
 
 Maybe<Own<Event>> EagerPromiseNodeBase::fire() {
@@ -2426,6 +2561,12 @@ Maybe<Own<Event>> EagerPromiseNodeBase::fire() {
 
 void AdapterPromiseNodeBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
+}
+
+void AdapterPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // Maybe returning the address of get() will give us a function name with meaningful type
+  // information.
+  builder.add(getMethodStartAddress(implicitCast<PromiseNode&>(*this), &PromiseNode::get));
 }
 
 // -------------------------------------------------------------------
