@@ -435,9 +435,9 @@ class TransformPromiseNode final: public TransformPromiseNodeBase {
   // function (implements `then()`).
 
 public:
-  TransformPromiseNode(Own<PromiseNode>&& dependency, Func&& func, ErrorFunc&& errorHandler)
-      : TransformPromiseNodeBase(kj::mv(dependency),
-            GetFunctorStartAddress<DepT&&>::apply(func)),
+  TransformPromiseNode(Own<PromiseNode>&& dependency, Func&& func, ErrorFunc&& errorHandler,
+                       void* continuationTracePtr)
+      : TransformPromiseNodeBase(kj::mv(dependency), continuationTracePtr),
         func(kj::fwd<Func>(func)), errorHandler(kj::fwd<ErrorFunc>(errorHandler)) {}
 
   ~TransformPromiseNode() noexcept(false) {
@@ -954,9 +954,11 @@ template <typename Func, typename ErrorFunc>
 PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler) {
   typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
 
+  void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
   Own<_::PromiseNode> intermediate =
       heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
-          kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
+          kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
+          continuationTracePtr);
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
   return _::maybeReduce(kj::mv(result), false);
@@ -997,8 +999,18 @@ Promise<T> Promise<T>::catch_(ErrorFunc&& errorHandler) {
   // Func is being filled in automatically. We want to make sure ErrorFunc can return a Promise,
   // but we don't want the extra overhead of promise chaining if ErrorFunc doesn't actually
   // return a promise. So we make our Func return match ErrorFunc.
-  return then(_::IdentityFunc<decltype(errorHandler(instance<Exception&&>()))>(),
-              kj::fwd<ErrorFunc>(errorHandler));
+  typedef _::IdentityFunc<decltype(errorHandler(instance<Exception&&>()))> Func;
+  typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
+
+  // The reason catch_() isn't simply implemented in terms of then() is because we want the trace
+  // pointer to be based on ErrorFunc rather than Func.
+  void* continuationTracePtr = _::GetFunctorStartAddress<kj::Exception&&>::apply(errorHandler);
+  Own<_::PromiseNode> intermediate =
+      heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+          kj::mv(node), Func(), kj::fwd<ErrorFunc>(errorHandler), continuationTracePtr);
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
+  return _::maybeReduce(kj::mv(result), false);
 }
 
 template <typename T>
