@@ -393,6 +393,12 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
 
+ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
+kj::String getAsyncTrace();
+// If the event loop is currently running in this thread, get a trace back through the promise
+// chain leading to the currently-executing event. The format is the same as kj::getStackTrace()
+// from exception.c++.
+
 template <typename Func>
 PromiseForResult<Func, void> retryOnDisconnect(Func&& func) KJ_WARN_UNUSED_RESULT;
 // Promises to run `func()` asynchronously, retrying once if it fails with a DISCONNECTED exception.
@@ -993,6 +999,8 @@ private:
 
   Own<TaskSet> daemons;
 
+  _::Event* currentlyFiring = nullptr;
+
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
@@ -1011,6 +1019,7 @@ private:
   friend class _::XThreadEvent;
   friend class _::FiberBase;
   friend class _::FiberStack;
+  friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 };
 
 class WaitScope {
