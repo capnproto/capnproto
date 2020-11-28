@@ -155,10 +155,6 @@ KJ_TEST("Path exceptions") {
   KJ_EXPECT_THROW_MESSAGE("root path has no parent", Path(nullptr).parent());
 }
 
-static inline bool operator==(const Array<wchar_t>& arr, const wchar_t* expected) {
-  return wcscmp(arr.begin(), expected) == 0;
-}
-
 constexpr kj::ArrayPtr<const wchar_t> operator "" _a(const wchar_t* str, size_t n) {
   return { str, n };
 }
