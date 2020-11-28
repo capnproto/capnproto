@@ -231,6 +231,15 @@ KJ_TEST("parsing 'nan' returns canonical NaN value") {
   }
 }
 
+KJ_TEST("stringify array-of-array") {
+  int arr1[] = {1, 23};
+  int arr2[] = {456, 7890};
+  ArrayPtr<int> arr3[] = {arr1, arr2};
+  ArrayPtr<ArrayPtr<int>> array = arr3;
+
+  KJ_EXPECT(str(array) == "1, 23, 456, 7890");
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
