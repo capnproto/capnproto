@@ -137,9 +137,9 @@ namespace kj {
 #define KJ_DBG(...) KJ_EXPAND(KJ_LOG(DBG, __VA_ARGS__))
 
 #define KJ_REQUIRE(cond, ...) \
-  if (KJ_LIKELY(cond)) {} else \
+  if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
     for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-                                 #cond, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
+        #cond, "_kjCondition," #__VA_ARGS__, _kjCondition, __VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_REQUIRE(...) \
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
@@ -217,9 +217,9 @@ namespace kj {
 #define KJ_DBG(...) KJ_LOG(DBG, ##__VA_ARGS__)
 
 #define KJ_REQUIRE(cond, ...) \
-  if (KJ_LIKELY(cond)) {} else \
+  if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
     for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-                                 #cond, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+        #cond, "_kjCondition," #__VA_ARGS__, _kjCondition, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_REQUIRE(...) \
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
@@ -576,6 +576,125 @@ template <>
 inline String Debug::makeDescription<>(const char* macroArgs) {
   return makeDescriptionInternal(macroArgs, nullptr);
 }
+
+// =======================================================================================
+// Magic Asserts!
+//
+// When KJ_ASSERT(foo == bar) fails, `foo` and `bar`'s actual values will be stringified in the
+// error message. How does it work? We use template magic and operator precedence. The assertion
+// actually evaluates something like this:
+//
+//     if (auto _kjCondition = kj::_::MAGIC_ASSERT << foo == bar)
+//
+// `<<` has operator precedence slightly above `==`, so `kj::_::MAGIC_ASSERT << foo` gets evaluated
+// first. This wraps `foo` in a little wrapper that captures the comparison operators and keeps
+// enough information around to be able to stringify the left and right sides of the comparison
+// independently. As always, the stringification only actually occurs if the assert fails.
+//
+// You might ask why we use operator `<<` and not e.g. operator `<=`, since operators of the same
+// precedence are evaluated left-to-right. The answer is that some compilers trigger all sorts of
+// warnings when you seem to be using a comparison as the input to another comparison. The
+// particular warning GCC produces is its general "-Wparentheses" warning which is broadly useful,
+// so we don't want to disable it. `<<` also produces some warnings, but only on Clang and the
+// specific warning is one we're comfortable disabling (see below). This does mean that we have to
+// explicitly overload `operator<<` ourselves to make sure using it in an assert still works.
+//
+// You might also ask, if we're using operator `<<` anyway, why not start it from the right, in
+// which case it would bind after computing any `<<` operators that were actually in the user's
+// code? I tried this, but it resulted in a somewhat broader warning from clang that I felt worse
+// about disabling (a warning about `<<` precedence not applying specifically to overloads) and
+// also created ambiguous overload errors in the KJ units code.
+
+#if __clang__
+// We intentionally overload operator << for the specific purpose of evaluating it before
+// evaluating comparison expressions, so stop Clang from warning about it. Unfortunately this means
+// eliminating a warning that would otherwise be useful for people using iostreams... sorry.
+#pragma GCC diagnostic ignored "-Woverloaded-shift-op-parentheses"
+#endif
+
+template <typename T>
+struct DebugExpression;
+
+template <typename T, typename = decltype(toCharSequence(instance<T&>()))>
+inline auto tryToCharSequence(T* value) { return kj::toCharSequence(*value); }
+inline StringPtr tryToCharSequence(...) { return "(can't stringify)"_kj; }
+// SFINAE to stringify a value if and only if it can be stringified.
+
+template <typename Left, typename Right>
+struct DebugComparison {
+  Left left;
+  Right right;
+  StringPtr op;
+  bool result;
+
+  inline operator bool() const { return KJ_LIKELY(result); }
+
+  template <typename T> inline void operator&(T&& other) = delete;
+  template <typename T> inline void operator^(T&& other) = delete;
+  template <typename T> inline void operator|(T&& other) = delete;
+};
+
+template <typename Left, typename Right>
+String KJ_STRINGIFY(DebugComparison<Left, Right>& cmp) {
+  return _::concat(tryToCharSequence(&cmp.left), cmp.op, tryToCharSequence(&cmp.right));
+}
+
+template <typename T>
+struct DebugExpression {
+  DebugExpression(T&& value): value(kj::fwd<T>(value)) {}
+  T value;
+
+  // Handle comparison operations by constructing a DebugComparison value.
+#define DEFINE_OPERATOR(OP) \
+  template <typename U> \
+  DebugComparison<T, U> operator OP(U&& other) { \
+    bool result = value OP other; \
+    return { kj::fwd<T>(value), kj::fwd<U>(other), " " #OP " "_kj, result }; \
+  }
+  DEFINE_OPERATOR(==);
+  DEFINE_OPERATOR(!=);
+  DEFINE_OPERATOR(<=);
+  DEFINE_OPERATOR(>=);
+  DEFINE_OPERATOR(< );
+  DEFINE_OPERATOR(> );
+#undef DEFINE_OPERATOR
+
+  // Handle binary operators that have equal or lower precedence than comparisons by performing
+  // the operation and wrapping the result.
+#define DEFINE_OPERATOR(OP) \
+  template <typename U> inline auto operator OP(U&& other) { \
+    return DebugExpression<decltype(kj::fwd<T>(value) OP kj::fwd<U>(other))>(\
+        kj::fwd<T>(value) OP kj::fwd<U>(other)); \
+  }
+  DEFINE_OPERATOR(<<);
+  DEFINE_OPERATOR(>>);
+  DEFINE_OPERATOR(&);
+  DEFINE_OPERATOR(^);
+  DEFINE_OPERATOR(|);
+#undef DEFINE_OPERATOR
+
+  inline operator bool() {
+    // No comparison performed, we're just asserting the expression is truthy. This also covers
+    // the case of the logic operators && and || -- we cannot overload those because doing so would
+    // break short-circuiting behavior.
+    return value;
+  }
+};
+
+template <typename T>
+StringPtr KJ_STRINGIFY(const DebugExpression<T>& exp) {
+  // Hack: This will only ever be called in cases where the expression's truthiness was asserted
+  //   directly, and was determined to be falsy.
+  return "false"_kj;
+}
+
+struct DebugExpressionStart {
+  template <typename T>
+  DebugExpression<T> operator<<(T&& value) const {
+    return DebugExpression<T>(kj::fwd<T>(value));
+  }
+};
+static constexpr DebugExpressionStart MAGIC_ASSERT;
 
 }  // namespace _ (private)
 }  // namespace kj
