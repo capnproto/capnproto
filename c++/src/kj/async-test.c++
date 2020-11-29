@@ -369,8 +369,26 @@ TEST(Async, SeparateFulfillerDiscarded) {
   auto pair = newPromiseAndFulfiller<int>();
   pair.fulfiller = nullptr;
 
-  EXPECT_ANY_THROW(pair.promise.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+      "PromiseFulfiller was destroyed without fulfilling the promise",
+      pair.promise.wait(waitScope));
 }
+
+#if !KJ_NO_EXCEPTIONS
+TEST(Async, SeparateFulfillerDiscardedDuringUnwind) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto pair = newPromiseAndFulfiller<int>();
+  kj::runCatchingExceptions([&]() {
+    auto fulfillerToDrop = kj::mv(pair.fulfiller);
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "test exception"));
+  });
+
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+      "test exception", pair.promise.wait(waitScope));
+}
+#endif
 
 TEST(Async, SeparateFulfillerMemoryLeak) {
   auto paf = kj::newPromiseAndFulfiller<void>();

@@ -521,8 +521,16 @@ inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func
 // =======================================================================================
 // Advanced promise construction
 
+class PromiseRejector {
+  // Superclass of PromiseFulfiller containing the non-typed methods. Useful when you only really
+  // need to be able to reject a promise, and you need to operate on fulfillers of different types.
+public:
+  virtual void reject(Exception&& exception) = 0;
+  virtual bool isWaiting() = 0;
+};
+
 template <typename T>
-class PromiseFulfiller {
+class PromiseFulfiller: public PromiseRejector {
   // A callback which can be used to fulfill a promise.  Only the first call to fulfill() or
   // reject() matters; subsequent calls are ignored.
 
@@ -546,7 +554,7 @@ public:
 };
 
 template <>
-class PromiseFulfiller<void> {
+class PromiseFulfiller<void>: public PromiseRejector {
   // Specialization of PromiseFulfiller for void promises.  See PromiseFulfiller<T>.
 
 public:
