@@ -208,6 +208,7 @@ KJ_TEST("getStackTrace() returns correct line number, not line + 1") {
   KJ_ASSERT(strstr(trace.cStr(), wrong.cStr()) == nullptr, trace, wrong);
 }
 
+#if !KJ_NO_EXCEPTIONS
 KJ_TEST("InFlightExceptionIterator works") {
   bool caught = false;
   try {
@@ -240,6 +241,7 @@ KJ_TEST("InFlightExceptionIterator works") {
 
   KJ_EXPECT(caught);
 }
+#endif
 
 KJ_TEST("computeRelativeTrace") {
   auto testCase = [](uint expectedPrefix,
