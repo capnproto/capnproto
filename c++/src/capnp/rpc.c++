@@ -1643,13 +1643,17 @@ private:
         kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>> fulfiller)
         : connectionState(kj::addRef(connectionState)), id(id), fulfiller(kj::mv(fulfiller)) {}
 
-    ~QuestionRef() {
-      unwindDetector.catchExceptionsIfUnwinding([&]() {
-        auto& question = KJ_ASSERT_NONNULL(
-            connectionState->questions.find(id), "Question ID no longer on table?");
+    ~QuestionRef() noexcept {
+      // Contrary to KJ style, we declare this destructor `noexcept` because if anything in here
+      // throws (without being caught) we're probably in pretty bad shape and going to be crashing
+      // later anyway. Better to abort now.
 
-        // Send the "Finish" message (if the connection is not already broken).
-        if (connectionState->connection.is<Connected>() && !question.skipFinish) {
+      auto& question = KJ_ASSERT_NONNULL(
+          connectionState->questions.find(id), "Question ID no longer on table?");
+
+      // Send the "Finish" message (if the connection is not already broken).
+      if (connectionState->connection.is<Connected>() && !question.skipFinish) {
+        KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
           auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
               messageSizeHint<rpc::Finish>());
           auto builder = message->getBody().getAs<rpc::Message>().initFinish();
@@ -1660,19 +1664,21 @@ private:
           // will send Release messages when those are destroyed.
           builder.setReleaseResultCaps(question.isAwaitingReturn);
           message->send();
+        })) {
+          connectionState->disconnect(kj::mv(*e));
         }
+      }
 
-        // Check if the question has returned and, if so, remove it from the table.
-        // Remove question ID from the table.  Must do this *after* sending `Finish` to ensure that
-        // the ID is not re-allocated before the `Finish` message can be sent.
-        if (question.isAwaitingReturn) {
-          // Still waiting for return, so just remove the QuestionRef pointer from the table.
-          question.selfRef = nullptr;
-        } else {
-          // Call has already returned, so we can now remove it from the table.
-          connectionState->questions.erase(id, question);
-        }
-      });
+      // Check if the question has returned and, if so, remove it from the table.
+      // Remove question ID from the table.  Must do this *after* sending `Finish` to ensure that
+      // the ID is not re-allocated before the `Finish` message can be sent.
+      if (question.isAwaitingReturn) {
+        // Still waiting for return, so just remove the QuestionRef pointer from the table.
+        question.selfRef = nullptr;
+      } else {
+        // Call has already returned, so we can now remove it from the table.
+        connectionState->questions.erase(id, question);
+      }
     }
 
     inline QuestionId getId() const { return id; }
@@ -1693,7 +1699,6 @@ private:
     kj::Own<RpcConnectionState> connectionState;
     QuestionId id;
     kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>> fulfiller;
-    kj::UnwindDetector unwindDetector;
   };
 
   class RpcRequest final: public RequestHook {
