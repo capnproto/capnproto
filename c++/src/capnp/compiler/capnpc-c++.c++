@@ -548,9 +548,12 @@ private:
               return CppTypeName::makePrimitive(" ::capnp::AnyStruct");
             case schema::Type::AnyPointer::Unconstrained::LIST:
               return CppTypeName::makePrimitive(" ::capnp::AnyList");
-            case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+            case schema::Type::AnyPointer::Unconstrained::CAPABILITY: {
               hasInterfaces = true;  // Probably need to #include <capnp/capability.h>.
-              return CppTypeName::makePrimitive(" ::capnp::Capability");
+              auto result = CppTypeName::makePrimitive(" ::capnp::Capability");
+              result.setHasInterfaces();
+              return result;
+            }
           }
           KJ_UNREACHABLE;
         }
