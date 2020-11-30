@@ -366,7 +366,7 @@ TEST(Async, SeparateFulfillerDiscarded) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  auto pair = newPromiseAndFulfiller<int>();
+  auto pair = newPromiseAndFulfiller<void>();
   pair.fulfiller = nullptr;
 
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
