@@ -85,15 +85,15 @@ KJ_TEST("KJ -> ByteStream -> KJ without shortening") {
     auto pieces = kj::heapArrayBuilder<kj::ArrayPtr<const kj::byte>>(4);
 
     // Two 2^15 pieces will be combined.
-    pieces.add(kj::ArrayPtr(reinterpret_cast<kj::byte*>(str.begin()), 1 << 15));
-    pieces.add(kj::ArrayPtr(reinterpret_cast<kj::byte*>(str.begin() + (1 << 15)), 1 << 15));
+    pieces.add(kj::arrayPtr(reinterpret_cast<kj::byte*>(str.begin()), 1 << 15));
+    pieces.add(kj::arrayPtr(reinterpret_cast<kj::byte*>(str.begin() + (1 << 15)), 1 << 15));
 
     // One 2^16 piece will be written alone.
-    pieces.add(kj::ArrayPtr(reinterpret_cast<kj::byte*>(
+    pieces.add(kj::arrayPtr(reinterpret_cast<kj::byte*>(
         str.begin() + (1 << 16)), 1 << 16));
 
     // One 2^17 piece will be split.
-    pieces.add(kj::ArrayPtr(reinterpret_cast<kj::byte*>(
+    pieces.add(kj::arrayPtr(reinterpret_cast<kj::byte*>(
         str.begin() + (1 << 16)), str.size() - (1 << 17)));
 
     auto promise = wrapped->write(pieces);
