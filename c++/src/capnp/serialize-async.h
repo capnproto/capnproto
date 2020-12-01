@@ -80,7 +80,7 @@ public:
   // Get the size of the underlying send buffer, if applicable. The RPC
   // system uses this as a hint for flow control purposes; see:
   //
-  // https://capnproto.org/news/#multi-stream-flow-control
+  // https://capnproto.org/news/2020-04-23-capnproto-0.8.html#multi-stream-flow-control
   //
   // ...for a more thorough explanation of how this is used. Implementations
   // may return nullptr if they do not have access to this information, or if
