@@ -27,12 +27,12 @@
 namespace capnp {
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(
-    TwoPartyVatNetwork::TransportUnion&& transport,
+    TwoPartyVatNetwork::StreamUnion&& stream,
     uint maxFdsPerMessage,
     rpc::twoparty::Side side,
     ReaderOptions receiveOptions)
 
-    : transport(kj::mv(transport)),
+    : stream(kj::mv(stream)),
       maxFdsPerMessage(maxFdsPerMessage),
       side(side),
       peerVatId(4),
@@ -47,11 +47,11 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(
   disconnectFulfiller.fulfiller = kj::mv(paf.fulfiller);
 }
 
-TwoPartyVatNetwork::TwoPartyVatNetwork(capnp::MessageTransport& transport,
+TwoPartyVatNetwork::TwoPartyVatNetwork(capnp::MessageStream& transport,
                    rpc::twoparty::Side side, ReaderOptions receiveOptions)
   : TwoPartyVatNetwork(transport, 0, side, receiveOptions) {}
 
-TwoPartyVatNetwork::TwoPartyVatNetwork(capnp::MessageTransport& transport, uint maxFdsPerMessage,
+TwoPartyVatNetwork::TwoPartyVatNetwork(capnp::MessageStream& transport, uint maxFdsPerMessage,
                    rpc::twoparty::Side side, ReaderOptions receiveOptions)
     : TwoPartyVatNetwork(&transport, maxFdsPerMessage, side, receiveOptions) {
   peerVatId.initRoot<rpc::twoparty::VatId>().setSide(
@@ -65,11 +65,11 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(capnp::MessageTransport& transport, uint 
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                                        ReaderOptions receiveOptions)
-    : TwoPartyVatNetwork(AsyncIoTransport(stream), 0, side, receiveOptions) {}
+    : TwoPartyVatNetwork(AsyncIoMessageStream(stream), 0, side, receiveOptions) {}
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
                                        rpc::twoparty::Side side, ReaderOptions receiveOptions)
-    : TwoPartyVatNetwork(AsyncCapabilityTransport(stream), maxFdsPerMessage, side, receiveOptions) {}
+    : TwoPartyVatNetwork(AsyncCapabilityMessageStream(stream), maxFdsPerMessage, side, receiveOptions) {}
 
 void TwoPartyVatNetwork::FulfillerDisposer::disposeImpl(void* pointer) const {
   if (--refcount == 0) {
@@ -77,16 +77,16 @@ void TwoPartyVatNetwork::FulfillerDisposer::disposeImpl(void* pointer) const {
   }
 }
 
-MessageTransport& TwoPartyVatNetwork::getTransport() {
-  KJ_SWITCH_ONEOF(transport) {
-    KJ_CASE_ONEOF(t, AsyncIoTransport) {
-      return t;
+MessageStream& TwoPartyVatNetwork::getStream() {
+  KJ_SWITCH_ONEOF(stream) {
+    KJ_CASE_ONEOF(s, AsyncIoMessageStream) {
+      return s;
     }
-    KJ_CASE_ONEOF(t, AsyncCapabilityTransport) {
-      return t;
+    KJ_CASE_ONEOF(s, AsyncCapabilityMessageStream) {
+      return s;
     }
-    KJ_CASE_ONEOF(t, MessageTransport*) {
-      return *t;
+    KJ_CASE_ONEOF(s, MessageStream*) {
+      return *s;
     }
   }
   KJ_UNREACHABLE;
@@ -152,7 +152,7 @@ public:
       // Note that if the write fails, all further writes will be skipped due to the exception.
       // We never actually handle this exception because we assume the read end will fail as well
       // and it's cleaner to handle the failure there.
-      return writeMessage(network.getTransport(), fds, message);
+      return writeMessage(network.getStream(), fds, message);
     }).attach(kj::addRef(*this))
       // Note that it's important that the eagerlyEvaluate() come *after* the attach() because
       // otherwise the message (and any capabilities in it) will not be released until a new
@@ -228,7 +228,7 @@ size_t TwoPartyVatNetwork::getWindow() {
   if (solSndbufUnimplemented) {
     return RpcFlowController::DEFAULT_WINDOW_SIZE;
   } else {
-    KJ_IF_MAYBE(bufSize, getTransport().getSendBufferSize()) {
+    KJ_IF_MAYBE(bufSize, getStream().getSendBufferSize()) {
       return *bufSize;
     } else {
       solSndbufUnimplemented = true;
@@ -250,7 +250,7 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
     auto fdSpace = (maxFdsPerMessage == 0)
       ? nullptr
       : kj::heapArray<kj::AutoCloseFd>(maxFdsPerMessage);
-    auto promise = tryReadMessage(getTransport(), fdSpace, receiveOptions);
+    auto promise = tryReadMessage(getStream(), fdSpace, receiveOptions);
     return promise.then([fdSpace = kj::mv(fdSpace)]
                         (kj::Maybe<MessageReaderAndFds>&& messageAndFds) mutable
                       -> kj::Maybe<kj::Own<IncomingRpcMessage>> {
@@ -270,7 +270,7 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
 
 kj::Promise<void> TwoPartyVatNetwork::shutdown() {
   kj::Promise<void> result = KJ_ASSERT_NONNULL(previousWrite, "already shut down").then([this]() {
-    return getTransport().shutdownWrite();
+    return getStream().shutdownWrite();
   });
   previousWrite = nullptr;
   return kj::mv(result);

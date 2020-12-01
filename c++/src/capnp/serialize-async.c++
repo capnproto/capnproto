@@ -303,10 +303,10 @@ kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<c
   });
 }
 
-AsyncIoTransport::AsyncIoTransport(kj::AsyncIoStream& stream)
+AsyncIoMessageStream::AsyncIoMessageStream(kj::AsyncIoStream& stream)
   : stream(stream) {};
 
-kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncIoTransport::tryReadMessage(
+kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncIoMessageStream::tryReadMessage(
     kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
@@ -320,7 +320,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncIoTransport::tryReadMessage(
     });
 }
 
-kj::Promise<void> AsyncIoTransport::writeMessage(
+kj::Promise<void> AsyncIoMessageStream::writeMessage(
     kj::ArrayPtr<const int> fds,
     kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   return capnp::writeMessage(stream, segments);
@@ -348,42 +348,42 @@ kj::Maybe<int> getSendBufferSize(kj::AsyncIoStream& stream) {
   return bufSize;
 }
 
-kj::Promise<void> AsyncIoTransport::shutdownWrite() {
+kj::Promise<void> AsyncIoMessageStream::shutdownWrite() {
   stream.shutdownWrite();
   return kj::READY_NOW;
 }
 
-kj::Maybe<int> AsyncIoTransport::getSendBufferSize() {
+kj::Maybe<int> AsyncIoMessageStream::getSendBufferSize() {
   return capnp::getSendBufferSize(stream);
 }
 
-AsyncCapabilityTransport::AsyncCapabilityTransport(kj::AsyncCapabilityStream& stream)
+AsyncCapabilityMessageStream::AsyncCapabilityMessageStream(kj::AsyncCapabilityStream& stream)
   : stream(stream) {};
 
-kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncCapabilityTransport::tryReadMessage(
+kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncCapabilityMessageStream::tryReadMessage(
     kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
   return capnp::tryReadMessage(stream, fdSpace, options, scratchSpace);
 }
 
-kj::Promise<void> AsyncCapabilityTransport::writeMessage(
+kj::Promise<void> AsyncCapabilityMessageStream::writeMessage(
     kj::ArrayPtr<const int> fds,
     kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   return capnp::writeMessage(stream, fds, segments);
 }
 
-kj::Maybe<int> AsyncCapabilityTransport::getSendBufferSize() {
+kj::Maybe<int> AsyncCapabilityMessageStream::getSendBufferSize() {
   return capnp::getSendBufferSize(stream);
 }
 
-kj::Promise<void> AsyncCapabilityTransport::shutdownWrite() {
+kj::Promise<void> AsyncCapabilityMessageStream::shutdownWrite() {
   stream.shutdownWrite();
   return kj::READY_NOW;
 }
 
 kj::Promise<kj::Own<MessageReader>> readMessage(
-    MessageTransport& input, ReaderOptions options,
+    MessageStream& input, ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
   return tryReadMessage(input, options, scratchSpace).then([](auto maybeResult) {
     KJ_IF_MAYBE(result, maybeResult) {
@@ -396,7 +396,7 @@ kj::Promise<kj::Own<MessageReader>> readMessage(
 }
 
 kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
-    MessageTransport& input,
+    MessageStream& input,
     ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
   return tryReadMessage(input, nullptr, options, scratchSpace)
@@ -410,7 +410,7 @@ kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
 }
 
 kj::Promise<MessageReaderAndFds> readMessage(
-    MessageTransport& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    MessageStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   return tryReadMessage(input, fdSpace, options, scratchSpace).then([](auto maybeResult) {
       KJ_IF_MAYBE(result, maybeResult) {
@@ -423,7 +423,7 @@ kj::Promise<MessageReaderAndFds> readMessage(
 }
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
-    MessageTransport& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    MessageStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   return input.tryReadMessage(fdSpace, options, scratchSpace);
 }

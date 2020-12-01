@@ -52,9 +52,9 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
   // Use `TwoPartyVatNetwork` only if you need the advanced features.
 
 public:
-  TwoPartyVatNetwork(MessageTransport& transport,
+  TwoPartyVatNetwork(MessageStream& msgStream,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
-  TwoPartyVatNetwork(MessageTransport& transport, uint maxFdsPerMessage,
+  TwoPartyVatNetwork(MessageStream& msgStream, uint maxFdsPerMessage,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
   TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                      ReaderOptions receiveOptions = ReaderOptions());
@@ -90,16 +90,16 @@ private:
   class IncomingMessageImpl;
 
   typedef kj::OneOf<
-      AsyncIoTransport,
-      AsyncCapabilityTransport,
-      MessageTransport*
-  > TransportUnion;
+      AsyncIoMessageStream,
+      AsyncCapabilityMessageStream,
+      MessageStream*
+  > StreamUnion;
 
-  TransportUnion transport;
-  // The underlying transport. The only place we read this is in the
-  // getTransport() accessor -- we only use the common MessageTransport
-  // methods -- but for the constructors that take Async*Stream, we need
-  // somewhere to actualy store the transport that wraps them. Listing
+  StreamUnion stream;
+  // The underlying stream. The only place we read this is in the
+  // getStream() accessor -- we only use the common MessageStream
+  // methods -- but for the constructors that take Async*MessageStream, we
+  // need somewhere to actualy store the transport that wraps them. Listing
   // the cases explicitly lets us keep them unboxed, and it's only two
   // cases (and will not increase, now that we have a proper interface).
 
@@ -138,10 +138,10 @@ private:
   FulfillerDisposer disconnectFulfiller;
 
 
-  TwoPartyVatNetwork(TransportUnion&& transport, uint maxFdsPerMessage,
+  TwoPartyVatNetwork(StreamUnion&& transport, uint maxFdsPerMessage,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
 
-  MessageTransport& getTransport();
+  MessageStream& getStream();
 
   kj::Own<TwoPartyVatNetworkBase::Connection> asConnection();
   // Returns a pointer to this with the disposer set to disconnectFulfiller.
