@@ -246,9 +246,10 @@ kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSeg
 
 kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveIncomingMessage() {
   return kj::evalLater([this]() -> kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> {
-    auto fdSpace = (maxFdsPerMessage == 0)
-      ? nullptr
-      : kj::heapArray<kj::AutoCloseFd>(maxFdsPerMessage);
+    kj::Array<kj::AutoCloseFd> fdSpace = nullptr;
+    if(maxFdsPerMessage > 0) {
+      fdSpace = kj::heapArray<kj::AutoCloseFd>(maxFdsPerMessage);
+    }
     auto promise = tryReadMessage(stream, fdSpace, receiveOptions);
     return promise.then([fdSpace = kj::mv(fdSpace)]
                         (kj::Maybe<MessageReaderAndFds>&& messageAndFds) mutable
