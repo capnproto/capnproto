@@ -89,19 +89,12 @@ private:
   class OutgoingMessageImpl;
   class IncomingMessageImpl;
 
-  typedef kj::OneOf<
-      AsyncIoMessageStream,
-      AsyncCapabilityMessageStream,
-      MessageStream*
-  > StreamUnion;
-
-  StreamUnion stream;
-  // The underlying stream. The only place we read this is in the
-  // getStream() accessor -- we only use the common MessageStream
-  // methods -- but for the constructors that take Async*MessageStream, we
-  // need somewhere to actualy store the transport that wraps them. Listing
-  // the cases explicitly lets us keep them unboxed, and it's only two
-  // cases (and will not increase, now that we have a proper interface).
+  MessageStream& stream;
+  // The underlying stream.
+  kj::Maybe<kj::Own<MessageStream>> ownStream;
+  // A place to store the stream, if we create it ourselves. Otherwise
+  // this will be nullptr. There is no need to ever read this; use
+  // 'stream' instead.
 
   uint maxFdsPerMessage;
   rpc::twoparty::Side side;
@@ -138,10 +131,16 @@ private:
   FulfillerDisposer disconnectFulfiller;
 
 
-  TwoPartyVatNetwork(StreamUnion&& transport, uint maxFdsPerMessage,
-                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
-
-  MessageStream& getStream();
+  TwoPartyVatNetwork(
+      MessageStream& stream,
+      kj::Maybe<kj::Own<MessageStream>>&& ownStream,
+      uint maxFdsPerMessage,
+      rpc::twoparty::Side side,
+      ReaderOptions receiveOptions);
+  TwoPartyVatNetwork(kj::Own<capnp::MessageStream>&& stream,
+                     uint maxFdsPerMessage,
+                     rpc::twoparty::Side side,
+                     ReaderOptions receiveOptions);
 
   kj::Own<TwoPartyVatNetworkBase::Connection> asConnection();
   // Returns a pointer to this with the disposer set to disconnectFulfiller.
