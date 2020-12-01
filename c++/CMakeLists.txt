@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.4)
 project("Cap'n Proto" CXX)
 set(VERSION 0.9-dev)
 
-set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(CheckIncludeFileCXX)
 include(GNUInstallDirs)

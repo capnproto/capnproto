@@ -125,7 +125,14 @@ void Thread::ThreadState::unref() {
 #endif
 
     KJ_IF_MAYBE(e, exception) {
-      KJ_LOG(ERROR, "uncaught exception thrown by detached thread", *e);
+      // If the exception is still present in ThreadState, this must be a detached thread, so
+      // the exception will never be rethrown. We should at least log it.
+      //
+      // We need to run the thread initializer again before we log anything because the main
+      // purpose of the thread initializer is to set up a logging callback.
+      initializer([&]() {
+        KJ_LOG(ERROR, "uncaught exception thrown by detached thread", *e);
+      });
     }
 
     delete this;

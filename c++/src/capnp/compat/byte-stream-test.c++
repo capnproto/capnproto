@@ -46,6 +46,12 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
   }));
 }
 
+kj::String makeString(size_t size) {
+  auto bytes = kj::heapArray<char>(size);
+  bytes[bytes.size() - 1] = 0;
+  return kj::String(kj::mv(bytes));
+};
+
 KJ_TEST("KJ -> ByteStream -> KJ without shortening") {
   kj::EventLoop eventLoop;
   kj::WaitScope waitScope(eventLoop);
@@ -61,6 +67,38 @@ KJ_TEST("KJ -> ByteStream -> KJ without shortening") {
     auto promise = wrapped->write("foo", 3);
     KJ_EXPECT(!promise.poll(waitScope));
     expectRead(*pipe.in, "foo").wait(waitScope);
+    promise.wait(waitScope);
+  }
+
+  {
+    // Write more than 1 << 16 bytes at once to exercise write splitting.
+    auto str = makeString(1 << 17);
+    auto promise = wrapped->write(str.begin(), str.size());
+    KJ_EXPECT(!promise.poll(waitScope));
+    expectRead(*pipe.in, str).wait(waitScope);
+    promise.wait(waitScope);
+  }
+
+  {
+    // Write more than 1 << 16 bytes via an array to exercise write splitting.
+    auto str = makeString(1 << 18);
+    auto pieces = kj::heapArrayBuilder<kj::ArrayPtr<const kj::byte>>(4);
+
+    // Two 2^15 pieces will be combined.
+    pieces.add(kj::ArrayPtr(reinterpret_cast<kj::byte*>(str.begin()), 1 << 15));
+    pieces.add(kj::ArrayPtr(reinterpret_cast<kj::byte*>(str.begin() + (1 << 15)), 1 << 15));
+
+    // One 2^16 piece will be written alone.
+    pieces.add(kj::ArrayPtr(reinterpret_cast<kj::byte*>(
+        str.begin() + (1 << 16)), 1 << 16));
+
+    // One 2^17 piece will be split.
+    pieces.add(kj::ArrayPtr(reinterpret_cast<kj::byte*>(
+        str.begin() + (1 << 16)), str.size() - (1 << 17)));
+
+    auto promise = wrapped->write(pieces);
+    KJ_EXPECT(!promise.poll(waitScope));
+    expectRead(*pipe.in, str).wait(waitScope);
     promise.wait(waitScope);
   }
 

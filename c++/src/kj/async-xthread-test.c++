@@ -828,5 +828,60 @@ KJ_TEST("detached cross-thread event doesn't cause crash") {
   })();
 }
 
+KJ_TEST("cross-thread event cancel requested while destination thread being destroyed") {
+  // This exercises the code in Executor::Impl::disconnect() which tears down the list of
+  // cross-thread events which have already been canceled. At one point this code had a bug which
+  // would cause it to throw if any events were present in the cancel list.
+
+  MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  Own<PromiseFulfiller<void>> fulfiller;  // accessed only from the subthread
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
+
+    *executor.lockExclusive() = getCurrentThreadExecutor();
+
+    // Wait for other thread to start a cross-thread task.
+    paf.promise.wait(waitScope);
+
+    // Let the other thread know, out-of-band, that the task is running, so that it can now request
+    // cancellation. We do this by setting `executor` to null (but we could also use some separate
+    // MutexGuarded conditional variable instead).
+    *executor.lockExclusive() = nullptr;
+
+    // Give other thread a chance to request cancellation of the promise.
+    delay();
+
+    // now we exit the event loop
+  });
+
+  ([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    const Executor* exec;
+    {
+      auto lock = executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != nullptr; });
+      exec = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    KJ_EXPECT(exec->isLive());
+
+    auto promise = exec->executeAsync([&]() -> Promise<void> {
+      fulfiller->fulfill();
+      return kj::NEVER_DONE;
+    });
+
+    // Wait for the other thread to signal to us that it has indeed started executing our task.
+    executor.lockExclusive().wait([](auto& val) { return val == nullptr; });
+
+    // Cancel the promise.
+    promise = nullptr;
+  })();
+}
+
 }  // namespace
 }  // namespace kj

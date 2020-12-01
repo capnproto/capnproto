@@ -587,6 +587,9 @@ struct TestGenerics(Foo, Bar) {
   }
 }
 
+struct BoxedText { text @0 :Text; }
+using BrandedAlias = TestGenerics(BoxedText, Text);
+
 struct TestGenericsWrapper(Foo, Bar) {
   value @0 :TestGenerics(Foo, Bar);
 }
@@ -760,7 +763,6 @@ struct TestAnyPointerConstants {
   anyStructAsStruct @1 :AnyStruct;
   anyKindAsList @2 :AnyPointer;
   anyListAsList @3 :AnyList;
-
 }
 
 const anyPointerConstants :TestAnyPointerConstants = (
@@ -769,6 +771,11 @@ const anyPointerConstants :TestAnyPointerConstants = (
   anyKindAsList = TestConstants.int32ListConst,
   anyListAsList = TestConstants.int32ListConst,
 );
+
+struct TestListOfAny {
+  capList @0 :List(Capability);
+  #listList @1 :List(AnyList); # TODO(soon): Make List(AnyList) work correctly in C++ generated code.
+}
 
 interface TestInterface {
   foo @0 (i :UInt32, j :Bool) -> (x :Text);
@@ -872,6 +879,8 @@ interface TestMoreStuff extends(TestCallOrder) {
              -> (fdCap3 :TestInterface, secondFdPresent :Bool);
   # Expects fdCap1 and fdCap2 wrap socket file descriptors. Writes "foo" to the first and "bar" to
   # the second. Also creates a socketpair, writes "baz" to one end, and returns the other end.
+
+  throwException @14 ();
 }
 
 interface TestMembrane {

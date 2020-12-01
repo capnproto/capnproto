@@ -393,6 +393,12 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
 
+ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
+kj::String getAsyncTrace();
+// If the event loop is currently running in this thread, get a trace back through the promise
+// chain leading to the currently-executing event. The format is the same as kj::getStackTrace()
+// from exception.c++.
+
 template <typename Func>
 PromiseForResult<Func, void> retryOnDisconnect(Func&& func) KJ_WARN_UNUSED_RESULT;
 // Promises to run `func()` asynchronously, retrying once if it fails with a DISCONNECTED exception.
@@ -515,8 +521,16 @@ inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func
 // =======================================================================================
 // Advanced promise construction
 
+class PromiseRejector {
+  // Superclass of PromiseFulfiller containing the non-typed methods. Useful when you only really
+  // need to be able to reject a promise, and you need to operate on fulfillers of different types.
+public:
+  virtual void reject(Exception&& exception) = 0;
+  virtual bool isWaiting() = 0;
+};
+
 template <typename T>
-class PromiseFulfiller {
+class PromiseFulfiller: public PromiseRejector {
   // A callback which can be used to fulfill a promise.  Only the first call to fulfill() or
   // reject() matters; subsequent calls are ignored.
 
@@ -540,7 +554,7 @@ public:
 };
 
 template <>
-class PromiseFulfiller<void> {
+class PromiseFulfiller<void>: public PromiseRejector {
   // Specialization of PromiseFulfiller for void promises.  See PromiseFulfiller<T>.
 
 public:
@@ -993,6 +1007,8 @@ private:
 
   Own<TaskSet> daemons;
 
+  _::Event* currentlyFiring = nullptr;
+
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
@@ -1011,6 +1027,7 @@ private:
   friend class _::XThreadEvent;
   friend class _::FiberBase;
   friend class _::FiberStack;
+  friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 };
 
 class WaitScope {
@@ -1056,6 +1073,16 @@ public:
   // This has no effect if this WaitScope itself is for a fiber.
   //
   // Pass `nullptr` as the parameter to go back to running events on the main stack.
+
+  void cancelAllDetached();
+  // HACK: Immediately cancel all detached promises.
+  //
+  // New code should not use detached promises, and therefore should not need this.
+  //
+  // This method exists to help existing code deal with the problems of detached promises,
+  // especially at teardown time.
+  //
+  // This method may be removed in the future.
 
 private:
   EventLoop& loop;

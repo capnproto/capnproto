@@ -97,6 +97,7 @@ struct Foo {
   listWithoutParam @31 :List;
   listWithTooManyParams @32 :List(Int32, Int64);
   listAnyPointer @33 :List(AnyPointer);
+  listAnyStruct @48 :List(AnyStruct);
   notAType @34 :notType;
   noParams @35 :Foo(Int32);
 

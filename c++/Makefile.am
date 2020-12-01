@@ -380,6 +380,9 @@ libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/grammar.capnp.c++                         \
   src/capnp/compiler/parser.h                                  \
   src/capnp/compiler/parser.c++                                \
+  src/capnp/compiler/resolver.h                                \
+  src/capnp/compiler/generics.h                                \
+  src/capnp/compiler/generics.c++                              \
   src/capnp/compiler/node-translator.h                         \
   src/capnp/compiler/node-translator.c++                       \
   src/capnp/compiler/compiler.h                                \

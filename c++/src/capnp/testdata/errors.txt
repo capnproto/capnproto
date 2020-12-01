@@ -2,7 +2,7 @@ file:74:30-32: error: As of Cap'n Proto v0.3, it is no longer necessary to assig
 file:74:30-32: error: As of Cap'n Proto v0.3, the 'union' keyword should be prefixed with a colon for named unions, e.g. `foo :union {`.
 file:79:23-25: error: As of Cap'n Proto v0.3, it is no longer necessary to assign numbers to unions. However, removing the number will break binary compatibility. If this is an old protocol and you need to retain compatibility, please add an exclamation point after the number to indicate that it is really needed, e.g. `foo @1! :union {`. If this is a new protocol or compatibility doesn't matter, just remove the @n entirely. Sorry for the inconvenience, and thanks for being an early adopter!  :)
 file:84:17-19: error: As of Cap'n Proto v0.3, the 'union' keyword should be prefixed with a colon for named unions, e.g. `foo :union {`.
-file:132:7-10: error: 'using' declaration without '=' must specify a named declaration from a different scope.
+file:133:7-10: error: 'using' declaration without '=' must specify a named declaration from a different scope.
 file:37:3-10: error: 'dupName' is already defined in this scope.
 file:36:3-10: error: 'dupName' previously defined here.
 file:52:5-12: error: 'dupName' is already defined in this scope.
@@ -21,42 +21,43 @@ file:39:15-16: error: Duplicate ordinal number.
 file:38:15-16: error: Ordinal @2 originally used here.
 file:41:18-19: error: Skipped ordinal @3.  Ordinals must be sequential with no holes.
 file:69:15-17: error: Union ordinal, if specified, must be greater than no more than one of its member ordinals (i.e. there can only be one field retroactively unionized).
-file:116:31-50: error: Import failed: noshuchfile.capnp
-file:118:26-32: error: Not defined: NoSuch
-file:119:28-34: error: 'Foo' has no member named 'NoSuch'
+file:117:31-50: error: Import failed: noshuchfile.capnp
+file:119:26-32: error: Not defined: NoSuch
+file:120:28-34: error: 'Foo' has no member named 'NoSuch'
 file:97:25-29: error: 'List' requires exactly one parameter.
 file:98:30-48: error: Too many generic parameters.
 file:98:30-34: error: 'List' requires exactly one parameter.
 file:99:23-39: error: 'List(AnyPointer)' is not supported.
-file:100:17-24: error: 'notType' is not a type.
-file:101:17-27: error: Declaration does not accept generic parameters.
-file:103:34-41: error: Integer value out of range.
-file:104:37-38: error: Integer value out of range.
-file:105:32-35: error: Type mismatch; expected Text.
-file:106:33-38: error: Type mismatch; expected Text.
-file:107:33-55: error: Type mismatch; expected Text.
-file:108:43-61: error: Integer is too big to be negative.
-file:109:35-39: error: '.Foo' does not refer to a constant.
-file:110:44-51: error: Constant names must be qualified to avoid confusion.  Please replace 'notType' with '.notType', if that's what you intended.
-file:117:28-34: error: Not defined: NoSuch
-file:112:29-32: error: 'Foo' is not an annotation.
-file:113:29-47: error: 'notFieldAnnotation' cannot be applied to this kind of declaration.
-file:114:33-48: error: 'fieldAnnotation' requires a value.
-file:126:35-46: error: Struct has no field named 'nosuchfield'.
-file:127:49-52: error: Type mismatch; expected group.
-file:125:52-55: error: Missing field name.
-file:136:3-10: error: 'dupName' is already defined in this scope.
-file:135:3-10: error: 'dupName' previously defined here.
-file:138:15-16: error: Duplicate ordinal number.
-file:137:15-16: error: Ordinal @2 originally used here.
-file:141:7-16: error: Declaration recursively depends on itself.
-file:147:14-27: error: Not enough generic parameters.
-file:148:15-47: error: Too many generic parameters.
-file:149:18-49: error: Double-application of generic parameters.
-file:150:38-43: error: Sorry, only pointer types can be used as generic parameters.
-file:153:30-44: error: Embeds can only be used when Text, Data, or a struct is expected.
-file:154:37-51: error: Couldn't read file for embed: no-such-file
-file:160:23-27: error: Only pointer parameters can declare their default as 'null'.
-file:161:10-16: error: 'stream' can only appear after '->', not before.
-file:161:10-16: error: A method declaration uses streaming, but '/capnp/stream.capnp' is not found in the import path. This is a standard file that should always be installed with the Cap'n Proto compiler.
-file:156:20-45: error: Import failed: nosuchfile-unused.capnp
+file:101:17-24: error: 'notType' is not a type.
+file:102:17-27: error: Declaration does not accept generic parameters.
+file:104:34-41: error: Integer value out of range.
+file:105:37-38: error: Integer value out of range.
+file:106:32-35: error: Type mismatch; expected Text.
+file:107:33-38: error: Type mismatch; expected Text.
+file:108:33-55: error: Type mismatch; expected Text.
+file:109:43-61: error: Integer is too big to be negative.
+file:110:35-39: error: '.Foo' does not refer to a constant.
+file:111:44-51: error: Constant names must be qualified to avoid confusion.  Please replace 'notType' with '.notType', if that's what you intended.
+file:118:28-34: error: Not defined: NoSuch
+file:100:22-37: error: 'List(AnyStruct)' is not supported.
+file:113:29-32: error: 'Foo' is not an annotation.
+file:114:29-47: error: 'notFieldAnnotation' cannot be applied to this kind of declaration.
+file:115:33-48: error: 'fieldAnnotation' requires a value.
+file:127:35-46: error: Struct has no field named 'nosuchfield'.
+file:128:49-52: error: Type mismatch; expected group.
+file:126:52-55: error: Missing field name.
+file:137:3-10: error: 'dupName' is already defined in this scope.
+file:136:3-10: error: 'dupName' previously defined here.
+file:139:15-16: error: Duplicate ordinal number.
+file:138:15-16: error: Ordinal @2 originally used here.
+file:142:7-16: error: Declaration recursively depends on itself.
+file:148:14-27: error: Not enough generic parameters.
+file:149:15-47: error: Too many generic parameters.
+file:150:18-49: error: Double-application of generic parameters.
+file:151:38-43: error: Sorry, only pointer types can be used as generic parameters.
+file:154:30-44: error: Embeds can only be used when Text, Data, or a struct is expected.
+file:155:37-51: error: Couldn't read file for embed: no-such-file
+file:161:23-27: error: Only pointer parameters can declare their default as 'null'.
+file:162:10-16: error: 'stream' can only appear after '->', not before.
+file:162:10-16: error: A method declaration uses streaming, but '/capnp/stream.capnp' is not found in the import path. This is a standard file that should always be installed with the Cap'n Proto compiler.
+file:157:20-45: error: Import failed: nosuchfile-unused.capnp

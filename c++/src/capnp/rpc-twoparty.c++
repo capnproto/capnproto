@@ -392,4 +392,8 @@ Capability::Client TwoPartyClient::bootstrap() {
   return rpcSystem.bootstrap(vatId);
 }
 
+void TwoPartyClient::setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func) {
+  rpcSystem.setTraceEncoder(kj::mv(func));
+}
+
 }  // namespace capnp

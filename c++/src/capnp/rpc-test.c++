@@ -673,6 +673,107 @@ TEST(Rpc, TailCall) {
   EXPECT_EQ(1, context.restorer.callCount);
 }
 
+class TestHangingTailCallee final: public test::TestTailCallee::Server {
+public:
+  TestHangingTailCallee(int& callCount, int& cancelCount)
+      : callCount(callCount), cancelCount(cancelCount) {}
+
+  kj::Promise<void> foo(FooContext context) override {
+    context.allowCancellation();
+    ++callCount;
+    return kj::Promise<void>(kj::NEVER_DONE)
+        .attach(kj::defer([&cancelCount = cancelCount]() { ++cancelCount; }));
+  }
+
+private:
+  int& callCount;
+  int& cancelCount;
+};
+
+class TestRacingTailCaller final: public test::TestTailCaller::Server {
+public:
+  TestRacingTailCaller(kj::Promise<void> unblock): unblock(kj::mv(unblock)) {}
+
+  kj::Promise<void> foo(FooContext context) override {
+    return unblock.then([context]() mutable {
+      auto tailRequest = context.getParams().getCallee().fooRequest();
+      return context.tailCall(kj::mv(tailRequest));
+    });
+  }
+
+private:
+  kj::Promise<void> unblock;
+};
+
+TEST(Rpc, TailCallCancel) {
+  TestContext context;
+
+  auto caller = context.connect(test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER)
+      .castAs<test::TestTailCaller>();
+
+  int callCount = 0, cancelCount = 0;
+
+  test::TestTailCallee::Client callee(kj::heap<TestHangingTailCallee>(callCount, cancelCount));
+
+  {
+    auto request = caller.fooRequest();
+    request.setCallee(callee);
+
+    auto promise = request.send();
+
+    KJ_ASSERT(callCount == 0);
+    KJ_ASSERT(cancelCount == 0);
+
+    KJ_ASSERT(!promise.poll(context.waitScope));
+
+    KJ_ASSERT(callCount == 1);
+    KJ_ASSERT(cancelCount == 0);
+  }
+
+  kj::Promise<void>(kj::NEVER_DONE).poll(context.waitScope);
+
+  KJ_ASSERT(callCount == 1);
+  KJ_ASSERT(cancelCount == 1);
+}
+
+TEST(Rpc, TailCallCancelRace) {
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  TestContext context(kj::heap<TestRacingTailCaller>(kj::mv(paf.promise)));
+
+  MallocMessageBuilder serverHostIdBuilder;
+  auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  serverHostId.setHost("server");
+
+  auto caller = context.rpcClient.bootstrap(serverHostId).castAs<test::TestTailCaller>();
+
+  int callCount = 0, cancelCount = 0;
+
+  test::TestTailCallee::Client callee(kj::heap<TestHangingTailCallee>(callCount, cancelCount));
+
+  {
+    auto request = caller.fooRequest();
+    request.setCallee(callee);
+
+    auto promise = request.send();
+
+    KJ_ASSERT(callCount == 0);
+    KJ_ASSERT(cancelCount == 0);
+
+    KJ_ASSERT(!promise.poll(context.waitScope));
+
+    KJ_ASSERT(callCount == 0);
+    KJ_ASSERT(cancelCount == 0);
+
+    // Unblock the server and at the same time cancel the client.
+    paf.fulfiller->fulfill();
+  }
+
+  kj::Promise<void>(kj::NEVER_DONE).poll(context.waitScope);
+
+  KJ_ASSERT(callCount == 1);
+  KJ_ASSERT(cancelCount == 1);
+}
+
 TEST(Rpc, Cancelation) {
   // Tests allowCancellation().
 
@@ -1353,6 +1454,44 @@ KJ_TEST("loopback bootstrap()") {
 
   KJ_EXPECT(response.getX() == "foo");
   KJ_EXPECT(callCount == 1);
+}
+
+KJ_TEST("method throws exception") {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Maybe<kj::Exception> maybeException;
+  client.throwExceptionRequest().send().ignoreResult()
+      .catch_([&](kj::Exception&& e) {
+    maybeException = kj::mv(e);
+  }).wait(context.waitScope);
+
+  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
+  KJ_EXPECT(exception.getRemoteTrace() == nullptr);
+}
+
+KJ_TEST("method throws exception with trace encoder") {
+  TestContext context;
+
+  context.rpcServer.setTraceEncoder([](const kj::Exception& e) {
+    return kj::str("trace for ", e.getDescription());
+  });
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Maybe<kj::Exception> maybeException;
+  client.throwExceptionRequest().send().ignoreResult()
+      .catch_([&](kj::Exception&& e) {
+    maybeException = kj::mv(e);
+  }).wait(context.waitScope);
+
+  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
+  KJ_EXPECT(exception.getRemoteTrace() == "trace for test exception");
 }
 
 }  // namespace
