@@ -348,7 +348,7 @@ kj::Maybe<int> getSendBufferSize(kj::AsyncIoStream& stream) {
   return bufSize;
 }
 
-kj::Promise<void> AsyncIoMessageStream::shutdownWrite() {
+kj::Promise<void> AsyncIoMessageStream::end() {
   stream.shutdownWrite();
   return kj::READY_NOW;
 }
@@ -377,7 +377,7 @@ kj::Maybe<int> AsyncCapabilityMessageStream::getSendBufferSize() {
   return capnp::getSendBufferSize(stream);
 }
 
-kj::Promise<void> AsyncCapabilityMessageStream::shutdownWrite() {
+kj::Promise<void> AsyncCapabilityMessageStream::end() {
   stream.shutdownWrite();
   return kj::READY_NOW;
 }

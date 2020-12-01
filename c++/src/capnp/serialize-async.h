@@ -111,7 +111,7 @@ public:
   // may return nullptr if they do not have access to this information, or if
   // the underlying transport does not use a congestion window.
 
-  virtual kj::Promise<void> shutdownWrite() = 0;
+  virtual kj::Promise<void> end() = 0;
   // Cleanly shut down just the write end of the transport, while keeping the read end open.
 
 };
@@ -130,7 +130,7 @@ public:
       kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
   kj::Maybe<int> getSendBufferSize() override;
 
-  kj::Promise<void> shutdownWrite() override;
+  kj::Promise<void> end() override;
 private:
   kj::AsyncIoStream& stream;
 };
@@ -148,7 +148,7 @@ public:
       kj::ArrayPtr<const int> fds,
       kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
   kj::Maybe<int> getSendBufferSize() override;
-  kj::Promise<void> shutdownWrite() override;
+  kj::Promise<void> end() override;
 private:
   kj::AsyncCapabilityStream& stream;
 };

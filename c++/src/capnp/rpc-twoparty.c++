@@ -270,7 +270,7 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
 
 kj::Promise<void> TwoPartyVatNetwork::shutdown() {
   kj::Promise<void> result = KJ_ASSERT_NONNULL(previousWrite, "already shut down").then([this]() {
-    return getStream().shutdownWrite();
+    return getStream().end();
   });
   previousWrite = nullptr;
   return kj::mv(result);
