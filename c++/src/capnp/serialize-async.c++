@@ -382,10 +382,10 @@ kj::Promise<void> AsyncCapabilityMessageStream::end() {
   return kj::READY_NOW;
 }
 
-kj::Promise<kj::Own<MessageReader>> readMessage(
-    MessageStream& input, ReaderOptions options,
+kj::Promise<kj::Own<MessageReader>> MessageStream::readMessage(
+    ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
-  return tryReadMessage(input, options, scratchSpace).then([](auto maybeResult) {
+  return tryReadMessage(options, scratchSpace).then([](kj::Maybe<kj::Own<MessageReader>> maybeResult) {
     KJ_IF_MAYBE(result, maybeResult) {
         return kj::mv(*result);
     } else {
@@ -395,11 +395,10 @@ kj::Promise<kj::Own<MessageReader>> readMessage(
   });
 }
 
-kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
-    MessageStream& input,
+kj::Promise<kj::Maybe<kj::Own<MessageReader>>> MessageStream::tryReadMessage(
     ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
-  return tryReadMessage(input, nullptr, options, scratchSpace)
+  return tryReadMessage(nullptr, options, scratchSpace)
     .then([](auto maybeReaderAndFds) -> kj::Maybe<kj::Own<MessageReader>> {
       KJ_IF_MAYBE(readerAndFds, maybeReaderAndFds) {
         return kj::mv(readerAndFds->reader);
@@ -409,10 +408,10 @@ kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
   });
 }
 
-kj::Promise<MessageReaderAndFds> readMessage(
-    MessageStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+kj::Promise<MessageReaderAndFds> MessageStream::readMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
-  return tryReadMessage(input, fdSpace, options, scratchSpace).then([](auto maybeResult) {
+  return tryReadMessage(fdSpace, options, scratchSpace).then([](auto maybeResult) {
       KJ_IF_MAYBE(result, maybeResult) {
         return kj::mv(*result);
       } else {
@@ -421,12 +420,5 @@ kj::Promise<MessageReaderAndFds> readMessage(
       }
   });
 }
-
-kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
-    MessageStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
-    ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
-  return input.tryReadMessage(fdSpace, options, scratchSpace);
-}
-
 
 }  // namespace capnp

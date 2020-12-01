@@ -151,7 +151,7 @@ public:
       // Note that if the write fails, all further writes will be skipped due to the exception.
       // We never actually handle this exception because we assume the read end will fail as well
       // and it's cleaner to handle the failure there.
-      return writeMessage(network.stream, fds, message);
+      return network.stream.writeMessage(fds, message);
     }).attach(kj::addRef(*this))
       // Note that it's important that the eagerlyEvaluate() come *after* the attach() because
       // otherwise the message (and any capabilities in it) will not be released until a new
@@ -250,7 +250,7 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
     if(maxFdsPerMessage > 0) {
       fdSpace = kj::heapArray<kj::AutoCloseFd>(maxFdsPerMessage);
     }
-    auto promise = tryReadMessage(stream, fdSpace, receiveOptions);
+    auto promise = stream.tryReadMessage(fdSpace, receiveOptions);
     return promise.then([fdSpace = kj::mv(fdSpace)]
                         (kj::Maybe<MessageReaderAndFds>&& messageAndFds) mutable
                       -> kj::Maybe<kj::Own<IncomingRpcMessage>> {
