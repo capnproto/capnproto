@@ -60,7 +60,7 @@ public:
                      ReaderOptions receiveOptions = ReaderOptions());
   TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
-  // To support FD passing, pass an AsyncCapabilityStream or a MesageTransport which supports
+  // To support FD passing, pass an AsyncCapabilityStream or a MessageStream which supports
   // fd passing, and `maxFdsPerMessage`, which specifies the maximum number of file descriptors
   // to accept from the peer in any one RPC message. It is important to keep maxFdsPerMessage
   // low in order to stop DoS attacks that fill up your FD table.
