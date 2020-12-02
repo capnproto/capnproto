@@ -22,6 +22,7 @@
 #include "byte-stream.h"
 #include <kj/test.h>
 #include <capnp/rpc-twoparty.h>
+#include <stdlib.h>
 
 namespace capnp {
 namespace {
@@ -48,6 +49,9 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
 
 kj::String makeString(size_t size) {
   auto bytes = kj::heapArray<char>(size);
+  for (char& c: bytes) {
+    c = 'a' + rand() % 26;
+  }
   bytes[bytes.size() - 1] = 0;
   return kj::String(kj::mv(bytes));
 };
@@ -94,7 +98,7 @@ KJ_TEST("KJ -> ByteStream -> KJ without shortening") {
 
     // One 2^17 piece will be split.
     pieces.add(kj::arrayPtr(reinterpret_cast<kj::byte*>(
-        str.begin() + (1 << 16)), str.size() - (1 << 17)));
+        str.begin() + (1 << 17)), str.size() - (1 << 17)));
 
     auto promise = wrapped->write(pieces);
     KJ_EXPECT(!promise.poll(waitScope));
