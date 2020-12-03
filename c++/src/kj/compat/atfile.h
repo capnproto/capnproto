@@ -83,7 +83,6 @@
 
 namespace kj {
   #if (KJ_COMPAT_ATFILE_EMULATE_READLINKAT == 1)
-  #include <stddef.h>
   int readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz);
   #endif
   #if (KJ_COMPAT_ATFILE_EMULATE_SYMLINKAT == 1)
