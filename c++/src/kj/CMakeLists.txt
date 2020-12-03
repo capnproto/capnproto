@@ -27,6 +27,7 @@ set(kj_sources_heavy
   filesystem-disk-unix.c++
   filesystem-disk-win32.c++
   parse/char.c++
+  compat/atfile.c++
 )
 if(NOT CAPNP_LITE)
   set(kj_sources ${kj_sources_lite} ${kj_sources_heavy})
