@@ -56,15 +56,7 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(
     uint maxFdsPerMessage,
     rpc::twoparty::Side side,
     ReaderOptions receiveOptions)
-    : TwoPartyVatNetwork(&stream, maxFdsPerMessage, side, receiveOptions) {
-  peerVatId.initRoot<rpc::twoparty::VatId>().setSide(
-      side == rpc::twoparty::Side::CLIENT ? rpc::twoparty::Side::SERVER
-                                          : rpc::twoparty::Side::CLIENT);
-
-  auto paf = kj::newPromiseAndFulfiller<void>();
-  disconnectPromise = paf.promise.fork();
-  disconnectFulfiller.fulfiller = kj::mv(paf.fulfiller);
-}
+    : TwoPartyVatNetwork(&stream, maxFdsPerMessage, side, receiveOptions) {}
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                                        ReaderOptions receiveOptions)
