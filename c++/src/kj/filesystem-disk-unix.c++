@@ -27,6 +27,7 @@
 
 #include "filesystem.h"
 #include "debug.h"
+#include "compat/atfile.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
