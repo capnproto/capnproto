@@ -27,14 +27,12 @@
 namespace capnp {
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(
-    MessageStream& stream,
-    kj::Maybe<kj::Own<MessageStream>>&& ownStream,
+    kj::OneOf<MessageStream*, kj::Own<MessageStream>>&& stream,
     uint maxFdsPerMessage,
     rpc::twoparty::Side side,
     ReaderOptions receiveOptions)
 
-    : stream(stream),
-      ownStream(kj::mv(ownStream)),
+    : stream(kj::mv(stream)),
       maxFdsPerMessage(maxFdsPerMessage),
       side(side),
       peerVatId(4),
@@ -49,23 +47,16 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(
   disconnectFulfiller.fulfiller = kj::mv(paf.fulfiller);
 }
 
-TwoPartyVatNetwork::TwoPartyVatNetwork(
-      kj::Own<capnp::MessageStream>&& stream,
-      uint maxFdsPerMessage,
-      rpc::twoparty::Side side,
-      ReaderOptions receiveOptions)
-  : TwoPartyVatNetwork(*stream, kj::mv(stream), maxFdsPerMessage, side, receiveOptions) {}
-
 TwoPartyVatNetwork::TwoPartyVatNetwork(capnp::MessageStream& stream,
                    rpc::twoparty::Side side, ReaderOptions receiveOptions)
-  : TwoPartyVatNetwork(stream, nullptr, 0, side, receiveOptions) {}
+  : TwoPartyVatNetwork(stream, 0, side, receiveOptions) {}
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(
     capnp::MessageStream& stream,
     uint maxFdsPerMessage,
     rpc::twoparty::Side side,
     ReaderOptions receiveOptions)
-    : TwoPartyVatNetwork(stream, nullptr, maxFdsPerMessage, side, receiveOptions) {
+    : TwoPartyVatNetwork(&stream, maxFdsPerMessage, side, receiveOptions) {
   peerVatId.initRoot<rpc::twoparty::VatId>().setSide(
       side == rpc::twoparty::Side::CLIENT ? rpc::twoparty::Side::SERVER
                                           : rpc::twoparty::Side::CLIENT);
@@ -84,6 +75,18 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint m
                                        rpc::twoparty::Side side, ReaderOptions receiveOptions)
     : TwoPartyVatNetwork(kj::Own<MessageStream>(kj::heap<AsyncCapabilityMessageStream>(stream)),
                          maxFdsPerMessage, side, receiveOptions) {}
+
+MessageStream& TwoPartyVatNetwork::getStream() {
+  KJ_SWITCH_ONEOF(stream) {
+    KJ_CASE_ONEOF(s, MessageStream*) {
+      return *s;
+    }
+    KJ_CASE_ONEOF(s, kj::Own<MessageStream>) {
+      return *s;
+    }
+  }
+  KJ_UNREACHABLE;
+}
 
 void TwoPartyVatNetwork::FulfillerDisposer::disposeImpl(void* pointer) const {
   if (--refcount == 0) {
@@ -151,7 +154,7 @@ public:
       // Note that if the write fails, all further writes will be skipped due to the exception.
       // We never actually handle this exception because we assume the read end will fail as well
       // and it's cleaner to handle the failure there.
-      return network.stream.writeMessage(fds, message);
+      return network.getStream().writeMessage(fds, message);
     }).attach(kj::addRef(*this))
       // Note that it's important that the eagerlyEvaluate() come *after* the attach() because
       // otherwise the message (and any capabilities in it) will not be released until a new
@@ -227,7 +230,7 @@ size_t TwoPartyVatNetwork::getWindow() {
   if (solSndbufUnimplemented) {
     return RpcFlowController::DEFAULT_WINDOW_SIZE;
   } else {
-    KJ_IF_MAYBE(bufSize, stream.getSendBufferSize()) {
+    KJ_IF_MAYBE(bufSize, getStream().getSendBufferSize()) {
       return *bufSize;
     } else {
       solSndbufUnimplemented = true;
@@ -250,7 +253,7 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
     if(maxFdsPerMessage > 0) {
       fdSpace = kj::heapArray<kj::AutoCloseFd>(maxFdsPerMessage);
     }
-    auto promise = stream.tryReadMessage(fdSpace, receiveOptions);
+    auto promise = getStream().tryReadMessage(fdSpace, receiveOptions);
     return promise.then([fdSpace = kj::mv(fdSpace)]
                         (kj::Maybe<MessageReaderAndFds>&& messageAndFds) mutable
                       -> kj::Maybe<kj::Own<IncomingRpcMessage>> {
@@ -270,7 +273,7 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
 
 kj::Promise<void> TwoPartyVatNetwork::shutdown() {
   kj::Promise<void> result = KJ_ASSERT_NONNULL(previousWrite, "already shut down").then([this]() {
-    return stream.end();
+    return getStream().end();
   });
   previousWrite = nullptr;
   return kj::mv(result);

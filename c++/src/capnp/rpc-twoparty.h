@@ -89,12 +89,9 @@ private:
   class OutgoingMessageImpl;
   class IncomingMessageImpl;
 
-  MessageStream& stream;
-  // The underlying stream.
-  kj::Maybe<kj::Own<MessageStream>> ownStream;
-  // A place to store the stream, if we create it ourselves. Otherwise
-  // this will be nullptr. There is no need to ever read this; use
-  // 'stream' instead.
+  kj::OneOf<MessageStream*, kj::Own<MessageStream>> stream;
+  // The underlying stream, which we may or may not own. Get a reference to
+  // this with getStream, rather than reading it directly.
 
   uint maxFdsPerMessage;
   rpc::twoparty::Side side;
@@ -132,15 +129,12 @@ private:
 
 
   TwoPartyVatNetwork(
-      MessageStream& stream,
-      kj::Maybe<kj::Own<MessageStream>>&& ownStream,
+      kj::OneOf<MessageStream*, kj::Own<MessageStream>>&& stream,
       uint maxFdsPerMessage,
       rpc::twoparty::Side side,
       ReaderOptions receiveOptions);
-  TwoPartyVatNetwork(kj::Own<capnp::MessageStream>&& stream,
-                     uint maxFdsPerMessage,
-                     rpc::twoparty::Side side,
-                     ReaderOptions receiveOptions);
+
+  MessageStream& getStream();
 
   kj::Own<TwoPartyVatNetworkBase::Connection> asConnection();
   // Returns a pointer to this with the disposer set to disconnectFulfiller.
