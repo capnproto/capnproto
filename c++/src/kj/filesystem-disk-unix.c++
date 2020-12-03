@@ -383,7 +383,7 @@ public:
   }
 
   void zero(uint64_t offset, uint64_t size) const {
-#ifdef FALLOC_FL_PUNCH_HOLE
+#if (FALLOC_FL_PUNCH_HOLE && (!(defined(__ANDROID__) && __ANDROID_API__ < 21)))
     KJ_SYSCALL_HANDLE_ERRORS(
         fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, size)) {
       case EOPNOTSUPP:
