@@ -383,7 +383,12 @@ public:
   }
 
   void zero(uint64_t offset, uint64_t size) const {
-#if (FALLOC_FL_PUNCH_HOLE && (!(defined(__ANDROID__) && __ANDROID_API__ < 21)))
+// If FALLOC_FL_PUNCH_HOLE is defined, use it to efficiently zero the area.
+//
+// A fallocate() wrapper was only added to Android's Bionic C library as of API level 21,
+// but FALLOC_FL_PUNCH_HOLE is apparently defined in the headers before that, so we'll
+// have to explicitly test for that case.
+#if defined(FALLOC_FL_PUNCH_HOLE) && !(__ANDROID__ && __BIONIC__ && __ANDROID_API__ < 21)
     KJ_SYSCALL_HANDLE_ERRORS(
         fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, size)) {
       case EOPNOTSUPP:
