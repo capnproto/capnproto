@@ -19,6 +19,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Includes just for need SOL_SOCKET and SO_SNDBUF
+#if _WIN32
+#include <kj/win32-api-version.h>
+
+#include <winsock2.h>
+#include <mswsock.h>
+#include <kj/windows-sanity.h>
+#else
+#include <sys/socket.h>
+#endif
+
 #include "serialize-async.h"
 #include <kj/debug.h>
 #include <kj/io.h>
@@ -289,6 +300,124 @@ kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<c
   return writeMessageImpl(segments,
       [&](kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
     return output.writeWithFds(pieces[0], pieces.slice(1, pieces.size()), fds);
+  });
+}
+
+AsyncIoMessageStream::AsyncIoMessageStream(kj::AsyncIoStream& stream)
+  : stream(stream) {};
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncIoMessageStream::tryReadMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options,
+    kj::ArrayPtr<word> scratchSpace) {
+  return capnp::tryReadMessage(stream, options, scratchSpace)
+    .then([](kj::Maybe<kj::Own<MessageReader>> maybeReader) -> kj::Maybe<MessageReaderAndFds> {
+      KJ_IF_MAYBE(reader, maybeReader) {
+        return MessageReaderAndFds { kj::mv(*reader), nullptr };
+      } else {
+        return nullptr;
+      }
+    });
+}
+
+kj::Promise<void> AsyncIoMessageStream::writeMessage(
+    kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return capnp::writeMessage(stream, segments);
+}
+
+kj::Maybe<int> getSendBufferSize(kj::AsyncIoStream& stream) {
+  // TODO(perf): It might be nice to have a tryGetsockopt() that doesn't require catching
+  //   exceptions?
+  int bufSize = 0;
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    uint len = sizeof(int);
+    stream.getsockopt(SOL_SOCKET, SO_SNDBUF, &bufSize, &len);
+    KJ_ASSERT(len == sizeof(bufSize)) { break; }
+  })) {
+    if (exception->getType() != kj::Exception::Type::UNIMPLEMENTED) {
+      // TODO(someday): Figure out why getting SO_SNDBUF sometimes throws EINVAL. I suspect it
+      //   happens when the remote side has closed their read end, meaning we no longer have
+      //   a send buffer, but I don't know what is the best way to verify that that was actually
+      //   the reason. I'd prefer not to ignore EINVAL errors in general.
+
+      // kj::throwRecoverableException(kj::mv(*exception));
+    }
+    return nullptr;
+  }
+  return bufSize;
+}
+
+kj::Promise<void> AsyncIoMessageStream::end() {
+  stream.shutdownWrite();
+  return kj::READY_NOW;
+}
+
+kj::Maybe<int> AsyncIoMessageStream::getSendBufferSize() {
+  return capnp::getSendBufferSize(stream);
+}
+
+AsyncCapabilityMessageStream::AsyncCapabilityMessageStream(kj::AsyncCapabilityStream& stream)
+  : stream(stream) {};
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncCapabilityMessageStream::tryReadMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options,
+    kj::ArrayPtr<word> scratchSpace) {
+  return capnp::tryReadMessage(stream, fdSpace, options, scratchSpace);
+}
+
+kj::Promise<void> AsyncCapabilityMessageStream::writeMessage(
+    kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return capnp::writeMessage(stream, fds, segments);
+}
+
+kj::Maybe<int> AsyncCapabilityMessageStream::getSendBufferSize() {
+  return capnp::getSendBufferSize(stream);
+}
+
+kj::Promise<void> AsyncCapabilityMessageStream::end() {
+  stream.shutdownWrite();
+  return kj::READY_NOW;
+}
+
+kj::Promise<kj::Own<MessageReader>> MessageStream::readMessage(
+    ReaderOptions options,
+    kj::ArrayPtr<word> scratchSpace) {
+  return tryReadMessage(options, scratchSpace).then([](kj::Maybe<kj::Own<MessageReader>> maybeResult) {
+    KJ_IF_MAYBE(result, maybeResult) {
+        return kj::mv(*result);
+    } else {
+        kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+        KJ_UNREACHABLE;
+    }
+  });
+}
+
+kj::Promise<kj::Maybe<kj::Own<MessageReader>>> MessageStream::tryReadMessage(
+    ReaderOptions options,
+    kj::ArrayPtr<word> scratchSpace) {
+  return tryReadMessage(nullptr, options, scratchSpace)
+    .then([](auto maybeReaderAndFds) -> kj::Maybe<kj::Own<MessageReader>> {
+      KJ_IF_MAYBE(readerAndFds, maybeReaderAndFds) {
+        return kj::mv(readerAndFds->reader);
+      } else {
+        return nullptr;
+      }
+  });
+}
+
+kj::Promise<MessageReaderAndFds> MessageStream::readMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  return tryReadMessage(fdSpace, options, scratchSpace).then([](auto maybeResult) {
+      KJ_IF_MAYBE(result, maybeResult) {
+        return kj::mv(*result);
+      } else {
+        kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+        KJ_UNREACHABLE;
+      }
   });
 }
 
