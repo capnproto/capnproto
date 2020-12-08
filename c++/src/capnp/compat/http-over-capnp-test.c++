@@ -391,7 +391,7 @@ void runEndToEndTests(kj::Timer& timer, kj::HttpHeaderTable& headerTable,
   clientPipe.ends[0] = nullptr;
   auto lastRead = serverPipe.ends[1]->readAllText();
   KJ_ASSERT(lastRead.poll(waitScope), "last read hung");
-  KJ_EXPECT(lastRead.wait(waitScope) == 0);
+  KJ_EXPECT(lastRead.wait(waitScope) == nullptr);
 }
 
 KJ_TEST("HTTP-over-Cap'n-Proto E2E, no path shortening") {

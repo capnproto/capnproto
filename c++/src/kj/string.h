@@ -312,9 +312,13 @@ class Delimited;
 // Delimits a sequence of type T with a string delimiter. Implements kj::delimited().
 
 template <typename T, typename... Rest>
-char* fill(char* __restrict__ target, Delimited<T> first, Rest&&... rest);
+char* fill(char* __restrict__ target, Delimited<T>&& first, Rest&&... rest);
 template <typename T, typename... Rest>
-char* fillLimited(char* __restrict__ target, char* limit, Delimited<T> first,Rest&&... rest);
+char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>&& first,Rest&&... rest);
+template <typename T, typename... Rest>
+char* fill(char* __restrict__ target, Delimited<T>& first, Rest&&... rest);
+template <typename T, typename... Rest>
+char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>& first,Rest&&... rest);
 // As with StringTree, we special-case Delimited<T>.
 
 struct Stringifier {
@@ -367,11 +371,6 @@ struct Stringifier {
   CappedArray<char, 24> operator*(float f) const;
   CappedArray<char, 32> operator*(double f) const;
   CappedArray<char, sizeof(const void*) * 2 + 1> operator*(const void* s) const;
-
-  template <typename T>
-  _::Delimited<ArrayPtr<T>> operator*(ArrayPtr<T> arr) const;
-  template <typename T>
-  _::Delimited<ArrayPtr<const T>> operator*(const Array<T>& arr) const;
 
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP  // supports expression SFINAE?
   template <typename T, typename Result = decltype(instance<T>().toString())>
@@ -466,19 +465,15 @@ StringPtr strPreallocated(ArrayPtr<char> buffer, Params&&... params) {
   return StringPtr(buffer.begin(), end);
 }
 
-namespace _ {  // private
-
-template <typename T>
-inline _::Delimited<ArrayPtr<T>> Stringifier::operator*(ArrayPtr<T> arr) const {
+template <typename T, typename = decltype(toCharSequence(kj::instance<T&>()))>
+inline _::Delimited<ArrayPtr<T>> operator*(const _::Stringifier&, ArrayPtr<T> arr) {
   return _::Delimited<ArrayPtr<T>>(arr, ", ");
 }
 
-template <typename T>
-inline _::Delimited<ArrayPtr<const T>> Stringifier::operator*(const Array<T>& arr) const {
+template <typename T, typename = decltype(toCharSequence(kj::instance<const T&>()))>
+inline _::Delimited<ArrayPtr<const T>> operator*(const _::Stringifier&, const Array<T>& arr) {
   return _::Delimited<ArrayPtr<const T>>(arr, ", ");
 }
-
-}  // namespace _ (private)
 
 #define KJ_STRINGIFY(...) operator*(::kj::_::Stringifier, __VA_ARGS__)
 // Defines a stringifier for a custom type.  Example:
@@ -673,12 +668,22 @@ private:
 };
 
 template <typename T, typename... Rest>
-char* fill(char* __restrict__ target, Delimited<T> first, Rest&&... rest) {
+char* fill(char* __restrict__ target, Delimited<T>&& first, Rest&&... rest) {
   target = first.flattenTo(target);
   return fill(target, kj::fwd<Rest>(rest)...);
 }
 template <typename T, typename... Rest>
-char* fillLimited(char* __restrict__ target, char* limit, Delimited<T> first, Rest&&... rest) {
+char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>&& first, Rest&&... rest) {
+  target = first.flattenTo(target, limit);
+  return fillLimited(target, limit, kj::fwd<Rest>(rest)...);
+}
+template <typename T, typename... Rest>
+char* fill(char* __restrict__ target, Delimited<T>& first, Rest&&... rest) {
+  target = first.flattenTo(target);
+  return fill(target, kj::fwd<Rest>(rest)...);
+}
+template <typename T, typename... Rest>
+char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>& first, Rest&&... rest) {
   target = first.flattenTo(target, limit);
   return fillLimited(target, limit, kj::fwd<Rest>(rest)...);
 }

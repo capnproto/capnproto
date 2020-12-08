@@ -65,12 +65,14 @@ private:
 #define KJ_FAIL_EXPECT(...) \
   KJ_INDIRECT_EXPAND(KJ_LOG, (ERROR , __VA_ARGS__));
 #define KJ_EXPECT(cond, ...) \
-  if (cond); else KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("failed: expected " #cond , __VA_ARGS__))
+  if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond); \
+  else KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("failed: expected " #cond , _kjCondition, __VA_ARGS__))
 #else
 #define KJ_FAIL_EXPECT(...) \
   KJ_LOG(ERROR, ##__VA_ARGS__);
 #define KJ_EXPECT(cond, ...) \
-  if (cond); else KJ_FAIL_EXPECT("failed: expected " #cond, ##__VA_ARGS__)
+  if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond); \
+  else KJ_FAIL_EXPECT("failed: expected " #cond, _kjCondition, ##__VA_ARGS__)
 #endif
 
 #define KJ_EXPECT_THROW_RECOVERABLE(type, code) \

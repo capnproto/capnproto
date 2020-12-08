@@ -430,6 +430,71 @@ TEST(Debug, Context) {
   }
 }
 
+KJ_TEST("magic assert stringification") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      int foo = 123;
+      int bar = 456;
+      KJ_ASSERT(foo == bar);
+    }));
+
+    KJ_EXPECT(exception.getDescription() == "expected foo == bar [123 == 456]");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      auto foo = kj::str("hello");
+      auto bar = kj::str("world!");
+      KJ_ASSERT(foo == bar, foo.size(), bar.size());
+    }));
+
+    KJ_EXPECT(exception.getDescription() ==
+        "expected foo == bar [hello == world!]; foo.size() = 5; bar.size() = 6");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(kj::str("hello") == kj::str("world!"));
+    }));
+
+    KJ_EXPECT(exception.getDescription() ==
+        "expected kj::str(\"hello\") == kj::str(\"world!\") [hello == world!]");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      int foo = 123;
+      int bar = 456;
+      KJ_ASSERT((foo == bar));
+    }));
+
+    KJ_EXPECT(exception.getDescription() == "expected (foo == bar)");
+  }
+
+  // Test use of << on left side, which could create confusion.
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      int foo = 123;
+      int bar = 456;
+      KJ_ASSERT(foo << 2 == bar);
+    }));
+
+    KJ_EXPECT(exception.getDescription() == "expected foo << 2 == bar [492 == 456]");
+  }
+
+  // Test use of & on left side.
+  {
+    int foo = 4;
+    KJ_ASSERT(foo & 4);
+
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(foo & 2);
+    }));
+
+    KJ_EXPECT(exception.getDescription() == "expected foo & 2");
+  }
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

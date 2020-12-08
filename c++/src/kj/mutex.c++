@@ -61,6 +61,12 @@
 namespace kj {
 namespace _ {  // private
 
+#if KJ_USE_FUTEX
+constexpr uint Mutex::EXCLUSIVE_HELD;
+constexpr uint Mutex::EXCLUSIVE_REQUESTED;
+constexpr uint Mutex::SHARED_COUNT_MASK;
+#endif
+
 inline void Mutex::addWaiter(Waiter& waiter) {
 #ifdef KJ_DEBUG
   assertLockedByCaller(EXCLUSIVE);
