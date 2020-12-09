@@ -29,9 +29,11 @@
 #include <direct.h>
 #include <fcntl.h>  // _O_BINARY
 #else
-#include <limits.h>
 #include <errno.h>
 #endif
+
+#include <stdint.h>
+#include <limits.h>
 
 #if !_WIN32 || __MINGW32__
 #include <unistd.h>
@@ -56,12 +58,11 @@ namespace miniposix {
 
 typedef int ssize_t;
 
-inline ssize_t read(int fd, void* buffer, size_t size) {
-  return ::_read(fd, buffer, size);
-}
-inline ssize_t write(int fd, const void* buffer, size_t size) {
-  return ::_write(fd, buffer, size);
-}
+// Windows I/O supports maximum 4GB at a time so make sure we saturate rather than overflow when
+// the caller requests a much larger size.
+#define KJ_OS_MAX_IO UINT_MAX
+#define KJ_OS_IO_FUNC(func) _ ## func
+
 inline int close(int fd) {
   return ::_close(fd);
 }
@@ -91,8 +92,24 @@ inline int close(int fd) {
 // We're on a POSIX system or MinGW which already defines the wrappers for us.
 
 using ::ssize_t;
-using ::read;
-using ::write;
+
+#if __APPLE__
+// Workaround for FB8934446 - even though the APIs take size_t arguments they're (incorrectly)
+// internally limited to INT_MAX.
+#define KJ_OS_MAX_IO INT_MAX
+#elif INTPTR_MAX >= INT64_MAX
+// Normal POSIX platforms are limited to SSIZE_MAX. However on 64-bit platforms there's no point
+// saturating any input I/O lengths - that would be 9 exabytes & insane to do in 1 I/O call.
+// Using SIZE_MAX ensures that the kj::min evaluation should be elided and the read/write/writev
+// calls should inlined directly to the libc function.
+#define KJ_OS_MAX_IO SIZE_MAX
+#else
+// On 32-bit platforms make sure that trying to do large I/O still works correctly (saturating &
+// returning the length that was processed rather than returning a low-level error).
+#define KJ_OS_MAX_IO SSIZE_MAX
+#endif
+#define KJ_OS_IO_FUNC(func) func
+
 using ::close;
 
 #endif
@@ -136,8 +153,25 @@ static constexpr inline size_t iovMax() {
 #error "Please determine the appropriate constant for IOV_MAX on your system."
 #endif
 
+#if __APPLE__
+// Unlike stock libc writev we're forced to take the iov non-const because the internal details of
+// this POSIX-emulation require us to potentially modify the iovec when writes > 2GB occur.
+ssize_t writev(int fd, struct iovec* iov, size_t iovcnt);
+#else
+using ::writev;
+#endif
 #endif
 
+static inline ssize_t read(int fd, void* buffer, size_t size) {
+  return ::KJ_OS_IO_FUNC(read)(fd, buffer, static_cast<unsigned int>(kj::min(size_t{KJ_OS_MAX_IO}, size)));
+}
+
+static inline ssize_t write(int fd, const void* buffer, size_t size) {
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(suppress : 4996)
+#endif
+  return ::KJ_OS_IO_FUNC(write)(fd, buffer, static_cast<unsigned int>(kj::min(size_t{KJ_OS_MAX_IO}, size)));
+}
 }  // namespace miniposix
 }  // namespace kj
 

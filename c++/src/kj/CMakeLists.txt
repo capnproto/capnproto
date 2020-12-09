@@ -18,6 +18,7 @@ set(kj_sources_lite
   test-helpers.c++
   units.c++
   encoding.c++
+  miniposix.c++
 )
 set(kj_sources_heavy
   refcount.c++
@@ -61,6 +62,7 @@ set(kj_headers
   time.h
   main.h
   windows-sanity.h
+  miniposix.h
 )
 set(kj-parse_headers
   parse/common.h

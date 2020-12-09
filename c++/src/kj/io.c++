@@ -402,7 +402,7 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   while (current < iov.end()) {
     // Issue the write.
     ssize_t n = 0;
-    KJ_SYSCALL(n = ::writev(fd, current, iov.end() - current), fd);
+    KJ_SYSCALL(n = miniposix::writev(fd, current, iov.end() - current), fd);
     KJ_ASSERT(n > 0, "writev() returned zero.");
 
     // Advance past all buffers that were fully-written.

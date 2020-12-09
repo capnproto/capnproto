@@ -75,10 +75,6 @@ static void setPrefix(char* ptr, int gb) {
   KJ_ASSERT(gb < ONE_GB_ALIGNED_PREFIXES.size());
   strcpy(ptr + gb * ONE_GB, (ONE_GB_ALIGNED_PREFIXES.begin() + gb)->cStr());
 };
-
-static void clearPrefix(char* ptr, int gb) {
-  memset(ptr + gb * ONE_GB, 0, (ONE_GB_ALIGNED_PREFIXES.begin() + gb)->size());
-};
 #endif
 
 TEST(Io, WriteLarge) {
@@ -168,7 +164,7 @@ TEST(Io, WriteVecLarge) {
     setPrefix(toWrite.begin(), 1);
     setPrefix(toWrite.begin(), 2);
 
-    ArrayPtr<const byte> pieces[5] = {
+    ArrayPtr<const byte> pieces[] = {
       arrayPtr(const_cast<const byte*>(toWrite.asBytes().begin()), ONE_GB),
       arrayPtr(const_cast<const byte*>(toWrite.asBytes().begin()), 3 * ONE_GB),
       arrayPtr(const_cast<const byte*>(toWrite.asBytes().begin() + 2 * ONE_GB), ONE_GB),
