@@ -67,24 +67,24 @@ namespace kj {
 
 class StringPtr {
 public:
-  inline StringPtr(): content("", 1) {}
-  inline StringPtr(decltype(nullptr)): content("", 1) {}
+  inline constexpr StringPtr(): content("", 1) {}
+  inline constexpr StringPtr(decltype(nullptr)): content("", 1) {}
   inline StringPtr(const char* value): content(value, strlen(value) + 1) {}
-  inline StringPtr(const char* value, size_t size): content(value, size + 1) {
+  inline constexpr StringPtr(const char* value, size_t size): content(value, size + 1) {
     KJ_IREQUIRE(value[size] == '\0', "StringPtr must be NUL-terminated.");
   }
-  inline StringPtr(const char* begin, const char* end): StringPtr(begin, end - begin) {}
+  inline constexpr StringPtr(const char* begin, const char* end): StringPtr(begin, end - begin) {}
   inline StringPtr(const String& value);
 
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
   template <typename T, typename = decltype(instance<T>().c_str())>
-  inline StringPtr(const T& t): StringPtr(t.c_str()) {}
+  inline constexpr StringPtr(const T& t): StringPtr(t.c_str()) {}
   // Allow implicit conversion from any class that has a c_str() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
   // those who don't want it.
 
   template <typename T, typename = decltype(instance<T>().c_str())>
-  inline operator T() const { return cStr(); }
+  inline constexpr operator T() const { return cStr(); }
   // Allow implicit conversion to any class that has a c_str() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
   // those who don't want it.
@@ -95,19 +95,19 @@ public:
   inline ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
-  inline const char* cStr() const { return content.begin(); }
+  inline constexpr const char* cStr() const { return content.begin(); }
   // Returns NUL-terminated string.
 
-  inline size_t size() const { return content.size() - 1; }
+  inline constexpr size_t size() const { return content.size() - 1; }
   // Result does not include NUL terminator.
 
-  inline char operator[](size_t index) const { return content[index]; }
+  inline constexpr char operator[](size_t index) const { return content[index]; }
 
-  inline const char* begin() const { return content.begin(); }
-  inline const char* end() const { return content.end() - 1; }
+  inline constexpr const char* begin() const { return content.begin(); }
+  inline constexpr const char* end() const { return content.end() - 1; }
 
-  inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
-  inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
+  inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
+  inline constexpr bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
 
   inline bool operator==(const StringPtr& other) const;
   inline bool operator!=(const StringPtr& other) const { return !(*this == other); }

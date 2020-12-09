@@ -183,11 +183,11 @@ public:
   template <typename U>
   inline bool operator!=(const U& other) const { return asPtr() != other; }
 
-  inline ArrayPtr<T> slice(size_t start, size_t end) {
+  inline constexpr ArrayPtr<T> slice(size_t start, size_t end) {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<T>(ptr + start, end - start);
   }
-  inline ArrayPtr<const T> slice(size_t start, size_t end) const {
+  inline constexpr ArrayPtr<const T> slice(size_t start, size_t end) const {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<const T>(ptr + start, end - start);
   }

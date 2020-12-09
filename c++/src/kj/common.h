@@ -1449,31 +1449,31 @@ public:
     static_assert(!isSameType<T, const char32_t>(), "see above");
   }
 
-  inline operator ArrayPtr<const T>() const {
+  inline constexpr operator ArrayPtr<const T>() const {
     return ArrayPtr<const T>(ptr, size_);
   }
-  inline ArrayPtr<const T> asConst() const {
+  inline constexpr ArrayPtr<const T> asConst() const {
     return ArrayPtr<const T>(ptr, size_);
   }
 
   inline constexpr size_t size() const { return size_; }
-  inline const T& operator[](size_t index) const {
+  inline constexpr const T& operator[](size_t index) const {
     KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
     return ptr[index];
   }
-  inline T& operator[](size_t index) {
+  inline constexpr T& operator[](size_t index) {
     KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
     return ptr[index];
   }
 
-  inline T* begin() { return ptr; }
-  inline T* end() { return ptr + size_; }
-  inline T& front() { return *ptr; }
-  inline T& back() { return *(ptr + size_ - 1); }
+  inline constexpr T* begin() { return ptr; }
+  inline constexpr T* end() { return ptr + size_; }
+  inline constexpr T& front() { return *ptr; }
+  inline constexpr T& back() { return *(ptr + size_ - 1); }
   inline constexpr const T* begin() const { return ptr; }
   inline constexpr const T* end() const { return ptr + size_; }
-  inline const T& front() const { return *ptr; }
-  inline const T& back() const { return *(ptr + size_ - 1); }
+  inline constexpr const T& front() const { return *ptr; }
+  inline constexpr const T& back() const { return *(ptr + size_ - 1); }
 
   inline ArrayPtr<const T> slice(size_t start, size_t end) const {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
