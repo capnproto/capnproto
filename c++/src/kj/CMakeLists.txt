@@ -93,9 +93,11 @@ install(FILES ${kj-std_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/std"
 
 set(kj-test_sources
   test.c++
+  test-util.c++
 )
 set(kj-test_headers
   test.h
+  test-util.h
 )
 set(kj-test-compat_headers
   compat/gtest.h

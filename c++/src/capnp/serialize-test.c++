@@ -27,6 +27,7 @@
 #include <kj/debug.h>
 #include <kj/compat/gtest.h>
 #include <kj/miniposix.h>
+#include <kj/test-util.h>
 #include <string>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -374,44 +375,10 @@ TEST(Serialize, WriteMessageEvenSegmentCount) {
   EXPECT_TRUE(output.dataEquals(serialized.asPtr()));
 }
 
-#if _WIN32
-int mkstemp(char *tpl) {
-  char* end = tpl + strlen(tpl);
-  while (end > tpl && *(end-1) == 'X') --end;
-
-  for (;;) {
-    KJ_ASSERT(_mktemp(tpl) == tpl);
-
-    int fd = open(tpl, O_RDWR | O_CREAT | O_EXCL | O_TEMPORARY | O_BINARY, 0700);
-    if (fd >= 0) {
-      return fd;
-    }
-
-    int error = errno;
-    if (error != EEXIST && error != EINTR) {
-      KJ_FAIL_SYSCALL("open(mktemp())", error, tpl);
-    }
-
-    memset(end, 'X', strlen(end));
-  }
-}
-#endif
-
 TEST(Serialize, FileDescriptors) {
-#if _WIN32 || __ANDROID__
-  // TODO(cleanup): Find the Windows temp directory? Seems overly difficult.
-  char filename[] = "capnproto-serialize-test-XXXXXX";
-#else
-  char filename[] = "/tmp/capnproto-serialize-test-XXXXXX";
-#endif
-  kj::AutoCloseFd tmpfile(mkstemp(filename));
+  char filename[] = KJ_TEMP_FILE_TEMPLATE("capnproto-serialize-test");
+  kj::AutoCloseFd tmpfile = kj::test::mkstempAutoErased(filename);
   ASSERT_GE(tmpfile.get(), 0);
-
-#if !_WIN32
-  // Unlink the file so that it will be deleted on close.
-  // (For win32, we already handled this is mkstemp().)
-  EXPECT_EQ(0, unlink(filename));
-#endif
 
   {
     TestMessageBuilder builder(7);

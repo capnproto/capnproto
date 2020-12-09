@@ -277,7 +277,7 @@ libkj_la_SOURCES=                                              \
   src/kj/thread.c++                                            \
   src/kj/time.c++                                              \
   src/kj/filesystem.c++                                        \
-  src/kj/filesystem-disk-unix.c++                                   \
+  src/kj/filesystem-disk-unix.c++                              \
   src/kj/filesystem-disk-win32.c++                             \
   src/kj/test-helpers.c++                                      \
   src/kj/main.c++                                              \
@@ -285,7 +285,10 @@ libkj_la_SOURCES=                                              \
 
 libkj_test_la_LIBADD = libkj.la $(PTHREAD_LIBS)
 libkj_test_la_LDFLAGS = -release $(VERSION) -no-undefined
-libkj_test_la_SOURCES = src/kj/test.c++
+libkj_test_la_SOURCES =                                        \
+  src/kj/test.c++                                              \
+  src/kj/test-util.c++                                         \
+  src/kj/test-util.h
 
 if !LITE_MODE
 libkj_async_la_LIBADD = libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
