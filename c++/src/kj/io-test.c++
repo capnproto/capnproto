@@ -26,10 +26,96 @@
 #include "io.h"
 #include "debug.h"
 #include "miniposix.h"
+#include "test-util.h"
 #include <kj/compat/gtest.h>
 
 namespace kj {
 namespace {
+
+#if INTPTR_MAX == INT64_MAX
+// These are helper constants for the large write to disk unit test. The basic idea is that we write
+// many GBs to disk & then validate that the contents were round-tripped correctly by reading it
+// back. This mechanism does a neat trick to avoid using a lot of memory. Since most (all?) modern
+// OSes oversubscribe & lazy allocate pages by COW mapping a reference page filled with 0s,
+// allocating 3 GB won't actually "do" anything. We then write out a prefix to each 1GB boundary
+// which means we'll dirty 3 pages with the remaining mapped to the reference page (this also
+// assumes that the allocation request will be handled by the OS rather than the user-space memory
+// allocator, but this seems like a safe assumption unless you're repeatedly running tests in the
+// same process that allocate such large amounts of RAM and the allocator happened to keep a lot of
+// pages around without returning it to the OS.
+
+static constexpr size_t ONE_GB = 1 * 1024 * 1024 * 1024;
+// Helper constant to represent the number of bytes in 1 GB.
+
+static constexpr size_t BUFFER_SIZE = 3 * ONE_GB;
+// The large write test uses 3GB as the target size of the I/O operation to perform as it's outside
+// the 2GB range that previously caused problems. Hopefully picking round numbers doesn't cause us
+// to test "happy" paths but a representative scenario of an arbitrarily large size.
+
+static constexpr kj::StringPtr ONE_GB_ALIGNED_PREFIXES_STORAGE[] = {
+// TODO(cleanup): KJ doesn't have an equivalent to std::array but if it were to that would be
+// preferred.
+  "kj says hello 1"_kj,
+  "kj says hello 2"_kj,
+  "kj says hello 3"_kj,
+};
+static constexpr kj::ArrayPtr<const kj::StringPtr> ONE_GB_ALIGNED_PREFIXES{ONE_GB_ALIGNED_PREFIXES_STORAGE};
+// These are prefixes for each 1GB that we right (i.e. the first GB will start with
+// "kj says hello 1" followed by 0s, the second GB will start with "kj says hello 2". This is just
+// used to confirm we've successfully written out all the pages in the correct order.
+
+static constexpr size_t PREFIX_SIZE_WITHOUT_NULL_TERMINATOR = ONE_GB_ALIGNED_PREFIXES[0].size();
+
+static const kj::StringPtr& nthPrefix(int gb) {
+  KJ_ASSERT(gb < ONE_GB_ALIGNED_PREFIXES.size());
+  return ONE_GB_ALIGNED_PREFIXES[gb];
+};
+
+static void setPrefix(char* ptr, int gb) {
+  KJ_ASSERT(gb < ONE_GB_ALIGNED_PREFIXES.size());
+  strcpy(ptr + gb * ONE_GB, (ONE_GB_ALIGNED_PREFIXES.begin() + gb)->cStr());
+};
+
+static void clearPrefix(char* ptr, int gb) {
+  memset(ptr + gb * ONE_GB, 0, (ONE_GB_ALIGNED_PREFIXES.begin() + gb)->size());
+};
+#endif
+
+TEST(Io, WriteLarge) {
+  // Check that writing a single large write > 2GB succeeds. This is primarily to workaround an
+  // Apple POSIX compliance issue (filed to Apple as FB8934446). This test only makes sense on
+  // 64-bit platforms as smaller platforms can't really even try to issue such large writes
+  // (since SSIZE_MAX on those platforms will be 2GB anyway).
+#if INTPTR_MAX == INT64_MAX
+  // Have to thunk through a temporary file since pipes would block on write trying to push this
+  // much data (i.e. would never get to read anything);
+
+  char filename [] = KJ_TEMP_FILE_TEMPLATE("kj-io-write-large-test");
+  AutoCloseFd file = test::mkstemp_auto_erased(filename);
+
+  {
+    FdOutputStream out(file.get());
+
+    auto toWrite = heapArray<char>(BUFFER_SIZE);
+    setPrefix(toWrite.begin(), 0);
+    setPrefix(toWrite.begin(), 1);
+    setPrefix(toWrite.begin(), 2);
+
+    out.write(toWrite.begin(), toWrite.size());
+  }
+
+  {
+    FdInputStream in(file.get());
+
+    for (int i = 0; i < 3; i++) {
+        auto toRead = heapString(PREFIX_SIZE_WITHOUT_NULL_TERMINATOR);
+        lseek(file.get(), i * ONE_GB, SEEK_SET);
+        in.read(toRead.begin(), toRead.size());
+        EXPECT_STREQ(nthPrefix(i).cStr(), toRead.cStr());
+    }
+  }
+#endif
+}
 
 TEST(Io, WriteVec) {
   // Check that writing an array of arrays works even when some of the arrays are empty.  (This
@@ -56,6 +142,56 @@ TEST(Io, WriteVec) {
   buf[6] = '\0';
 
   EXPECT_STREQ("foobar", buf);
+}
+
+TEST(Io, WriteVecLarge) {
+  // Check that writing an array of arrays works when one a single writev entry is > 2GB. This is
+  // primarily to workaround an Apple POSIX compliance issue (filed to Apple as FB8934446). This
+  // test only makes sense on 64-bit platforms as smaller platforms can't really even try to issue
+  // such large writes (since SSIZE_MAX on those platforms will be 2GB anyway).
+
+  // NOTE: This unit test is optimistic that the splitting of the iovec is correct because the
+  // scatter/gather puts each GB into a separate iovec. For full bullet-proofness the test should
+  // arrange the writev call to ensure that boundary conditions are covered in that the partition
+  // terminates at the exact end of an iovec section (what this test does currently), the first byte
+  // of an iovec section, and somewhere in the middle (& potentially test that empty iovecs don't
+  // pose a problem).
+
+#if INTPTR_MAX == INT64_MAX
+  char filename [] = KJ_TEMP_FILE_TEMPLATE("kj-io-writevec-large-test");
+  AutoCloseFd file = test::mkstemp_auto_erased(filename);
+
+  {
+    auto toWrite = heapArray<char>(BUFFER_SIZE);
+
+    setPrefix(toWrite.begin(), 0);
+    setPrefix(toWrite.begin(), 1);
+    setPrefix(toWrite.begin(), 2);
+
+    ArrayPtr<const byte> pieces[5] = {
+      arrayPtr(const_cast<const byte*>(toWrite.asBytes().begin()), ONE_GB),
+      arrayPtr(const_cast<const byte*>(toWrite.asBytes().begin()), 3 * ONE_GB),
+      arrayPtr(const_cast<const byte*>(toWrite.asBytes().begin() + 2 * ONE_GB), ONE_GB),
+    };
+
+    FdOutputStream out(file.get());
+    out.write(pieces);
+  }
+
+  {
+    // The file has 0th page prefix, 0th page prefix, 1st page prefix, 2nd page prefix, 2nd page prefix. 
+    auto expectedPrefixes = {0, 0, 1, 2, 2};
+
+    FdInputStream in(file.get());
+
+    for (int i = 0; i < expectedPrefixes.size(); i++) {
+        auto toRead = heapString(PREFIX_SIZE_WITHOUT_NULL_TERMINATOR);
+        lseek(file.get(), i * ONE_GB, SEEK_SET);
+        in.read(toRead.begin(), toRead.size());
+        EXPECT_STREQ(nthPrefix(*(expectedPrefixes.begin() + i)).cStr(), toRead.cStr());
+    }
+  }
+#endif
 }
 
 KJ_TEST("stringify AutoCloseFd") {
