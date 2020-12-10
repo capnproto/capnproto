@@ -2337,6 +2337,11 @@ private:
         return results;
       }
     }
+    void setPipeline(kj::Own<PipelineHook>&& pipeline) override {
+      KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
+        f->get()->fulfill(AnyPointer::Pipeline(kj::mv(pipeline)));
+      }
+    }
     kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) override {
       auto result = directTailCall(kj::mv(request));
       KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {

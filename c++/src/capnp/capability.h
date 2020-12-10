@@ -310,6 +310,44 @@ public:
   // should not be included in the size.  So, if you are simply going to copy some existing message
   // directly into the results, just call `.totalSize()` and pass that in.
 
+  void setPipeline(typename Results::Pipeline&& pipeline);
+  void setPipeline(typename Results::Pipeline& pipeline);
+  // Tells the system where the capabilities in the response will eventually resolve to. This
+  // allows requests that are promise-pipelined on this call's results to continue their journey
+  // to the final destination before this call itself has completed.
+  //
+  // This is particularly useful when forwarding RPC calls to other remote servers, but where a
+  // tail call can't be used. For example, imagine Alice calls `foo()` on Bob. In `foo()`'s
+  // implementation, Bob calls `bar()` on Charlie. `bar()` returns a capability to Bob, and then
+  // `foo()` returns the same capability on to Alice. Now imagine Alice is actually using promise
+  // pipelining in a chain like `foo().getCap().baz()`. The `baz()` call will travel to Bob as a
+  // pipelined call without waiting for `foo()` to return first. But once it gets to Bob, the
+  // message has to patiently wait until `foo()` has completed there, before it can then be
+  // forwarded on to Charlie. It would be better if immediately upon Bob calling `bar()` on
+  // Charlie, then Alice's call to `baz()` could be forwarded to Charlie as a pipelined call,
+  // without waiting for `bar()` to return. This would avoid a network round trip of latency
+  // between Bob and Charlie.
+  //
+  // To solve this problem, Bob takes the pipeline object from the `bar()` call, transforms it into
+  // an appropriate pipeline for a `foo()` call, and passes that to `setPipeline()`. This allows
+  // Alice's pipelined `baz()` call to flow through immediately. If `foo()` and `bar()` actually
+  // return the same type (requiring no transformation), this code looks like:
+  //
+  //     kj::Promise<void> foo(FooContext context) {
+  //       auto pipelinedPromise = charlie.barRequest().send();
+  //       context.setPipeline(pipelinedPromise);
+  //       return pipelinedPromise.then(...);
+  //     }
+  //
+  // Of course, if `foo()` and `bar()` return exactly the same type, and Bob doesn't intend
+  // to do anything with `bar()`'s response except pass it through, then `tailCall()` is a better
+  // choice here. `setPipeline()` is useful when the middleman actually intends to inspect the
+  // response for some purpose before forwarding it.
+  //
+  // Note: This method has an overload that takes an lvalue reference for convenience. This
+  //   overload increments the refcount on the underlying PipelineHook -- it does not keep the
+  //   reference.
+
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, Results>&& tailRequest);
   // Resolve the call by making a tail call.  `tailRequest` is a request that has been filled in
@@ -677,6 +715,8 @@ public:
   virtual kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) = 0;
   virtual void allowCancellation() = 0;
 
+  virtual void setPipeline(kj::Own<PipelineHook>&& pipeline) = 0;
+
   virtual kj::Promise<AnyPointer::Pipeline> onTailCall() = 0;
   // If `tailCall()` is called, resolves to the PipelineHook from the tail call.  An
   // implementation of `ClientHook::call()` is allowed to call this at most once.
@@ -962,6 +1002,14 @@ template <typename Params, typename Results>
 inline Orphanage CallContext<Params, Results>::getResultsOrphanage(
     kj::Maybe<MessageSize> sizeHint) {
   return Orphanage::getForMessageContaining(hook->getResults(sizeHint));
+}
+template <typename Params, typename Results>
+void CallContext<Params, Results>::setPipeline(typename Results::Pipeline&& pipeline) {
+  hook->setPipeline(PipelineHook::from(kj::mv(pipeline)));
+}
+template <typename Params, typename Results>
+void CallContext<Params, Results>::setPipeline(typename Results::Pipeline& pipeline) {
+  hook->setPipeline(PipelineHook::from(pipeline).addRef());
 }
 template <typename Params, typename Results>
 template <typename SubParams>
