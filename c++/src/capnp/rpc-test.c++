@@ -571,6 +571,35 @@ TEST(Rpc, Pipelining) {
   EXPECT_EQ(1, chainedCallCount);
 }
 
+KJ_TEST("RPC context.setPipeline") {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_PIPELINE)
+      .castAs<test::TestPipeline>();
+
+  auto promise = client.getCapPipelineOnlyRequest().send();
+
+  auto pipelineRequest = promise.getOutBox().getCap().fooRequest();
+  pipelineRequest.setI(321);
+  auto pipelinePromise = pipelineRequest.send();
+
+  auto pipelineRequest2 = promise.getOutBox().getCap().castAs<test::TestExtends>().graultRequest();
+  auto pipelinePromise2 = pipelineRequest2.send();
+
+  EXPECT_EQ(0, context.restorer.callCount);
+
+  auto response = pipelinePromise.wait(context.waitScope);
+  EXPECT_EQ("bar", response.getX());
+
+  auto response2 = pipelinePromise2.wait(context.waitScope);
+  checkTestMessage(response2);
+
+  EXPECT_EQ(3, context.restorer.callCount);
+
+  // The original promise never completed.
+  KJ_EXPECT(!promise.poll(context.waitScope));
+}
+
 TEST(Rpc, Release) {
   TestContext context;
 

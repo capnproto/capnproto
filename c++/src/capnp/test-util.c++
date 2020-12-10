@@ -981,6 +981,14 @@ kj::Promise<void> TestPipelineImpl::getAnyCap(GetAnyCapContext context) {
       });
 }
 
+kj::Promise<void> TestPipelineImpl::getCapPipelineOnly(GetCapPipelineOnlyContext context) {
+  ++callCount;
+  PipelineBuilder<GetCapPipelineOnlyResults> pb;
+  pb.initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
+  context.setPipeline(pb.build());
+  return kj::NEVER_DONE;
+}
+
 kj::Promise<void> TestCallOrderImpl::getCallSequence(GetCallSequenceContext context) {
   auto result = context.getResults();
   result.setN(count++);

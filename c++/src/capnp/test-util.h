@@ -212,6 +212,7 @@ public:
 
   kj::Promise<void> getCap(GetCapContext context) override;
   kj::Promise<void> getAnyCap(GetAnyCapContext context) override;
+  kj::Promise<void> getCapPipelineOnly(GetCapPipelineOnlyContext context) override;
 
 private:
   int& callCount;
