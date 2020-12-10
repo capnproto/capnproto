@@ -67,6 +67,7 @@ class LocalClient;
 namespace _ { // private
 extern const RawSchema NULL_INTERFACE_SCHEMA;  // defined in schema.c++
 class CapabilityServerSetBase;
+struct PipelineBuilderPair;
 }  // namespace _ (private)
 
 struct Capability {
@@ -330,19 +331,32 @@ public:
   //
   // To solve this problem, Bob takes the pipeline object from the `bar()` call, transforms it into
   // an appropriate pipeline for a `foo()` call, and passes that to `setPipeline()`. This allows
-  // Alice's pipelined `baz()` call to flow through immediately. If `foo()` and `bar()` actually
-  // return the same type (requiring no transformation), this code looks like:
+  // Alice's pipelined `baz()` call to flow through immediately. The code looks like:
   //
   //     kj::Promise<void> foo(FooContext context) {
-  //       auto pipelinedPromise = charlie.barRequest().send();
-  //       context.setPipeline(pipelinedPromise);
-  //       return pipelinedPromise.then(...);
+  //       auto barPromise = charlie.barRequest().send();
+  //
+  //       // Set up the final pipeline using pipelined capabilities from `barPromise`.
+  //       capnp::PipelineBuilder<FooResults> pipeline;
+  //       pipeline.setResultCap(barPromise.getSomeCap());
+  //       context.setPipeline(pipeline.build());
+  //
+  //       // Now actually wait for the results and process them.
+  //       return barPromise
+  //           .then([context](capnp::Response<BarResults> response) mutable {
+  //         auto results = context.initResults();
+  //
+  //         // Make sure to set up the capabilities exactly as we did in the pipeline.
+  //         results.setResultCap(response.getSomeCap());
+  //
+  //         // ... do other stuff with the real response ...
+  //       });
   //     }
   //
   // Of course, if `foo()` and `bar()` return exactly the same type, and Bob doesn't intend
   // to do anything with `bar()`'s response except pass it through, then `tailCall()` is a better
-  // choice here. `setPipeline()` is useful when the middleman actually intends to inspect the
-  // response for some purpose before forwarding it.
+  // choice here. `setPipeline()` is useful when some transformation is needed on the response,
+  // or the middleman needs to inspect the response for some reason.
   //
   // Note: This method has an overload that takes an lvalue reference for convenience. This
   //   overload increments the refcount on the underlying PipelineHook -- it does not keep the
@@ -491,6 +505,34 @@ protected:
 private:
   ClientHook* thisHook = nullptr;
   friend class LocalClient;
+};
+
+// =======================================================================================
+
+template <typename T>
+class PipelineBuilder: public T::Builder {
+  // Convenience class to build a Pipeline object for use with CallContext::setPipeline().
+  //
+  // Building a pipeline object is like building an RPC result message, except that you only need
+  // to fill in the capabilities, since the purpose is only to allow pipelined RPC requests to
+  // flow through.
+  //
+  // See the docs for `CallContext::setPipeline()` for an example.
+
+public:
+  PipelineBuilder(uint firstSegmentWords = 64);
+  // Construct a builder, allocating the given number of words for the first segment of the backing
+  // message. Since `PipelineBuilder` is typically used with small RPC messages, the default size
+  // here is considerably smaller than with MallocMessageBuilder.
+
+  typename T::Pipeline build();
+  // Constructs a `Pipeline` object backed by the current content of this builder. Calling this
+  // consumes the `PipelineBuilder`; no further methods can be invoked.
+
+private:
+  kj::Own<PipelineHook> hook;
+
+  PipelineBuilder(_::PipelineBuilderPair pair);
 };
 
 // =======================================================================================
@@ -1040,6 +1082,35 @@ StreamingCallContext<Params> Capability::Server::internalGetTypedStreamingContex
 
 Capability::Client Capability::Server::thisCap() {
   return Client(thisHook->addRef());
+}
+
+namespace _ { // private
+
+struct PipelineBuilderPair {
+  AnyPointer::Builder root;
+  kj::Own<PipelineHook> hook;
+};
+
+PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords);
+
+}  // namespace _ (private)
+
+template <typename T>
+PipelineBuilder<T>::PipelineBuilder(uint firstSegmentWords)
+    : PipelineBuilder(_::newPipelineBuilder(firstSegmentWords)) {}
+
+template <typename T>
+PipelineBuilder<T>::PipelineBuilder(_::PipelineBuilderPair pair)
+    : T::Builder(pair.root.initAs<T>()),
+      hook(kj::mv(pair.hook)) {}
+
+template <typename T>
+typename T::Pipeline PipelineBuilder<T>::build() {
+  // Prevent subsequent accidental modification. A good compiler should be able to optimize this
+  // assignment away assuming the PipelineBuilder is not accessed again after this point.
+  static_cast<typename T::Builder&>(*this) = nullptr;
+
+  return typename T::Pipeline(AnyPointer::Pipeline(kj::mv(hook)));
 }
 
 template <typename T>

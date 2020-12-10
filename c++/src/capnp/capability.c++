@@ -846,6 +846,36 @@ kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>
 
 // =======================================================================================
 
+namespace _ {  // private
+
+class PipelineBuilderHook final: public PipelineHook, public kj::Refcounted {
+public:
+  PipelineBuilderHook(uint firstSegmentWords)
+      : message(firstSegmentWords),
+        root(message.getRoot<AnyPointer>()) {}
+
+  kj::Own<PipelineHook> addRef() override {
+    return kj::addRef(*this);
+  }
+
+  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+    return root.asReader().getPipelinedCap(ops);
+  }
+
+  MallocMessageBuilder message;
+  AnyPointer::Builder root;
+};
+
+PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords) {
+  auto hook = kj::refcounted<PipelineBuilderHook>(firstSegmentWords);
+  auto root = hook->root;
+  return { root, kj::mv(hook) };
+}
+
+}  // namespace _ (private)
+
+// =======================================================================================
+
 namespace {
 
 class BrokenPipeline final: public PipelineHook, public kj::Refcounted {
