@@ -53,3 +53,49 @@ KJ_IF_MAYBE(pointerToValue, maybeValue) {
   handleEmptyCase();
 }
 ```
+
+### OneOf (variant)
+
+`OneOf<T>` is a template for a type-safe tagged union, similar to (but predating)
+[`std::variant`](https://en.cppreference.com/w/cpp/utility/variant). It has the advantage of
+enabling easy handing of the different control flow paths with compiler warnings automatically for
+unhandled cases using a familiar `switch`/`case` approach.
+
+You can construct a `OneOf<T>` using a value valid for any of the types:
+
+```c++
+#include <kj/one-of.h>
+
+auto numberInt = kj::OneOf<int, double, kj::String, bignum>(8);
+auto numberFloat = kj::OneOf<int, double, kj::String, bignum>(8.0);
+auto numberString = kj::OneOf<int, double, kj::String, bignum>("8");
+```
+
+Afterwards, you can handle the various cases as follows:
+
+```c+++
+KJ_SWITCH_ONEOF(number) {
+  KJ_CASE_ONEOF(i, int) {
+    doSomethingWithInt(i);
+  }
+  KJ_CASE_ONEOF(d, double) {
+    doSomethingWithDouble(d);
+  }
+  KJ_CASE_ONEOF(s, kj::String) {
+    doSomethingWithString(s);
+  }
+  KJ_CASE_ONEOF_DEFAULT {
+    doSomethingElse();
+  }
+}
+```
+
+`OneOf<T>` is non-nullable by default; using a nullish value (`nullptr`, etc) to make it nullable
+is inadvisable because it may interfere with implementation details. Instead, if you need an empty
+state, consider creating an empty struct which you can then use as an explicit empty state:
+
+```c++
+struct Empty {};
+
+kj::OneOf<Empty, double, kj::String> foo;
+```
