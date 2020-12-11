@@ -67,6 +67,7 @@ class LocalClient;
 namespace _ { // private
 extern const RawSchema NULL_INTERFACE_SCHEMA;  // defined in schema.c++
 class CapabilityServerSetBase;
+struct PipelineBuilderPair;
 }  // namespace _ (private)
 
 struct Capability {
@@ -310,6 +311,57 @@ public:
   // should not be included in the size.  So, if you are simply going to copy some existing message
   // directly into the results, just call `.totalSize()` and pass that in.
 
+  void setPipeline(typename Results::Pipeline&& pipeline);
+  void setPipeline(typename Results::Pipeline& pipeline);
+  // Tells the system where the capabilities in the response will eventually resolve to. This
+  // allows requests that are promise-pipelined on this call's results to continue their journey
+  // to the final destination before this call itself has completed.
+  //
+  // This is particularly useful when forwarding RPC calls to other remote servers, but where a
+  // tail call can't be used. For example, imagine Alice calls `foo()` on Bob. In `foo()`'s
+  // implementation, Bob calls `bar()` on Charlie. `bar()` returns a capability to Bob, and then
+  // `foo()` returns the same capability on to Alice. Now imagine Alice is actually using promise
+  // pipelining in a chain like `foo().getCap().baz()`. The `baz()` call will travel to Bob as a
+  // pipelined call without waiting for `foo()` to return first. But once it gets to Bob, the
+  // message has to patiently wait until `foo()` has completed there, before it can then be
+  // forwarded on to Charlie. It would be better if immediately upon Bob calling `bar()` on
+  // Charlie, then Alice's call to `baz()` could be forwarded to Charlie as a pipelined call,
+  // without waiting for `bar()` to return. This would avoid a network round trip of latency
+  // between Bob and Charlie.
+  //
+  // To solve this problem, Bob takes the pipeline object from the `bar()` call, transforms it into
+  // an appropriate pipeline for a `foo()` call, and passes that to `setPipeline()`. This allows
+  // Alice's pipelined `baz()` call to flow through immediately. The code looks like:
+  //
+  //     kj::Promise<void> foo(FooContext context) {
+  //       auto barPromise = charlie.barRequest().send();
+  //
+  //       // Set up the final pipeline using pipelined capabilities from `barPromise`.
+  //       capnp::PipelineBuilder<FooResults> pipeline;
+  //       pipeline.setResultCap(barPromise.getSomeCap());
+  //       context.setPipeline(pipeline.build());
+  //
+  //       // Now actually wait for the results and process them.
+  //       return barPromise
+  //           .then([context](capnp::Response<BarResults> response) mutable {
+  //         auto results = context.initResults();
+  //
+  //         // Make sure to set up the capabilities exactly as we did in the pipeline.
+  //         results.setResultCap(response.getSomeCap());
+  //
+  //         // ... do other stuff with the real response ...
+  //       });
+  //     }
+  //
+  // Of course, if `foo()` and `bar()` return exactly the same type, and Bob doesn't intend
+  // to do anything with `bar()`'s response except pass it through, then `tailCall()` is a better
+  // choice here. `setPipeline()` is useful when some transformation is needed on the response,
+  // or the middleman needs to inspect the response for some reason.
+  //
+  // Note: This method has an overload that takes an lvalue reference for convenience. This
+  //   overload increments the refcount on the underlying PipelineHook -- it does not keep the
+  //   reference.
+
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, Results>&& tailRequest);
   // Resolve the call by making a tail call.  `tailRequest` is a request that has been filled in
@@ -453,6 +505,34 @@ protected:
 private:
   ClientHook* thisHook = nullptr;
   friend class LocalClient;
+};
+
+// =======================================================================================
+
+template <typename T>
+class PipelineBuilder: public T::Builder {
+  // Convenience class to build a Pipeline object for use with CallContext::setPipeline().
+  //
+  // Building a pipeline object is like building an RPC result message, except that you only need
+  // to fill in the capabilities, since the purpose is only to allow pipelined RPC requests to
+  // flow through.
+  //
+  // See the docs for `CallContext::setPipeline()` for an example.
+
+public:
+  PipelineBuilder(uint firstSegmentWords = 64);
+  // Construct a builder, allocating the given number of words for the first segment of the backing
+  // message. Since `PipelineBuilder` is typically used with small RPC messages, the default size
+  // here is considerably smaller than with MallocMessageBuilder.
+
+  typename T::Pipeline build();
+  // Constructs a `Pipeline` object backed by the current content of this builder. Calling this
+  // consumes the `PipelineBuilder`; no further methods can be invoked.
+
+private:
+  kj::Own<PipelineHook> hook;
+
+  PipelineBuilder(_::PipelineBuilderPair pair);
 };
 
 // =======================================================================================
@@ -676,6 +756,8 @@ public:
   virtual AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) = 0;
   virtual kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) = 0;
   virtual void allowCancellation() = 0;
+
+  virtual void setPipeline(kj::Own<PipelineHook>&& pipeline) = 0;
 
   virtual kj::Promise<AnyPointer::Pipeline> onTailCall() = 0;
   // If `tailCall()` is called, resolves to the PipelineHook from the tail call.  An
@@ -964,6 +1046,14 @@ inline Orphanage CallContext<Params, Results>::getResultsOrphanage(
   return Orphanage::getForMessageContaining(hook->getResults(sizeHint));
 }
 template <typename Params, typename Results>
+void CallContext<Params, Results>::setPipeline(typename Results::Pipeline&& pipeline) {
+  hook->setPipeline(PipelineHook::from(kj::mv(pipeline)));
+}
+template <typename Params, typename Results>
+void CallContext<Params, Results>::setPipeline(typename Results::Pipeline& pipeline) {
+  hook->setPipeline(PipelineHook::from(pipeline).addRef());
+}
+template <typename Params, typename Results>
 template <typename SubParams>
 inline kj::Promise<void> CallContext<Params, Results>::tailCall(
     Request<SubParams, Results>&& tailRequest) {
@@ -992,6 +1082,35 @@ StreamingCallContext<Params> Capability::Server::internalGetTypedStreamingContex
 
 Capability::Client Capability::Server::thisCap() {
   return Client(thisHook->addRef());
+}
+
+namespace _ { // private
+
+struct PipelineBuilderPair {
+  AnyPointer::Builder root;
+  kj::Own<PipelineHook> hook;
+};
+
+PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords);
+
+}  // namespace _ (private)
+
+template <typename T>
+PipelineBuilder<T>::PipelineBuilder(uint firstSegmentWords)
+    : PipelineBuilder(_::newPipelineBuilder(firstSegmentWords)) {}
+
+template <typename T>
+PipelineBuilder<T>::PipelineBuilder(_::PipelineBuilderPair pair)
+    : T::Builder(pair.root.initAs<T>()),
+      hook(kj::mv(pair.hook)) {}
+
+template <typename T>
+typename T::Pipeline PipelineBuilder<T>::build() {
+  // Prevent subsequent accidental modification. A good compiler should be able to optimize this
+  // assignment away assuming the PipelineBuilder is not accessed again after this point.
+  static_cast<typename T::Builder&>(*this) = nullptr;
+
+  return typename T::Pipeline(AnyPointer::Pipeline(kj::mv(hook)));
 }
 
 template <typename T>

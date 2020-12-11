@@ -277,6 +277,11 @@ public:
     }
   }
 
+  void setPipeline(kj::Own<PipelineHook>&& pipeline) override {
+    inner->setPipeline(kj::refcounted<MembranePipelineHook>(
+        kj::mv(pipeline), policy->addRef(), !reverse));
+  }
+
   kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) override {
     return inner->tailCall(MembraneRequestHook::wrap(kj::mv(request), *policy, !reverse));
   }

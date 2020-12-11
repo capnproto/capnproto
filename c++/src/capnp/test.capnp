@@ -796,6 +796,9 @@ interface TestPipeline {
   testPointers @1 (cap :TestInterface, obj :AnyPointer, list :List(TestInterface)) -> ();
   getAnyCap @2 (n: UInt32, inCap :Capability) -> (s: Text, outBox :AnyBox);
 
+  getCapPipelineOnly @3 () -> (outBox :Box);
+  # Never returns, but uses setPipeline() to make the pipeline work.
+
   struct Box {
     cap @0 :TestInterface;
   }
