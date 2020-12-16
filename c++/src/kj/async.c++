@@ -1103,7 +1103,7 @@ public:
   using Executor::Executor;
 
   kj::Own<const Executor> addRef() const override {
-    return kj::atomicAddRef(static_cast<const _::ExecutorImpl&>(*this));
+    return kj::atomicAddRef(*this);
   }
 };
 
