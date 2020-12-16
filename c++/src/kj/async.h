@@ -759,6 +759,8 @@ private:
   TaskSet::ErrorHandler& errorHandler;
   Maybe<Own<Task>> tasks;
   Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
+
+  void* traceAddr;
 };
 
 // =======================================================================================

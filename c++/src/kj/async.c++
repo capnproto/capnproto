@@ -225,14 +225,17 @@ void Canceler::AdapterImpl<void>::cancel(kj::Exception&& e) {
 // =======================================================================================
 
 TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler)
-  : errorHandler(errorHandler) {}
+  : errorHandler(errorHandler) {
+  traceAddr = _::getMethodStartAddress(errorHandler, &ErrorHandler::taskFailed);
+}
 
 TaskSet::~TaskSet() noexcept(false) {}
 
 class TaskSet::Task final: public _::Event {
 public:
   Task(TaskSet& taskSet, Own<_::PromiseNode>&& nodeParam)
-      : taskSet(taskSet), node(kj::mv(nodeParam)) {
+      : taskSet(taskSet), node(kj::mv(nodeParam)),
+        traceAddr(taskSet.traceAddr) {
     node->setSelfPointer(&node);
     node->onReady(this);
   }
@@ -249,6 +252,28 @@ public:
 
 protected:
   Maybe<Own<Event>> fire() override {
+    if (KJ_ASSERT_NONNULL(*prev).get() != this) {
+      // Oh crap! It appears the linked list is corrupted. Try to produce some debug info.
+      ([&]() noexcept {
+        // The traceAddr which we gathered in TaskSet's constructor tells us which implementation
+        // of ErrorHandler it's using, helping us figure out which TaskSet this is. Note we had
+        // to gather the traceAddr earlier and pass it down, rather than generate it on-demand,
+        // because the TaskSet itself is probably destroyed by this point.
+
+        void* space[32];
+        _::TraceBuilder builder(space);
+        node->tracePromise(builder, false);
+
+        auto exception = KJ_EXCEPTION(FAILED, "TaskSet linked list corrupted");
+        exception.addTrace(traceAddr);
+        for (void* addr: builder.finish()) {
+          exception.addTrace(addr);
+        }
+
+        kj::throwFatalException(kj::mv(exception));
+      })();
+    }
+
     // Get the result.
     _::ExceptionOr<_::Void> result;
     node->get(result);
@@ -288,12 +313,14 @@ protected:
   void traceEvent(_::TraceBuilder& builder) override {
     // Pointing out the ErrorHandler's taskFailed() implementation will usually identify the
     // particular TaskSet that contains this event.
-    builder.add(_::getMethodStartAddress(taskSet.errorHandler, &ErrorHandler::taskFailed));
+    builder.add(traceAddr);
   }
 
 private:
   TaskSet& taskSet;
   Own<_::PromiseNode> node;
+
+  void* traceAddr;
 };
 
 void TaskSet::add(Promise<void>&& promise) {
