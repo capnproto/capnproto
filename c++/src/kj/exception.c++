@@ -82,6 +82,10 @@
 #include "dlfcn.h"
 #endif
 
+#if _MSC_VER
+#include <intrin.h>
+#endif
+
 namespace kj {
 
 StringPtr KJ_STRINGIFY(LogSeverity severity) {
@@ -836,6 +840,16 @@ void Exception::addTrace(void* ptr) {
   if (traceCount < kj::size(trace)) {
     trace[traceCount++] = ptr;
   }
+}
+
+void Exception::addTraceHere() {
+#if __GNUC__
+  addTrace(__builtin_return_address(0));
+#elif _MSC_VER
+  addTrace(_ReturnAddress());
+#else
+  #error "please implement for your compiler"
+#endif
 }
 
 #if !KJ_NO_EXCEPTIONS

@@ -128,6 +128,9 @@ public:
   // Append the given pointer to the backtrace, if it is not already full. This is used by the
   // async library to trace through the promise chain that led to the exception.
 
+  KJ_NOINLINE void addTraceHere();
+  // Adds the location that called this method to the stack trace.
+
 private:
   String ownFile;
   const char* file;
