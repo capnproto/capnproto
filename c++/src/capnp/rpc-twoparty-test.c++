@@ -234,8 +234,21 @@ TEST(TwoPartyNetwork, Pipelining) {
           .castAs<test::TestExtends>().graultRequest();
       auto pipelinePromise2 = pipelineRequest2.send();
 
-      EXPECT_ANY_THROW(pipelinePromise.wait(ioContext.waitScope));
-      EXPECT_ANY_THROW(pipelinePromise2.wait(ioContext.waitScope));
+      pipelinePromise.then([](auto) {
+        KJ_FAIL_EXPECT("should have thrown");
+      }, [](kj::Exception&& e) {
+        KJ_EXPECT(e.getType() == kj::Exception::Type::DISCONNECTED);
+        KJ_EXPECT(e.getDescription() == "remote exception: Peer disconnected.");
+        // I wish we could test stack traces somehow... oh well.
+      }).wait(ioContext.waitScope);
+
+      pipelinePromise2.then([](auto) {
+        KJ_FAIL_EXPECT("should have thrown");
+      }, [](kj::Exception&& e) {
+        KJ_EXPECT(e.getType() == kj::Exception::Type::DISCONNECTED);
+        KJ_EXPECT(e.getDescription() == "remote exception: Peer disconnected.");
+        // I wish we could test stack traces somehow... oh well.
+      }).wait(ioContext.waitScope);
 
       EXPECT_EQ(3, callCount);
       EXPECT_EQ(1, reverseCallCount);

@@ -339,6 +339,18 @@ public:
     kj::Exception networkException(kj::Exception::Type::DISCONNECTED,
         exception.getFile(), exception.getLine(), kj::heapString(exception.getDescription()));
 
+    // Don't throw away the stack trace.
+    if (exception.getRemoteTrace() != nullptr) {
+      networkException.setRemoteTrace(kj::str(exception.getRemoteTrace()));
+    }
+    for (void* addr: exception.getStackTrace()) {
+      networkException.addTrace(addr);
+    }
+    // If your stack trace points here, it means that the exception became the reason that the
+    // RPC connection was disconnected. The exception was then thrown by all in-flight calls and
+    // all future calls on this connection.
+    networkException.addTraceHere();
+
     KJ_IF_MAYBE(newException, kj::runCatchingExceptions([&]() {
       // Carefully pull all the objects out of the tables prior to releasing them because their
       // destructors could come back and mess with the tables.
