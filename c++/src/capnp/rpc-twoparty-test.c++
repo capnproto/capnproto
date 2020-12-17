@@ -763,7 +763,7 @@ KJ_TEST("promise cap resolves between starting request and sending it") {
   auto pipe = kj::newTwoWayPipe();
 
   // Client exports TestCallOrderImpl as its bootstrap.
-  TwoPartyClient client(*pipe.ends[0], kj::heap<TestCallOrderImpl>(), rpc::twoparty::Side::SERVER);
+  TwoPartyClient client(*pipe.ends[0], kj::heap<TestCallOrderImpl>(), rpc::twoparty::Side::CLIENT);
 
   // Server exports a promise, which will later resolve to loop back to the capability the client
   // exported.
