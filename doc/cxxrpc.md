@@ -22,7 +22,7 @@ a fully-functional Cap'n Proto client and server.
 ## KJ Concurrency Framework
 
 RPC naturally requires a notion of concurrency.  Unfortunately,
-[all concurrency models suck](https://plus.google.com/u/0/+KentonVarda/posts/D95XKtB5DhK).
+[all concurrency models suck](https://web.archive.org/web/20170718202612/https://plus.google.com/+KentonVarda/posts/D95XKtB5DhK).
 
 Cap'n Proto's RPC is based on the [KJ library](cxx.html#kj-library)'s event-driven concurrency
 framework.  The core of the KJ asynchronous framework (events, promises, callbacks) is defined in
