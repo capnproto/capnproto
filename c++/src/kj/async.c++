@@ -229,7 +229,15 @@ TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler)
   traceAddr = _::getMethodStartAddress(errorHandler, &ErrorHandler::taskFailed);
 }
 
-TaskSet::~TaskSet() noexcept(false) {}
+TaskSet::~TaskSet() noexcept(false) {
+  // You could argue it is dubious, but some applications would like for the destructor of a
+  // task to be able to schedule new tasks. So when we cancel our tasks... we might find new
+  // tasks added! We'll have to repeatedly cancel.
+  while (tasks != nullptr) {
+    auto toDestroy = kj::mv(tasks);
+    tasks = nullptr;
+  }
+}
 
 class TaskSet::Task final: public _::Event {
 public:
