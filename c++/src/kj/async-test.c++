@@ -691,6 +691,36 @@ TEST(Async, TaskSet) {
   EXPECT_EQ(1u, errorHandler.exceptionCount);
 }
 
+TEST(Async, TaskSet) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  bool destroyed = false;
+
+  {
+    ErrorHandlerImpl errorHandler;
+    TaskSet tasks(errorHandler);
+
+    tasks.add(kj::Promise<void>(kj::NEVER_DONE)
+        .attach(kj::defer([&]() {
+      // During cancellation, append another task!
+      // It had better be canceled too!
+      tasks.add(kj::Promise<void>(kj::READY_NOW)
+          .then([]() { KJ_FAIL_EXPECT("shouldn't get here"); },
+                [](auto) { KJ_FAIL_EXPECT("shouldn't get here"); })
+          .attach(kj::defer([&]() {
+        destroyed = true;
+      })));
+    })));
+  }
+
+  KJ_EXPECT(destroyed);
+
+  // Give a chance for the "shouldn't get here" asserts to execute, if the event is still running,
+  // which it shouldn't be.
+  waitScope.poll();
+}
+
 TEST(Async, TaskSetOnEmpty) {
   EventLoop loop;
   WaitScope waitScope(loop);
