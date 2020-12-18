@@ -414,7 +414,7 @@ public:
 #else
     // Use a 4k buffer of zeros amplified by iov to write zeros with as few syscalls as possible.
     size_t count = (size + sizeof(ZEROS) - 1) / sizeof(ZEROS);
-    const size_t iovmax = miniposix::iovMax(count);
+    const size_t iovmax = miniposix::iovMax();
     KJ_STACK_ARRAY(struct iovec, iov, kj::min(iovmax, count), 16, 256);
 
     for (auto& item: iov) {

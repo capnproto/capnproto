@@ -8,6 +8,7 @@ set(kj_sources_lite
   exception.c++
   io.c++
   memory.c++
+  miniposix.c++
   mutex.c++
   string.c++
   hash.c++
