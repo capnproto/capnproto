@@ -32,8 +32,12 @@ size_t iovMax() {
     errno = 0;
     iovmax = sysconf(_SC_IOV_MAX);
     if (iovmax == -1) {
-      // Assume iovmax == -1 && errno == 0 means "unbounded".
-      return errno ? _XOPEN_IOV_MAX : kj::maxValue;
+      if (errno == 0) {
+        // The -1 return value was the actual value, not an error. This means there's no limit.
+        return kj::MaxValue;
+      } else {
+        return _XOPEN_IOV_MAX;
+      }
     }
 
     return (size_t) iovmax;
