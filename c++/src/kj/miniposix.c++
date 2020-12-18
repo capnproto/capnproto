@@ -34,7 +34,7 @@ size_t iovMax() {
     if (iovmax == -1) {
       if (errno == 0) {
         // The -1 return value was the actual value, not an error. This means there's no limit.
-        return kj::MaxValue;
+        return kj::maxValue;
       } else {
         return _XOPEN_IOV_MAX;
       }
