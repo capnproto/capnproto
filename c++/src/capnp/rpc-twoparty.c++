@@ -143,10 +143,17 @@ public:
 
     network.previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down")
         .then([this]() {
-      // Note that if the write fails, all further writes will be skipped due to the exception.
-      // We never actually handle this exception because we assume the read end will fail as well
-      // and it's cleaner to handle the failure there.
-      return network.getStream().writeMessage(fds, message);
+      return kj::evalNow([&]() { return network.getStream().writeMessage(fds, message); })
+          .catch_([this](kj::Exception&& e) {
+        // Since no one checks write failures, we need to propagate them into read failures,
+        // otherwise we might get stuck sending all messages into a black hole and wondering why
+        // the peer never replies.
+        network.readCancelReason = kj::cp(e);
+        if (!network.readCanceler.isEmpty()) {
+          network.readCanceler.cancel(kj::cp(e));
+        }
+        kj::throwRecoverableException(kj::mv(e));
+      });
     }).attach(kj::addRef(*this))
       // Note that it's important that the eagerlyEvaluate() come *after* the attach() because
       // otherwise the message (and any capabilities in it) will not be released until a new
@@ -241,11 +248,16 @@ kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSeg
 
 kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveIncomingMessage() {
   return kj::evalLater([this]() -> kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> {
+    KJ_IF_MAYBE(e, readCancelReason) {
+      // A previous write failed; propagate the failure to reads, too.
+      return kj::cp(*e);
+    }
+
     kj::Array<kj::AutoCloseFd> fdSpace = nullptr;
     if(maxFdsPerMessage > 0) {
       fdSpace = kj::heapArray<kj::AutoCloseFd>(maxFdsPerMessage);
     }
-    auto promise = getStream().tryReadMessage(fdSpace, receiveOptions);
+    auto promise = readCanceler.wrap(getStream().tryReadMessage(fdSpace, receiveOptions));
     return promise.then([fdSpace = kj::mv(fdSpace)]
                         (kj::Maybe<MessageReaderAndFds>&& messageAndFds) mutable
                       -> kj::Maybe<kj::Own<IncomingRpcMessage>> {

@@ -102,6 +102,10 @@ private:
   bool solSndbufUnimplemented = false;
   // Whether stream.getsockopt(SO_SNDBUF) has been observed to throw UNIMPLEMENTED.
 
+  kj::Canceler readCanceler;
+  kj::Maybe<kj::Exception> readCancelReason;
+  // Used to propagate write errors into (permanent) read errors.
+
   kj::Maybe<kj::Promise<void>> previousWrite;
   // Resolves when the previous write completes.  This effectively serves as the write queue.
   // Becomes null when shutdown() is called.

@@ -213,6 +213,10 @@ TEST(TwoPartyNetwork, Pipelining) {
     EXPECT_FALSE(disconnected);
 
     // What if we disconnect?
+    // TODO(cleanup): This is kind of cheating, we are shutting down the underlying socket to
+    //   simulate a disconnect, but it's weird to pull the rug out from under our VatNetwork like
+    //   this and it causes a bit of a race between write failures and read failures. This part of
+    //   the test should maybe be restructured.
     serverThread.pipe->shutdownWrite();
 
     // The other side should also disconnect.
@@ -238,7 +242,6 @@ TEST(TwoPartyNetwork, Pipelining) {
         KJ_FAIL_EXPECT("should have thrown");
       }, [](kj::Exception&& e) {
         KJ_EXPECT(e.getType() == kj::Exception::Type::DISCONNECTED);
-        KJ_EXPECT(e.getDescription() == "remote exception: Peer disconnected.");
         // I wish we could test stack traces somehow... oh well.
       }).wait(ioContext.waitScope);
 
@@ -246,7 +249,6 @@ TEST(TwoPartyNetwork, Pipelining) {
         KJ_FAIL_EXPECT("should have thrown");
       }, [](kj::Exception&& e) {
         KJ_EXPECT(e.getType() == kj::Exception::Type::DISCONNECTED);
-        KJ_EXPECT(e.getDescription() == "remote exception: Peer disconnected.");
         // I wish we could test stack traces somehow... oh well.
       }).wait(ioContext.waitScope);
 
@@ -763,7 +765,7 @@ KJ_TEST("promise cap resolves between starting request and sending it") {
   auto pipe = kj::newTwoWayPipe();
 
   // Client exports TestCallOrderImpl as its bootstrap.
-  TwoPartyClient client(*pipe.ends[0], kj::heap<TestCallOrderImpl>(), rpc::twoparty::Side::SERVER);
+  TwoPartyClient client(*pipe.ends[0], kj::heap<TestCallOrderImpl>(), rpc::twoparty::Side::CLIENT);
 
   // Server exports a promise, which will later resolve to loop back to the capability the client
   // exported.
@@ -787,6 +789,52 @@ KJ_TEST("promise cap resolves between starting request and sending it") {
   KJ_EXPECT(n1 == 0, n1);
   auto n2 = promise2.wait(waitScope).getN();
   KJ_EXPECT(n2 == 1, n2);
+}
+
+KJ_TEST("write error propagates to read error") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  auto frontPipe = kj::newTwoWayPipe();
+  auto backPipe = kj::newTwoWayPipe();
+
+  TwoPartyClient client(*frontPipe.ends[0]);
+
+  int callCount;
+  TwoPartyClient server(*backPipe.ends[1], kj::heap<TestInterfaceImpl>(callCount),
+                        rpc::twoparty::Side::SERVER);
+
+  auto pumpUpTask = frontPipe.ends[1]->pumpTo(*backPipe.ends[0]);
+  auto pumpDownTask = backPipe.ends[0]->pumpTo(*frontPipe.ends[1]);
+
+  auto cap = client.bootstrap().castAs<test::TestInterface>();
+
+  // Make sure the connections work.
+  {
+    auto req = cap.fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    auto resp = req.send().wait(waitScope);
+    EXPECT_EQ("foo", resp.getX());
+  }
+
+  // Disconnect upstream task in such a way that future writes on the client will fail, but the
+  // server doesn't notice the disconnect and so won't react.
+  pumpUpTask = nullptr;
+  frontPipe.ends[1]->abortRead();  // causes write() on ends[0] to fail in the future
+
+  {
+    auto req = cap.fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    auto promise = req.send().then([](auto) {
+      KJ_FAIL_EXPECT("expected exception");
+    }, [](kj::Exception&& e) {
+      KJ_ASSERT(e.getDescription() == "abortRead() has been called");
+    });
+
+    KJ_ASSERT(promise.poll(waitScope));
+    promise.wait(waitScope);
+  }
 }
 
 }  // namespace
