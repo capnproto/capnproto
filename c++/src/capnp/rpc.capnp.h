@@ -32,6 +32,8 @@ CAPNP_DECLARE_SCHEMA(fbe1980490e001af);
 CAPNP_DECLARE_SCHEMA(95bc14545813fbc1);
 CAPNP_DECLARE_SCHEMA(9a0e61223d96743b);
 CAPNP_DECLARE_SCHEMA(8523ddc40b86b8b0);
+CAPNP_DECLARE_SCHEMA(b98fde6421524c20);
+CAPNP_DECLARE_SCHEMA(ed969c92ce05fc9c);
 CAPNP_DECLARE_SCHEMA(d800b1d6cd6f1ca0);
 CAPNP_DECLARE_SCHEMA(f316944415569081);
 CAPNP_DECLARE_SCHEMA(d37007fde1f0027d);
@@ -335,9 +337,41 @@ struct CapDescriptor {
     RECEIVER_ANSWER,
     THIRD_PARTY_HOSTED,
   };
+  struct SenderHosted;
+  struct SenderPromise;
 
   struct _capnpPrivate {
     CAPNP_DECLARE_STRUCT_HEADER(8523ddc40b86b8b0, 1, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct CapDescriptor::SenderHosted {
+  SenderHosted() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(b98fde6421524c20, 1, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct CapDescriptor::SenderPromise {
+  SenderPromise() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(ed969c92ce05fc9c, 1, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -2014,10 +2048,10 @@ public:
   inline  ::capnp::Void getNone() const;
 
   inline bool isSenderHosted() const;
-  inline  ::uint32_t getSenderHosted() const;
+  inline typename SenderHosted::Reader getSenderHosted() const;
 
   inline bool isSenderPromise() const;
-  inline  ::uint32_t getSenderPromise() const;
+  inline typename SenderPromise::Reader getSenderPromise() const;
 
   inline bool isReceiverHosted() const;
   inline  ::uint32_t getReceiverHosted() const;
@@ -2066,12 +2100,12 @@ public:
   inline void setNone( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isSenderHosted();
-  inline  ::uint32_t getSenderHosted();
-  inline void setSenderHosted( ::uint32_t value);
+  inline typename SenderHosted::Builder getSenderHosted();
+  inline typename SenderHosted::Builder initSenderHosted();
 
   inline bool isSenderPromise();
-  inline  ::uint32_t getSenderPromise();
-  inline void setSenderPromise( ::uint32_t value);
+  inline typename SenderPromise::Builder getSenderPromise();
+  inline typename SenderPromise::Builder initSenderPromise();
 
   inline bool isReceiverHosted();
   inline  ::uint32_t getReceiverHosted();
@@ -2109,6 +2143,172 @@ private:
 class CapDescriptor::Pipeline {
 public:
   typedef CapDescriptor Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class CapDescriptor::SenderHosted::Reader {
+public:
+  typedef SenderHosted Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint32_t getExportId() const;
+
+  inline bool hasTag() const;
+  inline ::capnp::AnyPointer::Reader getTag() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class CapDescriptor::SenderHosted::Builder {
+public:
+  typedef SenderHosted Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint32_t getExportId();
+  inline void setExportId( ::uint32_t value);
+
+  inline bool hasTag();
+  inline ::capnp::AnyPointer::Builder getTag();
+  inline ::capnp::AnyPointer::Builder initTag();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class CapDescriptor::SenderHosted::Pipeline {
+public:
+  typedef SenderHosted Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class CapDescriptor::SenderPromise::Reader {
+public:
+  typedef SenderPromise Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint32_t getExportId() const;
+
+  inline bool hasTag() const;
+  inline ::capnp::AnyPointer::Reader getTag() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class CapDescriptor::SenderPromise::Builder {
+public:
+  typedef SenderPromise Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint32_t getExportId();
+  inline void setExportId( ::uint32_t value);
+
+  inline bool hasTag();
+  inline ::capnp::AnyPointer::Builder getTag();
+  inline ::capnp::AnyPointer::Builder initTag();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class CapDescriptor::SenderPromise::Pipeline {
+public:
+  typedef SenderPromise Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -4507,52 +4707,46 @@ inline bool CapDescriptor::Reader::isSenderHosted() const {
 inline bool CapDescriptor::Builder::isSenderHosted() {
   return which() == CapDescriptor::SENDER_HOSTED;
 }
-inline  ::uint32_t CapDescriptor::Reader::getSenderHosted() const {
+inline typename CapDescriptor::SenderHosted::Reader CapDescriptor::Reader::getSenderHosted() const {
   KJ_IREQUIRE((which() == CapDescriptor::SENDER_HOSTED),
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint32_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+  return typename CapDescriptor::SenderHosted::Reader(_reader);
 }
-
-inline  ::uint32_t CapDescriptor::Builder::getSenderHosted() {
+inline typename CapDescriptor::SenderHosted::Builder CapDescriptor::Builder::getSenderHosted() {
   KJ_IREQUIRE((which() == CapDescriptor::SENDER_HOSTED),
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint32_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+  return typename CapDescriptor::SenderHosted::Builder(_builder);
 }
-inline void CapDescriptor::Builder::setSenderHosted( ::uint32_t value) {
+inline typename CapDescriptor::SenderHosted::Builder CapDescriptor::Builder::initSenderHosted() {
   _builder.setDataField<CapDescriptor::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, CapDescriptor::SENDER_HOSTED);
-  _builder.setDataField< ::uint32_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
+  _builder.setDataField< ::uint32_t>(::capnp::bounded<1>() * ::capnp::ELEMENTS, 0);
+  _builder.getPointerField(::capnp::bounded<0>() * ::capnp::POINTERS).clear();
+  return typename CapDescriptor::SenderHosted::Builder(_builder);
 }
-
 inline bool CapDescriptor::Reader::isSenderPromise() const {
   return which() == CapDescriptor::SENDER_PROMISE;
 }
 inline bool CapDescriptor::Builder::isSenderPromise() {
   return which() == CapDescriptor::SENDER_PROMISE;
 }
-inline  ::uint32_t CapDescriptor::Reader::getSenderPromise() const {
+inline typename CapDescriptor::SenderPromise::Reader CapDescriptor::Reader::getSenderPromise() const {
   KJ_IREQUIRE((which() == CapDescriptor::SENDER_PROMISE),
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint32_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+  return typename CapDescriptor::SenderPromise::Reader(_reader);
 }
-
-inline  ::uint32_t CapDescriptor::Builder::getSenderPromise() {
+inline typename CapDescriptor::SenderPromise::Builder CapDescriptor::Builder::getSenderPromise() {
   KJ_IREQUIRE((which() == CapDescriptor::SENDER_PROMISE),
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint32_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+  return typename CapDescriptor::SenderPromise::Builder(_builder);
 }
-inline void CapDescriptor::Builder::setSenderPromise( ::uint32_t value) {
+inline typename CapDescriptor::SenderPromise::Builder CapDescriptor::Builder::initSenderPromise() {
   _builder.setDataField<CapDescriptor::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, CapDescriptor::SENDER_PROMISE);
-  _builder.setDataField< ::uint32_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
+  _builder.setDataField< ::uint32_t>(::capnp::bounded<1>() * ::capnp::ELEMENTS, 0);
+  _builder.getPointerField(::capnp::bounded<0>() * ::capnp::POINTERS).clear();
+  return typename CapDescriptor::SenderPromise::Builder(_builder);
 }
-
 inline bool CapDescriptor::Reader::isReceiverHosted() const {
   return which() == CapDescriptor::RECEIVER_HOSTED;
 }
@@ -4699,6 +4893,80 @@ inline  ::uint8_t CapDescriptor::Builder::getAttachedFd() {
 inline void CapDescriptor::Builder::setAttachedFd( ::uint8_t value) {
   _builder.setDataField< ::uint8_t>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value, 255u);
+}
+
+inline  ::uint32_t CapDescriptor::SenderHosted::Reader::getExportId() const {
+  return _reader.getDataField< ::uint32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t CapDescriptor::SenderHosted::Builder::getExportId() {
+  return _builder.getDataField< ::uint32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+inline void CapDescriptor::SenderHosted::Builder::setExportId( ::uint32_t value) {
+  _builder.setDataField< ::uint32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool CapDescriptor::SenderHosted::Reader::hasTag() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool CapDescriptor::SenderHosted::Builder::hasTag() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline ::capnp::AnyPointer::Reader CapDescriptor::SenderHosted::Reader::getTag() const {
+  return ::capnp::AnyPointer::Reader(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline ::capnp::AnyPointer::Builder CapDescriptor::SenderHosted::Builder::getTag() {
+  return ::capnp::AnyPointer::Builder(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline ::capnp::AnyPointer::Builder CapDescriptor::SenderHosted::Builder::initTag() {
+  auto result = ::capnp::AnyPointer::Builder(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+  result.clear();
+  return result;
+}
+
+inline  ::uint32_t CapDescriptor::SenderPromise::Reader::getExportId() const {
+  return _reader.getDataField< ::uint32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t CapDescriptor::SenderPromise::Builder::getExportId() {
+  return _builder.getDataField< ::uint32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+inline void CapDescriptor::SenderPromise::Builder::setExportId( ::uint32_t value) {
+  _builder.setDataField< ::uint32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool CapDescriptor::SenderPromise::Reader::hasTag() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool CapDescriptor::SenderPromise::Builder::hasTag() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline ::capnp::AnyPointer::Reader CapDescriptor::SenderPromise::Reader::getTag() const {
+  return ::capnp::AnyPointer::Reader(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline ::capnp::AnyPointer::Builder CapDescriptor::SenderPromise::Builder::getTag() {
+  return ::capnp::AnyPointer::Builder(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline ::capnp::AnyPointer::Builder CapDescriptor::SenderPromise::Builder::initTag() {
+  auto result = ::capnp::AnyPointer::Builder(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+  result.clear();
+  return result;
 }
 
 inline  ::uint32_t PromisedAnswer::Reader::getQuestionId() const {
