@@ -108,23 +108,6 @@ interface Persistent@0xc8cb212fcd9f5691(SturdyRef, Owner) {
   }
 }
 
-interface RealmGateway(InternalRef, ExternalRef, InternalOwner, ExternalOwner) {
-  # Interface invoked when a SturdyRef is about to cross realms. The RPC system supports providing
-  # a RealmGateway as a callback hook when setting up RPC over some VatNetwork.
-
-  import @0 (cap :Persistent(ExternalRef, ExternalOwner),
-             params :Persistent(InternalRef, InternalOwner).SaveParams)
-         -> Persistent(InternalRef, InternalOwner).SaveResults;
-  # Given an external capability, save it and return an internal reference. Used when someone
-  # inside the realm tries to save a capability from outside the realm.
-
-  export @1 (cap :Persistent(InternalRef, InternalOwner),
-             params :Persistent(ExternalRef, ExternalOwner).SaveParams)
-         -> Persistent(ExternalRef, ExternalOwner).SaveResults;
-  # Given an internal capability, save it and return an external reference. Used when someone
-  # outside the realm tries to save a capability from inside the realm.
-}
-
 annotation persistent(interface, field) :Void;
 # Apply this annotation to interfaces for objects that will always be persistent, instead of
 # extending the Persistent capability, since the correct type parameters to Persistent depend on
