@@ -961,16 +961,28 @@ struct CapDescriptor {
     # struct or list instance is zeroed out of the message but the space is not reclaimed.
     # Hopefully this is unusual.
 
-    senderHosted @1 :ExportId;
-    # The ID of a capability in the sender's export table (receiver's import table).  It may be a
-    # newly allocated table entry, or an existing entry (increments the reference count).
+    senderHosted :group {
+      exportId @1 :ExportId;
+      # The ID of a capability in the sender's export table (receiver's import table).  It may be a
+      # newly allocated table entry, or an existing entry (increments the reference count).
 
-    senderPromise @2 :ExportId;
-    # A promise that the sender will resolve later.  The sender will send exactly one Resolve
-    # message at a future point in time to replace this promise.  Note that even if the same
-    # `senderPromise` is received multiple times, only one `Resolve` is sent to cover all of
-    # them.  If `senderPromise` is released before the `Resolve` is sent, the sender (of this
-    # `CapDescriptor`) may choose not to send the `Resolve` at all.
+      tag @7 :GatewayTag;
+      # Optionally contains extra information needed to route this capability in a multi-VatNetwork
+      # scenario.
+    }
+
+    senderPromise :group {
+      exportId @2 :ExportId;
+      # A promise that the sender will resolve later.  The sender will send exactly one Resolve
+      # message at a future point in time to replace this promise.  Note that even if the same
+      # `senderPromise` is received multiple times, only one `Resolve` is sent to cover all of
+      # them.  If `senderPromise` is released before the `Resolve` is sent, the sender (of this
+      # `CapDescriptor`) may choose not to send the `Resolve` at all.
+
+      tag @8 :GatewayTag;
+      # Optionally contains extra information needed to route this capability in a multi-VatNetwork
+      # scenario.
+    }
 
     receiverHosted @3 :ImportId;
     # A capability (or promise) previously exported by the receiver (imported by the sender).
@@ -1338,6 +1350,45 @@ using ThirdPartyCapId = AnyPointer;
 # ThirdPartyCapId could simply refer to a file descriptor attached to the message via SCM_RIGHTS.
 # This file descriptor would be one end of a newly-created socketpair, with the other end having
 # been sent to the process hosting the capability in RecipientId.
+
+using GatewayTag = AnyPointer;
+# **(level 3 w/gateways) **
+#
+# Used when the VatNetwork represents an internal network that is connected by some sort of
+# "gateway" to an exernal network. For example, say you design a VatNetwork to manage
+# communciations within a single server cluster, and you have a second VatNetwork that manages
+# communication with the public internet. If each machine in the cluster has both VatNetworks,
+# and capabilities are passed from one to the other and back, this could break three-party handoff.
+#
+# Specifically, imagine that Alice is an external client while Bob and Charlie are members of the
+# cluster. Alice sends a capability to Bob, who forwards it to Charlie. From the point of view of
+# the internal VatNetwork, Bob is the original host of the capability, so no handoff will occur.
+# This is often fine; Bob becomes a proxy. Since Bob and Charlie are close to each other relative
+# to Alice, this proxy does not significantly harm latency. But now imagine Charlie forwards the
+# capability back to Alice through a separate connection. Now, we really want path-shortening to
+# occur, so that Alice can access the local capability without reflecting through Bob and Charlie's
+# datacenter. But, it can't happen, because Charlie views the capability as being hosted by Bob,
+# and has no idea that it originally came from Alice. A similar problem arises when Charlie sends
+# the capability to some other distant, external entity, Dave -- we would like Dave to be able to
+# form a direct connection to Alice, since they may be closer to each other than to Bob and
+# Charlie's datacenter.
+#
+# One way to solve this is to designate exactly one machine in the cluster that will handle *all*
+# communications with the public internet. We call this a "gateway" machine. In this case, regular
+# three-party handoff allows the gateway machine to recognize when a capability crossing the
+# gateway in one direction matches one that previously crossed in the other direction, and it can
+# then shorten the path properly.
+#
+# However, designating a single gateway machine would create a scalability bottleneck. We really
+# want every machine to be able to act as a gateway. That means that Charlie needs to have some
+# way to know that the capability he got from Bob on the internal VatNetwork is actually proxied
+# from the external one. Charlie can then arrange the necessary three-party handoff on the exernal
+# VatNetwork.
+#
+# We leave it mostly up to the VatNetwork implementations to coordinate between multiple
+# VatNetworks in these scenarios. However, to facilitate this coordination, we introduce the
+# notion of a `GatewayTag`, which is some arbitrary information attached to a capability that is
+# carried along with it as it traverses the internal network.
 
 using JoinKeyPart = AnyPointer;
 # **(level 4)**
