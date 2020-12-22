@@ -1139,7 +1139,7 @@ private:
         // We've already seen and exported this capability before.  Just up the refcount.
         auto& exp = KJ_ASSERT_NONNULL(exports.find(iter->second));
         ++exp.refcount;
-        descriptor.setSenderHosted(iter->second);
+        descriptor.initSenderHosted().setExportId(iter->second);
         return iter->second;
       } else {
         // This is the first time we've seen this capability.
@@ -1152,9 +1152,9 @@ private:
         KJ_IF_MAYBE(wrapped, inner->whenMoreResolved()) {
           // This is a promise.  Arrange for the `Resolve` message to be sent later.
           exp.resolveOp = resolveExportedPromise(exportId, kj::mv(*wrapped));
-          descriptor.setSenderPromise(exportId);
+          descriptor.initSenderPromise().setExportId(exportId);
         } else {
-          descriptor.setSenderHosted(exportId);
+          descriptor.initSenderHosted().setExportId(exportId);
         }
 
         return exportId;
@@ -1448,9 +1448,9 @@ private:
         return nullptr;
 
       case rpc::CapDescriptor::SENDER_HOSTED:
-        return import(descriptor.getSenderHosted(), false, kj::mv(fd));
+        return import(descriptor.getSenderHosted().getExportId(), false, kj::mv(fd));
       case rpc::CapDescriptor::SENDER_PROMISE:
-        return import(descriptor.getSenderPromise(), true, kj::mv(fd));
+        return import(descriptor.getSenderPromise().getExportId(), true, kj::mv(fd));
 
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_MAYBE(exp, exports.find(descriptor.getReceiverHosted())) {
@@ -2485,10 +2485,10 @@ private:
                 // Nothing to do (but this ought never to happen).
                 break;
               case rpc::CapDescriptor::SENDER_HOSTED:
-                releaseExport(cap.getSenderHosted(), 1);
+                releaseExport(cap.getSenderHosted().getExportId(), 1);
                 break;
               case rpc::CapDescriptor::SENDER_PROMISE:
-                releaseExport(cap.getSenderPromise(), 1);
+                releaseExport(cap.getSenderPromise().getExportId(), 1);
                 break;
               case rpc::CapDescriptor::RECEIVER_ANSWER:
               case rpc::CapDescriptor::RECEIVER_HOSTED:
