@@ -172,8 +172,49 @@ KJ_TEST("clone()") {
   MallocMessageBuilder builder(2048);
   initTestMessage(builder.getRoot<TestAllTypes>());
 
-  auto copy = clone(builder.getRoot<TestAllTypes>().asReader());
-  checkTestMessage(*copy);
+  {
+    auto copy = clone(builder.getRoot<TestAllTypes>().asReader());
+    checkTestMessage(*copy);
+  }
+
+  {
+    // Test lvalue reference.
+    auto reader = builder.getRoot<TestAllTypes>().asReader();
+    auto copy = clone(reader);
+    checkTestMessage(*copy);
+  }
+
+  {
+    // Test const lvalue reference.
+    const auto reader = builder.getRoot<TestAllTypes>().asReader();
+    auto copy = clone(reader);
+    checkTestMessage(*copy);
+  }
+}
+
+KJ_TEST("clone() AnyPointer") {
+  MallocMessageBuilder builder(2048);
+  auto root = builder.getRoot<AnyPointer>();
+  initTestMessage(root.initAs<TestAllTypes>());
+
+  {
+    auto copy = clone(root.asReader());
+    checkTestMessage(copy->getAs<TestAllTypes>());
+  }
+
+  {
+    // Test lvalue reference.
+    auto reader = root.asReader();
+    auto copy = clone(reader);
+    checkTestMessage(copy->getAs<TestAllTypes>());
+  }
+
+  {
+    // Test const lvalue reference.
+    const auto reader = root.asReader();
+    auto copy = clone(reader);
+    checkTestMessage(copy->getAs<TestAllTypes>());
+  }
 }
 
 #if !CAPNP_ALLOW_UNALIGNED

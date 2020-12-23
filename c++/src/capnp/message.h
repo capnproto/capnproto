@@ -522,16 +522,15 @@ static typename Type::Reader defaultValue() {
 }
 
 namespace _ {
-  struct CloneImpl {
-    static inline kj::Own<_::CapTableBuilder> releaseBuiltinCapTable(MessageBuilder& message) {
-      return message.releaseBuiltinCapTable();
-    }
-  };
+
+struct CloneImpl {
+  static inline kj::Own<_::CapTableBuilder> releaseBuiltinCapTable(MessageBuilder& message) {
+    return message.releaseBuiltinCapTable();
+  }
 };
 
-template <typename Reader, typename>
-kj::Own<kj::Decay<Reader>> clone(Reader&& reader) {
-  auto size = reader.totalSize();
+template <typename Reader>
+kj::Own<kj::Decay<Reader>> cloneImpl(Reader&& reader, MessageSize size) {
   auto buffer = kj::heapArray<capnp::word>(size.wordCount + 1);
   memset(buffer.asBytes().begin(), 0, buffer.asBytes().size());
   if (size.capCount == 0) {
@@ -546,6 +545,30 @@ kj::Own<kj::Decay<Reader>> clone(Reader&& reader) {
     AnyPointer::Reader raw(_::PointerReader::getRootUnchecked(buffer.begin()).imbue(capTable));
     return kj::attachVal(raw.getAs<FromReader<Reader>>(), kj::mv(buffer), kj::mv(capTable));
   }
+}
+
+};
+
+template <typename Reader, typename>
+kj::Own<kj::Decay<Reader>> clone(Reader&& reader) {
+  return _::cloneImpl(reader, reader.totalSize());
+}
+
+// Awkwardly, with AnyPointer we have to use `.targetSize()` instead of `.totalSize()`.
+template <>
+inline kj::Own<AnyPointer::Reader>
+clone<AnyPointer::Reader, AnyPointer>(AnyPointer::Reader&& reader) {
+  return _::cloneImpl(reader, reader.targetSize());
+}
+template <>
+inline kj::Own<AnyPointer::Reader>
+clone<AnyPointer::Reader&, AnyPointer>(AnyPointer::Reader& reader) {
+  return _::cloneImpl(reader, reader.targetSize());
+}
+template <>
+inline kj::Own<AnyPointer::Reader>
+clone<const AnyPointer::Reader&, AnyPointer>(const AnyPointer::Reader& reader) {
+  return _::cloneImpl(reader, reader.targetSize());
 }
 
 template <typename T>
