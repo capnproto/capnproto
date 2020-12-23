@@ -1127,6 +1127,10 @@ struct ThirdPartyCapDescriptor {
   #
   # The sender will close the `Provide` request that it has sent to the third party as soon as
   # it receives either a `Call` or a `Release` message directed at the vine.
+
+  tag @2 :GatewayTag;
+  # GatewayTag for the capability this eventually points to. This can also be interpreted as being
+  # the tag attached to the vine.
 }
 
 struct Exception {
