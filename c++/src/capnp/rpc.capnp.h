@@ -421,7 +421,7 @@ struct ThirdPartyCapDescriptor {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d37007fde1f0027d, 1, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(d37007fde1f0027d, 1, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -2517,6 +2517,9 @@ public:
 
   inline  ::uint32_t getVineId() const;
 
+  inline bool hasTag() const;
+  inline ::capnp::AnyPointer::Reader getTag() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -2551,6 +2554,10 @@ public:
 
   inline  ::uint32_t getVineId();
   inline void setVineId( ::uint32_t value);
+
+  inline bool hasTag();
+  inline ::capnp::AnyPointer::Builder getTag();
+  inline ::capnp::AnyPointer::Builder initTag();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -5113,6 +5120,29 @@ inline  ::uint32_t ThirdPartyCapDescriptor::Builder::getVineId() {
 inline void ThirdPartyCapDescriptor::Builder::setVineId( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool ThirdPartyCapDescriptor::Reader::hasTag() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline bool ThirdPartyCapDescriptor::Builder::hasTag() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline ::capnp::AnyPointer::Reader ThirdPartyCapDescriptor::Reader::getTag() const {
+  return ::capnp::AnyPointer::Reader(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline ::capnp::AnyPointer::Builder ThirdPartyCapDescriptor::Builder::getTag() {
+  return ::capnp::AnyPointer::Builder(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline ::capnp::AnyPointer::Builder ThirdPartyCapDescriptor::Builder::initTag() {
+  auto result = ::capnp::AnyPointer::Builder(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+  result.clear();
+  return result;
 }
 
 inline bool Exception::Reader::hasReason() const {
