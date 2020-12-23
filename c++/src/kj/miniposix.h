@@ -133,8 +133,7 @@ static constexpr inline size_t iovMax() {
   return UIO_MAX_IOV;
 }
 #else
-// POSIX mystery meat
-size_t iovMax();
+#error "Please determine the appropriate constant for IOV_MAX on your system."
 #endif
 
 #endif
