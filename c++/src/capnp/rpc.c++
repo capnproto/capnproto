@@ -275,13 +275,12 @@ public:
   };
 
   RpcConnectionState(BootstrapFactoryBase& bootstrapFactory,
-                     kj::Maybe<RealmGateway<>::Client> gateway,
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller,
                      size_t flowLimit,
                      kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder)
-      : bootstrapFactory(bootstrapFactory), gateway(kj::mv(gateway)),
+      : bootstrapFactory(bootstrapFactory),
         restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), flowLimit(flowLimit),
         traceEncoder(traceEncoder), tasks(*this) {
     connection.init<Connected>(kj::mv(connectionParam));
@@ -562,7 +561,6 @@ private:
   // OK, now we can define RpcConnectionState's member data.
 
   BootstrapFactoryBase& bootstrapFactory;
-  kj::Maybe<RealmGateway<>::Client> gateway;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
 
   typedef kj::Own<VatNetworkBase::Connection> Connected;
@@ -658,38 +656,6 @@ private:
 
     Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-      if (interfaceId == typeId<Persistent<>>() && methodId == 0) {
-        KJ_IF_MAYBE(g, connectionState->gateway) {
-          // Wait, this is a call to Persistent.save() and we need to translate it through our
-          // gateway.
-          //
-          // We pull a neat trick here: We actually end up returning a RequestHook for an import
-          // request on the gateway cap, but with the "root" of the request actually pointing
-          // to the "params" field of the real request.
-
-          sizeHint = sizeHint.map([](MessageSize hint) {
-            ++hint.capCount;
-            hint.wordCount += sizeInWords<RealmGateway<>::ImportParams>();
-            return hint;
-          });
-
-          auto request = g->importRequest(sizeHint);
-          request.setCap(Persistent<>::Client(kj::refcounted<NoInterceptClient>(*this)));
-
-          // Awkwardly, request.initParams() would return a SaveParams struct, but to construct
-          // the Request<AnyPointer, AnyPointer> to return we need an AnyPointer::Builder, and you
-          // can't go backwards from a struct builder to an AnyPointer builder. So instead we
-          // manually get at the pointer by converting the outer request to AnyStruct and then
-          // pulling the pointer from the pointer section.
-          auto pointers = toAny(request).getPointerSection();
-          KJ_ASSERT(pointers.size() >= 2);
-          auto paramsPtr = pointers[1];
-          KJ_ASSERT(paramsPtr.isNull());
-
-          return Request<AnyPointer, AnyPointer>(paramsPtr, RequestHook::from(kj::mv(request)));
-        }
-      }
-
       return newCallNoIntercept(interfaceId, methodId, sizeHint);
     }
 
@@ -713,26 +679,6 @@ private:
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context) override {
-      if (interfaceId == typeId<Persistent<>>() && methodId == 0) {
-        KJ_IF_MAYBE(g, connectionState->gateway) {
-          // Wait, this is a call to Persistent.save() and we need to translate it through our
-          // gateway.
-          auto params = context->getParams().getAs<Persistent<>::SaveParams>();
-
-          auto requestSize = params.totalSize();
-          ++requestSize.capCount;
-          requestSize.wordCount += sizeInWords<RealmGateway<>::ImportParams>();
-
-          auto request = g->importRequest(requestSize);
-          request.setCap(Persistent<>::Client(kj::refcounted<NoInterceptClient>(*this)));
-          request.setParams(params);
-
-          context->allowCancellation();
-          context->releaseParams();
-          return context->directTailCall(RequestHook::from(kj::mv(request)));
-        }
-      }
-
       return callNoIntercept(interfaceId, methodId, kj::mv(context));
     }
 
@@ -970,16 +916,6 @@ private:
 
     Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-      if (!isResolved() && interfaceId == typeId<Persistent<>>() && methodId == 0 &&
-          connectionState->gateway != nullptr) {
-        // This is a call to Persistent.save(), and we're not resolved yet, and the underlying
-        // remote capability will perform a gateway translation. This isn't right if the promise
-        // ultimately resolves to a local capability. Instead, we'll need to queue the call until
-        // the promise resolves.
-        return newLocalPromiseClient(fork.addBranch())
-            ->newCall(interfaceId, methodId, sizeHint);
-      }
-
       receivedCall = true;
 
       // IMPORTANT: We must call our superclass's version of newCall(), NOT cap->newCall(), because
@@ -990,26 +926,6 @@ private:
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context) override {
-      if (!isResolved() && interfaceId == typeId<Persistent<>>() && methodId == 0 &&
-          connectionState->gateway != nullptr) {
-        // This is a call to Persistent.save(), and we're not resolved yet, and the underlying
-        // remote capability will perform a gateway translation. This isn't right if the promise
-        // ultimately resolves to a local capability. Instead, we'll need to queue the call until
-        // the promise resolves.
-
-        auto vpapPromises = fork.addBranch().then(kj::mvCapture(context,
-            [interfaceId,methodId](kj::Own<CallContextHook>&& context,
-                                   kj::Own<ClientHook> resolvedCap) {
-          auto vpap = resolvedCap->call(interfaceId, methodId, kj::mv(context));
-          return kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline));
-        })).split();
-
-        return {
-          kj::mv(kj::get<0>(vpapPromises)),
-          newLocalPromisePipeline(kj::mv(kj::get<1>(vpapPromises))),
-        };
-      }
-
       receivedCall = true;
       return cap->call(interfaceId, methodId, kj::mv(context));
     }
@@ -1194,60 +1110,6 @@ private:
 
       return kj::mv(replacement);
     }
-  };
-
-  class NoInterceptClient final: public RpcClient {
-    // A wrapper around an RpcClient which bypasses special handling of "save" requests. When we
-    // intercept a "save" request and invoke a RealmGateway, we give it a version of the capability
-    // with intercepting disabled, since usually the first thing the RealmGateway will do is turn
-    // around and call save() again.
-    //
-    // This is admittedly sort of backwards: the interception of "save" ought to be the part
-    // implemented by a wrapper. However, that would require placing a wrapper around every
-    // RpcClient we create whereas NoInterceptClient only needs to be injected after a save()
-    // request occurs and is intercepted.
-
-  public:
-    NoInterceptClient(RpcClient& inner)
-        : RpcClient(*inner.connectionState),
-          inner(kj::addRef(inner)) {}
-
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                        kj::Vector<int>& fds) override {
-      return inner->writeDescriptor(descriptor, fds);
-    }
-
-    kj::Maybe<kj::Own<ClientHook>> writeTarget(rpc::MessageTarget::Builder target) override {
-      return inner->writeTarget(target);
-    }
-
-    kj::Own<ClientHook> getInnermostClient() override {
-      return inner->getInnermostClient();
-    }
-
-    Request<AnyPointer, AnyPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-      return inner->newCallNoIntercept(interfaceId, methodId, sizeHint);
-    }
-    VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context) override {
-      return inner->callNoIntercept(interfaceId, methodId, kj::mv(context));
-    }
-
-    kj::Maybe<ClientHook&> getResolved() override {
-      return nullptr;
-    }
-
-    kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-      return nullptr;
-    }
-
-    kj::Maybe<int> getFd() override {
-      return nullptr;
-    }
-
-  private:
-    kj::Own<RpcClient> inner;
   };
 
   kj::Maybe<ExportId> writeDescriptor(ClientHook& cap, rpc::CapDescriptor::Builder descriptor,
@@ -2840,52 +2702,6 @@ private:
   ClientHook::VoidPromiseAndPipeline startCall(
       uint64_t interfaceId, uint64_t methodId,
       kj::Own<ClientHook>&& capability, kj::Own<CallContextHook>&& context) {
-    if (interfaceId == typeId<Persistent<>>() && methodId == 0) {
-      KJ_IF_MAYBE(g, gateway) {
-        // Wait, this is a call to Persistent.save() and we need to translate it through our
-        // gateway.
-
-        KJ_IF_MAYBE(resolvedPromise, capability->whenMoreResolved()) {
-          // The plot thickens: We're looking at a promise capability. It could end up resolving
-          // to a capability outside the gateway, in which case we don't want to translate at all.
-
-          auto promises = resolvedPromise->then(kj::mvCapture(context,
-              [this,interfaceId,methodId](kj::Own<CallContextHook>&& context,
-                                          kj::Own<ClientHook> resolvedCap) {
-            auto vpap = startCall(interfaceId, methodId, kj::mv(resolvedCap), kj::mv(context));
-            return kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline));
-          })).attach(addRef(*this), kj::mv(capability)).split();
-
-          return {
-            kj::mv(kj::get<0>(promises)),
-            newLocalPromisePipeline(kj::mv(kj::get<1>(promises))),
-          };
-        }
-
-        if (capability->getBrand() == this) {
-          // This capability is one of our own, pointing back out over the network. That means
-          // that it would be inappropriate to apply the gateway transformation. We just want to
-          // reflect the call back.
-          return kj::downcast<RpcClient>(*capability)
-              .callNoIntercept(interfaceId, methodId, kj::mv(context));
-        }
-
-        auto params = context->getParams().getAs<Persistent<>::SaveParams>();
-
-        auto requestSize = params.totalSize();
-        ++requestSize.capCount;
-        requestSize.wordCount += sizeInWords<RealmGateway<>::ExportParams>();
-
-        auto request = g->exportRequest(requestSize);
-        request.setCap(Persistent<>::Client(capability->addRef()));
-        request.setParams(params);
-
-        context->allowCancellation();
-        context->releaseParams();
-        return context->directTailCall(RequestHook::from(kj::mv(request)));
-      }
-    }
-
     return capability->call(interfaceId, methodId, kj::mv(context));
   }
 
@@ -3255,16 +3071,13 @@ private:
 
 class RpcSystemBase::Impl final: private BootstrapFactoryBase, private kj::TaskSet::ErrorHandler {
 public:
-  Impl(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface,
-       kj::Maybe<RealmGateway<>::Client> gateway)
+  Impl(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface)
       : network(network), bootstrapInterface(kj::mv(bootstrapInterface)),
-        bootstrapFactory(*this), gateway(kj::mv(gateway)), tasks(*this) {
+        bootstrapFactory(*this), tasks(*this) {
     tasks.add(acceptLoop());
   }
-  Impl(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory,
-       kj::Maybe<RealmGateway<>::Client> gateway)
-      : network(network), bootstrapFactory(bootstrapFactory),
-        gateway(kj::mv(gateway)), tasks(*this) {
+  Impl(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory)
+      : network(network), bootstrapFactory(bootstrapFactory), tasks(*this) {
     tasks.add(acceptLoop());
   }
   Impl(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
@@ -3326,7 +3139,6 @@ private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
   BootstrapFactoryBase& bootstrapFactory;
-  kj::Maybe<RealmGateway<>::Client> gateway;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
   size_t flowLimit = kj::maxValue;
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder;
@@ -3349,7 +3161,7 @@ private:
         tasks.add(kj::mv(info.shutdownPromise));
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
-          bootstrapFactory, gateway, restorer, kj::mv(connection),
+          bootstrapFactory, restorer, kj::mv(connection),
           kj::mv(onDisconnect.fulfiller), flowLimit, traceEncoder);
       RpcConnectionState& result = *newState;
       connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
@@ -3392,13 +3204,11 @@ private:
 };
 
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
-                             kj::Maybe<Capability::Client> bootstrapInterface,
-                             kj::Maybe<RealmGateway<>::Client> gateway)
-    : impl(kj::heap<Impl>(network, kj::mv(bootstrapInterface), kj::mv(gateway))) {}
+                             kj::Maybe<Capability::Client> bootstrapInterface)
+    : impl(kj::heap<Impl>(network, kj::mv(bootstrapInterface))) {}
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
-                             BootstrapFactoryBase& bootstrapFactory,
-                             kj::Maybe<RealmGateway<>::Client> gateway)
-    : impl(kj::heap<Impl>(network, bootstrapFactory, kj::mv(gateway))) {}
+                             BootstrapFactoryBase& bootstrapFactory)
+    : impl(kj::heap<Impl>(network, bootstrapFactory)) {}
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
     : impl(kj::heap<Impl>(network, restorer)) {}
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;
