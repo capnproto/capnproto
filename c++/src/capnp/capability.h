@@ -743,6 +743,14 @@ public:
   // Implements Capability::Client::getFd(). If this returns null but whenMoreResolved() returns
   // non-null, then Capability::Client::getFd() waits for resolution and tries again.
 
+  virtual kj::Maybe<AnyPointer::Reader> getGatewayTag() { return nullptr; }
+  // Get the `GatewayTag` associated with this capability, if any. See `GatewayTag` in `rpc.capnp`.
+  // The tag must not change over the lifetime of the `ClientHook`. The tag may be specific to a
+  // promise; the later resolution may have a different tag (or no tag). The tag is used for path
+  // shortening, so wrappers / membranes should NOT allow tags to pass through, unless it's OK for
+  // the wrapper to be elided. The tag should, however, be retained when the capability passes over
+  // an RPC connection.
+
   static kj::Own<ClientHook> from(Capability::Client client) { return kj::mv(client.hook); }
 };
 

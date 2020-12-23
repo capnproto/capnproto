@@ -467,6 +467,15 @@ struct TestContext {
         serverNetwork(network.add("server")),
         rpcClient(makeRpcClient(clientNetwork)),
         rpcServer(makeRpcServer(serverNetwork, bootstrap)) {}
+  template <typename Func, typename = decltype(kj::instance<Func&>()())>
+  TestContext(Func makeBootstrap)  // use if constructing the bootstrap requires a current EventLoop
+      : waitScope(loop),
+        network(),  // If I don't write this explicitly, Clang warns that `network` is
+                    // uninitialized on the next two lines, which seems like a Clang bug.
+        clientNetwork(network.add("client")),
+        serverNetwork(network.add("server")),
+        rpcClient(makeRpcClient(clientNetwork)),
+        rpcServer(makeRpcServer(serverNetwork, makeBootstrap())) {}
 
   Capability::Client connect(test::TestSturdyRefObjectId::Tag tag) {
     MallocMessageBuilder refMessage(128);
@@ -1314,6 +1323,103 @@ KJ_TEST("method throws exception with trace encoder") {
   auto exception = KJ_ASSERT_NONNULL(maybeException);
   KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
   KJ_EXPECT(exception.getRemoteTrace() == "trace for test exception");
+}
+
+class TestTagHook: public ClientHook, public kj::Refcounted {
+  // ClientHook that wraps some other hook and adds a GatewayTag.
+
+public:
+  TestTagHook(kj::Own<ClientHook> inner, kj::StringPtr tagText)
+      : inner(kj::mv(inner)) {
+    MallocMessageBuilder builder;
+    auto root = builder.initRoot<AnyPointer>();
+    root.setAs<Text>(tagText);
+    tag = clone(root.asReader());
+  }
+
+  Request<AnyPointer, AnyPointer> newCall(
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+    return inner->newCall(interfaceId, methodId, sizeHint);
+  }
+  VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                              kj::Own<CallContextHook>&& context) override {
+    return inner->call(interfaceId, methodId, kj::mv(context));
+  }
+  kj::Maybe<ClientHook&> getResolved() override {
+    return inner->getResolved();
+  }
+  kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+    return inner->whenMoreResolved();
+  }
+  kj::Own<ClientHook> addRef() override {
+    return kj::addRef(*this);
+  }
+  const void* getBrand() override {
+    return nullptr;
+  }
+  kj::Maybe<int> getFd() override {
+    return inner->getFd();
+  }
+  kj::Maybe<AnyPointer::Reader> getGatewayTag() override {
+    return *tag;
+  }
+
+private:
+  kj::Own<ClientHook> inner;
+  kj::Own<AnyPointer::Reader> tag;
+};
+
+template <typename Client>
+Client applyTag(Client cap, kj::StringPtr tag) {
+  return Client(kj::refcounted<TestTagHook>(ClientHook::from(cap), tag));
+}
+
+kj::StringPtr getTag(Capability::Client cap) {
+  KJ_IF_MAYBE(tag, ClientHook::from(cap)->getGatewayTag()) {
+    return tag->getAs<Text>();
+  } else {
+    return "(no tag)";
+  }
+}
+
+template <typename Client>
+kj::Promise<Client> resolveOneLevel(Client cap) {
+  return KJ_ASSERT_NONNULL(ClientHook::from(cap)->whenMoreResolved())
+      .then([](auto hook) { return Client(kj::mv(hook)); });
+}
+
+KJ_TEST("GatewayTags over RPC") {
+  kj::Own<kj::PromiseFulfiller<test::TestInterface::Client>> fulfiller;
+  TestContext context([&]() {
+    auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+    fulfiller = kj::mv(paf.fulfiller);
+    test::TestInterface::Client bootstrap = kj::mv(paf.promise);
+    return applyTag(bootstrap, "foo");
+  });
+
+  MallocMessageBuilder hostIdBuilder;
+  auto hostId = hostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  hostId.setHost("server");
+  auto client = context.rpcClient.bootstrap(hostId).castAs<test::TestInterface>();
+
+  // This is a promise, so it doesn't have a tag yet.
+  KJ_EXPECT(getTag(client) == "(no tag)");
+
+  client = resolveOneLevel(client).wait(context.waitScope);
+
+  KJ_EXPECT(getTag(client) == "foo");
+
+  auto promise = resolveOneLevel(client);
+  KJ_EXPECT(!promise.poll(context.waitScope));
+
+  int callCount = 0;
+  test::TestInterface::Client resolution = kj::heap<TestInterfaceImpl>(callCount);
+  fulfiller->fulfill(applyTag(resolution, "bar"));
+
+  KJ_ASSERT(promise.poll(context.waitScope));
+  client = promise.wait(context.waitScope);
+
+  KJ_EXPECT(getTag(client) == "bar");
 }
 
 }  // namespace

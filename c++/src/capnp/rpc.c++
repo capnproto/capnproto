@@ -716,8 +716,10 @@ private:
 
   public:
     ImportClient(RpcConnectionState& connectionState, ImportId importId,
-                 kj::Maybe<kj::AutoCloseFd> fd)
-        : RpcClient(connectionState), importId(importId), fd(kj::mv(fd)) {}
+                 kj::Maybe<AnyPointer::Reader> tag, kj::Maybe<kj::AutoCloseFd> fd)
+        : RpcClient(connectionState), importId(importId),
+          tag(tag.map([](AnyPointer::Reader r) { return capnp::clone(r); })),
+          fd(kj::mv(fd)) {}
 
     ~ImportClient() noexcept(false) {
       unwindDetector.catchExceptionsIfUnwinding([&]() {
@@ -783,8 +785,13 @@ private:
       return fd.map([](auto& f) { return f.get(); });
     }
 
+    kj::Maybe<AnyPointer::Reader> getGatewayTag() override {
+      return tag.map([](kj::Own<AnyPointer::Reader>& ptr) { return *ptr; });
+    }
+
   private:
     ImportId importId;
+    kj::Maybe<kj::Own<AnyPointer::Reader>> tag;
     kj::Maybe<kj::AutoCloseFd> fd;
 
     uint remoteRefcount = 0;
@@ -850,10 +857,11 @@ private:
     PromiseClient(RpcConnectionState& connectionState,
                   kj::Own<RpcClient> initial,
                   kj::Promise<kj::Own<ClientHook>> eventual,
-                  kj::Maybe<ImportId> importId)
+                  kj::Maybe<ImportId> importId, kj::Maybe<AnyPointer::Reader> tag)
         : RpcClient(connectionState),
           cap(kj::mv(initial)),
           importId(importId),
+          tag(tag.map([](AnyPointer::Reader r) { return capnp::clone(r); })),
           fork(eventual.then(
               [this](kj::Own<ClientHook>&& resolution) {
                 return resolve(kj::mv(resolution));
@@ -956,10 +964,15 @@ private:
       }
     }
 
+    kj::Maybe<AnyPointer::Reader> getGatewayTag() override {
+      return tag.map([](kj::Own<AnyPointer::Reader>& ptr) { return *ptr; });
+    }
+
   private:
     kj::Own<ClientHook> cap;
 
     kj::Maybe<ImportId> importId;
+    kj::Maybe<kj::Own<AnyPointer::Reader>> tag;
     kj::ForkedPromise<kj::Own<ClientHook>> fork;
 
     bool receivedCall = false;
@@ -1139,7 +1152,11 @@ private:
         // We've already seen and exported this capability before.  Just up the refcount.
         auto& exp = KJ_ASSERT_NONNULL(exports.find(iter->second));
         ++exp.refcount;
-        descriptor.initSenderHosted().setExportId(iter->second);
+        auto sh = descriptor.initSenderHosted();
+        sh.setExportId(iter->second);
+        KJ_IF_MAYBE(tag, cap.getGatewayTag()) {
+          sh.initTag().set(*tag);
+        }
         return iter->second;
       } else {
         // This is the first time we've seen this capability.
@@ -1152,9 +1169,17 @@ private:
         KJ_IF_MAYBE(wrapped, inner->whenMoreResolved()) {
           // This is a promise.  Arrange for the `Resolve` message to be sent later.
           exp.resolveOp = resolveExportedPromise(exportId, kj::mv(*wrapped));
-          descriptor.initSenderPromise().setExportId(exportId);
+          auto sp = descriptor.initSenderPromise();
+          sp.setExportId(exportId);
+          KJ_IF_MAYBE(tag, cap.getGatewayTag()) {
+            sp.initTag().set(*tag);
+          }
         } else {
-          descriptor.initSenderHosted().setExportId(exportId);
+          auto sh = descriptor.initSenderHosted();
+          sh.setExportId(exportId);
+          KJ_IF_MAYBE(tag, cap.getGatewayTag()) {
+            sh.initTag().set(*tag);
+          }
         }
 
         return exportId;
@@ -1300,9 +1325,36 @@ private:
   // =====================================================================================
   // Interpreting CapDescriptor
 
-  kj::Own<ClientHook> import(ImportId importId, bool isPromise, kj::Maybe<kj::AutoCloseFd> fd) {
+  struct ImportIdAndTag {
+    ImportId importId;
+    kj::Maybe<AnyPointer::Reader> tag;
+
+    ImportIdAndTag(rpc::CapDescriptor::SenderHosted::Reader reader)
+        : importId(reader.getExportId()) {
+      if (reader.hasTag()) {
+        tag = reader.getTag();
+      }
+    }
+    ImportIdAndTag(rpc::CapDescriptor::SenderPromise::Reader reader)
+        : importId(reader.getExportId()) {
+      if (reader.hasTag()) {
+        tag = reader.getTag();
+      }
+    }
+
+    ImportIdAndTag(rpc::ThirdPartyCapDescriptor::Reader reader)
+        : importId(reader.getVineId()) {
+      if (reader.hasTag()) {
+        tag = reader.getTag();
+      }
+    }
+  };
+
+  kj::Own<ClientHook> import(ImportIdAndTag importIdAndTag, bool isPromise,
+                             kj::Maybe<kj::AutoCloseFd> fd) {
     // Receive a new import.
 
+    ImportId importId = importIdAndTag.importId;
     auto& import = imports[importId];
     kj::Own<ImportClient> importClient;
 
@@ -1319,7 +1371,8 @@ private:
       // FD just because it happened to reference the same capability.
       importClient->setFdIfMissing(kj::mv(fd));
     } else {
-      importClient = kj::refcounted<ImportClient>(*this, importId, kj::mv(fd));
+      importClient = kj::refcounted<ImportClient>(
+          *this, importId, isPromise ? nullptr : importIdAndTag.tag, kj::mv(fd));
       import.importClient = *importClient;
     }
 
@@ -1341,7 +1394,8 @@ private:
 
         // Create a PromiseClient around it and return it.
         auto result = kj::refcounted<PromiseClient>(
-            *this, kj::mv(importClient), kj::mv(paf.promise), importId);
+            *this, kj::mv(importClient), kj::mv(paf.promise), importId,
+            isPromise ? importIdAndTag.tag : nullptr);
         import.appClient = *result;
         return kj::mv(result);
       }
@@ -1448,9 +1502,9 @@ private:
         return nullptr;
 
       case rpc::CapDescriptor::SENDER_HOSTED:
-        return import(descriptor.getSenderHosted().getExportId(), false, kj::mv(fd));
+        return import(descriptor.getSenderHosted(), false, kj::mv(fd));
       case rpc::CapDescriptor::SENDER_PROMISE:
-        return import(descriptor.getSenderPromise().getExportId(), true, kj::mv(fd));
+        return import(descriptor.getSenderPromise(), true, kj::mv(fd));
 
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_MAYBE(exp, exports.find(descriptor.getReceiverHosted())) {
@@ -1487,7 +1541,7 @@ private:
 
       case rpc::CapDescriptor::THIRD_PARTY_HOSTED:
         // We don't support third-party caps, so use the vine instead.
-        return import(descriptor.getThirdPartyHosted().getVineId(), false, kj::mv(fd));
+        return import(descriptor.getThirdPartyHosted(), false, kj::mv(fd));
 
       default:
         KJ_FAIL_REQUIRE("unknown CapDescriptor type") { break; }
@@ -1858,7 +1912,8 @@ private:
             return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
               kj::mv(ops),
               kj::refcounted<PromiseClient>(
-                  *connectionState, kj::mv(pipelineClient), kj::mv(resolutionPromise), nullptr)
+                  *connectionState, kj::mv(pipelineClient), kj::mv(resolutionPromise),
+                  nullptr, nullptr)
             };
           } else {
             // Oh, this pipeline will never get redirected, so just return the PipelineClient.
