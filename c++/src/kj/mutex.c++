@@ -271,6 +271,14 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
         // them up even if readers are waiting so that at the very least they may re-establish the
         // EXCLUSIVE_REQUESTED bit that we just removed.
         syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
+
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+        uint readerCount = oldState & SHARED_COUNT_MASK;
+        if (readerCount >= KJ_CONTENTION_WARNING_THRESHOLD) {
+          KJ_LOG(WARNING, "excessively many readers were waiting on this lock", readerCount,
+              kj::getStackTrace());
+        }
+#endif
       }
       break;
     }
