@@ -346,6 +346,42 @@ TEST(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
   writeMessage(*output, message).wait(ioContext.waitScope);
 }
 
+TEST(SerializeAsyncTest, WriteMultipleMessagesAsync) {
+  PipeWithSmallBuffer fds;
+  auto ioContext = kj::setupAsyncIo();
+  auto output = ioContext.lowLevelProvider->wrapOutputFd(fds[1]);
+
+  const int numMessages = 5;
+  const int baseListSize = 16;
+  auto messages = kj::heapArrayBuilder<TestMessageBuilder>(numMessages);
+  for (int i = 0; i < numMessages; ++i) {
+    messages.add(i+1);
+    auto root = messages[i].getRoot<TestAllTypes>();
+    auto list = root.initStructList(baseListSize+i);
+    for (auto element: list) {
+      initTestMessage(element);
+    }
+  }
+
+  kj::Thread thread([&]() {
+    SocketInputStream input(fds[0]);
+    for (int i = 0; i < numMessages; ++i) {
+      InputStreamMessageReader reader(input);
+      auto listReader = reader.getRoot<TestAllTypes>().getStructList();
+      EXPECT_EQ(baseListSize+i, listReader.size());
+      for (auto element: listReader) {
+        checkTestMessage(element);
+      }
+    }
+  });
+
+  auto msgs = kj::heapArray<capnp::MessageBuilder*>(numMessages);
+  for (int i = 0; i < numMessages; ++i) {
+    msgs[i] = &messages[i];
+  }
+  writeMessages(*output, msgs).wait(ioContext.waitScope);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

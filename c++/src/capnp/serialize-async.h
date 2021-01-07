@@ -76,6 +76,13 @@ public:
       KJ_WARN_UNUSED_RESULT;
   // Equivalent to the above with fds = nullptr.
 
+  virtual kj::Promise<void> writeMessages(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages)
+    KJ_WARN_UNUSED_RESULT = 0;
+  kj::Promise<void> writeMessages(kj::ArrayPtr<MessageBuilder*> builders)
+      KJ_WARN_UNUSED_RESULT;
+  // Similar to the above, but for writing multiple messages at a time in a batch.
+
   virtual kj::Maybe<int> getSendBufferSize() = 0;
   // Get the size of the underlying send buffer, if applicable. The RPC
   // system uses this as a hint for flow control purposes; see:
@@ -103,6 +110,8 @@ public:
   kj::Promise<void> writeMessage(
       kj::ArrayPtr<const int> fds,
       kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+  kj::Promise<void> writeMessages(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override;
   kj::Maybe<int> getSendBufferSize() override;
 
   kj::Promise<void> end() override;
@@ -122,6 +131,8 @@ public:
   kj::Promise<void> writeMessage(
       kj::ArrayPtr<const int> fds,
       kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+  kj::Promise<void> writeMessages(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override;
   kj::Maybe<int> getSendBufferSize() override;
   kj::Promise<void> end() override;
 private:
@@ -171,6 +182,18 @@ kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<c
     KJ_WARN_UNUSED_RESULT;
 kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds,
                                MessageBuilder& builder)
+    KJ_WARN_UNUSED_RESULT;
+
+
+// -----------------------------------------------------------------------------
+// Stand-alone functions for writing multiple messages at once on AsyncOutputStreams.
+
+kj::Promise<void> writeMessages(kj::AsyncOutputStream& output,
+                                kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages)
+    KJ_WARN_UNUSED_RESULT;
+
+kj::Promise<void> writeMessages(
+    kj::AsyncOutputStream& output, kj::ArrayPtr<MessageBuilder*> builders)
     KJ_WARN_UNUSED_RESULT;
 
 // =======================================================================================

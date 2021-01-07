@@ -149,7 +149,7 @@ public:
 };
 
 class AsyncCapabilityStream: public AsyncIoStream {
-  // An AsyncIoStream that also allows transmitting new stream objects and file descirptors
+  // An AsyncIoStream that also allows transmitting new stream objects and file descriptors
   // (capabilities, in the object-capability model sense), in addition to bytes.
   //
   // Capabilities can be attached to bytes when they are written. On the receiving end, the read()
@@ -158,7 +158,7 @@ class AsyncCapabilityStream: public AsyncIoStream {
   // Note that AsyncIoStream's regular byte-oriented methods can be used on AsyncCapabilityStream,
   // with the effect of silently dropping any capabilities attached to the respective bytes. E.g.
   // using `AsyncIoStream::tryRead()` to read bytes that had been sent with `writeWithFds()` will
-  // silently drop the FDs (closing them if appropriate). Also note that puming a stream with
+  // silently drop the FDs (closing them if appropriate). Also note that pumping a stream with
   // `pumpTo()` always drops all capabilities attached to the pumped data. (TODO(someday): Do we
   // want a version of pumpTo() that preserves capabilities?)
   //
