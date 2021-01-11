@@ -79,7 +79,7 @@ private:
   do { \
     KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
       KJ_EXPECT(e->getType() == ::kj::Exception::Type::type, \
-          "code threw wrong exception type: " #code, e->getType()); \
+          "code threw wrong exception type: " #code, *e); \
     } else { \
       KJ_FAIL_EXPECT("code did not throw: " #code); \
     } \
@@ -89,7 +89,7 @@ private:
   do { \
     KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
       KJ_EXPECT(::kj::_::hasSubstring(e->getDescription(), message), \
-          "exception description didn't contain expected substring", e->getDescription()); \
+          "exception description didn't contain expected substring", *e); \
     } else { \
       KJ_FAIL_EXPECT("code did not throw: " #code); \
     } \
