@@ -246,6 +246,8 @@ const T* readMaybe(const EncodingResult<T>& value) {
   }
 }
 
+String encodeCEscapeImpl(ArrayPtr<const byte> bytes, bool isBinary);
+
 }  // namespace _ (private)
 
 inline String encodeUriComponent(ArrayPtr<const char> text) {
@@ -276,8 +278,13 @@ inline EncodingResult<String> decodeWwwForm(ArrayPtr<const char> text) {
 }
 
 inline String encodeCEscape(ArrayPtr<const char> text) {
-  return encodeCEscape(text.asBytes());
+  return _::encodeCEscapeImpl(text.asBytes(), false);
 }
+
+inline String encodeCEscape(ArrayPtr<const byte> bytes) {
+  return _::encodeCEscapeImpl(bytes, true);
+}
+
 inline EncodingResult<String> decodeCEscape(ArrayPtr<const char> text) {
   auto result = decodeBinaryCEscape(text, true);
   return { String(result.releaseAsChars()), result.hadErrors };
