@@ -384,6 +384,35 @@ private:
     }
   }
 
+  template <typename F>
+  static auto teeExceptionVoid(F& fulfiller) {
+    // Returns a functor that can be passed as the second parameter to .then() to propagate the
+    // exception to a given fulfiller. The functor's return type is void.
+    return [&fulfiller](kj::Exception&& e) {
+      fulfiller.reject(kj::cp(e));
+      kj::throwRecoverableException(kj::mv(e));
+    };
+  }
+  template <typename F>
+  static auto teeExceptionSize(F& fulfiller) {
+    // Returns a functor that can be passed as the second parameter to .then() to propagate the
+    // exception to a given fulfiller. The functor's return type is size_t.
+    return [&fulfiller](kj::Exception&& e) -> size_t {
+      fulfiller.reject(kj::cp(e));
+      kj::throwRecoverableException(kj::mv(e));
+      return 0;
+    };
+  }
+  template <typename T, typename F>
+  static auto teeExceptionPromise(F& fulfiller) {
+    // Returns a functor that can be passed as the second parameter to .then() to propagate the
+    // exception to a given fulfiller. The functor's return type is Promise<T>.
+    return [&fulfiller](kj::Exception&& e) -> kj::Promise<T> {
+      fulfiller.reject(kj::cp(e));
+      return kj::mv(e);
+    };
+  }
+
   class BlockedWrite final: public AsyncCapabilityStream {
     // AsyncPipe state when a write() is currently waiting for a corresponding read().
 
@@ -523,7 +552,7 @@ private:
           writeBuffer = writeBuffer.slice(amount, writeBuffer.size());
           // We pumped the full amount, so we're done pumping.
           return amount;
-        }));
+        }, teeExceptionSize(fulfiller)));
       }
 
       // First piece doesn't cover the whole pump. Figure out how many more pieces to add.
@@ -557,7 +586,7 @@ private:
             return pipe.pumpTo(output, amount - actual)
                 .then([actual](uint64_t actual2) { return actual + actual2; });
           }
-        }));
+        }, teeExceptionPromise<uint64_t>(fulfiller)));
       } else {
         // Pump ends mid-piece. Write the last, partial piece.
         auto n = amount - actual;
@@ -577,7 +606,7 @@ private:
           morePieces = newMorePieces;
           canceler.release();
           return amount;
-        }));
+        }, teeExceptionSize(fulfiller)));
       }
     }
 
@@ -712,7 +741,7 @@ private:
                               minBytes - actual, maxBytes - actual)
               .then([actual](size_t actual2) { return actual + actual2; });
         }
-      }));
+      }, teeExceptionPromise<size_t>(fulfiller)));
     }
 
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
@@ -752,7 +781,7 @@ private:
         // Completed entire pumpTo amount.
         KJ_ASSERT(actual == amount2);
         return amount2;
-      }));
+      }, teeExceptionSize(fulfiller)));
     }
 
     void abortRead() override {
@@ -1042,7 +1071,7 @@ private:
           // place waiting for more data.
           return actual;
         }
-      }));
+      }, teeExceptionPromise<uint64_t>(fulfiller)));
     }
 
     void shutdownWrite() override {
@@ -1173,7 +1202,7 @@ private:
           KJ_ASSERT(pumpedSoFar == amount);
           return pipe.write(reinterpret_cast<const byte*>(writeBuffer) + actual, size - actual);
         }
-      }));
+      }, teeExceptionPromise<void>(fulfiller)));
     }
 
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -1200,7 +1229,7 @@ private:
               fulfiller.fulfill(kj::cp(amount));
               pipe.endState(*this);
               return pipe.write(partial2.begin(), partial2.size());
-            }));
+            }, teeExceptionPromise<void>(fulfiller)));
             ++i;
           } else {
             // The pump ends exactly at the end of a piece, how nice.
@@ -1208,7 +1237,7 @@ private:
               canceler.release();
               fulfiller.fulfill(kj::cp(amount));
               pipe.endState(*this);
-            }));
+            }, teeExceptionVoid(fulfiller)));
           }
 
           auto remainder = pieces.slice(i, pieces.size());
@@ -1237,7 +1266,7 @@ private:
           fulfiller.fulfill(kj::cp(amount));
           pipe.endState(*this);
         }
-      }));
+      }, teeExceptionVoid(fulfiller)));
     }
 
     Promise<void> writeWithFds(ArrayPtr<const byte> data,
@@ -1302,7 +1331,7 @@ private:
             KJ_ASSERT(pumpedSoFar == amount);
             return input.pumpTo(pipe, amount2 - actual);
           }
-        }));
+        }, teeExceptionPromise<uint64_t>(fulfiller)));
       });
     }
 
