@@ -516,6 +516,15 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::ArrayPtr<const byte> 
   }));
 }
 
+kj::Promise<void> expectEnd(kj::AsyncInputStream& in) {
+  static char buffer;
+
+  auto promise = in.tryRead(&buffer, 1, 1);
+  return promise.then([](size_t amount) {
+    KJ_ASSERT(amount == 0, "expected EOF");
+  });
+}
+
 void testHttpClientRequest(kj::WaitScope& waitScope, const HttpRequestTestCase& testCase,
                            kj::TwoWayPipe pipe) {
 
@@ -2010,9 +2019,10 @@ KJ_TEST("WebSocket pump disconnect on send") {
   auto pipe1 = KJ_HTTP_TEST_CREATE_2PIPE;
   auto pipe2 = KJ_HTTP_TEST_CREATE_2PIPE;
 
-  auto client1 = newWebSocket(kj::mv(pipe1.ends[0]), nullptr);
+  FakeEntropySource maskGenerator;
+  auto client1 = newWebSocket(kj::mv(pipe1.ends[0]), maskGenerator);
   auto server1 = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
-  auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), nullptr);
+  auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), maskGenerator);
 
   auto pumpTask = server1->pumpTo(*client2);
   auto sendTask = client1->send("hello"_kj);
@@ -2025,8 +2035,10 @@ KJ_TEST("WebSocket pump disconnect on send") {
   // Pump throws disconnected.
   KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, pumpTask.wait(waitScope));
 
-  // client1 managed to send its whole message into the pump, though.
-  sendTask.wait(waitScope);
+  // client1 may or may not have been able to send its whole message depending on buffering.
+  sendTask.then([]() {}, [](kj::Exception&& e) {
+    KJ_EXPECT(e.getType() == kj::Exception::Type::DISCONNECTED);
+  }).wait(waitScope);
 }
 
 KJ_TEST("WebSocket pump disconnect on receive") {
@@ -2034,8 +2046,9 @@ KJ_TEST("WebSocket pump disconnect on receive") {
   auto pipe1 = KJ_HTTP_TEST_CREATE_2PIPE;
   auto pipe2 = KJ_HTTP_TEST_CREATE_2PIPE;
 
+  FakeEntropySource maskGenerator;
   auto server1 = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
-  auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), nullptr);
+  auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), maskGenerator);
   auto server2 = newWebSocket(kj::mv(pipe2.ends[1]), nullptr);
 
   auto pumpTask = server1->pumpTo(*client2);
@@ -2971,6 +2984,8 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
       .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_REPLY_MESSAGE); })
       .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_CLOSE); })
       .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_REPLY_CLOSE); })
+      .then([&]() { return expectEnd(*backPipe.ends[1]); })
+      .then([&]() { backPipe.ends[1]->shutdownWrite(); })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
 
   {
