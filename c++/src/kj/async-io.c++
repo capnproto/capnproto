@@ -1638,7 +1638,8 @@ private:
     if (limit == 0) {
       inner = nullptr;
     } else if (amount < requested) {
-      KJ_FAIL_REQUIRE("pipe ended prematurely") { break; }
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED,
+          "fixed-length pipe ended prematurely"));
     }
   }
 };
