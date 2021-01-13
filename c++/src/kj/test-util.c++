@@ -29,9 +29,21 @@
 #include <io.h>
 #endif
 
+#if _WIN32 || __ANDROID__
+// TODO(cleanup): Find the Windows temp directory? Seems overly difficult pre C++17.
+// https://en.cppreference.com/w/cpp/filesystem/temp_directory_path
+// would require refactoring the mkstemp code a bit to take into account the types
+// needed to do this at runtime.
+#define KJ_TMPDIR_PREFIX ""
+#else
+#define KJ_TMPDIR_PREFIX "/tmp/"
+#endif
+
 namespace kj {
 namespace test {
-AutoCloseFd mkstempAutoErased(char *tpl) {
+AutoCloseFd mkstempAutoErased() {
+  char tpl[] = KJ_TMPDIR_PREFIX "kj-testfile-XXXXXX.tmp"
+
 #if _WIN32
   char* end = tpl + strlen(tpl);
   while (end > tpl && *(end-1) == 'X') --end;

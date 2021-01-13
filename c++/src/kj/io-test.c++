@@ -86,8 +86,7 @@ TEST(Io, WriteLarge) {
   // Have to thunk through a temporary file since pipes would block on write trying to push this
   // much data (i.e. would never get to read anything);
 
-  char filename [] = KJ_TEMP_FILE_TEMPLATE("kj-io-write-large-test");
-  AutoCloseFd file = test::mkstemp_auto_erased(filename);
+  AutoCloseFd file = test::mkstemp_auto_erased();
 
   {
     FdOutputStream out(file.get());
@@ -154,8 +153,7 @@ TEST(Io, WriteVecLarge) {
   // pose a problem).
 
 #if INTPTR_MAX == INT64_MAX
-  char filename [] = KJ_TEMP_FILE_TEMPLATE("kj-io-writevec-large-test");
-  AutoCloseFd file = test::mkstemp_auto_erased(filename);
+  AutoCloseFd file = test::mkstemp_auto_erased();
 
   {
     auto toWrite = heapArray<char>(BUFFER_SIZE);

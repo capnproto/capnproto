@@ -376,8 +376,7 @@ TEST(Serialize, WriteMessageEvenSegmentCount) {
 }
 
 TEST(Serialize, FileDescriptors) {
-  char filename[] = KJ_TEMP_FILE_TEMPLATE("capnproto-serialize-test");
-  kj::AutoCloseFd tmpfile = kj::test::mkstempAutoErased(filename);
+  kj::AutoCloseFd tmpfile = kj::test::mkstempAutoErased();
   ASSERT_GE(tmpfile.get(), 0);
 
   {
