@@ -499,6 +499,7 @@ public:
 private:
   Own<PromiseNode> dependency;
   void* continuationTracePtr;
+  Environment* environment;
 
   void dropDependency();
   void getDepResult(ExceptionOrValue& output);

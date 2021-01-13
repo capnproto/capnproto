@@ -1110,6 +1110,14 @@ private:
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
 };
 
+class Environment {
+public:
+  virtual kj::String toString() = 0;
+};
+
+void runInEnvironment(kj::Own<Environment> env, kj::FunctionParam<void()> func);
+Environment& getCurrentEnvironment();
+
 }  // namespace kj
 
 #define KJ_ASYNC_H_INCLUDED
