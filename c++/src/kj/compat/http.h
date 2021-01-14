@@ -696,6 +696,25 @@ public:
   // UNIMPLEMENTED.
 };
 
+class HttpClientErrorHandler {
+public:
+  virtual HttpClient::Response handleProtocolError(HttpHeaders::ProtocolError protocolError);
+  // Override this function to customize error handling when the client receives an HTTP message
+  // that fails to parse. The default implementations throws an exception.
+  //
+  // There are two main use cases for overriding this:
+  // 1. `protocolError` contains the actual header content that failed to parse, giving you the
+  //    opportunity to log it for debugging purposes. The default implementation throws away this
+  //    content.
+  // 2. You could potentially convert protocol errors into HTTP error codes, e.g. 502 Bad Gateway.
+
+  virtual HttpClient::WebSocketResponse handleWebSocketProtocolError(
+      HttpHeaders::ProtocolError protocolError);
+  // Like handleProtocolError() but for WebSocket requests. The default implementation calls
+  // handleProtocolError() and converts the Response to WebSocketResponse. There is probably very
+  // little reason to override this.
+};
+
 struct HttpClientSettings {
   kj::Duration idleTimeout = 5 * kj::SECONDS;
   // For clients which automatically create new connections, any connection idle for at least this
@@ -709,6 +728,10 @@ struct HttpClientSettings {
   // or vulnerable proxies between you and the server, you can provide a dummy entropy source that
   // doesn't generate real entropy (e.g. returning the same value every time). Otherwise, you must
   // provide a cryptographically-random entropy source.
+
+  kj::Maybe<HttpClientErrorHandler&> errorHandler = nullptr;
+  // Customize how protocol errors are handled by the HttpClient. If null, HttpClientErrorHandler's
+  // default implementation will be used.
 };
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, HttpHeaderTable& responseHeaderTable,

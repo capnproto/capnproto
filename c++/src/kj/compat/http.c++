@@ -3312,7 +3312,8 @@ WebSocketPipe newWebSocketPipe() {
 
 namespace {
 
-class HttpClientImpl final: public HttpClient {
+class HttpClientImpl final: public HttpClient,
+                            private HttpClientErrorHandler {
 public:
   HttpClientImpl(HttpHeaderTable& responseHeaderTable, kj::Own<kj::AsyncIoStream> rawStream,
                  HttpClientSettings settings)
@@ -3411,11 +3412,8 @@ public:
         }
         KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
           closed = true;
-          // TODO(someday): Do something with ProtocolError::rawContent. Exceptions feel like the
-          //   most idiomatic way to report errors when using HttpClient::request(), but we don't
-          //   have a good way of attaching the raw content to the exception.
-          KJ_FAIL_REQUIRE(protocolError.description) { break; }
-          return HttpClient::Response();
+          return settings.errorHandler.orDefault(*this).handleProtocolError(
+              kj::mv(protocolError));
         }
       }
 
@@ -3511,11 +3509,8 @@ public:
           }
         }
         KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
-          // TODO(someday): Do something with ProtocolError::rawContent. Exceptions feel like the
-          //   most idiomatic way to report errors when using HttpClient::request(), but we don't
-          //   have a good way of attaching the raw content to the exception.
-          KJ_FAIL_REQUIRE(protocolError.description) { break; }
-          return HttpClient::WebSocketResponse();
+          return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError(
+              kj::mv(protocolError));
         }
       }
 
@@ -3600,6 +3595,20 @@ kj::Own<HttpClient> newHttpClient(
   return kj::heap<HttpClientImpl>(responseHeaderTable,
       kj::Own<kj::AsyncIoStream>(&stream, kj::NullDisposer::instance),
       kj::mv(settings));
+}
+
+HttpClient::Response HttpClientErrorHandler::handleProtocolError(
+      HttpHeaders::ProtocolError protocolError) {
+  KJ_FAIL_REQUIRE(protocolError.description) { break; }
+  return HttpClient::Response();
+}
+
+HttpClient::WebSocketResponse HttpClientErrorHandler::handleWebSocketProtocolError(
+      HttpHeaders::ProtocolError protocolError) {
+  auto response = handleProtocolError(protocolError);
+  return HttpClient::WebSocketResponse {
+    response.statusCode, response.statusText, response.headers, kj::mv(response.body)
+  };
 }
 
 // =======================================================================================
