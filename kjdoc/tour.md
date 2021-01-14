@@ -93,9 +93,9 @@ for (auto i: kj::indices(foo)) {
 
 ### Casting helpers
 
-`kj::implicitCast<T>(value)` is equivalent to `static_cast<T>(value)`, but will generate a compiler error if `value` cannot be implicitly cast to `T`.
+`kj::implicitCast<T>(value)` is equivalent to `static_cast<T>(value)`, but will generate a compiler error if `value` cannot be implicitly cast to `T`. For example, `static_cast` can be used for both upcasts (derived type to base type) and downcasts (base type to derived type), but `implicitCast` can only be used for the former.
 
-`kj::downcast<T>(value)` is equivalent to `static_cast<T>(value)`, except that when compiled in debug mode with RTTI available, a runtime check will be performed to verify that `value` really has type `T`.
+`kj::downcast<T>(value)` is equivalent to `static_cast<T>(value)`, except that when compiled in debug mode with RTTI available, a runtime check (`dynamic_cast`) will be performed to verify that `value` really has type `T`. Use this in cases where you are casting a base type to a derived type, and you are confident that the object is actually an instance of the derived type. The debug-mode check will hep you catch bugs.
 
 `kj::dynamicDowncastIfAvailable<T>(value)` is like `dynamic_cast<T*>(value)` with two differences. First, it returns `kj::Maybe<T&>` instead of `T*`. Second, if the program is compiled without RTTI enabled, the function always returns null. This function is intended to be used to implement optimizations, where the code can do something smarter if `value` happens to be of some specific type -- but if RTTI is not available, it is safe to skip the optimization. See [KJ idiomatic use of dynamic_cast](style-guide.md#dynamic_cast) for more background.
 
