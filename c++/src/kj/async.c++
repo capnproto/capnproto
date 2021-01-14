@@ -1536,8 +1536,11 @@ EventLoop::EventLoop(EventPort& port)
       daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
-  // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
-  // some more.
+  // Destroy all "daemon" tasks, noting that their destructors might register more daemon tasks.
+  while (!daemons->isEmpty()) {
+    auto oldDaemons = kj::mv(daemons);
+    daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
+  }
   daemons = nullptr;
 
   KJ_IF_MAYBE(e, executor) {
