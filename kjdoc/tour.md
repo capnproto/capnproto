@@ -136,7 +136,7 @@ Some example uses of disposers include:
 
 * `kj::fakeOwn(ref)` returns a `kj::Own` that points to `ref` but doesn't actually destroy it. This is useful when you know for sure that `ref` will outlive the scope of the `kj::Own`, and therefore heap allocation is unnecessary. This is common in cases where, for example, the `kj::Own` is being passed into an object which itself will be destroyed before `ref` becomes invalid. It also makes sense when `ref` is actually a static value or global that lives forever.
 * `kj::refcounted<T>(args...)` allocates a `T` which uses reference counting. It returns a `kj::Own<T>` that represents one reference to the object. Additional references can be created by calling `kj::addRef(*ptr)`. The object is destroyed when no more `kj::Own`s exist pointing at it. Note that `T` must be a subclass of `kj::Refcounted`. If references may be shared across threads, then atomic refcounting must be used; use `kj::atomicRefcounted<T>(args...)` and inherit `kj::AtomicRefcounted`. Reference counting should be using sparingly; see [KJ idioms around reference counting](style-guide.md#reference-counting) for a discussion of when it should be used and why it is designed the way it is.
-* `kj::attachRef(ref, args...)` returns a `kj::Own` pointing to `ref` that actually owns `args...`, so that when the `kj::Own` goes out-of-scope, the other arguments are destroyed. Typically these arguments are themselves `kj::Own`s or other pass-by-move values that themselves own the object referenced by `ref`. `kj::attachVal(value, args...)` is similar, where `value` is a pass-by-move value rather than a reference; a copy of it will be allocated on the heap. Finally, `ownPtr.attach(args...)` returns a new `kj::Own` pointing to the same value that `ownPtr` pointed to, but such that `args...` are owned as well and will be destroyed together.
+* `kj::attachRef(ref, args...)` returns a `kj::Own` pointing to `ref` that actually owns `args...`, so that when the `kj::Own` goes out-of-scope, the other arguments are destroyed. Typically these arguments are themselves `kj::Own`s or other pass-by-move values that themselves own the object referenced by `ref`. `kj::attachVal(value, args...)` is similar, where `value` is a pass-by-move value rather than a reference; a copy of it will be allocated on the heap. Finally, `ownPtr.attach(args...)` returns a new `kj::Own` pointing to the same value that `ownPtr` pointed to, but such that `args...` are owned as well and will be destroyed together. Attachments are always destroyed after the thing they are attached to.
 * `kj::SpaceFor<T>` contains enough space for a value of type `T`, but does not construct the value until its `construct(args...)` method is called. That method returns an `kj::Own<T>`, whose disposer destroys the value. `kj::SpaceFor` is thus a safer way to perform manual construction compared to invoking `kj::ctor()` and `kj::dtor()`.
 
 These disposers cover most use cases, but you can also implement your own if desired. `kj::Own` features a constructor overload that lets you pass an arbitrary disposer.
@@ -145,7 +145,7 @@ These disposers cover most use cases, but you can also implement your own if des
 
 `kj::Array<T>` is similar to `kj::Own<T>`, but points to (and owns) an array of `T`s.
 
-A `kj::Array<T>` can be allocated with `kj::heapArray<T>(size)`, if `T` can be default-constructed. Otherwise, you will need to use a `kj::ArrayBuilder<T>` to build the array. First call `kj::heapArrayBuilder<T>(size)`, then invoke the builder's `add(value)` method to add each element, then finally call its `finish()` method to obtain the completed `kj::Array<T>`.
+A `kj::Array<T>` can be allocated with `kj::heapArray<T>(size)`, if `T` can be default-constructed. Otherwise, you will need to use a `kj::ArrayBuilder<T>` to build the array. First call `kj::heapArrayBuilder<T>(size)`, then invoke the builder's `add(value)` method to add each element, then finally call its `finish()` method to obtain the completed `kj::Array<T>`. `ArrayBuilder` requires that you know the final size before you start; if you don't, you may want to use `kj::Vector<T>` instead.
 
 Passing a `kj::Array<T>` implies an ownership transfer. If you merely want to pass a pointer to an array, without transferring ownership, use `kj::ArrayPtr<T>`. This type essentially encapsulates a pointer to the beginning of the array, plus its size. Note that a `kj::ArrayPtr` points to _the underlying memory_ backing a `kj::Array`, not to the `kj::Array` itself; thus, moving a `kj::Array` does NOT invalidate any `kj::ArrayPtr`s already pointing at it. You can also construct a `kj::ArrayPtr` pointing to any C-style array (doesn't have to be a `kj::Array`) using `kj::arrayPtr(ptr, size)` or `kj::arrayPtr(beginPtr, endPtr)`.
 
@@ -157,7 +157,7 @@ A `kj::String` is a segment of text. By convention, this text is expected to be 
 
 NUL characters (`'\0'`) are allowed to appear anywhere in a string and do not terminate the string. However, as a convenience, the buffer backing a `kj::String` always has an additional NUL character appended to the end (but not counted in the size). This allows the text in a `kj::String` to be passed to legacy C APIs that use NUL-terminated strings without an extra copy; use the `.cStr()` method to get a `const char*` for such cases. (Of course, keep in mind that if the string contains NUL characters other than at the end, legacy C APIs will interpret the string as truncated at that point.)
 
-`kj::StringPtr` represents a pointer to a `kj::String`. Similar to `kj::ArrayPtr`, `kj::StringPtr` does not point at the `kj::String` object itself, but at its backing array. Thus, moving a `kj::String` does not invalidate any `kj::StringPtr`s. This is a major difference from `std::string`! Moving an `std::string` invalidates all pointers into its backing buffer, because `std::string` inlines small strings as an optimization. This optimization may seem clever, but means that `std::string` cannot safely be used as a way to hold and transfer ownership of a text buffer. Doing so can lead to subtle, data-dependent bugs; a program might work fine until someone gives it an unusually small input, at which point it segfaults. `kj::String` foregoes this optimization for simplicity.
+`kj::StringPtr` represents a pointer to a `kj::String`. Similar to `kj::ArrayPtr`, `kj::StringPtr` does not point at the `kj::String` object itself, but at its backing array. Thus, moving a `kj::String` does not invalidate any `kj::StringPtr`s. This is a major difference from `std::string`! Moving an `std::string` invalidates all pointers into its backing buffer (including `std::string_view`s), because `std::string` inlines small strings as an optimization. This optimization may seem clever, but means that `std::string` cannot safely be used as a way to hold and transfer ownership of a text buffer. Doing so can lead to subtle, data-dependent bugs; a program might work fine until someone gives it an unusually small input, at which point it segfaults. `kj::String` foregoes this optimization for simplicity.
 
 Also similar to `kj::ArrayPtr`, a `kj::StringPtr` does not have to point at a `kj::String`. It can be initialized from a string literal or any C-style NUL-terminated `const char*` without making a copy. Also, KJ defines the special literal suffix `_kj` to write a string literal whose type is implicitly `kj::StringPtr`.
 
@@ -169,8 +169,9 @@ kj::StringPtr foo = "foo";
 
 // But if you add the _kj suffix, then you don't even need
 // to declare the type. `bar` will implicitly have type
-// kj::StringPtr.
-auto bar = "bar"_kj;
+// kj::StringPtr. Also, this version can be declared
+// `constexpr`.
+constexpr auto bar = "bar"_kj;
 ```
 
 ### Stringification
@@ -217,7 +218,10 @@ kj::Maybe<int> maybeJ = nullptr;
 
 KJ_IF_MAYBE(i, maybeI) {
   // This block will execute, with `i` being a
-  // pointer into `maybeI`'s value.
+  // pointer into `maybeI`'s value. In a better world,
+  // `i` would be a reference rather than a pointer,
+  // but we couldn't find a way to trick the compiler
+  // into that.
   KJ_ASSERT(*i == 123);
 } else {
   KJ_FAIL_ASSERT("can't get here");
@@ -242,6 +246,9 @@ Performance nuts will be interested to know that `kj::Maybe<T&>` and `kj::Maybe<
 void handle(kj::OneOf<int, kj::String> value) {
   KJ_SWITCH_ONEOF(value) {
     KJ_CASE_ONEOF(i, int) {
+      // Note that `i` is an lvalue reference to the content
+      // of the OneOf. This differs from `KJ_IF_MAYBE` where
+      // the variable is a pointer.
       handleInt(i);
     }
     KJ_CASE_ONEOF(s, kj::String) {
