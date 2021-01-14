@@ -147,7 +147,7 @@ These disposers cover most use cases, but you can also implement your own if des
 
 A `kj::Array<T>` can be allocated with `kj::heapArray<T>(size)`, if `T` can be default-constructed. Otherwise, you will need to use a `kj::ArrayBuilder<T>` to build the array. First call `kj::heapArrayBuilder<T>(size)`, then invoke the builder's `add(value)` method to add each element, then finally call its `finish()` method to obtain the completed `kj::Array<T>`.
 
-Passing a `kj::Array<T>` implies an ownership transfer. If you merely want to pass a pointer to an array, without transferring ownership, use `kj::ArrayPtr<T>`. This type essentially encapsulates a pointer to the beginning of the array, plus its size. Note that a `kj::ArrayPtr` points to _the underlying memory_ backing a `kj::Array`, not to the `kj::Arary` itself; thus, moving a `kj::Array` does NOT invalidate any `kj::ArrayPtr`s already pointing at it. You can also construct a `kj::ArrayPtr` pointing to any C-style array (doesn't have to be a `kj::Array`) using `kj::arrayPtr(ptr, size)` or `kj::arrayPtr(beginPtr, endPtr)`.
+Passing a `kj::Array<T>` implies an ownership transfer. If you merely want to pass a pointer to an array, without transferring ownership, use `kj::ArrayPtr<T>`. This type essentially encapsulates a pointer to the beginning of the array, plus its size. Note that a `kj::ArrayPtr` points to _the underlying memory_ backing a `kj::Array`, not to the `kj::Array` itself; thus, moving a `kj::Array` does NOT invalidate any `kj::ArrayPtr`s already pointing at it. You can also construct a `kj::ArrayPtr` pointing to any C-style array (doesn't have to be a `kj::Array`) using `kj::arrayPtr(ptr, size)` or `kj::arrayPtr(beginPtr, endPtr)`.
 
 Both `kj::Array` and `kj::ArrayPtr` contain a number of useful methods, like `slice()`. Be sure to check out the class definitions for more details.
 
@@ -159,7 +159,7 @@ NUL characters (`'\0'`) are allowed to appear anywhere in a string and do not te
 
 `kj::StringPtr` represents a pointer to a `kj::String`. Similar to `kj::ArrayPtr`, `kj::StringPtr` does not point at the `kj::String` object itself, but at its backing array. Thus, moving a `kj::String` does not invalidate any `kj::StringPtr`s. This is a major difference from `std::string`! Moving an `std::string` invalidates all pointers into its backing buffer, because `std::string` inlines small strings as an optimization. This optimization may seem clever, but means that `std::string` cannot safely be used as a way to hold and transfer ownership of a text buffer. Doing so can lead to subtle, data-dependent bugs; a program might work fine until someone gives it an unusually small input, at which point it segfaults. `kj::String` foregoes this optimization for simplicity.
 
-Also similar to `kj::ArrayPtr`, a `kj::StingPtr` does not have to point at a `kj::String`. It can be initialized from a string literal or any C-style NUL-terminated `const char*` without making a copy. Also, KJ defines the special literal suffix `_kj` to write a string literal whose type is implicitly `kj::StringPtr`.
+Also similar to `kj::ArrayPtr`, a `kj::StringPtr` does not have to point at a `kj::String`. It can be initialized from a string literal or any C-style NUL-terminated `const char*` without making a copy. Also, KJ defines the special literal suffix `_kj` to write a string literal whose type is implicitly `kj::StringPtr`.
 
 ```c++
 // It's OK to initialize a StringPtr from a classic literal.
@@ -183,7 +183,7 @@ kj::String makeGreeting(kj::StringPtr name) {
 }
 ```
 
-KJ knows how to stringify most primitive types as well as many KJ types automatically. Note that integers will be stringified in base 10; if you want hexidecimal, use `kj::hex(i)` as the parameter to `kj::str()`.
+KJ knows how to stringify most primitive types as well as many KJ types automatically. Note that integers will be stringified in base 10; if you want hexadecimal, use `kj::hex(i)` as the parameter to `kj::str()`.
 
 You can additionally extend `kj::str()` to work with your own types by declaring a stringification method using `KJ_STRINGIFY`, like so:
 
@@ -201,7 +201,7 @@ kj::StringPtr KJ_STRINGIFY(MyType value) {
 
 The `KJ_STRINGIFY` declaration should appear either in the same namespace where the type is defined, or in the global scope. The function can return any random-access iterable sequence of `char`, such as a `kj::String`, `kj::StringPtr`, `kj::ArrayPtr<char>`, etc. As an alternative to `KJ_STRINGIFY`, you can also declare a `toString()` method on your type, with the same return type semantics.
 
-When constructing very large strings, complex strings -- for example, when writing a code generator -- consider using `kj::StringTree`, which maintains a tree of strings and only concatenates them at the very end. For example, `kj::strTree(foo, kj::strTree(bar, baz)).flatten()` only performs one concatenation, whereas `kj::str(foo, kj::str(bar, baz))` would perform a redundant intermediate concatenation.
+When constructing very large, complex strings -- for example, when writing a code generator -- consider using `kj::StringTree`, which maintains a tree of strings and only concatenates them at the very end. For example, `kj::strTree(foo, kj::strTree(bar, baz)).flatten()` only performs one concatenation, whereas `kj::str(foo, kj::str(bar, baz))` would perform a redundant intermediate concatenation.
 
 ## Core Utility Types
 
@@ -443,7 +443,7 @@ kj::StringPtr getItem(int i) {
 }
 ```
 
-When the code above is compiled with exceptions enabled, and an out-of-bounds index will result in an exception is thrown. But when compiled `-fno-exceptions`, the function will store the exception off to the side (in KJ), and then return an empty string.
+When the code above is compiled with exceptions enabled, an out-of-bounds index will result in an exception being thrown. But when compiled with `-fno-exceptions`, the function will store the exception off to the side (in KJ), and then return an empty string.
 
 A recovery block can indicate that control flow should continue normally even in case of error by using a `break` statement.
 
@@ -502,7 +502,7 @@ private:
 };
 
 Transaction::~Transaction() noexcept(false) {
-  unwindDetector::catchExceptionsIfUnwinding([&]() {
+  unwindDetector.catchExceptionsIfUnwinding([&]() {
     if (!committed) {
       rollback();
     }
