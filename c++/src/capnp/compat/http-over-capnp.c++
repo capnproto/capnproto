@@ -203,8 +203,8 @@ public:
     });
   }
 
-  kj::Promise<Message> receive() override {
-    return KJ_ASSERT_NONNULL(in)->receive();
+  kj::Promise<Message> receive(size_t maxSize) override {
+    return KJ_ASSERT_NONNULL(in)->receive(maxSize);
   }
 
   kj::Promise<void> pumpTo(WebSocket& other) override {

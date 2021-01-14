@@ -2161,7 +2161,7 @@ public:
     return stream->whenWriteDisconnected();
   }
 
-  kj::Promise<Message> receive() override {
+  kj::Promise<Message> receive(size_t maxSize) override {
     size_t headerSize = Header::headerSize(recvData.begin(), recvData.size());
 
     if (headerSize > recvData.size()) {
@@ -2174,7 +2174,7 @@ public:
       }
 
       return stream->tryRead(recvData.end(), 1, recvBuffer.end() - recvData.end())
-          .then([this](size_t actual) -> kj::Promise<Message> {
+          .then([this,maxSize](size_t actual) -> kj::Promise<Message> {
         if (actual == 0) {
           if (recvData.size() > 0) {
             return KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in frame header");
@@ -2186,7 +2186,7 @@ public:
         }
 
         recvData = recvBuffer.slice(0, recvData.size() + actual);
-        return receive();
+        return receive(maxSize);
       });
     }
 
@@ -2195,6 +2195,8 @@ public:
     recvData = recvData.slice(headerSize, recvData.size());
 
     size_t payloadLen = recvHeader.getPayloadLen();
+
+    KJ_REQUIRE(payloadLen < maxSize, "WebSocket message is too large");
 
     auto opcode = recvHeader.getOpcode();
     bool isData = opcode < OPCODE_FIRST_CONTROL;
@@ -2249,7 +2251,7 @@ public:
     Mask mask = recvHeader.getMask();
 
     auto handleMessage = kj::mvCapture(message,
-        [this,opcode,payloadTarget,payloadLen,mask,isFin]
+        [this,opcode,payloadTarget,payloadLen,mask,isFin,maxSize]
         (kj::Array<byte>&& message) -> kj::Promise<Message> {
       if (!mask.isZero()) {
         mask.apply(kj::arrayPtr(payloadTarget, payloadLen));
@@ -2257,8 +2259,9 @@ public:
 
       if (!isFin) {
         // Add fragment to the list and loop.
+        auto newMax = maxSize - message.size();
         fragments.add(kj::mv(message));
-        return receive();
+        return receive(newMax);
       }
 
       switch (opcode) {
@@ -2283,10 +2286,10 @@ public:
         case OPCODE_PING:
           // Send back a pong.
           queuePong(kj::mv(message));
-          return receive();
+          return receive(maxSize);
         case OPCODE_PONG:
           // Unsolicited pong. Ignore.
-          return receive();
+          return receive(maxSize);
         default:
           KJ_FAIL_REQUIRE("unknown WebSocket opcode", opcode);
       }
@@ -2821,11 +2824,11 @@ public:
     }
   }
 
-  kj::Promise<Message> receive() override {
+  kj::Promise<Message> receive(size_t maxSize) override {
     KJ_IF_MAYBE(s, state) {
-      return s->receive();
+      return s->receive(maxSize);
     } else {
-      return newAdaptedPromise<Message, BlockedReceive>(*this);
+      return newAdaptedPromise<Message, BlockedReceive>(*this, maxSize);
     }
   }
   kj::Promise<void> pumpTo(WebSocket& other) override {
@@ -2899,7 +2902,7 @@ private:
       KJ_FAIL_ASSERT("another message send is already in progress");
     }
 
-    kj::Promise<Message> receive() override {
+    kj::Promise<Message> receive(size_t maxSize) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
       fulfiller.fulfill();
       pipe.endState(*this);
@@ -2990,9 +2993,9 @@ private:
       KJ_FAIL_ASSERT("another message send is already in progress");
     }
 
-    kj::Promise<Message> receive() override {
+    kj::Promise<Message> receive(size_t maxSize) override {
       KJ_REQUIRE(canceler.isEmpty(), "another message receive is already in progress");
-      return canceler.wrap(input.receive()
+      return canceler.wrap(input.receive(maxSize)
           .then([this](Message message) {
         if (message.is<Close>()) {
           canceler.release();
@@ -3032,8 +3035,9 @@ private:
 
   class BlockedReceive final: public WebSocket {
   public:
-    BlockedReceive(kj::PromiseFulfiller<Message>& fulfiller, WebSocketPipeImpl& pipe)
-        : fulfiller(fulfiller), pipe(pipe) {
+    BlockedReceive(kj::PromiseFulfiller<Message>& fulfiller, WebSocketPipeImpl& pipe,
+                   size_t maxSize)
+        : fulfiller(fulfiller), pipe(pipe), maxSize(maxSize) {
       KJ_REQUIRE(pipe.state == nullptr);
       pipe.state = *this;
     }
@@ -3079,7 +3083,7 @@ private:
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
-      return canceler.wrap(other.receive().then([this,&other](Message message) {
+      return canceler.wrap(other.receive(maxSize).then([this,&other](Message message) {
         canceler.release();
         fulfiller.fulfill(kj::mv(message));
         pipe.endState(*this);
@@ -3092,7 +3096,7 @@ private:
       }));
     }
 
-    kj::Promise<Message> receive() override {
+    kj::Promise<Message> receive(size_t maxSize) override {
       KJ_FAIL_ASSERT("another message receive is already in progress");
     }
     kj::Promise<void> pumpTo(WebSocket& other) override {
@@ -3102,6 +3106,7 @@ private:
   private:
     kj::PromiseFulfiller<Message>& fulfiller;
     WebSocketPipeImpl& pipe;
+    size_t maxSize;
     Canceler canceler;
   };
 
@@ -3165,7 +3170,7 @@ private:
       }));
     }
 
-    kj::Promise<Message> receive() override {
+    kj::Promise<Message> receive(size_t maxSize) override {
       KJ_FAIL_ASSERT("another message receive is already in progress");
     }
     kj::Promise<void> pumpTo(WebSocket& other) override {
@@ -3204,7 +3209,7 @@ private:
       KJ_FAIL_REQUIRE("can't tryPumpFrom() after disconnect()");
     }
 
-    kj::Promise<Message> receive() override {
+    kj::Promise<Message> receive(size_t maxSize) override {
       return KJ_EXCEPTION(DISCONNECTED, "WebSocket disconnected");
     }
     kj::Promise<void> pumpTo(WebSocket& other) override {
@@ -3238,7 +3243,7 @@ private:
           "other end of WebSocketPipe was destroyed"));
     }
 
-    kj::Promise<Message> receive() override {
+    kj::Promise<Message> receive(size_t maxSize) override {
       return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
     }
     kj::Promise<void> pumpTo(WebSocket& other) override {
@@ -3279,8 +3284,8 @@ public:
     return out->tryPumpFrom(other);
   }
 
-  kj::Promise<Message> receive() override {
-    return in->receive();
+  kj::Promise<Message> receive(size_t maxSize) override {
+    return in->receive(maxSize);
   }
   kj::Promise<void> pumpTo(WebSocket& other) override {
     return in->pumpTo(other);
@@ -4399,8 +4404,8 @@ private:
     kj::Promise<void> whenAborted() override {
       return inner->whenAborted();
     }
-    kj::Promise<Message> receive() override {
-      return inner->receive().then([this](Message&& message) -> kj::Promise<Message> {
+    kj::Promise<Message> receive(size_t maxSize) override {
+      return inner->receive(maxSize).then([this](Message&& message) -> kj::Promise<Message> {
         if (message.is<WebSocket::Close>()) {
           return afterReceiveClosed()
               .then([message = kj::mv(message)]() mutable { return kj::mv(message); });
@@ -5066,7 +5071,7 @@ private:
       kj::Promise<void> whenAborted() override {
         return kj::cp(exception);
       }
-      kj::Promise<Message> receive() override {
+      kj::Promise<Message> receive(size_t maxSize) override {
         return kj::cp(exception);
       }
 
