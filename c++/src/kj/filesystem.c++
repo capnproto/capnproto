@@ -160,7 +160,7 @@ bool PathPtr::operator==(PathPtr other) const {
   return parts == other.parts;
 }
 bool PathPtr::operator< (PathPtr other) const {
-  for (size_t i = 0; i < kj::min(parts.size(), other.parts.size()); i++) {
+  for (size_t i = 0; i < kj::min(parts.size(), other.parts.size()); ++i) {
     int comp = strcmp(parts[i].cStr(), other.parts[i].cStr());
     if (comp < 0) return true;
     if (comp > 0) return false;
@@ -248,7 +248,7 @@ String PathPtr::toWin32StringImpl(bool absolute, bool forApi) const {
 
     KJ_REQUIRE(!Path::isWin32Special(p), "path cannot contain DOS reserved name", p) {
       // Recover by blotting out the name with invalid characters which Win32 syscalls will reject.
-      for (size_t i = 0; i < p.size(); i++) {
+      for (size_t i = 0; i < p.size(); ++i) {
         *ptr++ = '|';
       }
       goto skip;
@@ -290,7 +290,7 @@ Array<wchar_t> PathPtr::forWin32Api(bool absolute) const {
 
 // -----------------------------------------------------------------------------
 
-String Path::stripNul(String input) {
+String Path::stripNul(const String& input) {
   kj::Vector<char> output(input.size());
   for (char c: input) {
     if (c != '\0') output.add(c);

@@ -157,10 +157,10 @@ struct NoScratch {
 
     template <typename RequestBuilder, typename ResponseBuilder>
     void add(RequestBuilder& request, ResponseBuilder& response) {
-      for (auto segment: request.getSegmentsForOutput()) {
+      for (auto& segment: request.getSegmentsForOutput()) {
         counter += segment.size() * sizeof(word);
       }
-      for (auto segment: response.getSegmentsForOutput()) {
+      for (auto& segment: response.getSegmentsForOutput()) {
         counter += segment.size() * sizeof(word);
       }
     }
@@ -218,10 +218,10 @@ struct UseScratch {
     template <typename RequestBuilder, typename ResponseBuilder>
     void add(RequestBuilder& request, ResponseBuilder& response) {
       size_t counter = 0;
-      for (auto segment: request.getSegmentsForOutput()) {
+      for (auto& segment: request.getSegmentsForOutput()) {
         counter += segment.size() * sizeof(word);
       }
-      for (auto segment: response.getSegmentsForOutput()) {
+      for (auto& segment: response.getSegmentsForOutput()) {
         counter += segment.size() * sizeof(word);
       }
       maxSize = std::max(counter, maxSize);

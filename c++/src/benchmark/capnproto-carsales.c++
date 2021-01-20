@@ -34,7 +34,7 @@ uint64_t carValue(ReaderOrBuilder car) {
 
   result += car.getSeats() * 200;
   result += car.getDoors() * 350;
-  for (auto wheel: car.getWheels()) {
+  for (auto& wheel: car.getWheels()) {
     result += wheel.getDiameter() * wheel.getDiameter();
     result += wheel.getSnowTires() ? 100 : 0;
   }
@@ -75,7 +75,7 @@ void randomCar(Car::Builder car) {
   car.setSeats(2 + fastRand(6));
   car.setDoors(2 + fastRand(3));
 
-  for (auto wheel: car.initWheels(4)) {
+  for (auto& wheel: car.initWheels(4)) {
     wheel.setDiameter(25 + fastRand(15));
     wheel.setAirPressure(30 + fastRandDouble(20));
     wheel.setSnowTires(fastRand(16) == 0);
@@ -110,7 +110,7 @@ public:
 
   static uint64_t setupRequest(ParkingLot::Builder request) {
     uint64_t result = 0;
-    for (auto car: request.initCars(fastRand(200))) {
+    for (auto& car: request.initCars(fastRand(200))) {
       randomCar(car);
       result += carValue(car);
     }
@@ -118,7 +118,7 @@ public:
   }
   static void handleRequest(ParkingLot::Reader request, TotalValue::Builder response) {
     uint64_t result = 0;
-    for (auto car: request.getCars()) {
+    for (auto& car: request.getCars()) {
       result += carValue(car);
     }
     response.setAmount(result);

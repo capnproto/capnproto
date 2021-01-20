@@ -286,19 +286,19 @@ public:
   // value.  This could happen in particular when receiving a message from a sender who has a
   // newer version of the protocol and is using a field of the union that you don't know about yet.
 
-  void set(StructSchema::Field field, const DynamicValue::Reader& value);
+  void set(const StructSchema::Field& field, const DynamicValue::Reader& value);
   // Set the given field value.
 
   DynamicValue::Builder init(StructSchema::Field field);
   DynamicValue::Builder init(StructSchema::Field field, uint size);
   // Init a struct, list, or blob field.
 
-  void adopt(StructSchema::Field field, Orphan<DynamicValue>&& orphan);
+  void adopt(const StructSchema::Field& field, Orphan<DynamicValue>&& orphan);
   Orphan<DynamicValue> disown(StructSchema::Field field);
   // Adopt/disown.  This works even for non-pointer fields: adopt() becomes equivalent to set()
   // and disown() becomes like get() followed by clear().
 
-  void clear(StructSchema::Field field);
+  void clear(const StructSchema::Field& field);
   // Clear a field, setting it to its default value.  For pointer fields, this actually makes the
   // field null.
 

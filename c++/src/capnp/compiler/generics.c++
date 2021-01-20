@@ -68,7 +68,7 @@ kj::Maybe<BrandedDecl> BrandedDecl::getMember(
   }
 }
 
-kj::Maybe<Declaration::Which> BrandedDecl::getKind() {
+kj::Maybe<Declaration::Which> BrandedDecl::getKind() const {
   if (body.is<Resolver::ResolvedParameter>()) {
     return nullptr;
   } else {
@@ -401,7 +401,7 @@ kj::Own<BrandScope> BrandScope::evaluateBrand(
         case schema::Brand::Scope::BIND: {
           auto bindings = nextScope.getBind();
           auto params = kj::heapArrayBuilder<BrandedDecl>(bindings.size());
-          for (auto binding: bindings) {
+          for (const auto& binding: bindings) {
             switch (binding.which()) {
               case schema::Brand::Binding::UNBOUND: {
                 // Build an AnyPointer-equivalent.
@@ -600,7 +600,7 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
         auto params = app.getParams();
         auto compiledParams = kj::heapArrayBuilder<BrandedDecl>(params.size());
         bool paramFailed = false;
-        for (auto param: params) {
+        for (const auto& param: params) {
           if (param.isNamed()) {
             errorReporter.addErrorOn(param.getNamed(), "Named parameter not allowed here.");
           }

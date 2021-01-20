@@ -80,10 +80,10 @@ void printAddressBook(int fd) {
 
   AddressBook::Reader addressBook = message.getRoot<AddressBook>();
 
-  for (Person::Reader person : addressBook.getPeople()) {
+  for (const auto& person : addressBook.getPeople()) {
     std::cout << person.getName().cStr() << ": "
               << person.getEmail().cStr() << std::endl;
-    for (Person::PhoneNumber::Reader phone: person.getPhones()) {
+    for (const auto& phone: person.getPhones()) {
       const char* typeName = "UNKNOWN";
       switch (phone.getType()) {
         case Person::PhoneNumber::Type::MOBILE: typeName = "mobile"; break;
@@ -209,7 +209,7 @@ void dynamicPrintValue(DynamicValue::Reader value) {
     case DynamicValue::LIST: {
       std::cout << "[";
       bool first = true;
-      for (auto element: value.as<DynamicList>()) {
+      for (const auto& element: value.as<DynamicList>()) {
         if (first) {
           first = false;
         } else {
@@ -235,7 +235,7 @@ void dynamicPrintValue(DynamicValue::Reader value) {
       std::cout << "(";
       auto structValue = value.as<DynamicStruct>();
       bool first = true;
-      for (auto field: structValue.getSchema().getFields()) {
+      for (const auto& field: structValue.getSchema().getFields()) {
         if (!structValue.has(field)) continue;
         if (first) {
           first = false;

@@ -48,7 +48,7 @@ public:
 
     auto list = request.initResults(count);
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; ++i) {
       SearchResult::Builder result = list[i];
       result.setScore(1000 - i);
       int urlSize = fastRand(100);
@@ -59,7 +59,7 @@ public:
 
       strcpy(url.begin(), URL_PREFIX);
       char* pos = url.begin() + urlPrefixLength;
-      for (int j = 0; j < urlSize; j++) {
+      for (int j = 0; j < urlSize; ++j) {
         *pos++ = 'a' + fastRand(26);
       }
 
@@ -72,7 +72,7 @@ public:
       snippet.push_back(' ');
 
       int prefix = fastRand(20);
-      for (int j = 0; j < prefix; j++) {
+      for (int j = 0; j < prefix; ++j) {
         snippet.append(WORDS[fastRand(WORDS_COUNT)]);
       }
 
@@ -80,7 +80,7 @@ public:
       if (isDog) snippet.append("dog ");
 
       int suffix = fastRand(20);
-      for (int j = 0; j < suffix; j++) {
+      for (int j = 0; j < suffix; ++j) {
         snippet.append(WORDS[fastRand(WORDS_COUNT)]);
       }
 
@@ -93,7 +93,7 @@ public:
   static void handleRequest(SearchResultList::Reader request, SearchResultList::Builder response) {
     std::vector<ScoredResult> scoredResults;
 
-    for (auto result: request.getResults()) {
+    for (auto& result: request.getResults()) {
       double score = result.getScore();
       if (strstr(result.getSnippet().cStr(), " cat ") != nullptr) {
         score *= 10000;
@@ -108,7 +108,7 @@ public:
 
     auto list = response.initResults(scoredResults.size());
     auto iter = list.begin();
-    for (auto result: scoredResults) {
+    for (auto& result: scoredResults) {
       iter->setScore(result.score);
       iter->setUrl(result.result.getUrl());
       iter->setSnippet(result.result.getSnippet());
@@ -118,7 +118,7 @@ public:
 
   static bool checkResponse(SearchResultList::Reader response, int expectedGoodCount) {
     int goodCount = 0;
-    for (auto result: response.getResults()) {
+    for (auto& result: response.getResults()) {
       if (result.getScore() > 1001) {
         ++goodCount;
       } else {

@@ -65,10 +65,10 @@ static Declaration::Builder addNested(Declaration::Builder parent) {
 
   uint index = rand() % (oldNested.size() + 1);
 
-  for (uint i = 0; i < index; i++) {
+  for (uint i = 0; i < index; ++i) {
     newNested.setWithCaveats(i, oldNested[i]);
   }
-  for (uint i = index + 1; i < newNested.size(); i++) {
+  for (uint i = index + 1; i < newNested.size(); ++i) {
     newNested.setWithCaveats(i, oldNested[i - 1]);
   }
 
@@ -129,7 +129,7 @@ static kj::ConstFunction<void(Expression::Builder)> randomizeType(Expression::Bu
     setDeclName(app.initFunction(), "List");
     setDeclName(app.initParams(1)[0].initValue(), option->name);
     return [option](Expression::Builder builder) {
-      for (auto element: builder.initList(rand() % 4 + 1)) {
+      for (const auto& element: builder.initList(rand() % 4 + 1)) {
         option->makeValue(element);
       }
     };
@@ -210,7 +210,7 @@ static ChangeInfo structModifyField(Declaration::Builder decl, uint& nextOrdinal
   if (decl.isUnion()) {
     hasUnion = true;
   } else {
-    for (auto n: nested) {
+    for (const auto& n: nested) {
       if (n.isUnion() && n.getName().getValue().size() == 0) {
         hasUnion = true;
         break;
@@ -238,7 +238,7 @@ static ChangeInfo structGroupifyFields(
   kj::Vector<Orphan<Declaration>> notGroupified;
   auto orphanage = Orphanage::getForMessageContaining(decl);
 
-  for (auto nested: decl.getNestedDecls()) {
+  for (const auto& nested: decl.getNestedDecls()) {
     if (rand() % 2) {
       groupified.add(orphanage.newOrphanCopy(nested.asReader()));
     } else {
@@ -254,16 +254,16 @@ static ChangeInfo structGroupifyFields(
   auto newNested = decl.initNestedDecls(notGroupified.size() + 1);
   uint index = rand() % (notGroupified.size() + 1);
 
-  for (uint i = 0; i < index; i++) {
+  for (uint i = 0; i < index; ++i) {
     newNested.adoptWithCaveats(i, kj::mv(notGroupified[i]));
   }
-  for (uint i = index; i < notGroupified.size(); i++) {
+  for (uint i = index; i < notGroupified.size(); ++i) {
     newNested.adoptWithCaveats(i + 1, kj::mv(notGroupified[i]));
   }
 
   auto newGroup = newNested[index];
   auto groupNested = newGroup.initNestedDecls(groupified.size());
-  for (uint i = 0; i < groupified.size(); i++) {
+  for (uint i = 0; i < groupified.size(); ++i) {
     groupNested.adoptWithCaveats(i, kj::mv(groupified[i]));
   }
 
@@ -285,10 +285,10 @@ static ChangeInfo structPermuteFields(
 
   KJ_STACK_ARRAY(uint, mapping, old.size(), 16, 64);
 
-  for (uint i = 0; i < mapping.size(); i++) {
+  for (uint i = 0; i < mapping.size(); ++i) {
     mapping[i] = i;
   }
-  for (uint i = mapping.size() - 1; i > 0; i--) {
+  for (uint i = mapping.size() - 1; i > 0; --i) {
     uint j = rand() % i;
     uint temp = mapping[j];
     mapping[j] = mapping[i];
@@ -296,7 +296,7 @@ static ChangeInfo structPermuteFields(
   }
 
   auto newNested = decl.initNestedDecls(old.size());
-  for (uint i = 0; i < old.size(); i++) {
+  for (uint i = 0; i < old.size(); ++i) {
     newNested.setWithCaveats(i, old[mapping[i]]);
   }
 
@@ -596,7 +596,7 @@ Orphan<DynamicStruct> makeExampleStruct(
   Orphan<DynamicStruct> result = orphanage.newOrphan(schema);
   auto builder = result.get();
 
-  for (auto field: schema.getNonUnionFields()) {
+  for (const auto& field: schema.getNonUnionFields()) {
     setExampleField(builder, field, sharedOrdinalCount);
   }
 
@@ -619,7 +619,7 @@ Orphan<DynamicStruct> makeExampleStruct(
 void checkExampleStruct(DynamicStruct::Reader reader, uint sharedOrdinalCount) {
   auto schema = reader.getSchema();
 
-  for (auto field: schema.getNonUnionFields()) {
+  for (const auto& field: schema.getNonUnionFields()) {
     checkExampleField(reader, field, sharedOrdinalCount);
   }
 
@@ -669,7 +669,7 @@ static void loadStructAndGroups(const SchemaLoader& src, SchemaLoader& dst, uint
   auto proto = src.get(id).getProto();
   dst.load(proto);
 
-  for (auto field: proto.getStruct().getFields()) {
+  for (const auto& field: proto.getStruct().getFields()) {
     if (field.isGroup()) {
       loadStructAndGroups(src, dst, field.getGroup().getTypeId());
     }
@@ -695,7 +695,7 @@ static kj::Maybe<kj::Exception> loadFile(
           sharedOrdinalCount));
     }
 
-    for (auto schema: compiler.getLoader().getAllLoaded()) {
+    for (const auto& schema: compiler.getLoader().getAllLoaded()) {
       loader.load(schema.getProto());
     }
     return nullptr;
@@ -789,7 +789,7 @@ void doTest() {
 
       auto enumerants = decl.initNestedDecls(4);
 
-      for (uint i = 0; i < kj::size(RFC3092); i++) {
+      for (uint i = 0; i < kj::size(RFC3092); ++i) {
         auto enumerantDecl = enumerants[i];
         enumerantDecl.initName().setValue(RFC3092[i]);
         enumerantDecl.getId().initOrdinal().setValue(i);
@@ -798,7 +798,7 @@ void doTest() {
     }
 
     // For each of TYPE_OPTIONS, declare a struct type that contains that type as its @0 field.
-    for (uint i = 0; i < kj::size(TYPE_OPTIONS); i++) {
+    for (uint i = 0; i < kj::size(TYPE_OPTIONS); ++i) {
       auto decl = decls[3 + i];
       auto& option = TYPE_OPTIONS[i];
 
@@ -821,7 +821,7 @@ void doTest() {
 
   uint nextOrdinal = 0;
 
-  for (uint i = 0; i < 96; i++) {
+  for (uint i = 0; i < 96; ++i) {
     uint oldOrdinalCount = nextOrdinal;
 
     auto newBuilder = kj::heap<MallocMessageBuilder>();

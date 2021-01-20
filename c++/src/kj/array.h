@@ -608,7 +608,7 @@ struct Mapper<T(&)[s]> {
   template <typename Func>
   auto operator*(Func&& func) -> Array<decltype(func(*array))> {
     auto builder = heapArrayBuilder<decltype(func(*array))>(s);
-    for (size_t i = 0; i < s; i++) {
+    for (size_t i = 0; i < s; ++i) {
       builder.add(func(array[i]));
     }
     return builder.finish();

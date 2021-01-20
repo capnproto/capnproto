@@ -221,7 +221,7 @@ int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* arg
     KJ_ASSERT(argc > 0);
 
     KJ_STACK_ARRAY(StringPtr, params, argc - 1, 8, 32);
-    for (int i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; ++i) {
       params[i - 1] = argv[i];
     }
 
@@ -423,7 +423,7 @@ MainFunc MainBuilder::build() {
 void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const StringPtr> params) {
   Vector<StringPtr> arguments;
 
-  for (size_t i = 0; i < params.size(); i++) {
+  for (size_t i = 0; i < params.size(); ++i) {
     StringPtr param = params[i];
     if (param == "--") {
       // "--" ends option parsing.
@@ -478,7 +478,7 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
       }
     } else if (param.startsWith("-") && param.size() > 1) {
       // Short option(s).
-      for (uint j = 1; j < param.size(); j++) {
+      for (uint j = 1; j < param.size(); ++j) {
         char c = param[j];
         auto iter = impl->shortOptions.find(c);
         if (iter == impl->shortOptions.end()) {
@@ -533,7 +533,7 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
             uint count = 0;
             for (uint j = i + 2;
                  j < params.size() && (params[j] == "help" || params[j] == "--help");
-                 j++) {
+                 ++j) {
               ++count;
             }
 
@@ -591,7 +591,7 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
   StringPtr* argPos = arguments.begin();
   for (auto& argSpec: impl->args) {
     uint i = 0;
-    for (; i < argSpec.minCount; i++) {
+    for (; i < argSpec.minCount; ++i) {
       if (argPos == arguments.end()) {
         usageError(programName, str("missing argument ", argSpec.title));
       } else {
@@ -724,7 +724,7 @@ void MainBuilder::MainImpl::printHelp(StringPtr programName) {
     for (auto& command: impl->subCommands) {
       text.addAll(StringPtr("  "));
       text.addAll(command.first);
-      for (size_t i = command.first.size(); i < maxLen; i++) {
+      for (size_t i = command.first.size(); i < maxLen; ++i) {
         text.add(' ');
       }
       text.addAll(StringPtr("  "));
@@ -797,7 +797,7 @@ void MainBuilder::MainImpl::wrapText(Vector<char>& output, StringPtr indent, Str
     }
 
     uint wrapPos = width;
-    for (;; wrapPos--) {
+    for (;; --wrapPos) {
       if (wrapPos == 0) {
         // Hmm, no good place to break words.  Just break in the middle.
         wrapPos = width;

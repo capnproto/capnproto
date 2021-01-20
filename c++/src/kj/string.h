@@ -423,7 +423,7 @@ String strArray(T&& arr, const char* delim) {
   size_t delimLen = strlen(delim);
   KJ_STACK_ARRAY(decltype(_::STR * arr[0]), pieces, kj::size(arr), 8, 32);
   size_t size = 0;
-  for (size_t i = 0; i < kj::size(arr); i++) {
+  for (size_t i = 0; i < kj::size(arr); ++i) {
     if (i > 0) size += delimLen;
     pieces[i] = _::STR * arr[i];
     size += pieces[i].size();
@@ -431,7 +431,7 @@ String strArray(T&& arr, const char* delim) {
 
   String result = heapString(size);
   char* pos = result.begin();
-  for (size_t i = 0; i < kj::size(arr); i++) {
+  for (size_t i = 0; i < kj::size(arr); ++i) {
     if (i > 0) {
       memcpy(pos, delim, delimLen);
       pos += delimLen;
@@ -540,8 +540,8 @@ inline Maybe<size_t> StringPtr::findFirst(char c) const {
 
 inline Maybe<size_t> StringPtr::findLast(char c) const {
   for (size_t i = size(); i > 0; --i) {
-    if (content[i-1] == c) {
-      return i-1;
+    if (content[i - 1] == c) {
+      return i - 1;
     }
   }
   return nullptr;

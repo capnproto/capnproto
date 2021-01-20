@@ -746,7 +746,7 @@ KJ_TEST("register custom encoding handlers") {
 }
 
 KJ_TEST("register custom roundtrip handler") {
-  for (auto i = 1; i <= 2; i++) {
+  for (auto i = 1; i <= 2; ++i) {
     JsonCodec json;
     TestStructHandler staticHandler;
     TestDynamicStructHandler dynamicHandler;

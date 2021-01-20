@@ -227,7 +227,7 @@ private:
 
   friend class PathPtr;
 
-  static String stripNul(String input);
+  static String stripNul(const String& input);
   static void validatePart(StringPtr part);
   static void evalPart(Vector<String>& parts, ArrayPtr<const char> part);
   static Path evalImpl(Vector<String>&& parts, StringPtr path);

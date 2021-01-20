@@ -107,7 +107,7 @@ public:
   kj::Maybe<BrandedDecl> getMember(kj::StringPtr memberName, Expression::Reader subSource);
   // Get a member of this declaration.
 
-  kj::Maybe<Declaration::Which> getKind();
+  kj::Maybe<Declaration::Which> getKind() const;
   // Returns the kind of declaration, or null if this is an unbound generic variable.
 
   template <typename InitBrandFunc>

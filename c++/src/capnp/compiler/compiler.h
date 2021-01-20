@@ -112,7 +112,7 @@ public:
     // Result of compiling a module.
 
   public:
-    uint64_t getId() { return id; }
+    uint64_t getId() const { return id; }
 
     CompiledType getRoot();
     // Get a CompiledType representing the root, which can be used to programmatically look up

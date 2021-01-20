@@ -198,7 +198,7 @@ public:
 
   template <typename Func>
   void forEach(Func&& func) {
-    for (Id i = 0; i < slots.size(); i++) {
+    for (Id i = 0; i < slots.size(); ++i) {
       if (slots[i] != nullptr) {
         func(i, slots[i]);
       }

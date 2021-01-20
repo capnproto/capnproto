@@ -398,11 +398,11 @@ struct People {
 You might write code like:
 
 {% highlight c++ %}
-void processPeople(People::Reader people) {
+void processPeople(const People::Reader& people) {
   Map<Text, Person>::Reader reader = people.getByName();
   capnp::List<Map<Text, Person>::Entry>::Reader entries =
-      reader.getEntries()
-  for (auto entry: entries) {
+      reader.getEntries();
+  for (const auto& entry: entries) {
     processPerson(entry);
   }
 }
@@ -544,7 +544,7 @@ void dynamicWriteAddressBook(int fd, StructSchema schema) {
   writePackedMessageToFd(fd, message);
 }
 
-void dynamicPrintValue(DynamicValue::Reader value) {
+void dynamicPrintValue(const DynamicValue::Reader& value) {
   // Print an arbitrary message via the dynamic API by
   // iterating over the schema.  Look at the handling
   // of STRUCT in particular.
@@ -571,7 +571,7 @@ void dynamicPrintValue(DynamicValue::Reader value) {
     case DynamicValue::LIST: {
       std::cout << "[";
       bool first = true;
-      for (auto element: value.as<DynamicList>()) {
+      for (const auto& element: value.as<DynamicList>()) {
         if (first) {
           first = false;
         } else {
@@ -597,7 +597,7 @@ void dynamicPrintValue(DynamicValue::Reader value) {
       std::cout << "(";
       auto structValue = value.as<DynamicStruct>();
       bool first = true;
-      for (auto field: structValue.getSchema().getFields()) {
+      for (const auto& field: structValue.getSchema().getFields()) {
         if (!structValue.has(field)) continue;
         if (first) {
           first = false;

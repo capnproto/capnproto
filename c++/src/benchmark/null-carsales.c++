@@ -98,7 +98,7 @@ uint64_t carValue(const Car& car) {
 
   result += car.seats * 200;
   result += car.doors * 350;
-  for (auto wheel: car.wheels) {
+  for (auto& wheel: car.wheels) {
     result += wheel.diameter * wheel.diameter;
     result += wheel.snowTires ? 100 : 0;
   }

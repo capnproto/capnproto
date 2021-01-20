@@ -65,8 +65,8 @@ uint64_t traverseList(ListType list) {
   // out-of-bounds.
 
   uint64_t result = 0;
-  for (size_t i = list.size(); i != 0; i--) {
-    result += traverse(list[i-1]);
+  for (size_t i = list.size(); i != 0; --i) {
+    result += traverse(list[i - 1]);
   }
   return result;
 }
@@ -144,7 +144,7 @@ void fuzz(kj::ArrayPtr<word> data, uint flipCount, uint startAt, uint endAt) {
   if (flipCount == 0) {
     traverseCatchingExceptions<Checker>(data);
   } else {
-    for (uint i = startAt; i < endAt; i++) {
+    for (uint i = startAt; i < endAt; ++i) {
       byte bit = 1u << (i % 8);
       byte old = data.asBytes()[i / 8];
       data.asBytes()[i / 8] |= bit;
@@ -206,8 +206,8 @@ struct StructListChecker {
   static uint check(ReaderOrBuilder& message) {
     uint result = 0;
     auto l = message.template getRoot<List<TestAllTypes>>();
-    for (size_t i = l.size(); i > 0; i--) {
-      for (auto c: l[i-1].getTextField()) {
+    for (size_t i = l.size(); i > 0; --i) {
+      for (auto c: l[i - 1].getTextField()) {
         result += c;
       }
     }

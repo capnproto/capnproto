@@ -478,14 +478,14 @@ public:
 
     auto schemas = compiler->getLoader().getAllLoaded();
     auto nodes = request.initNodes(schemas.size());
-    for (size_t i = 0; i < schemas.size(); i++) {
+    for (size_t i = 0; i < schemas.size(); ++i) {
       nodes.setWithCaveats(i, schemas[i].getProto());
     }
 
     request.adoptSourceInfo(compiler->getAllSourceInfo(message.getOrphanage()));
 
     auto requestedFiles = request.initRequestedFiles(sourceFiles.size());
-    for (size_t i = 0; i < sourceFiles.size(); i++) {
+    for (size_t i = 0; i < sourceFiles.size(); ++i) {
       auto requestedFile = requestedFiles[i];
       requestedFile.setId(sourceFiles[i].id);
       requestedFile.setFilename(sourceFiles[i].name);
@@ -493,7 +493,7 @@ public:
           *sourceFiles[i].module, Orphanage::getForMessageContaining(requestedFile)));
     }
 
-    for (auto& output: outputs) {
+    for (const auto& output: outputs) {
       if (kj::str(output.name) == "-") {
         writeMessageToFd(STDOUT_FILENO, message);
         continue;
@@ -1380,7 +1380,7 @@ private:
     }
     while (pos < end) {
       byte tag = *pos++;
-      for (uint i = 0; i < 8 && pos < end; i++) {
+      for (uint i = 0; i < 8 && pos < end; ++i) {
         if (tag & (1 << i)) {
           byte b = *pos++;
           if (b == 0) {
@@ -1740,7 +1740,7 @@ public:
       }
 
       auto& subscripts = kj::get<1>(*pos);
-      for (uint i = 0; i < subscripts.size(); i++) {
+      for (uint i = 0; i < subscripts.size(); ++i) {
         uint64_t subscript = subscripts[i];
         if (value.getType() == DynamicValue::LIST) {
           auto listValue = value.as<DynamicList>();
@@ -1941,7 +1941,7 @@ private:
     auto path = cwd.evalNative(pathStr);
 
     KJ_REQUIRE(path.size() > 0);
-    for (size_t i = path.size() - 1; i > 0; i--) {
+    for (size_t i = path.size() - 1; i > 0; --i) {
       auto prefix = path.slice(0, i);
       auto remainder = path.slice(i, path.size());
 
@@ -1961,7 +1961,7 @@ private:
       // be OK if we aren't generating any output anyway, but otherwise the results will almost
       // certainly not be what the user wanted. Let's print a warning, unless the output directives
       // are ones which we know do not produce output files. This is a hack.
-      for (auto& output: outputs) {
+      for (const auto& output: outputs) {
         auto name = kj::str(output.name);
         if (name != "-" && name != "capnp") {
           context.warning(kj::str(pathStr,

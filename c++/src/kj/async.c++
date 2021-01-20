@@ -1574,7 +1574,7 @@ void EventLoop::run(uint maxTurnCount) {
   running = true;
   KJ_DEFER(running = false);
 
-  for (uint i = 0; i < maxTurnCount; i++) {
+  for (uint i = 0; i < maxTurnCount; ++i) {
     if (!turn()) {
       break;
     }

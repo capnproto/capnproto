@@ -525,7 +525,7 @@ public:
   // Like setDataField() but applies the given XOR mask before storing.  Used for writing fields
   // with non-zero default values.
 
-  KJ_ALWAYS_INLINE(PointerBuilder getPointerField(StructPointerOffset ptrIndex));
+  KJ_ALWAYS_INLINE(PointerBuilder getPointerField(StructPointerOffset ptrIndex) const);
   // Get a builder for a pointer field given the index within the pointer section.
 
   void clearAll();
@@ -1065,7 +1065,7 @@ inline void StructBuilder::setDataField(StructDataOffset offset,
   setDataField<Mask<T> >(offset, mask<T>(value, m));
 }
 
-inline PointerBuilder StructBuilder::getPointerField(StructPointerOffset ptrIndex) {
+inline PointerBuilder StructBuilder::getPointerField(StructPointerOffset ptrIndex) const {
   // Hacky because WirePointer is defined in the .c++ file (so is incomplete here).
   return PointerBuilder(segment, capTable, reinterpret_cast<WirePointer*>(
       reinterpret_cast<word*>(pointers) + ptrIndex * WORDS_PER_POINTER));

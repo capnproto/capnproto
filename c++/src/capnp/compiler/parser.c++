@@ -78,7 +78,7 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
   auto fileDecl = result.getRoot();
   fileDecl.setFile(VOID);
 
-  for (auto statement: statements) {
+  for (const auto& statement: statements) {
     KJ_IF_MAYBE(decl, parser.parseStatement(statement, parser.getParsers().fileLevelDecl)) {
       Declaration::Builder builder = decl->get();
       switch (builder.which()) {
@@ -118,12 +118,12 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
   }
 
   auto declsBuilder = fileDecl.initNestedDecls(decls.size());
-  for (size_t i = 0; i < decls.size(); i++) {
+  for (size_t i = 0; i < decls.size(); ++i) {
     declsBuilder.adoptWithCaveats(i, kj::mv(decls[i]));
   }
 
   auto annotationsBuilder = fileDecl.initAnnotations(annotations.size());
-  for (size_t i = 0; i < annotations.size(); i++) {
+  for (size_t i = 0; i < annotations.size(); ++i) {
     annotationsBuilder.adoptWithCaveats(i, kj::mv(annotations[i]));
   }
 }
@@ -259,7 +259,7 @@ public:
       Located<List<List<Token>>::Reader>&& items) const {
     auto result = kj::heapArray<kj::Maybe<p::OutputType<ItemParser, CapnpParser::ParserInput>>>(
         items.value.size());
-    for (uint i = 0; i < items.value.size(); i++) {
+    for (uint i = 0; i < items.value.size(); ++i) {
       auto item = items.value[i];
       CapnpParser::ParserInput input(item.begin(), item.end());
       result[i] = itemParser(input);
@@ -314,7 +314,7 @@ template <typename T>
 Orphan<List<T>> arrayToList(Orphanage& orphanage, kj::Array<Orphan<T>>&& elements) {
   auto result = orphanage.newOrphan<List<T>>(elements.size());
   auto builder = result.get();
-  for (size_t i = 0; i < elements.size(); i++) {
+  for (size_t i = 0; i < elements.size(); ++i) {
     builder.adoptWithCaveats(i, kj::mv(elements[i]));
   }
   return kj::mv(result);
@@ -347,7 +347,7 @@ static Declaration::Builder initDecl(
   initGenericParams(builder, kj::mv(genericParameters));
 
   auto list = builder.initAnnotations(annotations.size());
-  for (uint i = 0; i < annotations.size(); i++) {
+  for (uint i = 0; i < annotations.size(); ++i) {
     list.adoptWithCaveats(i, kj::mv(annotations[i]));
   }
   return builder;
@@ -360,7 +360,7 @@ static Declaration::Builder initMemberDecl(
   name.copyTo(builder.initName());
   builder.getId().adoptOrdinal(kj::mv(ordinal));
   auto list = builder.initAnnotations(annotations.size());
-  for (uint i = 0; i < annotations.size(); i++) {
+  for (uint i = 0; i < annotations.size(); ++i) {
     list.adoptWithCaveats(i, kj::mv(annotations[i]));
   }
   return builder;
@@ -482,7 +482,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                     auto result = orphanage.newOrphan<Expression>();
                     auto builder = result.get();
                     auto listBuilder = builder.initList(value.value.size());
-                    for (uint i = 0; i < value.value.size(); i++) {
+                    for (uint i = 0; i < value.value.size(); ++i) {
                       KJ_IF_MAYBE(element, value.value[i]) {
                         listBuilder.adoptWithCaveats(i, kj::mv(*element));
                       }
@@ -791,7 +791,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
           builder.getId().setUnspecified();
         }
         auto list = builder.initAnnotations(annotations.size());
-        for (uint i = 0; i < annotations.size(); i++) {
+        for (uint i = 0; i < annotations.size(); ++i) {
           list.adoptWithCaveats(i, kj::mv(annotations[i]));
         }
         builder.setUnion();
@@ -808,7 +808,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
         name.copyTo(builder.getName());
         builder.getId().setUnspecified();
         auto list = builder.initAnnotations(annotations.size());
-        for (uint i = 0; i < annotations.size(); i++) {
+        for (uint i = 0; i < annotations.size(); ++i) {
           list.adoptWithCaveats(i, kj::mv(annotations[i]));
         }
         builder.setGroup();
@@ -958,7 +958,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                      kj::mv(annotations)).initAnnotation();
         builder.adoptType(kj::mv(type));
         DynamicStruct::Builder dynamicBuilder = builder;
-        for (auto& maybeTarget: targets.value) {
+        for (const auto& maybeTarget: targets.value) {
           KJ_IF_MAYBE(target, maybeTarget) {
             if (target->value == "*") {
               // Set all.
@@ -967,7 +967,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                     "Wildcard should not be specified together with other targets.");
               }
 
-              for (auto field: dynamicBuilder.getSchema().getFields()) {
+              for (const auto& field: dynamicBuilder.getSchema().getFields()) {
                 if (field.getProto().getName().startsWith("targets")) {
                   dynamicBuilder.set(field, true);
                 }
@@ -1060,7 +1060,7 @@ kj::Maybe<Orphan<Declaration>> CapnpParser::parseStatement(
         KJ_IF_MAYBE(memberParser, output->memberParser) {
           auto memberStatements = statement.getBlock();
           kj::Vector<Orphan<Declaration>> members(memberStatements.size());
-          for (auto memberStatement: memberStatements) {
+          for (const auto& memberStatement: memberStatements) {
             KJ_IF_MAYBE(member, parseStatement(memberStatement, *memberParser)) {
               members.add(kj::mv(*member));
             }
@@ -1118,7 +1118,7 @@ static kj::StringTree expressionStringTree(Expression::Reader exp);
 
 static kj::StringTree tupleLiteral(List<Expression::Param>::Reader params) {
   auto parts = kj::heapArrayBuilder<kj::StringTree>(params.size());
-  for (auto param: params) {
+  for (const auto& param: params) {
     auto part = expressionStringTree(param.getValue());
     if (param.isNamed()) {
       part = kj::strTree(param.getNamed().getValue(), " = ", kj::mv(part));
@@ -1154,7 +1154,7 @@ static kj::StringTree expressionStringTree(Expression::Reader exp) {
     case Expression::LIST: {
       auto list = exp.getList();
       auto parts = kj::heapArrayBuilder<kj::StringTree>(list.size());
-      for (auto element: list) {
+      for (const auto& element: list) {
         parts.add(expressionStringTree(element));
       }
       return kj::strTree("[ ", kj::StringTree(parts.finish(), ", "), " ]");

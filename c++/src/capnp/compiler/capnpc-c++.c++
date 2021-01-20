@@ -92,7 +92,7 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
   switch (node.which()) {
     case schema::Node::STRUCT: {
       auto structNode = node.getStruct();
-      for (auto field: structNode.getFields()) {
+      for (const auto& field: structNode.getFields()) {
         switch (field.which()) {
           case schema::Field::SLOT:
             enumerateDeps(field.getSlot().getType(), deps);
@@ -109,10 +109,10 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
     }
     case schema::Node::INTERFACE: {
       auto interfaceNode = node.getInterface();
-      for (auto superclass: interfaceNode.getSuperclasses()) {
+      for (const auto& superclass: interfaceNode.getSuperclasses()) {
         deps.insert(superclass.getId());
       }
-      for (auto method: interfaceNode.getMethods()) {
+      for (const auto& method: interfaceNode.getMethods()) {
         deps.insert(method.getParamStructType());
         deps.insert(method.getResultStructType());
       }
@@ -399,7 +399,7 @@ private:
       } else {
         // Search among the parent's nested nodes to for this node, in order to determine its name.
         auto parentProto = parent.getProto();
-        for (auto nested: parentProto.getNestedNodes()) {
+        for (const auto& nested: parentProto.getNestedNodes()) {
           if (nested.getId() == node.getId()) {
             unqualifiedName = nested.getName();
             break;
@@ -408,7 +408,7 @@ private:
         if (unqualifiedName == nullptr) {
           // Hmm, maybe it's a group node?
           if (parentProto.isStruct()) {
-            for (auto field: parentProto.getStruct().getFields()) {
+            for (const auto& field: parentProto.getStruct().getFields()) {
               if (field.isGroup() && field.getGroup().getTypeId() == node.getId()) {
                 ownUnqualifiedName = toTitleCase(protoName(field));
                 unqualifiedName = ownUnqualifiedName;
@@ -563,7 +563,7 @@ private:
 
   template <typename P>
   kj::Maybe<schema::Value::Reader> annotationValue(P proto, uint64_t annotationId) {
-    for (auto annotation: proto.getAnnotations()) {
+    for (const auto& annotation: proto.getAnnotations()) {
       if (annotation.getId() == annotationId) {
         return annotation.getValue();
       }
@@ -755,7 +755,7 @@ private:
     auto scopes = kj::heapArrayBuilder<kj::StringTree>(scopeMap.size());
     kj::Vector<kj::StringTree> bindings(scopeMap.size() * 2);  // (estimate two params per scope)
 
-    for (auto& scope: scopeMap) {
+    for (const auto& scope: scopeMap) {
       scopes.add(kj::strTree("  { ",
         "0x", kj::hex(scope.first), ", "
         "brandBindings + ", bindings.size(), ", ",
@@ -763,7 +763,7 @@ private:
         "false"
       "},\n"));
 
-      for (auto param: scope.second) {
+      for (const auto& param: scope.second) {
         bindings.add(kj::strTree("  ::capnp::_::brandBindingFor<", param.getName(), ">(),\n"));
       }
     }
@@ -800,7 +800,7 @@ private:
         break;
 
       case schema::Node::STRUCT:
-        for (auto field: schema.asStruct().getFields()) {
+        for (const auto& field: schema.asStruct().getFields()) {
           ADD_DEP(FIELD, field.getIndex(), field.getType());
         }
         break;
@@ -834,7 +834,7 @@ private:
     }
 
     auto deps = kj::heapArrayBuilder<kj::StringTree>(depMap.size());
-    for (auto& entry: depMap) {
+    for (const auto& entry: depMap) {
       deps.add(kj::strTree("  { ", entry.first, ", ", kj::mv(entry.second), " },\n"));
     }
 
@@ -1070,7 +1070,7 @@ private:
       slots.add(Slot { schema::Type::UINT16, structProto.getDiscriminantOffset() });
     }
 
-    for (auto field: schema.getFields()) {
+    for (const auto& field: schema.getFields()) {
       auto proto = field.getProto();
       switch (proto.which()) {
         case schema::Field::SLOT: {
@@ -1098,7 +1098,7 @@ private:
     // All void slots are redundant, and they sort towards the front of the list.  By starting out
     // with `prevSlot` = void, we will end up skipping them all, which is what we want.
     Slot prevSlot = { schema::Type::VOID, 0 };
-    for (auto slot: slots) {
+    for (const auto& slot: slots) {
       if (prevSlot.isSupersetOf(slot)) {
         // This slot is redundant as prevSlot is a superset of it.
         continue;
@@ -2163,7 +2163,7 @@ private:
 
     auto implicitParamsReader = proto.getImplicitParameters();
     auto implicitParamsBuilder = kj::heapArrayBuilder<CppTypeName>(implicitParamsReader.size());
-    for (auto param: implicitParamsReader) {
+    for (const auto& param: implicitParamsReader) {
       implicitParamsBuilder.add(CppTypeName::makeTemplateParam(param.getName()));
     }
     auto implicitParams = implicitParamsBuilder.finish();
@@ -2325,7 +2325,7 @@ private:
 
   void getTransitiveSuperclasses(InterfaceSchema schema, std::map<uint64_t, InterfaceSchema>& map) {
     if (map.insert(std::make_pair(schema.getProto().getId(), schema)).second) {
-      for (auto sup: schema.getSuperclasses()) {
+      for (const auto& sup: schema.getSuperclasses()) {
         getTransitiveSuperclasses(sup, map);
       }
     }
@@ -2689,14 +2689,14 @@ private:
 
     // Compute nested nodes, including groups.
     kj::Vector<NodeText> nestedTexts(proto.getNestedNodes().size());
-    for (auto nested: proto.getNestedNodes()) {
+    for (const auto& nested: proto.getNestedNodes()) {
       nestedTexts.add(makeNodeText(
           namespace_, subScope, nested.getName(), schemaLoader.getUnbound(nested.getId()),\
           templateContext));
     };
 
     if (proto.isStruct()) {
-      for (auto field: proto.getStruct().getFields()) {
+      for (const auto& field: proto.getStruct().getFields()) {
         if (field.isGroup()) {
           nestedTexts.add(makeNodeText(
               namespace_, subScope, toTitleCase(protoName(field)),
@@ -2705,7 +2705,7 @@ private:
         }
       }
     } else if (proto.isInterface()) {
-      for (auto method: proto.getInterface().getMethods()) {
+      for (const auto& method: proto.getInterface().getMethods()) {
         {
           Schema params = schemaLoader.getUnbound(method.getParamStructType());
           auto paramsProto = schemaLoader.getUnbound(method.getParamStructType()).getProto();
@@ -2749,10 +2749,10 @@ private:
         auto structSchema = schema.asStruct();
         membersByName = makeMembersByName(structSchema.getFields());
         auto builder = kj::heapArrayBuilder<uint>(structSchema.getFields().size());
-        for (auto field: structSchema.getUnionFields()) {
+        for (const auto& field: structSchema.getUnionFields()) {
           builder.add(field.getIndex());
         }
-        for (auto field: structSchema.getNonUnionFields()) {
+        for (const auto& field: structSchema.getNonUnionFields()) {
           builder.add(field.getIndex());
         }
         membersByDiscrim = builder.finish();
@@ -2986,7 +2986,7 @@ private:
     kj::Vector<kj::ArrayPtr<const char>> namespaceParts;
     kj::String namespacePrefix;
 
-    for (auto annotation: node.getAnnotations()) {
+    for (const auto& annotation: node.getAnnotations()) {
       if (annotation.getId() == NAMESPACE_ANNOTATION_ID) {
         kj::StringPtr ns = annotation.getValue().getText();
         kj::StringPtr ns2 = ns;
@@ -3018,7 +3018,7 @@ private:
     kj::String separator = kj::str("// ", kj::repeat('=', 87), "\n");
 
     kj::Vector<kj::StringPtr> includes;
-    for (auto import: request.getImports()) {
+    for (const auto& import: request.getImports()) {
       if (usedImports.count(import.getId()) > 0) {
         includes.add(import.getName());
       }
@@ -3148,11 +3148,11 @@ private:
           compilerVersion, generatorVersion);
     }
 
-    for (auto node: request.getNodes()) {
+    for (const auto& node: request.getNodes()) {
       schemaLoader.load(node);
     }
 
-    for (auto requestedFile: request.getRequestedFiles()) {
+    for (const auto& requestedFile: request.getRequestedFiles()) {
       auto schema = schemaLoader.get(requestedFile.getId());
       auto fileText = makeFileText(schema, requestedFile);
 

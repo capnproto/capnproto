@@ -506,7 +506,7 @@ kj::Maybe<StructSchema::Field> DynamicStruct::Builder::which() {
   return schema.getFieldByDiscriminant(discrim);
 }
 
-void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::Reader& value) {
+void DynamicStruct::Builder::set(const StructSchema::Field& field, const DynamicValue::Reader& value) {
   KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
   setInUnion(field);
 
@@ -656,7 +656,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
         dst.set(*unionField, src.get(*unionField));
       }
 
-      for (auto field: src.schema.getNonUnionFields()) {
+      for (const auto& field: src.schema.getNonUnionFields()) {
         if (src.has(field)) {
           dst.set(field, src.get(field));
         }
@@ -750,7 +750,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
   KJ_UNREACHABLE;
 }
 
-void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValue>&& orphan) {
+void DynamicStruct::Builder::adopt(const StructSchema::Field& field, Orphan<DynamicValue>&& orphan) {
   KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
   setInUnion(field);
 
@@ -842,7 +842,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
         dst.adopt(*unionField, src.disown(*unionField));
       }
 
-      for (auto field: src.schema.getNonUnionFields()) {
+      for (const auto& field: src.schema.getNonUnionFields()) {
         if (src.has(field)) {
           dst.adopt(field, src.disown(field));
         }
@@ -912,7 +912,7 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
         src.clear(*unionField);
       }
 
-      for (auto field: src.schema.getNonUnionFields()) {
+      for (const auto& field: src.schema.getNonUnionFields()) {
         if (src.has(field)) {
           dst.adopt(field, src.disown(field));
         }
@@ -925,7 +925,7 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
   KJ_UNREACHABLE;
 }
 
-void DynamicStruct::Builder::clear(StructSchema::Field field) {
+void DynamicStruct::Builder::clear(const StructSchema::Field& field) {
   KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
   setInUnion(field);
 
@@ -982,7 +982,7 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
         group.clear(*unionField);
       }
 
-      for (auto subField: group.schema.getNonUnionFields()) {
+      for (const auto& subField: group.schema.getNonUnionFields()) {
         group.clear(subField);
       }
       return;
@@ -1014,7 +1014,7 @@ void DynamicStruct::Builder::set(kj::StringPtr name,
                                  std::initializer_list<DynamicValue::Reader> value) {
   auto list = init(name, value.size()).as<DynamicList>();
   uint i = 0;
-  for (auto element: value) {
+  for (const auto& element: value) {
     list.set(i++, element);
   }
 }
@@ -1416,7 +1416,7 @@ Orphan<DynamicValue> DynamicList::Builder::disown(uint index) {
 void DynamicList::Builder::copyFrom(std::initializer_list<DynamicValue::Reader> value) {
   KJ_REQUIRE(value.size() == size(), "DynamicList::copyFrom() argument had different size.");
   uint i = 0;
-  for (auto element: value) {
+  for (const auto& element: value) {
     set(i++, element);
   }
 }

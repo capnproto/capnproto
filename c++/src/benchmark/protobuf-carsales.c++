@@ -74,7 +74,7 @@ void randomCar(Car* car) {
   car->set_seats(2 + fastRand(6));
   car->set_doors(2 + fastRand(3));
 
-  for (uint i = 0; i < 4; i++) {
+  for (uint i = 0; i < 4; ++i) {
     Wheel* wheel = car->add_wheel();
     wheel->set_diameter(25 + fastRand(15));
     wheel->set_air_pressure(30 + fastRandDouble(20));
@@ -111,7 +111,7 @@ public:
   static uint64_t setupRequest(ParkingLot* request) {
     uint count = fastRand(200);
     uint64_t result = 0;
-    for (uint i = 0; i < count; i++) {
+    for (uint i = 0; i < count; ++i) {
       Car* car = request->add_car();
       randomCar(car);
       result += carValue(*car);

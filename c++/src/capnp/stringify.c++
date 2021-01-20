@@ -97,7 +97,7 @@ private:
 
   static bool canPrintAllInline(const kj::Array<kj::StringTree>& items, PrintKind kind) {
     size_t totalSize = 0;
-    for (auto& item: items) {
+    for (const auto& item: items) {
       if (!canPrintInline(item)) return false;
       if (kind == PrintKind::RECORD) {
         totalSize += item.size();
@@ -190,7 +190,7 @@ static kj::StringTree print(const DynamicValue::Reader& value,
         }
       }
 
-      for (auto field: nonUnionFields) {
+      for (const auto& field: nonUnionFields) {
         KJ_IF_MAYBE(unionField, which) {
           if (unionField->getIndex() < field.getIndex()) {
             printedFields.add(kj::mv(unionValue));

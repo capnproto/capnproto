@@ -134,7 +134,7 @@ struct JsonCodec::Impl {
                             bool hasMultilineElement, uint indent, bool& multiline,
                             bool hasPrefix) const {
     size_t maxChildSize = 0;
-    for (auto& e: elements) maxChildSize = kj::max(maxChildSize, e.size());
+    for (const auto& e: elements) maxChildSize = kj::max(maxChildSize, e.size());
 
     kj::StringPtr prefix;
     kj::StringPtr delim;
@@ -382,7 +382,7 @@ Orphan<DynamicList> JsonCodec::decodeArray(List<JsonValue>::Reader input, ListSc
 
 void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const {
   KJ_REQUIRE(input.isObject(), "Expected object value") { return; }
-  for (auto field: input.getObject()) {
+  for (const auto& field: input.getObject()) {
     KJ_IF_MAYBE(fieldSchema, type.findFieldByName(field.getName())) {
       decodeField(*fieldSchema, field.getValue(), orphanage, output);
     } else {
@@ -930,7 +930,7 @@ public:
       //   the parent struct type itself is annotated.
       // So if we received `null` as the constructor parameter, check for annotations on the struct
       // type.
-      for (auto anno: schemaProto.getAnnotations()) {
+      for (const auto& anno: schemaProto.getAnnotations()) {
         switch (anno.getId()) {
           case JSON_DISCRIMINATOR_ANNOTATION_ID:
             discriminator = anno.getValue().getStruct().getAs<json::DiscriminatorOptions>();
@@ -975,7 +975,7 @@ public:
 
       kj::Maybe<json::DiscriminatorOptions::Reader> subDiscriminator;
       bool flattened = false;
-      for (auto anno: field.getProto().getAnnotations()) {
+      for (const auto& anno: field.getProto().getAnnotations()) {
         switch (anno.getId()) {
           case JSON_NAME_ANNOTATION_ID:
             info.name = anno.getValue().getText();
@@ -1030,7 +1030,7 @@ public:
 
       KJ_IF_MAYBE(fh, info.flattenHandler) {
         // Set up fieldsByName for each of the child's fields.
-        for (auto& entry: fh->fieldsByName) {
+        for (const auto& entry: fh->fieldsByName) {
           kj::StringPtr flattenedName;
           kj::String ownName;
           if (info.prefix.size() > 0) {
@@ -1123,7 +1123,7 @@ public:
     KJ_REQUIRE(input.isObject());
     kj::HashSet<const void*> unionsSeen;
     kj::Vector<JsonValue::Field::Reader> retries;
-    for (auto field: input.getObject()) {
+    for (const auto& field: input.getObject()) {
       if (!decodeField(codec, field.getName(), field.getValue(), output, unionsSeen)) {
         retries.add(field);
       }
@@ -1131,7 +1131,7 @@ public:
     while (!retries.empty()) {
       auto retriesCopy = kj::mv(retries);
       KJ_ASSERT(retries.empty());
-      for (auto field: retriesCopy) {
+      for (const auto& field: retriesCopy) {
         if (!decodeField(codec, field.getName(), field.getValue(), output, unionsSeen)) {
           retries.add(field);
         }
@@ -1227,7 +1227,7 @@ private:
 
     auto reader = input.as<DynamicStruct>();
     auto schema = reader.getSchema();
-    for (auto field: schema.getNonUnionFields()) {
+    for (const auto& field: schema.getNonUnionFields()) {
       auto& info = fields[field.getIndex()];
       if (!reader.has(field, codec.impl->hasMode)) {
         // skip
@@ -1336,11 +1336,11 @@ public:
     auto enumerants = schema.getEnumerants();
     auto builder = kj::heapArrayBuilder<kj::StringPtr>(enumerants.size());
 
-    for (auto e: enumerants) {
+    for (const auto& e: enumerants) {
       auto proto = e.getProto();
       kj::StringPtr name = proto.getName();
 
-      for (auto anno: proto.getAnnotations()) {
+      for (const auto& anno: proto.getAnnotations()) {
         switch (anno.getId()) {
           case JSON_NAME_ANNOTATION_ID:
             name = anno.getValue().getText();
@@ -1443,7 +1443,7 @@ JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
   };
 }
 
-void JsonCodec::handleByAnnotation(Schema schema) {
+void JsonCodec::handleByAnnotation(const Schema& schema) {
   switch (schema.getProto().which()) {
     case schema::Node::STRUCT: {
       if (schema.getProto().getId() == capnp::typeId<JsonValue>()) {
@@ -1453,7 +1453,7 @@ void JsonCodec::handleByAnnotation(Schema schema) {
       } else {
         kj::Vector<Schema> dependencies;
         loadAnnotatedHandler(schema.asStruct(), nullptr, nullptr, dependencies);
-        for (auto dep: dependencies) {
+        for (const auto& dep: dependencies) {
           handleByAnnotation(dep);
         }
       }

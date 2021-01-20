@@ -206,7 +206,7 @@ public:
   void addFieldHandler(StructSchema::Field field, Handler<T>& handler);
   // Matches only the specific field. T can be a dynamic type. T must match the field's type.
 
-  void handleByAnnotation(Schema schema);
+  void handleByAnnotation(const Schema& schema);
   template <typename T> void handleByAnnotation();
   // Inspects the given type (as specified by type parameter or dynamic schema) and all its
   // dependencies looking for JSON annotations (see json.capnp), building and registering Handlers

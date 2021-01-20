@@ -258,7 +258,7 @@ public:
     kj::ArrayPtr<const _::RawSchema*> result =
         loader.arena.allocateArray<const _::RawSchema*>(*count);
     uint pos = 0;
-    for (auto& dep: dependencies) {
+    for (const auto& dep: dependencies) {
       result[pos++] = dep.value;
     }
     KJ_DASSERT(pos == *count);
@@ -269,7 +269,7 @@ public:
     *count = members.size();
     kj::ArrayPtr<uint16_t> result = loader.arena.allocateArray<uint16_t>(*count);
     uint pos = 0;
-    for (auto& member: members) {
+    for (const auto& member: members) {
       result[pos++] = member.value;
     }
     KJ_DASSERT(pos == *count);
@@ -335,7 +335,7 @@ private:
 
     uint index = 0;
     uint nextOrdinal = 0;
-    for (auto field: fields) {
+    for (const auto& field: fields) {
       KJ_CONTEXT("validating struct field", field.getName());
 
       validateMemberName(field.getName(), index);
@@ -411,7 +411,7 @@ private:
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
     uint index = 0;
-    for (auto enumerant: enumerants) {
+    for (const auto& enumerant: enumerants) {
       validateMemberName(enumerant.getName(), index++);
 
       VALIDATE_SCHEMA(enumerant.getCodeOrder() < enumerants.size() &&
@@ -422,7 +422,7 @@ private:
   }
 
   void validate(const schema::Node::Interface::Reader& interfaceNode) {
-    for (auto extend: interfaceNode.getSuperclasses()) {
+    for (const auto& extend: interfaceNode.getSuperclasses()) {
       validateTypeId(extend.getId(), schema::Node::INTERFACE);
       validate(extend.getBrand());
     }
@@ -432,7 +432,7 @@ private:
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
     uint index = 0;
-    for (auto method: methods) {
+    for (const auto& method: methods) {
       KJ_CONTEXT("validating method", method.getName());
       validateMemberName(method.getName(), index++);
 
@@ -546,10 +546,10 @@ private:
   }
 
   void validate(const schema::Brand::Reader& brand) {
-    for (auto scope: brand.getScopes()) {
+    for (const auto& scope: brand.getScopes()) {
       switch (scope.which()) {
         case schema::Brand::Scope::BIND:
-          for (auto binding: scope.getBind()) {
+          for (const auto& binding: scope.getBind()) {
             switch (binding.which()) {
               case schema::Brand::Binding::UNBOUND:
                 break;
@@ -771,7 +771,7 @@ private:
       replacementIsOlder();
     }
 
-    for (uint i = 0; i < count; i++) {
+    for (uint i = 0; i < count; ++i) {
       checkCompatibility(fields[i], replacementFields[i]);
     }
 
@@ -864,10 +864,10 @@ private:
 
       kj::Vector<uint64_t> superclasses;
       kj::Vector<uint64_t> replacementSuperclasses;
-      for (auto superclass: interfaceNode.getSuperclasses()) {
+      for (const auto& superclass: interfaceNode.getSuperclasses()) {
         superclasses.add(superclass.getId());
       }
-      for (auto superclass: replacement.getSuperclasses()) {
+      for (const auto& superclass: replacement.getSuperclasses()) {
         replacementSuperclasses.add(superclass.getId());
       }
       std::sort(superclasses.begin(), superclasses.end());
@@ -907,7 +907,7 @@ private:
 
     uint count = std::min(methods.size(), replacementMethods.size());
 
-    for (uint i = 0; i < count; i++) {
+    for (uint i = 0; i < count; ++i) {
       checkCompatibility(methods[i], replacementMethods[i]);
     }
   }
@@ -1360,7 +1360,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     // We need to set the dependency list to point at other loader-owned RawSchemas.
     kj::ArrayPtr<const _::RawSchema*> dependencies =
         arena.allocateArray<const _::RawSchema*>(schema->dependencyCount);
-    for (uint i = 0; i < nativeSchema->dependencyCount; i++) {
+    for (uint i = 0; i < nativeSchema->dependencyCount; ++i) {
       dependencies[i] = loadNative(nativeSchema->dependencies[i]);
     }
     schema->dependencies = dependencies.begin();
@@ -1383,7 +1383,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     schema->canCastTo = nativeSchema;
 
     // Make sure the dependencies are loaded and compatible.
-    for (uint i = 0; i < nativeSchema->dependencyCount; i++) {
+    for (uint i = 0; i < nativeSchema->dependencyCount; ++i) {
       loadNative(nativeSchema->dependencies[i]);
     }
   }
@@ -1443,7 +1443,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
   memset(dstScopes.begin(), 0, dstScopes.size() * sizeof(dstScopes[0]));
 
   uint dstScopeCount = 0;
-  for (auto srcScope: srcScopes) {
+  for (const auto& srcScope: srcScopes) {
     switch (srcScope.which()) {
       case schema::Brand::Scope::BIND: {
         auto srcBindings = srcScope.getBind();
@@ -1481,7 +1481,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
         dstScope.typeId = srcScope.getScopeId();
 
         KJ_IF_MAYBE(b, clientBrand) {
-          for (auto& clientScope: *b) {
+          for (const auto& clientScope: *b) {
             if (clientScope.typeId == dstScope.typeId) {
               // Overwrite the whole thing.
               dstScope = clientScope;
@@ -1681,7 +1681,7 @@ void SchemaLoader::Impl::makeDep(_::RawBrandedSchema::Binding& result,
 
           KJ_IF_MAYBE(b, brandBindings) {
             // TODO(perf): We could binary search here, but... bleh.
-            for (auto& scope: *b) {
+            for (const auto& scope: *b) {
               if (scope.typeId == id) {
                 if (scope.isUnbound) {
                   // Unbound brand parameter.
@@ -1813,13 +1813,13 @@ const _::RawBrandedSchema* SchemaLoader::Impl::getUnbound(const _::RawSchema* sc
 
 kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
   size_t count = 0;
-  for (auto& schema: schemas) {
+  for (const auto& schema: schemas) {
     if (schema.value->lazyInitializer == nullptr) ++count;
   }
 
   kj::Array<Schema> result = kj::heapArray<Schema>(count);
   size_t i = 0;
-  for (auto& schema: schemas) {
+  for (const auto& schema: schemas) {
     if (schema.value->lazyInitializer == nullptr) {
       result[i++] = Schema(&schema.value->defaultBrand);
     }

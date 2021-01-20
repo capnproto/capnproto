@@ -75,7 +75,7 @@ public:
     lineBreaks.get([&](kj::SpaceFor<kj::Vector<uint>>& space) {
       auto vec = space.construct(content.size() / 40);
       vec->add(0);
-      for (const char* pos = content.begin(); pos < content.end(); ++pos) {
+      for (auto pos = content.begin(); pos < content.end(); ++pos) {
         if (*pos == '\n') {
           vec->add(pos + 1 - content.begin());
         }
@@ -416,7 +416,7 @@ public:
     // djb hash with xor
     // TODO(someday):  Add hashing library to KJ.
     size_t result = reinterpret_cast<uintptr_t>(&baseDir);
-    for (auto& part: path) {
+    for (const auto& part: path) {
       for (char c: part) {
         result = (result * 33) ^ c;
       }

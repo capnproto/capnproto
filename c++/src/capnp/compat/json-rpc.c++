@@ -38,7 +38,7 @@ public:
     auto proto = method.getProto();
     bool isNotification = false;
     kj::StringPtr name = proto.getName();
-    for (auto annotation: proto.getAnnotations()) {
+    for (const auto& annotation: proto.getAnnotations()) {
       switch (annotation.getId()) {
         case JSON_NAME_ANNOTATION_ID:
           name = annotation.getValue().getText();
@@ -112,10 +112,10 @@ JsonRpc::JsonRpc(Transport& transport, DynamicCapability::Client interfaceParam,
   codec.handleByAnnotation(interface.getSchema());
   codec.handleByAnnotation<json::RpcMessage>();
 
-  for (auto method: interface.getSchema().getMethods()) {
+  for (const auto& method: interface.getSchema().getMethods()) {
     auto proto = method.getProto();
     kj::StringPtr name = proto.getName();
-    for (auto annotation: proto.getAnnotations()) {
+    for (const auto& annotation: proto.getAnnotations()) {
       switch (annotation.getId()) {
         case JSON_NAME_ANNOTATION_ID:
           name = annotation.getValue().getText();

@@ -73,9 +73,9 @@ public:
        List<Declaration::BrandParameter>::Reader genericParams);
   // Create a dummy node representing a built-in declaration, like "Int32" or "true".
 
-  uint64_t getId() { return id; }
-  uint getParameterCount() { return genericParamCount; }
-  Declaration::Which getKind() { return kind; }
+  uint64_t getId() const { return id; }
+  uint getParameterCount() const { return genericParamCount; }
+  Declaration::Which getKind() const { return kind; }
 
   kj::Maybe<Schema> getBootstrapSchema();
   kj::Maybe<schema::Node::Reader> getFinalSchema();
@@ -482,7 +482,7 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
       // Expand the child nodes.
       auto& arena = module->getCompiler().getNodeArena();
 
-      for (auto nestedDecl: declaration.getNestedDecls()) {
+      for (const auto& nestedDecl: declaration.getNestedDecls()) {
         switch (nestedDecl.which()) {
           case Declaration::FILE:
           case Declaration::CONST:
@@ -559,7 +559,7 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
           module->getCompiler().shouldCompileAnnotations());
       KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&](){
         auto nodeSet = content.translator->getBootstrapNode();
-        for (auto& auxNode: nodeSet.auxNodes) {
+        for (const auto& auxNode: nodeSet.auxNodes) {
           workspace.bootstrapLoader.loadOnce(auxNode);
         }
         content.bootstrapSchema = workspace.bootstrapLoader.loadOnce(nodeSet.node);
@@ -687,7 +687,7 @@ void Compiler::Node::traverse(uint eagerness, std::unordered_map<Node*, uint>& s
         uint newEagerness = (eagerness & ~(DEPENDENCIES - 1)) | (eagerness / DEPENDENCIES);
 
         traverseNodeDependencies(*schema, newEagerness, seen, finalLoader, sourceInfo);
-        for (auto& aux: content->auxSchemas) {
+        for (const auto& aux: content->auxSchemas) {
           traverseNodeDependencies(aux, newEagerness, seen, finalLoader, sourceInfo);
         }
       }
@@ -723,7 +723,7 @@ void Compiler::Node::traverseNodeDependencies(
     kj::Vector<schema::Node::SourceInfo::Reader>& sourceInfo) {
   switch (schemaNode.which()) {
     case schema::Node::STRUCT:
-      for (auto field: schemaNode.getStruct().getFields()) {
+      for (const auto& field: schemaNode.getStruct().getFields()) {
         switch (field.which()) {
           case schema::Field::SLOT:
             traverseType(field.getSlot().getType(), eagerness, seen, finalLoader, sourceInfo);
@@ -738,21 +738,21 @@ void Compiler::Node::traverseNodeDependencies(
       break;
 
     case schema::Node::ENUM:
-      for (auto enumerant: schemaNode.getEnum().getEnumerants()) {
+      for (const auto& enumerant: schemaNode.getEnum().getEnumerants()) {
         traverseAnnotations(enumerant.getAnnotations(), eagerness, seen, finalLoader, sourceInfo);
       }
       break;
 
     case schema::Node::INTERFACE: {
       auto interface = schemaNode.getInterface();
-      for (auto superclass: interface.getSuperclasses()) {
+      for (const auto& superclass: interface.getSuperclasses()) {
         uint64_t superclassId = superclass.getId();
         if (superclassId != 0) {  // if zero, we reported an error earlier
           traverseDependency(superclassId, eagerness, seen, finalLoader, sourceInfo);
         }
         traverseBrand(superclass.getBrand(), eagerness, seen, finalLoader, sourceInfo);
       }
-      for (auto method: interface.getMethods()) {
+      for (const auto& method: interface.getMethods()) {
         traverseDependency(
             method.getParamStructType(), eagerness, seen, finalLoader, sourceInfo, true);
         traverseBrand(method.getParamBrand(), eagerness, seen, finalLoader, sourceInfo);
@@ -814,10 +814,10 @@ void Compiler::Node::traverseBrand(
     std::unordered_map<Node*, uint>& seen,
     const SchemaLoader& finalLoader,
     kj::Vector<schema::Node::SourceInfo::Reader>& sourceInfo) {
-  for (auto scope: brand.getScopes()) {
+  for (const auto& scope: brand.getScopes()) {
     switch (scope.which()) {
       case schema::Brand::Scope::BIND:
-        for (auto binding: scope.getBind()) {
+        for (const auto& binding: scope.getBind()) {
           switch (binding.which()) {
             case schema::Brand::Binding::UNBOUND:
               break;
@@ -850,7 +850,7 @@ void Compiler::Node::traverseAnnotations(const List<schema::Annotation>::Reader&
                                          std::unordered_map<Node*, uint>& seen,
                                          const SchemaLoader& finalLoader,
                                          kj::Vector<schema::Node::SourceInfo::Reader>& sourceInfo) {
-  for (auto annotation: annotations) {
+  for (const auto& annotation: annotations) {
     KJ_IF_MAYBE(node, module->getCompiler().findNode(annotation.getId())) {
       node->traverse(eagerness, seen, finalLoader, sourceInfo);
     }
@@ -1030,13 +1030,13 @@ static void findImports(Expression::Reader exp, std::set<kj::StringPtr>& output)
       break;
 
     case Expression::LIST:
-      for (auto element: exp.getList()) {
+      for (const auto& element: exp.getList()) {
         findImports(element, output);
       }
       break;
 
     case Expression::TUPLE:
-      for (auto element: exp.getTuple()) {
+      for (const auto& element: exp.getTuple()) {
         findImports(element.getValue(), output);
       }
       break;
@@ -1044,7 +1044,7 @@ static void findImports(Expression::Reader exp, std::set<kj::StringPtr>& output)
     case Expression::APPLICATION: {
       auto app = exp.getApplication();
       findImports(app.getFunction(), output);
-      for (auto param: app.getParams()) {
+      for (const auto& param: app.getParams()) {
         findImports(param.getValue(), output);
       }
       break;
@@ -1060,9 +1060,9 @@ static void findImports(Expression::Reader exp, std::set<kj::StringPtr>& output)
 static void findImports(Declaration::ParamList::Reader paramList, std::set<kj::StringPtr>& output) {
   switch (paramList.which()) {
     case Declaration::ParamList::NAMED_LIST:
-      for (auto param: paramList.getNamedList()) {
+      for (const auto& param: paramList.getNamedList()) {
         findImports(param.getType(), output);
-        for (auto ann: param.getAnnotations()) {
+        for (const auto& ann: param.getAnnotations()) {
           findImports(ann.getName(), output);
         }
       }
@@ -1088,7 +1088,7 @@ static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& outpu
       findImports(decl.getField().getType(), output);
       break;
     case Declaration::INTERFACE:
-      for (auto superclass: decl.getInterface().getSuperclasses()) {
+      for (const auto& superclass: decl.getInterface().getSuperclasses()) {
         findImports(superclass, output);
       }
       break;
@@ -1105,11 +1105,11 @@ static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& outpu
       break;
   }
 
-  for (auto ann: decl.getAnnotations()) {
+  for (const auto& ann: decl.getAnnotations()) {
     findImports(ann.getName(), output);
   }
 
-  for (auto nested: decl.getNestedDecls()) {
+  for (const auto& nested: decl.getNestedDecls()) {
     findImports(nested, output);
   }
 }
@@ -1147,7 +1147,7 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
   // defines a builtin declaration visible in the global scope.
 
   StructSchema declSchema = Schema::from<Declaration>();
-  for (auto field: declSchema.getFields()) {
+  for (const auto& field: declSchema.getFields()) {
     auto fieldProto = field.getProto();
     if (fieldProto.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT) {
       auto name = fieldProto.getName();
@@ -1155,7 +1155,7 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
         kj::StringPtr symbolName = name.slice(strlen("builtin"));
 
         List<Declaration::BrandParameter>::Reader params;
-        for (auto annotation: fieldProto.getAnnotations()) {
+        for (const auto& annotation: fieldProto.getAnnotations()) {
           if (annotation.getId() == 0x94099c3f9eb32d6bull) {
             params = annotation.getValue().getList().getAs<List<Declaration::BrandParameter>>();
             break;
@@ -1271,7 +1271,7 @@ Orphan<List<schema::Node::SourceInfo>> Compiler::Impl::getAllSourceInfo(Orphanag
 
   auto builder = result.get();
   size_t i = 0;
-  for (auto& entry: sourceInfoById) {
+  for (const auto& entry: sourceInfoById) {
     builder.setWithCaveats(i++, entry.second);
   }
 
@@ -1287,7 +1287,7 @@ void Compiler::Impl::eagerlyCompile(uint64_t id, uint eagerness,
 
     // Copy the SourceInfo structures into permanent space so that they aren't invalidated when
     // clearWorkspace() is called.
-    for (auto& sourceInfo: sourceInfos) {
+    for (const auto& sourceInfo: sourceInfos) {
       auto words = nodeArena.allocateArray<word>(sourceInfo.totalSize().wordCount + 1);
       memset(words.begin(), 0, words.asBytes().size());
       copyToUnchecked(sourceInfo, words);

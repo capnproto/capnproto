@@ -52,7 +52,7 @@ public:
     int goodCount = 0;
 
     request->init(count);
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; ++i) {
       SearchResult& result = request->items[i];
       result.score = 1000 - i;
       char* pos = reinterpret_cast<char*>(arenaPos);
@@ -61,7 +61,7 @@ public:
       strcpy(pos, "http://example.com/");
       pos += strlen("http://example.com/");
       int urlSize = fastRand(100);
-      for (int j = 0; j < urlSize; j++) {
+      for (int j = 0; j < urlSize; ++j) {
         *pos++ = 'a' + fastRand(26);
       }
       *pos++ = '\0';
@@ -81,7 +81,7 @@ public:
       *pos++ = ' ';
 
       int prefix = fastRand(20);
-      for (int j = 0; j < prefix; j++) {
+      for (int j = 0; j < prefix; ++j) {
         const char* word = WORDS[fastRand(WORDS_COUNT)];
         size_t len = strlen(word);
         memcpy(pos, word, len);
@@ -98,7 +98,7 @@ public:
       }
 
       int suffix = fastRand(20);
-      for (int j = 0; j < suffix; j++) {
+      for (int j = 0; j < suffix; ++j) {
         const char* word = WORDS[fastRand(WORDS_COUNT)];
         size_t len = strlen(word);
         memcpy(pos, word, len);

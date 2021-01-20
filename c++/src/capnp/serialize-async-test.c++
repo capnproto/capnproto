@@ -279,7 +279,7 @@ TEST(SerializeAsyncTest, WriteAsync) {
   TestMessageBuilder message(1);
   auto root = message.getRoot<TestAllTypes>();
   auto list = root.initStructList(16);
-  for (auto element: list) {
+  for (const auto& element: list) {
     initTestMessage(element);
   }
 
@@ -288,7 +288,7 @@ TEST(SerializeAsyncTest, WriteAsync) {
     InputStreamMessageReader reader(input);
     auto listReader = reader.getRoot<TestAllTypes>().getStructList();
     EXPECT_EQ(list.size(), listReader.size());
-    for (auto element: listReader) {
+    for (const auto& element: listReader) {
       checkTestMessage(element);
     }
   });
@@ -304,7 +304,7 @@ TEST(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
   TestMessageBuilder message(7);
   auto root = message.getRoot<TestAllTypes>();
   auto list = root.initStructList(16);
-  for (auto element: list) {
+  for (const auto& element: list) {
     initTestMessage(element);
   }
 
@@ -313,7 +313,7 @@ TEST(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
     InputStreamMessageReader reader(input);
     auto listReader = reader.getRoot<TestAllTypes>().getStructList();
     EXPECT_EQ(list.size(), listReader.size());
-    for (auto element: listReader) {
+    for (const auto& element: listReader) {
       checkTestMessage(element);
     }
   });
@@ -329,7 +329,7 @@ TEST(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
   TestMessageBuilder message(10);
   auto root = message.getRoot<TestAllTypes>();
   auto list = root.initStructList(16);
-  for (auto element: list) {
+  for (const auto& element: list) {
     initTestMessage(element);
   }
 
@@ -338,7 +338,7 @@ TEST(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
     InputStreamMessageReader reader(input);
     auto listReader = reader.getRoot<TestAllTypes>().getStructList();
     EXPECT_EQ(list.size(), listReader.size());
-    for (auto element: listReader) {
+    for (const auto& element: listReader) {
       checkTestMessage(element);
     }
   });
@@ -358,7 +358,7 @@ TEST(SerializeAsyncTest, WriteMultipleMessagesAsync) {
     messages.add(i+1);
     auto root = messages[i].getRoot<TestAllTypes>();
     auto list = root.initStructList(baseListSize+i);
-    for (auto element: list) {
+    for (const auto& element: list) {
       initTestMessage(element);
     }
   }
@@ -369,7 +369,7 @@ TEST(SerializeAsyncTest, WriteMultipleMessagesAsync) {
       InputStreamMessageReader reader(input);
       auto listReader = reader.getRoot<TestAllTypes>().getStructList();
       EXPECT_EQ(baseListSize+i, listReader.size());
-      for (auto element: listReader) {
+      for (const auto& element: listReader) {
         checkTestMessage(element);
       }
     }

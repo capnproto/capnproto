@@ -627,9 +627,9 @@ HttpOverCapnpFactory::HttpOverCapnpFactory(ByteStreamFactory& streamFactory,
   auto commonHeaderNames = Schema::from<capnp::CommonHeaderName>().getEnumerants();
   size_t maxHeaderId = 0;
   nameCapnpToKj = kj::heapArray<kj::HttpHeaderId>(commonHeaderNames.size());
-  for (size_t i = 1; i < commonHeaderNames.size(); i++) {
+  for (size_t i = 1; i < commonHeaderNames.size(); ++i) {
     kj::StringPtr nameText;
-    for (auto ann: commonHeaderNames[i].getProto().getAnnotations()) {
+    for (const auto& ann: commonHeaderNames[i].getProto().getAnnotations()) {
       if (ann.getId() == COMMON_TEXT_ANNOTATION) {
         nameText = ann.getValue().getText();
         break;
@@ -644,7 +644,7 @@ HttpOverCapnpFactory::HttpOverCapnpFactory(ByteStreamFactory& streamFactory,
   nameKjToCapnp = kj::heapArray<capnp::CommonHeaderName>(maxHeaderId + 1);
   for (auto& slot: nameKjToCapnp) slot = capnp::CommonHeaderName::INVALID;
 
-  for (size_t i = 1; i < commonHeaderNames.size(); i++) {
+  for (size_t i = 1; i < commonHeaderNames.size(); ++i) {
     auto& slot = nameKjToCapnp[nameCapnpToKj[i].hashCode()];
     KJ_ASSERT(slot == capnp::CommonHeaderName::INVALID);
     slot = static_cast<capnp::CommonHeaderName>(i);
@@ -652,9 +652,9 @@ HttpOverCapnpFactory::HttpOverCapnpFactory(ByteStreamFactory& streamFactory,
 
   auto commonHeaderValues = Schema::from<capnp::CommonHeaderValue>().getEnumerants();
   valueCapnpToKj = kj::heapArray<kj::StringPtr>(commonHeaderValues.size());
-  for (size_t i = 1; i < commonHeaderValues.size(); i++) {
+  for (size_t i = 1; i < commonHeaderValues.size(); ++i) {
     kj::StringPtr valueText;
-    for (auto ann: commonHeaderValues[i].getProto().getAnnotations()) {
+    for (const auto& ann: commonHeaderValues[i].getProto().getAnnotations()) {
       if (ann.getId() == COMMON_TEXT_ANNOTATION) {
         valueText = ann.getValue().getText();
         break;
@@ -697,7 +697,7 @@ kj::HttpHeaders HttpOverCapnpFactory::headersToKj(
     List<capnp::HttpHeader>::Reader capnpHeaders) const {
   kj::HttpHeaders result(headerTable);
 
-  for (auto header: capnpHeaders) {
+  for (const auto& header: capnpHeaders) {
     switch (header.which()) {
       case capnp::HttpHeader::COMMON: {
         auto nv = header.getCommon();

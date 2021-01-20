@@ -189,7 +189,7 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
   HANDLE process = GetCurrentProcess();
 
   uint count = 0;
-  for (; count < space.size(); count++) {
+  for (; count < space.size(); ++count) {
     if (!dbghelp.stackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread,
           &frame, &context, NULL, dbghelp.symFunctionTableAccess64,
           dbghelp.symGetModuleBase64, NULL)){
@@ -807,10 +807,10 @@ void Exception::truncateCommonTrace() {
 
     // We expect that the deepest frame in the exception's stack trace should be somewhere in our
     // own trace, since our own trace has a deeper limit. Search for it.
-    for (uint i = refTrace.size(); i > 0; i--) {
+    for (uint i = refTrace.size(); i > 0; --i) {
       if (refTrace[i-1] == trace[traceCount-1]) {
         // See how many frames match.
-        for (uint j = 0; j < i; j++) {
+        for (uint j = 0; j < i; ++j) {
           if (j >= traceCount) {
             // We matched the whole trace, apparently?
             traceCount = 0;
@@ -1201,7 +1201,7 @@ kj::ArrayPtr<void* const> computeRelativeTrace(
   // match.
   for (ssize_t i = -(ssize_t)(trace.size() - MIN_MATCH_LEN);
        i <= (ssize_t)(relativeTo.size() - MIN_MATCH_LEN);
-       i++) {
+       ++i) {
     // Negative values truncate `trace`, positive values truncate `relativeTo`.
     kj::ArrayPtr<void* const> subtrace = trace.slice(0, trace.size() - kj::max<ssize_t>(0, -i));
     kj::ArrayPtr<void* const> subrt = relativeTo

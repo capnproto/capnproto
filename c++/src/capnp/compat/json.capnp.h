@@ -196,7 +196,7 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline Which which();
+  inline Which which() const;
   inline bool isNull();
   inline  ::capnp::Void getNull();
   inline void setNull( ::capnp::Void value = ::capnp::VOID);
@@ -628,7 +628,7 @@ inline  ::capnp::json::Value::Which Value::Reader::which() const {
   return _reader.getDataField<Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline  ::capnp::json::Value::Which Value::Builder::which() {
+inline  ::capnp::json::Value::Which Value::Builder::which() const {
   return _builder.getDataField<Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }

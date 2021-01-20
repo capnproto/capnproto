@@ -585,14 +585,14 @@ TEST(Orphans, DynamicDisown) {
   DynamicStruct::Builder dynamic = root;
   DynamicStruct::Builder dynamicDst = dst;
 
-  for (auto field: dynamic.getSchema().getFields()) {
+  for (const auto& field: dynamic.getSchema().getFields()) {
     dynamicDst.adopt(field, dynamic.disown(field));
   }
 
   checkTestMessageAllZero(root.asReader());
   checkTestMessage(dst.asReader());
 
-  for (auto field: dynamic.getSchema().getFields()) {
+  for (const auto& field: dynamic.getSchema().getFields()) {
     dynamicDst.adopt(field, dynamic.disown(field));
   }
 
@@ -1061,10 +1061,10 @@ TEST(Orphans, ExtendData) {
   EXPECT_EQ(27, reader.size());
   EXPECT_EQ(builder.begin(), reader.begin());
 
-  for (uint i = 0; i < 17; i++) {
+  for (uint i = 0; i < 17; ++i) {
     EXPECT_EQ(123, reader[i]);
   }
-  for (uint i = 17; i < 27; i++) {
+  for (uint i = 17; i < 27; ++i) {
     EXPECT_EQ(0, reader[i]);
   }
 }
@@ -1084,11 +1084,11 @@ TEST(Orphans, ExtendDataCopy) {
   EXPECT_EQ(27, reader.size());
   EXPECT_NE(builder.begin(), reader.begin());
 
-  for (uint i = 0; i < 17; i++) {
+  for (uint i = 0; i < 17; ++i) {
     EXPECT_EQ(123, reader[i]);
     EXPECT_EQ(0, builder[i]);
   }
-  for (uint i = 17; i < 27; i++) {
+  for (uint i = 17; i < 27; ++i) {
     EXPECT_EQ(0, reader[i]);
   }
 
@@ -1104,7 +1104,7 @@ TEST(Orphans, ExtendDataFromEmpty) {
   auto reader = orphan.getReader();
   EXPECT_EQ(3, reader.size());
 
-  for (uint i = 0; i < 3; i++) {
+  for (uint i = 0; i < 3; ++i) {
     EXPECT_EQ(0, reader[i]);
   }
 }
@@ -1144,10 +1144,10 @@ TEST(Orphans, ExtendText) {
   EXPECT_EQ(27, reader.size());
   EXPECT_EQ(builder.begin(), reader.begin());
 
-  for (uint i = 0; i < 17; i++) {
+  for (uint i = 0; i < 17; ++i) {
     EXPECT_EQ('a', reader[i]);
   }
-  for (uint i = 17; i < 27; i++) {
+  for (uint i = 17; i < 27; ++i) {
     EXPECT_EQ('\0', reader[i]);
   }
 }
@@ -1167,11 +1167,11 @@ TEST(Orphans, ExtendTextCopy) {
   EXPECT_EQ(27, reader.size());
   EXPECT_NE(builder.begin(), reader.begin());
 
-  for (uint i = 0; i < 17; i++) {
+  for (uint i = 0; i < 17; ++i) {
     EXPECT_EQ('a', reader[i]);
     EXPECT_EQ('\0', builder[i]);
   }
-  for (uint i = 17; i < 27; i++) {
+  for (uint i = 17; i < 27; ++i) {
     EXPECT_EQ('\0', reader[i]);
   }
 
@@ -1187,7 +1187,7 @@ TEST(Orphans, ExtendTextFromEmpty) {
   auto reader = orphan.getReader();
   EXPECT_EQ(3, reader.size());
 
-  for (uint i = 0; i < 3; i++) {
+  for (uint i = 0; i < 3; ++i) {
     EXPECT_EQ('\0', reader[i]);
   }
 }
@@ -1196,7 +1196,7 @@ TEST(Orphans, TruncatePrimitiveList) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<List<uint32_t>>(7);
   auto builder = orphan.get();
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     builder.set(i, 123456789 + i);
   }
 
@@ -1207,11 +1207,11 @@ TEST(Orphans, TruncatePrimitiveList) {
   auto reader = orphan.getReader();
   EXPECT_EQ(3, reader.size());
 
-  for (uint i = 0; i < 3; i++) {
+  for (uint i = 0; i < 3; ++i) {
     EXPECT_EQ(123456789 + i, builder[i]);
     EXPECT_EQ(123456789 + i, reader[i]);
   }
-  for (uint i = 3; i < 7; i++) {
+  for (uint i = 3; i < 7; ++i) {
     EXPECT_EQ(0, builder[i]);
   }
 
@@ -1225,7 +1225,7 @@ TEST(Orphans, ExtendPrimitiveList) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<List<uint32_t>>(7);
   auto builder = orphan.get();
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     builder.set(i, 123456789 + i);
   }
 
@@ -1236,11 +1236,11 @@ TEST(Orphans, ExtendPrimitiveList) {
   auto reader = orphan.getReader();
   EXPECT_EQ(11, reader.size());
 
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     EXPECT_EQ(123456789 + i, reader[i]);
     EXPECT_EQ(123456789 + i, builder[i]);
   }
-  for (uint i = 7; i < 11; i++) {
+  for (uint i = 7; i < 11; ++i) {
     EXPECT_EQ(0, reader[i]);
   }
 
@@ -1254,7 +1254,7 @@ TEST(Orphans, ExtendPrimitiveListCopy) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<List<uint32_t>>(7);
   auto builder = orphan.get();
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     builder.set(i, 123456789 + i);
   }
 
@@ -1266,11 +1266,11 @@ TEST(Orphans, ExtendPrimitiveListCopy) {
   auto reader = orphan.getReader();
   EXPECT_EQ(11, reader.size());
 
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     EXPECT_EQ(123456789 + i, reader[i]);
     EXPECT_EQ(0, builder[i]);
   }
-  for (uint i = 7; i < 11; i++) {
+  for (uint i = 7; i < 11; ++i) {
     EXPECT_EQ(0, reader[i]);
   }
 
@@ -1291,7 +1291,7 @@ TEST(Orphans, ExtendPointerListFromEmpty) {
   auto reader = orphan.getReader();
   EXPECT_EQ(3, reader.size());
 
-  for (uint i = 0; i < 3; i++) {
+  for (uint i = 0; i < 3; ++i) {
     EXPECT_EQ(0, reader[i]);
   }
 }
@@ -1301,14 +1301,14 @@ TEST(Orphans, TruncatePointerList) {
 
   // Allocate data in advance so that the list itself is at the end of the segment.
   kj::Vector<Orphan<Text>> pointers(7);
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     pointers.add(message.getOrphanage().newOrphanCopy(Text::Reader(kj::str("foo", i))));
   }
   size_t sizeBeforeList = message.getSegmentsForOutput()[0].size();
 
   auto orphan = message.getOrphanage().newOrphan<List<Text>>(7);
   auto builder = orphan.get();
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     builder.adopt(i, kj::mv(pointers[i]));
   }
 
@@ -1319,11 +1319,11 @@ TEST(Orphans, TruncatePointerList) {
   auto reader = orphan.getReader();
   EXPECT_EQ(3, reader.size());
 
-  for (uint i = 0; i < 3; i++) {
+  for (uint i = 0; i < 3; ++i) {
     EXPECT_EQ(kj::str("foo", i), builder[i]);
     EXPECT_EQ(kj::str("foo", i), reader[i]);
   }
-  for (uint i = 3; i < 7; i++) {
+  for (uint i = 3; i < 7; ++i) {
     EXPECT_TRUE(builder[i] == nullptr);
   }
 
@@ -1338,14 +1338,14 @@ TEST(Orphans, ExtendPointerList) {
 
   // Allocate data in advance so that the list itself is at the end of the segment.
   kj::Vector<Orphan<Text>> pointers(7);
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     pointers.add(message.getOrphanage().newOrphanCopy(Text::Reader(kj::str("foo", i))));
   }
   size_t sizeBeforeList = message.getSegmentsForOutput()[0].size();
 
   auto orphan = message.getOrphanage().newOrphan<List<Text>>(7);
   auto builder = orphan.get();
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     builder.adopt(i, kj::mv(pointers[i]));
   }
 
@@ -1356,11 +1356,11 @@ TEST(Orphans, ExtendPointerList) {
   auto reader = orphan.getReader();
   EXPECT_EQ(11, reader.size());
 
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     EXPECT_EQ(kj::str("foo", i), reader[i]);
     EXPECT_EQ(kj::str("foo", i), builder[i]);
   }
-  for (uint i = 7; i < 11; i++) {
+  for (uint i = 7; i < 11; ++i) {
     EXPECT_TRUE(reader[i] == nullptr);
   }
 
@@ -1375,13 +1375,13 @@ TEST(Orphans, ExtendPointerListCopy) {
 
   // Allocate data in advance so that the list itself is at the end of the segment.
   kj::Vector<Orphan<Text>> pointers(7);
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     pointers.add(message.getOrphanage().newOrphanCopy(Text::Reader(kj::str("foo", i))));
   }
 
   auto orphan = message.getOrphanage().newOrphan<List<Text>>(7);
   auto builder = orphan.get();
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     builder.adopt(i, kj::mv(pointers[i]));
   }
 
@@ -1393,11 +1393,11 @@ TEST(Orphans, ExtendPointerListCopy) {
   auto reader = orphan.getReader();
   EXPECT_EQ(11, reader.size());
 
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     EXPECT_EQ(kj::str("foo", i), reader[i]);
     EXPECT_TRUE(builder[i] == nullptr);
   }
-  for (uint i = 7; i < 11; i++) {
+  for (uint i = 7; i < 11; ++i) {
     EXPECT_TRUE(reader[i] == nullptr);
   }
 
@@ -1418,7 +1418,7 @@ TEST(Orphans, ExtendPointerListFromEmpty) {
   auto reader = orphan.getReader();
   EXPECT_EQ(3, reader.size());
 
-  for (uint i = 0; i < 3; i++) {
+  for (uint i = 0; i < 3; ++i) {
     EXPECT_EQ("", reader[i]);
   }
 }
@@ -1428,7 +1428,7 @@ TEST(Orphans, TruncateStructList) {
 
   // Allocate data in advance so that the list itself is at the end of the segment.
   kj::Vector<Orphan<TestAllTypes>> pointers(7);
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     auto o = message.getOrphanage().newOrphan<TestAllTypes>();
     auto b = o.get();
     b.setUInt32Field(123456789 + i);
@@ -1439,7 +1439,7 @@ TEST(Orphans, TruncateStructList) {
 
   auto orphan = message.getOrphanage().newOrphan<List<TestAllTypes>>(7);
   auto builder = orphan.get();
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     builder.adoptWithCaveats(i, kj::mv(pointers[i]));
   }
 
@@ -1450,7 +1450,7 @@ TEST(Orphans, TruncateStructList) {
   auto reader = orphan.getReader();
   EXPECT_EQ(3, reader.size());
 
-  for (uint i = 0; i < 3; i++) {
+  for (uint i = 0; i < 3; ++i) {
     EXPECT_EQ(123456789 + i, reader[i].getUInt32Field());
     EXPECT_EQ(kj::str("foo", i), reader[i].getTextField());
     checkList(reader[i].getUInt8List(), {123, 45});
@@ -1459,7 +1459,7 @@ TEST(Orphans, TruncateStructList) {
     EXPECT_EQ(kj::str("foo", i), builder[i].getTextField());
     checkList(builder[i].getUInt8List(), {123, 45});
   }
-  for (uint i = 3; i < 7; i++) {
+  for (uint i = 3; i < 7; ++i) {
     checkTestMessageAllZero(builder[i]);
   }
 
@@ -1474,7 +1474,7 @@ TEST(Orphans, ExtendStructList) {
 
   // Allocate data in advance so that the list itself is at the end of the segment.
   kj::Vector<Orphan<TestAllTypes>> pointers(7);
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     auto o = message.getOrphanage().newOrphan<TestAllTypes>();
     auto b = o.get();
     b.setUInt32Field(123456789 + i);
@@ -1485,7 +1485,7 @@ TEST(Orphans, ExtendStructList) {
 
   auto orphan = message.getOrphanage().newOrphan<List<TestAllTypes>>(7);
   auto builder = orphan.get();
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     builder.adoptWithCaveats(i, kj::mv(pointers[i]));
   }
 
@@ -1494,7 +1494,7 @@ TEST(Orphans, ExtendStructList) {
   auto reader = orphan.getReader();
   EXPECT_EQ(11, reader.size());
 
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     EXPECT_EQ(123456789 + i, reader[i].getUInt32Field());
     EXPECT_EQ(kj::str("foo", i), reader[i].getTextField());
     checkList(reader[i].getUInt8List(), {123, 45});
@@ -1503,7 +1503,7 @@ TEST(Orphans, ExtendStructList) {
     EXPECT_EQ(kj::str("foo", i), builder[i].getTextField());
     checkList(builder[i].getUInt8List(), {123, 45});
   }
-  for (uint i = 7; i < 11; i++) {
+  for (uint i = 7; i < 11; ++i) {
     checkTestMessageAllZero(reader[i]);
   }
 
@@ -1518,7 +1518,7 @@ TEST(Orphans, ExtendStructListCopy) {
 
   // Allocate data in advance so that the list itself is at the end of the segment.
   kj::Vector<Orphan<TestAllTypes>> pointers(7);
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     auto o = message.getOrphanage().newOrphan<TestAllTypes>();
     auto b = o.get();
     b.setUInt32Field(123456789 + i);
@@ -1529,7 +1529,7 @@ TEST(Orphans, ExtendStructListCopy) {
 
   auto orphan = message.getOrphanage().newOrphan<List<TestAllTypes>>(7);
   auto builder = orphan.get();
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     builder.adoptWithCaveats(i, kj::mv(pointers[i]));
   }
 
@@ -1541,14 +1541,14 @@ TEST(Orphans, ExtendStructListCopy) {
   auto reader = orphan.getReader();
   EXPECT_EQ(11, reader.size());
 
-  for (uint i = 0; i < 7; i++) {
+  for (uint i = 0; i < 7; ++i) {
     EXPECT_EQ(123456789 + i, reader[i].getUInt32Field());
     EXPECT_EQ(kj::str("foo", i), reader[i].getTextField());
     checkList(reader[i].getUInt8List(), {123, 45});
 
     checkTestMessageAllZero(builder[i]);
   }
-  for (uint i = 7; i < 11; i++) {
+  for (uint i = 7; i < 11; ++i) {
     checkTestMessageAllZero(reader[i]);
   }
 
@@ -1569,7 +1569,7 @@ TEST(Orphans, ExtendStructListFromEmpty) {
   auto reader = orphan.getReader();
   EXPECT_EQ(3, reader.size());
 
-  for (uint i = 0; i < 3; i++) {
+  for (uint i = 0; i < 3; ++i) {
     checkTestMessageAllZero(reader[i]);
   }
 }

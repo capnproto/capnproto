@@ -418,7 +418,7 @@ private:
         }
 
 #ifndef MSG_CMSG_CLOEXEC
-        for (size_t i = 0; i < nfds; i++) {
+        for (size_t i = 0; i < nfds; ++i) {
           setCloseOnExec(fdBuffer[i]);
         }
 #endif
@@ -481,7 +481,7 @@ private:
     iov[0].iov_base = const_cast<byte*>(firstPiece.begin());
     iov[0].iov_len = firstPiece.size();
     iovTotal += iov[0].iov_len;
-    for (uint i = 1; i < iov.size(); i++) {
+    for (uint i = 1; i < iov.size(); ++i) {
       iov[i].iov_base = const_cast<byte*>(morePieces[i - 1].begin());
       iov[i].iov_len = morePieces[i - 1].size();
       iovTotal += iov[i].iov_len;
@@ -1559,12 +1559,12 @@ Promise<size_t> DatagramPortImpl::send(
     //
     // TODO(perf): On Linux we could use multiple syscalls via MSG_MORE or sendmsg/sendmmsg.
     size_t extraSize = 0;
-    for (size_t i = iovmax - 1; i < pieces.size(); i++) {
+    for (size_t i = iovmax - 1; i < pieces.size(); ++i) {
       extraSize += pieces[i].size();
     }
     extra = kj::heapArray<byte>(extraSize);
     extraSize = 0;
-    for (size_t i = iovmax - 1; i < pieces.size(); i++) {
+    for (size_t i = iovmax - 1; i < pieces.size(); ++i) {
       memcpy(extra.begin() + extraSize, pieces[i].begin(), pieces[i].size());
       extraSize += pieces[i].size();
     }

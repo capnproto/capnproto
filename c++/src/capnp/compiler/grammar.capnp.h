@@ -1453,9 +1453,9 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline Which which();
+  inline Which which() const;
   inline bool hasName();
-  inline  ::capnp::compiler::LocatedText::Builder getName();
+  inline  ::capnp::compiler::LocatedText::Builder getName() const;
   inline void setName( ::capnp::compiler::LocatedText::Reader value);
   inline  ::capnp::compiler::LocatedText::Builder initName();
   inline void adoptName(::capnp::Orphan< ::capnp::compiler::LocatedText>&& value);
@@ -1519,7 +1519,7 @@ public:
   inline typename Field::Builder getField();
   inline typename Field::Builder initField();
 
-  inline bool isUnion();
+  inline bool isUnion() const;
   inline  ::capnp::Void getUnion();
   inline void setUnion( ::capnp::Void value = ::capnp::VOID);
 
@@ -4260,7 +4260,7 @@ inline  ::capnp::compiler::Declaration::Which Declaration::Reader::which() const
   return _reader.getDataField<Which>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
-inline  ::capnp::compiler::Declaration::Which Declaration::Builder::which() {
+inline  ::capnp::compiler::Declaration::Which Declaration::Builder::which() const {
   return _builder.getDataField<Which>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
@@ -4277,7 +4277,7 @@ inline  ::capnp::compiler::LocatedText::Reader Declaration::Reader::getName() co
   return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::compiler::LocatedText::Builder Declaration::Builder::getName() {
+inline  ::capnp::compiler::LocatedText::Builder Declaration::Builder::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
@@ -4626,7 +4626,7 @@ inline typename Declaration::Field::Builder Declaration::Builder::initField() {
 inline bool Declaration::Reader::isUnion() const {
   return which() == Declaration::UNION;
 }
-inline bool Declaration::Builder::isUnion() {
+inline bool Declaration::Builder::isUnion() const {
   return which() == Declaration::UNION;
 }
 inline  ::capnp::Void Declaration::Reader::getUnion() const {

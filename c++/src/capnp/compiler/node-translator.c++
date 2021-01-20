@@ -149,7 +149,7 @@ public:
     kj::Maybe<uint> smallestAtLeast(uint size) {
       // Return the size of the smallest hole that is equal to or larger than the given size.
 
-      for (uint i = size; i < kj::size(holes); i++) {
+      for (uint i = size; i < kj::size(holes); ++i) {
         if (holes[i] != 0) {
           return i;
         }
@@ -163,7 +163,7 @@ public:
       // If there is a 32-bit hole with a 32-bit offset, no more than the first 32 bits are used.
       // If no more than the first 32 bits are used, and there is a 16-bit hole with a 16-bit
       // offset, then no more than the first 16 bits are used.  And so on.
-      for (uint i = kj::size(holes); i > 0; i--) {
+      for (uint i = kj::size(holes); i > 0; --i) {
         if (holes[i - 1] != 1) {
           return i;
         }
@@ -472,7 +472,7 @@ public:
       uint bestSize = kj::maxValue;
       kj::Maybe<uint> bestLocation = nullptr;
 
-      for (uint i = 0; i < parent.dataLocations.size(); i++) {
+      for (uint i = 0; i < parent.dataLocations.size(); ++i) {
         // If we haven't seen this DataLocation yet, add a corresponding DataLocationUsage.
         if (parentDataLocationUsage.size() == i) {
           parentDataLocationUsage.add();
@@ -494,7 +494,7 @@ public:
 
       // There are no holes at all in the union big enough to fit this field.  Go back through all
       // of the locations and attempt to expand them to fit.
-      for (uint i = 0; i < parent.dataLocations.size(); i++) {
+      for (uint i = 0; i < parent.dataLocations.size(); ++i) {
         KJ_IF_MAYBE(result, parentDataLocationUsage[i].tryAllocateByExpanding(
             *this, parent.dataLocations[i], lgSize)) {
           return *result;
@@ -540,7 +540,7 @@ public:
         }
       }
 
-      for (uint i = 0; i < parentDataLocationUsage.size(); i++) {
+      for (uint i = 0; i < parentDataLocationUsage.size(); ++i) {
         auto& location = parent.dataLocations[i];
         if (location.lgSize >= oldLgSize &&
             oldOffset >> (location.lgSize - oldLgSize) == location.offset) {
@@ -594,10 +594,10 @@ NodeTranslator::NodeSet NodeTranslator::getBootstrapNode() {
   auto sourceInfos = kj::heapArrayBuilder<schema::Node::SourceInfo::Reader>(
       1 + groups.size() + paramStructs.size());
   sourceInfos.add(sourceInfo.getReader());
-  for (auto& group: groups) {
+  for (const auto& group: groups) {
     sourceInfos.add(group.sourceInfo.getReader());
   }
-  for (auto& paramStruct: paramStructs) {
+  for (const auto& paramStruct: paramStructs) {
     sourceInfos.add(paramStruct.sourceInfo.getReader());
   }
 
@@ -620,7 +620,7 @@ NodeTranslator::NodeSet NodeTranslator::getBootstrapNode() {
 NodeTranslator::NodeSet NodeTranslator::finish(Schema selfBootstrapSchema) {
   // Careful about iteration here:  compileFinalValue() may actually add more elements to
   // `unfinishedValues`, invalidating iterators in the process.
-  for (size_t i = 0; i < unfinishedValues.size(); i++) {
+  for (size_t i = 0; i < unfinishedValues.size(); ++i) {
     auto& value = unfinishedValues[i];
     compileValue(value.source, value.type, value.typeScope.orDefault(selfBootstrapSchema),
                  value.target, false);
@@ -713,7 +713,7 @@ static kj::StringPtr getExpressionTargetName(Expression::Reader exp) {
 
 void NodeTranslator::DuplicateNameDetector::check(
     List<Declaration>::Reader nestedDecls, Declaration::Which parentKind) {
-  for (auto decl: nestedDecls) {
+  for (const auto& decl: nestedDecls) {
     {
       auto name = decl.getName();
       auto nameText = name.getValue();
@@ -866,7 +866,7 @@ void NodeTranslator::compileAnnotation(Declaration::Annotation::Reader decl,
   // Dynamically copy over the values of all of the "targets" members.
   DynamicStruct::Reader src = decl;
   DynamicStruct::Builder dst = builder;
-  for (auto srcField: src.getSchema().getFields()) {
+  for (const auto& srcField: src.getSchema().getFields()) {
     kj::StringPtr fieldName = srcField.getProto().getName();
     if (fieldName.startsWith("targets")) {
       auto dstField = dst.getSchema().getFieldByName(fieldName);
@@ -912,7 +912,7 @@ void NodeTranslator::compileEnum(Void decl,
   std::multimap<uint, std::pair<uint, Declaration::Reader>> enumerants;
 
   uint codeOrder = 0;
-  for (auto member: members) {
+  for (const auto& member: members) {
     if (member.isEnumerant()) {
       enumerants.insert(
           std::make_pair(member.getId().getOrdinal().getValue(),
@@ -925,7 +925,7 @@ void NodeTranslator::compileEnum(Void decl,
   uint i = 0;
   DuplicateOrdinalDetector dupDetector(errorReporter);
 
-  for (auto& entry: enumerants) {
+  for (const auto& entry: enumerants) {
     uint codeOrder = entry.second.first;
     Declaration::Reader enumerantDecl = entry.second.second;
 
@@ -1182,13 +1182,13 @@ private:
       errorReporter.addErrorOn(decl, "Union must have at least two members.");
     }
 
-    for (auto member: members) {
+    for (const auto& member: members) {
       kj::Maybe<uint> ordinal;
       MemberInfo* memberInfo = nullptr;
 
       switch (member.which()) {
         case Declaration::FIELD: {
-          parent.childCount++;
+          ++parent.childCount;
           // For layout purposes, pretend this field is enclosed in a one-member group.
           StructLayout::Group& singletonGroup =
               arena.allocate<StructLayout::Group>(layout);
@@ -1203,7 +1203,7 @@ private:
           if (member.getName().getValue() == "") {
             errorReporter.addErrorOn(member, "Unions cannot contain unnamed unions.");
           } else {
-            parent.childCount++;
+            ++parent.childCount;
 
             // For layout purposes, pretend this union is enclosed in a one-member group.
             StructLayout::Group& singletonGroup =
@@ -1225,7 +1225,7 @@ private:
           break;
 
         case Declaration::GROUP: {
-          parent.childCount++;
+          ++parent.childCount;
           StructLayout::Group& group = arena.allocate<StructLayout::Group>(layout);
           memberInfo = &arena.allocate<MemberInfo>(
               parent, codeOrder++, member,
@@ -1261,13 +1261,13 @@ private:
                           StructLayout::StructOrGroup& layout) {
     uint codeOrder = 0;
 
-    for (auto member: members) {
+    for (const auto& member: members) {
       kj::Maybe<uint> ordinal;
       MemberInfo* memberInfo = nullptr;
 
       switch (member.which()) {
         case Declaration::FIELD: {
-          parent.childCount++;
+          ++parent.childCount;
           memberInfo = &arena.allocate<MemberInfo>(
               parent, codeOrder++, member, layout, false);
           allMembers.add(memberInfo);
@@ -1284,7 +1284,7 @@ private:
             memberInfo = &parent;
             subCodeOrder = &codeOrder;
           } else {
-            parent.childCount++;
+            ++parent.childCount;
             memberInfo = &arena.allocate<MemberInfo>(
                 parent, codeOrder++, member,
                 newGroupNode(parent.node, member.getName().getValue()),
@@ -1300,7 +1300,7 @@ private:
         }
 
         case Declaration::GROUP:
-          parent.childCount++;
+          ++parent.childCount;
           memberInfo = &arena.allocate<MemberInfo>(
               parent, codeOrder++, member,
               newGroupNode(parent.node, member.getName().getValue()),
@@ -1329,7 +1329,7 @@ private:
                       StructLayout::StructOrGroup& layout) {
     for (uint i: kj::indices(params)) {
       auto param = params[i];
-      parent.childCount++;
+      ++parent.childCount;
       MemberInfo* memberInfo = &arena.allocate<MemberInfo>(parent, i, param, layout, false);
       allMembers.add(memberInfo);
       membersByOrdinal.insert(std::make_pair(i, memberInfo));
@@ -1553,7 +1553,7 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
   std::multimap<uint, std::pair<uint, Declaration::Reader>> methods;
 
   uint codeOrder = 0;
-  for (auto member: members) {
+  for (const auto& member: members) {
     if (member.isMethod()) {
       methods.insert(
           std::make_pair(member.getId().getOrdinal().getValue(),
@@ -2134,7 +2134,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(Expression::Reader src, 
       auto srcList = src.getList();
       Orphan<DynamicList> result = orphanage.newOrphan(listSchema, srcList.size());
       auto dstList = result.get();
-      for (uint i = 0; i < srcList.size(); i++) {
+      for (uint i = 0; i < srcList.size(); ++i) {
         KJ_IF_MAYBE(value, compileValue(srcList[i], elementType)) {
           dstList.adopt(i, kj::mv(*value));
         }
@@ -2163,7 +2163,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(Expression::Reader src, 
 
 void ValueTranslator::fillStructValue(DynamicStruct::Builder builder,
                                       List<Expression::Param>::Reader assignments) {
-  for (auto assignment: assignments) {
+  for (const auto& assignment: assignments) {
     if (assignment.isNamed()) {
       auto fieldName = assignment.getNamed();
       KJ_IF_MAYBE(field, builder.getSchema().findFieldByName(fieldName.getValue())) {
@@ -2343,7 +2343,7 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
   auto result = orphanage.newOrphan<List<schema::Annotation>>(annotations.size());
   auto builder = result.get();
 
-  for (uint i = 0; i < annotations.size(); i++) {
+  for (uint i = 0; i < annotations.size(); ++i) {
     Declaration::AnnotationApplication::Reader annotation = annotations[i];
     schema::Annotation::Builder annotationBuilder = builder[i];
 

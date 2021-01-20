@@ -110,7 +110,7 @@ private:
     auto proto = schema.getProto();
     KJ_CONTEXT(proto.getDisplayName());
     auto parent = schemaLoader.get(proto.getScopeId());
-    for (auto nested: parent.getProto().getNestedNodes()) {
+    for (const auto& nested: parent.getProto().getNestedNodes()) {
       if (nested.getId() == proto.getId()) {
         return nested.getName();
       }
@@ -127,7 +127,7 @@ private:
     targetPath.add(target);
 
     std::map<uint64_t, List<schema::Brand::Binding>::Reader> scopeBindings;
-    for (auto scopeBrand: brand.getScopes()) {
+    for (const auto& scopeBrand: brand.getScopes()) {
       switch (scopeBrand.which()) {
         case schema::Brand::Scope::BIND:
           scopeBindings[scopeBrand.getScopeId()] = scopeBrand.getBind();
@@ -612,7 +612,7 @@ private:
         bool targetsAll = true;
 
         auto dynamic = toDynamic(annotationProto);
-        for (auto field: dynamic.getSchema().getFields()) {
+        for (const auto& field: dynamic.getSchema().getFields()) {
           auto fieldName = field.getProto().getName();
           if (fieldName.startsWith("targets")) {
             if (dynamic.get(field).as<bool>()) {
@@ -664,14 +664,14 @@ private:
     StreamFdMessageReader reader(STDIN_FILENO, options);
     auto request = reader.getRoot<schema::CodeGeneratorRequest>();
 
-    for (auto node: request.getNodes()) {
+    for (const auto& node: request.getNodes()) {
       schemaLoader.load(node);
     }
 
     kj::FdOutputStream rawOut(STDOUT_FILENO);
     kj::BufferedOutputStreamWrapper out(rawOut);
 
-    for (auto requestedFile: request.getRequestedFiles()) {
+    for (const auto& requestedFile: request.getRequestedFiles()) {
       genFile(schemaLoader.get(requestedFile.getId())).visit(
           [&](kj::ArrayPtr<const char> text) {
             out.write(text.begin(), text.size());

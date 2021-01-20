@@ -164,7 +164,7 @@ private:
 
   void copyInto(ArrayPtr<byte> out) {
     size_t pos = 0;
-    for (auto& part: parts) {
+    for (const auto& part: parts) {
       size_t n = kj::min(part.size(), out.size() - pos);
       memcpy(out.begin() + pos, part.begin(), n);
       pos += n;
@@ -1682,7 +1682,7 @@ public:
       : inner(mv(inner)), bufferSizeLimit(bufferSizeLimit), length(this->inner->tryGetLength()) {}
   ~AsyncTee() noexcept(false) {
     bool hasBranches = false;
-    for (auto& branch: branches) {
+    for (const auto& branch: branches) {
       hasBranches = hasBranches || branch != nullptr;
     }
     KJ_ASSERT(!hasBranches, "destroying AsyncTee with branch still alive") {
@@ -1997,7 +1997,7 @@ private:
     uint nBranches = 0;
     uint nSinks = 0;
 
-    for (auto& state: branches) {
+    for (const auto& state: branches) {
       KJ_IF_MAYBE(s, state) {
         ++nBranches;
         KJ_IF_MAYBE(sink, s->sink) {
@@ -2036,7 +2036,7 @@ private:
     return pullLoop().eagerlyEvaluate([this](Exception&& exception) {
       // Exception from our loop, not from inner tryRead(). Something is broken; tell everybody!
       pulling = false;
-      for (auto& state: branches) {
+      for (const auto& state: branches) {
         KJ_IF_MAYBE(s, state) {
           KJ_IF_MAYBE(sink, s->sink) {
             sink->reject(KJ_EXCEPTION(FAILED, "Exception in tee loop", exception));
@@ -2065,7 +2065,7 @@ private:
 
       Vector<Promise<void>> promises;
 
-      for (auto& state: branches) {
+      for (const auto& state: branches) {
         KJ_IF_MAYBE(s, state) {
           KJ_IF_MAYBE(sink, s->sink) {
             promises.add(sink->fill(s->buffer, stoppage));
@@ -2103,7 +2103,7 @@ private:
       n.maxBytes = kj::min(n.maxBytes, MAX_BLOCK_SIZE);
       n.maxBytes = kj::min(n.maxBytes, bufferSizeLimit);
       n.maxBytes = kj::max(n.minBytes, n.maxBytes);
-      for (auto& state: branches) {
+      for (const auto& state: branches) {
         KJ_IF_MAYBE(s, state) {
           // TODO(perf): buffer.size() is O(n) where n = # of individual heap-allocated byte arrays.
           if (s->buffer.size() + n.maxBytes > bufferSizeLimit) {
@@ -2137,7 +2137,7 @@ private:
 
         KJ_ASSERT(stoppage == nullptr);
         Maybe<ArrayPtr<byte>> bufferPtr = nullptr;
-        for (auto& state: branches) {
+        for (const auto& state: branches) {
           KJ_IF_MAYBE(s, state) {
             // Prefer to move the buffer into the receiving branch's deque, rather than memcpy.
             //
@@ -2242,7 +2242,7 @@ bool AsyncTee::Buffer::empty() const {
 uint64_t AsyncTee::Buffer::size() const {
   uint64_t result = 0;
 
-  for (auto& bytes: bufferList) {
+  for (const auto& bytes: bufferList) {
     result += bytes.size();
   }
 
@@ -2959,7 +2959,7 @@ NetworkFilter::NetworkFilter()
 NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const StringPtr> deny,
                              NetworkFilter& next)
     : allowUnix(false), allowAbstractUnix(false), next(next) {
-  for (auto rule: allow) {
+  for (const auto& rule: allow) {
     if (rule == "local") {
       allowCidrs.addAll(localCidrs());
     } else if (rule == "network") {
@@ -2983,7 +2983,7 @@ NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const Str
     }
   }
 
-  for (auto rule: deny) {
+  for (const auto& rule: deny) {
     if (rule == "local") {
       denyCidrs.addAll(localCidrs());
     } else if (rule == "network") {
@@ -3019,14 +3019,14 @@ bool NetworkFilter::shouldAllow(const struct sockaddr* addr, uint addrlen) {
 
   bool allowed = false;
   uint allowSpecificity = 0;
-  for (auto& cidr: allowCidrs) {
+  for (const auto& cidr: allowCidrs) {
     if (cidr.matches(addr)) {
       allowSpecificity = kj::max(allowSpecificity, cidr.getSpecificity());
       allowed = true;
     }
   }
   if (!allowed) return false;
-  for (auto& cidr: denyCidrs) {
+  for (const auto& cidr: denyCidrs) {
     if (cidr.matches(addr)) {
       if (cidr.getSpecificity() >= allowSpecificity) return false;
     }
@@ -3051,7 +3051,7 @@ bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr, uint addrlen) 
     }
   } else {
 #endif
-    for (auto& cidr: allowCidrs) {
+    for (const auto& cidr: allowCidrs) {
       if (cidr.matchesFamily(addr->sa_family)) {
         matched = true;
       }

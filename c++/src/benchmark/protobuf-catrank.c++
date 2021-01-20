@@ -46,13 +46,13 @@ public:
     int count = fastRand(1000);
     int goodCount = 0;
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; ++i) {
       SearchResult* result = request->add_result();
       result->set_score(1000 - i);
       result->set_url("http://example.com/");
       std::string* url = result->mutable_url();
       int urlSize = fastRand(100);
-      for (int j = 0; j < urlSize; j++) {
+      for (int j = 0; j < urlSize; ++j) {
         url->push_back('a' + fastRand(26));
       }
 
@@ -65,7 +65,7 @@ public:
       snippet->push_back(' ');
 
       int prefix = fastRand(20);
-      for (int j = 0; j < prefix; j++) {
+      for (int j = 0; j < prefix; ++j) {
         snippet->append(WORDS[fastRand(WORDS_COUNT)]);
       }
 
@@ -73,7 +73,7 @@ public:
       if (isDog) snippet->append("dog ");
 
       int suffix = fastRand(20);
-      for (int j = 0; j < suffix; j++) {
+      for (int j = 0; j < suffix; ++j) {
         snippet->append(WORDS[fastRand(WORDS_COUNT)]);
       }
     }
