@@ -1604,7 +1604,7 @@ public:
   KJ_DISALLOW_COPY(Deferred);
 
   // This move constructor is usually optimized away by the compiler.
-  inline Deferred(Deferred&& other): func(kj::mv(other.func)), canceled(false) {
+  inline Deferred(Deferred&& other): func(kj::fwd<Func>(other.func)), canceled(false) {
     other.canceled = true;
   }
 private:
