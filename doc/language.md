@@ -801,6 +801,14 @@ this list, but most apps can safely use them:
   As a special exception to this rule, `List(Bool)` may **not** be upgraded to a list of structs,
   because implementing this for bit lists has proven unreasonably expensive.
 
+* A integer field may be promoted to an integer field of larger width while keeping the sign
+* A boolean field may be promoted to an integer field
+* A `Text` field may be promoted to `Data`
+* A `Data` field may be promoted to `List(UInt8)`
+* An enumeration may be promoted to `Uint16`, `UInt32`, or `UInt64`
+* An unsigned integer may be promoted to a signed integer if the positive part of the signed integer 
+  is wide enough to contain the unsigned integer
+
 Any change not listed above should be assumed NOT to be safe.  In particular:
 
 * You cannot change a field, method, or enumerant's number.
