@@ -827,7 +827,7 @@ kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
 }
 ```
 
-The problem in this example is that the recursive call is _not_ a tail call, due to the `.catch_()` appended to the end. Every time around the loop, a new `.catch_()` is added to the promise chain. If an exception were thrown, that exception would end up being logged many times -- once for each time the loop has repeated so far.
+The problem in this example is that the recursive call is _not_ a tail call, due to the `.catch_()` appended to the end. Every time around the loop, a new `.catch_()` is added to the promise chain. If an exception were thrown, that exception would end up being logged many times -- once for each time the loop has repeated so far. Or if the loop iterated enough times, and the top promise was then canceled, the chain could be so long that the destructors overflow the stack.
 
 In this case, the best fix is to pull the `.catch_()` out of the loop entirely:
 
