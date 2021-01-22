@@ -538,7 +538,7 @@ This section describes KJ APIs that control process execution and low-level inte
 
 KJ makes asynchronous programming manageable using an API modeled on E-style Promises. E-style Promises were also the inspiration for JavaScript Promises, so modern JavaScript programmers should find KJ Promises familiar, although there are some important differences.
 
-A `kj::Promise<T>` represents an asynchronous background task that, upon completion, either "resolve" to a value of type `T`, or "reject" with an exception.
+A `kj::Promise<T>` represents an asynchronous background task that, upon completion, either "resolves" to a value of type `T`, or "rejects" with an exception.
 
 In the simplest case, a `kj::Promise<T>` can be directly constructed from an instance of `T`:
 
@@ -581,9 +581,9 @@ kj::WaitScope& waitScope = io.waitScope;
 
 In order to implement all this, KJ will set up the appropriate OS-specific constructs to handle I/O events on the host platform. For example, on Linux, KJ will use `epoll`, whereas on Windows, it will set up an I/O Completion Port.
 
-Sometimes, you may need KJ promises to cooperate with some existing event loop, rather than set up its own. For example, you might be using libuv, or boost ASIO. Usually, a thread can only have one event loop, because it can only wait on one OS event queue (e.g. `epoll`) at a time. To accommodate this, it is possible (though not easy) to adapt KJ to run on top of some other event loop, by creating a custom implementation of `kj::EventPort`. The details of how to do this are beyond the scope of this document.
+Sometimes, you may need KJ promises to cooperate with some existing event loop, rather than set up its own. For example, you might be using libuv, or Boost.Asio. Usually, a thread can only have one event loop, because it can only wait on one OS event queue (e.g. `epoll`) at a time. To accommodate this, it is possible (though not easy) to adapt KJ to run on top of some other event loop, by creating a custom implementation of `kj::EventPort`. The details of how to do this are beyond the scope of this document.
 
-Sometimes, you may find that you don't really need to perform operating system I/O at all. For example, a unit test might only need to call some asynchronous functions using mock I/O interfaces, and a thread in a multi-threaded programs may only need to exchange events with other threads and not the OS. In these cases, you can create a simple event loop instead:
+Sometimes, you may find that you don't really need to perform operating system I/O at all. For example, a unit test might only need to call some asynchronous functions using mock I/O interfaces, and a thread in a multi-threaded program may only need to exchange events with other threads and not the OS. In these cases, you can create a simple event loop instead:
 
 ```c++
 kj::EventLoop eventLoop;
@@ -639,7 +639,7 @@ If the continuation itself returns another `Promise`, then the `Promise`s become
 
 ```c++
 kj::Promise<kj::Own<kj::AsyncIoStream>> connectPromise =
-    network.connect(addr);
+    networkAddress.connect();
 kj::Promise<kj::String> textPromise = connectPromise
     .then([](kj::Own<kj::AsyncIoStream> stream) {
   return stream->readAllText().attach(kj::mv(stream));
@@ -649,7 +649,7 @@ kj::Promise<kj::String> textPromise = connectPromise
 If a promise rejects (throws an exception), then the exception propagates through `.then()` to the new derived promise, without calling the continuation. If you'd like to actually handle the exception, you may pass a second lambda as the second argument to `.then()`.
 
 ```c++
-kj::Promise<kj::String> promise = network.connect(addr)
+kj::Promise<kj::String> promise = networkAddress.connect()
     .then([](kj::Own<kj::AsyncIoStream> stream) {
   return stream->readAllText().attach(kj::mv(stream));
 }, [](kj::Exception&& exception) {
@@ -682,13 +682,13 @@ If multiple `evalLast()`s exist at the same time, they will execute in last-in-f
 
 ### Attachments
 
-Often, a task represented by a `Promise` will require that some object remains live until the `Promise` completes. In particular, under KJ conventions, unless documented otherwise, any class method which returns a `Promise` inherently expects that the caller will ensure that the object it was called on will remain live until the `Promise` completes (or is canceled).
+Often, a task represented by a `Promise` will require that some object remains live until the `Promise` completes. In particular, under KJ conventions, unless documented otherwise, any class method which returns a `Promise` inherently expects that the caller will ensure that the object it was called on will remain live until the `Promise` completes (or is canceled). Put another way, member function implementations may assume their `this` pointer is valid as long as their returned `Promise` is alive.
 
 You may use `promise.attach(kj::mv(object))` to give a `Promise` direct ownership of an object that must be kept alive until the promise completes. `.attach()`, like `.then()`, consumes the promise and returns a new one of the same type.
 
 ```c++
 kj::Promise<kj::Own<kj::AsyncIoStream>> connectPromise =
-    network.connect(addr);
+    networkAddress.connect();
 kj::Promise<kj::String> textPromise = connectPromise
     .then([](kj::Own<kj::AsyncIoStream> stream) {
   // We must attach the stream so that it remains alive until `readAllText()`
@@ -792,7 +792,7 @@ paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "something went wrong"));
 
 Because of the complexity of the above issues, it is generally recommended that you **avoid promise-fulfiller pairs** except in cases where these issues very clearly don't matter (such as unit tests).
 
-Instead, when cancellation concerns matter, consider using "adapted promises", a more-sophisticated alternative. `kj::newAdaptedPromise<T, Adapter>()` constructs an instance of the class `Adapter` (which you define) encapsulated in a returned `Promise<T>`. `Adapter`'s constructor receives a `kj::PromiseFulfiller<T>&` used to fulfill the promise. The constructor should then register the fulfiller with the desired producer. If the promise is canceled, `Adapter`'s destructor will be invoked, and should un-register the fulfiller. One common technique is for `Adapter` implementations to form a linked list with other `Adapter`s waiting for the same producer. Adapted promises make consumer cancellation much more explicit and easy to handle, at the expense of requiring more code.
+Instead, when cancellation concerns matter, consider using "adapted promises", a more sophisticated alternative. `kj::newAdaptedPromise<T, Adapter>()` constructs an instance of the class `Adapter` (which you define) encapsulated in a returned `Promise<T>`. `Adapter`'s constructor receives a `kj::PromiseFulfiller<T>&` used to fulfill the promise. The constructor should then register the fulfiller with the desired producer. If the promise is canceled, `Adapter`'s destructor will be invoked, and should un-register the fulfiller. One common technique is for `Adapter` implementations to form a linked list with other `Adapter`s waiting for the same producer. Adapted promises make consumer cancellation much more explicit and easy to handle, at the expense of requiring more code.
 
 ### Loops
 
@@ -800,7 +800,7 @@ Promises, due to their construction, don't lend themselves easily to classic `fo
 
 ```c++
 kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
-  timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
+  return timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
     boop();
     // Loop by recursing.
     return boopEvery5Seconds(timer);
@@ -843,10 +843,10 @@ kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
 
 kj::Promise<void> boopEvery5SecondsLoop(kj::Timer& timer) {
   // No memory leaks now!
-  timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
-    KJ_LOG(WARNING, "boop");
+  return timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
+    boop();
     // Loop by recursing.
-    return logEvery5Seconds(timer);
+    return boopEvery5SecondsLoop(timer);
   });
 }
 ```
@@ -855,8 +855,8 @@ Another possible fix would be to make sure the recursive continuation and then e
 
 ```c++
 kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
-  // WARNING! MEMORY LEAK!
-  timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
+  // No more memory leaks, but hard to reason about.
+  return timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
     boop();
   }).then([&timer]() {
     // Loop by recursing.
@@ -898,7 +898,7 @@ kj::Tuple<kj::Promise<kj::Own<Foo>>, kj::Promise<kj::String>> promises = promise
 
 ### Threads
 
-The KJ async framework is designed around single-threaded event loops. However, you can multiple threads, with each running its own loop.
+The KJ async framework is designed around single-threaded event loops. However, you can have multiple threads, with each running its own loop.
 
 All KJ async objects, unless specifically documented otherwise, are intrinsically tied to the thread and event loop on which they were created. These objects must not be accessed from any other thread.
 
@@ -926,7 +926,6 @@ Because of this, fibers should not be used just to make code look nice (C++20's 
 
 ## System I/O
 
-TODO: OS handles, sync IO, async IO, filesystem, network, time
 
 ### Async I/O
 
@@ -938,7 +937,7 @@ Please refer to the API reference (the header files) for details on these APIs.
 
 ### Synchronous I/O
 
-Although most complex KJ applications use Async I/O, sometimes you want something a little simpler.
+Although most complex KJ applications use async I/O, sometimes you want something a little simpler.
 
 `kj/io.h` provides some more basic, synchronous streaming interfaces, like `kj::InputStream` and `kj::OutputStream`. Implementations are provided on top of file descriptors and Windows `HANDLE`s.
 
@@ -949,7 +948,7 @@ Additionally, the important utility class `kj::AutoCloseFd` (and `kj::AutoCloseH
 KJ provides an advanced, cross-platform filesystem API in `kj/filesystem.h`. Features include:
 
 * Paths represented using `kj::Path`. In addition to providing common-sense path parsing and manipulation functions, this class is designed to defend against path injection attacks.
-* All interfaces are abstract, allowing mulitple implementations.
+* All interfaces are abstract, allowing multiple implementations.
 * An in-memory implementation is provided, useful in particular for mocking the filesystem in unit tests.
 * On Unix, disk `kj::Directory` objects are backed by open file descriptors and use the `openat()` family of system calls.
 * Makes it easy to use atomic replacement when writing new files -- and even whole directories.
@@ -960,13 +959,13 @@ See the API reference (header file) for details.
 
 ### Clocks and time
 
-KJ provides a time library in `kj/time.h` whicth uses the type system to enforce unit safety.
+KJ provides a time library in `kj/time.h` which uses the type system to enforce unit safety.
 
 `kj::Duration` represents a length of time, such as a number of seconds. Multiply an integer by `kj::SECONDS`, `kj::MINUTES`, `kj::NANOSECONDS`, etc. to get a `kj::Duration` value. Divide by the appropriate constant to get an integer.
 
 `kj::Date` represents a point in time in the real world. `kj::UNIX_EPOCH` represents January 1st, 1970, 00:00 UTC. Other dates can be constructed by adding a `kj::Duraction` to `kj::UNIX_EPOCH`. Taking the difference between to `kj::Date`s produces a `kj::Duration`.
 
-`kj::TimePoint` represens a time point measured against an unspecified origin time. This is typically used with monotonic clocks that don't necessarily reflect calendar time. Unlike `kj::Date`, there is no implicit guarantee that two `kj::TimePoint`s are measured against the same origin and are therefore comparable; it is up to the application to track which clock any particluar `kj::TimePoint` came from.
+`kj::TimePoint` represents a time point measured against an unspecified origin time. This is typically used with monotonic clocks that don't necessarily reflect calendar time. Unlike `kj::Date`, there is no implicit guarantee that two `kj::TimePoint`s are measured against the same origin and are therefore comparable; it is up to the application to track which clock any particluar `kj::TimePoint` came from.
 
 `kj::Clock` is a simple interface whose `now()` method returns the current `kj::Date`. `kj::MonotonicClock` is a similar interface returning a `kj::TimePoint`, but with the guarantee that times returned always increase (whereas a `kj::Clock` might go "back in time" if the user manually modifies their system clock).
 
