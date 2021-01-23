@@ -597,7 +597,7 @@ In the top level of your program (or thread), the program is allowed to synchron
 ```
 kj::Timer& timer = io.provider->getTimer();
 kj::Promise<void> promise = timer.afterDelay(5 * kj::SECONDS);
-timer.wait(waitScope);  // returns after 5 seconds' delay
+promise.wait(waitScope);  // returns after 5 seconds' delay
 ```
 
 `promise.wait()` will run the thread's event loop until the promise completes. It will then return the `Promise`'s result (or throw the `Promise`'s exception). `.wait()` consumes the `Promise`, as if the `Promise` has been moved away.
@@ -702,7 +702,7 @@ Using `.attach()` is semantically equivalent to using `.then()`, passing an iden
 ```c++
 // This...
 promise.attach(kj::mv(attachment));
-// ... is equivalent to this...
+// ...is equivalent to this...
 promise.then([a = kj::mv(attachment)](auto x) { return kj::mv(x); });
 ```
 
@@ -722,7 +722,7 @@ If you construct a `Promise` and then just leave it be without calling `.then()`
 Note that, when possible, KJ evaluates continuations lazily. Continuations which merely transform the result (without returning a new `Promise` that might require more waiting) are only evaluated when the final result is actually needed. This is an optimization which allows a long chain of `.then()`s to be executed all at once, rather than turning the event loop for each one. However, it can lead to some confusion when storing an unconsumed `Promise`. For example:
 
 ```c++
-kj::Promise<void> timer.afterDelay(5 * kj::SECONDS)
+kj::Promise<void> promise = timer.afterDelay(5 * kj::SECONDS)
     .then([]() {
   // This log line will never be written, because nothing
   // is waiting on the final result of the promise.
@@ -776,7 +776,7 @@ kj::PromiseFulfillerPair<int> paf = kj::newPromiseAndFulfiller<int>();
 // Consumer waits for the promise.
 paf.promise.then([](int i) { ... });
 
-// Producer calls the fulfiller to fulfill he promise.
+// Producer calls the fulfiller to fulfill the promise.
 paf.fulfiller->fulfill(123);
 
 // Producer can also reject the promise.
@@ -785,7 +785,7 @@ paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "something went wrong"));
 
 **WARNING! DANGER!** When using promise-fulfiller pairs, it is very easy to forget about both exception propagation and, more importantly, cancellation-safety.
 
-* **Exception-safety:** If your code stops early due to an exception, it may forget to invoke the fulfiller. Upon destroying the fulfiller, the consumer end will receive a generic, unhelpful exception, merely saying that the fulfiller was destroyed unfulfilled. To aid in debugging, you should make sure to catch exceptions and call `reject()` to propagate them.
+* **Exception-safety:** If your code stops early due to an exception, it may forget to invoke the fulfiller. Upon destroying the fulfiller, the consumer end will receive a generic, unhelpful exception, merely saying that the fulfiller was destroyed unfulfilled. To aid in debugging, you should make sure to catch exceptions and call `fulfiller->reject()` to propagate them.
 * **Cancellation-safety:** Either the producer or the consumer task could be canceled, and you must consider how this affects the other end.
     * **Canceled consumer:** If the consumer is canceled, the producer may waste time producing an item that no one is waiting for. Or, worse, if the consumer has provided references to the producer (for example, a buffer into which results should be written), those references may become invalid upon cancellation, but the producer will continue executing, possibly resulting in a use-after-free. To avoid these problems, the producer can call `fulfiller->isWaiting()` to check if the consumer is still waiting -- this method returns false if either the consumer has been canceled, or if the producer has already fulfilled or rejected the promise previously. However, `isWaiting()` requires polling, which is not ideal. For better control, consider using an adapted promise (see below).
     * **Canceled producer:** If the producer is canceled, by default it will probably destroy the fulfiller without fulfilling or reject it. As described previously, the consumer will receive a non-descript exception, which is likely unhelpful for debugging. To avoid this scenario, the producer could perhaps use `.attach(kj::defer(...))` with a lambda that checks `fulfiller->isWaiting()` and rejects it if not.
@@ -851,7 +851,7 @@ kj::Promise<void> boopEvery5SecondsLoop(kj::Timer& timer) {
 }
 ```
 
-Another possible fix would be to make sure the recursive continuation and then error handler are passed to the same `.then()` invocation:
+Another possible fix would be to make sure the recursive continuation and the error handler are passed to the same `.then()` invocation:
 
 ```c++
 kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
@@ -873,7 +873,7 @@ Notice that in this second case, the error handler is scoped so that it does _no
 
 ### Forking and splitting promises
 
-As mentioned above, `.then()` and similar functions consume the promise on which they are called, so can only be called once. But, what if you want to start multiple tasks using the result of a promise? You could solve this in a convoluted way using adapted promises, but KJ has a built-in solution: `.fork()`
+As mentioned above, `.then()` and similar functions consume the promise on which they are called, so they can only be called once. But what if you want to start multiple tasks using the result of a promise? You could solve this in a convoluted way using adapted promises, but KJ has a built-in solution: `.fork()`
 
 ```c++
 kj::Promise<int> promise = ...;
@@ -920,7 +920,7 @@ kj::Promise<int> promise =
 });
 ```
 
-**CAUTION:** Fibers produce attractive-looking code, but have serious drawbacks. Every fiber must allocate a new call stack, which is typically rather large. The above example allocates a 64kb stack, which is the _minimum_ supported size. Some programs and libraries expect to be able to allocate megabytes of data on the stack. On modern Linux systems, a default stack size of 8MB is typical. Stacks space is allocated lazily on page faults, but just setting up the memory mapping is much more expensive than a typical `malloc()`. If you create lots of fibers, you should use `kj::FiberPool` to reduce allocation costs -- but while this reduces allocation overhead, it will increase memory usage.
+**CAUTION:** Fibers produce attractive-looking code, but have serious drawbacks. Every fiber must allocate a new call stack, which is typically rather large. The above example allocates a 64kb stack, which is the _minimum_ supported size. Some programs and libraries expect to be able to allocate megabytes of data on the stack. On modern Linux systems, a default stack size of 8MB is typical. Stack space is allocated lazily on page faults, but just setting up the memory mapping is much more expensive than a typical `malloc()`. If you create lots of fibers, you should use `kj::FiberPool` to reduce allocation costs -- but while this reduces allocation overhead, it will increase memory usage.
 
 Because of this, fibers should not be used just to make code look nice (C++20's `co_await`, which KJ will soon support, is a better way to do that). Instead, the main use case for fibers is to be able to call into existing libraries that are not designed to operate in an asynchronous way. For example, say you find a library that performs stream I/O, and lets you provide your own `read()`/`write()` implementations, but expects those implementations to operate in a blocking fashion. With fibers, you can use such a library within the asynchronous KJ event loop.
 
@@ -963,9 +963,9 @@ KJ provides a time library in `kj/time.h` which uses the type system to enforce 
 
 `kj::Duration` represents a length of time, such as a number of seconds. Multiply an integer by `kj::SECONDS`, `kj::MINUTES`, `kj::NANOSECONDS`, etc. to get a `kj::Duration` value. Divide by the appropriate constant to get an integer.
 
-`kj::Date` represents a point in time in the real world. `kj::UNIX_EPOCH` represents January 1st, 1970, 00:00 UTC. Other dates can be constructed by adding a `kj::Duraction` to `kj::UNIX_EPOCH`. Taking the difference between to `kj::Date`s produces a `kj::Duration`.
+`kj::Date` represents a point in time in the real world. `kj::UNIX_EPOCH` represents January 1st, 1970, 00:00 UTC. Other dates can be constructed by adding a `kj::Duration` to `kj::UNIX_EPOCH`. Taking the difference between to `kj::Date`s produces a `kj::Duration`.
 
-`kj::TimePoint` represents a time point measured against an unspecified origin time. This is typically used with monotonic clocks that don't necessarily reflect calendar time. Unlike `kj::Date`, there is no implicit guarantee that two `kj::TimePoint`s are measured against the same origin and are therefore comparable; it is up to the application to track which clock any particluar `kj::TimePoint` came from.
+`kj::TimePoint` represents a time point measured against an unspecified origin time. This is typically used with monotonic clocks that don't necessarily reflect calendar time. Unlike `kj::Date`, there is no implicit guarantee that two `kj::TimePoint`s are measured against the same origin and are therefore comparable; it is up to the application to track which clock any particular `kj::TimePoint` came from.
 
 `kj::Clock` is a simple interface whose `now()` method returns the current `kj::Date`. `kj::MonotonicClock` is a similar interface returning a `kj::TimePoint`, but with the guarantee that times returned always increase (whereas a `kj::Clock` might go "back in time" if the user manually modifies their system clock).
 
