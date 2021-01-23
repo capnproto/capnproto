@@ -676,7 +676,7 @@ As with `.then()` continuations, the lambda passed to these functions may itself
 
 `kj::evalLater()` executes the lambda on a future turn of the event loop. This is equivalent to `kj::Promise<void>().then()`.
 
-`kj::evalLast()` arranges for the lambda to be called only once all other work queued to the event loop has completed (but before querying the OS for new I/O events). This can often be useful, for example, for batching. For example, if a program tends to make many small write()s to a socket in rapid succession, you might want to add a layer that collects the writes into a batch, then sends the whole batch in a single write from an `evalLast()`. This way, none of the bytes are significantly delayed, but they can still be coalesced.
+`kj::evalLast()` arranges for the lambda to be called only once all other work queued to the event loop has completed (but before querying the OS for new I/O events). This can often be useful e.g. for batching. For example, if a program tends to make many small write()s to a socket in rapid succession, you might want to add a layer that collects the writes into a batch, then sends the whole batch in a single write from an `evalLast()`. This way, none of the bytes are significantly delayed, but they can still be coalesced.
 
 If multiple `evalLast()`s exist at the same time, they will execute in last-in-first-out order. If the first one out schedules more work on the event loop, that work will be completed before the next `evalLast()` executes, and so on.
 
