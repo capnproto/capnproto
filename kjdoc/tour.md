@@ -583,7 +583,7 @@ In order to implement all this, KJ will set up the appropriate OS-specific const
 
 Sometimes, you may need KJ promises to cooperate with some existing event loop, rather than set up its own. For example, you might be using libuv, or Boost.Asio. Usually, a thread can only have one event loop, because it can only wait on one OS event queue (e.g. `epoll`) at a time. To accommodate this, it is possible (though not easy) to adapt KJ to run on top of some other event loop, by creating a custom implementation of `kj::EventPort`. The details of how to do this are beyond the scope of this document.
 
-Sometimes, you may find that you don't really need to perform operating system I/O at all. For example, a unit test might only need to call some asynchronous functions using mock I/O interfaces, and a thread in a multi-threaded program may only need to exchange events with other threads and not the OS. In these cases, you can create a simple event loop instead:
+Sometimes, you may find that you don't really need to perform operating system I/O at all. For example, a unit test might only need to call some asynchronous functions using mock I/O interfaces, or a thread in a multi-threaded program may only need to exchange events with other threads and not the OS. In these cases, you can create a simple event loop instead:
 
 ```c++
 kj::EventLoop eventLoop;
@@ -604,7 +604,7 @@ timer.wait(waitScope);  // returns after 5 seconds' delay
 
 Synchronous waits cannot be nested -- i.e. a `.then()` callback (see below) that is called by the event loop itself cannot execute another level of synchronous waits. Hence, synchronous waits generally can only be used at the top level of the thread. The API requires passing a `kj::WaitScope` to `.wait()` as a way to demonstrate statically that the caller is allowed to perform synchronous waits. Any function which wishes to perform synchronous waits must take a `kj::WaitScope&` as a parameter to indicate that it does this.
 
-Synchronous waits often make sense to use in "client" programs that only have one task to complete before they exit. On the other end of the spectrum, server programs that handle many clients generally must do everything asynchronously. At the top level of a server program, you will typically instruct the event loop to run forever like so:
+Synchronous waits often make sense to use in "client" programs that only have one task to complete before they exit. On the other end of the spectrum, server programs that handle many clients generally must do everything asynchronously. At the top level of a server program, you will typically instruct the event loop to run forever, like so:
 
 ```c++
 // Run event loop forever, do everything asynchronously.
@@ -697,7 +697,7 @@ kj::Promise<kj::String> textPromise = connectPromise
 });
 ```
 
-Using `.attach()` is semantically equivalent to using `.then()`, passing an identify function as the continuation, while having that function capture ownership of the attached object, i.e.:
+Using `.attach()` is semantically equivalent to using `.then()`, passing an identity function as the continuation, while having that function capture ownership of the attached object, i.e.:
 
 ```c++
 // This...
