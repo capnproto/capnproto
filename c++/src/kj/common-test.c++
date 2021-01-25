@@ -596,5 +596,33 @@ KJ_TEST("kj::range()") {
   KJ_EXPECT(expected == 8);
 }
 
+KJ_TEST("kj::defer()") {
+  bool executed;
+
+  // rvalue reference
+  {
+    executed = false;
+    auto deferred = kj::defer([&executed]() {
+      executed = true;
+    });
+    KJ_EXPECT(!executed);
+  }
+
+  KJ_EXPECT(executed);
+
+  // lvalue reference
+  auto executor = [&executed]() {
+    executed = true;
+  };
+
+  {
+    executed = false;
+    auto deferred = kj::defer(executor);
+    KJ_EXPECT(!executed);
+  }
+
+  KJ_EXPECT(executed);
+}
+
 }  // namespace
 }  // namespace kj
