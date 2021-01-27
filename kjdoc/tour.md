@@ -682,7 +682,7 @@ If multiple `evalLast()`s exist at the same time, they will execute in last-in-f
 
 ### Attachments
 
-Often, a task represented by a `Promise` will require that some object remains live until the `Promise` completes. In particular, under KJ conventions, unless documented otherwise, any class method which returns a `Promise` inherently expects that the caller will ensure that the object it was called on will remain live until the `Promise` completes (or is canceled). Put another way, member function implementations may assume their `this` pointer is valid as long as their returned `Promise` is alive.
+Often, a task represented by a `Promise` will require that some object remains alive until the `Promise` completes. In particular, under KJ conventions, unless documented otherwise, any class method which returns a `Promise` inherently expects that the caller will ensure that the object it was called on will remain alive until the `Promise` completes (or is canceled). Put another way, member function implementations may assume their `this` pointer is valid as long as their returned `Promise` is alive.
 
 You may use `promise.attach(kj::mv(object))` to give a `Promise` direct ownership of an object that must be kept alive until the promise completes. `.attach()`, like `.then()`, consumes the promise and returns a new one of the same type.
 
