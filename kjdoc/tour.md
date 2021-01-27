@@ -714,7 +714,6 @@ promise = promise.attach(kj::defer([]() {
 }));
 ```
 
-
 ### Background tasks
 
 If you construct a `Promise` and then just leave it be without calling `.then()` or `.wait()` to consume it, the task it represents will nevertheless execute when the event loop runs, "in the background". You can call `.then()` or `.wait()` later on, when you're ready. This makes it possible to run multiple concurrent tasks at once.
@@ -745,6 +744,8 @@ kj::NEVER_DONE.wait(waitScope);
 ```
 
 `.eagerlyEvaluate()` takes an error handler callback as its parameter, with the same semantics as `.catch_()` or the second parameter to `.then()`. This is required because otherwise, it is very easy to forget to install an error handler on background tasks, resulting in errors being silently discarded. However, if you are certain that errors will be properly handled elsewhere, you may pass `nullptr` as the parameter to skip error checking -- this is equivalent to passing a callback that merely re-throws the exception.
+
+If you have lots of background tasks, use `kj::TaskSet` to manage them. Any promise added to a `kj::TaskSet` will be run to completion (with eager evaluation), with any exceptions being reported to a provided error handler callback.
 
 ### Cancellation
 
@@ -896,6 +897,18 @@ kj::Promise<kj::Tuple<kj::Own<Foo>, kj::String>> promise = ...;
 kj::Tuple<kj::Promise<kj::Own<Foo>>, kj::Promise<kj::String>> promises = promise.split();
 ```
 
+### Joining promises
+
+The opposite of forking promises is joining promises. There are two types of joins:
+* **Exclusive** joins wait for any one input promise to complete, then cancel the rest, returning the result of the promise that completed.
+* **Inclusive** joins wait for all input promises to complete, and render all of the results.
+
+For an exclusive join, use `promise.join(kj::mv(otherPromise))`. The two promises must return the same type. The result is a promise that returns whichever result is produced first, and cancels the other promise at that time. (To exclusively join more than two promises, call `.exclusiveJoin()` multiple times in a chain.)
+
+To perform an inclusive join, use `kj::joinPromises()`. This turns a `kj::Array<kj::Promise<T>>` into a `kj::Promise<kj::Array<T>>`. However, note that `kj::joinPromises()` has a couple common gotchas:
+* Trailing continuations on the promises passed to `kj::joinPromises()` are evaluated lazily after all the promises become ready. Use `.eagerlyEvaluate()` on each one to force trailing continuations to happen eagerly. (See earlier discussion under "Background Tasks".)
+* If any promise in the array rejects, the exception will be held until all other promises have completed (or rejected), and only then will the exception propagate. In practice we've found that most uses of `kj::joinPromises()` would prefer "exclusive" or "fail-fast" behavior in the case of an exception, but as of this writing we have not yet introduced a function that does this.
+
 ### Threads
 
 The KJ async framework is designed around single-threaded event loops. However, you can have multiple threads, with each running its own loop.
@@ -924,8 +937,31 @@ kj::Promise<int> promise =
 
 Because of this, fibers should not be used just to make code look nice (C++20's `co_await`, which KJ will soon support, is a better way to do that). Instead, the main use case for fibers is to be able to call into existing libraries that are not designed to operate in an asynchronous way. For example, say you find a library that performs stream I/O, and lets you provide your own `read()`/`write()` implementations, but expects those implementations to operate in a blocking fashion. With fibers, you can use such a library within the asynchronous KJ event loop.
 
-## System I/O
+### Unit testing tips
 
+When unit-testing promise APIs, two tricky challenges frequently arise:
+
+* Testing that a promise has completed when it is supposed to. You can use `promise.wait()`, but if the promise has not completed as expected, then the test may simply hang. This can be frustrating to debug.
+* Testing that a promise has not completed prematurely. You obviously can't use `promise.wait()`, because you _expect_ the promise has not completed, and therefore this would hang. You might try using `.then()` with a continuation that sets a flag, but if the flag is not set, it's hard to tell whether this is because the promise really has not completed, or merely because the event loop hasn't yet called the `.then()` continuation.
+
+To solve these problems, you can use `promise.poll(waitScope)`. This function runs the event loop until either the promise completes, or there is nothing left to do except to wait. This includes running any continuations in the queue as well as checking for I/O events from the operating system, repeatedly, until nothing is left. The only thing `.poll()` will not do is block. `.poll()` returns true if the promise has completed, false if it hasn't.
+
+```c++
+// In a unit test...
+kj::Promise<void> promise = waitForBoop();
+
+// The promise should not be done yet because we haven't booped yet.
+KJ_ASSERT(!promise.poll(waitScope));
+
+boop();
+
+// Assert the promise is done, to make sure wait() won't hang!
+KJ_ASSERT(promise.poll(waitScope));
+
+promise.wait(waitScope);
+```
+
+## System I/O
 
 ### Async I/O
 
