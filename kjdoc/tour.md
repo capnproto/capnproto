@@ -300,7 +300,7 @@ KJ's tree-based containers use a b-tree design for better memory locality than t
 
 ## Debugging and Observability
 
-KJ believes that there is no such thing as bug-free code. Instead, we must expect that our code will go wrong, and try to extract as much information as possible when it does. To that end, KJ provides powerful assertion macros designed for observability. (Be sure also to read about [KJ's exception philosohpy](style-guide.md#exceptions); this section describes the actual APIs involved.)
+KJ believes that there is no such thing as bug-free code. Instead, we must expect that our code will go wrong, and try to extract as much information as possible when it does. To that end, KJ provides powerful assertion macros designed for observability. (Be sure also to read about [KJ's exception philosophy](style-guide.md#exceptions); this section describes the actual APIs involved.)
 
 ### Assertions
 
@@ -400,7 +400,7 @@ On Windows, two similar macros are available based on Windows API calling conven
 
 ### Alternate exception types
 
-As described in [KJ's exception philosohpy](style-guide.md#exceptions), KJ supports a small set of exception types. Regular assertions throw `FAILED` exceptions. `KJ_SYSCALL` usually throws `FAILED`, but identifies certain error codes as `DISCONNECTED` or `OVERLOADED`. For example, `ECONNRESET` is clearly a `DISCONNECTED` exception.
+As described in [KJ's exception philosophy](style-guide.md#exceptions), KJ supports a small set of exception types. Regular assertions throw `FAILED` exceptions. `KJ_SYSCALL` usually throws `FAILED`, but identifies certain error codes as `DISCONNECTED` or `OVERLOADED`. For example, `ECONNRESET` is clearly a `DISCONNECTED` exception.
 
 If you wish to manually construct and throw a different exception type, you may use `KJ_EXCEPTION`:
 
