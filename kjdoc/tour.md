@@ -903,7 +903,7 @@ The opposite of forking promises is joining promises. There are two types of joi
 * **Exclusive** joins wait for any one input promise to complete, then cancel the rest, returning the result of the promise that completed.
 * **Inclusive** joins wait for all input promises to complete, and render all of the results.
 
-For an exclusive join, use `promise.join(kj::mv(otherPromise))`. The two promises must return the same type. The result is a promise that returns whichever result is produced first, and cancels the other promise at that time. (To exclusively join more than two promises, call `.exclusiveJoin()` multiple times in a chain.)
+For an exclusive join, use `promise.exclusiveJoin(kj::mv(otherPromise))`. The two promises must return the same type. The result is a promise that returns whichever result is produced first, and cancels the other promise at that time. (To exclusively join more than two promises, call `.exclusiveJoin()` multiple times in a chain.)
 
 To perform an inclusive join, use `kj::joinPromises()`. This turns a `kj::Array<kj::Promise<T>>` into a `kj::Promise<kj::Array<T>>`. However, note that `kj::joinPromises()` has a couple common gotchas:
 * Trailing continuations on the promises passed to `kj::joinPromises()` are evaluated lazily after all the promises become ready. Use `.eagerlyEvaluate()` on each one to force trailing continuations to happen eagerly. (See earlier discussion under "Background Tasks".)
