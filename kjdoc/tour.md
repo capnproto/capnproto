@@ -676,7 +676,7 @@ As with `.then()` continuations, the lambda passed to these functions may itself
 
 `kj::evalLater()` executes the lambda on a future turn of the event loop. This is equivalent to `kj::Promise<void>().then()`.
 
-`kj::evalLast()` arranges for the lambda to be called only once all other work queued to the event loop has completed (but before querying the OS for new I/O events). This can often be useful e.g. for batching. For example, if a program tends to make many small write()s to a socket in rapid succession, you might want to add a layer that collects the writes into a batch, then sends the whole batch in a single write from an `evalLast()`. This way, none of the bytes are significantly delayed, but they can still be coalesced.
+`kj::evalLast()` arranges for the lambda to be called only after all other work queued to the event loop has completed (but before querying the OS for new I/O events). This can often be useful e.g. for batching. For example, if a program tends to make many small write()s to a socket in rapid succession, you might want to add a layer that collects the writes into a batch, then sends the whole batch in a single write from an `evalLast()`. This way, none of the bytes are significantly delayed, but they can still be coalesced.
 
 If multiple `evalLast()`s exist at the same time, they will execute in last-in-first-out order. If the first one out schedules more work on the event loop, that work will be completed before the next `evalLast()` executes, and so on.
 
@@ -717,7 +717,7 @@ promise = promise.attach(kj::defer([]() {
 
 ### Background tasks
 
-If you construct a `Promise` and then just leave it be without calling `.then()` or `.wait()` to consume it, the task it represents will execute in the background. You can call `.then()` or `.wait()` later on, when you're ready. This makes it possible to run multiple concurrent tasks at once.
+If you construct a `Promise` and then just leave it be without calling `.then()` or `.wait()` to consume it, the task it represents will nevertheless execute when the event loop runs, "in the background". You can call `.then()` or `.wait()` later on, when you're ready. This makes it possible to run multiple concurrent tasks at once.
 
 Note that, when possible, KJ evaluates continuations lazily. Continuations which merely transform the result (without returning a new `Promise` that might require more waiting) are only evaluated when the final result is actually needed. This is an optimization which allows a long chain of `.then()`s to be executed all at once, rather than turning the event loop for each one. However, it can lead to some confusion when storing an unconsumed `Promise`. For example:
 
@@ -885,7 +885,7 @@ kj::Promise<int> branch3 = promise.addBranch();
 
 A forked promise can have any number of "branches" which represent different consumers waiting for the same result.
 
-Forked promises use reference counting. The `ForkedPromise` itself, and each branch created from it, each represents a reference to the original promise. The original promise will only be canceled if all branches are canceled and the `ForkedPromise` itself is destroyed.
+Forked promises use reference counting. The `ForkedPromise` itself, and each branch created from it, each represent a reference to the original promise. The original promise will only be canceled if all branches are canceled and the `ForkedPromise` itself is destroyed.
 
 Forked promises require that the result type has a copy constructor, so that it can be copied to each branch. (Regular promises only require the result type to be movable, not copyable.) Or, alternatively, if the result type is `kj::Own<T>` -- which is never copyable -- then `T` must have a method `kj::Own<T> T::addRef()`; this method will be invoked to create each branch. Typically, `addRef()` would be implemented using reference counting.
 
