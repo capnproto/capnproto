@@ -141,6 +141,11 @@ public:
       return;
     }
 
+    network.currentQueueSize += size * sizeof(capnp::word);
+    auto deferredSizeUpdate = kj::defer([&network = network, size]() mutable {
+      network.currentQueueSize -= size * sizeof(capnp::word);
+    });
+
     network.previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down")
         .then([this]() {
       return kj::evalNow([&]() { return network.getStream().writeMessage(fds, message); })
@@ -154,7 +159,7 @@ public:
         }
         kj::throwRecoverableException(kj::mv(e));
       });
-    }).attach(kj::addRef(*this))
+    }).attach(kj::addRef(*this), kj::mv(deferredSizeUpdate))
       // Note that it's important that the eagerlyEvaluate() come *after* the attach() because
       // otherwise the message (and any capabilities in it) will not be released until a new
       // message is written! (Kenton once spent all afternoon tracking this down...)
