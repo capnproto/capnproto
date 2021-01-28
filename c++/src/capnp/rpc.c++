@@ -1759,6 +1759,7 @@ private:
         // table state. We'll have to reject the promise instead.
         result.question.isAwaitingReturn = false;
         result.question.skipFinish = true;
+        connectionState->releaseExports(result.question.paramExports);
         result.questionRef->reject(kj::mv(*exception));
       }
 

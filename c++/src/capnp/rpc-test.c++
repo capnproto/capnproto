@@ -210,6 +210,11 @@ public:
   uint getSentCount() { return sent; }
   uint getReceivedCount() { return received; }
 
+  void onSend(kj::Function<void(MessageBuilder& message)> callback) {
+    // Invokes the given callback every time a message is sent.
+    sendCallback = kj::mv(callback);
+  }
+
   typedef TestNetworkAdapterBase::Connection Connection;
 
   class ConnectionImpl final
@@ -266,6 +271,8 @@ public:
       }
 
       void send() override {
+        connection.network.sendCallback(message);
+
         if (connection.networkException != nullptr) {
           return;
         }
@@ -411,6 +418,8 @@ private:
   std::map<const TestNetworkAdapter*, kj::Own<ConnectionImpl>> connections;
   std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<Connection>>>> fulfillerQueue;
   std::queue<kj::Own<Connection>> connectionQueue;
+
+  kj::Function<void(MessageBuilder& message)> sendCallback = [](MessageBuilder&) {};
 };
 
 TestNetwork::~TestNetwork() noexcept(false) {}
@@ -1314,6 +1323,118 @@ KJ_TEST("method throws exception with trace encoder") {
   auto exception = KJ_ASSERT_NONNULL(maybeException);
   KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
   KJ_EXPECT(exception.getRemoteTrace() == "trace for test exception");
+}
+
+KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
+  // When OutgoingRpcMessage::send() throws an exception on a Call message, we need to clean up
+  // anything that had been added to the export table as part of the call. At one point this
+  // cleanup was missing, so exports would leak.
+
+  TestContext context;
+
+  uint32_t expectedExportNumber = 0;
+  uint interceptCount = 0;
+  bool shouldThrowFromSend = false;
+  context.clientNetwork.onSend([&](MessageBuilder& builder) {
+    auto message = builder.getRoot<rpc::Message>().asReader();
+    if (message.isCall()) {
+      auto call = message.getCall();
+      if (call.getInterfaceId() == capnp::typeId<test::TestMoreStuff>() &&
+          call.getMethodId() == 0) {
+        // callFoo() request, expect a capability in the param caps. Specifically we expect a
+        // promise, because that's what we send below.
+        auto capTable = call.getParams().getCapTable();
+        KJ_ASSERT(capTable.size() == 1);
+        auto desc = capTable[0];
+        KJ_ASSERT(desc.isSenderPromise());
+        KJ_ASSERT(desc.getSenderPromise() == expectedExportNumber);
+
+        ++interceptCount;
+        if (shouldThrowFromSend) {
+          kj::throwRecoverableException(KJ_EXCEPTION(FAILED, "intercepted"));
+        }
+      }
+    }
+  });
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  {
+    shouldThrowFromSend = true;
+    auto req = client.callFooRequest();
+    req.setCap(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+    req.send().then([](auto&&) {
+      KJ_FAIL_ASSERT("should have thrown");
+    }, [](kj::Exception&& e) {
+      KJ_EXPECT(e.getDescription() == "intercepted", e);
+    }).wait(context.waitScope);
+  }
+
+  KJ_EXPECT(interceptCount == 1);
+
+  // Sending again should use the same export number, because the export table entry should have
+  // been released when send() threw. (At one point, this was a bug...)
+  {
+    shouldThrowFromSend = true;
+    auto req = client.callFooRequest();
+    req.setCap(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+    req.send().then([](auto&&) {
+      KJ_FAIL_ASSERT("should have thrown");
+    }, [](kj::Exception&& e) {
+      KJ_EXPECT(e.getDescription() == "intercepted", e);
+    }).wait(context.waitScope);
+  }
+
+  KJ_EXPECT(interceptCount == 2);
+
+  // Now lets start a call that doesn't throw. The export number should still be zero because
+  // the previous exports were released.
+  {
+    shouldThrowFromSend = false;
+    auto req = client.callFooRequest();
+    req.setCap(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+    auto promise = req.send();
+    KJ_EXPECT(!promise.poll(context.waitScope));
+
+    KJ_EXPECT(interceptCount == 3);
+  }
+
+  // We canceled the previous call, BUT the exported capability is still present until the other
+  // side drops it, which it won't because the call isn't marked cancelable and never completes.
+  // Now, let's send another call. This time, we expect a new export number will actually be
+  // allocated.
+  {
+    shouldThrowFromSend = false;
+    expectedExportNumber = 1;
+    auto req = client.callFooRequest();
+    auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+    req.setCap(kj::mv(paf.promise));
+    auto promise = req.send();
+    KJ_EXPECT(!promise.poll(context.waitScope));
+
+    KJ_EXPECT(interceptCount == 4);
+
+    // Now let's actually let the RPC complete so we can verify the RPC system isn't broken or
+    // anything.
+    int callCount = 0;
+    paf.fulfiller->fulfill(kj::heap<TestInterfaceImpl>(callCount));
+    auto resp = promise.wait(context.waitScope);
+    KJ_EXPECT(resp.getS() == "bar");
+    KJ_EXPECT(callCount == 1);
+  }
+
+  // Now if we do yet another call, it'll reuse export number 1.
+  {
+    shouldThrowFromSend = false;
+    expectedExportNumber = 1;
+    auto req = client.callFooRequest();
+    req.setCap(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+    auto promise = req.send();
+    KJ_EXPECT(!promise.poll(context.waitScope));
+
+    KJ_EXPECT(interceptCount == 5);
+  }
 }
 
 }  // namespace
