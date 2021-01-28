@@ -382,7 +382,9 @@ public:
 
       exports.forEach([&](ExportId id, Export& exp) {
         clientsToRelease.add(kj::mv(exp.clientHook));
-        resolveOpsToRelease.add(kj::mv(exp.resolveOp));
+        KJ_IF_MAYBE(op, exp.resolveOp) {
+          resolveOpsToRelease.add(kj::mv(*op));
+        }
         exp = Export();
       });
 
@@ -518,7 +520,7 @@ private:
 
     kj::Own<ClientHook> clientHook;
 
-    kj::Promise<void> resolveOp = nullptr;
+    kj::Maybe<kj::Promise<void>> resolveOp = nullptr;
     // If this export is a promise (not a settled capability), the `resolveOp` represents the
     // ongoing operation to wait for that promise to resolve and then send a `Resolve` message.
 
@@ -1139,7 +1141,11 @@ private:
         // We've already seen and exported this capability before.  Just up the refcount.
         auto& exp = KJ_ASSERT_NONNULL(exports.find(iter->second));
         ++exp.refcount;
-        descriptor.setSenderHosted(iter->second);
+        if (exp.resolveOp == nullptr) {
+          descriptor.setSenderHosted(iter->second);
+        } else {
+          descriptor.setSenderPromise(iter->second);
+        }
         return iter->second;
       } else {
         // This is the first time we've seen this capability.

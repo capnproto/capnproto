@@ -1437,6 +1437,90 @@ KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
   }
 }
 
+KJ_TEST("export the same promise twice") {
+  TestContext context;
+
+  bool exportIsPromise;
+  uint32_t expectedExportNumber;
+  uint interceptCount = 0;
+  context.clientNetwork.onSend([&](MessageBuilder& builder) {
+    auto message = builder.getRoot<rpc::Message>().asReader();
+    if (message.isCall()) {
+      auto call = message.getCall();
+      if (call.getInterfaceId() == capnp::typeId<test::TestMoreStuff>() &&
+          call.getMethodId() == 0) {
+        // callFoo() request, expect a capability in the param caps. Specifically we expect a
+        // promise, because that's what we send below.
+        auto capTable = call.getParams().getCapTable();
+        KJ_ASSERT(capTable.size() == 1);
+        auto desc = capTable[0];
+        if (exportIsPromise) {
+          KJ_ASSERT(desc.isSenderPromise());
+          KJ_ASSERT(desc.getSenderPromise() == expectedExportNumber);
+        } else {
+          KJ_ASSERT(desc.isSenderHosted());
+          KJ_ASSERT(desc.getSenderHosted() == expectedExportNumber);
+        }
+
+        ++interceptCount;
+      }
+    }
+  });
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  auto sendReq = [&](test::TestInterface::Client cap) {
+    auto req = client.callFooRequest();
+    req.setCap(kj::mv(cap));
+    return req.send();
+  };
+
+  auto expectNeverDone = [&](auto& promise) {
+    if (promise.poll(context.waitScope)) {
+      promise.wait(context.waitScope);  // let it throw if it's going to
+      KJ_FAIL_ASSERT("promise finished without throwing");
+    }
+  };
+
+  int callCount = 0;
+  test::TestInterface::Client normalCap = kj::heap<TestInterfaceImpl>(callCount);
+  test::TestInterface::Client promiseCap = kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE);
+
+  // Send request with a promise capability in the params.
+  exportIsPromise = true;
+  expectedExportNumber = 0;
+  auto promise1 = sendReq(promiseCap);
+  expectNeverDone(promise1);
+  KJ_EXPECT(interceptCount == 1);
+
+  // Send a second request with the same promise should use the same export table entry.
+  auto promise2 = sendReq(promiseCap);
+  expectNeverDone(promise2);
+  KJ_EXPECT(interceptCount == 2);
+
+  // Sending a request with a different promise should use a different export table entry.
+  expectedExportNumber = 1;
+  auto promise3 = sendReq(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+  expectNeverDone(promise3);
+  KJ_EXPECT(interceptCount == 3);
+
+  // Now try sending a non-promise cap. We'll send all these requests at once before waiting on
+  // any of them since these will acutally complete.k
+  exportIsPromise = false;
+  expectedExportNumber = 2;
+  auto promise4 = sendReq(normalCap);
+  auto promise5 = sendReq(normalCap);
+  expectedExportNumber = 3;
+  auto promise6 = sendReq(kj::heap<TestInterfaceImpl>(callCount));
+  KJ_EXPECT(interceptCount == 6);
+
+  KJ_EXPECT(promise4.wait(context.waitScope).getS() == "bar");
+  KJ_EXPECT(promise5.wait(context.waitScope).getS() == "bar");
+  KJ_EXPECT(promise6.wait(context.waitScope).getS() == "bar");
+  KJ_EXPECT(callCount == 3);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
