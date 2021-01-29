@@ -300,7 +300,7 @@ KJ's tree-based containers use a b-tree design for better memory locality than t
 
 ## Debugging and Observability
 
-KJ believes that there is no such thing as bug-free code. Instead, we must expect that our code will go wrong, and try to extract as much information as possible when it does. To that end, KJ provides powerful assertion macros designed for observability. (Be sure also to read about [KJ's exception philosohpy](style-guide.md#exceptions); this section describes the actual APIs involved.)
+KJ believes that there is no such thing as bug-free code. Instead, we must expect that our code will go wrong, and try to extract as much information as possible when it does. To that end, KJ provides powerful assertion macros designed for observability. (Be sure also to read about [KJ's exception philosophy](style-guide.md#exceptions); this section describes the actual APIs involved.)
 
 ### Assertions
 
@@ -400,7 +400,7 @@ On Windows, two similar macros are available based on Windows API calling conven
 
 ### Alternate exception types
 
-As described in [KJ's exception philosohpy](style-guide.md#exceptions), KJ supports a small set of exception types. Regular assertions throw `FAILED` exceptions. `KJ_SYSCALL` usually throws `FAILED`, but identifies certain error codes as `DISCONNECTED` or `OVERLOADED`. For example, `ECONNRESET` is clearly a `DISCONNECTED` exception.
+As described in [KJ's exception philosophy](style-guide.md#exceptions), KJ supports a small set of exception types. Regular assertions throw `FAILED` exceptions. `KJ_SYSCALL` usually throws `FAILED`, but identifies certain error codes as `DISCONNECTED` or `OVERLOADED`. For example, `ECONNRESET` is clearly a `DISCONNECTED` exception.
 
 If you wish to manually construct and throw a different exception type, you may use `KJ_EXCEPTION`:
 
@@ -538,13 +538,476 @@ This section describes KJ APIs that control process execution and low-level inte
 
 KJ makes asynchronous programming manageable using an API modeled on E-style Promises. E-style Promises were also the inspiration for JavaScript Promises, so modern JavaScript programmers should find KJ Promises familiar, although there are some important differences.
 
-A `kj::Promise<T>` represents an asynchronous background task that, upon completion, will either "resolve" to a value of type `T`, or "reject" with an exception.
+A `kj::Promise<T>` represents an asynchronous background task that, upon completion, either "resolves" to a value of type `T`, or "rejects" with an exception.
 
-TODO: Many details.
+In the simplest case, a `kj::Promise<T>` can be directly constructed from an instance of `T`:
+
+```c++
+int i = 123;
+kj::Promise<int> promise = i;
+```
+
+In this case, the promise is immediately resolved to the given value.
+
+A promise can also immediately reject with an exception:
+
+```c++
+kj::Exception e = KJ_EXCEPTION(FAILED, "problem");
+kj::Promise<int> promise = kj::mv(e);
+```
+
+Of course, `Promise`s are much more interesting when they don't complete immediately.
+
+When a function returns a `Promise`, it means that the function performs some asynchronous operation that will complete in the future. These functions are always non-blocking -- they immediately return a `Promise`. The task completes asynchronously on the event loop. The eventual results of the promise can be obtained using `.then()` to register a callback, or, in certain situations, `.wait()` to synchronously wait. These are described in more detail below.
+
+### Basic event loop setup
+
+In order to execute `Promise`-based code, the thread must be running an event loop. Typically, at the top level of the thread, you would do something like:
+
+```c++
+kj::AsyncIoContext io = kj::setupAsyncIo();
+
+kj::AsyncIoProvider& ioProvider = *io.provider;
+kj::LowLevelAsyncIoProvider& lowLevelProvider = *io.lowLevelProvider;
+kj::WaitScope& waitScope = io.waitScope;
+```
+
+`kj::setupAsyncIo()` constructs and returns a bunch of objects:
+
+* A `kj::AsyncIoProvider`, which provides access to a variety of I/O APIs, like timers, pipes, and networking.
+* A `kj::LowLevelAsyncIoProvider`, which allows you to wrap existing low-level operating system handles (Unix file descriptors, or Windows `HANDLE`s) in KJ asynchronous interfaces.
+* A `kj::WaitScope`, which allows you to perform synchronous waits (see next section).
+* OS-specific interfaces for even lower-level access -- see the API definition for more details.
+
+In order to implement all this, KJ will set up the appropriate OS-specific constructs to handle I/O events on the host platform. For example, on Linux, KJ will use `epoll`, whereas on Windows, it will set up an I/O Completion Port.
+
+Sometimes, you may need KJ promises to cooperate with some existing event loop, rather than set up its own. For example, you might be using libuv, or Boost.Asio. Usually, a thread can only have one event loop, because it can only wait on one OS event queue (e.g. `epoll`) at a time. To accommodate this, it is possible (though not easy) to adapt KJ to run on top of some other event loop, by creating a custom implementation of `kj::EventPort`. The details of how to do this are beyond the scope of this document.
+
+Sometimes, you may find that you don't really need to perform operating system I/O at all. For example, a unit test might only need to call some asynchronous functions using mock I/O interfaces, or a thread in a multi-threaded program may only need to exchange events with other threads and not the OS. In these cases, you can create a simple event loop instead:
+
+```c++
+kj::EventLoop eventLoop;
+kj::WaitScope waitScope(eventLoop);
+```
+
+### Synchronous waits
+
+In the top level of your program (or thread), the program is allowed to synchronously wait on a promise using the `kj::WaitScope` (see above).
+
+```
+kj::Timer& timer = io.provider->getTimer();
+kj::Promise<void> promise = timer.afterDelay(5 * kj::SECONDS);
+promise.wait(waitScope);  // returns after 5 seconds' delay
+```
+
+`promise.wait()` will run the thread's event loop until the promise completes. It will then return the `Promise`'s result (or throw the `Promise`'s exception). `.wait()` consumes the `Promise`, as if the `Promise` has been moved away.
+
+Synchronous waits cannot be nested -- i.e. a `.then()` callback (see below) that is called by the event loop itself cannot execute another level of synchronous waits. Hence, synchronous waits generally can only be used at the top level of the thread. The API requires passing a `kj::WaitScope` to `.wait()` as a way to demonstrate statically that the caller is allowed to perform synchronous waits. Any function which wishes to perform synchronous waits must take a `kj::WaitScope&` as a parameter to indicate that it does this.
+
+Synchronous waits often make sense to use in "client" programs that only have one task to complete before they exit. On the other end of the spectrum, server programs that handle many clients generally must do everything asynchronously. At the top level of a server program, you will typically instruct the event loop to run forever, like so:
+
+```c++
+// Run event loop forever, do everything asynchronously.
+kj::NEVER_DONE.wait(waitScope);
+```
+
+Libraries should always be asynchronous, so that either kind of program can use them.
+
+### Asynchronous callbacks
+
+Similar to JavaScript promises, you may register a callback to call upon completion of a KJ promise using `.then()`:
+
+```c++
+kj::Promise<kj::String> textPromise = stream.readAllText();
+kj::Promise<int> lineCountPromise = textPromise
+    .then([](kj::String text) {
+  int lineCount = 0;
+  for (char c: text) {
+    if (c == '\n') {
+      ++lineCount;
+    }
+  }
+  return lineCount;
+});
+```
+
+`promise.then()` takes, as its argument, a lambda which transforms the result of the `Promise`. It returns a new `Promise` for the transformed result. We call this lambda a "continuation".
+
+Calling `.then()`, like `.wait()`, consumes the original promise, as if it were "moved away". Ownership of the original promise is transferred into the new, derived promise. If you want to register multiple continuations on the same promise, you must fork it first (see below).
+
+If the continuation itself returns another `Promise`, then the `Promise`s become chained. That is, the final type is reduced from `Promise<Promise<T>>` to just `Promise<T>`.
+
+```c++
+kj::Promise<kj::Own<kj::AsyncIoStream>> connectPromise =
+    networkAddress.connect();
+kj::Promise<kj::String> textPromise = connectPromise
+    .then([](kj::Own<kj::AsyncIoStream> stream) {
+  return stream->readAllText().attach(kj::mv(stream));
+});
+```
+
+If a promise rejects (throws an exception), then the exception propagates through `.then()` to the new derived promise, without calling the continuation. If you'd like to actually handle the exception, you may pass a second lambda as the second argument to `.then()`.
+
+```c++
+kj::Promise<kj::String> promise = networkAddress.connect()
+    .then([](kj::Own<kj::AsyncIoStream> stream) {
+  return stream->readAllText().attach(kj::mv(stream));
+}, [](kj::Exception&& exception) {
+  return kj::str("connection error: ", exception);
+});
+```
+
+You can also use `.catch_(errorHandler)`, which is a shortcut for `.then(identityFunction, errorHandler)`.
+
+### `kj::evalNow()`, `kj::evalLater()`, and `kj::evalLast()`
+
+These three functions take a lambda as the parameter, and return the result of evaluating the lambda. They differ in when, exactly, the execution happens.
+
+```c++
+kj::Promise<int> promise = kj::evalLater([]() {
+  int i = doSomething();
+  return i;
+});
+```
+
+As with `.then()` continuations, the lambda passed to these functions may itself return a `Promise`.
+
+`kj::evalNow()` executes the lambda immediately -- before `evalNow()` even returns. The purpose of `evalNow()` is to catch any exceptions thrown and turn them into a rejected promise. This is often a good idea when you don't want the caller to have to handle both synchronous and asynchronous exceptions -- wrapping your whole function in `kj::evalNow()` ensures that all exceptions are delivered asynchronously.
+
+`kj::evalLater()` executes the lambda on a future turn of the event loop. This is equivalent to `kj::Promise<void>().then()`.
+
+`kj::evalLast()` arranges for the lambda to be called only after all other work queued to the event loop has completed (but before querying the OS for new I/O events). This can often be useful e.g. for batching. For example, if a program tends to make many small write()s to a socket in rapid succession, you might want to add a layer that collects the writes into a batch, then sends the whole batch in a single write from an `evalLast()`. This way, none of the bytes are significantly delayed, but they can still be coalesced.
+
+If multiple `evalLast()`s exist at the same time, they will execute in last-in-first-out order. If the first one out schedules more work on the event loop, that work will be completed before the next `evalLast()` executes, and so on.
+
+### Attachments
+
+Often, a task represented by a `Promise` will require that some object remains alive until the `Promise` completes. In particular, under KJ conventions, unless documented otherwise, any class method which returns a `Promise` inherently expects that the caller will ensure that the object it was called on will remain alive until the `Promise` completes (or is canceled). Put another way, member function implementations may assume their `this` pointer is valid as long as their returned `Promise` is alive.
+
+You may use `promise.attach(kj::mv(object))` to give a `Promise` direct ownership of an object that must be kept alive until the promise completes. `.attach()`, like `.then()`, consumes the promise and returns a new one of the same type.
+
+```c++
+kj::Promise<kj::Own<kj::AsyncIoStream>> connectPromise =
+    networkAddress.connect();
+kj::Promise<kj::String> textPromise = connectPromise
+    .then([](kj::Own<kj::AsyncIoStream> stream) {
+  // We must attach the stream so that it remains alive until `readAllText()`
+  // is done. The stream will then be discarded.
+  return stream->readAllText().attach(kj::mv(stream));
+});
+```
+
+Using `.attach()` is semantically equivalent to using `.then()`, passing an identity function as the continuation, while having that function capture ownership of the attached object, i.e.:
+
+```c++
+// This...
+promise.attach(kj::mv(attachment));
+// ...is equivalent to this...
+promise.then([a = kj::mv(attachment)](auto x) { return kj::mv(x); });
+```
+
+Note that you can use `.attach()` together with `kj::defer()` to construct a "finally" block -- code which will execute after the promise completes (or is canceled).
+
+```c++
+promise = promise.attach(kj::defer([]() {
+  // This code will execute when the promise completes or is canceled.
+}));
+```
+
+### Background tasks
+
+If you construct a `Promise` and then just leave it be without calling `.then()` or `.wait()` to consume it, the task it represents will nevertheless execute when the event loop runs, "in the background". You can call `.then()` or `.wait()` later on, when you're ready. This makes it possible to run multiple concurrent tasks at once.
+
+Note that, when possible, KJ evaluates continuations lazily. Continuations which merely transform the result (without returning a new `Promise` that might require more waiting) are only evaluated when the final result is actually needed. This is an optimization which allows a long chain of `.then()`s to be executed all at once, rather than turning the event loop for each one. However, it can lead to some confusion when storing an unconsumed `Promise`. For example:
+
+```c++
+kj::Promise<void> promise = timer.afterDelay(5 * kj::SECONDS)
+    .then([]() {
+  // This log line will never be written, because nothing
+  // is waiting on the final result of the promise.
+  KJ_LOG(WARNING, "It has been 5 seconds!!!");
+});
+kj::NEVER_DONE.wait(waitScope);
+```
+
+To solve this, use `.eagerlyEvaluate()`:
+
+```c++
+kj::Promise<void> promise = timer.afterDelay(5 * kj::SECONDS)
+    .then([]() {
+  // This log will correctly be written after 5 seconds.
+  KJ_LOG(WARNING, "It has been 5 seconds!!!");
+}).eagerlyEvaluate([](kj::Exception&& exception) {
+  KJ_LOG(ERROR, exception);
+});
+kj::NEVER_DONE.wait(waitScope);
+```
+
+`.eagerlyEvaluate()` takes an error handler callback as its parameter, with the same semantics as `.catch_()` or the second parameter to `.then()`. This is required because otherwise, it is very easy to forget to install an error handler on background tasks, resulting in errors being silently discarded. However, if you are certain that errors will be properly handled elsewhere, you may pass `nullptr` as the parameter to skip error checking -- this is equivalent to passing a callback that merely re-throws the exception.
+
+If you have lots of background tasks, use `kj::TaskSet` to manage them. Any promise added to a `kj::TaskSet` will be run to completion (with eager evaluation), with any exceptions being reported to a provided error handler callback.
+
+### Cancellation
+
+If you destroy a `Promise` before it has completed, any incomplete work will be immediately canceled.
+
+Upon cancellation, no further continuations are executed at all, not even error handlers. Only destructors are executed. Hence, when there is cleanup that must be performed after a task, it is not sufficient to use `.then()` to perform the cleanup in continuations. You must instead use `.attach()` to attach an object whose destructor performs the cleanup (or perhaps `.attach(kj::defer(...))`, as mentioned earlier).
+
+Promise cancellation has proven to be an extremely useful feature of KJ promises which is missing in other async frameworks, such as JavaScript's. However, it places new responsibility on the developer. Just as developers who allow exceptions must design their code to be "exception safe", developers using KJ promises must design their code to be "cancellation safe".
+
+It is especially important to note that once a promise has been canceled, then any references that were received along with the promise may no longer be valid. For example, consider this function:
+
+```
+kj::Promise<void> write(kj::ArrayPtr<kj::byte> data);
+```
+
+The function receives a pointer to some data owned elsewhere. By KJ convention, the caller must ensure this pointer remains valid until the promise completes _or is canceled_. If the caller decides it needs to free the data early, it may do so as long as it cancels the promise first. This property is important as otherwise it becomes impossible to reason about ownership in complex systems.
+
+This means that the implementation of `write()` must immediately stop using `data` as soon as cancellation occurs. For example, if `data` has been placed in some sort of queue where some other concurrent task takes items from the queue to write them, then it must be ensured that `data` will be removed from that queue upon cancellation. This "queued writes" pattern has historically been a frequent source of bugs in KJ code, to the point where experienced KJ developers now become immediately suspicious of such queuing. The `kj::AsyncOutputStream` interface explicitly prohibits overlapping calls to `write()` specifically so that the implementation need not worry about maintaining queues.
+
+### Promise-Fulfiller Pairs and Adapted Promises
+
+Sometimes, it's difficult to express asynchronous control flow as a simple chain of continuations. For example, imagine a producer-consumer queue, where producers and consumers are executing concurrently on the same event loop. The consumer doesn't directly call the producer, nor vice versa, but the consumer would like to wait for the producer to produce an item for consumption.
+
+For these situations, you may use a `Promise`-`Fulfiller` pair.
+
+```c++
+kj::PromiseFulfillerPair<int> paf = kj::newPromiseAndFulfiller<int>();
+
+// Consumer waits for the promise.
+paf.promise.then([](int i) { ... });
+
+// Producer calls the fulfiller to fulfill the promise.
+paf.fulfiller->fulfill(123);
+
+// Producer can also reject the promise.
+paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "something went wrong"));
+```
+
+**WARNING! DANGER!** When using promise-fulfiller pairs, it is very easy to forget about both exception propagation and, more importantly, cancellation-safety.
+
+* **Exception-safety:** If your code stops early due to an exception, it may forget to invoke the fulfiller. Upon destroying the fulfiller, the consumer end will receive a generic, unhelpful exception, merely saying that the fulfiller was destroyed unfulfilled. To aid in debugging, you should make sure to catch exceptions and call `fulfiller->reject()` to propagate them.
+* **Cancellation-safety:** Either the producer or the consumer task could be canceled, and you must consider how this affects the other end.
+    * **Canceled consumer:** If the consumer is canceled, the producer may waste time producing an item that no one is waiting for. Or, worse, if the consumer has provided references to the producer (for example, a buffer into which results should be written), those references may become invalid upon cancellation, but the producer will continue executing, possibly resulting in a use-after-free. To avoid these problems, the producer can call `fulfiller->isWaiting()` to check if the consumer is still waiting -- this method returns false if either the consumer has been canceled, or if the producer has already fulfilled or rejected the promise previously. However, `isWaiting()` requires polling, which is not ideal. For better control, consider using an adapted promise (see below).
+    * **Canceled producer:** If the producer is canceled, by default it will probably destroy the fulfiller without fulfilling or reject it. As described previously, the consumer will receive a non-descript exception, which is likely unhelpful for debugging. To avoid this scenario, the producer could perhaps use `.attach(kj::defer(...))` with a lambda that checks `fulfiller->isWaiting()` and rejects it if not.
+
+Because of the complexity of the above issues, it is generally recommended that you **avoid promise-fulfiller pairs** except in cases where these issues very clearly don't matter (such as unit tests).
+
+Instead, when cancellation concerns matter, consider using "adapted promises", a more sophisticated alternative. `kj::newAdaptedPromise<T, Adapter>()` constructs an instance of the class `Adapter` (which you define) encapsulated in a returned `Promise<T>`. `Adapter`'s constructor receives a `kj::PromiseFulfiller<T>&` used to fulfill the promise. The constructor should then register the fulfiller with the desired producer. If the promise is canceled, `Adapter`'s destructor will be invoked, and should un-register the fulfiller. One common technique is for `Adapter` implementations to form a linked list with other `Adapter`s waiting for the same producer. Adapted promises make consumer cancellation much more explicit and easy to handle, at the expense of requiring more code.
+
+### Loops
+
+Promises, due to their construction, don't lend themselves easily to classic `for()`/`while()` loops. Instead, loops should be expressed recursively, as in a functional language. For example:
+
+```c++
+kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
+  return timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
+    boop();
+    // Loop by recursing.
+    return boopEvery5Seconds(timer);
+  });
+}
+```
+
+KJ promises include "tail call optimization" for loops like the one above, so that the promise chain length remains finite no matter how many times the loop iterates.
+
+**WARNING!** It is very easy to accidentally break tail call optimization, creating a memory leak. Consider the following:
+
+```c++
+kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
+  // WARNING! MEMORY LEAK!
+  return timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
+    boop();
+    // Loop by recursing.
+    return boopEvery5Seconds(timer);
+  }).catch_([](kj::Exception&& exception) {
+    // Oh no, an error! Log it and end the loop.
+    KJ_LOG(ERROR, exception);
+    kj::throwFatalException(kj::mv(exception));
+  });
+}
+```
+
+The problem in this example is that the recursive call is _not_ a tail call, due to the `.catch_()` appended to the end. Every time around the loop, a new `.catch_()` is added to the promise chain. If an exception were thrown, that exception would end up being logged many times -- once for each time the loop has repeated so far. Or if the loop iterated enough times, and the top promise was then canceled, the chain could be so long that the destructors overflow the stack.
+
+In this case, the best fix is to pull the `.catch_()` out of the loop entirely:
+
+```c++
+kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
+  return boopEvery5SecondsLoop(timer)
+      .catch_([](kj::Exception&& exception) {
+    // Oh no, an error! Log it and end the loop.
+    KJ_LOG(ERROR, exception);
+    kj::throwFatalException(kj::mv(exception));
+  })
+}
+
+kj::Promise<void> boopEvery5SecondsLoop(kj::Timer& timer) {
+  // No memory leaks now!
+  return timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
+    boop();
+    // Loop by recursing.
+    return boopEvery5SecondsLoop(timer);
+  });
+}
+```
+
+Another possible fix would be to make sure the recursive continuation and the error handler are passed to the same `.then()` invocation:
+
+```c++
+kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
+  // No more memory leaks, but hard to reason about.
+  return timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
+    boop();
+  }).then([&timer]() {
+    // Loop by recursing.
+    return boopEvery5Seconds(timer);
+  }, [](kj::Exception&& exception) {
+    // Oh no, an error! Log it and end the loop.
+    KJ_LOG(ERROR, exception);
+    kj::throwFatalException(kj::mv(exception));
+  });
+}
+```
+
+Notice that in this second case, the error handler is scoped so that it does _not_ catch exceptions thrown by the recursive call; it only catches exceptions from `boop()`. This solves the problem, but it's a bit trickier to understand and to ensure that exceptions can't accidentally slip past the error handler.
+
+### Forking and splitting promises
+
+As mentioned above, `.then()` and similar functions consume the promise on which they are called, so they can only be called once. But what if you want to start multiple tasks using the result of a promise? You could solve this in a convoluted way using adapted promises, but KJ has a built-in solution: `.fork()`
+
+```c++
+kj::Promise<int> promise = ...;
+kj::ForkedPromise<int> forked = promise.fork();
+kj::Promise<int> branch1 = promise.addBranch();
+kj::Promise<int> branch2 = promise.addBranch();
+kj::Promise<int> branch3 = promise.addBranch();
+```
+
+A forked promise can have any number of "branches" which represent different consumers waiting for the same result.
+
+Forked promises use reference counting. The `ForkedPromise` itself, and each branch created from it, each represent a reference to the original promise. The original promise will only be canceled if all branches are canceled and the `ForkedPromise` itself is destroyed.
+
+Forked promises require that the result type has a copy constructor, so that it can be copied to each branch. (Regular promises only require the result type to be movable, not copyable.) Or, alternatively, if the result type is `kj::Own<T>` -- which is never copyable -- then `T` must have a method `kj::Own<T> T::addRef()`; this method will be invoked to create each branch. Typically, `addRef()` would be implemented using reference counting.
+
+Sometimes, the copyable requirement of `.fork()` can be burdensome and unnecessary. If the result type has multiple components, and each branch really only needs one of the components, then being able to copy (or refcount) is unnecessary. In these cases, you can use `.split()` instead. `.split()` converts a promise for a `kj::Tuple` into a `kj::Tuple` of promises. That is:
+
+```c++
+kj::Promise<kj::Tuple<kj::Own<Foo>, kj::String>> promise = ...;
+kj::Tuple<kj::Promise<kj::Own<Foo>>, kj::Promise<kj::String>> promises = promise.split();
+```
+
+### Joining promises
+
+The opposite of forking promises is joining promises. There are two types of joins:
+* **Exclusive** joins wait for any one input promise to complete, then cancel the rest, returning the result of the promise that completed.
+* **Inclusive** joins wait for all input promises to complete, and render all of the results.
+
+For an exclusive join, use `promise.exclusiveJoin(kj::mv(otherPromise))`. The two promises must return the same type. The result is a promise that returns whichever result is produced first, and cancels the other promise at that time. (To exclusively join more than two promises, call `.exclusiveJoin()` multiple times in a chain.)
+
+To perform an inclusive join, use `kj::joinPromises()`. This turns a `kj::Array<kj::Promise<T>>` into a `kj::Promise<kj::Array<T>>`. However, note that `kj::joinPromises()` has a couple common gotchas:
+* Trailing continuations on the promises passed to `kj::joinPromises()` are evaluated lazily after all the promises become ready. Use `.eagerlyEvaluate()` on each one to force trailing continuations to happen eagerly. (See earlier discussion under "Background Tasks".)
+* If any promise in the array rejects, the exception will be held until all other promises have completed (or rejected), and only then will the exception propagate. In practice we've found that most uses of `kj::joinPromises()` would prefer "exclusive" or "fail-fast" behavior in the case of an exception, but as of this writing we have not yet introduced a function that does this.
+
+### Threads
+
+The KJ async framework is designed around single-threaded event loops. However, you can have multiple threads, with each running its own loop.
+
+All KJ async objects, unless specifically documented otherwise, are intrinsically tied to the thread and event loop on which they were created. These objects must not be accessed from any other thread.
+
+To communicate between threads, you may use `kj::Executor`. Each thread (that has an event loop) may call `kj::getCurrentThreadExecutor()` to get a reference to its own `Executor`. That reference may then be shared with other threads. The other threads can use the methods of `Executor` to queue functions to execute on the owning thread's event loop.
+
+The threads which call an `Executor` do not have to have KJ event loops themselves. Thus, you can use an `Executor` to signal a KJ event loop thread from a non-KJ thread.
+
+### Fibers
+
+Fibers allow code to be written in a synchronous / blocking style while running inside the KJ event loop, by executing the code on an alternate call stack. The code running on this alternate stack is given a special `kj::WaitScope&`, which it can pass to `promise.wait()` to perform synchronous waits. When such a `.wait()` is invoked, the thread switches back to the main call stack and continues running the event loop there. When the waited promise resolves, execution switches back to the alternate call stack and `.wait()` returns (or throws).
+
+```c++
+constexpr size_t STACK_SIZE = 65536;
+kj::Promise<int> promise =
+    kj::startFiber(STACK_SIZE, [](kj::WaitScope& waitScope) {
+  int i = someAsyncFunc().wait(waitScope);
+  i += anotherAsyncFunc().wait(waitScope);
+  return i;
+});
+```
+
+**CAUTION:** Fibers produce attractive-looking code, but have serious drawbacks. Every fiber must allocate a new call stack, which is typically rather large. The above example allocates a 64kb stack, which is the _minimum_ supported size. Some programs and libraries expect to be able to allocate megabytes of data on the stack. On modern Linux systems, a default stack size of 8MB is typical. Stack space is allocated lazily on page faults, but just setting up the memory mapping is much more expensive than a typical `malloc()`. If you create lots of fibers, you should use `kj::FiberPool` to reduce allocation costs -- but while this reduces allocation overhead, it will increase memory usage.
+
+Because of this, fibers should not be used just to make code look nice (C++20's `co_await`, which KJ will soon support, is a better way to do that). Instead, the main use case for fibers is to be able to call into existing libraries that are not designed to operate in an asynchronous way. For example, say you find a library that performs stream I/O, and lets you provide your own `read()`/`write()` implementations, but expects those implementations to operate in a blocking fashion. With fibers, you can use such a library within the asynchronous KJ event loop.
+
+### Unit testing tips
+
+When unit-testing promise APIs, two tricky challenges frequently arise:
+
+* Testing that a promise has completed when it is supposed to. You can use `promise.wait()`, but if the promise has not completed as expected, then the test may simply hang. This can be frustrating to debug.
+* Testing that a promise has not completed prematurely. You obviously can't use `promise.wait()`, because you _expect_ the promise has not completed, and therefore this would hang. You might try using `.then()` with a continuation that sets a flag, but if the flag is not set, it's hard to tell whether this is because the promise really has not completed, or merely because the event loop hasn't yet called the `.then()` continuation.
+
+To solve these problems, you can use `promise.poll(waitScope)`. This function runs the event loop until either the promise completes, or there is nothing left to do except to wait. This includes running any continuations in the queue as well as checking for I/O events from the operating system, repeatedly, until nothing is left. The only thing `.poll()` will not do is block. `.poll()` returns true if the promise has completed, false if it hasn't.
+
+```c++
+// In a unit test...
+kj::Promise<void> promise = waitForBoop();
+
+// The promise should not be done yet because we haven't booped yet.
+KJ_ASSERT(!promise.poll(waitScope));
+
+boop();
+
+// Assert the promise is done, to make sure wait() won't hang!
+KJ_ASSERT(promise.poll(waitScope));
+
+promise.wait(waitScope);
+```
 
 ## System I/O
 
-TODO: async-io, etc.
+### Async I/O
+
+On top of KJ's async framework (described earlier), KJ provides asynchronous APIs for byte streams, networking, and timers.
+
+As mentioned previously, `kj::setupAsyncIo()` allocates an appropriate OS-specific event queue (such as `epoll` on Linux), returning implementations of `kj::AsyncIoProvider` and `kj::LowLevelAsyncIoProvider` implemented in terms of that queue. `kj::AsyncIoProvider` provides an OS-independent API for byte streams, networking, and timers. `kj::LowLevelAsyncIoProvider` allows native OS handles (file descriptors on Unix, `HANDLE`s on Windows) to be wrapped in KJ byte stream APIs, like `kj::AsyncIoStream`.
+
+Please refer to the API reference (the header files) for details on these APIs.
+
+### Synchronous I/O
+
+Although most complex KJ applications use async I/O, sometimes you want something a little simpler.
+
+`kj/io.h` provides some more basic, synchronous streaming interfaces, like `kj::InputStream` and `kj::OutputStream`. Implementations are provided on top of file descriptors and Windows `HANDLE`s.
+
+Additionally, the important utility class `kj::AutoCloseFd` (and `kj::AutoCloseHandle` for Windows) can be found here. This is an RAII wrapper around a file descriptor (or `HANDLE`), which you will likely want to use any time you are manipulating raw file descriptors (or `HANDLE`s) in KJ code.
+
+### Filesystem
+
+KJ provides an advanced, cross-platform filesystem API in `kj/filesystem.h`. Features include:
+
+* Paths represented using `kj::Path`. In addition to providing common-sense path parsing and manipulation functions, this class is designed to defend against path injection attacks.
+* All interfaces are abstract, allowing multiple implementations.
+* An in-memory implementation is provided, useful in particular for mocking the filesystem in unit tests.
+* On Unix, disk `kj::Directory` objects are backed by open file descriptors and use the `openat()` family of system calls.
+* Makes it easy to use atomic replacement when writing new files -- and even whole directories.
+* Symlinks, hard links, listing directories, recursive delete, recursive create parents, recursive copy directory, memory mapping, and unnamed temporary files are all exposed and easy to use.
+* Sparse files ("hole punching"), copy-on-write file cloning (`FICLONE`, `FICLONERANGE`), `sendfile()`-based copying, `renameat2()` atomic replacements, and more will automatically be used when available.
+
+See the API reference (header file) for details.
+
+### Clocks and time
+
+KJ provides a time library in `kj/time.h` which uses the type system to enforce unit safety.
+
+`kj::Duration` represents a length of time, such as a number of seconds. Multiply an integer by `kj::SECONDS`, `kj::MINUTES`, `kj::NANOSECONDS`, etc. to get a `kj::Duration` value. Divide by the appropriate constant to get an integer.
+
+`kj::Date` represents a point in time in the real world. `kj::UNIX_EPOCH` represents January 1st, 1970, 00:00 UTC. Other dates can be constructed by adding a `kj::Duration` to `kj::UNIX_EPOCH`. Taking the difference between to `kj::Date`s produces a `kj::Duration`.
+
+`kj::TimePoint` represents a time point measured against an unspecified origin time. This is typically used with monotonic clocks that don't necessarily reflect calendar time. Unlike `kj::Date`, there is no implicit guarantee that two `kj::TimePoint`s are measured against the same origin and are therefore comparable; it is up to the application to track which clock any particular `kj::TimePoint` came from.
+
+`kj::Clock` is a simple interface whose `now()` method returns the current `kj::Date`. `kj::MonotonicClock` is a similar interface returning a `kj::TimePoint`, but with the guarantee that times returned always increase (whereas a `kj::Clock` might go "back in time" if the user manually modifies their system clock).
+
+`kj::systemCoarseCalendarClock()`, `kj::systemPreciseCalendarClock()`, `kj::systemCoarseMonotonicClock()`, `kj::systemPreciseMonotonicClock()` are global functions that return implementations of `kj::Clock` or `kJ::MonotonicClock` based on sytem time.
+
+`kj::Timer` provides an async (promise-based) interface to wait for a specified time to pass. A `kj::Timer` is provided via `kj::AsyncIoProvider`, constructed using `kj::setupAsyncIo()` (see earlier discussion on async I/O).
 
 ## Program Harness
 
