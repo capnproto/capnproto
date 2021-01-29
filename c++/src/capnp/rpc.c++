@@ -3081,15 +3081,15 @@ public:
   Impl(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface)
       : network(network), bootstrapInterface(kj::mv(bootstrapInterface)),
         bootstrapFactory(*this), tasks(*this) {
-    tasks.add(acceptLoop());
+    acceptLoopPromise = acceptLoop().eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
   }
   Impl(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory)
       : network(network), bootstrapFactory(bootstrapFactory), tasks(*this) {
-    tasks.add(acceptLoop());
+    acceptLoopPromise = acceptLoop().eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
   }
   Impl(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
       : network(network), bootstrapFactory(*this), restorer(restorer), tasks(*this) {
-    tasks.add(acceptLoop());
+    acceptLoopPromise = acceptLoop().eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
   }
 
   ~Impl() noexcept(false) {
@@ -3142,6 +3142,8 @@ public:
     traceEncoder = kj::mv(func);
   }
 
+  kj::Promise<void> run() { return kj::mv(acceptLoopPromise); }
+
 private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
@@ -3149,6 +3151,7 @@ private:
   kj::Maybe<SturdyRefRestorerBase&> restorer;
   size_t flowLimit = kj::maxValue;
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder;
+  kj::Promise<void> acceptLoopPromise = nullptr;
   kj::TaskSet tasks;
 
   typedef std::unordered_map<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>
@@ -3179,16 +3182,10 @@ private:
   }
 
   kj::Promise<void> acceptLoop() {
-    auto receive = network.baseAccept().then(
+    return network.baseAccept().then(
         [this](kj::Own<VatNetworkBase::Connection>&& connection) {
       getConnectionState(kj::mv(connection));
-    });
-    return receive.then([this]() {
-      // No exceptions; continue loop.
-      //
-      // (We do this in a separate continuation to handle the case where exceptions are
-      // disabled.)
-      tasks.add(acceptLoop());
+      return acceptLoop();
     });
   }
 
@@ -3236,6 +3233,10 @@ void RpcSystemBase::baseSetFlowLimit(size_t words) {
 
 void RpcSystemBase::setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func) {
   impl->setTraceEncoder(kj::mv(func));
+}
+
+kj::Promise<void> RpcSystemBase::run() {
+  return impl->run();
 }
 
 }  // namespace _ (private)

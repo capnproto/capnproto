@@ -87,6 +87,8 @@ public:
 
   void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
 
+  kj::Promise<void> run();
+
 private:
   class Impl;
   kj::Own<Impl> impl;
