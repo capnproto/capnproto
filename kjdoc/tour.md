@@ -733,7 +733,7 @@ kj::NEVER_DONE.wait(waitScope);
 To solve this, use `.eagerlyEvaluate()`:
 
 ```c++
-kj::Promise<void> timer.afterDelay(5 * kj::SECONDS)
+kj::Promise<void> promise = timer.afterDelay(5 * kj::SECONDS)
     .then([]() {
   // This log will correctly be written after 5 seconds.
   KJ_LOG(WARNING, "It has been 5 seconds!!!");
@@ -816,7 +816,7 @@ KJ promises include "tail call optimization" for loops like the one above, so th
 ```c++
 kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
   // WARNING! MEMORY LEAK!
-  timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
+  return timer.afterDelay(5 * kj::SECONDS).then([&timer]() {
     boop();
     // Loop by recursing.
     return boopEvery5Seconds(timer);
