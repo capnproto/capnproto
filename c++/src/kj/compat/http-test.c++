@@ -239,7 +239,7 @@ KJ_TEST("HttpHeaders parse invalid") {
 
     auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
 
-    KJ_EXPECT(protocolError.description == "ERROR: Request headers have no terminal newline.",
+    KJ_EXPECT(protocolError.description == "Request headers have no terminal newline.",
         protocolError.description);
     KJ_EXPECT(protocolError.rawContent.asChars() == input);
   }
@@ -256,7 +256,7 @@ KJ_TEST("HttpHeaders parse invalid") {
 
     auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
 
-    KJ_EXPECT(protocolError.description == "ERROR: The headers sent by your client are not valid.",
+    KJ_EXPECT(protocolError.description == "The headers sent by your client are not valid.",
         protocolError.description);
     KJ_EXPECT(protocolError.rawContent.asChars() == input);
   }
@@ -273,7 +273,7 @@ KJ_TEST("HttpHeaders parse invalid") {
 
     auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
 
-    KJ_EXPECT(protocolError.description == "ERROR: The headers sent by your client are not valid.",
+    KJ_EXPECT(protocolError.description == "The headers sent by your client are not valid.",
         protocolError.description);
     KJ_EXPECT(protocolError.rawContent.asChars() == input);
   }
@@ -290,7 +290,7 @@ KJ_TEST("HttpHeaders parse invalid") {
 
     auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
 
-    KJ_EXPECT(protocolError.description == "ERROR: Unrecognized request method.",
+    KJ_EXPECT(protocolError.description == "Unrecognized request method.",
         protocolError.description);
     KJ_EXPECT(protocolError.rawContent.asChars() == input);
   }
@@ -2696,9 +2696,9 @@ KJ_TEST("HttpServer bad request, custom error handler") {
   static constexpr auto expectedResponse =
       "HTTP/1.1 400 Bad Request\r\n"
       "Connection: close\r\n"
-      "Content-Length: 87\r\n"
+      "Content-Length: 80\r\n"
       "\r\n"
-      "Saw protocol error: ERROR: Unrecognized request method.; "
+      "Saw protocol error: Unrecognized request method.; "
       "rawContent = bad request\\000\\n"_kj;
 
   KJ_EXPECT(expectedResponse == response, expectedResponse, response);

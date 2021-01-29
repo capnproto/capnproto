@@ -871,7 +871,7 @@ HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<ch
   char* end = trimHeaderEnding(content);
   if (end == nullptr) {
     return ProtocolError { 400, "Bad Request",
-        "ERROR: Request headers have no terminal newline.", content };
+        "Request headers have no terminal newline.", content };
   }
 
   char* ptr = content.begin();
@@ -882,19 +882,19 @@ HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<ch
     request.method = *method;
     if (*ptr != ' ' && *ptr != '\t') {
       return ProtocolError { 501, "Not Implemented",
-          "ERROR: Unrecognized request method.", content };
+          "Unrecognized request method.", content };
     }
     ++ptr;
   } else {
     return ProtocolError { 501, "Not Implemented",
-        "ERROR: Unrecognized request method.", content };
+        "Unrecognized request method.", content };
   }
 
   KJ_IF_MAYBE(path, consumeWord(ptr)) {
     request.url = *path;
   } else {
     return ProtocolError { 400, "Bad Request",
-        "ERROR: Invalid request line.", content };
+        "Invalid request line.", content };
   }
 
   // Ignore rest of line. Don't care about "HTTP/1.1" or whatever.
@@ -902,7 +902,7 @@ HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<ch
 
   if (!parseHeaders(ptr, end)) {
     return ProtocolError { 400, "Bad Request",
-        "ERROR: The headers sent by your client are not valid.", content };
+        "The headers sent by your client are not valid.", content };
   }
 
   return request;
@@ -912,7 +912,7 @@ HttpHeaders::ResponseOrProtocolError HttpHeaders::tryParseResponse(kj::ArrayPtr<
   char* end = trimHeaderEnding(content);
   if (end == nullptr) {
     return ProtocolError { 502, "Bad Gateway",
-        "ERROR: Response headers have no terminal newline.", content };
+        "Response headers have no terminal newline.", content };
   }
 
   char* ptr = content.begin();
@@ -922,25 +922,25 @@ HttpHeaders::ResponseOrProtocolError HttpHeaders::tryParseResponse(kj::ArrayPtr<
   KJ_IF_MAYBE(version, consumeWord(ptr)) {
     if (!version->startsWith("HTTP/")) {
       return ProtocolError { 502, "Bad Gateway",
-          "ERROR: Invalid response status line (invalid protocol).", content };
+          "Invalid response status line (invalid protocol).", content };
     }
   } else {
     return ProtocolError { 502, "Bad Gateway",
-        "ERROR: Invalid response status line (no spaces).", content };
+        "Invalid response status line (no spaces).", content };
   }
 
   KJ_IF_MAYBE(code, consumeNumber(ptr)) {
     response.statusCode = *code;
   } else {
     return ProtocolError { 502, "Bad Gateway",
-        "ERROR: Invalid response status line (invalid status code).", content };
+        "Invalid response status line (invalid status code).", content };
   }
 
   response.statusText = consumeLine(ptr);
 
   if (!parseHeaders(ptr, end)) {
     return ProtocolError { 502, "Bad Gateway",
-        "ERROR: The headers sent by the server are not valid.", content };
+        "The headers sent by the server are not valid.", content };
   }
 
   return response;
@@ -4727,7 +4727,7 @@ private:
             timedOut = true;
             return HttpHeaders::ProtocolError {
               408, "Request Timeout",
-              "ERROR: Timed out waiting for next request headers.", nullptr
+              "Timed out waiting for next request headers.", nullptr
             };
           }));
         }
@@ -4738,7 +4738,7 @@ private:
         this->closed = true;
         return HttpHeaders::RequestOrProtocolError(HttpHeaders::ProtocolError {
           408, "Request Timeout",
-          "ERROR: Client closed connection or connection timeout "
+          "Client closed connection or connection timeout "
           "while waiting for request headers.", nullptr
         });
       }
@@ -4752,7 +4752,7 @@ private:
         timedOut = true;
         return HttpHeaders::ProtocolError {
           408, "Request Timeout",
-          "ERROR: Timed out waiting for initial request headers.", nullptr
+          "Timed out waiting for initial request headers.", nullptr
         };
       });
       receivedHeaders = receivedHeaders.exclusiveJoin(kj::mv(timeoutPromise));
@@ -4982,18 +4982,18 @@ private:
     // it to be GET.
 
     if (method != HttpMethod::GET) {
-      return sendWebSocketError("ERROR: WebSocket must be initiated with a GET request.");
+      return sendWebSocketError("WebSocket must be initiated with a GET request.");
     }
 
     if (requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_VERSION).orDefault(nullptr) != "13") {
-      return sendWebSocketError("ERROR: The requested WebSocket version is not supported.");
+      return sendWebSocketError("The requested WebSocket version is not supported.");
     }
 
     kj::String key;
     KJ_IF_MAYBE(k, requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_KEY)) {
       key = kj::str(*k);
     } else {
-      return sendWebSocketError("ERROR: Missing Sec-WebSocket-Key");
+      return sendWebSocketError("Missing Sec-WebSocket-Key");
     }
 
     auto websocketAccept = generateWebSocketAccept(key);
@@ -5186,7 +5186,7 @@ kj::Promise<void> HttpServerErrorHandler::handleClientProtocolError(
   HttpHeaders headers(headerTable);
   headers.set(HttpHeaderId::CONTENT_TYPE, "text/plain");
 
-  auto errorMessage = kj::str(protocolError.description);
+  auto errorMessage = kj::str("ERROR: ", protocolError.description);
   auto body = response.send(protocolError.statusCode, protocolError.statusMessage,
                             headers, errorMessage.size());
 
