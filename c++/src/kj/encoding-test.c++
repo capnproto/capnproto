@@ -58,6 +58,15 @@ void expectRes(EncodingResult<T> result,
   expectResImpl(kj::mv(result), arrayPtr(expected, s - 1), errors);
 }
 
+#if __cplusplus >= 202000L
+template <typename T, size_t s>
+void expectRes(EncodingResult<T> result,
+               const char8_t (&expected)[s],
+               bool errors = false) {
+  expectResImpl(kj::mv(result), arrayPtr(reinterpret_cast<const char*>(expected), s - 1), errors);
+}
+#endif
+
 template <typename T, size_t s>
 void expectRes(EncodingResult<T> result,
                byte (&expected)[s],
