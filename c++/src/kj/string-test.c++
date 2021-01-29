@@ -240,6 +240,31 @@ KJ_TEST("stringify array-of-array") {
   KJ_EXPECT(str(array) == "1, 23, 456, 7890");
 }
 
+KJ_TEST("ArrayPtr == StringPtr") {
+  StringPtr s = "foo"_kj;
+  ArrayPtr<const char> a = s;
+
+  KJ_EXPECT(a == s);
+#if __cplusplus >= 202000L
+  KJ_EXPECT(s == a);
+#endif
+}
+
+KJ_TEST("String == String") {
+  String a = kj::str("foo");
+  String b = kj::str("foo");
+  String c = kj::str("bar");
+
+  // We're trying to trigger the -Wambiguous-reversed-operator warning in Clang, but it seems
+  // magic asserts inadvertently squelch it. So, we use an alternate macro with no magic.
+#define KJ_EXPECT_NOMAGIC(cond) \
+    if (cond) {} else { KJ_FAIL_ASSERT("expected " #cond); }
+
+  KJ_EXPECT_NOMAGIC(a == a);
+  KJ_EXPECT_NOMAGIC(a == b);
+  KJ_EXPECT_NOMAGIC(a != c);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

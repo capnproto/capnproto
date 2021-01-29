@@ -239,7 +239,7 @@ EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
     }
 
   error:
-    result.addAll(StringPtr(reinterpret_cast<const char *>(u8"\ufffd")));
+    result.addAll(StringPtr(u8"\ufffd"));
     hadErrors = true;
   }
 
