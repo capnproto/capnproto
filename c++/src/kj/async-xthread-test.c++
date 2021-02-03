@@ -883,5 +883,162 @@ KJ_TEST("cross-thread event cancel requested while destination thread being dest
   })();
 }
 
+KJ_TEST("cross-thread fulfiller") {
+  MutexGuarded<Maybe<Own<PromiseFulfiller<int>>>> fulfillerMutex;
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = kj::newCrossThreadPromiseAndFulfiller<int>();
+    *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
+
+    int result = paf.promise.wait(waitScope);
+    KJ_EXPECT(result == 123);
+  });
+
+  ([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    Own<PromiseFulfiller<int>> fulfiller;
+    {
+      auto lock = fulfillerMutex.lockExclusive();
+      lock.wait([&](auto& value) { return value != nullptr; });
+      fulfiller = kj::mv(KJ_ASSERT_NONNULL(*lock));
+    }
+
+    fulfiller->fulfill(123);
+  })();
+}
+
+KJ_TEST("cross-thread fulfiller rejects") {
+  MutexGuarded<Maybe<Own<PromiseFulfiller<void>>>> fulfillerMutex;
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = kj::newCrossThreadPromiseAndFulfiller<void>();
+    *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
+
+    KJ_EXPECT_THROW_MESSAGE("foo exception", paf.promise.wait(waitScope));
+  });
+
+  ([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    Own<PromiseFulfiller<void>> fulfiller;
+    {
+      auto lock = fulfillerMutex.lockExclusive();
+      lock.wait([&](auto& value) { return value != nullptr; });
+      fulfiller = kj::mv(KJ_ASSERT_NONNULL(*lock));
+    }
+
+    fulfiller->reject(KJ_EXCEPTION(FAILED, "foo exception"));
+  })();
+}
+
+KJ_TEST("cross-thread fulfiller destroyed") {
+  MutexGuarded<Maybe<Own<PromiseFulfiller<void>>>> fulfillerMutex;
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = kj::newCrossThreadPromiseAndFulfiller<void>();
+    *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
+
+    KJ_EXPECT_THROW_MESSAGE(
+        "cross-thread PromiseFulfiller was destroyed without fulfilling the promise",
+        paf.promise.wait(waitScope));
+  });
+
+  ([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    Own<PromiseFulfiller<void>> fulfiller;
+    {
+      auto lock = fulfillerMutex.lockExclusive();
+      lock.wait([&](auto& value) { return value != nullptr; });
+      fulfiller = kj::mv(KJ_ASSERT_NONNULL(*lock));
+    }
+
+    fulfiller = nullptr;
+  })();
+}
+
+KJ_TEST("cross-thread fulfiller canceled") {
+  MutexGuarded<Maybe<Own<PromiseFulfiller<void>>>> fulfillerMutex;
+  MutexGuarded<bool> done;
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = kj::newCrossThreadPromiseAndFulfiller<void>();
+    {
+      auto lock = fulfillerMutex.lockExclusive();
+      *lock = kj::mv(paf.fulfiller);
+      lock.wait([](auto& value) { return value == nullptr; });
+    }
+
+    // cancel
+    paf.promise = nullptr;
+
+    {
+      auto lock = done.lockExclusive();
+      lock.wait([](bool value) { return value; });
+    }
+  });
+
+  ([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    Own<PromiseFulfiller<void>> fulfiller;
+    {
+      auto lock = fulfillerMutex.lockExclusive();
+      lock.wait([&](auto& value) { return value != nullptr; });
+      fulfiller = kj::mv(KJ_ASSERT_NONNULL(*lock));
+      KJ_ASSERT(fulfiller->isWaiting());
+      *lock = nullptr;
+    }
+
+    // Should eventually show not waiting.
+    while (fulfiller->isWaiting()) {
+      delay();
+    }
+
+    *done.lockExclusive() = true;
+  })();
+}
+
+KJ_TEST("cross-thread fulfiller multiple fulfills") {
+  MutexGuarded<Maybe<Own<PromiseFulfiller<int>>>> fulfillerMutex;
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = kj::newCrossThreadPromiseAndFulfiller<int>();
+    *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
+
+    int result = paf.promise.wait(waitScope);
+    KJ_EXPECT(result == 123);
+  });
+
+  auto func = [&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    PromiseFulfiller<int>* fulfiller;
+    {
+      auto lock = fulfillerMutex.lockExclusive();
+      lock.wait([&](auto& value) { return value != nullptr; });
+      fulfiller = KJ_ASSERT_NONNULL(*lock).get();
+    }
+
+    fulfiller->fulfill(123);
+  };
+
+  kj::Thread thread1(func);
+  kj::Thread thread2(func);
+  kj::Thread thread3(func);
+  kj::Thread thread4(func);
+}
+
 }  // namespace
 }  // namespace kj

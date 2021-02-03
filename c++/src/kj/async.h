@@ -610,6 +610,11 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller();
 // fulfiller will be of type `PromiseFulfiller<Promise<U>>`.  Thus you pass a `Promise<U>` to the
 // `fulfill()` callback, and the promises are chained.
 
+template <typename T>
+PromiseFulfillerPair<T> newCrossThreadPromiseAndFulfiller();
+// Like `newPromiseAndFulfiller()`, but the fulfiller is allowed to be invoked from any thread,
+// not just the one that called this method.
+
 // =======================================================================================
 // Canceler
 
@@ -861,6 +866,7 @@ private:
 
   friend class EventLoop;
   friend class _::XThreadEvent;
+  friend class _::XThreadPaf;
 
   void send(_::XThreadEvent& event, bool sync) const;
   void wait();
@@ -1025,6 +1031,7 @@ private:
   friend class WaitScope;
   friend class Executor;
   friend class _::XThreadEvent;
+  friend class _::XThreadPaf;
   friend class _::FiberBase;
   friend class _::FiberStack;
   friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
