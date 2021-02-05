@@ -72,6 +72,28 @@
 
 #include <stdlib.h>
 
+#if _MSC_VER && !__clang__
+// MSVC's atomic intrinsics are weird and different, whereas the C++ standard atomics match the GCC
+// builtins -- except for requiring the obnoxious std::atomic<T> wrapper. So, on MSVC let's just
+// #define the builtins based on the C++ library, reinterpret-casting native types to
+// std::atomic... this is cheating but ugh, whatever.
+#include <atomic>
+template <typename T>
+static std::atomic<T>* reinterpretAtomic(T* ptr) { return reinterpret_cast<std::atomic<T>*>(ptr); }
+#define __atomic_store_n(ptr, val, order) \
+    std::atomic_store_explicit(reinterpretAtomic(ptr), val, order)
+#define __atomic_load_n(ptr, order) \
+    std::atomic_load_explicit(reinterpretAtomic(ptr), order)
+#define __atomic_compare_exchange_n(ptr, expected, desired, weak, succ, fail) \
+    std::atomic_compare_exchange_strong_explicit( \
+        reinterpretAtomic(ptr), expected, desired, succ, fail)
+#define __atomic_exchange_n(ptr, val, order) \
+    std::atomic_exchange_explicit(reinterpretAtomic(ptr), val, order)
+#define __ATOMIC_RELAXED std::memory_order_relaxed
+#define __ATOMIC_ACQUIRE std::memory_order_acquire
+#define __ATOMIC_RELEASE std::memory_order_release
+#endif
+
 namespace kj {
 
 namespace {
@@ -859,11 +881,7 @@ void XThreadEvent::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 }
 
 void XThreadEvent::ensureDoneOrCanceled() {
-#if _MSC_VER && !defined(__clang__)
-  {  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
-#else
   if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != DONE) {
-#endif
     auto lock = targetExecutor->impl->state.lockExclusive();
 
     const EventLoop* loop;
@@ -1060,12 +1078,7 @@ void XThreadEvent::done() {
 }
 
 inline void XThreadEvent::setDoneState() {
-#if _MSC_VER && !defined(__clang__)
-  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
-  state = DONE;
-#else
   __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
-#endif
 }
 
 void XThreadEvent::setDisconnected() {

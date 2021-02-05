@@ -1717,7 +1717,12 @@ public:
   }
   bool isWaiting() override {
     KJ_IF_MAYBE(t, target) {
+#if _MSC_VER && !__clang__
+      // Just assume 1-byte loads are atomic... on what kind of absurd platform would they not be?
+      return t->state == XThreadPaf::WAITING;
+#else
       return __atomic_load_n(&t->state, __ATOMIC_RELAXED) == XThreadPaf::WAITING;
+#endif
     } else {
       return false;
     }
