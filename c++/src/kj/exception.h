@@ -423,6 +423,16 @@ private:
 
 #endif  // !KJ_NO_EXCEPTIONS
 
+kj::Exception getDestructionReason(void* traceSeparator,
+    kj::Exception::Type defaultType, const char* defaultFile, int defaultLine,
+    kj::StringPtr defaultDescription);
+// Returns an exception that attempts to capture why a destructor has been invoked. If a KJ
+// exception is currently in-flight (see InFlightExceptionIterator), then that exception is
+// returned. Otherwise, an exception is constructed using the current stack trace and the type,
+// file, line, and description provided. In the latter case, `traceSeparator` is appended to the
+// stack trace; this should be a pointer to some dummy symbol which acts as a separator between the
+// original stack trace and any new trace frames added later.
+
 kj::ArrayPtr<void* const> computeRelativeTrace(
     kj::ArrayPtr<void* const> trace, kj::ArrayPtr<void* const> relativeTo);
 // Given two traces expected to have started from the same root, try to find the part of `trace`

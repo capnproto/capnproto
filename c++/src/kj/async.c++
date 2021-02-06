@@ -154,12 +154,21 @@ public:
 
 // =======================================================================================
 
+void END_CANCELER_STACK_START_CANCELEE_STACK() {}
+// Dummy symbol used when reporting how a Canceler was canceled. We end up combining two stack
+// traces into one and we use this as a separator.
+
 Canceler::~Canceler() noexcept(false) {
-  cancel("operation canceled");
+  cancel(getDestructionReason(
+      reinterpret_cast<void*>(&END_CANCELER_STACK_START_CANCELEE_STACK),
+      Exception::Type::DISCONNECTED, __FILE__, __LINE__, "operation canceled"_kj));
 }
 
 void Canceler::cancel(StringPtr cancelReason) {
   if (isEmpty()) return;
+  // We can't use getDestructionReason() here because if an exception is in-flight, it would use
+  // that exception, totally discarding the reason given by the caller. This would probably be
+  // unexpected. The caller can always use getDestructionReason() themselves if desired.
   cancel(Exception(Exception::Type::DISCONNECTED, __FILE__, __LINE__, kj::str(cancelReason)));
 }
 
@@ -2592,34 +2601,45 @@ void WeakFulfillerBase::disposeImpl(void* pointer) const {
     if (inner->isWaiting()) {
       // Let's find out if there's an exception being thrown. If so, we'll use it to reject the
       // promise.
-#if !KJ_NO_EXCEPTIONS
-      InFlightExceptionIterator iter;
-      KJ_IF_MAYBE(e, iter.next()) {
-        auto copy = kj::cp(*e);
-        copy.truncateCommonTrace();
-        inner->reject(kj::mv(copy));
-      } else {
-#endif
-        // Darn, use a generic exception.
-        kj::Exception exception(kj::Exception::Type::FAILED, __FILE__, __LINE__,
-            kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise."));
-
-        // Let's give some context on where the PromiseFulfiller was destroyed.
-        exception.extendTrace(1, 16);
-
-        // Add a separator that hopefully makes this understandable...
-        exception.addTrace(reinterpret_cast<void*>(&END_FULFILLER_STACK_START_LISTENER_STACK));
-
-        inner->reject(kj::mv(exception));
-#if !KJ_NO_EXCEPTIONS
-      }
-#endif
+      inner->reject(getDestructionReason(
+          reinterpret_cast<void*>(&END_FULFILLER_STACK_START_LISTENER_STACK),
+          kj::Exception::Type::FAILED, __FILE__, __LINE__,
+          "PromiseFulfiller was destroyed without fulfilling the promise."_kj));
     }
     inner = nullptr;
   }
 }
 
+}  // namespace _ (private)
+
+kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type defaultType,
+    const char* defaultFile, int defaultLine, kj::StringPtr defaultDescription) {
+#if !KJ_NO_EXCEPTIONS
+  InFlightExceptionIterator iter;
+  KJ_IF_MAYBE(e, iter.next()) {
+    auto copy = kj::cp(*e);
+    copy.truncateCommonTrace();
+    return copy;
+  } else {
+#endif
+    // Darn, use a generic exception.
+    kj::Exception exception(defaultType, __FILE__, __LINE__, kj::heapString(defaultDescription));
+
+    // Let's give some context on where the PromiseFulfiller was destroyed.
+    exception.extendTrace(2, 16);
+
+    // Add a separator that hopefully makes this understandable...
+    exception.addTrace(traceSeparator);
+
+    return exception;
+#if !KJ_NO_EXCEPTIONS
+  }
+#endif
+}
+
 // -------------------------------------------------------------------
+
+namespace _ {  // (private)
 
 Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW; }
 
