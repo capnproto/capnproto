@@ -72,6 +72,28 @@
 
 #include <stdlib.h>
 
+#if _MSC_VER && !__clang__
+// MSVC's atomic intrinsics are weird and different, whereas the C++ standard atomics match the GCC
+// builtins -- except for requiring the obnoxious std::atomic<T> wrapper. So, on MSVC let's just
+// #define the builtins based on the C++ library, reinterpret-casting native types to
+// std::atomic... this is cheating but ugh, whatever.
+#include <atomic>
+template <typename T>
+static std::atomic<T>* reinterpretAtomic(T* ptr) { return reinterpret_cast<std::atomic<T>*>(ptr); }
+#define __atomic_store_n(ptr, val, order) \
+    std::atomic_store_explicit(reinterpretAtomic(ptr), val, order)
+#define __atomic_load_n(ptr, order) \
+    std::atomic_load_explicit(reinterpretAtomic(ptr), order)
+#define __atomic_compare_exchange_n(ptr, expected, desired, weak, succ, fail) \
+    std::atomic_compare_exchange_strong_explicit( \
+        reinterpretAtomic(ptr), expected, desired, succ, fail)
+#define __atomic_exchange_n(ptr, val, order) \
+    std::atomic_exchange_explicit(reinterpretAtomic(ptr), val, order)
+#define __ATOMIC_RELAXED std::memory_order_relaxed
+#define __ATOMIC_ACQUIRE std::memory_order_acquire
+#define __ATOMIC_RELEASE std::memory_order_release
+#endif
+
 namespace kj {
 
 namespace {
@@ -656,26 +678,23 @@ LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 struct Executor::Impl {
   Impl(EventLoop& loop): state(loop) {}
 
-  typedef Maybe<_::XThreadEvent&> _::XThreadEvent::*NextMember;
-  typedef Maybe<_::XThreadEvent&>* _::XThreadEvent::*PrevMember;
-
-  template <NextMember next, PrevMember prev>
+  template <typename T, Maybe<T&> T::*next, Maybe<T&>* T::*prev>
   struct List {
-    kj::Maybe<_::XThreadEvent&> head;
-    kj::Maybe<_::XThreadEvent&>* tail = &head;
+    kj::Maybe<T&> head;
+    kj::Maybe<T&>* tail = &head;
 
     bool empty() const {
       return head == nullptr;
     }
 
-    void insert(_::XThreadEvent& event) {
+    void insert(T& event) {
       KJ_REQUIRE(event.*prev == nullptr);
       *tail = event;
       event.*prev = tail;
       tail = &(event.*next);
     }
 
-    void erase(_::XThreadEvent& event) {
+    void erase(T& event) {
       KJ_REQUIRE(event.*prev != nullptr);
       *(event.*prev) = event.*next;
       KJ_IF_MAYBE(n, event.*next) {
@@ -690,7 +709,7 @@ struct Executor::Impl {
 
     template <typename Func>
     void forEach(Func&& func) {
-      kj::Maybe<_::XThreadEvent&> current = head;
+      kj::Maybe<T&> current = head;
       for (;;) {
         KJ_IF_MAYBE(c, current) {
           auto nextItem = c->*next;
@@ -711,14 +730,17 @@ struct Executor::Impl {
     kj::Maybe<EventLoop&> loop;
     // Becomes null when the loop is destroyed.
 
-    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> start;
-    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> cancel;
-    List<&_::XThreadEvent::replyNext, &_::XThreadEvent::replyPrev> replies;
+    List<_::XThreadEvent, &_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> start;
+    List<_::XThreadEvent, &_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> cancel;
+    List<_::XThreadEvent, &_::XThreadEvent::replyNext, &_::XThreadEvent::replyPrev> replies;
     // Lists of events that need actioning by this thread.
 
-    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> executing;
+    List<_::XThreadEvent, &_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> executing;
     // Events that have already been dispatched and are happily executing. This list is maintained
     // so that they can be canceled if the event loop exits.
+
+    List<_::XThreadPaf, &_::XThreadPaf::next, &_::XThreadPaf::prev> fulfilled;
+    // Set of XThreadPafs that have been fulfilled by another thread.
 
     bool waitingForCancel = false;
     // True if this thread is currently blocked waiting for some other thread to pump its
@@ -726,7 +748,7 @@ struct Executor::Impl {
     // deadlock -- it must take precautions against this.
 
     bool isDispatchNeeded() const {
-      return !start.empty() || !cancel.empty() || !replies.empty();
+      return !start.empty() || !cancel.empty() || !replies.empty() || !fulfilled.empty();
     }
 
     void dispatchAll(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
@@ -741,6 +763,12 @@ struct Executor::Impl {
 
       replies.forEach([&](_::XThreadEvent& event) {
         replies.erase(event);
+        event.onReadyEvent.armBreadthFirst();
+      });
+
+      fulfilled.forEach([&](_::XThreadPaf& event) {
+        fulfilled.erase(event);
+        event.state = _::XThreadPaf::DISPATCHED;
         event.onReadyEvent.armBreadthFirst();
       });
     }
@@ -829,6 +857,15 @@ struct Executor::Impl {
         s.replies.erase(event);
       });
     }
+
+    // Similarly for cross-thread fulfillers. The waiting tasks should have been canceled.
+    if (!s.fulfilled.empty()) {
+      KJ_LOG(ERROR, "EventLoop destroyed with cross-thread fulfiller replies outstanding");
+      s.fulfilled.forEach([&](_::XThreadPaf& event) {
+        s.fulfilled.erase(event);
+        event.state = _::XThreadPaf::DISPATCHED;
+      });
+    }
   }};
 
 namespace _ {  // (private)
@@ -844,11 +881,7 @@ void XThreadEvent::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 }
 
 void XThreadEvent::ensureDoneOrCanceled() {
-#if _MSC_VER && !defined(__clang__)
-  {  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
-#else
   if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != DONE) {
-#endif
     auto lock = targetExecutor->impl->state.lockExclusive();
 
     const EventLoop* loop;
@@ -1045,12 +1078,7 @@ void XThreadEvent::done() {
 }
 
 inline void XThreadEvent::setDoneState() {
-#if _MSC_VER && !defined(__clang__)
-  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
-  state = DONE;
-#else
   __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
-#endif
 }
 
 void XThreadEvent::setDisconnected() {
@@ -1113,6 +1141,97 @@ void XThreadEvent::traceEvent(TraceBuilder& builder) {
 
 void XThreadEvent::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
+}
+
+XThreadPaf::XThreadPaf()
+    : state(WAITING), executor(getCurrentThreadExecutor()) {}
+XThreadPaf::~XThreadPaf() noexcept(false) {}
+
+void XThreadPaf::Disposer::disposeImpl(void* pointer) const {
+  XThreadPaf* obj = reinterpret_cast<XThreadPaf*>(pointer);
+  auto oldState = WAITING;
+
+  if (__atomic_load_n(&obj->state, __ATOMIC_ACQUIRE) == DISPATCHED) {
+    // Common case: Promise was fully fulfilled and dispatched, no need for locking.
+    delete obj;
+  } else if (__atomic_compare_exchange_n(&obj->state, &oldState, CANCELED, false,
+                                         __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+    // State transitioned from WAITING to CANCELED, so now it's the fulfiller's job to destroy the
+    // object.
+  } else {
+    // Whoops, another thread is already in the process of fulfilling this promise. We'll have to
+    // wait for it to finish and transition the state to FULFILLED.
+    obj->executor.impl->state.when([&](auto&) {
+      return obj->state == FULFILLED || obj->state == DISPATCHED;
+    }, [&](Executor::Impl::State& exState) {
+      if (obj->state == FULFILLED) {
+        // The object is on the queue but was not yet dispatched. Remove it.
+        exState.fulfilled.erase(*obj);
+      }
+    });
+
+    // It's ours now, delete it.
+    delete obj;
+  }
+}
+
+const XThreadPaf::Disposer XThreadPaf::DISPOSER;
+
+void XThreadPaf::onReady(Event* event) noexcept {
+  onReadyEvent.init(event);
+}
+
+void XThreadPaf::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // We can't safely trace into another thread, so we'll stop here.
+  // Maybe returning the address of get() will give us a function name with meaningful type
+  // information.
+  builder.add(getMethodStartAddress(implicitCast<PromiseNode&>(*this), &PromiseNode::get));
+}
+
+XThreadPaf::FulfillScope::FulfillScope(XThreadPaf** pointer) {
+  obj = __atomic_exchange_n(pointer, nullptr, __ATOMIC_ACQUIRE);
+  auto oldState = WAITING;
+  if (obj == nullptr) {
+    // Already fulfilled (possibly by another thread).
+  } else if (__atomic_compare_exchange_n(&obj->state, &oldState, FULFILLING, false,
+                                         __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+    // Transitioned to FULFILLING, good.
+  } else {
+    // The waiting thread must have canceled.
+    KJ_ASSERT(oldState == CANCELED);
+
+    // It's our responsibility to clean up, then.
+    delete obj;
+
+    // Set `obj` null so that we don't try to fill it in or delete it later.
+    obj = nullptr;
+  }
+}
+XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
+  if (obj != nullptr) {
+    auto lock = obj->executor.impl->state.lockExclusive();
+    KJ_IF_MAYBE(l, lock->loop) {
+      lock->fulfilled.insert(*obj);
+      __atomic_store_n(&obj->state, FULFILLED, __ATOMIC_RELEASE);
+      KJ_IF_MAYBE(p, l->port) {
+        // TODO(perf): It's annoying we have to call wake() with the lock held, but we have to
+        //   prevent the destination EventLoop from being destroyed first.
+        p->wake();
+      }
+    } else {
+      KJ_LOG(FATAL,
+          "the thread which called kj::newCrossThreadPromiseAndFulfiller<T>() apparently exited "
+          "its own event loop without canceling the cross-thread promise first; this is "
+          "undefined behavior so I will crash now");
+      abort();
+    }
+  }
+}
+
+kj::Exception XThreadPaf::unfulfilledException() {
+  // TODO(soon): Share code with regular PromiseAndFulfiller for stack tracing here.
+  return kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::heapString(
+      "cross-thread PromiseFulfiller was destroyed without fulfilling the promise."));
 }
 
 class ExecutorImpl: public Executor, public AtomicRefcounted {

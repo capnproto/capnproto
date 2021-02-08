@@ -193,6 +193,7 @@ class FiberBase;
 
 class Event;
 class XThreadEvent;
+class XThreadPaf;
 
 class PromiseBase {
 public:
