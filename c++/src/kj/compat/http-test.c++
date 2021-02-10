@@ -3947,5 +3947,140 @@ KJ_TEST("HttpClient to capnproto.org") {
 }
 #endif
 
+// =======================================================================================
+// Misc bugfix tests
+
+class ReadCancelHttpService final: public HttpService {
+  // HttpService that tries to read all request data but cancels after 1ms and sends a response.
+public:
+  ReadCancelHttpService(kj::Timer& timer, HttpHeaderTable& headerTable)
+      : timer(timer), headerTable(headerTable) {}
+
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& responseSender) override {
+    if (method == HttpMethod::POST) {
+      // Try to read all content, but cancel after 1ms.
+      return requestBody.readAllBytes().ignoreResult()
+          .exclusiveJoin(timer.afterDelay(1 * kj::MILLISECONDS))
+          .then([this, &responseSender]() {
+        responseSender.send(408, "Request Timeout", kj::HttpHeaders(headerTable), uint64_t(0));
+      });
+    } else {
+      responseSender.send(200, "OK", kj::HttpHeaders(headerTable), uint64_t(0));
+      return kj::READY_NOW;
+    }
+  }
+
+private:
+  kj::Timer& timer;
+  HttpHeaderTable& headerTable;
+};
+
+KJ_TEST("canceling a length stream mid-read correctly discards rest of request") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  ReadCancelHttpService service(timer, table);
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  {
+    static constexpr kj::StringPtr REQUEST =
+        "POST / HTTP/1.1\r\n"
+        "Content-Length: 6\r\n"
+        "\r\n"
+        "fooba"_kj;  // incomplete
+    pipe.ends[1]->write(REQUEST.begin(), REQUEST.size()).wait(waitScope);
+
+    auto promise = expectRead(*pipe.ends[1],
+        "HTTP/1.1 408 Request Timeout\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n"_kj);
+
+    KJ_EXPECT(!promise.poll(waitScope));
+
+    // Trigger timout, then response should be sent.
+    timer.advanceTo(timer.now() + 1 * kj::MILLISECONDS);
+    KJ_ASSERT(promise.poll(waitScope));
+    promise.wait(waitScope);
+  }
+
+  // We left our request stream hanging. The server will try to read and discard the request body.
+  // Let's give it the rest of the data, followed by a second request.
+  {
+    static constexpr kj::StringPtr REQUEST =
+        "r"
+        "GET / HTTP/1.1\r\n"
+        "\r\n"_kj;
+    pipe.ends[1]->write(REQUEST.begin(), REQUEST.size()).wait(waitScope);
+
+    auto promise = expectRead(*pipe.ends[1],
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n"_kj);
+    KJ_ASSERT(promise.poll(waitScope));
+    promise.wait(waitScope);
+  }
+}
+
+KJ_TEST("canceling a chunked stream mid-read correctly discards rest of request") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  ReadCancelHttpService service(timer, table);
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  {
+    static constexpr kj::StringPtr REQUEST =
+        "POST / HTTP/1.1\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "6\r\n"
+        "fooba"_kj;  // incomplete chunk
+    pipe.ends[1]->write(REQUEST.begin(), REQUEST.size()).wait(waitScope);
+
+    auto promise = expectRead(*pipe.ends[1],
+        "HTTP/1.1 408 Request Timeout\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n"_kj);
+
+    KJ_EXPECT(!promise.poll(waitScope));
+
+    // Trigger timout, then response should be sent.
+    timer.advanceTo(timer.now() + 1 * kj::MILLISECONDS);
+    KJ_ASSERT(promise.poll(waitScope));
+    promise.wait(waitScope);
+  }
+
+  // We left our request stream hanging. The server will try to read and discard the request body.
+  // Let's give it the rest of the data, followed by a second request.
+  {
+    static constexpr kj::StringPtr REQUEST =
+        "r\r\n"
+        "4a\r\n"
+        "this is some text that is the body of a chunk and not a valid chunk header\r\n"
+        "0\r\n"
+        "\r\n"
+        "GET / HTTP/1.1\r\n"
+        "\r\n"_kj;
+    pipe.ends[1]->write(REQUEST.begin(), REQUEST.size()).wait(waitScope);
+
+    auto promise = expectRead(*pipe.ends[1],
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n"_kj);
+    KJ_ASSERT(promise.poll(waitScope));
+    promise.wait(waitScope);
+  }
+}
+
 }  // namespace
 }  // namespace kj

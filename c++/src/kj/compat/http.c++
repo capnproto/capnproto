@@ -1537,23 +1537,38 @@ public:
   }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    if (length == 0) return size_t(0);
-
-    return inner.tryRead(buffer, kj::min(minBytes, length), kj::min(maxBytes, length))
-        .then([=](size_t amount) {
-      length -= amount;
-      if (length > 0 && amount < minBytes) {
-        kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED,
-            "premature EOF in HTTP entity body; did not reach Content-Length"));
-      } else if (length == 0) {
-        doneReading();
-      }
-      return amount;
-    });
+    return tryReadInternal(buffer, minBytes, maxBytes, 0);
   }
 
 private:
   size_t length;
+
+  Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
+                                  size_t alreadyRead) {
+    if (length == 0) return size_t(0);
+
+    // We have to set minBytes to 1 here so that if we read any data at all, we update our
+    // counter immediately, so that we still know where we are in case of cancellation.
+    return inner.tryRead(buffer, 1, kj::min(maxBytes, length))
+        .then([=](size_t amount) -> kj::Promise<size_t> {
+      length -= amount;
+      if (length > 0) {
+        // We haven't reached the end of the entity body yet.
+        if (amount == 0) {
+          kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED,
+              "premature EOF in HTTP entity body; did not reach Content-Length"));
+        } else if (amount < minBytes) {
+          // We requested a minimum 1 byte above, but our own caller actually set a larger minimum
+          // which has not yet been reached. Keep trying until we reach it.
+          return tryReadInternal(reinterpret_cast<byte*>(buffer) + amount,
+                                 minBytes - amount, maxBytes - amount, alreadyRead + amount);
+        }
+      } else if (length == 0) {
+        doneReading();
+      }
+      return amount + alreadyRead;
+    });
+  }
 };
 
 class HttpChunkedEntityReader final: public HttpEntityBodyReader {
@@ -1584,25 +1599,20 @@ private:
         chunkSize = nextChunkSize;
         return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
       });
-    } else if (chunkSize < minBytes) {
-      // Read entire current chunk and continue to next chunk.
-      return inner.tryRead(buffer, chunkSize, chunkSize)
+    } else {
+      // Read current chunk.
+      // We have to set minBytes to 1 here so that if we read any data at all, we update our
+      // counter immediately, so that we still know where we are in case of cancellation.
+      return inner.tryRead(buffer, 1, kj::min(maxBytes, chunkSize))
           .then([=](size_t amount) -> kj::Promise<size_t> {
         chunkSize -= amount;
-        if (chunkSize > 0) {
-          return KJ_EXCEPTION(DISCONNECTED, "premature EOF in HTTP chunk");
-        }
-
-        return tryReadInternal(reinterpret_cast<byte*>(buffer) + amount,
-                               minBytes - amount, maxBytes - amount, alreadyRead + amount);
-      });
-    } else {
-      // Read only part of the current chunk.
-      return inner.tryRead(buffer, minBytes, kj::min(maxBytes, chunkSize))
-          .then([=](size_t amount) -> size_t {
-        chunkSize -= amount;
-        if (amount < minBytes) {
+        if (amount == 0) {
           kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "premature EOF in HTTP chunk"));
+        } else if (amount < minBytes) {
+          // We requested a minimum 1 byte above, but our own caller actually set a larger minimum
+          // which has not yet been reached. Keep trying until we reach it.
+          return tryReadInternal(reinterpret_cast<byte*>(buffer) + amount,
+                                 minBytes - amount, maxBytes - amount, alreadyRead + amount);
         }
         return alreadyRead + amount;
       });
