@@ -4914,6 +4914,19 @@ private:
     kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
     kj::String lengthStr;
 
+    if (!closeAfterSend) {
+      // Check if application wants us to close connections.
+      KJ_IF_MAYBE(c, server.settings.callbacks) {
+        if (c->shouldClose()) {
+          closeAfterSend = true;
+        }
+      }
+    }
+
+    // TODO(soon): If `server.draining`, we should probably set `closeAfterSend` -- UNLESS the
+    //   connection was created using listenHttpCleanDrain(), in which case the application may
+    //   intend to continue using the connection.
+
     if (closeAfterSend) {
       connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "close";
     }
