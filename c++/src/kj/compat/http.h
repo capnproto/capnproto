@@ -822,6 +822,7 @@ WebSocketPipe newWebSocketPipe();
 // accepts the message.
 
 class HttpServerErrorHandler;
+class HttpServerCallbacks;
 
 struct HttpServerSettings {
   kj::Duration headerTimeout = 15 * kj::SECONDS;
@@ -843,6 +844,9 @@ struct HttpServerSettings {
   kj::Maybe<HttpServerErrorHandler&> errorHandler = nullptr;
   // Customize how client protocol errors and service application exceptions are handled by the
   // HttpServer. If null, HttpServerErrorHandler's default implementation will be used.
+
+  kj::Maybe<HttpServerCallbacks&> callbacks = nullptr;
+  // Additional optional callbacks used to control some server behavior.
 };
 
 class HttpServerErrorHandler {
@@ -877,6 +881,17 @@ public:
   //
   // Also unlike `HttpService::request()`, it is okay to return kj::READY_NOW without calling
   // `response.send()`. In this case, no response will be sent, and the connection will be closed.
+};
+
+class HttpServerCallbacks {
+public:
+  virtual bool shouldClose() { return false; }
+  // Whenever the HttpServer begins response headers, it will check `shouldClose()` to decide
+  // whether to send a `Connection: close` header and close the connection.
+  //
+  // This can be useful e.g. if the server has too many connections open and wants to shed some
+  // of them. Note that to implement graceful shutdown of a server, you should use
+  // `HttpServer::drain()` instead.
 };
 
 class HttpServer final: private kj::TaskSet::ErrorHandler {
