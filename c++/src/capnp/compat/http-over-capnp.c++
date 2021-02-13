@@ -450,11 +450,12 @@ class HttpOverCapnpFactory::ServerRequestContextImpl final
       public kj::HttpService::Response {
 public:
   ServerRequestContextImpl(HttpOverCapnpFactory& factory,
+                           HttpService::Client serviceCap,
                            capnp::HttpRequest::Reader request,
                            capnp::HttpService::ClientRequestContext::Client clientContext,
                            kj::Own<kj::AsyncInputStream> requestBodyIn,
                            kj::HttpService& kjService)
-      : factory(factory),
+      : factory(factory), serviceCap(kj::mv(serviceCap)),
         method(validateMethod(request.getMethod())),
         url(kj::str(request.getUrl())),
         headers(factory.headersToKj(request.getHeaders()).clone()),
@@ -560,6 +561,7 @@ public:
 
 private:
   HttpOverCapnpFactory& factory;
+  HttpService::Client serviceCap;  // ensures the inner kj::HttpService isn't destroyed
   kj::HttpMethod method;
   kj::String url;
   kj::HttpHeaders headers;
@@ -601,7 +603,7 @@ public:
       requestBody = kj::heap<NullInputStream>();
     }
     results.setContext(kj::heap<ServerRequestContextImpl>(
-        factory, metadata, params.getContext(), kj::mv(requestBody), *inner));
+        factory, thisCap(), metadata, params.getContext(), kj::mv(requestBody), *inner));
 
     return kj::READY_NOW;
   }
