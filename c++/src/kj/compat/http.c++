@@ -3475,20 +3475,37 @@ public:
           if (response.statusCode == 101) {
             if (!fastCaseCmp<'w', 'e', 'b', 's', 'o', 'c', 'k', 'e', 't'>(
                     responseHeaders.get(HttpHeaderId::UPGRADE).orDefault(nullptr).cStr())) {
-              KJ_FAIL_REQUIRE("server returned incorrect Upgrade header; should be 'websocket'",
-                              responseHeaders.get(HttpHeaderId::UPGRADE).orDefault("(null)")) {
-                break;
+              kj::String ownMessage;
+              kj::StringPtr message;
+              KJ_IF_MAYBE(actual, responseHeaders.get(HttpHeaderId::UPGRADE)) {
+                ownMessage = kj::str(
+                    "Server failed WebSocket handshake: incorrect Upgrade header: "
+                    "expected 'websocket', got '", *actual, "'.");
+                message = ownMessage;
+              } else {
+                message = "Server failed WebSocket handshake: missing Upgrade header.";
               }
-              return HttpClient::WebSocketResponse();
+              return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError({
+                502, "Bad Gateway", message, nullptr
+              });
             }
 
             auto expectedAccept = generateWebSocketAccept(keyBase64);
             if (responseHeaders.get(HttpHeaderId::SEC_WEBSOCKET_ACCEPT).orDefault(nullptr)
                   != expectedAccept) {
-              KJ_FAIL_REQUIRE("server returned incorrect Sec-WebSocket-Accept header",
-                  responseHeaders.get(HttpHeaderId::SEC_WEBSOCKET_ACCEPT).orDefault("(null)"),
-                  expectedAccept) { break; }
-              return HttpClient::WebSocketResponse();
+              kj::String ownMessage;
+              kj::StringPtr message;
+              KJ_IF_MAYBE(actual, responseHeaders.get(HttpHeaderId::SEC_WEBSOCKET_ACCEPT)) {
+                ownMessage = kj::str(
+                    "Server failed WebSocket handshake: incorrect Sec-WebSocket-Accept header: "
+                    "expected '", expectedAccept, "', got '", *actual, "'.");
+                message = ownMessage;
+              } else {
+                message = "Server failed WebSocket handshake: missing Upgrade header.";
+              }
+              return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError({
+                502, "Bad Gateway", message, nullptr
+              });
             }
 
             return {

@@ -707,6 +707,9 @@ public:
   //    opportunity to log it for debugging purposes. The default implementation throws away this
   //    content.
   // 2. You could potentially convert protocol errors into HTTP error codes, e.g. 502 Bad Gateway.
+  //
+  // Note that `protocolError` may contain pointers into buffers that are no longer valid once
+  // this method returns; you will have to make copies if you want to keep them.
 
   virtual HttpClient::WebSocketResponse handleWebSocketProtocolError(
       HttpHeaders::ProtocolError protocolError);
