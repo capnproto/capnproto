@@ -2731,31 +2731,6 @@ void WeakFulfillerBase::disposeImpl(void* pointer) const {
 
 }  // namespace _ (private)
 
-kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type defaultType,
-    const char* defaultFile, int defaultLine, kj::StringPtr defaultDescription) {
-#if !KJ_NO_EXCEPTIONS
-  InFlightExceptionIterator iter;
-  KJ_IF_MAYBE(e, iter.next()) {
-    auto copy = kj::cp(*e);
-    copy.truncateCommonTrace();
-    return copy;
-  } else {
-#endif
-    // Darn, use a generic exception.
-    kj::Exception exception(defaultType, __FILE__, __LINE__, kj::heapString(defaultDescription));
-
-    // Let's give some context on where the PromiseFulfiller was destroyed.
-    exception.extendTrace(2, 16);
-
-    // Add a separator that hopefully makes this understandable...
-    exception.addTrace(traceSeparator);
-
-    return exception;
-#if !KJ_NO_EXCEPTIONS
-  }
-#endif
-}
-
 // -------------------------------------------------------------------
 
 namespace _ {  // (private)
