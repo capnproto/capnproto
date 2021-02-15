@@ -104,8 +104,40 @@ struct TestJsonAnnotations3 $Json.discriminator(name = "type") {
   }
 }
 
+struct TestUnionTag $Json.discriminator(name = "type") {
+  union {
+    foo @0 :TestFlattenedStruct $Json.flatten();
+    ref @1 :TestUnionTypeReference $Json.flatten();
+    ren @2 :TestUnionTypeReference $Json.name("renamed-ref") $Json.flatten();
+  }
+}
+
+struct TestBogusGroup $Json.discriminator(name = "type") {
+  aGroup :group $Json.flatten() {
+    foo @0 :TestFlattenedStruct;
+    ref @1 :TestUnionTypeReference $Json.flatten();
+  }
+}
+
+struct TestIllegalTagType $Json.discriminator(name = "type") {
+  union {
+    foo @0 :TestFlattenedStruct $Json.flatten();
+    ref @1 :TestTypeUInt32 $Json.flatten();
+  }
+}
+
 struct TestFlattenedStruct {
   value @0 :Text;
+}
+
+struct TestUnionTypeReference {
+  type @0 :Text;
+  value @1 :Text;
+}
+
+struct TestTypeUInt32 {
+  type @0 :UInt32;
+  value @1 :Text;
 }
 
 enum TestJsonAnnotatedEnum {

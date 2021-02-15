@@ -914,7 +914,7 @@ class JsonCodec::AnnotatedHandler final: public JsonCodec::Handler<DynamicStruct
 public:
   AnnotatedHandler(JsonCodec& codec, StructSchema schema,
                    kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
-                   kj::Maybe<kj::StringPtr> unionDeclName,
+                   kj::StringPtr unionDeclName,
                    kj::Vector<Schema>& dependencies)
       : schema(schema) {
     auto schemaProto = schema.getProto();
@@ -945,8 +945,8 @@ public:
       } else {
         unionTagName = unionDeclName;
       }
-      KJ_IF_MAYBE(u, unionTagName) {
-        fieldsByName.insert(*u, FieldNameInfo {
+      if (unionTagName != nullptr) {
+        fieldsByName.insert(unionTagName, FieldNameInfo {
           FieldNameInfo::UNION_TAG, 0, 0, nullptr
         });
       }
@@ -1007,7 +1007,7 @@ public:
       if (fieldProto.isGroup()) {
         // Load group type handler now, even if not flattened, so that we can pass its
         // `subDiscriminator`.
-        kj::Maybe<kj::StringPtr> subFieldName;
+        kj::StringPtr subFieldName = nullptr;
         if (flattened) {
           // If the group was flattened, then we allow its field name to be used as the
           // discriminator name, so that the discriminator doesn't have to explicitly specify a
@@ -1044,9 +1044,14 @@ public:
             isUnionMember ? FieldNameInfo::FLATTENED_FROM_UNION : FieldNameInfo::FLATTENED,
             field.getIndex(), (uint)info.prefix.size(), kj::mv(ownName)
           }, [&](FieldNameInfo& existing, FieldNameInfo&& replacement) {
-            KJ_REQUIRE(existing.type == FieldNameInfo::FLATTENED_FROM_UNION &&
-                       replacement.type == FieldNameInfo::FLATTENED_FROM_UNION,
-                "flattened members have the same name and are not mutually exclusive");
+            if (existing.type == FieldNameInfo::UNION_TAG) {
+              KJ_REQUIRE(replacement.type == FieldNameInfo::FLATTENED_FROM_UNION,
+                  "union type reference is not member of a flattened union");
+            } else {
+              KJ_REQUIRE(existing.type == FieldNameInfo::FLATTENED_FROM_UNION &&
+                         replacement.type == FieldNameInfo::FLATTENED_FROM_UNION,
+                  "flattened members have the same name and are not mutually exclusive");
+            }
           });
         }
       }
@@ -1100,7 +1105,7 @@ public:
   void encode(const JsonCodec& codec, DynamicStruct::Reader input,
               JsonValue::Builder output) const override {
     kj::Vector<FlattenedField> flattenedFields;
-    gatherForEncode(codec, input, nullptr, nullptr, flattenedFields);
+    gatherForEncode(codec, input, flattenedFields);
 
     auto outs = output.initObject(flattenedFields.size());
     for (auto i: kj::indices(flattenedFields)) {
@@ -1176,6 +1181,7 @@ private:
 
       UNION_VALUE
       // This field is the value of a discriminated union that has `valueName` set.
+      // `index` is not used.
     } type;
 
     uint index;
@@ -1192,7 +1198,7 @@ private:
   // If the parent struct is a flattened union, it has a tag field which is a string with one of
   // these values. The map maps to the union member to set.
 
-  kj::Maybe<kj::StringPtr> unionTagName;
+  kj::StringPtr unionTagName;
   // If the parent struct is a flattened union, the name of the "tag" field.
 
   uint discriminantOffset;
@@ -1213,8 +1219,11 @@ private:
   };
 
   void gatherForEncode(const JsonCodec& codec, DynamicValue::Reader input,
-                       kj::StringPtr prefix, kj::StringPtr morePrefix,
-                       kj::Vector<FlattenedField>& flattenedFields) const {
+                       kj::Vector<FlattenedField>& flattenedFields,
+                       kj::StringPtr prefix = nullptr,
+                       kj::StringPtr morePrefix = nullptr,
+                       kj::StringPtr outerUnionTagName = nullptr,
+                       kj::StringPtr outerUnionTagValue = nullptr) const {
     kj::String ownPrefix;
     if (morePrefix.size() > 0) {
       if (prefix.size() > 0) {
@@ -1232,7 +1241,13 @@ private:
       if (!reader.has(field, codec.impl->hasMode)) {
         // skip
       } else KJ_IF_MAYBE(handler, info.flattenHandler) {
-        handler->gatherForEncode(codec, reader.get(field), prefix, info.prefix, flattenedFields);
+        handler->gatherForEncode(codec, reader.get(field), flattenedFields,
+            prefix, info.prefix, outerUnionTagName, outerUnionTagValue);
+      } else if (outerUnionTagName != nullptr && outerUnionTagName == info.name) {
+          auto value = reader.get(field).as<capnp::Text>();
+          KJ_REQUIRE(value == nullptr || value == outerUnionTagValue,
+              "union tag reference must either be empty or match the union's tag value",
+              value, outerUnionTagValue);
       } else {
         flattenedFields.add(FlattenedField {
             prefix, info.name, field, reader.get(field) });
@@ -1241,13 +1256,14 @@ private:
 
     KJ_IF_MAYBE(which, reader.which()) {
       auto& info = fields[which->getIndex()];
-      KJ_IF_MAYBE(tag, unionTagName) {
+      if (unionTagName != nullptr) {
         flattenedFields.add(FlattenedField {
-            prefix, *tag, Type(schema::Type::TEXT), Text::Reader(info.nameForDiscriminant) });
+            prefix, unionTagName, Type(schema::Type::TEXT), Text::Reader(info.nameForDiscriminant) });
       }
 
       KJ_IF_MAYBE(handler, info.flattenHandler) {
-        handler->gatherForEncode(codec, reader.get(*which), prefix, info.prefix, flattenedFields);
+        handler->gatherForEncode(codec, reader.get(*which), flattenedFields,
+            prefix, info.prefix, unionTagName, info.nameForDiscriminant);
       } else {
         auto type = which->getType();
         if (type.which() == schema::Type::VOID && unionTagName != nullptr) {
@@ -1287,6 +1303,14 @@ private:
             output.clear(*field);
             unionsSeen.insert(ptr);
           }
+
+          // Update the inner union tag to match the outer one, if any.
+          auto variant = KJ_ASSERT_NONNULL(output.which());
+          KJ_IF_MAYBE(fh, fields[variant.getIndex()].flattenHandler) {
+            fh->decodeField(codec, name.slice(info->prefixLength), value,
+                output.get(variant).as<DynamicStruct>(), unionsSeen);
+          }
+
           return true;
         }
         case FieldNameInfo::FLATTENED_FROM_UNION: {
@@ -1324,7 +1348,7 @@ private:
 
   const void* getUnionInstanceIdentifier(DynamicStruct::Builder obj) const {
     // Gets a value uniquely identifying an instance of a union.
-    // HACK: We return a poniter to the union's discriminant within the underlying buffer.
+    // HACK: We return a pointer to the union's discriminant within the underlying buffer.
     return reinterpret_cast<const uint16_t*>(
         AnyStruct::Reader(obj.asReader()).getDataSection().begin()) + discriminantOffset;
   }
@@ -1419,7 +1443,7 @@ private:
 
 JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
       StructSchema schema, kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
-      kj::Maybe<kj::StringPtr> unionDeclName, kj::Vector<Schema>& dependencies) {
+      kj::StringPtr unionDeclName, kj::Vector<Schema>& dependencies) {
   auto& entry = impl->annotatedHandlers.upsert(schema, nullptr,
       [&](kj::Maybe<kj::Own<AnnotatedHandler>>& existing, auto dummy) {
     KJ_ASSERT(existing != nullptr,

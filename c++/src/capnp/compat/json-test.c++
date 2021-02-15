@@ -835,7 +835,7 @@ public:
 };
 
 KJ_TEST("register capability handler") {
-  // This test currently only checks that this compiles, which at one point wasn't the caes.
+  // This test currently only checks that this compiles, which at one point wasn't the case.
   // TODO(test): Actually run some code here.
 
   TestCapabilityHandler handler;
@@ -1005,6 +1005,96 @@ KJ_TEST("base64 union encoded correctly") {
   root.initFoo(5);
 
   KJ_EXPECT(json.encode(root) == "{\"foo\": \"AAAAAAA=\"}", json.encode(root));
+}
+
+KJ_TEST("union tag reference checked and encoded correctly") {
+  kj::String encoded;
+  JsonCodec json;
+  json.handleByAnnotation<TestUnionTag>();
+  json.setPrettyPrint(true);
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<TestUnionTag>();
+    auto ref = root.initRef();
+
+    ref.setValue("value");
+    encoded = json.encode(root);
+    KJ_EXPECT(encoded == "{\"type\": \"ref\", \"value\": \"value\"}");
+
+    ref.setType("ref");
+    encoded = json.encode(root);
+    KJ_EXPECT(encoded == "{\"type\": \"ref\", \"value\": \"value\"}");
+
+    ref.setType("");
+    encoded = json.encode(root);
+    KJ_EXPECT(encoded == "{\"type\": \"ref\", \"value\": \"value\"}");
+
+    ref.setType("not ref");
+    KJ_EXPECT_THROW_MESSAGE(
+        "union tag reference must either be empty or match the union's tag value",
+        json.encode(root));
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<TestUnionTag>();
+    auto ren = root.initRen();
+
+    ren.setValue("value");
+    encoded = json.encode(root);
+    KJ_EXPECT(encoded == "{\"type\": \"renamed-ref\", \"value\": \"value\"}");
+
+    ren.setType("renamed-ref");
+    encoded = json.encode(root);
+    KJ_EXPECT(encoded == "{\"type\": \"renamed-ref\", \"value\": \"value\"}");
+
+    ren.setType("");
+    encoded = json.encode(root);
+    KJ_EXPECT(encoded == "{\"type\": \"renamed-ref\", \"value\": \"value\"}");
+
+    ren.setType("not renamed-ref");
+    KJ_EXPECT_THROW_MESSAGE(
+        "union tag reference must either be empty or match the union's tag value",
+        json.encode(root));
+  }
+}
+
+KJ_TEST("union tag reference decoded correctly") {
+  JsonCodec json;
+  json.handleByAnnotation<TestUnionTag>();
+  json.setPrettyPrint(true);
+
+  {
+    MallocMessageBuilder message;
+    auto u = message.getRoot<TestUnionTag>();
+    json.decode("{\"type\": \"foo\", \"value\": \"value\"}", u);
+    KJ_EXPECT(u.isFoo() == true);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto u = message.getRoot<TestUnionTag>();
+    json.decode("{\"type\": \"ref\", \"value\": \"value\"}", u);
+    KJ_EXPECT(u.isRef() == true);
+    auto ref = u.getRef();
+    KJ_EXPECT(ref.getType().asString() == "ref");
+    KJ_EXPECT(ref.getValue().asString() == "value");
+  }
+}
+
+KJ_TEST("union tag integrity checks") {
+  JsonCodec json;
+  json.handleByAnnotation<TestIllegalTagType>();
+
+  MallocMessageBuilder message;
+  auto u = message.getRoot<TestIllegalTagType>();
+  u.initRef().setValue("value");
+  KJ_EXPECT_THROW_MESSAGE("Value type mismatch", json.encode(u));
+
+  KJ_EXPECT_THROW_MESSAGE(
+    "union type reference is not member of a flattened union",
+    json.handleByAnnotation<TestBogusGroup>());
 }
 
 }  // namespace

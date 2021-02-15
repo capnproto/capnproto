@@ -253,7 +253,7 @@ private:
   AnnotatedHandler& loadAnnotatedHandler(
       StructSchema schema,
       kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
-      kj::Maybe<kj::StringPtr> unionDeclName,
+      kj::StringPtr unionDeclName,
       kj::Vector<Schema>& dependencies);
 };
 
