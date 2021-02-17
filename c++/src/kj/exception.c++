@@ -926,7 +926,8 @@ kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type def
   } else {
 #endif
     // Darn, use a generic exception.
-    kj::Exception exception(defaultType, __FILE__, __LINE__, kj::heapString(defaultDescription));
+    kj::Exception exception(defaultType, defaultFile, defaultLine,
+        kj::heapString(defaultDescription));
 
     // Let's give some context on where the PromiseFulfiller was destroyed.
     exception.extendTrace(2, 16);
