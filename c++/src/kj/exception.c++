@@ -40,6 +40,7 @@
 #include "threadlocal.h"
 #include "miniposix.h"
 #include "function.h"
+#include "main.h"
 #include <stdlib.h>
 #include <exception>
 #include <new>
@@ -1286,6 +1287,8 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
   } catch (std::exception& e) {
     return Exception(Exception::Type::FAILED,
                      "(unknown)", -1, str("std::exception: ", e.what()));
+  } catch (TopLevelProcessContext::CleanShutdownException) {
+    throw;
   } catch (...) {
 #if __GNUC__ && !KJ_NO_RTTI
     return Exception(Exception::Type::FAILED, "(unknown)", -1, str(
