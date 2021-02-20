@@ -354,8 +354,8 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind do not cause a memor
 
   // We can't easily test for memory leaks without hooking operator new and delete. However, we can
   // arrange for the test to crash on failure, by having the coroutine suspend at a promise that we
-  // later fulfill, thus arming the Coroutine's Event. If we destroy the coroutine in this state,
-  // EventLoop will throw on destruction because it can still see the Event in its list.
+  // later fulfill, thus arming the Coroutine's Event. If we fail to destroy the coroutine in this
+  // state, EventLoop will throw on destruction because it can still see the Event in its list.
 
   auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
     auto paf = kj::newPromiseAndFulfiller<void>();
