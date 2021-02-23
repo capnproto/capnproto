@@ -115,7 +115,7 @@ struct FileKeyHash {
           key.size * 103 + (key.lastModified - kj::UNIX_EPOCH) / kj::MILLISECONDS * 73;
     } else {
       return key.hashCode + key.size * 103 +
-          (key.lastModified - kj::UNIX_EPOCH) / kj::NANOSECONDS * 73;
+          (key.lastModified - kj::UNIX_EPOCH) / kj::NANOSECONDS * 73ull;
     }
   }
 };
