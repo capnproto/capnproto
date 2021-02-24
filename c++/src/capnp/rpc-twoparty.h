@@ -83,6 +83,10 @@ public:
   // Get the number of bytes worth of outgoing messages that are currently queued in memory waiting
   // to be sent on this connection. This may be useful for backpressure.
 
+  size_t getCurrentQueueCount() { return currentQueueCount; }
+  // Get the count outgoing messages that are currently queued in memory waiting
+  // to be sent on this connection. This may be useful for backpressure.
+
   // implements VatNetwork -----------------------------------------------------
 
   kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> connect(
@@ -121,6 +125,7 @@ private:
   kj::ForkedPromise<void> disconnectPromise = nullptr;
 
   size_t currentQueueSize = 0;
+  size_t currentQueueCount = 0;
 
   class FulfillerDisposer: public kj::Disposer {
     // Hack:  TwoPartyVatNetwork is both a VatNetwork and a VatNetwork::Connection.  When the RPC
@@ -229,6 +234,7 @@ public:
   // Forwarded to rpcSystem.setTraceEncoder().
 
   size_t getCurrentQueueSize() { return network.getCurrentQueueSize(); }
+  size_t getCurrentQueueCount() { return network.getCurrentQueueCount(); }
 
 private:
   TwoPartyVatNetwork network;

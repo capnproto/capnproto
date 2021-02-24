@@ -124,12 +124,14 @@ TEST(TwoPartyNetwork, Basic) {
   TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network);
 
+  KJ_EXPECT(network.getCurrentQueueCount() == 0);
   KJ_EXPECT(network.getCurrentQueueSize() == 0);
 
   // Request the particular capability from the server.
   auto client = getPersistentCap(rpcClient, rpc::twoparty::Side::SERVER,
       test::TestSturdyRefObjectId::Tag::TEST_INTERFACE).castAs<test::TestInterface>();
 
+  KJ_EXPECT(network.getCurrentQueueCount() == 1);
   KJ_EXPECT(network.getCurrentQueueSize() > 0);
   size_t oldSize = network.getCurrentQueueSize();
 
@@ -139,6 +141,7 @@ TEST(TwoPartyNetwork, Basic) {
   request1.setJ(true);
   auto promise1 = request1.send();
 
+  KJ_EXPECT(network.getCurrentQueueCount() == 2);
   KJ_EXPECT(network.getCurrentQueueSize() > oldSize);
   oldSize = network.getCurrentQueueSize();
 
@@ -146,6 +149,7 @@ TEST(TwoPartyNetwork, Basic) {
   initTestMessage(request2.initS());
   auto promise2 = request2.send();
 
+  KJ_EXPECT(network.getCurrentQueueCount() == 3);
   KJ_EXPECT(network.getCurrentQueueSize() > oldSize);
   oldSize = network.getCurrentQueueSize();
 
@@ -160,6 +164,7 @@ TEST(TwoPartyNetwork, Basic) {
 
   EXPECT_EQ(0, callCount);
 
+  KJ_EXPECT(network.getCurrentQueueCount() == 4);
   KJ_EXPECT(network.getCurrentQueueSize() > oldSize);
   oldSize = network.getCurrentQueueSize();
 
@@ -175,12 +180,14 @@ TEST(TwoPartyNetwork, Basic) {
   EXPECT_TRUE(barFailed);
 
   // There's still a `Finish` message queued.
+  KJ_EXPECT(network.getCurrentQueueCount() > 0);
   KJ_EXPECT(network.getCurrentQueueSize() > 0);
 
   // Let any I/O finish.
   kj::Promise<void>(kj::NEVER_DONE).poll(ioContext.waitScope);
 
   // Now nothing is queued.
+  KJ_EXPECT(network.getCurrentQueueCount() == 0);
   KJ_EXPECT(network.getCurrentQueueSize() == 0);
 }
 
