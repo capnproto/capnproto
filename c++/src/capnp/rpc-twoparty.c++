@@ -142,8 +142,10 @@ public:
     }
 
     network.currentQueueSize += size * sizeof(capnp::word);
+    ++network.currentQueueCount;
     auto deferredSizeUpdate = kj::defer([&network = network, size]() mutable {
       network.currentQueueSize -= size * sizeof(capnp::word);
+      --network.currentQueueCount;
     });
 
     network.previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down")
