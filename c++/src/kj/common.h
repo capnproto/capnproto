@@ -1154,7 +1154,7 @@ public:
   Maybe(T&& t): ptr(kj::mv(t)) {}
   Maybe(T& t): ptr(t) {}
   Maybe(const T& t): ptr(t) {}
-  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) {}
+  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) { other = nullptr; }
   Maybe(const Maybe& other): ptr(other.ptr) {}
   Maybe(Maybe& other): ptr(other.ptr) {}
 
@@ -1162,12 +1162,14 @@ public:
   Maybe(Maybe<U>&& other) {
     KJ_IF_MAYBE(val, kj::mv(other)) {
       ptr.emplace(kj::mv(*val));
+      other = nullptr;
     }
   }
   template <typename U>
   Maybe(Maybe<U&>&& other) {
     KJ_IF_MAYBE(val, other) {
       ptr.emplace(*val);
+      other = nullptr;
     }
   }
   template <typename U>
@@ -1181,7 +1183,7 @@ public:
 
   template <typename... Params>
   inline T& emplace(Params&&... params) {
-    // Replace this Maybe's content with a new value constructed by passing the given parametrs to
+    // Replace this Maybe's content with a new value constructed by passing the given parameters to
     // T's constructor. This can be used to initialize a Maybe without copying or even moving a T.
     // Returns a reference to the newly-constructed value.
 
@@ -1192,7 +1194,7 @@ public:
   inline Maybe& operator=(T& other) { ptr = other; return *this; }
   inline Maybe& operator=(const T& other) { ptr = other; return *this; }
 
-  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
+  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); other = nullptr; return *this; }
   inline Maybe& operator=(Maybe& other) { ptr = other.ptr; return *this; }
   inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
 
@@ -1200,6 +1202,7 @@ public:
   Maybe& operator=(Maybe<U>&& other) {
     KJ_IF_MAYBE(val, kj::mv(other)) {
       ptr.emplace(kj::mv(*val));
+      other = nullptr;
     } else {
       ptr = nullptr;
     }

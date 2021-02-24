@@ -53,7 +53,7 @@ struct Immovable {
 struct CopyOrMove {
   // Type that detects the difference between copy and move.
   CopyOrMove(int i): i(i) {}
-  CopyOrMove(CopyOrMove&& other): i(other.i) { i = -1; }
+  CopyOrMove(CopyOrMove&& other): i(other.i) { other.i = -1; }
   CopyOrMove(const CopyOrMove&) = default;
 
   int i;
@@ -285,8 +285,40 @@ TEST(Common, Maybe) {
     CopyOrMove x(123);
     Maybe<CopyOrMove&> m(x);
     Maybe<CopyOrMove> m2 = kj::mv(m);
-    KJ_EXPECT(KJ_ASSERT_NONNULL(m).i == 123);
-    KJ_EXPECT(KJ_ASSERT_NONNULL(m2).i == 123);
+    KJ_EXPECT(m == nullptr);  // m is moved out of and cleared
+    KJ_EXPECT(x.i == 123);  // but what m *referenced* was not moved out of
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m2).i == 123);  // m2 is a copy of what m referenced
+  }
+
+  {
+    // Test that a moved-out-of Maybe<T> is left empty after move constructor.
+    Maybe<int> m = 123;
+    KJ_EXPECT(m != nullptr);
+
+    Maybe<int> n(kj::mv(m));
+    KJ_EXPECT(m == nullptr);
+    KJ_EXPECT(n != nullptr);
+  }
+
+  {
+    // Test that a moved-out-of Maybe<T> is left empty after move constructor.
+    Maybe<int> m = 123;
+    KJ_EXPECT(m != nullptr);
+
+    Maybe<int> n = kj::mv(m);
+    KJ_EXPECT(m == nullptr);
+    KJ_EXPECT(n != nullptr);
+  }
+
+  {
+    // Test that a moved-out-of Maybe<T&> is left empty.
+    int x = 123;
+    Maybe<int&> m = x;
+    KJ_EXPECT(m != nullptr);
+
+    Maybe<int> n(kj::mv(m));
+    KJ_EXPECT(m == nullptr);
+    KJ_EXPECT(n != nullptr);
   }
 }
 
