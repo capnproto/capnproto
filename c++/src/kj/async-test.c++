@@ -85,6 +85,29 @@ TEST(Async, ThereVoid) {
   EXPECT_EQ(123, value);
 }
 
+TEST(Async, PromiseMove) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<int> a = 123;
+
+  int value = 0;
+  Promise<int> promise = a.then([&](int ai) { value = ai; return 0; });
+
+  EXPECT_TRUE(a.isConsumed());
+  EXPECT_FALSE(promise.isConsumed());
+
+  Promise<int> b = kj::mv(promise);
+  EXPECT_TRUE(promise.isConsumed());
+  EXPECT_FALSE(b.isConsumed());
+
+  EXPECT_EQ(0, value);
+  b.wait(waitScope);
+  EXPECT_EQ(123, value);
+
+  EXPECT_TRUE(b.isConsumed());
+}
+
 TEST(Async, Exception) {
   EventLoop loop;
   WaitScope waitScope(loop);

@@ -314,6 +314,11 @@ public:
   // Returns a dump of debug info about this promise.  Not for production use.  Requires RTTI.
   // This method does NOT consume the promise as other methods do.
 
+  bool isConsumed() const {
+    // Returns true if this instance represents a consumed promise. Primarily useful for asserts.
+    return node == nullptr;
+  }
+
 private:
   Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
