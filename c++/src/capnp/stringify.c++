@@ -224,7 +224,7 @@ static kj::StringTree print(const DynamicValue::Reader& value,
   KJ_UNREACHABLE;
 }
 
-kj::StringTree stringify(DynamicValue::Reader value) {
+kj::StringTree stringify(const DynamicValue::Reader& value) {
   return print(value, schema::Type::STRUCT, Indent(false), BARE);
 }
 

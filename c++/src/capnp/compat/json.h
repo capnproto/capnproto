@@ -140,7 +140,8 @@ public:
 
   template <typename T>
   void encode(T&& value, JsonValue::Builder output) const;
-  void encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const;
+  void encode(const DynamicValue::Reader& input, Type type,
+              JsonValue::Builder output) const;
   void decode(JsonValue::Reader input, DynamicStruct::Builder output) const;
   template <typename T>
   Orphan<T> decode(JsonValue::Reader input, Orphanage orphanage) const;
@@ -241,7 +242,7 @@ private:
 
   kj::Own<Impl> impl;
 
-  void encodeField(StructSchema::Field field, DynamicValue::Reader input,
+  void encodeField(StructSchema::Field field, const DynamicValue::Reader& input,
                    JsonValue::Builder output) const;
   Orphan<DynamicList> decodeArray(List<JsonValue>::Reader input, ListSchema type, Orphanage orphanage) const;
   void decodeObject(JsonValue::Reader input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const;
