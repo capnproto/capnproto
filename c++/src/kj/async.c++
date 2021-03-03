@@ -181,6 +181,7 @@ void END_CANCELER_STACK_START_CANCELEE_STACK() {}
 // traces into one and we use this as a separator.
 
 Canceler::~Canceler() noexcept(false) {
+  if (isEmpty()) return;
   cancel(getDestructionReason(
       reinterpret_cast<void*>(&END_CANCELER_STACK_START_CANCELEE_STACK),
       Exception::Type::DISCONNECTED, __FILE__, __LINE__, "operation canceled"_kj));
