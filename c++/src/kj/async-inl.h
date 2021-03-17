@@ -33,6 +33,8 @@
 
 KJ_BEGIN_HEADER
 
+#include "list.h"
+
 namespace kj {
 namespace _ {  // private
 
@@ -1435,8 +1437,7 @@ private:
   kj::Maybe<Own<PromiseNode>> promiseNode;
   // Accessed only in target thread.
 
-  Maybe<XThreadEvent&> targetNext;
-  Maybe<XThreadEvent&>* targetPrev = nullptr;
+  ListLink<XThreadEvent> targetLink;
   // Membership in one of the linked lists in the target Executor's work list or cancel list. These
   // fields are protected by the target Executor's mutex.
 
@@ -1465,8 +1466,7 @@ private:
   } state = UNUSED;
   // State, which is also protected by `targetExecutor`'s mutex.
 
-  Maybe<XThreadEvent&> replyNext;
-  Maybe<XThreadEvent&>* replyPrev = nullptr;
+  ListLink<XThreadEvent> replyLink;
   // Membership in `replyExecutor`'s reply list. Protected by `replyExecutor`'s mutex. The
   // executing thread places the event in the reply list near the end of the `EXECUTING` state.
   // Because the thread cannot lock two mutexes at once, it's possible that the reply executor
@@ -1639,8 +1639,7 @@ private:
   // Executor of the waiting thread. Only guaranteed to be valid when state is `WAITING` or
   // `FULFILLING`. After any other state has been reached, this reference may be invalidated.
 
-  Maybe<XThreadPaf&> next;
-  Maybe<XThreadPaf&>* prev = nullptr;
+  ListLink<XThreadPaf> link;
   // In the FULFILLING/FULFILLED states, the object is placed in a linked list within the waiting
   // thread's executor. In those states, these pointers are guarded by said executor's mutex.
 
