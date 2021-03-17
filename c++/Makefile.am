@@ -146,6 +146,7 @@ includekj_HEADERS =                                            \
   src/kj/memory.h                                              \
   src/kj/refcount.h                                            \
   src/kj/array.h                                               \
+  src/kj/list.h                                                \
   src/kj/vector.h                                              \
   src/kj/string.h                                              \
   src/kj/string-tree.h                                         \
@@ -264,6 +265,7 @@ libkj_la_SOURCES=                                              \
   src/kj/memory.c++                                            \
   src/kj/refcount.c++                                          \
   src/kj/array.c++                                             \
+  src/kj/list.c++                                              \
   src/kj/string.c++                                            \
   src/kj/string-tree.c++                                       \
   src/kj/hash.c++                                              \
@@ -536,6 +538,7 @@ capnp_test_SOURCES =                                           \
   src/kj/memory-test.c++                                       \
   src/kj/refcount-test.c++                                     \
   src/kj/array-test.c++                                        \
+  src/kj/list-test.c++                                         \
   src/kj/string-test.c++                                       \
   src/kj/string-tree-test.c++                                  \
   src/kj/table-test.c++                                        \
