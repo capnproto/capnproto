@@ -108,5 +108,60 @@ KJ_TEST("List") {
   KJ_EXPECT(list.empty());
 }
 
+KJ_TEST("List remove while iterating") {
+  List<TestElement, &TestElement::link> list;
+  KJ_EXPECT(list.empty());
+
+  TestElement foo(123);
+  list.add(foo);
+  KJ_DEFER(list.remove(foo));
+
+  TestElement bar(456);
+  list.add(bar);
+
+  TestElement baz(789);
+  list.add(baz);
+  KJ_DEFER(list.remove(baz));
+
+  KJ_EXPECT(foo.link.isLinked());
+  KJ_EXPECT(bar.link.isLinked());
+  KJ_EXPECT(baz.link.isLinked());
+
+  {
+    auto iter = list.begin();
+    KJ_ASSERT(iter != list.end());
+    KJ_EXPECT(iter->i == 123);
+    ++iter;
+
+    KJ_ASSERT(iter != list.end());
+    KJ_EXPECT(iter->i == 456);
+    list.remove(*iter);
+    ++iter;
+
+    KJ_ASSERT(iter != list.end());
+    KJ_EXPECT(iter->i == 789);
+    ++iter;
+
+    KJ_EXPECT(iter == list.end());
+  }
+
+  KJ_EXPECT(foo.link.isLinked());
+  KJ_EXPECT(!bar.link.isLinked());
+  KJ_EXPECT(baz.link.isLinked());
+
+  {
+    auto iter = list.begin();
+    KJ_ASSERT(iter != list.end());
+    KJ_EXPECT(iter->i == 123);
+    ++iter;
+
+    KJ_ASSERT(iter != list.end());
+    KJ_EXPECT(iter->i == 789);
+    ++iter;
+
+    KJ_EXPECT(iter == list.end());
+  }
+}
+
 }  // namespace
 }  // namespace kj
