@@ -3,6 +3,7 @@
 
 set(kj_sources_lite
   array.c++
+  list.c++
   common.c++
   debug.c++
   exception.c++
@@ -40,6 +41,7 @@ set(kj_headers
   memory.h
   refcount.h
   array.h
+  list.h
   vector.h
   string.h
   string-tree.h
@@ -218,6 +220,7 @@ if(BUILD_TESTING)
     common-test.c++
     memory-test.c++
     array-test.c++
+    list-test.c++
     string-test.c++
     table-test.c++
     map-test.c++
