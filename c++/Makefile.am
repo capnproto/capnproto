@@ -582,7 +582,7 @@ capnp_llvm_fuzzer_testcase_SOURCES = src/capnp/fuzz-run.c++
 if HAS_NO_FUZZING_ENGINE
     capnp_llvm_fuzzer_testcase_SOURCES += src/capnp/fuzz-driver.c++
 else
-    capnp_llvm_fuzzer_testcase_LDADD = $(LIB_FUZZING_ENGINE)
+    capnp_llvm_fuzzer_testcase_LDFLAGS = $(LIB_FUZZING_ENGINE)
 endif
 endif !LITE_MODE
 
