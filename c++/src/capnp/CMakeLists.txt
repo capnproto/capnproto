@@ -293,9 +293,6 @@ if(BUILD_TESTING)
 endif()  # BUILD_TESTING
 
 if(DEFINED ENV{LIB_FUZZING_ENGINE})
-  add_executable(fuzz_convert fuzz-convert.c++)
-  target_link_libraries(fuzz_convert capnp kj $ENV{LIB_FUZZING_ENGINE})
-
   add_executable(fuzz_run fuzz-run.c++ test-util.c++ test-util.h ${test_capnp_cpp_files} ${test_capnp_h_files})
   target_link_libraries(fuzz_run capnp-rpc capnp kj kj-async capnp-json $ENV{LIB_FUZZING_ENGINE})
 endif()
