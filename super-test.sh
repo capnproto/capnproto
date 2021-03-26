@@ -97,7 +97,7 @@ while [ $# -gt 0 ]; do
       ;;
     clang* )
       export CXX=clang++${1#clang}
-      if [ "$1" -eq clang-9]
+      if [ "$1" == "clang-9" ]; then
         export LIB_FUZZING_ENGINE=-fsanitize=fuzzer
       fi
       ;;
