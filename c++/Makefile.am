@@ -582,7 +582,7 @@ capnp_afl_testcase_SOURCES = src/capnp/afl-testcase.c++
 
 if HAS_FUZZING_ENGINE
     capnp_llvm_fuzzer_testcase_LDADD = libcapnp-test.a libcapnp-rpc.la libcapnp.la libkj.la libkj-async.la
-    capnp_llvm_fuzzer_testcase_SOURCES = src/capnp/fuzz-run.c++
+    capnp_llvm_fuzzer_testcase_SOURCES = src/capnp/llvm-fuzzer-testcase.c++
     capnp_llvm_fuzzer_testcase_LDFLAGS = $(LIB_FUZZING_ENGINE)
 endif
 endif !LITE_MODE
