@@ -484,6 +484,9 @@ capnp_test_LDADD = libcapnp-test.a libcapnp.la libkj-test.la libkj.la
 else !LITE_MODE
 
 check_PROGRAMS = capnp-test capnp-evolution-test capnp-afl-testcase
+if HAS_FUZZING_ENGINE
+    check_PROGRAMS += capnp-llvm-fuzzer-testcase
+endif
 heavy_tests =                                                  \
   src/kj/async-test.c++                                        \
   src/kj/async-xthread-test.c++                                \
@@ -579,6 +582,12 @@ capnp_evolution_test_SOURCES = src/capnp/compiler/evolution-test.c++
 
 capnp_afl_testcase_LDADD = libcapnp-test.a libcapnp-rpc.la libcapnp.la libkj.la libkj-async.la
 capnp_afl_testcase_SOURCES = src/capnp/afl-testcase.c++
+
+if HAS_FUZZING_ENGINE
+    capnp_llvm_fuzzer_testcase_LDADD = libcapnp-test.a libcapnp-rpc.la libcapnp.la libkj.la libkj-async.la
+    capnp_llvm_fuzzer_testcase_SOURCES = src/capnp/llvm-fuzzer-testcase.c++
+    capnp_llvm_fuzzer_testcase_LDFLAGS = $(LIB_FUZZING_ENGINE)
+endif
 endif !LITE_MODE
 
 if LITE_MODE

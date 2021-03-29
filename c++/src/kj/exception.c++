@@ -952,9 +952,11 @@ KJ_THREADLOCAL_PTR(ExceptionCallback) threadLocalCallback = nullptr;
 
 ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
   char stackVar;
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
   ptrdiff_t offset = reinterpret_cast<char*>(this) - &stackVar;
   KJ_ASSERT(offset < 65536 && offset > -65536,
             "ExceptionCallback must be allocated on the stack.");
+#endif
 
   threadLocalCallback = this;
 }
