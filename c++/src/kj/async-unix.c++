@@ -324,6 +324,8 @@ UnixEventPort::UnixEventPort()
   KJ_SYSCALL(fd = epoll_create1(EPOLL_CLOEXEC));
   epollFd = AutoCloseFd(fd);
 
+  memset(&signalFdSigset, 0, sizeof(signalFdSigset));
+
   KJ_SYSCALL(sigemptyset(&signalFdSigset));
   KJ_SYSCALL(fd = signalfd(-1, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
   signalFd = AutoCloseFd(fd);
@@ -569,6 +571,7 @@ static siginfo_t toRegularSiginfo(const struct signalfd_siginfo& siginfo) {
 
 bool UnixEventPort::doEpollWait(int timeout) {
   sigset_t newMask;
+  memset(&newMask, 0, sizeof(newMask));
   sigemptyset(&newMask);
 
   {
