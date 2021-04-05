@@ -460,7 +460,7 @@ void Debug::Context::logMessage(LogSeverity severity, const char* file, int line
                                 String&& text) {
   if (!logged) {
     Value v = ensureInitialized();
-    next.logMessage(LogSeverity::INFO, v.file, v.line, 0,
+    next.logMessage(LogSeverity::INFO, trimSourceFilename(v.file).cStr(), v.line, 0,
                     str("context: ", mv(v.description), '\n'));
     logged = true;
   }

@@ -726,7 +726,7 @@ String KJ_STRINGIFY(const Exception& e) {
   for (;;) {
     KJ_IF_MAYBE(c, contextPtr) {
       contextText[contextDepth++] =
-          str(c->file, ":", c->line, ": context: ", c->description, "\n");
+          str(trimSourceFilename(c->file), ":", c->line, ": context: ", c->description, "\n");
       contextPtr = c->next;
     } else {
       break;
