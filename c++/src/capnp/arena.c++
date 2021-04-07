@@ -42,10 +42,10 @@ void ReadLimiter::unread(WordCount64 amount) {
   // Be careful not to overflow here.  Since ReadLimiter has no thread-safety, it's possible that
   // the limit value was not updated correctly for one or more reads, and therefore unread() could
   // overflow it even if it is only unreading bytes that were actually read.
-  uint64_t oldValue = limit;
+  uint64_t oldValue = readLimit();
   uint64_t newValue = oldValue + unbound(amount / WORDS);
   if (newValue > oldValue) {
-    limit = newValue;
+    setLimit(newValue);
   }
 }
 
