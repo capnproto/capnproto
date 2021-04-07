@@ -285,6 +285,11 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         break;
     }
 
+    auto needsLabel = [](ArrayPtr<const char> &argName) -> bool {
+      return (argName.size() > 0 && argName[0] != '\"' &&
+          !(argName.size() >= 8 && memcmp(argName.begin(), "kj::str(", 8) == 0));
+    };
+
     for (size_t i = 0; i < argValues.size(); i++) {
       if (argNames[i] == "_kjCondition"_kj) {
         // Special handling: don't output delimiter, we want to append this to the previous item,
@@ -299,7 +304,7 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
       if (i > 0 || style != LOG) {
         totalSize += delim.size();
       }
-      if (argNames[i].size() > 0 && argNames[i][0] != '\"') {
+      if (needsLabel(argNames[i])) {
         totalSize += argNames[i].size() + sep.size();
       }
       totalSize += argValues[i].size();
@@ -333,7 +338,7 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
       if (i > 0 || style != LOG) {
         pos = _::fill(pos, delim);
       }
-      if (argNames[i].size() > 0 && argNames[i][0] != '\"') {
+      if (needsLabel(argNames[i])) {
         pos = _::fill(pos, argNames[i], sep);
       }
       pos = _::fill(pos, argValues[i]);

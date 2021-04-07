@@ -221,6 +221,11 @@ TEST(Debug, Log) {
     KJ_LOG(ERROR, i, str); line = __LINE__;
   }, "log message: " + fileLine(__FILE__, line) + ":+0: error: i = 123; str = foo\n");
 
+  // kj::str() expressions are included literally.
+  EXPECT_LOG_EQ([&](){
+    KJ_LOG(ERROR, kj::str(i, str), "x"); line = __LINE__;
+  }, "log message: " + fileLine(__FILE__, line) + ":+0: error: 123foo; x\n");
+
   EXPECT_LOG_EQ([&](){
     KJ_DBG("Some debug text."); line = __LINE__;
   }, "log message: " + fileLine(__FILE__, line) + ":+0: debug: Some debug text.\n");
