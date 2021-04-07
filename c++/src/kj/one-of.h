@@ -70,6 +70,34 @@ enum class Variants9 { _variant0, _variant1, _variant2, _variant3, _variant4, _v
                        _variant7, _variant8 };
 enum class Variants10 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
                         _variant7, _variant8, _variant9 };
+enum class Variants11 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10 };
+enum class Variants12 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11 };
+enum class Variants13 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12 };
+enum class Variants14 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13 };
+enum class Variants15 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14 };
+enum class Variants16 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15 };
+enum class Variants17 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16 };
+enum class Variants18 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17 };
+enum class Variants19 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18 };
+enum class Variants20 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19 };
 
 template <uint i> struct Variants_;
 template <> struct Variants_<0> { typedef Variants0 Type; };
@@ -83,6 +111,16 @@ template <> struct Variants_<7> { typedef Variants7 Type; };
 template <> struct Variants_<8> { typedef Variants8 Type; };
 template <> struct Variants_<9> { typedef Variants9 Type; };
 template <> struct Variants_<10> { typedef Variants10 Type; };
+template <> struct Variants_<11> { typedef Variants11 Type; };
+template <> struct Variants_<12> { typedef Variants12 Type; };
+template <> struct Variants_<13> { typedef Variants13 Type; };
+template <> struct Variants_<14> { typedef Variants14 Type; };
+template <> struct Variants_<15> { typedef Variants15 Type; };
+template <> struct Variants_<16> { typedef Variants16 Type; };
+template <> struct Variants_<17> { typedef Variants17 Type; };
+template <> struct Variants_<18> { typedef Variants18 Type; };
+template <> struct Variants_<19> { typedef Variants19 Type; };
+template <> struct Variants_<20> { typedef Variants20 Type; };
 
 template <uint i>
 using Variants = typename Variants_<i>::Type;
