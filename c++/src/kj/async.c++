@@ -1147,7 +1147,7 @@ void XThreadPaf::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 }
 
 XThreadPaf::FulfillScope::FulfillScope(XThreadPaf** pointer) {
-  obj = __atomic_exchange_n(pointer, reinterpret_cast<XThreadPaf*>(nullptr), __ATOMIC_ACQUIRE);
+  obj = __atomic_exchange_n(pointer, static_cast<XThreadPaf*>(nullptr), __ATOMIC_ACQUIRE);
   auto oldState = WAITING;
   if (obj == nullptr) {
     // Already fulfilled (possibly by another thread).
