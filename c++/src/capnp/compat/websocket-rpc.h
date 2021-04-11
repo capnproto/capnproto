@@ -30,4 +30,5 @@ private:
   kj::WebSocket& socket;
   size_t maxMessageReceiveSize;
 };
-};
+
+}  // namespace capnp
