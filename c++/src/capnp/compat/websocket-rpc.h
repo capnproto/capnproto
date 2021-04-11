@@ -4,6 +4,7 @@
 #include <capnp/serialize-async.h>
 
 namespace capnp {
+
 class WebSocketMessageStream final : public MessageStream {
   // An implementation of MessageStream that sends messages over a websocket.
   //

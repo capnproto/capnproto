@@ -13,20 +13,19 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> WebSocketMessageStream::tryReadMessa
     kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   return socket.receive(maxMessageReceiveSize)
-    .then([options, scratchSpace](auto msg) -> kj::Promise<kj::Maybe<MessageReaderAndFds>> {
-      KJ_SWITCH_ONEOF(msg) {
+      .then([options, scratchSpace](auto msg) -> kj::Promise<kj::Maybe<MessageReaderAndFds>> {
+    KJ_SWITCH_ONEOF(msg) {
         KJ_CASE_ONEOF(closeMsg, kj::WebSocket::Close) {
           return kj::Maybe<MessageReaderAndFds>();
         }
         KJ_CASE_ONEOF(str, kj::String) {
           KJ_FAIL_REQUIRE(
-            "Unexpected websocket text message; expected only binary messages."
-          );
+              "Unexpected websocket text message; expected only binary messages.");
           break;
         }
         KJ_CASE_ONEOF(bytes, kj::Array<byte>) {
           kj::ArrayPtr<byte> ptr(bytes);
-          if(reinterpret_cast<uintptr_t>(&bytes[0]) % alignof(word) == 0
+          if (reinterpret_cast<uintptr_t>(&bytes[0]) % alignof(word) == 0
               && bytes.size() % sizeof(word) == 0) {
             return kj::Maybe(MessageReaderAndFds {
               .reader = kj::heap<FlatArrayMessageReader>(
@@ -65,8 +64,7 @@ kj::Promise<void> WebSocketMessageStream::writeMessage(
   // message, and then use that to avoid an extra copy here.
 
   auto stream = kj::heap<kj::VectorOutputStream>(
-    computeSerializedSizeInWords(segments) * sizeof(word)
-  );
+      computeSerializedSizeInWords(segments) * sizeof(word));
   capnp::writeMessage(*stream, segments);
   auto arrayPtr = stream->getArray();
   return socket.send(arrayPtr).attach(kj::mv(stream));
@@ -78,9 +76,9 @@ kj::Promise<void> WebSocketMessageStream::writeMessages(
     return kj::READY_NOW;
   }
   return writeMessage(nullptr, messages[0])
-    .then([this, messages = messages.slice(1, messages.size())]() -> kj::Promise<void> {
-      return writeMessages(messages);
-    });
+      .then([this, messages = messages.slice(1, messages.size())]() -> kj::Promise<void> {
+    return writeMessages(messages);
+  });
 }
 
 kj::Maybe<int> WebSocketMessageStream::getSendBufferSize() {
