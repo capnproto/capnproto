@@ -43,7 +43,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> WebSocketMessageStream::tryReadMessa
                 kj::arrayPtr(words.begin(), sizeInWords),
                 options).attach(kj::mv(words));
           }
-          return kj::Maybe(MessageReaderAndFds {
+          return kj::Maybe<MessageReaderAndFds>(MessageReaderAndFds {
             .reader = kj::mv(reader),
             .fds = nullptr
           });
