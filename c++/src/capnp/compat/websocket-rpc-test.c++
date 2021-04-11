@@ -2,7 +2,7 @@
 #include "websocket-rpc.h"
 #include <kj/test.h>
 
-#include "json.capnp.h" // Arbitrary schema, just so we have something to play with
+#include <capnp/test.capnp.h>
 
 namespace capnp::_::WebSocketMessageStream {
   class FailErrorHandler final : public kj::TaskSet::ErrorHandler {
@@ -24,11 +24,11 @@ KJ_TEST("WebSocketMessageStream") {
 
   // Make a message, fill it with some stuff
   capnp::MallocMessageBuilder originalMsg;
-  auto object = originalMsg.initRoot<capnp::json::Value>().initObject(10);
-  object[0].setName("Test");
-  object[0].initValue().setString("A string");
-  object[1].setName("Another field");
-  object[1].initValue().setNumber(42);
+  auto object = originalMsg.initRoot<capnproto_test::capnp::test::TestAllTypes>().initStructList(10);
+  object[0].setTextField("Test");
+  object[1].initStructField().setTextField("A string");
+  object[2].setTextField("Another field");
+  object[3].setInt64Field(42);
 
   auto originalSegments = originalMsg.getSegmentsForOutput();
 
