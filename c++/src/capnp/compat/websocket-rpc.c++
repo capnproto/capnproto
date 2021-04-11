@@ -24,7 +24,6 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> WebSocketMessageStream::tryReadMessa
           break;
         }
         KJ_CASE_ONEOF(bytes, kj::Array<byte>) {
-          kj::ArrayPtr<byte> ptr(bytes);
           if (reinterpret_cast<uintptr_t>(&bytes[0]) % alignof(word) == 0
               && bytes.size() % sizeof(word) == 0) {
             return kj::Maybe(MessageReaderAndFds {
