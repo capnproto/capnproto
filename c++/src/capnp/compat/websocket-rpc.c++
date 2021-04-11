@@ -12,7 +12,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> WebSocketMessageStream::tryReadMessa
     kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   return socket.receive(options.traversalLimitInWords)
-      .then([options, scratchSpace](auto msg) -> kj::Promise<kj::Maybe<MessageReaderAndFds>> {
+      .then([options](auto msg) -> kj::Promise<kj::Maybe<MessageReaderAndFds>> {
     KJ_SWITCH_ONEOF(msg) {
         KJ_CASE_ONEOF(closeMsg, kj::WebSocket::Close) {
           return kj::Maybe<MessageReaderAndFds>();
@@ -23,28 +23,30 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> WebSocketMessageStream::tryReadMessa
           break;
         }
         KJ_CASE_ONEOF(bytes, kj::Array<byte>) {
-          if (reinterpret_cast<uintptr_t>(bytes.begin()) % alignof(word) == 0
-              && bytes.size() % sizeof(word) == 0) {
-            return kj::Maybe(MessageReaderAndFds {
-              .reader = kj::heap<FlatArrayMessageReader>(
-                  kj::arrayPtr(
-                    reinterpret_cast<word *>(bytes.begin()),
-                    bytes.size() / sizeof(word)
-                  ),
-                  options
-                ).attach(kj::mv(bytes)),
-              .fds = nullptr
-            });
+          kj::Own<capnp::MessageReader> reader;
+          size_t sizeInWords = bytes.size() / sizeof(word);
+          if (reinterpret_cast<uintptr_t>(bytes.begin()) % alignof(word) == 0) {
+            reader = kj::heap<FlatArrayMessageReader>(
+                kj::arrayPtr(
+                  reinterpret_cast<word *>(bytes.begin()),
+                  sizeInWords
+                ),
+                options).attach(kj::mv(bytes));
           } else {
-            // The array is misaligned or not a whole number of words, so we
-            // need to copy it.
-            auto stream = kj::heap<kj::ArrayInputStream>(bytes);
-            auto reader = kj::heap<InputStreamMessageReader>(*stream, options, scratchSpace);
-            return kj::Maybe(MessageReaderAndFds {
-              .reader = kj::mv(reader).attach(kj::mv(stream)),
-              .fds = nullptr
-            });
+            // The array is misaligned, so we need to copy it.
+            auto words = kj::heapArray<word>(sizeInWords);
+
+            // Note: can't just use bytes.size(), since the the target buffer may
+            // be shorter due to integer division.
+            memcpy(words.begin(), bytes.begin(), sizeInWords * sizeof(word));
+            reader = kj::heap<FlatArrayMessageReader>(
+                kj::arrayPtr(words.begin(), sizeInWords),
+                options).attach(kj::mv(words));
           }
+          return kj::Maybe(MessageReaderAndFds {
+            .reader = kj::mv(reader),
+            .fds = nullptr
+          });
         }
       }
       KJ_UNREACHABLE;
