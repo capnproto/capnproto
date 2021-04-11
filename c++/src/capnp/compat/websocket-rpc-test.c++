@@ -14,7 +14,8 @@ namespace capnp::_::WebSocketMessageStream {
 };
 
 KJ_TEST("WebSocketMessageStream") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   auto pipe = kj::newWebSocketPipe();
 
@@ -58,7 +59,7 @@ KJ_TEST("WebSocketMessageStream") {
       }
   }));
 
-  tasks.onEmpty().wait(io.waitScope);
+  tasks.onEmpty().wait(waitScope);
 
   // Close the websocket, and make sure the other end gets nullptr when reading.
   tasks.add(msgStreamA.end());
@@ -69,5 +70,5 @@ KJ_TEST("WebSocketMessageStream") {
     return kj::READY_NOW;
   }));
 
-  tasks.onEmpty().wait(io.waitScope);
+  tasks.onEmpty().wait(waitScope);
 }
