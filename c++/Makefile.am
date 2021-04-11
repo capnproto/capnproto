@@ -255,7 +255,7 @@ endif
 if LITE_MODE
 lib_LTLIBRARIES = libkj.la libkj-test.la libcapnp.la
 else
-lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la $(MAYBE_KJ_TLS_LA) $(MAYBE_KJ_GZIP_LA) libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
+lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la $(MAYBE_KJ_TLS_LA) $(MAYBE_KJ_GZIP_LA) libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnp-websocket.la libcapnpc.la
 endif
 
 libkj_la_LIBADD = $(PTHREAD_LIBS)
@@ -367,6 +367,11 @@ libcapnp_json_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnp_json_la_SOURCES=                                      \
   src/capnp/compat/json.c++                                    \
   src/capnp/compat/json.capnp.c++
+
+libcapnp_websocket_la_LIBADD = libcapnp.la libcapnp-rpc.la libkj.la libkj-async.la libkj-http.la $(PTHREAD_LIBS)
+libcapnp_websocket_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
+libcapnp_websocket_la_SOURCES=                                 \
+  src/capnp/compat/websocket-rpc.c++
 
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 libcapnpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
@@ -523,6 +528,7 @@ capnp_test_LDADD =                                             \
   libcapnp-test.a                                              \
   libcapnpc.la                                                 \
   libcapnp-rpc.la                                              \
+  libcapnp-websocket.la                                        \
   libcapnp-json.la                                             \
   libcapnp.la                                                  \
   libkj-http.la                                                \
