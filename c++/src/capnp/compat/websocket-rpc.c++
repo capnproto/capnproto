@@ -72,6 +72,8 @@ kj::Promise<void> WebSocketMessageStream::writeMessage(
 
 kj::Promise<void> WebSocketMessageStream::writeMessages(
     kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) {
+  // TODO(perf): Extend WebSocket interface with a way to write multiple messages at once.
+
   if(messages.size() == 0) {
     return kj::READY_NOW;
   }
