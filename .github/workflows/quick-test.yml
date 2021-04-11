@@ -45,8 +45,8 @@ jobs:
         os: ['windows-2016', 'windows-latest']
         include:
           - os: windows-2016
-            target: 'Ninja'
-            arch:
+            target: 'Visual Studio 15 2017'
+            arch: -A x64
           - os: windows-latest
             target: 'Visual Studio 16 2019'
             arch: -A x64
