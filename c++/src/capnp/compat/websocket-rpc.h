@@ -10,9 +10,7 @@ class WebSocketMessageStream final : public MessageStream {
   //
   // Each capnproto message is sent in a single binary websocket frame.
 public:
-  WebSocketMessageStream(
-      kj::WebSocket& socket,
-      size_t maxMessageReceiveSize = kj::WebSocket::SUGGESTED_MAX_MESSAGE_SIZE);
+  WebSocketMessageStream(kj::WebSocket& socket);
 
   // Implements MessageStream
   kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
@@ -29,7 +27,6 @@ public:
   kj::Promise<void> end() override;
 private:
   kj::WebSocket& socket;
-  size_t maxMessageReceiveSize;
 };
 
 }  // namespace capnp

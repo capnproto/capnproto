@@ -4,15 +4,14 @@
 
 namespace capnp {
 
-WebSocketMessageStream::WebSocketMessageStream(kj::WebSocket& socket, size_t maxMessageReceiveSize)
-  : socket(socket),
-    maxMessageReceiveSize(maxMessageReceiveSize)
+WebSocketMessageStream::WebSocketMessageStream(kj::WebSocket& socket)
+  : socket(socket)
   {};
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> WebSocketMessageStream::tryReadMessage(
     kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
-  return socket.receive(maxMessageReceiveSize)
+  return socket.receive(options.traversalLimitInWords)
       .then([options, scratchSpace](auto msg) -> kj::Promise<kj::Maybe<MessageReaderAndFds>> {
     KJ_SWITCH_ONEOF(msg) {
         KJ_CASE_ONEOF(closeMsg, kj::WebSocket::Close) {
