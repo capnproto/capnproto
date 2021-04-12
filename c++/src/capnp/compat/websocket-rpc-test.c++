@@ -29,7 +29,7 @@ KJ_TEST("WebSocketMessageStream") {
       KJ_IF_MAYBE(result, maybeResult) {
         KJ_ASSERT(result->fds.size() == 0);
         KJ_ASSERT(result->reader->getSegment(originalSegments.size()) == nullptr);
-        for(uint i = 0; i < originalSegments.size(); i++) {
+        for(size_t i = 0; i < originalSegments.size(); i++) {
           auto oldSegment = originalSegments[i];
           auto newSegment = result->reader->getSegment(i);
 
