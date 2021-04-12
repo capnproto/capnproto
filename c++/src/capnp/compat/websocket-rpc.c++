@@ -44,8 +44,8 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> WebSocketMessageStream::tryReadMessa
                 options).attach(kj::mv(words));
           }
           return kj::Maybe<MessageReaderAndFds>(MessageReaderAndFds {
-            .reader = kj::mv(reader),
-            .fds = nullptr
+            kj::mv(reader),
+            nullptr
           });
         }
       }
