@@ -1744,7 +1744,7 @@ public:
 }  // namespace _ (private)
 
 template <typename T>
-PromiseFulfillerPair<T> newCrossThreadPromiseAndFulfiller() {
+PromiseFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
   kj::Own<_::XThreadPafImpl<T>> node(new _::XThreadPafImpl<T>, _::XThreadPaf::DISPOSER);
   auto fulfiller = kj::heap<_::XThreadFulfiller<T>>(node);
   return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(node)), kj::mv(fulfiller) };

@@ -611,9 +611,11 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller();
 // `fulfill()` callback, and the promises are chained.
 
 template <typename T>
-PromiseFulfillerPair<T> newCrossThreadPromiseAndFulfiller();
+PromiseFulfillerPair<T> newPromiseAndCrossThreadFulfiller();
 // Like `newPromiseAndFulfiller()`, but the fulfiller is allowed to be invoked from any thread,
-// not just the one that called this method.
+// not just the one that called this method. Note that the Promise is still tied to the calling
+// thread's event loop and *cannot* be used from another thread -- only the PromiseFulfiller is
+// cross-thread.
 
 // =======================================================================================
 // Canceler
