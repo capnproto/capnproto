@@ -478,14 +478,28 @@ TEST(Async, Fork) {
 
   auto fork = promise.fork();
 
+#if __GNUC__ && !__clang__ && __GNUC__ >= 7
+// GCC 7 decides the open-brace below is "misleadingly indented" as if it were guarded by the `for`
+// that appears in the implementation of KJ_REQUIRE(). Shut up shut up shut up.
+#pragma GCC diagnostic ignored "-Wmisleading-indentation"
+#endif
+  KJ_ASSERT(!fork.hasBranches());
+  {
+    auto cancelBranch = fork.addBranch();
+    KJ_ASSERT(fork.hasBranches());
+  }
+  KJ_ASSERT(!fork.hasBranches());
+
   auto branch1 = fork.addBranch().then([](int i) {
     EXPECT_EQ(123, i);
     return 456;
   });
+  KJ_ASSERT(fork.hasBranches());
   auto branch2 = fork.addBranch().then([](int i) {
     EXPECT_EQ(123, i);
     return 789;
   });
+  KJ_ASSERT(fork.hasBranches());
 
   {
     auto releaseFork = kj::mv(fork);
