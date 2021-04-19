@@ -1126,6 +1126,11 @@ Promise<T> ForkedPromise<T>::addBranch() {
 }
 
 template <typename T>
+bool ForkedPromise<T>::hasBranches() {
+  return hub->isShared();
+}
+
+template <typename T>
 _::SplitTuplePromise<T> Promise<T>::split() {
   return refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(node))->split();
 }

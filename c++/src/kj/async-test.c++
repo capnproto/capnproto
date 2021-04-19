@@ -478,14 +478,23 @@ TEST(Async, Fork) {
 
   auto fork = promise.fork();
 
+  KJ_ASSERT(!fork.hasBranches());
+  {
+    auto cancelBranch = fork.addBranch();
+    KJ_ASSERT(fork.hasBranches());
+  }
+  KJ_ASSERT(!fork.hasBranches());
+
   auto branch1 = fork.addBranch().then([](int i) {
     EXPECT_EQ(123, i);
     return 456;
   });
+  KJ_ASSERT(fork.hasBranches());
   auto branch2 = fork.addBranch().then([](int i) {
     EXPECT_EQ(123, i);
     return 789;
   });
+  KJ_ASSERT(fork.hasBranches());
 
   {
     auto releaseFork = kj::mv(fork);

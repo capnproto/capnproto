@@ -332,6 +332,9 @@ public:
   Promise<T> addBranch();
   // Add a new branch to the fork.  The branch is equivalent to the original promise.
 
+  bool hasBranches();
+  // Returns true if there are any branches that haven't been canceled.
+
 private:
   Own<_::ForkHub<_::FixVoid<T>>> hub;
 
