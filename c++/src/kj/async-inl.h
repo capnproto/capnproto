@@ -1693,7 +1693,7 @@ private:
 };
 
 template <typename T>
-class XThreadFulfiller final: public PromiseFulfiller<T> {
+class XThreadFulfiller final: public CrossThreadPromiseFulfiller<T> {
 public:
   XThreadFulfiller(XThreadPafImpl<T>* target): target(target) {}
 
@@ -1702,19 +1702,19 @@ public:
       reject(XThreadPaf::unfulfilledException());
     }
   }
-  void fulfill(FixVoid<T>&& value) override {
+  void fulfill(FixVoid<T>&& value) const override {
     XThreadPaf::FulfillScope scope(&target);
     if (scope.shouldFulfill()) {
       scope.getTarget<T>()->result = kj::mv(value);
     }
   }
-  void reject(Exception&& exception) override {
+  void reject(Exception&& exception) const override {
     XThreadPaf::FulfillScope scope(&target);
     if (scope.shouldFulfill()) {
       scope.getTarget<T>()->result.addException(kj::mv(exception));
     }
   }
-  bool isWaiting() override {
+  bool isWaiting() const override {
     KJ_IF_MAYBE(t, target) {
 #if _MSC_VER && !__clang__
       // Just assume 1-byte loads are atomic... on what kind of absurd platform would they not be?
@@ -1728,7 +1728,7 @@ public:
   }
 
 private:
-  XThreadPaf* target;
+  mutable XThreadPaf* target;  // accessed using atomic ops
 };
 
 template <typename T>
@@ -1744,7 +1744,7 @@ public:
 }  // namespace _ (private)
 
 template <typename T>
-PromiseFulfillerPair<T> newCrossThreadPromiseAndFulfiller() {
+PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
   kj::Own<_::XThreadPafImpl<T>> node(new _::XThreadPafImpl<T>, _::XThreadPaf::DISPOSER);
   auto fulfiller = kj::heap<_::XThreadFulfiller<T>>(node);
   return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(node)), kj::mv(fulfiller) };

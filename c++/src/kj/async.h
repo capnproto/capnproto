@@ -611,9 +611,53 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller();
 // `fulfill()` callback, and the promises are chained.
 
 template <typename T>
-PromiseFulfillerPair<T> newCrossThreadPromiseAndFulfiller();
+class CrossThreadPromiseFulfiller: public kj::PromiseFulfiller<T> {
+  // Like PromiseFulfiller<T> but the methods are `const`, indicating they can safely be called
+  // from another thread.
+
+public:
+  virtual void fulfill(T&& value) const = 0;
+  virtual void reject(Exception&& exception) const = 0;
+  virtual bool isWaiting() const = 0;
+
+  void fulfill(T&& value) override { return constThis()->fulfill(kj::fwd<T>(value)); }
+  void reject(Exception&& exception) override { return constThis()->reject(kj::mv(exception)); }
+  bool isWaiting() override { return constThis()->isWaiting(); }
+
+private:
+  const CrossThreadPromiseFulfiller* constThis() { return this; }
+};
+
+template <>
+class CrossThreadPromiseFulfiller<void>: public kj::PromiseFulfiller<void> {
+  // Specialization of CrossThreadPromiseFulfiller for void promises.  See
+  // CrossThreadPromiseFulfiller<T>.
+
+public:
+  virtual void fulfill(_::Void&& value = _::Void()) const = 0;
+  virtual void reject(Exception&& exception) const = 0;
+  virtual bool isWaiting() const = 0;
+
+  void fulfill(_::Void&& value) override { return constThis()->fulfill(kj::mv(value)); }
+  void reject(Exception&& exception) override { return constThis()->reject(kj::mv(exception)); }
+  bool isWaiting() override { return constThis()->isWaiting(); }
+
+private:
+  const CrossThreadPromiseFulfiller* constThis() { return this; }
+};
+
+template <typename T>
+struct PromiseCrossThreadFulfillerPair {
+  _::ReducePromises<T> promise;
+  Own<CrossThreadPromiseFulfiller<T>> fulfiller;
+};
+
+template <typename T>
+PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller();
 // Like `newPromiseAndFulfiller()`, but the fulfiller is allowed to be invoked from any thread,
-// not just the one that called this method.
+// not just the one that called this method. Note that the Promise is still tied to the calling
+// thread's event loop and *cannot* be used from another thread -- only the PromiseFulfiller is
+// cross-thread.
 
 // =======================================================================================
 // Canceler

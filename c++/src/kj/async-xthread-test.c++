@@ -889,7 +889,7 @@ KJ_TEST("cross-thread fulfiller") {
   Thread thread([&]() noexcept {
     KJ_XTHREAD_TEST_SETUP_LOOP;
 
-    auto paf = kj::newCrossThreadPromiseAndFulfiller<int>();
+    auto paf = kj::newPromiseAndCrossThreadFulfiller<int>();
     *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
 
     int result = paf.promise.wait(waitScope);
@@ -916,7 +916,7 @@ KJ_TEST("cross-thread fulfiller rejects") {
   Thread thread([&]() noexcept {
     KJ_XTHREAD_TEST_SETUP_LOOP;
 
-    auto paf = kj::newCrossThreadPromiseAndFulfiller<void>();
+    auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
     *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
 
     KJ_EXPECT_THROW_MESSAGE("foo exception", paf.promise.wait(waitScope));
@@ -942,7 +942,7 @@ KJ_TEST("cross-thread fulfiller destroyed") {
   Thread thread([&]() noexcept {
     KJ_XTHREAD_TEST_SETUP_LOOP;
 
-    auto paf = kj::newCrossThreadPromiseAndFulfiller<void>();
+    auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
     *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
 
     KJ_EXPECT_THROW_MESSAGE(
@@ -971,7 +971,7 @@ KJ_TEST("cross-thread fulfiller canceled") {
   Thread thread([&]() noexcept {
     KJ_XTHREAD_TEST_SETUP_LOOP;
 
-    auto paf = kj::newCrossThreadPromiseAndFulfiller<void>();
+    auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
     {
       auto lock = fulfillerMutex.lockExclusive();
       *lock = kj::mv(paf.fulfiller);
@@ -1014,7 +1014,7 @@ KJ_TEST("cross-thread fulfiller multiple fulfills") {
   Thread thread([&]() noexcept {
     KJ_XTHREAD_TEST_SETUP_LOOP;
 
-    auto paf = kj::newCrossThreadPromiseAndFulfiller<int>();
+    auto paf = kj::newPromiseAndCrossThreadFulfiller<int>();
     *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
 
     int result = paf.promise.wait(waitScope);

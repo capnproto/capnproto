@@ -1178,7 +1178,7 @@ XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
       }
     } else {
       KJ_LOG(FATAL,
-          "the thread which called kj::newCrossThreadPromiseAndFulfiller<T>() apparently exited "
+          "the thread which called kj::newPromiseAndCrossThreadFulfiller<T>() apparently exited "
           "its own event loop without canceling the cross-thread promise first; this is "
           "undefined behavior so I will crash now");
       abort();
