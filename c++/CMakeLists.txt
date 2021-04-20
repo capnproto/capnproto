@@ -163,6 +163,7 @@ if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
       pkgconfig/kj-test.pc
       pkgconfig/kj-tls.pc
       pkgconfig/capnp-rpc.pc
+      pkgconfig/capnp-websocket.pc
       pkgconfig/capnp-json.pc
     )
   endif()
