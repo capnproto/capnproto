@@ -32,7 +32,7 @@ WebSocketMessageStream::WebSocketMessageStream(kj::WebSocket& socket)
 kj::Promise<kj::Maybe<MessageReaderAndFds>> WebSocketMessageStream::tryReadMessage(
     kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
-  return socket.receive(options.traversalLimitInWords)
+  return socket.receive(options.traversalLimitInWords * sizeof(word))
       .then([options](auto msg) -> kj::Promise<kj::Maybe<MessageReaderAndFds>> {
     KJ_SWITCH_ONEOF(msg) {
         KJ_CASE_ONEOF(closeMsg, kj::WebSocket::Close) {
