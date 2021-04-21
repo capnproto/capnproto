@@ -896,6 +896,11 @@ public:
   template <typename... Params>
   HashIndex(Params&&... params): cb(kj::fwd<Params>(params)...) {}
 
+  size_t capacity() {
+    // This method is for testing.
+    return buckets.size();
+  }
+
   void reserve(size_t size) {
     if (buckets.size() < size * 2) {
       rehash(size);
@@ -915,8 +920,12 @@ public:
   template <typename Row, typename... Params>
   kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos, Params&&... params) {
     if (buckets.size() * 2 < (table.size() + 1 + erasedCount) * 3) {
-      // Load factor is more than 2/3, let's rehash.
-      rehash(kj::max(buckets.size() * 2, (table.size() + 1) * 2));
+      // Load factor is more than 2/3, let's rehash so that it's 1/3, i.e. double the buckets.
+      // Note that rehashing also cleans up erased entries, so we may not actually be doubling if
+      // there are a lot of erasures. Nevertheless, this gives us amortized constant time -- it
+      // would take at least O(table.size()) more insertions (whether or not erasures occur)
+      // before another rehash is needed.
+      rehash((table.size() + 1) * 3);
     }
 
     uint hashCode = cb.hashCode(params...);
@@ -1010,6 +1019,7 @@ private:
 
   void rehash(size_t targetSize) {
     buckets = _::rehash(buckets, targetSize);
+    erasedCount = 0;
   }
 };
 

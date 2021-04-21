@@ -267,6 +267,32 @@ KJ_TEST("hash tables when hash is always same") {
   KJ_EXPECT_THROW_MESSAGE("inserted row already exists in table", table.insert("bar"));
 }
 
+class IntHasher {
+  // Dumb integer hasher that just returns the integer itself.
+public:
+  uint keyForRow(uint i) const { return i; }
+
+  bool matches(uint a, uint b) const {
+    return a == b;
+  }
+  uint hashCode(uint i) const {
+    return i;
+  }
+};
+
+KJ_TEST("HashIndex with many erasures doesn't keep growing") {
+  HashIndex<IntHasher> index;
+
+  kj::ArrayPtr<uint> rows = nullptr;
+
+  for (uint i: kj::zeroTo(1000000)) {
+    KJ_ASSERT(index.insert(rows, 0, i) == nullptr);
+    index.erase(rows, 0, i);
+  }
+
+  KJ_ASSERT(index.capacity() < 10);
+}
+
 struct SiPair {
   kj::StringPtr str;
   uint i;
