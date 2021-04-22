@@ -75,6 +75,11 @@ public:
   }
   inline StringPtr(const char* begin, const char* end): StringPtr(begin, end - begin) {}
   inline StringPtr(const String& value);
+  StringPtr& operator=(String&& value) = delete;
+  inline StringPtr& operator=(decltype(nullptr)) {
+    content = ArrayPtr<const char>("", 1);
+    return *this;
+  }
 
 #if __cplusplus >= 202000L
   inline StringPtr(const char8_t* value): StringPtr(reinterpret_cast<const char*>(value)) {}
