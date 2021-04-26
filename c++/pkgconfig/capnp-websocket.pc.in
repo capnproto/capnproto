@@ -1,0 +1,11 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: Cap'n Proto WebSocket RPC
+Description: WebSocket MessageStream for Cap'n Proto
+Version: @VERSION@
+Libs: -L${libdir} -lcapnp-websocket
+Requires: capnp = @VERSION@ capnp-rpc = @VERSION@ kj = @VERSION@ kj-async = @VERSION@ kj-http = @VERSION@
+Cflags: -I${includedir}

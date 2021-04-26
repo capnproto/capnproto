@@ -120,6 +120,7 @@ AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
   pkgconfig/capnpc.pc \
   pkgconfig/capnp-rpc.pc \
   pkgconfig/capnp-json.pc \
+  pkgconfig/capnp-websocket.pc \
   pkgconfig/kj.pc \
   pkgconfig/kj-async.pc \
   pkgconfig/kj-http.pc \
