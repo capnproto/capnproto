@@ -99,7 +99,7 @@ kj::Promise<void> WebSocketMessageStream::writeMessages(
     return kj::READY_NOW;
   }
   return writeMessage(nullptr, messages[0])
-      .then([this, messages = messages.slice(1, messages.size())]() -> kj::Promise<void> {
+      .then([this, messages = messages.slice(1, messages.size())]() mutable -> kj::Promise<void> {
     return writeMessages(messages);
   });
 }
