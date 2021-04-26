@@ -855,6 +855,68 @@ inline constexpr Repeat<Decay<T>> repeat(T&& value, size_t count) {
   return Repeat<Decay<T>>(value, count);
 }
 
+template <typename Inner, class Mapping>
+class MappedIterator: private Mapping {
+  // An iterator that wraps some other iterator and maps the values through a mapping function.
+  // The type `Mapping` must define a method `map()` which performs this mapping.
+
+public:
+  template <typename... Params>
+  MappedIterator(Inner inner, Params&&... params)
+      : Mapping(kj::fwd<Params>(params)...), inner(inner) {}
+
+  inline auto operator->() const { return &Mapping::map(*inner); }
+  inline decltype(auto) operator* () const { return Mapping::map(*inner); }
+  inline decltype(auto) operator[](size_t index) const { return Mapping::map(inner[index]); }
+  inline MappedIterator& operator++() { ++inner; return *this; }
+  inline MappedIterator  operator++(int) { return MappedIterator(inner++, *this); }
+  inline MappedIterator& operator--() { --inner; return *this; }
+  inline MappedIterator  operator--(int) { return MappedIterator(inner--, *this); }
+  inline MappedIterator& operator+=(ptrdiff_t amount) { inner += amount; return *this; }
+  inline MappedIterator& operator-=(ptrdiff_t amount) { inner -= amount; return *this; }
+  inline MappedIterator  operator+ (ptrdiff_t amount) const {
+    return MappedIterator(inner + amount, *this);
+  }
+  inline MappedIterator  operator- (ptrdiff_t amount) const {
+    return MappedIterator(inner - amount, *this);
+  }
+  inline ptrdiff_t operator- (const MappedIterator& other) const { return inner - other.inner; }
+
+  inline bool operator==(const MappedIterator& other) const { return inner == other.inner; }
+  inline bool operator!=(const MappedIterator& other) const { return inner != other.inner; }
+  inline bool operator<=(const MappedIterator& other) const { return inner <= other.inner; }
+  inline bool operator>=(const MappedIterator& other) const { return inner >= other.inner; }
+  inline bool operator< (const MappedIterator& other) const { return inner <  other.inner; }
+  inline bool operator> (const MappedIterator& other) const { return inner >  other.inner; }
+
+private:
+  Inner inner;
+};
+
+template <typename Inner, typename Mapping>
+class MappedIterable: private Mapping {
+  // An iterable that wraps some other iterable and maps the values through a mapping function.
+  // The type `Mapping` must define a method `map()` which performs this mapping.
+
+public:
+  template <typename... Params>
+  MappedIterable(Inner inner, Params&&... params)
+      : Mapping(kj::fwd<Params>(params)...), inner(inner) {}
+
+  typedef Decay<decltype(instance<Inner>().begin())> InnerIterator;
+  typedef MappedIterator<InnerIterator, Mapping> Iterator;
+  typedef Decay<decltype(instance<const Inner>().begin())> InnerConstIterator;
+  typedef MappedIterator<InnerConstIterator, Mapping> ConstIterator;
+
+  inline Iterator begin() { return { inner.begin(), (Mapping&)*this }; }
+  inline Iterator end() { return { inner.end(), (Mapping&)*this }; }
+  inline ConstIterator begin() const { return { inner.begin(), (const Mapping&)*this }; }
+  inline ConstIterator end() const { return { inner.end(), (const Mapping&)*this }; }
+
+private:
+  Inner inner;
+};
+
 // =======================================================================================
 // Manually invoking constructors and destructors
 //
