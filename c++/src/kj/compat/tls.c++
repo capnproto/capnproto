@@ -227,6 +227,10 @@ public:
     inner.getpeername(addr, length);
   }
 
+  kj::Maybe<int> getFd() const override {
+    return inner.getFd();
+  }
+
 private:
   SSL* ssl;
   kj::AsyncIoStream& inner;

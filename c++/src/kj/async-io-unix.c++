@@ -268,6 +268,10 @@ public:
     *length = socklen;
   }
 
+  kj::Maybe<int> getFd() const override {
+    return fd;
+  }
+
   Promise<void> waitConnected() {
     // Wait until initial connection has completed. This actually just waits until it is writable.
 
