@@ -146,6 +146,10 @@ public:
   // Note that we don't provide methods that return NetworkAddress because it usually wouldn't
   // be useful. You can't connect() to or listen() on these addresses, obviously, because they are
   // ephemeral addresses for a single connection.
+
+  virtual kj::Maybe<int> getFd() const { return nullptr; }
+  // Get the underlying Unix file descriptor, if any. Returns nullptr if this object actually
+  // isn't wrapping a file descriptor.
 };
 
 class AsyncCapabilityStream: public AsyncIoStream {

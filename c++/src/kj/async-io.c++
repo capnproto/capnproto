@@ -503,7 +503,7 @@ private:
         KJ_SWITCH_ONEOF(capBuffer) {
           KJ_CASE_ONEOF(fds, ArrayPtr<const int>) {
             if (fds.size() > 0 && maxStreams > 0) {
-              // TODO(someday): Maybe AsyncIoStream should have a `Maybe<int> getFd()` method?
+              // TODO(someday): Use AsyncIoStream's `Maybe<int> getFd()` method?
               KJ_FAIL_REQUIRE(
                   "async pipe message was written with FDs attached, but corresponding read "
                   "asked for streams, and we don't know how to convert here");
@@ -969,7 +969,7 @@ private:
           }
           KJ_CASE_ONEOF(streamBuffer, ArrayPtr<Own<AsyncCapabilityStream>>) {
             if (streamBuffer.size() > 0 && fds.size() > 0) {
-              // TODO(someday): Maybe AsyncIoStream should have a `Maybe<int> getFd()` method?
+              // TODO(someday): Use AsyncIoStream's `Maybe<int> getFd()` method?
               KJ_FAIL_REQUIRE(
                   "async pipe message was written with FDs attached, but corresponding read "
                   "asked for streams, and we don't know how to convert here");
@@ -2405,6 +2405,14 @@ public:
       tasks.add(promise.addBranch().then([this]() {
         return KJ_ASSERT_NONNULL(stream)->abortRead();
       }));
+    }
+  }
+
+  kj::Maybe<int> getFd() const override {
+    KJ_IF_MAYBE(s, stream) {
+      return s->get()->getFd();
+    } else {
+      return nullptr;
     }
   }
 
