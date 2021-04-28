@@ -311,12 +311,23 @@ TEST(Common, Maybe) {
   }
 
   {
-    // Test that a moved-out-of Maybe<T&> is left empty.
+    // Test that a moved-out-of Maybe<T&> is left empty when moved to a Maybe<T>.
     int x = 123;
     Maybe<int&> m = x;
     KJ_EXPECT(m != nullptr);
 
     Maybe<int> n(kj::mv(m));
+    KJ_EXPECT(m == nullptr);
+    KJ_EXPECT(n != nullptr);
+  }
+
+  {
+    // Test that a moved-out-of Maybe<T&> is left empty when moved to another Maybe<T&>.
+    int x = 123;
+    Maybe<int&> m = x;
+    KJ_EXPECT(m != nullptr);
+
+    Maybe<int&> n(kj::mv(m));
     KJ_EXPECT(m == nullptr);
     KJ_EXPECT(n != nullptr);
   }

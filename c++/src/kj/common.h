@@ -1369,16 +1369,33 @@ private:
 };
 
 template <typename T>
-class Maybe<T&>: public DisallowConstCopyIfNotConst<T> {
+class Maybe<T&> {
 public:
   constexpr Maybe(): ptr(nullptr) {}
   constexpr Maybe(T& t): ptr(&t) {}
   constexpr Maybe(T* t): ptr(t) {}
 
+  inline constexpr Maybe(PropagateConst<T, Maybe>& other): ptr(other.ptr) {}
+  // Allow const copy only if `T` itself is const. Otherwise allow only non-const copy, to
+  // protect transitive constness. Clang is happy for this constructor to be declared `= default`
+  // since, after evaluation of `PropagateConst`, it does end up being a default-able constructor.
+  // But, GCC and MSVC both complain about that, claiming this constructor cannot be declared
+  // default. I don't know who is correct, but whatever, we'll write out an implementation, fine.
+  //
+  // Note that we can't solve this by inheriting DisallowConstCopyIfNotConst<T> because we want
+  // to override the move constructor, and if we override the move constructor then we must define
+  // the copy constructor here.
+
+  inline constexpr Maybe(Maybe&& other): ptr(other.ptr) { other.ptr = nullptr; }
+
   template <typename U>
   inline constexpr Maybe(Maybe<U&>& other): ptr(other.ptr) {}
   template <typename U>
   inline constexpr Maybe(const Maybe<U&>& other): ptr(const_cast<const U*>(other.ptr)) {}
+  template <typename U>
+  inline constexpr Maybe(Maybe<U&>&& other): ptr(other.ptr) { other.ptr = nullptr; }
+  template <typename U>
+  inline constexpr Maybe(const Maybe<U&>&& other) = delete;
   template <typename U>
   constexpr Maybe(Maybe<U>& other): ptr(other.ptr.operator U*()) {}
   template <typename U>
@@ -1387,10 +1404,16 @@ public:
 
   inline Maybe& operator=(T& other) { ptr = &other; return *this; }
   inline Maybe& operator=(T* other) { ptr = other; return *this; }
+  inline Maybe& operator=(PropagateConst<T, Maybe>& other) { ptr = other.ptr; return *this; }
+  inline Maybe& operator=(Maybe&& other) { ptr = other.ptr; other.ptr = nullptr; return *this; }
   template <typename U>
   inline Maybe& operator=(Maybe<U&>& other) { ptr = other.ptr; return *this; }
   template <typename U>
   inline Maybe& operator=(const Maybe<const U&>& other) { ptr = other.ptr; return *this; }
+  template <typename U>
+  inline Maybe& operator=(Maybe<U&>&& other) { ptr = other.ptr; other.ptr = nullptr; return *this; }
+  template <typename U>
+  inline Maybe& operator=(const Maybe<U&>&& other) = delete;
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
