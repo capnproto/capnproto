@@ -139,7 +139,7 @@ Mutex::~Mutex() {
   KJ_ASSERT(futex == 0, "Mutex destroyed while locked.") { break; }
 }
 
-bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLocationArg location) {
   auto spec = timeout.map([](Duration d) { return toRelativeTimespec(d); });
   struct timespec* specp = nullptr;
   KJ_IF_MAYBE(s, spec) {
@@ -315,7 +315,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, const LockSourceLocation& location) {
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0, timeout != nullptr };
   addWaiter(waiter);
@@ -362,7 +362,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
                                           __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
             // OK, we set our own futex to 1. That means no other thread will, and so we won't be
             // receiving a mutex ownership transfer. We have to lock the mutex ourselves.
-            lock(EXCLUSIVE);
+            lock(EXCLUSIVE, nullptr, location);
             currentlyLocked = true;
             return;
           } else {
@@ -412,7 +412,7 @@ void Mutex::induceSpuriousWakeupForTest() {
   }
 }
 
-void Once::runOnce(Initializer& init) {
+void Once::runOnce(Initializer& init, const LockSourceLocation& location) {
 startOver:
   uint state = UNINITIALIZED;
   if (__atomic_compare_exchange_n(&futex, &state, INITIALIZING, false,
@@ -486,7 +486,7 @@ Mutex::Mutex() {
 }
 Mutex::~Mutex() {}
 
-bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, NoopSourceLocation) {
   if (timeout != nullptr) {
     KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
   }
@@ -555,7 +555,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   // held for debug purposes anyway, we just don't bother.
 }
 
-void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocation) {
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0 };
   static_assert(sizeof(waiter.condvar) == sizeof(CONDITION_VARIABLE),
@@ -662,7 +662,7 @@ Once::Once(bool startInitialized) {
 }
 Once::~Once() {}
 
-void Once::runOnce(Initializer& init) {
+void Once::runOnce(Initializer& init, NoopSourceLocation) {
   BOOL needInit;
   while (!InitOnceBeginInitialize(&coercedInitOnce, 0, &needInit, nullptr)) {
     // Init was occurring in another thread, but then failed with an exception. Retry.
@@ -712,7 +712,7 @@ Mutex::~Mutex() {
   KJ_PTHREAD_CLEANUP(pthread_rwlock_destroy(&mutex));
 }
 
-bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, NoopSourceLocation) {
   if (timeout != nullptr) {
     KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
   }
@@ -781,7 +781,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocation) {
   // Add waiter to list.
   Waiter waiter {
     nullptr, waitersTail, predicate, nullptr,
@@ -901,7 +901,7 @@ Once::~Once() {
   KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&mutex));
 }
 
-void Once::runOnce(Initializer& init) {
+void Once::runOnce(Initializer& init, NoopSourceLocation) {
   KJ_PTHREAD_CALL(pthread_mutex_lock(&mutex));
   KJ_DEFER(KJ_PTHREAD_CALL(pthread_mutex_unlock(&mutex)));
 

@@ -24,6 +24,7 @@
 #include "memory.h"
 #include <inttypes.h>
 #include "time.h"
+#include "source-location.h"
 
 KJ_BEGIN_HEADER
 
@@ -42,8 +43,20 @@ KJ_BEGIN_HEADER
 // TODO(someday):  Write efficient low-level locking primitives for other platforms.
 #include <pthread.h>
 #endif
-
 namespace kj {
+#if KJ_TRACK_LOCK_ACQUISITION
+#if !KJ_USE_FUTEX
+#error Lock tracking is only currently supported for futex-based mutexes.
+#endif
+
+#if __cplusplus <= 201703L
+#error C++20 or newer is required
+#endif
+
+using LockSourceLocation = SourceLocation;
+#else
+using LockSourceLocation = NoopSourceLocation;
+#endif
 
 class Exception;
 
@@ -67,7 +80,8 @@ public:
     SHARED
   };
 
-  bool lock(Exclusivity exclusivity, Maybe<Duration> timeout = nullptr);
+  bool lock(Exclusivity exclusivity, Maybe<Duration> timeout = nullptr
+     , const LockSourceLocation& location = LockSourceLocation::current());
   void unlock(Exclusivity exclusivity, Waiter* waiterToSkip = nullptr);
 
   void assertLockedByCaller(Exclusivity exclusivity);
@@ -80,7 +94,8 @@ public:
     virtual bool check() = 0;
   };
 
-  void wait(Predicate& predicate, Maybe<Duration> timeout = nullptr);
+  void wait(Predicate& predicate, Maybe<Duration> timeout = nullptr
+     , const LockSourceLocation& location = LockSourceLocation::current());
   // If predicate.check() returns false, unlock the mutex until predicate.check() returns true, or
   // when the timeout (if any) expires. The mutex is always re-locked when this returns regardless
   // of whether the timeout expired, and including if it throws.
@@ -162,7 +177,7 @@ public:
     virtual void run() = 0;
   };
 
-  void runOnce(Initializer& init);
+  void runOnce(Initializer& init, const LockSourceLocation& location = LockSourceLocation::current());
 
 #if _WIN32 || __CYGWIN__  // TODO(perf): Can we make this inline on win32 somehow?
   bool isInitialized() noexcept;
@@ -253,7 +268,7 @@ public:
   inline operator const T*() const { return ptr; }
 
   template <typename Cond>
-  void wait(Cond&& condition, Maybe<Duration> timeout = nullptr) {
+  void wait(Cond&& condition, Maybe<Duration> timeout = nullptr, const LockSourceLocation& location = LockSourceLocation::current()) {
     // Unlocks the lock until `condition(state)` evaluates true (where `state` is type `const T&`
     // referencing the object protected by the lock).
 
@@ -274,7 +289,7 @@ public:
     };
 
     PredicateImpl impl(kj::fwd<Cond>(condition), *ptr);
-    mutex->wait(impl, timeout);
+    mutex->wait(impl, timeout, location);
   }
 
 private:
@@ -316,7 +331,7 @@ public:
   explicit MutexGuarded(Params&&... params);
   // Initialize the mutex-bounded object by passing the given parameters to its constructor.
 
-  Locked<T> lockExclusive() const;
+  Locked<T> lockExclusive(const LockSourceLocation& location = LockSourceLocation::current()) const;
   // Exclusively locks the object and returns it.  The returned `Locked<T>` can be passed by
   // move, similar to `Own<T>`.
   //
@@ -326,15 +341,17 @@ public:
   // be shared between threads, its methods should be const, even though locking it produces a
   // non-const pointer to the contained object.
 
-  Locked<const T> lockShared() const;
+  Locked<const T> lockShared(const LockSourceLocation& location = LockSourceLocation::current()) const;
   // Lock the value for shared access.  Multiple shared locks can be taken concurrently, but cannot
   // be held at the same time as a non-shared lock.
 
-  Maybe<Locked<T>> lockExclusiveWithTimeout(Duration timeout) const;
+  Maybe<Locked<T>> lockExclusiveWithTimeout(Duration timeout
+     , const LockSourceLocation& location = LockSourceLocation::current()) const;
   // Attempts to exclusively lock the object. If the timeout elapses before the lock is aquired,
   // this returns null.
 
-  Maybe<Locked<const T>> lockSharedWithTimeout(Duration timeout) const;
+  Maybe<Locked<const T>> lockSharedWithTimeout(Duration timeout
+     , const LockSourceLocation& location = LockSourceLocation::current()) const;
   // Attempts to lock the value for shared access. If the timeout elapses before the lock is aquired,
   // this returns null.
 
@@ -349,7 +366,8 @@ public:
   // Like `getWithoutLock()`, but asserts that the lock is already held by the calling thread.
 
   template <typename Cond, typename Func>
-  auto when(Cond&& condition, Func&& callback, Maybe<Duration> timeout = nullptr) const
+  auto when(Cond&& condition, Func&& callback, Maybe<Duration> timeout = nullptr
+     , const LockSourceLocation& location = LockSourceLocation::current()) const
       -> decltype(callback(instance<T&>())) {
     // Waits until condition(state) returns true, then calls callback(state) under lock.
     //
@@ -369,7 +387,7 @@ public:
     // TODO(cleanup): lock->wait() is a better interface. Can we deprecate this one?
 
     auto lock = lockExclusive();
-    lock.wait(kj::fwd<Cond>(condition), timeout);
+    lock.wait(kj::fwd<Cond>(condition), timeout, location);
     return callback(value);
   }
 
@@ -386,7 +404,7 @@ class MutexGuarded<const T> {
 };
 
 template <typename T>
-class ExternalMutexGuarded {
+class ExternalMutexGuarded: private LockSourceLocation {
   // Holds a value that can only be manipulated while some other mutex is locked.
   //
   // The ExternalMutexGuarded<T> lives *outside* the scope of any lock on the mutex, but ensures
@@ -405,12 +423,17 @@ class ExternalMutexGuarded {
   //   - The value has been moved away.
   // - If ExternalMutexGuarded<T> is ever moved, then T must have a move constructor and move
   //   assignment operator that do not follow any pointers, therefore do not need to take a lock.
-
+  //
+  // Inherits from LockSourceLocation to perform an empty base class optimization when lock tracking
+  // is compiled out. Once the minimum C++ standard for the KJ library is C++20, this optimization
+  // could be replaced by a member variable with a [[no_unique_address]] annotation.
 public:
-  ExternalMutexGuarded() = default;
+  ExternalMutexGuarded(const LockSourceLocation& location = LockSourceLocation::current())
+      : LockSourceLocation(location) {}
+
   ~ExternalMutexGuarded() noexcept(false) {
     if (mutex != nullptr) {
-      mutex->lock(_::Mutex::EXCLUSIVE);
+      mutex->lock(_::Mutex::EXCLUSIVE, nullptr, *this);
       KJ_DEFER(mutex->unlock(_::Mutex::EXCLUSIVE));
       value = T();
     }
@@ -466,9 +489,9 @@ class Lazy {
 
 public:
   template <typename Func>
-  T& get(Func&& init);
+  T& get(Func&& init, const LockSourceLocation& location = LockSourceLocation::current());
   template <typename Func>
-  const T& get(Func&& init) const;
+  const T& get(Func&& init, const LockSourceLocation& location = LockSourceLocation::current()) const;
   // The first thread to call get() will invoke the given init function to construct the value.
   // Other threads will block until construction completes, then return the same value.
   //
@@ -495,20 +518,22 @@ inline MutexGuarded<T>::MutexGuarded(Params&&... params)
     : value(kj::fwd<Params>(params)...) {}
 
 template <typename T>
-inline Locked<T> MutexGuarded<T>::lockExclusive() const {
-  mutex.lock(_::Mutex::EXCLUSIVE);
+inline Locked<T> MutexGuarded<T>::lockExclusive(const LockSourceLocation& location)
+    const {
+  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, location);
   return Locked<T>(mutex, value);
 }
 
 template <typename T>
-inline Locked<const T> MutexGuarded<T>::lockShared() const {
-  mutex.lock(_::Mutex::SHARED);
+inline Locked<const T> MutexGuarded<T>::lockShared(const LockSourceLocation& location) const {
+  mutex.lock(_::Mutex::SHARED, nullptr, location);
   return Locked<const T>(mutex, value);
 }
 
 template <typename T>
-inline Maybe<Locked<T>> MutexGuarded<T>::lockExclusiveWithTimeout(Duration timeout) const {
-  if (mutex.lock(_::Mutex::EXCLUSIVE, timeout)) {
+inline Maybe<Locked<T>> MutexGuarded<T>::lockExclusiveWithTimeout(Duration timeout,
+    const LockSourceLocation& location) const {
+  if (mutex.lock(_::Mutex::EXCLUSIVE, timeout, location)) {
     return Locked<T>(mutex, value);
   } else {
     return nullptr;
@@ -516,8 +541,9 @@ inline Maybe<Locked<T>> MutexGuarded<T>::lockExclusiveWithTimeout(Duration timeo
 }
 
 template <typename T>
-inline Maybe<Locked<const T>> MutexGuarded<T>::lockSharedWithTimeout(Duration timeout) const {
-  if (mutex.lock(_::Mutex::SHARED, timeout)) {
+inline Maybe<Locked<const T>> MutexGuarded<T>::lockSharedWithTimeout(Duration timeout,
+    const LockSourceLocation& location) const {
+  if (mutex.lock(_::Mutex::SHARED, timeout, location)) {
     return Locked<const T>(mutex, value);
   } else {
     return nullptr;
@@ -563,20 +589,20 @@ private:
 
 template <typename T>
 template <typename Func>
-inline T& Lazy<T>::get(Func&& init) {
+inline T& Lazy<T>::get(Func&& init, const LockSourceLocation& location) {
   if (!once.isInitialized()) {
     InitImpl<Func> initImpl(*this, kj::fwd<Func>(init));
-    once.runOnce(initImpl);
+    once.runOnce(initImpl, location);
   }
   return *value;
 }
 
 template <typename T>
 template <typename Func>
-inline const T& Lazy<T>::get(Func&& init) const {
+inline const T& Lazy<T>::get(Func&& init, const LockSourceLocation& location) const {
   if (!once.isInitialized()) {
     InitImpl<Func> initImpl(*this, kj::fwd<Func>(init));
-    once.runOnce(initImpl);
+    once.runOnce(initImpl, location);
   }
   return *value;
 }
