@@ -25,6 +25,7 @@
 #include <inttypes.h>
 #include "time.h"
 #include "source-location.h"
+#include "one-of.h"
 
 KJ_BEGIN_HEADER
 
@@ -43,6 +44,12 @@ KJ_BEGIN_HEADER
 // TODO(someday):  Write efficient low-level locking primitives for other platforms.
 #include <pthread.h>
 #endif
+
+#if KJ_TRACK_LOCK_BLOCKING
+// Lock tracking is required to keep track of what blocked.
+#define KJ_TRACK_LOCK_ACQUISITION 1
+#endif
+
 namespace kj {
 #if KJ_TRACK_LOCK_ACQUISITION
 #if !KJ_USE_FUTEX
@@ -57,6 +64,7 @@ using LockSourceLocation = SourceLocation;
 #else
 using LockSourceLocation = NoopSourceLocation;
 #endif
+
 
 class Exception;
 
@@ -606,6 +614,53 @@ inline const T& Lazy<T>::get(Func&& init, const LockSourceLocation& location) co
   }
   return *value;
 }
+
+#if KJ_TRACK_LOCK_BLOCKING
+struct BlockedOnMutexAcquisition {
+  const _::Mutex& mutex;
+  // The mutex we are blocked on.
+
+  const SourceLocation& origin;
+  // Where did the blocking operation originate from.
+};
+
+struct BlockedOnCondVarWait {
+  const _::Mutex& mutex;
+  // The mutex the condition variable is using (may or may not be locked).
+
+  const void* waiter;
+  // Pointer to the waiter that's being waited on.
+
+  const SourceLocation& origin;
+  // Where did the blocking operation originate from.
+};
+
+struct BlockedOnOnceInit {
+  const _::Once& once;
+
+  const SourceLocation& origin;
+  // Where did the blocking operation originate from.
+};
+
+using BlockedOnReason = OneOf<BlockedOnMutexAcquisition, BlockedOnCondVarWait, BlockedOnOnceInit>;
+
+Maybe<const BlockedOnReason&> blockedReason() noexcept;
+// Returns the information about the reason the current thread is blocked synchronously on KJ
+// lock primitives. Returns nullptr if the current thread is not currently blocked on such
+// primitves. This is intended to be called from a signal handler to check whether the current
+// thread is blocked. Outside of a signal handler there is little value to this function. In those
+// cases by definition the thread is not blocked. This includes the callable used as part of a
+// condition variable since that happens after the lock is acquired & the current thread is no
+// longer blocked). The utility could be made useful for non-signal handler use-cases by being able
+// to fetch the pointer to the TLS variable directly (i.e. const BlockedOnReason&*). However, there
+// would have to be additional changes/complexity to try make that work since you'd need
+// synchronization to ensure that the memory you'd try to reference is still valid. The likely
+// solution would be to make these mutually exclusive options where you can use either the fast
+// async-safe option, or a mutex-guarded TLS variable you can get a reference to that isn't
+// async-safe. That being said, maybe someone can come up with a way to make something that works
+// in both use-cases which would of course be more preferable.
+#endif
+
 
 }  // namespace kj
 
