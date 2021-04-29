@@ -179,6 +179,34 @@ struct timespec toAbsoluteTimespec(TimePoint time) {
 // =======================================================================================
 // Futex-based implementation (Linux-only)
 
+#if KJ_SAVE_ACQUIRED_LOCK_INFO
+#if !__GLIBC_PREREQ(2, 30)
+#ifndef SYS_gettid
+#error SYS_gettid is unavailable on this system
+#endif
+
+#define gettid() ((pid_t)syscall(SYS_gettid))
+#endif
+
+static thread_local pid_t tlsTid = gettid();
+#define TRACK_ACQUIRED_TID() tlsTid
+
+Mutex::AcquiredMetadata Mutex::lockedInfo() const {
+  auto state = __atomic_load_n(&futex, __ATOMIC_RELAXED);
+  auto tid = lockedExclusivelyByThread;
+  auto location = lockAcquiredLocation;
+
+  if (state & EXCLUSIVE_HELD) {
+    return HoldingExclusively{tid, location};
+  } else {
+    return HoldingShared{location};
+  }
+}
+
+#else
+#define TRACK_ACQUIRED_TID() 0
+#endif
+
 Mutex::Mutex(): futex(0) {}
 Mutex::~Mutex() {
   // This will crash anyway, might as well crash with a nice error message.
@@ -201,6 +229,7 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
         uint state = 0;
         if (KJ_LIKELY(__atomic_compare_exchange_n(&futex, &state, EXCLUSIVE_HELD, false,
                                                   __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))) {
+
           // Acquired.
           break;
         }
@@ -228,9 +257,11 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
           }
         }
       }
+      acquiredExclusive(TRACK_ACQUIRED_TID(), location);
       break;
     case SHARED: {
       uint state = __atomic_add_fetch(&futex, 1, __ATOMIC_ACQUIRE);
+
       for (;;) {
         if (KJ_LIKELY((state & EXCLUSIVE_HELD) == 0)) {
           // Acquired.
@@ -263,6 +294,19 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
         }
         state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
       }
+
+      // We just want to record the lock being acquired somewhere but the specific location doesn't
+      // matter. This does mean that race conditions could occur where a thread might read this
+      // inconsistently (e.g. filename from 1 lock & function from another). This currently is just
+      // meant to be a debugging aid for manual analysis so it's OK for that purpose. If it's ever
+      // required for this to be used for anything else, then this should probably be changed to
+      // use an additional atomic variable that can ensure only one writer updates this. Or use the
+      // futex variable to ensure that this is only done for the first one to acquire the lock,
+      // although there may be thundering herd problems with that whereby there's a long wallclock
+      // time between when the lock is acquired and when the location is updated (since the first
+      // locker isn't really guaranteed to be the first one unlocked).
+      acquiredShared(location);
+
       break;
     }
   }
@@ -273,6 +317,10 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   switch (exclusivity) {
     case EXCLUSIVE: {
       KJ_DASSERT(futex & EXCLUSIVE_HELD, "Unlocked a mutex that wasn't locked.");
+
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+      auto acquiredLocation = releasingExclusive();
+#endif
 
       // First check if there are any conditional waiters. Note we only do this when unlocking an
       // exclusive lock since under a shared lock the state couldn't have changed.
@@ -331,7 +379,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
         uint readerCount = oldState & SHARED_COUNT_MASK;
         if (readerCount >= KJ_CONTENTION_WARNING_THRESHOLD) {
           KJ_LOG(WARNING, "excessively many readers were waiting on this lock", readerCount,
-              kj::getStackTrace());
+              kj::getStackTrace(), acquiredLocation);
         }
 #endif
       }
@@ -370,7 +418,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, const LockSourceLocation& location) {
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, LockSourceLocationArg location) {
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0, timeout != nullptr };
   addWaiter(waiter);
@@ -382,7 +430,10 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, const LockSource
   // currently.
   bool currentlyLocked = true;
   KJ_DEFER({
-    if (!currentlyLocked) lock(EXCLUSIVE);
+    // Infinite timeout for re-obtaining the lock is on purpose because the post-condition for this
+    // function has to be that the lock state hasn't changed (& we have to be locked when we enter
+    // since that's how condvars work).
+    if (!currentlyLocked) lock(EXCLUSIVE, nullptr, location);
     removeWaiter(waiter);
   });
 
@@ -475,7 +526,7 @@ void Mutex::induceSpuriousWakeupForTest() {
   }
 }
 
-void Once::runOnce(Initializer& init, const LockSourceLocation& location) {
+void Once::runOnce(Initializer& init, LockSourceLocationArg location) {
 startOver:
   uint state = UNINITIALIZED;
   if (__atomic_compare_exchange_n(&futex, &state, INITIALIZING, false,
@@ -860,7 +911,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
   // currently.
   bool currentlyLocked = true;
   KJ_DEFER({
-    if (!currentlyLocked) lock(EXCLUSIVE, nullptr);
+    if (!currentlyLocked) lock(EXCLUSIVE, nullptr, NoopSourceLocation::current());
     removeWaiter(waiter);
 
     // Destroy pthread objects.
@@ -928,7 +979,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
     // because we've already been signaled.
     KJ_PTHREAD_CALL(pthread_mutex_unlock(&waiter.stupidMutex));
 
-    lock(EXCLUSIVE);
+    lock(EXCLUSIVE, nullptr, NoopSourceLocation::current());
     currentlyLocked = true;
 
     KJ_IF_MAYBE(exception, waiter.exception) {
