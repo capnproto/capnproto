@@ -331,7 +331,7 @@ public:
   void takeOwnership(kj::String&& string);
   void takeOwnership(kj::Array<char>&& chars);
   void takeOwnership(HttpHeaders&& otherHeaders);
-  // Takes overship of a string so that it lives until the HttpHeaders object is destroyed. Useful
+  // Takes ownership of a string so that it lives until the HttpHeaders object is destroyed. Useful
   // when you've passed a dynamic value to set() or add() or parse*().
 
   struct Request {
