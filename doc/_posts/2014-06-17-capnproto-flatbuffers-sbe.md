@@ -98,7 +98,7 @@ The down side of reflection is that it is generally very slow (compared to gener
 
 When building a message, depending on how your code is organized, it may be convenient to have flexibility in the order in which you fill in the data. If that flexibility is missing, you may find you have to do extra bookkeeping to store data off to the side until its time comes to be added to the message.
 
-Protocol Buffers is natually completely flexible in terms of initialization order because the mesasge is being built on the heap. There is no reason to impose restrictions. (Although, the C++ Protobuf library heavily encourages top-down building.)
+Protocol Buffers is natually completely flexible in terms of initialization order because the message is being built on the heap. There is no reason to impose restrictions. (Although, the C++ Protobuf library heavily encourages top-down building.)
 
 All the zero-copy systems, though, have to use some form of arena allocation to make sure that the message is built in a contiguous block of memory that can be written out all at once. So, things get more complicated.
 
