@@ -1260,6 +1260,7 @@ public:
           // Fine.
           break;
         } else if (error != EINTR) {
+          KJ_DBG(error);
           KJ_FAIL_SYSCALL("connect()", error) { break; }
           return Own<AsyncIoStream>();
         }
