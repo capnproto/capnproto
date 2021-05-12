@@ -542,6 +542,34 @@ TEST(Async, ForkRef) {
   EXPECT_EQ(789, branch2.wait(waitScope));
 }
 
+TEST(Async, ForkMaybeRef) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<Maybe<Own<RefcountedInt>>> promise = evalLater([&]() {
+    return Maybe<Own<RefcountedInt>>(refcounted<RefcountedInt>(123));
+  });
+
+  auto fork = promise.fork();
+
+  auto branch1 = fork.addBranch().then([](Maybe<Own<RefcountedInt>>&& i) {
+    EXPECT_EQ(123, KJ_REQUIRE_NONNULL(i)->i);
+    return 456;
+  });
+  auto branch2 = fork.addBranch().then([](Maybe<Own<RefcountedInt>>&& i) {
+    EXPECT_EQ(123, KJ_REQUIRE_NONNULL(i)->i);
+    return 789;
+  });
+
+  {
+    auto releaseFork = kj::mv(fork);
+  }
+
+  EXPECT_EQ(456, branch1.wait(waitScope));
+  EXPECT_EQ(789, branch2.wait(waitScope));
+}
+
+
 TEST(Async, Split) {
   EventLoop loop;
   WaitScope waitScope(loop);

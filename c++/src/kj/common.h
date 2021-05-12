@@ -383,7 +383,7 @@ template <> struct EnableIf_<true> { typedef void Type; };
 template <bool b> using EnableIf = typename EnableIf_<b>::Type;
 // Use like:
 //
-//     template <typename T, typename = EnableIf<isValid<T>()>
+//     template <typename T, typename = EnableIf<isValid<T>()>>
 //     void func(T&& t);
 
 template <typename...> struct VoidSfinae_ { using Type = void; };
