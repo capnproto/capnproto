@@ -211,7 +211,8 @@ if(NOT CAPNP_LITE)
   install(TARGETS capnp_tool capnpc_cpp capnpc_capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
 
   # Symlink capnpc -> capnp
-  install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp${CMAKE_EXECUTABLE_SUFFIX} \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc${CMAKE_EXECUTABLE_SUFFIX}\")")
+  install(CODE
+      "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp${CMAKE_EXECUTABLE_SUFFIX} \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc${CMAKE_EXECUTABLE_SUFFIX}\" RESULT_VARIABLE STATUS OUTPUT_VARIABLE CAPNPC_SYMLINK_ERR ERROR_VARIABLE CAPNPC_SYMLINK_ERR)\nif (STATUS AND NOT STATUS EQUAL 0)\nmessage(WARNING \"Failed to symlink capnpc -> capnp (check permissions or OS config)\")\nendif()")
 endif()  # NOT CAPNP_LITE
 
 # Tests ========================================================================
