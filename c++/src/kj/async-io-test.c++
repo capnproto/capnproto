@@ -32,6 +32,7 @@
 #include "io.h"
 #include "miniposix.h"
 #include <kj/compat/gtest.h>
+#include <kj/time.h>
 #include <sys/types.h>
 #if _WIN32
 #include <ws2tcpip.h>
@@ -931,8 +932,10 @@ TEST(AsyncIo, Udp) {
 TEST(AsyncIo, AbstractUnixSocket) {
   auto ioContext = setupAsyncIo();
   auto& network = ioContext.provider->getNetwork();
+  auto elapsedSinceEpoch = systemPreciseMonotonicClock().now() - kj::origin<TimePoint>();
+  auto address = kj::str("unix-abstract:foo", getpid(), elapsedSinceEpoch / kj::NANOSECONDS);
 
-  Own<NetworkAddress> addr = network.parseAddress("unix-abstract:foo").wait(ioContext.waitScope);
+  Own<NetworkAddress> addr = network.parseAddress(address).wait(ioContext.waitScope);
 
   Own<ConnectionReceiver> listener = addr->listen();
   // chdir proves no filesystem dependence. Test fails for regular unix socket
