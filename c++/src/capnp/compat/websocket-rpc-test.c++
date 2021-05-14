@@ -77,3 +77,37 @@ KJ_TEST("WebSocketMessageStream") {
   }).wait(waitScope);
   endPromise.wait(waitScope);
 }
+
+KJ_TEST("WebSocketMessageStreamByteCount") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe1 = kj::newWebSocketPipe();
+  auto pipe2 = kj::newWebSocketPipe();
+
+  auto msgStreamA = capnp::WebSocketMessageStream(*pipe1.ends[0]);
+  auto msgStreamB = capnp::WebSocketMessageStream(*pipe2.ends[1]);
+
+  auto pumpTask = pipe1.ends[1]->pumpTo(*pipe2.ends[0]);
+
+  capnp::MallocMessageBuilder originalMsg;
+  auto object = originalMsg.initRoot<capnproto_test::capnp::test::TestAllTypes>().initStructList(10);
+  object[0].setTextField("Test");
+  object[1].initStructField().setTextField("A string");
+  object[2].setTextField("Another field");
+  object[3].setInt64Field(42);
+  auto originalSegments = originalMsg.getSegmentsForOutput();
+
+  auto writePromise = msgStreamA.writeMessage(nullptr, originalSegments);
+  msgStreamB.tryReadMessage(nullptr).wait(waitScope);
+  writePromise.wait(waitScope);
+
+  auto endPromise = msgStreamA.end();
+  msgStreamB.tryReadMessage(nullptr).wait(waitScope);
+  pumpTask.wait(waitScope);
+  endPromise.wait(waitScope);
+  KJ_EXPECT(pipe1.ends[0]->sentByteCount() == 2585);
+  KJ_EXPECT(pipe1.ends[1]->receivedByteCount() == 2585);
+  KJ_EXPECT(pipe2.ends[0]->sentByteCount() == 2585);
+  KJ_EXPECT(pipe2.ends[1]->receivedByteCount() == 2585);
+}

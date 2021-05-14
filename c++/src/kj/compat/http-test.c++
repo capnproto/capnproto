@@ -1687,7 +1687,8 @@ KJ_TEST("WebSocket core protocol") {
       .then([&]() { return client->send(mediumString); })
       .then([&]() { return client->send(bigString); })
       .then([&]() { return client->send(kj::StringPtr("world").asBytes()); })
-      .then([&]() { return client->close(1234, "bored"); });
+      .then([&]() { return client->close(1234, "bored"); })
+      .then([&]() { KJ_EXPECT(client->sentByteCount() == 90307)});
 
   {
     auto message = server->receive().wait(waitScope);
@@ -1718,6 +1719,7 @@ KJ_TEST("WebSocket core protocol") {
     KJ_ASSERT(message.is<WebSocket::Close>());
     KJ_EXPECT(message.get<WebSocket::Close>().code == 1234);
     KJ_EXPECT(message.get<WebSocket::Close>().reason == "bored");
+    KJ_EXPECT(server->receivedByteCount() == 90307);
   }
 
   auto serverTask = server->close(4321, "whatever");
@@ -1727,6 +1729,7 @@ KJ_TEST("WebSocket core protocol") {
     KJ_ASSERT(message.is<WebSocket::Close>());
     KJ_EXPECT(message.get<WebSocket::Close>().code == 4321);
     KJ_EXPECT(message.get<WebSocket::Close>().reason == "whatever");
+    KJ_EXPECT(client->receivedByteCount() == 12);
   }
 
   clientTask.wait(waitScope);
@@ -2012,6 +2015,35 @@ KJ_TEST("WebSocket ping received during pong send") {
   expectRead(*client, EXPECTED2).wait(waitScope);
 
   clientTask.wait(waitScope);
+}
+
+KJ_TEST("WebSocket pump byte counting") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe1 = KJ_HTTP_TEST_CREATE_2PIPE;
+  auto pipe2 = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  FakeEntropySource maskGenerator;
+  auto server1 = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
+  auto client2 = newWebSocket(kj::mv(pipe2.ends[0]), maskGenerator);
+  auto server2 = newWebSocket(kj::mv(pipe2.ends[1]), nullptr);
+
+  auto pumpTask = server1->pumpTo(*client2);
+  auto receiveTask = server2->receive();
+
+  // Client sends three bytes of a valid message then disconnects.
+  const char DATA[] = {0x01, 0x06, 'h'};
+  pipe1.ends[0]->write(DATA, 3).wait(waitScope);
+  pipe1.ends[0] = nullptr;
+
+  // The pump completes successfully, forwarding the disconnect.
+  pumpTask.wait(waitScope);
+
+  // The eventual receiver gets a disconnect execption.
+  KJ_EXPECT_THROW(DISCONNECTED, receiveTask.wait(waitScope));
+
+  KJ_EXPECT(server1->receivedByteCount() == 3);
+  KJ_EXPECT(client2->sentByteCount() == 3);
+  KJ_EXPECT(server2->receivedByteCount() == 3);
 }
 
 KJ_TEST("WebSocket pump disconnect on send") {
