@@ -249,6 +249,17 @@ class HttpHeaders {
 public:
   explicit HttpHeaders(const HttpHeaderTable& table);
 
+  static bool isValidHeaderValue(kj::StringPtr value);
+  // This returns whether the value is a valid parameter to the set call. While the HTTP spec
+  // suggests that only printable ASCII characters are allowed in header values, in practice that
+  // turns out to not be the case. We follow the browser's lead in disallowing \r and \n.
+  // https://github.com/httpwg/http11bis/issues/19
+  // Use this if you want to validate the value before supplying it to set() if you want to avoid
+  // an exception being thrown (e.g. you have custom error reporting). NOTE that set will still
+  // validate the value. If performance is a problem this API needs to be adjusted to a
+  // `validateHeaderValue` function that returns a special type that set can be confident has
+  // already passed through the validation routine.
+
   KJ_DISALLOW_COPY(HttpHeaders);
   HttpHeaders(HttpHeaders&&) = default;
   HttpHeaders& operator=(HttpHeaders&&) = default;
