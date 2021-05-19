@@ -435,8 +435,17 @@ public:
   static const HeapDisposer instance;
 };
 
+#if _MSC_VER && _MSC_VER < 1920 && !defined(__clang__)
+template <typename T>
+__declspec(selectany) const HeapDisposer<T> HeapDisposer<T>::instance = HeapDisposer<T>();
+// On MSVC 2017 we suddenly started seeing a linker error on one specific specialization of
+// `HeapDisposer::instance` when seemingly-unrelated code was modified. Explicitly specifying
+// `__declspec(selectany)` seems to fix it. But why? Shouldn't template members have `selectany`
+// behavior by default? We don't know. It works and we're moving on.
+#else
 template <typename T>
 const HeapDisposer<T> HeapDisposer<T>::instance = HeapDisposer<T>();
+#endif
 
 }  // namespace _ (private)
 
