@@ -486,6 +486,21 @@ template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
 // Join an array of promises into a promise for an array.
 
+#if __cpp_fold_expressions
+// Maybe it's possible to implement this without fold expressions in a C++11-friendly way but I
+// don't want to spend the time to figure that out. Technically this also requires
+// __cpp_generic_lambdas but fold expressions are C++17 and generic lambdas are C++14.
+
+template <typename... Ts>
+Promise<Tuple<Ts...>> joinPromises(Tuple<Promise<Ts>...>&& promises);
+// Join a tuple of promises into a promise for a tuple.
+
+template <typename T, typename U, typename... Ts>
+Promise<Tuple<T, U, Ts...>> joinPromises(Promise<T>&& first, Promise<U>&& second,
+    Promise<Ts>&&... more);
+// Join one or more (possibly heterogenous) promises into a promise for a tuple of the results.
+#endif
+
 // =======================================================================================
 // Hack for creating a lambda that holds an owned pointer.
 

@@ -787,6 +787,73 @@ private:
 
 // -------------------------------------------------------------------
 
+#if __cpp_fold_expressions
+class TupleJoinPromiseNodeBase: public PromiseNode {
+public:
+  TupleJoinPromiseNodeBase(Array<Own<PromiseNode>> promises,
+                           ExceptionOrValue* resultParts, size_t maxPartSize);
+  ~TupleJoinPromiseNodeBase() noexcept(false);
+
+  void onReady(Event* event) noexcept override final;
+  void get(ExceptionOrValue& output) noexcept override final;
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override final;
+
+protected:
+  virtual void getNoError(ExceptionOrValue& output) noexcept = 0;
+  // Called to compile the result only in the case where there were no errors.
+
+private:
+  uint countLeft;
+  OnReadyEvent onReadyEvent;
+
+  class Branch final: public Event {
+  public:
+    Branch(TupleJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependency,
+           ExceptionOrValue& output);
+    ~Branch() noexcept(false);
+
+    Maybe<Own<Event>> fire() override;
+    void traceEvent(TraceBuilder& builder) override;
+
+    Maybe<Exception> getPart();
+    // Calls dependency->get(output).  If there was an exception, return it.
+
+  private:
+    TupleJoinPromiseNodeBase& joinNode;
+    Own<PromiseNode> dependency;
+    ExceptionOrValue& output;
+
+    friend class TupleJoinPromiseNodeBase;
+  };
+
+  Array<Branch> branches;
+};
+
+template <typename ...Ts>
+class TupleJoinPromiseNode final: public TupleJoinPromiseNodeBase {
+public:
+  TupleJoinPromiseNode(Array<Own<PromiseNode>> promises,
+                       Tuple<ExceptionOr<Ts>...> resultParts)
+      : TupleJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(),
+            kj::max({sizeof(ExceptionOr<Ts>)...})),
+        resultParts(kj::mv(resultParts)) {}
+
+protected:
+  void getNoError(ExceptionOrValue& output) noexcept override {
+    output.as<Tuple<Ts...>>() = kj::apply([](auto&&... parts) {
+      KJ_IASSERT(((parts.value != nullptr) && ...),
+            "Bug in KJ promise framework:  Promise result had neither value no exception.");
+      return kj::tuple((kj::mv(*_::readMaybe(parts.value)), ...));
+    }, kj::mv(resultParts));
+  }
+
+private:
+  Tuple<ExceptionOr<Ts>...> resultParts;
+};
+#endif
+
+// -------------------------------------------------------------------
+
 class ArrayJoinPromiseNodeBase: public PromiseNode {
 public:
   ArrayJoinPromiseNodeBase(Array<Own<PromiseNode>> promises,
@@ -1268,6 +1335,26 @@ Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises) {
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<T>>(promises.size())));
 }
+
+#if __cpp_fold_expressions
+template <typename... Ts>
+Promise<Tuple<Ts...>> joinPromises(Tuple<Ts...>&& promises) {
+  return _::PromiseNode::to<Promise<Tuple<Ts...>>>(kj::heap<_::TupleJoinPromiseNode<Ts...>>(
+      apply([](auto&&... promises) {
+        return heapArray((_::PromiseNode::from(kj::mv(promises)), ...));
+      }, kj::mv(promises)),
+      tuple<_::ExceptionOr<Ts>...>()));
+}
+
+template <typename T, typename U, typename... Ts>
+Promise<Tuple<T, U, Ts...>> joinPromises(Promise<T>&& first, Promise<U>&& second,
+    Promise<Ts>&&... more) {
+  return _::PromiseNode::to<Promise<Tuple<Ts...>>>(kj::heap<_::TupleJoinPromiseNode<Ts...>>(
+      heapArray(_::PromiseNode::from(kj::mv(first)), _::PromiseNode::from(kj::mv(second)),
+          (_::PromiseNode::from(kj::mv(more)), ...)),
+      tuple<_::ExceptionOr<Ts>...>()));
+}
+#endif
 
 // =======================================================================================
 

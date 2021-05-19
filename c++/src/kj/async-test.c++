@@ -660,6 +660,44 @@ TEST(Async, ArrayJoinVoid) {
   promise.wait(waitScope);
 }
 
+#if __cpp_fold_expressions
+TEST(Async, TupleJoin) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  {
+    Promise<Tuple<int, int, int>> promise = joinPromises(Promise<int>{123}, Promise<int>{456}, Promise<int>{789});
+
+    auto result = promise.wait(waitScope);
+
+    EXPECT_EQ(123, get<0>(result));
+    EXPECT_EQ(456, get<1>(result));
+    EXPECT_EQ(789, get<2>(result));
+  }
+
+  {
+    Promise<Tuple<int, int, int>> promise = joinPromises(tuple(
+        Promise<int>{123}, Promise<int>{456}, Promise<int>{789}));
+
+    auto result = promise.wait(waitScope);
+
+    EXPECT_EQ(123, get<0>(result));
+    EXPECT_EQ(456, get<1>(result));
+    EXPECT_EQ(789, get<2>(result));
+  }
+
+}
+
+TEST(Async, TupleJoinVoid) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<Tuple<void, void, void>> promise = joinPromises(READY_NOW, READY_NOW, READY_NOW);
+
+  promise.wait(waitScope);
+}
+#endif
+
 TEST(Async, Canceler) {
   EventLoop loop;
   WaitScope waitScope(loop);

@@ -604,6 +604,25 @@ inline constexpr auto max(T&& a, U&& b) -> WiderType<Decay<T>, Decay<U>> {
   return a > b ? WiderType<Decay<T>, Decay<U>>(a) : WiderType<Decay<T>, Decay<U>>(b);
 }
 
+template <typename T>
+inline constexpr auto max(std::initializer_list<T> l) -> T {
+  auto first = l.begin();
+  auto last = l.end();
+
+  KJ_IREQUIRE(first != last, "Empty list to find the maximum of");
+
+  auto largest = l.begin();
+  ++first;
+
+  for (; first != last; ++first) {
+    if (*first > *largest) {
+      largest = first;
+    }
+  }
+
+  return *largest;
+}
+
 template <typename T, size_t s>
 inline constexpr size_t size(T (&arr)[s]) { return s; }
 template <typename T>

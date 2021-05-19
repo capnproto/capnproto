@@ -2516,6 +2516,85 @@ void ExclusiveJoinPromiseNode::Branch::traceEvent(TraceBuilder& builder) {
 
 // -------------------------------------------------------------------
 
+#if __cpp_fold_expressions
+TupleJoinPromiseNodeBase::TupleJoinPromiseNodeBase(
+    Array<Own<PromiseNode>> promises, ExceptionOrValue* resultParts, size_t maxPartSize)
+    : countLeft(promises.size()) {
+  // Make the branches.
+  auto builder = heapArrayBuilder<Branch>(promises.size());
+  for (uint i: indices(promises)) {
+    ExceptionOrValue& output = *reinterpret_cast<ExceptionOrValue*>(
+        reinterpret_cast<byte*>(resultParts) + i * maxPartSize);
+    builder.add(*this, kj::mv(promises[i]), output);
+  }
+  branches = builder.finish();
+
+  if (branches.size() == 0) {
+    onReadyEvent.arm();
+  }
+}
+
+TupleJoinPromiseNodeBase::~TupleJoinPromiseNodeBase() noexcept(false) {}
+
+void TupleJoinPromiseNodeBase::onReady(Event* event) noexcept {
+  onReadyEvent.init(event);
+}
+
+void TupleJoinPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
+  // If any of the elements threw exceptions, propagate them.
+  for (auto& branch: branches) {
+    KJ_IF_MAYBE(exception, branch.getPart()) {
+      output.addException(kj::mv(*exception));
+    }
+  }
+
+  if (output.exception == nullptr) {
+    // No errors.  The template subclass will need to fill in the result.
+    getNoError(output);
+  }
+}
+
+void TupleJoinPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called
+  //   joinPromises()?
+
+  if (stopAtNextEvent) return;
+
+  // Trace the first branch I guess.
+  if (branches != nullptr) {
+    branches[0].dependency->tracePromise(builder, false);
+  }
+}
+
+TupleJoinPromiseNodeBase::Branch::Branch(
+    TupleJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependencyParam, ExceptionOrValue& output)
+    : joinNode(joinNode), dependency(kj::mv(dependencyParam)), output(output) {
+  dependency->setSelfPointer(&dependency);
+  dependency->onReady(this);
+}
+
+TupleJoinPromiseNodeBase::Branch::~Branch() noexcept(false) {}
+
+Maybe<Own<Event>> TupleJoinPromiseNodeBase::Branch::fire() {
+  if (--joinNode.countLeft == 0) {
+    joinNode.onReadyEvent.arm();
+  }
+  return nullptr;
+}
+
+void TupleJoinPromiseNodeBase::Branch::traceEvent(TraceBuilder& builder) {
+  dependency->tracePromise(builder, true);
+  joinNode.onReadyEvent.traceEvent(builder);
+}
+
+Maybe<Exception> TupleJoinPromiseNodeBase::Branch::getPart() {
+  dependency->get(output);
+  return kj::mv(output.exception);
+}
+#endif
+
+// -------------------------------------------------------------------
+
 ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
     Array<Own<PromiseNode>> promises, ExceptionOrValue* resultParts, size_t partSize)
     : countLeft(promises.size()) {
