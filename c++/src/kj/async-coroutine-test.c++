@@ -432,6 +432,8 @@ KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not 
       awaitPromise(kj::mv(rejectedThrowyDtorPromise)).wait(waitScope));
 }
 
+// TODO(now): async stack traces
+
 Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
   auto address = co_await addressPromise;
   auto client = co_await address->connect();

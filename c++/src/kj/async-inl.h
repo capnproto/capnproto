@@ -2003,6 +2003,19 @@ private:
     output.as<FixVoid<T>>() = kj::mv(result);
   }
 
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override {
+    if (stopAtNextEvent) return;
+
+    KJ_IF_MAYBE(promise, awaitingPromise) {
+      promise->tracePromise(builder, stopAtNextEvent);
+    }
+
+    // Maybe returning the address of coroutine() will give us a function name with meaningful type
+    // information.
+    auto coroutine = Handle::from_promise(*this);
+    builder.add(GetFunctorStartAddress<>::apply(coroutine));
+  };
+
   // -------------------------------------------------------
   // Event implementation
 
@@ -2019,10 +2032,26 @@ private:
     //
     // TODO(someday): If we ever support coroutines with -fno-exceptions, we'll need to reject the
     //   enclosing coroutine promise here, if the Awaiter's result is exceptional.
+
+    awaitingPromise = nullptr;
+
     auto coroutine = Handle::from_promise(*this);
     coroutine.resume();
 
     return nullptr;
+  }
+
+  void traceEvent(TraceBuilder& builder) override {
+    KJ_IF_MAYBE(promise, awaitingPromise) {
+      promise->tracePromise(builder, true);
+    }
+
+    // Maybe returning the address of coroutine() will give us a function name with meaningful type
+    // information.
+    auto coroutine = Handle::from_promise(*this);
+    builder.add(GetFunctorStartAddress<>::apply(coroutine));
+
+    onReadyEvent.traceEvent(builder);
   }
 
   void fulfill(FixVoid<T>&& value) {
@@ -2038,6 +2067,10 @@ private:
   OnReadyEvent onReadyEvent;
   ExceptionOr<FixVoid<T>> result;
   bool waiting = true;
+
+  Maybe<PromiseNode&> awaitingPromise;
+  // Whenever this coroutine is suspended waiting on another promise, we keep a reference to that
+  // promise so tracePromise()/traceEvent() can trace into it.
 
   UnwindDetector unwindDetector;
 
@@ -2086,6 +2119,12 @@ public:
   explicit Awaiter(Promise<U> promise): promise(kj::mv(promise)) {}
   Awaiter(Awaiter&&) = default;
   ~Awaiter() noexcept(false) {
+    // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
+    // destroyed.
+    KJ_IF_MAYBE(coroutineEvent, maybeCoroutineEvent) {
+      coroutineEvent->awaitingPromise = nullptr;
+    }
+
     unwindDetector.catchExceptionsIfUnwinding([this]() {
       // No need to check for a moved-from state, promise will just ignore the nullification.
       promise = nullptr;
@@ -2131,7 +2170,11 @@ public:
       // returned true from await_ready().
       return false;
     } else {
-      // Otherwise, we must suspend.
+      // Otherwise, we must suspend. Store a reference to the promise we're waiting on for tracing
+      // purposes; coroutineEvent.fire() and/or ~Adapter() will null this out.
+      coroutineEvent.awaitingPromise = node;
+      maybeCoroutineEvent = coroutineEvent;
+
       return true;
     }
   }
@@ -2140,6 +2183,13 @@ private:
   UnwindDetector unwindDetector;
   Promise<U> promise;
   ExceptionOr<FixVoid<U>> result;
+
+  Maybe<Coroutine&> maybeCoroutineEvent;
+  // If we do suspend waiting for our wrapped promise, we store a reference to `promise`'s
+  // PromiseNode in our enclosing Coroutine for tracing purposes. To guard against any edge cases
+  // where an async stack trace is generated when an Awaiter was destroyed without Coroutine::fire()
+  // having been called, we need our own reference to the enclosing Coroutine. (I struggle to think
+  // up any such scenarios, but perhaps they could occur when destroying a suspended coroutine.)
 };
 
 #undef KJ_COROUTINE_STD_NAMESPACE
