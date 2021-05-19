@@ -998,7 +998,11 @@ public:
 #if KJ_NO_EXCEPTIONS
     logException(LogSeverity::ERROR, mv(exception));
 #else
+#if __cpp_lib_uncaught_exceptions
+    if (std::uncaught_exceptions()) {
+#else
     if (std::uncaught_exception()) {
+#endif
       // Bad time to throw an exception.  Just log instead.
       //
       // TODO(someday): We should really compare uncaughtExceptionCount() against the count at
