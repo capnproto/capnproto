@@ -204,6 +204,11 @@ public:
   inline ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
+  inline StringPtr asPtr() const KJ_LIFETIMEBOUND {
+    // Convenience operator to return a StringPtr.
+    return StringPtr{*this};
+  }
+
   inline Array<char> releaseArray() { return kj::mv(content); }
   // Disowns the backing array (which includes the NUL terminator) and returns it. The String value
   // is clobbered (as if moved away).
