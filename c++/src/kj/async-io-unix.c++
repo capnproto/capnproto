@@ -498,7 +498,7 @@ private:
 
     ssize_t n;
     if (fds.size() == 0) {
-      KJ_NONBLOCKING_SYSCALL(n = ::writev(fd, iov.begin(), iov.size())) {
+      KJ_NONBLOCKING_SYSCALL(n = ::writev(fd, iov.begin(), iov.size()), iovTotal, iov.size()) {
         // Error.
 
         // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -513,7 +513,7 @@ private:
       msg.msg_iov = iov.begin();
       msg.msg_iovlen = iov.size();
 
-      // Allocate space to receive a cmsg.
+      // Allocate space to send a cmsg.
       size_t msgBytes = CMSG_SPACE(sizeof(int) * fds.size());
       // On Linux, CMSG_SPACE will align to a word-size boundary, but on Mac it always aligns to a
       // 32-bit boundary. I guess aligning to 32 bits helps avoid the problem where you
