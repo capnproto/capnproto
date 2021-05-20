@@ -75,6 +75,11 @@ public:
   }
   inline StringPtr(const char* begin, const char* end): StringPtr(begin, end - begin) {}
   inline StringPtr(const String& value);
+  StringPtr& operator=(String&& value) = delete;
+  inline StringPtr& operator=(decltype(nullptr)) {
+    content = ArrayPtr<const char>("", 1);
+    return *this;
+  }
 
 #if __cpp_char8_t
   inline StringPtr(const char8_t* value): StringPtr(reinterpret_cast<const char*>(value)) {}
