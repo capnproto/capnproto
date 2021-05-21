@@ -2110,13 +2110,13 @@ template <typename T>
 template <typename U>
 class Coroutine<T>::Awaiter {
   // Wrapper around a co_await'ed promise and some storage space for the result of that promise.
-  // The compiler arranges to call our await_suspend() to suspend, and we forward the call to the
-  // enclosing coroutine's promise adapter, which arranges to be woken up when the awaited promise
-  // is settled. Once that happens, the enclosing coroutine's promise adapter resumes the coroutine,
-  // which transitively calls await_resume() to unwrap the awaited promise result.
+  // The compiler arranges to call our await_suspend() to suspend, which arranges to be woken up
+  // when the awaited promise is settled. Once that happens, the enclosing coroutine's Event
+  // implementation resumes the coroutine, which transitively calls await_resume() to unwrap the
+  // awaited promise result.
 
 public:
-  explicit Awaiter(Promise<U> promise): promise(kj::mv(promise)) {}
+  explicit Awaiter(Promise<U> promise): node(PromiseNode::from(kj::mv(promise))) {}
   Awaiter(Awaiter&&) = default;
   ~Awaiter() noexcept(false) {
     // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
@@ -2126,8 +2126,8 @@ public:
     }
 
     unwindDetector.catchExceptionsIfUnwinding([this]() {
-      // No need to check for a moved-from state, promise will just ignore the nullification.
-      promise = nullptr;
+      // No need to check for a moved-from state, node will just ignore the nullification.
+      node = nullptr;
     });
   }
   KJ_DISALLOW_COPY(Awaiter);
@@ -2143,8 +2143,7 @@ public:
   // adding a new isReady() virtual function to PromiseNode which everyone would have to implement.
 
   U await_resume() {
-    auto& node = PromiseNode::from(promise);
-    node.get(result);
+    node->get(result);
 
     KJ_IF_MAYBE(exception, result.exception) {
       kj::throwFatalException(kj::mv(*exception));
@@ -2156,11 +2155,10 @@ public:
   }
 
   bool await_suspend(Coroutine::Handle coroutine) {
-    auto& node = PromiseNode::from(promise);
     auto& coroutineEvent = coroutine.promise();
 
-  // TODO(now): Should we call node.setSelfPointer() here?
-    node.onReady(&coroutineEvent);
+    node->setSelfPointer(&node);
+    node->onReady(&coroutineEvent);
 
     if (coroutineEvent.isNext()) {
       // The result is immediately ready! Let's cancel our event.
@@ -2172,7 +2170,7 @@ public:
     } else {
       // Otherwise, we must suspend. Store a reference to the promise we're waiting on for tracing
       // purposes; coroutineEvent.fire() and/or ~Adapter() will null this out.
-      coroutineEvent.awaitingPromise = node;
+      coroutineEvent.awaitingPromise = *node;
       maybeCoroutineEvent = coroutineEvent;
 
       return true;
@@ -2181,15 +2179,15 @@ public:
 
 private:
   UnwindDetector unwindDetector;
-  Promise<U> promise;
+  Own<PromiseNode> node;
   ExceptionOr<FixVoid<U>> result;
 
   Maybe<Coroutine&> maybeCoroutineEvent;
-  // If we do suspend waiting for our wrapped promise, we store a reference to `promise`'s
-  // PromiseNode in our enclosing Coroutine for tracing purposes. To guard against any edge cases
-  // where an async stack trace is generated when an Awaiter was destroyed without Coroutine::fire()
-  // having been called, we need our own reference to the enclosing Coroutine. (I struggle to think
-  // up any such scenarios, but perhaps they could occur when destroying a suspended coroutine.)
+  // If we do suspend waiting for our wrapped promise, we store a reference to `node` in our
+  // enclosing Coroutine for tracing purposes. To guard against any edge cases where an async stack
+  // trace is generated when an Awaiter was destroyed without Coroutine::fire() having been called,
+  // we need our own reference to the enclosing Coroutine. (I struggle to think up any such
+  // scenarios, but perhaps they could occur when destroying a suspended coroutine.)
 };
 
 #undef KJ_COROUTINE_STD_NAMESPACE
