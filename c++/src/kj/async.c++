@@ -2341,10 +2341,10 @@ ChainPromiseNode::ChainPromiseNode(Own<PromiseNode> innerParam)
     : state(STEP1), inner(kj::mv(innerParam)) {
   inner->setSelfPointer(&inner);
   inner->onReady(this);
-  // We don't implement the immediate-execution optimization here because that broke a test case in
-  // http-test.c++ (the first one added by commit d2ec1420007186fd5ae9c7e597b56909864f8827). I
-  // I couldn't figure out what the issue was, but moving the optimization to onReady() fixed the
-  // problem.
+  // TODO(perf): It'd be nice to implement the immediate-execution optimization here for coroutines'
+  //   benefit, but it's difficult to avoid stack overflows from long chains of onReady() -> fire()
+  //   code paths. It seems like we need to make co_await run a miniature event loop until it would
+  //   block.
 }
 
 ChainPromiseNode::~ChainPromiseNode() noexcept(false) {}
@@ -2353,13 +2353,6 @@ void ChainPromiseNode::onReady(Event* event) noexcept {
   switch (state) {
     case STEP1:
       onReadyEvent = event;
-      // Optimization: If our inner promise is immediately ready, we can proceed directly to STEP2.
-      // This allows coroutines which await an immediately-ready promise for a promise to continue
-      // executing without suspending.
-      if (isNext()) {
-        disarm();
-        fire();
-      }
       return;
     case STEP2:
       inner->onReady(event);
