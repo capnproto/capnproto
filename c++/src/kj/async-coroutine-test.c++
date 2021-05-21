@@ -436,7 +436,51 @@ KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not 
       awaitPromise(kj::mv(rejectedThrowyDtorPromise)).wait(waitScope));
 }
 
-// TODO(now): async stack traces
+uint countLines(StringPtr s) {
+  uint lines = 0;
+  for (char c: s) {
+    lines += c == '\n';
+  }
+  return lines;
+}
+
+#if !_MSC_VER || defined(__clang__)
+// TODO(msvc): This test relies on GetFunctorStartAddress, which is not supported on MSVC currently,
+//   so skip the test.
+KJ_TEST("Can trace through coroutines") {
+  // This verifies that async traces, generated either from promises or from events, can see through
+  // coroutines.
+  //
+  // This test may be a bit brittle because it depends on specific trace counts.
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<void>();
+
+  // Get an async trace when the promise is fulfilled. We eagerlyEvaluate() to make sure the
+  // continuation executes while the event loop is running.
+  paf.promise = paf.promise.then([]() {
+    auto trace = getAsyncTrace();
+    // One for waitImpl(), one for the coroutine, and one for this continuation.
+    KJ_EXPECT(countLines(trace) == 3);
+  }).eagerlyEvaluate(nullptr);
+
+  auto coroPromise = [&]() -> kj::Promise<void> {
+    co_await paf.promise;
+  }();
+
+  {
+    auto trace = coroPromise.trace();
+    // One for the Coroutine PromiseNode, one for paf.promise.
+    KJ_EXPECT(countLines(trace) >= 2);
+  }
+
+  paf.fulfiller->fulfill();
+
+  coroPromise.wait(waitScope);
+}
+#endif  // !_MSC_VER || defined(__clang__)
 
 Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
   auto address = co_await addressPromise;
