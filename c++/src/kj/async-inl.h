@@ -1825,11 +1825,11 @@ namespace kj::_ {
 namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
 template <typename Self, typename T>
-class CoroutineBase;
+class CoroutineMixin;
 // CRTP mixin, covered later.
 
 template <typename T>
-class Coroutine: public CoroutineBase<Coroutine<T>, T>,
+class Coroutine: public CoroutineMixin<Coroutine<T>, T>,
                  private PromiseNode,
                  private Event,
                  private Disposer {
@@ -2084,18 +2084,18 @@ private:
   // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
   // coroutine.destroy() has returned. Our disposer then rethrows as needed.
 
-  friend class CoroutineBase<Coroutine<T>, T>;
+  friend class CoroutineMixin<Coroutine<T>, T>;
 };
 
 template <typename Self, typename T>
-class CoroutineBase {
+class CoroutineMixin {
 public:
   void return_value(T value) {
     static_cast<Self*>(this)->fulfill(kj::mv(value));
   }
 };
 template <typename Self>
-class CoroutineBase<Self, void> {
+class CoroutineMixin<Self, void> {
 public:
   void return_void() {
     static_cast<Self*>(this)->fulfill(_::Void());
