@@ -272,7 +272,15 @@ KJ_TEST("Exceptions before the first co_await don't escape, but reject the promi
 
   auto throwEarly = []() -> Promise<void> {
     KJ_FAIL_ASSERT("test exception");
+#ifdef __GNUC__
+// Yes, this `co_return` is unreachable. But without it, this function is no longer a coroutine.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunreachable-code"
+#endif  // __GNUC__
     co_return;
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif  // __GNUC__
   };
 
   auto throwy = throwEarly();
