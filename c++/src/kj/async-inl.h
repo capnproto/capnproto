@@ -1824,46 +1824,130 @@ namespace kj::_ {
 
 namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
-template <typename Self, typename T>
-class CoroutineMixin;
-// CRTP mixin, covered later.
-
-template <typename T>
-class Coroutine: public CoroutineMixin<Coroutine<T>, T>,
-                 private PromiseNode,
-                 private Event,
-                 private Disposer {
-  // The standard calls this the `promise_type` object. We can call this the "coroutine
-  // implementation object" since the word promise means different things in KJ and std styles. This
-  // is where we implement how a `kj::Promise<T>` is returned from a coroutine, and how that promise
-  // is later fulfilled. We also fill in a few lifetime-related details.
-  //
-  // The implementation object is also where we can customize memory allocation of coroutine frames,
-  // by implementing a member `operator new(size_t, Args...)` (same `Args...` as in
-  // coroutine_traits).
-  //
-  // We can also customize how await-expressions are transformed within `kj::Promise<T>`-based
-  // coroutines by implementing an `await_transform(P)` member function, where `P` is some type for
-  // which we want to implement co_await support, e.g. `kj::Promise<U>`. This feature is useful
-  // to provide a more optimized `kj::EventLoop` integration when the coroutine's return type and
-  // the await-expression's type are both `kj::Promise` instantiations.
-
+class CoroutineBase: public PromiseNode,
+                     public Event,
+                     public Disposer {
 public:
-  using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
+  CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef)
+      : coroutine(coroutine),
+        resultRef(resultRef) {}
+  ~CoroutineBase() noexcept(false) { readMaybe(maybeDisposalResults)->destructorRan = true; }
+  KJ_DISALLOW_COPY(CoroutineBase);
 
-  Coroutine() = default;
-  ~Coroutine() noexcept(false) { readMaybe(maybeDisposalResults)->destructorRan = true; }
-  KJ_DISALLOW_COPY(Coroutine);
+  auto initial_suspend() { return stdcoro::suspend_never(); }
+  auto final_suspend() noexcept { return stdcoro::suspend_always(); }
+  // These adjust the suspension behavior of coroutines immediately upon initiation, and immediately
+  // after completion.
+  //
+  // The initial suspension point could allow us to defer the initial execution of a coroutine with
+  // evalLater(), for instance.
+  //
+  // The final suspension point is useful to delay deallocation of the coroutine frame to match the
+  // lifetime of the enclosing promise.
 
-  Promise<T> get_return_object() {
-    // Called after coroutine frame construction and before initial_suspend() to create the
-    // coroutine's return object. `this` itself lives inside the coroutine frame, and we arrange for
-    // the returned Promise<T> to own `this` via a custom Disposer and by always leaving the
-    // coroutine in a suspended state.
-    return PromiseNode::to<Promise<T>>(Own<PromiseNode>(this, *this));
+  void unhandled_exception() {
+    // Pretty self-explanatory, we propagate the exception to the promise which owns us, unless
+    // we're being destroyed, in which case we propagate it back to our disposer. Note that all
+    // unhandled exceptions end up here, not just ones after the first co_await.
+
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([] { throw; })) {
+      KJ_IF_MAYBE(disposalResults, maybeDisposalResults) {
+        // Exception during coroutine destruction. Only record the first one.
+        if (disposalResults->exception == nullptr) {
+          disposalResults->exception = kj::mv(*exception);
+        }
+      } else if (isWaiting()) {
+        // Exception during coroutine execution.
+        resultRef.addException(kj::mv(*exception));
+        scheduleResumption();
+      } else {
+        // Okay, what could this mean? We've already been fulfilled or rejected, but we aren't being
+        // destroyed yet. The only possibility is that we are unwinding the coroutine frame due to a
+        // successful completion, and something in the frame threw. We can't already be rejected,
+        // because rejecting a coroutine involves throwing, which would have unwound the frame prior
+        // to setting `waiting = false`.
+        //
+        // Since we know we're unwinding due to a successful completion, we also know that whatever
+        // Event we may have armed has not yet fired, because we haven't had a chance to return to
+        // the event loop.
+
+        // final_suspend() has not been called.
+        KJ_IASSERT(!coroutine.done());
+
+        // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
+        // and will see this exception.
+        resultRef.addException(kj::mv(*exception));
+      }
+    } else {
+      KJ_UNREACHABLE;
+    }
+  }
+
+protected:
+  class AwaiterBase;
+
+  bool isWaiting() { return waiting; }
+  void scheduleResumption() {
+    onReadyEvent.arm();
+    waiting = false;
   }
 
 private:
+  // -------------------------------------------------------
+  // PromiseNode implementation
+
+  void onReady(Event* event) noexcept override {
+    onReadyEvent.init(event);
+  }
+
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override {
+    if (stopAtNextEvent) return;
+
+    KJ_IF_MAYBE(promise, promiseNodeForTrace) {
+      promise->tracePromise(builder, stopAtNextEvent);
+    }
+
+    // Maybe returning the address of coroutine() will give us a function name with meaningful type
+    // information.
+    builder.add(GetFunctorStartAddress<>::apply(coroutine));
+  };
+
+  // -------------------------------------------------------
+  // Event implementation
+
+  Maybe<Own<Event>> fire() override {
+    // Call Awaiter::await_resume() and proceed with the coroutine. Note that this will not destroy
+    // the coroutine if control flows off the end of it, because we return suspend_always() from
+    // final_suspend().
+    //
+    // It's tempting to arrange to check for exceptions right now and reject the promise that owns
+    // us without resuming the coroutine, which would save us from throwing an exception when we
+    // already know where it's going. But, we don't really know: unlike in the KJ_NO_EXCEPTIONS
+    // case, the `co_await` might be in a try-catch block, so we have no choice but to resume and
+    // throw later.
+    //
+    // TODO(someday): If we ever support coroutines with -fno-exceptions, we'll need to reject the
+    //   enclosing coroutine promise here, if the Awaiter's result is exceptional.
+
+    promiseNodeForTrace = nullptr;
+
+    coroutine.resume();
+
+    return nullptr;
+  }
+
+  void traceEvent(TraceBuilder& builder) override {
+    KJ_IF_MAYBE(promise, promiseNodeForTrace) {
+      promise->tracePromise(builder, true);
+    }
+
+    // Maybe returning the address of coroutine() will give us a function name with meaningful type
+    // information.
+    builder.add(GetFunctorStartAddress<>::apply(coroutine));
+
+    onReadyEvent.traceEvent(builder);
+  }
+
   // -------------------------------------------------------
   // Disposer implementation
 
@@ -1872,14 +1956,12 @@ private:
 
     // const_cast okay -- every Own<PromiseNode> that we build in get_return_object() uses itself
     // as the disposer, thus every disposer is unique and there are no thread-safety concerns.
-    const_cast<Coroutine&>(*this).destroy();
+    const_cast<CoroutineBase&>(*this).destroy();
   }
 
   void destroy() {
     // Mutable helper function for disposeImpl(). Basically a wrapper around coroutine.destroy()
     // with some stuff to propagate exceptions appropriately.
-
-    auto coroutine = Handle::from_promise(*this);
 
     // Objects in the coroutine frame might throw from their destructors, so unhandled_exception()
     // will need some way to communicate those exceptions back to us. Separately, we also want
@@ -1918,60 +2000,65 @@ private:
     }
   }
 
+  stdcoro::coroutine_handle<> coroutine;
+  ExceptionOrValue& resultRef;
+
+  OnReadyEvent onReadyEvent;
+  bool waiting = true;
+
+  Maybe<PromiseNode&> promiseNodeForTrace;
+  // Whenever this coroutine is suspended waiting on another promise, we keep a reference to that
+  // promise so tracePromise()/traceEvent() can trace into it.
+
+  UnwindDetector unwindDetector;
+
+  struct DisposalResults {
+    bool destructorRan = false;
+    Maybe<Exception> exception;
+  };
+  Maybe<DisposalResults&> maybeDisposalResults;
+  // Only non-null during destruction. Before calling coroutine.destroy(), our disposer sets this
+  // to point to a DisposalResults on the stack so unhandled_exception() will have some place to
+  // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
+  // coroutine.destroy() has returned. Our disposer then rethrows as needed.
+};
+
+template <typename Self, typename T>
+class CoroutineMixin;
+// CRTP mixin, covered later.
+
+template <typename T>
+class Coroutine final: public CoroutineBase,
+                       public CoroutineMixin<Coroutine<T>, T> {
+  // The standard calls this the `promise_type` object. We can call this the "coroutine
+  // implementation object" since the word promise means different things in KJ and std styles. This
+  // is where we implement how a `kj::Promise<T>` is returned from a coroutine, and how that promise
+  // is later fulfilled. We also fill in a few lifetime-related details.
+  //
+  // The implementation object is also where we can customize memory allocation of coroutine frames,
+  // by implementing a member `operator new(size_t, Args...)` (same `Args...` as in
+  // coroutine_traits).
+  //
+  // We can also customize how await-expressions are transformed within `kj::Promise<T>`-based
+  // coroutines by implementing an `await_transform(P)` member function, where `P` is some type for
+  // which we want to implement co_await support, e.g. `kj::Promise<U>`. This feature is useful
+  // to provide a more optimized `kj::EventLoop` integration when the coroutine's return type and
+  // the await-expression's type are both `kj::Promise` instantiations.
+
 public:
-  auto initial_suspend() { return stdcoro::suspend_never(); }
-  auto final_suspend() noexcept { return stdcoro::suspend_always(); }
-  // These adjust the suspension behavior of coroutines immediately upon initiation, and immediately
-  // after completion.
-  //
-  // The initial suspension point could allow us to defer the initial execution of a coroutine with
-  // evalLater(), for instance.
-  //
-  // The final suspension point is useful to delay deallocation of the coroutine frame to match the
-  // lifetime of the enclosing promise.
+  using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
 
-  void unhandled_exception() {
-    // Pretty self-explanatory, we propagate the exception to the promise which owns us, unless
-    // we're being destroyed, in which case we propagate it back to our disposer. Note that all
-    // unhandled exceptions end up here, not just ones after the first co_await.
+  Coroutine(): CoroutineBase(Handle::from_promise(*this), result) {}
 
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([] { throw; })) {
-      KJ_IF_MAYBE(disposalResults, maybeDisposalResults) {
-        // Exception during coroutine destruction. Only record the first one.
-        if (disposalResults->exception == nullptr) {
-          disposalResults->exception = kj::mv(*exception);
-        }
-      } else if (waiting) {
-        // Exception during coroutine execution.
-        result.addException(kj::mv(*exception));
-        waiting = false;
-        onReadyEvent.arm();
-      } else {
-        // Okay, what could this mean? We've already been fulfilled or rejected, but we aren't being
-        // destroyed yet. The only possibility is that we are unwinding the coroutine frame due to a
-        // successful completion, and something in the frame threw. We can't already be rejected,
-        // because rejecting a coroutine involves throwing, which would have unwound the frame prior
-        // to setting `waiting = false`.
-        //
-        // Since we know we're unwinding due to a successful completion, we also know that whatever
-        // Event we may have armed has not yet fired, because we haven't had a chance to return to
-        // the event loop.
-
-        // return_value()/return_void() has already been called.
-        KJ_IASSERT(result.value != nullptr);
-
-        // But final_suspend() has not.
-        KJ_IASSERT(!Handle::from_promise(*this).done());
-
-        // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
-        // and will see this exception.
-        result.addException(kj::mv(*exception));
-      }
-    } else {
-      KJ_UNREACHABLE;
-    }
+  Promise<T> get_return_object() {
+    // Called after coroutine frame construction and before initial_suspend() to create the
+    // coroutine's return object. `this` itself lives inside the coroutine frame, and we arrange for
+    // the returned Promise<T> to own `this` via a custom Disposer and by always leaving the
+    // coroutine in a suspended state.
+    return PromiseNode::to<Promise<T>>(Own<PromiseNode>(this, *this));
   }
 
+public:
   template <typename U>
   class Awaiter;
 
@@ -1995,94 +2082,20 @@ private:
   // -------------------------------------------------------
   // PromiseNode implementation
 
-  void onReady(Event* event) noexcept override {
-    onReadyEvent.init(event);
-  }
-
   void get(ExceptionOrValue& output) noexcept override {
     output.as<FixVoid<T>>() = kj::mv(result);
   }
 
-  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override {
-    if (stopAtNextEvent) return;
-
-    KJ_IF_MAYBE(promise, awaitingPromise) {
-      promise->tracePromise(builder, stopAtNextEvent);
-    }
-
-    // Maybe returning the address of coroutine() will give us a function name with meaningful type
-    // information.
-    auto coroutine = Handle::from_promise(*this);
-    builder.add(GetFunctorStartAddress<>::apply(coroutine));
-  };
-
-  // -------------------------------------------------------
-  // Event implementation
-
-  Maybe<Own<Event>> fire() override {
-    // Call Awaiter::await_resume() and proceed with the coroutine. Note that this will not destroy
-    // the coroutine if control flows off the end of it, because we return suspend_always() from
-    // final_suspend().
-    //
-    // It's tempting to arrange to check for exceptions right now and reject the promise that owns
-    // us without resuming the coroutine, which would save us from throwing an exception when we
-    // already know where it's going. But, we don't really know: unlike in the KJ_NO_EXCEPTIONS
-    // case, the `co_await` might be in a try-catch block, so we have no choice but to resume and
-    // throw later.
-    //
-    // TODO(someday): If we ever support coroutines with -fno-exceptions, we'll need to reject the
-    //   enclosing coroutine promise here, if the Awaiter's result is exceptional.
-
-    awaitingPromise = nullptr;
-
-    auto coroutine = Handle::from_promise(*this);
-    coroutine.resume();
-
-    return nullptr;
-  }
-
-  void traceEvent(TraceBuilder& builder) override {
-    KJ_IF_MAYBE(promise, awaitingPromise) {
-      promise->tracePromise(builder, true);
-    }
-
-    // Maybe returning the address of coroutine() will give us a function name with meaningful type
-    // information.
-    auto coroutine = Handle::from_promise(*this);
-    builder.add(GetFunctorStartAddress<>::apply(coroutine));
-
-    onReadyEvent.traceEvent(builder);
-  }
-
   void fulfill(FixVoid<T>&& value) {
-    // Called by the return_value()/return_void() functions in our base class.
+    // Called by the return_value()/return_void() functions in our mixin class.
 
-    if (waiting) {
+    if (isWaiting()) {
       result = kj::mv(value);
-      onReadyEvent.arm();
-      waiting = false;
+      scheduleResumption();
     }
   }
 
-  OnReadyEvent onReadyEvent;
   ExceptionOr<FixVoid<T>> result;
-  bool waiting = true;
-
-  Maybe<PromiseNode&> awaitingPromise;
-  // Whenever this coroutine is suspended waiting on another promise, we keep a reference to that
-  // promise so tracePromise()/traceEvent() can trace into it.
-
-  UnwindDetector unwindDetector;
-
-  struct DisposalResults {
-    bool destructorRan = false;
-    Maybe<Exception> exception;
-  };
-  Maybe<DisposalResults&> maybeDisposalResults;
-  // Only non-null during destruction. Before calling coroutine.destroy(), our disposer sets this
-  // to point to a DisposalResults on the stack so unhandled_exception() will have some place to
-  // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
-  // coroutine.destroy() has returned. Our disposer then rethrows as needed.
 
   friend class CoroutineMixin<Coroutine<T>, T>;
 };
@@ -2106,23 +2119,15 @@ public:
 // both a `return_value()` and `return_void()`. No amount of EnableIffery can get around it, so
 // these return_* functions live in a CRTP mixin.
 
-template <typename T>
-template <typename U>
-class Coroutine<T>::Awaiter {
-  // Wrapper around a co_await'ed promise and some storage space for the result of that promise.
-  // The compiler arranges to call our await_suspend() to suspend, which arranges to be woken up
-  // when the awaited promise is settled. Once that happens, the enclosing coroutine's Event
-  // implementation resumes the coroutine, which transitively calls await_resume() to unwrap the
-  // awaited promise result.
-
+class CoroutineBase::AwaiterBase {
 public:
-  explicit Awaiter(Promise<U> promise): node(PromiseNode::from(kj::mv(promise))) {}
-  Awaiter(Awaiter&&) = default;
-  ~Awaiter() noexcept(false) {
+  explicit AwaiterBase(Own<PromiseNode> node): node(kj::mv(node)) {}
+  AwaiterBase(AwaiterBase&&) = default;
+  ~AwaiterBase() noexcept(false) {
     // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
     // destroyed.
     KJ_IF_MAYBE(coroutineEvent, maybeCoroutineEvent) {
-      coroutineEvent->awaitingPromise = nullptr;
+      coroutineEvent->promiseNodeForTrace = nullptr;
     }
 
     unwindDetector.catchExceptionsIfUnwinding([this]() {
@@ -2130,33 +2135,28 @@ public:
       node = nullptr;
     });
   }
-  KJ_DISALLOW_COPY(Awaiter);
+  KJ_DISALLOW_COPY(AwaiterBase);
 
   bool await_ready() const { return false; }
-  // This could return "`promise.node.get()` is safe to call" instead, which would make suspension-
-  // less co_awaits possible for immediately-fulfilled promises. However, we need an Event to figure
-  // that out, and we won't have access to the Coroutine Event until await_suspend() is called. So,
-  // we must return false here. But read on, because await_suspend() has a trick up its sleeve to
+  // This could return "`node->get()` is safe to call" instead, which would make suspension-less
+  // co_awaits possible for immediately-fulfilled promises. However, we need an Event to figure that
+  // out, and we won't have access to the Coroutine Event until await_suspend() is called. So, we
+  // must return false here. But read on, because await_suspend() has a trick up its sleeve to
   // enable suspension-less co_awaits!
   //
   // We could also solve this by giving Awaiters a dummy Event that get immediately disarmed, or by
   // adding a new isReady() virtual function to PromiseNode which everyone would have to implement.
 
-  U await_resume() {
+protected:
+  void getImpl(ExceptionOrValue& result) {
     node->get(result);
 
     KJ_IF_MAYBE(exception, result.exception) {
       kj::throwFatalException(kj::mv(*exception));
     }
-
-    auto value = kj::_::readMaybe(result.value);
-    KJ_IASSERT(value != nullptr, "Neither exception nor value present.");
-    return U(kj::mv(*value));
   }
 
-  bool await_suspend(Coroutine::Handle coroutine) {
-    auto& coroutineEvent = coroutine.promise();
-
+  bool awaitSuspendImpl(CoroutineBase& coroutineEvent) {
     node->setSelfPointer(&node);
     node->onReady(&coroutineEvent);
 
@@ -2170,7 +2170,7 @@ public:
     } else {
       // Otherwise, we must suspend. Store a reference to the promise we're waiting on for tracing
       // purposes; coroutineEvent.fire() and/or ~Adapter() will null this out.
-      coroutineEvent.awaitingPromise = *node;
+      coroutineEvent.promiseNodeForTrace = *node;
       maybeCoroutineEvent = coroutineEvent;
 
       return true;
@@ -2180,14 +2180,40 @@ public:
 private:
   UnwindDetector unwindDetector;
   Own<PromiseNode> node;
-  ExceptionOr<FixVoid<U>> result;
 
-  Maybe<Coroutine&> maybeCoroutineEvent;
+  Maybe<CoroutineBase&> maybeCoroutineEvent;
   // If we do suspend waiting for our wrapped promise, we store a reference to `node` in our
   // enclosing Coroutine for tracing purposes. To guard against any edge cases where an async stack
   // trace is generated when an Awaiter was destroyed without Coroutine::fire() having been called,
   // we need our own reference to the enclosing Coroutine. (I struggle to think up any such
   // scenarios, but perhaps they could occur when destroying a suspended coroutine.)
+};
+
+template <typename T>
+template <typename U>
+class Coroutine<T>::Awaiter: public AwaiterBase {
+  // Wrapper around a co_await'ed promise and some storage space for the result of that promise.
+  // The compiler arranges to call our await_suspend() to suspend, which arranges to be woken up
+  // when the awaited promise is settled. Once that happens, the enclosing coroutine's Event
+  // implementation resumes the coroutine, which transitively calls await_resume() to unwrap the
+  // awaited promise result.
+
+public:
+  explicit Awaiter(Promise<U> promise): AwaiterBase(PromiseNode::from(kj::mv(promise))) {}
+
+  U await_resume() {
+    getImpl(result);
+    auto value = kj::_::readMaybe(result.value);
+    KJ_IASSERT(value != nullptr, "Neither exception nor value present.");
+    return U(kj::mv(*value));
+  }
+
+  bool await_suspend(Coroutine::Handle coroutine) {
+    return awaitSuspendImpl(coroutine.promise());
+  }
+
+private:
+  ExceptionOr<FixVoid<U>> result;
 };
 
 #undef KJ_COROUTINE_STD_NAMESPACE
