@@ -2319,6 +2319,10 @@ Maybe<Own<Event>> ForkHubBase::fire() {
 }
 
 void ForkHubBase::traceEvent(TraceBuilder& builder) {
+  if (inner.get() != nullptr) {
+    inner->tracePromise(builder, true);
+  }
+
   if (headBranch != nullptr) {
     // We'll trace down the first branch, I guess.
     headBranch->onReadyEvent.traceEvent(builder);
