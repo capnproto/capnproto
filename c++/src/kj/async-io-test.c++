@@ -243,6 +243,122 @@ TEST(AsyncIo, UnixSocket) {
 
   EXPECT_EQ("foo", result);
 }
+
+TEST(AsyncIo, AncillaryMessageHandlerNoMsg) {
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
+
+  Own<ConnectionReceiver> listener;
+  Own<AsyncIoStream> server;
+  Own<AsyncIoStream> client;
+
+  char receiveBuffer[4];
+
+  bool clientHandlerCalled = false;
+  kj::Function<void(kj::ArrayPtr<AncillaryMessage>)> clientHandler =
+    [&](kj::ArrayPtr<AncillaryMessage>) {
+    clientHandlerCalled = true;
+  };
+  bool serverHandlerCalled = false;
+  kj::Function<void(kj::ArrayPtr<AncillaryMessage>)> serverHandler =
+    [&](kj::ArrayPtr<AncillaryMessage>) {
+    serverHandlerCalled = true;
+  };
+
+  auto port = newPromiseAndFulfiller<uint>();
+
+  port.promise.then([&](uint portnum) {
+    return network.parseAddress("localhost", portnum);
+  }).then([&](Own<NetworkAddress>&& addr) {
+    auto promise = addr->connectAuthenticated();
+    return promise.then([&,addr=kj::mv(addr)](AuthenticatedStream result) mutable {
+      client = kj::mv(result.stream);
+      client->registerAncillaryMessageHandler(kj::mv(clientHandler));
+      return client->write("foo", 3);
+    });
+  }).detach([](kj::Exception&& exception) {
+    KJ_FAIL_EXPECT(exception);
+  });
+
+  kj::String result = network.parseAddress("*").then([&](Own<NetworkAddress>&& result) {
+    listener = result->listen();
+    port.fulfiller->fulfill(listener->getPort());
+    return listener->acceptAuthenticated();
+  }).then([&](AuthenticatedStream result) {
+    server = kj::mv(result.stream);
+    server->registerAncillaryMessageHandler(kj::mv(serverHandler));
+    return server->tryRead(receiveBuffer, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer, n);
+  }).wait(ioContext.waitScope);
+
+  EXPECT_EQ("foo", result);
+  EXPECT_FALSE(clientHandlerCalled);
+  EXPECT_FALSE(serverHandlerCalled);
+}
+#endif
+
+#if !_WIN32 && !__CYGWIN__  && !__APPLE__ // MacOS only supports SO_TIMESTAMP on datagram sockets
+TEST(AsyncIo, AncillaryMessageHandler) {
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
+
+  Own<ConnectionReceiver> listener;
+  Own<AsyncIoStream> server;
+  Own<AsyncIoStream> client;
+
+  char receiveBuffer[4];
+
+  bool clientHandlerCalled = false;
+  kj::Function<void(kj::ArrayPtr<AncillaryMessage>)> clientHandler =
+    [&](kj::ArrayPtr<AncillaryMessage>) {
+    clientHandlerCalled = true;
+  };
+  bool serverHandlerCalled = false;
+  kj::Function<void(kj::ArrayPtr<AncillaryMessage>)> serverHandler =
+    [&](kj::ArrayPtr<AncillaryMessage> msgs) {
+    serverHandlerCalled = true;
+    EXPECT_EQ(1, msgs.size());
+    EXPECT_EQ(SOL_SOCKET, msgs[0].getLevel());
+    EXPECT_EQ(SO_TIMESTAMP, msgs[0].getType());
+  };
+
+  auto port = newPromiseAndFulfiller<uint>();
+
+  port.promise.then([&](uint portnum) {
+    return network.parseAddress("localhost", portnum);
+  }).then([&](Own<NetworkAddress>&& addr) {
+    auto promise = addr->connectAuthenticated();
+    return promise.then([&,addr=kj::mv(addr)](AuthenticatedStream result) mutable {
+      client = kj::mv(result.stream);
+      client->registerAncillaryMessageHandler(kj::mv(clientHandler));
+      return client->write("foo", 3);
+    });
+  }).detach([](kj::Exception&& exception) {
+    KJ_FAIL_EXPECT(exception);
+  });
+
+  kj::String result = network.parseAddress("*").then([&](Own<NetworkAddress>&& result) {
+    listener = result->listen();
+    // Register interest in having the timestamp delivered via cmsg on each recvmsg.
+    int yes = 1;
+    listener->setsockopt(SOL_SOCKET, SO_TIMESTAMP, &yes, sizeof(yes));
+    port.fulfiller->fulfill(listener->getPort());
+    return listener->acceptAuthenticated();
+  }).then([&](AuthenticatedStream result) {
+    server = kj::mv(result.stream);
+    server->registerAncillaryMessageHandler(kj::mv(serverHandler));
+    return server->tryRead(receiveBuffer, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer, n);
+  }).wait(ioContext.waitScope);
+
+  EXPECT_EQ("foo", result);
+  EXPECT_FALSE(clientHandlerCalled);
+  EXPECT_TRUE(serverHandlerCalled);
+}
 #endif
 
 String tryParse(WaitScope& waitScope, Network& network, StringPtr text, uint portHint = 0) {

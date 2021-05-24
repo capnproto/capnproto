@@ -43,6 +43,7 @@ class AutoCloseFd;
 class NetworkAddress;
 class AsyncOutputStream;
 class AsyncIoStream;
+class AncillaryMessage;
 
 // =======================================================================================
 // Streaming I/O
@@ -84,6 +85,12 @@ public:
   //
   // To prevent runaway memory allocation, consider using a more conservative value for `limit` than
   // the default, particularly on untrusted data streams which may never see EOF.
+
+  virtual void registerAncillaryMessageHandler(Function<void(ArrayPtr<AncillaryMessage>)> fn);
+  // Register interest in checking for ancillary messages (aka control messages) when reading.
+  // The provided callback will be called whenever any are encountered. The messages passed to
+  // the function do not live beyond when function returns.
+  // Only supported on Unix (the default impl throws UNIMPLEMENTED). Most apps will not use this.
 };
 
 class AsyncOutputStream {
@@ -483,7 +490,7 @@ public:
   // Get the content of the datagram.
 
   virtual MaybeTruncated<ArrayPtr<const AncillaryMessage>> getAncillary() = 0;
-  // Ancilarry messages received with the datagram. See the recvmsg() system call and the cmsghdr
+  // Ancillary messages received with the datagram. See the recvmsg() system call and the cmsghdr
   // struct. Most apps don't need this.
   //
   // If the returned value is truncated, then the last message in the array may itself be
