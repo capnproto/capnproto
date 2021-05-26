@@ -356,7 +356,7 @@ public:
 
   template <typename Cond>
   void wait(Cond&& condition, Maybe<Duration> timeout = nullptr,
-      LockSourceLocationArg location = LockSourceLocation::current()) {
+      LockSourceLocationArg location = {}) {
     // Unlocks the lock until `condition(state)` evaluates true (where `state` is type `const T&`
     // referencing the object protected by the lock).
 
@@ -419,7 +419,7 @@ public:
   explicit MutexGuarded(Params&&... params);
   // Initialize the mutex-bounded object by passing the given parameters to its constructor.
 
-  Locked<T> lockExclusive(LockSourceLocationArg location = LockSourceLocation::current()) const;
+  Locked<T> lockExclusive(LockSourceLocationArg location = {}) const;
   // Exclusively locks the object and returns it.  The returned `Locked<T>` can be passed by
   // move, similar to `Own<T>`.
   //
@@ -429,17 +429,17 @@ public:
   // be shared between threads, its methods should be const, even though locking it produces a
   // non-const pointer to the contained object.
 
-  Locked<const T> lockShared(LockSourceLocationArg location = LockSourceLocation::current()) const;
+  Locked<const T> lockShared(LockSourceLocationArg location = {}) const;
   // Lock the value for shared access.  Multiple shared locks can be taken concurrently, but cannot
   // be held at the same time as a non-shared lock.
 
   Maybe<Locked<T>> lockExclusiveWithTimeout(Duration timeout,
-      LockSourceLocationArg location = LockSourceLocation::current()) const;
+      LockSourceLocationArg location = {}) const;
   // Attempts to exclusively lock the object. If the timeout elapses before the lock is aquired,
   // this returns null.
 
   Maybe<Locked<const T>> lockSharedWithTimeout(Duration timeout,
-      LockSourceLocationArg location = LockSourceLocation::current()) const;
+      LockSourceLocationArg location = {}) const;
   // Attempts to lock the value for shared access. If the timeout elapses before the lock is aquired,
   // this returns null.
 
@@ -455,7 +455,7 @@ public:
 
   template <typename Cond, typename Func>
   auto when(Cond&& condition, Func&& callback, Maybe<Duration> timeout = nullptr,
-      LockSourceLocationArg location = LockSourceLocation::current()) const
+      LockSourceLocationArg location = {}) const
       -> decltype(callback(instance<T&>())) {
     // Waits until condition(state) returns true, then calls callback(state) under lock.
     //
@@ -516,7 +516,7 @@ class ExternalMutexGuarded {
   // is compiled out. Once the minimum C++ standard for the KJ library is C++20, this optimization
   // could be replaced by a member variable with a [[no_unique_address]] annotation.
 public:
-  ExternalMutexGuarded(LockSourceLocationArg location = LockSourceLocation::current())
+  ExternalMutexGuarded(LockSourceLocationArg location = {})
       : location(location) {}
 
   ~ExternalMutexGuarded() noexcept(false) {
@@ -580,9 +580,9 @@ class Lazy {
 
 public:
   template <typename Func>
-  T& get(Func&& init, LockSourceLocationArg location = LockSourceLocation::current());
+  T& get(Func&& init, LockSourceLocationArg location = {});
   template <typename Func>
-  const T& get(Func&& init, LockSourceLocationArg location = LockSourceLocation::current()) const;
+  const T& get(Func&& init, LockSourceLocationArg location = {}) const;
   // The first thread to call get() will invoke the given init function to construct the value.
   // Other threads will block until construction completes, then return the same value.
   //

@@ -48,19 +48,20 @@ class SourceLocation {
   // this is a non-STL wrapper over the compiler primitives (these are the same across MSVC/clang/
   // gcc). Additionally this uses kj::StringPtr for holding the strings instead of const char* which
   // makes it integrate a little more nicely into KJ.
-public:
-#if KJ_COMPILER_SUPPORTS_SOURCE_LOCATION
-  static constexpr SourceLocation current(
-      const char* file = __builtin_FILE(), const char* function = __builtin_FUNCTION(),
-      uint line = __builtin_LINE(), uint column = KJ_CALLER_COLUMN()) {
-    // When invoked with no arguments returns a SourceLocation that points at the caller of the
-    // function.
-    return SourceLocation(file, function, line, column);
-  }
-#endif
 
-  constexpr SourceLocation() : SourceLocation("??", "??", 0, 0) {}
+  struct Badge { explicit constexpr Badge() = default; };
+  // Neat little trick to make sure we can never call SourceLocation with explicit arguments.
+public:
+#if !KJ_COMPILER_SUPPORTS_SOURCE_LOCATION
+  constexpr SourceLocation() : fileName("??"), function("??"), lineNumber(0), columnNumber(0) {}
   // Constructs a dummy source location that's not pointing at anything.
+#else
+  constexpr SourceLocation(Badge = Badge{}, const char* file = __builtin_FILE(),
+      const char* func = __builtin_FUNCTION(), uint line = __builtin_LINE(),
+      uint column = KJ_CALLER_COLUMN())
+    : fileName(file), function(func), lineNumber(line), columnNumber(column)
+  {}
+#endif
 
   const char* fileName;
   const char* function;
@@ -68,21 +69,14 @@ public:
   uint columnNumber;
 
 private:
-  constexpr SourceLocation(const char* file, const char* func, uint line, uint column)
-    : fileName(file), function(func), lineNumber(line), columnNumber(column)
-  {}
 };
 
 kj::String KJ_STRINGIFY(const SourceLocation& l);
 
 class NoopSourceLocation {
   // This is used in places where we want to conditionally compile out tracking the source location.
-  // As such it intentionally lacks all the features but the static `::current()` function so that
-  // the API isn't accidentally used in the wrong compilation context.
-public:
-  static constexpr NoopSourceLocation current() {
-    return NoopSourceLocation{};
-  }
+  // As such it intentionally lacks all the features but the default constructor so that the API
+  // isn't accidentally used in the wrong compilation context.
 };
 
 KJ_UNUSED static kj::String KJ_STRINGIFY(const NoopSourceLocation& l) {

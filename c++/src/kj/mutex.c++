@@ -911,7 +911,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
   // currently.
   bool currentlyLocked = true;
   KJ_DEFER({
-    if (!currentlyLocked) lock(EXCLUSIVE, nullptr, NoopSourceLocation::current());
+    if (!currentlyLocked) lock(EXCLUSIVE, nullptr, NoopSourceLocation{});
     removeWaiter(waiter);
 
     // Destroy pthread objects.
@@ -979,7 +979,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
     // because we've already been signaled.
     KJ_PTHREAD_CALL(pthread_mutex_unlock(&waiter.stupidMutex));
 
-    lock(EXCLUSIVE, nullptr, NoopSourceLocation::current());
+    lock(EXCLUSIVE, nullptr, NoopSourceLocation{});
     currentlyLocked = true;
 
     KJ_IF_MAYBE(exception, waiter.exception) {

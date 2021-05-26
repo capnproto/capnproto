@@ -857,20 +857,21 @@ KJ_TEST("tracking blocked on Once::init") {
 KJ_TEST("get location of exclusive mutex") {
   _::Mutex mutex;
   static constexpr auto lockLine = __LINE__ + 1;
-  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, SourceLocation::current());
+  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, SourceLocation{});
   KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
 
   const auto& lockedInfo = mutex.lockedInfo();
   const auto& lockInfo = lockedInfo.get<_::HoldingExclusively>();
   EXPECT_EQ(gettid(), lockInfo.threadHoldingLock());
-  KJ_EXPECT(kj::StringPtr{lockInfo.lockAcquiredAt().fileName}.endsWith("/mutex-test.c++"));
+  KJ_EXPECT(kj::StringPtr{lockInfo.lockAcquiredAt().fileName}.endsWith("/mutex-test.c++"),
+      lockInfo.lockAcquiredAt().fileName);
   EXPECT_EQ(lockInfo.lockAcquiredAt().lineNumber, lockLine);
 }
 
 KJ_TEST("get location of shared mutex") {
   _::Mutex mutex;
   static constexpr auto lockLine = __LINE__ + 1;
-  mutex.lock(_::Mutex::SHARED, nullptr, SourceLocation::current());
+  mutex.lock(_::Mutex::SHARED, nullptr, SourceLocation{});
   KJ_DEFER(mutex.unlock(_::Mutex::SHARED));
 
   const auto& lockedInfo = mutex.lockedInfo();
