@@ -25,6 +25,8 @@ function test_samples() {
 }
 
 QUICK=
+CPP_FEATURES=
+EXTRA_LIBS=
 
 PARALLEL=$(nproc 2>/dev/null || echo 1)
 
@@ -40,6 +42,30 @@ while [ $# -gt 0 ]; do
       ;;  # nothing
     quick )
       QUICK=quick
+      ;;
+    cpp-features )
+      if [ "$#" -lt 2 ] || [ -n "$CPP_FEATURES" ]; then
+        echo "usage: $0 cpp-features CPP_DEFINES" >&2
+        echo "e.g. $0 cpp-features '-DSOME_VAR=5 -DSOME_OTHER_VAR=6'" >&2
+        if [ -n "$CPP_FEATURES" ]; then
+          echo "cpp-features provided multiple times" >&2
+        fi
+        exit 1
+      fi
+      CPP_FEATURES="$2"
+      shift
+      ;;
+    extra-libs )
+      if [ "$#" -lt 2 ] || [ -n "$EXTRA_LIBS" ]; then
+        echo "usage: $0 extra-libs EXTRA_LIBS" >&2
+        echo "e.g. $0 extra-libs '-lrt'" >&2
+        if [ -n "$EXTRA_LIBS" ]; then
+          echo "extra-libs provided multiple times" >&2
+        fi
+        exit 1
+      fi
+      EXTRA_LIBS="$2"
+      shift
       ;;
     caffeinate )
       # Re-run preventing sleep.
@@ -120,7 +146,7 @@ while [ $# -gt 0 ]; do
 
       export WINEPATH='Z:\usr\'"$CROSS_HOST"'\lib;Z:\usr\lib\gcc\'"$CROSS_HOST"'\6.3-win32;Z:'"$PWD"'\.libs'
 
-      doit ./configure --host="$CROSS_HOST" --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
+      doit ./configure --host="$CROSS_HOST" --disable-shared CXXFLAGS="-static-libgcc -static-libstdc++ $CPP_FEATURES" LIBS="$EXTRA_LIBS"
 
       doit make -j$PARALLEL check
       doit make distclean
@@ -155,7 +181,7 @@ while [ $# -gt 0 ]; do
 
       export PATH="$SDK_HOME/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
       doit make distclean
-      doit ./configure --host="$CROSS_HOST" CC="$COMPILER_PREFIX-clang" CXX="$COMPILER_PREFIX-clang++" --with-external-capnp --disable-shared CXXFLAGS='-fPIE' LDFLAGS='-pie' LIBS='-static-libstdc++ -static-libgcc -ldl' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
+      doit ./configure --host="$CROSS_HOST" CC="$COMPILER_PREFIX-clang" CXX="$COMPILER_PREFIX-clang++" --with-external-capnp --disable-shared CXXFLAGS="-fPIE $CPP_FEATURES" LDFLAGS='-pie' LIBS="-static-libstdc++ -static-libgcc -ldl $EXTRA_LIBS" CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
 
       doit make -j$PARALLEL
       doit make -j$PARALLEL capnp-test
@@ -322,7 +348,8 @@ done
 # sign-compare warnings than probably all other warnings combined and I've never seen it flag a
 # real problem. Disable unused parameters because it's stupidly noisy and never a real problem.
 # Enable expensive release-gating tests.
-export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -DCAPNP_EXPENSIVE_TESTS=1"
+export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -DCAPNP_EXPENSIVE_TESTS=1 ${CPP_FEATURES}"
+export LIBS="$EXTRA_LIBS"
 
 STAGING=$PWD/tmp-staging
 
@@ -500,7 +527,7 @@ if [ "x`uname`" = xLinux ]; then
   echo "Testing with valgrind"
   echo "========================================================================="
 
-  doit ./configure --disable-shared CXXFLAGS="-g"
+  doit ./configure --disable-shared CXXFLAGS="-g $CPP_FEATURES"
   doit make -j$PARALLEL
   doit make -j$PARALLEL capnp-test
   # Running the fuzz tests under Valgrind is a great thing to do -- but it takes

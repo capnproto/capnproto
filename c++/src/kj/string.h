@@ -156,6 +156,7 @@ private:
   ArrayPtr<const char> content;
 
   friend constexpr kj::StringPtr (::operator "" _kj)(const char* str, size_t n);
+  friend class SourceLocation;
 };
 
 #if !__cpp_impl_three_way_comparison
