@@ -519,6 +519,21 @@ public:
   ExternalMutexGuarded(LockSourceLocationArg location = {})
       : location(location) {}
 
+  template <typename U, typename... Params>
+  ExternalMutexGuarded(Locked<U> lock, Params&&... params)
+      : mutex(lock.mutex),
+        value(kj::fwd<Params>(params)...) {}
+  // Construct the value in-place. This constructor requires passing ownership of the lock into
+  // the constructor. Normally this should be a lock that you take on the line calling the
+  // constructor, like:
+  //
+  //     ExternalMutexGuarded<T> foo(someMutexGuarded.lockExclusive());
+  //
+  // The reason this constructor does not accept an lvalue reference to an existing lock is because
+  // this would be deadlock-prone: If an exception were thrown immediately after the constructor
+  // completed, then the destructor would deadlock, because the lock would still be held. An
+  // ExternalMutexGuarded must live outside the scope of any locks to avoid such a deadlock.
+
   ~ExternalMutexGuarded() noexcept(false) {
     if (mutex != nullptr) {
       mutex->lock(_::Mutex::EXCLUSIVE, nullptr, location);
