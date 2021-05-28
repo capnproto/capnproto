@@ -428,6 +428,30 @@ struct TlsTest {
     options.trustedCertificates = kj::arrayPtr(&caCert, 1);
     return options;
   }
+
+  Promise<void> writeToServer(AsyncIoStream& client) {
+    return client.write("foo", 4);
+  }
+
+  Promise<void> readFromClient(AsyncIoStream& server) {
+    auto buf = heapArray<char>(4);
+
+    auto readPromise = server.read(buf.begin(), buf.size());
+
+    auto checkBuffer = [buf = kj::mv(buf)]() {
+      KJ_ASSERT(kj::StringPtr(buf.begin(), buf.end()-1) == kj::StringPtr("foo"));
+    };
+
+    return readPromise.then(kj::mv(checkBuffer));
+  }
+
+  void testConnection(AsyncIoStream& client, AsyncIoStream& server) {
+    auto writePromise = writeToServer(client);
+    auto readPromise = readFromClient(server);
+
+    writePromise.wait(io.waitScope);
+    readPromise.wait(io.waitScope);
+  };
 };
 
 KJ_TEST("TLS basics") {
@@ -442,12 +466,7 @@ KJ_TEST("TLS basics") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  auto writePromise = client->write("foo", 3);
-  char buf[4];
-  server->read(&buf, 3).wait(test.io.waitScope);
-  buf[3] = '\0';
-
-  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  test.testConnection(*client, *server);
 }
 
 KJ_TEST("TLS peer identity") {
@@ -487,12 +506,7 @@ KJ_TEST("TLS peer identity") {
     KJ_EXPECT(id->toString() == "(anonymous client)");
   }
 
-  auto writePromise = client.stream->write("foo", 3);
-  char buf[4];
-  server.stream->read(&buf, 3).wait(test.io.waitScope);
-  buf[3] = '\0';
-
-  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  test.testConnection(*client.stream, *server.stream);
 }
 
 KJ_TEST("TLS multiple messages") {
@@ -648,12 +662,7 @@ KJ_TEST("TLS SNI") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  auto writePromise = client->write("foo", 3);
-  char buf[4];
-  server->read(&buf, 3).wait(test.io.waitScope);
-  buf[3] = '\0';
-
-  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  test.testConnection(*client, *server);
 
   KJ_ASSERT(callback.callCount == 1);
 }
@@ -775,12 +784,7 @@ KJ_TEST("TLS client certificate verification") {
     KJ_ASSERT(id->hasCertificate());
     KJ_EXPECT(id->getCommonName() == "example.net");
 
-    auto writePromise = client->write("foo", 3);
-    char buf[4];
-    server.stream->read(&buf, 3).wait(test.io.waitScope);
-    buf[3] = '\0';
-
-    KJ_ASSERT(kj::StringPtr(buf) == "foo");
+    test.testConnection(*client, *server.stream);
   }
 
   // If verifyClients is off, client certificate is ignored, even if trusted.
@@ -917,35 +921,31 @@ public:
 KJ_TEST("TLS receiver basics") {
   TlsReceiverTest test;
 
-  auto wrapClient = [&](auto stream) {
+  auto clientPromise = test.baseReceiver->connect().then([&](auto stream) {
     return test.tlsClient.wrapClient(kj::mv(stream), "example.com");
-  };
+  });
+  auto serverPromise = test.receiver->accept();
 
-  auto writeToServer = [&](auto client) {
-    return test.writeToServer(kj::mv(client));
-  };
+  auto client = clientPromise.wait(test.io.waitScope);
+  auto server = serverPromise.wait(test.io.waitScope);
 
-  auto readFromClient = [&](auto server) {
-    return test.readFromClient(kj::mv(server));
-  };
-
-  auto clientPromise = test.baseReceiver->connect().then(wrapClient).then(writeToServer);
-  auto serverPromise = test.receiver->accept().then(readFromClient);
-
-  clientPromise.wait(test.io.waitScope);
-  serverPromise.wait(test.io.waitScope);
+  test.testConnection(*client, *server);
 }
 
 KJ_TEST("TLS receiver experiences pre-TLS error") {
   TlsReceiverTest test;
 
-  auto endPromise = test.receiver->onFatalError();
+  KJ_LOG(INFO, "Accepting before a bad connect");
+  auto promise = test.receiver->accept();
 
   KJ_LOG(INFO, "Disappointing our server");
-  KJ_EXPECT_LOG(ERROR, "TlsConnectionReceiver could not accept()");
   test.baseReceiver->badConnect();
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Pipes are leaky", endPromise.wait(test.io.waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Pipes are leaky", promise.wait(test.io.waitScope));
+
+  KJ_LOG(INFO, "Trying to load a promise after failure");
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+      "Pipes are leaky", test.receiver->accept().wait(test.io.waitScope));
 }
 
 KJ_TEST("TLS receiver accepts multiple clients") {
@@ -956,11 +956,11 @@ KJ_TEST("TLS receiver accepts multiple clients") {
   };
 
   auto writeToServer = [&](auto client) {
-    return test.writeToServer(kj::mv(client));
+    return test.writeToServer(*client).attach(kj::mv(client));
   };
 
   auto readFromClient = [&](auto server) {
-    return test.readFromClient(kj::mv(server));
+    return test.readFromClient(*server).attach(kj::mv(server));
   };
 
   KJ_LOG(INFO, "Requesting a bunch of client connects");
@@ -993,11 +993,11 @@ KJ_TEST("TLS receiver does not stall on client that disconnects before ssl hands
   };
 
   auto writeToServer = [&](auto client) {
-    return test.writeToServer(kj::mv(client));
+    return test.writeToServer(*client).attach(kj::mv(client));
   };
 
   auto readFromClient = [&](auto server) {
-    return test.readFromClient(kj::mv(server));
+    return test.readFromClient(*server).attach(kj::mv(server));
   };
 
   constexpr auto kClientCount = 20;
@@ -1010,7 +1010,6 @@ KJ_TEST("TLS receiver does not stall on client that disconnects before ssl hands
   }
 
   KJ_LOG(INFO, "Requesting and resolving a client connect that hangs up before ssl connect");
-  KJ_EXPECT_LOG(ERROR, "Client disconnected during SSL_accept");
   KJ_ASSERT(test.baseReceiver->connect().wait(test.io.waitScope));
 
   KJ_LOG(INFO, "Requesting the second batch of client connects in parallel");
@@ -1040,11 +1039,11 @@ KJ_TEST("TLS receiver does not stall on hung client") {
   };
 
   auto writeToServer = [&](auto client) {
-    return test.writeToServer(kj::mv(client));
+    return test.writeToServer(*client).attach(kj::mv(client));
   };
 
   auto readFromClient = [&](auto server) {
-    return test.readFromClient(kj::mv(server));
+    return test.readFromClient(*server).attach(kj::mv(server));
   };
 
   constexpr auto kClientCount = 20;
@@ -1075,7 +1074,6 @@ KJ_TEST("TLS receiver does not stall on hung client") {
   joinPromises(clientPromises.releaseAsArray()).wait(test.io.waitScope);
 
   KJ_LOG(INFO, "Releasing the hung client");
-  KJ_EXPECT_LOG(ERROR, "Client disconnected during SSL_accept");
   hungClient = {};
 
   KJ_LOG(INFO, "Requesting one last server accept that we'll never resolve");
