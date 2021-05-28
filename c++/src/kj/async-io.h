@@ -448,14 +448,14 @@ public:
   // Protocol-specific message type.
 
   template <typename T>
-  inline Maybe<const T&> as();
+  inline Maybe<const T&> as() const;
   // Interpret the ancillary message as the given struct type. Most ancillary messages are some
   // sort of struct, so this is a convenient way to access it. Returns nullptr if the message
   // is smaller than the struct -- this can happen if the message was truncated due to
   // insufficient ancillary buffer space.
 
   template <typename T>
-  inline ArrayPtr<const T> asArray();
+  inline ArrayPtr<const T> asArray() const;
   // Interpret the ancillary message as an array of items. If the message size does not evenly
   // divide into elements of type T, the remainder is discarded -- this can happen if the message
   // was truncated due to insufficient ancillary buffer space.
@@ -983,7 +983,7 @@ inline int AncillaryMessage::getLevel() const { return level; }
 inline int AncillaryMessage::getType() const { return type; }
 
 template <typename T>
-inline Maybe<const T&> AncillaryMessage::as() {
+inline Maybe<const T&> AncillaryMessage::as() const {
   if (data.size() >= sizeof(T)) {
     return *reinterpret_cast<const T*>(data.begin());
   } else {
@@ -992,7 +992,7 @@ inline Maybe<const T&> AncillaryMessage::as() {
 }
 
 template <typename T>
-inline ArrayPtr<const T> AncillaryMessage::asArray() {
+inline ArrayPtr<const T> AncillaryMessage::asArray() const {
   return arrayPtr(reinterpret_cast<const T*>(data.begin()), data.size() / sizeof(T));
 }
 
