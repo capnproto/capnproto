@@ -1336,6 +1336,15 @@ public:
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
+  inline bool operator==(const Maybe<T>& other) const {
+    if (ptr == nullptr) {
+      return other == nullptr;
+    } else {
+      return other.ptr != nullptr && *ptr == *other.ptr;
+    }
+  }
+  inline bool operator!=(const Maybe<T>& other) const { return !(*this == other); }
+
   Maybe(const T* t) = delete;
   Maybe& operator=(const T* other) = delete;
   // We used to permit assigning a Maybe<T> directly from a T*, and the assignment would check for

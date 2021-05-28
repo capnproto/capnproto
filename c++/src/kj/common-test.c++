@@ -331,6 +331,20 @@ TEST(Common, Maybe) {
     KJ_EXPECT(m == nullptr);
     KJ_EXPECT(n != nullptr);
   }
+
+  {
+    Maybe<int> m1 = 123;
+    Maybe<int> m2 = 123;
+    Maybe<int> m3 = 456;
+    Maybe<int> m4 = nullptr;
+    Maybe<int> m5 = nullptr;
+
+    KJ_EXPECT(m1 == m2);
+    KJ_EXPECT(m1 != m3);
+    KJ_EXPECT(m1 != m4);
+    KJ_EXPECT(m4 == m5);
+    KJ_EXPECT(m4 != m1);
+  }
 }
 
 TEST(Common, MaybeConstness) {
