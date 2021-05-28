@@ -53,13 +53,17 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
 
 public:
   TwoPartyVatNetwork(MessageStream& msgStream,
-                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
+                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions(),
+                     const kj::MonotonicClock& clock = kj::systemCoarseMonotonicClock());
   TwoPartyVatNetwork(MessageStream& msgStream, uint maxFdsPerMessage,
-                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
+                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions(),
+                     const kj::MonotonicClock& clock = kj::systemCoarseMonotonicClock());
   TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
-                     ReaderOptions receiveOptions = ReaderOptions());
+                     ReaderOptions receiveOptions = ReaderOptions(),
+                     const kj::MonotonicClock& clock = kj::systemCoarseMonotonicClock());
   TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
-                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
+                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions(),
+                     const kj::MonotonicClock& clock = kj::systemCoarseMonotonicClock());
   // To support FD passing, pass an AsyncCapabilityStream or a MessageStream which supports
   // fd passing, and `maxFdsPerMessage`, which specifies the maximum number of file descriptors
   // to accept from the peer in any one RPC message. It is important to keep maxFdsPerMessage
@@ -71,6 +75,9 @@ public:
   // are many use cases for passing FDs from supervisor to sandbox but no use case for vice versa.
   // The supervisor may be configured not to accept any FDs from the sandbox in order to reduce
   // risk of DoS attacks.
+  //
+  // clock is used for calculating the oldest queued message age, which is a useful metric for
+  // detecting queue overload
 
   KJ_DISALLOW_COPY(TwoPartyVatNetwork);
 
@@ -84,8 +91,12 @@ public:
   // to be sent on this connection. This may be useful for backpressure.
 
   size_t getCurrentQueueCount() { return currentQueueCount; }
-  // Get the count outgoing messages that are currently queued in memory waiting
+  // Get the count of outgoing messages that are currently queued in memory waiting
   // to be sent on this connection. This may be useful for backpressure.
+
+  kj::Duration getOutgoingMessageWaitTime();
+  // Get how long the current outgoing message has been waiting to be sent on this connection.
+  // Returns 0 if the queue is empty. This may be useful for backpressure.
 
   // implements VatNetwork -----------------------------------------------------
 
@@ -126,6 +137,8 @@ private:
 
   size_t currentQueueSize = 0;
   size_t currentQueueCount = 0;
+  const kj::MonotonicClock& clock;
+  kj::TimePoint currentOutgoingMessageSendTime;
 
   class FulfillerDisposer: public kj::Disposer {
     // Hack:  TwoPartyVatNetwork is both a VatNetwork and a VatNetwork::Connection.  When the RPC
@@ -147,7 +160,8 @@ private:
       kj::OneOf<MessageStream*, kj::Own<MessageStream>>&& stream,
       uint maxFdsPerMessage,
       rpc::twoparty::Side side,
-      ReaderOptions receiveOptions);
+      ReaderOptions receiveOptions,
+      const kj::MonotonicClock& clock);
 
   MessageStream& getStream();
 
@@ -235,6 +249,7 @@ public:
 
   size_t getCurrentQueueSize() { return network.getCurrentQueueSize(); }
   size_t getCurrentQueueCount() { return network.getCurrentQueueCount(); }
+  kj::Duration getOutgoingMessageWaitTime() { return network.getOutgoingMessageWaitTime(); }
 
 private:
   TwoPartyVatNetwork network;
