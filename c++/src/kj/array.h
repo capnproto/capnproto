@@ -140,62 +140,62 @@ public:
     other.ptr = nullptr;
     other.size_ = 0;
   }
-  inline Array(T* firstElement, size_t size, const ArrayDisposer& disposer)
+  inline Array(T* firstElement KJ_LIFETIMEBOUND, size_t size, const ArrayDisposer& disposer)
       : ptr(firstElement), size_(size), disposer(&disposer) {}
 
   KJ_DISALLOW_COPY(Array);
   inline ~Array() noexcept { dispose(); }
 
-  inline operator ArrayPtr<T>() {
+  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
     return ArrayPtr<T>(ptr, size_);
   }
-  inline operator ArrayPtr<const T>() const {
+  inline operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND {
     return ArrayPtr<T>(ptr, size_);
   }
-  inline ArrayPtr<T> asPtr() {
+  inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND {
     return ArrayPtr<T>(ptr, size_);
   }
-  inline ArrayPtr<const T> asPtr() const {
+  inline ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND {
     return ArrayPtr<T>(ptr, size_);
   }
 
   inline size_t size() const { return size_; }
-  inline T& operator[](size_t index) {
+  inline T& operator[](size_t index) KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
     return ptr[index];
   }
-  inline const T& operator[](size_t index) const {
+  inline const T& operator[](size_t index) const KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
     return ptr[index];
   }
 
-  inline const T* begin() const { return ptr; }
-  inline const T* end() const { return ptr + size_; }
-  inline const T& front() const { return *ptr; }
-  inline const T& back() const { return *(ptr + size_ - 1); }
-  inline T* begin() { return ptr; }
-  inline T* end() { return ptr + size_; }
-  inline T& front() { return *ptr; }
-  inline T& back() { return *(ptr + size_ - 1); }
+  inline const T* begin() const KJ_LIFETIMEBOUND { return ptr; }
+  inline const T* end() const KJ_LIFETIMEBOUND { return ptr + size_; }
+  inline const T& front() const KJ_LIFETIMEBOUND { return *ptr; }
+  inline const T& back() const KJ_LIFETIMEBOUND { return *(ptr + size_ - 1); }
+  inline T* begin() KJ_LIFETIMEBOUND { return ptr; }
+  inline T* end() KJ_LIFETIMEBOUND { return ptr + size_; }
+  inline T& front() KJ_LIFETIMEBOUND { return *ptr; }
+  inline T& back() KJ_LIFETIMEBOUND { return *(ptr + size_ - 1); }
 
   template <typename U>
   inline bool operator==(const U& other) const { return asPtr() == other; }
   template <typename U>
   inline bool operator!=(const U& other) const { return asPtr() != other; }
 
-  inline ArrayPtr<T> slice(size_t start, size_t end) {
+  inline ArrayPtr<T> slice(size_t start, size_t end) KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<T>(ptr + start, end - start);
   }
-  inline ArrayPtr<const T> slice(size_t start, size_t end) const {
+  inline ArrayPtr<const T> slice(size_t start, size_t end) const KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<const T>(ptr + start, end - start);
   }
 
-  inline ArrayPtr<const byte> asBytes() const { return asPtr().asBytes(); }
-  inline ArrayPtr<PropagateConst<T, byte>> asBytes() { return asPtr().asBytes(); }
-  inline ArrayPtr<const char> asChars() const { return asPtr().asChars(); }
-  inline ArrayPtr<PropagateConst<T, char>> asChars() { return asPtr().asChars(); }
+  inline ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { return asPtr().asBytes(); }
+  inline ArrayPtr<PropagateConst<T, byte>> asBytes() KJ_LIFETIMEBOUND { return asPtr().asBytes(); }
+  inline ArrayPtr<const char> asChars() const KJ_LIFETIMEBOUND { return asPtr().asChars(); }
+  inline ArrayPtr<PropagateConst<T, char>> asChars() KJ_LIFETIMEBOUND { return asPtr().asChars(); }
 
   inline Array<PropagateConst<T, byte>> releaseAsBytes() {
     // Like asBytes() but transfers ownership.
@@ -343,38 +343,38 @@ public:
   KJ_DISALLOW_COPY(ArrayBuilder);
   inline ~ArrayBuilder() noexcept(false) { dispose(); }
 
-  inline operator ArrayPtr<T>() {
+  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
     return arrayPtr(ptr, pos);
   }
-  inline operator ArrayPtr<const T>() const {
+  inline operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND {
     return arrayPtr(ptr, pos);
   }
-  inline ArrayPtr<T> asPtr() {
+  inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND {
     return arrayPtr(ptr, pos);
   }
-  inline ArrayPtr<const T> asPtr() const {
+  inline ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND {
     return arrayPtr(ptr, pos);
   }
 
   inline size_t size() const { return pos - ptr; }
   inline size_t capacity() const { return endPtr - ptr; }
-  inline T& operator[](size_t index) {
+  inline T& operator[](size_t index) KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr), "Out-of-bounds Array access.");
     return ptr[index];
   }
-  inline const T& operator[](size_t index) const {
+  inline const T& operator[](size_t index) const KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr), "Out-of-bounds Array access.");
     return ptr[index];
   }
 
-  inline const T* begin() const { return ptr; }
-  inline const T* end() const { return pos; }
-  inline const T& front() const { return *ptr; }
-  inline const T& back() const { return *(pos - 1); }
-  inline T* begin() { return ptr; }
-  inline T* end() { return pos; }
-  inline T& front() { return *ptr; }
-  inline T& back() { return *(pos - 1); }
+  inline const T* begin() const KJ_LIFETIMEBOUND { return ptr; }
+  inline const T* end() const KJ_LIFETIMEBOUND { return pos; }
+  inline const T& front() const KJ_LIFETIMEBOUND { return *ptr; }
+  inline const T& back() const KJ_LIFETIMEBOUND { return *(pos - 1); }
+  inline T* begin() KJ_LIFETIMEBOUND { return ptr; }
+  inline T* end() KJ_LIFETIMEBOUND { return pos; }
+  inline T& front() KJ_LIFETIMEBOUND { return *ptr; }
+  inline T& back() KJ_LIFETIMEBOUND { return *(pos - 1); }
 
   ArrayBuilder& operator=(ArrayBuilder&& other) {
     dispose();
@@ -393,7 +393,7 @@ public:
   }
 
   template <typename... Params>
-  T& add(Params&&... params) {
+  T& add(Params&&... params) KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(pos < endPtr, "Added too many elements to ArrayBuilder.");
     ctor(*pos, kj::fwd<Params>(params)...);
     return *pos++;
@@ -519,20 +519,22 @@ class FixedArray {
 
 public:
   inline constexpr size_t size() const { return fixedSize; }
-  inline constexpr T* begin() { return content; }
-  inline constexpr T* end() { return content + fixedSize; }
-  inline constexpr const T* begin() const { return content; }
-  inline constexpr const T* end() const { return content + fixedSize; }
+  inline constexpr T* begin() KJ_LIFETIMEBOUND { return content; }
+  inline constexpr T* end() KJ_LIFETIMEBOUND { return content + fixedSize; }
+  inline constexpr const T* begin() const KJ_LIFETIMEBOUND { return content; }
+  inline constexpr const T* end() const KJ_LIFETIMEBOUND { return content + fixedSize; }
 
-  inline constexpr operator ArrayPtr<T>() {
+  inline constexpr operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
     return arrayPtr(content, fixedSize);
   }
-  inline constexpr operator ArrayPtr<const T>() const {
+  inline constexpr operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND {
     return arrayPtr(content, fixedSize);
   }
 
-  inline constexpr T& operator[](size_t index) { return content[index]; }
-  inline constexpr const T& operator[](size_t index) const { return content[index]; }
+  inline constexpr T& operator[](size_t index) KJ_LIFETIMEBOUND { return content[index]; }
+  inline constexpr const T& operator[](size_t index) const KJ_LIFETIMEBOUND {
+    return content[index];
+  }
 
 private:
   T content[fixedSize];
@@ -551,20 +553,20 @@ public:
 
   inline size_t size() const { return currentSize; }
   inline void setSize(size_t s) { KJ_IREQUIRE(s <= fixedSize); currentSize = s; }
-  inline T* begin() { return content; }
-  inline T* end() { return content + currentSize; }
-  inline const T* begin() const { return content; }
-  inline const T* end() const { return content + currentSize; }
+  inline T* begin() KJ_LIFETIMEBOUND { return content; }
+  inline T* end() KJ_LIFETIMEBOUND { return content + currentSize; }
+  inline const T* begin() const KJ_LIFETIMEBOUND { return content; }
+  inline const T* end() const KJ_LIFETIMEBOUND { return content + currentSize; }
 
-  inline operator ArrayPtr<T>() {
+  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
     return arrayPtr(content, currentSize);
   }
-  inline operator ArrayPtr<const T>() const {
+  inline operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND {
     return arrayPtr(content, currentSize);
   }
 
-  inline T& operator[](size_t index) { return content[index]; }
-  inline const T& operator[](size_t index) const { return content[index]; }
+  inline T& operator[](size_t index) KJ_LIFETIMEBOUND { return content[index]; }
+  inline const T& operator[](size_t index) const KJ_LIFETIMEBOUND { return content[index]; }
 
 private:
   size_t currentSize;

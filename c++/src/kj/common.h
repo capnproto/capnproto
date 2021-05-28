@@ -206,6 +206,35 @@ typedef unsigned char byte;
 #define KJ_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #endif
 
+#ifdef __has_cpp_attribute
+#define KJ_HAS_CPP_ATTRIBUTE(x) __has_cpp_attribute(x)
+#else
+#define KJ_HAS_CPP_ATTRIBUTE(x) 0
+#endif
+
+#if KJ_HAS_CPP_ATTRIBUTE(clang::lifetimebound)
+// If this is generating too many false-positives, the user is responsible for disabling the
+// problematic warning at the compiler switch level or by suppressing the place where the
+// false-positive is reported through compiler-specific pragmas if available.
+#define KJ_LIFETIMEBOUND [[clang::lifetimebound]]
+#else
+#define KJ_LIFETIMEBOUND
+#endif
+// Annotation that indicates the returned value is referencing a resource owned by this type (e.g.
+// cStr() on a std::string). Unfortunately this lifetime can only be superficial currently & cannot
+// track further. For example, there's no way to get `array.asPtr().slice(5, 6))` to warn if the
+// last slice exceeds the lifetime of `array`. That's because in the general case `ArrayPtr::slice`
+// can't have the lifetime bound annotation since it's not wrong to do something like:
+//     ArrayPtr<char> doSomething(ArrayPtr<char> foo) {
+//        ...
+//        return foo.slice(5, 6);
+//     }
+// If `ArrayPtr::slice` had a lifetime bound then the compiler would warn about this perfectly
+// legitimate method. Really there needs to be 2 more annotations. One to inherit the lifetime bound
+// and another to inherit the lifetime bound from a parameter (which really could be the same thing
+// by allowing a syntax like `[[clang::lifetimebound(*this)]]`.
+// https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
+
 #if __clang__
 #define KJ_UNUSED_MEMBER __attribute__((unused))
 // Inhibits "unused" warning for member variables.  Only Clang produces such a warning, while GCC
@@ -1479,8 +1508,9 @@ class ArrayPtr: public DisallowConstCopyIfNotConst<T> {
 public:
   inline constexpr ArrayPtr(): ptr(nullptr), size_(0) {}
   inline constexpr ArrayPtr(decltype(nullptr)): ptr(nullptr), size_(0) {}
-  inline constexpr ArrayPtr(T* ptr, size_t size): ptr(ptr), size_(size) {}
-  inline constexpr ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
+  inline constexpr ArrayPtr(T* ptr KJ_LIFETIMEBOUND, size_t size): ptr(ptr), size_(size) {}
+  inline constexpr ArrayPtr(T* begin KJ_LIFETIMEBOUND, T* end KJ_LIFETIMEBOUND)
+      : ptr(begin), size_(end - begin) {}
   ArrayPtr<T>& operator=(Array<T>&&) = delete;
   ArrayPtr<T>& operator=(decltype(nullptr)) {
     ptr = nullptr;
@@ -1510,14 +1540,15 @@ public:
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winit-list-lifetime"
 #endif
-  inline KJ_CONSTEXPR() ArrayPtr(::std::initializer_list<RemoveConstOrDisable<T>> init)
+  inline KJ_CONSTEXPR() ArrayPtr(
+      ::std::initializer_list<RemoveConstOrDisable<T>> init KJ_LIFETIMEBOUND)
       : ptr(init.begin()), size_(init.size()) {}
 #if __GNUC__ && !__clang__ && __GNUC__ >= 9
 #pragma GCC diagnostic pop
 #endif
 
   template <size_t size>
-  inline constexpr ArrayPtr(T (&native)[size]): ptr(native), size_(size) {
+  inline constexpr ArrayPtr(KJ_LIFETIMEBOUND T (&native)[size]): ptr(native), size_(size) {
     // Construct an ArrayPtr from a native C-style array.
     //
     // We disable this constructor for const char arrays because otherwise you would be able to
@@ -1625,13 +1656,13 @@ private:
 };
 
 template <typename T>
-inline constexpr ArrayPtr<T> arrayPtr(T* ptr, size_t size) {
+inline constexpr ArrayPtr<T> arrayPtr(T* ptr KJ_LIFETIMEBOUND, size_t size) {
   // Use this function to construct ArrayPtrs without writing out the type name.
   return ArrayPtr<T>(ptr, size);
 }
 
 template <typename T>
-inline constexpr ArrayPtr<T> arrayPtr(T* begin, T* end) {
+inline constexpr ArrayPtr<T> arrayPtr(T* begin KJ_LIFETIMEBOUND, T* end KJ_LIFETIMEBOUND) {
   // Use this function to construct ArrayPtrs without writing out the type name.
   return ArrayPtr<T>(begin, end);
 }
