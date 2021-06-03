@@ -26,17 +26,21 @@
 #endif
 
 #include "tls.h"
-#include <kj/test.h>
-#include <kj/async-io.h>
-#include <stdlib.h>
+
 #include <openssl/opensslv.h>
+
+#include <stdlib.h>
 
 #if _WIN32
 #include <winsock2.h>
+
 #include <kj/windows-sanity.h>
 #else
 #include <sys/socket.h>
 #endif
+
+#include <kj/async-io.h>
+#include <kj/test.h>
 
 namespace kj {
 namespace {
