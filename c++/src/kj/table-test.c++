@@ -765,6 +765,21 @@ KJ_TEST("simple tree table") {
     KJ_EXPECT(iter == range.end());
   }
 
+  {
+    auto iter = table.seek("garply");
+    KJ_EXPECT(*iter++ == "garply");
+    KJ_EXPECT(*iter++ == "grault");
+    KJ_EXPECT(*iter++ == "qux");
+    KJ_EXPECT(iter == table.ordered().end());
+  }
+
+  {
+    auto iter = table.seek("gorply");
+    KJ_EXPECT(*iter++ == "grault");
+    KJ_EXPECT(*iter++ == "qux");
+    KJ_EXPECT(iter == table.ordered().end());
+  }
+
   auto& graultRow = table.begin()[1];
   kj::StringPtr origGrault = graultRow;
 

@@ -181,14 +181,24 @@ public:
   }
 
   template <typename T>
-  T& get() {
+  T& get() & {
     KJ_IREQUIRE(is<T>(), "Must check OneOf::is<T>() before calling get<T>().");
     return *reinterpret_cast<T*>(space);
   }
   template <typename T>
-  const T& get() const {
+  T&& get() && {
+    KJ_IREQUIRE(is<T>(), "Must check OneOf::is<T>() before calling get<T>().");
+    return kj::mv(*reinterpret_cast<T*>(space));
+  }
+  template <typename T>
+  const T& get() const& {
     KJ_IREQUIRE(is<T>(), "Must check OneOf::is<T>() before calling get<T>().");
     return *reinterpret_cast<const T*>(space);
+  }
+  template <typename T>
+  const T&& get() const&& {
+    KJ_IREQUIRE(is<T>(), "Must check OneOf::is<T>() before calling get<T>().");
+    return kj::mv(*reinterpret_cast<const T*>(space));
   }
 
   template <typename T, typename... Params>
