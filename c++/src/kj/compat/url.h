@@ -43,6 +43,14 @@ struct UrlOptions {
   // silently removed. In other words, setting this false causes consecutive slashes in the path or
   // consecutive ampersands in the query to be collapsed into one, whereas if true then they
   // produce empty components.
+
+  enum class MergeFragment {
+    kAuto, // Depend on the context if we merge the fragment into the previous component.
+    kNo, // Never merge the fragment into the previous component.
+    kYes // Always merge the fragment into the previous component.
+  };
+  MergeFragment mergeFragment = MergeFragment::kAuto;
+  // How the fragment component is parsed.
 };
 
 struct Url {
@@ -62,6 +70,7 @@ struct Url {
   // Username / password.
 
   String host;
+  bool hasAuthority = false;
   // Hostname, including port if specified. We choose not to parse out the port because KJ's
   // network address parsing functions already accept addresses containing port numbers, and
   // because most web standards don't actually want to separate host and port.
@@ -124,9 +133,12 @@ struct Url {
     // path, and query, but omits userInfo (which should be used to construct the Authorization
     // header) and fragment (which should not be transmitted).
 
-    HTTP_REQUEST
+    HTTP_REQUEST,
     // The path to place in the first line of a regular HTTP request. This includes only the path
     // and query. Scheme, user, host, and fragment are omitted.
+
+    ARBITRARY,
+    // An arbitrary URL that may omit any component.
 
     // TODO(someday): Add context(s) that supports things like "mailto:", "data:", "blob:". These
     //   don't have an authority section.
@@ -139,9 +151,15 @@ struct Url {
   static Maybe<Url> tryParse(StringPtr text, Context context = REMOTE_HREF, Options options = {});
   // Parse an absolute URL.
 
+  static Maybe<Url> tryParseWithoutContext(StringPtr text, Options options = {});
+  // Parse an aboslute URL without a Context object.
+
   Url parseRelative(StringPtr relative) const;
   Maybe<Url> tryParseRelative(StringPtr relative) const;
   // Parse a relative URL string with this URL as the base.
+
+  bool isValidWithContext(Context context) const;
+  // Verify that this URL obeys the rules for the given context.
 };
 
 } // namespace kj

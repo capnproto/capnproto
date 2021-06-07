@@ -40,27 +40,27 @@ constexpr auto END_AUTHORITY = parse::anyOfChars("/?#");
 // not currently allow it in the authority component, because our parser would reject it as a host
 // character anyway.
 
-const parse::CharGroup_& getEndPathPart(Url::Context context) {
+const parse::CharGroup_& getEndPathPart(Url::Options::MergeFragment mergeFragment) {
   static constexpr auto END_PATH_PART_HREF = parse::anyOfChars("/?#");
   static constexpr auto END_PATH_PART_REQUEST = parse::anyOfChars("/?");
 
-  switch (context) {
-    case Url::REMOTE_HREF:        return END_PATH_PART_HREF;
-    case Url::HTTP_PROXY_REQUEST: return END_PATH_PART_REQUEST;
-    case Url::HTTP_REQUEST:       return END_PATH_PART_REQUEST;
+  switch (mergeFragment) {
+    case Url::Options::MergeFragment::kAuto:  KJ_UNREACHABLE;
+    case Url::Options::MergeFragment::kNo:    return END_PATH_PART_HREF;
+    case Url::Options::MergeFragment::kYes:   return END_PATH_PART_REQUEST;
   }
 
   KJ_UNREACHABLE;
 }
 
-const parse::CharGroup_& getEndQueryPart(Url::Context context) {
+const parse::CharGroup_& getEndQueryPart(Url::Options::MergeFragment mergeFragment) {
   static constexpr auto END_QUERY_PART_HREF = parse::anyOfChars("&#");
   static constexpr auto END_QUERY_PART_REQUEST = parse::anyOfChars("&");
 
-  switch (context) {
-    case Url::REMOTE_HREF:        return END_QUERY_PART_HREF;
-    case Url::HTTP_PROXY_REQUEST: return END_QUERY_PART_REQUEST;
-    case Url::HTTP_REQUEST:       return END_QUERY_PART_REQUEST;
+  switch (mergeFragment) {
+    case Url::Options::MergeFragment::kAuto:  KJ_UNREACHABLE;
+    case Url::Options::MergeFragment::kNo:    return END_QUERY_PART_HREF;
+    case Url::Options::MergeFragment::kYes:   return END_QUERY_PART_REQUEST;
   }
 
   KJ_UNREACHABLE;
@@ -165,68 +165,44 @@ Url Url::parse(StringPtr url, Context context, Options options) {
   return KJ_REQUIRE_NONNULL(tryParse(url, context, options), "invalid URL", url);
 }
 
-Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
+Maybe<Url> Url::tryParseWithoutContext(StringPtr text, Options options) {
   Url result;
   result.options = options;
   bool err = false;  // tracks percent-decoding errors
 
-  auto& END_PATH_PART = getEndPathPart(context);
-  auto& END_QUERY_PART = getEndQueryPart(context);
+  auto& END_PATH_PART = getEndPathPart(options.mergeFragment);
+  auto& END_QUERY_PART = getEndQueryPart(options.mergeFragment);
 
-  if (context == HTTP_REQUEST) {
-    if (!text.startsWith("/")) {
-      return nullptr;
-    }
-  } else {
-    KJ_IF_MAYBE(scheme, trySplit(text, ':')) {
-      result.scheme = kj::str(*scheme);
-    } else {
-      // missing scheme
-      return nullptr;
-    }
+  KJ_IF_MAYBE (scheme, trySplit(text, ':')) {
+    result.scheme = kj::str(*scheme);
     toLower(result.scheme);
-    if (result.scheme.size() == 0 ||
-        !ALPHAS.contains(result.scheme[0]) ||
-        !SCHEME_CHARS.containsAll(result.scheme.slice(1))) {
-      // bad scheme
-      return nullptr;
-    }
-
-    if (!text.startsWith("//")) {
-      // We require an authority (hostname) part.
-      return nullptr;
-    }
-    text = text.slice(2);
-
-    {
-      auto authority = split(text, END_AUTHORITY);
-
-      KJ_IF_MAYBE(userpass, trySplit(authority, '@')) {
-        if (context != REMOTE_HREF) {
-          // No user/pass allowed here.
-          return nullptr;
-        }
-        KJ_IF_MAYBE(username, trySplit(*userpass, ':')) {
-          result.userInfo = UserInfo {
-            percentDecode(*username, err, options),
-            percentDecode(*userpass, err, options)
-          };
-        } else {
-          result.userInfo = UserInfo {
-            percentDecode(*userpass, err, options),
-            nullptr
-          };
-        }
-      }
-
-      result.host = percentDecode(authority, err, options);
-      if (!HOST_CHARS.containsAll(result.host)) return nullptr;
-      toLower(result.host);
-    }
   }
 
-  while (text.startsWith("/")) {
-    text = text.slice(1);
+  auto extractAuthorityComponent = [&]() {
+    text = text.slice(2);
+
+    result.hasAuthority = true;
+    auto authority = split(text, END_AUTHORITY);
+
+    KJ_IF_MAYBE (userpass, trySplit(authority, '@')) {
+      KJ_IF_MAYBE (username, trySplit(*userpass, ':')) {
+        result.userInfo = UserInfo{
+          percentDecode(*username, err, options),
+          percentDecode(*userpass, err, options)
+        };
+      } else {
+        result.userInfo = UserInfo{
+          percentDecode(*userpass, err, options),
+          nullptr
+        };
+      }
+    }
+
+    result.host = percentDecode(authority, err, options);
+    toLower(result.host);
+  };
+
+  auto extractPathSegment = [&]() {
     auto part = split(text, END_PATH_PART);
     if (part.size() == 2 && part[0] == '.' && part[1] == '.') {
       if (result.path.size() != 0) {
@@ -241,6 +217,20 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
       result.path.add(percentDecode(part, err, options));
       result.hasTrailingSlash = false;
     }
+  };
+
+  if (text.startsWith("//")) {
+    extractAuthorityComponent();
+    if (!HOST_CHARS.containsAll(result.host))
+      return nullptr;
+  } else if (text.size() > 0 && !END_PATH_PART.contains(*text.begin())) {
+    // We've started with a path segment but no authority, extract the first segment.
+    extractPathSegment();
+  }
+
+  while (text.startsWith("/")) {
+    text = text.slice(1);
+    extractPathSegment();
   }
 
   if (text.startsWith("?")) {
@@ -260,19 +250,144 @@ Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
   }
 
   if (text.startsWith("#")) {
-    if (context != REMOTE_HREF) {
-      // No fragment allowed here.
+    if (options.mergeFragment == Options::MergeFragment::kNo) {
+      result.fragment = percentDecode(text.slice(1), err, options);
+      text = {};
+    } else {
+      // If we still have a '#', that means that we didn't have a path or a query but still had the fragment.
+      // TODO(now) Should we consider the '#' as part of the authority like we would have for path or query?
       return nullptr;
     }
-    result.fragment = percentDecode(text.slice(1), err, options);
-  } else {
-    // We should have consumed everything.
-    KJ_ASSERT(text.size() == 0);
   }
+
+  // We should have consumed everything.
+  KJ_ASSERT(text.size() == 0, text);
 
   if (err) return nullptr;
 
   return kj::mv(result);
+}
+
+Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
+  switch (context) {
+    case Context::REMOTE_HREF: {
+      if (options.mergeFragment == Options::MergeFragment::kAuto) {
+        options.mergeFragment = Options::MergeFragment::kNo;
+      }
+    } break;
+    case Context::HTTP_PROXY_REQUEST: {
+      if (options.mergeFragment == Options::MergeFragment::kAuto) {
+        options.mergeFragment = Options::MergeFragment::kYes;
+      }
+    } break;
+    case Context::HTTP_REQUEST: {
+      if (options.mergeFragment == Options::MergeFragment::kAuto) {
+        options.mergeFragment = Options::MergeFragment::kYes;
+      }
+    } break;
+    case Context::ARBITRARY: {
+      if (options.mergeFragment == Options::MergeFragment::kAuto) {
+        options.mergeFragment = Options::MergeFragment::kNo;
+      }
+    } break;
+  }
+
+  KJ_IF_MAYBE (parsedUrl, tryParseWithoutContext(text, options)) {
+    if (parsedUrl->isValidWithContext(context)) {
+      return kj::mv(*parsedUrl);
+    } else {
+      // TODO(now) Should I leave these logs in? They kinda feel like a poor man's equivalent of
+      // emitting exceptions.
+      KJ_LOG(INFO, "URL failed validation", text, *parsedUrl);
+      return nullptr;
+    }
+  } else {
+    KJ_LOG(INFO, "URL failed construction", text);
+    return nullptr;
+  }
+}
+
+bool Url::isValidWithContext(Context context) const {
+  auto validateScheme = [&]{
+    if (scheme.size() == 0) {
+      // Scheme is absent.
+      return false;
+    }
+
+    if (!ALPHAS.contains(scheme[0]) || !SCHEME_CHARS.containsAll(scheme.slice(1))) {
+      // Scheme is invalid.
+      return false;
+    }
+
+    return true;
+  };
+
+  auto validateHost = [&] {
+    if (!hasAuthority) {
+      // We require an authority (hostname) part.
+      return false;
+    } else if (host.size() > 0 && !HOST_CHARS.containsAll(host)) {
+      // Authority is invalid.
+      return false;
+    }
+
+    return true;
+  };
+
+  switch (context) {
+    case HTTP_REQUEST: {
+      if(scheme.size() > 0){
+        return false;
+      }
+
+      if(host.size() > 0){
+        return false;
+      }
+
+      KJ_IF_MAYBE (info, userInfo) {
+        return false;
+      }
+
+      KJ_IF_MAYBE (frag, fragment) {
+        return false;
+      }
+
+      return true;
+    }
+    case HTTP_PROXY_REQUEST: {
+      if (!validateScheme()) {
+        return false;
+      }
+
+      if (!validateHost()) {
+        return false;
+      }
+
+      KJ_IF_MAYBE (info, userInfo) {
+        return false;
+      }
+
+      KJ_IF_MAYBE (frag, fragment) {
+        return false;
+      }
+
+      return true;
+    }
+    case REMOTE_HREF: {
+      if (!validateScheme()) {
+        return false;
+      }
+
+      if (!validateHost()) {
+        return false;
+      }
+
+      return true;
+    }
+    case ARBITRARY: {
+      return true;
+    }
+  }
 }
 
 Url Url::parseRelative(StringPtr url) const {
@@ -286,8 +401,8 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
   result.options = options;
   bool err = false;  // tracks percent-decoding errors
 
-  auto& END_PATH_PART = getEndPathPart(Url::REMOTE_HREF);
-  auto& END_QUERY_PART = getEndQueryPart(Url::REMOTE_HREF);
+  auto& END_PATH_PART = getEndPathPart(Options::MergeFragment::kNo);
+  auto& END_QUERY_PART = getEndQueryPart(Options::MergeFragment::kNo);
 
   // scheme
   {
