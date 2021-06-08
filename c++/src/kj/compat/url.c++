@@ -45,9 +45,9 @@ const parse::CharGroup_& getEndPathPart(Url::Options::MergeFragment mergeFragmen
   static constexpr auto END_PATH_PART_REQUEST = parse::anyOfChars("/?");
 
   switch (mergeFragment) {
-    case Url::Options::MergeFragment::kAuto:  KJ_UNREACHABLE;
-    case Url::Options::MergeFragment::kNo:    return END_PATH_PART_HREF;
-    case Url::Options::MergeFragment::kYes:   return END_PATH_PART_REQUEST;
+    case Url::Options::MergeFragment::AUTO:  KJ_UNREACHABLE;
+    case Url::Options::MergeFragment::NO:    return END_PATH_PART_HREF;
+    case Url::Options::MergeFragment::YES:   return END_PATH_PART_REQUEST;
   }
 
   KJ_UNREACHABLE;
@@ -58,9 +58,9 @@ const parse::CharGroup_& getEndQueryPart(Url::Options::MergeFragment mergeFragme
   static constexpr auto END_QUERY_PART_REQUEST = parse::anyOfChars("&");
 
   switch (mergeFragment) {
-    case Url::Options::MergeFragment::kAuto:  KJ_UNREACHABLE;
-    case Url::Options::MergeFragment::kNo:    return END_QUERY_PART_HREF;
-    case Url::Options::MergeFragment::kYes:   return END_QUERY_PART_REQUEST;
+    case Url::Options::MergeFragment::AUTO:  KJ_UNREACHABLE;
+    case Url::Options::MergeFragment::NO:    return END_QUERY_PART_HREF;
+    case Url::Options::MergeFragment::YES:   return END_QUERY_PART_REQUEST;
   }
 
   KJ_UNREACHABLE;
@@ -250,7 +250,7 @@ Maybe<Url> Url::tryParseWithoutContext(StringPtr text, Options options) {
   }
 
   if (text.startsWith("#")) {
-    if (options.mergeFragment == Options::MergeFragment::kNo) {
+    if (options.mergeFragment == Options::MergeFragment::NO) {
       result.fragment = percentDecode(text.slice(1), err, options);
       text = {};
     } else {
@@ -271,23 +271,23 @@ Maybe<Url> Url::tryParseWithoutContext(StringPtr text, Options options) {
 Maybe<Url> Url::tryParse(StringPtr text, Context context, Options options) {
   switch (context) {
     case Context::REMOTE_HREF: {
-      if (options.mergeFragment == Options::MergeFragment::kAuto) {
-        options.mergeFragment = Options::MergeFragment::kNo;
+      if (options.mergeFragment == Options::MergeFragment::AUTO) {
+        options.mergeFragment = Options::MergeFragment::NO;
       }
     } break;
     case Context::HTTP_PROXY_REQUEST: {
-      if (options.mergeFragment == Options::MergeFragment::kAuto) {
-        options.mergeFragment = Options::MergeFragment::kYes;
+      if (options.mergeFragment == Options::MergeFragment::AUTO) {
+        options.mergeFragment = Options::MergeFragment::YES;
       }
     } break;
     case Context::HTTP_REQUEST: {
-      if (options.mergeFragment == Options::MergeFragment::kAuto) {
-        options.mergeFragment = Options::MergeFragment::kYes;
+      if (options.mergeFragment == Options::MergeFragment::AUTO) {
+        options.mergeFragment = Options::MergeFragment::YES;
       }
     } break;
     case Context::ARBITRARY: {
-      if (options.mergeFragment == Options::MergeFragment::kAuto) {
-        options.mergeFragment = Options::MergeFragment::kNo;
+      if (options.mergeFragment == Options::MergeFragment::AUTO) {
+        options.mergeFragment = Options::MergeFragment::NO;
       }
     } break;
   }
@@ -401,8 +401,8 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
   result.options = options;
   bool err = false;  // tracks percent-decoding errors
 
-  auto& END_PATH_PART = getEndPathPart(Options::MergeFragment::kNo);
-  auto& END_QUERY_PART = getEndQueryPart(Options::MergeFragment::kNo);
+  auto& END_PATH_PART = getEndPathPart(Options::MergeFragment::NO);
+  auto& END_QUERY_PART = getEndQueryPart(Options::MergeFragment::NO);
 
   // scheme
   {

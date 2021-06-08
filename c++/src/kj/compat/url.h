@@ -45,11 +45,11 @@ struct UrlOptions {
   // produce empty components.
 
   enum class MergeFragment {
-    kAuto, // Depend on the context if we merge the fragment into the previous component.
-    kNo, // Never merge the fragment into the previous component.
-    kYes // Always merge the fragment into the previous component.
+    AUTO, // Depend on the context if we merge the fragment into the previous component.
+    NO,   // Never merge the fragment into the previous component.
+    YES,  // Always merge the fragment into the previous component.
   };
-  MergeFragment mergeFragment = MergeFragment::kAuto;
+  MergeFragment mergeFragment = MergeFragment::AUTO;
   // How the fragment component is parsed.
 };
 
