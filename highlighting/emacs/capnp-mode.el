@@ -15,7 +15,6 @@
 ;;
 ;; (add-to-list 'load-path "~/src/capnproto/highlighting/emacs")
 ;; (require 'capnp-mode)
-;; (add-to-list 'auto-mode-alist '("\\.capnp\\'" . capnp-mode))
 ;;
 
 ;;; Code:
@@ -72,4 +71,9 @@ For detail, see `comment-dwim'."
   (setq mode-name "capnp")
   (define-key capnp-mode-map [remap comment-dwim] 'capnp-comment-dwim))
 
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.capnp\\'" . capnp-mode))
+
 (provide 'capnp-mode)
+
+;;; capnp-mode.el ends here
