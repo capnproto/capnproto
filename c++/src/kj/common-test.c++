@@ -75,6 +75,37 @@ TEST(Common, Maybe) {
       ADD_FAILURE();
     }
     EXPECT_EQ(123, m.orDefault(456));
+    bool ranLazy = false;
+    EXPECT_EQ(123, m.orDefault([&] {
+      ranLazy = true;
+      return 456;
+    }));
+    EXPECT_FALSE(ranLazy);
+
+    KJ_IF_MAYBE(v, m) {
+      const int& ref = m.orDefault([notUsed = 5]() -> const int& { return notUsed; });
+
+      EXPECT_EQ(ref, *v);
+      EXPECT_EQ(&ref, v);
+
+      const int& ref2 = m.orDefault([notUsed = 5]() -> int { return notUsed; });
+      EXPECT_NE(&ref, &ref2);
+      EXPECT_EQ(ref2, 123);
+    } else {
+      ADD_FAILURE();
+    }
+  }
+
+  {
+    Maybe<int> empty;
+    int defaultValue = 5;
+    auto& ref1 = empty.orDefault([&defaultValue]() -> int& {
+      return defaultValue;
+    });
+    EXPECT_EQ(&ref1, &defaultValue);
+
+    auto ref2 = empty.orDefault([&]() -> int { return defaultValue; });
+    EXPECT_NE(&ref2, &defaultValue);
   }
 
   {
@@ -92,6 +123,12 @@ TEST(Common, Maybe) {
       ADD_FAILURE();
     }
     EXPECT_EQ(0, m.orDefault(456));
+    bool ranLazy = false;
+    EXPECT_EQ(0, m.orDefault([&] {
+      ranLazy = true;
+      return 456;
+    }));
+    EXPECT_FALSE(ranLazy);
   }
 
   {
@@ -107,6 +144,12 @@ TEST(Common, Maybe) {
       EXPECT_EQ(0, *v);  // avoid unused warning
     }
     EXPECT_EQ(456, m.orDefault(456));
+    bool ranLazy = false;
+    EXPECT_EQ(456, m.orDefault([&] {
+      ranLazy = true;
+      return 456;
+    }));
+    EXPECT_TRUE(ranLazy);
   }
 
   int i = 234;
@@ -251,6 +294,9 @@ TEST(Common, Maybe) {
     Maybe<kj::String> m = nullptr;
     kj::String s = kj::mv(m).orDefault(kj::str("foo"));
     EXPECT_EQ("foo", s);
+    EXPECT_EQ("foo", kj::mv(m).orDefault([] {
+      return kj::str("foo");
+    }));
   }
 
   {

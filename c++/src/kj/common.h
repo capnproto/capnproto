@@ -1377,6 +1377,46 @@ public:
     }
   }
 
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<T&>() : instance<F>()())>
+  Result orDefault(F&& lazyDefaultValue) & {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
+    } else {
+      return *ptr;
+    }
+  }
+
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<const T&>() : instance<F>()())>
+  const Result orDefault(F&& lazyDefaultValue) const & {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
+    } else {
+      return *ptr;
+    }
+  }
+
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<T&&>() : instance<F>()())>
+  Result orDefault(F&& lazyDefaultValue) && {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
+    } else {
+      return kj::mv(*ptr);
+    }
+  }
+
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<T&&>() : instance<F>()())>
+  const Result orDefault(F&& lazyDefaultValue) const && {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
+    } else {
+      return kj::mv(*ptr);
+    }
+  }
+
   template <typename Func>
   auto map(Func&& f) & -> Maybe<decltype(f(instance<T&>()))> {
     if (ptr == nullptr) {
