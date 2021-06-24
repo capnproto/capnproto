@@ -87,6 +87,24 @@
 #include <intrin.h>
 #endif
 
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+#include <sanitizer/lsan_interface.h>
+#else
+static KJ_ALWAYS_INLINE(void __lsan_ignore_object(const void* p)) {}
+#endif
+// TODO(soon): Remove the LSAN stuff per https://github.com/capnproto/capnproto/pull/1255 feedback.
+
+namespace {
+template <typename T>
+inline T* lsanIgnoreObjectAndReturn(T* ptr) {
+  // Defensively lsan_ignore_object since the documentation doesn't explicitly specify what happens
+  // if you call this multiple times on the same object.
+  // TODO(soon): Remove this per https://github.com/capnproto/capnproto/pull/1255.
+  __lsan_ignore_object(ptr);
+  return ptr;
+}
+}
+
 namespace kj {
 
 StringPtr KJ_STRINGIFY(LogSeverity severity) {
@@ -1070,9 +1088,34 @@ private:
 };
 
 ExceptionCallback& getExceptionCallback() {
-  static ExceptionCallback::RootExceptionCallback defaultCallback;
+  static auto defaultCallback = lsanIgnoreObjectAndReturn(
+      new ExceptionCallback::RootExceptionCallback());
+  // We allocate on the heap because some objects may throw in their destructors. If those objects
+  // had static storage, they might get fully constructed before the root callback. If they however
+  // then throw an exception during destruction, there would be a lifetime issue because their
+  // destructor would end up getting registered after the root callback's destructor. One solution
+  // is to just leak this pointer & allocate on first-use. The cost is that the initialization is
+  // mildly more expensive (+ we need to annotate sanitizers to ignore the problem). A great
+  // compiler annotation that would simply things would be one that allowed static variables to have
+  // their destruction omitted wholesale. That would allow us to avoid the heap but still have the
+  // same robust safety semantics leaking would give us. A practical alternative that could be
+  // implemented without new compilers would be to define another static root callback in
+  // RootExceptionCallback's destructor (+ a separate pointer to share its value with this
+  // function). Since this would end up getting constructed during exit unwind, it would have the
+  // nice property of effectively being guaranteed to be evicted last.
+  //
+  // All this being said, I came back to leaking the object is the easiest tweak here:
+  //  * Can't go wrong
+  //  * Easy to maintain
+  //  * Throwing exceptions is bound to do be expensive and malloc-happy anyway, so the incremental
+  //    cost of 1 heap allocation is minimal.
+  //
+  // TODO(soon): Harris has an excellent suggestion in https://github.com/capnproto/capnproto/pull/1255
+  //  that should ensure we initialize the root callback once on first use as a global & never
+  //  destroy it.
+
   ExceptionCallback* scoped = threadLocalCallback;
-  return scoped != nullptr ? *scoped : defaultCallback;
+  return scoped != nullptr ? *scoped : *defaultCallback;
 }
 
 void throwFatalException(kj::Exception&& exception, uint ignoreCount) {

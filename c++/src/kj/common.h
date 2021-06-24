@@ -48,6 +48,18 @@
 #define KJ_END_HEADER
 #endif
 
+#ifdef __has_cpp_attribute
+#define KJ_HAS_CPP_ATTRIBUTE(x) __has_cpp_attribute(x)
+#else
+#define KJ_HAS_CPP_ATTRIBUTE(x) 0
+#endif
+
+#ifdef __has_feature
+#define KJ_HAS_COMPILER_FEATURE(x) __has_feature(x)
+#else
+#define KJ_HAS_COMPILER_FEATURE(x) 0
+#endif
+
 KJ_BEGIN_HEADER
 
 #ifndef KJ_NO_COMPILER_CHECK
@@ -206,12 +218,6 @@ typedef unsigned char byte;
 #define KJ_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #endif
 
-#ifdef __has_cpp_attribute
-#define KJ_HAS_CPP_ATTRIBUTE(x) __has_cpp_attribute(x)
-#else
-#define KJ_HAS_CPP_ATTRIBUTE(x) 0
-#endif
-
 #if KJ_HAS_CPP_ATTRIBUTE(clang::lifetimebound)
 // If this is generating too many false-positives, the user is responsible for disabling the
 // problematic warning at the compiler switch level or by suppressing the place where the
@@ -251,15 +257,7 @@ typedef unsigned char byte;
 #define KJ_NO_UNIQUE_ADDRESS
 #endif
 
-#if defined(__has_feature)
-#if __has_feature(thread_sanitizer)
-#define KJ_SANITIZE_THREAD 1
-#endif
-#elif __SANITIZE_THREAD__
-#define KJ_SANITIZE_THREAD 1
-#endif
-
-#if KJ_SANITIZE_THREAD
+#if KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__)
 #define KJ_DISABLE_TSAN __attribute__((no_sanitize("thread"), noinline))
 #else
 #define KJ_DISABLE_TSAN
