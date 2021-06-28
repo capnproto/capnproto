@@ -90,7 +90,7 @@
 #if KJ_HAS_COMPILER_FEATURE(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
 #include <sanitizer/lsan_interface.h>
 #else
-static KJ_ALWAYS_INLINE(void __lsan_ignore_object(const void* p)) {}
+static void __lsan_ignore_object(const void* p) {}
 #endif
 // TODO(soon): Remove the LSAN stuff per https://github.com/capnproto/capnproto/pull/1255 feedback.
 
