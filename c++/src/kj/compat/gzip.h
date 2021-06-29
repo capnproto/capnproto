@@ -43,7 +43,7 @@ private:
   z_stream ctx = {};
   byte buffer[4096];
 
-  void fail(int result);
+  [[noreturn]] void fail(int result);
 };
 
 }  // namespace _ (private)

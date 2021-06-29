@@ -735,7 +735,7 @@ TEST(AsyncUnixTest, Wake) {
 }
 
 int exitCodeForSignal = 0;
-void exitSignalHandler(int) {
+[[noreturn]] void exitSignalHandler(int) {
   _exit(exitCodeForSignal);
 }
 
