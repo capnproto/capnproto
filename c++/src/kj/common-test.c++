@@ -83,9 +83,7 @@ TEST(Common, Maybe) {
     EXPECT_FALSE(ranLazy);
 
     KJ_IF_MAYBE(v, m) {
-      const int& ref = m.orDefault([notUsed = 5]() -> const int& {
-        return std::cref(notUsed);
-      });
+      const int& ref = m.orDefault([notUsed = 5]() -> const int& { return notUsed; });
 
       EXPECT_EQ(ref, *v);
       EXPECT_EQ(&ref, v);
