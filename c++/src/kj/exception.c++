@@ -444,7 +444,7 @@ namespace {
 
 #if !KJ_NO_EXCEPTIONS
 
-void terminateHandler() {
+[[noreturn]] void terminateHandler() {
   void* traceSpace[32];
 
   // ignoreCount = 3 to ignore std::terminate entry.
@@ -584,7 +584,7 @@ void printStackTraceOnCrash() {
 #else
 namespace {
 
-void crashHandler(int signo, siginfo_t* info, void* context) {
+[[noreturn]] void crashHandler(int signo, siginfo_t* info, void* context) {
   void* traceSpace[32];
 
 #if KJ_USE_WIN32_DBGHELP

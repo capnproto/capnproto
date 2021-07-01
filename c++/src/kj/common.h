@@ -751,7 +751,7 @@ struct ThrowOverflow {
   // Functor which throws an exception complaining about integer overflow. Usually this is used
   // with the interfaces in units.h, but is defined here because Cap'n Proto wants to avoid
   // including units.h when not using CAPNP_DEBUG_TYPES.
-  void operator()() const;
+  [[noreturn]] void operator()() const;
 };
 
 #if __GNUC__ || __clang__ || _MSC_VER

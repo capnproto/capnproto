@@ -454,7 +454,7 @@ private:
   Impl* impl;
 #endif
 
-  void run();
+  [[noreturn]] void run();
 
   bool isReset() { return main == nullptr; }
 };
@@ -1389,7 +1389,7 @@ struct FiberStack::StartRoutine {
     reinterpret_cast<FiberStack*>(ptr)->run();
   }
 #else
-  static void run(int arg1, int arg2) {
+  [[noreturn]] static void run(int arg1, int arg2) {
     // This is the static C-style function we pass to makeContext().
 
     // POSIX says the arguments are ints, not pointers. So we split our pointer in half in order to

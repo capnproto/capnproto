@@ -175,7 +175,7 @@ private:
 
   friend class SegmentBuilder;
 
-  static void abortCheckObjectFault();
+  [[noreturn]] static void abortCheckObjectFault();
   // Called in debug mode in cases that would segfault in opt mode. (Should be impossible!)
 };
 
@@ -221,7 +221,7 @@ private:
 
   bool readOnly;
 
-  void throwNotWritable();
+  [[noreturn]] void throwNotWritable();
 
   KJ_DISALLOW_COPY(SegmentBuilder);
 };
