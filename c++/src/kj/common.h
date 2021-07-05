@@ -341,6 +341,12 @@ KJ_NORETURN(void unreachable());
 #define KJ_KNOWN_UNREACHABLE(code) do {code;} while(false)
 #endif
 
+#if KJ_HAS_CPP_ATTRIBUTE(fallthrough)
+#define KJ_FALLTHROUGH [[fallthrough]]
+#else
+#define KJ_FALLTHROUGH
+#endif
+
 // #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack)
 //
 // Allocate an array, preferably on the stack, unless it is too big.  On GCC this will use
