@@ -779,7 +779,7 @@ public:
         if (!exists(path)) {
           return nullptr;
         }
-        // fallthrough
+        KJ_FALLTHROUGH;
       default:
         KJ_FAIL_SYSCALL("openat(fd, path, O_DIRECTORY)", error, path) { return nullptr; }
     }
@@ -914,7 +914,7 @@ public:
           mode = mode - WriteMode::CREATE_PARENT;
           return createNamedTemporary(finalName, mode, kj::mv(tryCreate));
         }
-        // fallthrough
+        KJ_FALLTHROUGH;
       default:
         KJ_FAIL_SYSCALL("create(path)", error, path) { break; }
         return nullptr;
@@ -957,7 +957,7 @@ public:
             // Retry, but make sure we don't try to create the parent again.
             return tryReplaceNode(path, mode - WriteMode::CREATE_PARENT, kj::mv(tryCreate));
           }
-          // fallthrough
+          KJ_FALLTHROUGH;
         default:
           KJ_FAIL_SYSCALL("create(path)", error, path) { return false; }
       } else {
