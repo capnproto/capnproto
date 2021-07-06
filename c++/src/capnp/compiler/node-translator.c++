@@ -1893,7 +1893,7 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
         return kj::mv(result);
       }
 
-    } // fallthrough -- value is positive, so we can just go on to the uint case below.
+    } KJ_FALLTHROUGH;  // value is positive, so we can just go on to the uint case below.
 
     case DynamicValue::UINT: {
       uint64_t maxValue = 0;

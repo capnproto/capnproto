@@ -904,7 +904,7 @@ private:
               state = COMMENT;
               break;
             }
-            // fallthrough
+            KJ_FALLTHROUGH;
           case NORMAL:
             switch (c) {
               case '#': state = COMMENT; break;

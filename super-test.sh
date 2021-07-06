@@ -351,6 +351,12 @@ done
 export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -DCAPNP_EXPENSIVE_TESTS=1 ${CPP_FEATURES}"
 export LIBS="$EXTRA_LIBS"
 
+if [ "${CXX:-}" != "g++-5" ]; then
+  # This warning flag is missing on g++-5 but available on all other GCC/Clang versions we target
+  # in CI.
+  export CXXFLAGS="$CXXFLAGS -Wimplicit-fallthrough"
+fi
+
 STAGING=$PWD/tmp-staging
 
 rm -rf "$STAGING"

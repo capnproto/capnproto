@@ -185,7 +185,7 @@ private:
           Sleep(10);
           goto retry;
         }
-        // fallthrough
+        KJ_FALLTHROUGH;
       default:
         KJ_FAIL_WIN32("RemoveDirectory", error) { break; }
     }
