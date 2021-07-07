@@ -2194,6 +2194,7 @@ public:
 
       return stream->tryRead(recvData.end(), 1, recvBuffer.end() - recvData.end())
           .then([this,maxSize](size_t actual) -> kj::Promise<Message> {
+        receivedBytes += actual;
         if (actual == 0) {
           if (recvData.size() > 0) {
             return KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in frame header");
@@ -2324,7 +2325,8 @@ public:
       memcpy(payloadTarget, recvData.begin(), recvData.size());
       size_t remaining = payloadLen - recvData.size();
       auto promise = stream->tryRead(payloadTarget + recvData.size(), remaining, remaining)
-          .then([remaining](size_t amount) {
+          .then([this, remaining](size_t amount) {
+        receivedBytes += amount;
         if (amount < remaining) {
           kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in message"));
         }
@@ -2364,6 +2366,10 @@ public:
 
     return nullptr;
   }
+
+  uint64_t sentByteCount() override { return sentBytes; }
+
+  uint64_t receivedByteCount() override { return receivedBytes; }
 
 private:
   class Mask {
@@ -2565,6 +2571,9 @@ private:
   kj::Array<byte> recvBuffer;
   kj::ArrayPtr<byte> recvData;
 
+  uint64_t sentBytes = 0;
+  uint64_t receivedBytes = 0;
+
   kj::Promise<void> sendImpl(byte opcode, kj::ArrayPtr<const byte> message) {
     KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
     KJ_REQUIRE(!currentlySending, "another message send is already in progress");
@@ -2603,7 +2612,7 @@ private:
     if (!mask.isZero()) {
       promise = promise.attach(kj::mv(ownMessage));
     }
-    return promise.then([this]() {
+    return promise.then([this, size = sendParts[0].size() + sendParts[1].size()]() {
       currentlySending = false;
 
       // Send queued pong if needed.
@@ -2612,6 +2621,7 @@ private:
         queuedPong = nullptr;
         queuePong(kj::mv(payload));
       }
+      sentBytes += size;
     });
   }
 
@@ -2657,8 +2667,9 @@ private:
     if (recvData.size() > 0) {
       // We have some data buffered. Write it first.
       return other.stream->write(recvData.begin(), recvData.size())
-          .then([this, &other]() {
+          .then([this, &other, size = recvData.size()]() {
         recvData = nullptr;
+        other.sentBytes += size;
         return optimizedPumpTo(other);
       });
     }
@@ -2671,10 +2682,12 @@ private:
     });
 
     // There's no buffered incoming data, so start pumping stream now.
-    return stream->pumpTo(*other.stream).then([&other](size_t) -> kj::Promise<void> {
+    return stream->pumpTo(*other.stream).then([this, &other](size_t s) -> kj::Promise<void> {
       // WebSocket pumps are expected to include end-of-stream.
       other.disconnected = true;
       other.stream->shutdownWrite();
+      receivedBytes += s;
+      other.sentBytes += s;
       return kj::READY_NOW;
     }, [&other](kj::Exception&& e) -> kj::Promise<void> {
       // We don't know if it was a read or a write that threw. If it was a read that threw, we need
@@ -2793,23 +2806,27 @@ public:
 
   kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
     KJ_IF_MAYBE(s, state) {
-      return s->send(message);
+      return s->send(message).then([&, size = message.size()]() { transferredBytes += size; });
     } else {
-      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message));
+      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message))
+          .then([&, size = message.size()]() { transferredBytes += size; });
     }
   }
   kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
     KJ_IF_MAYBE(s, state) {
-      return s->send(message);
+      return s->send(message).then([&, size = message.size()]() { transferredBytes += size; });
     } else {
-      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message));
+      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message))
+          .then([&, size = message.size()]() { transferredBytes += size; });
     }
   }
   kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
     KJ_IF_MAYBE(s, state) {
-      return s->close(code, reason);
+      return s->close(code, reason)
+          .then([&, size = reason.size()]() { transferredBytes += (2 +size); });
     } else {
-      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(ClosePtr { code, reason }));
+      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(ClosePtr { code, reason }))
+          .then([&, size = reason.size()]() { transferredBytes += (2 +size); });
     }
   }
   kj::Promise<void> disconnect() override {
@@ -2852,10 +2869,20 @@ public:
   }
   kj::Promise<void> pumpTo(WebSocket& other) override {
     KJ_IF_MAYBE(s, state) {
-      return s->pumpTo(other);
+      auto before = other.receivedByteCount();
+      return s->pumpTo(other).attach(kj::defer([this, &other, before]() {
+        transferredBytes += other.receivedByteCount() - before;
+      }));
     } else {
       return newAdaptedPromise<void, BlockedPumpTo>(*this, other);
     }
+  }
+
+  uint64_t sentByteCount() override {
+    return transferredBytes;
+  }
+  uint64_t receivedByteCount() override {
+    return transferredBytes;
   }
 
 private:
@@ -2865,6 +2892,8 @@ private:
   // outstanding, `state` is null.
 
   kj::Own<WebSocket> ownState;
+
+  uint64_t transferredBytes = 0;
 
   bool aborted = false;
   Maybe<Own<PromiseFulfiller<void>>> abortedFulfiller = nullptr;
@@ -2967,6 +2996,13 @@ private:
       }));
     }
 
+  uint64_t sentByteCount() override {
+    KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+  }
+  uint64_t receivedByteCount() override {
+    KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+   }
+
   private:
     kj::PromiseFulfiller<void>& fulfiller;
     WebSocketPipeImpl& pipe;
@@ -3043,6 +3079,13 @@ private:
         pipe.endState(*this);
         kj::throwRecoverableException(kj::mv(e));
       }));
+    }
+
+    uint64_t sentByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+    }
+    uint64_t receivedByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
     }
 
   private:
@@ -3122,6 +3165,13 @@ private:
       KJ_FAIL_ASSERT("another message receive is already in progress");
     }
 
+    uint64_t sentByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+    }
+    uint64_t receivedByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+    }
+
   private:
     kj::PromiseFulfiller<Message>& fulfiller;
     WebSocketPipeImpl& pipe;
@@ -3196,6 +3246,13 @@ private:
       KJ_FAIL_ASSERT("another message receive is already in progress");
     }
 
+    uint64_t sentByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+    }
+    uint64_t receivedByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+    }
+
   private:
     kj::PromiseFulfiller<void>& fulfiller;
     WebSocketPipeImpl& pipe;
@@ -3234,6 +3291,14 @@ private:
     kj::Promise<void> pumpTo(WebSocket& other) override {
       return kj::READY_NOW;
     }
+
+    uint64_t sentByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+    }
+    uint64_t receivedByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+    }
+
   };
 
   class Aborted final: public WebSocket {
@@ -3267,6 +3332,13 @@ private:
     }
     kj::Promise<void> pumpTo(WebSocket& other) override {
       return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
+    }
+
+    uint64_t sentByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
+    }
+    uint64_t receivedByteCount() override {
+      KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
     }
   };
 };
@@ -3309,6 +3381,9 @@ public:
   kj::Promise<void> pumpTo(WebSocket& other) override {
     return in->pumpTo(other);
   }
+
+  uint64_t sentByteCount() override { return out->sentByteCount(); }
+  uint64_t receivedByteCount() override { return in->sentByteCount(); }
 
 private:
   kj::Own<WebSocketPipeImpl> in;
@@ -4469,6 +4544,9 @@ private:
       });
     }
 
+    uint64_t sentByteCount() override { return inner->sentByteCount(); }
+    uint64_t receivedByteCount() override { return inner->receivedByteCount(); }
+
   private:
     kj::Own<kj::WebSocket> inner;
     kj::Maybe<kj::Promise<void>> completionTask;
@@ -5132,6 +5210,9 @@ private:
       kj::Promise<Message> receive(size_t maxSize) override {
         return kj::cp(exception);
       }
+
+      uint64_t sentByteCount() override { KJ_FAIL_ASSERT("received bad WebSocket handshake"); }
+      uint64_t receivedByteCount() override { KJ_FAIL_ASSERT("received bad WebSocket handshake"); }
 
     private:
       kj::Exception exception;

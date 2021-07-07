@@ -583,6 +583,9 @@ public:
   // if this WebSocket implementation is able to perform the pump in an optimized way, better than
   // the default implementation of pumpTo(). The default implementation of pumpTo() always tries
   // calling this first, and the default implementation of tryPumpFrom() always returns null.
+
+  virtual uint64_t sentByteCount() = 0;
+  virtual uint64_t receivedByteCount() = 0;
 };
 
 class HttpClient {

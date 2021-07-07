@@ -157,6 +157,7 @@ public:
     auto req = KJ_REQUIRE_NONNULL(out, "already called disconnect()").sendDataRequest(
         MessageSize { 8 + message.size() / sizeof(word), 0 });
     req.setData(message);
+    sentBytes += message.size();
     return req.send();
   }
 
@@ -164,6 +165,7 @@ public:
     auto req = KJ_REQUIRE_NONNULL(out, "already called disconnect()").sendTextRequest(
         MessageSize { 8 + message.size() / sizeof(word), 0 });
     memcpy(req.initText(message.size()).begin(), message.begin(), message.size());
+    sentBytes += message.size();
     return req.send();
   }
 
@@ -171,6 +173,7 @@ public:
     auto req = KJ_REQUIRE_NONNULL(out, "already called disconnect()").closeRequest();
     req.setCode(code);
     req.setReason(reason);
+    sentBytes += reason.size() + 2;
     return req.send().ignoreResult();
   }
 
@@ -223,10 +226,14 @@ public:
     }
   }
 
+  uint64_t sentByteCount() override { return sentBytes; }
+  uint64_t receivedByteCount() override { return KJ_ASSERT_NONNULL(in)->receivedByteCount(); }
+
 private:
   kj::Maybe<kj::Own<kj::WebSocket>> in;   // One end of a WebSocketPipe, used only for receiving.
   kj::Maybe<capnp::WebSocket::Client> out;  // Used only for sending.
   kj::Own<kj::PromiseFulfiller<kj::Promise<Capability::Client>>> shorteningFulfiller;
+  uint64_t sentBytes = 0;
 };
 
 // =======================================================================================
