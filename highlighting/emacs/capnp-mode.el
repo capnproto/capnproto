@@ -1,9 +1,10 @@
-;;; capnp-mode.el --- major mode for editing Capn' Proto Files
+;;; capnp-mode.el --- Major mode for editing Capn' Proto Files
 
 ;; This is free and unencumbered software released into the public domain.
 
 ;; Author: Brian Taylor <el.wubo@gmail.com>
 ;; Version: 1.0.0
+;; URL: https://github.com/capnproto/capnproto
 
 ;;; Commentary:
 
@@ -15,7 +16,6 @@
 ;;
 ;; (add-to-list 'load-path "~/src/capnproto/highlighting/emacs")
 ;; (require 'capnp-mode)
-;; (add-to-list 'auto-mode-alist '("\\.capnp\\'" . capnp-mode))
 ;;
 
 ;;; Code:
@@ -23,12 +23,11 @@
 ;; command to comment/uncomment text
 (defun capnp-comment-dwim (arg)
   "Comment or uncomment current line or region in a smart way.
-For detail, see `comment-dwim'."
+For detail, see `comment-dwim' for ARG explanation."
   (interactive "*P")
   (require 'newcomment)
   (let (
-        (comment-start "#") (comment-end "")
-        )
+        (comment-start "#") (comment-end ""))
     (comment-dwim arg)))
 
 (defvar capnp--syntax-table
@@ -72,4 +71,9 @@ For detail, see `comment-dwim'."
   (setq mode-name "capnp")
   (define-key capnp-mode-map [remap comment-dwim] 'capnp-comment-dwim))
 
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.capnp\\'" . capnp-mode))
+
 (provide 'capnp-mode)
+;;; capnp-mode.el ends here
+
