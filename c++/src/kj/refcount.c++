@@ -48,7 +48,12 @@ void Refcounted::disposeImpl(void* pointer) const {
 // Atomic (thread-safe) refcounting
 
 AtomicRefcounted::~AtomicRefcounted() noexcept(false) {
+#if defined(__clang__) || !defined(_MSC_VER)
+  KJ_ASSERT(__atomic_load_n(&refcount, __ATOMIC_RELAXED) == 0,
+      "Refcounted object deleted with non-zero refcount.");
+#else
   KJ_ASSERT(refcount == 0, "Refcounted object deleted with non-zero refcount.");
+#endif
 }
 
 void AtomicRefcounted::disposeImpl(void* pointer) const {
