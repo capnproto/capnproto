@@ -207,10 +207,41 @@ BTreeImpl::BTreeImpl()
       freelistSize(0),
       beginLeaf(0),
       endLeaf(0) {}
+
 BTreeImpl::~BTreeImpl() noexcept(false) {
   if (tree != &EMPTY_NODE) {
     aligned_free(tree);
   }
+}
+
+BTreeImpl::BTreeImpl(BTreeImpl&& other)
+  : BTreeImpl() {
+  *this = kj::mv(other);
+}
+
+BTreeImpl& BTreeImpl::operator=(BTreeImpl&& other) {
+  KJ_DASSERT(&other != this);
+
+  if (tree != &EMPTY_NODE) {
+    aligned_free(tree);
+  }
+  tree = other.tree;
+  treeCapacity = other.treeCapacity;
+  height = other.height;
+  freelistHead = other.freelistHead;
+  freelistSize = other.freelistSize;
+  beginLeaf = other.beginLeaf;
+  endLeaf = other.endLeaf;
+
+  other.tree = const_cast<NodeUnion*>(&EMPTY_NODE);
+  other.treeCapacity = 1;
+  other.height = 0;
+  other.freelistHead = 1;
+  other.freelistSize = 0;
+  other.beginLeaf = 0;
+  other.endLeaf = 0;
+
+  return *this;
 }
 
 const BTreeImpl::NodeUnion BTreeImpl::EMPTY_NODE = {{{0, {0}}}};

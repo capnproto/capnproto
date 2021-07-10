@@ -810,6 +810,35 @@ KJ_TEST("simple tree table") {
     KJ_EXPECT(*iter++ == "waldo");
     KJ_EXPECT(iter == table.end());
   }
+
+  // Verify that move constructor/assignment work.
+  Table<StringPtr, TreeIndex<StringCompare>> other(kj::mv(table));
+  KJ_EXPECT(other.size() == 5);
+  KJ_EXPECT(table.size() == 0);
+  KJ_EXPECT(table.begin() == table.end());
+  {
+    auto iter = other.begin();
+    KJ_EXPECT(*iter++ == "garply");
+    KJ_EXPECT(*iter++ == "grault");
+    KJ_EXPECT(*iter++ == "qux");
+    KJ_EXPECT(*iter++ == "corge");
+    KJ_EXPECT(*iter++ == "waldo");
+    KJ_EXPECT(iter == other.end());
+  }
+
+  table = kj::mv(other);
+  KJ_EXPECT(other.size() == 0);
+  KJ_EXPECT(table.size() == 5);
+  {
+    auto iter = table.begin();
+    KJ_EXPECT(*iter++ == "garply");
+    KJ_EXPECT(*iter++ == "grault");
+    KJ_EXPECT(*iter++ == "qux");
+    KJ_EXPECT(*iter++ == "corge");
+    KJ_EXPECT(*iter++ == "waldo");
+    KJ_EXPECT(iter == table.end());
+  }
+  KJ_EXPECT(other.begin() == other.end());
 }
 
 class UintCompare {

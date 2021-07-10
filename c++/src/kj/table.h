@@ -1076,6 +1076,10 @@ public:
   BTreeImpl();
   ~BTreeImpl() noexcept(false);
 
+  KJ_DISALLOW_COPY(BTreeImpl);
+  BTreeImpl(BTreeImpl&& other);
+  BTreeImpl& operator=(BTreeImpl&& other);
+
   void logInconsistency() const;
 
   void reserve(size_t size);
