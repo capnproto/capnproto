@@ -33,6 +33,7 @@
 #include "thread.h"
 #include <kj/compat/gtest.h>
 #include <stdlib.h>
+#include <atomic>
 
 #if _WIN32
 #include <windows.h>
@@ -54,8 +55,10 @@ namespace {
 
 #if _WIN32
 inline void delay() { Sleep(10); }
+inline void yield() { Sleep(0); }
 #else
 inline void delay() { usleep(10000); }
+inline void yield() { sched_yield(); }
 #endif
 
 TEST(Mutex, MutexGuarded) {
@@ -473,23 +476,19 @@ KJ_TEST("wait()s wake each other") {
 
 TEST(Mutex, Lazy) {
   Lazy<uint> lazy;
-  volatile bool initStarted = false;
+  std::atomic<bool> initStarted(false);
 
   Thread thread([&]() {
     EXPECT_EQ(123u, lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
-      initStarted = true;
+      initStarted.store(true, std::memory_order_relaxed);
       delay();
       return space.construct(123);
     }));
   });
 
   // Spin until the initializer has been entered in the thread.
-  while (!initStarted) {
-#if _WIN32
-    Sleep(0);
-#else
-    sched_yield();
-#endif
+  while (!initStarted.load(std::memory_order_relaxed)) {
+    yield();
   }
 
   EXPECT_EQ(123u, lazy.get([](SpaceFor<uint>& space) { return space.construct(456); }));

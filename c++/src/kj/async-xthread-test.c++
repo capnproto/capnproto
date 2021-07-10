@@ -29,6 +29,8 @@
 #include "mutex.h"
 #include <kj/test.h>
 
+#include <atomic>
+
 #if _WIN32
 #include <windows.h>
 #include "windows-sanity.h"
@@ -298,13 +300,16 @@ KJ_TEST("cancel cross-thread event before it runs") {
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
-    volatile bool called = false;
+    std::atomic<bool> called(false);
     {
-      Promise<uint> promise = exec->executeAsync([&]() { called = true; return 123u; });
+      Promise<uint> promise = exec->executeAsync([&]() {
+        called.store(true, std::memory_order_relaxed);
+        return 123u;
+      });
       delay();
       KJ_EXPECT(!promise.poll(waitScope));
     }
-    KJ_EXPECT(!called);
+    KJ_EXPECT(!called.load(std::memory_order_relaxed));
 
     *executor.lockExclusive() = nullptr;
   })();
@@ -342,12 +347,12 @@ KJ_TEST("cancel cross-thread event while it runs") {
     }
 
     {
-      volatile bool called = false;
+      std::atomic<bool> called(false);
       Promise<uint> promise = exec->executeAsync([&]() -> kj::Promise<uint> {
-        called = true;
+        called.store(true, std::memory_order_relaxed);
         return kj::NEVER_DONE;
       });
-      while (!called) {
+      while (!called.load(std::memory_order_relaxed)) {
         delay();
       }
       KJ_EXPECT(!promise.poll(waitScope));
