@@ -1389,7 +1389,7 @@ public:
 
   template <typename F,
       typename Result = decltype(instance<bool>() ? instance<const T&>() : instance<F>()())>
-  const Result orDefault(F&& lazyDefaultValue) const & {
+  Result orDefault(F&& lazyDefaultValue) const & {
     if (ptr == nullptr) {
       return lazyDefaultValue();
     } else {
@@ -1409,7 +1409,7 @@ public:
 
   template <typename F,
       typename Result = decltype(instance<bool>() ? instance<const T&&>() : instance<F>()())>
-  const Result orDefault(F&& lazyDefaultValue) const && {
+  Result orDefault(F&& lazyDefaultValue) const && {
     if (ptr == nullptr) {
       return lazyDefaultValue();
     } else {
