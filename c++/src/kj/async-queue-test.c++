@@ -33,6 +33,10 @@ struct QueueTest {
   ProducerConsumerQueue<size_t> queue;
 
   QueueTest() = default;
+  QueueTest(QueueTest&&) = delete;
+  QueueTest(const QueueTest&) = delete;
+  QueueTest& operator=(QueueTest&&) = delete;
+  QueueTest& operator=(const QueueTest&) = delete;
 
   struct Producer {
     QueueTest& test;
@@ -69,7 +73,7 @@ struct QueueTest {
 };
 
 KJ_TEST("ProducerConsumerQueue with various amounts of producers and consumers") {
-  auto test = QueueTest();
+  QueueTest test;
 
   size_t constexpr kItemCount = 1000;
   for (auto producerCount: { 1, 5, 10 }) {
@@ -121,7 +125,7 @@ KJ_TEST("ProducerConsumerQueue with various amounts of producers and consumers")
 }
 
 KJ_TEST("ProducerConsumerQueue with rejectAll()") {
-  auto test = QueueTest();
+  QueueTest test;
 
   for (auto consumerCount: { 1, 5, 10 }) {
     KJ_LOG(INFO, "Testing a new set of consumers with rejection", consumerCount);
