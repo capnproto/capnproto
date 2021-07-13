@@ -176,6 +176,17 @@ typedef unsigned char byte;
   classname& operator=(const classname&) = delete
 // Deletes the implicit copy constructor and assignment operator.
 
+#define KJ_DISALLOW_COPY_AND_MOVE(classname) \
+  classname(const classname&) = delete; \
+  classname& operator=(const classname&) = delete; \
+  classname(classname&&) = delete; \
+  classname& operator=(classname&&) = delete
+// Explicitly deletes the copy and move constructors and assignment operators.
+
+#define KJ_RESOURCE_TYPE_CONSTRUCTORS(classname) KJ_DISALLOW_COPY_AND_MOVE(classname)
+// Explicitly define constructors suitable for a resource type. See
+// https://github.com/capnproto/capnproto/blob/master/style-guide.md#value-types-vs-resource-types.
+
 #ifdef __GNUC__
 #define KJ_LIKELY(condition) __builtin_expect(condition, true)
 #define KJ_UNLIKELY(condition) __builtin_expect(condition, false)

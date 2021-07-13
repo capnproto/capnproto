@@ -45,9 +45,18 @@ struct ImplicitToInt {
   }
 };
 
+struct Uncopiable {
+  Uncopiable() = default;
+
+  KJ_DISALLOW_COPY(Uncopiable);
+
+  Uncopiable(Uncopiable&&) = default;
+  Uncopiable& operator=(Uncopiable&&) = default;
+};
+
 struct Immovable {
   Immovable() = default;
-  KJ_DISALLOW_COPY(Immovable);
+  KJ_DISALLOW_COPY_AND_MOVE(Immovable);
 };
 
 struct CopyOrMove {
@@ -315,6 +324,21 @@ TEST(Common, Maybe) {
     } else {
       ADD_FAILURE();
     }
+  }
+
+  {
+    // Test usage of uncopiable types.
+    Maybe<Uncopiable> m;
+    KJ_EXPECT(m == nullptr);
+    m.emplace();
+    KJ_EXPECT(m != nullptr);
+
+    auto m2 = kj::mv(m);
+    KJ_EXPECT(m == nullptr);
+    KJ_EXPECT(m2 != nullptr);
+
+    m2 = nullptr;
+    KJ_EXPECT(m2 == nullptr);
   }
 
   {
