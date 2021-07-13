@@ -914,6 +914,11 @@ public:
     receiver = tlsServer.wrapPort(kj::mv(baseReceiverPtr));
   }
 
+  TlsReceiverTest(TlsReceiverTest&&) = delete;
+  TlsReceiverTest(const TlsReceiverTest&) = delete;
+  TlsReceiverTest& operator=(TlsReceiverTest&&) = delete;
+  TlsReceiverTest& operator=(const TlsReceiverTest&) = delete;
+
   Own<ConnectionReceiver> receiver;
   MockConnectionReceiver* baseReceiver;
 };
