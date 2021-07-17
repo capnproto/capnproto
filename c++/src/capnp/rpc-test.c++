@@ -210,8 +210,9 @@ public:
   uint getSentCount() { return sent; }
   uint getReceivedCount() { return received; }
 
-  void onSend(kj::Function<void(MessageBuilder& message)> callback) {
-    // Invokes the given callback every time a message is sent.
+  void onSend(kj::Function<bool(MessageBuilder& message)> callback) {
+    // Invokes the given callback every time a message is sent. Callback can return false to cause
+    // send() to do nothing.
     sendCallback = kj::mv(callback);
   }
 
@@ -271,7 +272,7 @@ public:
       }
 
       void send() override {
-        connection.network.sendCallback(message);
+        if (!connection.network.sendCallback(message)) return;
 
         if (connection.networkException != nullptr) {
           return;
@@ -419,7 +420,7 @@ private:
   std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<Connection>>>> fulfillerQueue;
   std::queue<kj::Own<Connection>> connectionQueue;
 
-  kj::Function<void(MessageBuilder& message)> sendCallback = [](MessageBuilder&) {};
+  kj::Function<bool(MessageBuilder& message)> sendCallback = [](MessageBuilder&) { return true; };
 };
 
 TestNetwork::~TestNetwork() noexcept(false) {}
@@ -1352,9 +1353,11 @@ KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
         ++interceptCount;
         if (shouldThrowFromSend) {
           kj::throwRecoverableException(KJ_EXCEPTION(FAILED, "intercepted"));
+          return false;  // only matters when -fno-exceptions
         }
       }
     }
+    return true;
   });
 
   auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
@@ -1465,6 +1468,7 @@ KJ_TEST("export the same promise twice") {
         ++interceptCount;
       }
     }
+    return true;
   });
 
   auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
