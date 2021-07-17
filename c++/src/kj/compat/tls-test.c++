@@ -946,11 +946,21 @@ KJ_TEST("TLS receiver experiences pre-TLS error") {
   KJ_LOG(INFO, "Disappointing our server");
   test.baseReceiver->badConnect();
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Pipes are leaky", promise.wait(test.io.waitScope));
+  // Can't use KJ_EXPECT_THROW_RECOVERABLE_MESSAGE because wait() that returns a value can't throw
+  // recoverable exceptions. Can't use KJ_EXPECT_THROW_MESSAGE because non-recoverable exceptions
+  // will fork() in -fno-exception which screws up our state.
+  promise.then([](auto) {
+    KJ_FAIL_EXPECT("expected exception");
+  }, [](kj::Exception&& e) {
+    KJ_EXPECT(e.getDescription() == "Pipes are leaky");
+  }).wait(test.io.waitScope);
 
   KJ_LOG(INFO, "Trying to load a promise after failure");
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
-      "Pipes are leaky", test.receiver->accept().wait(test.io.waitScope));
+  test.receiver->accept().then([](auto) {
+    KJ_FAIL_EXPECT("expected exception");
+  }, [](kj::Exception&& e) {
+    KJ_EXPECT(e.getDescription() == "Pipes are leaky");
+  }).wait(test.io.waitScope);
 }
 
 KJ_TEST("TLS receiver accepts multiple clients") {
