@@ -2039,11 +2039,23 @@ KJ_TEST("WebSocket pump byte counting") {
   pumpTask.wait(waitScope);
 
   // The eventual receiver gets a disconnect execption.
-  KJ_EXPECT_THROW(DISCONNECTED, receiveTask.wait(waitScope));
+  // (Note: We don't use KJ_EXPECT_THROW here because under -fno-exceptions it forks and we lose
+  // state.)
+  receiveTask.then([](auto) {
+    KJ_FAIL_EXPECT("expected exception");
+  }, [](kj::Exception&& e) {
+    KJ_EXPECT(e.getType() == kj::Exception::Type::DISCONNECTED);
+  }).wait(waitScope);
 
   KJ_EXPECT(server1->receivedByteCount() == 3);
+#if KJ_NO_RTTI
+  // Optimized socket pump will be disabled, so only whole messages are counted by client2/server2.
+  KJ_EXPECT(client2->sentByteCount() == 0);
+  KJ_EXPECT(server2->receivedByteCount() == 0);
+#else
   KJ_EXPECT(client2->sentByteCount() == 3);
   KJ_EXPECT(server2->receivedByteCount() == 3);
+#endif
 }
 
 KJ_TEST("WebSocket pump disconnect on send") {
@@ -3025,7 +3037,8 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
     FakeEntropySource entropySource;
     HttpClientSettings clientSettings;
     clientSettings.entropySource = entropySource;
-    auto backClient = newHttpClient(table, *backPipe.ends[0], clientSettings);
+    auto backClientStream = kj::mv(backPipe.ends[0]);
+    auto backClient = newHttpClient(table, *backClientStream, clientSettings);
     auto frontService = newHttpService(*backClient);
     HttpServer frontServer(timer, table, *frontService);
     auto listenTask = frontServer.listenHttp(kj::mv(frontPipe.ends[1]));
