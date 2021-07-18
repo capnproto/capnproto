@@ -90,11 +90,14 @@ public:
   // some data.
 
 private:
-  volatile uint64_t limit;
+  alignas(8) volatile uint64_t limit;
   // Current limit, decremented each time catRead() is called. We modify this variable using atomics
   // with "relaxed" thread safety to make TSAN happy (on ARM & x86 this is no different from a
   // regular read/write of the variable). See the class comment for why this is OK (previously we
   // used a regular volatile variable - this is just to make ASAN happy).
+  //
+  // alignas(8) is the default on 64-bit systems, but needed on 32-bit to avoid an expensive
+  // unaligned atomic operation.
 
   KJ_DISALLOW_COPY(ReadLimiter);
 
