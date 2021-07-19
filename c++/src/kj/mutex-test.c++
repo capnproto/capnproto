@@ -691,13 +691,11 @@ KJ_TEST("tracking blocking on mutex acquisition") {
   // We can't use KJ_SYSCALL() because it is not async-signal-safe.
   KJ_REQUIRE(-1 != timer_settime(timer, 0, &spec, nullptr));
 
-  static constexpr int blockedLine = __LINE__ + 1;
-  KJ_REQUIRE(foo.lockSharedWithTimeout(100 * MILLISECONDS) == nullptr);
+  kj::SourceLocation expectedBlockLocation;
+  KJ_REQUIRE(foo.lockSharedWithTimeout(100 * MILLISECONDS, expectedBlockLocation) == nullptr);
 
   KJ_EXPECT(blockingInfo.blockedOnMutexAcquisition);
-  KJ_EXPECT(kj::StringPtr{blockingInfo.blockLocation.fileName}.endsWith("/mutex-test.c++"),
-      blockingInfo.blockLocation.fileName);
-  EXPECT_EQ(blockingInfo.blockLocation.lineNumber, blockedLine);
+  KJ_EXPECT(blockingInfo.blockLocation == expectedBlockLocation);
 }
 
 KJ_TEST("tracking blocked on CondVar::wait") {
@@ -749,25 +747,14 @@ KJ_TEST("tracking blocked on CondVar::wait") {
   // We can't use KJ_SYSCALL() because it is not async-signal-safe.
   KJ_REQUIRE(-1 != timer_settime(timer, 0, &spec, nullptr));
 
-  static constexpr int blockedLine = __LINE__ + 1;
+  SourceLocation waitLocation;
+
   lock.wait([](const int& value) {
     return false;
-  }, 100 * MILLISECONDS);
+  }, 100 * MILLISECONDS, waitLocation);
 
   KJ_EXPECT(blockingInfo.blockedOnCondVar);
-  KJ_EXPECT(kj::StringPtr{blockingInfo.blockLocation.fileName}.endsWith("/mutex-test.c++"),
-      blockingInfo.blockLocation.fileName);
-
-#if __clang__
-  static constexpr int lineCorrection = 0;
-#else
-  static constexpr int lineCorrection = 2;
-  // GCC apparently captures the caller's line number as the line number of the argument location
-  // rather than the start of the expression like clang does, so in this case we have to adjust an
-  // extra 2 lines to account for the lambda body (since the location is captured as the last arg).
-#endif
-
-  EXPECT_EQ(blockingInfo.blockLocation.lineNumber, blockedLine + lineCorrection);
+  KJ_EXPECT(blockingInfo.blockLocation == waitLocation);
 }
 
 KJ_TEST("tracking blocked on Once::init") {
@@ -827,57 +814,42 @@ KJ_TEST("tracking blocked on Once::init") {
   // We can't use KJ_SYSCALL() because it is not async-signal-safe.
   KJ_REQUIRE(-1 != timer_settime(timer, 0, &spec, nullptr));
 
+  kj::SourceLocation onceInitializingBlocked;
+
   onceInitializing.lockExclusive().wait([](const bool& initializing) {
     return initializing;
   });
 
-  static constexpr int blockedLine = __LINE__ + 1;
   once.get([](SpaceFor<int>& x) {
       return x.construct(5);
-  });
+  }, onceInitializingBlocked);
 
   KJ_EXPECT(blockingInfo.blockedOnOnceInit);
-  KJ_EXPECT(kj::StringPtr{blockingInfo.blockLocation.fileName}.endsWith("/mutex-test.c++"),
-      blockingInfo.blockLocation.fileName);
-
-#if __clang__
-  static constexpr int lineCorrection = 0;
-#else
-  static constexpr int lineCorrection = 2;
-  // GCC apparently captures the caller's line number as the line number of the argument location
-  // rather than the start of the expression like clang does, so in this case we have to adjust an
-  // extra 2 lines to account for the lambda body (since the location is captured as the last arg).
-#endif
-
-
-  EXPECT_EQ(blockingInfo.blockLocation.lineNumber, blockedLine + lineCorrection);
+  KJ_EXPECT(blockingInfo.blockLocation == onceInitializingBlocked);
 }
 
 #if KJ_SAVE_ACQUIRED_LOCK_INFO
 KJ_TEST("get location of exclusive mutex") {
   _::Mutex mutex;
-  static constexpr auto lockLine = __LINE__ + 1;
-  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, SourceLocation{});
+  kj::SourceLocation lockAcquisition;
+  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, lockAcquisition);
   KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
 
   const auto& lockedInfo = mutex.lockedInfo();
   const auto& lockInfo = lockedInfo.get<_::HoldingExclusively>();
   EXPECT_EQ(gettid(), lockInfo.threadHoldingLock());
-  KJ_EXPECT(kj::StringPtr{lockInfo.lockAcquiredAt().fileName}.endsWith("/mutex-test.c++"),
-      lockInfo.lockAcquiredAt().fileName);
-  EXPECT_EQ(lockInfo.lockAcquiredAt().lineNumber, lockLine);
+  KJ_EXPECT(lockInfo.lockAcquiredAt() == lockAcquisition);
 }
 
 KJ_TEST("get location of shared mutex") {
   _::Mutex mutex;
-  static constexpr auto lockLine = __LINE__ + 1;
-  mutex.lock(_::Mutex::SHARED, nullptr, SourceLocation{});
+  kj::SourceLocation lockLocation;
+  mutex.lock(_::Mutex::SHARED, nullptr, lockLocation);
   KJ_DEFER(mutex.unlock(_::Mutex::SHARED));
 
   const auto& lockedInfo = mutex.lockedInfo();
   const auto& lockInfo = lockedInfo.get<_::HoldingShared>();
-  KJ_EXPECT(kj::StringPtr{lockInfo.lockAcquiredAt().fileName}.endsWith("/mutex-test.c++"));
-  EXPECT_EQ(lockInfo.lockAcquiredAt().lineNumber, lockLine);
+  KJ_EXPECT(lockInfo.lockAcquiredAt() == lockLocation);
 }
 #endif
 

@@ -63,12 +63,21 @@ public:
   {}
 #endif
 
+#if KJ_COMPILER_SUPPORTS_SOURCE_LOCATION
+  // This can only be exposed if we actually generate valid SourceLocation objects as otherwise all
+  // SourceLocation objects would confusingly (and likely problematically) be equated equal.
+  constexpr bool operator==(const SourceLocation& o) const {
+    // Pointer equality is fine here based on how SourceLocation operates & how compilers will
+    // intern all duplicate string constants.
+    return fileName == o.fileName && function == o.function && lineNumber == o.lineNumber &&
+        columnNumber == o.columnNumber;
+  }
+#endif
+
   const char* fileName;
   const char* function;
   uint lineNumber;
   uint columnNumber;
-
-private:
 };
 
 kj::String KJ_STRINGIFY(const SourceLocation& l);
