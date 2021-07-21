@@ -520,9 +520,10 @@ public:
       : location(location) {}
 
   template <typename U, typename... Params>
-  ExternalMutexGuarded(Locked<U> lock, Params&&... params)
+  ExternalMutexGuarded(Locked<U> lock, Params&&... params, LockSourceLocationArg location = {})
       : mutex(lock.mutex),
-        value(kj::fwd<Params>(params)...) {}
+        value(kj::fwd<Params>(params)...),
+        location(location) {}
   // Construct the value in-place. This constructor requires passing ownership of the lock into
   // the constructor. Normally this should be a lock that you take on the line calling the
   // constructor, like:
@@ -543,12 +544,13 @@ public:
   }
 
   ExternalMutexGuarded(ExternalMutexGuarded&& other)
-      : mutex(other.mutex), value(kj::mv(other.value)) {
+      : mutex(other.mutex), value(kj::mv(other.value)), location(other.location) {
     other.mutex = nullptr;
   }
   ExternalMutexGuarded& operator=(ExternalMutexGuarded&& other) {
     mutex = other.mutex;
     value = kj::mv(other.value);
+    location = other.location;
     other.mutex = nullptr;
     return *this;
   }
