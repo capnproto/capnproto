@@ -258,6 +258,9 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
         }
       }
       acquiredExclusive(TRACK_ACQUIRED_TID(), location);
+#if KJ_CONTENTION_WARNING_THRESHOLD
+      printContendedReader = false;
+#endif
       break;
     case SHARED: {
       uint state = __atomic_add_fetch(&futex, 1, __ATOMIC_ACQUIRE);
@@ -294,6 +297,15 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
         }
         state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
       }
+
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+      if (__atomic_load_n(&printContendedReader, __ATOMIC_RELAXED)) {
+        // Double-checked lock avoids the CPU needing to acquire the lock in most cases.
+        if (__atomic_exchange_n(&printContendedReader, false, __ATOMIC_RELAXED)) {
+          KJ_LOG(WARNING, "Acquired contended lock", location, kj::getStackTrace());
+        }
+      }
+#endif
 
       // We just want to record the lock being acquired somewhere but the specific location doesn't
       // matter. This does mean that race conditions could occur where a thread might read this
@@ -364,6 +376,18 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
         }
       }
 
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+      uint readerCount;
+      {
+        uint oldState = __atomic_load_n(&futex, __ATOMIC_RELAXED);
+        readerCount = oldState & SHARED_COUNT_MASK;
+        if (readerCount >= KJ_CONTENTION_WARNING_THRESHOLD) {
+          // Atomic not needed because we're still holding the exclusive lock.
+          printContendedReader = true;
+        }
+      }
+#endif
+
       // Didn't wake any waiters, so wake normally.
       uint oldState = __atomic_fetch_and(
           &futex, ~(EXCLUSIVE_HELD | EXCLUSIVE_REQUESTED), __ATOMIC_RELEASE);
@@ -376,10 +400,9 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
         syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
 
 #ifdef KJ_CONTENTION_WARNING_THRESHOLD
-        uint readerCount = oldState & SHARED_COUNT_MASK;
         if (readerCount >= KJ_CONTENTION_WARNING_THRESHOLD) {
           KJ_LOG(WARNING, "excessively many readers were waiting on this lock", readerCount,
-              kj::getStackTrace(), acquiredLocation);
+              acquiredLocation, kj::getStackTrace());
         }
 #endif
       }
