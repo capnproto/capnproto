@@ -118,11 +118,11 @@ public:
 
   inline char operator[](size_t index) const { return content[index]; }
 
-  inline const char* begin() const { return content.begin(); }
-  inline const char* end() const { return content.end() - 1; }
+  inline constexpr const char* begin() const { return content.begin(); }
+  inline constexpr const char* end() const { return content.end() - 1; }
 
-  inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
-  inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
+  inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
+  inline constexpr bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
 
   inline bool operator==(const StringPtr& other) const;
   inline bool operator!=(const StringPtr& other) const { return !(*this == other); }
