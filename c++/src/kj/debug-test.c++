@@ -75,6 +75,7 @@ public:
       // This is the child!
       close(pipeFds[0]);
       outputPipe = pipeFds[1];
+      text.clear();
       return true;
     } else {
       close(pipeFds[1]);

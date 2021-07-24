@@ -129,6 +129,7 @@ set(kj-async_headers
   async-unix.h
   async-win32.h
   async-io.h
+  async-queue.h
   timer.h
 )
 if(NOT CAPNP_LITE)
@@ -249,6 +250,7 @@ if(BUILD_TESTING)
       async-win32-test.c++
       async-win32-xthread-test.c++
       async-io-test.c++
+      async-queue-test.c++
       refcount-test.c++
       string-tree-test.c++
       encoding-test.c++

@@ -174,6 +174,7 @@ includekj_HEADERS =                                            \
   src/kj/async-unix.h                                          \
   src/kj/async-win32.h                                         \
   src/kj/async-io.h                                            \
+  src/kj/async-queue.h                                         \
   src/kj/main.h                                                \
   src/kj/test.h                                                \
   src/kj/windows-sanity.h
@@ -503,6 +504,7 @@ heavy_tests =                                                  \
   src/kj/async-win32-test.c++                                  \
   src/kj/async-win32-xthread-test.c++                          \
   src/kj/async-io-test.c++                                     \
+  src/kj/async-queue-test.c++                                  \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/kj/std/iostream-test.c++                                 \
@@ -524,6 +526,7 @@ heavy_tests =                                                  \
   src/capnp/rpc-twoparty-test.c++                              \
   src/capnp/ez-rpc-test.c++                                    \
   src/capnp/compat/json-test.c++                               \
+  src/capnp/compat/websocket-rpc-test.c++                      \
   src/capnp/compiler/lexer-test.c++                            \
   src/capnp/compiler/type-id-test.c++
 capnp_test_LDADD =                                             \
