@@ -161,6 +161,13 @@ public:
   // are waiting for a wait() condition. Assuming correct implementation, all those threads
   // should immediately go back to sleep.
 
+#if KJ_USE_FUTEX
+  uint numReadersWaitingForTest() const;
+  // The number of reader locks that are currently blocked on this lock (must be called while
+  // holding the writer lock). This is really only a utility method for mutex-test.c++ so it can
+  // validate certain invariants.
+#endif
+
 #if KJ_SAVE_ACQUIRED_LOCK_INFO
   using AcquiredMetadata = kj::OneOf<HoldingExclusively, HoldingShared>;
   KJ_DISABLE_TSAN AcquiredMetadata lockedInfo() const;

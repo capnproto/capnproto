@@ -549,6 +549,11 @@ void Mutex::induceSpuriousWakeupForTest() {
   }
 }
 
+uint Mutex::numReadersWaitingForTest() const {
+  assertLockedByCaller(EXCLUSIVE);
+  return futex & SHARED_COUNT_MASK;
+}
+
 void Once::runOnce(Initializer& init, LockSourceLocationArg location) {
 startOver:
   uint state = UNINITIALIZED;
