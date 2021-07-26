@@ -19,7 +19,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "test.h"
+
+#include <string.h>
 #ifndef _WIN32
 #include <unistd.h>
 #include <sys/types.h>
@@ -28,17 +34,35 @@
 #include <process.h>
 #endif
 
+#include <functional>
+
 namespace kj {
 namespace _ {  // private
 
 bool hasSubstring(StringPtr haystack, StringPtr needle) {
-  // TODO(perf): This is not the best algorithm for substring matching.
   if (needle.size() <= haystack.size()) {
+    // Boyer Moore Horspool wins https://quick-bench.com/q/RiKdKduhdLb6x_DfS1fHaksqwdQ
+    // https://quick-bench.com/q/KV8irwXrkvsNMbNpP8ENR_tBEPY but libc++ only has default_searcher
+    // which performs *drastically worse* than the naiive algorithm (seriously - why even bother?).
+    // Hell, doing a query for an embedded null & dispatching to strstr is still cheaper & only
+    // marginally slower than the purely naiive implementation.
+
+#if !defined(_WIN32)
+    return memmem(haystack.begin(), haystack.size(), needle.begin(), needle.size()) != nullptr;
+#elif defined(__cpp_lib_boyer_moore_searcher)
+    std::boyer_moore_horspool_searcher searcher{needle.begin(), needle.size()};
+    return std::search(haystack.begin(), haystack.end(), searcher) != haystack.end();
+#else
+    // TODO(perf): This is not the best algorithm for substring matching. strstr can't be used
+    //   because this is supposed to be safe to call on strings with embedded nulls.
+    // Amusingly this naiive algorithm some times outperforms std::default_searcher, even if we need
+    // to double-check first if the needle has an embedded null (indicating std::search ).
     for (size_t i = 0; i <= haystack.size() - needle.size(); i++) {
       if (haystack.slice(i).startsWith(needle)) {
         return true;
       }
     }
+#endif
   }
   return false;
 }
