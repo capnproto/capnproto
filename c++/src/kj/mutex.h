@@ -139,7 +139,7 @@ public:
   bool lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLocationArg location);
   void unlock(Exclusivity exclusivity, Waiter* waiterToSkip = nullptr);
 
-  void assertLockedByCaller(Exclusivity exclusivity);
+  void assertLockedByCaller(Exclusivity exclusivity) const;
   // In debug mode, assert that the mutex is locked by the calling thread, or if that is
   // non-trivial, assert that the mutex is locked (which should be good enough to catch problems
   // in unit tests).  In non-debug builds, do nothing.
