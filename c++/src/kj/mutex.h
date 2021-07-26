@@ -179,6 +179,10 @@ private:
   //   waiting for a read lock, otherwise it is the count of threads that currently hold a read
   //   lock.
 
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+  bool printContendedReader = false;
+#endif
+
   static constexpr uint EXCLUSIVE_HELD = 1u << 31;
   static constexpr uint EXCLUSIVE_REQUESTED = 1u << 30;
   static constexpr uint SHARED_COUNT_MASK = EXCLUSIVE_REQUESTED - 1;
