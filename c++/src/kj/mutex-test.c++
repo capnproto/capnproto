@@ -42,6 +42,10 @@
 #include <unistd.h>
 #endif
 
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+#include <vector>
+#endif
+
 #if KJ_TRACK_LOCK_BLOCKING
 #include <syscall.h>
 #include <signal.h>
@@ -855,5 +859,69 @@ KJ_TEST("get location of shared mutex") {
 
 #endif
 
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+KJ_TEST("make sure contended mutex warns") {
+  class Expectation final: public ExceptionCallback {
+  public:
+    Expectation(LogSeverity severity, StringPtr substring) :
+        severity(severity), substring(substring), seen(false) {}
+
+    void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                    String&& text) override {
+      if (!seen && severity == this->severity) {
+        if (_::hasSubstring(text, substring)) {
+          // Match. Ignore it.
+          seen = true;
+          return;
+        }
+      }
+
+      // Pass up the chain.
+      ExceptionCallback::logMessage(severity, file, line, contextDepth, kj::mv(text));
+    }
+
+    bool hasSeen() const {
+      return seen;
+    }
+
+  private:
+    LogSeverity severity;
+    StringPtr substring;
+    bool seen;
+    UnwindDetector unwindDetector;
+  };
+
+  _::Mutex mutex;
+  LockSourceLocation exclusiveLockLocation;
+  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, exclusiveLockLocation);
+
+  bool seenContendedLockLog = false;
+
+  auto threads = kj::heapArrayBuilder<kj::Own<kj::Thread>>(KJ_CONTENTION_WARNING_THRESHOLD);
+  for (auto i: kj::zeroTo(KJ_CONTENTION_WARNING_THRESHOLD)) {
+    (void)i;
+    threads.add(kj::heap<kj::Thread>([&mutex, &seenContendedLockLog]() {
+      Expectation expectation(LogSeverity::WARNING, "Acquired contended lock");
+      LockSourceLocation sharedLockLocation;
+      mutex.lock(_::Mutex::SHARED, nullptr, sharedLockLocation);
+      seenContendedLockLog = seenContendedLockLog || expectation.hasSeen();
+      mutex.unlock(_::Mutex::SHARED);
+    }));
+  }
+
+  while (mutex.numReadersWaitingForTest() < KJ_CONTENTION_WARNING_THRESHOLD) {
+    usleep(5 * kj::MILLISECONDS / kj::MICROSECONDS);
+  }
+
+  {
+    KJ_EXPECT_LOG(WARNING, "excessively many readers were waiting on this lock");
+    mutex.unlock(_::Mutex::EXCLUSIVE);
+  }
+
+  threads.clear();
+
+  KJ_ASSERT(seenContendedLockLog);
+}
+#endif
 }  // namespace
 }  // namespace kj
