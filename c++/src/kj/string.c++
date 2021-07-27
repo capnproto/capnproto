@@ -187,7 +187,11 @@ static CappedArray<char, sizeof(T) * 3 + 2> stringifyImpl(T i) {
   // We don't use sprintf() because it's not async-signal-safe (for strPreallocated()).
   CappedArray<char, sizeof(T) * 3 + 2> result;
   bool negative = i < 0;
-  Unsigned u = negative ? -i : i;
+  // Note that if `i` is the most-negative value, negating it produces the same bit value. But
+  // since it's a signed integer, this is considered an overflow. We therefore must make it
+  // unsigned first, then negate it, to avoid ubsan complaining.
+  Unsigned u = i;
+  if (negative) u = -u;
   uint8_t reverse[sizeof(T) * 3 + 1];
   uint8_t* p = reverse;
   if (u == 0) {

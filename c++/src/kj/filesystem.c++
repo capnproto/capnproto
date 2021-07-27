@@ -912,7 +912,9 @@ private:
             "InMemoryFile cannot resize the file backing store while memory mappings exist.");
 
         auto newBytes = heapArray<byte>(kj::max(capacity, bytes.size() * 2));
-        memcpy(newBytes.begin(), bytes.begin(), size);
+        if (size > 0) {  // placate ubsan; bytes.begin() might be null
+          memcpy(newBytes.begin(), bytes.begin(), size);
+        }
         memset(newBytes.begin() + size, 0, newBytes.size() - size);
         bytes = kj::mv(newBytes);
       }
