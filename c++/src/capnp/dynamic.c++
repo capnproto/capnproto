@@ -1733,15 +1733,26 @@ int64_t unsignedToSigned<int64_t>(unsigned long long value) {
 
 template <typename T, typename U>
 T checkRoundTrip(U value) {
-#if __aarch64__
-  // Work around an apparently broken compiler optimization on Clang / arm64. It appears that
-  // for T = int8_t, U = double, and value = 128, the compiler incorrectly believes that the
-  // round-trip does not change the value, where in fact it should change to -128. Similar problems
-  // exist for various other types and inputs -- json-test seems to exercise several problem cases.
-  // The problem only exists when compiling with optimization. In any case, declaring the variable
-  // `volatile` kills the optimization.
-  volatile
-#endif
+  T result = value;
+  KJ_REQUIRE(U(result) == value, "Value out-of-range for requested type.", value) {
+    // Use it anyway.
+    break;
+  }
+  return result;
+}
+
+template <typename T, typename U>
+T checkRoundTripFromFloat(U value) {
+  // When `U` is `float` or `double`, we have to use a different approach, because casting an
+  // out-of-range float to an integer is, surprisingly, UB.
+  constexpr T MIN = kj::minValue;
+  constexpr T MAX = kj::maxValue;
+  KJ_REQUIRE(value >= U(MIN), "Value out-of-range for requested type.", value) {
+    return MIN;
+  }
+  KJ_REQUIRE(value <= U(MAX), "Value out-of-range for requested type.", value) {
+    return MAX;
+  }
   T result = value;
   KJ_REQUIRE(U(result) == value, "Value out-of-range for requested type.", value) {
     // Use it anyway.
@@ -1782,14 +1793,14 @@ typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder& builder) { \
   } \
 }
 
-HANDLE_NUMERIC_TYPE(int8_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(int16_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(int32_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(int64_t, kj::implicitCast, unsignedToSigned, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(uint8_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(uint16_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(uint32_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(uint64_t, signedToUnsigned, kj::implicitCast, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(int8_t, checkRoundTrip, unsignedToSigned, checkRoundTripFromFloat)
+HANDLE_NUMERIC_TYPE(int16_t, checkRoundTrip, unsignedToSigned, checkRoundTripFromFloat)
+HANDLE_NUMERIC_TYPE(int32_t, checkRoundTrip, unsignedToSigned, checkRoundTripFromFloat)
+HANDLE_NUMERIC_TYPE(int64_t, kj::implicitCast, unsignedToSigned, checkRoundTripFromFloat)
+HANDLE_NUMERIC_TYPE(uint8_t, signedToUnsigned, checkRoundTrip, checkRoundTripFromFloat)
+HANDLE_NUMERIC_TYPE(uint16_t, signedToUnsigned, checkRoundTrip, checkRoundTripFromFloat)
+HANDLE_NUMERIC_TYPE(uint32_t, signedToUnsigned, checkRoundTrip, checkRoundTripFromFloat)
+HANDLE_NUMERIC_TYPE(uint64_t, signedToUnsigned, kj::implicitCast, checkRoundTripFromFloat)
 HANDLE_NUMERIC_TYPE(float, kj::implicitCast, kj::implicitCast, kj::implicitCast)
 HANDLE_NUMERIC_TYPE(double, kj::implicitCast, kj::implicitCast, kj::implicitCast)
 
