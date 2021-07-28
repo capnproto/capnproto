@@ -139,7 +139,7 @@ public:
   bool lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLocationArg location);
   void unlock(Exclusivity exclusivity, Waiter* waiterToSkip = nullptr);
 
-  void assertLockedByCaller(Exclusivity exclusivity);
+  void assertLockedByCaller(Exclusivity exclusivity) const;
   // In debug mode, assert that the mutex is locked by the calling thread, or if that is
   // non-trivial, assert that the mutex is locked (which should be good enough to catch problems
   // in unit tests).  In non-debug builds, do nothing.
@@ -160,6 +160,13 @@ public:
   // Utility method for mutex-test.c++ which causes a spurious thread wakeup on all threads that
   // are waiting for a wait() condition. Assuming correct implementation, all those threads
   // should immediately go back to sleep.
+
+#if KJ_USE_FUTEX
+  uint numReadersWaitingForTest() const;
+  // The number of reader locks that are currently blocked on this lock (must be called while
+  // holding the writer lock). This is really only a utility method for mutex-test.c++ so it can
+  // validate certain invariants.
+#endif
 
 #if KJ_SAVE_ACQUIRED_LOCK_INFO
   using AcquiredMetadata = kj::OneOf<HoldingExclusively, HoldingShared>;

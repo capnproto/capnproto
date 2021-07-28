@@ -428,7 +428,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   }
 }
 
-void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
+void Mutex::assertLockedByCaller(Exclusivity exclusivity) const {
   switch (exclusivity) {
     case EXCLUSIVE:
       KJ_ASSERT(futex & EXCLUSIVE_HELD,
@@ -547,6 +547,11 @@ void Mutex::induceSpuriousWakeupForTest() {
       break;
     }
   }
+}
+
+uint Mutex::numReadersWaitingForTest() const {
+  assertLockedByCaller(EXCLUSIVE);
+  return futex & SHARED_COUNT_MASK;
 }
 
 void Once::runOnce(Initializer& init, LockSourceLocationArg location) {
@@ -689,7 +694,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   }
 }
 
-void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
+void Mutex::assertLockedByCaller(Exclusivity exclusivity) const {
   // We could use TryAcquireSRWLock*() here like we do with the pthread version. However, as of
   // this writing, my version of Wine (1.6.2) doesn't implement these functions and will abort if
   // they are called. Since we were only going to use them as a hacky way to check if the lock is
@@ -902,7 +907,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   }
 }
 
-void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
+void Mutex::assertLockedByCaller(Exclusivity exclusivity) const {
   switch (exclusivity) {
     case EXCLUSIVE:
       // A read lock should fail if the mutex is already held for writing.

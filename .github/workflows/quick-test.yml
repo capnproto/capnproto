@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [clang-9]
-        features: ["-DKJ_TRACK_LOCK_BLOCKING=1 -DKJ_SAVE_ACQUIRED_LOCK_INFO=1"]
+        features: ["-DKJ_TRACK_LOCK_BLOCKING=1 -DKJ_SAVE_ACQUIRED_LOCK_INFO=1 -DKJ_CONTENTION_WARNING_THRESHOLD=200"]
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
