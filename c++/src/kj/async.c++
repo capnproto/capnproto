@@ -278,6 +278,16 @@ public:
     node->onReady(this);
   }
 
+  Own<Task> pop() {
+    KJ_IF_MAYBE(n, next) { n->get()->prev = prev; }
+    Own<Task> self = kj::mv(KJ_ASSERT_NONNULL(*prev));
+    KJ_ASSERT(self.get() == this);
+    *prev = kj::mv(next);
+    next = nullptr;
+    prev = nullptr;
+    return self;
+  }
+
   Maybe<Own<Task>> next;
   Maybe<Own<Task>>* prev = nullptr;
 
@@ -307,14 +317,7 @@ protected:
     }
 
     // Remove from the task list.
-    KJ_IF_MAYBE(n, next) {
-      n->get()->prev = prev;
-    }
-    Own<Event> self = kj::mv(KJ_ASSERT_NONNULL(*prev));
-    KJ_ASSERT(self.get() == this);
-    *prev = kj::mv(next);
-    next = nullptr;
-    prev = nullptr;
+    auto self = pop();
 
     KJ_IF_MAYBE(f, taskSet.emptyFulfiller) {
       if (taskSet.tasks == nullptr) {
