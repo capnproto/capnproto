@@ -259,17 +259,6 @@ void Canceler::AdapterImpl<void>::cancel(kj::Exception&& e) {
 
 TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler)
   : errorHandler(errorHandler) {}
-
-TaskSet::~TaskSet() noexcept(false) {
-  // You could argue it is dubious, but some applications would like for the destructor of a
-  // task to be able to schedule new tasks. So when we cancel our tasks... we might find new
-  // tasks added! We'll have to repeatedly cancel.
-  while (tasks != nullptr) {
-    auto toDestroy = kj::mv(tasks);
-    tasks = nullptr;
-  }
-}
-
 class TaskSet::Task final: public _::Event {
 public:
   Task(TaskSet& taskSet, Own<_::PromiseNode>&& nodeParam)
@@ -339,6 +328,16 @@ private:
   TaskSet& taskSet;
   Own<_::PromiseNode> node;
 };
+
+TaskSet::~TaskSet() noexcept(false) {
+  // You could argue it is dubious, but some applications would like for the destructor of a
+  // task to be able to schedule new tasks. So when we cancel our tasks... we might find new
+  // tasks added! We'll have to repeatedly cancel. Additionally, we need to make sure that we destroy
+  // the items in a loop to prevent any issues with stack overflow.
+  while (tasks != nullptr) {
+    auto removed = KJ_REQUIRE_NONNULL(tasks)->pop();
+  }
+}
 
 void TaskSet::add(Promise<void>&& promise) {
   auto task = heap<Task>(*this, _::PromiseNode::from(kj::mv(promise)));
