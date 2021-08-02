@@ -746,25 +746,14 @@ TEST(Async, TaskSet) {
   EXPECT_EQ(1u, errorHandler.exceptionCount);
 }
 
-TEST(Async, LargeTaskSetDestruction) {
-  static constexpr size_t stackSize = 200 * 1024;
-
-  static auto testBody = [] {
-
-    ErrorHandlerImpl errorHandler;
-    TaskSet tasks(errorHandler);
-
-    for (int i = 0; i < stackSize / sizeof(void*); i++) {
-      tasks.add(kj::NEVER_DONE);
-    }
-  };
-
+template <typename F>
+void runWithReducedStackSize(size_t stackSize, F&& testBody) {
 #if KJ_FIBERS_AVAILABLE
   EventLoop loop;
   WaitScope waitScope(loop);
 
   startFiber(stackSize,
-      [](WaitScope&) mutable {
+      [&](WaitScope&) mutable {
     testBody();
   }).wait(waitScope);
 
@@ -775,14 +764,27 @@ TEST(Async, LargeTaskSetDestruction) {
 
   KJ_REQUIRE(0 == pthread_attr_setstacksize(&attr, stackSize));
   pthread_t thread;
-  KJ_REQUIRE(0 == pthread_create(&thread, &attr, [](void*) -> void* {
+  KJ_REQUIRE(0 == pthread_create(&thread, &attr, [](void* body) -> void* {
     EventLoop loop;
     WaitScope waitScope(loop);
-    testBody();
+    (*reinterpret_cast<F*>(body))();
     return nullptr;
-  }, nullptr));
+  }, &testBody));
   KJ_REQUIRE(0 == pthread_join(thread, nullptr));
 #endif
+}
+
+TEST(Async, LargeTaskSetDestruction) {
+  static constexpr size_t stackSize = 200 * 1024;
+
+  runWithReducedStackSize(stackSize, [] {
+    ErrorHandlerImpl errorHandler;
+    TaskSet tasks(errorHandler);
+
+    for (int i = 0; i < stackSize / sizeof(void*); i++) {
+      tasks.add(kj::NEVER_DONE);
+    }
+  });
 }
 
 TEST(Async, TaskSet) {
