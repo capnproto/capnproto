@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "async.h"
+#include "array.h"
 #include "debug.h"
 #include <kj/compat/gtest.h>
 #include "mutex.h"
@@ -756,7 +757,6 @@ void runWithReducedStackSize(size_t stackSize, F&& testBody) {
       [&](WaitScope&) mutable {
     testBody();
   }).wait(waitScope);
-
 #else
   pthread_attr_t attr;
   KJ_REQUIRE(0 == pthread_attr_init(&attr));
@@ -783,6 +783,85 @@ TEST(Async, LargeTaskSetDestruction) {
 
     for (int i = 0; i < stackSize / sizeof(void*); i++) {
       tasks.add(kj::NEVER_DONE);
+    }
+  });
+}
+
+TEST(Async, LargeInclusiveJoinPromisesChain) {
+  static constexpr size_t stackSize = 200 * 1024;
+
+  runWithReducedStackSize(stackSize, [] {
+    auto promises = heapArrayBuilder<Promise<void>>(2);
+    promises.add(NEVER_DONE);
+    promises.add(NEVER_DONE);
+    auto promise = joinPromises(promises.finish());
+    for (int i = 0; i < stackSize / sizeof(void *); i++) {
+      auto promises = heapArrayBuilder<Promise<void>>(2);
+      promises.add(kj::mv(promise));
+      promises.add(NEVER_DONE);
+      promise = joinPromises(promises.finish());
+    }
+  });
+}
+
+TEST(Async, LargeExclusiveJoinPromiseChain) {
+  struct MyAdapter{
+    MyAdapter(PromiseFulfiller<void>& fulfiller) : fulfiller(fulfiller) {}
+    PromiseFulfiller<void>& fulfiller;
+  };
+
+  static constexpr size_t stackSize = 200 * 1024;
+
+  runWithReducedStackSize(stackSize, [] {
+    Promise<void> promise = NEVER_DONE;
+    for (int i = 0; i < stackSize / sizeof(void *); i++) {
+      promise = promise.exclusiveJoin(NEVER_DONE);
+    }
+  });
+}
+
+TEST(Async, LargeEagerlyEvaluateChain) {
+  static constexpr size_t stackSize = 200 * 1024;
+
+  runWithReducedStackSize(stackSize, [] {
+    Promise<void> promise = NEVER_DONE;
+    for (int i = 0; i < stackSize / sizeof(void *); i++) {
+      promise = promise.eagerlyEvaluate(nullptr);
+    }
+  });
+}
+
+TEST(Async, LargeAttachChain) {
+  static constexpr size_t stackSize = 200 * 1024;
+
+  runWithReducedStackSize(stackSize, [] {
+    Promise<void> promise = NEVER_DONE;
+    for (int i = 0; i < stackSize / sizeof(void *); i++) {
+      promise = promise.attach(kj::heap<int>(0));
+    }
+  });
+}
+
+TEST(Async, LargeTransformChain) {
+  static constexpr size_t stackSize = 200 * 1024;
+
+  runWithReducedStackSize(stackSize, [] {
+    Promise<void> promise = NEVER_DONE;
+    for (int i = 0; i < stackSize / sizeof(void *); i++) {
+      promise = promise.then([] {});
+    }
+  });
+}
+
+TEST(Async, LargeTransformChainOfPromises) {
+  static constexpr size_t stackSize = 200 * 1024;
+
+  runWithReducedStackSize(stackSize, [] {
+    Promise<void> promise = NEVER_DONE;
+    for (int i = 0; i < stackSize / sizeof(void *); i++) {
+      promise = promise.then([] {
+        return Promise<void>{NEVER_DONE};
+      });
     }
   });
 }
