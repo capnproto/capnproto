@@ -87,7 +87,14 @@
 #include <intrin.h>
 #endif
 
-#if KJ_HAS_COMPILER_FEATURE(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+#if _MSC_VER && !__clang__
+#define KJ_MIGHT_HAVE_LSAN 0
+#else
+#define KJ_MIGHT_HAVE_LSAN 1
+#endif
+
+#if KJ_MIGHT_HAVE_LSAN && (KJ_HAS_COMPILER_FEATURE(address_sanitizer) || \
+                           defined(__SANITIZE_ADDRESS__))
 #include <sanitizer/lsan_interface.h>
 #else
 static void __lsan_ignore_object(const void* p) {}
