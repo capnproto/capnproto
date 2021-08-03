@@ -36,6 +36,8 @@ KJ_BEGIN_HEADER
 #include "list.h"
 
 namespace kj {
+template <typename T>
+class Vector;
 namespace _ {  // private
 
 template <typename T>
@@ -280,6 +282,22 @@ protected:
   private:
     Event* event = nullptr;
   };
+
+  virtual void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) = 0;
+  // Move ownership of any dependent promises into toCancel. The typical sequence is that the
+  // top most promise's destructor invokes this and then dispatches to
+  // cancelDependenciesWithoutStackOverflow which will ensure it releases PromiseNode only once they
+  // don't have any dependencies. This converts stack usage to heap usage. Thus you should still
+  // limit how deep of a promise dependency you create that's not tail-call optimized.
+
+  void cancelDependenciesWithoutStackOverflow();
+  // This destroys the set of provided promise nodes without risk of stack overflow. It first moves
+  // ownership of a promise node's dependencies out of the promise and then destroys the promise.
+  // This ensures that there's a very bounded limit to the stack depth needed to destroy any given
+  // promise.
+  // NOTE: This has to be invoked by the destructor of the class that owns the dependencies.
+  // ~PromiseNode would run too late since destructors in C++ run roughly in reverse inheritance
+  // order.
 };
 
 // -------------------------------------------------------------------
@@ -298,6 +316,7 @@ public:
 
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>&) override final {}
 };
 
 template <typename T>
@@ -330,10 +349,12 @@ private:
 class AttachmentPromiseNodeBase: public PromiseNode {
 public:
   AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency);
+  ~AttachmentPromiseNodeBase() noexcept(false);
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>&) override final;
 
 private:
   Own<PromiseNode> dependency;
@@ -493,10 +514,12 @@ struct GetFunctorStartAddress<Void&&>: public GetFunctorStartAddress<> {};
 class TransformPromiseNodeBase: public PromiseNode {
 public:
   TransformPromiseNodeBase(Own<PromiseNode>&& dependency, void* continuationTracePtr);
+  ~TransformPromiseNodeBase() noexcept(false);
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) override final;
 
 private:
   Own<PromiseNode> dependency;
@@ -568,6 +591,7 @@ public:
   // implements PromiseNode ------------------------------------------
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) override final {}
 
 protected:
   inline ExceptionOrValue& getHubResultRef();
@@ -710,6 +734,7 @@ public:
   void setSelfPointer(Own<PromiseNode>* selfPtr) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) override final;
 
 private:
   enum State {
@@ -760,6 +785,7 @@ public:
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) override final;
 
 private:
   class Branch: public Event {
@@ -796,6 +822,7 @@ public:
   void onReady(Event* event) noexcept override final;
   void get(ExceptionOrValue& output) noexcept override final;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override final;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) override final;
 
 protected:
   virtual void getNoError(ExceptionOrValue& output) noexcept = 0;
@@ -873,9 +900,11 @@ class EagerPromiseNodeBase: public PromiseNode, protected Event {
 
 public:
   EagerPromiseNodeBase(Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef);
+  ~EagerPromiseNodeBase() noexcept(false);
 
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) override;
 
 private:
   Own<PromiseNode> dependency;
@@ -914,6 +943,7 @@ class AdapterPromiseNodeBase: public PromiseNode {
 public:
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>&) override final {}
 
 protected:
   inline void setReady() {
@@ -982,6 +1012,7 @@ public:
 
   void onReady(_::Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) override final {}
 
 protected:
   bool isFinished() { return state == FINISHED; }
@@ -1421,8 +1452,10 @@ class XThreadEvent: private Event,         // it's an event in the target thread
                     public PromiseNode {   // it's a PromiseNode in the requesting thread
 public:
   XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor, void* funcTracePtr);
+  ~XThreadEvent() noexcept(false);
 
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) override final;
 
 protected:
   void ensureDoneOrCanceled();
@@ -1609,6 +1642,7 @@ public:
   // implements PromiseNode ----------------------------------------------------
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) override final {}
 
 private:
   enum {

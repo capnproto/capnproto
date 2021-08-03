@@ -145,6 +145,7 @@ public:
   void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
     builder.add(reinterpret_cast<void*>(&kj::evalLater<DummyFunctor>));
   }
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>&) override final {}
 };
 
 class YieldHarderPromiseNode final: public _::PromiseNode {
@@ -158,6 +159,7 @@ public:
   void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
     builder.add(reinterpret_cast<void*>(&kj::evalLast<DummyFunctor>));
   }
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>&) override final {}
 };
 
 class NeverDonePromiseNode final: public _::PromiseNode {
@@ -171,6 +173,7 @@ public:
   void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
     builder.add(_::getMethodStartAddress(kj::NEVER_DONE, &_::NeverDone::wait));
   }
+  void cancelDependenciesInto(Vector<Own<PromiseNode>>&) override final {}
 };
 
 }  // namespace
@@ -841,6 +844,17 @@ XThreadEvent::XThreadEvent(
     ExceptionOrValue& result, const Executor& targetExecutor, void* funcTracePtr)
     : Event(targetExecutor.getLoop()), result(result), funcTracePtr(funcTracePtr),
       targetExecutor(targetExecutor.addRef()) {}
+
+XThreadEvent::~XThreadEvent() noexcept(false) {
+  cancelDependenciesWithoutStackOverflow();
+}
+
+void XThreadEvent::cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) {
+  KJ_IF_MAYBE(n, promiseNode) {
+    KJ_ASSERT(n->get() != nullptr);
+    toCancel.add(kj::mv(*n));
+  }
+}
 
 void XThreadEvent::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
   // We can't safely trace into another thread, so we'll stop here.
@@ -2151,6 +2165,41 @@ void PromiseNode::OnReadyEvent::armBreadthFirst() {
   event = _kJ_ALREADY_READY;
 }
 
+void PromiseNode::cancelDependenciesWithoutStackOverflow() {
+#if KJ_CHAIN_PROMISE_DEPTH_WARNING_THRESHOLD
+  size_t promisesDestroyed = 0;
+  KJ_DEFER(
+    if (promisesDestroyed > 500) {
+      KJ_LOG(WARNING, "Tail chain optimization unintentionally broken or promise queue depth is "
+          "surprisingly large", promisesDestroyed);
+    }
+  );
+#endif
+
+  Vector<Own<PromiseNode>> toCancel;
+
+  // First consume the direct children.
+  cancelDependenciesInto(toCancel);
+
+  // Now iteratively explode the transitive set of dependencies into toCancel while using a bounded
+  // amount of stack space. We have to make sure to destroy in reverse order so that we don't
+  // accidentally destroy the state of a promise before dependencies have been destroyed.
+  for (size_t i = 0; i < toCancel.size(); i++) {
+    toCancel[i]->cancelDependenciesInto(toCancel);
+  }
+
+#if KJ_CHAIN_PROMISE_DEPTH_WARNING_THRESHOLD
+  promisesDestroyed = toCancel.size();
+#endif
+
+  // We could let toCancel just leave scope since ArrayBuilder currently unwinds in the reverse
+  // order we need. However, that feels like an implementation detail that could change so let's
+  // evacuate in the right order explicitly instead.
+  while (!toCancel.empty()) {
+    toCancel.removeLast();
+  }
+}
+
 // -------------------------------------------------------------------
 
 ImmediatePromiseNodeBase::ImmediatePromiseNodeBase() {}
@@ -2180,6 +2229,16 @@ AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependen
   dependency->setSelfPointer(&dependency);
 }
 
+AttachmentPromiseNodeBase::~AttachmentPromiseNodeBase() noexcept(false) {
+  cancelDependenciesWithoutStackOverflow();
+}
+
+void AttachmentPromiseNodeBase::cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) {
+  if (dependency.get()) {
+    toCancel.add(kj::mv(dependency));
+  }
+}
+
 void AttachmentPromiseNodeBase::onReady(Event* event) noexcept {
   dependency->onReady(event);
 }
@@ -2196,7 +2255,7 @@ void AttachmentPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtN
 }
 
 void AttachmentPromiseNodeBase::dropDependency() {
-  dependency = nullptr;
+  cancelDependenciesWithoutStackOverflow();
 }
 
 // -------------------------------------------------------------------
@@ -2205,6 +2264,16 @@ TransformPromiseNodeBase::TransformPromiseNodeBase(
     Own<PromiseNode>&& dependencyParam, void* continuationTracePtr)
     : dependency(kj::mv(dependencyParam)), continuationTracePtr(continuationTracePtr) {
   dependency->setSelfPointer(&dependency);
+}
+
+TransformPromiseNodeBase::~TransformPromiseNodeBase() noexcept(false) {
+  cancelDependenciesWithoutStackOverflow();
+}
+
+void TransformPromiseNodeBase::cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) {
+  if (dependency.get()) {
+    toCancel.add(kj::mv(dependency));
+  }
 }
 
 void TransformPromiseNodeBase::onReady(Event* event) noexcept {
@@ -2232,7 +2301,7 @@ void TransformPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNe
 }
 
 void TransformPromiseNodeBase::dropDependency() {
-  dependency = nullptr;
+  cancelDependenciesWithoutStackOverflow();
 }
 
 void TransformPromiseNodeBase::getDepResult(ExceptionOrValue& output) {
@@ -2346,7 +2415,15 @@ ChainPromiseNode::ChainPromiseNode(Own<PromiseNode> innerParam)
   inner->onReady(this);
 }
 
-ChainPromiseNode::~ChainPromiseNode() noexcept(false) {}
+ChainPromiseNode::~ChainPromiseNode() noexcept(false) {
+  cancelDependenciesWithoutStackOverflow();
+}
+
+void ChainPromiseNode::cancelDependenciesInto(Vector<Own<PromiseNode>> &toCancel) {
+  if (inner.get()) {
+    toCancel.add(kj::mv(inner));
+  }
+}
 
 void ChainPromiseNode::onReady(Event* event) noexcept {
   switch (state) {
@@ -2461,7 +2538,18 @@ void ChainPromiseNode::traceEvent(TraceBuilder& builder) {
 ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right)
     : left(*this, kj::mv(left)), right(*this, kj::mv(right)) {}
 
-ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {}
+ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {
+  cancelDependenciesWithoutStackOverflow();
+}
+
+void ExclusiveJoinPromiseNode::cancelDependenciesInto(Vector<Own<PromiseNode>> &toCancel) {
+  if (left.dependency.get()) {
+    toCancel.add(kj::mv(left.dependency));
+  }
+  if (right.dependency.get()) {
+    toCancel.add(kj::mv(right.dependency));
+  }
+}
 
 void ExclusiveJoinPromiseNode::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
@@ -2545,7 +2633,17 @@ ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
     onReadyEvent.arm();
   }
 }
-ArrayJoinPromiseNodeBase::~ArrayJoinPromiseNodeBase() noexcept(false) {}
+ArrayJoinPromiseNodeBase::~ArrayJoinPromiseNodeBase() noexcept(false) {
+  cancelDependenciesWithoutStackOverflow();
+}
+
+void ArrayJoinPromiseNodeBase::cancelDependenciesInto(Vector<Own<PromiseNode>>& toCancel) {
+  for (auto& branch: branches) {
+    if (branch.dependency.get()) {
+      toCancel.add(kj::mv(branch.dependency));
+    }
+  }
+}
 
 void ArrayJoinPromiseNodeBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
@@ -2631,6 +2729,16 @@ EagerPromiseNodeBase::EagerPromiseNodeBase(
     : dependency(kj::mv(dependencyParam)), resultRef(resultRef) {
   dependency->setSelfPointer(&dependency);
   dependency->onReady(this);
+}
+
+EagerPromiseNodeBase::~EagerPromiseNodeBase() noexcept(false) {
+  cancelDependenciesWithoutStackOverflow();
+}
+
+void EagerPromiseNodeBase::cancelDependenciesInto(Vector<Own<PromiseNode>> &toCancel) {
+  if (dependency.get()) {
+    toCancel.add(kj::mv(dependency));
+  }
 }
 
 void EagerPromiseNodeBase::onReady(Event* event) noexcept {
