@@ -263,6 +263,10 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
 #endif
       break;
     case SHARED: {
+#if KJ_CONTENTION_WARNING_THRESHOLD
+      kj::Maybe<kj::TimePoint> contentionWaitStart;
+#endif
+
       uint state = __atomic_add_fetch(&futex, 1, __ATOMIC_ACQUIRE);
 
       for (;;) {
@@ -270,6 +274,15 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
           // Acquired.
           break;
         }
+
+#if KJ_CONTENTION_WARNING_THRESHOLD
+        if (contentionWaitStart == nullptr) {
+          // We could have the exclusive mutex tell us how long it was holding the lock. That would
+          // be the nicest. However, I'm hesitant to bloat the structure. I suspect having a reader
+          // tell us how long it was waiting for is probably a good proxy.
+          contentionWaitStart = kj::systemPreciseMonotonicClock().now();
+        }
+#endif
 
         setCurrentThreadIsWaitingFor(&blockReason);
 
@@ -299,10 +312,14 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
       }
 
 #ifdef KJ_CONTENTION_WARNING_THRESHOLD
-      if (__atomic_load_n(&printContendedReader, __ATOMIC_RELAXED)) {
-        // Double-checked lock avoids the CPU needing to acquire the lock in most cases.
-        if (__atomic_exchange_n(&printContendedReader, false, __ATOMIC_RELAXED)) {
-          KJ_LOG(WARNING, "Acquired contended lock", location, kj::getStackTrace());
+      KJ_IF_MAYBE(start, contentionWaitStart) {
+        if (__atomic_load_n(&printContendedReader, __ATOMIC_RELAXED)) {
+          // Double-checked lock avoids the CPU needing to acquire the lock in most cases.
+          if (__atomic_exchange_n(&printContendedReader, false, __ATOMIC_RELAXED)) {
+            auto contentionDuration = kj::systemPreciseMonotonicClock().now() - *start;
+            KJ_LOG(WARNING, "Acquired contended lock", location, contentionDuration,
+                kj::getStackTrace());
+          }
         }
       }
 #endif
