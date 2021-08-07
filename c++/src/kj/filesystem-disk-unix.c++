@@ -1102,7 +1102,10 @@ public:
 
       KJ_SYSCALL_HANDLE_ERRORS(syscall(SYS_renameat2,
           fromDirFd, fromPath.cStr(), fd.get(), toPath.cStr(), RENAME_EXCHANGE)) {
-        case ENOSYS:
+        case ENOSYS:  // Syscall not supported by kernel.
+        case EINVAL:  // Maybe we screwed up, or maybe the syscall is not supported by the
+                      // filesystem. Unfortunately, there's no way to tell, so assume the latter.
+                      // ZFS in particular apparently produces EINVAL.
           break;  // fall back to traditional means
         case ENOENT:
           // Presumably because the target path doesn't exist.
@@ -1131,7 +1134,10 @@ public:
     } else if (has(mode, WriteMode::CREATE)) {
       KJ_SYSCALL_HANDLE_ERRORS(syscall(SYS_renameat2,
           fromDirFd, fromPath.cStr(), fd.get(), toPath.cStr(), RENAME_NOREPLACE)) {
-        case ENOSYS:
+        case ENOSYS:  // Syscall not supported by kernel.
+        case EINVAL:  // Maybe we screwed up, or maybe the syscall is not supported by the
+                      // filesystem. Unfortunately, there's no way to tell, so assume the latter.
+                      // ZFS in particular apparently produces EINVAL.
           break;  // fall back to traditional means
         case EEXIST:
           return false;
