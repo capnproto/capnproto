@@ -2075,6 +2075,39 @@ KJ_TEST("Userland tee") {
   expectRead(*right, "foobar").wait(ws);
 }
 
+KJ_TEST("Userland nested tee") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto tee = newTee(kj::mv(pipe.in));
+  auto left = kj::mv(tee.branches[0]);
+  auto right = kj::mv(tee.branches[1]);
+
+  auto tee2 = newTee(kj::mv(right));
+  auto rightLeft = kj::mv(tee2.branches[0]);
+  auto rightRight = kj::mv(tee2.branches[1]);
+
+  auto writePromise = pipe.out->write("foobar", 6);
+
+  expectRead(*left, "foobar").wait(ws);
+  writePromise.wait(ws);
+  expectRead(*rightLeft, "foobar").wait(ws);
+  expectRead(*rightRight, "foo").wait(ws);
+
+  auto tee3 = newTee(kj::mv(rightRight));
+  auto rightRightLeft = kj::mv(tee3.branches[0]);
+  auto rightRightRight = kj::mv(tee3.branches[1]);
+  expectRead(*rightRightLeft, "bar").wait(ws);
+  expectRead(*rightRightRight, "b").wait(ws);
+
+  auto tee4 = newTee(kj::mv(rightRightRight));
+  auto rightRightRightLeft = kj::mv(tee4.branches[0]);
+  auto rightRightRightRight = kj::mv(tee4.branches[1]);
+  expectRead(*rightRightRightLeft, "ar").wait(ws);
+  expectRead(*rightRightRightRight, "ar").wait(ws);
+}
+
 KJ_TEST("Userland tee concurrent read") {
   kj::EventLoop loop;
   WaitScope ws(loop);
