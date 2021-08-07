@@ -26,15 +26,15 @@
 #include "thread.h"
 
 // TODO(later): Refactor this more cleanly so that the KJ library itself defines this.
-#if !__BIONIC__
+#if !__BIONIC__ && !KJ_NO_EXCEPTIONS
 #define KJ_FIBERS_AVAILABLE 1
 #else
 #define KJ_FIBERS_AVAILABLE 0
 #endif
 
 #if !KJ_FIBERS_AVAILABLE
-// For bionic & OpenBSD, enables the regression test for kj::TaskSet::~TaskSet potentially causing a
-// stack overflow.
+// For bionic, OpenBSD, and no-exception builds, enables the regression test for
+// kj::TaskSet::~TaskSet potentially causing a stack overflow.
 #include <pthread.h>
 #endif
 
