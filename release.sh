@@ -120,7 +120,7 @@ done_banner() {
     y | Y )
       doit git push origin $PUSH
       doit gce-ss copy-files capnproto-c++-$VERSION.tar.gz capnproto-c++-win32-$VERSION.zip \
-          fe:/var/www/capnproto.org
+          alpha2:/var/www/capnproto.org
 
       if [ "$FINAL" = yes ]; then
         echo "========================================================================="
