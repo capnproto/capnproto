@@ -102,6 +102,12 @@ If you download directly from Git, you will need to have the GNU autotools --
 2. Find `capnp.exe`, `capnpc-c++.exe`, and `capnpc-capnp.exe` under `capnproto-tools-win32-0.0.0` in
    the zip and copy them somewhere.
 
+3. If your `.capnp` files will import any of the `.capnp` files provided by the core project, or
+   if you use the `stream` keyword (which implicitly imports `capnp/stream.capnp`), then you need
+   to put those files somewhere where the capnp compiler can find them. To do this, copy the
+   directory `capnproto-c++-0.0.0/src` to the location of your choice, then make sure to pass the
+   flag `-I <that location>` to `capnp` when you run it.
+
 If you don't care about C++ support, you can stop here. The compiler exe can be used with plugins
 provided by projects implementing Cap'n Proto in other languages.
 
