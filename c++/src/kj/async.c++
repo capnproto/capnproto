@@ -1196,7 +1196,7 @@ XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
 }
 
 kj::Exception XThreadPaf::unfulfilledException() {
-  // TODO(soon): Share code with regular PromiseAndFulfiller for stack tracing here.
+  // TODO(cleanup): Share code with regular PromiseAndFulfiller for stack tracing here.
   return kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::heapString(
       "cross-thread PromiseFulfiller was destroyed without fulfilling the promise."));
 }

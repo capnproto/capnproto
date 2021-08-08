@@ -89,7 +89,7 @@ TEST(AsyncIo, SimpleNetwork) {
   EXPECT_EQ("foo", result);
 }
 
-#if !_WIN32  // TODO(soon): Implement NetworkPeerIdentity for Win32.
+#if !_WIN32  // TODO(0.10): Implement NetworkPeerIdentity for Win32.
 TEST(AsyncIo, SimpleNetworkAuthentication) {
   auto ioContext = setupAsyncIo();
   auto& network = ioContext.provider->getNetwork();

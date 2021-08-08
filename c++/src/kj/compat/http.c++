@@ -5037,7 +5037,7 @@ private:
       }
     }
 
-    // TODO(soon): If `server.draining`, we should probably set `closeAfterSend` -- UNLESS the
+    // TODO(0.10): If `server.draining`, we should probably set `closeAfterSend` -- UNLESS the
     //   connection was created using listenHttpCleanDrain(), in which case the application may
     //   intend to continue using the connection.
 
