@@ -799,7 +799,8 @@ public:
   // Open a file for writing.
   //
   // `tryOpenFile()` returns null if the path is required to exist but doesn't (MODIFY or REPLACE)
-  // or if the path is required not to exist but does (CREATE or RACE).
+  // or if the path is required not to exist but does (CREATE or RACE). These are the only cases
+  // where it returns null -- all other types of errors (like "access denied") throw exceptions.
 
   virtual Own<Replacer<File>> replaceFile(PathPtr path, WriteMode mode) const = 0;
   // Construct a file which, when ready, will be atomically moved to `path`, replacing whatever
@@ -876,7 +877,9 @@ public:
   virtual bool tryRemove(PathPtr path) const = 0;
   // Deletes/unlinks the given path. If the path names a directory, it is recursively deleted.
   //
-  // tryRemove() returns false if the path doesn't exist; remove() throws in this case.
+  // tryRemove() returns false in the specific case that the path doesn't exist. remove() would
+  // throw in this case. In all other error cases (like "access denied"), tryRemove() still throws;
+  // it is only "does not exist" that produces a false return.
 
   // TODO(someday):
   // - Support sockets? There's no openat()-like interface for sockets, so it's hard to support

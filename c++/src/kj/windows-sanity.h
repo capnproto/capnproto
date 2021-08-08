@@ -50,8 +50,11 @@
 
 namespace win32 {
   const auto ERROR_ = ERROR;
+
+#ifdef ERROR  // This could be absent if e.g. NOGDI was used.
 #undef ERROR
   const auto ERROR = ERROR_;
+#endif
 
   typedef VOID VOID_;
 #undef VOID
