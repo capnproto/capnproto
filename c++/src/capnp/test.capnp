@@ -774,7 +774,7 @@ const anyPointerConstants :TestAnyPointerConstants = (
 
 struct TestListOfAny {
   capList @0 :List(Capability);
-  #listList @1 :List(AnyList); # TODO(soon): Make List(AnyList) work correctly in C++ generated code.
+  #listList @1 :List(AnyList); # TODO(0.10): Make List(AnyList) work correctly in C++ generated code.
 }
 
 interface TestInterface {

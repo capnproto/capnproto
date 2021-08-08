@@ -208,7 +208,7 @@ public:
   void shutdownWrite() override {
     KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
 
-    // TODO(0.9): shutdownWrite() is problematic because it doesn't return a promise. It was
+    // TODO(0.10): shutdownWrite() is problematic because it doesn't return a promise. It was
     //   designed to assume that it would only be called after all writes are finished and that
     //   there was no reason to block at that point, but SSL sessions don't fit this since they
     //   actually have to send a shutdown message.
@@ -427,8 +427,8 @@ public:
         tasks(*this) {}
 
   void taskFailed(Exception&& e) override {
-    // TODO(soon) SSL connection failures may be a fact of normal operation but they may also be
-    // important diagnostic information. We should allow for an error handler to be passed in so
+    // TODO(someday): SSL connection failures may be a fact of normal operation but they may also
+    // be important diagnostic information. We should allow for an error handler to be passed in so
     // that network issues that affect TLS can be more discoverable from the server side.
     if (e.getType() != Exception::Type::DISCONNECTED) {
       KJ_LOG(ERROR, "error accepting tls connection", kj::mv(e));
