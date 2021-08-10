@@ -82,23 +82,23 @@ KJ_TEST("ProducerConsumerQueue with various amounts of producers and consumers")
              producerCount, consumerCount, kItemCount);
       // Make a vector to track our entries.
       auto bits = Vector<bool>(kItemCount);
-      for (size_t i = 0; i < kItemCount; ++i) {
+      for (auto i KJ_UNUSED : kj::zeroTo(kItemCount)) {
         bits.add(false);
       }
 
       // Make enough producers.
       auto producers = Vector<QueueTest::Producer>();
-      for (size_t i = 0; i < producerCount; ++i) {
+      for (auto i KJ_UNUSED : kj::zeroTo(producerCount)) {
         producers.add(test);
       }
 
       // Make enough consumers.
       auto consumers = Vector<QueueTest::Consumer>();
-      for (size_t i = 0; i < consumerCount; ++i) {
+      for (auto i KJ_UNUSED : kj::zeroTo(consumerCount)) {
         consumers.add(test);
       }
 
-      for (size_t i = 0; i < kItemCount; ++i) {
+      for (auto i : kj::zeroTo(kItemCount)) {
         // Use a producer and a consumer for each entry.
 
         auto& producer = producers[i % producerCount];
@@ -117,7 +117,7 @@ KJ_TEST("ProducerConsumerQueue with various amounts of producers and consumers")
         promises.add(kj::mv(consumer.promise));
       }
       joinPromises(promises.releaseAsArray()).wait(test.io.waitScope);
-      for (auto i = 0; i < kItemCount; ++i) {
+      for (auto i : kj::zeroTo(kItemCount)) {
         KJ_ASSERT(bits[i], i);
       }
     }
@@ -132,7 +132,7 @@ KJ_TEST("ProducerConsumerQueue with rejectAll()") {
 
     // Make enough consumers.
     auto promises = Vector<Promise<void>>();
-    for (size_t i = 0; i < consumerCount; ++i) {
+    for (auto i KJ_UNUSED : kj::zeroTo(consumerCount)) {
       promises.add(test.queue.pop().ignoreResult());
     }
 
