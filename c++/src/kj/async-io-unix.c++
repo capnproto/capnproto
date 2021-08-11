@@ -1286,7 +1286,8 @@ public:
           // Fine.
           break;
         } else if (error != EINTR) {
-          KJ_FAIL_SYSCALL("connect()", error) { break; }
+          auto address = SocketAddress(addr, addrlen).toString();
+          KJ_FAIL_SYSCALL("connect()", error, address) { break; }
           return Own<AsyncIoStream>();
         }
       } else {
