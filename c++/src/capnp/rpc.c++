@@ -3112,7 +3112,7 @@ public:
       // disassemble it.
       if (!connections.empty()) {
         kj::Vector<kj::Own<RpcConnectionState>> deleteMe(connections.size());
-        kj::Exception shutdownException = KJ_EXCEPTION(FAILED, "RpcSystem was destroyed.");
+        kj::Exception shutdownException = KJ_EXCEPTION(DISCONNECTED, "RpcSystem was destroyed.");
         for (auto& entry: connections) {
           entry.second->disconnect(kj::cp(shutdownException));
           deleteMe.add(kj::mv(entry.second));
