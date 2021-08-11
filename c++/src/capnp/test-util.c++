@@ -1190,6 +1190,10 @@ kj::Promise<void> TestMoreStuffImpl::throwException(ThrowExceptionContext contex
   return KJ_EXCEPTION(FAILED, "test exception");
 }
 
+kj::Promise<void> TestMoreStuffImpl::throwRemoteException(ThrowRemoteExceptionContext context) {
+  return KJ_EXCEPTION(FAILED, "remote exception: test exception");
+}
+
 #endif  // !CAPNP_LITE
 
 }  // namespace _ (private)
