@@ -1305,6 +1305,23 @@ KJ_TEST("method throws exception") {
   KJ_EXPECT(exception.getRemoteTrace() == nullptr);
 }
 
+KJ_TEST("method throws exception won't redundantly add remote exception prefix") {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Maybe<kj::Exception> maybeException;
+  client.throwRemoteExceptionRequest().send().ignoreResult()
+      .catch_([&](kj::Exception&& e) {
+    maybeException = kj::mv(e);
+  }).wait(context.waitScope);
+
+  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
+  KJ_EXPECT(exception.getRemoteTrace() == nullptr);
+}
+
 KJ_TEST("method throws exception with trace encoder") {
   TestContext context;
 

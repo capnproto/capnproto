@@ -884,6 +884,7 @@ interface TestMoreStuff extends(TestCallOrder) {
   # the second. Also creates a socketpair, writes "baz" to one end, and returns the other end.
 
   throwException @14 ();
+  throwRemoteException @15 ();
 }
 
 interface TestMembrane {
