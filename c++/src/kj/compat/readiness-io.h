@@ -65,8 +65,8 @@ public:
   KJ_DISALLOW_COPY(ReadyOutputStreamWrapper);
 
   kj::Maybe<size_t> write(kj::ArrayPtr<const byte> src);
-  // Writes bytes from `src`, returning the number of bytes written. Never returns zero. Returns
-  // nullptr if not ready.
+  // Writes bytes from `src`, returning the number of bytes written. Never returns zero for
+  // a non-empty `src`. Returns nullptr if not ready.
 
   kj::Promise<void> whenReady();
   // Returns a promise that resolves when write() will return non-null.

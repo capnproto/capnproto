@@ -614,7 +614,7 @@ public:
     // Content-Length: 0.
 
     kj::Promise<Response> response;
-    // Promise for the eventual respnose.
+    // Promise for the eventual response.
   };
 
   virtual Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,

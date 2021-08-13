@@ -359,7 +359,7 @@ public:
     uint64_t hashCode = 0;
     // Hint which can be used to determine if two FsNode instances point to the same underlying
     // file object. If two FsNodes report different hashCodes, then they are not the same object.
-    // If they report the same hashCode, then they may or may not be teh same object.
+    // If they report the same hashCode, then they may or may not be the same object.
     //
     // The Unix filesystem implementation builds the hashCode based on st_dev and st_ino of
     // `struct stat`. However, note that some filesystems -- especially FUSE-based -- may not fill
