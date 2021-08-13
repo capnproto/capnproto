@@ -247,7 +247,7 @@ private:
 
   kj::Maybe<Waiter&> waitersHead = nullptr;
   kj::Maybe<Waiter&>* waitersTail = &waitersHead;
-  // linked list of waitUntil()s; can only modify under lock
+  // linked list of waiters; can only modify under lock
 
   inline void addWaiter(Waiter& waiter);
   inline void removeWaiter(Waiter& waiter);
