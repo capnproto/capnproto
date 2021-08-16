@@ -75,6 +75,10 @@ void AsyncInputStream::registerAncillaryMessageHandler(
  KJ_UNIMPLEMENTED("registerAncillaryMsgHandler is not implemented by this AsyncInputStream");
 }
 
+Maybe<Own<AsyncInputStream>> AsyncInputStream::tryTee(uint64_t) {
+  return nullptr;
+}
+
 namespace {
 
 class AsyncPump {
