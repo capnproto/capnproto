@@ -1700,9 +1700,10 @@ public:
     }
   }
 
-  void addBranch(BranchId branch) {
-    KJ_REQUIRE(branches[branch] == nullptr, "branch already exists");
-    branches[branch] = Branch();
+  BranchId addBranch() {
+    BranchId branchId = branches.size();
+    branches.add(Branch());
+    return branchId;
   }
 
   void removeBranch(BranchId branch) {
@@ -2060,7 +2061,7 @@ private:
   Own<AsyncInputStream> inner;
   const uint64_t bufferSizeLimit = kj::maxValue;
   Maybe<uint64_t> length;
-  Maybe<Branch> branches[2];
+  Vector<Maybe<Branch>> branches;
   Maybe<Stoppage> stoppage;
   Promise<void> pullPromise = READY_NOW;
   bool pulling = false;
@@ -2260,9 +2261,8 @@ uint64_t AsyncTee::Buffer::size() const {
 
 class TeeBranch final: public AsyncInputStream {
 public:
-  TeeBranch(Own<AsyncTee> tee, uint8_t branch): tee(mv(tee)), branch(branch) {
-    this->tee->addBranch(branch);
-  }
+  TeeBranch(Own<AsyncTee> teeArg): tee(mv(teeArg)), branch(tee->addBranch()) {}
+
   ~TeeBranch() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       tee->removeBranch(branch);
@@ -2283,7 +2283,7 @@ public:
 
 private:
   Own<AsyncTee> tee;
-  const uint8_t branch;
+  const uint branch;
   UnwindDetector unwind;
 };
 
@@ -2291,8 +2291,8 @@ private:
 
 Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
   auto impl = refcounted<AsyncTee>(mv(input), limit);
-  Own<AsyncInputStream> branch1 = heap<TeeBranch>(addRef(*impl), 0);
-  Own<AsyncInputStream> branch2 = heap<TeeBranch>(mv(impl), 1);
+  Own<AsyncInputStream> branch1 = heap<TeeBranch>(addRef(*impl));
+  Own<AsyncInputStream> branch2 = heap<TeeBranch>(mv(impl));
   return { { mv(branch1), mv(branch2) } };
 }
 
