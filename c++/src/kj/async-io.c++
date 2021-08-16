@@ -1684,8 +1684,45 @@ CapabilityPipe newCapabilityPipe() {
 namespace {
 
 class AsyncTee final: public Refcounted {
+  class Buffer {
+  public:
+    Buffer() = default;
+
+    uint64_t consume(ArrayPtr<byte>& readBuffer, size_t& minBytes);
+    // Consume as many bytes as possible, copying them into `readBuffer`. Return the number of bytes
+    // consumed.
+    //
+    // `readBuffer` and `minBytes` are both assigned appropriate new values, such that after any
+    // call to `consume()`, `readBuffer` will point to the remaining slice of unwritten space, and
+    // `minBytes` will have been decremented (clamped to zero) by the amount of bytes read. That is,
+    // the read can be considered fulfilled if `minBytes` is zero after a call to `consume()`.
+
+    Array<const ArrayPtr<const byte>> asArray(uint64_t minBytes, uint64_t& amount);
+    // Consume the first `minBytes` of the buffer (or the entire buffer) and return it in an Array
+    // of ArrayPtr<const byte>s, suitable for passing to AsyncOutputStream.write(). The outer Array
+    // owns the underlying data.
+
+    void produce(Array<byte> bytes);
+    // Enqueue a byte array to the end of the buffer list.
+
+    bool empty() const;
+    uint64_t size() const;
+
+  private:
+    Buffer(std::deque<Array<byte>>&& buffer) : bufferList(mv(buffer)) {}
+
+    std::deque<Array<byte>> bufferList;
+  };
+
+  class Sink;
+
 public:
   using BranchId = uint;
+
+  struct Branch {
+    Buffer buffer;
+    Maybe<Sink&> sink;
+  };
 
   explicit AsyncTee(Own<AsyncInputStream> inner, uint64_t bufferSizeLimit)
       : inner(mv(inner)), bufferSizeLimit(bufferSizeLimit), length(this->inner->tryGetLength()) {}
@@ -1780,32 +1817,6 @@ private:
   struct Eof {};
   using Stoppage = OneOf<Eof, Exception>;
 
-  class Buffer {
-  public:
-    uint64_t consume(ArrayPtr<byte>& readBuffer, size_t& minBytes);
-    // Consume as many bytes as possible, copying them into `readBuffer`. Return the number of bytes
-    // consumed.
-    //
-    // `readBuffer` and `minBytes` are both assigned appropriate new values, such that after any
-    // call to `consume()`, `readBuffer` will point to the remaining slice of unwritten space, and
-    // `minBytes` will have been decremented (clamped to zero) by the amount of bytes read. That is,
-    // the read can be considered fulfilled if `minBytes` is zero after a call to `consume()`.
-
-    Array<const ArrayPtr<const byte>> asArray(uint64_t minBytes, uint64_t& amount);
-    // Consume the first `minBytes` of the buffer (or the entire buffer) and return it in an Array
-    // of ArrayPtr<const byte>s, suitable for passing to AsyncOutputStream.write(). The outer Array
-    // owns the underlying data.
-
-    void produce(Array<byte> bytes);
-    // Enqueue a byte array to the end of the buffer list.
-
-    bool empty() const;
-    uint64_t size() const;
-
-  private:
-    std::deque<Array<byte>> bufferList;
-  };
-
   class Sink {
   public:
     struct Need {
@@ -1878,11 +1889,6 @@ private:
 
     PromiseFulfiller<T>& fulfiller;
     Maybe<Sink&>& sinkLink;
-  };
-
-  struct Branch {
-    Buffer buffer;
-    Maybe<Sink&> sink;
   };
 
   class ReadSink final: public SinkBase<size_t> {
