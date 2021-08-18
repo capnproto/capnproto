@@ -1708,6 +1708,20 @@ class AsyncTee final: public Refcounted {
     bool empty() const;
     uint64_t size() const;
 
+    Buffer clone() const {
+      size_t size = 0;
+      for (const auto& buf: bufferList) {
+        size += buf.size();
+      }
+      auto builder = heapArrayBuilder<byte>(size);
+      for (const auto& buf: bufferList) {
+        builder.addAll(buf);
+      }
+      std::deque<Array<byte>> deque;
+      deque.emplace_back(builder.finish());
+      return Buffer{mv(deque)};
+    }
+
   private:
     Buffer(std::deque<Array<byte>>&& buffer) : bufferList(mv(buffer)) {}
 
@@ -1738,9 +1752,18 @@ public:
   }
 
   BranchId addBranch() {
+    return addBranch(Branch());
+  }
+
+  BranchId addBranch(Branch&& branch) {
     BranchId branchId = branches.size();
-    branches.add(Branch());
+    branches.add(mv(branch));
     return branchId;
+  }
+
+  Branch cloneBranch(BranchId branchId) const {
+    const auto& state = KJ_ASSERT_NONNULL(branches[branchId]);
+    return {state.buffer.clone(), nullptr};
   }
 
   void removeBranch(BranchId branch) {
@@ -1789,6 +1812,10 @@ public:
     return length.map([&state](uint64_t amount) {
       return amount + state.buffer.size();
     });
+  }
+
+  uint64_t getBufferSizeLimit() const {
+    return bufferSizeLimit;
   }
 
   Promise<uint64_t> pumpTo(BranchId branch, AsyncOutputStream& output, uint64_t amount)  {
@@ -2269,6 +2296,9 @@ class TeeBranch final: public AsyncInputStream {
 public:
   TeeBranch(Own<AsyncTee> teeArg): tee(mv(teeArg)), branch(tee->addBranch()) {}
 
+  TeeBranch(Badge<TeeBranch>, Own<AsyncTee> teeArg, AsyncTee::Branch&& branchState)
+      : tee(mv(teeArg)), branch(tee->addBranch(mv(branchState))) {}
+
   ~TeeBranch() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       tee->removeBranch(branch);
@@ -2287,6 +2317,16 @@ public:
     return tee->tryGetLength(branch);
   }
 
+  Maybe<Own<AsyncInputStream>> tryTee(uint64_t limit) override {
+    if (tee->getBufferSizeLimit() != limit) {
+      // Cannot optimize this path as the limit has changed, so we need a new AsyncTee to manage
+      // the limit.
+      return nullptr;
+    }
+
+    return kj::heap<TeeBranch>(Badge<TeeBranch>{}, addRef(*tee), tee->cloneBranch(branch));
+  }
+
 private:
   Own<AsyncTee> tee;
   const uint branch;
@@ -2296,6 +2336,10 @@ private:
 }  // namespace
 
 Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
+  KJ_IF_MAYBE(t, input->tryTee()) {
+    return { { mv(input), mv(*t) }};
+  }
+
   auto impl = refcounted<AsyncTee>(mv(input), limit);
   Own<AsyncInputStream> branch1 = heap<TeeBranch>(addRef(*impl));
   Own<AsyncInputStream> branch2 = heap<TeeBranch>(mv(impl));
