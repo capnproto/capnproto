@@ -728,7 +728,7 @@ KJ_TEST("TLS client certificate verification") {
                        // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE("alert",  // "alert handshake failure" or "alert certificate required"
-                    "CERTIFICATE_REQUIRED"),
+                    "ALERT"), // "ALERT_HANDSHAKE_FAILURE" or "ALERT_CERTIFICATE_REQUIRED"
         clientPromise.wait(test.io.waitScope));
 #endif
   }
