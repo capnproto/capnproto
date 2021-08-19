@@ -75,6 +75,10 @@ void AsyncInputStream::registerAncillaryMessageHandler(
  KJ_UNIMPLEMENTED("registerAncillaryMsgHandler is not implemented by this AsyncInputStream");
 }
 
+Maybe<Own<AsyncInputStream>> AsyncInputStream::tryTee(uint64_t) {
+  return nullptr;
+}
+
 namespace {
 
 class AsyncPump {
@@ -1680,8 +1684,59 @@ CapabilityPipe newCapabilityPipe() {
 namespace {
 
 class AsyncTee final: public Refcounted {
+  class Buffer {
+  public:
+    Buffer() = default;
+
+    uint64_t consume(ArrayPtr<byte>& readBuffer, size_t& minBytes);
+    // Consume as many bytes as possible, copying them into `readBuffer`. Return the number of bytes
+    // consumed.
+    //
+    // `readBuffer` and `minBytes` are both assigned appropriate new values, such that after any
+    // call to `consume()`, `readBuffer` will point to the remaining slice of unwritten space, and
+    // `minBytes` will have been decremented (clamped to zero) by the amount of bytes read. That is,
+    // the read can be considered fulfilled if `minBytes` is zero after a call to `consume()`.
+
+    Array<const ArrayPtr<const byte>> asArray(uint64_t minBytes, uint64_t& amount);
+    // Consume the first `minBytes` of the buffer (or the entire buffer) and return it in an Array
+    // of ArrayPtr<const byte>s, suitable for passing to AsyncOutputStream.write(). The outer Array
+    // owns the underlying data.
+
+    void produce(Array<byte> bytes);
+    // Enqueue a byte array to the end of the buffer list.
+
+    bool empty() const;
+    uint64_t size() const;
+
+    Buffer clone() const {
+      size_t size = 0;
+      for (const auto& buf: bufferList) {
+        size += buf.size();
+      }
+      auto builder = heapArrayBuilder<byte>(size);
+      for (const auto& buf: bufferList) {
+        builder.addAll(buf);
+      }
+      std::deque<Array<byte>> deque;
+      deque.emplace_back(builder.finish());
+      return Buffer{mv(deque)};
+    }
+
+  private:
+    Buffer(std::deque<Array<byte>>&& buffer) : bufferList(mv(buffer)) {}
+
+    std::deque<Array<byte>> bufferList;
+  };
+
+  class Sink;
+
 public:
   using BranchId = uint;
+
+  struct Branch {
+    Buffer buffer;
+    Maybe<Sink&> sink;
+  };
 
   explicit AsyncTee(Own<AsyncInputStream> inner, uint64_t bufferSizeLimit)
       : inner(mv(inner)), bufferSizeLimit(bufferSizeLimit), length(this->inner->tryGetLength()) {}
@@ -1696,9 +1751,19 @@ public:
     }
   }
 
-  void addBranch(BranchId branch) {
-    KJ_REQUIRE(branches[branch] == nullptr, "branch already exists");
-    branches[branch] = Branch();
+  BranchId addBranch() {
+    return addBranch(Branch());
+  }
+
+  BranchId addBranch(Branch&& branch) {
+    BranchId branchId = branches.size();
+    branches.add(mv(branch));
+    return branchId;
+  }
+
+  Branch cloneBranch(BranchId branchId) const {
+    const auto& state = KJ_ASSERT_NONNULL(branches[branchId]);
+    return {state.buffer.clone(), nullptr};
   }
 
   void removeBranch(BranchId branch) {
@@ -1749,6 +1814,10 @@ public:
     });
   }
 
+  uint64_t getBufferSizeLimit() const {
+    return bufferSizeLimit;
+  }
+
   Promise<uint64_t> pumpTo(BranchId branch, AsyncOutputStream& output, uint64_t amount)  {
     auto& state = KJ_ASSERT_NONNULL(branches[branch]);
     KJ_ASSERT(state.sink == nullptr);
@@ -1774,32 +1843,6 @@ public:
 private:
   struct Eof {};
   using Stoppage = OneOf<Eof, Exception>;
-
-  class Buffer {
-  public:
-    uint64_t consume(ArrayPtr<byte>& readBuffer, size_t& minBytes);
-    // Consume as many bytes as possible, copying them into `readBuffer`. Return the number of bytes
-    // consumed.
-    //
-    // `readBuffer` and `minBytes` are both assigned appropriate new values, such that after any
-    // call to `consume()`, `readBuffer` will point to the remaining slice of unwritten space, and
-    // `minBytes` will have been decremented (clamped to zero) by the amount of bytes read. That is,
-    // the read can be considered fulfilled if `minBytes` is zero after a call to `consume()`.
-
-    Array<const ArrayPtr<const byte>> asArray(uint64_t minBytes, uint64_t& amount);
-    // Consume the first `minBytes` of the buffer (or the entire buffer) and return it in an Array
-    // of ArrayPtr<const byte>s, suitable for passing to AsyncOutputStream.write(). The outer Array
-    // owns the underlying data.
-
-    void produce(Array<byte> bytes);
-    // Enqueue a byte array to the end of the buffer list.
-
-    bool empty() const;
-    uint64_t size() const;
-
-  private:
-    std::deque<Array<byte>> bufferList;
-  };
 
   class Sink {
   public:
@@ -1873,11 +1916,6 @@ private:
 
     PromiseFulfiller<T>& fulfiller;
     Maybe<Sink&>& sinkLink;
-  };
-
-  struct Branch {
-    Buffer buffer;
-    Maybe<Sink&> sink;
   };
 
   class ReadSink final: public SinkBase<size_t> {
@@ -2056,7 +2094,7 @@ private:
   Own<AsyncInputStream> inner;
   const uint64_t bufferSizeLimit = kj::maxValue;
   Maybe<uint64_t> length;
-  Maybe<Branch> branches[2];
+  Vector<Maybe<Branch>> branches;
   Maybe<Stoppage> stoppage;
   Promise<void> pullPromise = READY_NOW;
   bool pulling = false;
@@ -2256,9 +2294,11 @@ uint64_t AsyncTee::Buffer::size() const {
 
 class TeeBranch final: public AsyncInputStream {
 public:
-  TeeBranch(Own<AsyncTee> tee, uint8_t branch): tee(mv(tee)), branch(branch) {
-    this->tee->addBranch(branch);
-  }
+  TeeBranch(Own<AsyncTee> teeArg): tee(mv(teeArg)), branch(tee->addBranch()) {}
+
+  TeeBranch(Badge<TeeBranch>, Own<AsyncTee> teeArg, AsyncTee::Branch&& branchState)
+      : tee(mv(teeArg)), branch(tee->addBranch(mv(branchState))) {}
+
   ~TeeBranch() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       tee->removeBranch(branch);
@@ -2277,18 +2317,32 @@ public:
     return tee->tryGetLength(branch);
   }
 
+  Maybe<Own<AsyncInputStream>> tryTee(uint64_t limit) override {
+    if (tee->getBufferSizeLimit() != limit) {
+      // Cannot optimize this path as the limit has changed, so we need a new AsyncTee to manage
+      // the limit.
+      return nullptr;
+    }
+
+    return kj::heap<TeeBranch>(Badge<TeeBranch>{}, addRef(*tee), tee->cloneBranch(branch));
+  }
+
 private:
   Own<AsyncTee> tee;
-  const uint8_t branch;
+  const uint branch;
   UnwindDetector unwind;
 };
 
 }  // namespace
 
 Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
+  KJ_IF_MAYBE(t, input->tryTee()) {
+    return { { mv(input), mv(*t) }};
+  }
+
   auto impl = refcounted<AsyncTee>(mv(input), limit);
-  Own<AsyncInputStream> branch1 = heap<TeeBranch>(addRef(*impl), 0);
-  Own<AsyncInputStream> branch2 = heap<TeeBranch>(mv(impl), 1);
+  Own<AsyncInputStream> branch1 = heap<TeeBranch>(addRef(*impl));
+  Own<AsyncInputStream> branch2 = heap<TeeBranch>(mv(impl));
   return { { mv(branch1), mv(branch2) } };
 }
 
