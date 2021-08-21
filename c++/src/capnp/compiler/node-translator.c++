@@ -2395,7 +2395,7 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
             }
           }
         }
-      } else if (*kind != Declaration::ANNOTATION) {
+      } else {
         errorReporter.addErrorOn(name, kj::str(
             "'", expressionString(name), "' is not an annotation."));
       }
