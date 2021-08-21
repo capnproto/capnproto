@@ -51,13 +51,14 @@ file:136:3-10: error: 'dupName' previously defined here.
 file:139:15-16: error: Duplicate ordinal number.
 file:138:15-16: error: Ordinal @2 originally used here.
 file:142:7-16: error: Declaration recursively depends on itself.
-file:148:14-27: error: Not enough generic parameters.
-file:149:15-47: error: Too many generic parameters.
-file:150:18-49: error: Double-application of generic parameters.
-file:151:38-43: error: Sorry, only pointer types can be used as generic parameters.
-file:154:30-44: error: Embeds can only be used when Text, Data, or a struct is expected.
-file:155:37-51: error: Couldn't read file for embed: no-such-file
-file:161:23-27: error: Only pointer parameters can declare their default as 'null'.
-file:162:10-16: error: 'stream' can only appear after '->', not before.
-file:162:10-16: error: A method declaration uses streaming, but '/capnp/stream.capnp' is not found in the import path. This is a standard file that should always be installed with the Cap'n Proto compiler.
-file:157:20-45: error: Import failed: nosuchfile-unused.capnp
+file:145:19-20: error: 'T' is not an annotation.
+file:149:14-27: error: Not enough generic parameters.
+file:150:15-47: error: Too many generic parameters.
+file:151:18-49: error: Double-application of generic parameters.
+file:152:38-43: error: Sorry, only pointer types can be used as generic parameters.
+file:155:30-44: error: Embeds can only be used when Text, Data, or a struct is expected.
+file:156:37-51: error: Couldn't read file for embed: no-such-file
+file:162:23-27: error: Only pointer parameters can declare their default as 'null'.
+file:163:10-16: error: 'stream' can only appear after '->', not before.
+file:163:10-16: error: A method declaration uses streaming, but '/capnp/stream.capnp' is not found in the import path. This is a standard file that should always be installed with the Cap'n Proto compiler.
+file:158:20-45: error: Import failed: nosuchfile-unused.capnp

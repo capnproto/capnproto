@@ -142,6 +142,7 @@ enum DupEnumerants {
 const recursive: UInt32 = .recursive;
 
 struct Generic(T, U) {
+  foo @0 :UInt32 $T;
 }
 
 struct UseGeneric {
