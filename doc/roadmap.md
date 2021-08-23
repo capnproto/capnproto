@@ -50,7 +50,7 @@ these will actually happen; as always, real work is driven by real-world needs.
   to each struct type. The POCS type would use traditional memory allocation, thus would not
   support zero-copy, but would support a more traditional and easy-to-use C++ API, including
   the ability to mutate the object over time without convoluted memory management. POCS types
-  could be extracted from an inserted into messages with a single copy, allowing them to be
+  could be extracted from and inserted into messages with a single copy, allowing them to be
   used easily in non-performance-critical code.
 * **Multi-threading:**  It should be made easy to assign different Cap'n Proto RPC objects
   to different threads and have them be able to safely call each other. Each thread would still
