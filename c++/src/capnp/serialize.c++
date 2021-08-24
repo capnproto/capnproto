@@ -23,6 +23,10 @@
 #include "layout.h"
 #include <kj/debug.h>
 #include <exception>
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#endif
 
 namespace capnp {
 
@@ -301,6 +305,9 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
 StreamFdMessageReader::~StreamFdMessageReader() noexcept(false) {}
 
 void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+#ifdef _WIN32
+  KJ_REQUIRE(_setmode(fd, _O_BINARY) == _O_BINARY, "Tried to write a message to a file descriptor that is in text mode. Set the file descriptor to binary mode by calling the _setmode Windows CRT function.");
+#endif
   kj::FdOutputStream stream(fd);
   writeMessage(stream, segments);
 }
