@@ -469,6 +469,7 @@ There has also never been any agreement on C++ file extensions, for some reason.
 * Statements inside a `namespace` are **not** indented unless the namespace is a short block that is just forward-declaring things at the top of a file.
 * Set your editor to strip trailing whitespace on save, otherwise other people who use this setting will see spurious diffs when they edit a file after you.
 
+<br>
 
     if (foo) {
       bar();

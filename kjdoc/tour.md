@@ -97,7 +97,7 @@ for (auto i: kj::indices(foo)) {
 
 `kj::downcast<T>(value)` is equivalent to `static_cast<T>(value)`, except that when compiled in debug mode with RTTI available, a runtime check (`dynamic_cast`) will be performed to verify that `value` really has type `T`. Use this in cases where you are casting a base type to a derived type, and you are confident that the object is actually an instance of the derived type. The debug-mode check will help you catch bugs.
 
-`kj::dynamicDowncastIfAvailable<T>(value)` is like `dynamic_cast<T*>(value)` with two differences. First, it returns `kj::Maybe<T&>` instead of `T*`. Second, if the program is compiled without RTTI enabled, the function always returns null. This function is intended to be used to implement optimizations, where the code can do something smarter if `value` happens to be of some specific type -- but if RTTI is not available, it is safe to skip the optimization. See [KJ idiomatic use of dynamic_cast](style-guide.md#dynamic_cast) for more background.
+`kj::dynamicDowncastIfAvailable<T>(value)` is like `dynamic_cast<T*>(value)` with two differences. First, it returns `kj::Maybe<T&>` instead of `T*`. Second, if the program is compiled without RTTI enabled, the function always returns null. This function is intended to be used to implement optimizations, where the code can do something smarter if `value` happens to be of some specific type -- but if RTTI is not available, it is safe to skip the optimization. See [KJ idiomatic use of dynamic_cast](../style-guide.md#dynamic_cast) for more background.
 
 ### Min/max, numeric limits, and special floats
 
@@ -120,7 +120,7 @@ These functions should almost never be used in high-level code. They are intende
 
 ## Ownership and memory management
 
-KJ style makes heavy use of [RAII](style-guide.md#raii-resource-acquisition-is-initialization). KJ-based code should never use `new` and `delete` directly. Instead, use the utilities in this section to manage memory in a RAII way.
+KJ style makes heavy use of [RAII](../style-guide.md#raii-resource-acquisition-is-initialization). KJ-based code should never use `new` and `delete` directly. Instead, use the utilities in this section to manage memory in a RAII way.
 
 ### Owned pointers, heap allocation, and disposers
 
@@ -135,7 +135,7 @@ However, a `kj::Own` does not necessarily refer to a heap object. A `kj::Own` is
 Some example uses of disposers include:
 
 * `kj::fakeOwn(ref)` returns a `kj::Own` that points to `ref` but doesn't actually destroy it. This is useful when you know for sure that `ref` will outlive the scope of the `kj::Own`, and therefore heap allocation is unnecessary. This is common in cases where, for example, the `kj::Own` is being passed into an object which itself will be destroyed before `ref` becomes invalid. It also makes sense when `ref` is actually a static value or global that lives forever.
-* `kj::refcounted<T>(args...)` allocates a `T` which uses reference counting. It returns a `kj::Own<T>` that represents one reference to the object. Additional references can be created by calling `kj::addRef(*ptr)`. The object is destroyed when no more `kj::Own`s exist pointing at it. Note that `T` must be a subclass of `kj::Refcounted`. If references may be shared across threads, then atomic refcounting must be used; use `kj::atomicRefcounted<T>(args...)` and inherit `kj::AtomicRefcounted`. Reference counting should be using sparingly; see [KJ idioms around reference counting](style-guide.md#reference-counting) for a discussion of when it should be used and why it is designed the way it is.
+* `kj::refcounted<T>(args...)` allocates a `T` which uses reference counting. It returns a `kj::Own<T>` that represents one reference to the object. Additional references can be created by calling `kj::addRef(*ptr)`. The object is destroyed when no more `kj::Own`s exist pointing at it. Note that `T` must be a subclass of `kj::Refcounted`. If references may be shared across threads, then atomic refcounting must be used; use `kj::atomicRefcounted<T>(args...)` and inherit `kj::AtomicRefcounted`. Reference counting should be using sparingly; see [KJ idioms around reference counting](../style-guide.md#reference-counting) for a discussion of when it should be used and why it is designed the way it is.
 * `kj::attachRef(ref, args...)` returns a `kj::Own` pointing to `ref` that actually owns `args...`, so that when the `kj::Own` goes out-of-scope, the other arguments are destroyed. Typically these arguments are themselves `kj::Own`s or other pass-by-move values that themselves own the object referenced by `ref`. `kj::attachVal(value, args...)` is similar, where `value` is a pass-by-move value rather than a reference; a copy of it will be allocated on the heap. Finally, `ownPtr.attach(args...)` returns a new `kj::Own` pointing to the same value that `ownPtr` pointed to, but such that `args...` are owned as well and will be destroyed together. Attachments are always destroyed after the thing they are attached to.
 * `kj::SpaceFor<T>` contains enough space for a value of type `T`, but does not construct the value until its `construct(args...)` method is called. That method returns an `kj::Own<T>`, whose disposer destroys the value. `kj::SpaceFor` is thus a safer way to perform manual construction compared to invoking `kj::ctor()` and `kj::dtor()`.
 
@@ -278,7 +278,7 @@ typedef kj::OneOf<NotStarted, Running, Done> State;
 
 `kj::Function<ReturnType(ParamTypes...)>` represents a callable function with the given signature. A `kj::Function` can be initialized from any callable object, such as a lambda, function pointer, or anything with `operator()`. `kj::Function` is useful when you want to write an API that accepts a lambda callback, without defining the API itself as a template. `kj::Function` supports move semantics.
 
-`kj::ConstFunction` is like `kj::Function`, but is used to indicate that the function should be safe to call from multiple threads. (See [KJ idioms around constness and thread-safety](style-guide.md#constness).)
+`kj::ConstFunction` is like `kj::Function`, but is used to indicate that the function should be safe to call from multiple threads. (See [KJ idioms around constness and thread-safety](../style-guide.md#constness).)
 
 A special optimization type, `kj::FunctionParam`, is like `kj::Function` but designed to be used specifically as the type of a callback parameter to some other function where that callback is only called synchronously; i.e., the callback won't be called anymore after the outer function returns. Unlike `kj::Function`, a `kj::FunctionParam` can be constructed entirely on the stack, with no heap allocation.
 
@@ -300,7 +300,7 @@ KJ's tree-based containers use a b-tree design for better memory locality than t
 
 ## Debugging and Observability
 
-KJ believes that there is no such thing as bug-free code. Instead, we must expect that our code will go wrong, and try to extract as much information as possible when it does. To that end, KJ provides powerful assertion macros designed for observability. (Be sure also to read about [KJ's exception philosophy](style-guide.md#exceptions); this section describes the actual APIs involved.)
+KJ believes that there is no such thing as bug-free code. Instead, we must expect that our code will go wrong, and try to extract as much information as possible when it does. To that end, KJ provides powerful assertion macros designed for observability. (Be sure also to read about [KJ's exception philosophy](../style-guide.md#exceptions); this section describes the actual APIs involved.)
 
 ### Assertions
 
@@ -400,7 +400,7 @@ On Windows, two similar macros are available based on Windows API calling conven
 
 ### Alternate exception types
 
-As described in [KJ's exception philosophy](style-guide.md#exceptions), KJ supports a small set of exception types. Regular assertions throw `FAILED` exceptions. `KJ_SYSCALL` usually throws `FAILED`, but identifies certain error codes as `DISCONNECTED` or `OVERLOADED`. For example, `ECONNRESET` is clearly a `DISCONNECTED` exception.
+As described in [KJ's exception philosophy](../style-guide.md#exceptions), KJ supports a small set of exception types. Regular assertions throw `FAILED` exceptions. `KJ_SYSCALL` usually throws `FAILED`, but identifies certain error codes as `DISCONNECTED` or `OVERLOADED`. For example, `ECONNRESET` is clearly a `DISCONNECTED` exception.
 
 If you wish to manually construct and throw a different exception type, you may use `KJ_EXCEPTION`:
 
@@ -526,7 +526,7 @@ This section describes KJ APIs that control process execution and low-level inte
 
 `kj::Thread` creates a thread in which the lambda passed to `kj::Thread`'s constructor will be executed. `kj::Thread`'s destructor waits for the thread to exit before continuing, and rethrows any exception that had been thrown from the thread's main function -- unless the thread's `.detach()` method has been called, in which case `kj::Thread`'s destructor does nothing.
 
-`kj::MutexGuarded<T>` holds an instance of `T` that is protected by a mutex. In order to access the protected value, you must first create a lock. `.lockExclusive()` returns `kj::Locked<T>` which can be used to access the underlying value. `.lockShared()` returns `kj::Locked<const T>`, [using constness to enforce thread-safe read-only access](style-guide.md#constness) so that multiple threads can take the lock concurrently. In this way, KJ mutexes make it difficult to forget to take a lock before accessing the protected object.
+`kj::MutexGuarded<T>` holds an instance of `T` that is protected by a mutex. In order to access the protected value, you must first create a lock. `.lockExclusive()` returns `kj::Locked<T>` which can be used to access the underlying value. `.lockShared()` returns `kj::Locked<const T>`, [using constness to enforce thread-safe read-only access](../style-guide.md#constness) so that multiple threads can take the lock concurrently. In this way, KJ mutexes make it difficult to forget to take a lock before accessing the protected object.
 
 `kj::Locked<T>` has a method `.wait(cond)` which temporarily releases the lock and waits, taking the lock back as soon as `cond(value)` evaluates true. This provides a much cleaner and more readable interface than traditional conditional variables.
 
