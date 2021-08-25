@@ -282,7 +282,8 @@ KJ_TEST("float stringification and parsing is not locale-dependent") {
   KJ_EXPECT("1.5"_kj.parseAs<double>() == 1.5);
 
   if (setlocale(LC_NUMERIC, "es_ES") == nullptr &&
-      setlocale(LC_NUMERIC, "es_ES.utf8") == nullptr) {
+      setlocale(LC_NUMERIC, "es_ES.utf8") == nullptr &&
+      setlocale(LC_NUMERIC, "es_ES.UTF-8") == nullptr) {
     // Some systems may not have the desired locale available.
     KJ_LOG(WARNING, "Couldn't set locale to es_ES. Skipping this test.");
   } else {
