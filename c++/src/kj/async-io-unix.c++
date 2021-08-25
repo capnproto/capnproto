@@ -1146,6 +1146,9 @@ public:
               ownFd.get(), IPPROTO_TCP, TCP_NODELAY, (char*)&one, sizeof(one))) {
           case EOPNOTSUPP:
           case ENOPROTOOPT: // (returned for AF_UNIX in cygwin)
+#if __FreeBSD__
+          case EINVAL: // (returned for AF_UNIX in FreeBSD)
+#endif
             break;
           default:
             KJ_FAIL_SYSCALL("setsocketopt(IPPROTO_TCP, TCP_NODELAY)", error);
