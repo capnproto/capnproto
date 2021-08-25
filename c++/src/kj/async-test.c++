@@ -25,16 +25,7 @@
 #include "mutex.h"
 #include "thread.h"
 
-// TODO(later): Refactor this more cleanly so that the KJ library itself defines this.
-#if !__BIONIC__ && !KJ_NO_EXCEPTIONS
-#define KJ_FIBERS_AVAILABLE 1
-#else
-#define KJ_FIBERS_AVAILABLE 0
-#endif
-
-#if !KJ_FIBERS_AVAILABLE
-// For bionic, OpenBSD, and no-exception builds, enables the regression test for
-// kj::TaskSet::~TaskSet potentially causing a stack overflow.
+#if !KJ_USE_FIBERS
 #include <pthread.h>
 #endif
 
@@ -759,7 +750,7 @@ TEST(Async, LargeTaskSetDestruction) {
     }
   };
 
-#if KJ_FIBERS_AVAILABLE
+#if KJ_USE_FIBERS
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -998,7 +989,7 @@ KJ_TEST("exclusiveJoin both events complete simultaneously") {
   KJ_EXPECT(!joined.poll(waitScope));
 }
 
-#if KJ_FIBERS_AVAILABLE && !KJ_NO_EXCEPTIONS
+#if KJ_USE_FIBERS
 KJ_TEST("start a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);

@@ -449,11 +449,13 @@ private:
 
   struct StartRoutine;
 
+#if KJ_USE_FIBERS
 #if _WIN32 || __CYGWIN__
   void* osFiber;
-#elif !__BIONIC__
+#else
   struct Impl;
   Impl* impl;
+#endif
 #endif
 
   [[noreturn]] void run();
@@ -1311,7 +1313,8 @@ const Executor& getCurrentThreadExecutor() {
 
 namespace _ {  // private
 
-#if !(_WIN32 || __CYGWIN__ || __BIONIC__)
+#if KJ_USE_FIBERS
+#if !(_WIN32 || __CYGWIN__)
 struct FiberStack::Impl {
   // This struct serves two purposes:
   // - It contains OS-specific state that we don't want to declare in the header.
@@ -1383,6 +1386,7 @@ struct FiberStack::Impl {
   }
 };
 #endif
+#endif
 
 struct FiberStack::StartRoutine {
 #if _WIN32 || __CYGWIN__
@@ -1436,14 +1440,13 @@ FiberStack::FiberStack(size_t stackSizeParam)
     // Force stackSize to a reasonable minimum.
     : stackSize(kj::max(stackSizeParam, 65536))
 {
-#if KJ_NO_EXCEPTIONS
-  KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
 
-#elif _WIN32 || __CYGWIN__
+#if KJ_USE_FIBERS
+#if _WIN32 || __CYGWIN__
   // We can create fibers before we convert the main thread into a fiber in FiberBase
   KJ_WIN32(osFiber = CreateFiber(stackSize, &StartRoutine::run, this));
 
-#elif !__BIONIC__
+#else
   // Note: Nothing below here can throw. If that changes then we need to call Impl::free(impl)
   //   on exceptions...
   ucontext_t context;
@@ -1460,6 +1463,10 @@ FiberStack::FiberStack(size_t stackSizeParam)
   if (_setjmp(impl->originalJmpBuf) == 0) {
     setcontext(&context);
   }
+#endif
+#else
+#if KJ_NO_EXCEPTIONS
+  KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
 #else
   KJ_UNIMPLEMENTED(
       "Fibers are not implemented on this platform because its C library lacks setcontext() "
@@ -1467,13 +1474,16 @@ FiberStack::FiberStack(size_t stackSizeParam)
       "We can likely make it happen using assembly, but didn't want to try unless it was "
       "actually needed.");
 #endif
+#endif
 }
 
 FiberStack::~FiberStack() noexcept(false) {
+#if KJ_USE_FIBERS
 #if _WIN32 || __CYGWIN__
   DeleteFiber(osFiber);
-#elif !__BIONIC__
+#else
   Impl::free(impl, stackSize);
+#endif
 #endif
 }
 
@@ -1545,23 +1555,27 @@ Maybe<Own<Event>> FiberBase::fire() {
 void FiberStack::switchToFiber() {
   // Switch from the main stack to the fiber. Returns once the fiber either calls switchToMain()
   // or returns from its main function.
+#if KJ_USE_FIBERS
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
-#elif !__BIONIC__
+#else
   if (_setjmp(impl->originalJmpBuf) == 0) {
     _longjmp(impl->fiberJmpBuf, 1);
   }
+#endif
 #endif
 }
 void FiberStack::switchToMain() {
   // Switch from the fiber to the main stack. Returns the next time the main stack calls
   // switchToFiber().
+#if KJ_USE_FIBERS
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(getMainWin32Fiber());
-#elif !__BIONIC__
+#else
   if (_setjmp(impl->fiberJmpBuf) == 0) {
     _longjmp(impl->originalJmpBuf, 1);
   }
+#endif
 #endif
 }
 
