@@ -149,7 +149,7 @@ public:
     if (shorteningFulfiller->isWaiting()) {
       // We want to make sure the fulfiller is not rejected with a bogus "PromiseFulfiller
       // destroyed" error, so fulfill it with never-done.
-      shorteningFulfiller->fulfill(kj::NEVER_DONE);
+      shorteningFulfiller->fulfill(KJ_EXCEPTION(DISCONNECTED));
     }
   }
 

@@ -565,6 +565,61 @@ void runWebSocketTests(kj::HttpHeaderTable& headerTable,
   }
 }
 
+void runWebSocketAbortTests(kj::HttpHeaderTable& headerTable,
+                            HttpOverCapnpFactory& clientFactory,
+                            HttpOverCapnpFactory& serverFactory,
+                            kj::WaitScope& waitScope) {
+  // As above but test abort behavior is correct.
+
+  {
+    auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
+    auto donePaf = kj::newPromiseAndFulfiller<void>();
+
+    auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
+      headerTable, kj::mv(wsPaf.fulfiller), kj::mv(donePaf.promise)));
+    auto front = clientFactory.capnpToKj(back);
+    auto client = kj::newHttpClient(*front);
+
+    auto resp = client->openWebSocket("/ws", kj::HttpHeaders(headerTable)).wait(waitScope);
+    KJ_ASSERT(resp.webSocketOrBody.is<kj::Own<kj::WebSocket>>());
+
+    auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
+    auto serverWs = wsPaf.promise.wait(waitScope);
+
+    auto serverAborted = serverWs->whenAborted();
+    clientWs = nullptr;
+    KJ_EXPECT(serverAborted.poll(waitScope));
+    serverAborted.wait(waitScope);
+  }
+
+  // Now test in the other direction.
+  // TODO(review): For some reason it's not noticed in the other direction. The shorteningFulfiller
+  // is satisfied with a DISCONNECTED exception but the clientAborted promise is never satisfied for
+  // some reason...
+#if 0
+  {
+    auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
+    auto donePaf = kj::newPromiseAndFulfiller<void>();
+
+    auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
+      headerTable, kj::mv(wsPaf.fulfiller), kj::mv(donePaf.promise)));
+    auto front = clientFactory.capnpToKj(back);
+    auto client = kj::newHttpClient(*front);
+
+    auto resp = client->openWebSocket("/ws", kj::HttpHeaders(headerTable)).wait(waitScope);
+    KJ_ASSERT(resp.webSocketOrBody.is<kj::Own<kj::WebSocket>>());
+
+    auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
+    auto serverWs = wsPaf.promise.wait(waitScope);
+
+    auto clientAborted = clientWs->whenAborted();
+    serverWs = nullptr;
+    KJ_EXPECT(clientAborted.poll(waitScope));
+    clientAborted.wait(waitScope);
+  }
+#endif
+}
+
 KJ_TEST("HTTP-over-Cap'n Proto WebSocket, no path shortening") {
   kj::EventLoop eventLoop;
   kj::WaitScope waitScope(eventLoop);
@@ -577,6 +632,7 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, no path shortening") {
   auto headerTable = tableBuilder.build();
 
   runWebSocketTests(*headerTable, factory1, factory2, waitScope);
+  runWebSocketAbortTests(*headerTable, factory1, factory2, waitScope);
 }
 
 KJ_TEST("HTTP-over-Cap'n Proto WebSocket, with path shortening") {
@@ -589,6 +645,7 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, with path shortening") {
   auto headerTable = tableBuilder.build();
 
   runWebSocketTests(*headerTable, factory, factory, waitScope);
+  runWebSocketAbortTests(*headerTable, factory, factory, waitScope);
 }
 
 // =======================================================================================
