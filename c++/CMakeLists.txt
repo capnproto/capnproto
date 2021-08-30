@@ -26,6 +26,7 @@ set(INSTALL_TARGETS_DEFAULT_ARGS
 # Options ======================================================================
 
 option(BUILD_TESTING "Build unit tests and enable CTest 'check' target." ON)
+option(INSTALL_TARGETS "Install and export CapnProto." ON)
 option(EXTERNAL_CAPNP "Use the system capnp binary, or the one specified in $CAPNP, instead of using the compiled one." OFF)
 option(CAPNP_LITE "Compile Cap'n Proto in 'lite mode', in which all reflection APIs (schema.h, dynamic.h, etc.) are not included. Produces a smaller library at the cost of features. All programs built against the library must be compiled with -DCAPNP_LITE. Requires EXTERNAL_CAPNP." OFF)
 
@@ -103,80 +104,84 @@ add_subdirectory(src)
 
 # Install ======================================================================
 
-include(CMakePackageConfigHelpers)
+if(INSTALL_TARGETS)
 
-# We used to use write_basic_package_version_file(), but since the autotools build needs to install
-# a config version script as well, I copied the AnyNewerVersion template from my CMake Modules
-# directory to Cap'n Proto's cmake/ directory (alternatively, we could make the autotools build
-# depend on CMake).
-#
-# We might as well use the local copy of the template. In the future we can modify the project's
-# version compatibility policy just by changing that file.
-set(PACKAGE_VERSION ${VERSION})
-configure_file(cmake/CapnProtoConfigVersion.cmake.in cmake/CapnProtoConfigVersion.cmake @ONLY)
+  include(CMakePackageConfigHelpers)
 
-set(CONFIG_PACKAGE_LOCATION ${CMAKE_INSTALL_LIBDIR}/cmake/CapnProto)
+  # We used to use write_basic_package_version_file(), but since the autotools build needs to install
+  # a config version script as well, I copied the AnyNewerVersion template from my CMake Modules
+  # directory to Cap'n Proto's cmake/ directory (alternatively, we could make the autotools build
+  # depend on CMake).
+  #
+  # We might as well use the local copy of the template. In the future we can modify the project's
+  # version compatibility policy just by changing that file.
+  set(PACKAGE_VERSION ${VERSION})
+  configure_file(cmake/CapnProtoConfigVersion.cmake.in cmake/CapnProtoConfigVersion.cmake @ONLY)
 
-configure_package_config_file(cmake/CapnProtoConfig.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfig.cmake
-  INSTALL_DESTINATION ${CONFIG_PACKAGE_LOCATION}
-  PATH_VARS CMAKE_INSTALL_FULL_INCLUDEDIR
-)
-export(EXPORT CapnProtoTargets
-  FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoTargets.cmake"
-  NAMESPACE CapnProto::
-)
-install(EXPORT CapnProtoTargets
-  FILE CapnProtoTargets.cmake
-  NAMESPACE CapnProto::
-  DESTINATION ${CONFIG_PACKAGE_LOCATION}
-)
-install(FILES
-  cmake/CapnProtoMacros.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfig.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfigVersion.cmake
-  DESTINATION ${CONFIG_PACKAGE_LOCATION}
-)
-#install CapnProtoMacros for CapnProtoConfig.cmake build directory consumers
-configure_file(cmake/CapnProtoMacros.cmake cmake/CapnProtoMacros.cmake COPYONLY)
+  set(CONFIG_PACKAGE_LOCATION ${CMAKE_INSTALL_LIBDIR}/cmake/CapnProto)
 
-if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
-  # Variables for pkg-config files
-  set(prefix "${CMAKE_INSTALL_PREFIX}")
-  set(exec_prefix "") # not needed since we use absolute paths in libdir and includedir
-  set(libdir "${CMAKE_INSTALL_FULL_LIBDIR}")
-  set(includedir "${CMAKE_INSTALL_FULL_INCLUDEDIR}")
-  set(PTHREAD_CFLAGS "-pthread")
-  set(STDLIB_FLAG)  # TODO: Unsupported
-
-  set(CAPNP_PKG_CONFIG_FILES
-    pkgconfig/kj.pc
-    pkgconfig/capnp.pc
-    pkgconfig/capnpc.pc
+  configure_package_config_file(cmake/CapnProtoConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfig.cmake
+    INSTALL_DESTINATION ${CONFIG_PACKAGE_LOCATION}
+    PATH_VARS CMAKE_INSTALL_FULL_INCLUDEDIR
   )
+  export(EXPORT CapnProtoTargets
+    FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoTargets.cmake"
+    NAMESPACE CapnProto::
+  )
+  install(EXPORT CapnProtoTargets
+    FILE CapnProtoTargets.cmake
+    NAMESPACE CapnProto::
+    DESTINATION ${CONFIG_PACKAGE_LOCATION}
+  )
+  install(FILES
+    cmake/CapnProtoMacros.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/CapnProtoConfigVersion.cmake
+    DESTINATION ${CONFIG_PACKAGE_LOCATION}
+  )
+  #install CapnProtoMacros for CapnProtoConfig.cmake build directory consumers
+  configure_file(cmake/CapnProtoMacros.cmake cmake/CapnProtoMacros.cmake COPYONLY)
 
-  if(NOT CAPNP_LITE)
-    list(APPEND CAPNP_PKG_CONFIG_FILES
-      pkgconfig/kj-async.pc
-      pkgconfig/kj-gzip.pc
-      pkgconfig/kj-http.pc
-      pkgconfig/kj-test.pc
-      pkgconfig/kj-tls.pc
-      pkgconfig/capnp-rpc.pc
-      pkgconfig/capnp-websocket.pc
-      pkgconfig/capnp-json.pc
+  if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
+    # Variables for pkg-config files
+    set(prefix "${CMAKE_INSTALL_PREFIX}")
+    set(exec_prefix "") # not needed since we use absolute paths in libdir and includedir
+    set(libdir "${CMAKE_INSTALL_FULL_LIBDIR}")
+    set(includedir "${CMAKE_INSTALL_FULL_INCLUDEDIR}")
+    set(PTHREAD_CFLAGS "-pthread")
+    set(STDLIB_FLAG)  # TODO: Unsupported
+
+    set(CAPNP_PKG_CONFIG_FILES
+      pkgconfig/kj.pc
+      pkgconfig/capnp.pc
+      pkgconfig/capnpc.pc
     )
+
+    if(NOT CAPNP_LITE)
+      list(APPEND CAPNP_PKG_CONFIG_FILES
+        pkgconfig/kj-async.pc
+        pkgconfig/kj-gzip.pc
+        pkgconfig/kj-http.pc
+        pkgconfig/kj-test.pc
+        pkgconfig/kj-tls.pc
+        pkgconfig/capnp-rpc.pc
+        pkgconfig/capnp-websocket.pc
+        pkgconfig/capnp-json.pc
+      )
+    endif()
+
+    foreach(pcfile ${CAPNP_PKG_CONFIG_FILES})
+      configure_file(${pcfile}.in "${CMAKE_CURRENT_BINARY_DIR}/${pcfile}" @ONLY)
+      install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${pcfile}" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+    endforeach()
+
+    unset(STDLIB_FLAG)
+    unset(PTHREAD_CFLAGS)
+    unset(includedir)
+    unset(libdir)
+    unset(exec_prefix)
+    unset(prefix)
   endif()
 
-  foreach(pcfile ${CAPNP_PKG_CONFIG_FILES})
-    configure_file(${pcfile}.in "${CMAKE_CURRENT_BINARY_DIR}/${pcfile}" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${pcfile}" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-  endforeach()
-
-  unset(STDLIB_FLAG)
-  unset(PTHREAD_CFLAGS)
-  unset(includedir)
-  unset(libdir)
-  unset(exec_prefix)
-  unset(prefix)
 endif()
