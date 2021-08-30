@@ -105,7 +105,6 @@ add_subdirectory(src)
 # Install ======================================================================
 
 if(EXPORT_TARGETS)
-
   include(CMakePackageConfigHelpers)
 
   # We used to use write_basic_package_version_file(), but since the autotools build needs to install
@@ -183,5 +182,4 @@ if(EXPORT_TARGETS)
     unset(exec_prefix)
     unset(prefix)
   endif()
-
 endif()
