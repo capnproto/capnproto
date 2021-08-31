@@ -368,9 +368,15 @@ private:
 
 #if __GNUC__ >= 8 && !__clang__
 // GCC 8's class-memaccess warning rightly does not like the memcpy()'s below, but there's no
-// "legal" way for us to extract the contetn of a PTMF so too bad.
+// "legal" way for us to extract the content of a PTMF so too bad.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
+#if __GNUC__ >= 11
+// GCC 11's array-bounds is  similarly upset with us for digging into "private" implementation
+// details. But the format is well-defined by the ABI which cannot change so please just let us
+// do it kthx.
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
 #endif
 
 template <typename T, typename ReturnType, typename... ParamTypes>

@@ -1009,6 +1009,10 @@ Function<void(Function<void()>)> ExceptionCallback::getThreadInitializer() {
   return next.getThreadInitializer();
 }
 
+namespace _ {  // private
+  uint uncaughtExceptionCount();  // defined later in this file
+}
+
 class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
 public:
   RootExceptionCallback(): ExceptionCallback(*this) {}
@@ -1017,7 +1021,7 @@ public:
 #if KJ_NO_EXCEPTIONS
     logException(LogSeverity::ERROR, mv(exception));
 #else
-    if (std::uncaught_exception()) {
+    if (_::uncaughtExceptionCount() > 0) {
       // Bad time to throw an exception.  Just log instead.
       //
       // TODO(someday): We should really compare uncaughtExceptionCount() against the count at
