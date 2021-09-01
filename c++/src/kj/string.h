@@ -23,6 +23,7 @@
 
 #include <initializer_list>
 #include "array.h"
+#include "units.h"
 #include <string.h>
 
 KJ_BEGIN_HEADER
@@ -288,8 +289,19 @@ String heapString(ArrayPtr<const char> value);
 // Magic str() function which transforms parameters to text and concatenates them into one big
 // String.
 
-namespace _ {  // private
+template <typename T>
+class SignalSafeCharSequence: public T {
+  // Annotates that the result of a stringification operation is signal-safe. T is the type being
+  // wrapped after stringification (ArrayPtr/CappedArray/FixedArray/StringPtr).
+public:
+  using T::T;
 
+  SignalSafeCharSequence() = default;
+  template <typename ...Args>
+  constexpr SignalSafeCharSequence(Args&&... args): T(kj::fwd<Args>(args)...) {}
+};
+
+namespace _ {  // private
 inline size_t sum(std::initializer_list<size_t> nums) {
   size_t result = 0;
   for (auto num: nums) {
@@ -358,6 +370,29 @@ template <typename T, typename... Rest>
 char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>& first,Rest&&... rest);
 // As with StringTree, we special-case Delimited<T>.
 
+// SignalSafeCharSequence<Delimited<T>> needs some special handling so that the right
+// fill/fillLimited implementation is called.
+template <typename T, typename... Rest>
+char* fill(char* __restrict__ target, SignalSafeCharSequence<Delimited<T>>&& first,
+    Rest&&... rest) {
+  return fill(target, static_cast<Delimited<T>&&>(kj::mv(first)), kj::fwd<Rest>(rest)...);
+}
+template <typename T, typename... Rest>
+char* fillLimited(char* __restrict__ target, char* limit,
+    SignalSafeCharSequence<Delimited<T>>&& first, Rest&&... rest) {
+  return fillLimited(target, limit, static_cast<Delimited<T>&&>(kj::mv(first)),
+      kj::fwd<Rest>(rest)...);
+}
+template <typename T, typename... Rest>
+char* fill(char* __restrict__ target, SignalSafeCharSequence<Delimited<T>>& first, Rest&&... rest) {
+  return fill(target, static_cast<Delimited<T>&>(first), kj::fwd<Rest>(rest)...);
+}
+template <typename T, typename... Rest>
+char* fillLimited(char* __restrict__ target, char* limit,
+    SignalSafeCharSequence<Delimited<T>>& first,Rest&&... rest) {
+  return fillLimited(target, limit, static_cast<Delimited<T>&>(first), kj::fwd<Rest>(rest)...);
+}
+
 struct Stringifier {
   // This is a dummy type with only one instance: STR (below).  To make an arbitrary type
   // stringifiable, define `operator*(Stringifier, T)` to return an iterable container of `char`.
@@ -371,62 +406,74 @@ struct Stringifier {
   // different.  Declaring `operator*` with `Stringifier` as the left operand cannot conflict with
   // anything.
 
-  inline ArrayPtr<const char> operator*(ArrayPtr<const char> s) const { return s; }
-  inline ArrayPtr<const char> operator*(ArrayPtr<char> s) const { return s; }
-  inline ArrayPtr<const char> operator*(const Array<const char>& s) const KJ_LIFETIMEBOUND {
+  template <typename T>
+  using SignalSafe = SignalSafeCharSequence<T>;
+
+  inline SignalSafe<ArrayPtr<const char>>
+  operator*(ArrayPtr<const char> s) const { return s; }
+  inline SignalSafe<ArrayPtr<const char>>
+  operator*(ArrayPtr<char> s) const { return s; }
+  inline SignalSafe<ArrayPtr<const char>>
+  operator*(const Array<const char>& s) const KJ_LIFETIMEBOUND {
     return s;
   }
-  inline ArrayPtr<const char> operator*(const Array<char>& s) const KJ_LIFETIMEBOUND { return s; }
+  inline SignalSafe<ArrayPtr<const char>>
+  operator*(const Array<char>& s) const KJ_LIFETIMEBOUND { return s; }
   template<size_t n>
-  inline ArrayPtr<const char> operator*(const CappedArray<char, n>& s) const KJ_LIFETIMEBOUND {
+  inline SignalSafe<ArrayPtr<const char>>
+  operator*(const CappedArray<char, n>& s) const KJ_LIFETIMEBOUND {
     return s;
   }
-  template<size_t n>
-  inline ArrayPtr<const char> operator*(const FixedArray<char, n>& s) const KJ_LIFETIMEBOUND {
+  template <size_t n>
+  inline SignalSafe<ArrayPtr<const char>>
+  operator*(const FixedArray<char, n> &s) const KJ_LIFETIMEBOUND {
     return s;
   }
-  inline ArrayPtr<const char> operator*(const char* s) const KJ_LIFETIMEBOUND {
+  inline SignalSafe<ArrayPtr<const char>>
+  operator*(const char *s) const KJ_LIFETIMEBOUND {
     return arrayPtr(s, strlen(s));
   }
 #if __cpp_char8_t
-  inline ArrayPtr<const char> operator*(const char8_t* s) const KJ_LIFETIMEBOUND {
+  inline SignalSafe<ArrayPtr<const char>> operator*(const char8_t* s) const KJ_LIFETIMEBOUND {
     return operator*(reinterpret_cast<const char*>(s));
   }
 #endif
-  inline ArrayPtr<const char> operator*(const String& s) const KJ_LIFETIMEBOUND {
+  inline SignalSafe<ArrayPtr<const char>> operator*(const String& s) const KJ_LIFETIMEBOUND {
     return s.asArray();
   }
-  inline ArrayPtr<const char> operator*(const StringPtr& s) const { return s.asArray(); }
+  inline SignalSafe<ArrayPtr<const char>> operator*(
+      const StringPtr& s) const { return s.asArray(); }
 
   inline Range<char> operator*(const Range<char>& r) const { return r; }
   inline Repeat<char> operator*(const Repeat<char>& r) const { return r; }
 
-  inline FixedArray<char, 1> operator*(char c) const {
+  inline SignalSafe<FixedArray<char, 1>> operator*(char c) const {
     FixedArray<char, 1> result;
     result[0] = c;
     return result;
   }
 
-  constexpr StringPtr operator*(decltype(nullptr)) const {
+  constexpr SignalSafe<StringPtr> operator*(decltype(nullptr)) const {
     return "nullptr"_kj;
   }
-  constexpr StringPtr operator*(bool b) const {
+  constexpr SignalSafe<StringPtr> operator*(bool b) const {
     return b ? "true"_kj : "false"_kj;
   }
 
-  CappedArray<char, 5> operator*(signed char i) const;
-  CappedArray<char, 5> operator*(unsigned char i) const;
-  CappedArray<char, sizeof(short) * 3 + 2> operator*(short i) const;
-  CappedArray<char, sizeof(unsigned short) * 3 + 2> operator*(unsigned short i) const;
-  CappedArray<char, sizeof(int) * 3 + 2> operator*(int i) const;
-  CappedArray<char, sizeof(unsigned int) * 3 + 2> operator*(unsigned int i) const;
-  CappedArray<char, sizeof(long) * 3 + 2> operator*(long i) const;
-  CappedArray<char, sizeof(unsigned long) * 3 + 2> operator*(unsigned long i) const;
-  CappedArray<char, sizeof(long long) * 3 + 2> operator*(long long i) const;
-  CappedArray<char, sizeof(unsigned long long) * 3 + 2> operator*(unsigned long long i) const;
+  SignalSafe<CappedArray<char, 5>> operator*(signed char i) const;
+  SignalSafe<CappedArray<char, 5>> operator*(unsigned char i) const;
+  SignalSafe<CappedArray<char, sizeof(short) * 3 + 2>> operator*(short i) const;
+  SignalSafe<CappedArray<char, sizeof(unsigned short) * 3 + 2>> operator*(unsigned short i) const;
+  SignalSafe<CappedArray<char, sizeof(int) * 3 + 2>> operator*(int i) const;
+  SignalSafe<CappedArray<char, sizeof(unsigned int) * 3 + 2>> operator*(unsigned int i) const;
+  SignalSafe<CappedArray<char, sizeof(long) * 3 + 2>> operator*(long i) const;
+  SignalSafe<CappedArray<char, sizeof(unsigned long) * 3 + 2>> operator*(unsigned long i) const;
+  SignalSafe<CappedArray<char, sizeof(long long) * 3 + 2>> operator*(long long i) const;
+  SignalSafe<CappedArray<char, sizeof(unsigned long long) * 3 + 2>> operator*(
+      unsigned long long i) const;
   CappedArray<char, 24> operator*(float f) const;
   CappedArray<char, 32> operator*(double f) const;
-  CappedArray<char, sizeof(const void*) * 2 + 1> operator*(const void* s) const;
+  SignalSafe<CappedArray<char, sizeof(const void*) * 2 + 1>> operator*(const void* s) const;
 
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP  // supports expression SFINAE?
   template <typename T, typename Result = decltype(instance<T>().toString())>
@@ -449,6 +496,32 @@ auto toCharSequence(T&& value) -> decltype(_::STR * kj::fwd<T>(value)) {
 
   return _::STR * kj::fwd<T>(value);
 }
+
+namespace _ {  // private
+template <typename T, typename = void>
+struct IsSignalSafeToCharSequence_ {
+  static constexpr bool value = false;
+};
+template <typename T>
+struct IsSignalSafeToCharSequence_<T, VoidSfinae<decltype(toCharSequence(instance<T>()))>> {
+  static constexpr bool value = isInstanceOfTemplate<
+      decltype(toCharSequence(instance<T>())), SignalSafeCharSequence>();
+};
+}  // namespace _ (private)
+
+template <typename T>
+static constexpr inline bool isSignalSafeToCharSequence() {
+  // Returns true if T is safe to stringify in a signal handler context. This means no memory
+  // allocations and no invocations of methods that are not safe not use in a signal handler
+  // context. These are manually annotated for each type and this must be done carefully to avoid
+  // accidentally allowing types to be passed to strPreallocated. This can be invoked on a type T
+  // that isn't itself valid to pass to toCharSequence, in which case this returns false.
+  return _::IsSignalSafeToCharSequence_<T>::value;
+}
+
+template <typename T, typename U>
+using PropagateSignalSafeCharSequence = Conditional<isSignalSafeToCharSequence<U>(),
+    SignalSafeCharSequence<T>, T>;
 
 CappedArray<char, sizeof(unsigned char) * 2 + 1> hex(unsigned char i);
 CappedArray<char, sizeof(unsigned short) * 2 + 1> hex(unsigned short i);
@@ -497,6 +570,21 @@ String strArray(T&& arr, const char* delim) {
   return result;
 }
 
+namespace _ {   // private
+template <typename ... Args>
+struct AssertSignalSafeToCharSequence_;
+
+template <>
+struct AssertSignalSafeToCharSequence_<>{};
+
+template <typename T, typename ... Args>
+struct AssertSignalSafeToCharSequence_<T, Args...>:
+    public AssertSignalSafeToCharSequence_<Args...> {
+  static_assert(isSignalSafeToCharSequence<T>(),
+      "This type isn't safe to stringify in a signal handler.");
+};
+}  // namespace _ (private)
+
 template <typename... Params>
 StringPtr strPreallocated(ArrayPtr<char> buffer, Params&&... params) {
   // Like str() but writes into a preallocated buffer. If the buffer is not long enough, the result
@@ -507,13 +595,7 @@ StringPtr strPreallocated(ArrayPtr<char> buffer, Params&&... params) {
   //     char buffer[256];
   //     StringPtr text = strPreallocated(buffer, params...);
   //
-  // This is useful for optimization. It can also potentially be used safely in async signal
-  // handlers. HOWEVER, to use in an async signal handler, all of the stringifiers for the inputs
-  // must also be signal-safe. KJ guarantees signal safety when stringifying any built-in integer
-  // type (but NOT floating-points), basic char/byte sequences (ArrayPtr<byte>, String, etc.), as
-  // well as Array<T> as long as T can also be stringified safely. To safely stringify a delimited
-  // array, you must use kj::delimited(arr, delim) rather than the deprecated
-  // kj::strArray(arr, delim).
+  // This is useful for optimization. For use in a signal handler use strSignalSafe() instead.
 
   char* end = _::fillLimited(buffer.begin(), buffer.end() - 1,
       toCharSequence(kj::fwd<Params>(params))...);
@@ -521,13 +603,33 @@ StringPtr strPreallocated(ArrayPtr<char> buffer, Params&&... params) {
   return StringPtr(buffer.begin(), end);
 }
 
+template <typename... Params>
+StringPtr KJ_ALWAYS_INLINE(strSignalSafe(ArrayPtr<char> buffer, Params&&... params)) {
+  // Like strPreallocated this fills into a pre-allocated buffer to avoid calls to malloc. Unlike
+  // strPreallocated, all of the stringifiers for the inputs must also be safe to stringify within
+  // a signal handler. KJ guarantees signal safety when stringifying any built-in integer type
+  // (but NOT floating-points), basic char/byte sequences (ArrayPtr<byte>, String, etc.), as well as
+  // Array<T> as long as T can also be stringified safely. To safely stringify a delimited array,
+  // you must use kj::delimited(arr, delim) rather than the deprecated kj::strArray(arr, delim).
+  // These rules are enforced at compile-time for types that returns kj::SignalSafeCharSequence from
+  // KJ_STRINGIFY.
+
+  // Compile-time enforcement that the either we're not in a signal handler or the supplied types
+  // follow the rules.
+  constexpr _::AssertSignalSafeToCharSequence_<Params...> assertion KJ_UNUSED {};
+
+  return strPreallocated(buffer, kj::fwd<Params>(params)...);
+}
+
 template <typename T, typename = decltype(toCharSequence(kj::instance<T&>()))>
-inline _::Delimited<ArrayPtr<T>> operator*(const _::Stringifier&, ArrayPtr<T> arr) {
+inline PropagateSignalSafeCharSequence<_::Delimited<ArrayPtr<T>>, T>
+operator*(const _::Stringifier&, ArrayPtr<T> arr) {
   return _::Delimited<ArrayPtr<T>>(arr, ", ");
 }
 
 template <typename T, typename = decltype(toCharSequence(kj::instance<const T&>()))>
-inline _::Delimited<ArrayPtr<const T>> operator*(const _::Stringifier&, const Array<T>& arr) {
+inline PropagateSignalSafeCharSequence<_::Delimited<ArrayPtr<const T>>, const T>
+operator*(const _::Stringifier&, const Array<T>& arr) {
   return _::Delimited<ArrayPtr<const T>>(arr, ", ");
 }
 
@@ -745,9 +847,13 @@ char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>& first, R
 }
 
 template <typename T>
-inline Delimited<T>&& KJ_STRINGIFY(Delimited<T>&& delimited) { return kj::mv(delimited); }
+inline SignalSafeCharSequence<Delimited<T>> KJ_STRINGIFY(Delimited<T>&& delimited) {
+  return kj::mv(delimited);
+}
 template <typename T>
-inline const Delimited<T>& KJ_STRINGIFY(const Delimited<T>& delimited) { return delimited; }
+inline const SignalSafeCharSequence<Delimited<T>>& KJ_STRINGIFY(const Delimited<T>& delimited) {
+  return delimited;
+}
 
 }  // namespace _ (private)
 

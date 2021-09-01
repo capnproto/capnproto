@@ -177,7 +177,8 @@ static CappedArray<char, sizeof(T) * 3 + 2> stringifyImpl(T i) {
 }
 
 #define STRINGIFY_INT(type, unsigned) \
-CappedArray<char, sizeof(type) * 3 + 2> Stringifier::operator*(type i) const { \
+SignalSafeCharSequence<CappedArray<char, sizeof(type) * 3 + 2>> \
+Stringifier::operator*(type i) const { \
   return stringifyImpl<type, unsigned>(i); \
 }
 
@@ -194,7 +195,8 @@ STRINGIFY_INT(unsigned long long, unsigned long long);
 
 #undef STRINGIFY_INT
 
-CappedArray<char, sizeof(const void*) * 2 + 1> Stringifier::operator*(const void* i) const {
+SignalSafeCharSequence<CappedArray<char, sizeof(const void*) * 2 + 1>>
+Stringifier::operator*(const void* i) const {
   return hexImpl<uintptr_t>(reinterpret_cast<uintptr_t>(i));
 }
 
@@ -370,6 +372,11 @@ char* DoubleToBuffer(double value, char* buffer) {
     return buffer;
   }
 
+  // DoubleToBuffer isn't async-signal safe because it invokes snprintf & this is the implementation
+  // backing stringification of doubles.
+  static_assert(!isSignalSafeToCharSequence<double>(),
+      "double stringification uses snprintf and isn't currently safe in a signal handler...");
+
   int snprintf_result KJ_UNUSED =
     snprintf(buffer, kDoubleToBufferSize, "%.*g", DBL_DIG, value);
 
@@ -428,6 +435,11 @@ char* FloatToBuffer(float value, char* buffer) {
     strcpy(buffer, "nan");
     return buffer;
   }
+
+  // DoubleToBuffer isn't async-signal safe because it invokes snprintf & this is the implementation
+  // backing stringification of doubles.
+  static_assert(!isSignalSafeToCharSequence<float>(),
+      "float stringification uses snprintf and isn't currently safe in a signal handler...");
 
   int snprintf_result KJ_UNUSED =
     snprintf(buffer, kFloatToBufferSize, "%.*g", FLT_DIG, value);

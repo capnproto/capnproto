@@ -454,6 +454,13 @@ template <typename...> struct VoidSfinae_ { using Type = void; };
 template <typename... Ts> using VoidSfinae = typename VoidSfinae_<Ts...>::Type;
 // Note: VoidSfinae is std::void_t from C++17.
 
+template <bool, typename T, typename F> struct Conditional_;
+template <typename T, typename F> struct Conditional_<true, T, F> { using Type = T; };
+template <typename T, typename F> struct Conditional_<false, T, F> { using Type = F; };
+
+template <bool condition, typename T, typename F>
+using Conditional = typename Conditional_<condition, T, F>::Type;
+
 template <typename T>
 T instance() noexcept;
 // Like std::declval, but doesn't transform T into an rvalue reference.  If you want that, specify

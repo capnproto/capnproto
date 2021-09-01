@@ -86,6 +86,9 @@ template <> constexpr bool isIntegral<unsigned short>() { return true; }
 template <> constexpr bool isIntegral<unsigned int>() { return true; }
 template <> constexpr bool isIntegral<unsigned long>() { return true; }
 template <> constexpr bool isIntegral<unsigned long long>() { return true; }
+#if __cpp_char8_t
+template <> constexpr bool isIntegral<char8_t>() { return true; }
+#endif
 
 template <typename T>
 struct IsIntegralOrBounded_ { static constexpr bool value = isIntegral<T>(); };

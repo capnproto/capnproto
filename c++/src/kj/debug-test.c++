@@ -49,6 +49,9 @@ namespace kj {
 namespace _ {  // private
 namespace {
 
+static_assert(isSignalSafeToCharSequence<DebugComparison<int, uint8_t>>(), "");
+static_assert(!isSignalSafeToCharSequence<DebugComparison<int, StringPtr>>(), "");
+
 class MockException {};
 
 class MockExceptionCallback: public ExceptionCallback {

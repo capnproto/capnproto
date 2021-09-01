@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "string.h"
+#include "time.h"
 #include <kj/compat/gtest.h>
 #include <string>
 #include "vector.h"
@@ -28,6 +29,36 @@
 namespace kj {
 namespace _ {  // private
 namespace {
+
+static_assert(isSignalSafeToCharSequence<decltype(nullptr)>(), "");
+static_assert(isSignalSafeToCharSequence<bool>(), "");
+static_assert(isSignalSafeToCharSequence<char>(), "");
+static_assert(isSignalSafeToCharSequence<const char>(), "");
+static_assert(isSignalSafeToCharSequence<const char*>(), "");
+static_assert(isSignalSafeToCharSequence<int>(), "");
+static_assert(isSignalSafeToCharSequence<uint8_t>(), "");
+static_assert(isSignalSafeToCharSequence<const unsigned>(), "");
+static_assert(isSignalSafeToCharSequence<const unsigned&>(), "");
+#if __cpp_char8_t
+static_assert(isSignalSafeToCharSequence<char8_t>(), "");
+static_assert(isSignalSafeToCharSequence<const char8_t*>(), "");
+#endif
+static_assert(isSignalSafeToCharSequence<String>(), "");
+static_assert(isSignalSafeToCharSequence<StringPtr>(), "");
+static_assert(isSignalSafeToCharSequence<TimePoint>(), "");
+static_assert(isSignalSafeToCharSequence<Date>(), "");
+static_assert(isSignalSafeToCharSequence<Duration>(), "");
+
+static_assert(isSignalSafeToCharSequence<Delimited<ArrayPtr<int>>>(), "");
+static_assert(isSignalSafeToCharSequence<Delimited<ArrayPtr<StringPtr>>>(), "");
+static_assert(!isSignalSafeToCharSequence<Delimited<const Duration*>>(), "");
+static_assert(isSignalSafeToCharSequence<ArrayPtr<StringPtr>>(), "");
+static_assert(isSignalSafeToCharSequence<ArrayPtr<int>>(), "");
+static_assert(isSignalSafeToCharSequence<String&>(), "");
+static_assert(isSignalSafeToCharSequence<const String&>(), "");
+static_assert(!isSignalSafeToCharSequence<const TimePoint*>(), "");
+static_assert(!isSignalSafeToCharSequence<const Date*>(), "");
+static_assert(!isSignalSafeToCharSequence<const Duration*>(), "");
 
 TEST(String, Str) {
   EXPECT_EQ("foobar", str("foo", "bar"));
