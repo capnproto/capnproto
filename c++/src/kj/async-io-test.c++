@@ -299,11 +299,11 @@ TEST(AsyncIo, AncillaryMessageHandlerNoMsg) {
 }
 #endif
 
-// We only support ancillary messages on Unix.
-// MacOS only supports SO_TIMESTAMP on datagram sockets, so this test won't work.
-// Android fails this test for unknown reasons and I don't care because it's an extremely obscure
-// feature anyway.
-#if !_WIN32 && !__CYGWIN__  && !__APPLE__ && !__ANDROID__
+// This test uses SO_TIMESTAMP on a SOCK_STREAM, which is only supported by Linux. Ideally we'd
+// rewrite the test to use some other message type that is widely supported on streams. But for
+// now we just limit the test to Linux. Also, it doesn't work on Android for some reason, and it
+// isn't worth investigating, so we skip it there.
+#if __linux__ && !__ANDROID__
 TEST(AsyncIo, AncillaryMessageHandler) {
   auto ioContext = setupAsyncIo();
   auto& network = ioContext.provider->getNetwork();

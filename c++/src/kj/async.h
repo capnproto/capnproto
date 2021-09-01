@@ -27,6 +27,19 @@
 
 KJ_BEGIN_HEADER
 
+#ifndef KJ_USE_FIBERS
+  #if __BIONIC__ || __FreeBSD__ || __OpenBSD__ || KJ_NO_EXCEPTIONS
+    // These platforms don't support fibers.
+    #define KJ_USE_FIBERS 0
+  #else
+    #define KJ_USE_FIBERS 1
+  #endif
+#else
+  #if KJ_NO_EXCEPTIONS && KJ_USE_FIBERS
+    #error "Fibers cannot be enabled when exceptions are disabled."
+  #endif
+#endif
+
 namespace kj {
 
 class EventLoop;
