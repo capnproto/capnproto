@@ -51,14 +51,14 @@ static_assert(isSignalSafeToCharSequence<Duration>(), "");
 
 static_assert(isSignalSafeToCharSequence<Delimited<ArrayPtr<int>>>(), "");
 static_assert(isSignalSafeToCharSequence<Delimited<ArrayPtr<StringPtr>>>(), "");
-static_assert(!isSignalSafeToCharSequence<Delimited<const Duration*>>(), "");
+static_assert(isSignalSafeToCharSequence<Delimited<Array<const Duration*>>>(), "");
 static_assert(isSignalSafeToCharSequence<ArrayPtr<StringPtr>>(), "");
 static_assert(isSignalSafeToCharSequence<ArrayPtr<int>>(), "");
 static_assert(isSignalSafeToCharSequence<String&>(), "");
 static_assert(isSignalSafeToCharSequence<const String&>(), "");
-static_assert(!isSignalSafeToCharSequence<const TimePoint*>(), "");
-static_assert(!isSignalSafeToCharSequence<const Date*>(), "");
-static_assert(!isSignalSafeToCharSequence<const Duration*>(), "");
+static_assert(isSignalSafeToCharSequence<const TimePoint*>(), "");
+static_assert(isSignalSafeToCharSequence<const Date*>(), "");
+static_assert(isSignalSafeToCharSequence<const Duration*>(), "");
 
 static_assert(!isToCharSequenceResultingInCappedCapacity<int(&)[1]>(), "");
 static_assert(!isToCharSequenceResultingInCappedCapacity<int(&)[1]>(), "");

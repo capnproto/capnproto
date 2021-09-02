@@ -40,6 +40,16 @@
 #include <sys/wait.h>
 #endif
 
+#if __linux__
+#include <sys/syscall.h>
+#include <sched.h>
+#include "time.h"
+
+#if !__GLIBC_PREREQ(2, 30)
+#define gettid() ((pid_t)syscall(SYS_gettid))
+#endif
+#endif
+
 #if _MSC_VER && !defined(__clang__)
 #pragma warning(disable: 4996)
 // Warns that sprintf() is buffer-overrunny. Yeah, I know, it's cool.
@@ -544,8 +554,25 @@ KJ_TEST("magic assert stringification signal handler") {
   auto expected = str(condition);
   auto buf = kj::heapArray<char>(200);
   auto actual = strSignalSafe(buf, condition);
-  KJ_REQUIRE(actual == expected);
-  KJ_REQUIRE("4294967295 == 4294967295" == actual);
+  KJ_EXPECT(actual == expected);
+  KJ_EXPECT("4294967295 == 4294967295" == actual);
+
+#if __linux__ && !__aarch64__
+  // Double-check that this works within a real signal handler. The intention is that this test runs
+  // under TSAN to have compiler-generated instrumentation verify that assumptions hold.
+  static auto sigBuf = kj::heapArray<char>(200);
+
+  signal(SIGUSR1, [](int) {
+    static constexpr Duration a = INT64_MIN * NANOSECONDS;
+    static constexpr Duration b = INT64_MIN * NANOSECONDS;
+    static const auto condition = _::MAGIC_ASSERT << a == b;
+    strSignalSafe(sigBuf, condition);
+  });
+  raise(SIGUSR1);
+
+  actual = kj::StringPtr(sigBuf.begin());
+  KJ_EXPECT(actual == "-9223372036.854775808s == -9223372036.854775808s");
+#endif
 }
 }  // namespace
 }  // namespace _ (private)
