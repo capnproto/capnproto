@@ -407,8 +407,12 @@ struct Stringifier {
     return result;
   }
 
-  StringPtr operator*(decltype(nullptr)) const;
-  StringPtr operator*(bool b) const;
+  constexpr StringPtr operator*(decltype(nullptr)) const {
+    return "nullptr"_kj;
+  }
+  constexpr StringPtr operator*(bool b) const {
+    return b ? "true"_kj : "false"_kj;
+  }
 
   CappedArray<char, 5> operator*(signed char i) const;
   CappedArray<char, 5> operator*(unsigned char i) const;

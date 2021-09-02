@@ -146,14 +146,6 @@ HEXIFY_INT(unsigned long long);
 
 namespace _ {  // private
 
-StringPtr Stringifier::operator*(decltype(nullptr)) const {
-  return "nullptr";
-}
-
-StringPtr Stringifier::operator*(bool b) const {
-  return b ? StringPtr("true") : StringPtr("false");
-}
-
 template <typename T, typename Unsigned>
 static CappedArray<char, sizeof(T) * 3 + 2> stringifyImpl(T i) {
   // We don't use sprintf() because it's not async-signal-safe (for strPreallocated()).
@@ -202,7 +194,7 @@ STRINGIFY_INT(unsigned long long, unsigned long long);
 
 #undef STRINGIFY_INT
 
-CappedArray<char, sizeof(const void*) * 2 + 1> Stringifier::operator*(const void* i) const { \
+CappedArray<char, sizeof(const void*) * 2 + 1> Stringifier::operator*(const void* i) const {
   return hexImpl<uintptr_t>(reinterpret_cast<uintptr_t>(i));
 }
 
