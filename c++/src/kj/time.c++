@@ -261,13 +261,13 @@ const MonotonicClock& systemPreciseMonotonicClock() {
 
 #endif
 
-kj::String KJ_STRINGIFY(TimePoint t) {
+CappedArray<char, sizeof(int64_t) * 3 + 2 + 4> KJ_STRINGIFY(TimePoint t) {
   return kj::toCharSequence(t - kj::origin<TimePoint>());
 }
-kj::String KJ_STRINGIFY(Date d) {
+CappedArray<char, sizeof(int64_t) * 3 + 2 + 4> KJ_STRINGIFY(Date d) {
   return kj::toCharSequence(d - UNIX_EPOCH);
 }
-kj::String KJ_STRINGIFY(Duration d) {
+CappedArray<char, sizeof(int64_t) * 3 + 2 + 4> KJ_STRINGIFY(Duration d) {
   auto digits = kj::toCharSequence(d / kj::NANOSECONDS);
   ArrayPtr<char> arr = digits;
 
@@ -292,15 +292,20 @@ kj::String KJ_STRINGIFY(Duration d) {
     unit = kj::NANOSECONDS;
   }
 
+  CappedArray<char, sizeof(int64_t) * 3 + 2 + 4> result;
+  char *end;
   if (d % unit == 0 * kj::NANOSECONDS) {
-    return kj::str(arr.slice(0, point), suffix);
+    end = _::fillLimited(result.begin(), result.end(), arr.slice(0, point), suffix);
   } else {
     while (arr.back() == '0') {
       arr = arr.slice(0, arr.size() - 1);
     }
-    KJ_ASSERT(arr.size() > point);
-    return kj::str(arr.slice(0, point), ".", arr.slice(point, arr.size()), suffix);
+    KJ_DASSERT(arr.size() > point);
+    end = _::fillLimited(result.begin(), result.end(), arr.slice(0, point), "."_kj,
+        arr.slice(point, arr.size()), suffix);
   }
+  result.setSize(end - result.begin());
+  return result;
 }
 
 }  // namespace kj
