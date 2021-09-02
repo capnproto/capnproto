@@ -719,7 +719,8 @@ StringPtr KJ_STRINGIFY(Exception::Type type) {
     "failed",
     "overloaded",
     "disconnected",
-    "unimplemented"
+    "unimplemented",
+    "canceled"
   };
 
   return TYPE_STRINGS[static_cast<uint>(type)];

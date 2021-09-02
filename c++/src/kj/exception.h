@@ -59,9 +59,12 @@ public:
     // The call required communication over a connection that has been lost. The callee will need
     // to re-establish connections and try again.
 
-    UNIMPLEMENTED = 3
+    UNIMPLEMENTED = 3,
     // The requested method is not implemented. The caller may wish to revert to a fallback
     // approach based on other methods.
+
+    CANCELED = 4
+    // The operation was canceled.
 
     // IF YOU ADD A NEW VALUE:
     // - Update the stringifier.

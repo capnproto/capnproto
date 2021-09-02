@@ -1194,6 +1194,9 @@ struct Exception {
     # The server doesn't implement the requested method. If there is some other method that the
     # client could call (perhaps an older and/or slower interface), it should try that instead.
     # Otherwise, this should be treated like `failed`.
+
+    canceled @4;
+    # The operation was canceled.
   }
 
   obsoleteIsCallersFault @1 :Bool;
