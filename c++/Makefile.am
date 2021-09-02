@@ -499,6 +499,7 @@ endif
 heavy_tests =                                                  \
   src/kj/async-test.c++                                        \
   src/kj/async-xthread-test.c++                                \
+  src/kj/async-coroutine-test.c++                              \
   src/kj/async-unix-test.c++                                   \
   src/kj/async-unix-xthread-test.c++                           \
   src/kj/async-win32-test.c++                                  \

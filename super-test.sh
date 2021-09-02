@@ -122,6 +122,8 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     clang* )
+      # Need to set CC as well for configure to handle -fcoroutines-ts.
+      export CC=clang${1#clang}
       export CXX=clang++${1#clang}
       if [ "$1" != "clang-5.0" ]; then
         export LIB_FUZZING_ENGINE=-fsanitize=fuzzer
@@ -400,6 +402,17 @@ fi
 if [ $IS_CLANG = yes ]; then
   # Don't fail out on this ridiculous "argument unused during compilation" warning.
   export CXXFLAGS="$CXXFLAGS -Wno-error=unused-command-line-argument"
+
+  # At the moment, only our clang-10 CI run seems to like -fcoroutines-ts. Earlier versions seem to
+  # have a library misconfiguration causing ./configure to result in the following error:
+  #   conftest.cpp:12:12: fatal error: 'initializer_list' file not found
+  #   #include <initializer_list>
+  # Let's use any clang version >= 10 so that if we move to a newer version, we'll get additional
+  # coverage by default.
+  if [ "${CXX#*-}" -ge 10 ] 2>/dev/null; then
+    export CXXFLAGS="$CXXFLAGS -std=gnu++17 -stdlib=libc++ -fcoroutines-ts"
+    export LDFLAGS="-fcoroutines-ts -stdlib=libc++"
+  fi
 else
   # GCC emits uninitialized warnings all over and they seem bogus. We use valgrind to test for
   # uninitialized memory usage later on. GCC 4 also emits strange bogus warnings with
