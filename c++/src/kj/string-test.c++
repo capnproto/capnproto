@@ -60,6 +60,20 @@ static_assert(!isSignalSafeToCharSequence<const TimePoint*>(), "");
 static_assert(!isSignalSafeToCharSequence<const Date*>(), "");
 static_assert(!isSignalSafeToCharSequence<const Duration*>(), "");
 
+static_assert(!isToCharSequenceResultingInCappedCapacity<int(&)[1]>(), "");
+static_assert(!isToCharSequenceResultingInCappedCapacity<int(&)[1]>(), "");
+static_assert(isToCharSequenceResultingInCappedCapacity<const char(&)[1]>(), "");
+static_assert(isToCharSequenceResultingInCappedCapacity<char(&)[1]>(), "");
+static_assert(isToCharSequenceResultingInCappedCapacity<decltype("abc")>(), "");
+static_assert(isToCharSequenceResultingInCappedCapacity<decltype(nullptr)>(), "");
+static_assert(isToCharSequenceResultingInCappedCapacity<bool>(), "");
+static_assert(_::cappedCapacityOfToCharSequence<decltype("")>() == 0, "");
+static_assert(_::cappedCapacityOfToCharSequence<decltype("abc")>() == 3, "");
+static_assert(_::cappedCapacityOfToCharSequence<void*>() == sizeof(void*) * 2 + 1, "");
+static_assert(_::cappedCapacityOfToCharSequence<int>() == sizeof(int) * 3 + 2, "");
+static_assert(_::cappedCapacityOfToCharSequence<decltype(nullptr)>() == sizeof("nullptr") - 1, "");
+static_assert(_::cappedCapacityOfToCharSequence<bool>() == sizeof("false") - 1, "");
+
 TEST(String, Str) {
   EXPECT_EQ("foobar", str("foo", "bar"));
   EXPECT_EQ("1 2 3 4", str(1, " ", 2u, " ", 3l, " ", 4ll));

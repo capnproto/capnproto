@@ -507,6 +507,120 @@ struct IsSignalSafeToCharSequence_<T, VoidSfinae<decltype(toCharSequence(instanc
   static constexpr bool value = isInstanceOfTemplate<
       decltype(toCharSequence(instance<T>())), SignalSafeCharSequence>();
 };
+
+template <typename T> struct HasCappedCapacity_ { static constexpr bool value = false; };
+template <typename T>
+struct HasCappedCapacity_<SignalSafeCharSequence<T>>: public HasCappedCapacity_<T> {};
+template <typename T, size_t N>
+struct HasCappedCapacity_<FixedArray<T, N>> { static constexpr bool value = true; };
+template <typename T, size_t N>
+struct HasCappedCapacity_<CappedArray<T, N>> { static constexpr bool value = true; };
+
+template <typename T> static inline constexpr bool hasCappedCapacity() {
+  // This returns true if T::capacity() is a method that exists, false otherwise. This is a
+  // helper function for isToCharSequenceResultingInCappedCapacity as I couldn't figure out how to
+  // make the SFINAE magic less verbose.
+  return HasCappedCapacity_<T>::value;
+}
+
+template <typename T> struct IsLiteralArray_ { static constexpr bool value = false; };
+template <typename T, size_t N>
+struct IsLiteralArray_<T(&)[N]> { static constexpr bool value = true; };
+template <typename T> static constexpr bool isLiteralArray() { return IsLiteralArray_<T>::value; }
+// Detect if a type is a C array.
+
+template <typename T>
+struct IsSpecialToCharSequenceCapacity_ { static constexpr bool value = false; };
+template <typename T, size_t N>
+struct IsSpecialToCharSequenceCapacity_<T(&)[N]> {
+  static constexpr bool value = isSameType<char, Decay<T>>()
+#if __cpp_char8_t
+    || isSameType<char8_t, Decay<T>>()
+#endif
+    ;
+};
+// TODO(someday): Support T[N] for types other than char which should get rid of most of these
+//   helpers (would instead just imply stringification returning a
+//   ConstexprDelimited<T, N, length of delimiter> type that can compute the total capacity
+//   required.
+// That would get rid of most of IsSpecialToCharSequenceCapacity_ and all IsLiteralArray_.
+template <>
+struct IsSpecialToCharSequenceCapacity_<decltype(nullptr)> { static constexpr bool value = true; };
+template <>
+struct IsSpecialToCharSequenceCapacity_<bool> { static constexpr bool value = true; };
+// Will always be needed to handle nullptr/bool properly.
+
+template <typename T>
+static constexpr bool isSpecialToCharSequenceCapacity() {
+  return IsSpecialToCharSequenceCapacity_<T>::value;
+}
+
+template <typename T, typename = void>
+struct IsToCharSequenceResultingInCappedCapacity_ {
+  static constexpr bool value = false;
+};
+template <typename T>
+class IsToCharSequenceResultingInCappedCapacity_<T,
+    VoidSfinae<decltype(toCharSequence(instance<T>()))>> {
+public:
+  static constexpr bool value = isSpecialToCharSequenceCapacity<T>() || (!isLiteralArray<T>() &&
+      hasCappedCapacity<decltype(toCharSequence(instance<T>()))>());
+  // Currently toCharSequence will think arrays are T* and say it has a capped capacity when it
+  // doesn't (treating it like a void*). Thus we need special helpers here to disable.
+};
+template <typename T>
+static constexpr inline bool isToCharSequenceResultingInCappedCapacity() {
+  // Returns true if toCharSequence<T> returns a stringifiable type that has an upper-bound capacity
+  // requirement known at compile-time (i.e. CappedArray/FixedArray). This is primarily useful for
+  // indicating whether composite types are safe to stringify in a signal handler context as
+  // otherwise you would need to allocate memory. There's an alternate universe where KJ_STRINGIFY
+  // could optionally accept the buffer to append into rather than having to return a type, but
+  // that seems overly complex.
+  return IsToCharSequenceResultingInCappedCapacity_<T>::value;
+};
+
+template <typename T>
+struct CappedCapacityOfToCharSequence_ {
+  static constexpr size_t capacity =
+      CappedCapacityOfToCharSequence_<decltype(toCharSequence(instance<T>()))>::capacity;
+};
+template <>
+struct CappedCapacityOfToCharSequence_<decltype(nullptr)> {
+  static constexpr size_t capacity = sizeof("nullptr") - 1;
+};
+template <>
+struct CappedCapacityOfToCharSequence_<bool> {
+  static constexpr size_t capacity = max(sizeof("true"), sizeof("false")) - 1;
+};
+template <typename T, size_t N>
+struct CappedCapacityOfToCharSequence_<CappedArray<T, N>> {
+  static constexpr size_t capacity = N;
+};
+template <typename T, size_t N>
+struct CappedCapacityOfToCharSequence_<FixedArray<T, N>> {
+  static constexpr size_t capacity = N;
+};
+template <typename T, size_t N>
+struct CappedCapacityOfToCharSequence_<T(&)[N]> {
+  // TODO(someday): Support arbitrary T[N] arrays by doing
+  //   CappedCapacityOfToCharSequence_<T>::capacity * N + (N - 1) * strlen(", ")
+  // char[N] and char8_t[N] should be presumed to be null-terminated & have capacity N - 1 as below.
+  // This requires some care as there needs to be a variant of Delimited that takes a fixed string
+  // delimiter as a template argument and implementing an override of operator* to distinguish T[N].
+  static_assert(isToCharSequenceResultingInCappedCapacity<T(&)[N]>(),
+      "This type doesn't have a capped capacity that's currently known.");
+  static constexpr size_t capacity = N - 1;
+};
+template <typename T>
+struct CappedCapacityOfToCharSequence_<SignalSafeCharSequence<T>>
+    : public CappedCapacityOfToCharSequence_<T> {};
+
+template <typename T>
+static inline constexpr size_t cappedCapacityOfToCharSequence() {
+  // Returns the maximum capacity required to serialize T to a string. Calling this on a type that
+  // doesn't satisfy isToCharSequenceResultingInCappedCapacity will result in a compile error.
+  return CappedCapacityOfToCharSequence_<T>::capacity;
+}
 }  // namespace _ (private)
 
 template <typename T>

@@ -632,10 +632,40 @@ struct DebugComparison {
   template <typename T> inline void operator&(T&& other) = delete;
   template <typename T> inline void operator^(T&& other) = delete;
   template <typename T> inline void operator|(T&& other) = delete;
+
+  static inline constexpr bool isToCharSequenceSignalSafe() {
+    // The transitive signal safety requirement should be obvious. We restrict this further that
+    // both sides need to have a known upper-bound on the amount of space needed to serialize
+    // without losing information. This ensures we don't break any existing usages and that our
+    // stack usage is more constrained without too much slack needed to support serializing really
+    // large strings.
+    return isSignalSafeToCharSequence<Left>() && isSignalSafeToCharSequence<Right>() &&
+        isToCharSequenceResultingInCappedCapacity<Left>() &&
+        isToCharSequenceResultingInCappedCapacity<Right>();
+  }
 };
 
-template <typename Left, typename Right>
-String KJ_STRINGIFY(DebugComparison<Left, Right>& cmp) {
+template <typename Left, typename Right,
+    typename = EnableIf<DebugComparison<Left, Right>::isToCharSequenceSignalSafe()>>
+SignalSafeCharSequence<CappedArray<char, cappedCapacityOfToCharSequence<Left>() +
+    cappedCapacityOfToCharSequence<Right>() + 4>>
+KJ_STRINGIFY(const DebugComparison<Left, Right>& cmp) {
+  // This is the stringification of DebugComparison that is selected for use when Left and Right
+  // are safe to stringify in a signal handler AND they're both resulting in CappedArray/FixedArray
+  // when serialized. All other cases use the default heap allocation stringification mechanism.
+  // +4 because the longest comparison op is 2 characters + a space character on either side.
+  constexpr size_t capacity = cappedCapacityOfToCharSequence<Left>() +
+      cappedCapacityOfToCharSequence<Right>() + 4;
+  CappedArray<char, capacity> result;
+  auto end = fillLimited(result.begin(), result.end(), tryToCharSequence(&cmp.left), cmp.op,
+      tryToCharSequence(&cmp.right));
+  result.setSize(end - result.begin());
+  return result;
+}
+
+template <typename Left, typename Right,
+    typename = EnableIf<!DebugComparison<Left, Right>::isToCharSequenceSignalSafe()>>
+String KJ_STRINGIFY(const DebugComparison<Left, Right>& cmp) {
   return _::concat(tryToCharSequence(&cmp.left), cmp.op, tryToCharSequence(&cmp.right));
 }
 
@@ -682,7 +712,7 @@ struct DebugExpression {
 };
 
 template <typename T>
-StringPtr KJ_STRINGIFY(const DebugExpression<T>& exp) {
+SignalSafeCharSequence<StringPtr> KJ_STRINGIFY(const DebugExpression<T>& exp) {
   // Hack: This will only ever be called in cases where the expression's truthiness was asserted
   //   directly, and was determined to be falsy.
   return "false"_kj;

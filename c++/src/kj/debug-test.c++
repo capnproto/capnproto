@@ -536,6 +536,17 @@ KJ_TEST("magic assert stringification") {
   }
 }
 
+KJ_TEST("magic assert stringification signal handler") {
+  static constexpr uint a = UINT32_MAX;
+  static constexpr uint b = UINT32_MAX;
+  static const auto condition = _::MAGIC_ASSERT << a == b;
+
+  auto expected = str(condition);
+  auto buf = kj::heapArray<char>(200);
+  auto actual = strSignalSafe(buf, condition);
+  KJ_REQUIRE(actual == expected);
+  KJ_REQUIRE("4294967295 == 4294967295" == actual);
+}
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
