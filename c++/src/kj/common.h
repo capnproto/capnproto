@@ -422,6 +422,15 @@ template <typename T> struct IsLvalueReference_<T&> { static constexpr bool valu
 template <typename T>
 inline constexpr bool isLvalueReference() { return IsLvalueReference_<T>::value; }
 
+template <typename T, template <typename ...> class Ref>
+struct IsInstanceOfTemplate_ { static constexpr bool value = false; };
+template <template <typename ...> class Ref, typename... Args>
+struct IsInstanceOfTemplate_<Ref<Args...>, Ref> { static constexpr bool value = true; };
+template <typename T, template <typename ...> class Ref>
+inline constexpr bool isInstanceOfTemplate() { return IsInstanceOfTemplate_<T, Ref>::value; }
+// Returns true if T is a specialization of Ref. For example, isInstanceOfTemplate<T, kj::Array>
+// will return true if T is a kj::Array<U>.
+
 template <typename T> struct Decay_ { typedef T Type; };
 template <typename T> struct Decay_<T&> { typedef typename Decay_<T>::Type Type; };
 template <typename T> struct Decay_<T&&> { typedef typename Decay_<T>::Type Type; };
