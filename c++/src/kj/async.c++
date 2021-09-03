@@ -53,8 +53,12 @@
 #include <windows.h>  // for Sleep(0) and fibers
 #include "windows-sanity.h"
 #else
+
+#if KJ_USE_FIBERS
 #include <ucontext.h>
 #include <setjmp.h>    // for fibers
+#endif
+
 #include <sys/mman.h>  // mmap(), for allocating new stacks
 #include <unistd.h>    // sysconf()
 #include <errno.h>

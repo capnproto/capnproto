@@ -421,10 +421,15 @@ capnpc_c___SOURCES = src/capnp/compiler/capnpc-c++.c++
 # Also attempt to run ldconfig, because otherwise users get confused.  If
 # it fails (e.g. because the platform doesn't have it, or because the
 # user doesn't have root privileges), don't worry about it.
+#
+# We need to specify the path for OpenBSD.
 install-exec-hook:
 	ln -sf capnp $(DESTDIR)$(bindir)/capnpc
-	ldconfig < /dev/null > /dev/null 2>&1 || true
-
+	if [ `uname` == 'OpenBSD' ]; then \
+	        (ldconfig /usr/local/lib /usr/lib /usr/X11R6/lib > /dev/null 2>&1 || true); \
+	else \
+		ldconfig < /dev/null > /dev/null 2>&1 || true; \
+	fi
 uninstall-hook:
 	rm -f $(DESTDIR)$(bindir)/capnpc
 
