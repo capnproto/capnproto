@@ -1479,7 +1479,9 @@ kj::Own<PeerIdentity> SocketAddress::getIdentity(kj::LowLevelAsyncIoProvider& ll
       // seen vague references on the internet saying that a PID of 0 and a UID of uid_t(-1) are used
       // as invalid values.
 
-#if defined(SO_PEERCRED)
+// OpenBSD defines SO_PEERCRED but uses a different interface for it
+// hence we're falling back to LOCAL_PEERCRED
+#if defined(SO_PEERCRED) && !__OpenBSD__
       struct ucred creds;
       uint length = sizeof(creds);
       stream.getsockopt(SOL_SOCKET, SO_PEERCRED, &creds, &length);
@@ -1491,7 +1493,7 @@ kj::Own<PeerIdentity> SocketAddress::getIdentity(kj::LowLevelAsyncIoProvider& ll
       }
 
 #elif defined(LOCAL_PEERCRED)
-      // MacOS / FreeBSD
+      // MacOS / FreeBSD / OpenBSD
       struct xucred creds;
       uint length = sizeof(creds);
       stream.getsockopt(SOL_LOCAL, LOCAL_PEERCRED, &creds, &length);
