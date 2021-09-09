@@ -23,6 +23,11 @@
 #include "debug.h"
 #include <stdlib.h>
 
+#if KJ_DEBUG_TABLE_IMPL
+#undef KJ_DASSERT
+#define KJ_DASSERT KJ_ASSERT
+#endif
+
 namespace kj {
 namespace _ {
 
