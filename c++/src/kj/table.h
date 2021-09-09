@@ -39,6 +39,8 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
+class String;
+
 namespace _ {  // private
 
 template <typename Row>
@@ -1171,6 +1173,8 @@ public:
   template <typename Func>
   inline bool check(Func& func) const { return i != 0 && func(i - 1); }
   // Equivalent to *this != nullptr && func(**this)
+
+  kj::String toString() const;
 
 private:
   uint i;
