@@ -651,7 +651,7 @@ void BTreeImpl::renumber(uint oldRow, uint newRow, const SearchKey& searchKey) {
     auto& node = tree[pos].parent;
     uint indexInParent = searchKey.search(node);
     pos = node.children[indexInParent];
-    if (node.keys[indexInParent] == oldRow) {
+    if (indexInParent < kj::size(node.keys) && node.keys[indexInParent] == oldRow) {
       node.keys[indexInParent] = newRow;
     }
     KJ_DASSERT(pos != 0);
