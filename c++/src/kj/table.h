@@ -1241,6 +1241,12 @@ struct BTreeImpl::Parent {
   static constexpr size_t NKEYS = 7;
   MaybeUint keys[NKEYS];
   // Pointers to table rows, offset by 1 so that 0 is an empty value.
+  //
+  // Each keys[i] specifies the table row which is the "last" row found under children[i].
+  //
+  // Note that `keys` has size 7 but `children` has size 8. `children[8]`'s "last row" is not
+  // recorded here, because the Parent's Parent records it instead. (Or maybe the Parent's Parent's
+  // Parent, if this Parent is `children[8]` of its own Parent. And so on.)
 
   static constexpr size_t NCHILDREN = NKEYS + 1;
   uint children[NCHILDREN];
