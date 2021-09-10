@@ -24,6 +24,8 @@
 #include <set>
 #include <unordered_set>
 #include "hash.h"
+#include "time.h"
+#include <stdlib.h>
 
 namespace kj {
 namespace _ {
@@ -904,6 +906,69 @@ KJ_TEST("large tree table") {
       }
       KJ_ASSERT(iter == range.end());
     }
+  }
+}
+
+KJ_TEST("TreeIndex fuzz test") {
+  // A test which randomly modifies a TreeIndex to try to discover buggy state changes.
+
+  uint seed = (kj::systemPreciseCalendarClock().now() - kj::UNIX_EPOCH) / kj::NANOSECONDS;
+  KJ_CONTEXT(seed);  // print the seed if the test fails
+  srand(seed);
+
+  Table<uint, TreeIndex<UintCompare>> table;
+
+  auto randomInsert = [&]() {
+    table.upsert(rand(), [](auto&&, auto&&) {});
+  };
+  auto randomErase = [&]() {
+    if (table.size() > 0) {
+      auto& row = table.begin()[rand() % table.size()];
+      table.erase(row);
+    }
+  };
+  auto randomLookup = [&]() {
+    if (table.size() > 0) {
+      auto& row = table.begin()[rand() % table.size()];
+      auto& found = KJ_ASSERT_NONNULL(table.find(row));
+      KJ_ASSERT(&found == &row);
+    }
+  };
+
+  // First pass: focus on insertions, aim to do 2x as many insertions as deletions.
+  for (auto i KJ_UNUSED: kj::zeroTo(1000)) {
+    switch (rand() % 4) {
+      case 0:
+      case 1:
+        randomInsert();
+        break;
+      case 2:
+        randomErase();
+        break;
+      case 3:
+        randomLookup();
+        break;
+    }
+
+    table.verify();
+  }
+
+  // Second pass: focus on deletions, aim to do 2x as many deletions as insertions.
+  for (auto i KJ_UNUSED: kj::zeroTo(1000)) {
+    switch (rand() % 4) {
+      case 0:
+        randomInsert();
+        break;
+      case 1:
+      case 2:
+        randomErase();
+        break;
+      case 3:
+        randomLookup();
+        break;
+    }
+
+    table.verify();
   }
 }
 
