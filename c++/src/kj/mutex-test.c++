@@ -686,6 +686,7 @@ KJ_TEST("tracking blocking on mutex acquisition") {
   event.sigev_value.sival_ptr = &blockingInfo;
   KJ_SYSCALL(event._sigev_un._tid = gettid());
   KJ_SYSCALL(timer_create(CLOCK_MONOTONIC, &event, &timer));
+  KJ_DEFER(timer_delete(timer));
 
   kj::Duration timeout = 50 * MILLISECONDS;
   struct itimerspec spec;
@@ -742,6 +743,7 @@ KJ_TEST("tracking blocked on CondVar::wait") {
   event.sigev_value.sival_ptr = &blockingInfo;
   KJ_SYSCALL(event._sigev_un._tid = gettid());
   KJ_SYSCALL(timer_create(CLOCK_MONOTONIC, &event, &timer));
+  KJ_DEFER(timer_delete(timer));
 
   kj::Duration timeout = 50 * MILLISECONDS;
   struct itimerspec spec;
@@ -798,6 +800,7 @@ KJ_TEST("tracking blocked on Once::init") {
   event.sigev_value.sival_ptr = &blockingInfo;
   KJ_SYSCALL(event._sigev_un._tid = gettid());
   KJ_SYSCALL(timer_create(CLOCK_MONOTONIC, &event, &timer));
+  KJ_DEFER(timer_delete(timer));
 
   Lazy<int> once;
   MutexGuarded<bool> onceInitializing(false);
