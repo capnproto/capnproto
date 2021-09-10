@@ -56,9 +56,9 @@ using TimePoint = Absolute<Duration, _::TimeLabel>;
 using Date = Absolute<Duration, _::DateLabel>;
 // A point in real-world time, measured relative to the Unix epoch (Jan 1, 1970 00:00:00 UTC).
 
-kj::String KJ_STRINGIFY(TimePoint);
-kj::String KJ_STRINGIFY(Date);
-kj::String KJ_STRINGIFY(Duration);
+CappedArray<char, sizeof(int64_t) * 3 + 2 + 4> KJ_STRINGIFY(TimePoint);
+CappedArray<char, sizeof(int64_t) * 3 + 2 + 4> KJ_STRINGIFY(Date);
+CappedArray<char, sizeof(int64_t) * 3 + 2 + 4> KJ_STRINGIFY(Duration);
 
 constexpr Date UNIX_EPOCH = origin<Date>();
 // The `Date` representing Jan 1, 1970 00:00:00 UTC.
@@ -110,7 +110,6 @@ const MonotonicClock& systemPreciseMonotonicClock();
 // The "coarse" version has precision around 1-10ms, while the "precise" version has precision
 // better than 1us. The "precise" version may be slightly slower, though on modern hardware and
 // a reasonable operating system the difference is usually negligible.
-
 }  // namespace kj
 
 KJ_END_HEADER
