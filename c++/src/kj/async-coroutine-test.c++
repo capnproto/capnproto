@@ -433,9 +433,7 @@ Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
   co_await client->write("foo", 3);
 }
 
-Promise<String> receiveDataCoroutine(Promise<Own<NetworkAddress>> addressPromise) {
-  auto address = co_await addressPromise;
-  auto listener = address->listen();
+Promise<String> receiveDataCoroutine(Own<ConnectionReceiver> listener) {
   auto server = co_await listener->accept();
   char buffer[4];
   auto n = co_await server->read(buffer, 3, 4);
@@ -447,13 +445,15 @@ KJ_TEST("Simple network test with coroutine") {
   auto io = setupAsyncIo();
   auto& network = io.provider->getNetwork();
 
-  constexpr uint port = 5500;
+  Own<NetworkAddress> serverAddress = network.parseAddress("*", 0).wait(io.waitScope);
+  Own<ConnectionReceiver> listener = serverAddress->listen();
 
-  sendData(network.parseAddress("localhost", port)).detach([](Exception&& exception) {
+  sendData(network.parseAddress("localhost", listener->getPort()))
+      .detach([](Exception&& exception) {
     KJ_FAIL_EXPECT(exception);
   });
 
-  String result = receiveDataCoroutine(network.parseAddress("*", port)).wait(io.waitScope);
+  String result = receiveDataCoroutine(kj::mv(listener)).wait(io.waitScope);
 
   KJ_EXPECT("foo" == result);
 }
