@@ -600,7 +600,7 @@ template <typename T, size_t N>
 struct CappedCapacityOfToCharSequence_<T(&)[N]> {
   // TODO(someday): Support arbitrary T[N] arrays by doing
   //   CappedCapacityOfToCharSequence_<T>::capacity * N + (N - 1) * strlen(", ")
-  // char[N] and char8_t[N] should be presumed to be null-terminated & have capacity N - 1 as below.
+  // char[N] should be presumed to be null-terminated & have capacity N - 1 as below.
   // This requires some care as there needs to be a variant of Delimited that takes a fixed string
   // delimiter as a template argument and implementing an override of operator* to distinguish T[N].
   static_assert(isToCharSequenceResultingInCappedCapacity<T(&)[N]>(),
