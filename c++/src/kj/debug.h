@@ -615,11 +615,6 @@ inline String Debug::makeDescription<>(const char* macroArgs) {
 template <typename T>
 struct DebugExpression;
 
-template <typename T, typename = decltype(toCharSequence(instance<T&>()))>
-inline auto tryToCharSequence(T* value) { return kj::toCharSequence(*value); }
-inline StringPtr tryToCharSequence(...) { return "(can't stringify)"_kj; }
-// SFINAE to stringify a value if and only if it can be stringified.
-
 template <typename Left, typename Right>
 struct DebugComparison {
   Left left;

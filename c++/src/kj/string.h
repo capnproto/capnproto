@@ -498,15 +498,10 @@ auto toCharSequence(T&& value) -> decltype(_::STR * kj::fwd<T>(value)) {
 }
 
 namespace _ {  // private
-template <typename T, typename = void>
-struct IsSignalSafeToCharSequence_ {
-  static constexpr bool value = false;
-};
-template <typename T>
-struct IsSignalSafeToCharSequence_<T, VoidSfinae<decltype(toCharSequence(instance<T>()))>> {
-  static constexpr bool value = isInstanceOfTemplate<
-      decltype(toCharSequence(instance<T>())), SignalSafeCharSequence>();
-};
+template <typename T, typename = decltype(toCharSequence(instance<T&>()))>
+inline auto tryToCharSequence(T* value) { return kj::toCharSequence(*value); }
+inline SignalSafeCharSequence<StringPtr> tryToCharSequence(...) { return "(can't stringify)"_kj; }
+// SFINAE to stringify a value if and only if it can be stringified.
 
 template <typename T> struct HasCappedCapacity_ { static constexpr bool value = false; };
 template <typename T>
@@ -626,7 +621,8 @@ static constexpr inline bool isSignalSafeToCharSequence() {
   // context. These are manually annotated for each type and this must be done carefully to avoid
   // accidentally allowing types to be passed to strPreallocated. This can be invoked on a type T
   // that isn't itself valid to pass to toCharSequence, in which case this returns false.
-  return _::IsSignalSafeToCharSequence_<T>::value;
+  return isInstanceOfTemplate<
+      decltype(_::tryToCharSequence(instance<Decay<T>*>())), SignalSafeCharSequence>();
 }
 
 template <typename T, typename U>
