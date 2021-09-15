@@ -714,7 +714,7 @@ StringPtr strPreallocated(ArrayPtr<char> buffer, Params&&... params) {
 }
 
 template <typename... Params>
-StringPtr KJ_ALWAYS_INLINE(strSignalSafe(ArrayPtr<char> buffer, Params&&... params)) {
+StringPtr strSignalSafe(ArrayPtr<char> buffer, Params&&... params) {
   // Like strPreallocated this fills into a pre-allocated buffer to avoid calls to malloc. Unlike
   // strPreallocated, all of the stringifiers for the inputs must also be safe to stringify within
   // a signal handler. KJ guarantees signal safety when stringifying any built-in integer type
