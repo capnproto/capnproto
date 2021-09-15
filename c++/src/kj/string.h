@@ -531,14 +531,10 @@ template <typename T> static constexpr bool isLiteralArray() { return IsLiteralA
 
 template <typename T>
 struct IsSpecialToCharSequenceCapacity_ { static constexpr bool value = false; };
-template <typename T, size_t N>
-struct IsSpecialToCharSequenceCapacity_<T(&)[N]> {
-  static constexpr bool value = isSameType<char, Decay<T>>()
-#if __cpp_char8_t
-    || isSameType<char8_t, Decay<T>>()
-#endif
-    ;
-};
+template <size_t N>
+struct IsSpecialToCharSequenceCapacity_<char(&)[N]> { static constexpr bool value = true; };
+template <size_t N>
+struct IsSpecialToCharSequenceCapacity_<const char(&)[N]> { static constexpr bool value = true; };
 // TODO(someday): Support T[N] for types other than char which should get rid of most of these
 //   helpers (would instead just imply stringification returning a
 //   ConstexprDelimited<T, N, length of delimiter> type that can compute the total capacity
