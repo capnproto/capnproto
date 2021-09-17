@@ -1022,19 +1022,20 @@ KJ provides an advanced, cross-platform filesystem API in `kj/filesystem.h`. Fea
 * Sparse files ("hole punching"), copy-on-write file cloning (`FICLONE`, `FICLONERANGE`), `sendfile()`-based copying, `renameat2()` atomic replacements, and more will automatically be used when available.
 
 ```c++
-// NOTE: in most cases, you should construct the `Filesystem` at the entry point of your program,
-// then pass it in as a parameter wherever it's used. This allows test implementations or user-space
-// filesystems.
+// NOTE: in most cases, you should construct the `Filesystem` at the entry
+// point of your program, then pass it in as a parameter wherever it's used.
+// This allows dependency injection of alternative filesystem implementations
+// for testing or other interesting use cases.
 kj::Own<kj::Filesystem> fs = kj::newDiskFilesystem();
-kj::Own<const kj::ReadableFile>> file = fs->getCurrent().openFile(kj::Path::parse("README.md"));
+kj::Own<const kj::ReadableFile>> file =
+    fs->getCurrent().openFile(kj::Path::parse("README.md"));
 kj::String text = file->readAllText();
 ```
 
-For large files, consider using mmap when you want to read the full contents of a file, which uses
-on demand paging as contents are accessed rather than buffering the contents into memory first.
+For large files, consider using mmap when you want to read the full contents of a file, which uses on demand paging as contents are accessed rather than buffering the contents into memory first.
 
 ```c++
-kj::Array<const char> fileBuffer = file->mmap(0, file->stat().size).releaseAsChars();
+kj::Array<const kj::byte> fileBuffer = file->mmap(0, file->stat().size);
 ```
 
 See the API reference (header file) for details.

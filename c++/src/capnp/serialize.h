@@ -57,10 +57,11 @@ public:
   //
   //     auto fs = kj::newDiskFilesystem();
   //     auto file = fs->getCurrent().openFile(kj::Path::parse("mydata"));
-  //     kj::Array<const kj::byte> fileBuffer = file->mmap(0, file->stat().size).releaseAsChars()
+  //     kj::Array<const kj::byte> fileBuffer = file->mmap(0, file->stat().size);
   //     kj::ArrayPtr<const capnp::word> messageBuffer(
-  //       reinterpret_cast<const capnp::word *>(fileBuffer.begin()), fileBuffer.size() / sizeof(capnp::word));
-  //     capnp::FlatArrayMessageReader capnpReader { messageBuffer };
+  //       reinterpret_cast<const capnp::word *>(fileBuffer.begin()),
+  //       fileBuffer.size() / sizeof(capnp::word));
+  //     capnp::FlatArrayMessageReader capnpReader(messageBuffer);
 
   kj::ArrayPtr<const word> getSegment(uint id) override;
 
