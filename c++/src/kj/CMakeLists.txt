@@ -84,8 +84,9 @@ endif()
 #make sure the lite flag propagates to all users (internal + external) of this library
 target_compile_definitions(kj PUBLIC ${CAPNP_LITE_FLAG})
 #make sure external consumers don't need to manually set the include dirs
+get_filename_component(PARENT_DIR ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 target_include_directories(kj INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+  $<BUILD_INTERFACE:${PARENT_DIR}>
   $<INSTALL_INTERFACE:include>
 )
 # Ensure the library has a version set to match autotools build

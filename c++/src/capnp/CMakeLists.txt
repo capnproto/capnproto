@@ -66,8 +66,9 @@ add_library(capnp ${capnp_sources})
 add_library(CapnProto::capnp ALIAS capnp)
 target_link_libraries(capnp PUBLIC kj)
 #make sure external consumers don't need to manually set the include dirs
+get_filename_component(PARENT_DIR ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 target_include_directories(capnp INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+  $<BUILD_INTERFACE:${PARENT_DIR}>
   $<INSTALL_INTERFACE:include>
 )
 # Ensure the library has a version set to match autotools build
