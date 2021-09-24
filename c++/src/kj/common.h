@@ -1263,6 +1263,60 @@ inline T* readMaybe(T* ptr) { return ptr; }
 
 #define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::_::readMaybe(exp))
 
+#if __GNUC__
+// These two macros provide a friendly syntax to extract the value of a Maybe or return early.
+//
+// Use KJ_UNWRAP_OR_RETURN if you just want to return a simple value when the Maybe is null:
+//
+//     int foo(Maybe<int> maybe) {
+//       int value = KJ_UNWRAP_OR_RETURN(maybe, -1);
+//       // ... use value ...
+//     }
+//
+// For functions returning void, omit the second parameter to KJ_UNWRAP_OR_RETURN:
+//
+//     void foo(Maybe<int> maybe) {
+//       int value = KJ_UNWRAP_OR_RETURN(maybe);
+//       // ... use value ...
+//     }
+//
+// Use KJ_UNWRAP_OR if you want to execute a block with multiple statements.
+//
+//     int foo(Maybe<int> maybe) {
+//       int value = KJ_UNWRAP_OR(maybe, {
+//         KJ_LOG(ERROR, "problem!!!");
+//         return -1;
+//       });
+//       // ... use value ...
+//     }
+//
+// The block MUST return at the end or you will get a compiler error
+//
+// Unfortunately, these macros seem impossible to express without using GCC's non-standard
+// "statement expressions" extension. IIFEs don't do the trick here because a lambda cannot
+// return out of the parent scope. These macros should therefore only be used in projects that
+// target GCC or GCC-compatible compilers.
+
+#define KJ_UNWRAP_OR_RETURN(value, ...) \
+  (*({ \
+    auto _kj_result = ::kj::_::readMaybe(value); \
+    if (!_kj_result) { \
+      return __VA_ARGS__; \
+    } \
+    kj::mv(_kj_result); \
+  }))
+
+#define KJ_UNWRAP_OR(value, block) \
+  (*({ \
+    auto _kj_result = ::kj::_::readMaybe(value); \
+    if (!_kj_result) { \
+      block; \
+      asm("KJ_UNWRAP_OR_block_is_missing_return_statement\n"); \
+    } \
+    kj::mv(_kj_result); \
+  }))
+#endif
+
 template <typename T>
 class Maybe {
   // A T, or nullptr.
