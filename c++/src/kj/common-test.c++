@@ -418,6 +418,96 @@ TEST(Common, MaybeConstness) {
   }
 }
 
+#if __GNUC__
+TEST(Common, MaybeUnwrapOrReturn) {
+  {
+    auto func = [](Maybe<int> i) -> int {
+      int& j = KJ_UNWRAP_OR_RETURN(i, -1);
+      KJ_EXPECT(&j == &KJ_ASSERT_NONNULL(i));
+      return j + 2;
+    };
+
+    KJ_EXPECT(func(123) == 125);
+    KJ_EXPECT(func(nullptr) == -1);
+  }
+
+  {
+    auto func = [&](Maybe<String> maybe) -> int {
+      String str = KJ_UNWRAP_OR_RETURN(kj::mv(maybe), -1);
+      return str.parseAs<int>();
+    };
+
+    KJ_EXPECT(func(kj::str("123")) == 123);
+    KJ_EXPECT(func(nullptr) == -1);
+  }
+
+  // Test void return.
+  {
+    int val = 0;
+    auto func = [&](Maybe<int> i) {
+      val = KJ_UNWRAP_OR_RETURN(i);
+    };
+
+    func(123);
+    KJ_EXPECT(val == 123);
+    val = 321;
+    func(nullptr);
+    KJ_EXPECT(val == 321);
+  }
+
+  // Test KJ_UNWRAP_OR
+  {
+    bool wasNull = false;
+    auto func = [&](Maybe<int> i) -> int {
+      int& j = KJ_UNWRAP_OR(i, {
+        wasNull = true;
+        return -1;
+      });
+      KJ_EXPECT(&j == &KJ_ASSERT_NONNULL(i));
+      return j + 2;
+    };
+
+    KJ_EXPECT(func(123) == 125);
+    KJ_EXPECT(!wasNull);
+    KJ_EXPECT(func(nullptr) == -1);
+    KJ_EXPECT(wasNull);
+  }
+
+  {
+    bool wasNull = false;
+    auto func = [&](Maybe<String> maybe) -> int {
+      String str = KJ_UNWRAP_OR(kj::mv(maybe), {
+        wasNull = true;
+        return -1;
+      });
+      return str.parseAs<int>();
+    };
+
+    KJ_EXPECT(func(kj::str("123")) == 123);
+    KJ_EXPECT(!wasNull);
+    KJ_EXPECT(func(nullptr) == -1);
+    KJ_EXPECT(wasNull);
+  }
+
+  // Test void return.
+  {
+    int val = 0;
+    auto func = [&](Maybe<int> i) {
+      val = KJ_UNWRAP_OR(i, {
+        return;
+      });
+    };
+
+    func(123);
+    KJ_EXPECT(val == 123);
+    val = 321;
+    func(nullptr);
+    KJ_EXPECT(val == 321);
+  }
+
+}
+#endif
+
 class Foo {
 public:
   KJ_DISALLOW_COPY(Foo);
