@@ -776,7 +776,9 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::Async
   auto conn = kj::heap<TlsConnection>(kj::mv(stream), reinterpret_cast<SSL_CTX*>(ctx));
   auto promise = conn->accept();
   KJ_IF_MAYBE(timeout, acceptTimeout) {
-    promise = KJ_REQUIRE_NONNULL(timer).timeoutAfter(*timeout, kj::mv(promise));
+    promise = KJ_REQUIRE_NONNULL(timer).afterDelay(*timeout).then([]() -> kj::Promise<void> {
+      return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
+    }).exclusiveJoin(kj::mv(promise));
   }
   return promise.then(kj::mvCapture(conn, [](kj::Own<TlsConnection> conn)
       -> kj::Own<kj::AsyncIoStream> {
@@ -798,7 +800,9 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStr
   auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), reinterpret_cast<SSL_CTX*>(ctx));
   auto promise = conn->accept();
   KJ_IF_MAYBE(timeout, acceptTimeout) {
-    promise = KJ_REQUIRE_NONNULL(timer).timeoutAfter(*timeout, kj::mv(promise));
+    promise = KJ_REQUIRE_NONNULL(timer).afterDelay(*timeout).then([]() -> kj::Promise<void> {
+      return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
+    }).exclusiveJoin(kj::mv(promise));
   }
   return promise.then([conn=kj::mv(conn),innerId=kj::mv(stream.peerIdentity)]() mutable {
     auto id = conn->getIdentity(kj::mv(innerId));
