@@ -651,7 +651,7 @@ KJ_TEST("TLS SNI") {
   TestSniCallback callback;
   serverOptions.sniCallback = callback;
 
-  TlsTest test(TlsTest::defaultClient(), serverOptions);
+  TlsTest test(TlsTest::defaultClient(), kj::mv(serverOptions));
   ErrorNexus e;
 
   auto pipe = test.io.provider->newTwoWayPipe();
@@ -701,15 +701,34 @@ KJ_TEST("TLS certificate validation") {
 #endif
 
 KJ_TEST("TLS client certificate verification") {
-  TlsContext::Options serverOptions = TlsTest::defaultServer();
-  TlsContext::Options clientOptions = TlsTest::defaultClient();
+  enum class VerifyClients {
+    YES,
+    NO
+  };
+  auto makeServerOptionsForClient = [](
+      const TlsContext::Options& clientOptions,
+      VerifyClients verifyClients
+  ) {
+    TlsContext::Options serverOptions = TlsTest::defaultServer();
+    serverOptions.verifyClients = verifyClients == VerifyClients::YES;
 
-  serverOptions.verifyClients = true;
-  serverOptions.trustedCertificates = clientOptions.trustedCertificates;
+    // Share the certs between the client and server.
+    serverOptions.trustedCertificates = clientOptions.trustedCertificates;
 
-  // No certificate loaded in the client: fail
+    return serverOptions;
+  };
+
+  TlsKeypair selfSignedKeypair = { TlsPrivateKey(HOST_KEY), TlsCertificate(SELF_SIGNED_CERT) };
+  TlsKeypair altKeypair = {
+      TlsPrivateKey(HOST_KEY2),
+      TlsCertificate(kj::str(VALID_CERT2, INTERMEDIATE_CERT)),
+  };
+
   {
-    TlsTest test(clientOptions, serverOptions);
+    // No certificate loaded in the client: fail
+    auto clientOptions = TlsTest::defaultClient();
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::YES);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
 
     auto pipe = test.io.provider->newTwoWayPipe();
 
@@ -733,11 +752,13 @@ KJ_TEST("TLS client certificate verification") {
 #endif
   }
 
-  // Self-signed certificate loaded in the client: fail
-  TlsKeypair selfSignedKeypair = { TlsPrivateKey(HOST_KEY), TlsCertificate(SELF_SIGNED_CERT) };
-  clientOptions.defaultKeypair = selfSignedKeypair;
   {
-    TlsTest test(clientOptions, serverOptions);
+    // Self-signed certificate loaded in the client: fail
+    auto clientOptions = TlsTest::defaultClient();
+    clientOptions.defaultKeypair = selfSignedKeypair;
+
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::YES);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
 
     auto pipe = test.io.provider->newTwoWayPipe();
 
@@ -761,14 +782,14 @@ KJ_TEST("TLS client certificate verification") {
 #endif
   }
 
-  // Trusted certificate loaded in the client: success.
-  TlsKeypair altKeypair = {
-    TlsPrivateKey(HOST_KEY2),
-    TlsCertificate(kj::str(VALID_CERT2, INTERMEDIATE_CERT))
-  };
-  clientOptions.defaultKeypair = altKeypair;
   {
-    TlsTest test(clientOptions, serverOptions);
+    // Trusted certificate loaded in the client: success.
+    auto clientOptions = TlsTest::defaultClient();
+    clientOptions.defaultKeypair = altKeypair;
+
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::YES);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
+
     ErrorNexus e;
 
     auto pipe = test.io.provider->newTwoWayPipe();
@@ -787,10 +808,12 @@ KJ_TEST("TLS client certificate verification") {
     test.testConnection(*client, *server.stream);
   }
 
-  // If verifyClients is off, client certificate is ignored, even if trusted.
-  serverOptions.verifyClients = false;
   {
-    TlsTest test(clientOptions, serverOptions);
+    // If verifyClients is off, client certificate is ignored, even if trusted.
+    auto clientOptions = TlsTest::defaultClient();
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::NO);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
+
     ErrorNexus e;
 
     auto pipe = test.io.provider->newTwoWayPipe();
@@ -806,10 +829,14 @@ KJ_TEST("TLS client certificate verification") {
     KJ_EXPECT(!id->hasCertificate());
   }
 
-  // Non-trusted keys are ignored too (not errors).
-  clientOptions.defaultKeypair = selfSignedKeypair;
   {
-    TlsTest test(clientOptions, serverOptions);
+    // Non-trusted keys are ignored too (not errors).
+    auto clientOptions = TlsTest::defaultClient();
+    clientOptions.defaultKeypair = selfSignedKeypair;
+
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::NO);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
+
     ErrorNexus e;
 
     auto pipe = test.io.provider->newTwoWayPipe();
