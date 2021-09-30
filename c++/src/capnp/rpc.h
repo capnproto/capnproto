@@ -251,7 +251,15 @@ private:
 // =======================================================================================
 // VatNetwork
 
-class OutgoingRpcMessage {
+class RpcMessage {
+public:
+  virtual size_t sizeInWords() = 0;
+  // Get the total size of the message, for flow control purposes. Although the caller could
+  // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
+  // implementations can compute the size more cheaply by summing segment sizes.
+};
+
+class OutgoingRpcMessage: public RpcMessage {
   // A message to be sent by a `VatNetwork`.
 
 public:
@@ -266,14 +274,9 @@ public:
   virtual void send() = 0;
   // Send the message, or at least put it in a queue to be sent later.  Note that the builder
   // returned by `getBody()` remains valid at least until the `OutgoingRpcMessage` is destroyed.
-
-  virtual size_t sizeInWords() = 0;
-  // Get the total size of the message, for flow control purposes. Although the caller could
-  // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
-  // implementations can compute the size more cheaply by summing segment sizes.
 };
 
-class IncomingRpcMessage {
+class IncomingRpcMessage: public RpcMessage {
   // A message received from a `VatNetwork`.
 
 public:
@@ -288,20 +291,14 @@ public:
   // should be careful to check if an FD was already consumed by comparing the slot with `nullptr`.
   // (We don't use Maybe here because moving from a Maybe doesn't make it null, so it would only
   // add confusion. Moving from an AutoCloseFd does in fact make it null.)
-
-  virtual size_t sizeInWords() = 0;
-  // Get the total size of the message, for flow control purposes. Although the caller could
-  // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
-  // implementations can compute the size more cheaply by summing segment sizes.
 };
 
 class RpcFlowController {
   // Tracks a particular RPC stream in order to implement a flow control algorithm.
 
 public:
-  virtual kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) = 0;
-  // Like calling message->send(), but the promise resolves when it's a good time to send the
-  // next message.
+  virtual kj::Promise<void> next(kj::Own<RpcMessage> message, kj::Promise<void> ack) = 0;
+  // Returns a promise that resolves when it's a good time to process the next message.
   //
   // `ack` is a promise that resolves when the message has been acknowledged from the other side.
   // In practice, `message` is typically a `Call` message and `ack` is a `Return`. Note that this
@@ -320,7 +317,7 @@ public:
   // to stop it.
 
   virtual kj::Promise<void> waitAllAcked() = 0;
-  // Wait for all `ack`s previously passed to send() to finish. It is an error to call send() again
+  // Wait for all `ack`s previously passed to next() to finish. It is an error to call next() again
   // after this.
 
   // ---------------------------------------------------------------------------

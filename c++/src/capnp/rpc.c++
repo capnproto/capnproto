@@ -1806,7 +1806,10 @@ private:
           flow = target->flowController.emplace(
               connectionState->connection.get<Connected>()->newStream());
         }
-        flowPromise = flow->send(kj::mv(message), setup.promise.ignoreResult());
+        // We are REQUIRED to send the message NOW to maintain correct ordering.
+        message->send();
+
+        flowPromise = flow->next(kj::mv(message), setup.promise.ignoreResult());
       })) {
         // We can't safely throw the exception from here since we've already modified the question
         // table state. We'll have to reject the promise instead.
@@ -3266,24 +3269,21 @@ public:
     state.init<Running>();
   }
 
-  kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
+  kj::Promise<void> next(kj::Own<RpcMessage> message, kj::Promise<void> ack) override {
     auto size = message->sizeInWords() * sizeof(capnp::word);
     maxMessageSize = kj::max(size, maxMessageSize);
-
-    // We are REQUIRED to send the message NOW to maintain correct ordering.
-    message->send();
 
     inFlight += size;
     tasks.add(ack.then([this, size]() {
       inFlight -= size;
       KJ_SWITCH_ONEOF(state) {
-        KJ_CASE_ONEOF(blockedSends, Running) {
+        KJ_CASE_ONEOF(blockedActions, Running) {
           if (isReady()) {
             // Release all fulfillers.
-            for (auto& fulfiller: blockedSends) {
+            for (auto& fulfiller: blockedActions) {
               fulfiller->fulfill();
             }
-            blockedSends.clear();
+            blockedActions.clear();
 
           }
 
@@ -3302,12 +3302,12 @@ public:
     }));
 
     KJ_SWITCH_ONEOF(state) {
-      KJ_CASE_ONEOF(blockedSends, Running) {
+      KJ_CASE_ONEOF(blockedActions, Running) {
         if (isReady()) {
           return kj::READY_NOW;
         } else {
           auto paf = kj::newPromiseAndFulfiller<void>();
-          blockedSends.add(kj::mv(paf.fulfiller));
+          blockedActions.add(kj::mv(paf.fulfiller));
           return kj::mv(paf.promise);
         }
       }
@@ -3343,12 +3343,12 @@ private:
 
   void taskFailed(kj::Exception&& exception) override {
     KJ_SWITCH_ONEOF(state) {
-      KJ_CASE_ONEOF(blockedSends, Running) {
-        // Fail out all pending sends.
-        for (auto& fulfiller: blockedSends) {
+      KJ_CASE_ONEOF(blockedActions, Running) {
+        // Fail out all pending actions.
+        for (auto& fulfiller: blockedActions) {
           fulfiller->reject(kj::cp(exception));
         }
-        // Fail out all future sends.
+        // Fail out all future actions.
         state = kj::mv(exception);
       }
       KJ_CASE_ONEOF(exception, kj::Exception) {
@@ -3372,8 +3372,8 @@ class FixedWindowFlowController final
 public:
   FixedWindowFlowController(size_t windowSize): windowSize(windowSize), inner(*this) {}
 
-  kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
-    return inner.send(kj::mv(message), kj::mv(ack));
+  kj::Promise<void> next(kj::Own<RpcMessage> message, kj::Promise<void> ack) override {
+    return inner.next(kj::mv(message), kj::mv(ack));
   }
 
   kj::Promise<void> waitAllAcked() override {
