@@ -286,10 +286,10 @@ public:
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller,
-                     size_t flowLimit,
+                     kj::Maybe<RpcFlowController&> flowController,
                      kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder)
       : bootstrapFactory(bootstrapFactory),
-        restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), flowLimit(flowLimit),
+        restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), flowController(flowController),
         traceEncoder(traceEncoder), tasks(*this) {
     connection.init<Connected>(kj::mv(connectionParam));
     tasks.add(messageLoop());
@@ -442,11 +442,6 @@ public:
     disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
     connection.init<Disconnected>(kj::mv(networkException));
     canceler.cancel(networkException);
-  }
-
-  void setFlowLimit(size_t words) {
-    flowLimit = words;
-    maybeUnblockFlow();
   }
 
 private:
@@ -606,13 +601,7 @@ private:
   // There are only four tables.  This definitely isn't a fifth table.  I don't know what you're
   // talking about.
 
-  size_t flowLimit;
-  size_t callWordsInFlight = 0;
-
-  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> flowWaiter;
-  // If non-null, we're currently blocking incoming messages waiting for callWordsInFlight to drop
-  // below flowLimit. Fulfill this to un-block.
-
+  kj::Maybe<RpcFlowController&> flowController;
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder;
 
   kj::TaskSet tasks;
@@ -1806,10 +1795,10 @@ private:
           flow = target->flowController.emplace(
               connectionState->connection.get<Connected>()->newStream());
         }
+        flowPromise = flow->next(*message, setup.promise.ignoreResult());
+
         // We are REQUIRED to send the message NOW to maintain correct ordering.
         message->send();
-
-        flowPromise = flow->next(kj::mv(message), setup.promise.ignoreResult());
       })) {
         // We can't safely throw the exception from here since we've already modified the question
         // table state. We'll have to reject the promise instead.
@@ -2060,14 +2049,19 @@ private:
           answerId(answerId),
           interfaceId(interfaceId),
           methodId(methodId),
-          requestSize(request->sizeInWords()),
           request(kj::mv(request)),
           paramsCapTable(kj::mv(capTableArray)),
           params(paramsCapTable.imbue(params)),
           returnMessage(nullptr),
           redirectResults(redirectResults),
-          cancelFulfiller(kj::mv(cancelFulfiller)) {
-      connectionState.callWordsInFlight += requestSize;
+          cancelFulfiller(kj::mv(cancelFulfiller)),
+          ackFulfiller(nullptr),
+          flowProm(nullptr) {
+      KJ_IF_MAYBE(controller, connectionState.flowController) {
+        auto paf = kj::newPromiseAndFulfiller<void>();
+        ackFulfiller = kj::mv(paf.fulfiller);
+        flowProm = controller->next(*KJ_ASSERT_NONNULL(this->request), kj::mv(paf.promise));
+      }
     }
 
     ~RpcCallContext() noexcept(false) {
@@ -2204,6 +2198,16 @@ private:
       }
     }
 
+    kj::Maybe<kj::Promise<void>> getFlowProm() {
+      KJ_IF_MAYBE(prom, flowProm) {
+        auto ret = kj::mv(*prom);
+        flowProm = nullptr;
+        return kj::mv(ret);
+      } else {
+        return nullptr;
+      }
+    }
+
     // implements CallContextHook ------------------------------------
 
     AnyPointer::Reader getParams() override {
@@ -2319,7 +2323,6 @@ private:
 
     // Request ---------------------------------------------
 
-    size_t requestSize;  // for flow limit purposes
     kj::Maybe<kj::Own<IncomingRpcMessage>> request;
     ReaderCapabilityTable paramsCapTable;
     AnyPointer::Reader params;
@@ -2348,6 +2351,15 @@ private:
     // cancels that promise.
 
     kj::UnwindDetector unwindDetector;
+
+    // Flow Control ----------------------------------------
+
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> ackFulfiller;
+    // if non-null, fulfilled when the call is complete
+
+    kj::Maybe<kj::Promise<void>> flowProm;
+    // non-null when connectionState has a flowController set
+    // Further messages should be processed only as a continuation on flowProm.
 
     // -----------------------------------------------------
 
@@ -2384,47 +2396,31 @@ private:
         }
       }
 
-      // Also, this is the right time to stop counting the call against the flow limit.
-      connectionState->callWordsInFlight -= requestSize;
-      connectionState->maybeUnblockFlow();
+      KJ_IF_MAYBE(fulfiller, ackFulfiller) {
+        (*fulfiller)->fulfill();
+      }
     }
   };
 
   // =====================================================================================
   // Message handling
 
-  void maybeUnblockFlow() {
-    if (callWordsInFlight < flowLimit) {
-      KJ_IF_MAYBE(w, flowWaiter) {
-        w->get()->fulfill();
-        flowWaiter = nullptr;
-      }
-    }
-  }
-
   kj::Promise<void> messageLoop() {
     if (!connection.is<Connected>()) {
       return kj::READY_NOW;
     }
 
-    if (callWordsInFlight > flowLimit) {
-      auto paf = kj::newPromiseAndFulfiller<void>();
-      flowWaiter = kj::mv(paf.fulfiller);
-      return paf.promise.then([this]() {
-        return messageLoop();
-      });
-    }
-
     return canceler.wrap(connection.get<Connected>()->receiveIncomingMessage()).then(
-        [this](kj::Maybe<kj::Own<IncomingRpcMessage>>&& message) {
+        [this](kj::Maybe<kj::Own<IncomingRpcMessage>>&& message) -> kj::Tuple<bool, kj::Maybe<kj::Promise<void>>> {
+      kj::Maybe<kj::Promise<void>> flowProm;
       KJ_IF_MAYBE(m, message) {
-        handleMessage(kj::mv(*m));
-        return true;
+        flowProm = handleMessage(kj::mv(*m));
+        return kj::tuple(true, kj::mv(flowProm));
       } else {
         disconnect(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
-        return false;
+        return kj::tuple(false, kj::mv(flowProm));
       }
-    }).then([this](bool keepGoing) {
+    }).then([this](kj::Tuple<bool, kj::Maybe<kj::Promise<void>>> ctx) {
       // No exceptions; continue loop.
       //
       // (We do this in a separate continuation to handle the case where exceptions are
@@ -2441,11 +2437,21 @@ private:
       //   resolution of `PromiseClient`s based on returned capabilites does not occur in a
       //   depth-first way, when it should. If we could fix that then we can probably remove this
       //   `evalLater()`. However, the `evalLater()` is not that bad and solves the problem...
-      if (keepGoing) tasks.add(kj::evalLater([this]() { return messageLoop(); }));
+      auto keepGoing = kj::get<0>(ctx);
+      auto flowProm = kj::mv(kj::get<1>(ctx));
+      if (keepGoing) tasks.add(kj::evalLater([this, flowProm = kj::mv(flowProm)]() mutable {
+        KJ_IF_MAYBE(prom, flowProm) {
+          return prom->then([this]() {
+            return messageLoop();
+          });
+        } else {
+          return messageLoop();
+        }
+      }));
     });
   }
 
-  void handleMessage(kj::Own<IncomingRpcMessage> message) {
+  kj::Maybe<kj::Promise<void>> handleMessage(kj::Own<IncomingRpcMessage> message) {
     auto reader = message->getBody().getAs<rpc::Message>();
 
     switch (reader.which()) {
@@ -2462,8 +2468,7 @@ private:
         break;
 
       case rpc::Message::CALL:
-        handleCall(kj::mv(message), reader.getCall());
-        break;
+        return handleCall(kj::mv(message), reader.getCall());
 
       case rpc::Message::RETURN:
         handleReturn(kj::mv(message), reader.getReturn());
@@ -2495,6 +2500,8 @@ private:
         break;
       }
     }
+
+    return nullptr;
   }
 
   void handleUnimplemented(const rpc::Message::Reader& message) {
@@ -2630,14 +2637,14 @@ private:
     response->send();
   }
 
-  void handleCall(kj::Own<IncomingRpcMessage>&& message, const rpc::Call::Reader& call) {
+  kj::Maybe<kj::Promise<void>> handleCall(kj::Own<IncomingRpcMessage>&& message, const rpc::Call::Reader& call) {
     kj::Own<ClientHook> capability;
 
     KJ_IF_MAYBE(t, getMessageTarget(call.getTarget())) {
       capability = kj::mv(*t);
     } else {
       // Exception already reported.
-      return;
+      return nullptr;
     }
 
     bool redirectResults;
@@ -2649,7 +2656,7 @@ private:
         redirectResults = true;
         break;
       default:
-        KJ_FAIL_REQUIRE("Unsupported `Call.sendResultsTo`.") { return; }
+        KJ_FAIL_REQUIRE("Unsupported `Call.sendResultsTo`.") { return nullptr; }
     }
 
     auto payload = call.getParams();
@@ -2669,7 +2676,7 @@ private:
       auto& answer = answers[answerId];
 
       KJ_REQUIRE(!answer.active, "questionId is already in use") {
-        return;
+        return nullptr;
       }
 
       answer.active = true;
@@ -2687,6 +2694,7 @@ private:
 
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
+      auto flowProm = context->getFlowProm();
       if (redirectResults) {
         auto resultsPromise = promiseAndPipeline.promise.then(
             kj::mvCapture(context, [](kj::Own<RpcCallContext>&& context) {
@@ -2720,6 +2728,7 @@ private:
             .exclusiveJoin(kj::mv(cancelPaf.promise))
             .detach([](kj::Exception&&) {});
       }
+      return flowProm;
     }
   }
 
@@ -3147,12 +3156,8 @@ public:
     }
   }
 
-  void setFlowLimit(size_t words) {
-    flowLimit = words;
-
-    for (auto& conn: connections) {
-      conn.second->setFlowLimit(words);
-    }
+  void setFlowController(RpcFlowController& controller) {
+    flowController = controller;
   }
 
   void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func) {
@@ -3166,7 +3171,7 @@ private:
   kj::Maybe<Capability::Client> bootstrapInterface;
   BootstrapFactoryBase& bootstrapFactory;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
-  size_t flowLimit = kj::maxValue;
+  kj::Maybe<RpcFlowController&> flowController;
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder;
   kj::Promise<void> acceptLoopPromise = nullptr;
   kj::TaskSet tasks;
@@ -3189,7 +3194,7 @@ private:
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
           bootstrapFactory, restorer, kj::mv(connection),
-          kj::mv(onDisconnect.fulfiller), flowLimit, traceEncoder);
+          kj::mv(onDisconnect.fulfiller), flowController, traceEncoder);
       RpcConnectionState& result = *newState;
       connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
       return result;
@@ -3244,8 +3249,8 @@ Capability::Client RpcSystemBase::baseRestore(
   return impl->restore(hostId, objectId);
 }
 
-void RpcSystemBase::baseSetFlowLimit(size_t words) {
-  return impl->setFlowLimit(words);
+void RpcSystemBase::setFlowController(RpcFlowController& controller) {
+  impl->setFlowController(controller);
 }
 
 void RpcSystemBase::setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func) {
@@ -3269,8 +3274,8 @@ public:
     state.init<Running>();
   }
 
-  kj::Promise<void> next(kj::Own<RpcMessage> message, kj::Promise<void> ack) override {
-    auto size = message->sizeInWords() * sizeof(capnp::word);
+  kj::Promise<void> next(RpcMessage& message, kj::Promise<void> ack) override {
+    auto size = message.sizeInWords() * sizeof(capnp::word);
     maxMessageSize = kj::max(size, maxMessageSize);
 
     inFlight += size;
@@ -3372,8 +3377,8 @@ class FixedWindowFlowController final
 public:
   FixedWindowFlowController(size_t windowSize): windowSize(windowSize), inner(*this) {}
 
-  kj::Promise<void> next(kj::Own<RpcMessage> message, kj::Promise<void> ack) override {
-    return inner.next(kj::mv(message), kj::mv(ack));
+  kj::Promise<void> next(RpcMessage& message, kj::Promise<void> ack) override {
+    return inner.next(message, kj::mv(ack));
   }
 
   kj::Promise<void> waitAllAcked() override {

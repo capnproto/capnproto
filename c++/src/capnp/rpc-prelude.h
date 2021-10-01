@@ -85,6 +85,7 @@ public:
   RpcSystemBase(RpcSystemBase&& other) noexcept;
   ~RpcSystemBase() noexcept(false);
 
+  void setFlowController(RpcFlowController& flowController);
   void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
 
   kj::Promise<void> run();

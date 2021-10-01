@@ -109,10 +109,14 @@ public:
   // You may emulate the old concept of object IDs by exporting a bootstrap interface which has
   // methods that can be used to obtain other capabilities by ID.
 
-  void setFlowLimit(size_t words);
-  // Sets the incoming call flow limit. If more than `words` worth of call messages have not yet
-  // received responses, the RpcSystem will not read further messages from the stream. This can be
-  // used as a crude way to prevent a resource exhaustion attack (or bug) in which a peer makes an
+  // void setFlowController(RpcFlowController& controller);
+  //
+  // (Inherited from _::RpcSystemBase)
+  // Set a flow controller which will implement a policy for limiting the flow of incoming calls.
+  // The RpcSystem will not read further messages from the stream depending on this policy.
+  //
+  // An example policy is a fixed window based on a maximum number of call bytes in flight. This can
+  // be used as a crude way to prevent a resource exhaustion attack (or bug) in which a peer makes an
   // excessive number of simultaneous calls that consume the receiver's RAM.
   //
   // There are some caveats. When over the flow limit, all messages are blocked, including returns.
@@ -297,8 +301,9 @@ class RpcFlowController {
   // Tracks a particular RPC stream in order to implement a flow control algorithm.
 
 public:
-  virtual kj::Promise<void> next(kj::Own<RpcMessage> message, kj::Promise<void> ack) = 0;
+  virtual kj::Promise<void> next(RpcMessage& message, kj::Promise<void> ack) = 0;
   // Returns a promise that resolves when it's a good time to process the next message.
+  // The passed-in message only needs to live until next() returns.
   //
   // `ack` is a promise that resolves when the message has been acknowledged from the other side.
   // In practice, `message` is typically a `Call` message and `ack` is a `Return`. Note that this
@@ -307,14 +312,11 @@ public:
   // the remote application responds slowly. If `ack` rejects, then all outstanding and future
   // sends will propagate the exception.
   //
-  // Note that messages sent with this method must still be delivered in the same order as if they
-  // had been sent with `message->send()`; they cannot be delayed until later. This is important
+  // Note that processing of the passed-in message must not be delayed until after the returned promise
   // because the message may introduce state changes in the RPC system that later messages rely on,
   // such as introducing a new Question ID that a later message may reference. Thus, the controller
-  // can only create backpressure by having the returned promise resolve slowly.
-  //
-  // Dropping the returned promise does not cancel the send. Once send() is called, there's no way
-  // to stop it.
+  // can only create backpressure by having the returned promise resolve slowly, and having processing
+  // of further messages delayed by this promise.
 
   virtual kj::Promise<void> waitAllAcked() = 0;
   // Wait for all `ack`s previously passed to next() to finish. It is an error to call next() again
@@ -544,11 +546,6 @@ template <typename VatId>
 Capability::Client RpcSystem<VatId>::restore(
     typename VatId::Reader hostId, AnyPointer::Reader objectId) {
   return baseRestore(_::PointerHelpers<VatId>::getInternalReader(hostId), objectId);
-}
-
-template <typename VatId>
-inline void RpcSystem<VatId>::setFlowLimit(size_t words) {
-  baseSetFlowLimit(words);
 }
 
 template <typename VatId, typename ProvisionId, typename RecipientId,
