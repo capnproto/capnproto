@@ -3392,6 +3392,132 @@ private:
   WindowFlowController inner;
 };
 
+class RpcLoopFlowController final
+    : public RpcFlowController, private kj::TaskSet::ErrorHandler {
+public:
+  RpcLoopFlowController(LoopFlowControllerOptions options, kj::Timer& timer)
+      : timer(timer), options(options), limit(options.initialLimit), inFlight(0), tasks(*this) {
+    state.init<Running>();
+  };
+
+  kj::Promise<void> next(RpcMessage& message, kj::Promise<void> ack) override {
+    ++inFlight;
+    tasks.add(ack.then([this]() {
+      --inFlight;
+      KJ_IF_MAYBE(f, emptyFulfiller) {
+        if (inFlight == 0) {
+          f->get()->fulfill(tasks.onEmpty());
+        }
+      }
+    }));
+
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(blockedActions, Running) {
+        if (isReady()) {
+          return kj::READY_NOW;
+        } else {
+          auto paf = kj::newPromiseAndFulfiller<void>();
+          blockedActions.add(kj::mv(paf.fulfiller));
+          if (!hasReleaseTask) {
+            hasReleaseTask = true;
+            tasks.add(kj::evalLast([this]{
+              hasReleaseTask = false;
+              release();
+            }));
+          }
+          return kj::mv(paf.promise);
+        }
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        return kj::cp(exception);
+      }
+    }
+    KJ_UNREACHABLE;
+  };
+
+  kj::Promise<void> waitAllAcked() override {
+    KJ_IF_MAYBE(q, state.tryGet<Running>()) {
+      if (!q->empty()) {
+        auto paf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+        emptyFulfiller = kj::mv(paf.fulfiller);
+        return kj::mv(paf.promise);
+      }
+    }
+    return tasks.onEmpty();
+  }
+
+private:
+  kj::Timer& timer;
+  const kj::MonotonicClock& clock = kj::systemPreciseMonotonicClock();
+
+  LoopFlowControllerOptions options;
+
+  int limit;
+  int inFlight;
+
+  typedef kj::Vector<kj::Own<kj::PromiseFulfiller<void>>> Running;
+  kj::OneOf<Running, kj::Exception> state;
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<void>>>> emptyFulfiller;
+
+  kj::TaskSet tasks;
+
+
+  bool hasReleaseTask = false;
+
+  void release() {
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(blockedActions, Running) {
+        // Release all fulfillers.
+        for (auto& fulfiller: blockedActions) {
+          fulfiller->fulfill();
+        }
+        blockedActions.clear();
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        KJ_LOG(ERROR, exception);
+        // A previous call failed, but this one -- which was already in-flight at the time --
+        // ended up succeeding. That may indicate that the server side is not properly
+        // handling streaming error propagation. Nothing much we can do about it here though.
+      }
+    }
+  }
+
+  bool isReady() {
+    auto tickLength = clock.now() - timer.now();
+    auto eventCount = kj::getCurrentThreadLoopStats().count;
+    if (tickLength > options.longTick && eventCount <= limit*2) {
+      // Multiplicatively reduce the limit when the tick length is getting long
+      // as long as we're not already significantly above the limit
+      limit /= 2;
+
+      // Don't reduce the limit too far
+      if (limit < options.minLimit) limit = options.minLimit;
+
+    } else if (tickLength < options.shortTick && limit < options.maxLimit) {
+      // Additively increase the limit if the tick length is short
+      limit += 100;
+    }
+
+    return eventCount < limit;
+  };
+
+  void taskFailed(kj::Exception&& exception) override {
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(blockedActions, Running) {
+        // Fail out all pending actions.
+        for (auto& fulfiller: blockedActions) {
+          fulfiller->reject(kj::cp(exception));
+        }
+        // Fail out all future actions.
+        state = kj::mv(exception);
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        // ignore redundant exception
+      }
+    }
+  };
+};
+
 }  // namespace
 
 kj::Own<RpcFlowController> RpcFlowController::newFixedWindowController(size_t windowSize) {
@@ -3399,6 +3525,10 @@ kj::Own<RpcFlowController> RpcFlowController::newFixedWindowController(size_t wi
 }
 kj::Own<RpcFlowController> RpcFlowController::newVariableWindowController(WindowGetter& getter) {
   return kj::heap<WindowFlowController>(getter);
+}
+kj::Own<RpcFlowController> RpcFlowController::newLoopFlowController(
+    LoopFlowControllerOptions options, kj::Timer& timer) {
+  return kj::heap<RpcLoopFlowController>(options, timer);
 }
 
 }  // namespace capnp

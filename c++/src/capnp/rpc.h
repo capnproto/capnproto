@@ -23,6 +23,8 @@
 
 #include "capability.h"
 #include "rpc-prelude.h"
+#include <kj/timer.h>
+#include <limits.h>
 
 CAPNP_BEGIN_HEADER
 
@@ -344,6 +346,22 @@ public:
 
   static constexpr size_t DEFAULT_WINDOW_SIZE = 65536;
   // The window size used by the default implementation of Connection::newStream().
+
+  struct LoopFlowControllerOptions {
+    int minLimit = 100;
+    int maxLimit = INT_MAX;
+    int initialLimit = INT_MAX;
+    kj::Duration longTick = 10 * kj::MILLISECONDS;
+    kj::Duration shortTick = 1 * kj::MILLISECONDS;
+  };
+
+  static kj::Own<RpcFlowController> newLoopFlowController(
+      LoopFlowControllerOptions options, kj::Timer& timer);
+  // Constructs a flow controller that limits flow based on event loop load -- Message actions
+  // will be delayed using a Additive Increase, Multiplicative Increase algorithm that delays
+  // actions when the number of armed events on the event loop passes a threshold. The threshold
+  // is multiplicatively reduced when significant event loop load is detected, and additively
+  // increased on every message when event loop load is low.
 };
 
 template <typename VatId, typename ProvisionId, typename RecipientId,
