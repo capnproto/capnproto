@@ -207,8 +207,14 @@ if(NOT CAPNP_LITE)
   find_package(ZLIB)
   if(ZLIB_FOUND)
     add_definitions(-D KJ_HAS_ZLIB=1)
-    include_directories(${ZLIB_INCLUDE_DIRS})
     target_link_libraries(kj-gzip PUBLIC kj-async kj ${ZLIB_LIBRARIES})
+    # The interface include directories inherited from `kj` lib are going to be the last
+    # in the target include directories order, but we want them to be the first to avoid
+    # including from the ZLIB (possibly) global include path first, as it may contain
+    # capnproto includes as well.
+    # NOTE: kj-async does not export any interface properties so we can ignore it here
+    get_target_property(_KJ_INTERFACE_INCLUDE_DIRECTORIES kj INTERFACE_INCLUDE_DIRECTORIES)
+    target_include_directories(kj-gzip PUBLIC "${_KJ_INTERFACE_INCLUDE_DIRECTORIES};${ZLIB_INCLUDE_DIRS}")
   endif()
 
   # Ensure the library has a version set to match autotools build
