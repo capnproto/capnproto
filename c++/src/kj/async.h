@@ -1052,6 +1052,11 @@ public:
   // Note that this is only needed for cross-thread scheduling. To schedule code to run later in
   // the current thread, use `kj::evalLater()`, which will be more efficient.
 
+  struct Stats {
+    int count = 0;
+  };
+  // Statistics about the event loop, accessible by kj::getCurrentThreadLoopStats();
+
 private:
   kj::Maybe<EventPort&> port;
   // If null, this thread doesn't receive I/O events from the OS. It can potentially receive
@@ -1067,6 +1072,8 @@ private:
   _::Event** tail = &head;
   _::Event** depthFirstInsertPoint = &head;
   _::Event** breadthFirstInsertPoint = &head;
+
+  Stats stats;
 
   kj::Maybe<Own<Executor>> executor;
   // Allocated the first time getExecutor() is requested, making cross-thread request possible.
@@ -1095,7 +1102,10 @@ private:
   friend class _::FiberBase;
   friend class _::FiberStack;
   friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
+  friend const Stats getCurrentThreadLoopStats();
 };
+
+const EventLoop::Stats getCurrentThreadLoopStats();
 
 class WaitScope {
   // Represents a scope in which asynchronous programming can occur.  A `WaitScope` should usually

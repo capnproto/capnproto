@@ -1312,6 +1312,10 @@ const Executor& getCurrentThreadExecutor() {
   return currentEventLoop().getExecutor();
 }
 
+const EventLoop::Stats getCurrentThreadLoopStats() {
+  return currentEventLoop().stats;
+}
+
 // =======================================================================================
 // Fiber implementation.
 
@@ -1995,6 +1999,7 @@ void Event::armDepthFirst() {
              "Executor to queue events cross-thread.");
 
   if (prev == nullptr) {
+    ++loop.stats.count;
     next = *loop.depthFirstInsertPoint;
     prev = loop.depthFirstInsertPoint;
     *prev = this;
@@ -2021,6 +2026,7 @@ void Event::armBreadthFirst() {
              "Executor to queue events cross-thread.");
 
   if (prev == nullptr) {
+    ++loop.stats.count;
     next = *loop.breadthFirstInsertPoint;
     prev = loop.breadthFirstInsertPoint;
     *prev = this;
@@ -2044,6 +2050,7 @@ void Event::armLast() {
              "Executor to queue events cross-thread.");
 
   if (prev == nullptr) {
+    ++loop.stats.count;
     next = *loop.breadthFirstInsertPoint;
     prev = loop.breadthFirstInsertPoint;
     *prev = this;
@@ -2068,6 +2075,7 @@ bool Event::isNext() {
 
 void Event::disarm() {
   if (prev != nullptr) {
+    --loop.stats.count;
     if (threadLocalEventLoop != &loop && threadLocalEventLoop != nullptr) {
       KJ_LOG(FATAL, "Promise destroyed from a different thread than it was created in.");
       // There's no way out of this place without UB, so abort now.
