@@ -109,10 +109,19 @@ KJ_BEGIN_HEADER
 #undef _GLIBCXX_HAVE_GETS
 #endif
 
-#if defined(_MSC_VER)
+#if _WIN32
+// Windows likes to define macros for min() and max(). We just can't deal with this.
+// If windows.h was included already, undef these.
+#undef min
+#undef max
+// If windows.h was not included yet, define the macro that prevents min() and max() from being
+// defined.
 #ifndef NOMINMAX
 #define NOMINMAX 1
 #endif
+#endif
+
+#if defined(_MSC_VER)
 #include <intrin.h>  // __popcnt
 #endif
 
