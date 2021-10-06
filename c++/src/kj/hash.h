@@ -90,6 +90,8 @@ struct HashCoder {
 
   template <typename T>
   uint operator*(T* ptr) const {
+    static_assert(!isSameType<Decay<T>, char>(), "Wrap in StringPtr if you want to hash string "
+        "contents. If you want to hash the pointer, cast to void*");
     if (sizeof(ptr) == sizeof(uint)) {
       // TODO(cleanup): In C++17, make the if() above be `if constexpr ()`, then change this to
       //   reinterpret_cast<uint>(ptr).
@@ -128,6 +130,14 @@ static KJ_CONSTEXPR(const) HashCoder HASHCODER = HashCoder();
 inline uint hashCode(uint value) { return value; }
 template <typename T>
 inline uint hashCode(T&& value) { return hashCode(_::HASHCODER * kj::fwd<T>(value)); }
+template <typename T, size_t N>
+inline uint hashCode(T (&arr)[N]) {
+  static_assert(!isSameType<Decay<T>, char>(), "Wrap in StringPtr if you want to hash string "
+      "contents. If you want to hash the pointer, cast to void*");
+  static_assert(isSameType<Decay<T>, char>(), "Wrap in ArrayPtr if you want to hash a C array. "
+      "If you want to hash the pointer, cast to void*");
+  return 0;
+}
 template <typename... T>
 inline uint hashCode(T&&... values) {
   uint hashes[] = { hashCode(kj::fwd<T>(values))... };
