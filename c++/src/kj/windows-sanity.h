@@ -49,9 +49,8 @@
 #pragma once
 
 namespace win32 {
-  const auto ERROR_ = ERROR;
-
 #ifdef ERROR  // This could be absent if e.g. NOGDI was used.
+  const auto ERROR_ = ERROR;
 #undef ERROR
   const auto ERROR = ERROR_;
 #endif
