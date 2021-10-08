@@ -207,8 +207,7 @@ if(NOT CAPNP_LITE)
   find_package(ZLIB)
   if(ZLIB_FOUND)
     add_definitions(-D KJ_HAS_ZLIB=1)
-    include_directories(${ZLIB_INCLUDE_DIRS})
-    target_link_libraries(kj-gzip PUBLIC kj-async kj ${ZLIB_LIBRARIES})
+    target_link_libraries(kj-gzip PUBLIC kj-async kj ZLIB::ZLIB)
   endif()
 
   # Ensure the library has a version set to match autotools build
