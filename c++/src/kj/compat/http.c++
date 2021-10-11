@@ -4818,7 +4818,32 @@ private:
       if (httpInput.isCleanDrain()) {
         // If we haven't buffered any data, then we can safely drain here, so allow the wait to
         // be canceled by the onDrain promise.
-        timeoutPromise = timeoutPromise.exclusiveJoin(server.onDrain.addBranch());
+        auto cleanDrainPromise = server.onDrain.addBranch()
+            .then([this]() -> kj::Promise<void> {
+          // This is a little tricky... drain() has been called, BUT we could have read some data
+          // into the buffer in the meantime, and we don't want to lose that. If any data has
+          // arrived, then we have no choice but to read the rest of the request and respond to
+          // it.
+          if (!httpInput.isCleanDrain()) {
+            return kj::NEVER_DONE;
+          }
+
+          // OK... As far as we know, no data has arrived in the buffer. However, unfortunately,
+          // we don't *really* know that, because read() is asynchronous. It may have already
+          // delivered some bytes, but we just haven't received the notification yet, because it's
+          // still queued on the event loop. As a horrible hack, we use evalLast(), so that any
+          // such pending notifications get a chance to be delivered.
+          // TODO(someday): Does this actually work on Windows, where the notification could also
+          //   be queued on the IOCP?
+          return kj::evalLast([this]() -> kj::Promise<void> {
+            if (httpInput.isCleanDrain()) {
+              return kj::READY_NOW;
+            } else {
+              return kj::NEVER_DONE;
+            }
+          });
+        });
+        timeoutPromise = timeoutPromise.exclusiveJoin(kj::mv(cleanDrainPromise));
       }
 
       firstByte = firstByte.exclusiveJoin(timeoutPromise.then([this]() -> bool {

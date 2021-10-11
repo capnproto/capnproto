@@ -4127,5 +4127,71 @@ KJ_TEST("canceling a chunked stream mid-read correctly discards rest of request"
   }
 }
 
+KJ_TEST("drain() doesn't lose bytes when called at the wrong moment") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  DummyService service(table);
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttpCleanDrain(*pipe.ends[0]);
+
+  // Do a regular request.
+  static constexpr kj::StringPtr REQUEST =
+      "GET / HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n"_kj;
+  pipe.ends[1]->write(REQUEST.begin(), REQUEST.size()).wait(waitScope);
+  expectRead(*pipe.ends[1],
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 13\r\n"
+      "\r\n"
+      "example.com:/"_kj).wait(waitScope);
+
+  // Make sure the server is blocked on the next read from the socket.
+  kj::Promise<void>(kj::NEVER_DONE).poll(waitScope);
+
+  // Now simultaneously deliver a new request AND drain the socket.
+  auto drainPromise = server.drain();
+  static constexpr kj::StringPtr REQUEST2 =
+      "GET /foo HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n"_kj;
+  pipe.ends[1]->write(REQUEST2.begin(), REQUEST2.size()).wait(waitScope);
+
+#if KJ_HTTP_TEST_USE_OS_PIPE
+  // In the case of an OS pipe, the drain will complete before any data is read from the socket.
+  drainPromise.wait(waitScope);
+
+  // The HTTP server should indicate the connection was released but still valid.
+  KJ_ASSERT(listenTask.wait(waitScope));
+
+  // The request will not have been read off the socket. We can read it now.
+  pipe.ends[1]->shutdownWrite();
+  KJ_EXPECT(pipe.ends[0]->readAllText().wait(waitScope) == REQUEST2);
+
+#else
+  // In the case of an in-memory pipe, the write() will have delivered bytes directly to the
+  // destination buffer synchronously, which means that the server must handle the request
+  // before draining.
+  KJ_EXPECT(!drainPromise.poll(waitScope));
+
+  // The HTTP request should get a response.
+  expectRead(*pipe.ends[1],
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 16\r\n"
+      "\r\n"
+      "example.com:/foo"_kj).wait(waitScope);
+
+  // Now the drain completes.
+  drainPromise.wait(waitScope);
+
+  // The HTTP server should indicate the connection was released but still valid.
+  KJ_ASSERT(listenTask.wait(waitScope));
+#endif
+}
+
 }  // namespace
 }  // namespace kj
