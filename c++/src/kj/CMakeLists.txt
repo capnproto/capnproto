@@ -219,7 +219,7 @@ endif()
 # Tests ========================================================================
 
 if(BUILD_TESTING)
-  add_executable(kj-tests
+  set(TEST_FILES
     common-test.c++
     memory-test.c++
     array-test.c++
@@ -236,13 +236,24 @@ if(BUILD_TESTING)
     test-test.c++
     std/iostream-test.c++
   )
-  # TODO: Link with librt on Solaris for sched_yield
-  target_link_libraries(kj-tests kj-test kj)
-  add_dependencies(check kj-tests)
-  add_test(NAME kj-tests-run COMMAND kj-tests)
+  foreach(TEST_FILE IN LISTS TEST_FILES)
+    get_filename_component(exe_dir "${TEST_FILE}" DIRECTORY)
+    get_filename_component(exe_name "${TEST_FILE}" NAME_WE)
+    if(exe_dir)
+      set(target "kj-${exe_dir}-${exe_name}")
+      set(exe_name "${exe_dir}/${exe_name}")
+    else()
+      set(target "kj-${exe_name}")
+    endif()
+    add_executable(${target} ${TEST_FILE})
+    target_link_libraries(${target} kj-test kj)
+    set_target_properties(${target} PROPERTIES OUTPUT_NAME ${exe_name})
+    add_dependencies(check ${target})
+    add_test(NAME ${target}-run COMMAND ${exe_name}${CMAKE_EXECUTABLE_SUFFIX})
+  endforeach()
 
   if(NOT CAPNP_LITE)
-    add_executable(kj-heavy-tests
+    set(HEAVY_TEST_FILES
       async-test.c++
       async-xthread-test.c++
       async-coroutine-test.c++
@@ -269,14 +280,27 @@ if(BUILD_TESTING)
       compat/gzip-test.c++
       compat/tls-test.c++
     )
-    target_link_libraries(kj-heavy-tests kj-http kj-gzip kj-tls kj-async kj-test kj)
+    foreach(TEST_FILE IN LISTS HEAVY_TEST_FILES)
+      get_filename_component(exe_dir "${TEST_FILE}" DIRECTORY)
+      get_filename_component(exe_name "${TEST_FILE}" NAME_WE)
+      if(exe_dir)
+        set(target "kj-${exe_dir}-${exe_name}")
+        set(exe_name "${exe_dir}/${exe_name}")
+      else()
+        set(target "kj-${exe_name}")
+      endif()
+      add_executable(${target} ${TEST_FILE})
+      target_link_libraries(${target} kj-http kj-gzip kj-tls kj-async kj-test kj)
+      set_target_properties(${target} PROPERTIES OUTPUT_NAME ${exe_name})
+      add_dependencies(check ${target})
+      add_test(NAME ${target}-run COMMAND ${exe_name}${CMAKE_EXECUTABLE_SUFFIX})
+    endforeach()
+
     if (WITH_OPENSSL)
       set_source_files_properties(compat/tls-test.c++
         PROPERTIES
           COMPILE_DEFINITIONS KJ_HAS_OPENSSL
       )
     endif()
-    add_dependencies(check kj-heavy-tests)
-    add_test(NAME kj-heavy-tests-run COMMAND kj-heavy-tests)
   endif()  # NOT CAPNP_LITE
 endif()  # BUILD_TESTING

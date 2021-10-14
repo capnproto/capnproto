@@ -255,7 +255,7 @@ if(BUILD_TESTING)
     set(test_libraries capnp-json capnp-rpc capnp-websocket capnp capnpc kj-http kj-async kj-test kj)
   endif()
 
-  add_executable(capnp-tests
+  set(TEST_FILES
     common-test.c++
     blob-test.c++
     endian-test.c++
@@ -269,17 +269,26 @@ if(BUILD_TESTING)
     serialize-packed-test.c++
     canonicalize-test.c++
     fuzz-test.c++
-    test-util.c++
-    ${test_capnp_cpp_files}
-    ${test_capnp_h_files}
   )
-  target_link_libraries(capnp-tests ${test_libraries})
-  add_dependencies(capnp-tests test_capnp)
-  add_dependencies(check capnp-tests)
-  add_test(NAME capnp-tests-run COMMAND capnp-tests)
+  foreach(TEST_FILE IN LISTS TEST_FILES)
+    get_filename_component(exe_dir "${TEST_FILE}" DIRECTORY)
+    get_filename_component(exe_name "${TEST_FILE}" NAME_WE)
+    if(exe_dir)
+      set(target "capnp-${exe_dir}-${exe_name}")
+      set(exe_name "${exe_dir}/${exe_name}")
+    else()
+      set(target capnp-${exe_name})
+    endif()
+    add_executable(${target} ${TEST_FILE} test-util.c++ ${test_capnp_cpp_files} ${test_capnp_h_files})
+    set_target_properties(${target} PROPERTIES OUTPUT_NAME ${exe_name})
+    target_link_libraries(${target} ${test_libraries})
+    add_dependencies(${target} test_capnp)
+    add_dependencies(check ${target})
+    add_test(NAME ${target}-run COMMAND ${exe_name}${CMAKE_EXECUTABLE_SUFFIX})
+  endforeach()
 
   if(NOT CAPNP_LITE)
-    add_executable(capnp-heavy-tests
+    set(HEAVY_TEST_FILES
       endian-reverse-test.c++
       capability-test.c++
       membrane-test.c++
@@ -295,22 +304,25 @@ if(BUILD_TESTING)
       ez-rpc-test.c++
       compiler/lexer-test.c++
       compiler/type-id-test.c++
-      test-util.c++
       compat/json-test.c++
       compat/websocket-rpc-test.c++
-      ${test_capnp_cpp_files}
-      ${test_capnp_h_files}
     )
-    target_link_libraries(capnp-heavy-tests ${test_libraries})
-    if(NOT MSVC)
-      set_target_properties(capnp-heavy-tests
-        PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations"
-      )
-    endif()
-
-    add_dependencies(capnp-heavy-tests test_capnp)
-    add_dependencies(check capnp-heavy-tests)
-    add_test(NAME capnp-heavy-tests-run COMMAND capnp-heavy-tests)
+    foreach(TEST_FILE IN LISTS HEAVY_TEST_FILES)
+      get_filename_component(exe_dir "${TEST_FILE}" DIRECTORY)
+      get_filename_component(exe_name "${TEST_FILE}" NAME_WE)
+      if(exe_dir)
+        set(target "capnp-${exe_dir}-${exe_name}")
+        set(exe_name "${exe_dir}/${exe_name}")
+      else()
+        set(target capnp-${exe_name})
+      endif()
+      add_executable(${target} ${TEST_FILE} test-util.c++ ${test_capnp_cpp_files} ${test_capnp_h_files})
+      set_target_properties(${target} PROPERTIES OUTPUT_NAME ${exe_name})
+      target_link_libraries(${target} ${test_libraries})
+      add_dependencies(${target} test_capnp)
+      add_dependencies(check ${target})
+      add_test(NAME ${target}-run COMMAND ${exe_name}${CMAKE_EXECUTABLE_SUFFIX})
+    endforeach()
 
     add_executable(capnp-evolution-tests compiler/evolution-test.c++)
     target_link_libraries(capnp-evolution-tests capnpc capnp kj)
