@@ -99,6 +99,7 @@ endif()
 
 # Source =======================================================================
 include(CapnProtoMacros)
+include(CapnProtoAddTest)
 add_subdirectory(src)
 
 # Install ======================================================================

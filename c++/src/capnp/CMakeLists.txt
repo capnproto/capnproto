@@ -249,10 +249,13 @@ if(BUILD_TESTING)
   #   target-based capnp_generate() command, as that will make CMake do the right thing by default.
   add_custom_target(test_capnp DEPENDS ${test_capnp_cpp_files} ${test_capnp_h_files})
 
-  if(CAPNP_LITE)
-    set(test_libraries capnp kj-test kj)
-  else()
-    set(test_libraries capnp-json capnp-rpc capnp-websocket capnp capnpc kj-http kj-async kj-test kj)
+  set(test_libraries capnp)
+  if(NOT CAPNP_LITE)
+    # The test code in capnp that relies on the non-lite version isn't split up into separate test
+    # files like it is in KJ so lite and non-lite tests alike have to have the heavier dependency
+    # set of libraries currently. Might be worthwhile to split out the test code for CAPNP_LITE
+    # into separate files.
+    list(APPEND test_libraries capnp-json capnp-rpc capnp-websocket capnpc kj-http kj-async)
   endif()
 
   set(TEST_FILES
@@ -271,20 +274,10 @@ if(BUILD_TESTING)
     fuzz-test.c++
   )
   foreach(TEST_FILE IN LISTS TEST_FILES)
-    get_filename_component(exe_dir "${TEST_FILE}" DIRECTORY)
-    get_filename_component(exe_name "${TEST_FILE}" NAME_WE)
-    if(exe_dir)
-      set(target "capnp-${exe_dir}-${exe_name}")
-      set(exe_name "${exe_dir}/${exe_name}")
-    else()
-      set(target "capnp-${exe_name}")
-    endif()
-    add_executable(${target} ${TEST_FILE} test-util.c++ ${test_capnp_cpp_files} ${test_capnp_h_files})
-    set_target_properties(${target} PROPERTIES OUTPUT_NAME ${exe_name})
-    target_link_libraries(${target} ${test_libraries})
-    add_dependencies(${target} test_capnp)
-    add_dependencies(check ${target})
-    add_test(NAME ${target}-run COMMAND ${exe_name}${CMAKE_EXECUTABLE_SUFFIX})
+    capnproto_add_kj_test(capnp MAIN "${TEST_FILE}"
+      SOURCES test-util.c++ ${test_capnp_cpp_files} ${test_capnp_h_files}
+      LIBRARIES ${test_libraries}
+    )
   endforeach()
 
   if(NOT CAPNP_LITE)
@@ -308,20 +301,10 @@ if(BUILD_TESTING)
       compat/websocket-rpc-test.c++
     )
     foreach(TEST_FILE IN LISTS HEAVY_TEST_FILES)
-      get_filename_component(exe_dir "${TEST_FILE}" DIRECTORY)
-      get_filename_component(exe_name "${TEST_FILE}" NAME_WE)
-      if(exe_dir)
-        set(target "capnp-${exe_dir}-${exe_name}")
-        set(exe_name "${exe_dir}/${exe_name}")
-      else()
-        set(target "capnp-${exe_name}")
-      endif()
-      add_executable(${target} ${TEST_FILE} test-util.c++ ${test_capnp_cpp_files} ${test_capnp_h_files})
-      set_target_properties(${target} PROPERTIES OUTPUT_NAME ${exe_name})
-      target_link_libraries(${target} ${test_libraries})
-      add_dependencies(${target} test_capnp)
-      add_dependencies(check ${target})
-      add_test(NAME ${target}-run COMMAND ${exe_name}${CMAKE_EXECUTABLE_SUFFIX})
+      capnproto_add_kj_test(capnp MAIN "${TEST_FILE}"
+        SOURCES test-util.c++ ${test_capnp_cpp_files} ${test_capnp_h_files}
+        LIBRARIES ${test_libraries}
+      )
     endforeach()
 
     add_executable(capnp-evolution-tests compiler/evolution-test.c++)
