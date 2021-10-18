@@ -1023,8 +1023,7 @@ inline void dtor(T& location) {
 // forces the caller to handle the null case in order to satisfy the compiler, thus reliably
 // preventing null pointer dereferences at runtime.
 //
-// Maybe<T> can be implicitly constructed from T and from nullptr.  Additionally, it can be
-// implicitly constructed from T*, in which case the pointer is checked for nullness at runtime.
+// Maybe<T> can be implicitly constructed from T and from nullptr.
 // To read the value of a Maybe<T>, do:
 //
 //    KJ_IF_MAYBE(value, someFuncReturningMaybe()) {
