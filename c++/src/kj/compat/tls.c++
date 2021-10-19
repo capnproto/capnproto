@@ -419,18 +419,20 @@ private:
 
 class TlsConnectionReceiver final: public ConnectionReceiver, public TaskSet::ErrorHandler {
 public:
-  TlsConnectionReceiver(TlsContext &tls, Own<ConnectionReceiver> inner)
+  TlsConnectionReceiver(
+      TlsContext &tls, Own<ConnectionReceiver> inner,
+      kj::Maybe<TlsErrorHandler> acceptErrorHandler)
       : tls(tls), inner(kj::mv(inner)),
         acceptLoopTask(acceptLoop().eagerlyEvaluate([this](Exception &&e) {
           onAcceptFailure(kj::mv(e));
         })),
+        acceptErrorHandler(kj::mv(acceptErrorHandler)),
         tasks(*this) {}
 
   void taskFailed(Exception&& e) override {
-    // TODO(someday): SSL connection failures may be a fact of normal operation but they may also
-    // be important diagnostic information. We should allow for an error handler to be passed in so
-    // that network issues that affect TLS can be more discoverable from the server side.
-    if (e.getType() != Exception::Type::DISCONNECTED) {
+    KJ_IF_MAYBE(handler, acceptErrorHandler){
+      handler->operator()(kj::mv(e));
+    } else if (e.getType() != Exception::Type::DISCONNECTED) {
       KJ_LOG(ERROR, "error accepting tls connection", kj::mv(e));
     }
   };
@@ -504,6 +506,7 @@ private:
 
   Promise<void> acceptLoopTask;
   ProducerConsumerQueue<AuthenticatedStream> queue;
+  kj::Maybe<TlsErrorHandler> acceptErrorHandler;
   TaskSet tasks;
 
   Maybe<Exception> maybeInnerException;
@@ -712,6 +715,8 @@ TlsContext::TlsContext(Options options) {
     this->acceptTimeout = *timeout;
   }
 
+  this->acceptErrorHandler = kj::mv(options.acceptErrorHandler);
+
   this->ctx = ctx;
 }
 
@@ -776,7 +781,9 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::Async
   auto conn = kj::heap<TlsConnection>(kj::mv(stream), reinterpret_cast<SSL_CTX*>(ctx));
   auto promise = conn->accept();
   KJ_IF_MAYBE(timeout, acceptTimeout) {
-    promise = KJ_REQUIRE_NONNULL(timer).timeoutAfter(*timeout, kj::mv(promise));
+    promise = KJ_REQUIRE_NONNULL(timer).afterDelay(*timeout).then([]() -> kj::Promise<void> {
+      return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
+    }).exclusiveJoin(kj::mv(promise));
   }
   return promise.then(kj::mvCapture(conn, [](kj::Own<TlsConnection> conn)
       -> kj::Own<kj::AsyncIoStream> {
@@ -798,7 +805,9 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStr
   auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), reinterpret_cast<SSL_CTX*>(ctx));
   auto promise = conn->accept();
   KJ_IF_MAYBE(timeout, acceptTimeout) {
-    promise = KJ_REQUIRE_NONNULL(timer).timeoutAfter(*timeout, kj::mv(promise));
+    promise = KJ_REQUIRE_NONNULL(timer).afterDelay(*timeout).then([]() -> kj::Promise<void> {
+      return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
+    }).exclusiveJoin(kj::mv(promise));
   }
   return promise.then([conn=kj::mv(conn),innerId=kj::mv(stream.peerIdentity)]() mutable {
     auto id = conn->getIdentity(kj::mv(innerId));
@@ -807,7 +816,10 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStr
 }
 
 kj::Own<kj::ConnectionReceiver> TlsContext::wrapPort(kj::Own<kj::ConnectionReceiver> port) {
-  return kj::heap<TlsConnectionReceiver>(*this, kj::mv(port));
+  auto handler = acceptErrorHandler.map([](TlsErrorHandler& handler) {
+    return handler.reference();
+  });
+  return kj::heap<TlsConnectionReceiver>(*this, kj::mv(port), kj::mv(handler));
 }
 
 kj::Own<kj::Network> TlsContext::wrapNetwork(kj::Network& network) {
