@@ -889,7 +889,8 @@ public:
       errorReporter.addErrorOn(ordinal, "Duplicate ordinal number.");
       KJ_IF_MAYBE(last, lastOrdinalLocation) {
         errorReporter.addErrorOn(
-            *last, kj::str("Ordinal @", last->getValue(), " originally used here."));
+            *last, kj::str("Ordinal @", last->getValue(), " originally used here. Next expected "
+                "ordinal is @", expectedOrdinal, "."));
         // Don't report original again.
         lastOrdinalLocation = nullptr;
       }

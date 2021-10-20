@@ -18,7 +18,7 @@ file:45:3-23: error: Group must have at least one member.
 file:47: error: Union must have at least two members.
 file:92: error: Unions cannot contain unnamed unions.
 file:39:15-16: error: Duplicate ordinal number.
-file:38:15-16: error: Ordinal @2 originally used here.
+file:38:15-16: error: Ordinal @2 originally used here. Next expected ordinal is @3.
 file:41:18-19: error: Skipped ordinal @3.  Ordinals must be sequential with no holes.
 file:69:15-17: error: Union ordinal, if specified, must be greater than no more than one of its member ordinals (i.e. there can only be one field retroactively unionized).
 file:117:31-50: error: Import failed: noshuchfile.capnp
@@ -49,7 +49,7 @@ file:126:52-55: error: Missing field name.
 file:137:3-10: error: 'dupName' is already defined in this scope.
 file:136:3-10: error: 'dupName' previously defined here.
 file:139:15-16: error: Duplicate ordinal number.
-file:138:15-16: error: Ordinal @2 originally used here.
+file:138:15-16: error: Ordinal @2 originally used here. Next expected ordinal is @3.
 file:142:7-16: error: Declaration recursively depends on itself.
 file:145:19-20: error: 'T' is not an annotation.
 file:149:14-27: error: Not enough generic parameters.
