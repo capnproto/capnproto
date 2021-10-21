@@ -39,7 +39,10 @@ Refcounted::~Refcounted() noexcept(false) {
 }
 
 void Refcounted::disposeImpl(void* pointer) const {
-  if (--refcount == 0) {
+  if (refcount) {
+    --refcount;
+  }
+  else {
     delete this;
   }
 }

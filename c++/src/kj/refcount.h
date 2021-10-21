@@ -69,13 +69,17 @@ public:
   virtual ~Refcounted() noexcept(false);
   KJ_DISALLOW_COPY(Refcounted);
 
-  inline bool isShared() const { return refcount > 1; }
+  inline bool isShared() const { return refcount > 0; }
   // Check if there are multiple references to this object. This is sometimes useful for deciding
   // whether it's safe to modify the object vs. make a copy.
 
 private:
   mutable uint refcount = 0;
   // "mutable" because disposeImpl() is const.  Bleh.
+
+#if defined(KJ_DEBUG)
+  bool refcounted = false;
+#endif
 
   void disposeImpl(void* pointer) const override;
   template <typename T>
@@ -92,7 +96,12 @@ inline Own<T> refcounted(Params&&... params) {
   // Allocate a new refcounted instance of T, passing `params` to its constructor.  Returns an
   // initial reference to the object.  More references can be created with `kj::addRef()`.
 
-  return Refcounted::addRefInternal(new T(kj::fwd<Params>(params)...));
+  T* object = new T(kj::fwd<Params>(params)...);
+  Refcounted* refcounted = object;
+#if defined(KJ_DEBUG)
+  refcounted->refcounted = true;
+#endif
+  return Own<T>(object, *refcounted);
 }
 
 template <typename T>
@@ -101,7 +110,7 @@ Own<T> addRef(T& object) {
   // using `kj::refcounted<>()`.  It is suggested that subclasses implement a non-static addRef()
   // method which wraps this and returns the appropriate type.
 
-  KJ_IREQUIRE(object.Refcounted::refcount > 0, "Object not allocated with kj::refcounted().");
+  KJ_IREQUIRE(object.Refcounted::refcounted, "Object not allocated with kj::refcounted().");
   return Refcounted::addRefInternal(&object);
 }
 
