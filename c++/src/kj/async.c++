@@ -48,6 +48,7 @@
 #include "function.h"
 #include "list.h"
 #include <deque>
+#include <atomic>
 
 #if _WIN32 || __CYGWIN__
 #include <windows.h>  // for Sleep(0) and fibers
@@ -82,7 +83,6 @@
 // builtins -- except for requiring the obnoxious std::atomic<T> wrapper. So, on MSVC let's just
 // #define the builtins based on the C++ library, reinterpret-casting native types to
 // std::atomic... this is cheating but ugh, whatever.
-#include <atomic>
 template <typename T>
 static std::atomic<T>* reinterpretAtomic(T* ptr) { return reinterpret_cast<std::atomic<T>*>(ptr); }
 #define __atomic_store_n(ptr, val, order) \
@@ -1984,6 +1984,16 @@ Event::Event(kj::EventLoop& loop)
     : loop(loop), next(nullptr), prev(nullptr) {}
 
 Event::~Event() noexcept(false) {
+  destroyed = true;
+
+  // Prevent compiler from eliding this store above. This line probably isn't needed because there
+  // are complex calls later in this destructor, and the compiler probably can't prove that they
+  // won't come back and examine `destroyed`, so it won't elide the write anyway. However, an
+  // atomic_signal_fence is also sufficient to tell the compiler that a signal handler might access
+  // `destroyed`, so it won't optimize away the write. Note that a signal fence does not produce
+  // any instructions, it just blocks compiler optimizations.
+  std::atomic_signal_fence(std::memory_order_acq_rel);
+
   disarm();
 
   KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
@@ -1993,6 +2003,11 @@ void Event::armDepthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
+  if (destroyed) {
+    ([]() noexcept {
+      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed");
+    })();
+  }
 
   if (prev == nullptr) {
     next = *loop.depthFirstInsertPoint;
@@ -2019,6 +2034,11 @@ void Event::armBreadthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
+  if (destroyed) {
+    ([]() noexcept {
+      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed");
+    })();
+  }
 
   if (prev == nullptr) {
     next = *loop.breadthFirstInsertPoint;
@@ -2042,6 +2062,11 @@ void Event::armLast() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
+  if (destroyed) {
+    ([]() noexcept {
+      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed");
+    })();
+  }
 
   if (prev == nullptr) {
     next = *loop.breadthFirstInsertPoint;
