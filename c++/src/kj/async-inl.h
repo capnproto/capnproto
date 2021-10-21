@@ -206,6 +206,7 @@ private:
   Event* next;
   Event** prev;
   bool firing = false;
+  bool destroyed = false;
 };
 
 class PromiseNode {
