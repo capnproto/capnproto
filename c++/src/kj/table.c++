@@ -730,7 +730,7 @@ void BTreeImpl::merge(Leaf& dst, uint dstPos, uint pivot, Leaf& src) {
   KJ_DASSERT(dst.isHalfFull());
 
   constexpr size_t mid = Leaf::NROWS/2;
-  dst.rows[mid] = pivot;
+  KJ_DASSERT(dst.rows[mid-1] == pivot);
   acopy(dst.rows + mid, src.rows, mid);
 
   dst.next = src.next;
