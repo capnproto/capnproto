@@ -5458,8 +5458,18 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
   return promise.attach(kj::mv(obj)).eagerlyEvaluate(nullptr);
 }
 
-void HttpServer::taskFailed(kj::Exception&& exception) {
+namespace {
+void defaultHandleListenLoopException(kj::Exception&& exception) {
   KJ_LOG(ERROR, "unhandled exception in HTTP server", exception);
+}
+}  // namespace
+
+void HttpServer::taskFailed(kj::Exception&& exception) {
+  KJ_IF_MAYBE(handler, settings.errorHandler) {
+    handler->handleListenLoopException(kj::mv(exception));
+  } else {
+    defaultHandleListenLoopException(kj::mv(exception));
+  }
 }
 
 HttpServer::SuspendedRequest::SuspendedRequest(
@@ -5546,6 +5556,10 @@ kj::Promise<void> HttpServerErrorHandler::handleApplicationError(
   KJ_LOG(ERROR, "HttpService threw exception after generating a partial response",
                 "too late to report error to client", exception);
   return kj::READY_NOW;
+}
+
+void HttpServerErrorHandler::handleListenLoopException(kj::Exception&& exception) {
+  defaultHandleListenLoopException(kj::mv(exception));
 }
 
 kj::Promise<void> HttpServerErrorHandler::handleNoResponse(kj::HttpService::Response& response) {

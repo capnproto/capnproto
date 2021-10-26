@@ -899,6 +899,12 @@ public:
   //
   // Also unlike `HttpService::request()`, it is okay to return kj::READY_NOW without calling
   // `response.send()`. In this case, no response will be sent, and the connection will be closed.
+
+  virtual void handleListenLoopException(kj::Exception&& exception);
+  // Override this function to customize error handling for individual connections in the
+  // `listenHttp()` overload which accepts a ConnectionReceiver reference.
+  //
+  // The default handler uses KJ_LOG() to log the exception as an error.
 };
 
 class HttpServerCallbacks {
