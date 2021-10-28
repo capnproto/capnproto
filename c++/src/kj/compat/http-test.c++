@@ -2970,6 +2970,406 @@ KJ_TEST("HttpServer cancels request when client disconnects") {
   cancelPromise.wait(waitScope);
 }
 
+class SuspendAfter: private HttpService {
+  // A SuspendableHttpServiceFactory which responds to the first `n` requests with 200 OK, then
+  // suspends all subsequent requests until its counter is reset.
+
+public:
+  void suspendAfter(uint countdownParam) { countdown = countdownParam; }
+
+  kj::Maybe<kj::Own<HttpService>> operator()(HttpServer::SuspendableRequest& sr) {
+    if (countdown == 0) {
+      suspendedRequest = sr.suspend();
+      return nullptr;
+    }
+    --countdown;
+    return kj::Own<HttpService>(static_cast<HttpService*>(this), kj::NullDisposer::instance);
+  }
+
+  kj::Maybe<HttpServer::SuspendedRequest> getSuspended() {
+    KJ_DEFER(suspendedRequest = nullptr);
+    return kj::mv(suspendedRequest);
+  }
+
+private:
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    HttpHeaders responseHeaders(table);
+    response.send(200, "OK", responseHeaders);
+    return requestBody.readAllBytes().ignoreResult();
+  }
+
+  HttpHeaderTable table;
+
+  uint countdown = kj::maxValue;
+  kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
+};
+
+KJ_TEST("HttpServer can suspend a request") {
+  // This test sends a single request to an HttpServer three times. First it writes the request to
+  // its pipe and arranges for the HttpServer to suspend the request. Then it resumes the suspended
+  // request and arranges for this resumption to be suspended as well. Then it resumes once more and
+  // arranges for the request to be completed.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  // This HttpService will not actually be used, because we're passing a factory in to
+  // listenHttpCleanDrain().
+  HangingHttpService service;
+  HttpServer server(timer, table, service);
+
+  kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
+
+  SuspendAfter factory;
+
+  {
+    // Observe the HttpServer suspend.
+
+    factory.suspendAfter(0);
+    auto listenPromise = server.listenHttpCleanDrain(*pipe.ends[0], factory);
+
+    static constexpr kj::StringPtr REQUEST =
+        "POST / HTTP/1.1\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "6\r\n"
+        "foobar\r\n"
+        "0\r\n"
+        "\r\n"_kj;
+    pipe.ends[1]->write(REQUEST.begin(), REQUEST.size()).wait(waitScope);
+
+    // The listen promise is fulfilled with false.
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(!listenPromise.wait(waitScope));
+
+    // And we have a SuspendedRequest.
+    suspendedRequest = factory.getSuspended();
+    KJ_EXPECT(suspendedRequest != nullptr);
+  }
+
+  {
+    // Observe the HttpServer suspend again without reading from the connection.
+
+    factory.suspendAfter(0);
+    auto listenPromise = server.listenHttpCleanDrain(
+        *pipe.ends[0], factory, kj::mv(suspendedRequest));
+
+    // The listen promise is again fulfilled with false.
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(!listenPromise.wait(waitScope));
+
+    // We again have a suspendedRequest.
+    suspendedRequest = factory.getSuspended();
+    KJ_EXPECT(suspendedRequest != nullptr);
+  }
+
+  {
+    // The SuspendedRequest is completed.
+
+    factory.suspendAfter(1);
+    auto listenPromise = server.listenHttpCleanDrain(
+        *pipe.ends[0], factory, kj::mv(suspendedRequest));
+
+    auto drainPromise = kj::evalLast([&]() {
+      return server.drain();
+    });
+
+    // We need to read the response for the HttpServer to drain.
+    auto readPromise = pipe.ends[1]->readAllText();
+
+    // This time, the server drained cleanly.
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(listenPromise.wait(waitScope));
+
+    drainPromise.wait(waitScope);
+
+    // Close the server side of the pipe so our read promise completes.
+    pipe.ends[0] = nullptr;
+
+    auto response = readPromise.wait(waitScope);
+    static constexpr kj::StringPtr RESPONSE =
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "0\r\n"
+        "\r\n"_kj;
+    KJ_EXPECT(RESPONSE == response);
+  }
+}
+
+KJ_TEST("HttpServer can suspend and resume pipelined requests") {
+  // This test sends multiple requests with both Content-Length and Transfer-Encoding: chunked
+  // bodies, and verifies that suspending both kinds does not corrupt the stream.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  // This HttpService will not actually be used, because we're passing a factory in to
+  // listenHttpCleanDrain().
+  HangingHttpService service;
+  HttpServer server(timer, table, service);
+
+  // We'll suspend the second request.
+  kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
+  SuspendAfter factory;
+
+  static constexpr kj::StringPtr LENGTHFUL_REQUEST =
+      "POST / HTTP/1.1\r\n"
+      "Content-Length: 6\r\n"
+      "\r\n"
+      "foobar"_kj;
+  static constexpr kj::StringPtr CHUNKED_REQUEST =
+      "POST / HTTP/1.1\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "\r\n"
+      "6\r\n"
+      "foobar\r\n"
+      "0\r\n"
+      "\r\n"_kj;
+
+  // Set up several requests; we'll suspend and transfer the second and third one.
+  auto writePromise = pipe.ends[1]->write(LENGTHFUL_REQUEST.begin(), LENGTHFUL_REQUEST.size())
+      .then([&]() {
+    return pipe.ends[1]->write(CHUNKED_REQUEST.begin(), CHUNKED_REQUEST.size());
+  }).then([&]() {
+    return pipe.ends[1]->write(LENGTHFUL_REQUEST.begin(), LENGTHFUL_REQUEST.size());
+  }).then([&]() {
+    return pipe.ends[1]->write(CHUNKED_REQUEST.begin(), CHUNKED_REQUEST.size());
+  });
+
+  auto readPromise = pipe.ends[1]->readAllText();
+
+  {
+    // Observe the HttpServer suspend the second request.
+
+    factory.suspendAfter(1);
+    auto listenPromise = server.listenHttpCleanDrain(*pipe.ends[0], factory);
+
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(!listenPromise.wait(waitScope));
+    suspendedRequest = factory.getSuspended();
+    KJ_EXPECT(suspendedRequest != nullptr);
+  }
+
+  {
+    // Let's resume one request and suspend the next pipelined request.
+
+    factory.suspendAfter(1);
+    auto listenPromise = server.listenHttpCleanDrain(
+        *pipe.ends[0], factory, kj::mv(suspendedRequest));
+
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(!listenPromise.wait(waitScope));
+    suspendedRequest = factory.getSuspended();
+    KJ_EXPECT(suspendedRequest != nullptr);
+  }
+
+  {
+    // Resume again and run to completion.
+
+    factory.suspendAfter(kj::maxValue);
+    auto listenPromise = server.listenHttpCleanDrain(
+        *pipe.ends[0], factory, kj::mv(suspendedRequest));
+
+    auto drainPromise = kj::evalLast([&]() {
+      return server.drain();
+    });
+
+    // This time, the server drained cleanly.
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(listenPromise.wait(waitScope));
+    // No suspended request this time.
+    suspendedRequest = factory.getSuspended();
+    KJ_EXPECT(suspendedRequest == nullptr);
+
+    drainPromise.wait(waitScope);
+  }
+
+  writePromise.wait(waitScope);
+
+  // Close the server side of the pipe so our read promise completes.
+  pipe.ends[0] = nullptr;
+
+  auto responses = readPromise.wait(waitScope);
+  static constexpr kj::StringPtr RESPONSE =
+      "HTTP/1.1 200 OK\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "\r\n"
+      "0\r\n"
+      "\r\n"_kj;
+  KJ_EXPECT(kj::str(kj::delimited(kj::repeat(RESPONSE, 4), "")) == responses);
+}
+
+KJ_TEST("HttpServer can suspend a request with no leftover") {
+  // This test verifies that if the request loop's read perfectly ends at the end of message
+  // headers, leaving no leftover section, we can still successfully suspend and resume.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  // This HttpService will not actually be used, because we're passing a factory in to
+  // listenHttpCleanDrain().
+  HangingHttpService service;
+  HttpServer server(timer, table, service);
+
+  kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
+
+  SuspendAfter factory;
+
+  {
+    factory.suspendAfter(0);
+    auto listenPromise = server.listenHttpCleanDrain(*pipe.ends[0], factory);
+
+    static constexpr kj::StringPtr REQUEST_HEADERS =
+        "POST / HTTP/1.1\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"_kj;
+    pipe.ends[1]->write(REQUEST_HEADERS.begin(), REQUEST_HEADERS.size()).wait(waitScope);
+
+    // The listen promise is fulfilled with false.
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(!listenPromise.wait(waitScope));
+
+    // And we have a SuspendedRequest. We know that it has no leftover, because we only wrote
+    // headers, no body yet.
+    suspendedRequest = factory.getSuspended();
+    KJ_EXPECT(suspendedRequest != nullptr);
+  }
+
+  {
+    factory.suspendAfter(1);
+    auto listenPromise = server.listenHttpCleanDrain(
+        *pipe.ends[0], factory, kj::mv(suspendedRequest));
+
+    auto drainPromise = kj::evalLast([&]() {
+      return server.drain();
+    });
+
+    // We need to read the response for the HttpServer to drain.
+    auto readPromise = pipe.ends[1]->readAllText();
+
+    static constexpr kj::StringPtr REQUEST_BODY =
+        "6\r\n"
+        "foobar\r\n"
+        "0\r\n"
+        "\r\n"_kj;
+    pipe.ends[1]->write(REQUEST_BODY.begin(), REQUEST_BODY.size()).wait(waitScope);
+
+    // Clean drain.
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(listenPromise.wait(waitScope));
+
+    drainPromise.wait(waitScope);
+
+    // No SuspendedRequest.
+    suspendedRequest = factory.getSuspended();
+    KJ_EXPECT(suspendedRequest == nullptr);
+
+    // Close the server side of the pipe so our read promise completes.
+    pipe.ends[0] = nullptr;
+
+    auto response = readPromise.wait(waitScope);
+    static constexpr kj::StringPtr RESPONSE =
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "0\r\n"
+        "\r\n"_kj;
+    KJ_EXPECT(RESPONSE == response);
+  }
+}
+
+KJ_TEST("HttpServer::listenHttpCleanDrain() factory-created services outlive requests") {
+  // Test that the lifetimes of factory-created Own<HttpService> objects are handled correctly.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  // This HttpService will not actually be used, because we're passing a factory in to
+  // listenHttpCleanDrain().
+  HangingHttpService service;
+  HttpServer server(timer, table, service);
+
+  uint serviceCount = 0;
+
+  // A factory which returns a service whose request() function responds asynchronously.
+  auto factory = [&](HttpServer::SuspendableRequest&) -> kj::Own<HttpService> {
+    class ServiceImpl final: public HttpService {
+    public:
+      explicit ServiceImpl(uint& serviceCount): serviceCount(++serviceCount) {}
+      ~ServiceImpl() noexcept(false) { --serviceCount; }
+      KJ_DISALLOW_COPY(ServiceImpl);
+
+      kj::Promise<void> request(
+          HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+          kj::AsyncInputStream& requestBody, Response& response) override {
+        return evalLater([&serviceCount = serviceCount, &table = table, &requestBody, &response]() {
+          // This KJ_EXPECT here is the entire point of this test.
+          KJ_EXPECT(serviceCount == 1)
+          HttpHeaders responseHeaders(table);
+          response.send(200, "OK", responseHeaders);
+          return requestBody.readAllBytes().ignoreResult();
+        });
+      }
+
+    private:
+      HttpHeaderTable table;
+
+      uint& serviceCount;
+    };
+
+    return kj::heap<ServiceImpl>(serviceCount);
+  };
+
+  auto listenPromise = server.listenHttpCleanDrain(*pipe.ends[0], factory);
+
+  static constexpr kj::StringPtr REQUEST =
+      "POST / HTTP/1.1\r\n"
+      "Content-Length: 6\r\n"
+      "\r\n"
+      "foobar"_kj;
+  pipe.ends[1]->write(REQUEST.begin(), REQUEST.size()).wait(waitScope);
+
+  // We need to read the response for the HttpServer to drain.
+  auto readPromise = pipe.ends[1]->readAllText();
+
+  // http-socketpair-test quirk: we must drive the request loop past the point of receiving request
+  // headers so that our call to server.drain() doesn't prematurely cancel the request.
+  KJ_EXPECT(!listenPromise.poll(waitScope));
+
+  auto drainPromise = kj::evalLast([&]() {
+    return server.drain();
+  });
+
+  // Clean drain.
+  KJ_EXPECT(listenPromise.poll(waitScope));
+  KJ_EXPECT(listenPromise.wait(waitScope));
+
+  drainPromise.wait(waitScope);
+
+  // Close the server side of the pipe so our read promise completes.
+  pipe.ends[0] = nullptr;
+  auto response = readPromise.wait(waitScope);
+
+  static constexpr kj::StringPtr RESPONSE =
+      "HTTP/1.1 200 OK\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "\r\n"
+      "0\r\n"
+      "\r\n"_kj;
+  KJ_EXPECT(RESPONSE == response);
+}
+
 // -----------------------------------------------------------------------------
 
 KJ_TEST("newHttpService from HttpClient") {
