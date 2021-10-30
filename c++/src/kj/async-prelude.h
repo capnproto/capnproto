@@ -26,6 +26,7 @@
 
 #include "exception.h"
 #include "tuple.h"
+#include "source-location.h"
 
 // Detect whether or not we should enable kj::Promise<T> coroutine integration.
 //
@@ -55,9 +56,8 @@ class Promise;
 class WaitScope;
 class TaskSet;
 
-template <typename T>
-Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
-Promise<void> joinPromises(Array<Promise<void>>&& promises);
+Promise<void> joinPromises(Array<Promise<void>>&& promises, SourceLocation location = {});
+// Out-of-line <void> specialization of template function defined in async.h.
 
 namespace _ {  // private
 
@@ -230,8 +230,9 @@ private:
 };
 
 void detach(kj::Promise<void>&& promise);
-void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope);
-bool pollImpl(_::PromiseNode& node, WaitScope& waitScope);
+void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
+              SourceLocation location);
+bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 Promise<void> yield();
 Promise<void> yieldHarder();
 Own<PromiseNode> neverDone();
@@ -241,7 +242,7 @@ public:
   template <typename T>
   operator Promise<T>() const;
 
-  KJ_NORETURN(void wait(WaitScope& waitScope) const);
+  KJ_NORETURN(void wait(WaitScope& waitScope, SourceLocation location = {}) const);
 };
 
 }  // namespace _ (private)
