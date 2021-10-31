@@ -115,7 +115,8 @@ EventLoop& currentEventLoop() {
 
 class RootEvent: public _::Event {
 public:
-  RootEvent(_::PromiseNode* node, void* traceAddr): node(node), traceAddr(traceAddr) {}
+  RootEvent(_::PromiseNode* node, void* traceAddr, SourceLocation location)
+      : Event(location), node(node), traceAddr(traceAddr) {}
 
   bool fired = false;
 
@@ -261,12 +262,12 @@ void Canceler::AdapterImpl<void>::cancel(kj::Exception&& e) {
 
 // =======================================================================================
 
-TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler)
-  : errorHandler(errorHandler) {}
+TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler, SourceLocation location)
+  : errorHandler(errorHandler), location(location) {}
 class TaskSet::Task final: public _::Event {
 public:
   Task(TaskSet& taskSet, Own<_::PromiseNode>&& nodeParam)
-      : taskSet(taskSet), node(kj::mv(nodeParam)) {
+      : Event(taskSet.location), taskSet(taskSet), node(kj::mv(nodeParam)) {
     node->setSelfPointer(&node);
     node->onReady(this);
   }
@@ -844,8 +845,9 @@ struct Executor::Impl {
 namespace _ {  // (private)
 
 XThreadEvent::XThreadEvent(
-    ExceptionOrValue& result, const Executor& targetExecutor, void* funcTracePtr)
-    : Event(targetExecutor.getLoop()), result(result), funcTracePtr(funcTracePtr),
+    ExceptionOrValue& result, const Executor& targetExecutor, void* funcTracePtr,
+    SourceLocation location)
+    : Event(targetExecutor.getLoop(), location), result(result), funcTracePtr(funcTracePtr),
       targetExecutor(targetExecutor.addRef()) {}
 
 void XThreadEvent::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
@@ -1501,14 +1503,14 @@ void FiberStack::initialize(SynchronousFunc& func) {
   this->main = &func;
 }
 
-FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result)
-    : state(WAITING), stack(kj::heap<FiberStack>(stackSize)), result(result) {
+FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result, SourceLocation location)
+    : Event(location),  state(WAITING), stack(kj::heap<FiberStack>(stackSize)), result(result) {
   stack->initialize(*this);
   ensureThreadCanRunFibers();
 }
 
-FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result)
-    : state(WAITING), result(result) {
+FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result, SourceLocation location)
+    : Event(location), state(WAITING), result(result) {
   stack = pool.impl->takeStack();
   stack->initialize(*this);
   ensureThreadCanRunFibers();
@@ -1838,7 +1840,8 @@ static kj::CanceledException fiberCanceledException() {
 };
 #endif
 
-void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope) {
+void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
+              SourceLocation location) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
 
@@ -1873,7 +1876,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 #endif
     KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
-    RootEvent doneEvent(node, reinterpret_cast<void*>(&waitImpl));
+    RootEvent doneEvent(node, reinterpret_cast<void*>(&waitImpl), location);
     node->setSelfPointer(&node);
     node->onReady(&doneEvent);
 
@@ -1917,13 +1920,13 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
   });
 }
 
-bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
+bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
   KJ_REQUIRE(waitScope.fiber == nullptr, "poll() is not supported in fibers.");
   KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
 
-  RootEvent doneEvent(&node, reinterpret_cast<void*>(&pollImpl));
+  RootEvent doneEvent(&node, reinterpret_cast<void*>(&pollImpl), location);
   node.onReady(&doneEvent);
 
   loop.running = true;
@@ -1965,9 +1968,9 @@ Own<PromiseNode> neverDone() {
   return kj::heap<NeverDonePromiseNode>();
 }
 
-void NeverDone::wait(WaitScope& waitScope) const {
+void NeverDone::wait(WaitScope& waitScope, SourceLocation location) const {
   ExceptionOr<Void> dummy;
-  waitImpl(neverDone(), dummy, waitScope);
+  waitImpl(neverDone(), dummy, waitScope, location);
   KJ_UNREACHABLE;
 }
 
@@ -1977,11 +1980,11 @@ void detach(kj::Promise<void>&& promise) {
   loop.daemons->add(kj::mv(promise));
 }
 
-Event::Event()
-    : loop(currentEventLoop()), next(nullptr), prev(nullptr) {}
+Event::Event(SourceLocation location)
+    : loop(currentEventLoop()), next(nullptr), prev(nullptr), location(location) {}
 
-Event::Event(kj::EventLoop& loop)
-    : loop(loop), next(nullptr), prev(nullptr) {}
+Event::Event(kj::EventLoop& loop, SourceLocation location)
+    : loop(loop), next(nullptr), prev(nullptr), location(location) {}
 
 Event::~Event() noexcept(false) {
   destroyed = true;
@@ -2004,8 +2007,8 @@ void Event::armDepthFirst() {
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
   if (destroyed) {
-    ([]() noexcept {
-      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed");
+    ([this]() noexcept {
+      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
     })();
   }
 
@@ -2035,8 +2038,8 @@ void Event::armBreadthFirst() {
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
   if (destroyed) {
-    ([]() noexcept {
-      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed");
+    ([this]() noexcept {
+      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
     })();
   }
 
@@ -2063,8 +2066,8 @@ void Event::armLast() {
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
   if (destroyed) {
-    ([]() noexcept {
-      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed");
+    ([this]() noexcept {
+      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
     })();
   }
 
@@ -2346,8 +2349,9 @@ void ForkBranchBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 
 // -------------------------------------------------------------------
 
-ForkHubBase::ForkHubBase(Own<PromiseNode>&& innerParam, ExceptionOrValue& resultRef)
-    : inner(kj::mv(innerParam)), resultRef(resultRef) {
+ForkHubBase::ForkHubBase(Own<PromiseNode>&& innerParam, ExceptionOrValue& resultRef,
+                         SourceLocation location)
+    : Event(location), inner(kj::mv(innerParam)), resultRef(resultRef) {
   inner->setSelfPointer(&inner);
   inner->onReady(this);
 }
@@ -2387,8 +2391,8 @@ void ForkHubBase::traceEvent(TraceBuilder& builder) {
 
 // -------------------------------------------------------------------
 
-ChainPromiseNode::ChainPromiseNode(Own<PromiseNode> innerParam)
-    : state(STEP1), inner(kj::mv(innerParam)) {
+ChainPromiseNode::ChainPromiseNode(Own<PromiseNode> innerParam, SourceLocation location)
+    : Event(location), state(STEP1), inner(kj::mv(innerParam)) {
   inner->setSelfPointer(&inner);
   inner->onReady(this);
 }
@@ -2505,8 +2509,9 @@ void ChainPromiseNode::traceEvent(TraceBuilder& builder) {
 
 // -------------------------------------------------------------------
 
-ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right)
-    : left(*this, kj::mv(left)), right(*this, kj::mv(right)) {}
+ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(
+    Own<PromiseNode> left, Own<PromiseNode> right, SourceLocation location)
+    : left(*this, kj::mv(left), location), right(*this, kj::mv(right), location) {}
 
 ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {}
 
@@ -2533,8 +2538,8 @@ void ExclusiveJoinPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNe
 }
 
 ExclusiveJoinPromiseNode::Branch::Branch(
-    ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependencyParam)
-    : joinNode(joinNode), dependency(kj::mv(dependencyParam)) {
+    ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependencyParam, SourceLocation location)
+    : Event(location), joinNode(joinNode), dependency(kj::mv(dependencyParam)) {
   dependency->setSelfPointer(&dependency);
   dependency->onReady(this);
 }
@@ -2577,14 +2582,15 @@ void ExclusiveJoinPromiseNode::Branch::traceEvent(TraceBuilder& builder) {
 // -------------------------------------------------------------------
 
 ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
-    Array<Own<PromiseNode>> promises, ExceptionOrValue* resultParts, size_t partSize)
+    Array<Own<PromiseNode>> promises, ExceptionOrValue* resultParts, size_t partSize,
+    SourceLocation location)
     : countLeft(promises.size()) {
   // Make the branches.
   auto builder = heapArrayBuilder<Branch>(promises.size());
   for (uint i: indices(promises)) {
     ExceptionOrValue& output = *reinterpret_cast<ExceptionOrValue*>(
         reinterpret_cast<byte*>(resultParts) + i * partSize);
-    builder.add(*this, kj::mv(promises[i]), output);
+    builder.add(*this, kj::mv(promises[i]), output, location);
   }
   branches = builder.finish();
 
@@ -2625,8 +2631,9 @@ void ArrayJoinPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNe
 }
 
 ArrayJoinPromiseNodeBase::Branch::Branch(
-    ArrayJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependencyParam, ExceptionOrValue& output)
-    : joinNode(joinNode), dependency(kj::mv(dependencyParam)), output(output) {
+    ArrayJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependencyParam, ExceptionOrValue& output,
+    SourceLocation location)
+    : Event(location), joinNode(joinNode), dependency(kj::mv(dependencyParam)), output(output) {
   dependency->setSelfPointer(&dependency);
   dependency->onReady(this);
 }
@@ -2651,8 +2658,10 @@ Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
 }
 
 ArrayJoinPromiseNode<void>::ArrayJoinPromiseNode(
-    Array<Own<PromiseNode>> promises, Array<ExceptionOr<_::Void>> resultParts)
-    : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<_::Void>)),
+    Array<Own<PromiseNode>> promises, Array<ExceptionOr<_::Void>> resultParts,
+    SourceLocation location)
+    : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<_::Void>),
+                               location),
       resultParts(kj::mv(resultParts)) {}
 
 ArrayJoinPromiseNode<void>::~ArrayJoinPromiseNode() {}
@@ -2663,10 +2672,10 @@ void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
 
 }  // namespace _ (private)
 
-Promise<void> joinPromises(Array<Promise<void>>&& promises) {
+Promise<void> joinPromises(Array<Promise<void>>&& promises, SourceLocation location) {
   return _::PromiseNode::to<Promise<void>>(kj::heap<_::ArrayJoinPromiseNode<void>>(
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
-      heapArray<_::ExceptionOr<_::Void>>(promises.size())));
+      heapArray<_::ExceptionOr<_::Void>>(promises.size()), location));
 }
 
 namespace _ {  // (private)
@@ -2674,8 +2683,8 @@ namespace _ {  // (private)
 // -------------------------------------------------------------------
 
 EagerPromiseNodeBase::EagerPromiseNodeBase(
-    Own<PromiseNode>&& dependencyParam, ExceptionOrValue& resultRef)
-    : dependency(kj::mv(dependencyParam)), resultRef(resultRef) {
+    Own<PromiseNode>&& dependencyParam, ExceptionOrValue& resultRef, SourceLocation location)
+    : Event(location), dependency(kj::mv(dependencyParam)), resultRef(resultRef) {
   dependency->setSelfPointer(&dependency);
   dependency->onReady(this);
 }
@@ -2763,8 +2772,10 @@ Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW
 
 namespace _ {  // (private)
 
-CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef)
-    : coroutine(coroutine),
+CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
+                             SourceLocation location)
+    : Event(location),
+      coroutine(coroutine),
       resultRef(resultRef) {}
 CoroutineBase::~CoroutineBase() noexcept(false) {
   readMaybe(maybeDisposalResults)->destructorRan = true;
