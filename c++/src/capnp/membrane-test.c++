@@ -276,6 +276,33 @@ KJ_TEST("apply membrane using copyOutOfMembrane() on AnyPointer") {
   }, "inside", "inbound", "inside", "inside");
 }
 
+KJ_TEST("MembraneHook::whenMoreResolved returns same value even when called concurrently.") {
+  TestEnv env;
+
+  auto paf = kj::newPromiseAndFulfiller<test::TestMembrane::Client>();
+  test::TestMembrane::Client promCap(kj::mv(paf.promise));
+
+  auto prom = promCap.whenResolved();
+  prom = prom.then([promCap = kj::mv(promCap), &env]() mutable {
+    auto membraned = membrane(kj::mv(promCap), env.policy->addRef());
+    auto hook = ClientHook::from(membraned);
+
+    auto arr = kj::heapArrayBuilder<kj::Promise<kj::Own<ClientHook>>>(2);
+    arr.add(KJ_ASSERT_NONNULL(hook->whenMoreResolved()));
+    arr.add(KJ_ASSERT_NONNULL(hook->whenMoreResolved()));
+
+    return kj::joinPromises(arr.finish()).attach(kj::mv(hook));
+  }).then([](kj::Vector<kj::Own<ClientHook>> hooks) {
+    auto first = hooks[0].get();
+    auto second = hooks[1].get();
+    KJ_ASSERT(first == second);
+  }).eagerlyEvaluate(nullptr);
+
+  auto newClient = kj::heap<TestMembraneImpl>();
+  paf.fulfiller->fulfill(kj::mv(newClient));
+  prom.wait(env.waitScope);
+}
+
 struct TestRpcEnv {
   kj::EventLoop loop;
   kj::WaitScope waitScope;
