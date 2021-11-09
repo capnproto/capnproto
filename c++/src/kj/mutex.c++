@@ -151,7 +151,7 @@ bool Mutex::checkPredicate(Waiter& waiter) {
   return result;
 }
 
-#if !_WIN32 && !__CYGWIN__
+#if !_WIN32 && !__CYGWIN__ && !defined(KJ_NO_THREADS)
 namespace {
 
 TimePoint toTimePoint(struct timespec ts) {
@@ -849,6 +849,15 @@ bool Once::isInitialized() noexcept {
 void Once::reset() {
   InitOnceInitialize(&coercedInitOnce);
 }
+
+#elif defined(KJ_NO_THREADS)
+
+Mutex::Mutex() {}
+Mutex::~Mutex() {}
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, NoopSourceLocation) {
+  return true;
+}
+void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {}
 
 #else
 // =======================================================================================

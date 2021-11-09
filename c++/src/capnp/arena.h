@@ -102,7 +102,7 @@ private:
   KJ_DISALLOW_COPY(ReadLimiter);
 
   KJ_ALWAYS_INLINE(void setLimit(uint64_t newLimit)) {
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(KJ_NO_THREADS)
     __atomic_store_n(&limit, newLimit, __ATOMIC_RELAXED);
 #else
     limit = newLimit;
@@ -110,7 +110,7 @@ private:
   }
 
   KJ_ALWAYS_INLINE(uint64_t readLimit() const) {
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(KJ_NO_THREADS)
     return __atomic_load_n(&limit, __ATOMIC_RELAXED);
 #else
     return limit;

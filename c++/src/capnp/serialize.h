@@ -165,6 +165,8 @@ void writeMessage(kj::OutputStream& output, MessageBuilder& builder);
 void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write the segment array to the given output stream.
 
+#ifndef KJ_NO_FD
+
 // =======================================================================================
 // Specializations for reading from / writing to file descriptors.
 
@@ -210,6 +212,8 @@ void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segme
 // you catch this exception at the call site.  If throwing an exception is not acceptable, you
 // can implement your own OutputStream with arbitrary error handling and then use writeMessage().
 
+#endif
+
 // =======================================================================================
 // inline stuff
 
@@ -225,9 +229,11 @@ inline void writeMessage(kj::OutputStream& output, MessageBuilder& builder) {
   writeMessage(output, builder.getSegmentsForOutput());
 }
 
+#ifndef KJ_NO_FD
 inline void writeMessageToFd(int fd, MessageBuilder& builder) {
   writeMessageToFd(fd, builder.getSegmentsForOutput());
 }
+#endif
 
 }  // namespace capnp
 

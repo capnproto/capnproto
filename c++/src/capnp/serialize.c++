@@ -302,6 +302,8 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
 
 // =======================================================================================
 
+#ifndef KJ_NO_FD
+
 StreamFdMessageReader::~StreamFdMessageReader() noexcept(false) {}
 
 void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
@@ -323,5 +325,7 @@ void readMessageCopyFromFd(int fd, MessageBuilder& target,
   kj::FdInputStream stream(fd);
   readMessageCopy(stream, target, options, scratchSpace);
 }
+
+#endif
 
 }  // namespace capnp

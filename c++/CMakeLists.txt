@@ -28,6 +28,11 @@ set(INSTALL_TARGETS_DEFAULT_ARGS
 
 option(EXTERNAL_CAPNP "Use the system capnp binary, or the one specified in $CAPNP, instead of using the compiled one." OFF)
 option(CAPNP_LITE "Compile Cap'n Proto in 'lite mode', in which all reflection APIs (schema.h, dynamic.h, etc.) are not included. Produces a smaller library at the cost of features. All programs built against the library must be compiled with -DCAPNP_LITE. Requires EXTERNAL_CAPNP." OFF)
+option(CAPNP_EMBEDDED "Builds capnp library for bare metal embedded systems.  Library will not be thread or interrupt safe." OFF)
+
+if(CAPNP_EMBEDDED)
+  add_definitions(-DKJ_NO_FD -DKJ_NO_POSIX -DKJ_NO_EXCEPTIONS -DKJ_NO_THREADS)
+endif()
 
 # Check for invalid combinations of build options
 if(CAPNP_LITE AND BUILD_TESTING AND NOT EXTERNAL_CAPNP)
@@ -92,7 +97,7 @@ else()
     message(SEND_ERROR "Cap'n Proto requires compiler-specific extensions (e.g., -std=gnu++14). Please leave CMAKE_CXX_EXTENSIONS undefined or ON.")
   endif()
 
-  if (NOT ANDROID)
+  if (NOT ANDROID AND NOT CAPNP_EMBEDDED)
     add_compile_options(-pthread)
   endif()
 endif()
@@ -140,7 +145,7 @@ install(FILES
 #install CapnProtoMacros for CapnProtoConfig.cmake build directory consumers
 configure_file(cmake/CapnProtoMacros.cmake cmake/CapnProtoMacros.cmake COPYONLY)
 
-if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
+if(NOT MSVC AND NOT CAPNP_EMBEDDED)  # Don't install pkg-config files when building with MSVC
   # Variables for pkg-config files
   set(prefix "${CMAKE_INSTALL_PREFIX}")
   set(exec_prefix "") # not needed since we use absolute paths in libdir and includedir

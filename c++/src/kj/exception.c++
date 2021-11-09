@@ -38,7 +38,9 @@
 #include "string.h"
 #include "debug.h"
 #include "threadlocal.h"
+#ifndef KJ_NO_POSIX
 #include "miniposix.h"
+#endif
 #include "function.h"
 #include "main.h"
 #include <stdlib.h>
@@ -46,7 +48,7 @@
 #include <new>
 #include <signal.h>
 #include <stdint.h>
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(KJ_NO_POSIX)
 #include <sys/mman.h>
 #endif
 #include "io.h"
@@ -609,13 +611,16 @@ namespace {
                          "\nstack: ", stringifyStackTraceAddresses(trace),
                          stringifyStackTrace(trace), '\n');
 
+#ifndef KJ_NO_POSIX
   FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
   _exit(1);
+#endif
 }
 
 }  // namespace
 
 void printStackTraceOnCrash() {
+#ifndef KJ_NO_POSIX
   // Set up alternate signal stack so that stack overflows can be handled.
   stack_t stack;
   memset(&stack, 0, sizeof(stack));
@@ -660,6 +665,8 @@ void printStackTraceOnCrash() {
 #if !KJ_NO_EXCEPTIONS
   // Also override std::terminate() handler with something nicer for KJ.
   std::set_terminate(&terminateHandler);
+#endif
+
 #endif
 }
 #endif
@@ -1047,6 +1054,7 @@ public:
     text = str(kj::repeat('_', contextDepth), file, ":", line, ": ", severity, ": ",
                mv(text), '\n');
 
+#ifndef KJ_NO_POSIX
     StringPtr textPtr = text;
 
     while (textPtr != nullptr) {
@@ -1057,6 +1065,7 @@ public:
       }
       textPtr = textPtr.slice(n);
     }
+#endif
   }
 
   StackTraceMode stackTraceMode() override {
@@ -1138,6 +1147,8 @@ void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
 
 namespace _ {  // private
 
+#ifndef KJ_NO_EXCEPTIONS
+
 #if __cplusplus >= 201703L
 
 uint uncaughtExceptionCount() {
@@ -1212,6 +1223,14 @@ uint uncaughtExceptionCount() {
 #error "This needs to be ported to your compiler / C++ ABI."
 #endif
 
+#else
+
+uint uncaughtExceptionCount() {
+  return 0;
+}
+
+#endif
+
 }  // namespace _ (private)
 
 UnwindDetector::UnwindDetector(): uncaughtCount(_::uncaughtExceptionCount()) {}
@@ -1263,7 +1282,11 @@ size_t sharedSuffixLength(kj::ArrayPtr<void* const> a, kj::ArrayPtr<void* const>
 
 kj::ArrayPtr<void* const> computeRelativeTrace(
     kj::ArrayPtr<void* const> trace, kj::ArrayPtr<void* const> relativeTo) {
+#ifndef KJ_NO_POSIX
   using miniposix::ssize_t;
+#else
+  using ssize_t = int;
+#endif
 
   static constexpr size_t MIN_MATCH_LEN = 4;
   if (trace.size() < MIN_MATCH_LEN || relativeTo.size() < MIN_MATCH_LEN) {

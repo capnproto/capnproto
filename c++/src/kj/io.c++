@@ -29,7 +29,9 @@
 
 #include "io.h"
 #include "debug.h"
+#ifndef KJ_NO_POSIX
 #include "miniposix.h"
+#endif
 #include <algorithm>
 #include <errno.h>
 #include "vector.h"
@@ -37,7 +39,7 @@
 #if _WIN32
 #include <windows.h>
 #include "windows-sanity.h"
-#else
+#elif !defined(KJ_NO_POSIX)
 #include <sys/uio.h>
 #endif
 
@@ -324,6 +326,8 @@ void VectorOutputStream::grow(size_t minSize) {
 
 // =======================================================================================
 
+#ifndef KJ_NO_FD
+
 AutoCloseFd::~AutoCloseFd() noexcept(false) {
   if (fd >= 0) {
     // Don't use SYSCALL() here because close() should not be repeated on EINTR.
@@ -420,6 +424,8 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   }
 #endif
 }
+
+#endif
 
 // =======================================================================================
 

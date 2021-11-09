@@ -247,6 +247,8 @@ private:
   void grow(size_t minSize);
 };
 
+#ifndef KJ_NO_FD
+
 // =======================================================================================
 // File descriptor I/O
 
@@ -341,6 +343,7 @@ private:
   int fd;
   AutoCloseFd autoclose;
 };
+#endif
 
 // =======================================================================================
 // Win32 Handle I/O

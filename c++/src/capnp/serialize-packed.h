@@ -70,6 +70,8 @@ public:
   ~PackedMessageReader() noexcept(false);
 };
 
+#ifndef KJ_NO_FD
+
 class PackedFdMessageReader: private kj::FdInputStream, private kj::BufferedInputStreamWrapper,
                              public PackedMessageReader {
 public:
@@ -88,6 +90,8 @@ public:
   ~PackedFdMessageReader() noexcept(false);
 };
 
+#endif
+
 void writePackedMessage(kj::BufferedOutputStream& output, MessageBuilder& builder);
 void writePackedMessage(kj::BufferedOutputStream& output,
                         kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
@@ -100,9 +104,13 @@ void writePackedMessage(kj::OutputStream& output,
 // in succession, consider wrapping your output in a buffered stream in order to reduce system
 // call overhead.
 
+#ifndef KJ_NO_FD
+
 void writePackedMessageToFd(int fd, MessageBuilder& builder);
 void writePackedMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write a single packed message to the file descriptor.
+
+#endif
 
 size_t computeUnpackedSizeInWords(kj::ArrayPtr<const byte> packedBytes);
 // Computes the number of words to which the given packed bytes will unpack. Not intended for use
@@ -119,9 +127,13 @@ inline void writePackedMessage(kj::OutputStream& output, MessageBuilder& builder
   writePackedMessage(output, builder.getSegmentsForOutput());
 }
 
+#ifndef KJ_NO_FD
+
 inline void writePackedMessageToFd(int fd, MessageBuilder& builder) {
   writePackedMessageToFd(fd, builder.getSegmentsForOutput());
 }
+
+#endif
 
 }  // namespace capnp
 

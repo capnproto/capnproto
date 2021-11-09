@@ -47,7 +47,11 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
-#if __GNUC__
+#ifdef KJ_NO_THREADS
+
+#define KJ_THREADLOCAL_PTR(type) static type*
+
+#elif __GNUC__
 
 #define KJ_THREADLOCAL_PTR(type) static __thread type*
 // GCC's __thread is lighter-weight than thread_local and is good enough for our purposes.

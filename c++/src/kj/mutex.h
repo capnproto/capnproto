@@ -34,7 +34,7 @@ KJ_BEGIN_HEADER
 #define KJ_USE_FUTEX 1
 #endif
 
-#if !KJ_USE_FUTEX && !_WIN32 && !__CYGWIN__
+#if !KJ_USE_FUTEX && !_WIN32 && !__CYGWIN__ && !defined(KJ_NO_POSIX)
 // We fall back to pthreads when we don't have a better platform-specific primitive. pthreads
 // mutexes are bloated, though, so we like to avoid them. Hence on Linux we use futex(), and on
 // Windows we use SRW locks and friends. On Cygwin we prefer the Win32 primitives both because they
@@ -197,6 +197,8 @@ private:
 #elif _WIN32 || __CYGWIN__
   uintptr_t srwLock;  // Actually an SRWLOCK, but don't want to #include <windows.h> in header.
 
+#elif defined(KJ_NO_THREADS)
+  uint32_t dummy_mutex;
 #else
   mutable pthread_rwlock_t mutex;
 #endif
@@ -236,6 +238,8 @@ private:
 #elif _WIN32 || __CYGWIN__
     uintptr_t condvar;
     // Actually CONDITION_VARIABLE, but don't want to #include <windows.h> in header.
+#elif defined(KJ_NO_THREADS)
+    uint32_t dummy_condvar;
 #else
     pthread_cond_t condvar;
 
@@ -285,6 +289,8 @@ public:
     // Fast path check to see if runOnce() would simply return immediately.
 #if KJ_USE_FUTEX
     return __atomic_load_n(&futex, __ATOMIC_ACQUIRE) == INITIALIZED;
+#elif defined(KJ_NO_THREADS)
+    return true;
 #else
     return __atomic_load_n(&state, __ATOMIC_ACQUIRE) == INITIALIZED;
 #endif
@@ -310,6 +316,8 @@ private:
 #elif _WIN32 || __CYGWIN__
   uintptr_t initOnce;  // Actually an INIT_ONCE, but don't want to #include <windows.h> in header.
 
+#elif defined(KJ_NO_THREADS)
+  uint32_t dummy_initOnce;
 #else
   enum State {
     UNINITIALIZED,

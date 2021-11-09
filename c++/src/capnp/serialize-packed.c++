@@ -439,6 +439,8 @@ PackedMessageReader::PackedMessageReader(
 
 PackedMessageReader::~PackedMessageReader() noexcept(false) {}
 
+#ifndef KJ_NO_FD
+
 PackedFdMessageReader::PackedFdMessageReader(
     int fd, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
     : FdInputStream(fd),
@@ -454,6 +456,8 @@ PackedFdMessageReader::PackedFdMessageReader(
                           options, scratchSpace) {}
 
 PackedFdMessageReader::~PackedFdMessageReader() noexcept(false) {}
+
+#endif
 
 void writePackedMessage(kj::BufferedOutputStream& output,
                         kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
@@ -472,10 +476,14 @@ void writePackedMessage(kj::OutputStream& output,
   }
 }
 
+#ifndef KJ_NO_FD
+
 void writePackedMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   kj::FdOutputStream output(fd);
   writePackedMessage(output, segments);
 }
+
+#endif
 
 size_t computeUnpackedSizeInWords(kj::ArrayPtr<const byte> packedBytes) {
   const byte* ptr = packedBytes.begin();
