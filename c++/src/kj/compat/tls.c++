@@ -151,6 +151,14 @@ public:
       throwOpensslError();
     }
 
+    // As of OpenSSL 1.1.0, X509_V_FLAG_TRUSTED_FIRST is on by default. Turning it on for older
+    // versions -- as well as certain OpenSSL-compatible libraries -- fixes the problem described
+    // here: https://community.letsencrypt.org/t/openssl-client-compatibility-changes-for-let-s-encrypt-certificates/143816
+    //
+    // Otherwise, certificates issued by Let's Encrypt won't work as of September 30, 2021:
+    // https://letsencrypt.org/docs/dst-root-ca-x3-expiration-september-2021/
+    X509_VERIFY_PARAM_set_flags(verify, X509_V_FLAG_TRUSTED_FIRST);
+
     return sslCall([this]() { return SSL_connect(ssl); }).then([this](size_t) {
       X509* cert = SSL_get_peer_certificate(ssl);
       KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate");
