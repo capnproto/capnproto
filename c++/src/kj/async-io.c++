@@ -1738,6 +1738,47 @@ public:
     Maybe<Sink&> sink;
   };
 
+  class TeeBranch final: public AsyncInputStream {
+  public:
+    TeeBranch(Own<AsyncTee> teeArg): tee(mv(teeArg)), branch(tee->addBranch()) {}
+
+    TeeBranch(Badge<TeeBranch>, Own<AsyncTee> teeArg, AsyncTee::Branch&& branchState)
+        : tee(mv(teeArg)), branch(tee->addBranch(mv(branchState))) {}
+
+    ~TeeBranch() noexcept(false) {
+      unwind.catchExceptionsIfUnwinding([&]() {
+        tee->removeBranch(branch);
+      });
+    }
+
+    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return tee->tryRead(branch, buffer, minBytes, maxBytes);
+    }
+
+    Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+      return tee->pumpTo(branch, output, amount);
+    }
+
+    Maybe<uint64_t> tryGetLength() override {
+      return tee->tryGetLength(branch);
+    }
+
+    Maybe<Own<AsyncInputStream>> tryTee(uint64_t limit) override {
+      if (tee->getBufferSizeLimit() != limit) {
+        // Cannot optimize this path as the limit has changed, so we need a new AsyncTee to manage
+        // the limit.
+        return nullptr;
+      }
+
+      return kj::heap<TeeBranch>(Badge<TeeBranch>{}, addRef(*tee), tee->cloneBranch(branch));
+    }
+
+  private:
+    Own<AsyncTee> tee;
+    const uint branch;
+    UnwindDetector unwind;
+  };
+
   explicit AsyncTee(Own<AsyncInputStream> inner, uint64_t bufferSizeLimit)
       : inner(mv(inner)), bufferSizeLimit(bufferSizeLimit), length(this->inner->tryGetLength()) {}
   ~AsyncTee() noexcept(false) {
@@ -2292,47 +2333,6 @@ uint64_t AsyncTee::Buffer::size() const {
   return result;
 }
 
-class TeeBranch final: public AsyncInputStream {
-public:
-  TeeBranch(Own<AsyncTee> teeArg): tee(mv(teeArg)), branch(tee->addBranch()) {}
-
-  TeeBranch(Badge<TeeBranch>, Own<AsyncTee> teeArg, AsyncTee::Branch&& branchState)
-      : tee(mv(teeArg)), branch(tee->addBranch(mv(branchState))) {}
-
-  ~TeeBranch() noexcept(false) {
-    unwind.catchExceptionsIfUnwinding([&]() {
-      tee->removeBranch(branch);
-    });
-  }
-
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tee->tryRead(branch, buffer, minBytes, maxBytes);
-  }
-
-  Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-    return tee->pumpTo(branch, output, amount);
-  }
-
-  Maybe<uint64_t> tryGetLength() override {
-    return tee->tryGetLength(branch);
-  }
-
-  Maybe<Own<AsyncInputStream>> tryTee(uint64_t limit) override {
-    if (tee->getBufferSizeLimit() != limit) {
-      // Cannot optimize this path as the limit has changed, so we need a new AsyncTee to manage
-      // the limit.
-      return nullptr;
-    }
-
-    return kj::heap<TeeBranch>(Badge<TeeBranch>{}, addRef(*tee), tee->cloneBranch(branch));
-  }
-
-private:
-  Own<AsyncTee> tee;
-  const uint branch;
-  UnwindDetector unwind;
-};
-
 }  // namespace
 
 Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
@@ -2341,8 +2341,8 @@ Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
   }
 
   auto impl = refcounted<AsyncTee>(mv(input), limit);
-  Own<AsyncInputStream> branch1 = heap<TeeBranch>(addRef(*impl));
-  Own<AsyncInputStream> branch2 = heap<TeeBranch>(mv(impl));
+  Own<AsyncInputStream> branch1 = heap<AsyncTee::TeeBranch>(addRef(*impl));
+  Own<AsyncInputStream> branch2 = heap<AsyncTee::TeeBranch>(mv(impl));
   return { { mv(branch1), mv(branch2) } };
 }
 
