@@ -1731,18 +1731,18 @@ class AsyncTee final: public Refcounted {
   class Sink;
 
 public:
-  class TeeBranch final: public AsyncInputStream {
+  class Branch final: public AsyncInputStream {
   public:
-    TeeBranch(Own<AsyncTee> teeArg): tee(mv(teeArg)) {
+    Branch(Own<AsyncTee> teeArg): tee(mv(teeArg)) {
       tee->branches.add(*this);
     }
 
-    TeeBranch(Own<AsyncTee> teeArg, TeeBranch& cloneFrom)
+    Branch(Own<AsyncTee> teeArg, Branch& cloneFrom)
         : tee(mv(teeArg)), buffer(cloneFrom.buffer.clone()) {
       tee->branches.add(*this);
     }
 
-    ~TeeBranch() noexcept(false) {
+    ~Branch() noexcept(false) {
       KJ_ASSERT(link.isLinked()) {
         // Don't std::terminate().
         return;
@@ -1775,12 +1775,12 @@ public:
         return nullptr;
       }
 
-      return kj::heap<TeeBranch>(addRef(*tee), *this);
+      return kj::heap<Branch>(addRef(*tee), *this);
     }
 
   private:
     Own<AsyncTee> tee;
-    ListLink<TeeBranch> link;
+    ListLink<Branch> link;
 
     Buffer buffer;
     Maybe<Sink&> sink;
@@ -1797,7 +1797,7 @@ public:
     }
   }
 
-  Promise<size_t> tryRead(TeeBranch& branch, void* buffer, size_t minBytes, size_t maxBytes)  {
+  Promise<size_t> tryRead(Branch& branch, void* buffer, size_t minBytes, size_t maxBytes)  {
     KJ_ASSERT(branch.sink == nullptr);
 
     // If there is excess data in the buffer for us, slurp that up.
@@ -1826,7 +1826,7 @@ public:
     return mv(promise);
   }
 
-  Maybe<uint64_t> tryGetLength(TeeBranch& branch)  {
+  Maybe<uint64_t> tryGetLength(Branch& branch)  {
     return length.map([&branch](uint64_t amount) {
       return amount + branch.buffer.size();
     });
@@ -1836,7 +1836,7 @@ public:
     return bufferSizeLimit;
   }
 
-  Promise<uint64_t> pumpTo(TeeBranch& branch, AsyncOutputStream& output, uint64_t amount)  {
+  Promise<uint64_t> pumpTo(Branch& branch, AsyncOutputStream& output, uint64_t amount)  {
     KJ_ASSERT(branch.sink == nullptr);
 
     if (amount == 0) {
@@ -2105,7 +2105,7 @@ private:
   Own<AsyncInputStream> inner;
   const uint64_t bufferSizeLimit = kj::maxValue;
   Maybe<uint64_t> length;
-  List<TeeBranch, &TeeBranch::link> branches;
+  List<Branch, &Branch::link> branches;
   Maybe<Stoppage> stoppage;
   Promise<void> pullPromise = READY_NOW;
   bool pulling = false;
@@ -2305,8 +2305,8 @@ Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
   }
 
   auto impl = refcounted<AsyncTee>(mv(input), limit);
-  Own<AsyncInputStream> branch1 = heap<AsyncTee::TeeBranch>(addRef(*impl));
-  Own<AsyncInputStream> branch2 = heap<AsyncTee::TeeBranch>(mv(impl));
+  Own<AsyncInputStream> branch1 = heap<AsyncTee::Branch>(addRef(*impl));
+  Own<AsyncInputStream> branch2 = heap<AsyncTee::Branch>(mv(impl));
   return { { mv(branch1), mv(branch2) } };
 }
 
