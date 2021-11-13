@@ -264,9 +264,9 @@ size_t BTreeImpl::verifyNode(size_t size, FunctionParam<bool(uint, uint)>& f,
     for (auto i: kj::zeroTo(n)) {
       KJ_ASSERT(*parent.keys[i] < size, n, i);
       total += verifyNode(size, f, parent.children[i], height - 1, parent.keys[i]);
-      if (i + 1 < n) {
-        KJ_ASSERT(f(*parent.keys[i], *parent.keys[i + 1]),
-            n, i, parent.keys[i], parent.keys[i + 1]);
+      if (i > 0) {
+        KJ_ASSERT(f(*parent.keys[i - 1], *parent.keys[i]),
+            n, i, parent.keys[i - 1], parent.keys[i]);
       }
     }
     total += verifyNode(size, f, parent.children[n], height - 1, maxRow);
@@ -279,12 +279,13 @@ size_t BTreeImpl::verifyNode(size_t size, FunctionParam<bool(uint, uint)>& f,
     auto n = leaf.size();
     for (auto i: kj::zeroTo(n)) {
       KJ_ASSERT(*leaf.rows[i] < size, n, i);
-      if (i + 1 < n) {
-        KJ_ASSERT(f(*leaf.rows[i], *leaf.rows[i + 1]),
-            n, i, leaf.rows[i], leaf.rows[i + 1]);
-      } else if (maxRow != nullptr) {
-        KJ_ASSERT(leaf.rows[n-1] == maxRow);
+      if (i > 0) {
+        KJ_ASSERT(f(*leaf.rows[i - 1], *leaf.rows[i]),
+            n, i, leaf.rows[i - 1], leaf.rows[i]);
       }
+    }
+    if (maxRow != nullptr) {
+      KJ_ASSERT(leaf.rows[n-1] == maxRow, n);
     }
     return n;
   }
