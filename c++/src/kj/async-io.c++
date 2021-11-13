@@ -1731,36 +1731,41 @@ class AsyncTee final: public Refcounted {
   class Sink;
 
 public:
-  using BranchId = uint;
-
-  struct Branch {
-    Buffer buffer;
-    Maybe<Sink&> sink;
-  };
-
   class TeeBranch final: public AsyncInputStream {
   public:
-    TeeBranch(Own<AsyncTee> teeArg): tee(mv(teeArg)), branch(tee->addBranch()) {}
+    TeeBranch(Own<AsyncTee> teeArg): tee(mv(teeArg)) {
+      tee->branches.add(*this);
+    }
 
-    TeeBranch(Badge<TeeBranch>, Own<AsyncTee> teeArg, AsyncTee::Branch&& branchState)
-        : tee(mv(teeArg)), branch(tee->addBranch(mv(branchState))) {}
+    TeeBranch(Own<AsyncTee> teeArg, TeeBranch& cloneFrom)
+        : tee(mv(teeArg)), buffer(cloneFrom.buffer.clone()) {
+      tee->branches.add(*this);
+    }
 
     ~TeeBranch() noexcept(false) {
-      unwind.catchExceptionsIfUnwinding([&]() {
-        tee->removeBranch(branch);
-      });
+      KJ_ASSERT(link.isLinked()) {
+        // Don't std::terminate().
+        return;
+      }
+      tee->branches.remove(*this);
+
+      KJ_REQUIRE(sink == nullptr,
+          "destroying tee branch with operation still in-progress; probably going to segfault") {
+        // Don't std::terminate().
+        break;
+      }
     }
 
     Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return tee->tryRead(branch, buffer, minBytes, maxBytes);
+      return tee->tryRead(*this, buffer, minBytes, maxBytes);
     }
 
     Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-      return tee->pumpTo(branch, output, amount);
+      return tee->pumpTo(*this, output, amount);
     }
 
     Maybe<uint64_t> tryGetLength() override {
-      return tee->tryGetLength(branch);
+      return tee->tryGetLength(*this);
     }
 
     Maybe<Own<AsyncInputStream>> tryTee(uint64_t limit) override {
@@ -1770,67 +1775,40 @@ public:
         return nullptr;
       }
 
-      return kj::heap<TeeBranch>(Badge<TeeBranch>{}, addRef(*tee), tee->cloneBranch(branch));
+      return kj::heap<TeeBranch>(addRef(*tee), *this);
     }
 
   private:
     Own<AsyncTee> tee;
-    const uint branch;
-    UnwindDetector unwind;
+    ListLink<TeeBranch> link;
+
+    Buffer buffer;
+    Maybe<Sink&> sink;
+
+    friend class AsyncTee;
   };
 
   explicit AsyncTee(Own<AsyncInputStream> inner, uint64_t bufferSizeLimit)
       : inner(mv(inner)), bufferSizeLimit(bufferSizeLimit), length(this->inner->tryGetLength()) {}
   ~AsyncTee() noexcept(false) {
-    bool hasBranches = false;
-    for (auto& branch: branches) {
-      hasBranches = hasBranches || branch != nullptr;
-    }
-    KJ_ASSERT(!hasBranches, "destroying AsyncTee with branch still alive") {
+    KJ_ASSERT(branches.size() == 0, "destroying AsyncTee with branch still alive") {
       // Don't std::terminate().
       break;
     }
   }
 
-  BranchId addBranch() {
-    return addBranch(Branch());
-  }
-
-  BranchId addBranch(Branch&& branch) {
-    BranchId branchId = branches.size();
-    branches.add(mv(branch));
-    return branchId;
-  }
-
-  Branch cloneBranch(BranchId branchId) const {
-    const auto& state = KJ_ASSERT_NONNULL(branches[branchId]);
-    return {state.buffer.clone(), nullptr};
-  }
-
-  void removeBranch(BranchId branch) {
-    auto& state = KJ_REQUIRE_NONNULL(branches[branch], "branch was already destroyed");
-    KJ_REQUIRE(state.sink == nullptr,
-        "destroying tee branch with operation still in-progress; probably going to segfault") {
-      // Don't std::terminate().
-      break;
-    }
-
-    branches[branch] = nullptr;
-  }
-
-  Promise<size_t> tryRead(BranchId branch, void* buffer, size_t minBytes, size_t maxBytes)  {
-    auto& state = KJ_ASSERT_NONNULL(branches[branch]);
-    KJ_ASSERT(state.sink == nullptr);
+  Promise<size_t> tryRead(TeeBranch& branch, void* buffer, size_t minBytes, size_t maxBytes)  {
+    KJ_ASSERT(branch.sink == nullptr);
 
     // If there is excess data in the buffer for us, slurp that up.
     auto readBuffer = arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes);
-    auto readSoFar = state.buffer.consume(readBuffer, minBytes);
+    auto readSoFar = branch.buffer.consume(readBuffer, minBytes);
 
     if (minBytes == 0) {
       return readSoFar;
     }
 
-    if (state.buffer.empty()) {
+    if (branch.buffer.empty()) {
       KJ_IF_MAYBE(reason, stoppage) {
         // Prefer a short read to an exception. The exception prevents the pull loop from adding any
         // data to the buffer, so `readSoFar` will be zero the next time someone calls `tryRead()`,
@@ -1842,16 +1820,15 @@ public:
       }
     }
 
-    auto promise = newAdaptedPromise<size_t, ReadSink>(state.sink, readBuffer, minBytes, readSoFar);
+    auto promise = newAdaptedPromise<size_t, ReadSink>(
+        branch.sink, readBuffer, minBytes, readSoFar);
     ensurePulling();
     return mv(promise);
   }
 
-  Maybe<uint64_t> tryGetLength(BranchId branch)  {
-    auto& state = KJ_ASSERT_NONNULL(branches[branch]);
-
-    return length.map([&state](uint64_t amount) {
-      return amount + state.buffer.size();
+  Maybe<uint64_t> tryGetLength(TeeBranch& branch)  {
+    return length.map([&branch](uint64_t amount) {
+      return amount + branch.buffer.size();
     });
   }
 
@@ -1859,15 +1836,14 @@ public:
     return bufferSizeLimit;
   }
 
-  Promise<uint64_t> pumpTo(BranchId branch, AsyncOutputStream& output, uint64_t amount)  {
-    auto& state = KJ_ASSERT_NONNULL(branches[branch]);
-    KJ_ASSERT(state.sink == nullptr);
+  Promise<uint64_t> pumpTo(TeeBranch& branch, AsyncOutputStream& output, uint64_t amount)  {
+    KJ_ASSERT(branch.sink == nullptr);
 
     if (amount == 0) {
       return amount;
     }
 
-    if (state.buffer.empty()) {
+    if (branch.buffer.empty()) {
       KJ_IF_MAYBE(reason, stoppage) {
         if (reason->is<Eof>()) {
           return uint64_t(0);
@@ -1876,7 +1852,7 @@ public:
       }
     }
 
-    auto promise = newAdaptedPromise<uint64_t, PumpSink>(state.sink, output, amount);
+    auto promise = newAdaptedPromise<uint64_t, PumpSink>(branch.sink, output, amount);
     ensurePulling();
     return mv(promise);
   }
@@ -2078,18 +2054,14 @@ private:
     uint64_t minBytes = 0;
     uint64_t maxBytes = kj::maxValue;
 
-    uint nBranches = 0;
     uint nSinks = 0;
 
-    for (auto& state: branches) {
-      KJ_IF_MAYBE(s, state) {
-        ++nBranches;
-        KJ_IF_MAYBE(sink, s->sink) {
-          ++nSinks;
-          auto need = sink->need();
-          minBytes = kj::max(minBytes, need.minBytes);
-          maxBytes = kj::min(maxBytes, need.maxBytes);
-        }
+    for (auto& branch: branches) {
+      KJ_IF_MAYBE(sink, branch.sink) {
+        ++nSinks;
+        auto need = sink->need();
+        minBytes = kj::max(minBytes, need.minBytes);
+        maxBytes = kj::min(maxBytes, need.maxBytes);
       }
     }
 
@@ -2120,11 +2092,9 @@ private:
     return pullLoop().eagerlyEvaluate([this](Exception&& exception) {
       // Exception from our loop, not from inner tryRead(). Something is broken; tell everybody!
       pulling = false;
-      for (auto& state: branches) {
-        KJ_IF_MAYBE(s, state) {
-          KJ_IF_MAYBE(sink, s->sink) {
-            sink->reject(KJ_EXCEPTION(FAILED, "Exception in tee loop", exception));
-          }
+      for (auto& branch: branches) {
+        KJ_IF_MAYBE(sink, branch.sink) {
+          sink->reject(KJ_EXCEPTION(FAILED, "Exception in tee loop", exception));
         }
       }
     });
@@ -2135,7 +2105,7 @@ private:
   Own<AsyncInputStream> inner;
   const uint64_t bufferSizeLimit = kj::maxValue;
   Maybe<uint64_t> length;
-  Vector<Maybe<Branch>> branches;
+  List<TeeBranch, &TeeBranch::link> branches;
   Maybe<Stoppage> stoppage;
   Promise<void> pullPromise = READY_NOW;
   bool pulling = false;
@@ -2149,11 +2119,9 @@ private:
 
       Vector<Promise<void>> promises;
 
-      for (auto& state: branches) {
-        KJ_IF_MAYBE(s, state) {
-          KJ_IF_MAYBE(sink, s->sink) {
-            promises.add(sink->fill(s->buffer, stoppage));
-          }
+      for (auto& branch: branches) {
+        KJ_IF_MAYBE(sink, branch.sink) {
+          promises.add(sink->fill(branch.buffer, stoppage));
         }
       }
 
@@ -2187,13 +2155,11 @@ private:
       n.maxBytes = kj::min(n.maxBytes, MAX_BLOCK_SIZE);
       n.maxBytes = kj::min(n.maxBytes, bufferSizeLimit);
       n.maxBytes = kj::max(n.minBytes, n.maxBytes);
-      for (auto& state: branches) {
-        KJ_IF_MAYBE(s, state) {
-          // TODO(perf): buffer.size() is O(n) where n = # of individual heap-allocated byte arrays.
-          if (s->buffer.size() + n.maxBytes > bufferSizeLimit) {
-            stoppage = Stoppage(KJ_EXCEPTION(FAILED, "tee buffer size limit exceeded"));
-            return pullLoop();
-          }
+      for (auto& branch: branches) {
+        // TODO(perf): buffer.size() is O(n) where n = # of individual heap-allocated byte arrays.
+        if (branch.buffer.size() + n.maxBytes > bufferSizeLimit) {
+          stoppage = Stoppage(KJ_EXCEPTION(FAILED, "tee buffer size limit exceeded"));
+          return pullLoop();
         }
       }
       auto heapBuffer = heapArray<byte>(n.maxBytes);
@@ -2221,19 +2187,17 @@ private:
 
         KJ_ASSERT(stoppage == nullptr);
         Maybe<ArrayPtr<byte>> bufferPtr = nullptr;
-        for (auto& state: branches) {
-          KJ_IF_MAYBE(s, state) {
-            // Prefer to move the buffer into the receiving branch's deque, rather than memcpy.
-            //
-            // TODO(perf): For the 2-branch case, this is fine, since the majority of the time
-            //   only one buffer will be in use. If we generalize to the n-branch case, this would
-            //   become memcpy-heavy.
-            KJ_IF_MAYBE(ptr, bufferPtr) {
-              s->buffer.produce(heapArray(*ptr));
-            } else {
-              bufferPtr = ArrayPtr<byte>(heapBuffer);
-              s->buffer.produce(mv(heapBuffer));
-            }
+        for (auto& branch: branches) {
+          // Prefer to move the buffer into the receiving branch's deque, rather than memcpy.
+          //
+          // TODO(perf): For the 2-branch case, this is fine, since the majority of the time
+          //   only one buffer will be in use. If we generalize to the n-branch case, this would
+          //   become memcpy-heavy.
+          KJ_IF_MAYBE(ptr, bufferPtr) {
+            branch.buffer.produce(heapArray(*ptr));
+          } else {
+            bufferPtr = ArrayPtr<byte>(heapBuffer);
+            branch.buffer.produce(mv(heapBuffer));
           }
         }
 
