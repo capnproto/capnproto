@@ -1987,13 +1987,13 @@ Event::Event(kj::EventLoop& loop, SourceLocation location)
     : loop(loop), next(nullptr), prev(nullptr), location(location) {}
 
 Event::~Event() noexcept(false) {
-  destroyed = true;
+  live = 0;
 
   // Prevent compiler from eliding this store above. This line probably isn't needed because there
   // are complex calls later in this destructor, and the compiler probably can't prove that they
-  // won't come back and examine `destroyed`, so it won't elide the write anyway. However, an
+  // won't come back and examine `live`, so it won't elide the write anyway. However, an
   // atomic_signal_fence is also sufficient to tell the compiler that a signal handler might access
-  // `destroyed`, so it won't optimize away the write. Note that a signal fence does not produce
+  // `live`, so it won't optimize away the write. Note that a signal fence does not produce
   // any instructions, it just blocks compiler optimizations.
   std::atomic_signal_fence(std::memory_order_acq_rel);
 
@@ -2006,7 +2006,7 @@ void Event::armDepthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
-  if (destroyed) {
+  if (live != MAGIC_LIVE_VALUE) {
     ([this]() noexcept {
       KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
     })();
@@ -2037,7 +2037,7 @@ void Event::armBreadthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
-  if (destroyed) {
+  if (live != MAGIC_LIVE_VALUE) {
     ([this]() noexcept {
       KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
     })();
@@ -2065,7 +2065,7 @@ void Event::armLast() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
-  if (destroyed) {
+  if (live != MAGIC_LIVE_VALUE) {
     ([this]() noexcept {
       KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
     })();
