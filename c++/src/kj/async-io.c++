@@ -2336,7 +2336,7 @@ private:
 }  // namespace
 
 Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
-  KJ_IF_MAYBE(t, input->tryTee()) {
+  KJ_IF_MAYBE(t, input->tryTee(limit)) {
     return { { mv(input), mv(*t) }};
   }
 
