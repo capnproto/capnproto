@@ -5528,6 +5528,8 @@ kj::Promise<void> HttpServerErrorHandler::handleApplicationError(
   }
 
   KJ_IF_MAYBE(r, response) {
+    KJ_LOG(INFO, "Internal error serving HTTP response", exception);
+
     HttpHeaderTable headerTable {};
     HttpHeaders headers(headerTable);
     headers.set(HttpHeaderId::CONTENT_TYPE, "text/plain");
