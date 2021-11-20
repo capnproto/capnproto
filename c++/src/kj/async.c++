@@ -1345,28 +1345,28 @@ struct FiberStack::Impl {
     // TODO(someday): Does it make sense to use MAP_GROWSDOWN on Linux? It's a kind of bizarre flag
     //   that causes the mapping to automatically allocate extra pages (beyond the range specified)
     //   until it hits something...
-    void* stack = mmap(nullptr, allocSize, PROT_NONE,
+    void* stackMapping = mmap(nullptr, allocSize, PROT_NONE,
         MAP_ANONYMOUS | MAP_PRIVATE | MAP_STACK, -1, 0);
-    if (stack == MAP_FAILED) {
+    if (stackMapping == MAP_FAILED) {
       KJ_FAIL_SYSCALL("mmap(new stack)", errno);
     }
     KJ_ON_SCOPE_FAILURE({
-      KJ_SYSCALL(munmap(stack, allocSize)) { break; }
+      KJ_SYSCALL(munmap(stackMapping, allocSize)) { break; }
     });
 
+    void* stack = reinterpret_cast<byte*>(stackMapping) + pageSize;
     // Now mark everything except the guard page as read-write. We assume the stack grows down, so
     // the guard page is at the beginning. No modern architecture uses stacks that grow up.
-    KJ_SYSCALL(mprotect(reinterpret_cast<byte*>(stack) + pageSize,
-                        stackSize, PROT_READ | PROT_WRITE));
+    KJ_SYSCALL(mprotect(stack, stackSize, PROT_READ | PROT_WRITE));
 
     // Stick `Impl` at the top of the stack.
-    Impl* impl = (reinterpret_cast<Impl*>(reinterpret_cast<byte*>(stack) + allocSize) - 1);
+    Impl* impl = (reinterpret_cast<Impl*>(reinterpret_cast<byte*>(stack) + stackSize) - 1);
 
     // Note: mmap() allocates zero'd pages so we don't have to memset() anything here.
 
     KJ_SYSCALL(getcontext(context));
-    context->uc_stack.ss_size = allocSize - sizeof(Impl);
-    context->uc_stack.ss_sp = reinterpret_cast<char*>(stack);
+    context->uc_stack.ss_size = stackSize - sizeof(Impl);
+    context->uc_stack.ss_sp = stack;
     context->uc_stack.ss_flags = 0;
     // We don't use uc_link since our fiber start routine runs forever in a loop to allow for
     // reuse. When we're done with the fiber, we just destroy it, without switching to it's
