@@ -1374,10 +1374,10 @@ struct FiberStack::Impl {
     // page only. This appears to work as no particular bounds checks or
     // anything are set up based on what we say here.
     context->uc_stack.ss_size = pageSize - sizeof(Impl);
-    context->uc_stack.ss_sp = reinterpret_cast<byte*>(stack) + stackSize - min(pageSize, stackSize);
+    context->uc_stack.ss_sp = reinterpret_cast<char*>(stack) + stackSize - min(pageSize, stackSize);
 #else
-    context->uc_stack.ss_size = stackSize;
-    context->uc_stack.ss_sp = stack;
+    context->uc_stack.ss_size = stackSize - sizeof(Impl);
+    context->uc_stack.ss_sp = reinterpret_cast<char*>(stack);
 #endif
     context->uc_stack.ss_flags = 0;
     // We don't use uc_link since our fiber start routine runs forever in a loop to allow for
