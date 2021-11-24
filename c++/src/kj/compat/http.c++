@@ -5049,7 +5049,7 @@ private:
           //   other HTTP servers do similar things.
 
           auto promise = service->request(
-              request.method, request.url, headers, *body, *this);
+              request.method, request.url, headers, *body, *this).attach(kj::mv(service));
           return promise.then([this, body = kj::mv(body)]() mutable -> kj::Promise<bool> {
             // Response done. Await next request.
 
@@ -5138,7 +5138,7 @@ private:
                 });
               }
             });
-          }).attach(kj::mv(service));
+          });
         }
         KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
           // Bad request.
