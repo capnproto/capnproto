@@ -1366,10 +1366,13 @@ struct FiberStack::Impl {
     KJ_SYSCALL(getcontext(context));
 #if __APPLE__ && __aarch64__
     // Per issue #1386, apple on arm64 zeros the entire configured stack.
-    // For performance reasons, we rely on being able to allocate larger stacks
-    // than needed, and allow them to be lazily paged in. Instead, we lie:
+    // But this is redundant, since we just allocated the stack with mmap() which
+    // returns zero'd pages. Re-zeroing is both slow and results in prematurely
+    // allocating pages we may not need -- it's normal for stacks to rely heavily
+    // on lazy page allocation to avoid wasting memory. Instead, we lie:
     // we allocate the full size, but tell the ucontext the stack is the last
-    // page only.
+    // page only. This appears to work as no particular bounds checks or
+    // anything are set up based on what we say here.
     context->uc_stack.ss_size = pageSize - sizeof(Impl);
     context->uc_stack.ss_sp = reinterpret_cast<byte*>(stack) + stackSize - min(pageSize, stackSize);
 #else
