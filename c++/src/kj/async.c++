@@ -1337,9 +1337,8 @@ struct FiberStack::Impl {
 #ifndef MAP_STACK
 #define MAP_STACK 0
 #endif
-
     size_t pageSize = getPageSize();
-    size_t allocSize = stackSize + pageSize;  // size plus guard page
+    size_t allocSize = stackSize + pageSize;  // size plus guard page and impl
 
     // Allocate virtual address space for the stack but make it inaccessible initially.
     // TODO(someday): Does it make sense to use MAP_GROWSDOWN on Linux? It's a kind of bizarre flag
@@ -1365,8 +1364,18 @@ struct FiberStack::Impl {
     // Note: mmap() allocates zero'd pages so we don't have to memset() anything here.
 
     KJ_SYSCALL(getcontext(context));
-    context->uc_stack.ss_size = stackSize - sizeof(Impl);
+#if __APPLE__ && __aarch64__
+    // Per issue #1386, apple on arm64 zeros the entire configured stack.
+    // For performance reasons, we rely on being able to allocate larger stacks
+    // than needed, and allow them to be lazily paged in. Instead, we lie:
+    // we allocate the full size, but tell the ucontext the stack is the last
+    // page only.
+    context->uc_stack.ss_size = pageSize - sizeof(Impl);
+    context->uc_stack.ss_sp = reinterpret_cast<byte*>(stack) + stackSize - min(pageSize, stackSize);
+#else
+    context->uc_stack.ss_size = stackSize;
     context->uc_stack.ss_sp = stack;
+#endif
     context->uc_stack.ss_flags = 0;
     // We don't use uc_link since our fiber start routine runs forever in a loop to allow for
     // reuse. When we're done with the fiber, we just destroy it, without switching to it's
@@ -1387,7 +1396,7 @@ struct FiberStack::Impl {
 #ifndef _SC_PAGESIZE
 #define _SC_PAGESIZE _SC_PAGE_SIZE
 #endif
-    static size_t result = sysconf(_SC_PAGE_SIZE);
+    static size_t result = sysconf(_SC_PAGESIZE);
     return result;
   }
 };
