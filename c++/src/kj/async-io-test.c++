@@ -2918,5 +2918,78 @@ KJ_TEST("import socket FD that's already broken") {
 #endif  // !__CYGWIN__
 #endif  // !_WIN32
 
+KJ_TEST("AggregateConnectionReceiver") {
+  EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe1 = newCapabilityPipe();
+  auto pipe2 = newCapabilityPipe();
+
+  auto receiversBuilder = kj::heapArrayBuilder<Own<ConnectionReceiver>>(2);
+  receiversBuilder.add(kj::heap<CapabilityStreamConnectionReceiver>(*pipe1.ends[0]));
+  receiversBuilder.add(kj::heap<CapabilityStreamConnectionReceiver>(*pipe2.ends[0]));
+
+  auto aggregate = newAggregateConnectionReceiver(receiversBuilder.finish());
+
+  CapabilityStreamNetworkAddress connector1(nullptr, *pipe1.ends[1]);
+  CapabilityStreamNetworkAddress connector2(nullptr, *pipe2.ends[1]);
+
+  auto connectAndWrite = [&](NetworkAddress& addr, kj::StringPtr text) {
+    return addr.connect()
+        .then([text](Own<AsyncIoStream> stream) {
+      auto promise = stream->write(text.begin(), text.size());
+      return promise.attach(kj::mv(stream));
+    }).eagerlyEvaluate([](kj::Exception&& e) {
+      KJ_LOG(ERROR, e);
+    });
+  };
+
+  auto acceptAndRead = [&](ConnectionReceiver& socket, kj::StringPtr expected) {
+    return socket
+        .accept().then([](Own<AsyncIoStream> stream) {
+      auto promise = stream->readAllText();
+      return promise.attach(kj::mv(stream));
+    }).then([expected](kj::String actual) {
+      KJ_EXPECT(actual == expected);
+    }).eagerlyEvaluate([](kj::Exception&& e) {
+      KJ_LOG(ERROR, e);
+    });
+  };
+
+  auto connectPromise1 = connectAndWrite(connector1, "foo");
+  KJ_EXPECT(!connectPromise1.poll(ws));
+  auto connectPromise2 = connectAndWrite(connector2, "bar");
+  KJ_EXPECT(!connectPromise2.poll(ws));
+
+  acceptAndRead(*aggregate, "foo").wait(ws);
+
+  auto connectPromise3 = connectAndWrite(connector1, "baz");
+  KJ_EXPECT(!connectPromise3.poll(ws));
+
+  acceptAndRead(*aggregate, "bar").wait(ws);
+  acceptAndRead(*aggregate, "baz").wait(ws);
+
+  connectPromise1.wait(ws);
+  connectPromise2.wait(ws);
+  connectPromise3.wait(ws);
+
+  auto acceptPromise1 = acceptAndRead(*aggregate, "qux");
+  auto acceptPromise2 = acceptAndRead(*aggregate, "corge");
+  auto acceptPromise3 = acceptAndRead(*aggregate, "grault");
+
+  KJ_EXPECT(!acceptPromise1.poll(ws));
+  KJ_EXPECT(!acceptPromise2.poll(ws));
+  KJ_EXPECT(!acceptPromise3.poll(ws));
+
+  // Cancel one of the acceptors...
+  { auto drop = kj::mv(acceptPromise2); }
+
+  connectAndWrite(connector2, "qux").wait(ws);
+  connectAndWrite(connector1, "grault").wait(ws);
+
+  acceptPromise1.wait(ws);
+  acceptPromise3.wait(ws);
+}
+
 }  // namespace
 }  // namespace kj
