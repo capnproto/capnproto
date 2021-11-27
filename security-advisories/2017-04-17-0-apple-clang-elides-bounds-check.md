@@ -42,7 +42,7 @@ Fixed in
   - Windows: https://capnproto.org/capnproto-c++-win32-0.5.3.1.zip
 - release 0.6 (future)
 
-[0]: https://github.com/sandstorm-io/capnproto/commit/52bc956459a5e83d7c31be95763ff6399e064ae4
+[0]: https://github.com/capnproto/capnproto/commit/52bc956459a5e83d7c31be95763ff6399e064ae4
 
 Details
 =======
@@ -144,4 +144,4 @@ technically-correct solution has been implemented in the next commit,
 extensive refactoring, it is not appropriate for cherry-picking, and will
 only land in versions 0.6 and up.
 
-[2]: https://github.com/sandstorm-io/capnproto/commit/2ca8e41140ebc618b8fb314b393b0a507568cf21
+[2]: https://github.com/capnproto/capnproto/commit/2ca8e41140ebc618b8fb314b393b0a507568cf21
