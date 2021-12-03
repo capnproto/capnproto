@@ -2779,6 +2779,19 @@ public:
   }
 
   Promise<AuthenticatedStream> acceptAuthenticated() override {
+    // Whenever our accept() is called, we want it to resolve to the first connection accepted by
+    // any of our child receivers. Naively, it may seem like we should call accept() on them all
+    // and exclusiveJoin() the results. Unfortunately, this might not work in a certain race
+    // condition: if two or more of our children receive connections simultaneously, both child
+    // acccept() calls may return, but we'll only end up taking one and dropping the other.
+    //
+    // To avoid this problem, we must instead initiate `accept()` calls on all children, and even
+    // after one of them returns a result, we must allow the others to keep running. If we end up
+    // accepting any sockets from children when there is no outstanding accept() on the aggregate,
+    // we must put that socket into a backlog. We only restart accept() calls on children if the
+    // backlog is empty, and hence the maximum length of the backlog is the number of children
+    // minus 1.
+
     if (backlog.empty()) {
       auto result = kj::newAdaptedPromise<AuthenticatedStream, Waiter>(*this);
       ensureAllAccepting();
@@ -2841,7 +2854,7 @@ private:
 
   Promise<void> acceptLoop(size_t index) {
     return kj::evalNow([&]() { return receivers[index]->acceptAuthenticated(); })
-            .then([this](AuthenticatedStream&& as) {
+        .then([this](AuthenticatedStream&& as) {
       if (waiters.empty()) {
         backlog.push_back(kj::mv(as));
       } else {
@@ -2861,6 +2874,12 @@ private:
       if (waiters.empty()) {
         // Don't keep accepting if there's no one waiting.
         // HACK: We can't cancel ourselves, so detach the task so we can null out the slot.
+        //   We know that the promise we're detaching here is exactly the promise that's currently
+        //   executing and has no further `.then()`s on it, so no further callbacks will run in
+        //   detached state... we're just using `detach()` as a tricky way to have the event loop
+        //   dispose of this promise later after we've returned.
+        // TODO(cleanup): This pattern has come up several times, we need a better way to handle
+        //   it.
         KJ_ASSERT_NONNULL(acceptTasks[index]).detach([](auto&&) {});
         acceptTasks[index] = nullptr;
         return READY_NOW;
