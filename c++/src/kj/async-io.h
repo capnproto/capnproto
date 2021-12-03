@@ -439,6 +439,10 @@ public:
   // Same as the methods of AsyncIoStream.
 };
 
+Own<ConnectionReceiver> newAggregateConnectionReceiver(Array<Own<ConnectionReceiver>> receivers);
+// Create a ConnectionReceiver that listens on several other ConnectionReceivers and returns
+// sockets from any of them.
+
 // =======================================================================================
 // Datagram I/O
 

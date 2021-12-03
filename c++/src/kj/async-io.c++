@@ -2764,6 +2764,140 @@ String CapabilityStreamNetworkAddress::toString() {
 
 // =======================================================================================
 
+namespace {
+
+class AggregateConnectionReceiver final: public ConnectionReceiver {
+public:
+  AggregateConnectionReceiver(Array<Own<ConnectionReceiver>> receiversParam)
+      : receivers(kj::mv(receiversParam)),
+        acceptTasks(kj::heapArray<Maybe<Promise<void>>>(receivers.size())) {}
+
+  Promise<Own<AsyncIoStream>> accept() override {
+    return acceptAuthenticated().then([](AuthenticatedStream&& authenticated) {
+      return kj::mv(authenticated.stream);
+    });
+  }
+
+  Promise<AuthenticatedStream> acceptAuthenticated() override {
+    // Whenever our accept() is called, we want it to resolve to the first connection accepted by
+    // any of our child receivers. Naively, it may seem like we should call accept() on them all
+    // and exclusiveJoin() the results. Unfortunately, this might not work in a certain race
+    // condition: if two or more of our children receive connections simultaneously, both child
+    // acccept() calls may return, but we'll only end up taking one and dropping the other.
+    //
+    // To avoid this problem, we must instead initiate `accept()` calls on all children, and even
+    // after one of them returns a result, we must allow the others to keep running. If we end up
+    // accepting any sockets from children when there is no outstanding accept() on the aggregate,
+    // we must put that socket into a backlog. We only restart accept() calls on children if the
+    // backlog is empty, and hence the maximum length of the backlog is the number of children
+    // minus 1.
+
+    if (backlog.empty()) {
+      auto result = kj::newAdaptedPromise<AuthenticatedStream, Waiter>(*this);
+      ensureAllAccepting();
+      return result;
+    } else {
+      auto result = kj::mv(backlog.front());
+      backlog.pop_front();
+      return result;
+    }
+  }
+
+  uint getPort() override {
+    return receivers[0]->getPort();
+  }
+  void getsockopt(int level, int option, void* value, uint* length) override {
+    return receivers[0]->getsockopt(level, option, value, length);
+  }
+  void setsockopt(int level, int option, const void* value, uint length) override {
+    // Apply to all.
+    for (auto& r: receivers) {
+      r->setsockopt(level, option, value, length);
+    }
+  }
+  void getsockname(struct sockaddr* addr, uint* length) override {
+    return receivers[0]->getsockname(addr, length);
+  }
+
+private:
+  Array<Own<ConnectionReceiver>> receivers;
+  Array<Maybe<Promise<void>>> acceptTasks;
+
+  struct Waiter {
+    Waiter(PromiseFulfiller<AuthenticatedStream>& fulfiller,
+           AggregateConnectionReceiver& parent)
+        : fulfiller(fulfiller), parent(parent) {
+      parent.waiters.add(*this);
+    }
+    ~Waiter() noexcept(false) {
+      if (link.isLinked()) {
+        parent.waiters.remove(*this);
+      }
+    }
+
+    PromiseFulfiller<AuthenticatedStream>& fulfiller;
+    AggregateConnectionReceiver& parent;
+    ListLink<Waiter> link;
+  };
+
+  List<Waiter, &Waiter::link> waiters;
+  std::deque<Promise<AuthenticatedStream>> backlog;
+  // At least one of `waiters` or `backlog` is always empty.
+
+  void ensureAllAccepting() {
+    for (auto i: kj::indices(receivers)) {
+      if (acceptTasks[i] == nullptr) {
+        acceptTasks[i] = acceptLoop(i);
+      }
+    }
+  }
+
+  Promise<void> acceptLoop(size_t index) {
+    return kj::evalNow([&]() { return receivers[index]->acceptAuthenticated(); })
+        .then([this](AuthenticatedStream&& as) {
+      if (waiters.empty()) {
+        backlog.push_back(kj::mv(as));
+      } else {
+        auto& waiter = waiters.front();
+        waiter.fulfiller.fulfill(kj::mv(as));
+        waiters.remove(waiter);
+      }
+    }, [this](Exception&& e) {
+      if (waiters.empty()) {
+        backlog.push_back(kj::mv(e));
+      } else {
+        auto& waiter = waiters.front();
+        waiter.fulfiller.reject(kj::mv(e));
+        waiters.remove(waiter);
+      }
+    }).then([this, index]() -> Promise<void> {
+      if (waiters.empty()) {
+        // Don't keep accepting if there's no one waiting.
+        // HACK: We can't cancel ourselves, so detach the task so we can null out the slot.
+        //   We know that the promise we're detaching here is exactly the promise that's currently
+        //   executing and has no further `.then()`s on it, so no further callbacks will run in
+        //   detached state... we're just using `detach()` as a tricky way to have the event loop
+        //   dispose of this promise later after we've returned.
+        // TODO(cleanup): This pattern has come up several times, we need a better way to handle
+        //   it.
+        KJ_ASSERT_NONNULL(acceptTasks[index]).detach([](auto&&) {});
+        acceptTasks[index] = nullptr;
+        return READY_NOW;
+      } else {
+        return acceptLoop(index);
+      }
+    });
+  }
+};
+
+}  // namespace
+
+Own<ConnectionReceiver> newAggregateConnectionReceiver(Array<Own<ConnectionReceiver>> receivers) {
+  return kj::heap<AggregateConnectionReceiver>(kj::mv(receivers));
+}
+
+// =======================================================================================
+
 namespace _ {  // private
 
 #if !_WIN32
