@@ -1373,7 +1373,7 @@ struct FiberStack::Impl {
     // we allocate the full size, but tell the ucontext the stack is the last
     // page only. This appears to work as no particular bounds checks or
     // anything are set up based on what we say here.
-    context->uc_stack.ss_size = pageSize - sizeof(Impl);
+    context->uc_stack.ss_size = min(pageSize, stackSize) - sizeof(Impl);
     context->uc_stack.ss_sp = reinterpret_cast<char*>(stack) + stackSize - min(pageSize, stackSize);
 #else
     context->uc_stack.ss_size = stackSize - sizeof(Impl);
