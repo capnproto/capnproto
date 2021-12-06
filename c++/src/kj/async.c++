@@ -1337,36 +1337,48 @@ struct FiberStack::Impl {
 #ifndef MAP_STACK
 #define MAP_STACK 0
 #endif
-
     size_t pageSize = getPageSize();
-    size_t allocSize = stackSize + pageSize;  // size plus guard page
+    size_t allocSize = stackSize + pageSize;  // size plus guard page and impl
 
     // Allocate virtual address space for the stack but make it inaccessible initially.
     // TODO(someday): Does it make sense to use MAP_GROWSDOWN on Linux? It's a kind of bizarre flag
     //   that causes the mapping to automatically allocate extra pages (beyond the range specified)
     //   until it hits something...
-    void* stack = mmap(nullptr, allocSize, PROT_NONE,
+    void* stackMapping = mmap(nullptr, allocSize, PROT_NONE,
         MAP_ANONYMOUS | MAP_PRIVATE | MAP_STACK, -1, 0);
-    if (stack == MAP_FAILED) {
+    if (stackMapping == MAP_FAILED) {
       KJ_FAIL_SYSCALL("mmap(new stack)", errno);
     }
     KJ_ON_SCOPE_FAILURE({
-      KJ_SYSCALL(munmap(stack, allocSize)) { break; }
+      KJ_SYSCALL(munmap(stackMapping, allocSize)) { break; }
     });
 
+    void* stack = reinterpret_cast<byte*>(stackMapping) + pageSize;
     // Now mark everything except the guard page as read-write. We assume the stack grows down, so
     // the guard page is at the beginning. No modern architecture uses stacks that grow up.
-    KJ_SYSCALL(mprotect(reinterpret_cast<byte*>(stack) + pageSize,
-                        stackSize, PROT_READ | PROT_WRITE));
+    KJ_SYSCALL(mprotect(stack, stackSize, PROT_READ | PROT_WRITE));
 
     // Stick `Impl` at the top of the stack.
-    Impl* impl = (reinterpret_cast<Impl*>(reinterpret_cast<byte*>(stack) + allocSize) - 1);
+    Impl* impl = (reinterpret_cast<Impl*>(reinterpret_cast<byte*>(stack) + stackSize) - 1);
 
     // Note: mmap() allocates zero'd pages so we don't have to memset() anything here.
 
     KJ_SYSCALL(getcontext(context));
-    context->uc_stack.ss_size = allocSize - sizeof(Impl);
+#if __APPLE__ && __aarch64__
+    // Per issue #1386, apple on arm64 zeros the entire configured stack.
+    // But this is redundant, since we just allocated the stack with mmap() which
+    // returns zero'd pages. Re-zeroing is both slow and results in prematurely
+    // allocating pages we may not need -- it's normal for stacks to rely heavily
+    // on lazy page allocation to avoid wasting memory. Instead, we lie:
+    // we allocate the full size, but tell the ucontext the stack is the last
+    // page only. This appears to work as no particular bounds checks or
+    // anything are set up based on what we say here.
+    context->uc_stack.ss_size = min(pageSize, stackSize) - sizeof(Impl);
+    context->uc_stack.ss_sp = reinterpret_cast<char*>(stack) + stackSize - min(pageSize, stackSize);
+#else
+    context->uc_stack.ss_size = stackSize - sizeof(Impl);
     context->uc_stack.ss_sp = reinterpret_cast<char*>(stack);
+#endif
     context->uc_stack.ss_flags = 0;
     // We don't use uc_link since our fiber start routine runs forever in a loop to allow for
     // reuse. When we're done with the fiber, we just destroy it, without switching to it's
@@ -1387,7 +1399,7 @@ struct FiberStack::Impl {
 #ifndef _SC_PAGESIZE
 #define _SC_PAGESIZE _SC_PAGE_SIZE
 #endif
-    static size_t result = sysconf(_SC_PAGE_SIZE);
+    static size_t result = sysconf(_SC_PAGESIZE);
     return result;
   }
 };
