@@ -429,7 +429,7 @@ We use:
 * Clang for compiling.
 * `KJ_DBG()` for simple debugging.
 * Valgrind for complicated debugging.
-* [Ekam](https://github.com/sandstorm-io/ekam) for a build system.
+* [Ekam](https://github.com/capnproto/ekam) for a build system.
 * Git for version control.
 
 ## Irrelevant formatting rules

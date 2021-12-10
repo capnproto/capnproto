@@ -37,7 +37,7 @@ Fixed in
   - Unix: https://capnproto.org/capnproto-c++-0.4.1.1.tar.gz
 - release 0.6 (future)
 
-[0]: https://github.com/sandstorm-io/capnproto/commit/26bcceda72372211063d62aab7e45665faa83633
+[0]: https://github.com/capnproto/capnproto/commit/26bcceda72372211063d62aab7e45665faa83633
 
 Details
 =======
@@ -106,5 +106,5 @@ cleanup, but [check the Cap'n Proto blog for an in-depth discussion][2].
 This problem is also caught by capnp/fuzz-test.c++, which *has* been
 merged into master but likely doesn't have as broad coverage.
 
-[1]: https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2015-03-02-0-c++-integer-overflow.md
+[1]: https://github.com/capnproto/capnproto/tree/master/security-advisories/2015-03-02-0-c++-integer-overflow.md
 [2]: https://capnproto.org/news/2015-03-02-security-advisory-and-integer-overflow-protection.html

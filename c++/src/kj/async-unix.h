@@ -287,7 +287,7 @@ public:
   // has not yet resolved. If you do this, the previous promise may throw an exception.
   //
   // WARNING: This has some known weird behavior on macOS. See
-  //   https://github.com/sandstorm-io/capnproto/issues/374.
+  //   https://github.com/capnproto/capnproto/issues/374.
 
   Promise<void> whenWriteDisconnected();
   // Resolves when poll() on the file descriptor reports POLLHUP or POLLERR.
