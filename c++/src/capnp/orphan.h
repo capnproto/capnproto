@@ -71,7 +71,7 @@ public:
   // If the new size is less than the original, the remaining elements will be discarded. The
   // list is never moved in this case. If the list happens to be located at the end of its segment
   // (which is always true if the list was the last thing allocated), the removed memory will be
-  // reclaimed (reducing the messag size), otherwise it is simply zeroed. The reclaiming behavior
+  // reclaimed (reducing the message size), otherwise it is simply zeroed. The reclaiming behavior
   // is particularly useful for allocating buffer space when you aren't sure how much space you
   // actually need: you can pre-allocate, say, a 4k byte array, read() from a file into it, and
   // then truncate it back to the amount of space actually used.

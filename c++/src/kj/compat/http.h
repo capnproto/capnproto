@@ -381,7 +381,7 @@ public:
   ResponseOrProtocolError tryParseResponse(kj::ArrayPtr<char> content);
   // Parse an HTTP header blob and add all the headers to this object.
   //
-  // `content` should be all text from the start of the request to the first occurrance of two
+  // `content` should be all text from the start of the request to the first occurrence of two
   // newlines in a row -- including the first of these two newlines, but excluding the second.
   //
   // The parse is performed with zero copies: The callee clobbers `content` with '\0' characters
@@ -956,7 +956,7 @@ public:
   // Reads HTTP requests from the given connection and directs them to the handler. A successful
   // completion of the promise indicates that all requests received on the connection resulted in
   // a complete response, and the client closed the connection gracefully or drain() was called.
-  // The promise throws if an unparseable request is received or if some I/O error occurs. Dropping
+  // The promise throws if an unparsable request is received or if some I/O error occurs. Dropping
   // the returned promise will cancel all I/O on the connection and cancel any in-flight requests.
 
   kj::Promise<bool> listenHttpCleanDrain(kj::AsyncIoStream& connection);

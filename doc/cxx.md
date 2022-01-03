@@ -179,7 +179,7 @@ To use this code in your app, you must link against both `libcapnp` and `libkj`.
 flags.
 
 If you use [RPC](cxxrpc.html) (i.e., your schema defines [interfaces](language.html#interfaces)),
-then you will additionally nead to link against `libcapnp-rpc` and `libkj-async`, or use the
+then you will additionally need to link against `libcapnp-rpc` and `libkj-async`, or use the
 `capnp-rpc` `pkg-config` module.
 
 ### Setting a Namespace
@@ -794,7 +794,7 @@ Here are some tips for using the C++ Cap'n Proto runtime most effectively:
   dead space.
 
   In the future, Cap'n Proto may be improved such that it can re-use dead space in a message.
-  However, this will only improve things, not fix them entirely: fragementation could still leave
+  However, this will only improve things, not fix them entirely: fragmentation could still leave
   dead space.
 
 ### Build Tips
@@ -877,7 +877,7 @@ tips will apply.
 
 ## Lessons Learned from Protocol Buffers
 
-The author of Cap'n Proto's C++ implementation also wrote (in the past) verison 2 of Google's
+The author of Cap'n Proto's C++ implementation also wrote (in the past) version 2 of Google's
 Protocol Buffers.  As a result, Cap'n Proto's implementation benefits from a number of lessons
 learned the hard way:
 

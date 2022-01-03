@@ -316,7 +316,7 @@ struct Bootstrap {
   # A Vat may export multiple bootstrap interfaces. In this case, `deprecatedObjectId` specifies
   # which one to return. If this pointer is null, then the default bootstrap interface is returned.
   #
-  # As of verison 0.5, use of this field is deprecated. If a service wants to export multiple
+  # As of version 0.5, use of this field is deprecated. If a service wants to export multiple
   # bootstrap interfaces, it should instead define a single bootstrap interface that has methods
   # that return each of the other interfaces.
   #
@@ -352,7 +352,7 @@ struct Bootstrap {
   # - Overloading "Restore" also had a security problem: Often, "main" or "well-known"
   #   capabilities exported by a vat are in fact not public: they are intended to be accessed only
   #   by clients who are capable of forming a connection to the vat. This can lead to trouble if
-  #   the client itself has other clients and wishes to foward some `Restore` requests from those
+  #   the client itself has other clients and wishes to forward some `Restore` requests from those
   #   external clients -- it has to be very careful not to allow through `Restore` requests
   #   addressing the default capability.
   #

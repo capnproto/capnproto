@@ -905,7 +905,7 @@ TlsCertificate::TlsCertificate(kj::ArrayPtr<const kj::ArrayPtr<const byte>> asn1
   for (auto i: kj::indices(asn1)) {
     auto p = asn1[i].begin();
 
-    // "_AUX" apparently refers to some auxilliary information that can be appended to the
+    // "_AUX" apparently refers to some auxiliary information that can be appended to the
     // certificate, but should only be trusted for your own certificate, not the whole chain??
     // I don't really know, I'm just cargo-culting.
     chain[i] = i == 0 ? d2i_X509_AUX(nullptr, &p, asn1[i].size())
@@ -933,7 +933,7 @@ TlsCertificate::TlsCertificate(kj::StringPtr pem) {
   KJ_DEFER(BIO_free(bio));
 
   for (auto i: kj::indices(chain)) {
-    // "_AUX" apparently refers to some auxilliary information that can be appended to the
+    // "_AUX" apparently refers to some auxiliary information that can be appended to the
     // certificate, but should only be trusted for your own certificate, not the whole chain??
     // I don't really know, I'm just cargo-culting.
     chain[i] = i == 0 ? PEM_read_bio_X509_AUX(bio, nullptr, nullptr, nullptr)

@@ -169,7 +169,7 @@ private:
   void compileBootstrapValue(
       Expression::Reader source, schema::Type::Reader type, schema::Value::Builder target,
       kj::Maybe<Schema> typeScope = nullptr);
-  // Calls compileValue() if this value should be interpreted at bootstrap time.  Otheriwse,
+  // Calls compileValue() if this value should be interpreted at bootstrap time.  Otherwise,
   // adds the value to `unfinishedValues` for later evaluation.
   //
   // If `type` comes from some other node, `typeScope` is the schema for that node. Otherwise the

@@ -1035,7 +1035,7 @@ KJ provides a time library in `kj/time.h` which uses the type system to enforce 
 
 `kj::Clock` is a simple interface whose `now()` method returns the current `kj::Date`. `kj::MonotonicClock` is a similar interface returning a `kj::TimePoint`, but with the guarantee that times returned always increase (whereas a `kj::Clock` might go "back in time" if the user manually modifies their system clock).
 
-`kj::systemCoarseCalendarClock()`, `kj::systemPreciseCalendarClock()`, `kj::systemCoarseMonotonicClock()`, `kj::systemPreciseMonotonicClock()` are global functions that return implementations of `kj::Clock` or `kJ::MonotonicClock` based on sytem time.
+`kj::systemCoarseCalendarClock()`, `kj::systemPreciseCalendarClock()`, `kj::systemCoarseMonotonicClock()`, `kj::systemPreciseMonotonicClock()` are global functions that return implementations of `kj::Clock` or `kJ::MonotonicClock` based on system time.
 
 `kj::Timer` provides an async (promise-based) interface to wait for a specified time to pass. A `kj::Timer` is provided via `kj::AsyncIoProvider`, constructed using `kj::setupAsyncIo()` (see earlier discussion on async I/O).
 

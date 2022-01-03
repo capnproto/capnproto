@@ -180,7 +180,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
 
-      // Note that the default value might be "anyPointer" even if the type is some poniter type
+      // Note that the default value might be "anyPointer" even if the type is some pointer type
       // *other than* anyPointer. This happens with generics -- the field is actually a generic
       // parameter that has been bound, but the default value was of course compiled without any
       // binding available.
@@ -272,7 +272,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
 
-      // Note that the default value might be "anyPointer" even if the type is some poniter type
+      // Note that the default value might be "anyPointer" even if the type is some pointer type
       // *other than* anyPointer. This happens with generics -- the field is actually a generic
       // parameter that has been bound, but the default value was of course compiled without any
       // binding available.

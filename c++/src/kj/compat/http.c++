@@ -1753,7 +1753,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
 
   // #3
   KJ_IF_MAYBE(te, headers.get(HttpHeaderId::TRANSFER_ENCODING)) {
-    // TODO(someday): Support plugable transfer encodings? Or at least gzip?
+    // TODO(someday): Support pluggable transfer encodings? Or at least gzip?
     // TODO(someday): Support stacked transfer encodings, e.g. "gzip, chunked".
 
     // NOTE: #3¶3 is ambiguous about what should happen if Transfer-Encoding and Content-Length are

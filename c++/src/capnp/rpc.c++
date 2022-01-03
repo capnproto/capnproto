@@ -1037,7 +1037,7 @@ private:
 
           if (other->isResolved()) {
             // The other capability resolved already. If it determined that it resolved as
-            // relfected, then we determine the same.
+            // reflected, then we determine the same.
             resolutionType = other->resolutionType;
           } else {
             // The other capability hasn't resolved yet, so we can safely merge with it and do a
@@ -1387,7 +1387,7 @@ private:
     //
     // 2. The `Resolve` message contained a `CapDescriptor` of type `receiverHosted`, naming an
     //    entry in the receiver's export table. That entry just happened to contain an
-    //    `ImportClient` refering back to the sender. This specifically happens when the entry
+    //    `ImportClient` referring back to the sender. This specifically happens when the entry
     //    in question had previously itself referred to a promise, and that promise has since
     //    resolved to a remote capability, at which point the export table entry was replaced by
     //    the appropriate `ImportClient` representing that. Presumably, the peer *did not yet know*
@@ -2128,7 +2128,7 @@ private:
 
         kj::Maybe<kj::Array<ExportId>> exports;
         KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-          // Debug info incase send() fails due to overside message.
+          // Debug info in case send() fails due to overside message.
           KJ_CONTEXT("returning from RPC call", interfaceId, methodId);
           exports = kj::downcast<RpcServerResponseImpl>(*KJ_ASSERT_NONNULL(response)).send();
         })) {
@@ -2429,13 +2429,13 @@ private:
       //
       // TODO(perf): We add an evalLater() here so that anything we needed to do in reaction to
       //   the previous message has a chance to complete before the next message is handled. In
-      //   paticular, without this, I observed an ordering problem: I saw a case where a `Return`
+      //   particular, without this, I observed an ordering problem: I saw a case where a `Return`
       //   message was followed by a `Resolve` message, but the `PromiseClient` associated with the
       //   `Resolve` had its `resolve()` method invoked _before_ any `PromiseClient`s associated
       //   with pipelined capabilities resolved by the `Return`. This could lead to an
       //   incorrectly-ordered interaction between `PromiseClient`s when they resolve to each
       //   other. This is probably really a bug in the way `Return`s are handled -- apparently,
-      //   resolution of `PromiseClient`s based on returned capabilites does not occur in a
+      //   resolution of `PromiseClient`s based on returned capabilities does not occur in a
       //   depth-first way, when it should. If we could fix that then we can probably remove this
       //   `evalLater()`. However, the `evalLater()` is not that bad and solves the problem...
       if (keepGoing) tasks.add(kj::evalLater([this]() { return messageLoop(); }));

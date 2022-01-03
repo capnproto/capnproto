@@ -2038,7 +2038,7 @@ KJ_TEST("WebSocket pump byte counting") {
   // The pump completes successfully, forwarding the disconnect.
   pumpTask.wait(waitScope);
 
-  // The eventual receiver gets a disconnect execption.
+  // The eventual receiver gets a disconnect exception.
   // (Note: We don't use KJ_EXPECT_THROW here because under -fno-exceptions it forks and we lose
   // state.)
   receiveTask.then([](auto) {
@@ -2106,7 +2106,7 @@ KJ_TEST("WebSocket pump disconnect on receive") {
   // The pump completes successfully, forwarding the disconnect.
   pumpTask.wait(waitScope);
 
-  // The eventual receiver gets a disconnect execption.
+  // The eventual receiver gets a disconnect exception.
   KJ_EXPECT_THROW(DISCONNECTED, receiveTask.wait(waitScope));
 }
 
@@ -4448,7 +4448,7 @@ KJ_TEST("canceling a length stream mid-read correctly discards rest of request")
 
     KJ_EXPECT(!promise.poll(waitScope));
 
-    // Trigger timout, then response should be sent.
+    // Trigger timeout, then response should be sent.
     timer.advanceTo(timer.now() + 1 * kj::MILLISECONDS);
     KJ_ASSERT(promise.poll(waitScope));
     promise.wait(waitScope);
@@ -4499,7 +4499,7 @@ KJ_TEST("canceling a chunked stream mid-read correctly discards rest of request"
 
     KJ_EXPECT(!promise.poll(waitScope));
 
-    // Trigger timout, then response should be sent.
+    // Trigger timeout, then response should be sent.
     timer.advanceTo(timer.now() + 1 * kj::MILLISECONDS);
     KJ_ASSERT(promise.poll(waitScope));
     promise.wait(waitScope);

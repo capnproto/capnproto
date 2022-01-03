@@ -97,7 +97,7 @@ public:
   bool erase(KeyLike&& key);
   // Erase the entry with the matching key.
   //
-  // WARNING: This invalidates all pointers and interators into the map. Use eraseAll() if you need
+  // WARNING: This invalidates all pointers and iterators into the map. Use eraseAll() if you need
   //   to iterate and erase multiple entries.
 
   void erase(Entry& entry);
@@ -200,7 +200,7 @@ public:
   bool erase(KeyLike&& key);
   // Erase the entry with the matching key.
   //
-  // WARNING: This invalidates all pointers and interators into the map. Use eraseAll() if you need
+  // WARNING: This invalidates all pointers and iterators into the map. Use eraseAll() if you need
   //   to iterate and erase multiple entries.
 
   void erase(Entry& entry);

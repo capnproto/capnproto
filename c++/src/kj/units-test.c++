@@ -341,7 +341,7 @@ TEST(UnitMeasure, BoundedMinMax) {
   assertTypeAndValue(boundedValue<4,t1>(2), kj::min(bounded<4>(), boundedValue<5,t1>(2)));
   assertTypeAndValue(boundedValue<4,t1>(2), kj::min(boundedValue<5,t1>(2), bounded<4>()));
 
-  // These two are degenerate cases. Currently they fail to compile but meybe they shouldn't?
+  // These two are degenerate cases. Currently they fail to compile but maybe they shouldn't?
 //  assertTypeAndValue(bounded<5>(), kj::max(boundedValue<4,t2>(3), bounded<5>()));
 //  assertTypeAndValue(bounded<5>(), kj::max(bounded<5>(), boundedValue<4,t2>(3)));
 

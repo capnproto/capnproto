@@ -2567,7 +2567,7 @@ kj::Promise<Maybe<Own<AsyncCapabilityStream>>> AsyncCapabilityStream::tryReceive
     }
 
     KJ_REQUIRE(actual.capCount == 1,
-        "expected to receive a capability (e.g. file descirptor via SCM_RIGHTS), but didn't") {
+        "expected to receive a capability (e.g. file descriptor via SCM_RIGHTS), but didn't") {
       return nullptr;
     }
 
@@ -2783,7 +2783,7 @@ public:
     // any of our child receivers. Naively, it may seem like we should call accept() on them all
     // and exclusiveJoin() the results. Unfortunately, this might not work in a certain race
     // condition: if two or more of our children receive connections simultaneously, both child
-    // acccept() calls may return, but we'll only end up taking one and dropping the other.
+    // accept() calls may return, but we'll only end up taking one and dropping the other.
     //
     // To avoid this problem, we must instead initiate `accept()` calls on all children, and even
     // after one of them returns a result, we must allow the others to keep running. If we end up

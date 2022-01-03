@@ -336,7 +336,7 @@ class HashIndex;
 //     // methods to match this row.
 //
 //     bool matches(const Row&, SearchParams&&...) const;
-//     // Returns true if the row on the left matches thes search params on the right.
+//     // Returns true if the row on the left matches the search params on the right.
 //
 //     uint hashCode(SearchParams&&...) const;
 //     // Computes the hash code of the given search params. Matching rows (as determined by
@@ -1561,7 +1561,7 @@ public:
         : links(links), pos(pos) {}
 
     inline size_t operator*() const {
-      KJ_TABLE_IREQUIRE(pos != 0, "can't derefrence end() iterator");
+      KJ_TABLE_IREQUIRE(pos != 0, "can't dereference end() iterator");
       return pos - 1;
     };
 
