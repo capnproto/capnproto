@@ -292,7 +292,13 @@ public:
   }
 
 private:
-  static constexpr size_t MAX_SPLICE_BUFFER = 65536;
+  static constexpr size_t MAX_SPLICE_LEN = 1 << 20;
+  // Maximum value we'll pass for the `len` argument of `splice()`. Linux does not like it when we
+  // use `kj::maxValue` here so we clamp it. Note that the actual value of this constant is
+  // irrelevanta as long as it is more than the pipe buffer size (typically 64k) and less than
+  // whatever value makes Linux unhappy. All actual operations will be clamped to the buffer size.
+  // (And if the buffer size is for some reason larger than this, that's OK too, we just won't
+  // end up using the whole buffer.)
 
   Promise<uint64_t> splicePumpFrom(AsyncStreamFd& input, uint64_t readSoFar, uint64_t limit) {
     // splice() requires that either its input or its output is a pipe. But chances are neither
@@ -309,12 +315,22 @@ private:
     // we allocate a kernelspace buffer by allocating a pipe, then we splice() into the pipe and
     // splice() back out.
 
+    // Linux normally allocates pipe buffers of 64k (16 pages of 4k each). However, when
+    // /proc/sys/fs/pipe-user-pages-soft is hit, then Linux will start allocating 4k (1 page)
+    // buffers instead, and will give an error if we try to increase it.
+    //
+    // The soft limit defaults to 16384 pages, which we'd hit after 1024 pipes -- totally possible
+    // in a big server. 64k is a nice buffer size, but even 4k is better than not using splice, so
+    // we'll live with whatever buffer size the kernel gives us.
+    //
+    // There is a second, "hard" limit, /proc/sys/fs/pipe-user-pages-hard, at which point Linux
+    // will start refusing to allocate pipes at all. However, this limit defaults to unlimited,
+    // so we won't worry about it.
+
     int pipeFds[2];
     KJ_SYSCALL(pipe2(pipeFds, O_NONBLOCK | O_CLOEXEC));
 
     AutoCloseFd pipeIn(pipeFds[0]), pipeOut(pipeFds[1]);
-
-    KJ_SYSCALL(fcntl(pipeIn, F_SETPIPE_SZ, int(MAX_SPLICE_BUFFER)));
 
     return splicePumpLoop(input, pipeFds[0], pipeFds[1], readSoFar, limit, 0)
         .attach(kj::mv(pipeIn), kj::mv(pipeOut));
@@ -327,7 +343,7 @@ private:
         // First flush out whatever is in the pipe buffer.
         ssize_t n;
         KJ_NONBLOCKING_SYSCALL(n = splice(pipeIn, nullptr, fd, nullptr,
-            MAX_SPLICE_BUFFER, SPLICE_F_MOVE | SPLICE_F_NONBLOCK));
+            MAX_SPLICE_LEN, SPLICE_F_MOVE | SPLICE_F_NONBLOCK));
         if (n > 0) {
           KJ_ASSERT(n <= bufferedAmount, "splice pipe larger than bufferedAmount?");
           bufferedAmount -= n;
@@ -350,7 +366,7 @@ private:
 
         ssize_t n;
         KJ_NONBLOCKING_SYSCALL(n = splice(input.fd, nullptr, pipeOut, nullptr,
-            kj::min(limit - readSoFar, MAX_SPLICE_BUFFER), SPLICE_F_MOVE | SPLICE_F_NONBLOCK));
+            kj::min(limit - readSoFar, MAX_SPLICE_LEN), SPLICE_F_MOVE | SPLICE_F_NONBLOCK));
         if (n == 0) {
           // EOF.
           return readSoFar;
