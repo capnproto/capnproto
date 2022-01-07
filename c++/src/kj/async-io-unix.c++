@@ -324,11 +324,22 @@ private:
     // we'll live with whatever buffer size the kernel gives us.
     //
     // There is a second, "hard" limit, /proc/sys/fs/pipe-user-pages-hard, at which point Linux
-    // will start refusing to allocate pipes at all. However, this limit defaults to unlimited,
-    // so we won't worry about it.
+    // will start refusing to allocate pipes at all. In this case we fall back to an unoptimized
+    // pump. However, this limit defaults to unlimited, so this won't ever happen unless someone
+    // has manually changed the limit. That's probably dangerous since if the app allocates pipes
+    // anywhere else in its codebase, it probably doesn't have any fallbacks in those places, so
+    // things will break anyway... to avoid that we'd need to self-regulate the number of pipes
+    // we allocate here to avoid coming close to the hard limit, but that's a lot of effort so I'm
+    // not going to bother!
 
     int pipeFds[2];
-    KJ_SYSCALL(pipe2(pipeFds, O_NONBLOCK | O_CLOEXEC));
+    KJ_SYSCALL_HANDLE_ERRORS(pipe2(pipeFds, O_NONBLOCK | O_CLOEXEC)) {
+      case ENFILE:
+        // Probably hit the limit on pipe buffers, fall back to unoptimized pump.
+        return unoptimizedPumpTo(input, *this, limit, readSoFar);
+      default:
+        KJ_FAIL_SYSCALL("pipe2()", error);
+    }
 
     AutoCloseFd pipeIn(pipeFds[0]), pipeOut(pipeFds[1]);
 
