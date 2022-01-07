@@ -2991,5 +2991,312 @@ KJ_TEST("AggregateConnectionReceiver") {
   acceptPromise3.wait(ws);
 }
 
+// =======================================================================================
+// Tests for optimized pumpTo() between OS handles. Note that this is only even optimized on
+// some OSes (only Linux as of this writing), but the behavior should still be the same on all
+// OSes, so we run the tests regardless.
+
+kj::String bigString(size_t size) {
+  auto result = kj::heapString(size);
+  for (auto i: kj::zeroTo(size)) {
+    result[i] = 'a' + i % 26;
+  }
+  return result;
+}
+
+KJ_TEST("OS handle pumpTo") {
+  auto ioContext = setupAsyncIo();
+  auto& ws = ioContext.waitScope;
+
+  auto pipe1 = ioContext.provider->newTwoWayPipe();
+  auto pipe2 = ioContext.provider->newTwoWayPipe();
+
+  auto pump = pipe1.ends[1]->pumpTo(*pipe2.ends[0]);
+
+  {
+    auto readPromise = expectRead(*pipe2.ends[1], "foo");
+    pipe1.ends[0]->write("foo", 3).wait(ws);
+    readPromise.wait(ws);
+  }
+
+  {
+    auto readPromise = expectRead(*pipe2.ends[1], "bar");
+    pipe1.ends[0]->write("bar", 3).wait(ws);
+    readPromise.wait(ws);
+  }
+
+  auto two = bigString(2000);
+  auto four = bigString(4000);
+  auto eight = bigString(8000);
+  auto fiveHundred = bigString(500'000);
+
+  {
+    auto readPromise = expectRead(*pipe2.ends[1], two);
+    pipe1.ends[0]->write(two.begin(), two.size()).wait(ws);
+    readPromise.wait(ws);
+  }
+
+  {
+    auto readPromise = expectRead(*pipe2.ends[1], four);
+    pipe1.ends[0]->write(four.begin(), four.size()).wait(ws);
+    readPromise.wait(ws);
+  }
+
+  {
+    auto readPromise = expectRead(*pipe2.ends[1], eight);
+    pipe1.ends[0]->write(eight.begin(), eight.size()).wait(ws);
+    readPromise.wait(ws);
+  }
+
+  {
+    auto readPromise = expectRead(*pipe2.ends[1], fiveHundred);
+    pipe1.ends[0]->write(fiveHundred.begin(), fiveHundred.size()).wait(ws);
+    readPromise.wait(ws);
+  }
+
+  KJ_EXPECT(!pump.poll(ws))
+  pipe1.ends[0]->shutdownWrite();
+  KJ_EXPECT(pump.wait(ws) == 6 + two.size() + four.size() + eight.size() + fiveHundred.size());
+}
+
+KJ_TEST("OS handle pumpTo small limit") {
+  auto ioContext = setupAsyncIo();
+  auto& ws = ioContext.waitScope;
+
+  auto pipe1 = ioContext.provider->newTwoWayPipe();
+  auto pipe2 = ioContext.provider->newTwoWayPipe();
+
+  auto pump = pipe1.ends[1]->pumpTo(*pipe2.ends[0], 500);
+
+  auto text = bigString(1000);
+
+  auto expected = kj::str(text.slice(0, 500));
+
+  auto readPromise = expectRead(*pipe2.ends[1], expected);
+  pipe1.ends[0]->write(text.begin(), text.size()).wait(ws);
+  auto secondWritePromise = pipe1.ends[0]->write(text.begin(), text.size());
+  readPromise.wait(ws);
+  KJ_EXPECT(pump.wait(ws) == 500);
+
+  expectRead(*pipe1.ends[1], text.slice(500)).wait(ws);
+}
+
+KJ_TEST("OS handle pumpTo small limit -- write first then read") {
+  auto ioContext = setupAsyncIo();
+  auto& ws = ioContext.waitScope;
+
+  auto pipe1 = ioContext.provider->newTwoWayPipe();
+  auto pipe2 = ioContext.provider->newTwoWayPipe();
+
+  auto text = bigString(1000);
+
+  auto expected = kj::str(text.slice(0, 500));
+
+  // Initiate the write first and let it put as much in the buffer as possible.
+  auto writePromise = pipe1.ends[0]->write(text.begin(), text.size());
+  writePromise.poll(ws);
+
+  // Now start the pump.
+  auto pump = pipe1.ends[1]->pumpTo(*pipe2.ends[0], 500);
+
+  auto readPromise = expectRead(*pipe2.ends[1], expected);
+  writePromise.wait(ws);
+  auto secondWritePromise = pipe1.ends[0]->write(text.begin(), text.size());
+  readPromise.wait(ws);
+  KJ_EXPECT(pump.wait(ws) == 500);
+
+  expectRead(*pipe1.ends[1], text.slice(500)).wait(ws);
+}
+
+KJ_TEST("OS handle pumpTo large limit") {
+  auto ioContext = setupAsyncIo();
+  auto& ws = ioContext.waitScope;
+
+  auto pipe1 = ioContext.provider->newTwoWayPipe();
+  auto pipe2 = ioContext.provider->newTwoWayPipe();
+
+  auto pump = pipe1.ends[1]->pumpTo(*pipe2.ends[0], 750'000);
+
+  auto text = bigString(500'000);
+
+  auto expected = kj::str(text, text.slice(0, 250'000));
+
+  auto readPromise = expectRead(*pipe2.ends[1], expected);
+  pipe1.ends[0]->write(text.begin(), text.size()).wait(ws);
+  auto secondWritePromise = pipe1.ends[0]->write(text.begin(), text.size());
+  readPromise.wait(ws);
+  KJ_EXPECT(pump.wait(ws) == 750'000);
+
+  expectRead(*pipe1.ends[1], text.slice(250'000)).wait(ws);
+}
+
+KJ_TEST("OS handle pumpTo large limit -- write first then read") {
+  auto ioContext = setupAsyncIo();
+  auto& ws = ioContext.waitScope;
+
+  auto pipe1 = ioContext.provider->newTwoWayPipe();
+  auto pipe2 = ioContext.provider->newTwoWayPipe();
+
+  auto text = bigString(500'000);
+
+  auto expected = kj::str(text, text.slice(0, 250'000));
+
+  // Initiate the write first and let it put as much in the buffer as possible.
+  auto writePromise = pipe1.ends[0]->write(text.begin(), text.size());
+  writePromise.poll(ws);
+
+  // Now start the pump.
+  auto pump = pipe1.ends[1]->pumpTo(*pipe2.ends[0], 750'000);
+
+  auto readPromise = expectRead(*pipe2.ends[1], expected);
+  writePromise.wait(ws);
+  auto secondWritePromise = pipe1.ends[0]->write(text.begin(), text.size());
+  readPromise.wait(ws);
+  KJ_EXPECT(pump.wait(ws) == 750'000);
+
+  expectRead(*pipe1.ends[1], text.slice(250'000)).wait(ws);
+}
+
+#if !_WIN32
+kj::String fillWriteBuffer(int fd) {
+  // Fill up the write buffer of the given FD and return the contents written. We need to use the
+  // raw syscalls to do this because KJ doesn't have a way to know how many bytes made it into the
+  // socket buffer.
+  auto huge = bigString(2'000'000);
+
+  size_t pos = 0;
+  for (;;) {
+    KJ_ASSERT(pos < huge.size(), "whoa, big buffer");
+    ssize_t n;
+    KJ_NONBLOCKING_SYSCALL(n = ::write(fd, huge.begin() + pos, huge.size() - pos));
+    if (n < 0) break;
+    pos += n;
+  }
+
+  return kj::str(huge.slice(0, pos));
+}
+
+KJ_TEST("OS handle pumpTo write buffer is full before pump") {
+  auto ioContext = setupAsyncIo();
+  auto& ws = ioContext.waitScope;
+
+  auto pipe1 = ioContext.provider->newTwoWayPipe();
+  auto pipe2 = ioContext.provider->newTwoWayPipe();
+
+  auto bufferContent = fillWriteBuffer(KJ_ASSERT_NONNULL(pipe2.ends[0]->getFd()));
+
+  // Also prime the input pipe with some buffered bytes.
+  auto writePromise = pipe1.ends[0]->write("foo", 3);
+  writePromise.poll(ws);
+
+  // Start the pump and let it get blocked.
+  auto pump = pipe1.ends[1]->pumpTo(*pipe2.ends[0]);
+  KJ_EXPECT(!pump.poll(ws));
+
+  // Queue another write, even.
+  writePromise = writePromise
+      .then([&]() { return pipe1.ends[0]->write("bar", 3); });
+  writePromise.poll(ws);
+
+  // See it all go through.
+  expectRead(*pipe2.ends[1], bufferContent).wait(ws);
+  expectRead(*pipe2.ends[1], "foobar").wait(ws);
+
+  writePromise.wait(ws);
+
+  pipe1.ends[0]->shutdownWrite();
+  KJ_EXPECT(pump.wait(ws) == 6);
+  pipe2.ends[0]->shutdownWrite();
+  KJ_EXPECT(pipe2.ends[1]->readAllText().wait(ws) == "");
+}
+
+KJ_TEST("OS handle pumpTo write buffer is full before pump -- and pump ends early") {
+  auto ioContext = setupAsyncIo();
+  auto& ws = ioContext.waitScope;
+
+  auto pipe1 = ioContext.provider->newTwoWayPipe();
+  auto pipe2 = ioContext.provider->newTwoWayPipe();
+
+  auto bufferContent = fillWriteBuffer(KJ_ASSERT_NONNULL(pipe2.ends[0]->getFd()));
+
+  // Also prime the input pipe with some buffered bytes followed by EOF.
+  auto writePromise = pipe1.ends[0]->write("foo", 3)
+      .then([&]() { pipe1.ends[0]->shutdownWrite(); });
+  writePromise.poll(ws);
+
+  // Start the pump and let it get blocked.
+  auto pump = pipe1.ends[1]->pumpTo(*pipe2.ends[0]);
+  KJ_EXPECT(!pump.poll(ws));
+
+  // See it all go through.
+  expectRead(*pipe2.ends[1], bufferContent).wait(ws);
+  expectRead(*pipe2.ends[1], "foo").wait(ws);
+
+  writePromise.wait(ws);
+
+  KJ_EXPECT(pump.wait(ws) == 3);
+  pipe2.ends[0]->shutdownWrite();
+  KJ_EXPECT(pipe2.ends[1]->readAllText().wait(ws) == "");
+}
+
+KJ_TEST("OS handle pumpTo write buffer is full before pump -- and pump hits limit early") {
+  auto ioContext = setupAsyncIo();
+  auto& ws = ioContext.waitScope;
+
+  auto pipe1 = ioContext.provider->newTwoWayPipe();
+  auto pipe2 = ioContext.provider->newTwoWayPipe();
+
+  auto bufferContent = fillWriteBuffer(KJ_ASSERT_NONNULL(pipe2.ends[0]->getFd()));
+
+  // Also prime the input pipe with some buffered bytes followed by EOF.
+  auto writePromise = pipe1.ends[0]->write("foo", 3);
+  writePromise.poll(ws);
+
+  // Start the pump and let it get blocked.
+  auto pump = pipe1.ends[1]->pumpTo(*pipe2.ends[0], 3);
+  KJ_EXPECT(!pump.poll(ws));
+
+  // See it all go through.
+  expectRead(*pipe2.ends[1], bufferContent).wait(ws);
+  expectRead(*pipe2.ends[1], "foo").wait(ws);
+
+  writePromise.wait(ws);
+
+  KJ_EXPECT(pump.wait(ws) == 3);
+  pipe2.ends[0]->shutdownWrite();
+  KJ_EXPECT(pipe2.ends[1]->readAllText().wait(ws) == "");
+}
+
+KJ_TEST("OS handle pumpTo write buffer is full before pump -- and a lot of data is pumped") {
+  auto ioContext = setupAsyncIo();
+  auto& ws = ioContext.waitScope;
+
+  auto pipe1 = ioContext.provider->newTwoWayPipe();
+  auto pipe2 = ioContext.provider->newTwoWayPipe();
+
+  auto bufferContent = fillWriteBuffer(KJ_ASSERT_NONNULL(pipe2.ends[0]->getFd()));
+
+  // Also prime the input pipe with some buffered bytes followed by EOF.
+  auto text = bigString(500'000);
+  auto writePromise = pipe1.ends[0]->write(text.begin(), text.size());
+  writePromise.poll(ws);
+
+  // Start the pump and let it get blocked.
+  auto pump = pipe1.ends[1]->pumpTo(*pipe2.ends[0]);
+  KJ_EXPECT(!pump.poll(ws));
+
+  // See it all go through.
+  expectRead(*pipe2.ends[1], bufferContent).wait(ws);
+  expectRead(*pipe2.ends[1], text).wait(ws);
+
+  writePromise.wait(ws);
+
+  pipe1.ends[0]->shutdownWrite();
+  KJ_EXPECT(pump.wait(ws) == text.size());
+  pipe2.ends[0]->shutdownWrite();
+  KJ_EXPECT(pipe2.ends[1]->readAllText().wait(ws) == "");
+}
+#endif
+
 }  // namespace
 }  // namespace kj
