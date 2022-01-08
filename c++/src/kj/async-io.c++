@@ -83,8 +83,8 @@ namespace {
 
 class AsyncPump {
 public:
-  AsyncPump(AsyncInputStream& input, AsyncOutputStream& output, uint64_t limit)
-      : input(input), output(output), limit(limit) {}
+  AsyncPump(AsyncInputStream& input, AsyncOutputStream& output, uint64_t limit, uint64_t doneSoFar)
+      : input(input), output(output), limit(limit), doneSoFar(doneSoFar) {}
 
   Promise<uint64_t> pump() {
     // TODO(perf): This could be more efficient by reading half a buffer at a time and then
@@ -108,11 +108,19 @@ private:
   AsyncInputStream& input;
   AsyncOutputStream& output;
   uint64_t limit;
-  uint64_t doneSoFar = 0;
+  uint64_t doneSoFar;
   byte buffer[4096];
 };
 
 }  // namespace
+
+Promise<uint64_t> unoptimizedPumpTo(
+    AsyncInputStream& input, AsyncOutputStream& output, uint64_t amount,
+    uint64_t completedSoFar) {
+  auto pump = heap<AsyncPump>(input, output, amount, completedSoFar);
+  auto promise = pump->pump();
+  return promise.attach(kj::mv(pump));
+}
 
 Promise<uint64_t> AsyncInputStream::pumpTo(
     AsyncOutputStream& output, uint64_t amount) {
@@ -122,9 +130,7 @@ Promise<uint64_t> AsyncInputStream::pumpTo(
   }
 
   // OK, fall back to naive approach.
-  auto pump = heap<AsyncPump>(*this, output, amount);
-  auto promise = pump->pump();
-  return promise.attach(kj::mv(pump));
+  return unoptimizedPumpTo(*this, output, amount);
 }
 
 namespace {

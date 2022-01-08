@@ -228,6 +228,176 @@ public:
     return promise.attach(kj::mv(fds), kj::mv(streams));
   }
 
+#if __linux__
+  Maybe<Promise<uint64_t>> tryPumpFrom(
+      AsyncInputStream& inputParam, uint64_t amount = kj::maxValue) override {
+    AsyncStreamFd& input = KJ_UNWRAP_OR_RETURN(
+        kj::dynamicDowncastIfAvailable<AsyncStreamFd>(inputParam), nullptr);
+
+    // The input is another AsyncStreamFd, so perhaps we can do an optimized pump with splice().
+
+    // Before we resort to a bunch of syscalls, let's try to see if the pump is small and able to
+    // be fully satisfied immediately. This optimizes for the case of small streams, e.g. a short
+    // HTTP body.
+
+    byte buffer[4096];
+    size_t pos = 0;
+    size_t initialAmount = kj::min(sizeof(buffer), amount);
+
+    bool eof = false;
+
+    // Read into the buffer until it's full or there are no bytes available. Note that we'd expect
+    // one call to read() will pull as much data out of the socket as possible (up to our buffer
+    // size), so you might think the loop is unnecessary. The reason we want to do a second read(),
+    // though, is to find out if we're at EOF or merely waiting for more data. In the EOF case,
+    // we can end the pump early without splicing.
+    while (pos < initialAmount) {
+      ssize_t n;
+      KJ_NONBLOCKING_SYSCALL(n = ::read(input.fd, buffer + pos, initialAmount - pos));
+      if (n <= 0) {
+        eof = n == 0;
+        break;
+      }
+      pos += n;
+    }
+
+    // Write the bytes that we just read back out to the output.
+    {
+      ssize_t n;
+      KJ_NONBLOCKING_SYSCALL(n = ::write(fd, buffer, pos));
+      if (n < 0) n = 0;  // treat EAGAIN as "zero bytes written"
+      if (size_t(n) < pos) {
+        // Oh crap, the output buffer is full. This should be rare. But, now we're going to have
+        // to copy the remaining bytes into the heap to do an async write.
+        auto leftover = kj::heapArray<byte>(buffer + n, pos - n);
+        auto promise = write(leftover.begin(), leftover.size());
+        promise = promise.attach(kj::mv(leftover));
+        if (eof || pos == amount) {
+          return promise.then([pos]() { return pos; });
+        } else {
+          return promise.then([&input, this, pos, amount]() {
+            return splicePumpFrom(input, pos, amount);
+          });
+        }
+      }
+    }
+
+    if (eof || pos == amount) {
+      // We finished the pump in one go, so don't splice.
+      return Promise<uint64_t>(uint64_t(pos));
+    } else {
+      // Use splice for the rest of the pump.
+      return splicePumpFrom(input, pos, amount);
+    }
+  }
+
+private:
+  static constexpr size_t MAX_SPLICE_LEN = 1 << 20;
+  // Maximum value we'll pass for the `len` argument of `splice()`. Linux does not like it when we
+  // use `kj::maxValue` here so we clamp it. Note that the actual value of this constant is
+  // irrelevanta as long as it is more than the pipe buffer size (typically 64k) and less than
+  // whatever value makes Linux unhappy. All actual operations will be clamped to the buffer size.
+  // (And if the buffer size is for some reason larger than this, that's OK too, we just won't
+  // end up using the whole buffer.)
+
+  Promise<uint64_t> splicePumpFrom(AsyncStreamFd& input, uint64_t readSoFar, uint64_t limit) {
+    // splice() requires that either its input or its output is a pipe. But chances are neither
+    // `input.fd` nor `this->fd` is a pipe -- in most use cases they are sockets. In order to take
+    // advantage of splice(), then, we need to allocate a pipe to act as the middleman, so we can
+    // splice() from the input to the pipe, and then from the pipe to the output.
+    //
+    // You might wonder why this pipe middleman is required. Why can't splice() go directly from
+    // a socket to a socket? Linus Torvalds attempts to explain here:
+    //     https://yarchive.net/comp/linux/splice.html
+    //
+    // The short version is that the pipe itself is equivalent to an in-memory buffer. In a naive
+    // pump implementation, we allocate a buffer, read() into it and write() out. With splice(),
+    // we allocate a kernelspace buffer by allocating a pipe, then we splice() into the pipe and
+    // splice() back out.
+
+    // Linux normally allocates pipe buffers of 64k (16 pages of 4k each). However, when
+    // /proc/sys/fs/pipe-user-pages-soft is hit, then Linux will start allocating 4k (1 page)
+    // buffers instead, and will give an error if we try to increase it.
+    //
+    // The soft limit defaults to 16384 pages, which we'd hit after 1024 pipes -- totally possible
+    // in a big server. 64k is a nice buffer size, but even 4k is better than not using splice, so
+    // we'll live with whatever buffer size the kernel gives us.
+    //
+    // There is a second, "hard" limit, /proc/sys/fs/pipe-user-pages-hard, at which point Linux
+    // will start refusing to allocate pipes at all. In this case we fall back to an unoptimized
+    // pump. However, this limit defaults to unlimited, so this won't ever happen unless someone
+    // has manually changed the limit. That's probably dangerous since if the app allocates pipes
+    // anywhere else in its codebase, it probably doesn't have any fallbacks in those places, so
+    // things will break anyway... to avoid that we'd need to self-regulate the number of pipes
+    // we allocate here to avoid coming close to the hard limit, but that's a lot of effort so I'm
+    // not going to bother!
+
+    int pipeFds[2];
+    KJ_SYSCALL_HANDLE_ERRORS(pipe2(pipeFds, O_NONBLOCK | O_CLOEXEC)) {
+      case ENFILE:
+        // Probably hit the limit on pipe buffers, fall back to unoptimized pump.
+        return unoptimizedPumpTo(input, *this, limit, readSoFar);
+      default:
+        KJ_FAIL_SYSCALL("pipe2()", error);
+    }
+
+    AutoCloseFd pipeIn(pipeFds[0]), pipeOut(pipeFds[1]);
+
+    return splicePumpLoop(input, pipeFds[0], pipeFds[1], readSoFar, limit, 0)
+        .attach(kj::mv(pipeIn), kj::mv(pipeOut));
+  }
+
+  Promise<uint64_t> splicePumpLoop(AsyncStreamFd& input, int pipeIn, int pipeOut,
+                                   uint64_t readSoFar, uint64_t limit, size_t bufferedAmount) {
+    for (;;) {
+      while (bufferedAmount > 0) {
+        // First flush out whatever is in the pipe buffer.
+        ssize_t n;
+        KJ_NONBLOCKING_SYSCALL(n = splice(pipeIn, nullptr, fd, nullptr,
+            MAX_SPLICE_LEN, SPLICE_F_MOVE | SPLICE_F_NONBLOCK));
+        if (n > 0) {
+          KJ_ASSERT(n <= bufferedAmount, "splice pipe larger than bufferedAmount?");
+          bufferedAmount -= n;
+        } else {
+          KJ_ASSERT(n < 0, "splice pipe empty before bufferedAmount reached?", bufferedAmount);
+          return observer.whenBecomesWritable()
+              .then([this, &input, pipeIn, pipeOut, readSoFar, limit, bufferedAmount]() {
+            return splicePumpLoop(input, pipeIn, pipeOut, readSoFar, limit, bufferedAmount);
+          });
+        }
+      }
+
+      // Now the pipe buffer is empty, so we can try to read some more.
+      {
+        if (readSoFar >= limit) {
+          // Hit the limit, we're done.
+          KJ_ASSERT(readSoFar == limit);
+          return readSoFar;
+        }
+
+        ssize_t n;
+        KJ_NONBLOCKING_SYSCALL(n = splice(input.fd, nullptr, pipeOut, nullptr,
+            kj::min(limit - readSoFar, MAX_SPLICE_LEN), SPLICE_F_MOVE | SPLICE_F_NONBLOCK));
+        if (n == 0) {
+          // EOF.
+          return readSoFar;
+        } else if (n < 0) {
+          // No data available, wait.
+          return input.observer.whenBecomesReadable()
+              .then([this, &input, pipeIn, pipeOut, readSoFar, limit]() {
+            return splicePumpLoop(input, pipeIn, pipeOut, readSoFar, limit, 0);
+          });
+        }
+
+        readSoFar += n;
+        bufferedAmount = n;
+      }
+    }
+  }
+
+public:
+#endif  // __linux__
+
   Promise<void> whenWriteDisconnected() override {
     KJ_IF_MAYBE(p, writeDisconnectedPromise) {
       return p->addBranch();

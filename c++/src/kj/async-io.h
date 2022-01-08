@@ -168,6 +168,20 @@ public:
   // isn't wrapping a file descriptor.
 };
 
+Promise<uint64_t> unoptimizedPumpTo(
+    AsyncInputStream& input, AsyncOutputStream& output, uint64_t amount,
+    uint64_t completedSoFar = 0);
+// Performs a pump using read() and write(), without calling the stream's pumpTo() nor
+// tryPumpFrom() methods. This is intended to be used as a fallback by implementations of pumpTo()
+// and tryPumpFrom() when they want to give up on optimization, but can't just call pumpTo() again
+// because this would recursively retry the optimization. unoptimizedPumpTo() should only be called
+// inside implementations of streams, never by the caller of a stream -- use the pumpTo() method
+// instead.
+//
+// `completedSoFar` is the number of bytes out of `amount` that have already been pumped. This is
+// provided for convenience for cases where the caller has already done some pumping before they
+// give up. Otherwise, a `.then()` would need to be used to add the bytes to the final result.
+
 class AsyncCapabilityStream: public AsyncIoStream {
   // An AsyncIoStream that also allows transmitting new stream objects and file descriptors
   // (capabilities, in the object-capability model sense), in addition to bytes.
