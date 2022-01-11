@@ -4266,12 +4266,15 @@ private:
   };
 
   void serviceQueue() {
-    if (concurrentRequests >= maxConcurrentRequests) { return; }
-    if (pendingRequests.empty()) { return; }
-
-    auto fulfiller = kj::mv(pendingRequests.front());
-    pendingRequests.pop();
-    fulfiller->fulfill(ConnectionCounter(*this));
+    while (concurrentRequests < maxConcurrentRequests && !pendingRequests.empty()) {
+      auto fulfiller = kj::mv(pendingRequests.front());
+      pendingRequests.pop();
+      // ConnectionCounter's destructor calls this function, so we can avoid unnecessary recursion
+      // if we only create a ConnectionCounter when we find a waiting fulfiller.
+      if (fulfiller->isWaiting()) {
+        fulfiller->fulfill(ConnectionCounter(*this));
+      }
+    }
   }
 
   void fireCountChanged() {
