@@ -430,7 +430,7 @@ private:
 
 #if 0
         // Figure out exactly how many params are not bound to AnyPointer.
-        // TODO(msvc): In a few obscure cases, MSVC does not like empty template pramater lists,
+        // TODO(msvc): In a few obscure cases, MSVC does not like empty template parameter lists,
         //   even if all parameters have defaults. So, we give in and explicitly list all
         //   parameters in our generated code for now. Try again later.
         uint paramCount = 0;

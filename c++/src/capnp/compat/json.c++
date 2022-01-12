@@ -741,7 +741,7 @@ public:
 private:
   kj::String consumeQuotedString() {
     input.consume('"');
-    // TODO(perf): Avoid copy / alloc if no escapes encoutered.
+    // TODO(perf): Avoid copy / alloc if no escapes encountered.
     // TODO(perf): Get statistics on string size and preallocate?
     kj::Vector<char> decoded;
 
@@ -1324,7 +1324,7 @@ private:
 
   const void* getUnionInstanceIdentifier(DynamicStruct::Builder obj) const {
     // Gets a value uniquely identifying an instance of a union.
-    // HACK: We return a poniter to the union's discriminant within the underlying buffer.
+    // HACK: We return a pointer to the union's discriminant within the underlying buffer.
     return reinterpret_cast<const uint16_t*>(
         AnyStruct::Reader(obj.asReader()).getDataSection().begin()) + discriminantOffset;
   }

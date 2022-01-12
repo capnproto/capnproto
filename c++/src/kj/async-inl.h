@@ -247,7 +247,7 @@ public:
   //
   // If `stopAtNextEvent` is true, then the trace should stop as soon as it hits a PromiseNode that
   // also implements Event, and should not trace that node or its children. This is used in
-  // conjuction with Event::traceEvent(). The chain of Events is often more sparse than the chain
+  // conjunction with Event::traceEvent(). The chain of Events is often more sparse than the chain
   // of PromiseNodes, because a TransformPromiseNode (which implements .then()) is not itself an
   // Event. TransformPromiseNode instead tells its child node to directly notify its *parent* node
   // when it is ready, and then TransformPromiseNode applies the .then() transformation during the

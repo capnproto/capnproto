@@ -144,7 +144,7 @@ bool Mutex::checkPredicate(Waiter& waiter) {
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
     result = waiter.predicate.check();
   })) {
-    // Exception thown.
+    // Exception thrown.
     result = true;
     waiter.exception = kj::heap(kj::mv(*exception));
   };
@@ -499,7 +499,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, LockSourceLocati
       KJ_SYSCALL_HANDLE_ERRORS(syscall(SYS_futex,
           &waiter.futex, FUTEX_WAIT_BITSET_PRIVATE, 0, tsp, nullptr, FUTEX_BITSET_MATCH_ANY)) {
         case EAGAIN:
-          // Indicates that the futex was already non-zero by the time the kernal looked at it.
+          // Indicates that the futex was already non-zero by the time the kernel looked at it.
           // Not an error.
           break;
         case ETIMEDOUT: {

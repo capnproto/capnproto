@@ -85,7 +85,7 @@ public:
 
     kj::StringPtr cipherList;
     // OpenSSL cipher list string. The default is a curated list designed to be compatible with
-    // almost all software in curent use (specifically, based on Mozilla's "intermediate"
+    // almost all software in current use (specifically, based on Mozilla's "intermediate"
     // recommendations). The defaults will change in future versions of this library to account
     // for the latest cryptanalysis.
     //

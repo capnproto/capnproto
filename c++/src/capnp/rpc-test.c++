@@ -798,7 +798,7 @@ TEST(Rpc, TailCallCancelRace) {
   KJ_ASSERT(cancelCount == 1);
 }
 
-TEST(Rpc, Cancelation) {
+TEST(Rpc, Cancellation) {
   // Tests allowCancellation().
 
   TestContext context;
@@ -1527,7 +1527,7 @@ KJ_TEST("export the same promise twice") {
   KJ_EXPECT(interceptCount == 3);
 
   // Now try sending a non-promise cap. We'll send all these requests at once before waiting on
-  // any of them since these will acutally complete.k
+  // any of them since these will actually complete.
   exportIsPromise = false;
   expectedExportNumber = 2;
   auto promise4 = sendReq(normalCap);

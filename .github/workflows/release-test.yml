@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         # We can only run extended tests with the default version of g++, because it has to match
-        # the verison of g++-multilib for 32-bit cross-compilation, and alternate versions of
+        # the version of g++-multilib for 32-bit cross-compilation, and alternate versions of
         # g++-multilib generally aren't available. Clang is more lenient, but we might as well be
         # consistent. The quick tests should be able to catch issues with older and newer compiler
         # versions.

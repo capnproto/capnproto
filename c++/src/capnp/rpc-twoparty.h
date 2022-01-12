@@ -183,7 +183,7 @@ private:
 
 class TwoPartyServer: private kj::TaskSet::ErrorHandler {
   // Convenience class which implements a simple server which accepts connections on a listener
-  // socket and serices them as two-party connections.
+  // socket and services them as two-party connections.
 
 public:
   explicit TwoPartyServer(Capability::Client bootstrapInterface);

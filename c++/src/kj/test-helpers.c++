@@ -147,7 +147,7 @@ bool expectFatalThrow(kj::Maybe<Exception::Type> type, kj::Maybe<StringPtr> mess
     KJ_FAIL_EXPECT("subprocess crashed without throwing exception", WTERMSIG(status));
     return false;
   } else {
-    KJ_FAIL_EXPECT("subprocess neiter excited nor crashed?", status);
+    KJ_FAIL_EXPECT("subprocess neither excited nor crashed?", status);
     return false;
   }
 #endif

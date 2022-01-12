@@ -30,7 +30,7 @@
 #elif __APPLE__
 // getcontext() and friends are marked deprecated on MacOS but seemingly no replacement is
 // provided. It appears as if they deprecated it solely because the standards bodies deprecated it,
-// which they seemingly did mainly because the proper sematics are too difficult for them to
+// which they seemingly did mainly because the proper semantics are too difficult for them to
 // define. I doubt MacOS would actually remove these functions as they are widely used. But if they
 // do, then I guess we'll need to fall back to using setjmp()/longjmp(), and some sort of hack
 // involving sigaltstack() (and generating a fake signal I guess) in order to initialize the fiber
@@ -1040,7 +1040,7 @@ void XThreadEvent::done() {
         lock->executing.remove(*this);
         break;
       case CANCELING:
-        // Sending thread requested cancelation, but we're done anyway, so it doesn't matter at this
+        // Sending thread requested cancellation, but we're done anyway, so it doesn't matter at this
         // point.
         lock->cancel.remove(*this);
         break;

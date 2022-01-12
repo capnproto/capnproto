@@ -695,7 +695,7 @@ class Canceler {
   // Canceler and using it to wrap promises before returning them to callers. When Bob is
   // destroyed, the Canceler is destroyed too, and all promises Bob wrapped with it throw errors.
   //
-  // Note that another common strategy for cancelation is to use exclusiveJoin() to join a promise
+  // Note that another common strategy for cancellation is to use exclusiveJoin() to join a promise
   // with some "cancellation promise" which only resolves if the operation should be canceled. The
   // cancellation promise could itself be created by newPromiseAndFulfiller<void>(), and thus
   // calling the PromiseFulfiller cancels the operation. There is a major problem with this
@@ -794,7 +794,7 @@ class TaskSet {
   // This is useful for "daemon" objects that perform background tasks which aren't intended to
   // fulfill any particular external promise, but which may need to be canceled (and thus can't
   // use `Promise::detach()`).  The daemon object holds a TaskSet to collect these tasks it is
-  // working on.  This way, if the daemon itself is destroyed, the TaskSet is detroyed as well,
+  // working on.  This way, if the daemon itself is destroyed, the TaskSet is destroyed as well,
   // and everything the daemon is doing is canceled.
 
 public:
