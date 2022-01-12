@@ -972,6 +972,27 @@ KJ_TEST("TreeIndex fuzz test") {
   }
 }
 
+KJ_TEST("TreeIndex clear() leaves tree in valid state") {
+  // A test which ensures that calling clear() does not break the internal state of a TreeIndex.
+  // It used to be the case that clearing a non-empty tree would leave it thinking that it had room
+  // for one more node than it really did, causing it to write and read beyond the end of its
+  // internal array of nodes.
+  Table<uint, TreeIndex<UintCompare>> table;
+
+  // Insert at least one value to allocate an initial set of tree nodes.
+  table.upsert(1, [](auto&&, auto&&) {});
+  KJ_EXPECT(table.find(1) != nullptr);
+  table.clear();
+
+  // Insert enough values to force writes/reads beyond the end of the tree's internal node array.
+  for (uint i = 0; i < 29; ++i) {
+    table.upsert(i, [](auto&&, auto&&) {});
+  }
+  for (uint i = 0; i < 29; ++i) {
+    KJ_EXPECT(table.find(i) != nullptr);
+  }
+}
+
 KJ_TEST("benchmark: kj::Table<uint, TreeIndex>") {
   constexpr uint SOME_PRIME = BIG_PRIME;
   constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};

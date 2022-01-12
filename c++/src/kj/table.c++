@@ -335,7 +335,7 @@ void BTreeImpl::clear() {
     azero(tree, treeCapacity);
     height = 0;
     freelistHead = 1;
-    freelistSize = treeCapacity;
+    freelistSize = treeCapacity - 1;  // subtract one to account for the root node
     beginLeaf = 0;
     endLeaf = 0;
   }
