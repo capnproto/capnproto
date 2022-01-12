@@ -4593,5 +4593,64 @@ KJ_TEST("drain() doesn't lose bytes when called at the wrong moment") {
 #endif
 }
 
+class BrokenConnectionListener final: public kj::ConnectionReceiver {
+public:
+  void fulfillOne(kj::Own<kj::AsyncIoStream> stream) {
+    fulfiller->fulfill(kj::mv(stream));
+  }
+
+  kj::Promise<kj::Own<kj::AsyncIoStream>> accept() override {
+    auto paf = kj::newPromiseAndFulfiller<kj::Own<kj::AsyncIoStream>>();
+    fulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
+
+  uint getPort() override {
+    KJ_UNIMPLEMENTED("not used");
+  }
+
+private:
+  kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncIoStream>>> fulfiller;
+};
+
+class BrokenConnection final: public kj::AsyncIoStream {
+public:
+  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    KJ_FAIL_ASSERT("broken");
+  }
+  Promise<void> write(const void* buffer, size_t size) override {
+    KJ_FAIL_ASSERT("broken");
+  }
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    KJ_FAIL_ASSERT("broken");
+  }
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
+  }
+
+  void shutdownWrite() override {}
+};
+
+KJ_TEST("HttpServer.listenHttp() doesn't prematurely terminate if an accepted connection is broken") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  HttpHeaderTable table;
+  DummyService service(table);
+  HttpServer server(timer, table, service);
+
+  BrokenConnectionListener listener;
+  auto promise = server.listenHttp(listener).eagerlyEvaluate(nullptr);
+
+  // Loop is waiting for a connection.
+  KJ_ASSERT(!promise.poll(waitScope));
+
+  KJ_EXPECT_LOG(ERROR, "failed: broken");
+  listener.fulfillOne(kj::heap<BrokenConnection>());
+
+  // The loop should not have stopped, even though the connection was broken.
+  KJ_ASSERT(!promise.poll(waitScope));
+}
+
 }  // namespace
 }  // namespace kj
