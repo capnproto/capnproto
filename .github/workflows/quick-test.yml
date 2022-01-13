@@ -10,6 +10,15 @@ on:
     - 'release-*'
 
 jobs:
+  Linux-musl:
+    runs-on: ubuntu-latest
+    container: alpine:latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: install dependencies
+        run: apk add autoconf automake build-base cmake libtool libucontext-dev linux-headers openssl-dev
+      - name: super-test
+        run: ./super-test.sh quick
   Linux:
     runs-on: ubuntu-latest
     strategy:

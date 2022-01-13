@@ -137,6 +137,15 @@ if(NOT CAPNP_LITE)
   add_library(kj-async ${kj-async_sources})
   add_library(CapnProto::kj-async ALIAS kj-async)
   target_link_libraries(kj-async PUBLIC kj)
+  if(WITH_FIBERS)
+    target_compile_definitions(kj-async PUBLIC KJ_USE_FIBERS)
+    if(_WITH_LIBUCONTEXT)
+      target_link_libraries(kj-async PUBLIC PkgConfig::libucontext)
+    endif()
+  else()
+    target_compile_definitions(kj-async PUBLIC KJ_USE_FIBERS=0)
+  endif()
+
   if(UNIX)
     # external clients of this library need to link to pthreads
     target_compile_options(kj-async INTERFACE "-pthread")
@@ -182,7 +191,7 @@ if(NOT CAPNP_LITE)
   add_library(kj-tls ${kj-tls_sources})
   add_library(CapnProto::kj-tls ALIAS kj-tls)
   target_link_libraries(kj-tls PUBLIC kj-async)
-  if (WITH_OPENSSL)
+  if(WITH_OPENSSL)
     target_compile_definitions(kj-tls PRIVATE KJ_HAS_OPENSSL)
     target_link_libraries(kj-tls PRIVATE OpenSSL::SSL OpenSSL::Crypto)
   endif()
@@ -270,7 +279,7 @@ if(BUILD_TESTING)
       compat/tls-test.c++
     )
     target_link_libraries(kj-heavy-tests kj-http kj-gzip kj-tls kj-async kj-test kj)
-    if (WITH_OPENSSL)
+    if(WITH_OPENSSL)
       set_property(
         SOURCE compat/tls-test.c++
         APPEND PROPERTY COMPILE_DEFINITIONS KJ_HAS_OPENSSL
