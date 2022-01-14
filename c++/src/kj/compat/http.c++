@@ -5405,7 +5405,7 @@ kj::Promise<void> HttpServer::listenLoop(kj::ConnectionReceiver& port) {
       return kj::READY_NOW;
     }
 
-    tasks.add(listenHttp(kj::mv(connection)));
+    tasks.add(kj::evalNow([&]() { return listenHttp(kj::mv(connection)); }));
     return listenLoop(port);
   });
 }
