@@ -29,4 +29,9 @@
   WaitScope waitScope(loop)
 #include "async-xthread-test.c++"
 
+#else   // !_WIN32
+#include <kj/compat/gtest.h>
+KJ_TEST("dummy") {}
+// Here so that when this test is built as a test, the KJ test harness doesn't complain that there
+// were no tests.
 #endif  // !_WIN32

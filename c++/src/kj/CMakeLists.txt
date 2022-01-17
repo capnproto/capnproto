@@ -219,7 +219,7 @@ endif()
 # Tests ========================================================================
 
 if(BUILD_TESTING)
-  add_executable(kj-tests
+  set(TEST_FILES
     common-test.c++
     memory-test.c++
     array-test.c++
@@ -236,13 +236,12 @@ if(BUILD_TESTING)
     test-test.c++
     std/iostream-test.c++
   )
-  # TODO: Link with librt on Solaris for sched_yield
-  target_link_libraries(kj-tests kj-test kj)
-  add_dependencies(check kj-tests)
-  add_test(NAME kj-tests-run COMMAND kj-tests)
+  foreach(TEST_FILE IN LISTS TEST_FILES)
+    capnproto_add_kj_test(kj MAIN "${TEST_FILE}")
+  endforeach()
 
   if(NOT CAPNP_LITE)
-    add_executable(kj-heavy-tests
+    set(HEAVY_TEST_FILES
       async-test.c++
       async-xthread-test.c++
       async-coroutine-test.c++
@@ -269,14 +268,15 @@ if(BUILD_TESTING)
       compat/gzip-test.c++
       compat/tls-test.c++
     )
-    target_link_libraries(kj-heavy-tests kj-http kj-gzip kj-tls kj-async kj-test kj)
+    foreach(TEST_FILE IN LISTS HEAVY_TEST_FILES)
+      capnproto_add_kj_test(kj MAIN "${TEST_FILE}" LIBRARIES kj-http kj-gzip kj-tls kj-async)
+    endforeach()
+
     if (WITH_OPENSSL)
       set_source_files_properties(compat/tls-test.c++
         PROPERTIES
           COMPILE_DEFINITIONS KJ_HAS_OPENSSL
       )
     endif()
-    add_dependencies(check kj-heavy-tests)
-    add_test(NAME kj-heavy-tests-run COMMAND kj-heavy-tests)
   endif()  # NOT CAPNP_LITE
 endif()  # BUILD_TESTING

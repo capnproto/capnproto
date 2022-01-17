@@ -249,13 +249,16 @@ if(BUILD_TESTING)
   #   target-based capnp_generate() command, as that will make CMake do the right thing by default.
   add_custom_target(test_capnp DEPENDS ${test_capnp_cpp_files} ${test_capnp_h_files})
 
-  if(CAPNP_LITE)
-    set(test_libraries capnp kj-test kj)
-  else()
-    set(test_libraries capnp-json capnp-rpc capnp-websocket capnp capnpc kj-http kj-async kj-test kj)
+  set(test_libraries capnp)
+  if(NOT CAPNP_LITE)
+    # The test code in capnp that relies on the non-lite version isn't split up into separate test
+    # files like it is in KJ so lite and non-lite tests alike have to have the heavier dependency
+    # set of libraries currently. Might be worthwhile to split out the test code for CAPNP_LITE
+    # into separate files.
+    list(APPEND test_libraries capnp-json capnp-rpc capnp-websocket capnpc kj-http kj-async)
   endif()
 
-  add_executable(capnp-tests
+  set(TEST_FILES
     common-test.c++
     blob-test.c++
     endian-test.c++
@@ -269,17 +272,16 @@ if(BUILD_TESTING)
     serialize-packed-test.c++
     canonicalize-test.c++
     fuzz-test.c++
-    test-util.c++
-    ${test_capnp_cpp_files}
-    ${test_capnp_h_files}
   )
-  target_link_libraries(capnp-tests ${test_libraries})
-  add_dependencies(capnp-tests test_capnp)
-  add_dependencies(check capnp-tests)
-  add_test(NAME capnp-tests-run COMMAND capnp-tests)
+  foreach(TEST_FILE IN LISTS TEST_FILES)
+    capnproto_add_kj_test(capnp MAIN "${TEST_FILE}"
+      SOURCES test-util.c++ ${test_capnp_cpp_files} ${test_capnp_h_files}
+      LIBRARIES ${test_libraries}
+    )
+  endforeach()
 
   if(NOT CAPNP_LITE)
-    add_executable(capnp-heavy-tests
+    set(HEAVY_TEST_FILES
       endian-reverse-test.c++
       capability-test.c++
       membrane-test.c++
@@ -295,22 +297,15 @@ if(BUILD_TESTING)
       ez-rpc-test.c++
       compiler/lexer-test.c++
       compiler/type-id-test.c++
-      test-util.c++
       compat/json-test.c++
       compat/websocket-rpc-test.c++
-      ${test_capnp_cpp_files}
-      ${test_capnp_h_files}
     )
-    target_link_libraries(capnp-heavy-tests ${test_libraries})
-    if(NOT MSVC)
-      set_target_properties(capnp-heavy-tests
-        PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations"
+    foreach(TEST_FILE IN LISTS HEAVY_TEST_FILES)
+      capnproto_add_kj_test(capnp MAIN "${TEST_FILE}"
+        SOURCES test-util.c++ ${test_capnp_cpp_files} ${test_capnp_h_files}
+        LIBRARIES ${test_libraries}
       )
-    endif()
-
-    add_dependencies(capnp-heavy-tests test_capnp)
-    add_dependencies(check capnp-heavy-tests)
-    add_test(NAME capnp-heavy-tests-run COMMAND capnp-heavy-tests)
+    endforeach()
 
     add_executable(capnp-evolution-tests compiler/evolution-test.c++)
     target_link_libraries(capnp-evolution-tests capnpc capnp kj)

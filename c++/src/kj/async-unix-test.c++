@@ -965,4 +965,9 @@ KJ_TEST("UnixEventPort can receive multiple queued instances of an RT signal") {
 }  // namespace
 }  // namespace kj
 
+#else   // !_WIN32
+#include <kj/compat/gtest.h>
+KJ_TEST("dummy") {}
+// Here so that when this test is built as a test, the KJ test harness doesn't complain that there
+// were no tests.
 #endif  // !_WIN32

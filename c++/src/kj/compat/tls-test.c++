@@ -1153,4 +1153,9 @@ KJ_TEST("TLS to capnproto.org") {
 }  // namespace
 }  // namespace kj
 
+#else
+#include <kj/test.h>
+KJ_TEST("Dummy") {}
+// Here so that when this test is built as a test, the KJ test harness doesn't complain that there
+// were no tests.
 #endif  // KJ_HAS_OPENSSL

@@ -492,6 +492,10 @@ KJ_TEST("HttpClient to capnproto.org with a coroutine") {
   promise.wait(io.waitScope);
 }
 
+#else   // KJ_HAS_COROUTINE
+KJ_TEST("dummy") {}
+// Here so that when this test is built as a test, the KJ test harness doesn't complain that there
+// were no tests.
 #endif  // KJ_HAS_COROUTINE
 
 }  // namespace
