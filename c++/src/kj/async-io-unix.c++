@@ -804,6 +804,10 @@ private:
   }
 };
 
+#if __linux__
+constexpr size_t AsyncStreamFd::MAX_SPLICE_LEN;
+#endif  // __linux__
+
 // =======================================================================================
 
 class SocketAddress {
