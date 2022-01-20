@@ -296,6 +296,48 @@ KJ_TEST("HttpHeaders parse invalid") {
   }
 }
 
+KJ_TEST("HttpHeaders require valid HttpHeaderTable") {
+  const auto ERROR_MESSAGE =
+      "HttpHeaders object was constructed from HttpHeaderTable "
+      "that wasn't fully built yet at the time of construction"_kj;
+
+  {
+    // A tabula rasa is valid.
+    HttpHeaderTable table;
+    KJ_REQUIRE(table.isReady());
+
+    HttpHeaders headers(table);
+  }
+
+  {
+    // A future table is not valid.
+    HttpHeaderTable::Builder builder;
+
+    auto& futureTable = builder.getFutureTable();
+    KJ_REQUIRE(!futureTable.isReady());
+
+    auto makeHeadersThenBuild = [&]() {
+      HttpHeaders headers(futureTable);
+      auto table = builder.build();
+    };
+    KJ_EXPECT_THROW_MESSAGE(ERROR_MESSAGE, makeHeadersThenBuild());
+  }
+
+  {
+    // A well built table is valid.
+    HttpHeaderTable::Builder builder;
+
+    auto& futureTable = builder.getFutureTable();
+    KJ_REQUIRE(!futureTable.isReady());
+
+    auto ownedTable = builder.build();
+    KJ_REQUIRE(futureTable.isReady());
+    KJ_REQUIRE(ownedTable->isReady());
+
+    HttpHeaders headers(futureTable);
+  }
+}
+
 KJ_TEST("HttpHeaders validation") {
   auto table = HttpHeaderTable::Builder().build();
   HttpHeaders headers(*table);
