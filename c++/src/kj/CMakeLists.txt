@@ -271,9 +271,9 @@ if(BUILD_TESTING)
     )
     target_link_libraries(kj-heavy-tests kj-http kj-gzip kj-tls kj-async kj-test kj)
     if (WITH_OPENSSL)
-      set_source_files_properties(compat/tls-test.c++
-        PROPERTIES
-          COMPILE_DEFINITIONS KJ_HAS_OPENSSL
+      set_property(
+        SOURCE compat/tls-test.c++
+        APPEND PROPERTY COMPILE_DEFINITIONS KJ_HAS_OPENSSL
       )
     endif()
     add_dependencies(check kj-heavy-tests)
