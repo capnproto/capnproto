@@ -1911,6 +1911,8 @@ private:
   OnReadyEvent onReadyEvent;
   bool waiting = true;
 
+  bool hasSuspendedAtLeastOnce = false;
+
   Maybe<PromiseNode&> promiseNodeForTrace;
   // Whenever this coroutine is suspended waiting on another promise, we keep a reference to that
   // promise so tracePromise()/traceEvent() can trace into it.

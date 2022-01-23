@@ -2956,8 +2956,11 @@ bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent)
   node->setSelfPointer(&node);
   node->onReady(&coroutineEvent);
 
-  if (coroutineEvent.isNext()) {
-    // The result is immediately ready! Let's cancel our event.
+  if (coroutineEvent.hasSuspendedAtLeastOnce && coroutineEvent.isNext()) {
+    // The result is immediately ready and this coroutine is running on the event loop's stack, not
+    // a user code stack. Let's cancel our event and immediately resume. It's important that we
+    // don't perform this optimization if this is the first suspension, because our caller may
+    // depend on running code before this promise's continuations fire.
     coroutineEvent.disarm();
 
     // We can resume ourselves by returning false. This accomplishes the same thing as if we had
@@ -2968,6 +2971,8 @@ bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent)
     // purposes; coroutineEvent.fire() and/or ~Adapter() will null this out.
     coroutineEvent.promiseNodeForTrace = *node;
     maybeCoroutineEvent = coroutineEvent;
+
+    coroutineEvent.hasSuspendedAtLeastOnce = true;
 
     return true;
   }
