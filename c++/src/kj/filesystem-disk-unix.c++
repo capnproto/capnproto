@@ -1090,7 +1090,7 @@ public:
       }
     }
 
-#if __linux__ && defined(RENAME_EXCHANGE)
+#if __linux__ && defined(RENAME_EXCHANGE) && defined(SYS_renameat2)
     // Try to use Linux's renameat2() to atomically check preconditions and apply.
 
     if (has(mode, WriteMode::MODIFY)) {
