@@ -234,9 +234,20 @@ public:
   kj::StringPtr idToString(HttpHeaderId id) const;
   // Get the canonical string name for the given ID.
 
+  bool isReady() const;
+  // Returns true if this HttpHeaderTable either was default constructed or its Builder has
+  // invoked `build()` and released it.
+
 private:
   kj::Vector<kj::StringPtr> namesById;
   kj::Own<IdsByNameMap> idsByName;
+
+  enum class BuildStatus {
+    UNSTARTED = 0,
+    BUILDING = 1,
+    FINISHED = 2,
+  };
+  BuildStatus buildStatus = BuildStatus::UNSTARTED;
 };
 
 class HttpHeaders {
@@ -1077,10 +1088,22 @@ inline void HttpHeaderId::requireFrom(const HttpHeaderTable& table) const {
       "the provided HttpHeaderId is from the wrong HttpHeaderTable");
 }
 
-inline kj::Own<HttpHeaderTable> HttpHeaderTable::Builder::build() { return kj::mv(table); }
+inline kj::Own<HttpHeaderTable> HttpHeaderTable::Builder::build() {
+  table->buildStatus = BuildStatus::FINISHED;
+  return kj::mv(table);
+}
 inline HttpHeaderTable& HttpHeaderTable::Builder::getFutureTable() { return *table; }
 
 inline uint HttpHeaderTable::idCount() const { return namesById.size(); }
+inline bool HttpHeaderTable::isReady() const {
+  switch (buildStatus) {
+    case BuildStatus::UNSTARTED: return true;
+    case BuildStatus::BUILDING: return false;
+    case BuildStatus::FINISHED: return true;
+  }
+
+  KJ_UNREACHABLE;
+}
 
 inline kj::StringPtr HttpHeaderTable::idToString(HttpHeaderId id) const {
   id.requireFrom(*this);

@@ -528,7 +528,9 @@ struct HttpHeaderTable::IdsByNameMap {
 };
 
 HttpHeaderTable::Builder::Builder()
-    : table(kj::heap<HttpHeaderTable>()) {}
+    : table(kj::heap<HttpHeaderTable>()) {
+  table->buildStatus = BuildStatus::BUILDING;
+}
 
 HttpHeaderId HttpHeaderTable::Builder::add(kj::StringPtr name) {
   requireValidHeaderName(name);
@@ -576,7 +578,11 @@ bool HttpHeaders::isValidHeaderValue(kj::StringPtr value) {
 
 HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
     : table(&table),
-      indexedHeaders(kj::heapArray<kj::StringPtr>(table.idCount())) {}
+      indexedHeaders(kj::heapArray<kj::StringPtr>(table.idCount())) {
+  KJ_ASSERT(
+      table.isReady(), "HttpHeaders object was constructed from "
+      "HttpHeaderTable that wasn't fully built yet at the time of construction");
+}
 
 void HttpHeaders::clear() {
   for (auto& header: indexedHeaders) {
