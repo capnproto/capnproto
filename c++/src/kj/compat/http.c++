@@ -3289,6 +3289,11 @@ private:
         canceler.release();
         pipe.endState(*this);
         fulfiller.fulfill();
+      }, [this](kj::Exception&& e) {
+        canceler.release();
+        pipe.endState(*this);
+        fulfiller.reject(kj::cp(e));
+        kj::throwRecoverableException(kj::mv(e));
       }));
     }
     kj::Promise<void> disconnect() override {
@@ -3298,6 +3303,11 @@ private:
         pipe.endState(*this);
         fulfiller.fulfill();
         return pipe.disconnect();
+      }, [this](kj::Exception&& e) {
+        canceler.release();
+        pipe.endState(*this);
+        fulfiller.reject(kj::cp(e));
+        kj::throwRecoverableException(kj::mv(e));
       }));
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
@@ -3306,6 +3316,11 @@ private:
         canceler.release();
         pipe.endState(*this);
         fulfiller.fulfill();
+      }, [this](kj::Exception&& e) {
+        canceler.release();
+        pipe.endState(*this);
+        fulfiller.reject(kj::cp(e));
+        kj::throwRecoverableException(kj::mv(e));
       }));
     }
 
