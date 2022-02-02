@@ -148,6 +148,16 @@ public:
       return;
     }
 
+    auto sendTime = network.clock.now();
+    if (network.currentQueueCount == 0) {
+      // Optimistically set sendTime when there's no messages in the queue. Without this, sending
+      // a message after a long delay could cause getOutgoingMessageWaitTime() to return excessively
+      // long wait times if it is called during the time period after send() is called,
+      // but before the write occurs, as we increment currentQueueCount synchronously, but
+      // asynchronously update currentOutgoingMessageSendTime.
+      network.currentOutgoingMessageSendTime = sendTime;
+    }
+
     network.currentQueueSize += size * sizeof(capnp::word);
     ++network.currentQueueCount;
     auto deferredSizeUpdate = kj::defer([&network = network, size]() mutable {
@@ -155,7 +165,6 @@ public:
       --network.currentQueueCount;
     });
 
-    auto sendTime = network.clock.now();
     network.previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down")
         .then([this, sendTime]() {
       return kj::evalNow([&]() {
