@@ -213,6 +213,18 @@ TEST(TwoPartyNetwork, Basic) {
   // Now nothing is queued.
   KJ_EXPECT(network.getCurrentQueueCount() == 0);
   KJ_EXPECT(network.getCurrentQueueSize() == 0);
+
+  // Ensure that sending a message after not sending one for some time
+  // doesn't return incorrect waitTime statistics.
+  clock.increment(10 * kj::SECONDS);
+
+  auto request4 = client.fooRequest();
+  request4.setI(123);
+  request4.setJ(true);
+  auto promise4 = request4.send();
+
+  KJ_EXPECT(network.getCurrentQueueCount() == 1);
+  KJ_EXPECT(network.getOutgoingMessageWaitTime() == 0 * kj::SECONDS);
 }
 
 TEST(TwoPartyNetwork, Pipelining) {
