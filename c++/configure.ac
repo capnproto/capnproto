@@ -32,6 +32,11 @@ AC_ARG_WITH([openssl],
     [build libkj-tls by linking against openssl @<:@default=check@:>@])],
   [],[with_openssl=check])
 
+AC_ARG_WITH([fibers],
+  [AS_HELP_STRING([--with-fibers],
+    [build libkj-async with fibers @<:@default=check@:>@])],
+  [],[with_fibers=check])
+
 AC_ARG_ENABLE([reflection], [
   AS_HELP_STRING([--disable-reflection], [
     compile Cap'n Proto in "lite mode", in which all reflection APIs (schema.h, dynamic.h, etc.)
@@ -195,8 +200,46 @@ AS_IF([test "$with_openssl" != no], [
 ])
 AM_CONDITIONAL([BUILD_KJ_TLS], [test "$with_openssl" != no])
 
-# CapnProtoConfig.cmake.in needs this variable.
-AC_SUBST(WITH_OPENSSL, $with_openssl)
+# Fibers need the symbols getcontext, setcontext, swapcontext and makecontext.
+# We assume that makecontext implies the rest.
+AS_IF([test "$with_fibers" != no], [
+  libc_supports_fibers=yes
+  AC_SEARCH_LIBS([makecontext], [], [], [
+    libc_supports_fibers=no
+  ])
+
+  AS_IF([test "$libc_supports_fibers" = yes], [
+      with_fibers=yes
+    ], [
+    # If getcontext does not exist in libc, try with libucontext
+    ucontext_supports_fibers=yes
+    AC_CHECK_LIB(ucontext, [makecontext], [], [
+      ucontext_supports_fibers=no
+    ])
+    AS_IF([test "$ucontext_supports_fibers" = yes], [
+      ASYNC_LIBS="$ASYNC_LIBS -lucontext"
+      with_fibers=yes
+    ], [
+      AS_IF([test "$with_fibers" = yes], [
+        AC_MSG_ERROR([Missing symbols required for fibers (makecontext, setcontext, ...). Disable fibers (--without-fibers) or install libucontext])
+      ], [
+        AC_MSG_WARN([could not find required symbols (makecontext, setcontext, ...) -- won't build with fibers])
+        with_fibers=no
+      ])
+    ])
+  ])
+])
+AS_IF([test "$with_fibers" = yes], [
+  CXXFLAGS="$CXXFLAGS -DKJ_USE_FIBERS"
+], [
+  CXXFLAGS="$CXXFLAGS -DKJ_USE_FIBERS=0"
+])
+
+# CapnProtoConfig.cmake.in needs these variables,
+# we force them to NO because we don't need the CMake dependency for them,
+# the dependencies are provided by the .pc files.
+AC_SUBST(WITH_OPENSSL, NO)
+AC_SUBST(_WITH_LIBUCONTEXT, NO)
 
 AM_CONDITIONAL([HAS_FUZZING_ENGINE], [test "x$LIB_FUZZING_ENGINE" != "x"])
 
