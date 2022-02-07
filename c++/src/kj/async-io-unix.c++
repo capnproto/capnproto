@@ -273,7 +273,7 @@ public:
         auto promise = write(leftover.begin(), leftover.size());
         promise = promise.attach(kj::mv(leftover));
         if (eof || pos == amount) {
-          return promise.then([pos]() { return pos; });
+          return promise.then([pos]() -> uint64_t { return pos; });
         } else {
           return promise.then([&input, this, pos, amount]() {
             return splicePumpFrom(input, pos, amount);
