@@ -228,7 +228,12 @@ public:
     return promise.attach(kj::mv(fds), kj::mv(streams));
   }
 
-#if __linux__
+#if __linux__ && !__ANDROID__
+// Linux's splice() syscall lets us optimize pumping of bytes between file descriptors.
+//
+// TODO(someday): splice()-based pumping hangs in unit tests on Android for some reason. We should
+//   figure out why, but for now I'm just disabling it...
+
   Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& inputParam, uint64_t amount = kj::maxValue) override {
     AsyncStreamFd& input = KJ_UNWRAP_OR_RETURN(
@@ -396,7 +401,7 @@ private:
   }
 
 public:
-#endif  // __linux__
+#endif  // __linux__ && !__ANDROID__
 
   Promise<void> whenWriteDisconnected() override {
     KJ_IF_MAYBE(p, writeDisconnectedPromise) {
@@ -804,9 +809,9 @@ private:
   }
 };
 
-#if __linux__
+#if __linux__ && !__ANDROID__
 constexpr size_t AsyncStreamFd::MAX_SPLICE_LEN;
-#endif  // __linux__
+#endif  // __linux__ && !__ANDROID__
 
 // =======================================================================================
 
