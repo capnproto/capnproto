@@ -4658,13 +4658,13 @@ private:
 class BrokenConnection final: public kj::AsyncIoStream {
 public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    KJ_FAIL_ASSERT("broken");
+    return KJ_EXCEPTION(FAILED, "broken");
   }
   Promise<void> write(const void* buffer, size_t size) override {
-    KJ_FAIL_ASSERT("broken");
+    return KJ_EXCEPTION(FAILED, "broken");
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    KJ_FAIL_ASSERT("broken");
+    return KJ_EXCEPTION(FAILED, "broken");
   }
   Promise<void> whenWriteDisconnected() override {
     return kj::NEVER_DONE;
