@@ -160,7 +160,7 @@ See the header `kj/exception.h` for details on how to register an exception call
 
 Cap'n Proto is built on top of a basic utility library called KJ.  The two were actually developed
 together -- KJ is simply the stuff which is not specific to Cap'n Proto serialization, and may be
-useful to others independently of Cap'n Proto.  For now, the the two are distributed together.  The
+useful to others independently of Cap'n Proto.  For now, the two are distributed together.  The
 name "KJ" has no particular meaning; it was chosen to be short and easy-to-type.
 
 As of v0.3, KJ is distributed with Cap'n Proto but built as a separate library.  You may need
