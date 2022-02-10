@@ -74,3 +74,6 @@
 
 # editor artefacts
 *~
+
+# cross-compiling / glibc testing
+/dockcross
