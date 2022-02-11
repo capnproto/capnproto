@@ -51,6 +51,24 @@ jobs:
         run: |
             # librt is used for timer_create in the unit tests for lock tracking (mutex-test.c++).
             ./super-test.sh quick ${{ matrix.compiler }} cpp-features "${{matrix.features}}" extra-libs "-lrt"
+  ManyLinux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cross-compiler: manylinux2014-x64
+          - cross-compiler: manylinux2014-x86
+            docker-run-args: --platform linux/386
+    steps:
+      - uses: actions/checkout@v2
+      - name: install dockcross
+        run: |
+            docker run ${{ matrix.docker-run-args }} --rm dockcross/${{ matrix.cross-compiler }} > ./dockcross
+            chmod +x ./dockcross
+      - name: super-test
+        run: |
+            ./dockcross ./super-test.sh quick g++
   MacOS:
     runs-on: macos-latest
     strategy:
