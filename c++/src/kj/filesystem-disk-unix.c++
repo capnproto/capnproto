@@ -1705,12 +1705,15 @@ private:
       }
     }
 
+    // TODO(someday): Use MAX_PATH from <limits.h>?
+    // TODO(someday): Use std::filesystem::current_path() when compiling with
+    // c++17 or above.
     size_t size = 256;
   retry:
     KJ_STACK_ARRAY(char, buf, size, 256, 4096);
     if (getcwd(buf.begin(), size) == nullptr) {
       int error = errno;
-      if (error == ENAMETOOLONG) {
+      if (error == ERANGE) {
         size *= 2;
         goto retry;
       } else {

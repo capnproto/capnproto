@@ -23,6 +23,7 @@
 #include "test.h"
 #include "encoding.h"
 #include <stdlib.h>
+#include <string>
 #if _WIN32
 #include <windows.h>
 #include "windows-sanity.h"
@@ -944,6 +945,31 @@ KJ_TEST("DiskFile holes") {
   KJ_EXPECT(StringPtr(reinterpret_cast<char*>(buf), 6) == StringPtr("\0\0\0\0\0\0", 6));
 }
 #endif
+
+// Ensure the current path is correctly computed.
+//
+// See issue #1425.
+KJ_TEST("DiskFilesystem::computeCurrentPath") {
+  TempDir tempDir;
+  auto dir = tempDir.get();
+
+  // Paths can be PATH_MAX, but the segments which make up that path typically
+  // can't exceed 255 bytes.
+  auto maxPathSegment = std::string(255, 'a');
+
+  // Create a path which exceeds the 256 byte buffer used in
+  // computeCurrentPath. 
+  auto subdir = dir->openSubdir(Path({
+    maxPathSegment,
+    maxPathSegment,
+    "some_path_longer_than_256_bytes"
+  }), WriteMode::CREATE | WriteMode::CREATE_PARENT);
+
+  fchdir(KJ_ASSERT_NONNULL(subdir->getFd()));
+
+  // Test computeCurrentPath indirectly.
+  newDiskFilesystem();
+}
 
 }  // namespace
 }  // namespace kj
