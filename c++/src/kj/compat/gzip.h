@@ -36,12 +36,11 @@ public:
   KJ_DISALLOW_COPY(GzipOutputContext);
 
   void setInput(const void* in, size_t size);
-  kj::Tuple<bool, kj::ArrayPtr<const byte>> pumpOnce(int flush);
+  kj::Tuple<bool, kj::ArrayPtr<const byte>> pumpOnce(int flush, kj::ArrayPtr<byte> buffer);
 
 private:
   bool compressing;
   z_stream ctx = {};
-  byte buffer[4096];
 
   [[noreturn]] void fail(int result);
 };
@@ -72,6 +71,12 @@ public:
 
   GzipOutputStream(OutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
   GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS));
+  // A buffer will be allocated to hold (de)compressed bytes before they're written to `inner`
+
+  GzipOutputStream(BufferedOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
+  GzipOutputStream(BufferedOutputStream& inner, decltype(DECOMPRESS));
+  // The (de)compressed bytes will be written directly to `inner`'s buffer
+
   ~GzipOutputStream() noexcept(false);
   KJ_DISALLOW_COPY(GzipOutputStream);
 
@@ -83,7 +88,11 @@ public:
   }
 
 private:
-  OutputStream& inner;
+  GzipOutputStream(kj::Own<BufferedOutputStream>&& wrapper, int compressionLevel);
+  GzipOutputStream(kj::Own<BufferedOutputStream>&& wrapper, decltype(DECOMPRESS));
+
+  BufferedOutputStream& inner;
+  Maybe<Own<BufferedOutputStream>> wrapper;
   _::GzipOutputContext ctx;
 
   void pump(int flush);
@@ -135,6 +144,7 @@ public:
 private:
   AsyncOutputStream& inner;
   _::GzipOutputContext ctx;
+  byte buffer[4096];
 
   kj::Promise<void> pump(int flush);
 };

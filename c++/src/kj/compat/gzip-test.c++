@@ -273,6 +273,18 @@ KJ_TEST("gzip compression") {
   }
 }
 
+KJ_TEST("unbuffered gzip compression") {
+  MockOutputStream rawOutput;
+  BufferedOutputStreamWrapper bufferedOutput(rawOutput);
+  {
+    GzipOutputStream gzip(bufferedOutput);
+    gzip.write("foobar", 6);
+  }
+
+  bufferedOutput.flush();
+  KJ_EXPECT(rawOutput.decompress() == "foobar");
+}
+
 KJ_TEST("gzip huge round trip") {
   auto bytes = heapArray<byte>(65536);
   for (auto& b: bytes) {
