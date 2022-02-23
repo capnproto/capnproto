@@ -958,17 +958,17 @@ KJ_TEST("DiskFilesystem::computeCurrentPath") {
   auto maxPathSegment = std::string(255, 'a');
 
   // Create a path which exceeds the 256 byte buffer used in
-  // computeCurrentPath. 
+  // computeCurrentPath.
   auto subdir = dir->openSubdir(Path({
     maxPathSegment,
     maxPathSegment,
     "some_path_longer_than_256_bytes"
   }), WriteMode::CREATE | WriteMode::CREATE_PARENT);
 
-  fchdir(KJ_ASSERT_NONNULL(subdir->getFd()));
+  KJ_SYSCALL(fchdir(KJ_ASSERT_NONNULL(subdir->getFd())));
 
   // Test computeCurrentPath indirectly.
-  newDiskFilesystem();
+  KJ_EXPECT(newDiskFilesystem());
 }
 
 }  // namespace
