@@ -96,23 +96,7 @@ install(FILES ${kj_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
 install(FILES ${kj-parse_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/parse")
 install(FILES ${kj-std_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/std")
 
-set(kj-test_sources
-  test.c++
-)
-set(kj-test_headers
-  test.h
-)
-set(kj-test-compat_headers
-  compat/gtest.h
-)
-add_library(kj-test ${kj-test_sources})
-add_library(CapnProto::kj-test ALIAS kj-test)
-target_link_libraries(kj-test PUBLIC kj)
-# Ensure the library has a version set to match autotools build
-set_target_properties(kj-test PROPERTIES VERSION ${VERSION})
-install(TARGETS kj-test ${INSTALL_TARGETS_DEFAULT_ARGS})
-install(FILES ${kj-test_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
-install(FILES ${kj-test-compat_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
+# kj-async ======================================================================
 
 set(kj-async_sources
   async.c++
@@ -228,6 +212,24 @@ endif()
 # Tests ========================================================================
 
 if(BUILD_TESTING)
+  set(kj-test_sources
+    test.c++
+  )
+  set(kj-test_headers
+    test.h
+  )
+  set(kj-test-compat_headers
+    compat/gtest.h
+  )
+  add_library(kj-test ${kj-test_sources})
+  add_library(CapnProto::kj-test ALIAS kj-test)
+  target_link_libraries(kj-test PUBLIC kj)
+  # Ensure the library has a version set to match autotools build
+  set_target_properties(kj-test PROPERTIES VERSION ${VERSION})
+  install(TARGETS kj-test ${INSTALL_TARGETS_DEFAULT_ARGS})
+  install(FILES ${kj-test_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj")
+  install(FILES ${kj-test-compat_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
+
   add_executable(kj-tests
     common-test.c++
     memory-test.c++
