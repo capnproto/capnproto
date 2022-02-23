@@ -946,6 +946,7 @@ KJ_TEST("DiskFile holes") {
 }
 #endif
 
+#if !_WIN32 // Only applies to Unix.
 // Ensure the current path is correctly computed.
 //
 // See issue #1425.
@@ -965,11 +966,14 @@ KJ_TEST("DiskFilesystem::computeCurrentPath") {
     "some_path_longer_than_256_bytes"
   }), WriteMode::CREATE | WriteMode::CREATE_PARENT);
 
+  auto origDir = open(".", O_RDONLY | O_DIRECTORY);
   KJ_SYSCALL(fchdir(KJ_ASSERT_NONNULL(subdir->getFd())));
+  KJ_DEFER(KJ_SYSCALL(fchdir(origDir)));
 
   // Test computeCurrentPath indirectly.
-  KJ_EXPECT(newDiskFilesystem());
+  newDiskFilesystem();
 }
+#endif
 
 }  // namespace
 }  // namespace kj
