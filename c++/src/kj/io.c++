@@ -212,6 +212,13 @@ void BufferedOutputStreamWrapper::write(const void* src, size_t size) {
   if (src == bufferPos) {
     // Oh goody, the caller wrote directly into our buffer.
     bufferPos += size;
+
+    // If we're full, flush now so that the next call to `getWriteBuffer()` returns more available
+    // space
+    if (bufferPos == buffer.end()) {
+      inner.write(buffer.begin(), buffer.size());
+      bufferPos = buffer.begin();
+    }
   } else {
     size_t available = buffer.end() - bufferPos;
 

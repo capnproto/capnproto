@@ -70,7 +70,7 @@ kj::Tuple<bool, kj::ArrayPtr<const byte>> GzipOutputContext::pumpOnce(
   }
 
   // - Z_STREAM_END means we have finished the stream successfully.
-  // - Z_BUF_ERROR means we didn't have any more input to process
+  // - Z_BUF_ERROR means we ran out of input to process or space for output
   //   (but still have to make a call to write to potentially flush data).
   return kj::tuple(result == Z_OK, buffer.slice(0, buffer.size() - ctx.avail_out));
 }
