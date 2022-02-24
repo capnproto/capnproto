@@ -1710,7 +1710,7 @@ private:
     KJ_STACK_ARRAY(char, buf, size, 256, 4096);
     if (getcwd(buf.begin(), size) == nullptr) {
       int error = errno;
-      if (error == ENAMETOOLONG) {
+      if (error == ERANGE) {
         size *= 2;
         goto retry;
       } else {
