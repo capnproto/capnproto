@@ -102,7 +102,7 @@ private:
 
 template <typename T>
 class ProducerConsumerQueue {
-  // ProducerConsumerQueue is an async FIFO queue.
+  // ProducerConsumerQueue is an async FIFO queue or LIFO stack.
 
 public:
   void push(T v) {
@@ -146,6 +146,23 @@ public:
     }
   }
 
+  Promise<T> popFront() {
+    // Eventually pop a value from the queue.
+    // Note that if your sinks lag your sources, the promise will always be ready.
+
+    if (!values.empty()) {
+      // We have at least one value, get the youngest.
+      KJ_IASSERT(waiters.empty());
+
+      auto value = kj::mv(values.front());
+      values.pop_front();
+      return kj::mv(value);
+    } else {
+      // We don't have any values, add ourselves to the waiting queue.
+      return waiters.wait();
+    }
+  }
+  
 private:
   std::list<T> values;
   WaiterQueue<T> waiters;
