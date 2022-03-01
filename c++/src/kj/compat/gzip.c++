@@ -179,7 +179,9 @@ void GzipOutputStream::write(const void* in, size_t size) {
 void GzipOutputStream::pump(int flush) {
   bool ok;
   do {
-    auto result = ctx.pumpOnce(flush, inner.getWriteBuffer());
+    auto writeBuffer = inner.getWriteBuffer();
+    KJ_REQUIRE(writeBuffer.size() > 0, "no space left in buffer");
+    auto result = ctx.pumpOnce(flush, writeBuffer);
     ok = get<0>(result);
     auto chunk = get<1>(result);
     if (chunk.size() > 0) {
