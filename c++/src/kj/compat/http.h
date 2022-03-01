@@ -298,6 +298,12 @@ public:
 
   kj::Maybe<kj::StringPtr> get(HttpHeaderId id) const;
   // Read a header.
+  //
+  // Note that there is intentionally no method to look up a header by string name rather than
+  // header ID. The intent is that you should always allocate a header ID for any header that you
+  // care about, so that you can get() it by ID. Headers with registered IDs are stored in an array
+  // indexed by ID, making lookup fast. Headers without registered IDs are stored in a separate list
+  // that is optimized for re-transmission of the whole list, but not for lookup.
 
   template <typename Func>
   void forEach(Func&& func) const;
