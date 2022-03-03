@@ -966,7 +966,7 @@ KJ_TEST("DiskFilesystem::computeCurrentPath") {
     "some_path_longer_than_256_bytes"
   }), WriteMode::CREATE | WriteMode::CREATE_PARENT);
 
-  auto origDir = open(".", O_RDONLY | O_DIRECTORY);
+  auto origDir = open(".", O_RDONLY);
   KJ_SYSCALL(fchdir(KJ_ASSERT_NONNULL(subdir->getFd())));
   KJ_DEFER(KJ_SYSCALL(fchdir(origDir)));
 
