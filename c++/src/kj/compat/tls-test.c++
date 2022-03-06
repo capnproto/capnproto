@@ -682,16 +682,25 @@ void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert, kj::StringPt
   KJ_EXPECT_THROW_MESSAGE(message, clientPromise.wait(test.io.waitScope));
 }
 
+// OpenSSL 3.0 changed error messages
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(OPENSSL_IS_BORINGSSL)
+#define SSL_MESSAGE(v11, v30) v30
+#else
+#define SSL_MESSAGE(v11, v30) v11
+#endif
+
 KJ_TEST("TLS certificate validation") {
   expectInvalidCert("wrong.com", TlsCertificate(kj::str(VALID_CERT, INTERMEDIATE_CERT)),
-                    "Hostname mismatch");
+                    SSL_MESSAGE("Hostname mismatch", "hostname mismatch"));
   expectInvalidCert("example.com", TlsCertificate(VALID_CERT),
                     "unable to get local issuer certificate");
   expectInvalidCert("example.com", TlsCertificate(kj::str(EXPIRED_CERT, INTERMEDIATE_CERT)),
                     "certificate has expired");
   expectInvalidCert("example.com", TlsCertificate(SELF_SIGNED_CERT),
-                    "self signed certificate");
+                    SSL_MESSAGE("self signed certificate", "self-signed certificate"));
 }
+
+#undef SSL_MESSAGE
 
 // BoringSSL seems to print error messages differently.
 #ifdef OPENSSL_IS_BORINGSSL
@@ -852,6 +861,8 @@ KJ_TEST("TLS client certificate verification") {
     KJ_EXPECT(!id->hasCertificate());
   }
 }
+
+#undef SSL_MESSAGE
 
 class MockConnectionReceiver final: public ConnectionReceiver {
   // This connection receiver allows mocked async connection establishment without the network.

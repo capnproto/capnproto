@@ -369,6 +369,18 @@ private:
     switch (cmd) {
       case BIO_CTRL_FLUSH:
         return 1;
+      case BIO_CTRL_INFO:
+      case BIO_CTRL_EOF:
+        // Queries for info and EOF
+        return 0;
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L && \
+        !defined(OPENSSL_IS_BORINGSSL) && \
+        !defined(OPENSSL_NO_KTLS)
+      case BIO_CTRL_GET_KTLS_SEND:
+      case BIO_CTRL_GET_KTLS_RECV:
+        // Queries to determine if our BIO supports KTLS
+        return 0;
+#endif
       case BIO_CTRL_PUSH:
       case BIO_CTRL_POP:
         // Informational?
