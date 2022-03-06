@@ -1123,6 +1123,19 @@ KJ_TEST("TLS receiver does not stall on hung client") {
   KJ_EXPECT(!extraAcceptPromise.poll(test.io.waitScope));
 }
 
+void throwBadContext() {
+  TlsContext::Options options;
+  options.cipherList = "bogus,broken,wrong";
+
+  TlsContext ctx(kj::mv(options));
+}
+
+KJ_TEST("OpenSSL error formatting") {
+  KJ_EXPECT_THROW_MESSAGE("ssl_lib.c", throwBadContext());
+  KJ_EXPECT_THROW_MESSAGE("SSL_CTX_set_cipher_list", throwBadContext());
+  KJ_EXPECT_THROW_MESSAGE("no cipher match", throwBadContext());
+}
+
 #ifdef KJ_EXTERNAL_TESTS
 KJ_TEST("TLS to capnproto.org") {
   kj::AsyncIoContext io = setupAsyncIo();

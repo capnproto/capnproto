@@ -57,10 +57,20 @@ void throwOpensslError() {
   // throw it.
 
   kj::Vector<kj::String> lines;
-  while (unsigned long long error = ERR_get_error()) {
+  const char *fname;
+  int lno;
+  const char *data;
+  int flags;
+  while (unsigned long long error = ERR_get_error_line_data(&fname, &lno, &data, &flags)) {
     char message[1024];
     ERR_error_string_n(error, message, sizeof(message));
-    lines.add(kj::heapString(message));
+
+    bool has_data = (flags & ERR_TXT_STRING) != 0;
+    const char *extra_prefix = has_data ? " [" : "";
+    const char *extra_suffix = has_data ? "]" : "";
+    const char *extra = has_data ? data : "";
+
+    lines.add(kj::str("[", fname, ":", lno, "] ", message, extra_prefix, extra, extra_suffix));
   }
   kj::String message = kj::strArray(lines, "\n");
   KJ_FAIL_ASSERT("OpenSSL error", message);
