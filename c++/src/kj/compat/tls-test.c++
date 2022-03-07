@@ -1131,7 +1131,7 @@ void throwBadContext() {
 }
 
 KJ_TEST("OpenSSL error formatting") {
-  KJ_EXPECT_THROW_MESSAGE("/ssl_ciph.c", throwBadContext());
+  KJ_EXPECT_THROW_MESSAGE("ssl_ciph.c", throwBadContext());
   KJ_EXPECT_THROW_MESSAGE("ssl_cipher_process_rulestr", throwBadContext());
   KJ_EXPECT_THROW_MESSAGE("invalid command", throwBadContext());
 }
