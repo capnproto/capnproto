@@ -372,9 +372,7 @@ private:
       case BIO_CTRL_EOF:
         // Queries for EOF
         return 0;
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L && \
-        !defined(OPENSSL_IS_BORINGSSL) && \
-        !defined(OPENSSL_NO_KTLS)
+#ifdef BIO_CTRL_GET_KTLS_SEND
       case BIO_CTRL_GET_KTLS_SEND:
       case BIO_CTRL_GET_KTLS_RECV:
         // Queries to determine if our BIO supports KTLS
