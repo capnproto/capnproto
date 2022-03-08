@@ -369,9 +369,8 @@ private:
     switch (cmd) {
       case BIO_CTRL_FLUSH:
         return 1;
-      case BIO_CTRL_INFO:
       case BIO_CTRL_EOF:
-        // Queries for info and EOF
+        // Queries for EOF
         return 0;
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L && \
         !defined(OPENSSL_IS_BORINGSSL) && \
