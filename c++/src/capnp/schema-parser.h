@@ -141,6 +141,11 @@ public:
     getLoader().loadCompiledTypeAndDependencies<T>();
   }
 
+  kj::Array<Schema> getAllLoaded() const {
+    // Gets an array of all schema nodes that have been parsed so far.
+    return getLoader().getAllLoaded();
+  }
+
 private:
   struct Impl;
   struct DiskFileCompat;
@@ -149,6 +154,7 @@ private:
   mutable bool hadErrors = false;
 
   ModuleImpl& getModuleImpl(kj::Own<SchemaFile>&& file) const;
+  const SchemaLoader& getLoader() const;
   SchemaLoader& getLoader();
 
   friend class ParsedSchema;
