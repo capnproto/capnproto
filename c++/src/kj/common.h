@@ -1860,33 +1860,38 @@ To& downcast(From& from) {
 // =======================================================================================
 // Defer
 
+class Deferred {
+public:
+  inline void cancel() { canceled = true; }
+
+protected:
+  inline Deferred(): canceled{false} {}
+  bool canceled;
+};
+
 namespace _ {  // private
 
 template <typename Func>
-class Deferred {
+class DeferredImpl final: Deferred {
 public:
-  inline Deferred(Func&& func): func(kj::fwd<Func>(func)), canceled(false) {}
-  inline ~Deferred() noexcept(false) { if (!canceled) func(); }
-  KJ_DISALLOW_COPY(Deferred);
+  inline DeferredImpl(Func&& func): func(kj::fwd<Func>(func)) {}
+  inline ~DeferredImpl() noexcept(false) { if (!canceled) func(); }
+  KJ_DISALLOW_COPY(DeferredImpl);
 
   // This move constructor is usually optimized away by the compiler.
-  inline Deferred(Deferred&& other): func(kj::fwd<Func>(other.func)), canceled(other.canceled) {
+  inline DeferredImpl(DeferredImpl&& other): func(kj::fwd<Func>(other.func)) {
+    canceled = other.canceled;
     other.canceled = true;
-  }
-
-  void cancel() {
-    canceled = true;
   }
 
 private:
   Func func;
-  bool canceled;
 };
 
 }  // namespace _ (private)
 
 template <typename Func>
-_::Deferred<Func> defer(Func&& func) {
+_::DeferredImpl<Func> defer(Func&& func) {
   // Returns an object which will invoke the given functor in its destructor.  The object is not
   // copyable but is movable with the semantics you'd expect.  Since the return type is private,
   // you need to assign to an `auto` variable.
@@ -1894,7 +1899,7 @@ _::Deferred<Func> defer(Func&& func) {
   // The KJ_DEFER macro provides slightly more convenient syntax for the common case where you
   // want some code to run at current scope exit.
 
-  return _::Deferred<Func>(kj::fwd<Func>(func));
+  return _::DeferredImpl<Func>(kj::fwd<Func>(func));
 }
 
 #define KJ_DEFER(code) auto KJ_UNIQUE_NAME(_kjDefer) = ::kj::defer([&](){code;})
