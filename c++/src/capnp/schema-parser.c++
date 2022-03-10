@@ -313,6 +313,10 @@ SchemaLoader& SchemaParser::getLoader() {
   return impl->compiler.getLoader();
 }
 
+const SchemaLoader& SchemaParser::getLoader() const {
+  return impl->compiler.getLoader();
+}
+
 kj::Maybe<ParsedSchema> ParsedSchema::findNested(kj::StringPtr name) const {
   // TODO(someday): lookup() doesn't handle generics correctly. Use the ModuleScope/CompiledType
   //   interface instead. We can also add an applybrand() method to ParsedSchema using those
