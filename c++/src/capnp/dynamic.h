@@ -1668,6 +1668,14 @@ inline DynamicCapability::Client Capability::Client::castAs<DynamicCapability>(
   return DynamicCapability::Client(schema, hook->addRef());
 }
 
+template <>
+inline DynamicCapability::Client CapabilityServerSet<DynamicCapability>::add(
+    kj::Own<DynamicCapability::Server>&& server) {
+  void* ptr = reinterpret_cast<void*>(server.get());
+  auto schema = server->getSchema();
+  return addInternal(kj::mv(server), ptr).castAs<DynamicCapability>(schema);
+}
+
 // -------------------------------------------------------------------
 
 template <typename T>
