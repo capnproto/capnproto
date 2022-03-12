@@ -1317,6 +1317,94 @@ KJ_TEST("insertion order index is movable") {
   KJ_EXPECT(iter == range.end());
 }
 
+// =======================================================================================
+// Test bug where insertion failure on a later index in the table would not be rolled back
+// correctly if a previous index was TreeIndex.
+
+class StringLengthCompare {
+  // Considers two strings equal if they have the same length.
+public:
+  inline size_t keyForRow(StringPtr entry) const {
+    return entry.size();
+  }
+
+  inline bool matches(StringPtr e, size_t key) const {
+    return e.size() == key;
+  }
+
+  inline bool isBefore(StringPtr e, size_t key) const {
+    return e.size() < key;
+  }
+
+  uint hashCode(size_t size) const {
+    return size;
+  }
+};
+
+KJ_TEST("HashIndex rollback on insertion failure") {
+  // Test that when an insertion produces a duplicate on a later index, changes to previous indexes
+  // are properly rolled back.
+
+  Table<StringPtr, HashIndex<StringHasher>, HashIndex<StringLengthCompare>> table;
+  table.insert("a"_kj);
+  table.insert("ab"_kj);
+  table.insert("abc"_kj);
+
+  {
+    // We use upsert() so that we don't throw an exception from the duplicate, but this exercises
+    // the same logic as a duplicate insert() other than throwing.
+    kj::StringPtr& found = table.upsert("xyz"_kj, [&](StringPtr& existing, StringPtr&& param) {
+      KJ_EXPECT(existing == "abc");
+      KJ_EXPECT(param == "xyz");
+    });
+    KJ_EXPECT(found == "abc");
+
+    table.erase(found);
+  }
+
+  table.insert("xyz"_kj);
+
+  {
+    kj::StringPtr& found = table.upsert("tuv"_kj, [&](StringPtr& existing, StringPtr&& param) {
+      KJ_EXPECT(existing == "xyz");
+      KJ_EXPECT(param == "tuv");
+    });
+    KJ_EXPECT(found == "xyz");
+  }
+}
+
+KJ_TEST("TreeIndex rollback on insertion failure") {
+  // Test that when an insertion produces a duplicate on a later index, changes to previous indexes
+  // are properly rolled back.
+
+  Table<StringPtr, TreeIndex<StringCompare>, TreeIndex<StringLengthCompare>> table;
+  table.insert("a"_kj);
+  table.insert("ab"_kj);
+  table.insert("abc"_kj);
+
+  {
+    // We use upsert() so that we don't throw an exception from the duplicate, but this exercises
+    // the same logic as a duplicate insert() other than throwing.
+    kj::StringPtr& found = table.upsert("xyz"_kj, [&](StringPtr& existing, StringPtr&& param) {
+      KJ_EXPECT(existing == "abc");
+      KJ_EXPECT(param == "xyz");
+    });
+    KJ_EXPECT(found == "abc");
+
+    table.erase(found);
+  }
+
+  table.insert("xyz"_kj);
+
+  {
+    kj::StringPtr& found = table.upsert("tuv"_kj, [&](StringPtr& existing, StringPtr&& param) {
+      KJ_EXPECT(existing == "xyz");
+      KJ_EXPECT(param == "tuv");
+    });
+    KJ_EXPECT(found == "xyz");
+  }
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace kj
