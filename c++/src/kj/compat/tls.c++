@@ -370,7 +370,10 @@ private:
       case BIO_CTRL_FLUSH:
         return 1;
       case BIO_CTRL_EOF:
-        // Queries for EOF
+        // Queries for EOF. OpenSSL sometimes polls this BIO_CTRL after
+        // attempting a read, but we don't have a good way to check for
+        // an EOF explicitly so we "lie" and say we have not reached EOF.
+        // OpenSSL can still use the read return value to indicate EOF.
         return 0;
 #ifdef BIO_CTRL_GET_KTLS_SEND
       case BIO_CTRL_GET_KTLS_SEND:
