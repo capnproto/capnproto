@@ -175,6 +175,9 @@ public:
   kj::Promise<void> accept() {
     // We are the server. Set SSL options to prefer server's cipher choice.
     SSL_set_options(ssl, SSL_OP_CIPHER_SERVER_PREFERENCE);
+#ifdef SSL_OP_IGNORE_UNEXPECTED_EOF
+    SSL_set_options(ssl, SSL_OP_IGNORE_UNEXPECTED_EOF);
+#endif
 
     auto acceptPromise = sslCall([this]() {
       return SSL_accept(ssl);
@@ -347,7 +350,11 @@ private:
     BIO_clear_retry_flags(b);
     KJ_IF_MAYBE(n, reinterpret_cast<TlsConnection*>(BIO_get_data(b))->readBuffer
         .read(kj::arrayPtr(out, outl).asBytes())) {
-      return *n;
+      int ret = *n;
+      if (ret == 0) {
+        BIO_set_flags(b, BIO_FLAGS_IN_EOF);
+      }
+      return ret;
     } else {
       BIO_set_retry_read(b);
       return -1;
@@ -370,11 +377,7 @@ private:
       case BIO_CTRL_FLUSH:
         return 1;
       case BIO_CTRL_EOF:
-        // Queries for EOF. OpenSSL sometimes polls this BIO_CTRL after
-        // attempting a read, but we don't have a good way to check for
-        // an EOF explicitly so we "lie" and say we have not reached EOF.
-        // OpenSSL can still use the read return value to indicate EOF.
-        return 0;
+        return BIO_test_flags(b, BIO_FLAGS_IN_EOF) != 0 ? 1 : 0;
 #ifdef BIO_CTRL_GET_KTLS_SEND
       case BIO_CTRL_GET_KTLS_SEND:
       case BIO_CTRL_GET_KTLS_RECV:
