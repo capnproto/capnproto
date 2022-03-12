@@ -1484,7 +1484,7 @@ public:
 
   template <typename Row, typename... Params>
   void erase(kj::ArrayPtr<Row> table, size_t pos, Params&&... params) {
-    impl.erase(pos, searchKey(table, params...));
+    impl.erase(pos, searchKeyForErase(table, pos, params...));
   }
 
   template <typename Row, typename... Params>
@@ -1535,6 +1535,16 @@ private:
   template <typename Row, typename... Params>
   inline auto searchKey(kj::ArrayPtr<Row>& table, Params&... params) const {
     auto predicate = [&](uint i) { return cb.isBefore(table[i], params...); };
+    return SearchKeyImpl<decltype(predicate)>(kj::mv(predicate));
+  }
+
+  template <typename Row, typename... Params>
+  inline auto searchKeyForErase(kj::ArrayPtr<Row>& table, uint pos, Params&... params) const {
+    // When erasing, the table entry for the erased row may already be invalid, so we must avoid
+    // accessing it.
+    auto predicate = [&,pos](uint i) {
+      return i != pos && cb.isBefore(table[i], params...);
+    };
     return SearchKeyImpl<decltype(predicate)>(kj::mv(predicate));
   }
 };
