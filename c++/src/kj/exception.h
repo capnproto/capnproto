@@ -80,6 +80,8 @@ public:
   StringPtr getDescription() const { return description; }
   ArrayPtr<void* const> getStackTrace() const { return arrayPtr(trace, traceCount); }
 
+  void setDescription(kj::String&& desc) { description = kj::mv(desc); }
+
   StringPtr getRemoteTrace() const { return remoteTrace; }
   void setRemoteTrace(kj::String&& value) { remoteTrace = kj::mv(value); }
   // Additional stack trace data originating from a remote server. If present, then
