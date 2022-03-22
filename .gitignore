@@ -77,3 +77,12 @@
 
 # cross-compiling / glibc testing
 /dockcross
+
+//
+bazel-*
+.cache
+compile_commands.json
+
+// created by hedron_compile_commands
+null.d
+external

@@ -1,0 +1,13 @@
+{
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/compile_commands.json",
+    "files.exclude": {
+        "**/.cache": true
+    },
+    "editor.formatOnSave": true,
+    "search.exclude": {
+        "bazel-*": true,
+    },
+    "files.exclude": {
+        "bazel-*": true,
+    },
+}

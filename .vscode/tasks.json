@@ -1,0 +1,84 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "compdb",
+            "type": "shell",
+            "command": "ln -sf bazel-out/../../../external external && bazel run @hedron_compile_commands//:refresh_all && rm null.d",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "build all target",
+            "type": "shell",
+            "command": "bazel build  --compilation_mode=${input:compilationMode} --compilation_mode=dbg //...",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": {
+                "base": "$gcc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/bazel-${workspaceRootFolderName}/"
+                ]
+            }
+        },
+        {
+            "label": "build debug target",
+            "type": "shell",
+            "command": "bazel build --compilation_mode=dbg //${relativeFileDirname}:${selectedText}",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": {
+                "base": "$gcc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/bazel-${workspaceRootFolderName}/"
+                ]
+            }
+        },
+        {
+            "label": "build target",
+            "type": "shell",
+            "command": "bazel build --compilation_mode=${input:compilationMode} //${relativeFileDirname}:${selectedText}",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": {
+                "base": "$gcc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/bazel-${workspaceRootFolderName}/"
+                ]
+            }
+        },
+        {
+            "label": "run target",
+            "type": "shell",
+            "command": "bazel run //${relativeFileDirname}:${selectedText}",
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "type": "pickString",
+            "id": "compilationMode",
+            "description": "Build options:",
+            "options": [
+                "fastbuild",
+                "dbg",
+                "opt"
+            ],
+            "default": "dbg"
+        }
+    ]
+}
