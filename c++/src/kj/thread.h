@@ -36,7 +36,10 @@ class Thread {
 
 public:
   explicit Thread(Function<void()> func);
+
   KJ_DISALLOW_COPY(Thread);
+  Thread(Thread&&) noexcept;
+  Thread& operator=(Thread&&) noexcept;
 
   ~Thread() noexcept(false);
 
@@ -76,6 +79,43 @@ private:
   static void* runThread(void* ptr);
 #endif
 };
+
+inline Thread::Thread(Thread&& other) noexcept
+  : state(other.state)
+#if _WIN32
+  , threadHandle(other.threadHandle)
+#else
+  , threadId(other.threadId)
+#endif
+  , detached(other.detached) {
+  other.detached = true;
+}
+
+inline Thread& Thread::operator=(Thread&& other) noexcept {
+  {
+    ThreadState* tempState = state;
+    state = other.state;
+    other.state = tempState;
+  }
+  {
+#if _WIN32
+    void* tempThreadHandle = threadHandle;
+    threadHandle = other.threadHandle;
+    other.threadHandle = tempThreadHandle;
+#else
+    unsigned long long tempThreadId = threadId;
+    threadId = other.threadId;
+    other.threadId = tempThreadId;
+#endif
+  }
+  {
+    bool tempDetached = detached;
+    detached = other.detached;
+    other.detached = tempDetached;
+  }
+
+  return *this;
+}
 
 }  // namespace kj
 

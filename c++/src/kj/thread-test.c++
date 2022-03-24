@@ -120,5 +120,35 @@ KJ_TEST("threads pick up exception callback initializer") {
   KJ_EXPECT(context.captured == "foobar", context.captured);
 }
 
+KJ_TEST("threads can be move-constructed") {
+  std::atomic<int> count = 0;
+  kj::Thread thread1([&] { delay(); ++count; });
+  kj::Thread thread2(kj::mv(thread1));
+  while (count == 0) {
+    delay();
+  }
+  delay();
+  KJ_EXPECT(count == 1);
+}
+
+KJ_TEST("threads can be move-assigned") {
+  std::atomic<int> count = 0;
+  auto f = [&] { delay(); ++count; };
+
+  kj::Thread thread1(f);
+  kj::Thread thread2(f);
+  {
+    kj::Thread tempThread(kj::mv(thread1));
+    thread1 = kj::mv(thread2);
+    thread2 = kj::mv(tempThread);
+  }
+
+  while (count != 2) {
+    delay();
+  }
+  delay();
+  KJ_EXPECT(count == 2);
+}
+
 }  // namespace
 }  // namespace kj

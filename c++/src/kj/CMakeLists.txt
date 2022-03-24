@@ -241,6 +241,7 @@ if(BUILD_TESTING)
     io-test.c++
     mutex-test.c++
     time-test.c++
+    thread-test.c++
     threadlocal-test.c++
     test-test.c++
     std/iostream-test.c++
