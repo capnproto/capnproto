@@ -93,25 +93,25 @@ inline Thread::Thread(Thread&& other) noexcept
 
 inline Thread& Thread::operator=(Thread&& other) noexcept {
   {
-    ThreadState* tempState = state;
+    ThreadState* temp = state;
     state = other.state;
-    other.state = tempState;
+    other.state = temp;
   }
   {
 #if _WIN32
-    void* tempThreadHandle = threadHandle;
+    void* temp = threadHandle;
     threadHandle = other.threadHandle;
-    other.threadHandle = tempThreadHandle;
+    other.threadHandle = temp;
 #else
-    unsigned long long tempThreadId = threadId;
+    unsigned long long temp = threadId;
     threadId = other.threadId;
-    other.threadId = tempThreadId;
+    other.threadId = temp;
 #endif
   }
   {
-    bool tempDetached = detached;
+    bool temp = detached;
     detached = other.detached;
-    other.detached = tempDetached;
+    other.detached = temp;
   }
 
   return *this;
