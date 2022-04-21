@@ -28,44 +28,6 @@
                     "${workspaceFolder}/bazel-${workspaceRootFolderName}/"
                 ]
             }
-        },
-        {
-            "label": "build debug target",
-            "type": "shell",
-            "command": "bazel build --compilation_mode=dbg //${relativeFileDirname}:${selectedText}",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": {
-                "base": "$gcc",
-                "fileLocation": [
-                    "relative",
-                    "${workspaceFolder}/bazel-${workspaceRootFolderName}/"
-                ]
-            }
-        },
-        {
-            "label": "build target",
-            "type": "shell",
-            "command": "bazel build --compilation_mode=${input:compilationMode} //${relativeFileDirname}:${selectedText}",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": {
-                "base": "$gcc",
-                "fileLocation": [
-                    "relative",
-                    "${workspaceFolder}/bazel-${workspaceRootFolderName}/"
-                ]
-            }
-        },
-        {
-            "label": "run target",
-            "type": "shell",
-            "command": "bazel run //${relativeFileDirname}:${selectedText}",
-            "problemMatcher": []
         }
     ],
     "inputs": [

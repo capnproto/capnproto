@@ -51,17 +51,3 @@ build:ubsan --copt -O1
 build:ubsan --copt -fno-omit-frame-pointer
 build:ubsan --linkopt -fsanitize=undefined
 build:ubsan --linkopt -lubsan
-
-# Use our custom-configured c++ toolchain.
-# Eg: bazel build --config=clang_config ...
-# If you got errors of includes, please change 
-# include path in bazel/toolchain/cc_toolchain_config.bzl
-# the path was related with the version of clang
-build:clang_config --crosstool_top=//bazel/toolchain:clang_suite
-
-# Use --cpu as a differentiator.
-build:clang_config --cpu=k8
-
-# Use the default Bazel C++ toolchain to build the tools used during the
-# build.
-build:clang_config --host_crosstool_top=@bazel_tools//tools/cpp:toolchain

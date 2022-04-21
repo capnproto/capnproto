@@ -86,3 +86,7 @@ compile_commands.json
 // created by hedron_compile_commands
 null.d
 external
+/external
+/bazel-*
+/compile_commands.json
+/.cache/
