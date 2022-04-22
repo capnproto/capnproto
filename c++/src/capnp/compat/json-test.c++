@@ -20,12 +20,12 @@
 // THE SOFTWARE.
 
 #include "json.h"
-#include <capnp/test-util.h>
-#include <capnp/compat/json.capnp.h>
-#include <capnp/compat/json-test.capnp.h>
-#include <kj/debug.h>
-#include <kj/string.h>
-#include <kj/test.h>
+#include "capnp/test-util.h"
+#include "capnp/compat/json.capnp.h"
+#include "capnp/compat/json-test.capnp.h"
+#include "kj/debug.h"
+#include "kj/string.h"
+#include "kj/test.h"
 
 namespace capnp {
 namespace _ {  // private

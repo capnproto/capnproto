@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include <capnp/schema.capnp.h>
+#include "capnp/schema.capnp.h"
 #include "message.h"
 
 CAPNP_BEGIN_HEADER

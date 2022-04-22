@@ -21,7 +21,7 @@
 
 #include "any.h"
 #include "message.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 #include "test-util.h"
 
 namespace capnp {

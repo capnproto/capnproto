@@ -22,9 +22,9 @@
 #define CAPNP_TESTING_CAPNP 1
 
 #include "schema-loader.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 #include "test-util.h"
-#include <kj/debug.h>
+#include "kj/debug.h"
 
 namespace capnp {
 namespace _ {  // private

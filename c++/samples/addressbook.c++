@@ -37,8 +37,8 @@
 // TODO(test):  Needs cleanup.
 
 #include "addressbook.capnp.h"
-#include <capnp/message.h>
-#include <capnp/serialize-packed.h>
+#include "capnp/message.h"
+#include "capnp/serialize-packed.h"
 #include <iostream>
 
 using addressbook::Person;
@@ -116,11 +116,11 @@ void printAddressBook(int fd) {
 #if !CAPNP_LITE
 
 #include "addressbook.capnp.h"
-#include <capnp/message.h>
-#include <capnp/serialize-packed.h>
+#include "capnp/message.h"
+#include "capnp/serialize-packed.h"
 #include <iostream>
-#include <capnp/schema.h>
-#include <capnp/dynamic.h>
+#include "capnp/schema.h"
+#include "capnp/dynamic.h"
 
 using ::capnp::DynamicValue;
 using ::capnp::DynamicStruct;

@@ -22,7 +22,7 @@
 #if KJ_HAS_OPENSSL
 
 #if _WIN32
-#include <kj/win32-api-version.h>
+#include "kj/win32-api-version.h"
 #endif
 
 #include "tls.h"
@@ -34,13 +34,13 @@
 #if _WIN32
 #include <winsock2.h>
 
-#include <kj/windows-sanity.h>
+#include "kj/windows-sanity.h"
 #else
 #include <sys/socket.h>
 #endif
 
-#include <kj/async-io.h>
-#include <kj/test.h>
+#include "kj/async-io.h"
+#include "kj/test.h"
 
 namespace kj {
 namespace {

@@ -21,7 +21,7 @@
 
 #include "lexer.h"
 #include "../message.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 
 namespace capnp {
 namespace compiler {

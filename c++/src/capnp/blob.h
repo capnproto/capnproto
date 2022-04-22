@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <kj/common.h>
-#include <kj/string.h>
+#include "kj/common.h"
+#include "kj/string.h"
 #include "common.h"
 #include <string.h>
 

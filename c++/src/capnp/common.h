@@ -26,12 +26,12 @@
 #pragma once
 
 #include <inttypes.h>
-#include <kj/string.h>
-#include <kj/memory.h>
-#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+#include "kj/string.h"
+#include "kj/memory.h"
+#include "kj/windows-sanity.h"  // work-around macro conflict with `VOID`
 
 #if CAPNP_DEBUG_TYPES
-#include <kj/units.h>
+#include "kj/units.h"
 #endif
 
 #if !defined(CAPNP_HEADER_WARNINGS) || !CAPNP_HEADER_WARNINGS

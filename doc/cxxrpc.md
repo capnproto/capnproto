@@ -356,7 +356,7 @@ show you how to use EZ RPC to get started.
 A client should typically look like this:
 
 {% highlight c++ %}
-#include <capnp/ez-rpc.h>
+#include "capnp/ez-rpc.h"
 #include "my-interface.capnp.h"
 #include <iostream>
 
@@ -401,7 +401,7 @@ For a more complete example, see the
 A server might look something like this:
 
 {% highlight c++ %}
-#include <capnp/ez-rpc.h>
+#include "capnp/ez-rpc.h"
 #include "my-interface-impl.h"
 #include <iostream>
 

@@ -24,10 +24,10 @@
 #endif
 
 #include "test-util.h"
-#include <kj/debug.h>
-#include <kj/compat/gtest.h>
-#include <kj/io.h>
-#include <kj/miniposix.h>
+#include "kj/debug.h"
+#include "kj/compat/gtest.h"
+#include "kj/io.h"
+#include "kj/miniposix.h"
 
 namespace capnp {
 namespace _ {  // private

@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "readiness-io.h"
-#include <kj/test.h>
+#include "kj/test.h"
 #include <stdlib.h>
 
 namespace kj {

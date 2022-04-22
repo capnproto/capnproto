@@ -41,7 +41,7 @@
 #include <sys/ptrace.h>
 #include <linux/seccomp.h>
 #include <linux/filter.h>
-#include <kj/debug.h>
+#include "kj/debug.h"
 
 #ifdef SECCOMP_SET_MODE_FILTER
 
@@ -128,6 +128,6 @@ SetupSeccompForFilesystemTest setupSeccompForFilesystemTest;
 //   test on the host platform then it needs to be a test on all other targets, too. So add a dummy
 //   test here.
 // TODO(cleanup): Make Ekam cross-compiling better.
-#include <kj/test.h>
+#include "kj/test.h"
 KJ_TEST("old kernel test -- not supported on this architecture") {}
 #endif

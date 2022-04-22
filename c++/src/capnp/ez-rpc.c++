@@ -21,10 +21,10 @@
 
 #include "ez-rpc.h"
 #include "rpc-twoparty.h"
-#include <capnp/rpc.capnp.h>
-#include <kj/async-io.h>
-#include <kj/debug.h>
-#include <kj/threadlocal.h>
+#include "capnp/rpc.capnp.h"
+#include "kj/async-io.h"
+#include "kj/debug.h"
+#include "kj/threadlocal.h"
 #include <map>
 
 namespace capnp {

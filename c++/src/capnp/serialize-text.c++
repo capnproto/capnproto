@@ -21,7 +21,7 @@
 
 #include "serialize-text.h"
 
-#include <kj/debug.h>
+#include "kj/debug.h"
 
 #include "pretty-print.h"
 #include "compiler/lexer.capnp.h"

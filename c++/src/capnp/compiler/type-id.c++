@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "type-id.h"
-#include <kj/debug.h>
+#include "kj/debug.h"
 #include <string.h>
 
 namespace capnp {

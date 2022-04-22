@@ -23,13 +23,13 @@
 #include "schema-loader.h"
 #include "message.h"
 #include "arena.h"
-#include <kj/debug.h>
-#include <kj/exception.h>
-#include <kj/arena.h>
-#include <kj/vector.h>
+#include "kj/debug.h"
+#include "kj/exception.h"
+#include "kj/arena.h"
+#include "kj/vector.h"
 #include <algorithm>
-#include <kj/map.h>
-#include <capnp/stream.capnp.h>
+#include "kj/map.h"
+#include "capnp/stream.capnp.h"
 
 #if _MSC_VER && !defined(__clang__)
 #include <atomic>

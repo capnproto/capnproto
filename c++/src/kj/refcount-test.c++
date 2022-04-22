@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "refcount.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 
 namespace kj {
 

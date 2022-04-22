@@ -22,8 +22,8 @@
 #define CAPNP_PRIVATE
 #include "arena.h"
 #include "message.h"
-#include <kj/debug.h>
-#include <kj/refcount.h>
+#include "kj/debug.h"
+#include "kj/refcount.h"
 #include <vector>
 #include <string.h>
 #include <stdio.h>

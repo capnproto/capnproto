@@ -20,8 +20,8 @@
 // THE SOFTWARE.
 
 #include "byte-stream.h"
-#include <kj/test.h>
-#include <capnp/rpc-twoparty.h>
+#include "kj/test.h"
+#include "capnp/rpc-twoparty.h"
 #include <stdlib.h>
 
 namespace capnp {

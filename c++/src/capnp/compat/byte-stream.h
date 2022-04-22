@@ -22,8 +22,8 @@
 #pragma once
 // Bridges from KJ streams to Cap'n Proto ByteStream RPC protocol.
 
-#include <capnp/compat/byte-stream.capnp.h>
-#include <kj/async-io.h>
+#include "capnp/compat/byte-stream.capnp.h"
+#include "kj/async-io.h"
 
 namespace capnp {
 

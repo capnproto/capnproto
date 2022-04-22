@@ -23,10 +23,10 @@
 
 #include "compiler.h"
 #include "error-reporter.h"
-#include <kj/memory.h>
-#include <kj/array.h>
-#include <kj/string.h>
-#include <kj/filesystem.h>
+#include "kj/memory.h"
+#include "kj/array.h"
+#include "kj/string.h"
+#include "kj/filesystem.h"
 
 CAPNP_BEGIN_HEADER
 

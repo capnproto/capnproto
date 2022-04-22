@@ -21,7 +21,7 @@
 
 #include "exception.h"
 #include "debug.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 #include <stdexcept>
 #include <stdint.h>
 

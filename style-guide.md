@@ -571,7 +571,7 @@ Headers:
     #pragma once
     // Documentation for file.
 
-    #include <kj/common.h>
+    #include "kj/common.h"
 
     namespace myproject {
 
@@ -593,7 +593,7 @@ Source code:
     // Licensed under the Whatever License blah blah no warranties.
 
     #include "this-module.h"
-    #include <other-module.h>
+    #include "other-module.h"
 
     namespace myproject {
 
@@ -609,7 +609,7 @@ Test:
     // Licensed under the Whatever License blah blah no warranties.
 
     #include "this-module.h"
-    #include <other-module.h>
+    #include "other-module.h"
 
     namespace myproject {
     namespace {

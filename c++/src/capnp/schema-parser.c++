@@ -21,16 +21,16 @@
 
 #include "schema-parser.h"
 #include "message.h"
-#include <capnp/compiler/compiler.h>
-#include <capnp/compiler/lexer.capnp.h>
-#include <capnp/compiler/lexer.h>
-#include <capnp/compiler/grammar.capnp.h>
-#include <capnp/compiler/parser.h>
+#include "capnp/compiler/compiler.h"
+#include "capnp/compiler/lexer.capnp.h"
+#include "capnp/compiler/lexer.h"
+#include "capnp/compiler/grammar.capnp.h"
+#include "capnp/compiler/parser.h"
 #include <unordered_map>
-#include <kj/mutex.h>
-#include <kj/vector.h>
-#include <kj/debug.h>
-#include <kj/io.h>
+#include "kj/mutex.h"
+#include "kj/vector.h"
+#include "kj/debug.h"
+#include "kj/io.h"
 #include <map>
 
 namespace capnp {

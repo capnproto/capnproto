@@ -20,10 +20,10 @@
 // THE SOFTWARE.
 
 #include "membrane.h"
-#include <kj/test.h>
+#include "kj/test.h"
 #include "test-util.h"
-#include <kj/function.h>
-#include <kj/async-io.h>
+#include "kj/function.h"
+#include "kj/async-io.h"
 #include "rpc-twoparty.h"
 
 namespace capnp {

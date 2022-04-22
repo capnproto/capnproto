@@ -22,9 +22,9 @@
 #pragma once
 // Bridges from KJ HTTP to Cap'n Proto HTTP-over-RPC.
 
-#include <capnp/compat/http-over-capnp.capnp.h>
-#include <kj/compat/http.h>
-#include <kj/map.h>
+#include "capnp/compat/http-over-capnp.capnp.h"
+#include "kj/compat/http.h"
+#include "kj/map.h"
 #include "byte-stream.h"
 
 namespace capnp {

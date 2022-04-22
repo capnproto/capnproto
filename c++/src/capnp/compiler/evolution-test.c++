@@ -30,18 +30,18 @@
 #define _GNU_SOURCE
 #endif
 
-#include <capnp/compiler/grammar.capnp.h>
-#include <capnp/schema-loader.h>
-#include <capnp/message.h>
-#include <capnp/pretty-print.h>
+#include "capnp/compiler/grammar.capnp.h"
+#include "capnp/schema-loader.h"
+#include "capnp/message.h"
+#include "capnp/pretty-print.h"
 #include "compiler.h"
-#include <kj/function.h>
-#include <kj/debug.h>
+#include "kj/function.h"
+#include "kj/debug.h"
 #include <stdlib.h>
 #include <time.h>
-#include <kj/main.h>
-#include <kj/io.h>
-#include <kj/miniposix.h>
+#include "kj/main.h"
+#include "kj/io.h"
+#include "kj/miniposix.h"
 
 namespace capnp {
 namespace compiler {

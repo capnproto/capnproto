@@ -20,13 +20,13 @@
 // THE SOFTWARE.
 
 #include "serialize-text.h"
-#include <kj/compat/gtest.h>
-#include <kj/string.h>
-#include <capnp/pretty-print.h>
-#include <capnp/message.h>
+#include "kj/compat/gtest.h"
+#include "kj/string.h"
+#include "capnp/pretty-print.h"
+#include "capnp/message.h"
 #include "test-util.h"
 
-#include <capnp/test.capnp.h>
+#include "capnp/test.capnp.h"
 
 namespace capnp {
 namespace _ {  // private

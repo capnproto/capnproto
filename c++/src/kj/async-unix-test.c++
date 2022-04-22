@@ -31,7 +31,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 #include <pthread.h>
 #include <algorithm>
 #include <sys/wait.h>

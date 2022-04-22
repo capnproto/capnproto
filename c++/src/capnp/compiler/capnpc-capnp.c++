@@ -26,20 +26,20 @@
 #define _GNU_SOURCE
 #endif
 
-#include <capnp/schema.capnp.h>
+#include "capnp/schema.capnp.h"
 #include "../serialize.h"
-#include <kj/debug.h>
-#include <kj/io.h>
-#include <kj/string-tree.h>
-#include <kj/vector.h>
+#include "kj/debug.h"
+#include "kj/io.h"
+#include "kj/string-tree.h"
+#include "kj/vector.h"
 #include "../schema-loader.h"
 #include "../dynamic.h"
-#include <kj/miniposix.h>
+#include "kj/miniposix.h"
 #include <unordered_map>
-#include <kj/main.h>
+#include "kj/main.h"
 #include <algorithm>
 #include <map>
-#include <capnp/stream.capnp.h>
+#include "capnp/stream.capnp.h"
 
 #if HAVE_CONFIG_H
 #include "config.h"

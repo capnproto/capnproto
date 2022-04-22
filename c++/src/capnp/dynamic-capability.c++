@@ -22,7 +22,7 @@
 // This file contains the parts of dynamic.h that live in capnp-rpc.so.
 
 #include "dynamic.h"
-#include <kj/debug.h>
+#include "kj/debug.h"
 
 namespace capnp {
 

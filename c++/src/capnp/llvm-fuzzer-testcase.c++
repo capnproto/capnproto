@@ -1,7 +1,7 @@
 #include "test-util.h"
-#include <kj/main.h>
+#include "kj/main.h"
 #include "serialize.h"
-#include <capnp/test.capnp.h>
+#include "capnp/test.capnp.h"
 #include <unistd.h>
 
 /* This is the entry point of a fuzz target to be used with libFuzzer

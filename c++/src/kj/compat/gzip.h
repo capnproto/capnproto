@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <kj/io.h>
-#include <kj/async-io.h>
+#include "kj/io.h"
+#include "kj/async-io.h"
 #include <zlib.h>
 
 namespace kj {

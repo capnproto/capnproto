@@ -21,9 +21,9 @@
 
 #include "reconnect.h"
 #include "test-util.h"
-#include <kj/debug.h>
-#include <kj/test.h>
-#include <kj/async-io.h>
+#include "kj/debug.h"
+#include "kj/test.h"
+#include "kj/async-io.h"
 #include "rpc-twoparty.h"
 
 namespace capnp {

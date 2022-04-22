@@ -21,11 +21,11 @@
 
 #include "http.h"
 #include "url.h"
-#include <kj/debug.h>
-#include <kj/parse/char.h>
+#include "kj/debug.h"
+#include "kj/parse/char.h"
 #include <unordered_map>
 #include <stdlib.h>
-#include <kj/encoding.h>
+#include "kj/encoding.h"
 #include <deque>
 #include <queue>
 #include <map>

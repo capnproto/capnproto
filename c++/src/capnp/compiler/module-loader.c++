@@ -22,11 +22,11 @@
 #include "module-loader.h"
 #include "lexer.h"
 #include "parser.h"
-#include <kj/vector.h>
-#include <kj/mutex.h>
-#include <kj/debug.h>
-#include <kj/io.h>
-#include <capnp/message.h>
+#include "kj/vector.h"
+#include "kj/mutex.h"
+#include "kj/debug.h"
+#include "kj/io.h"
+#include "capnp/message.h"
 #include <unordered_map>
 
 namespace capnp {

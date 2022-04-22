@@ -31,7 +31,7 @@
 #include "mutex.h"
 #include "debug.h"
 #include "thread.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 #include <stdlib.h>
 
 #if _WIN32

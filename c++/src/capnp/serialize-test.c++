@@ -24,9 +24,9 @@
 #endif
 
 #include "serialize.h"
-#include <kj/debug.h>
-#include <kj/compat/gtest.h>
-#include <kj/miniposix.h>
+#include "kj/debug.h"
+#include "kj/compat/gtest.h"
+#include "kj/miniposix.h"
 #include <string>
 #include <stdlib.h>
 #include <fcntl.h>

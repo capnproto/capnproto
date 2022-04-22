@@ -25,10 +25,10 @@
 #include "test-util.h"
 #include "schema.h"
 #include "serialize.h"
-#include <kj/debug.h>
-#include <kj/string-tree.h>
-#include <kj/compat/gtest.h>
-#include <capnp/rpc.capnp.h>
+#include "kj/debug.h"
+#include "kj/string-tree.h"
+#include "kj/compat/gtest.h"
+#include "capnp/rpc.capnp.h"
 #include <map>
 #include <queue>
 

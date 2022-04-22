@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include <kj/string.h>
-#include <kj/array.h>
-#include <capnp/common.h>
+#include "kj/string.h"
+#include "kj/array.h"
+#include "capnp/common.h"
 
 namespace capnp {
 namespace compiler {

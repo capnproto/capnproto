@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include <capnp/generated-header-support.h>
-#include <kj/windows-sanity.h>
+#include "capnp/generated-header-support.h"
+#include "kj/windows-sanity.h"
 #if !CAPNP_LITE
-#include <capnp/capability.h>
+#include "capnp/capability.h"
 #endif  // !CAPNP_LITE
 
 #if CAPNP_VERSION != 10000

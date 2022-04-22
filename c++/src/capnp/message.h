@@ -21,11 +21,11 @@
 
 #pragma once
 
-#include <kj/common.h>
-#include <kj/memory.h>
-#include <kj/mutex.h>
-#include <kj/debug.h>
-#include <kj/vector.h>
+#include "kj/common.h"
+#include "kj/memory.h"
+#include "kj/mutex.h"
+#include "kj/debug.h"
+#include "kj/vector.h"
 #include "common.h"
 #include "layout.h"
 #include "any.h"
@@ -115,7 +115,7 @@ public:
   template <typename RootType, typename SchemaType>
   typename RootType::Reader getRoot(SchemaType schema);
   // Dynamically interpret the root struct of the message using the given schema (a StructSchema).
-  // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
+  // RootType in this case must be DynamicStruct, and you must #include "capnp/dynamic.h" to
   // use this.
 
   bool isCanonical();
@@ -216,13 +216,13 @@ public:
   template <typename RootType, typename SchemaType>
   typename RootType::Builder getRoot(SchemaType schema);
   // Dynamically interpret the root struct of the message using the given schema (a StructSchema).
-  // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
+  // RootType in this case must be DynamicStruct, and you must #include "capnp/dynamic.h" to
   // use this.
 
   template <typename RootType, typename SchemaType>
   typename RootType::Builder initRoot(SchemaType schema);
   // Dynamically init the root struct of the message using the given schema (a StructSchema).
-  // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
+  // RootType in this case must be DynamicStruct, and you must #include "capnp/dynamic.h" to
   // use this.
 
   template <typename T>

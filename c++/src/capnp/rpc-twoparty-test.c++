@@ -27,21 +27,21 @@
 
 // Includes just for need SOL_SOCKET and SO_SNDBUF
 #if _WIN32
-#include <kj/win32-api-version.h>
+#include "kj/win32-api-version.h"
 #endif
 
 #include "rpc-twoparty.h"
 #include "test-util.h"
-#include <capnp/rpc.capnp.h>
-#include <kj/debug.h>
-#include <kj/thread.h>
-#include <kj/compat/gtest.h>
-#include <kj/miniposix.h>
+#include "capnp/rpc.capnp.h"
+#include "kj/debug.h"
+#include "kj/thread.h"
+#include "kj/compat/gtest.h"
+#include "kj/miniposix.h"
 
 #if _WIN32
 #include <winsock2.h>
 #include <mswsock.h>
-#include <kj/windows-sanity.h>
+#include "kj/windows-sanity.h"
 #else
 #include <sys/socket.h>
 #endif

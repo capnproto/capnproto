@@ -20,9 +20,9 @@
 // THE SOFTWARE.
 
 #include "test-util.h"
-#include <kj/main.h>
+#include "kj/main.h"
 #include "serialize.h"
-#include <capnp/test.capnp.h>
+#include "capnp/test.capnp.h"
 #include <unistd.h>
 
 namespace capnp {

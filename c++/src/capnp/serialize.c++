@@ -21,7 +21,7 @@
 
 #include "serialize.h"
 #include "layout.h"
-#include <kj/debug.h>
+#include "kj/debug.h"
 #include <exception>
 #ifdef _WIN32
 #include <io.h>

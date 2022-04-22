@@ -20,8 +20,8 @@
 // THE SOFTWARE.
 
 #include "json-rpc.h"
-#include <kj/compat/http.h>
-#include <capnp/compat/json-rpc.capnp.h>
+#include "kj/compat/http.h"
+#include "capnp/compat/json-rpc.capnp.h"
 
 namespace capnp {
 
