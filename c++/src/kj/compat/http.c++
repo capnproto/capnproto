@@ -335,13 +335,17 @@ kj::StringPtr KJ_STRINGIFY(HttpMethod method) {
   return METHOD_NAMES[static_cast<uint>(method)];
 }
 
-static kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr) {
+kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method) {
+  return "CONNECT"_kj;
+}
+
+static kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> consumeHttpMethod(char*& ptr) {
   char* p = ptr;
 
 #define EXPECT_REST(prefix, suffix) \
   if (strncmp(p, #suffix, sizeof(#suffix)-1) == 0) { \
     ptr = p + (sizeof(#suffix)-1); \
-    return HttpMethod::prefix##suffix; \
+    return kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>>(HttpMethod::prefix##suffix); \
   } else { \
     return nullptr; \
   }
@@ -351,7 +355,18 @@ static kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr) {
     case 'C':
       switch (*p++) {
         case 'H': EXPECT_REST(CH,ECKOUT)
-        case 'O': EXPECT_REST(CO,PY)
+        case 'O':
+          switch (*p++) {
+            case 'P': EXPECT_REST(COP,Y)
+            case 'N':
+              if (strncmp(p, "NECT", 4) == 0) {
+                ptr = p + 4;
+                return kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>>(HttpConnectMethod());
+              } else {
+                return nullptr;
+              }
+            default: return nullptr;
+          }
         default: return nullptr;
       }
     case 'D': EXPECT_REST(D,ELETE)
@@ -413,6 +428,19 @@ static kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr) {
 }
 
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name) {
+  KJ_IF_MAYBE(method, tryParseHttpMethodAllowingConnect(name)) {
+    KJ_SWITCH_ONEOF(*method) {
+      KJ_CASE_ONEOF(m, HttpMethod) { return m; }
+      KJ_CASE_ONEOF(m, HttpConnectMethod) { return nullptr; }
+    }
+    KJ_UNREACHABLE;
+  } else {
+    return nullptr;
+  }
+}
+
+kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> tryParseHttpMethodAllowingConnect(
+    kj::StringPtr name) {
   // const_cast OK because we don't actually access it. consumeHttpMethod() is also called by some
   // code later than explicitly needs to use a non-const pointer.
   char* ptr = const_cast<char*>(name.begin());
@@ -882,6 +910,23 @@ static char* trimHeaderEnding(kj::ArrayPtr<char> content) {
 }
 
 HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<char> content) {
+  KJ_SWITCH_ONEOF(tryParseRequestOrConnect(content)) {
+    KJ_CASE_ONEOF(request, Request) {
+      return kj::mv(request);
+    }
+    KJ_CASE_ONEOF(error, ProtocolError) {
+      return kj::mv(error);
+    }
+    KJ_CASE_ONEOF(connect, ConnectRequest) {
+      return ProtocolError { 501, "Not Implemented",
+          "Unrecognized request method.", content };
+    }
+  }
+  KJ_UNREACHABLE;
+}
+
+HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect(
+    kj::ArrayPtr<char> content) {
   char* end = trimHeaderEnding(content);
   if (end == nullptr) {
     return ProtocolError { 400, "Bad Request",
@@ -890,25 +935,34 @@ HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<ch
 
   char* ptr = content.begin();
 
-  HttpHeaders::Request request;
+  HttpHeaders::RequestConnectOrProtocolError result;
 
   KJ_IF_MAYBE(method, consumeHttpMethod(ptr)) {
-    request.method = *method;
     if (*ptr != ' ' && *ptr != '\t') {
       return ProtocolError { 501, "Not Implemented",
           "Unrecognized request method.", content };
     }
     ++ptr;
+
+    kj::Maybe<StringPtr> path;
+    KJ_IF_MAYBE(p, consumeWord(ptr)) {
+      path = *p;
+    } else {
+      return ProtocolError { 400, "Bad Request",
+          "Invalid request line.", content };
+    }
+
+    KJ_SWITCH_ONEOF(*method) {
+      KJ_CASE_ONEOF(m, HttpMethod) {
+        result = HttpHeaders::Request { m, KJ_ASSERT_NONNULL(path) };
+      }
+      KJ_CASE_ONEOF(m, HttpConnectMethod) {
+        result = HttpHeaders::ConnectRequest { KJ_ASSERT_NONNULL(path) };
+      }
+    }
   } else {
     return ProtocolError { 501, "Not Implemented",
         "Unrecognized request method.", content };
-  }
-
-  KJ_IF_MAYBE(path, consumeWord(ptr)) {
-    request.url = *path;
-  } else {
-    return ProtocolError { 400, "Bad Request",
-        "Invalid request line.", content };
   }
 
   // Ignore rest of line. Don't care about "HTTP/1.1" or whatever.
@@ -919,7 +973,7 @@ HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<ch
         "The headers sent by your client are not valid.", content };
   }
 
-  return request;
+  return result;
 }
 
 HttpHeaders::ResponseOrProtocolError HttpHeaders::tryParseResponse(kj::ArrayPtr<char> content) {
@@ -989,6 +1043,12 @@ kj::String HttpHeaders::serializeRequest(
   return serialize(kj::toCharSequence(method), url, kj::StringPtr("HTTP/1.1"), connectionHeaders);
 }
 
+kj::String HttpHeaders::serializeConnectRequest(
+    kj::StringPtr authority,
+    kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
+  return serialize("CONNECT"_kj, authority, kj::StringPtr("HTTP/1.1"), connectionHeaders);
+}
+
 kj::String HttpHeaders::serializeResponse(
     uint statusCode, kj::StringPtr statusText,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
@@ -1054,6 +1114,20 @@ static constexpr size_t MAX_BUFFER = 128 * 1024;
 static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 
 class HttpInputStreamImpl final: public HttpInputStream {
+private:
+  static kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest> getResumingRequest(
+      kj::OneOf<HttpMethod, HttpConnectMethod> method,
+      kj::StringPtr url) {
+    KJ_SWITCH_ONEOF(method) {
+      KJ_CASE_ONEOF(m, HttpMethod) {
+        return HttpHeaders::Request { m, url };
+      }
+      KJ_CASE_ONEOF(m, HttpConnectMethod) {
+        return HttpHeaders::ConnectRequest { url };
+      }
+    }
+    KJ_UNREACHABLE;
+  }
 public:
   explicit HttpInputStreamImpl(AsyncInputStream& inner, const HttpHeaderTable& table)
       : inner(inner), headerBuffer(kj::heapArray<char>(MIN_BUFFER)), headers(table) {
@@ -1062,7 +1136,7 @@ public:
   explicit HttpInputStreamImpl(AsyncInputStream& inner,
       kj::Array<char> headerBufferParam,
       kj::ArrayPtr<char> leftoverParam,
-      HttpMethod method,
+      kj::OneOf<HttpMethod, HttpConnectMethod> method,
       kj::StringPtr url,
       HttpHeaders headers)
       : inner(inner),
@@ -1071,7 +1145,7 @@ public:
         messageHeaderEnd(leftoverParam.begin() - headerBuffer.begin()),
         leftover(leftoverParam),
         headers(kj::mv(headers)),
-        resumingRequest(HttpHeaders::Request { method, url }) {
+        resumingRequest(getResumingRequest(method, url)) {
     // Constructor used for resuming a SuspendedRequest.
 
     // We expect headerBuffer to look like this:
@@ -1117,13 +1191,34 @@ public:
 
   kj::Promise<Request> readRequest() override {
     return readRequestHeaders()
-        .then([this](HttpHeaders::RequestOrProtocolError&& requestOrProtocolError)
+        .then([this](HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError)
             -> HttpInputStream::Request {
       auto request = KJ_REQUIRE_NONNULL(
           requestOrProtocolError.tryGet<HttpHeaders::Request>(), "bad request");
       auto body = getEntityBody(HttpInputStreamImpl::REQUEST, request.method, 0, headers);
 
       return { request.method, request.url, headers, kj::mv(body) };
+    });
+  }
+
+  kj::Promise<kj::OneOf<Request, Connect>> readRequestAllowingConnect() override {
+    return readRequestHeaders()
+        .then([this](HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError)
+            -> kj::OneOf<HttpInputStream::Request, HttpInputStream::Connect> {
+      KJ_SWITCH_ONEOF(requestOrProtocolError) {
+        KJ_CASE_ONEOF(request, HttpHeaders::Request) {
+          auto body = getEntityBody(HttpInputStreamImpl::REQUEST, request.method, 0, headers);
+          return HttpInputStream::Request { request.method, request.url, headers, kj::mv(body) };
+        }
+        KJ_CASE_ONEOF(request, HttpHeaders::ConnectRequest) {
+          auto body = getEntityBody(HttpInputStreamImpl::REQUEST, HttpConnectMethod(), 0, headers);
+          return HttpInputStream::Connect { request.authority, headers, kj::mv(body) };
+        }
+        KJ_CASE_ONEOF(error, HttpHeaders::ProtocolError) {
+          KJ_FAIL_REQUIRE("bad request");
+        }
+      }
+      KJ_UNREACHABLE;
     });
   }
 
@@ -1262,15 +1357,15 @@ public:
     });
   }
 
-  inline kj::Promise<HttpHeaders::RequestOrProtocolError> readRequestHeaders() {
+  inline kj::Promise<HttpHeaders::RequestConnectOrProtocolError> readRequestHeaders() {
     KJ_IF_MAYBE(resuming, resumingRequest) {
       KJ_DEFER(resumingRequest = nullptr);
-      return HttpHeaders::RequestOrProtocolError(*resuming);
+      return HttpHeaders::RequestConnectOrProtocolError(*resuming);
     }
 
     return readMessageHeaders().then([this](kj::ArrayPtr<char> text) {
       headers.clear();
-      return headers.tryParseRequest(text);
+      return headers.tryParseRequestOrConnect(text);
     });
   }
 
@@ -1322,7 +1417,9 @@ public:
   };
 
   kj::Own<kj::AsyncInputStream> getEntityBody(
-      RequestOrResponse type, HttpMethod method, uint statusCode,
+      RequestOrResponse type,
+      kj::OneOf<HttpMethod, HttpConnectMethod> method,
+      uint statusCode,
       const kj::HttpHeaders& headers);
 
   struct ReleasedBuffer {
@@ -1348,7 +1445,7 @@ private:
   HttpHeaders headers;
   // Parsed headers, after a call to parseAwaited*().
 
-  kj::Maybe<HttpHeaders::Request> resumingRequest;
+  kj::Maybe<kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest>> resumingRequest;
   // Non-null if we're resuming a SuspendedRequest.
 
   bool lineBreakBeforeNextHeader = false;
@@ -1729,33 +1826,45 @@ static_assert(!fastCaseCmp<'f','O','o','B'>("FooB1"), "");
 static_assert(!fastCaseCmp<'f','O','o','B','1','a'>("FooB1"), "");
 
 kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
-    RequestOrResponse type, HttpMethod method, uint statusCode,
+    RequestOrResponse type,
+    kj::OneOf<HttpMethod, HttpConnectMethod> method,
+    uint statusCode,
     const kj::HttpHeaders& headers) {
   KJ_REQUIRE(headerBuffer.size() > 0, "Cannot get entity body after header buffer release.");
 
+  auto isHeadRequest = method.tryGet<HttpMethod>().map([](auto& m) {
+    return m == HttpMethod::HEAD;
+  }).orDefault(false);
+
+  auto isConnectRequest = method.is<HttpConnectMethod>();
+
   // Rules to determine how HTTP entity-body is delimited:
   //   https://tools.ietf.org/html/rfc7230#section-3.3.3
-
   // #1
   if (type == RESPONSE) {
-    if (method == HttpMethod::HEAD) {
+    if (isHeadRequest) {
       // Body elided.
       kj::Maybe<uint64_t> length;
       KJ_IF_MAYBE(cl, headers.get(HttpHeaderId::CONTENT_LENGTH)) {
         length = strtoull(cl->cStr(), nullptr, 10);
       } else if (headers.get(HttpHeaderId::TRANSFER_ENCODING) == nullptr) {
-        // HACK: Neither Content-Length nor Transfer-Encoding header in response to HEAD request.
-        //   Propagate this fact with a 0 expected body length.
+        // HACK: Neither Content-Length nor Transfer-Encoding header in response to HEAD
+        //   request. Propagate this fact with a 0 expected body length.
         length = uint64_t(0);
       }
       return kj::heap<HttpNullEntityReader>(*this, length);
+    } else if (isConnectRequest && statusCode >= 200 && statusCode < 300) {
+      KJ_FAIL_ASSERT("a CONNECT response with a 2xx status does not have an entity body to get");
     } else if (statusCode == 204 || statusCode == 304) {
       // No body.
       return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
     }
   }
 
-  // #2 deals with the CONNECT method which is handled separately.
+  // For CONNECT requests messages, we let the rest of the logic play out.
+  // We already check before here to ensure that Transfer-Encoding and
+  // Content-Length headers are not present in which case the code below
+  // does the right thing.
 
   // #3
   KJ_IF_MAYBE(te, headers.get(HttpHeaderId::TRANSFER_ENCODING)) {
@@ -1775,9 +1884,9 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
       // #3¶2
       KJ_REQUIRE(type != REQUEST, "request body cannot have Transfer-Encoding other than chunked");
       return kj::heap<HttpConnectionCloseEntityReader>(*this);
-    } else {
-      KJ_FAIL_REQUIRE("unknown transfer encoding", *te) { break; }
     }
+
+    KJ_FAIL_REQUIRE("unknown transfer encoding", te) { break; };
   }
 
   // #4 and #5
@@ -3488,6 +3597,132 @@ WebSocketPipe newWebSocketPipe() {
 }
 
 // =======================================================================================
+class AsyncIoStreamWithInitialBuffer final: public kj::AsyncIoStream {
+  // An AsyncIoStream implementation that accepts an initial buffer of data
+  // to be read out first, and is optionally capable of deferring writes
+  // until a given waitBeforeSend promise is fulfilled.
+  //
+  // Instances are created with a leftoverBackingBuffer (a kj::Array<byte>)
+  // and a leftover kj::ArrayPtr<byte> that provides a view into the backing
+  // buffer representing the queued data that is pending to be read. Calling
+  // tryRead will consume the data from the leftover first. Once leftover has
+  // been fully consumed, reads will defer to the underlying stream.
+public:
+  AsyncIoStreamWithInitialBuffer(kj::Own<kj::AsyncIoStream> stream,
+                                 kj::Array<byte> leftoverBackingBuffer,
+                                 kj::ArrayPtr<byte> leftover)
+                                 : stream(kj::mv(stream)),
+                                   leftoverBackingBuffer(kj::mv(leftoverBackingBuffer)),
+                                   leftover(leftover) {}
+
+  void shutdownWrite() override {
+    stream->shutdownWrite();
+  }
+
+  // AsyncInputStream
+  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    KJ_REQUIRE(maxBytes >= minBytes);
+    auto destination = static_cast<byte*>(buffer);
+
+    // If there are at least minBytes available in the leftover buffer...
+    if (leftover.size() >= minBytes) {
+      // We are going to immediately read up to maxBytes from the leftover buffer...
+      auto bytesToCopy = kj::min(maxBytes, leftover.size());
+      memcpy(destination, leftover.begin(), bytesToCopy);
+      leftover = leftover.slice(bytesToCopy, leftover.size());
+
+      // If we've consumed all of the data in the leftover buffer, go ahead and free it.
+      if (leftover.size() == 0) {
+        leftoverBackingBuffer = nullptr;
+      }
+
+      return bytesToCopy;
+    } else {
+      // We know here that leftover.size() is less than minBytes, but it might not
+      // be zero. Copy everything from leftover into the destination buffer then read
+      // the rest from the underlying stream.
+      auto bytesToCopy = leftover.size();
+      KJ_DASSERT(bytesToCopy < minBytes);
+
+      if (bytesToCopy > 0) {
+        memcpy(destination, leftover.begin(), bytesToCopy);
+        leftoverBackingBuffer = nullptr;
+        minBytes -= bytesToCopy;
+        maxBytes -= bytesToCopy;
+        KJ_DASSERT(minBytes >= 1);
+        KJ_DASSERT(maxBytes >= minBytes);
+      }
+
+      return stream->tryRead(destination + bytesToCopy, minBytes, maxBytes)
+          .then([bytesToCopy](size_t amount) { return amount + bytesToCopy; });
+    }
+  }
+
+  Maybe<uint64_t> tryGetLength() override {
+    // For a CONNECT pipe, we have no idea how much data there is going to be.
+    return nullptr;
+  }
+
+  kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+    return pumpLoop(output, amount, 0);
+  }
+
+  kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+    return input.pumpTo(*stream, amount);
+  }
+
+  // AsyncOutputStream
+  Promise<void> write(const void* buffer, size_t size) override {
+    return stream->write(buffer, size);
+  }
+
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    return stream->write(pieces);
+  }
+
+  Promise<void> whenWriteDisconnected() override {
+    return stream->whenWriteDisconnected();
+  }
+
+private:
+
+  kj::Promise<uint64_t> pumpLoop(
+      kj::AsyncOutputStream& output,
+      uint64_t remaining,
+      uint64_t total) {
+    // If there is any data remaining in the leftover queue, we'll write it out first to output.
+    if (leftover.size() > 0) {
+      auto bytesToWrite = kj::min(leftover.size(), remaining);
+      return output.write(leftover.begin(), bytesToWrite).then(
+          [this, &output, remaining, total, bytesToWrite]() mutable -> kj::Promise<uint64_t> {
+        leftover = leftover.slice(bytesToWrite, leftover.size());
+        // If the leftover buffer has been fully consumed, go ahead and free it now.
+        if (leftover.size() == 0) {
+          leftoverBackingBuffer = nullptr;
+        }
+        remaining -= bytesToWrite;
+        total += bytesToWrite;
+
+        if (remaining == 0) {
+          return total;
+        }
+        return pumpLoop(output, remaining, total);
+      });
+    } else {
+      // Otherwise, we are just going to defer to stream's pumpTo, making sure to
+      // account for the total amount we've already written from the leftover queue.
+      return stream->pumpTo(output, remaining).then([total](auto read) {
+        return total + read;
+      });
+    }
+  };
+
+  kj::Own<kj::AsyncIoStream> stream;
+  kj::Array<byte> leftoverBackingBuffer;
+  kj::ArrayPtr<byte> leftover;
+};
+
+// =======================================================================================
 
 namespace _ { // private implementation details
 
@@ -3909,6 +4144,68 @@ kj::OneOf<CompressionParameters, kj::Exception> tryParseExtensionAgreement(
 }
 } // namespace _ (private)
 namespace {
+class NullInputStream final: public kj::AsyncInputStream {
+public:
+  NullInputStream(kj::Maybe<size_t> expectedLength = size_t(0))
+      : expectedLength(expectedLength) {}
+
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return size_t(0);
+  }
+
+  kj::Maybe<uint64_t> tryGetLength() override {
+    return expectedLength;
+  }
+
+  kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+    return uint64_t(0);
+  }
+
+private:
+  kj::Maybe<size_t> expectedLength;
+};
+
+class NullOutputStream final: public kj::AsyncOutputStream {
+public:
+  Promise<void> write(const void* buffer, size_t size) override {
+    return kj::READY_NOW;
+  }
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    return kj::READY_NOW;
+  }
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
+  }
+
+  // We can't really optimize tryPumpFrom() unless AsyncInputStream grows a skip() method.
+};
+
+class NullIoStream final: public kj::AsyncIoStream {
+public:
+  void shutdownWrite() override {}
+
+  Promise<void> write(const void* buffer, size_t size) override {
+    return kj::READY_NOW;
+  }
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    return kj::READY_NOW;
+  }
+  Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
+  }
+
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return size_t(0);
+  }
+
+  kj::Maybe<uint64_t> tryGetLength() override {
+    return kj::Maybe<uint64_t>((uint64_t)0);
+  }
+
+  kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+    return uint64_t(0);
+  }
+};
 
 class HttpClientImpl final: public HttpClient,
                             private HttpClientErrorHandler {
@@ -4160,6 +4457,91 @@ public:
     });
   }
 
+  kj::Promise<ConnectResponse> connect(kj::StringPtr host, const HttpHeaders& headers) override {
+    KJ_REQUIRE(!upgraded,
+        "can't make further requests on this HttpClient because it has been or is in the process "
+        "of being upgraded");
+    KJ_REQUIRE(!closed,
+        "this HttpClient's connection has been closed by the server or due to an error");
+    KJ_REQUIRE(httpOutput.canReuse(),
+        "can't start new request until previous request body has been fully written");
+
+    closeWatcherTask = nullptr;
+
+    // Mark upgraded for now even though the tunnel could fail, because we can't allow pipelined
+    // requests in the meantime.
+    upgraded = true;
+
+    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
+
+    httpOutput.writeHeaders(headers.serializeConnectRequest(host, connectionHeaders));
+
+    auto id = ++counter;
+
+    return httpInput.readResponseHeaders().then(
+        [this,id](HttpHeaders::ResponseOrProtocolError&& responseOrProtocolError)
+            -> HttpClient::ConnectResponse {
+      KJ_SWITCH_ONEOF(responseOrProtocolError) {
+        KJ_CASE_ONEOF(response, HttpHeaders::Response) {
+          auto& responseHeaders = httpInput.getHeaders();
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            // Any statusCode that is not in the 2xx range in interpreted
+            // as an HTTP response. Any status code in the 2xx range is
+            // interpreted as a successful CONNECT response.
+            closed = true;
+            return HttpClient::ConnectResponse {
+              response.statusCode,
+              response.statusText,
+              &responseHeaders,
+              httpInput.getEntityBody(
+                  HttpInputStreamImpl::RESPONSE,
+                  HttpConnectMethod(),
+                  response.statusCode,
+                  responseHeaders)
+            };
+          }
+
+          // This should hold true here because we set upgraded = true earlier
+          // to prevent additional pipelined requests from being sent.
+          KJ_ASSERT(counter == id);
+
+          auto releasedBuffer = httpInput.releaseBuffer();
+
+          auto promised = httpOutput.flush().then([io = kj::mv(ownStream)]
+              () mutable -> kj::Promise<kj::Own<kj::AsyncIoStream>> {
+            return kj::mv(io);
+          });
+
+          kj::Own<kj::AsyncIoStream> io = heap<AsyncIoStreamWithInitialBuffer>(
+              kj::newPromisedStream(kj::mv(promised)),
+              kj::mv(releasedBuffer.buffer),
+              releasedBuffer.leftover);
+
+          return ConnectResponse {
+            response.statusCode,
+            response.statusText,
+            &responseHeaders,
+            kj::mv(io),
+          };
+        }
+        KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+          closed = true;
+          auto response = handleProtocolError(protocolError);
+          kj::Own<kj::AsyncInputStream> body = heap<NullInputStream>();
+          return HttpClient::ConnectResponse {
+            response.statusCode,
+            response.statusText,
+            response.headers,
+            kj::mv(body),
+          };
+        }
+      }
+
+      KJ_UNREACHABLE;
+    });
+
+  }
+
 private:
   HttpInputStreamImpl httpInput;
   HttpOutputStream httpOutput;
@@ -4227,7 +4609,8 @@ kj::Promise<HttpClient::WebSocketResponse> HttpClient::openWebSocket(
   });
 }
 
-kj::Promise<kj::Own<kj::AsyncIoStream>> HttpClient::connect(kj::StringPtr host) {
+kj::Promise<HttpClient::ConnectResponse>
+HttpClient::connect(kj::StringPtr host, const HttpHeaders& headers) {
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpClient");
 }
 
@@ -4311,6 +4694,26 @@ public:
         }
       }
       return kj::mv(response);
+    }));
+  }
+
+  kj::Promise<ConnectResponse>
+  connect(kj::StringPtr host, const HttpHeaders& headers) override {
+    auto refcounted = getClient();
+    auto result = refcounted->client->connect(host, headers);
+    return result.then(kj::mvCapture(refcounted,
+        [](kj::Own<RefcountedClient>&& refcounted, ConnectResponse&& response) {
+      KJ_SWITCH_ONEOF(response.connectionOrBody) {
+        KJ_CASE_ONEOF(input, kj::Own<kj::AsyncInputStream>) {
+          response.connectionOrBody = input.attach(kj::mv(refcounted));
+          return kj::mv(response);
+        }
+        KJ_CASE_ONEOF(connection, kj::Own<kj::AsyncIoStream>) {
+          response.connectionOrBody = connection.attach(kj::mv(refcounted));
+          return kj::mv(response);
+        }
+      }
+      KJ_UNREACHABLE;
     }));
   }
 
@@ -4475,6 +4878,19 @@ public:
     }
   }
 
+  kj::Promise<ConnectResponse> connect(kj::StringPtr host, const HttpHeaders& headers) override {
+    KJ_IF_MAYBE(c, client) {
+      return c->get()->connect(host, headers);
+    } else {
+      auto hostCopy = kj::str(host);
+      auto headersCopy = headers.clone();
+      return promise.addBranch().then(kj::mvCapture(hostCopy, kj::mvCapture(headersCopy,
+          [this](HttpHeaders&& headers, kj::String&& host) {
+        return KJ_ASSERT_NONNULL(client)->connect(host, headers);
+      })));
+    }
+  }
+
 private:
   kj::ForkedPromise<void> promise;
   kj::Maybe<kj::Own<NetworkAddressHttpClient>> client;
@@ -4521,6 +4937,10 @@ public:
     auto headersCopy = headers.clone();
     headersCopy.set(HttpHeaderId::HOST, parsed.host);
     return getClient(parsed).openWebSocket(path, headersCopy);
+  }
+
+  kj::Promise<ConnectResponse> connect(kj::StringPtr host, const HttpHeaders& headers) override {
+    KJ_UNIMPLEMENTED("connect() is not implemented for NetworkHttpClient");
   }
 
 private:
@@ -4695,6 +5115,31 @@ public:
     return kj::mv(promise);
   }
 
+  kj::Promise<ConnectResponse> connect(kj::StringPtr host,
+                                       const kj::HttpHeaders& headers) override {
+    if (concurrentRequests < maxConcurrentRequests) {
+      auto counter = ConnectionCounter(*this);
+      auto response = inner.connect(host, headers);
+      fireCountChanged();
+      return attachCounter(kj::mv(response), kj::mv(counter));
+    }
+
+    auto paf = kj::newPromiseAndFulfiller<ConnectionCounter>();
+    auto hostCopy = kj::str(host);
+    auto headersCopy = headers.clone();
+
+    auto promise = paf.promise
+        .then([this,
+               hostCopy = kj::mv(hostCopy),
+               headersCopy = kj::mv(headersCopy)](ConnectionCounter&& counter) mutable {
+      return attachCounter(inner.connect(hostCopy, headersCopy), kj::mv(counter));
+    });
+
+    pendingRequests.push(kj::mv(paf.fulfiller));
+    fireCountChanged();
+    return kj::mv(promise);
+  }
+
 private:
   struct ConnectionCounter;
 
@@ -4785,6 +5230,25 @@ private:
       };
     });
   }
+
+  static kj::Promise<ConnectResponse> attachCounter(
+      kj::Promise<ConnectResponse>&& promise,
+      ConnectionCounter&& counter) {
+    return promise.then([counter = kj::mv(counter)](HttpClient::ConnectResponse&& response)
+        mutable -> HttpClient::ConnectResponse {
+      KJ_SWITCH_ONEOF(response.connectionOrBody) {
+        KJ_CASE_ONEOF(input, kj::Own<kj::AsyncInputStream>) {
+          response.connectionOrBody = input.attach(kj::mv(counter));
+          return kj::mv(response);
+        }
+        KJ_CASE_ONEOF(io, kj::Own<kj::AsyncIoStream>) {
+          response.connectionOrBody = io.attach(kj::mv(counter));
+          return kj::mv(response);
+        }
+      }
+      KJ_UNREACHABLE;
+    });
+  }
 };
 
 }
@@ -4799,42 +5263,6 @@ kj::Own<HttpClient> newConcurrencyLimitingHttpClient(
 // =======================================================================================
 
 namespace {
-
-class NullInputStream final: public kj::AsyncInputStream {
-public:
-  NullInputStream(kj::Maybe<size_t> expectedLength = size_t(0))
-      : expectedLength(expectedLength) {}
-
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return size_t(0);
-  }
-
-  kj::Maybe<uint64_t> tryGetLength() override {
-    return expectedLength;
-  }
-
-  kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-    return uint64_t(0);
-  }
-
-private:
-  kj::Maybe<size_t> expectedLength;
-};
-
-class NullOutputStream final: public kj::AsyncOutputStream {
-public:
-  Promise<void> write(const void* buffer, size_t size) override {
-    return kj::READY_NOW;
-  }
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    return kj::READY_NOW;
-  }
-  Promise<void> whenWriteDisconnected() override {
-    return kj::NEVER_DONE;
-  }
-
-  // We can't really optimize tryPumpFrom() unless AsyncInputStream grows a skip() method.
-};
 
 class HttpClientAdapter final: public HttpClient {
 public:
@@ -4893,8 +5321,24 @@ public:
     return paf.promise.attach(kj::mv(responder));
   }
 
-  kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host) override {
-    return service.connect(kj::mv(host));
+  kj::Promise<ConnectResponse> connect(kj::StringPtr host, const HttpHeaders& headers) override {
+    // We have to clone the host and the headers because HttpServer implementation are allowed to
+    // assusme that they remain valid until the service handler completes whereas HttpClient callers
+    // are allowed to destroy them immediately after the call.
+    auto hostCopy = kj::str(host);
+    auto headersCopy = kj::heap(headers.clone());
+
+    auto paf = kj::newPromiseAndFulfiller<ConnectResponse>();
+    auto tunnel = kj::refcounted<ConnectResponseImpl>(kj::mv(paf.fulfiller));
+
+    auto requestPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+    tunnel->setPromise(kj::mv(requestPaf.promise));
+
+    auto promise = service.connect(host, *headersCopy, *tunnel)
+        .attach(kj::mv(hostCopy), kj::mv(headersCopy));
+    requestPaf.fulfiller->fulfill(kj::mv(promise));
+
+    return paf.promise.attach(kj::mv(tunnel));
   }
 
 private:
@@ -4960,6 +5404,53 @@ private:
         }
       });
     }
+  };
+
+  class DelayedEofIoStream final: public kj::AsyncIoStream {
+    // An AsyncIoStream wrapper that, when it reaches EOF, delays the final read until some
+    // promise completes.
+  public:
+    DelayedEofIoStream(kj::Own<kj::AsyncIoStream> io, kj::Promise<void> completionTask)
+        : inner(*io),
+          delayedInputStream(DelayedEofInputStream(kj::mv(io), kj::mv(completionTask))) {}
+
+    kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return delayedInputStream.tryRead(buffer, minBytes, maxBytes);
+    }
+
+    kj::Maybe<uint64_t> tryGetLength() override {
+      return delayedInputStream.tryGetLength();
+    }
+
+    kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
+      return delayedInputStream.pumpTo(output, amount);
+    }
+
+    kj::Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+      return inner.tryPumpFrom(input, amount);
+    }
+
+    Promise<void> write(const void* buffer, size_t size) override {
+      return inner.write(buffer, size);
+    }
+
+    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      return inner.write(pieces);
+    }
+
+    Promise<void> whenWriteDisconnected() override {
+      return inner.whenWriteDisconnected();
+    }
+
+    void shutdownWrite() override {
+      inner.shutdownWrite();
+    }
+
+  private:
+    kj::AsyncIoStream& inner;
+    DelayedEofInputStream delayedInputStream;
+    // It's important to watch the deconstruction order here. The kj::Own for the inner
+    // is owned by the DelayedEofInputStream.
   };
 
   class ResponseImpl final: public HttpService::Response, public kj::Refcounted {
@@ -5192,6 +5683,78 @@ private:
     kj::Own<kj::PromiseFulfiller<HttpClient::WebSocketResponse>> fulfiller;
     kj::Promise<void> task = nullptr;
   };
+
+  class ConnectResponseImpl final: public HttpService::ConnectResponse, public kj::Refcounted {
+  public:
+    ConnectResponseImpl(kj::Own<kj::PromiseFulfiller<HttpClient::ConnectResponse>> fulfiller)
+        : fulfiller(kj::mv(fulfiller)) {}
+
+    void setPromise(kj::Promise<void> promise) {
+      task = promise.eagerlyEvaluate([this](kj::Exception&& exception) {
+        if (fulfiller->isWaiting()) {
+          fulfiller->reject(kj::mv(exception));
+        } else {
+          kj::throwRecoverableException(kj::mv(exception));
+        }
+      });
+    }
+
+    kj::Own<kj::AsyncIoStream> accept(uint statusCode,
+                                      kj::StringPtr statusText,
+                                      const HttpHeaders& headers) override {
+      KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
+
+      auto headersCopy = kj::heap(headers.clone());
+
+      auto pipe = newTwoWayPipe();
+
+      kj::Own<kj::AsyncIoStream> io =
+          kj::heap<DelayedEofIoStream>(kj::mv(pipe.ends[0]), task.attach(kj::addRef(*this)));
+
+      fulfiller->fulfill(HttpClient::ConnectResponse {
+        statusCode,
+        statusText,
+        headersCopy.get(),
+        kj::mv(io),
+      });
+      return kj::mv(pipe.ends[1]);
+    }
+
+    kj::Own<kj::AsyncOutputStream> reject(
+        uint statusCode,
+        kj::StringPtr statusText,
+        const HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize) override {
+      KJ_REQUIRE(statusCode < 200 || statusCode >= 300,
+          "the statusCode must not be 2xx for reject.");
+      auto statusTextCopy = kj::str(statusText);
+      auto headersCopy = kj::heap(headers.clone());
+
+      auto pipe = newOneWayPipe(nullptr);
+
+      auto wrapper = kj::heap<DelayedEofInputStream>(
+          kj::mv(pipe.in), task.attach(kj::addRef(*this)));
+
+      task = task.then([this,statusCode,statusTextCopy = kj::mv(statusTextCopy),
+                        headersCopy = kj::mv(headersCopy), wrapper = kj::mv(wrapper)]() mutable {
+        kj::Own<kj::AsyncInputStream> body =
+            wrapper.attach(kj::mv(statusTextCopy), kj::mv(headersCopy));
+        fulfiller->fulfill(HttpClient::ConnectResponse {
+          statusCode,
+          statusTextCopy,
+          headersCopy.get(),
+          kj::mv(body),
+        });
+      }).eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+      return kj::mv(pipe.out);
+    }
+
+  private:
+    kj::Own<kj::PromiseFulfiller<HttpClient::ConnectResponse>> fulfiller;
+    kj::Promise<void> task = nullptr;
+  };
+
 };
 
 }  // namespace
@@ -5252,8 +5815,26 @@ public:
     }
   }
 
-  kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host) override {
-    return client.connect(kj::mv(host));
+  kj::Promise<void> connect(kj::StringPtr host, const HttpHeaders& headers,
+                            ConnectResponse& tunnel) override {
+    KJ_REQUIRE(!headers.isWebSocket(), "WebSocket upgrade headers are not permitted in a connect.");
+    return client.connect(host, headers)
+        .then([&tunnel](HttpClient::ConnectResponse&& response) -> kj::Promise<void> {
+      KJ_SWITCH_ONEOF(response.connectionOrBody) {
+        KJ_CASE_ONEOF(io, kj::Own<kj::AsyncIoStream>) {
+          auto io2 = tunnel.accept(response.statusCode, response.statusText, *response.headers);
+          auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+          promises.add(io->pumpTo(*io2).ignoreResult());
+          promises.add(io2->pumpTo(*io).ignoreResult());
+          return kj::joinPromises(promises.finish()).attach(kj::mv(io), kj::mv(io2));
+        }
+        KJ_CASE_ONEOF(input, kj::Own<kj::AsyncInputStream>) {
+          auto io2 = tunnel.reject(response.statusCode, response.statusText, *response.headers);
+          return input->pumpTo(*io2).ignoreResult().attach(kj::mv(input), kj::mv(io2));
+        }
+      }
+      KJ_UNREACHABLE;
+    });
   }
 
 private:
@@ -5280,11 +5861,15 @@ kj::Promise<void> HttpService::Response::sendError(
   return sendError(statusCode, statusText, HttpHeaders(headerTable));
 }
 
-kj::Promise<kj::Own<kj::AsyncIoStream>> HttpService::connect(kj::StringPtr host) {
+kj::Promise<void> HttpService::connect(
+    kj::StringPtr host,
+    const HttpHeaders& headers,
+    ConnectResponse& tunnel) {
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpService");
 }
 
 class HttpServer::Connection final: private HttpService::Response,
+                                    private HttpService::ConnectResponse,
                                     private HttpServerErrorHandler {
 public:
   Connection(HttpServer& server, kj::AsyncIoStream& stream,
@@ -5317,6 +5902,14 @@ public:
         return kj::mv(promise);
       }
 
+      KJ_IF_MAYBE(p, tunnelRejected) {
+        // reject() was called to reject a CONNECT request. Finish sending and close the connection.
+        // Don't log the exception because it's probably a side-effect of this.
+        auto promise = kj::mv(*p);
+        tunnelRejected = nullptr;
+        return kj::mv(promise);
+      }
+
       return sendError(kj::mv(e));
     });
   }
@@ -5344,14 +5937,15 @@ private:
 
   HttpInputStreamImpl httpInput;
   HttpOutputStream httpOutput;
-  kj::Maybe<HttpMethod> currentMethod;
+  kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> currentMethod;
   bool timedOut = false;
   bool closed = false;
   bool upgraded = false;
-  bool webSocketClosed = false;
+  bool webSocketOrConnectClosed = false;
   bool closeAfterSend = false;  // True if send() should set Connection: close.
   bool suspended = false;
   kj::Maybe<kj::Promise<bool>> webSocketError;
+  kj::Maybe<kj::Promise<bool>> tunnelRejected;
 
   static HttpInputStreamImpl makeHttpInput(
       kj::AsyncIoStream& stream,
@@ -5423,7 +6017,7 @@ private:
 
     auto receivedHeaders = firstByte
         .then([this,firstRequest](bool hasData)
-            -> kj::Promise<HttpHeaders::RequestOrProtocolError> {
+            -> kj::Promise<HttpHeaders::RequestConnectOrProtocolError> {
       if (hasData) {
         auto readHeaders = httpInput.readRequestHeaders();
         if (!firstRequest) {
@@ -5431,7 +6025,7 @@ private:
           // the first byte of a pipeline response.
           readHeaders = readHeaders.exclusiveJoin(
               server.timer.afterDelay(server.settings.headerTimeout)
-              .then([this]() -> HttpHeaders::RequestOrProtocolError {
+              .then([this]() -> HttpHeaders::RequestConnectOrProtocolError {
             timedOut = true;
             return HttpHeaders::ProtocolError {
               408, "Request Timeout",
@@ -5444,7 +6038,7 @@ private:
         // Client closed connection or pipeline timed out with no bytes received. This is not an
         // error, so don't report one.
         this->closed = true;
-        return HttpHeaders::RequestOrProtocolError(HttpHeaders::ProtocolError {
+        return HttpHeaders::RequestConnectOrProtocolError(HttpHeaders::ProtocolError {
           408, "Request Timeout",
           "Client closed connection or connection timeout "
           "while waiting for request headers.", nullptr
@@ -5456,7 +6050,7 @@ private:
       // On the first request, the header timeout starts ticking immediately upon request opening.
       auto timeoutPromise = server.timer.afterDelay(server.settings.headerTimeout)
           .exclusiveJoin(server.onDrain.addBranch())
-          .then([this]() -> HttpHeaders::RequestOrProtocolError {
+          .then([this]() -> HttpHeaders::RequestConnectOrProtocolError {
         timedOut = true;
         return HttpHeaders::ProtocolError {
           408, "Request Timeout",
@@ -5467,7 +6061,7 @@ private:
     }
 
     return receivedHeaders
-        .then([this](HttpHeaders::RequestOrProtocolError&& requestOrProtocolError)
+        .then([this](HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError)
             -> kj::Promise<bool> {
       if (timedOut) {
         // Client took too long to send anything, so we're going to close the connection. In
@@ -5495,6 +6089,68 @@ private:
       }
 
       KJ_SWITCH_ONEOF(requestOrProtocolError) {
+        KJ_CASE_ONEOF(request, HttpHeaders::ConnectRequest) {
+          auto& headers = httpInput.getHeaders();
+
+          currentMethod = HttpConnectMethod();
+
+          // The HTTP specification says that CONNECT requests have no meaningful payload
+          // but stops short of saying that CONNECT *cannot* have a payload. Implementations
+          // can choose to either accept payloads or reject them. We choose to reject it.
+          // Specifically, if there are Content-Length or Transfer-Encoding headers in the
+          // request headers, we'll automatically reject the CONNECT request.
+          //
+          // The key implication here is that any data that immediately follows the headers
+          // block of the CONNECT request is considered to be part of the tunnel if it is
+          // established.
+
+          KJ_IF_MAYBE(cl, headers.get(HttpHeaderId::CONTENT_LENGTH)) {
+            return sendError(HttpHeaders::ProtocolError {
+              400,
+              "Bad Request"_kj,
+              "Bad Request"_kj,
+              nullptr,
+            });
+          }
+          KJ_IF_MAYBE(te, headers.get(HttpHeaderId::TRANSFER_ENCODING)) {
+            return sendError(HttpHeaders::ProtocolError {
+              400,
+              "Bad Request"_kj,
+              "Bad Request"_kj,
+              nullptr,
+            });
+          }
+
+          SuspendableRequest suspendable(*this, HttpConnectMethod(), request.authority, headers);
+          auto maybeService = factory(suspendable);
+
+          if (suspended) {
+            return false;
+          }
+
+          auto service = KJ_ASSERT_NONNULL(kj::mv(maybeService),
+              "SuspendableHttpServiceFactory did not suspend, but returned nullptr.");
+
+          auto promise = service->connect(request.authority, headers, *this).attach(kj::mv(service));
+          return promise.then([this]() mutable -> kj::Promise<bool> {
+            KJ_IF_MAYBE(p, tunnelRejected) {
+              // reject() was called to reject a CONNECT attempt.
+              // Finish sending and close the connection.
+              auto promise = kj::mv(*p);
+              tunnelRejected = nullptr;
+              return kj::mv(promise);
+            }
+
+            if (httpOutput.isBroken()) {
+              return false;
+            }
+
+            return httpOutput.flush().then([]() mutable -> kj::Promise<bool> {
+              // There is really no reasonable path to reusing a CONNECT connection.
+              return false;
+            });
+          });
+        }
         KJ_CASE_ONEOF(request, HttpHeaders::Request) {
           auto& headers = httpInput.getHeaders();
 
@@ -5510,13 +6166,13 @@ private:
           auto service = KJ_ASSERT_NONNULL(kj::mv(maybeService),
               "SuspendableHttpServiceFactory did not suspend, but returned nullptr.");
 
-          auto body = httpInput.getEntityBody(
-              HttpInputStreamImpl::REQUEST, request.method, 0, headers);
-
           // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
           //   prevent permanent deadlock. It's slightly weird in that arguably the client should
           //   be able to shutdown the upstream but still wait on the downstream, but I believe many
           //   other HTTP servers do similar things.
+
+          auto body = httpInput.getEntityBody(
+              HttpInputStreamImpl::REQUEST, request.method, 0, headers);
 
           auto promise = service->request(
               request.method, request.url, headers, *body, *this).attach(kj::mv(service));
@@ -5532,7 +6188,7 @@ private:
 
             if (upgraded) {
               // We've upgraded to WebSocket, and by now we should have closed the WebSocket.
-              if (!webSocketClosed) {
+              if (!webSocketOrConnectClosed) {
                 // This is gonna segfault later so abort now instead.
                 KJ_LOG(FATAL, "Accepted WebSocket object must be destroyed before HttpService "
                               "request handler completes.");
@@ -5662,22 +6318,26 @@ private:
       connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "close";
     }
 
+    bool isHeadRequest = method.tryGet<HttpMethod>().map([](auto& m) {
+        return m == HttpMethod::HEAD;
+      }).orDefault(false);
+
     if (statusCode == 204 || statusCode == 304) {
       // No entity-body.
     } else if (statusCode == 205) {
       // Status code 205 also has no body, but unlike 204 and 304, it must explicitly encode an
-      // empty body, e.g. using content-length: 0. I'm guessing this is one of those things, where
-      // some early clients expected an explicit body while others assumed an empty body, and so
-      // the standard had to choose the common denominator.
+      // empty body, e.g. using content-length: 0. I'm guessing this is one of those things,
+      // where some early clients expected an explicit body while others assumed an empty body,
+      // and so the standard had to choose the common denominator.
       //
       // Spec: https://tools.ietf.org/html/rfc7231#section-6.3.6
       connectionHeaders[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = "0";
     } else KJ_IF_MAYBE(s, expectedBodySize) {
-      // HACK: We interpret a zero-length expected body length on responses to HEAD requests to mean
-      //   "don't set a Content-Length header at all." This provides a way to omit a body header on
-      //   HEAD responses with non-null-body status codes. This is a hack that *only* makes sense
-      //   for HEAD responses.
-      if (method != HttpMethod::HEAD || *s > 0) {
+      // HACK: We interpret a zero-length expected body length on responses to HEAD requests to
+      //   mean "don't set a Content-Length header at all." This provides a way to omit a body
+      //   header on HEAD responses with non-null-body status codes. This is a hack that *only*
+      //   makes sense for HEAD responses.
+      if (!isHeadRequest || *s > 0) {
         lengthStr = kj::str(*s);
         connectionHeaders[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = lengthStr;
       }
@@ -5688,7 +6348,7 @@ private:
     // For HEAD requests, if the application specified a Content-Length or Transfer-Encoding
     // header, use that instead of whatever we decided above.
     kj::ArrayPtr<kj::StringPtr> connectionHeadersArray = connectionHeaders;
-    if (method == HttpMethod::HEAD) {
+    if (isHeadRequest) {
       if (headers.get(HttpHeaderId::CONTENT_LENGTH) != nullptr ||
           headers.get(HttpHeaderId::TRANSFER_ENCODING) != nullptr) {
         connectionHeadersArray = connectionHeadersArray
@@ -5700,7 +6360,7 @@ private:
         statusCode, statusText, connectionHeadersArray));
 
     kj::Own<kj::AsyncOutputStream> bodyStream;
-    if (method == HttpMethod::HEAD) {
+    if (isHeadRequest) {
       // Ignore entity-body.
       httpOutput.finishBody();
       return heap<HttpDiscardingEntityWriter>();
@@ -5721,13 +6381,13 @@ private:
         "can't call acceptWebSocket() if the request headers didn't have Upgrade: WebSocket");
 
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
+    KJ_REQUIRE(method.tryGet<HttpMethod>().map([](auto& m) {
+      return m == HttpMethod::GET;
+    }).orDefault(false), "WebSocket must be initiated with a GET request.");
+
     // Unlike send(), we neither need nor want to null out currentMethod. The error cases below
     // depend on it being non-null to allow error responses to be sent, and the happy path expects
     // it to be GET.
-
-    if (method != HttpMethod::GET) {
-      return sendWebSocketError("WebSocket must be initiated with a GET request.");
-    }
 
     if (requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_VERSION).orDefault(nullptr) != "13") {
       return sendWebSocketError("The requested WebSocket version is not supported.");
@@ -5767,9 +6427,9 @@ private:
     upgraded = true;
     // We need to give the WebSocket an Own<AsyncIoStream>, but we only have a reference. This is
     // safe because the application is expected to drop the WebSocket object before returning
-    // from the request handler. For some extra safety, we check that webSocketClosed has been
-    // set true when the handler returns.
-    auto deferNoteClosed = kj::defer([this]() { webSocketClosed = true; });
+    // from the request handler. For some extra safety, we check that webSocketOrConnectClosed has
+    // been set true when the handler returns.
+    auto deferNoteClosed = kj::defer([this]() { webSocketOrConnectClosed = true; });
     kj::Own<kj::AsyncIoStream> ownStream(&stream, kj::NullDisposer::instance);
     return upgradeToWebSocket(ownStream.attach(kj::mv(deferNoteClosed)),
                               httpInput, httpOutput, nullptr);
@@ -5851,6 +6511,44 @@ private:
 
     return kj::heap<BrokenWebSocket>(KJ_EXCEPTION(FAILED,
         "received bad WebSocket handshake", errorMessage));
+  }
+
+  kj::Own<kj::AsyncIoStream> accept(uint statusCode, kj::StringPtr statusText,
+                                    const HttpHeaders& headers) override {
+    auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
+    currentMethod = nullptr;
+    KJ_ASSERT(method.is<HttpConnectMethod>(), "only use accept() with CONNECT requests");
+
+    KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
+    tunnelRejected = nullptr;
+
+    httpOutput.writeHeaders(headers.serializeResponse(statusCode, statusText));
+
+    auto releasedBuffer = httpInput.releaseBuffer();
+    auto deferNoteClosed = kj::defer([this]() { webSocketOrConnectClosed = true; });
+    kj::Own<kj::AsyncIoStream> ownStream(&stream, kj::NullDisposer::instance);
+
+    auto promised = httpOutput.flush().then([io = ownStream.attach(kj::mv(deferNoteClosed))]
+        () mutable -> kj::Promise<kj::Own<kj::AsyncIoStream>> {
+      return kj::mv(io);
+    });
+
+    return heap<AsyncIoStreamWithInitialBuffer>(
+        kj::newPromisedStream(kj::mv(promised)),
+        kj::mv(releasedBuffer.buffer),
+        releasedBuffer.leftover);
+  }
+
+  kj::Own<kj::AsyncOutputStream> reject(uint statusCode, kj::StringPtr statusText,
+                                        const HttpHeaders& headers,
+                                        kj::Maybe<uint64_t> expectedBodySize) override {
+    auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
+    KJ_REQUIRE(method.is<HttpConnectMethod>(), "Only use reject() with CONNECT requests.");
+    KJ_REQUIRE(statusCode < 200 || statusCode >= 300, "the statusCode must not be 2xx for reject.");
+    tunnelRejected = Maybe<kj::Promise<bool>>(true);
+    // We are always going to close the connection after sending the rejection.
+    closeAfterSend = true;
+    return send(statusCode, statusText, headers, expectedBodySize);
   }
 };
 
@@ -5969,7 +6667,8 @@ void HttpServer::taskFailed(kj::Exception&& exception) {
 }
 
 HttpServer::SuspendedRequest::SuspendedRequest(
-    kj::Array<byte> bufferParam, kj::ArrayPtr<byte> leftoverParam, HttpMethod method,
+    kj::Array<byte> bufferParam, kj::ArrayPtr<byte> leftoverParam,
+    kj::OneOf<HttpMethod, HttpConnectMethod> method,
     kj::StringPtr url, HttpHeaders headers)
     : buffer(kj::mv(bufferParam)),
       leftover(leftoverParam),
