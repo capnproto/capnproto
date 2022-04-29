@@ -47,6 +47,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
+      # See: https://github.com/actions/virtual-environments/issues/4589#issuecomment-1100899313
+      # GitHub's Ubuntu image installs all kinds of stuff from non-Ubuntu repositories which cause
+      # conflicts with Ubuntu packages ultimately preventing installation of wine32. Let's try to
+      # fix that...
+      - name: remove unwanted packages and repositories
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          sudo apt-get update -qq
+          sudo apt-get install -yqq --allow-downgrades libpcre2-8-0/focal libpcre2-16-0/focal libpcre2-32-0/focal libpcre2-posix2/focal
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
