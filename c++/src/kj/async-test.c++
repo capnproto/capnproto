@@ -25,7 +25,7 @@
 #include "mutex.h"
 #include "thread.h"
 
-#if !KJ_USE_FIBERS
+#if !KJ_USE_FIBERS && !_WIN32
 #include <pthread.h>
 #endif
 
@@ -737,6 +737,10 @@ TEST(Async, TaskSet) {
   EXPECT_EQ(1u, errorHandler.exceptionCount);
 }
 
+#if KJ_USE_FIBERS || !_WIN32
+// This test requires either fibers or pthreads in order to limit the stack size. Currently we
+// don't have a version that works on Windows without fibers, so skip the test there.
+
 TEST(Async, LargeTaskSetDestruction) {
   static constexpr size_t stackSize = 200 * 1024;
 
@@ -775,6 +779,8 @@ TEST(Async, LargeTaskSetDestruction) {
   KJ_REQUIRE(0 == pthread_join(thread, nullptr));
 #endif
 }
+
+#endif  // KJ_USE_FIBERS || !_WIN32
 
 TEST(Async, TaskSet) {
   EventLoop loop;
