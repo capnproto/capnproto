@@ -197,15 +197,26 @@ Cap'n Proto may be layered on top of an existing encrypted transport, such as TL
 
 ### How do I report security bugs?
 
-Please email [security@sandstorm.io](mailto:security@sandstorm.io).
+Please email [kenton@cloudflare.com](mailto:kenton@cloudflare.com).
 
 ## Sandstorm
 
 ### How does Cap'n Proto relate to Sandstorm.io?
 
-[Sandstorm.io](https://sandstorm.io) is an Open Source project and startup founded by Kenton, the author of Cap'n Proto. Cap'n Proto is owned and developed by Sandstorm the company and heavily used in Sandstorm the project.
+[Sandstorm.io](https://sandstorm.io) is an Open Source project and startup founded by Kenton, the author of Cap'n Proto. Cap'n Proto was developed by Sandstorm the company and heavily used in Sandstorm the project. Sandstorm ceased most operations in 2017 and formally dissolved as a company in 2022, but the open source project continues to be developed by the community.
 
 ### How does Sandstorm use Cap'n Proto?
 
 See [this Sandstorm blog post](https://blog.sandstorm.io/news/2014-12-15-capnproto-0.5.html).
 
+## Cloudflare
+
+### How does Cap'n Proto relate to Cloudflare?
+
+[Cloudflare Workers](https://workers.dev) is a next-generation cloud application platform. Kenton, the author of Cap'n Proto, is the lead engineer on the Workers project. Workers heavily uses Cap'n Proto in its implementation, and the Cloudflare Workers team are now the primarily developers and maintainers of Cap'n Proto's primary C++ implementation.
+
+### How does Cloudflare use Cap'n Proto?
+
+The Cloudflare Workers runtime is built on Cap'n Proto and it's associated C++ toolkit library, KJ. Cap'n Proto is used for a variety of things, such as communication between sandbox processes and their supervisors, as well between machines and datacenters, especially in the implementation of [Durable Objects](https://blog.cloudflare.com/introducing-workers-durable-objects/).
+
+Cloudflare has also [long used Cap'n Proto in its logging pipeline](http://www.thedotpost.com/2015/06/john-graham-cumming-i-got-10-trillion-problems-but-logging-aint-one) and [developed the Lua implementation of Cap'n Proto](https://blog.cloudflare.com/introducing-lua-capnproto-better-serialization-in-lua/) -- both of these actually predate Kenton joining the company.
