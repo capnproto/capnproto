@@ -1,3 +1,16 @@
+CAPNPROTO_COPTS = [
+    "-Wall",
+    "-Wextra",
+    "-Wno-deprecated-declarations",
+    "-Wno-maybe-uninitialized",
+    "-Wno-strict-aliasing",
+    "-Wno-sign-compare",
+    "-Wno-unused-parameter",
+    # in order to handle some non-standard quote includes
+    "-iquote c++/src/kj",
+    "-iquote c++/src/capnp/compiler",
+]
+
 # ==============  kj ===================
 cc_library(
     name = "kj",
@@ -65,17 +78,14 @@ cc_library(
         "c++/src/kj/vector.h",
         "c++/src/kj/windows-sanity.h",
     ],
-    copts = [
-        "-Wno-sign-compare",
-        "-Wno-strict-aliasing",
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-    ],
+    copts = CAPNPROTO_COPTS,
     defines = [
         "KJ_USE_FUTEX=0",
     ],
+    # Need this because I need all my deps put relative "real" path of c++/src into -I and -isystem
     includes = ["c++/src"],
     linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
 )
 
@@ -88,10 +98,9 @@ cc_library(
         "c++/src/kj/compat/gtest.h",
         "c++/src/kj/test.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-sign-compare",
-    ],
+    copts = CAPNPROTO_COPTS,
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [":kj"],
 )
@@ -118,11 +127,9 @@ cc_library(
         "c++/src/kj/async-win32.h",
         "c++/src/kj/timer.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-        "-Wno-sign-compare",
-    ],
+    copts = CAPNPROTO_COPTS,
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [":kj"],
 )
@@ -137,11 +144,9 @@ cc_library(
         "c++/src/kj/compat/http.h",
         "c++/src/kj/compat/url.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-        "-Wno-sign-compare",
-    ],
+    copts = CAPNPROTO_COPTS,
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [":kj-async"],
 )
@@ -156,13 +161,12 @@ cc_library(
         "c++/src/kj/compat/readiness-io.h",
         "c++/src/kj/compat/tls.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-    ],
+    copts = CAPNPROTO_COPTS,
     defines = [
         "KJ_HAS_OPENSSL",
     ],
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [
         ":kj-async",
@@ -178,12 +182,10 @@ cc_library(
     hdrs = [
         "c++/src/kj/compat/gzip.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-        "-Iexternal/c++/src/kj",
-    ],
+    copts = CAPNPROTO_COPTS,
     defines = ["KJ_HAS_ZLIB=1"],
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [
         ":kj",
@@ -211,11 +213,8 @@ cc_test(
         "c++/src/kj/threadlocal-test.c++",
         "c++/src/kj/time-test.c++",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-        "-Wno-sign-compare",
-    ],
+    copts = CAPNPROTO_COPTS,
+    linkopts = ["-pthread"],
     deps = [":kj-test"],
 )
 
@@ -254,12 +253,11 @@ cc_test(
         "c++/src/kj/tuple-test.c++",
         "c++/src/kj/units-test.c++",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-        "-Wno-sign-compare",
+    copts = CAPNPROTO_COPTS,
+    linkopts = [
+        "-ldl",
+        "-pthread",
     ],
-    linkopts = ["-ldl"],
     deps = [
         ":kj",
         ":kj-async",
@@ -271,9 +269,9 @@ cc_test(
     ],
 )
 
-cc_import(
-    name = "capnp_schemas",
-    hdrs = [
+filegroup(
+    name = "capnp-schemas",
+    srcs = [
         "c++/src/capnp/c++.capnp",
         "c++/src/capnp/schema.capnp",
         "c++/src/capnp/stream.capnp",
@@ -330,12 +328,10 @@ cc_library(
         "c++/src/capnp/serialize-text.h",
         "c++/src/capnp/stream.capnp.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-        "-iquote c++/src/kj",
-    ],
-    include_prefix = "capnp",
+    copts = CAPNPROTO_COPTS,
+    data = [":capnp-schemas"],
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [
         "//:kj",
@@ -343,9 +339,9 @@ cc_library(
     ],
 )
 
-cc_import(
-    name = "capnp-rpc_schemas",
-    hdrs = [
+filegroup(
+    name = "capnp-rpc-schemas",
+    srcs = [
         "c++/src/capnp/persistent.capnp",
         "c++/src/capnp/rpc.capnp",
         "c++/src/capnp/rpc-twoparty.capnp",
@@ -376,11 +372,10 @@ cc_library(
         "c++/src/capnp/rpc-twoparty.capnp.h",
         "c++/src/capnp/rpc-twoparty.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-    ],
-    include_prefix = "capnp",
+    copts = CAPNPROTO_COPTS,
+    data = [":capnp-rpc-schemas"],
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -389,9 +384,9 @@ cc_library(
     ],
 )
 
-cc_import(
-    name = "capnp-json_schemas",
-    hdrs = [
+filegroup(
+    name = "capnp-json-schemas",
+    srcs = [
         "c++/src/capnp/compat/json.h",
     ],
     visibility = ["//visibility:public"],
@@ -407,11 +402,10 @@ cc_library(
         "c++/src/capnp/compat/json.capnp.h",
         "c++/src/capnp/compat/json.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-    ],
-    include_prefix = "capnp",
+    copts = CAPNPROTO_COPTS,
+    data = [":capnp-json-schemas"],
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -428,11 +422,9 @@ cc_library(
     hdrs = [
         "c++/src/capnp/compat/websocket-rpc.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-    ],
-    include_prefix = "capnp",
+    copts = CAPNPROTO_COPTS,
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -472,11 +464,13 @@ cc_library(
         "c++/src/capnp/compiler/lexer.h",
         "c++/src/capnp/compiler/parser.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
+    copts = CAPNPROTO_COPTS + [
+        # Need this for external link to this BUILD file
+        "-iquote external/capnproto/c++/src/capnp/compiler",
     ],
-    include_prefix = "capnp",
+    # include_prefix = "capnp",
+    linkopts = ["-pthread"],
+    strip_include_prefix = "c++/src",
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -485,17 +479,15 @@ cc_library(
 )
 
 cc_binary(
-    name = "capnp_tool",
+    name = "capnp-bin",
     srcs = [
         "c++/src/capnp/compiler/capnp.c++",
         "c++/src/capnp/compiler/lexer.h",
         "c++/src/capnp/compiler/module-loader.c++",
         "c++/src/capnp/compiler/module-loader.h",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-    ],
+    copts = CAPNPROTO_COPTS,
+    linkopts = ["-pthread"],
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -506,14 +498,12 @@ cc_binary(
 )
 
 cc_binary(
-    name = "capnpc_cpp",
+    name = "capnpc-cpp",
     srcs = [
         "c++/src/capnp/compiler/capnpc-c++.c++",
     ],
-    copts = [
-        "-Wno-shadow",
-        "-Wno-unused-parameter",
-    ],
+    copts = CAPNPROTO_COPTS,
+    linkopts = ["-pthread"],
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
