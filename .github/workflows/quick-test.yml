@@ -86,13 +86,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ['windows-2016', 'windows-latest']
+        os: ['windows-2019', 'windows-latest']
         include:
-          - os: windows-2016
-            target: 'Visual Studio 15 2017'
+          - os: windows-2019
+            target: 'Visual Studio 16 2019'
             arch: -A x64
           - os: windows-latest
-            target: 'Visual Studio 16 2019'
+            target: 'Visual Studio 17 2022'
             arch: -A x64
     steps:
       - uses: actions/checkout@v2
