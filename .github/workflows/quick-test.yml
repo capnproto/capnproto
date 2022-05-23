@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
-        run: apk add autoconf automake build-base cmake libtool libucontext-dev linux-headers openssl-dev
+        run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev
       - name: super-test
         run: ./super-test.sh quick
   Linux:
