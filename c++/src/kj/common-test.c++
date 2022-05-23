@@ -98,6 +98,43 @@ TEST(Common, Maybe) {
   }
 
   {
+    Maybe<Own<CopyOrMove>> m = kj::heap<CopyOrMove>(123);
+    EXPECT_FALSE(m == nullptr);
+    EXPECT_TRUE(m != nullptr);
+    KJ_IF_MAYBE(v, m) {
+      EXPECT_EQ(123, (*v)->i);
+    } else {
+      ADD_FAILURE();
+    }
+    KJ_IF_MAYBE(v, mv(m)) {
+      EXPECT_EQ(123, (*v)->i);
+    } else {
+      ADD_FAILURE();
+    }
+    // We have moved the kj::Own away, so this should give us the default and leave the Maybe empty.
+    EXPECT_EQ(456, m.orDefault(heap<CopyOrMove>(456))->i);
+    EXPECT_TRUE(m == nullptr);
+
+    bool ranLazy = false;
+    EXPECT_EQ(123, mv(m).orDefault([&] {
+      ranLazy = true;
+      return heap<CopyOrMove>(123);
+    })->i);
+    EXPECT_TRUE(ranLazy);
+    EXPECT_TRUE(m == nullptr);
+
+    m = heap<CopyOrMove>(123);
+    EXPECT_TRUE(m != nullptr);
+    ranLazy = false;
+    EXPECT_EQ(123, mv(m).orDefault([&] {
+      ranLazy = true;
+      return heap<CopyOrMove>(456);
+    })->i);
+    EXPECT_FALSE(ranLazy);
+    EXPECT_TRUE(m == nullptr);
+  }
+
+  {
     Maybe<int> empty;
     int defaultValue = 5;
     auto& ref1 = empty.orDefault([&defaultValue]() -> int& {
