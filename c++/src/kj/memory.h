@@ -376,6 +376,16 @@ public:
     }
   }
 
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<Own<T>>() : instance<F>()())>
+  Result orDefault(F&& lazyDefaultValue) && {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
+    } else {
+      return kj::mv(ptr);
+    }
+  }
+
   template <typename Func>
   auto map(Func&& f) & -> Maybe<decltype(f(instance<Own<T>&>()))> {
     if (ptr == nullptr) {
