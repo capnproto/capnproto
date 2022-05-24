@@ -30,6 +30,7 @@
 #endif
 
 #if KJ_USE_FIBERS && !_WIN32
+#include <errno.h>
 #include <ucontext.h>
 #endif
 
