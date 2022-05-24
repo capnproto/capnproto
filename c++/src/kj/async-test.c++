@@ -44,6 +44,7 @@ TEST(Async, GetFunctorStartAddress) {
 }
 #endif
 
+#if KJ_USE_FIBERS
 bool isLibcContextHandlingKnownBroken() {
   // manylinux2014-x86's libc implements getcontext() to fail with ENOSYS. This is flagrantly
   // against spec: getcontext() is not a syscall and is documented as never failing. Our configure
@@ -51,7 +52,7 @@ bool isLibcContextHandlingKnownBroken() {
   // what happens, which wouldn't work when cross-compiling. It would have been so much better if
   // they had removed the symbol from libc entirely. But as a work-around, we will skip the tests
   // when libc is broken.
-#if KJ_USE_FIBERS && __linux__
+#if __linux__
   static bool result = ([]() {
     ucontext_t context;
     if (getcontext(&context) < 0 && errno == ENOSYS) {
@@ -71,6 +72,7 @@ bool isLibcContextHandlingKnownBroken() {
   return false;
 #endif
 }
+#endif
 
 TEST(Async, EvalVoid) {
   EventLoop loop;
