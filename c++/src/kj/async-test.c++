@@ -29,7 +29,7 @@
 #include <pthread.h>
 #endif
 
-#if KJ_USE_FIBERS && !_WIN32
+#if KJ_USE_FIBERS && __linux__
 #include <errno.h>
 #include <ucontext.h>
 #endif
@@ -51,7 +51,7 @@ bool isLibcContextHandlingKnownBroken() {
   // what happens, which wouldn't work when cross-compiling. It would have been so much better if
   // they had removed the symbol from libc entirely. But as a work-around, we will skip the tests
   // when libc is broken.
-#if KJ_USE_FIBERS && !_WIN32
+#if KJ_USE_FIBERS && __linux__
   static bool result = ([]() {
     ucontext_t context;
     if (getcontext(&context) < 0 && errno == ENOSYS) {
