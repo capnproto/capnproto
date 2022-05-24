@@ -29,6 +29,10 @@
 #include <pthread.h>
 #endif
 
+#if KJ_USE_FIBERS && !_WIN32
+#include <ucontext.h>
+#endif
+
 namespace kj {
 namespace {
 
@@ -38,6 +42,34 @@ TEST(Async, GetFunctorStartAddress) {
   EXPECT_TRUE(nullptr != _::GetFunctorStartAddress<>::apply([](){return 0;}));
 }
 #endif
+
+bool isLibcContextHandlingKnownBroken() {
+  // manylinux2014-x86's libc implements getcontext() to fail with ENOSYS. This is flagrantly
+  // against spec: getcontext() is not a syscall and is documented as never failing. Our configure
+  // script cannot detect this problem because it would require actually executing code to see
+  // what happens, which wouldn't work when cross-compiling. It would have been so much better if
+  // they had removed the symbol from libc entirely. But as a work-around, we will skip the tests
+  // when libc is broken.
+#if KJ_USE_FIBERS && !_WIN32
+  static bool result = ([]() {
+    ucontext_t context;
+    if (getcontext(&context) < 0 && errno == ENOSYS) {
+      KJ_LOG(WARNING,
+          "This platform's libc is broken. Its getcontext() errors with ENOSYS. Fibers will not "
+          "work, so we'll skip the tests, but libkj was still built with fiber support, which "
+          "is broken. Please tell your libc maitnainer to remove the getcontext() function "
+          "entirely rather than provide an intentionally-broken version -- that way, the "
+          "configure script will detect that it should build libkj without fiber support.");
+      return true;
+    } else {
+      return false;
+    }
+  })();
+  return result;
+#else
+  return false;
+#endif
+}
 
 TEST(Async, EvalVoid) {
   EventLoop loop;
@@ -755,6 +787,8 @@ TEST(Async, LargeTaskSetDestruction) {
   };
 
 #if KJ_USE_FIBERS
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -997,6 +1031,8 @@ KJ_TEST("exclusiveJoin both events complete simultaneously") {
 
 #if KJ_USE_FIBERS
 KJ_TEST("start a fiber") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -1018,6 +1054,8 @@ KJ_TEST("start a fiber") {
 }
 
 KJ_TEST("fiber promise chaining") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -1041,6 +1079,8 @@ KJ_TEST("fiber promise chaining") {
 }
 
 KJ_TEST("throw from a fiber") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -1064,6 +1104,8 @@ KJ_TEST("throw from a fiber") {
 // This test fails on MinGW 32-bit builds due to a compiler bug with exceptions + fibers:
 //     https://sourceforge.net/p/mingw-w64/bugs/835/
 KJ_TEST("cancel a fiber") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -1097,6 +1139,8 @@ KJ_TEST("cancel a fiber") {
 #endif
 
 KJ_TEST("fiber pool") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
   FiberPool pool(65536);
@@ -1169,6 +1213,8 @@ bool onOurStack(char* p) {
 }
 
 KJ_TEST("fiber pool runSynchronously()") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   FiberPool pool(65536);
 
   {
@@ -1202,6 +1248,8 @@ KJ_TEST("fiber pool runSynchronously()") {
 }
 
 KJ_TEST("fiber pool limit") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   FiberPool pool(65536);
 
   pool.setMaxFreelist(1);
@@ -1260,6 +1308,8 @@ KJ_TEST("fiber pool limit") {
 }
 
 KJ_TEST("run event loop on freelisted stacks") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   FiberPool pool(65536);
 
   class MockEventPort: public EventPort {
