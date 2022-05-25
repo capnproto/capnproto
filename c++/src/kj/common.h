@@ -99,6 +99,7 @@ KJ_BEGIN_HEADER
 #endif
 
 #include <stddef.h>
+#include <cstring>
 #include <initializer_list>
 
 #if __linux__ && __cplusplus > 201200L
@@ -608,6 +609,52 @@ constexpr bool canMemcpy() {
 #define KJ_ASSERT_CAN_MEMCPY(T) \
   static_assert(kj::canMemcpy<T>(), "this code expects this type to be memcpy()-able");
 #endif
+
+namespace _ {  // private
+#if defined(__clang__) && defined(__is_identifier)
+#define KJ_HAS_BUILTIN_TYPE_TRAIT(x) (!__is_identifier(x))
+#elif defined(__has_builtin)
+#define KJ_HAS_BUILTIN_TYPE_TRAIT(x) __has_builtin(x)
+#else
+#define KJ_HAS_BUILTIN_TYPE_TRAIT(x) 0
+#endif
+
+#if KJ_HAS_BUILTIN_TYPE_TRAIT(__is_integral)
+template <typename T>
+constexpr bool canMemcmpArrayOf() {
+  return __is_integral(T);
+}
+#else
+template <typename T, typename U>
+constexpr bool isSameType() {
+#if KJ_HAS_BUILTIN_TYPE_TRAIT(__is_same)
+  return __is_same(T, U);
+#elif KJ_HAS_BUILTIN_TYPE_TRAIT(__is_same_as) || __GNUC__
+  return __is_same_as(T, U);
+#else
+  return false;
+#endif
+}
+
+#undef KJ_HAS_BUILTIN_TYPE_TRAIT  // Don't leak this to user code.
+
+template <typename T>
+constexpr bool canMemcmpArrayOfHelper() {
+  return isSameType<T, const bool>()
+      || isSameType<T, const char>()
+      || isSameType<T, const signed char>()   || isSameType<T, const unsigned char>()
+      || isSameType<T, const short int>()     || isSameType<T, const unsigned short int>()
+      || isSameType<T, const int>()           || isSameType<T, const unsigned int>()
+      || isSameType<T, const long int>()      || isSameType<T, const unsigned long int>()
+      || isSameType<T, const long long int>() || isSameType<T, const unsigned long long int>();
+}
+
+template <typename T>
+constexpr bool canMemcmpArrayOf() {
+  return canMemcmpArrayOfHelper<const T>();
+}
+#endif
+}  // namespace _ (private)
 
 template <typename T>
 class Badge {
@@ -1765,6 +1812,9 @@ public:
 
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
+    if (_::canMemcmpArrayOf<T>()) {
+      return std::memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
+    }
     for (size_t i = 0; i < size_; i++) {
       if (ptr[i] != other[i]) return false;
     }
