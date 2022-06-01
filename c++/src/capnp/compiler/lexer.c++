@@ -20,8 +20,8 @@
 // THE SOFTWARE.
 
 #include "lexer.h"
-#include <kj/parse/char.h>
-#include <kj/debug.h>
+#include "kj/parse/char.h"
+#include "kj/debug.h"
 
 namespace capnp {
 namespace compiler {

@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "map.h"
-#include <kj/test.h>
+#include "kj/test.h"
 
 namespace kj {
 namespace _ {

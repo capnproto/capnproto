@@ -20,9 +20,9 @@
 // THE SOFTWARE.
 
 #include "url.h"
-#include <kj/encoding.h>
-#include <kj/parse/char.h>
-#include <kj/debug.h>
+#include "kj/encoding.h"
+#include "kj/parse/char.h"
+#include "kj/debug.h"
 #include <stdlib.h>
 
 namespace kj {

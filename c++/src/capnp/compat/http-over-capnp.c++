@@ -20,8 +20,8 @@
 // THE SOFTWARE.
 
 #include "http-over-capnp.h"
-#include <kj/debug.h>
-#include <capnp/schema.h>
+#include "kj/debug.h"
+#include "capnp/schema.h"
 
 namespace capnp {
 

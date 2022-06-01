@@ -22,9 +22,9 @@
 #define KJ_TESTING_KJ 1
 
 #include "http.h"
-#include <kj/debug.h>
-#include <kj/test.h>
-#include <kj/encoding.h>
+#include "kj/debug.h"
+#include "kj/test.h"
+#include "kj/encoding.h"
 #include <map>
 
 #if KJ_HTTP_TEST_USE_OS_PIPE

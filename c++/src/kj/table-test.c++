@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "table.h"
-#include <kj/test.h>
+#include "kj/test.h"
 #include <set>
 #include <unordered_set>
 #include "hash.h"

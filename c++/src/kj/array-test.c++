@@ -23,7 +23,7 @@
 #include "debug.h"
 #include <string>
 #include <list>
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 
 namespace kj {
 namespace {

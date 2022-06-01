@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include <capnp/compiler/grammar.capnp.h>
-#include <capnp/schema.capnp.h>
-#include <capnp/schema-loader.h>
+#include "capnp/compiler/grammar.capnp.h"
+#include "capnp/schema.capnp.h"
+#include "capnp/schema-loader.h"
 #include "error-reporter.h"
 #include "generics.h"
 

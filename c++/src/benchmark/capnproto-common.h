@@ -26,11 +26,11 @@
 #endif
 
 #include "common.h"
-#include <capnp/serialize.h>
-#include <capnp/serialize-packed.h>
-#include <kj/debug.h>
+#include "capnp/serialize.h"
+#include "capnp/serialize-packed.h"
+#include "kj/debug.h"
 #if HAVE_SNAPPY
-#include <capnp/serialize-snappy.h>
+#include "capnp/serialize-snappy.h"
 #endif  // HAVE_SNAPPY
 #include <thread>
 

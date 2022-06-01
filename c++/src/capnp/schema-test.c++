@@ -22,7 +22,7 @@
 #define CAPNP_TESTING_CAPNP 1
 
 #include "schema.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 #include "test-util.h"
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.

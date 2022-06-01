@@ -31,8 +31,8 @@
 #include "debug.h"
 #include "io.h"
 #include "miniposix.h"
-#include <kj/compat/gtest.h>
-#include <kj/time.h>
+#include "kj/compat/gtest.h"
+#include "kj/time.h"
 #include <sys/types.h>
 #if _WIN32
 #include <ws2tcpip.h>

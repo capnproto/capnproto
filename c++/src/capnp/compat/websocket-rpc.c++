@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include <capnp/compat/websocket-rpc.h>
-#include <kj/io.h>
-#include <capnp/serialize.h>
+#include "capnp/compat/websocket-rpc.h"
+#include "kj/io.h"
+#include "capnp/serialize.h"
 
 namespace capnp {
 

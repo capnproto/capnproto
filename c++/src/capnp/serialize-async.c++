@@ -21,18 +21,18 @@
 
 // Includes just for need SOL_SOCKET and SO_SNDBUF
 #if _WIN32
-#include <kj/win32-api-version.h>
+#include "kj/win32-api-version.h"
 
 #include <winsock2.h>
 #include <mswsock.h>
-#include <kj/windows-sanity.h>
+#include "kj/windows-sanity.h"
 #else
 #include <sys/socket.h>
 #endif
 
 #include "serialize-async.h"
-#include <kj/debug.h>
-#include <kj/io.h>
+#include "kj/debug.h"
+#include "kj/io.h"
 
 namespace capnp {
 

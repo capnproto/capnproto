@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "list.h"
-#include <kj/test.h>
+#include "kj/test.h"
 
 namespace kj {
 namespace {

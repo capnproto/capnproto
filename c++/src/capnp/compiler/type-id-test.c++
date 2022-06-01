@@ -20,8 +20,8 @@
 // THE SOFTWARE.
 
 #include "type-id.h"
-#include <capnp/schema.capnp.h>
-#include <kj/test.h>
+#include "capnp/schema.capnp.h"
+#include "kj/test.h"
 
 namespace capnp {
 namespace compiler {

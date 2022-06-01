@@ -41,7 +41,7 @@
 #pragma once
 
 #include "message.h"
-#include <kj/io.h>
+#include "kj/io.h"
 
 CAPNP_BEGIN_HEADER
 

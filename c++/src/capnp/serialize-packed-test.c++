@@ -20,8 +20,8 @@
 // THE SOFTWARE.
 
 #include "serialize-packed.h"
-#include <kj/debug.h>
-#include <kj/compat/gtest.h>
+#include "kj/debug.h"
+#include "kj/compat/gtest.h"
 #include <string>
 #include <stdlib.h>
 #include "test-util.h"

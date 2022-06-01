@@ -20,9 +20,9 @@
 // THE SOFTWARE.
 
 #include "websocket-rpc.h"
-#include <kj/test.h>
+#include "kj/test.h"
 
-#include <capnp/test.capnp.h>
+#include "capnp/test.capnp.h"
 
 KJ_TEST("WebSocketMessageStream") {
   kj::EventLoop loop;

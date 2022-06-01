@@ -22,7 +22,7 @@
 #include "common.h"
 #include "test.h"
 #include <inttypes.h>
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 
 namespace kj {
 namespace {

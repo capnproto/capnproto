@@ -36,9 +36,9 @@
 // Please don't file a bug report telling us to change our enum naming style. You are at least
 // seven years too late.
 
-#include <capnp/schema.capnp.h>
-#include <kj/hash.h>
-#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+#include "capnp/schema.capnp.h"
+#include "kj/hash.h"
+#include "kj/windows-sanity.h"  // work-around macro conflict with `VOID`
 
 CAPNP_BEGIN_HEADER
 

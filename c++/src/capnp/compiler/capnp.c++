@@ -24,7 +24,7 @@
 #endif
 
 #if _WIN32
-#include <kj/win32-api-version.h>
+#include "kj/win32-api-version.h"
 #endif
 
 #include "lexer.h"
@@ -32,30 +32,30 @@
 #include "compiler.h"
 #include "module-loader.h"
 #include "node-translator.h"
-#include <capnp/pretty-print.h>
-#include <capnp/schema.capnp.h>
-#include <kj/vector.h>
-#include <kj/io.h>
-#include <kj/miniposix.h>
-#include <kj/debug.h>
+#include "capnp/pretty-print.h"
+#include "capnp/schema.capnp.h"
+#include "kj/vector.h"
+#include "kj/io.h"
+#include "kj/miniposix.h"
+#include "kj/debug.h"
 #include "../message.h"
 #include <iostream>
-#include <kj/main.h>
-#include <kj/parse/char.h>
+#include "kj/main.h"
+#include "kj/parse/char.h"
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <capnp/serialize.h>
-#include <capnp/serialize-packed.h>
-#include <capnp/serialize-text.h>
-#include <capnp/compat/json.h>
+#include "capnp/serialize.h"
+#include "capnp/serialize-packed.h"
+#include "capnp/serialize-text.h"
+#include "capnp/compat/json.h"
 #include <errno.h>
 #include <stdlib.h>
-#include <kj/map.h>
+#include "kj/map.h"
 
 #if _WIN32
 #include <process.h>
 #include <windows.h>
-#include <kj/windows-sanity.h>
+#include "kj/windows-sanity.h"
 #undef CONST
 #else
 #include <sys/wait.h>

@@ -34,9 +34,9 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
-#include <kj/async-queue.h>
-#include <kj/debug.h>
-#include <kj/vector.h>
+#include "kj/async-queue.h"
+#include "kj/debug.h"
+#include "kj/vector.h"
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define BIO_set_init(x,v)          (x->init=v)

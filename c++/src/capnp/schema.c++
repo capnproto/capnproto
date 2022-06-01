@@ -21,8 +21,8 @@
 
 #include "schema.h"
 #include "message.h"
-#include <kj/debug.h>
-#include <capnp/stream.capnp.h>
+#include "kj/debug.h"
+#include "capnp/stream.capnp.h"
 
 namespace capnp {
 

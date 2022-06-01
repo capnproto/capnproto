@@ -27,7 +27,7 @@
 #include "debug.h"
 #include "thread.h"
 #include "mutex.h"
-#include <kj/test.h>
+#include "kj/test.h"
 
 #if _WIN32
 #include <windows.h>

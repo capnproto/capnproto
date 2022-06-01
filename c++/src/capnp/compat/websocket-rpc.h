@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <kj/compat/http.h>
-#include <capnp/serialize-async.h>
+#include "kj/compat/http.h"
+#include "capnp/serialize-async.h"
 
 namespace capnp {
 

@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "endian.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 
 namespace capnp {
 namespace _ {  // private

@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <kj/string.h>
-#include <kj/vector.h>
+#include "kj/string.h"
+#include "kj/vector.h"
 #include <inttypes.h>
 
 namespace kj {

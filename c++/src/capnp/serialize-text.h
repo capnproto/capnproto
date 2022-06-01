@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include <kj/string.h>
+#include "kj/string.h"
 #include "dynamic.h"
 #include "orphan.h"
 #include "schema.h"

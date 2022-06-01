@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include <capnp/schema.h>
-#include <capnp/dynamic.h>
-#include <capnp/compat/json.capnp.h>
+#include "capnp/schema.h"
+#include "capnp/dynamic.h"
+#include "capnp/compat/json.capnp.h"
 
 namespace capnp {
 

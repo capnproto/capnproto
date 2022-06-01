@@ -34,11 +34,11 @@
 //   values to them.
 // - Methods are identified by an enum.
 
-#include <kj/string.h>
-#include <kj/vector.h>
-#include <kj/memory.h>
-#include <kj/one-of.h>
-#include <kj/async-io.h>
+#include "kj/string.h"
+#include "kj/vector.h"
+#include "kj/memory.h"
+#include "kj/one-of.h"
+#include "kj/async-io.h"
 
 namespace kj {
 

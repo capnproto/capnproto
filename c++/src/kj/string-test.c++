@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "string.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 #include <string>
 #include "vector.h"
 #include <locale.h>

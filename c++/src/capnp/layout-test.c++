@@ -23,7 +23,7 @@
 #include "layout.h"
 #include "message.h"
 #include "arena.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 
 #if CAPNP_DEBUG_TYPES
 namespace kj {

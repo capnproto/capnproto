@@ -21,18 +21,18 @@
 
 #include "rpc.h"
 #include "message.h"
-#include <kj/debug.h>
-#include <kj/vector.h>
-#include <kj/async.h>
-#include <kj/one-of.h>
-#include <kj/function.h>
+#include "kj/debug.h"
+#include "kj/vector.h"
+#include "kj/async.h"
+#include "kj/one-of.h"
+#include "kj/function.h"
 #include <functional>  // std::greater
 #include <unordered_map>
 #include <map>
 #include <queue>
-#include <capnp/rpc.capnp.h>
-#include <kj/io.h>
-#include <kj/map.h>
+#include "capnp/rpc.capnp.h"
+#include "kj/io.h"
+#include "kj/map.h"
 
 namespace capnp {
 namespace _ {  // private

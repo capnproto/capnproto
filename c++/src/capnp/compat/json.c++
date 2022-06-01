@@ -20,13 +20,13 @@
 // THE SOFTWARE.
 
 #include "json.h"
-#include <capnp/orphan.h>
-#include <kj/debug.h>
-#include <kj/function.h>
-#include <kj/vector.h>
-#include <kj/one-of.h>
-#include <kj/encoding.h>
-#include <kj/map.h>
+#include "capnp/orphan.h"
+#include "kj/debug.h"
+#include "kj/function.h"
+#include "kj/vector.h"
+#include "kj/one-of.h"
+#include "kj/encoding.h"
+#include "kj/map.h"
 
 namespace capnp {
 

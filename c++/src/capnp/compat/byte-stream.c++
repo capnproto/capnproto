@@ -20,8 +20,8 @@
 // THE SOFTWARE.
 
 #include "byte-stream.h"
-#include <kj/one-of.h>
-#include <kj/debug.h>
+#include "kj/one-of.h"
+#include "kj/debug.h"
 
 namespace capnp {
 

@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "encoding.h"
-#include <kj/test.h>
+#include "kj/test.h"
 #include <stdint.h>
 
 namespace kj {

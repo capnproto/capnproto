@@ -20,14 +20,14 @@
 // THE SOFTWARE.
 
 #if _WIN32
-#include <kj/win32-api-version.h>
+#include "kj/win32-api-version.h"
 #endif
 
 #include "parser.h"
 #include "type-id.h"
-#include <capnp/dynamic.h>
-#include <kj/debug.h>
-#include <kj/encoding.h>
+#include "capnp/dynamic.h"
+#include "kj/debug.h"
+#include "kj/encoding.h"
 #if !_MSC_VER
 #include <unistd.h>
 #endif
@@ -39,7 +39,7 @@
 #include <windows.h>
 #include <wincrypt.h>
 #undef CONST
-#include <kj/windows-sanity.h>
+#include "kj/windows-sanity.h"
 #endif
 
 namespace capnp {

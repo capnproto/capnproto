@@ -22,10 +22,10 @@
 #pragma once
 
 #include "../common.h"
-#include <kj/string.h>
-#include <kj/exception.h>
-#include <kj/vector.h>
-#include <kj/filesystem.h>
+#include "kj/string.h"
+#include "kj/exception.h"
+#include "kj/vector.h"
+#include "kj/filesystem.h"
 
 CAPNP_BEGIN_HEADER
 

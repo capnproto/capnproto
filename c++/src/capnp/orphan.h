@@ -126,10 +126,10 @@ public:
 
   Orphan<DynamicStruct> newOrphan(StructSchema schema) const;
   // Dynamically create an orphan struct with the given schema.  You must
-  // #include <capnp/dynamic.h> to use this.
+  // #include "capnp/dynamic.h" to use this.
 
   Orphan<DynamicList> newOrphan(ListSchema schema, uint size) const;
-  // Dynamically create an orphan list with the given schema.  You must #include <capnp/dynamic.h>
+  // Dynamically create an orphan list with the given schema.  You must #include "capnp/dynamic.h"
   // to use this.
 
   template <typename Reader>

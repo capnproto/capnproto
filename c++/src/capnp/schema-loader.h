@@ -22,8 +22,8 @@
 #pragma once
 
 #include "schema.h"
-#include <kj/memory.h>
-#include <kj/mutex.h>
+#include "kj/memory.h"
+#include "kj/mutex.h"
 
 CAPNP_BEGIN_HEADER
 

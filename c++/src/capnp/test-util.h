@@ -21,14 +21,14 @@
 
 #pragma once
 
-#include <capnp/test.capnp.h>
+#include "capnp/test.capnp.h"
 #include <iostream>
 #include "blob.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 
 #if !CAPNP_LITE
 #include "dynamic.h"
-#include <kj/io.h>
+#include "kj/io.h"
 #endif  // !CAPNP_LITE
 
 CAPNP_BEGIN_HEADER

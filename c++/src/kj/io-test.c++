@@ -26,7 +26,7 @@
 #include "io.h"
 #include "debug.h"
 #include "miniposix.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 
 namespace kj {
 namespace {

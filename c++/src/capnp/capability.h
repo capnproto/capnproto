@@ -25,8 +25,8 @@
 #error "RPC APIs, including this header, are not available in lite mode."
 #endif
 
-#include <kj/async.h>
-#include <kj/vector.h>
+#include "kj/async.h"
+#include "kj/vector.h"
 #include "raw-schema.h"
 #include "any.h"
 #include "pointer-helpers.h"
@@ -216,7 +216,7 @@ public:
 
   template <typename T>
   typename T::Client castAs(InterfaceSchema schema);
-  // Dynamic version.  `T` must be `DynamicCapability`, and you must `#include <capnp/dynamic.h>`.
+  // Dynamic version.  `T` must be `DynamicCapability`, and you must `#include "capnp/dynamic.h"`.
 
   kj::Promise<void> whenResolved();
   // If the capability is actually only a promise, the returned promise resolves once the

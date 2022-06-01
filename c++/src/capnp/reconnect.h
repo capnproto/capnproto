@@ -22,7 +22,7 @@
 #pragma once
 
 #include "capability.h"
-#include <kj/function.h>
+#include "kj/function.h"
 
 CAPNP_BEGIN_HEADER
 

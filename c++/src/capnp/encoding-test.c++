@@ -19,11 +19,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include <capnp/test-import.capnp.h>
-#include <capnp/test-import2.capnp.h>
+#include "capnp/test-import.capnp.h"
+#include "capnp/test-import2.capnp.h"
 #include "message.h"
-#include <kj/debug.h>
-#include <kj/compat/gtest.h>
+#include "kj/debug.h"
+#include "kj/compat/gtest.h"
 #include "test-util.h"
 #include "schema-lite.h"
 #include "serialize-packed.h"

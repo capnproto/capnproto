@@ -23,13 +23,13 @@
 #define _GNU_SOURCE
 #endif
 
-#include <capnp/test-import.capnp.h>
-#include <capnp/test-import2.capnp.h>
+#include "capnp/test-import.capnp.h"
+#include "capnp/test-import2.capnp.h"
 #include "message.h"
 #include "serialize.h"
-#include <kj/test.h>
+#include "kj/test.h"
 #include <stdlib.h>
-#include <kj/miniposix.h>
+#include "kj/miniposix.h"
 #include "test-util.h"
 
 namespace capnp {

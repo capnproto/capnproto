@@ -24,21 +24,21 @@
 #endif
 
 #if _WIN32
-#include <kj/win32-api-version.h>
+#include "kj/win32-api-version.h"
 #endif
 
 #include "serialize-async.h"
 #include "serialize.h"
-#include <kj/debug.h>
-#include <kj/thread.h>
+#include "kj/debug.h"
+#include "kj/thread.h"
 #include <stdlib.h>
-#include <kj/miniposix.h>
+#include "kj/miniposix.h"
 #include "test-util.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 
 #if _WIN32
 #include <winsock2.h>
-#include <kj/windows-sanity.h>
+#include "kj/windows-sanity.h"
 namespace kj {
   namespace _ {
     int win32Socketpair(SOCKET socks[2]);

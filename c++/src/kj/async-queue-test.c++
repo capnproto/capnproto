@@ -21,9 +21,9 @@
 
 #include "async-queue.h"
 
-#include <kj/async-io.h>
-#include <kj/test.h>
-#include <kj/vector.h>
+#include "kj/async-io.h"
+#include "kj/test.h"
+#include "kj/vector.h"
 
 namespace kj {
 namespace {

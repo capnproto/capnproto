@@ -21,7 +21,7 @@
 
 #include "async.h"
 #include "debug.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 #include "mutex.h"
 #include "thread.h"
 

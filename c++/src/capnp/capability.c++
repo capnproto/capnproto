@@ -24,9 +24,9 @@
 #include "capability.h"
 #include "message.h"
 #include "arena.h"
-#include <kj/refcount.h>
-#include <kj/debug.h>
-#include <kj/vector.h>
+#include "kj/refcount.h"
+#include "kj/debug.h"
+#include "kj/vector.h"
 #include <map>
 #include "generated-header-support.h"
 

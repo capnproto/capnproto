@@ -22,8 +22,8 @@
 #pragma once
 
 #include "schema-loader.h"
-#include <kj/string.h>
-#include <kj/filesystem.h>
+#include "kj/string.h"
+#include "kj/filesystem.h"
 
 CAPNP_BEGIN_HEADER
 

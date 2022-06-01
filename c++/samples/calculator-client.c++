@@ -20,8 +20,8 @@
 // THE SOFTWARE.
 
 #include "calculator.capnp.h"
-#include <capnp/ez-rpc.h>
-#include <kj/debug.h>
+#include "capnp/ez-rpc.h"
+#include "kj/debug.h"
 #include <math.h>
 #include <iostream>
 

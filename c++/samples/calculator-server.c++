@@ -20,9 +20,9 @@
 // THE SOFTWARE.
 
 #include "calculator.capnp.h"
-#include <kj/debug.h>
-#include <capnp/ez-rpc.h>
-#include <capnp/message.h>
+#include "kj/debug.h"
+#include "capnp/ez-rpc.h"
+#include "capnp/message.h"
 #include <iostream>
 
 typedef unsigned int uint;

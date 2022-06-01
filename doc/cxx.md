@@ -49,8 +49,8 @@ You might write code like:
 
 {% highlight c++ %}
 #include "addressbook.capnp.h"
-#include <capnp/message.h>
-#include <capnp/serialize-packed.h>
+#include "capnp/message.h"
+#include "capnp/serialize-packed.h"
 #include <iostream>
 
 void writeAddressBook(int fd) {
@@ -478,11 +478,11 @@ of the dynamic API:
 
 {% highlight c++ %}
 #include "addressbook.capnp.h"
-#include <capnp/message.h>
-#include <capnp/serialize-packed.h>
+#include "capnp/message.h"
+#include "capnp/serialize-packed.h"
 #include <iostream>
-#include <capnp/schema.h>
-#include <capnp/dynamic.h>
+#include "capnp/schema.h"
+#include "capnp/dynamic.h"
 
 using ::capnp::DynamicValue;
 using ::capnp::DynamicStruct;

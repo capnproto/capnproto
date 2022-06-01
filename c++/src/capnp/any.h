@@ -25,8 +25,8 @@
 #include "pointer-helpers.h"
 #include "orphan.h"
 #include "list.h"
-#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
-#include <kj/hash.h>
+#include "kj/windows-sanity.h"  // work-around macro conflict with `VOID`
+#include "kj/hash.h"
 
 CAPNP_BEGIN_HEADER
 
@@ -116,15 +116,15 @@ struct AnyPointer {
 
     template <typename T>
     inline ReaderFor<T> getAs(StructSchema schema) const;
-    // Only valid for T = DynamicStruct.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicStruct.  Requires `#include "capnp/dynamic.h"`.
 
     template <typename T>
     inline ReaderFor<T> getAs(ListSchema schema) const;
-    // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicList.  Requires `#include "capnp/dynamic.h"`.
 
     template <typename T>
     inline ReaderFor<T> getAs(InterfaceSchema schema) const;
-    // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicCapability.  Requires `#include "capnp/dynamic.h"`.
 
 #if !CAPNP_LITE
     kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
@@ -177,15 +177,15 @@ struct AnyPointer {
 
     template <typename T>
     inline BuilderFor<T> getAs(StructSchema schema);
-    // Only valid for T = DynamicStruct.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicStruct.  Requires `#include "capnp/dynamic.h"`.
 
     template <typename T>
     inline BuilderFor<T> getAs(ListSchema schema);
-    // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicList.  Requires `#include "capnp/dynamic.h"`.
 
     template <typename T>
     inline BuilderFor<T> getAs(InterfaceSchema schema);
-    // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicCapability.  Requires `#include "capnp/dynamic.h"`.
 
     template <typename T>
     inline BuilderFor<T> initAs();
@@ -197,11 +197,11 @@ struct AnyPointer {
 
     template <typename T>
     inline BuilderFor<T> initAs(StructSchema schema);
-    // Only valid for T = DynamicStruct.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicStruct.  Requires `#include "capnp/dynamic.h"`.
 
     template <typename T>
     inline BuilderFor<T> initAs(ListSchema schema, uint elementCount);
-    // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicList.  Requires `#include "capnp/dynamic.h"`.
 
     inline AnyList::Builder initAsAnyList(ElementSize elementSize, uint elementCount);
     // Note: Does not accept INLINE_COMPOSITE for elementSize.
@@ -214,7 +214,7 @@ struct AnyPointer {
     template <typename T>
     inline void setAs(ReaderFor<T> value);
     // Valid for ReaderType = T::Reader for T = any generated struct type, List<U>, Text, Data,
-    // DynamicStruct, or DynamicList (the dynamic types require `#include <capnp/dynamic.h>`).
+    // DynamicStruct, or DynamicList (the dynamic types require `#include "capnp/dynamic.h"`).
 
     template <typename T>
     inline void setAs(std::initializer_list<ReaderFor<ListElementType<T>>> list);
@@ -231,7 +231,7 @@ struct AnyPointer {
     template <typename T>
     inline void adopt(Orphan<T>&& orphan);
     // Valid for T = any generated struct type, List<U>, Text, Data, DynamicList, DynamicStruct,
-    // or DynamicValue (the dynamic types require `#include <capnp/dynamic.h>`).
+    // or DynamicValue (the dynamic types require `#include "capnp/dynamic.h"`).
 
     template <typename T>
     inline Orphan<T> disownAs();
@@ -239,15 +239,15 @@ struct AnyPointer {
 
     template <typename T>
     inline Orphan<T> disownAs(StructSchema schema);
-    // Only valid for T = DynamicStruct.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicStruct.  Requires `#include "capnp/dynamic.h"`.
 
     template <typename T>
     inline Orphan<T> disownAs(ListSchema schema);
-    // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicList.  Requires `#include "capnp/dynamic.h"`.
 
     template <typename T>
     inline Orphan<T> disownAs(InterfaceSchema schema);
-    // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
+    // Only valid for T = DynamicCapability.  Requires `#include "capnp/dynamic.h"`.
 
     inline Orphan<AnyPointer> disown();
     // Disown without a type.

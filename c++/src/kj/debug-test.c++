@@ -25,7 +25,7 @@
 
 #include "debug.h"
 #include "exception.h"
-#include <kj/compat/gtest.h>
+#include "kj/compat/gtest.h"
 #include <string>
 #include <stdio.h>
 #include <signal.h>
