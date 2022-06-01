@@ -103,6 +103,40 @@ namespace kj {
 
 namespace {
 
+KJ_THREADLOCAL_PTR(DisallowAsyncDestructorsScope) disallowAsyncDestructorsScope = nullptr;
+
+}  // namespace
+
+AsyncObject::~AsyncObject() noexcept {
+  // Since the method is noexcept, this will abort the process.
+  KJ_REQUIRE(disallowAsyncDestructorsScope == nullptr,
+      kj::str("KJ async object being destroyed when not allowed: ",
+              disallowAsyncDestructorsScope->reason));
+}
+
+DisallowAsyncDestructorsScope::DisallowAsyncDestructorsScope(kj::StringPtr reason)
+    : reason(reason), previousValue(disallowAsyncDestructorsScope) {
+  requireOnStack(this, "DisallowAsyncDestructorsScope must be allocated on the stack.");
+  disallowAsyncDestructorsScope = this;
+}
+
+DisallowAsyncDestructorsScope::~DisallowAsyncDestructorsScope() {
+  disallowAsyncDestructorsScope = previousValue;
+}
+
+AllowAsyncDestructorsScope::AllowAsyncDestructorsScope()
+    : previousValue(disallowAsyncDestructorsScope) {
+  requireOnStack(this, "AllowAsyncDestructorsScope must be allocated on the stack.");
+  disallowAsyncDestructorsScope = nullptr;
+}
+AllowAsyncDestructorsScope::~AllowAsyncDestructorsScope() {
+  disallowAsyncDestructorsScope = previousValue;
+}
+
+// =======================================================================================
+
+namespace {
+
 KJ_THREADLOCAL_PTR(EventLoop) threadLocalEventLoop = nullptr;
 
 #define _kJ_ALREADY_READY reinterpret_cast< ::kj::_::Event*>(1)

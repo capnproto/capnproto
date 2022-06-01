@@ -442,6 +442,10 @@ kj::ArrayPtr<void* const> computeRelativeTrace(
 //
 // This is useful for debugging, when reporting several related traces at once.
 
+void requireOnStack(void* ptr, kj::StringPtr description);
+// Throw an exception if `ptr` does not appear to point to something near the top of the stack.
+// Used as a safety check for types that must be stack-allocated, like ExceptionCallback.
+
 }  // namespace kj
 
 KJ_END_HEADER

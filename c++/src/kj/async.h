@@ -64,6 +64,54 @@ using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // Func itself returns a promise, the promises are joined, so you never get Promise<Promise<T>>.
 
 // =======================================================================================
+
+class AsyncObject {
+  // You may optionally inherit privately from this to indicate that the type is a KJ async object,
+  // meaning it deals with KJ async I/O making it tied to a specific thread and event loop. This
+  // enables some additional debug checks, but does not otherwise have any effect on behavior as
+  // long as there are no bugs.
+  //
+  // (We prefer inheritance rather than composition here because inheriting an empty type adds zero
+  // size to the derived class.)
+
+public:
+  ~AsyncObject() noexcept;
+};
+
+class DisallowAsyncDestructorsScope {
+  // Create this type on the stack in order to specify that during its scope, no KJ async objects
+  // should be destroyed. If AsyncObject's destructor is called in this scope, the process will
+  // crash with std::terminate().
+  //
+  // This is useful as a sort of "sanitizer" to catch bugs. When tearing down an object that is
+  // intended to be passed between threads, you can set up one of these scopes to catch whether
+  // the object contains any async objects, which are not legal to pass across threads.
+
+public:
+  explicit DisallowAsyncDestructorsScope(kj::StringPtr reason);
+  ~DisallowAsyncDestructorsScope();
+  KJ_DISALLOW_COPY(DisallowAsyncDestructorsScope);
+
+private:
+  kj::StringPtr reason;
+  DisallowAsyncDestructorsScope* previousValue;
+
+  friend class AsyncObject;
+};
+
+class AllowAsyncDestructorsScope {
+  // Negates the effect of DisallowAsyncDestructorsScope.
+
+public:
+  AllowAsyncDestructorsScope();
+  ~AllowAsyncDestructorsScope();
+  KJ_DISALLOW_COPY(AllowAsyncDestructorsScope);
+
+private:
+  DisallowAsyncDestructorsScope* previousValue;
+};
+
+// =======================================================================================
 // Promises
 
 template <typename T>
@@ -540,7 +588,7 @@ inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func
 // =======================================================================================
 // Advanced promise construction
 
-class PromiseRejector {
+class PromiseRejector: private AsyncObject {
   // Superclass of PromiseFulfiller containing the non-typed methods. Useful when you only really
   // need to be able to reject a promise, and you need to operate on fulfillers of different types.
 public:
@@ -681,7 +729,7 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller();
 // =======================================================================================
 // Canceler
 
-class Canceler {
+class Canceler: private AsyncObject {
   // A Canceler can wrap some set of Promises and then forcefully cancel them on-demand, or
   // implicitly when the Canceler is destroyed.
   //
@@ -786,7 +834,7 @@ private:
 // =======================================================================================
 // TaskSet
 
-class TaskSet {
+class TaskSet: private AsyncObject {
   // Holds a collection of Promise<void>s and ensures that each executes to completion.  Memory
   // associated with each promise is automatically freed when the promise completes.  Destroying
   // the TaskSet itself automatically cancels all unfinished promises.
