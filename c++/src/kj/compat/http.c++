@@ -3701,7 +3701,8 @@ public:
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_VERSION] = "13";
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_KEY] = keyBase64;
 
-    kj::String extensionValues;
+    kj::Maybe<kj::String> offeredExtensions;
+    kj::Maybe<CompressionParameters> clientOffer;
     KJ_IF_MAYBE(value, headers.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
       // Strip all `Sec-WebSocket-Extensions` except for `permessage-deflate`.
       kj::StringPtr permitedExtension = "permessage-deflate"_kj;
@@ -3711,13 +3712,18 @@ public:
       auto empty = true;
       for (const auto &ext : extensions) {
         if (empty) {
-          extensionValues = kj::str(ext);
+          clientOffer = retainClientCompressorConfig(ext);
+          // If client offered `client_x` params, we will retain them to compare against the response
+          // later. Note that we only check the first offer as offers are ordered by preference.
+          offeredExtensions = kj::str(ext);
           empty = false;
         } else {
-          extensionValues = kj::str(extensionValues, ", ", ext);
+          offeredExtensions = kj::str(KJ_REQUIRE_NONNULL(offeredExtensions), ", ", ext);
         }
       }
-      connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_EXTENSIONS] = extensionValues;
+      KJ_IF_MAYBE(extensions, offeredExtensions) {
+        connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_EXTENSIONS] = *extensions;
+      }
     }
 
     httpOutput.writeHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
@@ -3728,7 +3734,8 @@ public:
     auto id = ++counter;
 
     return httpInput.readResponseHeaders()
-        .then([this,id,keyBase64 = kj::mv(keyBase64)](
+        .then([this,id,keyBase64 = kj::mv(keyBase64), offeredExtensions = kj::mv(offeredExtensions),
+            clientOffer = kj::mv(clientOffer)](
             HttpHeaders::ResponseOrProtocolError&& responseOrProtocolError)
             -> HttpClient::WebSocketResponse {
       KJ_SWITCH_ONEOF(responseOrProtocolError) {
@@ -3770,6 +3777,69 @@ public:
               });
             }
 
+            kj::Maybe<CompressionParameters> compressionParameters;
+            KJ_IF_MAYBE(agreedParameters, responseHeaders.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
+              kj::StringPtr failed = "Server failed WebSocket handshake: "_kj;
+              // If the response included websocket extensions, let's make sure we only received a
+              // single (valid) `permessage-deflate` extension.
+              if (offeredExtensions == nullptr) {
+                // We've received extensions when we did not send any in the first place.
+                auto msg = kj::str(
+                    failed, "added Sec-WebSocket-Extensions when client did not offer any.");
+                return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError({
+                  502, "Bad Gateway", msg, nullptr
+                });
+              }
+              auto offers = splitPartsWithCondition(*agreedParameters, ',');
+              if (offers.size() != 1) {
+                // We only expect a single `permessage-deflate` extension, so if we have more offers,
+                // the server has either included repeats, or non-`permessage-deflate` extensions.
+                auto msg = kj::str(
+                    failed,
+                    "response included more than one Sec-WebSocket-Extensions value when only one was expected.");
+                return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError({
+                  502, "Bad Gateway", msg, nullptr
+                });
+              }
+              kj::StringPtr finalOffer = offers[0];
+              if (!finalOffer.startsWith("permessage-deflate"_kj)) {
+                // Our client only sends `permessage-deflate`, thus the server included an extension
+                // that we did not ask for.
+                auto msg = kj::str(
+                    failed,
+                    "response included a Sec-WebSocket-Extensions value that was not permessage-deflate.");
+                return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError({
+                  502, "Bad Gateway", msg, nullptr
+                });
+              }
+              // Only thing left to do is verify the parameters of our single extension.
+              auto parameters = splitPartsWithCondition(finalOffer, ';');
+              compressionParameters = validateResponseCompressionParameters(parameters.asPtr());
+              if (compressionParameters == nullptr) {
+                // There was a problem parsing the server's `Sec-WebSocket-Extensions` response.
+                auto msg = kj::str(
+                    failed,
+                    "the Sec-WebSocket-Extensions header in the Response included an invalid value.");
+                return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError({
+                  502, "Bad Gateway", msg, nullptr
+                });
+              }
+              auto &agreement = KJ_REQUIRE_NONNULL(compressionParameters);
+              KJ_IF_MAYBE(original, clientOffer) {
+                // In the case that the client offered `client_x` and the server did
+                // not include the same parameter in the response, we will ensure the client uses
+                // the parameter/value it originally offered.
+                if (agreement.outbound_max_window_bits == nullptr) {
+                  // client_max_window_bits
+                  agreement.outbound_max_window_bits = original->outbound_max_window_bits;
+                }
+                if (agreement.outbound_no_context_takeover == false) {
+                  // client_no_context_takeover
+                  agreement.outbound_no_context_takeover = original->outbound_no_context_takeover;
+                }
+              }
+            }
+            // TODO (now): Pass compressionParameters to upgradeToWebSocket().
             return {
               response.statusCode,
               response.statusText,
@@ -3853,6 +3923,143 @@ private:
         }
       }
     }).eagerlyEvaluate(nullptr);
+  }
+
+  struct CompressionParameters {
+    // TODO (now): We need a better place to put this struct since both HttpClient and
+    // HttpServer::Connection share it (as well as WebSocketImpl eventually).
+    // I suspect it would be a good idea to make another class with all this websocket stuff.
+    //
+    // These are the parameters for `Sec-WebSocket-Extensions` permessage-deflate extension.
+    // Since we cannot distinguish the client/server in `upgradeToWebSocket`, we use the prefixes
+    // `inbound` and `outbound` instead.
+    bool outbound_no_context_takeover;
+    bool inbound_no_context_takeover;
+    kj::Maybe<size_t> outbound_max_window_bits;
+    kj::Maybe<size_t> inbound_max_window_bits;
+  };
+
+  kj::Maybe<CompressionParameters> retainClientCompressorConfig(const kj::StringPtr offer) {
+    // If the client requests any `client_x` parameter of the `permessage-deflate` extension, we
+    // will want to retain the value so that it can be compared with the server's response.
+    kj::Maybe<CompressionParameters> parameters = CompressionParameters {
+        .outbound_no_context_takeover = false,
+        .outbound_max_window_bits = nullptr };
+
+    auto temp = kj::str(offer);
+    kj::StringPtr tempPtr = temp;
+    auto params = splitPartsWithCondition(tempPtr, ';');
+
+    for (const auto& p : params) {
+      auto &config = KJ_REQUIRE_NONNULL(parameters);
+      if (p.startsWith("client_max_window_bits=")) {
+        auto windowSize = kj::str(
+            p.slice("client_max_window_bits="_kj.size(), p.size()));
+
+        size_t window;
+        kj::Maybe<kj::Exception> maybeException = kj::runCatchingExceptions([&]() {
+          window = windowSize.parseAs<size_t>();
+        });
+        KJ_IF_MAYBE(e, maybeException) {
+          // Received invalid ABNF, expected 1*DIGIT. The server won't accept this offer anyways,
+          // so we might as well abandon the operation.
+          parameters = nullptr;
+          break;
+        }
+        config.outbound_max_window_bits = window;
+      } else if (p.startsWith("client_no_context_takeover")) {
+        config.outbound_no_context_takeover = true;
+      }
+    }
+    return kj::mv(parameters);
+  }
+
+  kj::Maybe<CompressionParameters> validateResponseCompressionParameters(
+      kj::ArrayPtr<kj::String> parameters) {
+    // TODO (now): We should really find a way to merge the client/server `validateCompressionParameters`
+    // methods. They're long and extremely similar. Maybe we can define some other class, keep these
+    // methods private, and have the HttpClient/HttpServer::Connection classes be friend classes?
+    if (parameters.size() > 5) {
+      // `permessage-deflate` has 4 optional parameters. If we've seen all 4 parameters, then any
+      // additional parameters are either repeats, or invalid, so there's no need to process them.
+      // `parameters` starts with `permessage-deflate`, so we should have 5 elements at most.
+      return nullptr;
+    }
+
+    kj::Maybe<CompressionParameters> compressionParameters = CompressionParameters {
+        .outbound_no_context_takeover = false,
+        .inbound_no_context_takeover = false,
+        .outbound_max_window_bits = nullptr,
+        .inbound_max_window_bits = nullptr };
+    auto& config = KJ_REQUIRE_NONNULL(compressionParameters);
+
+    for (const auto &i : kj::indices(parameters)) {
+      if (i == 0) {
+        // Skip first element, which is `permessage-deflate`.
+        continue;
+      }
+      if (parameters[i].startsWith("server_max_window_bits=")) {
+        if (config.inbound_max_window_bits != nullptr) {
+          // We've seen this parameter already, decline.
+          compressionParameters = nullptr;
+          break;
+        }
+        auto windowSize = kj::str(
+            parameters[i].slice("server_max_window_bits="_kj.size(), parameters[i].size()));
+
+        size_t window;
+        kj::Maybe<kj::Exception> maybeException = kj::runCatchingExceptions([&]() {
+          window = windowSize.parseAs<size_t>();
+        });
+        KJ_IF_MAYBE(e, maybeException) {
+          // Received invalid ABNF, expected 1*DIGIT -- decline.
+          compressionParameters = nullptr;
+          break;
+        }
+        config.inbound_max_window_bits = window;
+      } else if (parameters[i].startsWith("client_max_window_bits=")) {
+        // Note that this response must have a value -- it cannot be empty.
+        if (config.outbound_max_window_bits != nullptr) {
+          // We've seen this parameter already, decline.
+          compressionParameters = nullptr;
+          break;
+        }
+        // Server has responded to max window size with `response_w <= request_w`, so we just
+        // use this value.
+        auto windowSize = kj::str(
+            parameters[i].slice("client_max_window_bits="_kj.size(), parameters[i].size()));
+
+        size_t window;
+        kj::Maybe<kj::Exception> maybeException = kj::runCatchingExceptions([&]() {
+          window = windowSize.parseAs<size_t>();
+        });
+        KJ_IF_MAYBE(e, maybeException) {
+          // Received invalid ABNF, expected 1*DIGIT -- decline.
+          compressionParameters = nullptr;
+          break;
+        }
+        config.outbound_max_window_bits = window;
+      } else if (parameters[i].startsWith("server_no_context_takeover")) {
+        if (config.inbound_no_context_takeover == true) {
+          // We've seen this parameter already, decline.
+          compressionParameters = nullptr;
+          break;
+        }
+        config.inbound_no_context_takeover = true;
+      } else if (parameters[i].startsWith("client_no_context_takeover")) {
+        if (config.outbound_no_context_takeover == true) {
+          // We've seen this parameter already, decline.
+          compressionParameters = nullptr;
+          break;
+        }
+        config.outbound_no_context_takeover = true;
+      } else {
+        // This is an invalid parameter, we must decline the offer.
+        compressionParameters = nullptr;
+        break;
+      }
+    }
+    return kj::mv(compressionParameters);
   }
 };
 
