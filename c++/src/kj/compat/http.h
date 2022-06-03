@@ -534,6 +534,16 @@ public:
   virtual void generate(kj::ArrayPtr<byte> buffer) = 0;
 };
 
+struct CompressionParameters {
+  // These are the parameters for `Sec-WebSocket-Extensions` permessage-deflate extension.
+  // Since we cannot distinguish the client/server in `upgradeToWebSocket`, we use the prefixes
+  // `inbound` and `outbound` instead.
+  bool outbound_no_context_takeover = false;
+  bool inbound_no_context_takeover = false;
+  kj::Maybe<size_t> outbound_max_window_bits = nullptr;
+  kj::Maybe<size_t> inbound_max_window_bits = nullptr;
+};
+
 class WebSocket {
   // Interface representincg an open WebSocket session.
   //

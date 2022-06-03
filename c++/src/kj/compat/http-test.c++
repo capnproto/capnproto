@@ -2225,6 +2225,24 @@ const char WEBSOCKET_RESPONSE_HANDSHAKE[] =
     "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
     "My-Header: respond-foo\r\n"
     "\r\n";
+const char WEBSOCKET_COMPRESSION_HANDSHAKE[] =
+    " HTTP/1.1\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Key: DCI4TgwiOE4MIjhODCI4Tg==\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "Sec-WebSocket-Extensions: permessage-deflate;   client_no_context_takeover; "
+        "client_max_window_bits; server_max_window_bits=10, "
+        "permessage-deflate; client_max_window_bits\r\n"
+    "\r\n";
+const char WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE[] =
+    "HTTP/1.1 101 Switching Protocols\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
+    "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=15; "
+        "server_max_window_bits=10\r\n"
+    "\r\n";
 const char WEBSOCKET_RESPONSE_HANDSHAKE_ERROR[] =
     "HTTP/1.1 404 Not Found\r\n"
     "Content-Length: 0\r\n"
@@ -2280,6 +2298,24 @@ void testWebSocketClient(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
   }
 }
 
+void testWebSocketCompression(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
+                              kj::HttpHeaderId extHeader, kj::StringPtr extensions,
+                              HttpClient& client) {
+  kj::HttpHeaders headers(headerTable);
+  headers.set(extHeader, extensions);
+  auto response = client.openWebSocket("/websocket", headers).wait(waitScope);
+
+  KJ_EXPECT(response.statusCode == 101);
+  KJ_EXPECT(response.statusText == "Switching Protocols", response.statusText);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(extHeader)) ==
+      "permessage-deflate; client_max_window_bits=15; server_max_window_bits=10");
+  KJ_ASSERT(response.webSocketOrBody.is<kj::Own<WebSocket>>());
+  auto ws = kj::mv(response.webSocketOrBody.get<kj::Own<WebSocket>>());
+  // TODO (now): Once we actually start compressing messages, we need to try sending/receiving
+  // here.
+  // TODO (now): Might also be useful to test that we fail to connect if we get an invalid Response.
+}
+
 inline kj::Promise<void> writeA(kj::AsyncOutputStream& out, kj::ArrayPtr<const byte> data) {
   return out.write(data.begin(), data.size());
 }
@@ -2310,6 +2346,37 @@ KJ_TEST("HttpClient WebSocket handshake") {
   auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
 
   testWebSocketClient(waitScope, *headerTable, hMyHeader, *client);
+
+  serverTask.wait(waitScope);
+}
+
+KJ_TEST("HttpClient WebSocket Compression Negotiation") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_HANDSHAKE);
+
+  auto serverTask = expectRead(*pipe.ends[1], request)
+      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE)); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  HttpHeaderTable::Builder tableBuilder;
+  HttpHeaderId extHeader = tableBuilder.add("Sec-WebSocket-Extensions");
+  auto headerTable = tableBuilder.build();
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
+
+  // To test request/response parsing, we'll try to send:
+  //  - extensions that should get dropped,
+  //  - extra whitespace following extensions/parameters.
+  const auto extensions = "permessage-DROPTHIS,  permessage-deflate;   client_no_context_takeover; "
+      "client_max_window_bits; server_max_window_bits=10, "
+      "permessage-deflate; client_max_window_bits"_kj;
+  testWebSocketCompression(waitScope, *headerTable, extHeader, extensions, *client);
 
   serverTask.wait(waitScope);
 }
