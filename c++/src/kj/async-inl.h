@@ -134,7 +134,7 @@ private:
   void** limit;
 };
 
-class Event {
+class Event: private AsyncObject {
   // An event waiting to be executed.  Not for direct use by applications -- promises use this
   // internally.
 
@@ -212,7 +212,7 @@ private:
   SourceLocation location;
 };
 
-class PromiseNode {
+class PromiseNode: private AsyncObject {
   // A Promise<T> contains a chain of PromiseNodes tracking the pending transformations.
   //
   // To reduce generated code bloat, PromiseNode is not a template.  Instead, it makes very hacky

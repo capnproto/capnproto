@@ -98,6 +98,191 @@ enum class Variants20 { _variant0, _variant1, _variant2, _variant3, _variant4, _
                         _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
                         _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
                         _variant19 };
+enum class Variants21 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20 };
+enum class Variants22 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21 };
+enum class Variants23 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22 };
+enum class Variants24 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23 };
+enum class Variants25 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24 };
+enum class Variants26 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25 };
+enum class Variants27 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26 };
+enum class Variants28 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27 };
+enum class Variants29 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28 };
+enum class Variants30 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29 };
+enum class Variants31 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30 };
+enum class Variants32 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31 };
+enum class Variants33 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32 };
+enum class Variants34 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33 };
+enum class Variants35 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34 };
+enum class Variants36 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35 };
+enum class Variants37 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36 };
+enum class Variants38 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37 };
+enum class Variants39 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38 };
+enum class Variants40 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39 };
+enum class Variants41 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40 };
+enum class Variants42 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40, _variant41 };
+enum class Variants43 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40, _variant41, _variant42 };
+enum class Variants44 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40, _variant41, _variant42,
+                        _variant43 };
+enum class Variants45 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40, _variant41, _variant42,
+                        _variant43, _variant44 };
+enum class Variants46 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40, _variant41, _variant42,
+                        _variant43, _variant44, _variant45 };
+enum class Variants47 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40, _variant41, _variant42,
+                        _variant43, _variant44, _variant45, _variant46 };
+enum class Variants48 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40, _variant41, _variant42,
+                        _variant43, _variant44, _variant45, _variant46, _variant47 };
+enum class Variants49 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40, _variant41, _variant42,
+                        _variant43, _variant44, _variant45, _variant46, _variant47, _variant48 };
+enum class Variants50 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9, _variant10, _variant11, _variant12,
+                        _variant13, _variant14, _variant15, _variant16, _variant17, _variant18,
+                        _variant19, _variant20, _variant21, _variant22, _variant23, _variant24,
+                        _variant25, _variant26, _variant27, _variant28, _variant29, _variant30,
+                        _variant31, _variant32, _variant33, _variant34, _variant35, _variant36,
+                        _variant37, _variant38, _variant39, _variant40, _variant41, _variant42,
+                        _variant43, _variant44, _variant45, _variant46, _variant47, _variant48,
+                        _variant49 };
 
 template <uint i> struct Variants_;
 template <> struct Variants_<0> { typedef Variants0 Type; };
@@ -121,6 +306,36 @@ template <> struct Variants_<17> { typedef Variants17 Type; };
 template <> struct Variants_<18> { typedef Variants18 Type; };
 template <> struct Variants_<19> { typedef Variants19 Type; };
 template <> struct Variants_<20> { typedef Variants20 Type; };
+template <> struct Variants_<21> { typedef Variants21 Type; };
+template <> struct Variants_<22> { typedef Variants22 Type; };
+template <> struct Variants_<23> { typedef Variants23 Type; };
+template <> struct Variants_<24> { typedef Variants24 Type; };
+template <> struct Variants_<25> { typedef Variants25 Type; };
+template <> struct Variants_<26> { typedef Variants26 Type; };
+template <> struct Variants_<27> { typedef Variants27 Type; };
+template <> struct Variants_<28> { typedef Variants28 Type; };
+template <> struct Variants_<29> { typedef Variants29 Type; };
+template <> struct Variants_<30> { typedef Variants30 Type; };
+template <> struct Variants_<31> { typedef Variants31 Type; };
+template <> struct Variants_<32> { typedef Variants32 Type; };
+template <> struct Variants_<33> { typedef Variants33 Type; };
+template <> struct Variants_<34> { typedef Variants34 Type; };
+template <> struct Variants_<35> { typedef Variants35 Type; };
+template <> struct Variants_<36> { typedef Variants36 Type; };
+template <> struct Variants_<37> { typedef Variants37 Type; };
+template <> struct Variants_<38> { typedef Variants38 Type; };
+template <> struct Variants_<39> { typedef Variants39 Type; };
+template <> struct Variants_<40> { typedef Variants40 Type; };
+template <> struct Variants_<41> { typedef Variants41 Type; };
+template <> struct Variants_<42> { typedef Variants42 Type; };
+template <> struct Variants_<43> { typedef Variants43 Type; };
+template <> struct Variants_<44> { typedef Variants44 Type; };
+template <> struct Variants_<45> { typedef Variants45 Type; };
+template <> struct Variants_<46> { typedef Variants46 Type; };
+template <> struct Variants_<47> { typedef Variants47 Type; };
+template <> struct Variants_<48> { typedef Variants48 Type; };
+template <> struct Variants_<49> { typedef Variants49 Type; };
+template <> struct Variants_<50> { typedef Variants50 Type; };
 
 template <uint i>
 using Variants = typename Variants_<i>::Type;

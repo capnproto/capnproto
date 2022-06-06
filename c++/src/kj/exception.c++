@@ -969,14 +969,17 @@ KJ_THREADLOCAL_PTR(ExceptionCallback) threadLocalCallback = nullptr;
 
 }  // namespace
 
-ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
-  char stackVar;
+void requireOnStack(void* ptr, kj::StringPtr description) {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-  ptrdiff_t offset = reinterpret_cast<char*>(this) - &stackVar;
-  KJ_ASSERT(offset < 65536 && offset > -65536,
-            "ExceptionCallback must be allocated on the stack.");
+  char stackVar;
+  ptrdiff_t offset = reinterpret_cast<char*>(ptr) - &stackVar;
+  KJ_REQUIRE(offset < 65536 && offset > -65536,
+            kj::str(description));
 #endif
+}
 
+ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
+  requireOnStack(this, "ExceptionCallback must be allocated on the stack.");
   threadLocalCallback = this;
 }
 

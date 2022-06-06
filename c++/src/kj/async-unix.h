@@ -187,7 +187,7 @@ private:
   Maybe<Own<ChildSet>> childSet;
 };
 
-class UnixEventPort::FdObserver {
+class UnixEventPort::FdObserver: private AsyncObject {
   // Object which watches a file descriptor to determine when it is readable or writable.
   //
   // For listen sockets, "readable" means that there is a connection to accept(). For everything

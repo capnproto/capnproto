@@ -48,7 +48,7 @@ class AncillaryMessage;
 // =======================================================================================
 // Streaming I/O
 
-class AsyncInputStream {
+class AsyncInputStream: private AsyncObject {
   // Asynchronous equivalent of InputStream (from io.h).
 
 public:
@@ -102,7 +102,7 @@ public:
   // likely to arise if tryTee() is called twice with different limits on the same stream.
 };
 
-class AsyncOutputStream {
+class AsyncOutputStream: private AsyncObject {
   // Asynchronous equivalent of OutputStream (from io.h).
 
 public:
@@ -428,7 +428,7 @@ public:
 // =======================================================================================
 // Accepting connections
 
-class ConnectionReceiver {
+class ConnectionReceiver: private AsyncObject {
   // Represents a server socket listening on a port.
 
 public:
@@ -563,7 +563,7 @@ public:
 // =======================================================================================
 // Networks
 
-class NetworkAddress {
+class NetworkAddress: private AsyncObject {
   // Represents a remote address to which the application can connect.
 
 public:
