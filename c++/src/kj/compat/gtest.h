@@ -32,6 +32,8 @@
 #include "../test.h"
 #include <kj/windows-sanity.h>  // work-around macro conflict with `ERROR`
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
 namespace _ {  // private
@@ -118,3 +120,5 @@ private:
 #define TEST(x, y) KJ_TEST("legacy test: " #x "/" #y)
 
 }  // namespace kj
+
+KJ_END_HEADER
