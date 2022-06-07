@@ -177,6 +177,7 @@ includekj_HEADERS =                                            \
   src/kj/async-queue.h                                         \
   src/kj/main.h                                                \
   src/kj/test.h                                                \
+  src/kj/win32-api-version.h                                   \
   src/kj/windows-sanity.h
 
 includekjparse_HEADERS =                                       \

@@ -64,6 +64,7 @@ set(kj_headers
   filesystem.h
   time.h
   main.h
+  win32-api-version.h
   windows-sanity.h
 )
 set(kj-parse_headers
