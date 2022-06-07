@@ -26,6 +26,8 @@
 #include <capnp/capability.h>
 #include <kj/map.h>
 
+CAPNP_BEGIN_HEADER
+
 namespace kj { class HttpInputStream; }
 
 namespace capnp {
@@ -110,3 +112,5 @@ private:
 };
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

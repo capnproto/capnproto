@@ -25,6 +25,8 @@
 #include <capnp/dynamic.h>
 #include <capnp/compat/json.capnp.h>
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 
 typedef json::Value JsonValue;
@@ -523,3 +525,5 @@ void JsonCodec::handleByAnnotation() {
 }
 
 } // namespace capnp
+
+CAPNP_END_HEADER

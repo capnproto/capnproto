@@ -28,6 +28,8 @@
 #include "function.h"
 #include "hash.h"
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
 template <typename T>
@@ -1110,3 +1112,5 @@ void Directory::Replacer<T>::commit() {
 }
 
 } // namespace kj
+
+KJ_END_HEADER

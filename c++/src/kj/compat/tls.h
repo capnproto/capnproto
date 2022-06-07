@@ -30,6 +30,8 @@
 
 #include <kj/async-io.h>
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
 class TlsPrivateKey;
@@ -296,3 +298,5 @@ public:  // (not really public, only TlsConnection can call this)
 };
 
 } // namespace kj
+
+KJ_END_HEADER

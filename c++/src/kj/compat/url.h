@@ -25,6 +25,8 @@
 #include <kj/vector.h>
 #include <inttypes.h>
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
 struct UrlOptions {
@@ -145,3 +147,5 @@ struct Url {
 };
 
 } // namespace kj
+
+KJ_END_HEADER

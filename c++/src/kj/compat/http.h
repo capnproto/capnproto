@@ -40,6 +40,8 @@
 #include <kj/one-of.h>
 #include <kj/async-io.h>
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
 #define KJ_HTTP_FOR_EACH_METHOD(MACRO) \
@@ -1154,3 +1156,5 @@ inline void HttpHeaders::forEach(Func1&& func1, Func2&& func2) const {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER
