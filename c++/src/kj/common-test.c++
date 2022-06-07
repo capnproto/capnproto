@@ -811,6 +811,10 @@ KJ_TEST("ArrayPtr operator ==") {
              ArrayPtr<const char* const>({"foo", "baz"})));
   KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) !=
              ArrayPtr<const char* const>({"foo"})));
+
+  // operator== should not use memcmp for double elements.
+  double d[1] = { nan() };
+  KJ_EXPECT(ArrayPtr<double>(d, 1) != ArrayPtr<double>(d, 1));
 }
 
 KJ_TEST("kj::range()") {

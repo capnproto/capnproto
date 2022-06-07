@@ -99,6 +99,7 @@ KJ_BEGIN_HEADER
 #endif
 
 #include <stddef.h>
+#include <cstring>
 #include <initializer_list>
 
 #if __linux__ && __cplusplus > 201200L
@@ -571,6 +572,19 @@ T refIfLvalue(T&&);
 template <typename T, typename U> struct IsSameType_ { static constexpr bool value = false; };
 template <typename T> struct IsSameType_<T, T> { static constexpr bool value = true; };
 template <typename T, typename U> constexpr bool isSameType() { return IsSameType_<T, U>::value; }
+
+template <typename T> constexpr bool isIntegral() { return false; }
+template <> constexpr bool isIntegral<char>() { return true; }
+template <> constexpr bool isIntegral<signed char>() { return true; }
+template <> constexpr bool isIntegral<short>() { return true; }
+template <> constexpr bool isIntegral<int>() { return true; }
+template <> constexpr bool isIntegral<long>() { return true; }
+template <> constexpr bool isIntegral<long long>() { return true; }
+template <> constexpr bool isIntegral<unsigned char>() { return true; }
+template <> constexpr bool isIntegral<unsigned short>() { return true; }
+template <> constexpr bool isIntegral<unsigned int>() { return true; }
+template <> constexpr bool isIntegral<unsigned long>() { return true; }
+template <> constexpr bool isIntegral<unsigned long long>() { return true; }
 
 template <typename T>
 struct CanConvert_ {
@@ -1765,6 +1779,9 @@ public:
 
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
+    if (isIntegral<RemoveConst<T>>()) {
+      return std::memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
+    }
     for (size_t i = 0; i < size_; i++) {
       if (ptr[i] != other[i]) return false;
     }
