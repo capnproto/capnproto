@@ -1324,10 +1324,10 @@ public:
     auto paf = kj::newPromiseAndFulfiller<void>();
 
     auto promise = messageReadQueue
-        .then(kj::mvCapture(paf.fulfiller, [this](kj::Own<kj::PromiseFulfiller<void>> fulfiller) {
+        .then([this,fulfiller=kj::mv(paf.fulfiller)]() mutable {
       onMessageDone = kj::mv(fulfiller);
       return readHeader(HeaderType::MESSAGE, 0, 0);
-    }));
+    });
 
     messageReadQueue = kj::mv(paf.promise);
 
@@ -2084,10 +2084,10 @@ private:
     // is empty, then they make the write directly, using `writeInProgress` to detect and block
     // concurrent writes.
 
-    writeQueue = writeQueue.then(kj::mvCapture(content, [this](kj::String&& content) {
+    writeQueue = writeQueue.then([this,content=kj::mv(content)]() mutable {
       auto promise = inner.write(content.begin(), content.size());
       return promise.attach(kj::mv(content));
-    }));
+    });
   }
 };
 
@@ -2476,9 +2476,9 @@ public:
 
     Mask mask = recvHeader.getMask();
 
-    auto handleMessage = kj::mvCapture(message,
-        [this,opcode,payloadTarget,payloadLen,mask,isFin,maxSize,originalMaxSize]
-        (kj::Array<byte>&& message) -> kj::Promise<Message> {
+    auto handleMessage =
+        [this,opcode,payloadTarget,payloadLen,mask,isFin,maxSize,originalMaxSize,message=kj::mv(message)]() mutable
+        -> kj::Promise<Message> {
       if (!mask.isZero()) {
         mask.apply(kj::arrayPtr(payloadTarget, payloadLen));
       }
@@ -2558,7 +2558,7 @@ public:
         default:
           KJ_FAIL_REQUIRE("unknown WebSocket opcode", opcode);
       }
-    });
+    };
 
     if (payloadLen <= recvData.size()) {
       // All data already received.
@@ -3182,9 +3182,9 @@ private:
       queuedPong = kj::mv(payload);
     } else KJ_IF_MAYBE(promise, sendingPong) {
       // We're still sending a previous pong. Wait for it to finish before sending ours.
-      sendingPong = promise->then(kj::mvCapture(payload, [this](kj::Array<byte> payload) mutable {
+      sendingPong = promise->then([this,payload=kj::mv(payload)]() mutable {
         return sendPong(kj::mv(payload));
-      }));
+      });
     } else {
       // We're not sending any pong currently.
       sendingPong = sendPong(kj::mv(payload));
@@ -5144,11 +5144,11 @@ public:
     auto refcounted = getClient();
     auto result = refcounted->client->request(method, url, headers, expectedBodySize);
     result.body = result.body.attach(kj::addRef(*refcounted));
-    result.response = result.response.then(kj::mvCapture(refcounted,
-        [](kj::Own<RefcountedClient>&& refcounted, Response&& response) {
+    result.response = result.response.then(
+        [refcounted=kj::mv(refcounted)](Response&& response) mutable {
       response.body = response.body.attach(kj::mv(refcounted));
       return kj::mv(response);
-    }));
+    });
     return result;
   }
 
@@ -5156,8 +5156,8 @@ public:
       kj::StringPtr url, const HttpHeaders& headers) override {
     auto refcounted = getClient();
     auto result = refcounted->client->openWebSocket(url, headers);
-    return result.then(kj::mvCapture(refcounted,
-        [](kj::Own<RefcountedClient>&& refcounted, WebSocketResponse&& response) {
+    return result.then(
+        [refcounted=kj::mv(refcounted)](WebSocketResponse&& response) mutable {
       KJ_SWITCH_ONEOF(response.webSocketOrBody) {
         KJ_CASE_ONEOF(body, kj::Own<kj::AsyncInputStream>) {
           response.webSocketOrBody = body.attach(kj::mv(refcounted));
@@ -5172,15 +5172,15 @@ public:
         }
       }
       return kj::mv(response);
-    }));
+    });
   }
 
   kj::Promise<ConnectResponse>
   connect(kj::StringPtr host, const HttpHeaders& headers) override {
     auto refcounted = getClient();
     auto result = refcounted->client->connect(host, headers);
-    return result.then(kj::mvCapture(refcounted,
-        [](kj::Own<RefcountedClient>&& refcounted, ConnectResponse&& response) {
+    return result.then(
+        [refcounted=kj::mv(refcounted)](ConnectResponse&& response) mutable {
       KJ_SWITCH_ONEOF(response.connectionOrBody) {
         KJ_CASE_ONEOF(input, kj::Own<kj::AsyncInputStream>) {
           response.connectionOrBody = input.attach(kj::mv(refcounted));
@@ -5192,7 +5192,7 @@ public:
         }
       }
       KJ_UNREACHABLE;
-    }));
+    });
   }
 
 private:
@@ -5327,12 +5327,12 @@ public:
       // This gets complicated since request() returns a pair of a stream and a promise.
       auto urlCopy = kj::str(url);
       auto headersCopy = headers.clone();
-      auto combined = promise.addBranch().then(kj::mvCapture(urlCopy, kj::mvCapture(headersCopy,
-          [this,method,expectedBodySize](HttpHeaders&& headers, kj::String&& url)
+      auto combined = promise.addBranch().then(
+          [this,method,expectedBodySize,url=kj::mv(urlCopy), headers=kj::mv(headersCopy)]()
           -> kj::Tuple<kj::Own<kj::AsyncOutputStream>, kj::Promise<Response>> {
         auto req = KJ_ASSERT_NONNULL(client)->request(method, url, headers, expectedBodySize);
         return kj::tuple(kj::mv(req.body), kj::mv(req.response));
-      })));
+      });
 
       auto split = combined.split();
       return {
@@ -5349,10 +5349,10 @@ public:
     } else {
       auto urlCopy = kj::str(url);
       auto headersCopy = headers.clone();
-      return promise.addBranch().then(kj::mvCapture(urlCopy, kj::mvCapture(headersCopy,
-          [this](HttpHeaders&& headers, kj::String&& url) {
+      return promise.addBranch().then(
+          [this,url=kj::mv(urlCopy),headers=kj::mv(headersCopy)]() {
         return KJ_ASSERT_NONNULL(client)->openWebSocket(url, headers);
-      })));
+      });
     }
   }
 
@@ -5362,10 +5362,10 @@ public:
     } else {
       auto hostCopy = kj::str(host);
       auto headersCopy = headers.clone();
-      return promise.addBranch().then(kj::mvCapture(hostCopy, kj::mvCapture(headersCopy,
-          [this](HttpHeaders&& headers, kj::String&& host) {
+      return promise.addBranch().then(
+          [this,headers=kj::mv(headersCopy),host=kj::mv(hostCopy)]() {
         return KJ_ASSERT_NONNULL(client)->connect(host, headers);
-      })));
+      });
     }
   }
 

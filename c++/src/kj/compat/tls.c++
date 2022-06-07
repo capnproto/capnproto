@@ -357,11 +357,11 @@ private:
           disconnected = true;
           return size_t(0);
         case SSL_ERROR_WANT_READ:
-          return readBuffer.whenReady().then(kj::mvCapture(func,
-              [this](Func&& func) mutable { return sslCall(kj::fwd<Func>(func)); }));
+          return readBuffer.whenReady().then(
+              [this,func=kj::mv(func)]() mutable { return sslCall(kj::fwd<Func>(func)); });
         case SSL_ERROR_WANT_WRITE:
-          return writeBuffer.whenReady().then(kj::mvCapture(func,
-              [this](Func&& func) mutable { return sslCall(kj::fwd<Func>(func)); }));
+          return writeBuffer.whenReady().then(
+              [this,func=kj::mv(func)]() mutable { return sslCall(kj::fwd<Func>(func)); });
         case SSL_ERROR_SSL:
           throwOpensslError();
         case SSL_ERROR_SYSCALL:
@@ -568,10 +568,10 @@ public:
     //   So, we make some copies here.
     auto& tlsRef = tls;
     auto hostnameCopy = kj::str(hostname);
-    return inner->connect().then(kj::mvCapture(hostnameCopy,
-        [&tlsRef](kj::String&& hostname, Own<AsyncIoStream>&& stream) {
+    return inner->connect().then(
+        [&tlsRef,hostname=kj::mv(hostnameCopy)](Own<AsyncIoStream>&& stream) {
       return tlsRef.wrapClient(kj::mv(stream), hostname);
-    }));
+    });
   }
 
   Promise<kj::AuthenticatedStream> connectAuthenticated() override {
@@ -659,10 +659,10 @@ public:
     }
 
     return inner.parseAddress(addr, portHint)
-        .then(kj::mvCapture(hostname, [this](kj::String&& hostname, kj::Own<NetworkAddress>&& addr)
+        .then([this, hostname=kj::mv(hostname)](kj::Own<NetworkAddress>&& addr) mutable
             -> kj::Own<kj::NetworkAddress> {
       return kj::heap<TlsNetworkAddress>(tls, kj::mv(hostname), kj::mv(addr));
-    }));
+    });
   }
 
   Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) override {
@@ -863,10 +863,10 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapClient(
     kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname) {
   auto conn = kj::heap<TlsConnection>(kj::mv(stream), reinterpret_cast<SSL_CTX*>(ctx));
   auto promise = conn->connect(expectedServerHostname);
-  return promise.then(kj::mvCapture(conn, [](kj::Own<TlsConnection> conn)
+  return promise.then([conn=kj::mv(conn)]() mutable
       -> kj::Own<kj::AsyncIoStream> {
     return kj::mv(conn);
-  }));
+  });
 }
 
 kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::AsyncIoStream> stream) {
@@ -877,10 +877,10 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::Async
       return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
     }).exclusiveJoin(kj::mv(promise));
   }
-  return promise.then(kj::mvCapture(conn, [](kj::Own<TlsConnection> conn)
+  return promise.then([conn=kj::mv(conn)]() mutable
       -> kj::Own<kj::AsyncIoStream> {
     return kj::mv(conn);
-  }));
+  });
 }
 
 kj::Promise<kj::AuthenticatedStream> TlsContext::wrapClient(

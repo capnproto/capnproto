@@ -2749,9 +2749,9 @@ Promise<Own<AsyncIoStream>> CapabilityStreamNetworkAddress::connect() {
   }
   auto result = kj::mv(pipe.ends[0]);
   return inner.sendStream(kj::mv(pipe.ends[1]))
-      .then(kj::mvCapture(result, [](Own<AsyncIoStream>&& result) {
-    return kj::mv(result);
-  }));
+      .then([result=kj::mv(result)]() mutable {
+    return Own<AsyncIoStream>(kj::mv(result));
+  });
 }
 Promise<AuthenticatedStream> CapabilityStreamNetworkAddress::connectAuthenticated() {
   return connect().then([](Own<AsyncIoStream>&& stream) {

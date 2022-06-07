@@ -177,10 +177,10 @@ Capability::Client EzRpcClient::importCap(kj::StringPtr name) {
   KJ_IF_MAYBE(client, impl->clientContext) {
     return client->get()->restore(name);
   } else {
-    return impl->setupPromise.addBranch().then(kj::mvCapture(kj::heapString(name),
-        [this](kj::String&& name) {
+    return impl->setupPromise.addBranch().then(
+        [this,name=kj::heapString(name)]() {
       return KJ_ASSERT_NONNULL(impl->clientContext)->restore(name);
-    }));
+    });
   }
 }
 
@@ -260,13 +260,11 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
     portPromise = paf.promise.fork();
 
     tasks.add(context->getIoProvider().getNetwork().parseAddress(bindAddress, defaultPort)
-        .then(kj::mvCapture(paf.fulfiller,
-          [this, readerOpts](kj::Own<kj::PromiseFulfiller<uint>>&& portFulfiller,
-                             kj::Own<kj::NetworkAddress>&& addr) {
+        .then([this, portFulfiller=kj::mv(paf.fulfiller), readerOpts](kj::Own<kj::NetworkAddress>&& addr) mutable {
       auto listener = addr->listen();
       portFulfiller->fulfill(listener->getPort());
       acceptLoop(kj::mv(listener), readerOpts);
-    })));
+    }));
   }
 
   Impl(Capability::Client mainInterface, struct sockaddr* bindAddress, uint addrSize,
@@ -290,9 +288,7 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
 
   void acceptLoop(kj::Own<kj::ConnectionReceiver>&& listener, ReaderOptions readerOpts) {
     auto ptr = listener.get();
-    tasks.add(ptr->accept().then(kj::mvCapture(kj::mv(listener),
-        [this, readerOpts](kj::Own<kj::ConnectionReceiver>&& listener,
-                           kj::Own<kj::AsyncIoStream>&& connection) {
+    tasks.add(ptr->accept().then([this, listener=kj::mv(listener), readerOpts](kj::Own<kj::AsyncIoStream>&& connection) mutable {
       acceptLoop(kj::mv(listener), readerOpts);
 
       auto server = kj::heap<ServerContext>(kj::mv(connection), *this, readerOpts);
@@ -300,7 +296,7 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
       // Arrange to destroy the server context when all references are gone, or when the
       // EzRpcServer is destroyed (which will destroy the TaskSet).
       tasks.add(server->network.onDisconnect().attach(kj::mv(server)));
-    })));
+    }));
   }
 
   Capability::Client restore(AnyPointer::Reader objectId) override {

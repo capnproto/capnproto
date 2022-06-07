@@ -861,9 +861,9 @@ public:
       }
     }
 
-    return op->onComplete().then(mvCapture(result, mvCapture(scratch,
-        [this,newFd]
-        (Array<byte> scratch, Own<AsyncIoStream> stream, Win32EventPort::IoResult ioResult)
+    return op->onComplete().then(
+        [this,newFd,stream=kj::mv(result),scratch=kj::mv(scratch)]
+        (Win32EventPort::IoResult ioResult) mutable
         -> Promise<Own<AsyncIoStream>> {
       if (ioResult.errorCode != ERROR_SUCCESS) {
         KJ_FAIL_WIN32("AcceptEx()", ioResult.errorCode) { break; }
@@ -880,11 +880,11 @@ public:
       // getpeername() to get the address.
       auto addr = SocketAddress::getPeerAddress(newFd);
       if (addr.allowedBy(filter)) {
-        return kj::mv(stream);
+        return Own<AsyncIoStream>(kj::mv(stream));
       } else {
         return accept();
       }
-    })));
+    });
   }
 
   uint getPort() override {
@@ -941,9 +941,9 @@ public:
     SocketAddress::getWildcardForFamily(addr->sa_family).bind(fd);
 
     auto connected = result->connect(addr, addrlen);
-    return connected.then(kj::mvCapture(result, [](Own<AsyncIoStream>&& result) {
-      return kj::mv(result);
-    }));
+    return connected.then([result=kj::mv(result)]() mutable -> Own<AsyncIoStream> {
+      return Own<AsyncIoStream>(kj::mv(result));
+    });
   }
   Own<ConnectionReceiver> wrapListenSocketFd(
       SOCKET fd, NetworkFilter& filter, uint flags = 0) override {
@@ -1086,9 +1086,9 @@ public:
       : lowLevel(parent.lowLevel), filter(allow, deny, parent.filter) {}
 
   Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint = 0) override {
-    return evalLater(mvCapture(heapString(addr), [this,portHint](String&& addr) {
+    return evalLater([this,portHint,addr=kj::mv(addr)]() {
       return SocketAddress::parse(lowLevel, addr, portHint, filter);
-    })).then([this](Array<SocketAddress> addresses) -> Own<NetworkAddress> {
+    }).then([this](Array<SocketAddress> addresses) -> Own<NetworkAddress> {
       return heap<NetworkAddressImpl>(lowLevel, filter, kj::mv(addresses));
     });
   }
@@ -1150,13 +1150,12 @@ public:
 
     auto pipe = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
 
-    auto thread = heap<Thread>(kj::mvCapture(startFunc,
-        [threadFd](Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)>&& startFunc) {
+    auto thread = heap<Thread>([threadFd,startFunc=kj::mv(startFunc)]() mutable {
       LowLevelAsyncIoProviderImpl lowLevel;
       auto stream = lowLevel.wrapSocketFd(threadFd, NEW_FD_FLAGS);
       AsyncIoProviderImpl ioProvider(lowLevel);
       startFunc(ioProvider, *stream, lowLevel.getWaitScope());
-    }));
+    });
 
     return { kj::mv(thread), kj::mv(pipe) };
   }
