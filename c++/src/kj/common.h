@@ -573,6 +573,19 @@ template <typename T, typename U> struct IsSameType_ { static constexpr bool val
 template <typename T> struct IsSameType_<T, T> { static constexpr bool value = true; };
 template <typename T, typename U> constexpr bool isSameType() { return IsSameType_<T, U>::value; }
 
+template <typename T> constexpr bool isIntegral() { return false; }
+template <> constexpr bool isIntegral<char>() { return true; }
+template <> constexpr bool isIntegral<signed char>() { return true; }
+template <> constexpr bool isIntegral<short>() { return true; }
+template <> constexpr bool isIntegral<int>() { return true; }
+template <> constexpr bool isIntegral<long>() { return true; }
+template <> constexpr bool isIntegral<long long>() { return true; }
+template <> constexpr bool isIntegral<unsigned char>() { return true; }
+template <> constexpr bool isIntegral<unsigned short>() { return true; }
+template <> constexpr bool isIntegral<unsigned int>() { return true; }
+template <> constexpr bool isIntegral<unsigned long>() { return true; }
+template <> constexpr bool isIntegral<unsigned long long>() { return true; }
+
 template <typename T>
 struct CanConvert_ {
   static int sfinae(T);
@@ -609,52 +622,6 @@ constexpr bool canMemcpy() {
 #define KJ_ASSERT_CAN_MEMCPY(T) \
   static_assert(kj::canMemcpy<T>(), "this code expects this type to be memcpy()-able");
 #endif
-
-namespace _ {  // private
-#if defined(__clang__) && defined(__is_identifier)
-#define KJ_HAS_BUILTIN_TYPE_TRAIT(x) (!__is_identifier(x))
-#elif defined(__has_builtin)
-#define KJ_HAS_BUILTIN_TYPE_TRAIT(x) __has_builtin(x)
-#else
-#define KJ_HAS_BUILTIN_TYPE_TRAIT(x) 0
-#endif
-
-#if KJ_HAS_BUILTIN_TYPE_TRAIT(__is_integral)
-template <typename T>
-constexpr bool canMemcmpArrayOf() {
-  return __is_integral(T);
-}
-#else
-template <typename T, typename U>
-constexpr bool isSameType() {
-#if KJ_HAS_BUILTIN_TYPE_TRAIT(__is_same)
-  return __is_same(T, U);
-#elif KJ_HAS_BUILTIN_TYPE_TRAIT(__is_same_as) || __GNUC__
-  return __is_same_as(T, U);
-#else
-  return false;
-#endif
-}
-
-#undef KJ_HAS_BUILTIN_TYPE_TRAIT  // Don't leak this to user code.
-
-template <typename T>
-constexpr bool canMemcmpArrayOfHelper() {
-  return isSameType<T, const bool>()
-      || isSameType<T, const char>()
-      || isSameType<T, const signed char>()   || isSameType<T, const unsigned char>()
-      || isSameType<T, const short int>()     || isSameType<T, const unsigned short int>()
-      || isSameType<T, const int>()           || isSameType<T, const unsigned int>()
-      || isSameType<T, const long int>()      || isSameType<T, const unsigned long int>()
-      || isSameType<T, const long long int>() || isSameType<T, const unsigned long long int>();
-}
-
-template <typename T>
-constexpr bool canMemcmpArrayOf() {
-  return canMemcmpArrayOfHelper<const T>();
-}
-#endif
-}  // namespace _ (private)
 
 template <typename T>
 class Badge {
@@ -1812,7 +1779,7 @@ public:
 
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
-    if (_::canMemcmpArrayOf<T>()) {
+    if (isIntegral<RemoveConst<T>>()) {
       return std::memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
     }
     for (size_t i = 0; i < size_; i++) {

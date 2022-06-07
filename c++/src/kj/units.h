@@ -74,19 +74,6 @@ class Bounded;
 template <uint value>
 class BoundedConst;
 
-template <typename T> constexpr bool isIntegral() { return false; }
-template <> constexpr bool isIntegral<char>() { return true; }
-template <> constexpr bool isIntegral<signed char>() { return true; }
-template <> constexpr bool isIntegral<short>() { return true; }
-template <> constexpr bool isIntegral<int>() { return true; }
-template <> constexpr bool isIntegral<long>() { return true; }
-template <> constexpr bool isIntegral<long long>() { return true; }
-template <> constexpr bool isIntegral<unsigned char>() { return true; }
-template <> constexpr bool isIntegral<unsigned short>() { return true; }
-template <> constexpr bool isIntegral<unsigned int>() { return true; }
-template <> constexpr bool isIntegral<unsigned long>() { return true; }
-template <> constexpr bool isIntegral<unsigned long long>() { return true; }
-
 template <typename T>
 struct IsIntegralOrBounded_ { static constexpr bool value = isIntegral<T>(); };
 template <uint64_t m, typename T>
