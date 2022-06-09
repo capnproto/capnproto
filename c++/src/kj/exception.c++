@@ -970,7 +970,11 @@ KJ_THREADLOCAL_PTR(ExceptionCallback) threadLocalCallback = nullptr;
 }  // namespace
 
 void requireOnStack(void* ptr, kj::StringPtr description) {
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) || \
+    KJ_HAS_COMPILER_FEATURE(address_sanitizer) || \
+    defined(__SANITIZE_ADDRESS__)
+  // When using libfuzzer or ASAN, this sanity check may spurriously fail, so skip it.
+#else
   char stackVar;
   ptrdiff_t offset = reinterpret_cast<char*>(ptr) - &stackVar;
   KJ_REQUIRE(offset < 65536 && offset > -65536,

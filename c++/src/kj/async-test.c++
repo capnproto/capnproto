@@ -1162,7 +1162,12 @@ KJ_TEST("fiber pool") {
         if (i1_local == nullptr) {
           i1_local = &i;
         } else {
+#if !KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+          // Verify that the stack variable is in the exact same spot as before.
+          // May not work under ASAN as the instrumentation to detect stack-use-after-return can
+          // change the address.
           KJ_ASSERT(i1_local == &i);
+#endif
         }
         return i;
       });
@@ -1173,7 +1178,9 @@ KJ_TEST("fiber pool") {
           if (i2_local == nullptr) {
             i2_local = &i;
           } else {
+#if !KJ_HAS_COMPILER_FEATURE(address_sanitizer)
             KJ_ASSERT(i2_local == &i);
+#endif
           }
           return i;
         });
@@ -1210,9 +1217,24 @@ KJ_TEST("fiber pool") {
 bool onOurStack(char* p) {
   // If p points less than 64k away from a random stack variable, then it must be on the same
   // stack, since we never allocate stacks smaller than 64k.
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+  // The stack-use-after-return detection mechanism breaks our ability to check this, so don't.
+  return true;
+#else
   char c;
   ptrdiff_t diff = p - &c;
   return diff < 65536 && diff > -65536;
+#endif
+}
+
+bool notOnOurStack(char* p) {
+  // Opposite of onOurStack(), except returns true if the check can't be performed.
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+  // The stack-use-after-return detection mechanism breaks our ability to check this, so don't.
+  return true;
+#else
+  return !onOurStack(p);
+#endif
 }
 
 KJ_TEST("fiber pool runSynchronously()") {
@@ -1240,11 +1262,14 @@ KJ_TEST("fiber pool runSynchronously()") {
   });
   KJ_ASSERT(ptr2 != nullptr);
 
+#if !KJ_HAS_COMPILER_FEATURE(address_sanitizer)
   // Should have used the same stack both times, so local var would be in the same place.
+  // Under ASAN, the stack-use-after-return detection correctly fires on this, so we skip the check.
   KJ_EXPECT(ptr1 == ptr2);
+#endif
 
   // Should have been on a different stack from the main stack.
-  KJ_EXPECT(!onOurStack(ptr1));
+  KJ_EXPECT(notOnOurStack(ptr1));
 
   KJ_EXPECT_THROW_MESSAGE("test exception",
       pool.runSynchronously([&]() { KJ_FAIL_ASSERT("test exception"); }));
@@ -1298,7 +1323,7 @@ KJ_TEST("fiber pool limit") {
   // is the one from the thread.
   pool.runSynchronously([&]() {
     KJ_EXPECT(onOurStack(ptr2));
-    KJ_EXPECT(!onOurStack(ptr1));
+    KJ_EXPECT(notOnOurStack(ptr1));
 
     KJ_EXPECT(pool.getFreelistSize() == 0);
   });
@@ -1369,15 +1394,15 @@ KJ_TEST("run event loop on freelisted stacks") {
 
     // The event callbacks should have run on a different stack, but the wait should have been on
     // the main stack.
-    KJ_EXPECT(!onOurStack(ptr1));
-    KJ_EXPECT(!onOurStack(ptr2));
+    KJ_EXPECT(notOnOurStack(ptr1));
+    KJ_EXPECT(notOnOurStack(ptr2));
     KJ_EXPECT(onOurStack(port.waitStack));
 
     pool.runSynchronously([&]() {
       // This should run on the same stack where the event callbacks ran.
       KJ_EXPECT(onOurStack(ptr1));
       KJ_EXPECT(onOurStack(ptr2));
-      KJ_EXPECT(!onOurStack(port.waitStack));
+      KJ_EXPECT(notOnOurStack(port.waitStack));
     });
   }
 
@@ -1410,8 +1435,8 @@ KJ_TEST("run event loop on freelisted stacks") {
 
     // The event callback should have run on a different stack, and poll() should have run on
     // a separate stack too.
-    KJ_EXPECT(!onOurStack(ptr1));
-    KJ_EXPECT(!onOurStack(port.pollStack));
+    KJ_EXPECT(notOnOurStack(ptr1));
+    KJ_EXPECT(notOnOurStack(port.pollStack));
 
     pool.runSynchronously([&]() {
       // This should run on the same stack where the event callbacks ran.

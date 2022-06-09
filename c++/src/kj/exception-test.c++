@@ -132,10 +132,16 @@ TEST(Exception, UnwindDetector) {
 }
 #endif
 
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) || \
+    KJ_HAS_COMPILER_FEATURE(address_sanitizer) || \
+    defined(__SANITIZE_ADDRESS__)
+// The implementation skips this check in these cases.
+#else
 #if !__MINGW32__  // Inexplicably crashes when exception is thrown from constructor.
 TEST(Exception, ExceptionCallbackMustBeOnStack) {
   KJ_EXPECT_THROW_MESSAGE("must be allocated on the stack", new ExceptionCallback);
 }
+#endif
 #endif  // !__MINGW32__
 
 #if !KJ_NO_EXCEPTIONS
