@@ -971,7 +971,11 @@ KJ_THREADLOCAL_PTR(ExceptionCallback) threadLocalCallback = nullptr;
 
 ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
   char stackVar;
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) || \
+    KJ_HAS_COMPILER_FEATURE(address_sanitizer) || \
+    defined(__SANITIZE_ADDRESS__)
+  // When using libfuzzer or ASAN, this sanity check may spurriously fail, so skip it.
+#else
   ptrdiff_t offset = reinterpret_cast<char*>(this) - &stackVar;
   KJ_ASSERT(offset < 65536 && offset > -65536,
             "ExceptionCallback must be allocated on the stack.");
