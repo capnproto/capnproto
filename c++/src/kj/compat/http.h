@@ -534,6 +534,16 @@ public:
   virtual void generate(kj::ArrayPtr<byte> buffer) = 0;
 };
 
+struct CompressionParameters {
+  // These are the parameters for `Sec-WebSocket-Extensions` permessage-deflate extension.
+  // Since we cannot distinguish the client/server in `upgradeToWebSocket`, we use the prefixes
+  // `inbound` and `outbound` instead.
+  bool outboundNoContextTakeover = false;
+  bool inboundNoContextTakeover = false;
+  kj::Maybe<size_t> outboundMaxWindowBits = nullptr;
+  kj::Maybe<size_t> inboundMaxWindowBits = nullptr;
+};
+
 class WebSocket {
   // Interface representincg an open WebSocket session.
   //
@@ -766,6 +776,9 @@ struct HttpClientSettings {
   kj::Maybe<HttpClientErrorHandler&> errorHandler = nullptr;
   // Customize how protocol errors are handled by the HttpClient. If null, HttpClientErrorHandler's
   // default implementation will be used.
+
+  bool enableWebSocketCompression = false;
+  // We won't attempt to parse `Sec-WebSocket-Extensions` by default.
 };
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
@@ -882,6 +895,9 @@ struct HttpServerSettings {
 
   kj::Maybe<HttpServerCallbacks&> callbacks = nullptr;
   // Additional optional callbacks used to control some server behavior.
+
+  bool enableWebSocketCompression = false;
+  // We won't attempt to parse `Sec-WebSocket-Extensions` by default.
 };
 
 class HttpServerErrorHandler {
@@ -1152,5 +1168,42 @@ inline void HttpHeaders::forEach(Func1&& func1, Func2&& func2) const {
     func2(header.name, header.value);
   }
 }
+
+// =======================================================================================
+namespace _ { // private implementation details for WebSocket compression
+
+kj::ArrayPtr<const char> splitNext(kj::ArrayPtr<const char>& cursor, char delimiter);
+
+void stripLeadingAndTrailingSpace(ArrayPtr<const char>& str);
+
+kj::Vector<kj::ArrayPtr<const char>> splitParts(kj::ArrayPtr<const char> input, char delim);
+
+struct KeyMaybeVal {
+  ArrayPtr<const char> key;
+  kj::Maybe<ArrayPtr<const char>> val;
+};
+
+kj::Array<KeyMaybeVal> toKeysAndVals(const kj::ArrayPtr<kj::ArrayPtr<const char>>& params);
+
+struct UnverifiedConfig {
+  // An intermediate representation of the final `CompressionParameters` struct; used during parsing.
+  // We use it to ensure the structure of an offer is generally correct, see
+  // `populateUnverifiedConfig()` for details.
+  bool clientNoContextTakeover = false;
+  bool serverNoContextTakeover = false;
+  kj::Maybe<ArrayPtr<const char>> clientMaxWindowBits = nullptr;
+  kj::Maybe<ArrayPtr<const char>> serverMaxWindowBits = nullptr;
+};
+
+kj::Maybe<UnverifiedConfig> populateUnverifiedConfig(kj::Array<KeyMaybeVal>& params);
+
+kj::Maybe<CompressionParameters> validateCompressionConfig(UnverifiedConfig&& config,
+    bool isAgreement);
+
+kj::Vector<CompressionParameters> findValidExtensionOffers(StringPtr offers);
+
+kj::String generateExtensionRequest(const ArrayPtr<CompressionParameters>& extensions);
+
+}; // namespace _ (private)
 
 }  // namespace kj

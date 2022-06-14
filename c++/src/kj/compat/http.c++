@@ -3489,6 +3489,330 @@ WebSocketPipe newWebSocketPipe() {
 
 // =======================================================================================
 
+namespace _ { // private implementation details
+
+kj::ArrayPtr<const char> splitNext(kj::ArrayPtr<const char>& cursor, char delimiter) {
+  // Consumes and returns the next item in a delimited list.
+  //
+  // If a delimiter is found:
+  //  - `cursor` is updated to point to the rest of the string after the delimiter.
+  //  - The text before the delimiter is returned.
+  // If no delimiter is found:
+  //  - `cursor` is updated to an empty string.
+  //  - The text that had been in `cursor` is returned.
+  //
+  // (It's up to the caller to stop the loop once `cursor` is empty.)
+  KJ_IF_MAYBE(index, cursor.findFirst(delimiter)) {
+    auto part = cursor.slice(0, *index);
+    cursor = cursor.slice(*index + 1, cursor.size());
+    return part;
+  }
+  kj::ArrayPtr<const char> result(kj::mv(cursor));
+  cursor = nullptr;
+
+  return result;
+}
+
+void stripLeadingAndTrailingSpace(ArrayPtr<const char>& str) {
+  // Remove any leading/trailing spaces from `str`, modifying it in-place.
+  while (str.size() > 0 && (str[0] == ' ' || str[0] == '\t')) {
+    str = str.slice(1, str.size());
+  }
+  while (str.size() > 0 && (str.back() == ' ' || str.back() == '\t')) {
+    str = str.slice(0, str.size() - 1);
+  }
+}
+
+kj::Vector<kj::ArrayPtr<const char>> splitParts(kj::ArrayPtr<const char> input, char delim) {
+  // Given a string `input` and a delimiter `delim`, split the string into a vector of substrings,
+  // separated by the delimiter. Note that leading/trailing whitespace is stripped from each element.
+  kj::Vector<kj::ArrayPtr<const char>> parts;
+
+  while (input.size() != 0) {
+    auto part = splitNext(input, delim);
+    stripLeadingAndTrailingSpace(part);
+    parts.add(kj::mv(part));
+  }
+
+  return parts;
+}
+
+kj::Array<KeyMaybeVal> toKeysAndVals(const kj::ArrayPtr<kj::ArrayPtr<const char>>& params) {
+  // Given a collection of parameters (a single offer), parse the parameters into <key, MaybeValue>
+  // pairs. If the parameter contains an `=`, we set the `key` to everything before, and the `value`
+  // to everything after. Otherwise, we set the `key` to be the entire parameter.
+  // Either way, both the key and value (if it exists) are stripped of leading & trailing whitespace.
+  auto result = kj::heapArray<KeyMaybeVal>(params.size());
+  size_t count = 0;
+  for (const auto& param : params) {
+    kj::ArrayPtr<const char> key;
+    kj::Maybe<kj::ArrayPtr<const char>> value;
+
+    KJ_IF_MAYBE(index, param.findFirst('=')) {
+      // Found '=' so we have a value.
+      key = param.slice(0, *index);
+      stripLeadingAndTrailingSpace(key);
+      value = param.slice(*index + 1, param.size());
+      KJ_IF_MAYBE(v, value) {
+        stripLeadingAndTrailingSpace(*v);
+      }
+    } else {
+      key = kj::mv(param);
+    }
+
+    result[count].key = kj::mv(key);
+    result[count].val = kj::mv(value);
+    ++count;
+  }
+  return kj::mv(result);
+}
+
+struct ParamType {
+  enum { CLIENT, SERVER } side;
+  enum { NO_CONTEXT_TAKEOVER, MAX_WINDOW_BITS } property;
+};
+
+inline kj::Maybe<ParamType> parseKeyName(kj::ArrayPtr<const char>& key) {
+  // Returns a `ParamType` struct if the `key` is valid and nullptr if invalid.
+
+  if (key == "client_no_context_takeover"_kj) {
+    return ParamType { ParamType::CLIENT, ParamType::NO_CONTEXT_TAKEOVER };
+  } else if (key == "server_no_context_takeover"_kj) {
+    return ParamType { ParamType::SERVER, ParamType::NO_CONTEXT_TAKEOVER };
+  } else if (key == "client_max_window_bits"_kj) {
+    return ParamType { ParamType::CLIENT, ParamType::MAX_WINDOW_BITS };
+  } else if (key == "server_max_window_bits"_kj) {
+    return ParamType { ParamType::SERVER, ParamType::MAX_WINDOW_BITS };
+  }
+  return nullptr;
+}
+
+kj::Maybe<UnverifiedConfig> populateUnverifiedConfig(kj::Array<KeyMaybeVal>& params) {
+  // Given a collection of <key, MaybeValue> pairs, attempt to populate an `UnverifiedConfig` struct.
+  // If the struct cannot be populated, we return null.
+  //
+  // This function populates the struct with what it finds, it does not perform bounds checking or
+  // concern itself with valid `Value`s (so long as the `Value` is non-empty).
+  //
+  // The following issues would prevent a struct from being populated:
+  //  Key issues:
+  //    - `Key` is invalid (see `parseKeyName()`).
+  //    - `Key` is repeated.
+  //  Value issues:
+  //    - Got a `Value` when none was expected (only the `max_window_bits` parameters expect values).
+  //    - Got an empty `Value` (0 characters, or all whitespace characters).
+
+  if (params.size() > 4) {
+    // We expect 4 `Key`s at most, having more implies repeats/invalid keys are present.
+    return nullptr;
+  }
+
+  UnverifiedConfig config;
+
+  for (auto& param : params) {
+    KJ_IF_MAYBE(paramType, parseKeyName(param.key)) {
+      // `Key` is valid, but we still want to check for repeats.
+      const auto& side = paramType->side;
+      const auto& property = paramType->property;
+
+      if (property == ParamType::NO_CONTEXT_TAKEOVER) {
+        auto& takeOverSetting = (side == ParamType::CLIENT) ?
+            config.clientNoContextTakeover : config.serverNoContextTakeover;
+
+        if (takeOverSetting == true) {
+          // This `Key` is a repeat; invalid config.
+          return nullptr;
+        }
+
+        if (param.val != nullptr) {
+          // The `x_no_context_takeover` parameter shouldn't have a value; invalid config.
+          return nullptr;
+        }
+
+        takeOverSetting = true;
+      } else if (property == ParamType::MAX_WINDOW_BITS) {
+        auto& maxBitsSetting =
+            (side == ParamType::CLIENT) ? config.clientMaxWindowBits : config.serverMaxWindowBits;
+
+        if (maxBitsSetting != nullptr) {
+          // This `Key` is a repeat; invalid config.
+          return nullptr;
+        }
+
+        KJ_IF_MAYBE(value, param.val) {
+          if (value->size() == 0) {
+            // This is equivalent to `x_max_window_bits=`, since we got an "=" we expected a token
+            // to follow.
+            return nullptr;
+          }
+          maxBitsSetting = param.val;
+        } else {
+          // We know we got this `max_window_bits` parameter in a Request/Response, and we also know
+          // that it didn't include an "=" (otherwise the value wouldn't be null).
+          // It's important to retain the information that the parameter was received *without* a
+          // corresponding value, as this may determine whether the offer is valid or not.
+          //
+          // To retain this information, we'll set `maxBitsSetting` to be an empty ArrayPtr so this
+          // can be dealt with properly later.
+          maxBitsSetting = ArrayPtr<const char>();
+        }
+      }
+    } else {
+      // Invalid parameter.
+      return nullptr;
+    }
+  }
+  return kj::mv(config);
+}
+
+kj::Maybe<CompressionParameters> validateCompressionConfig(UnverifiedConfig&& config,
+    bool isAgreement) {
+  // Verifies that the `config` is valid depending on whether we're validating a Request (offer) or
+  // a Response (agreement). This essentially consumes the `UnverifiedConfig` and converts it into a
+  // `CompressionParameters` struct.
+  CompressionParameters result;
+
+  KJ_IF_MAYBE(serverBits, config.serverMaxWindowBits) {
+    if (serverBits->size() == 0) {
+      // This means `server_max_window_bits` was passed without a value. Since a value is required,
+      // this config is invalid.
+      return nullptr;
+    } else {
+      KJ_IF_MAYBE(bits, kj::str(*serverBits).tryParseAs<size_t>()) {
+        if (*bits < 8 || 15 < *bits) {
+          // Out of range -- invalid.
+          return nullptr;
+        }
+        if (isAgreement) {
+          result.inboundMaxWindowBits = *bits;
+        } else {
+          result.outboundMaxWindowBits = *bits;
+        }
+      } else {
+        // Invalid ABNF, expected 1*DIGIT.
+        return nullptr;
+      }
+    }
+  }
+
+  KJ_IF_MAYBE(clientBits, config.clientMaxWindowBits) {
+    if (clientBits->size() == 0) {
+      if (!isAgreement) {
+        // `client_max_window_bits` does not need to have a value in an offer, let's set it to 15
+        // to get the best level of compression.
+        result.inboundMaxWindowBits = 15;
+      } else {
+        // `client_max_window_bits` must have a value in a Response.
+        return nullptr;
+      }
+    } else {
+      KJ_IF_MAYBE(bits, kj::str(*clientBits).tryParseAs<size_t>()) {
+        if (*bits < 8 || 15 < *bits) {
+          // Out of range -- invalid.
+          return nullptr;
+        }
+        if (isAgreement) {
+          result.outboundMaxWindowBits = *bits;
+        } else {
+          result.inboundMaxWindowBits = *bits;
+        }
+      } else {
+        // Invalid ABNF, expected 1*DIGIT.
+        return nullptr;
+      }
+    }
+  }
+
+  if (isAgreement) {
+    result.outboundNoContextTakeover = config.clientNoContextTakeover;
+    result.inboundNoContextTakeover = config.serverNoContextTakeover;
+  } else {
+    result.inboundNoContextTakeover = config.clientNoContextTakeover;
+    result.outboundNoContextTakeover = config.serverNoContextTakeover;
+  }
+  return kj::mv(result);
+}
+
+inline kj::Maybe<CompressionParameters> tryExtractParameters(
+    kj::Vector<kj::ArrayPtr<const char>>& configuration,
+    bool isAgreement) {
+  // If the `configuration` is structured correctly and has no invalid parameters/values, we will
+  // return a populated `CompressionParameters` struct.
+  if (configuration.size() == 1) {
+    // Plain `permessage-deflate`.
+    return CompressionParameters{};
+  }
+  auto params = configuration.slice(1, configuration.size());
+  auto keyMaybeValuePairs = toKeysAndVals(params);
+  // Parse parameter strings into parameter[=value] pairs.
+  auto maybeUnverified = populateUnverifiedConfig(keyMaybeValuePairs);
+  KJ_IF_MAYBE(unverified, maybeUnverified) {
+    // Parsing succeeded, i.e. the parameter (`key`) names are valid and we don't have
+    // values for `x_no_context_takeover` parameters (the configuration is structured correctly).
+    // All that's left is to check the `x_max_window_bits` values (if any are present).
+    KJ_IF_MAYBE(validConfig, validateCompressionConfig(kj::mv(*unverified), isAgreement)) {
+      return kj::mv(*validConfig);
+    }
+  }
+  return nullptr;
+}
+
+kj::Vector<CompressionParameters> findValidExtensionOffers(StringPtr offers) {
+  // A function to be called by the client that wants to offer extensions through
+  // `Sec-WebSocket-Extensions`. This function takes the value of the header (a string) and
+  // populates a Vector of all the valid offers.
+  kj::Vector<CompressionParameters> result;
+
+  auto extensions = splitParts(offers, ',');
+
+  for (const auto& offer : extensions) {
+    auto splitOffer = splitParts(offer, ';');
+    if (splitOffer.front() != "permessage-deflate"_kj) {
+      continue;
+    }
+    KJ_IF_MAYBE(validated, tryExtractParameters(splitOffer, false)) {
+      // We need to swap the inbound/outbound properties since `tryExtractParameters` thinks we're
+      // parsing as the server (`isAgreement` is false).
+      auto tempCtx = validated->inboundNoContextTakeover;
+      validated->inboundNoContextTakeover = validated->outboundNoContextTakeover;
+      validated->outboundNoContextTakeover = tempCtx;
+      auto tempWindow = validated->inboundMaxWindowBits;
+      validated->inboundMaxWindowBits = validated->outboundMaxWindowBits;
+      validated->outboundMaxWindowBits = tempWindow;
+      result.add(kj::mv(*validated));
+    }
+  }
+
+  return kj::mv(result);
+}
+
+kj::String generateExtensionRequest(const ArrayPtr<CompressionParameters>& extensions) {
+  // Build the `Sec-WebSocket-Extensions` request from the validated parameters.
+  constexpr auto EXT = "permessage-deflate"_kj;
+  auto offers = kj::heapArray<String>(extensions.size());
+  size_t i = 0;
+  for (const auto& offer : extensions) {
+    offers[i] = kj::str(EXT);
+    if (offer.outboundNoContextTakeover) {
+      offers[i] = kj::str(offers[i], "; client_no_context_takeover");
+    }
+    if (offer.inboundNoContextTakeover) {
+      offers[i] = kj::str(offers[i], "; server_no_context_takeover");
+    }
+    if (offer.outboundMaxWindowBits != nullptr) {
+      auto w = KJ_ASSERT_NONNULL(offer.outboundMaxWindowBits);
+      offers[i] = kj::str(offers[i], "; client_max_window_bits=", w);
+    }
+    if (offer.inboundMaxWindowBits != nullptr) {
+      auto w = KJ_ASSERT_NONNULL(offer.inboundMaxWindowBits);
+      offers[i] = kj::str(offers[i], "; server_max_window_bits=", w);
+    }
+    ++i;
+  }
+  return kj::strArray(offers, ", ");
+}
+
+} // namespace _ (private)
 namespace {
 
 class HttpClientImpl final: public HttpClient,
@@ -3626,6 +3950,18 @@ public:
     connectionHeaders[HttpHeaders::BuiltinIndices::UPGRADE] = "websocket";
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_VERSION] = "13";
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_KEY] = keyBase64;
+
+    kj::Maybe<kj::String> offeredExtensions;
+    if (settings.enableWebSocketCompression) {
+      KJ_IF_MAYBE(value, headers.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
+        // Strip all `Sec-WebSocket-Extensions` except for `permessage-deflate`.
+        auto extensions = _::findValidExtensionOffers(*value);
+        if (extensions.size() > 0) {
+          connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_EXTENSIONS] =
+              offeredExtensions.emplace(_::generateExtensionRequest(extensions.asPtr()));
+        }
+      }
+    }
 
     httpOutput.writeHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
 
