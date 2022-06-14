@@ -3812,6 +3812,45 @@ kj::String generateExtensionRequest(const ArrayPtr<CompressionParameters>& exten
   return kj::strArray(offers, ", ");
 }
 
+kj::Maybe<CompressionParameters> tryParseExtensionOffers(StringPtr offers) {
+  // Given a string of offers, accept the first valid offer by returning a `CompressionParameters`
+  // struct. If there are no valid offers, return `nullptr`.
+  auto splitOffers = splitParts(offers, ',');
+
+  for (const auto& offer : splitOffers) {
+    auto splitOffer = splitParts(offer, ';');
+
+    if (splitOffer.front() != "permessage-deflate"_kj) {
+      // Extension token was invalid.
+      continue;
+    }
+    KJ_IF_MAYBE(config, tryExtractParameters(splitOffer, false)) {
+      return kj::mv(*config);
+    }
+  }
+  return nullptr;
+}
+
+kj::String generateExtensionResponse(const CompressionParameters& parameters) {
+  // Build the `Sec-WebSocket-Extensions` response from the agreed parameters.
+  kj::String response = kj::str("permessage-deflate");
+  if (parameters.inboundNoContextTakeover) {
+    response = kj::str(response, "; client_no_context_takeover");
+  }
+  if (parameters.outboundNoContextTakeover) {
+    response = kj::str(response, "; server_no_context_takeover");
+  }
+  if (parameters.inboundMaxWindowBits != nullptr) {
+    auto w = KJ_REQUIRE_NONNULL(parameters.inboundMaxWindowBits);
+    response = kj::str(response, "; client_max_window_bits=", w);
+  }
+  if (parameters.outboundMaxWindowBits != nullptr) {
+    auto w = KJ_REQUIRE_NONNULL(parameters.outboundMaxWindowBits);
+    response = kj::str(response, "; server_max_window_bits=", w);
+  }
+  return kj::mv(response);
+}
+
 } // namespace _ (private)
 namespace {
 
@@ -5618,12 +5657,26 @@ private:
       return sendWebSocketError("Missing Sec-WebSocket-Key");
     }
 
+    kj::Maybe<CompressionParameters> acceptedParameters;
+    kj::String agreedParameters;
+    if (server.settings.enableWebSocketCompression) {
+      KJ_IF_MAYBE(value, requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
+        KJ_IF_MAYBE(config, _::tryParseExtensionOffers(*value)) {
+          acceptedParameters = kj::mv(*config);
+        }
+      }
+    }
+
     auto websocketAccept = generateWebSocketAccept(key);
 
     kj::StringPtr connectionHeaders[HttpHeaders::WEBSOCKET_CONNECTION_HEADERS_COUNT];
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_ACCEPT] = websocketAccept;
     connectionHeaders[HttpHeaders::BuiltinIndices::UPGRADE] = "websocket";
     connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "Upgrade";
+    KJ_IF_MAYBE(parameters, acceptedParameters) {
+      agreedParameters = _::generateExtensionResponse(*parameters);
+      connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_EXTENSIONS] = agreedParameters;
+    }
 
     httpOutput.writeHeaders(headers.serializeResponse(
         101, "Switching Protocols", connectionHeaders));

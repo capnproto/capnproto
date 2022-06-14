@@ -1204,6 +1204,10 @@ kj::Vector<CompressionParameters> findValidExtensionOffers(StringPtr offers);
 
 kj::String generateExtensionRequest(const ArrayPtr<CompressionParameters>& extensions);
 
+kj::Maybe<CompressionParameters> tryParseExtensionOffers(StringPtr offers);
+
+kj::String generateExtensionResponse(const CompressionParameters& parameters);
+
 }; // namespace _ (private)
 
 }  // namespace kj
