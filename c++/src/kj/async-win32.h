@@ -38,6 +38,8 @@
 #include <windows.h>
 #include "windows-sanity.h"
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
 class Win32EventPort: public EventPort {
@@ -227,3 +229,5 @@ private:
 };
 
 } // namespace kj
+
+KJ_END_HEADER

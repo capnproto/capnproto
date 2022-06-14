@@ -23,6 +23,8 @@
 
 #include "string.h"
 
+KJ_BEGIN_HEADER
+
 // GCC does not implement __builtin_COLUMN() as that's non-standard but MSVC & clang do.
 // MSVC does as of version https://github.com/microsoft/STL/issues/54) but there's currently not any
 // pressing need for this for MSVC & writing the write compiler version check is annoying.
@@ -105,3 +107,5 @@ KJ_UNUSED static kj::String KJ_STRINGIFY(const NoopSourceLocation& l) {
   return kj::String();
 }
 }  // namespace kj
+
+KJ_END_HEADER

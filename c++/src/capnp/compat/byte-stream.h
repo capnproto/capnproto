@@ -25,6 +25,8 @@
 #include <capnp/compat/byte-stream.capnp.h>
 #include <kj/async-io.h>
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 
 class ByteStreamFactory {
@@ -45,3 +47,5 @@ private:
 };
 
 }  // namespace capnp
+
+CAPNP_END_HEADER
