@@ -1208,6 +1208,10 @@ kj::Maybe<CompressionParameters> tryParseExtensionOffers(StringPtr offers);
 
 kj::String generateExtensionResponse(const CompressionParameters& parameters);
 
+kj::OneOf<CompressionParameters, kj::Exception> tryParseExtensionAgreement(
+    const Maybe<CompressionParameters>& clientOffer,
+    StringPtr agreedParameters);
+
 }; // namespace _ (private)
 
 }  // namespace kj

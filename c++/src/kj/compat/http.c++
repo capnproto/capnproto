@@ -3851,6 +3851,62 @@ kj::String generateExtensionResponse(const CompressionParameters& parameters) {
   return kj::mv(response);
 }
 
+kj::OneOf<CompressionParameters, kj::Exception> tryParseExtensionAgreement(
+    const Maybe<CompressionParameters>& clientOffer,
+    StringPtr agreedParameters) {
+  // Like `tryParseExtensionOffers`, but called by the client when parsing the server's Response.
+  // If the client must decline the agreement, we want to provide some details about what went wrong
+  // (since the client has to fail the connection).
+  constexpr auto FAILURE = "Server failed WebSocket handshake: "_kj;
+  auto e = KJ_EXCEPTION(FAILED);
+
+  if (clientOffer == nullptr) {
+    // We've received extensions when we did not send any in the first place.
+    e.setDescription(
+        kj::str(FAILURE, "added Sec-WebSocket-Extensions when client did not offer any."));
+    return kj::mv(e);
+  }
+
+  auto offers = splitParts(agreedParameters, ',');
+  if (offers.size() != 1) {
+    constexpr auto EXPECT = "expected exactly one extension (permessage-deflate) but received "
+                            "more than one."_kj;
+    e.setDescription(kj::str(FAILURE, EXPECT));
+    return kj::mv(e);
+  }
+  auto splitOffer = splitParts(offers.front(), ';');
+
+  if (splitOffer.front() != "permessage-deflate"_kj) {
+    e.setDescription(kj::str(FAILURE, "response included a Sec-WebSocket-Extensions value that was "
+                                      "not permessage-deflate."));
+    return kj::mv(e);
+  }
+
+  // Verify the parameters of our single extension, and compare it with the clients original offer.
+  KJ_IF_MAYBE(config, tryExtractParameters(splitOffer, true)) {
+    const auto& client = KJ_ASSERT_NONNULL(clientOffer);
+    // The server might have ignored the client's hints regarding its compressor's configuration.
+    // That's fine, but as the client, we still want to use those outbound compression parameters.
+    if (config->outboundMaxWindowBits == nullptr) {
+      config->outboundMaxWindowBits = client.outboundMaxWindowBits;
+    } else KJ_IF_MAYBE(value, client.outboundMaxWindowBits) {
+      if (*value < KJ_ASSERT_NONNULL(config->outboundMaxWindowBits)) {
+        // If the client asked for a value smaller than what the server responded with, use the
+        // value that the client originally specified.
+        config->outboundMaxWindowBits = *value;
+      }
+    }
+    if (config->outboundNoContextTakeover == false) {
+      config->outboundNoContextTakeover = client.outboundNoContextTakeover;
+    }
+    return kj::mv(*config);
+  }
+
+  // There was a problem parsing the server's `Sec-WebSocket-Extensions` response.
+  e.setDescription(kj::str(FAILURE, "the Sec-WebSocket-Extensions header in the Response included "
+      "an invalid value."));
+  return kj::mv(e);
+}
 } // namespace _ (private)
 namespace {
 
@@ -3991,11 +4047,13 @@ public:
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_KEY] = keyBase64;
 
     kj::Maybe<kj::String> offeredExtensions;
+    kj::Maybe<CompressionParameters> clientOffer;
     if (settings.enableWebSocketCompression) {
       KJ_IF_MAYBE(value, headers.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
         // Strip all `Sec-WebSocket-Extensions` except for `permessage-deflate`.
         auto extensions = _::findValidExtensionOffers(*value);
         if (extensions.size() > 0) {
+          clientOffer = extensions.front();
           connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_EXTENSIONS] =
               offeredExtensions.emplace(_::generateExtensionRequest(extensions.asPtr()));
         }
@@ -4010,7 +4068,7 @@ public:
     auto id = ++counter;
 
     return httpInput.readResponseHeaders()
-        .then([this,id,keyBase64 = kj::mv(keyBase64)](
+        .then([this,id,keyBase64 = kj::mv(keyBase64),clientOffer = kj::mv(clientOffer)](
             HttpHeaders::ResponseOrProtocolError&& responseOrProtocolError)
             -> HttpClient::WebSocketResponse {
       KJ_SWITCH_ONEOF(responseOrProtocolError) {
@@ -4050,6 +4108,19 @@ public:
               return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError({
                 502, "Bad Gateway", message, nullptr
               });
+            }
+
+            kj::Maybe<CompressionParameters> compressionParameters;
+            if (settings.enableWebSocketCompression) {
+              KJ_IF_MAYBE(agreedParameters, responseHeaders.get(
+                  HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
+                auto parseResult = _::tryParseExtensionAgreement(clientOffer,
+                    *agreedParameters);
+                if (parseResult.is<kj::Exception>()) {
+                  return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError({
+                    502, "Bad Gateway", parseResult.get<kj::Exception>().getDescription(), nullptr});
+                }
+              }
             }
 
             return {
