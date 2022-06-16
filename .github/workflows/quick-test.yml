@@ -64,11 +64,41 @@ jobs:
       - uses: actions/checkout@v2
       - name: install dockcross
         run: |
-            docker run ${{ matrix.docker-run-args }} --rm dockcross/${{ matrix.cross-compiler }} > ./dockcross
-            chmod +x ./dockcross
+            docker run ${{ matrix.docker-run-args }} --rm dockcross/${{ matrix.cross-compiler }} > ./dockcross-${{ matrix.cross-compiler }}
+            chmod +x ./dockcross-${{ matrix.cross-compiler }}
       - name: super-test
         run: |
-            ./dockcross ./super-test.sh quick g++
+            ./dockcross-${{ matrix.cross-compiler }} ./super-test.sh quick g++
+  Android:
+    name: Android (${{ matrix.cross-compiler }})
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - cross-compiler: android-arm
+            arch: arm
+          - cross-compiler: android-arm64
+            arch: aarch64
+          - cross-compiler: android-x86
+            arch: x86
+          - cross-compiler: android-x86_64
+            arch: x86_64
+    steps:
+      - uses: actions/checkout@v2
+      - name: install dockcross
+        run: |
+            docker run --rm dockcross/${{ matrix.cross-compiler }} > ./dockcross-${{ matrix.cross-compiler }}
+            chmod +x ./dockcross-${{ matrix.cross-compiler }}
+      - name: cmake build
+        run: |
+            ./dockcross-${{ matrix.cross-compiler }} cmake -DBUILD_TESTING=OFF -Bbuild -S.
+            ./dockcross-${{ matrix.cross-compiler }} cmake --build build
+      - name: automake build
+        run: |
+            cd c++
+            ../dockcross-${{ matrix.cross-compiler }} autoreconf -i
+            ../dockcross-${{ matrix.cross-compiler }} ./configure --host ${{ matrix.arch }} --disable-tests
+            ../dockcross-${{ matrix.cross-compiler }} make
   MacOS:
     runs-on: macos-latest
     strategy:
