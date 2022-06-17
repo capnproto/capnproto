@@ -61,6 +61,10 @@ AC_ARG_ENABLE([reflection], [
     esac
   ], [lite_mode=no])
 
+AC_ARG_ENABLE([tests],
+  [AS_HELP_STRING([--disable-tests], [build without tests])],
+  [build_testing=no], [build_testing=yes])
+
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_CXX
@@ -104,6 +108,8 @@ AS_IF([test "$external_capnp" != "no"], [
 AM_CONDITIONAL([USE_EXTERNAL_CAPNP], [test "$external_capnp" != "no"])
 
 AM_CONDITIONAL([LITE_MODE], [test "$lite_mode" = "yes"])
+
+AM_CONDITIONAL([BUILD_TESTING], [test "$build_testing" = "yes"])
 
 AS_IF([test "$lite_mode" = "yes"], [
   CXXFLAGS="-DCAPNP_LITE $CXXFLAGS"

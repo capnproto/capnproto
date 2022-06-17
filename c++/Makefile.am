@@ -448,6 +448,8 @@ endif LITE_MODE
 
 # Tests ==============================================================
 
+if BUILD_TESTING
+
 test_capnpc_inputs =                                           \
   src/capnp/test.capnp                                         \
   src/capnp/test-import.capnp                                  \
@@ -614,3 +616,5 @@ TESTS = capnp-test
 else !LITE_MODE
 TESTS = capnp-test capnp-evolution-test src/capnp/compiler/capnp-test.sh
 endif !LITE_MODE
+
+endif BUILD_TESTING
