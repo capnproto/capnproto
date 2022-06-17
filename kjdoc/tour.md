@@ -236,6 +236,8 @@ KJ_IF_MAYBE(j, maybeJ) {
 
 Note that `KJ_IF_MAYBE` forces you to think about the null case. This differs from `std::optional`, which can be dereferenced using `*`, resulting in undefined behavior if the value is null.
 
+Similarly, `map()` and `orDefault()` allow transforming and retrieving the stored value in a safe manner without complex control flows.
+
 Performance nuts will be interested to know that `kj::Maybe<T&>` and `kj::Maybe<Own<T>>` are both optimized such that they take no more space than their underlying pointer type, using a literal null pointer to indicate nullness. For other types of `T`, `kj::Maybe<T>` must maintain an extra boolean and so is somewhat larger than `T`.
 
 ### Variant types
