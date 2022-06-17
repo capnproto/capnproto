@@ -111,6 +111,11 @@ KJ_TEST("VectorOutputStream") {
 
   KJ_ASSERT(output.getWriteBuffer().size() == 24);
   KJ_ASSERT(output.getWriteBuffer().begin() == output.getArray().begin() + 40);
+
+  output.clear();
+  KJ_ASSERT(output.getWriteBuffer().begin() == output.getArray().begin());
+  KJ_ASSERT(output.getWriteBuffer().size() == 64);
+  KJ_ASSERT(output.getArray().size() == 0);
 }
 
 class MockInputStream: public InputStream {

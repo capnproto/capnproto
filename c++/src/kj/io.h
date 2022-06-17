@@ -236,6 +236,8 @@ public:
     return arrayPtr(vector.begin(), fillPos);
   }
 
+  void clear() { fillPos = vector.begin(); }
+
   // implements BufferedInputStream ----------------------------------
   ArrayPtr<byte> getWriteBuffer() override;
   void write(const void* buffer, size_t size) override;
