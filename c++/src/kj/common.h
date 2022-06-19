@@ -100,6 +100,7 @@ KJ_BEGIN_HEADER
 
 #include <stddef.h>
 #include <initializer_list>
+#include <string.h>
 
 #if __linux__ && __cplusplus > 201200L
 // Hack around stdlib bug with C++14 that exists on some Linux systems.
@@ -1747,6 +1748,9 @@ public:
   inline ArrayPtr slice(size_t start, size_t end) {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
+  }
+  inline bool startsWith(const ArrayPtr<const T>& other) const {
+    return other.size_ <= size_ && slice(0, other.size_) == other;
   }
 
   inline ArrayPtr<PropagateConst<T, byte>> asBytes() const {
