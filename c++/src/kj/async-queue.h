@@ -22,10 +22,10 @@
 #pragma once
 
 #include "async.h"
-#include "common.h"
-#include "debug.h"
-#include "list.h"
-#include "memory.h"
+#include <kj/common.h>
+#include <kj/debug.h>
+#include <kj/list.h>
+#include <kj/memory.h>
 
 #include <list>
 

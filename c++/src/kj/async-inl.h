@@ -33,7 +33,7 @@
 
 KJ_BEGIN_HEADER
 
-#include "list.h"
+#include <kj/list.h>
 
 namespace kj {
 namespace _ {  // private

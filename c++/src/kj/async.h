@@ -22,8 +22,8 @@
 #pragma once
 
 #include "async-prelude.h"
-#include "exception.h"
-#include "refcount.h"
+#include <kj/exception.h>
+#include <kj/refcount.h>
 
 KJ_BEGIN_HEADER
 
