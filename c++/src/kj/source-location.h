@@ -103,7 +103,7 @@ class NoopSourceLocation {
   // isn't accidentally used in the wrong compilation context.
 };
 
-KJ_UNUSED static kj::String KJ_STRINGIFY(const NoopSourceLocation& l) {
+KJ_UNUSED static kj::String KJ_STRINGIFY(KJ_UNUSED const NoopSourceLocation& l) {
   return kj::String();
 }
 }  // namespace kj
