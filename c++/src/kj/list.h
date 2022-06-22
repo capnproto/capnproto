@@ -102,6 +102,19 @@ public:
     ++listSize;
   }
 
+  void addFront(T& element) {
+    if ((element.*link).prev != nullptr) _::throwDoubleAdd();
+    (element.*link).next = head;
+    (element.*link).prev = &head;
+    KJ_IF_MAYBE(oldHead, head) {
+      (oldHead->*link).prev = &(element.*link).next;
+    } else {
+      tail = &(element.*link).next;
+    }
+    head = element;
+    ++listSize;
+  }
+
   void remove(T& element) {
     if ((element.*link).prev == nullptr) _::throwRemovedNotPresent();
     *((element.*link).prev) = (element.*link).next;

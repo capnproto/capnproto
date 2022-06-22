@@ -39,6 +39,7 @@ KJ_TEST("List") {
 
   TestElement foo(123);
   TestElement bar(456);
+  TestElement baz(789);
 
   {
     list.add(foo);
@@ -77,6 +78,26 @@ KJ_TEST("List") {
         ++iter;
         KJ_ASSERT(iter == clist.end());
       }
+
+      {
+        list.addFront(baz);
+        KJ_EXPECT(list.size() == 3);
+        KJ_DEFER(list.remove(baz));
+
+        {
+          auto iter = list.begin();
+          KJ_ASSERT(iter != list.end());
+          KJ_EXPECT(iter->i == 789);
+          ++iter;
+          KJ_ASSERT(iter != list.end());
+          KJ_EXPECT(iter->i == 123);
+          ++iter;
+          KJ_ASSERT(iter != list.end());
+          KJ_EXPECT(iter->i == 321);
+          ++iter;
+          KJ_ASSERT(iter == list.end());
+        }
+      }
     }
 
     KJ_EXPECT(list.size() == 1);
@@ -97,7 +118,7 @@ KJ_TEST("List") {
   KJ_EXPECT(list.size() == 0);
 
   {
-    list.add(bar);
+    list.addFront(bar);
     KJ_DEFER(list.remove(bar));
     KJ_EXPECT(!list.empty());
     KJ_EXPECT(list.size() == 1);
@@ -109,6 +130,23 @@ KJ_TEST("List") {
       KJ_EXPECT(iter->i == 321);
       ++iter;
       KJ_ASSERT(iter == list.end());
+    }
+
+    {
+      list.add(baz);
+      KJ_EXPECT(list.size() == 2);
+      KJ_DEFER(list.remove(baz));
+
+      {
+        auto iter = list.begin();
+        KJ_ASSERT(iter != list.end());
+        KJ_EXPECT(iter->i == 321);
+        ++iter;
+        KJ_ASSERT(iter != list.end());
+        KJ_EXPECT(iter->i == 789);
+        ++iter;
+        KJ_ASSERT(iter == list.end());
+      }
     }
   }
 
