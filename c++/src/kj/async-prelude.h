@@ -24,9 +24,9 @@
 
 #pragma once
 
-#include "exception.h"
-#include "tuple.h"
-#include "source-location.h"
+#include <kj/exception.h>
+#include <kj/tuple.h>
+#include <kj/source-location.h>
 
 // Detect whether or not we should enable kj::Promise<T> coroutine integration.
 //

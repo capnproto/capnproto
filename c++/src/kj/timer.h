@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "time.h"
+#include <kj/time.h>
 #include "async.h"
 
 KJ_BEGIN_HEADER

@@ -22,9 +22,9 @@
 #pragma once
 
 #include "async.h"
-#include "function.h"
-#include "thread.h"
-#include "timer.h"
+#include <kj/function.h>
+#include <kj/thread.h>
+#include <kj/timer.h>
 
 KJ_BEGIN_HEADER
 
