@@ -86,7 +86,7 @@ endif()
 target_compile_definitions(kj PUBLIC ${CAPNP_LITE_FLAG})
 #make sure external consumers don't need to manually set the include dirs
 get_filename_component(PARENT_DIR ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
-target_include_directories(kj INTERFACE
+target_include_directories(kj PUBLIC
   $<BUILD_INTERFACE:${PARENT_DIR}>
   $<INSTALL_INTERFACE:include>
 )
