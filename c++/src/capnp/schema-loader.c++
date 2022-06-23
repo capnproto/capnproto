@@ -103,6 +103,8 @@ public:
       const _::RawSchema* schema, schema::Brand::Reader proto,
       kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> clientBrand);
 
+  const _::RawBrandedSchema* cloneNative(const _::RawBrandedSchema* loadNative);
+
   struct TryGetResult {
     _::RawSchema* schema;
     kj::Maybe<const LazyLoadCallback&> callback;
@@ -1506,6 +1508,11 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
   return makeBranded(schema, copyDeduped(dstScopes));
 }
 
+const _::RawBrandedSchema* SchemaLoader::Impl::cloneNative(const _::RawBrandedSchema* native) {
+  return makeBranded(loadNative(native->generic), kj::ArrayPtr<const _::RawBrandedSchema::Scope>(
+      native->scopes, native->scopeCount));
+}
+
 const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
     const _::RawSchema* schema, kj::ArrayPtr<const _::RawBrandedSchema::Scope> bindings) {
   if (bindings.size() == 0) {
@@ -2088,6 +2095,10 @@ kj::Array<Schema> SchemaLoader::getAllLoaded() const {
 
 void SchemaLoader::loadNative(const _::RawSchema* nativeSchema) {
   impl.lockExclusive()->get()->loadNative(nativeSchema);
+}
+
+const _::RawBrandedSchema* SchemaLoader::loadNative(const _::RawBrandedSchema* nativeSchema) {
+  return impl.lockExclusive()->get()->cloneNative(nativeSchema);
 }
 
 }  // namespace capnp

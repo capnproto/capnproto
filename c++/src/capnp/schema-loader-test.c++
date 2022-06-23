@@ -400,6 +400,19 @@ TEST(SchemaLoader, LoadStreaming) {
   KJ_EXPECT(results.getShortDisplayName() == "StreamResult", results.getShortDisplayName());
 }
 
+TEST(SchemaLoader, SchemaFor) {
+  SchemaLoader loader;
+  
+  using TargetCls = test::TestLists;
+  
+  Schema nativeSchema = Schema::from<TargetCls>();
+  Schema loaderFromProto = loader.load(nativeSchema.getProto());
+  Schema loaderFromSchemaFor = loader.getSchemaFor<TargetCls>();
+  
+  EXPECT_FALSE(nativeSchema == loaderFromProto);
+  EXPECT_TRUE(loaderFromSchemaFor == loaderFromProto);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
