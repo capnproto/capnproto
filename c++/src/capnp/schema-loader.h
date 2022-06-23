@@ -163,7 +163,7 @@ private:
   kj::MutexGuarded<kj::Own<Impl>> impl;
 
   void loadNative(const _::RawSchema* nativeSchema);
-  const _::RawBrandedSchema* loadNative(const const _::RawBrandedSchema* native);
+  const _::RawBrandedSchema* loadNative(const _::RawBrandedSchema* native);
 };
 
 template <typename T>
