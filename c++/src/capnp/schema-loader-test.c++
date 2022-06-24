@@ -403,14 +403,22 @@ TEST(SchemaLoader, LoadStreaming) {
 TEST(SchemaLoader, SchemaFor) {
   SchemaLoader loader;
   
-  using TargetCls = test::TestLists;
+  #define HANDLE_TYPE(TargetType) { \
+    Schema nativeSchema = Schema::from<TargetType>(); \
+    Schema loaderFromProto = loader.load(nativeSchema.getProto()); \
+    Schema loaderFromSchemaFor = loader.getSchemaFor<TargetType>(); \
+    \
+    EXPECT_FALSE(nativeSchema == loaderFromProto); \
+    EXPECT_TRUE(loaderFromSchemaFor == loaderFromProto); \
+  }
   
-  Schema nativeSchema = Schema::from<TargetCls>();
-  Schema loaderFromProto = loader.load(nativeSchema.getProto());
-  Schema loaderFromSchemaFor = loader.getSchemaFor<TargetCls>();
+  // Test up to two levels of brand bindings
+  HANDLE_TYPE(test::TestEnum)
+  HANDLE_TYPE(test::TestAllTypes)
+  HANDLE_TYPE(test::TestGenerics<test::TestAllTypes, test::TestInterface>)
+  HANDLE_TYPE(test::TestGenerics<test::TestAllTypes, test::TestGenerics<test::TestAllTypes, test::TestInterface>>)
   
-  EXPECT_FALSE(nativeSchema == loaderFromProto);
-  EXPECT_TRUE(loaderFromSchemaFor == loaderFromProto);
+  #undef HANDLE_TYPE
 }
 
 }  // namespace
