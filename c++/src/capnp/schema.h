@@ -125,6 +125,8 @@ public:
   class BrandArgumentList;
   BrandArgumentList getBrandArgumentsAtScope(uint64_t scopeId) const;
   // Gets the values bound to the brand parameters at the given scope.
+  
+  kj::Array<uint64_t> listBrandArgumentScopes() const;
 
   StructSchema asStruct() const;
   EnumSchema asEnum() const;
