@@ -1015,6 +1015,46 @@ TEST(Async, Poll) {
   paf.promise.wait(waitScope);
 }
 
+KJ_TEST("Maximum turn count during wait scope poll is enforced") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  ErrorHandlerImpl errorHandler;
+  TaskSet tasks(errorHandler);
+
+  auto evaluated1 = false;
+  tasks.add(evalLater([&]() {
+    evaluated1 = true;
+  }));
+
+  auto evaluated2 = false;
+  tasks.add(evalLater([&]() {
+    evaluated2 = true;
+  }));
+
+  auto evaluated3 = false;
+  tasks.add(evalLater([&]() {
+    evaluated3 = true;
+  }));
+
+  uint count;
+
+  // Check that only events up to a maximum are resolved:
+  count = waitScope.poll(2);
+  KJ_ASSERT(count == 2);
+  KJ_EXPECT(evaluated1);
+  KJ_EXPECT(evaluated2);
+  KJ_EXPECT(!evaluated3);
+  
+  // Get the last remaining event in the queue:
+  count = waitScope.poll(1);
+  KJ_ASSERT(count == 1);
+  KJ_EXPECT(evaluated3);
+
+  // No more events:
+  count = waitScope.poll(1);
+  KJ_ASSERT(count == 0);
+}
+
 KJ_TEST("exclusiveJoin both events complete simultaneously") {
   // Previously, if both branches of an exclusiveJoin() completed simultaneously, then the parent
   // event could be armed twice. This is an error, but the exact results of this error depend on
