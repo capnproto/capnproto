@@ -19,7 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "debug.h"
 #include "filesystem.h"
+#include "string.h"
 #include "test.h"
 #include "encoding.h"
 #include <stdlib.h>
@@ -208,16 +210,19 @@ bool isWine() { return false; }
 #endif
 
 static Own<File> newTempFile() {
-  char filename[] = VAR_TMP "/kj-filesystem-test.XXXXXX";
+  const char* tmpDir = getenv("TEST_TMPDIR");
+  auto filename = str(tmpDir != nullptr ? tmpDir : VAR_TMP, "/kj-filesystem-test.XXXXXX");
   int fd;
-  KJ_SYSCALL(fd = mkstemp(filename));
-  KJ_DEFER(KJ_SYSCALL(unlink(filename)));
+  KJ_SYSCALL(fd = mkstemp(filename.begin()));
+  KJ_DEFER(KJ_SYSCALL(unlink(filename.cStr())));
   return newDiskFile(AutoCloseFd(fd));
 }
 
 class TempDir {
 public:
-  TempDir(): filename(heapString(VAR_TMP "/kj-filesystem-test.XXXXXX")) {
+  TempDir() {
+  const char* tmpDir = getenv("TEST_TMPDIR");
+    filename = str(tmpDir != nullptr ? tmpDir : VAR_TMP, "/kj-filesystem-test.XXXXXX");
     if (mkdtemp(filename.begin()) == nullptr) {
       KJ_FAIL_SYSCALL("mkdtemp", errno, filename);
     }

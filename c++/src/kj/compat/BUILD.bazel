@@ -1,0 +1,118 @@
+exports_files(["gtest.h"])
+
+cc_library(
+    name = "kj-tls",
+    srcs = [
+        "readiness-io.c++",
+        "tls.c++",
+    ],
+    hdrs = [
+        "readiness-io.h",
+        "tls.h",
+    ],
+    include_prefix = "kj",
+    target_compatible_with = select({
+        "//c++/src/kj:use_openssl": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    visibility = ["//visibility:public"],
+    deps = [
+        "//c++/src/kj:kj-async",
+        "@ssl",
+    ],
+)
+
+cc_library(
+    name = "kj-http",
+    srcs = [
+        "http.c++",
+        "url.c++",
+    ],
+    hdrs = [
+        "http.h",
+        "url.h",
+    ],
+    include_prefix = "kj",
+    visibility = ["//visibility:public"],
+    deps = ["//c++/src/kj:kj-async"],
+)
+
+cc_library(
+    name = "kj-gzip",
+    srcs = ["gzip.c++"],
+    hdrs = ["gzip.h"],
+    include_prefix = "kj",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//c++/src/kj:kj-async",
+        "@zlib",
+    ],
+)
+
+cc_library(
+    name = "gtest",
+    hdrs = ["gtest.h"],
+    include_prefix = "kj/compat",
+    visibility = ["//visibility:public"],
+    deps = ["//c++/src/kj"],
+)
+
+kj_tests = [
+    "http-test.c++",
+    "url-test.c++",
+]
+
+[cc_test(
+    name = f.removesuffix(".c++"),
+    srcs = [f],
+    deps = [
+        ":kj-http",
+        "//c++/src/kj:kj-test",
+    ],
+) for f in kj_tests]
+
+cc_library(
+    name = "http-socketpair-test-base",
+    hdrs = ["http-test.c++"],
+)
+
+cc_test(
+    name = "http-socketpair-test",
+    srcs = ["http-socketpair-test.c++"],
+    deps = [
+        ":http-socketpair-test-base",
+        ":kj-http",
+        "//c++/src/kj:kj-test",
+    ],
+)
+
+kj_tls_tests = [
+    "tls-test.c++",
+    "readiness-io-test.c++",
+]
+
+[cc_test(
+    name = f.removesuffix(".c++"),
+    srcs = [f],
+    target_compatible_with = select({
+        "//c++/src/kj:use_openssl": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":kj-tls",
+        "//c++/src/kj:kj-test",
+    ],
+) for f in kj_tls_tests]
+
+cc_test(
+    name = "gzip-test",
+    srcs = ["gzip-test.c++"],
+    target_compatible_with = select({
+        "//c++/src/kj:use_zlib": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":kj-gzip",
+        "//c++/src/kj:kj-test",
+    ],
+)
