@@ -149,6 +149,9 @@ public:
   // Integer numbers prefixed by "0" are parsed in base 10 (unlike strtoi with base 0).
   // Overflowed integer numbers throw exception.
   // Overflowed floating numbers return inf.
+  template <typename T>
+  Maybe<T> tryParseAs() const;
+  // Same as parseAs, but rather than throwing an exception we return NULL.
 
 private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
@@ -178,6 +181,19 @@ template <> unsigned long long StringPtr::parseAs<unsigned long long>() const;
 template <> float StringPtr::parseAs<float>() const;
 template <> double StringPtr::parseAs<double>() const;
 
+template <> Maybe<char> StringPtr::tryParseAs<char>() const;
+template <> Maybe<signed char> StringPtr::tryParseAs<signed char>() const;
+template <> Maybe<unsigned char> StringPtr::tryParseAs<unsigned char>() const;
+template <> Maybe<short> StringPtr::tryParseAs<short>() const;
+template <> Maybe<unsigned short> StringPtr::tryParseAs<unsigned short>() const;
+template <> Maybe<int> StringPtr::tryParseAs<int>() const;
+template <> Maybe<unsigned> StringPtr::tryParseAs<unsigned>() const;
+template <> Maybe<long> StringPtr::tryParseAs<long>() const;
+template <> Maybe<unsigned long> StringPtr::tryParseAs<unsigned long>() const;
+template <> Maybe<long long> StringPtr::tryParseAs<long long>() const;
+template <> Maybe<unsigned long long> StringPtr::tryParseAs<unsigned long long>() const;
+template <> Maybe<float> StringPtr::tryParseAs<float>() const;
+template <> Maybe<double> StringPtr::tryParseAs<double>() const;
 // =======================================================================================
 // String -- A NUL-terminated Array<char> containing UTF-8 text.
 //
@@ -263,6 +279,9 @@ public:
   template <typename T>
   T parseAs() const { return StringPtr(*this).parseAs<T>(); }
   // Parse as number
+
+  template <typename T>
+  Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
 private:
   Array<char> content;
