@@ -1,0 +1,32 @@
+load("@capnp-cpp//src/capnp:cc_capnp_library.bzl", "cc_capnp_library")
+
+exports_files([
+    "json.capnp",
+])
+
+# because git contains generated artifacts (which are used to bootstrap the compiler)
+# we can't have cc_capnp_library for json.capnp. Expose it as cc library and a file.
+cc_library(
+    name = "json",
+    srcs = [
+        "json.c++",
+        "json.capnp.c++",
+    ],
+    hdrs = [
+        "json.capnp.h",
+        "json.h",
+    ],
+    include_prefix = "capnp/compat",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/capnp",
+    ],
+)
+
+cc_capnp_library(
+    name = "http-over-capnp",
+    srcs = ["http-over-capnp.capnp", "byte-stream.capnp"],
+    include_prefix = "capnp/compat",
+    src_prefix = "src",
+    visibility = ["//visibility:public"],
+)
