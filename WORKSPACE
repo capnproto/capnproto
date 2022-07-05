@@ -1,0 +1,64 @@
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "f7be3474d42aae265405a592bb7da8e171919d74c16f082a5457840f06054728",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
+    ],
+)
+
+load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+
+bazel_skylib_workspace()
+
+http_archive(
+    name = "rules_foreign_cc",
+    sha256 = "6041f1374ff32ba711564374ad8e007aef77f71561a7ce784123b9b4b88614fc",
+    strip_prefix = "rules_foreign_cc-0.8.0",
+    url = "https://github.com/bazelbuild/rules_foreign_cc/archive/0.8.0.tar.gz",
+)
+
+load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
+
+rules_foreign_cc_dependencies()
+
+http_archive(
+    name = "ssl",
+    sha256 = "873ec711658f65192e9c58554ce058d1cfa4e57e13ab5366ee16f76d1c757efc",
+    strip_prefix = "google-boringssl-ed2e74e",
+    type = "tgz",
+    # from master-with-bazel branch
+    urls = ["https://github.com/google/boringssl/tarball/ed2e74e737dc802ed9baad1af62c1514430a70d6"],
+)
+
+_zlib_build = """
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+filegroup(
+    name = "src",
+    srcs = glob(["**/*"]),
+)
+
+configure_make(
+    name = "zlib",
+    args = ["-j `nproc`"],
+    lib_source = ":src",
+    # TODO: shared config doesn't build with foreign_cc for some reason.
+    configure_options = [
+        "--static",
+    ],
+    out_static_libs = [
+       "libz.a",
+    ],
+    visibility = ["//visibility:public"],
+)
+"""
+
+http_archive(
+    name = "zlib",
+    build_file_content = _zlib_build,
+    sha256 = "7db46b8d7726232a621befaab4a1c870f00a90805511c0e0090441dac57def18",
+    strip_prefix = "zlib-1.2.12",
+    urls = ["https://zlib.net/zlib-1.2.12.tar.xz"],
+)

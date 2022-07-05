@@ -77,3 +77,6 @@
 
 # cross-compiling / glibc testing
 /dockcross
+
+# bazel output
+bazel-*
