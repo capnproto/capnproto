@@ -269,8 +269,8 @@ kj::Array<uint64_t> Schema::listBrandArgumentScopes() const {
   KJ_REQUIRE(getProto().getIsGeneric(), "Not a generic type.", getProto().getDisplayName());
   
   auto result = kj::heapArray<uint64_t>(raw->scopeCount);
-  for(auto iScope : kj::indices(result)) {
-	result[iScope] = raw->scopes[iScope].typeId;
+  for (auto iScope: kj::indices(result)) {
+    result[iScope] = raw->scopes[iScope].typeId;
   }
   
   return result;
