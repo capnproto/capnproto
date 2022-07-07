@@ -126,7 +126,9 @@ public:
   BrandArgumentList getBrandArgumentsAtScope(uint64_t scopeId) const;
   // Gets the values bound to the brand parameters at the given scope.
   
-  kj::Array<uint64_t> listBrandArgumentScopes() const;
+  kj::Array<uint64_t> getGenericScopeIds() const;
+  // Returns the type IDs of all parent scopes that have generic parameters, to which this type is
+  // subject.
 
   StructSchema asStruct() const;
   EnumSchema asEnum() const;
