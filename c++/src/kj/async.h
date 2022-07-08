@@ -1164,8 +1164,10 @@ public:
   inline ~WaitScope() { if (fiber == nullptr) loop.leaveScope(); }
   KJ_DISALLOW_COPY(WaitScope);
 
-  void poll();
-  // Pumps the event queue and polls for I/O until there's nothing left to do (without blocking).
+  uint poll(uint maxTurnCount = maxValue);
+  // Pumps the event queue and polls for I/O until there's nothing left to do (without blocking) or
+  // the maximum turn count has been reached. Returns the number of events popped off the event
+  // queue.
   //
   // Not supported in fibers.
 
