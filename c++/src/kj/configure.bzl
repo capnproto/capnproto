@@ -80,19 +80,19 @@ def kj_configure():
             # todo: take this from flag
             "KJ_CONTENTION_WARNING_THRESHOLD=100",
         ] + select({
-            "//c++/src/kj:use_openssl": ["KJ_HAS_OPENSSL"],
+            "//src/kj:use_openssl": ["KJ_HAS_OPENSSL"],
             "//conditions:default": [],
         }) + select({
-            "//c++/src/kj:use_zlib": ["KJ_HAS_ZLIB"],
+            "//src/kj:use_zlib": ["KJ_HAS_ZLIB"],
             "//conditions:default": [],
         }) + select({
-            "//c++/src/kj:use_libdl": ["KJ_HAS_LIBDL"],
+            "//src/kj:use_libdl": ["KJ_HAS_LIBDL"],
             "//conditions:default": [],
         }) + select({
-            "//c++/src/kj:use_save_acquired_lock_info": ["KJ_SAVE_ACQUIRED_LOCK_INFO=1"],
+            "//src/kj:use_save_acquired_lock_info": ["KJ_SAVE_ACQUIRED_LOCK_INFO=1"],
             "//conditions:default": ["KJ_SAVE_ACQUIRED_LOCK_INFO=0"],
         }) + select({
-            "//c++/src/kj:use_track_lock_blocking": ["KJ_TRACK_LOCK_BLOCKING=1"],
+            "//src/kj:use_track_lock_blocking": ["KJ_TRACK_LOCK_BLOCKING=1"],
             "//conditions:default": ["KJ_TRACK_LOCK_BLOCKING=0"],
         }),
     )

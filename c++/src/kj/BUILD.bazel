@@ -1,4 +1,4 @@
-load("//c++/src/kj:configure.bzl", "kj_configure")
+load(":configure.bzl", "kj_configure")
 
 kj_configure()
 
@@ -111,7 +111,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":kj",
-        "//c++/src/kj/compat:gtest",
+        "//src/kj/compat:gtest",
     ],
 )
 
@@ -163,7 +163,7 @@ cc_test(
         ":use_coroutines": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
-    deps = ["//c++/src/kj/compat:kj-http"],
+    deps = ["//src/kj/compat:kj-http"],
 )
 
 cc_library(
