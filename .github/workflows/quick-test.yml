@@ -131,7 +131,7 @@ jobs:
             rmdir /s /q C:\PROGRA~1\POSTGR~1
 
             echo "Building Cap'n Proto with MinGW"
-            cmake -Hc++ -Bbuild-output -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=debug -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install -DCMAKE_SH="CMAKE_SH-NOTFOUND"
+            cmake -Hc++ -Bbuild-output -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=debug -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install -DCMAKE_SH="CMAKE_SH-NOTFOUND" -DCMAKE_CXX_STANDARD_LIBRARIES="-static-libgcc -static-libstdc++"
             cmake --build build-output --target install -- -j2
 
             echo "Building Cap'n Proto samples with MinGW"
