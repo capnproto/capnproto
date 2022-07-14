@@ -1,4 +1,4 @@
-build --cxxopt='-std=c++14' --force_pic --verbose_failures
+build --cxxopt='-std=c++14' --host_cxxopt='-std=c++14' --force_pic --verbose_failures
 
 # build with ssl and zlib by default
 build --//src/kj:openssl=True --//src/kj:zlib=True
