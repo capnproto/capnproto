@@ -10,7 +10,7 @@ cc_library(
         "readiness-io.h",
         "tls.h",
     ],
-    include_prefix = "kj",
+    include_prefix = "kj/compat",
     target_compatible_with = select({
         "//src/kj:use_openssl": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -32,7 +32,7 @@ cc_library(
         "http.h",
         "url.h",
     ],
-    include_prefix = "kj",
+    include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
     deps = ["//src/kj:kj-async"],
 )
@@ -41,7 +41,7 @@ cc_library(
     name = "kj-gzip",
     srcs = ["gzip.c++"],
     hdrs = ["gzip.h"],
-    include_prefix = "kj",
+    include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",

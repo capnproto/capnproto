@@ -22,7 +22,7 @@
 #pragma once
 
 #include "rpc.h"
-#include "message.h"
+#include <capnp/message.h>
 #include <kj/async-io.h>
 #include <capnp/serialize-async.h>
 #include <capnp/rpc-twoparty.capnp.h>

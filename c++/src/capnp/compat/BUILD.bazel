@@ -24,9 +24,30 @@ cc_library(
 )
 
 cc_capnp_library(
-    name = "http-over-capnp",
-    srcs = ["http-over-capnp.capnp", "byte-stream.capnp"],
+    name = "http-over-capnp_capnp",
+    srcs = [
+        "byte-stream.capnp",
+        "http-over-capnp.capnp",
+    ],
     include_prefix = "capnp/compat",
     src_prefix = "src",
     visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "http-over-capnp",
+    srcs = [
+        "byte-stream.c++",
+        "http-over-capnp.c++",
+    ],
+    hdrs = [
+        "byte-stream.h",
+        "http-over-capnp.h",
+    ],
+    include_prefix = "capnp/compat",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":http-over-capnp_capnp",
+        "//src/kj/compat:kj-http",
+    ],
 )

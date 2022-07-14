@@ -27,8 +27,8 @@
 
 #include "async.h"
 #include "timer.h"
-#include "vector.h"
-#include "io.h"
+#include <kj/vector.h>
+#include <kj/io.h>
 #include <signal.h>
 
 KJ_BEGIN_HEADER
