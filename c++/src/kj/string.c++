@@ -51,6 +51,17 @@ long long parseSigned(const StringPtr& s, long long min, long long max) {
   return value;
 }
 
+Maybe<long long> tryParseSigned(const StringPtr& s, long long min, long long max) {
+  if (s == nullptr) { return nullptr; } // String does not contain valid number.
+  char *endPtr;
+  errno = 0;
+  auto value = strtoll(s.begin(), &endPtr, isHex(s.cStr()) ? 16 : 10);
+  if (endPtr != s.end() || errno == ERANGE || value < min || max < value) {
+    return nullptr;
+  }
+  return value;
+}
+
 unsigned long long parseUnsigned(const StringPtr& s, unsigned long long max) {
   KJ_REQUIRE(s != nullptr, "String does not contain valid number", s) { return 0; }
   char *endPtr;
@@ -64,6 +75,15 @@ unsigned long long parseUnsigned(const StringPtr& s, unsigned long long max) {
   return value;
 }
 
+Maybe<unsigned long long> tryParseUnsigned(const StringPtr& s, unsigned long long max) {
+  if (s == nullptr) { return nullptr; } // String does not contain valid number.
+  char *endPtr;
+  errno = 0;
+  auto value = strtoull(s.begin(), &endPtr, isHex(s.cStr()) ? 16 : 10);
+  if (endPtr != s.end() || errno == ERANGE || max < value || s[0] == '-') { return nullptr; }
+  return value;
+}
+
 template <typename T>
 T parseInteger(const StringPtr& s) {
   if (static_cast<T>(minValue) < 0) {
@@ -73,6 +93,18 @@ T parseInteger(const StringPtr& s) {
   } else {
     unsigned long long max = static_cast<T>(maxValue);
     return static_cast<T>(parseUnsigned(s, max));
+  }
+}
+
+template <typename T>
+Maybe<T> tryParseInteger(const StringPtr& s) {
+  if (static_cast<T>(minValue) < 0) {
+    long long min = static_cast<T>(minValue);
+    long long max = static_cast<T>(maxValue);
+    return static_cast<Maybe<T>>(tryParseSigned(s, min, max));
+  } else {
+    unsigned long long max = static_cast<T>(maxValue);
+    return static_cast<Maybe<T>>(tryParseUnsigned(s, max));
   }
 }
 
@@ -92,6 +124,21 @@ PARSE_AS_INTEGER(unsigned long);
 PARSE_AS_INTEGER(long long);
 PARSE_AS_INTEGER(unsigned long long);
 #undef PARSE_AS_INTEGER
+
+#define TRY_PARSE_AS_INTEGER(T) \
+    template <> Maybe<T> StringPtr::tryParseAs<T>() const { return tryParseInteger<T>(*this); }
+TRY_PARSE_AS_INTEGER(char);
+TRY_PARSE_AS_INTEGER(signed char);
+TRY_PARSE_AS_INTEGER(unsigned char);
+TRY_PARSE_AS_INTEGER(short);
+TRY_PARSE_AS_INTEGER(unsigned short);
+TRY_PARSE_AS_INTEGER(int);
+TRY_PARSE_AS_INTEGER(unsigned int);
+TRY_PARSE_AS_INTEGER(long);
+TRY_PARSE_AS_INTEGER(unsigned long);
+TRY_PARSE_AS_INTEGER(long long);
+TRY_PARSE_AS_INTEGER(unsigned long long);
+#undef TRY_PARSE_AS_INTEGER
 
 String heapString(size_t size) {
   char* buffer = _::HeapArrayDisposer::allocate<char>(size + 1);
@@ -571,9 +618,26 @@ double parseDouble(const StringPtr& s) {
   return value;
 }
 
+Maybe<double> tryParseDouble(const StringPtr& s) {
+  if(s == nullptr) { return nullptr; }
+  char *endPtr;
+  errno = 0;
+  auto value = _::NoLocaleStrtod(s.begin(), &endPtr);
+  if (endPtr != s.end()) { return nullptr; }
+#if _WIN32 || __CYGWIN__ || __BIONIC__
+  if (isNaN(value)) {
+    return kj::nan();
+  }
+#endif
+  return value;
+}
+
 }  // namespace _ (private)
 
 template <> double StringPtr::parseAs<double>() const { return _::parseDouble(*this); }
 template <> float StringPtr::parseAs<float>() const { return _::parseDouble(*this); }
+
+template <> Maybe<double> StringPtr::tryParseAs<double>() const { return _::tryParseDouble(*this); }
+template <> Maybe<float> StringPtr::tryParseAs<float>() const { return _::tryParseDouble(*this); }
 
 }  // namespace kj
