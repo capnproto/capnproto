@@ -209,6 +209,7 @@ cc_library(
     deps = [
         ":capnp-rpc",
         ":capnp_test",
+        ":capnpc",
         "//src/kj:kj-test",
     ],
 )
@@ -218,18 +219,28 @@ cc_library(
     srcs = [f],
     deps = [":capnp-test"],
 ) for f in [
-    "common-test.c++",
-    "blob-test.c++",
-    "endian-test.c++",
-    "layout-test.c++",
     "any-test.c++",
-    "message-test.c++",
-    "encoding-test.c++",
-    "orphan-test.c++",
-    "serialize-test.c++",
-    "serialize-packed-test.c++",
+    "blob-test.c++",
     "canonicalize-test.c++",
-    "fuzz-test.c++",
+    "common-test.c++",
+    "dynamic-test.c++",
+    "encoding-test.c++",
+    "endian-reverse-test.c++",
+    "endian-test.c++",
+    "ez-rpc-test.c++",
+    "layout-test.c++",
+    "membrane-test.c++",
+    "message-test.c++",
+    "orphan-test.c++",
+    "reconnect-test.c++",
+    "rpc-test.c++",
+    "rpc-twoparty-test.c++",
+    "schema-loader-test.c++",
+    "schema-parser-test.c++",
+    "serialize-async-test.c++",
+    "serialize-packed-test.c++",
+    "serialize-test.c++",
+    "stringify-test.c++",
 ]]
 
 cc_library(
@@ -242,4 +253,11 @@ cc_test(
     name = "endian-fallback-test",
     srcs = ["endian-fallback-test.c++"],
     deps = [":endian-test-base"],
+)
+
+cc_test(
+    name = "fuzz-test",
+    size = "large",
+    srcs = ["fuzz-test.c++"],
+    deps = [":capnp-test"],
 )

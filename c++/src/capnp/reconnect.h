@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "capability.h"
+#include <capnp/capability.h>
 #include <kj/function.h>
 
 CAPNP_BEGIN_HEADER
