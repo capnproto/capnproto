@@ -33,6 +33,11 @@ struct MessageReaderAndFds {
   kj::ArrayPtr<kj::AutoCloseFd> fds;
 };
 
+struct MessageAndFds {
+  kj::ArrayPtr<const kj::ArrayPtr<const word>> segments;
+  kj::ArrayPtr<const int> fds;
+};
+
 class MessageStream {
   // Interface over which messages can be sent and received; virtualizes
   // the functionality above.
@@ -76,6 +81,9 @@ public:
       KJ_WARN_UNUSED_RESULT;
   // Equivalent to the above with fds = nullptr.
 
+  kj::Promise<void> writeMessages(
+      kj::ArrayPtr<MessageAndFds> messages)
+    KJ_WARN_UNUSED_RESULT;
   virtual kj::Promise<void> writeMessages(
       kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages)
     KJ_WARN_UNUSED_RESULT = 0;
