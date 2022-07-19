@@ -64,6 +64,7 @@ namespace {
 
 static constexpr uint64_t NAMESPACE_ANNOTATION_ID = 0xb9c6f99ebf805f2cull;
 static constexpr uint64_t NAME_ANNOTATION_ID = 0xf264a779fef191ceull;
+static constexpr uint64_t OMIT_SCHEMAS_ANNOTATION_ID = 0xe17e871ab8a5deabull;
 
 bool hasDiscriminantValue(const schema::Field::Reader& reader) {
   return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
@@ -2985,6 +2986,7 @@ private:
 
     kj::Vector<kj::ArrayPtr<const char>> namespaceParts;
     kj::String namespacePrefix;
+    bool omitSchemas = false;
 
     for (auto annotation: node.getAnnotations()) {
       if (annotation.getId() == NAMESPACE_ANNOTATION_ID) {
@@ -3007,6 +3009,10 @@ private:
         }
 
         break;
+      }
+
+      if(annotation.getId() == OMIT_SCHEMAS_ANNOTATION_ID) {
+        omitSchemas = true;
       }
     }
 
@@ -3045,7 +3051,12 @@ private:
           "#if CAPNP_VERSION != ", CAPNP_VERSION, "\n"
           "#error \"Version mismatch between generated code and library headers.  You must "
               "use the same version of the Cap'n Proto compiler and library.\"\n"
-          "#endif\n"
+          "#endif\n",
+          omitSchemas ? kj::strTree(
+                  "#if !CAPNP_LITE\n",
+                  "#error \"$Cxx.omitSchemas requires that you compile using CAPNP_LITE\"\n"
+                  "#endif\n"
+          ) : kj::strTree(),
           "\n",
           KJ_MAP(path, includes) {
             if (path.startsWith("/")) {
@@ -3085,7 +3096,8 @@ private:
           "\n"
           "namespace capnp {\n"
           "namespace schemas {\n",
-          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDefs); },
+          omitSchemas ? kj::Array<kj::StringTree>() : KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDefs); },
+          omitSchemas ? "// Schemas omitted due to $Cxx.omitSchemas\n" : "",
           "}  // namespace schemas\n"
           "}  // namespace capnp\n",
           sourceDefs.size() == 0 ? kj::strTree() : kj::strTree(

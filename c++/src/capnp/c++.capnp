@@ -24,3 +24,4 @@ $namespace("capnp::annotations");
 
 annotation namespace(file): Text;
 annotation name(field, enumerant, struct, enum, interface, method, param, group, union): Text;
+annotation omitSchemas(file): Void;
