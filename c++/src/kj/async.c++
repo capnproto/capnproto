@@ -1892,16 +1892,19 @@ void EventLoop::poll() {
   }
 }
 
-void WaitScope::poll() {
+uint WaitScope::poll(uint maxTurnCount) {
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
   KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
 
   loop.running = true;
   KJ_DEFER(loop.running = false);
 
+  uint turnCount = 0;
   runOnStackPool([&]() {
-    for (;;) {
-      if (!loop.turn()) {
+    while (turnCount < maxTurnCount) {
+      if (loop.turn()) {
+        ++turnCount;
+      } else {
         // No events in the queue.  Poll for I/O.
         loop.poll();
 
@@ -1912,6 +1915,7 @@ void WaitScope::poll() {
       }
     }
   });
+  return turnCount;
 }
 
 void WaitScope::cancelAllDetached() {

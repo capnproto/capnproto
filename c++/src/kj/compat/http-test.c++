@@ -2225,6 +2225,24 @@ const char WEBSOCKET_RESPONSE_HANDSHAKE[] =
     "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
     "My-Header: respond-foo\r\n"
     "\r\n";
+const char WEBSOCKET_COMPRESSION_HANDSHAKE[] =
+    " HTTP/1.1\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Key: DCI4TgwiOE4MIjhODCI4Tg==\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover; "
+        "client_max_window_bits=15; server_max_window_bits=10, "
+        "permessage-deflate; client_max_window_bits=15\r\n"
+    "\r\n";
+const char WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE[] =
+    "HTTP/1.1 101 Switching Protocols\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
+    "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=15; "
+        "server_max_window_bits=10\r\n"
+    "\r\n";
 const char WEBSOCKET_RESPONSE_HANDSHAKE_ERROR[] =
     "HTTP/1.1 404 Not Found\r\n"
     "Content-Length: 0\r\n"
@@ -2280,6 +2298,24 @@ void testWebSocketClient(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
   }
 }
 
+void testWebSocketCompression(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
+                              kj::HttpHeaderId extHeader, kj::StringPtr extensions,
+                              HttpClient& client) {
+  kj::HttpHeaders headers(headerTable);
+  headers.set(extHeader, extensions);
+  auto response = client.openWebSocket("/websocket", headers).wait(waitScope);
+
+  KJ_EXPECT(response.statusCode == 101);
+  KJ_EXPECT(response.statusText == "Switching Protocols", response.statusText);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(extHeader)) ==
+      "permessage-deflate; client_max_window_bits=15; server_max_window_bits=10");
+  KJ_ASSERT(response.webSocketOrBody.is<kj::Own<WebSocket>>());
+  auto ws = kj::mv(response.webSocketOrBody.get<kj::Own<WebSocket>>());
+  // TODO (now): Once we actually start compressing messages, we need to try sending/receiving
+  // here.
+  // TODO (now): Might also be useful to test that we fail to connect if we get an invalid Response.
+}
+
 inline kj::Promise<void> writeA(kj::AsyncOutputStream& out, kj::ArrayPtr<const byte> data) {
   return out.write(data.begin(), data.size());
 }
@@ -2310,6 +2346,527 @@ KJ_TEST("HttpClient WebSocket handshake") {
   auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
 
   testWebSocketClient(waitScope, *headerTable, hMyHeader, *client);
+
+  serverTask.wait(waitScope);
+}
+
+KJ_TEST("WebSocket Compression String Parsing (splitNext)") {
+  // Test `splitNext()`.
+  // We want to assert that:
+  // If a delimiter is found:
+  // - `input` is updated to point to the rest of the string after the delimiter.
+  // - The text before the delimiter is returned.
+  // If no delimiter is found:
+  // - `input` is updated to an empty string.
+  // - The text that had been in `input` is returned.
+
+  const auto s =  "permessage-deflate;   client_max_window_bits=10;server_no_context_takeover"_kj;
+
+  const auto expectedPartOne = "permessage-deflate"_kj;
+  const auto expectedRemainingOne = "client_max_window_bits=10;server_no_context_takeover"_kj;
+
+  auto cursor = s.asArray();
+  auto actual = _::splitNext(cursor, ';');
+  KJ_ASSERT(actual == expectedPartOne);
+
+  _::stripLeadingAndTrailingSpace(cursor);
+  KJ_ASSERT(cursor == expectedRemainingOne.asArray());
+
+  const auto expectedPartTwo = "client_max_window_bits=10"_kj;
+  const auto expectedRemainingTwo = "server_no_context_takeover"_kj;
+
+  actual = _::splitNext(cursor, ';');
+  KJ_ASSERT(actual == expectedPartTwo);
+  KJ_ASSERT(cursor == expectedRemainingTwo);
+
+  const auto expectedPartThree = "server_no_context_takeover"_kj;
+  const auto expectedRemainingThree = ""_kj;
+  actual = _::splitNext(cursor, ';');
+  KJ_ASSERT(actual == expectedPartThree);
+  KJ_ASSERT(cursor == expectedRemainingThree);
+}
+
+KJ_TEST("WebSocket Compression String Parsing (splitParts)") {
+  // Test `splitParts()`.
+  // We want to assert that we:
+  //  1. Correctly split by the delimiter.
+  //  2. Strip whitespace before/after the extracted part.
+  const auto permitted = "permessage-deflate"_kj;
+
+  const auto s =  "permessage-deflate; client_max_window_bits=10;server_no_context_takeover,    "
+                  "    permessage-deflate;  ;   ,"  // strips leading whitespace
+                  "permessage-deflate"_kj;
+
+  // These are the expected values.
+  const auto extOne = "permessage-deflate; client_max_window_bits=10;server_no_context_takeover"_kj;
+  const auto extTwo = "permessage-deflate;  ;"_kj;
+  const auto extThree = "permessage-deflate"_kj;
+
+  auto actualExtensions = kj::_::splitParts(s, ',');
+  KJ_ASSERT(actualExtensions.size() == 3);
+  KJ_ASSERT(actualExtensions[0] == extOne);
+  KJ_ASSERT(actualExtensions[1] == extTwo);
+  KJ_ASSERT(actualExtensions[2] == extThree);
+  // Splitting by ',' was fine, now let's try splitting the parameters (split by ';').
+
+  const auto paramOne = "client_max_window_bits=10"_kj;
+  const auto paramTwo = "server_no_context_takeover"_kj;
+
+  auto actualParamsFirstExt = kj::_::splitParts(actualExtensions[0], ';');
+  KJ_ASSERT(actualParamsFirstExt.size() == 3);
+  KJ_ASSERT(actualParamsFirstExt[0] == permitted);
+  KJ_ASSERT(actualParamsFirstExt[1] == paramOne);
+  KJ_ASSERT(actualParamsFirstExt[2] == paramTwo);
+
+  auto actualParamsSecondExt = kj::_::splitParts(actualExtensions[1], ';');
+  KJ_ASSERT(actualParamsSecondExt.size() == 2);
+  KJ_ASSERT(actualParamsSecondExt[0] == permitted);
+  KJ_ASSERT(actualParamsSecondExt[1] == ""_kj); // Note that the whitespace was stripped.
+
+  auto actualParamsThirdExt = kj::_::splitParts(actualExtensions[2], ';');
+  // No parameters supplied in the third offer. We expect to only see the extension name.
+  KJ_ASSERT(actualParamsThirdExt.size() == 1);
+  KJ_ASSERT(actualParamsThirdExt[0] == permitted);
+}
+
+KJ_TEST("WebSocket Compression String Parsing (toKeysAndVals)") {
+  // If an "=" is found, everything before the "=" goes into the `Key` and everything after goes
+  // into the `Value`. Otherwise, everything goes into the `Key` and the `Value` remains null.
+  const auto cleanParameters =  "client_no_context_takeover; client_max_window_bits; "
+                                "server_max_window_bits=10"_kj;
+  auto parts = _::splitParts(cleanParameters, ';');
+  auto keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  KJ_ASSERT(keysMaybeValues.size() == 3);
+
+  auto firstKey = "client_no_context_takeover"_kj;
+  KJ_ASSERT(keysMaybeValues[0].key == firstKey.asArray());
+  KJ_ASSERT(keysMaybeValues[0].val == nullptr);
+
+  auto secondKey = "client_max_window_bits"_kj;
+  KJ_ASSERT(keysMaybeValues[1].key == secondKey.asArray());
+  KJ_ASSERT(keysMaybeValues[1].val == nullptr);
+
+  auto thirdKey = "server_max_window_bits"_kj;
+  auto thirdVal = "10"_kj;
+  KJ_ASSERT(keysMaybeValues[2].key == thirdKey.asArray());
+  KJ_ASSERT(keysMaybeValues[2].val == thirdVal.asArray());
+
+  const auto weirdParameters =  "= 14 ; client_max_window_bits= ; server_max_window_bits =hello"_kj;
+  // This is weird because:
+  //  1. Parameter 1 has no key.
+  //  2. Parameter 2 has an "=" but no subsequent value.
+  //  3. Parameter 3 has an "=" with an invalid value.
+  // That said, we don't mind if the parameters are weird when calling this function. The point
+  // is to create KeyMaybeVal pairs and process them later.
+
+  parts = _::splitParts(weirdParameters, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  KJ_ASSERT(keysMaybeValues.size() == 3);
+
+  firstKey = ""_kj;
+  auto firstVal = "14"_kj;
+  KJ_ASSERT(keysMaybeValues[0].key == firstKey.asArray());
+  KJ_ASSERT(keysMaybeValues[0].val == firstVal.asArray());
+
+  secondKey = "client_max_window_bits"_kj;
+  auto secondVal = ""_kj;
+  KJ_ASSERT(keysMaybeValues[1].key == secondKey.asArray());
+  KJ_ASSERT(keysMaybeValues[1].val == secondVal.asArray());
+
+  thirdKey = "server_max_window_bits"_kj;
+  thirdVal = "hello"_kj;
+  KJ_ASSERT(keysMaybeValues[2].key == thirdKey.asArray());
+  KJ_ASSERT(keysMaybeValues[2].val == thirdVal.asArray());
+}
+
+KJ_TEST("WebSocket Compression String Parsing (populateUnverifiedConfig)") {
+  // First we'll cover cases where the `UnverifiedConfig` is successfully constructed,
+  // which indicates the offer was structured in a parseable way. Next, we'll cover cases where the
+  // offer is structured incorrectly.
+  const auto cleanParameters =  "client_no_context_takeover; client_max_window_bits; "
+                                "server_max_window_bits=10"_kj;
+  auto parts = _::splitParts(cleanParameters, ';');
+  auto keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+
+  auto unverified = _::populateUnverifiedConfig(keysMaybeValues);
+  auto config = KJ_ASSERT_NONNULL(unverified);
+  KJ_ASSERT(config.clientNoContextTakeover == true);
+  KJ_ASSERT(config.serverNoContextTakeover == false);
+
+  auto clientBits = KJ_ASSERT_NONNULL(config.clientMaxWindowBits);
+  KJ_ASSERT(clientBits == ""_kj);
+  auto serverBits = KJ_ASSERT_NONNULL(config.serverMaxWindowBits);
+  KJ_ASSERT(serverBits == "10"_kj);
+  // Valid config can be populated succesfully.
+
+  const auto weirdButValidParameters =  "client_no_context_takeover; client_max_window_bits; "
+                                        "server_max_window_bits=this_should_be_a_number"_kj;
+  parts = _::splitParts(weirdButValidParameters, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+
+  unverified = _::populateUnverifiedConfig(keysMaybeValues);
+  config = KJ_ASSERT_NONNULL(unverified);
+  KJ_ASSERT(config.clientNoContextTakeover == true);
+  KJ_ASSERT(config.serverNoContextTakeover == false);
+
+  clientBits = KJ_ASSERT_NONNULL(config.clientMaxWindowBits);
+  KJ_ASSERT(clientBits == ""_kj);
+  serverBits = KJ_ASSERT_NONNULL(config.serverMaxWindowBits);
+  KJ_ASSERT(serverBits == "this_should_be_a_number"_kj);
+  // Note that while the value associated with `server_max_window_bits` is not a number,
+  // `populateUnverifiedConfig` succeeds because the parameter[=value] is generally structured
+  // correctly.
+
+  // --- HANDLE INCORRECTLY STRUCTURED OFFERS ---
+  auto invalidKey = "somethingKey; client_max_window_bits;"_kj;
+  parts = _::splitParts(invalidKey, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  // Fail to populate due to invalid key name
+
+  auto invalidKeyTwo = "client_max_window_bitsJUNK; server_no_context_takeover"_kj;
+  parts = _::splitParts(invalidKeyTwo, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  // Fail to populate due to invalid key name (invalid characters after valid parameter name).
+
+  auto repeatedKey = "client_no_context_takeover; client_no_context_takeover"_kj;
+  parts = _::splitParts(repeatedKey, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  // Fail to populate due to repeated key name.
+
+  auto unexpectedValue = "client_no_context_takeover="_kj;
+  parts = _::splitParts(unexpectedValue, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  // Fail to populate due to value in `x_no_context_takeover` parameter (unexpected value).
+
+  auto unexpectedValueTwo = "client_no_context_takeover=   "_kj;
+  parts = _::splitParts(unexpectedValueTwo, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  // Fail to populate due to value in `x_no_context_takeover` parameter.
+
+  auto emptyValue = "client_max_window_bits="_kj;
+  parts = _::splitParts(emptyValue, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  // Fail to populate due to empty value in `x_max_window_bits` parameter.
+  // "Empty" in this case means an "=" was provided, but no subsequent value was provided.
+
+  auto emptyValueTwo = "client_max_window_bits=   "_kj;
+  parts = _::splitParts(emptyValueTwo, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  // Fail to populate due to empty value in `x_max_window_bits` parameter.
+  // "Empty" in this case means an "=" was provided, but no subsequent value was provided.
+}
+
+KJ_TEST("WebSocket Compression String Parsing (validateCompressionConfig)") {
+  // We've tested `toKeysAndVals()` and `populateUnverifiedConfig()`, so we only need to test
+  // correctly structured offers/agreements here.
+  const auto cleanParameters =  "client_no_context_takeover; client_max_window_bits; "
+                                "server_max_window_bits=10"_kj;
+  auto parts = _::splitParts(cleanParameters, ';');
+  auto keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  auto maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
+  auto unverified = KJ_ASSERT_NONNULL(maybeUnverified);
+  auto maybeValid = _::validateCompressionConfig(kj::mv(unverified), false); // Validate as Server.
+  auto valid = KJ_ASSERT_NONNULL(maybeValid);
+  KJ_ASSERT(valid.inboundNoContextTakeover == true);
+  KJ_ASSERT(valid.outboundNoContextTakeover == false);
+  auto inboundBits = KJ_ASSERT_NONNULL(valid.inboundMaxWindowBits);
+  KJ_ASSERT(inboundBits == 15); // `client_max_window_bits` can be empty in an offer.
+  auto outboundBits = KJ_ASSERT_NONNULL(valid.outboundMaxWindowBits);
+  KJ_ASSERT(outboundBits == 10);
+  // Valid config successfully constructed.
+
+  const auto correctStructureButInvalid = "client_no_context_takeover; client_max_window_bits; "
+                                          "server_max_window_bits=this_should_be_a_number"_kj;
+  parts = _::splitParts(correctStructureButInvalid, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+
+  maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
+  unverified = KJ_ASSERT_NONNULL(maybeUnverified);
+  maybeValid = _::validateCompressionConfig(kj::mv(unverified), false); // Validate as Server.
+  KJ_ASSERT(maybeValid == nullptr);
+  // The config "looks" correct, but the `server_max_window_bits` parameter has an invalid value.
+
+  const auto invalidRange = "client_max_window_bits; server_max_window_bits=18;"_kj;
+  // `server_max_window_bits` is out of range, decline.
+  parts = _::splitParts(invalidRange, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
+  maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), false);
+  KJ_ASSERT(maybeValid == nullptr);
+
+  const auto invalidRangeTwo = "client_max_window_bits=4"_kj;
+  // `server_max_window_bits` is out of range, decline.
+  parts = _::splitParts(invalidRangeTwo, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
+  maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), false);
+  KJ_ASSERT(maybeValid == nullptr);
+
+  const auto invalidRequest = "server_max_window_bits"_kj;
+  // `sever_max_window_bits` must have a value in a request AND a response.
+  parts = _::splitParts(invalidRequest, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
+  maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), false);
+  KJ_ASSERT(maybeValid == nullptr);
+
+  const auto invalidResponse = "client_max_window_bits"_kj;
+  // `client_max_window_bits` must have a value in a response.
+  parts = _::splitParts(invalidResponse, ';');
+  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
+  maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), true);
+  KJ_ASSERT(maybeValid == nullptr);
+}
+
+KJ_TEST("WebSocket Compression String Parsing (findValidExtensionOffers)") {
+  // Test that we can extract only the valid extensions from a string of offers.
+  constexpr auto extensions = "permessage-deflate; " // Valid offer.
+                                "client_no_context_takeover; "
+                                "client_max_window_bits; "
+                                "server_max_window_bits=10, "
+                              "permessage-deflate; " // Another valid offer.
+                                "client_no_context_takeover; "
+                                "client_max_window_bits, "
+                              "permessage-invalid; " // Invalid ext name.
+                                "client_no_context_takeover, "
+                              "permessage-deflate; " // Invalid parmeter.
+                                "invalid_parameter; "
+                                "client_max_window_bits; "
+                                "server_max_window_bits=10, "
+                              "permessage-deflate; " // Invalid parmeter value.
+                                "server_max_window_bits=should_be_a_number, "
+                              "permessage-deflate; " // Unexpected parmeter value.
+                                "client_max_window_bits=true, "
+                              "permessage-deflate; " // Missing expected parmeter value.
+                                "server_max_window_bits, "
+                              "permessage-deflate; " // Invalid parameter value (too high).
+                                "client_max_window_bits=99, "
+                              "permessage-deflate; " // Invalid parameter value (too low).
+                                "client_max_window_bits=4, "
+                              "permessage-deflate; " // Invalid parameter (repeated).
+                                "client_max_window_bits; "
+                                "client_max_window_bits, "
+                              "permessage-deflate"_kj; // Valid offer (no parameters).
+
+  auto validOffers = _::findValidExtensionOffers(extensions);
+  KJ_ASSERT(validOffers.size() == 3);
+  KJ_ASSERT(validOffers[0].outboundNoContextTakeover == true);
+  KJ_ASSERT(validOffers[0].inboundNoContextTakeover == false);
+  KJ_ASSERT(validOffers[0].outboundMaxWindowBits == 15);
+  KJ_ASSERT(validOffers[0].inboundMaxWindowBits == 10);
+
+  KJ_ASSERT(validOffers[1].outboundNoContextTakeover == true);
+  KJ_ASSERT(validOffers[1].inboundNoContextTakeover == false);
+  KJ_ASSERT(validOffers[1].outboundMaxWindowBits == 15);
+  KJ_ASSERT(validOffers[1].inboundMaxWindowBits == nullptr);
+
+  KJ_ASSERT(validOffers[2].outboundNoContextTakeover == false);
+  KJ_ASSERT(validOffers[2].inboundNoContextTakeover == false);
+  KJ_ASSERT(validOffers[2].outboundMaxWindowBits == nullptr);
+  KJ_ASSERT(validOffers[2].inboundMaxWindowBits == nullptr);
+}
+
+KJ_TEST("WebSocket Compression String Parsing (generateExtensionRequest)") {
+  // Test that we can extract only the valid extensions from a string of offers.
+  constexpr auto extensions = "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits=10; "
+                                "client_max_window_bits, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "client_max_window_bits, "
+                              "permessage-deflate"_kj;
+  constexpr auto EXPECTED = "permessage-deflate; "
+                              "client_no_context_takeover; "
+                              "client_max_window_bits=15; "
+                              "server_max_window_bits=10, "
+                            "permessage-deflate; "
+                              "client_no_context_takeover; "
+                              "client_max_window_bits=15, "
+                            "permessage-deflate"_kj;
+  auto validOffers = _::findValidExtensionOffers(extensions);
+  auto extensionRequest = _::generateExtensionRequest(validOffers);
+  KJ_ASSERT(extensionRequest == EXPECTED);
+}
+
+KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionOffers)") {
+  // Test that we can accept a valid offer from string of offers.
+  constexpr auto extensions = "permessage-invalid; " // Invalid ext name.
+                                "client_no_context_takeover, "
+                              "permessage-deflate; " // Invalid parmeter.
+                                "invalid_parameter; "
+                                "client_max_window_bits; "
+                                "server_max_window_bits=10, "
+                              "permessage-deflate; " // Invalid parmeter value.
+                                "server_max_window_bits=should_be_a_number, "
+                              "permessage-deflate; " // Unexpected parmeter value.
+                                "client_max_window_bits=true, "
+                              "permessage-deflate; " // Missing expected parmeter value.
+                                "server_max_window_bits, "
+                              "permessage-deflate; " // Invalid parameter value (too high).
+                                "client_max_window_bits=99, "
+                              "permessage-deflate; " // Invalid parameter value (too low).
+                                "client_max_window_bits=4, "
+                              "permessage-deflate; " // Invalid parameter (repeated).
+                                "client_max_window_bits; "
+                                "client_max_window_bits, "
+                              "permessage-deflate; " // Valid offer.
+                                "client_no_context_takeover; "
+                                "client_max_window_bits; "
+                                "server_max_window_bits=10, "
+                              "permessage-deflate; " // Another valid offer.
+                                "client_no_context_takeover; "
+                                "client_max_window_bits, "
+                              "permessage-deflate"_kj; // Valid offer (no parameters).
+
+  auto maybeAccepted = _::tryParseExtensionOffers(extensions);
+  auto accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == true);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == 10);
+  KJ_ASSERT(accepted.inboundMaxWindowBits == 15);
+
+  // Try the second valid offer from the big list above.
+  auto offerTwo = "permessage-deflate; client_no_context_takeover; client_max_window_bits"_kj;
+  maybeAccepted = _::tryParseExtensionOffers(offerTwo);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == true);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == nullptr);
+  KJ_ASSERT(accepted.inboundMaxWindowBits == 15);
+
+  auto offerThree = "permessage-deflate"_kj; // The third valid offer.
+  maybeAccepted = _::tryParseExtensionOffers(offerThree);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == nullptr);
+  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+
+  auto invalid = "invalid"_kj; // Any of the invalid offers we saw above would return NULL.
+  maybeAccepted = _::tryParseExtensionOffers(invalid);
+  KJ_ASSERT(maybeAccepted == nullptr);
+}
+
+KJ_TEST("WebSocket Compression String Parsing (generateExtensionResponse)") {
+  // Test that we can extract only the valid extensions from a string of offers.
+  constexpr auto extensions = "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits=10; "
+                                "client_max_window_bits, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "client_max_window_bits, "
+                              "permessage-deflate"_kj;
+  constexpr auto EXPECTED = "permessage-deflate; "
+                              "client_no_context_takeover; "
+                              "client_max_window_bits=15; "
+                              "server_max_window_bits=10"_kj;
+  auto accepted = _::tryParseExtensionOffers(extensions);
+  auto extensionResponse = _::generateExtensionResponse(KJ_ASSERT_NONNULL(accepted));
+  KJ_ASSERT(extensionResponse == EXPECTED);
+}
+
+KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionAgreement)") {
+  constexpr auto didNotOffer = "Server failed WebSocket handshake: "
+      "added Sec-WebSocket-Extensions when client did not offer any."_kj;
+  constexpr auto tooMany = "Server failed WebSocket handshake: "
+      "expected exactly one extension (permessage-deflate) but received more than one."_kj;
+  constexpr auto badExt = "Server failed WebSocket handshake: "
+      "response included a Sec-WebSocket-Extensions value that was not permessage-deflate."_kj;
+  constexpr auto badVal = "Server failed WebSocket handshake: "
+      "the Sec-WebSocket-Extensions header in the Response included an invalid value."_kj;
+
+  constexpr auto tooManyExtensions = "permessage-deflate; client_no_context_takeover; "
+      "client_max_window_bits; server_max_window_bits=10, "
+      "permessage-deflate; client_no_context_takeover; client_max_window_bits;"_kj;
+
+  auto maybeAccepted = _::tryParseExtensionAgreement(nullptr, tooManyExtensions);
+  KJ_ASSERT(
+      KJ_ASSERT_NONNULL(maybeAccepted.tryGet<kj::Exception>()).getDescription() == didNotOffer);
+
+  Maybe<CompressionParameters> defaultConfig = CompressionParameters{};
+  maybeAccepted = _::tryParseExtensionAgreement(defaultConfig, tooManyExtensions);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(maybeAccepted.tryGet<kj::Exception>()).getDescription() == tooMany);
+
+  constexpr auto invalidExt = "permessage-invalid; "
+                                "client_no_context_takeover; "
+                                "client_max_window_bits; "
+                                "server_max_window_bits=10;";
+  maybeAccepted = _::tryParseExtensionAgreement(defaultConfig, invalidExt);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(maybeAccepted.tryGet<kj::Exception>()).getDescription() == badExt);
+
+  constexpr auto invalidVal = "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "client_max_window_bits; "
+                                "server_max_window_bits=100;";
+  maybeAccepted = _::tryParseExtensionAgreement(defaultConfig, invalidVal);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(maybeAccepted.tryGet<kj::Exception>()).getDescription() == badVal);
+
+  constexpr auto missingVal = "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "client_max_window_bits; " // This must have a value in a Response!
+                                "server_max_window_bits=10;";
+  maybeAccepted = _::tryParseExtensionAgreement(defaultConfig, missingVal);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(maybeAccepted.tryGet<kj::Exception>()).getDescription() == badVal);
+
+  constexpr auto valid = "permessage-deflate; client_no_context_takeover; "
+      "client_max_window_bits=15; server_max_window_bits=10"_kj;
+  maybeAccepted = _::tryParseExtensionAgreement(defaultConfig, valid);
+  auto config = KJ_ASSERT_NONNULL(maybeAccepted.tryGet<CompressionParameters>());
+  KJ_ASSERT(config.outboundNoContextTakeover == true);
+  KJ_ASSERT(config.inboundNoContextTakeover == false);
+  KJ_ASSERT(config.outboundMaxWindowBits == 15);
+  KJ_ASSERT(config.inboundMaxWindowBits == 10);
+
+  auto client = CompressionParameters{ true, false, 15, 10 };
+  // If the server ignores our `client_no_context_takeover` parameter, we (the client) still use it.
+  constexpr auto serverIgnores = "permessage-deflate; client_max_window_bits=15; "
+    "server_max_window_bits=10"_kj;
+  maybeAccepted = _::tryParseExtensionAgreement(client, serverIgnores);
+  config = KJ_ASSERT_NONNULL(maybeAccepted.tryGet<CompressionParameters>());
+  KJ_ASSERT(config.outboundNoContextTakeover == true); // Note that this is missing in the response.
+  KJ_ASSERT(config.inboundNoContextTakeover == false);
+  KJ_ASSERT(config.outboundMaxWindowBits == 15);
+  KJ_ASSERT(config.inboundMaxWindowBits == 10);
+}
+
+KJ_TEST("HttpClient WebSocket Compression Negotiation") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_HANDSHAKE);
+
+  auto serverTask = expectRead(*pipe.ends[1], request)
+      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE)); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  HttpHeaderTable::Builder tableBuilder;
+  HttpHeaderId extHeader = tableBuilder.add("Sec-WebSocket-Extensions");
+  auto headerTable = tableBuilder.build();
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  clientSettings.enableWebSocketCompression = true;
+
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
+
+  // To test request/response parsing, we'll try to send:
+  //  - extensions that should get dropped,
+  //  - extra whitespace following extensions/parameters.
+  const auto extensions = "permessage-DROPTHIS,  permessage-deflate;   client_no_context_takeover; "
+      "client_max_window_bits; server_max_window_bits    =  10   , "
+      "permessage-deflate; client_max_window_bits"_kj;
+  testWebSocketCompression(waitScope, *headerTable, extHeader, extensions, *client);
 
   serverTask.wait(waitScope);
 }
