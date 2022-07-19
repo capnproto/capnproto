@@ -2988,6 +2988,13 @@ private:
     kj::String namespacePrefix;
     bool omitSchemas = false;
 
+    for(auto annotation : node.getAnnotations()) {
+        if(annotation.getId() == OMIT_SCHEMAS_ANNOTATION_ID) {
+            omitSchemas = true;
+            break;
+        }
+    }
+
     for (auto annotation: node.getAnnotations()) {
       if (annotation.getId() == NAMESPACE_ANNOTATION_ID) {
         kj::StringPtr ns = annotation.getValue().getText();
@@ -3009,10 +3016,6 @@ private:
         }
 
         break;
-      }
-
-      if(annotation.getId() == OMIT_SCHEMAS_ANNOTATION_ID) {
-        omitSchemas = true;
       }
     }
 
