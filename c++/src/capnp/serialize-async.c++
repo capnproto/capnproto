@@ -31,8 +31,10 @@
 #endif
 
 #include "serialize-async.h"
+#include "serialize.h"
 #include <kj/debug.h>
 #include <kj/io.h>
+#include <kj/encoding.h>
 
 namespace capnp {
 
@@ -500,6 +502,290 @@ kj::Promise<MessageReaderAndFds> MessageStream::readMessage(
         KJ_UNREACHABLE;
       }
   });
+}
+
+template<typename Stream>
+kj::Promise<kj::Maybe<MessageReaderAndFds>> _::tryReadMessageInternal(Stream& stream,
+    uint64_t defaultReadSize, kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+    ReaderOptions readerOptions, kj::ArrayPtr<word> scratchSpace) {
+  KJ_IF_MAYBE(m, stream.tryGetBufferedMessage(passedInFdSpace)) {
+    return kj::Maybe<MessageReaderAndFds>(kj::mv(*m));
+  }
+
+  auto prefixSize = 0;
+  kj::Array<byte> buffer;
+  void* start;
+  size_t minBytes;
+  size_t maxBytes;
+
+  auto incomplete = stream.tryGetIncompleteRead();
+  KJ_IF_MAYBE(i, incomplete) {
+    // We take the incomplete read and put it as a prefix in the readBuffer.
+
+    KJ_ASSERT(i->bytes.size() < i->expectedSize);
+    prefixSize = i->bytes.size();
+
+    // The buffer needs to be at least as big as the expected message size, so if the message is
+    // larger than defaultReadSize, we need to use that
+    auto bufferSize = kj::max(i->expectedSize, defaultReadSize);
+
+    buffer = kj::heapArray<byte>(bufferSize);
+    memcpy(static_cast<void*>(buffer.begin()), static_cast<void*>(i->bytes.begin()), prefixSize);
+
+    start = buffer.begin() + prefixSize;
+    minBytes = i->expectedSize - prefixSize;
+    maxBytes = bufferSize - prefixSize;
+  } else {
+    buffer = kj::heapArray<byte>(defaultReadSize);
+    start = buffer.begin();
+    minBytes = 1;
+    maxBytes = defaultReadSize;
+  }
+
+  return stream.tryRead(kj::mv(buffer), start, minBytes, maxBytes).then(
+      [&stream, defaultReadSize, readerOptions, prefixSize, passedInFdSpace]
+      (typename Stream::ReadResult result) mutable
+      -> kj::Promise<kj::Maybe<MessageReaderAndFds>> {
+    auto n = result.byteCount;
+
+    if (n == 0) {
+      if (prefixSize) {
+        kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+      }
+
+      // EOF, return a buffered message if we have one.
+      KJ_IF_MAYBE(m, stream.tryGetBufferedMessage(passedInFdSpace)) {
+        return kj::Maybe<MessageReaderAndFds>(kj::mv(*m));
+      }
+      return kj::Maybe<MessageReaderAndFds>();
+    }
+
+    n += prefixSize;
+
+    kj::ArrayPtr<word> readHead(reinterpret_cast<word*>(result.buffer.begin()), n / sizeof(word));
+
+    // Any bytes not on a word boundary at the end of the read are part of an incomplete message.
+    kj::Maybe<kj::ArrayPtr<byte>> leftoverBytes;
+    auto numLeftoverBytes = n % sizeof(word);
+    if (numLeftoverBytes > 0) {
+      leftoverBytes = kj::ArrayPtr<byte>(result.buffer.begin() + (n - numLeftoverBytes), numLeftoverBytes);
+    }
+
+    while(readHead.size() > 0) {
+      auto totalWords = capnp::expectedSizeInWordsFromPrefix(readHead);
+      KJ_REQUIRE(totalWords < readerOptions.traversalLimitInWords);
+
+      if (totalWords > readHead.size()) {
+        // The last message isn't complete
+
+        leftoverBytes = kj::ArrayPtr<byte>(reinterpret_cast<byte*>(readHead.begin()),
+            (readHead.size() * sizeof(word)) + numLeftoverBytes);
+        break;
+      }
+
+      // We have the complete message
+      auto messageCopy = kj::heapArray<word>(totalWords);
+      memcpy(messageCopy.begin(), readHead.begin(), totalWords * sizeof(word));
+
+      bool isLast = totalWords == readHead.size();
+
+      stream.bufferCompleteMessage({
+        kj::attachVal(FlatArrayMessageReader(messageCopy, readerOptions),
+            kj::mv(messageCopy)),
+        result.getFds(isLast)
+      });
+      readHead = readHead.slice(totalWords, readHead.size());
+    }
+
+    KJ_IF_MAYBE(leftover, leftoverBytes) {
+      kj::ArrayPtr<word> leftoverWords(reinterpret_cast<word*>(leftover->begin()),
+          leftover->size() / sizeof(word));
+
+      auto expectedSize = capnp::expectedSizeInWordsFromPrefix(leftoverWords) * sizeof(word);
+
+      stream.bufferIncompleteMessage(*leftover, result.getFds(true), expectedSize);
+    }
+
+    return tryReadMessageInternal(stream, defaultReadSize, passedInFdSpace, readerOptions, nullptr);
+  });
+}
+
+template kj::Promise<kj::Maybe<MessageReaderAndFds>>
+      _::tryReadMessageInternal<BufferedAsyncIoMessageStream>(
+      BufferedAsyncIoMessageStream& stream,
+      uint64_t defaultReadSize, kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+      ReaderOptions readerOptions, kj::ArrayPtr<word> scratchSpace);
+
+template kj::Promise<kj::Maybe<MessageReaderAndFds>>
+      _::tryReadMessageInternal<BufferedAsyncCapabilityMessageStream>(
+      BufferedAsyncCapabilityMessageStream& stream,
+      uint64_t defaultReadSize, kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+      ReaderOptions readerOptions, kj::ArrayPtr<word> scratchSpace);
+
+kj::Promise<BufferedAsyncIoMessageStream::ReadResult>
+    BufferedAsyncIoMessageStream::tryRead(kj::Array<byte> buffer, void* start, size_t minBytes,
+      size_t maxBytes) {
+  return stream.tryRead(start, minBytes, maxBytes).then(
+      [buffer = kj::mv(buffer)](size_t n) mutable {
+    return ReadResult { kj::mv(buffer), n };
+  });
+}
+
+kj::Maybe<MessageReaderAndFds> BufferedAsyncIoMessageStream::tryGetBufferedMessage(
+    kj::ArrayPtr<kj::AutoCloseFd>) {
+  if (bufferedReaders.size() > 0) {
+    auto next = kj::mv(bufferedReaders.front());
+    bufferedReaders.pop_front();
+    return MessageReaderAndFds { kj::mv(next), nullptr };
+  }
+  return nullptr;
+}
+
+kj::Maybe<BufferedAsyncIoMessageStream::IncompleteRead>
+    BufferedAsyncIoMessageStream::tryGetIncompleteRead() {
+  return kj::mv(incompleteRead);
+}
+
+void BufferedAsyncIoMessageStream::bufferCompleteMessage(MessageReaderAndOwnedFds message) {
+  bufferedReaders.push_back(kj::mv(message.reader));
+}
+
+void BufferedAsyncIoMessageStream::bufferIncompleteMessage(
+    kj::ArrayPtr<kj::byte> leftover, kj::Array<kj::AutoCloseFd> fds, size_t size) {
+  kj::ArrayPtr<word> leftoverWords(reinterpret_cast<word*>(leftover.begin()),
+      leftover.size() / sizeof(word));
+
+  auto& incomplete = incompleteRead.emplace(IncompleteRead {
+    kj::heapArray<byte>(leftover.size()),
+    capnp::expectedSizeInWordsFromPrefix(leftoverWords) * sizeof(word)
+  });
+  memcpy(incomplete.bytes.begin(), leftover.begin(), leftover.size());
+}
+
+kj::Promise<BufferedAsyncCapabilityMessageStream::ReadResult>
+    BufferedAsyncCapabilityMessageStream::tryRead(kj::Array<byte> buffer, void* start,
+      size_t minBytes, size_t maxBytes) {
+  auto fdSpace = kj::heapArray<kj::AutoCloseFd>(options.maxFdsPerMessage);
+  return stream.tryReadWithFds(start, minBytes, maxBytes, fdSpace.begin(),
+      options.maxFdsPerMessage).then(
+      [this, buffer = kj::mv(buffer), fdSpace = kj::mv(fdSpace)]
+      (kj::AsyncCapabilityStream::ReadResult result) mutable {
+    return ReadResult(kj::mv(buffer), kj::mv(fdSpace), kj::mv(incompleteReadFds),
+        result.byteCount, result.capCount);
+  });
+}
+
+kj::Maybe<MessageReaderAndFds> BufferedAsyncCapabilityMessageStream::tryGetBufferedMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace) {
+  if (bufferedReaders.size() > 0) {
+    auto next = kj::mv(bufferedReaders.front());
+    bufferedReaders.pop_front();
+
+    for(auto i : kj::zeroTo(next.fds.size())) {
+      if (i >= fdSpace.size()) {
+        break;
+      }
+      fdSpace[i] = kj::mv(next.fds[i]);
+    }
+
+
+    return MessageReaderAndFds {
+      kj::mv(next.reader),
+      fdSpace.slice(0, kj::min(fdSpace.size(), next.fds.size()))
+    };
+  } else {
+    return nullptr;
+  }
+}
+
+kj::Maybe<BufferedAsyncCapabilityMessageStream::IncompleteRead>
+    BufferedAsyncCapabilityMessageStream::tryGetIncompleteRead() {
+  return kj::mv(incompleteRead);
+}
+
+void BufferedAsyncCapabilityMessageStream::bufferCompleteMessage(MessageReaderAndOwnedFds message) {
+  bufferedReaders.push_back(kj::mv(message));
+}
+
+void BufferedAsyncCapabilityMessageStream::bufferIncompleteMessage(
+    kj::ArrayPtr<kj::byte> leftover, kj::Array<kj::AutoCloseFd> fds, size_t size) {
+  kj::ArrayPtr<word> leftoverWords(reinterpret_cast<word*>(leftover.begin()),
+      leftover.size() / sizeof(word));
+
+  auto& incomplete = incompleteRead.emplace(IncompleteRead {
+    kj::heapArray<byte>(leftover.size()),
+    capnp::expectedSizeInWordsFromPrefix(leftoverWords) * sizeof(word)
+  });
+  memcpy(incomplete.bytes.begin(), leftover.begin(), leftover.size());
+  incompleteReadFds = kj::mv(fds);
+}
+
+kj::Array<kj::AutoCloseFd> BufferedAsyncCapabilityMessageStream::ReadResult::getFds(bool isLast) {
+  if (prefixFds.size() > 0) {
+    KJ_REQUIRE(capCount == 0, "Additional FDs were sent prematurely.");
+    return kj::mv(prefixFds);
+  } else if (capCount > 0 && isLast) {
+    auto builder = kj::heapArrayBuilder<kj::AutoCloseFd>(capCount);
+    builder.addAll<kj::AutoCloseFd*, true>(fdSpace.begin(), fdSpace.begin() + capCount);
+    capCount = 0;
+    return builder.finish();
+  } else {
+    return kj::Array<kj::AutoCloseFd>();
+  }
+}
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedAsyncIoMessageStream::tryReadMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+    ReaderOptions readerOptions,
+    kj::ArrayPtr<word> scratchSpace) {
+  return _::tryReadMessageInternal(*this, options.defaultReadSize, passedInFdSpace, readerOptions, scratchSpace);
+}
+
+kj::Promise<void> BufferedAsyncIoMessageStream::writeMessage(
+    kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return capnp::writeMessage(stream, segments);
+}
+
+kj::Promise<void> BufferedAsyncIoMessageStream::writeMessages(
+    kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) {
+  return capnp::writeMessages(stream, messages);
+}
+
+kj::Maybe<int> BufferedAsyncIoMessageStream::getSendBufferSize() {
+  return capnp::getSendBufferSize(stream);
+}
+
+kj::Promise<void> BufferedAsyncIoMessageStream::end() {
+  stream.shutdownWrite();
+  return kj::READY_NOW;
+}
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedAsyncCapabilityMessageStream::tryReadMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+    ReaderOptions readerOptions,
+    kj::ArrayPtr<word> scratchSpace) {
+  return _::tryReadMessageInternal(*this, options.defaultReadSize, passedInFdSpace, readerOptions, scratchSpace);
+}
+
+kj::Promise<void> BufferedAsyncCapabilityMessageStream::writeMessage(
+    kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return capnp::writeMessage(stream, segments);
+}
+
+kj::Promise<void> BufferedAsyncCapabilityMessageStream::writeMessages(
+    kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) {
+  return capnp::writeMessages(stream, messages);
+}
+
+kj::Maybe<int> BufferedAsyncCapabilityMessageStream::getSendBufferSize() {
+  return capnp::getSendBufferSize(stream);
+}
+
+kj::Promise<void> BufferedAsyncCapabilityMessageStream::end() {
+  stream.shutdownWrite();
+  return kj::READY_NOW;
 }
 
 }  // namespace capnp

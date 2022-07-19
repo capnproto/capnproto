@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <deque>
+#include <kj/io.h>
 #include <kj/async-io.h>
 #include "message.h"
 
@@ -31,6 +33,16 @@ namespace capnp {
 struct MessageReaderAndFds {
   kj::Own<MessageReader> reader;
   kj::ArrayPtr<kj::AutoCloseFd> fds;
+};
+
+struct MessageReaderAndOwnedFds {
+  kj::Own<MessageReader> reader;
+  kj::Array<kj::AutoCloseFd> fds;
+};
+
+struct MessageAndFds {
+  kj::ArrayPtr<const kj::ArrayPtr<const word>> segments;
+  kj::ArrayPtr<const int> fds;
 };
 
 class MessageStream {
@@ -137,6 +149,155 @@ public:
   kj::Promise<void> end() override;
 private:
   kj::AsyncCapabilityStream& stream;
+};
+
+struct BufferedStreamOptions {
+  uint64_t defaultReadSize = 65536; // 64KiB
+  // Max amount of bytes to read in tryReadMessage if stream.tryGetLength() returns nullptr.
+
+};
+
+struct BufferedCapabilityStreamOptions : public BufferedStreamOptions {
+  uint maxFdsPerMessage;
+};
+
+class BufferedAsyncIoMessageStream;
+class BufferedAsyncCapabilityMessageStream;
+
+namespace _ {
+
+template<typename Stream>
+kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessageInternal(Stream& stream,
+    uint64_t defaultReadSize, kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+    ReaderOptions readerOptions, kj::ArrayPtr<word> scratchSpace);
+
+extern template kj::Promise<kj::Maybe<MessageReaderAndFds>>
+      tryReadMessageInternal<BufferedAsyncIoMessageStream>(
+      BufferedAsyncIoMessageStream& stream,
+      uint64_t defaultReadSize, kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+      ReaderOptions readerOptions, kj::ArrayPtr<word> scratchSpace);
+
+extern template kj::Promise<kj::Maybe<MessageReaderAndFds>>
+      tryReadMessageInternal<BufferedAsyncCapabilityMessageStream>(
+      BufferedAsyncCapabilityMessageStream& stream,
+      uint64_t defaultReadSize, kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+      ReaderOptions readerOptions, kj::ArrayPtr<word> scratchSpace);
+
+} // namespace _
+
+class BufferedAsyncIoMessageStream final : public MessageStream {
+public:
+  explicit BufferedAsyncIoMessageStream(kj::AsyncIoStream& stream,
+      BufferedStreamOptions options = BufferedStreamOptions{})
+      : stream(stream), options(options) {}
+
+  // Implements MessageStream
+  kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
+  kj::Promise<void> writeMessage(
+      kj::ArrayPtr<const int> fds,
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+  kj::Promise<void> writeMessages(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override;
+  kj::Maybe<int> getSendBufferSize() override;
+  kj::Promise<void> end() override;
+
+private:
+  kj::AsyncIoStream& stream;
+  BufferedStreamOptions options;
+
+  struct IncompleteRead {
+    kj::Array<kj::byte> bytes;
+    size_t expectedSize;
+  };
+
+  std::deque<kj::Own<MessageReader>> bufferedReaders;
+  kj::Maybe<IncompleteRead> incompleteRead;
+
+  // Implementation details used by tryReadMessageInternal
+  kj::Maybe<MessageReaderAndFds> tryGetBufferedMessage(kj::ArrayPtr<kj::AutoCloseFd> fdSpace);
+  kj::Maybe<IncompleteRead> tryGetIncompleteRead();
+  void bufferCompleteMessage(MessageReaderAndOwnedFds message);
+  void bufferIncompleteMessage(kj::ArrayPtr<kj::byte> leftover, kj::Array<kj::AutoCloseFd> fds, size_t size);
+
+  struct ReadResult {
+    kj::Array<kj::byte> buffer;
+    size_t byteCount;
+
+    kj::Array<kj::AutoCloseFd> getFds(bool isLast) { return nullptr; }
+  };
+  kj::Promise<ReadResult> tryRead(kj::Array<byte> buffer, void* start, size_t minBytes,
+      size_t maxBytes);
+
+  friend kj::Promise<kj::Maybe<MessageReaderAndFds>>
+      _::tryReadMessageInternal<BufferedAsyncIoMessageStream>(
+      BufferedAsyncIoMessageStream& stream,
+      uint64_t defaultReadSize, kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+      ReaderOptions readerOptions, kj::ArrayPtr<word> scratchSpace);
+};
+
+class BufferedAsyncCapabilityMessageStream final : public MessageStream {
+public:
+  explicit BufferedAsyncCapabilityMessageStream(kj::AsyncCapabilityStream& stream,
+      BufferedCapabilityStreamOptions options = BufferedCapabilityStreamOptions{})
+      : stream(stream), options(options) {}
+
+  // Implements MessageStream
+  kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
+  kj::Promise<void> writeMessage(
+      kj::ArrayPtr<const int> fds,
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+  kj::Promise<void> writeMessages(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override;
+  kj::Maybe<int> getSendBufferSize() override;
+  kj::Promise<void> end() override;
+
+private:
+  kj::AsyncCapabilityStream& stream;
+  BufferedCapabilityStreamOptions options;
+
+  struct IncompleteRead {
+    kj::Array<kj::byte> bytes;
+    size_t expectedSize;
+  };
+
+  std::deque<MessageReaderAndOwnedFds> bufferedReaders;
+  kj::Maybe<IncompleteRead> incompleteRead;
+  kj::Array<kj::AutoCloseFd> incompleteReadFds;
+
+  // Implementation details used by tryReadMessageInternal
+  kj::Maybe<MessageReaderAndFds> tryGetBufferedMessage(kj::ArrayPtr<kj::AutoCloseFd> fdSpace);
+  kj::Maybe<IncompleteRead> tryGetIncompleteRead();
+  void bufferCompleteMessage(MessageReaderAndOwnedFds message);
+  void bufferIncompleteMessage(kj::ArrayPtr<kj::byte> bytes, kj::Array<kj::AutoCloseFd> fds, size_t size);
+
+  struct ReadResult {
+    kj::Array<kj::byte> buffer;
+    size_t byteCount;
+
+    ReadResult(kj::Array<kj::byte> buffer, kj::Array<kj::AutoCloseFd> fdSpace,
+        kj::Array<kj::AutoCloseFd> prefixFds, size_t byteCount, size_t capCount)
+        : buffer(kj::mv(buffer)), byteCount(byteCount), prefixFds(kj::mv(prefixFds)),
+        fdSpace(kj::mv(fdSpace)), capCount(capCount) {}
+
+    kj::Array<kj::AutoCloseFd> getFds(bool isLast);
+
+  private:
+    kj::Array<kj::AutoCloseFd> prefixFds;
+    kj::Array<kj::AutoCloseFd> fdSpace;
+    size_t capCount;
+  };
+  kj::Promise<ReadResult> tryRead(kj::Array<byte> buffer, void* start, size_t minBytes,
+      size_t maxBytes);
+
+  friend kj::Promise<kj::Maybe<MessageReaderAndFds>>
+      _::tryReadMessageInternal<BufferedAsyncCapabilityMessageStream>(
+      BufferedAsyncCapabilityMessageStream& stream,
+      uint64_t defaultReadSize, kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+      ReaderOptions readerOptions, kj::ArrayPtr<word> scratchSpace);
 };
 
 // -----------------------------------------------------------------------------
