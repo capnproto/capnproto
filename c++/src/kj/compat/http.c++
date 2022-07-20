@@ -5561,9 +5561,14 @@ private:
               if (httpInput.canReuse()) {
                 // Things look clean. Go ahead and accept the next request.
 
-                // Note that we don't have to handle server.draining here because we'll take care of
-                // it the next time around the loop.
-                return loop(false);
+                if (closeAfterSend) {
+                  // We sent Connection: close, so drop the connection now.
+                  return false;
+                } else {
+                  // Note that we don't have to handle server.draining here because we'll take care
+                  // of it the next time around the loop.
+                  return loop(false);
+                }
               } else {
                 // Apparently, the application did not read the request body. Maybe this is a bug,
                 // or maybe not: maybe the client tried to upload too much data and the application
@@ -5575,6 +5580,12 @@ private:
                 // which case the moment it finishes receiving the response, it could be completely
                 // within its rights to start a new request. If we close the socket now, we might
                 // interrupt that new request.
+                //
+                // Or maybe we did send `Connection: close`, as indicated by `closeAfterSend` being
+                // true. Even in that case, we should still try to read and ignore the request,
+                // otherwise when we close the connection the client may get a "connection reset"
+                // error before they get a chance to actually read the response body that we sent
+                // them.
                 //
                 // There's no way we can get out of this perfectly cleanly. HTTP just isn't good
                 // enough at connection management. The best we can do is give the client some grace
@@ -5598,11 +5609,12 @@ private:
 
                 return lengthGrace.exclusiveJoin(kj::mv(timeGrace))
                     .then([this](bool clean) -> kj::Promise<bool> {
-                  if (clean) {
+                  if (clean && !closeAfterSend) {
                     // We recovered. Continue loop.
                     return loop(false);
                   } else {
-                    // Client still not done. Return broken.
+                    // Client still not done, or we sent Connection: close and so want to drop the
+                    // connection anyway. Return broken.
                     return false;
                   }
                 });
