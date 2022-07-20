@@ -42,9 +42,10 @@ class TlsConnection;
 
 enum class TlsVersion {
   SSL_3,     // avoid; cryptographically broken
-  TLS_1_0,
-  TLS_1_1,
-  TLS_1_2
+  TLS_1_0,   // avoid; cryptographically weak
+  TLS_1_1,   // avoid; cryptographically weak
+  TLS_1_2,
+  TLS_1_3
 };
 
 using TlsErrorHandler = kj::Function<void(kj::Exception&&)>;

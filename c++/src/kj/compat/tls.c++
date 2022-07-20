@@ -681,6 +681,13 @@ TlsContext::TlsContext(Options options) {
   if (options.minVersion > TlsVersion::TLS_1_2) {
     optionFlags |= SSL_OP_NO_TLSv1_2;
   }
+  if (options.minVersion > TlsVersion::TLS_1_3) {
+#ifdef SSL_OP_NO_TLSv1_3
+    optionFlags |= SSL_OP_NO_TLSv1_3;
+#else
+    KJ_FAIL_REQUIRE("OpenSSL headers don't support TLS 1.3");
+#endif
+  }
   SSL_CTX_set_options(ctx, optionFlags);  // note: never fails; returns new options bitmask
 
   // honor options.cipherList
