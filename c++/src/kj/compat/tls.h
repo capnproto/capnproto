@@ -144,6 +144,12 @@ public:
   // Upgrade a ConnectionReceiver to one that automatically upgrades all accepted connections to
   // TLS (acting as the server).
 
+  kj::Own<kj::NetworkAddress> wrapAddress(
+      kj::Own<kj::NetworkAddress> address, kj::StringPtr expectedServerHostname);
+  // Upgrade a NetworkAddress to one that automatically upgrades all connections to TLS, acting
+  // as the client when `connect()` is called or the server if `listen()` is called.
+  // `connect()` will athenticate the server as `expectedServerHostname`.
+
   kj::Own<kj::Network> wrapNetwork(kj::Network& network);
   // Upgrade a Network to one that automatically upgrades all connections to TLS. The network will
   // only accept addresses of the form "hostname" and "hostname:port" (it does not accept raw IP

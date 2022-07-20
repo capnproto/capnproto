@@ -837,6 +837,11 @@ kj::Own<kj::ConnectionReceiver> TlsContext::wrapPort(kj::Own<kj::ConnectionRecei
   return kj::heap<TlsConnectionReceiver>(*this, kj::mv(port), kj::mv(handler));
 }
 
+kj::Own<kj::NetworkAddress> TlsContext::wrapAddress(
+    kj::Own<kj::NetworkAddress> address, kj::StringPtr expectedServerHostname) {
+  return kj::heap<TlsNetworkAddress>(*this, kj::str(expectedServerHostname), kj::mv(address));
+}
+
 kj::Own<kj::Network> TlsContext::wrapNetwork(kj::Network& network) {
   return kj::heap<TlsNetwork>(*this, network);
 }
