@@ -29,7 +29,9 @@ namespace {
 KJ_TEST("HashMap") {
   HashMap<String, int> map;
 
-  map.insert(kj::str("foo"), 123);
+  kj::String ownFoo = kj::str("foo");
+  const char* origFoo = ownFoo.begin();
+  map.insert(kj::mv(ownFoo), 123);
   map.insert(kj::str("bar"), 456);
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 123);
@@ -39,10 +41,16 @@ KJ_TEST("HashMap") {
   map.upsert(kj::str("foo"), 789, [](int& old, uint newValue) {
     KJ_EXPECT(old == 123);
     KJ_EXPECT(newValue == 789);
-    old = 321;
+    old = 4321;
   });
 
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 4321);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
+
+  map.upsert(kj::str("foo"), 321);
+
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
 
   KJ_EXPECT(
       map.findOrCreate("foo"_kj,
@@ -70,7 +78,9 @@ KJ_TEST("HashMap") {
 KJ_TEST("TreeMap") {
   TreeMap<String, int> map;
 
-  map.insert(kj::str("foo"), 123);
+  kj::String ownFoo = kj::str("foo");
+  const char* origFoo = ownFoo.begin();
+  map.insert(kj::mv(ownFoo), 123);
   map.insert(kj::str("bar"), 456);
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 123);
@@ -80,10 +90,16 @@ KJ_TEST("TreeMap") {
   map.upsert(kj::str("foo"), 789, [](int& old, uint newValue) {
     KJ_EXPECT(old == 123);
     KJ_EXPECT(newValue == 789);
-    old = 321;
+    old = 4321;
   });
 
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 4321);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
+
+  map.upsert(kj::str("foo"), 321);
+
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
 
   KJ_EXPECT(
       map.findOrCreate("foo"_kj,
