@@ -110,7 +110,7 @@ public:
       // from the given offset.  The idea is that you just allocated an lgSize-sized field from
       // an limitLgSize-sized space, such as a newly-added word on the end of the data segment.
 
-      KJ_DREQUIRE(limitLgSize <= kj::size(holes));
+      KJ_ASSUME(limitLgSize <= kj::size(holes));
 
       while (lgSize < limitLgSize) {
         KJ_DREQUIRE(holes[lgSize] == 0);

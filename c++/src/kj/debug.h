@@ -67,6 +67,13 @@
 // * `KJ_REQUIRE(condition, ...)`:  Like `KJ_ASSERT` but used to check preconditions -- e.g. to
 //   validate parameters passed from a caller.  A failure indicates that the caller is buggy.
 //
+// * `KJ_ASSUME(condition, ...)`: Like `KJ_ASSERT`, but in release mode (if KJ_DEBUG is not
+//   defined; see below) instead warrants to the compiler that the condition can be assumed to
+//   hold, allowing it to optimize accordingly.  This can result in undefined behavior, so use
+//   this macro *only* if you can prove to your satisfaction that the condition is guaranteed by
+//   surrounding code, and if the condition failing to hold would in any case result in undefined
+//   behavior in its dependencies.
+//
 // * `KJ_SYSCALL(code, ...)`:  Executes `code` assuming it makes a system call.  A negative result
 //   is considered an error, with error code reported via `errno`.  EINTR is handled by retrying.
 //   Other errors are handled by throwing an exception.  If you need to examine the return code,
@@ -98,11 +105,12 @@
 //   omits the first parameter and behaves like it was `false`.  `FAIL_SYSCALL` and
 //   `FAIL_RECOVERABLE_SYSCALL` take a string and an OS error number as the first two parameters.
 //   The string should be the name of the failed system call.
-// * For every macro `FOO` above, there is a `DFOO` version (or `RECOVERABLE_DFOO`) which is only
-//   executed in debug mode, i.e. when KJ_DEBUG is defined.  KJ_DEBUG is defined automatically
-//   by common.h when compiling without optimization (unless NDEBUG is defined), but you can also
-//   define it explicitly (e.g. -DKJ_DEBUG).  Generally, production builds should NOT use KJ_DEBUG
-//   as it may enable expensive checks that are unlikely to fail.
+// * For every macro `FOO` above except `ASSUME`, there is a `DFOO` version (or
+//   `RECOVERABLE_DFOO`) which is only executed in debug mode, i.e. when KJ_DEBUG is defined.
+//   KJ_DEBUG is defined automatically by common.h when compiling without optimization (unless
+//   NDEBUG is defined), but you can also define it explicitly (e.g. -DKJ_DEBUG).  Generally,
+//   production builds should NOT use KJ_DEBUG as it may enable expensive checks that are unlikely
+//   to fail.
 
 #pragma once
 
@@ -342,10 +350,21 @@ namespace kj {
 #define KJ_DLOG KJ_LOG
 #define KJ_DASSERT KJ_ASSERT
 #define KJ_DREQUIRE KJ_REQUIRE
+#define KJ_ASSUME KJ_ASSERT
 #else
 #define KJ_DLOG(...) do {} while (false)
 #define KJ_DASSERT(...) do {} while (false)
 #define KJ_DREQUIRE(...) do {} while (false)
+#if defined(__GNUC__)
+#define KJ_ASSUME(cond, ...) do { if (cond) {} else __builtin_unreachable(); } while (false)
+#elif defined(__clang__)
+#define KJ_ASSUME(cond, ...) __builtin_assume(cond)
+#elif defined(_MSC_VER)
+#define KJ_ASSUME(cond, ...) __assume(cond)
+#else
+#define KJ_ASSUME(...) do {} while (false)
+#endif
+
 #endif
 
 namespace _ {  // private
