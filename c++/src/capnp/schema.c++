@@ -265,6 +265,19 @@ Schema::BrandArgumentList Schema::getBrandArgumentsAtScope(uint64_t scopeId) con
   return BrandArgumentList(scopeId, raw->isUnbound());
 }
 
+kj::Array<uint64_t> Schema::getGenericScopeIds() const {
+  if (!getProto().getIsGeneric())
+    return nullptr;
+  
+  auto result = kj::heapArray<uint64_t>(raw->scopeCount);
+  for (auto iScope: kj::indices(result)) {
+    result[iScope] = raw->scopes[iScope].typeId;
+  }
+  
+  return result;
+}
+	
+
 StructSchema Schema::asStruct() const {
   KJ_REQUIRE(getProto().isStruct(), "Tried to use non-struct schema as a struct.",
              getProto().getDisplayName()) {

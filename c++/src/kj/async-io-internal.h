@@ -26,6 +26,8 @@
 #include "async-io.h"
 #include <stdint.h>
 
+KJ_BEGIN_HEADER
+
 struct sockaddr;
 struct sockaddr_un;
 
@@ -86,3 +88,5 @@ private:
 
 }  // namespace _ (private)
 }  // namespace kj
+
+KJ_END_HEADER

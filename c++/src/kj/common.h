@@ -99,7 +99,9 @@ KJ_BEGIN_HEADER
 #endif
 
 #include <stddef.h>
+#include <cstring>
 #include <initializer_list>
+#include <string.h>
 
 #if __linux__ && __cplusplus > 201200L
 // Hack around stdlib bug with C++14 that exists on some Linux systems.
@@ -571,6 +573,19 @@ T refIfLvalue(T&&);
 template <typename T, typename U> struct IsSameType_ { static constexpr bool value = false; };
 template <typename T> struct IsSameType_<T, T> { static constexpr bool value = true; };
 template <typename T, typename U> constexpr bool isSameType() { return IsSameType_<T, U>::value; }
+
+template <typename T> constexpr bool isIntegral() { return false; }
+template <> constexpr bool isIntegral<char>() { return true; }
+template <> constexpr bool isIntegral<signed char>() { return true; }
+template <> constexpr bool isIntegral<short>() { return true; }
+template <> constexpr bool isIntegral<int>() { return true; }
+template <> constexpr bool isIntegral<long>() { return true; }
+template <> constexpr bool isIntegral<long long>() { return true; }
+template <> constexpr bool isIntegral<unsigned char>() { return true; }
+template <> constexpr bool isIntegral<unsigned short>() { return true; }
+template <> constexpr bool isIntegral<unsigned int>() { return true; }
+template <> constexpr bool isIntegral<unsigned long>() { return true; }
+template <> constexpr bool isIntegral<unsigned long long>() { return true; }
 
 template <typename T>
 struct CanConvert_ {
@@ -1748,6 +1763,18 @@ public:
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
   }
+  inline bool startsWith(const ArrayPtr<const T>& other) const {
+    return other.size_ <= size_ && slice(0, other.size_) == other;
+  }
+
+  inline Maybe<size_t> findFirst(const T& match) const {
+    for (size_t i = 0; i < size_; i++) {
+      if (ptr[i] == match) {
+        return i;
+      }
+    }
+    return nullptr;
+  }
 
   inline ArrayPtr<PropagateConst<T, byte>> asBytes() const {
     // Reinterpret the array as a byte array. This is explicitly legal under C++ aliasing
@@ -1765,6 +1792,9 @@ public:
 
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
+    if (isIntegral<RemoveConst<T>>()) {
+      return std::memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
+    }
     for (size_t i = 0; i < size_; i++) {
       if (ptr[i] != other[i]) return false;
     }
@@ -1794,6 +1824,46 @@ private:
   T* ptr;
   size_t size_;
 };
+
+template <>
+inline Maybe<size_t> ArrayPtr<const char>::findFirst(const char& c) const {
+  const char* pos = reinterpret_cast<const char*>(memchr(ptr, c, size_));
+  if (pos == nullptr) {
+    return nullptr;
+  } else {
+    return pos - ptr;
+  }
+}
+
+template <>
+inline Maybe<size_t> ArrayPtr<char>::findFirst(const char& c) const {
+  char* pos = reinterpret_cast<char*>(memchr(ptr, c, size_));
+  if (pos == nullptr) {
+    return nullptr;
+  } else {
+    return pos - ptr;
+  }
+}
+
+template <>
+inline Maybe<size_t> ArrayPtr<const byte>::findFirst(const byte& c) const {
+  const byte* pos = reinterpret_cast<const byte*>(memchr(ptr, c, size_));
+  if (pos == nullptr) {
+    return nullptr;
+  } else {
+    return pos - ptr;
+  }
+}
+
+template <>
+inline Maybe<size_t> ArrayPtr<byte>::findFirst(const byte& c) const {
+  byte* pos = reinterpret_cast<byte*>(memchr(ptr, c, size_));
+  if (pos == nullptr) {
+    return nullptr;
+  } else {
+    return pos - ptr;
+  }
+}
 
 template <typename T>
 inline constexpr ArrayPtr<T> arrayPtr(T* ptr KJ_LIFETIMEBOUND, size_t size) {

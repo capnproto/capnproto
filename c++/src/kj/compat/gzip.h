@@ -25,6 +25,8 @@
 #include <kj/async-io.h>
 #include <zlib.h>
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
 namespace _ {  // private
@@ -140,3 +142,5 @@ private:
 };
 
 }  // namespace kj
+
+KJ_END_HEADER

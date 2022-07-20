@@ -29,8 +29,10 @@
 // - Test fixtures are not supported. Allocate your "test fixture" on the stack instead. Do setup
 //   in the constructor, teardown in the destructor.
 
-#include "../test.h"
+#include <kj/test.h>
 #include <kj/windows-sanity.h>  // work-around macro conflict with `ERROR`
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -118,3 +120,5 @@ private:
 #define TEST(x, y) KJ_TEST("legacy test: " #x "/" #y)
 
 }  // namespace kj
+
+KJ_END_HEADER

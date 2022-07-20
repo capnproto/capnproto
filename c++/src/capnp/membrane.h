@@ -49,6 +49,8 @@
 
 #include "capability.h"
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 
 class MembranePolicy {
@@ -275,3 +277,5 @@ Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
 }
 
 } // namespace capnp
+
+CAPNP_END_HEADER

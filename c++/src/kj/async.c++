@@ -78,6 +78,19 @@
 
 #include <stdlib.h>
 
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+// Clang's address sanitizer requires special hints when switching fibers, especially in order for
+// stack-use-after-return handling to work right.
+//
+// TODO(someday): Does GCC's sanitizer, flagged by __SANITIZE_ADDRESS__, have these hints too? I
+//   don't know and am not in a position to test, so I'm assuming not for now.
+#include <sanitizer/common_interface_defs.h>
+#else
+// Nop the hints so that we don't have to put #ifdefs around every use.
+#define __sanitizer_start_switch_fiber(...)
+#define __sanitizer_finish_switch_fiber(...)
+#endif
+
 #if _MSC_VER && !__clang__
 // MSVC's atomic intrinsics are weird and different, whereas the C++ standard atomics match the GCC
 // builtins -- except for requiring the obnoxious std::atomic<T> wrapper. So, on MSVC let's just
@@ -1364,6 +1377,23 @@ struct FiberStack::Impl {
   jmp_buf fiberJmpBuf;
   jmp_buf originalJmpBuf;
 
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+  // Stuff that we need to pass to __sanitizer_start_switch_fiber() /
+  // __sanitizer_finish_switch_fiber() when using ASAN.
+
+  void* originalFakeStack = nullptr;
+  void* fiberFakeStack = nullptr;
+  // Pointer to ASAN "fake stack" associated with the fiber and its calling stack. Filled in by
+  // __sanitizer_start_switch_fiber() before switching away, consumed by
+  // __sanitizer_finish_switch_fiber() upon switching back.
+
+  void const* originalBottom;
+  size_t originalSize;
+  // Size and location of the original stack before switching fibers. These are filled in by
+  // __sanitizer_finish_switch_fiber() after the switch, and must be passed to
+  // __sanitizer_start_switch_fiber() when switching back later.
+#endif
+
   static Impl* alloc(size_t stackSize, ucontext_t* context) {
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
@@ -1457,6 +1487,9 @@ struct FiberStack::StartRoutine {
 
     auto& stack = *reinterpret_cast<FiberStack*>(ptr);
 
+    __sanitizer_finish_switch_fiber(nullptr,
+        &stack.impl->originalBottom, &stack.impl->originalSize);
+
     // We first switch to the fiber inside of the FiberStack constructor. This is just for
     // initialization purposes, and we're expected to switch back immediately.
     stack.switchToMain();
@@ -1512,9 +1545,11 @@ FiberStack::FiberStack(size_t stackSizeParam)
 
   makecontext(&context, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
 
+  __sanitizer_start_switch_fiber(&impl->originalFakeStack, impl, stackSize - sizeof(Impl));
   if (_setjmp(impl->originalJmpBuf) == 0) {
     setcontext(&context);
   }
+  __sanitizer_finish_switch_fiber(impl->originalFakeStack, nullptr, nullptr);
 #endif
 #else
 #if KJ_NO_EXCEPTIONS
@@ -1611,9 +1646,11 @@ void FiberStack::switchToFiber() {
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
 #else
+  __sanitizer_start_switch_fiber(&impl->originalFakeStack, impl, stackSize - sizeof(Impl));
   if (_setjmp(impl->originalJmpBuf) == 0) {
     _longjmp(impl->fiberJmpBuf, 1);
   }
+  __sanitizer_finish_switch_fiber(impl->originalFakeStack, nullptr, nullptr);
 #endif
 #endif
 }
@@ -1624,9 +1661,21 @@ void FiberStack::switchToMain() {
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(getMainWin32Fiber());
 #else
+  // TODO(someady): In theory, the last time we switch away from the fiber, we should pass `nullptr`
+  //   for the first argument here, so that ASAN destroys the fake stack. However, as currently
+  //   designed, we don't actually know if we're switching away for the last time. It's understood
+  //   that when we call switchToMain() in FiberStack::run(), then the main stack is allowed to
+  //   destroy the fiber, or reuse it. I don't want to develop a mechanism to switch back to the
+  //   fiber on final destruction just to get the hints right, so instead we leak the fake stack.
+  //   This doesn't seem to cause any problems -- it's not even detected by ASAN as a memory leak.
+  //   But if we wanted to run ASAN builds in production or something, it might be an issue.
+  __sanitizer_start_switch_fiber(&impl->fiberFakeStack,
+                                 impl->originalBottom, impl->originalSize);
   if (_setjmp(impl->fiberJmpBuf) == 0) {
     _longjmp(impl->originalJmpBuf, 1);
   }
+  __sanitizer_finish_switch_fiber(impl->fiberFakeStack,
+                                  &impl->originalBottom, &impl->originalSize);
 #endif
 #endif
 }
@@ -1843,16 +1892,19 @@ void EventLoop::poll() {
   }
 }
 
-void WaitScope::poll() {
+uint WaitScope::poll(uint maxTurnCount) {
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
   KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
 
   loop.running = true;
   KJ_DEFER(loop.running = false);
 
+  uint turnCount = 0;
   runOnStackPool([&]() {
-    for (;;) {
-      if (!loop.turn()) {
+    while (turnCount < maxTurnCount) {
+      if (loop.turn()) {
+        ++turnCount;
+      } else {
         // No events in the queue.  Poll for I/O.
         loop.poll();
 
@@ -1863,6 +1915,7 @@ void WaitScope::poll() {
       }
     }
   });
+  return turnCount;
 }
 
 void WaitScope::cancelAllDetached() {
