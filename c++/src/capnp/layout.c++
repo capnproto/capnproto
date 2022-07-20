@@ -484,7 +484,7 @@ struct WireHelpers {
         return reinterpret_cast<word*>(ref);
       }
 
-      KJ_REQUIRE(segment != nullptr);
+      KJ_ASSUME(segment != nullptr);
       word* ptr = segment->allocate(amount);
 
       if (ptr == nullptr) {
