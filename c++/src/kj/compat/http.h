@@ -918,7 +918,8 @@ kj::Own<HttpInputStream> newHttpInputStream(
 // continue reading from `input` in a reliable way.
 
 kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
-                                kj::Maybe<EntropySource&> maskEntropySource);
+                                kj::Maybe<EntropySource&> maskEntropySource,
+                                kj::Maybe<CompressionParameters> compressionConfig = nullptr);
 // Create a new WebSocket on top of the given stream. It is assumed that the HTTP -> WebSocket
 // upgrade handshake has already occurred (or is not needed), and messages can immediately be
 // sent and received on the stream. Normally applications would not call this directly.
@@ -930,6 +931,11 @@ kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
 // purpose of the mask is to prevent badly-written HTTP proxies from interpreting "things that look
 // like HTTP requests" in a message as being actual HTTP requests, which could result in cache
 // poisoning. See RFC6455 section 10.3.
+//
+// `compressionConfig` is an optional argument that allows us to specify how the WebSocket should
+// compress and decompress messages. The configuration is determined by the
+// `Sec-WebSocket-Extensions` header during WebSocket negotiation.
+//
 
 struct WebSocketPipe {
   kj::Own<WebSocket> ends[2];
