@@ -29,6 +29,9 @@
 #include <deque>
 #include <queue>
 #include <map>
+#if KJ_HAS_ZLIB
+#include <zlib.h>
+#endif // KJ_HAS_ZLIB
 
 namespace kj {
 
@@ -2302,7 +2305,17 @@ public:
       : stream(kj::mv(stream)), maskKeyGenerator(maskKeyGenerator),
         compressionConfig(kj::mv(compressionConfigParam)),
         sendingPong(kj::mv(waitBeforeSend)),
-        recvBuffer(kj::mv(buffer)), recvData(leftover) {}
+        recvBuffer(kj::mv(buffer)), recvData(leftover) {
+#if KJ_HAS_ZLIB
+    KJ_IF_MAYBE(config, compressionConfig) {
+      compressionContext.emplace(ZlibContext::Mode::COMPRESS, *config);
+      decompressionContext.emplace(ZlibContext::Mode::DECOMPRESS, *config);
+    }
+#else
+    KJ_REQUIRE(compressionConfig == nullptr,
+        "WebSocket compression is only supported if KJ is compiled with Zlib.");
+#endif // KJ_HAS_ZLIB
+  }
 
   kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
     return sendImpl(OPCODE_BINARY, message);
@@ -2413,15 +2426,24 @@ public:
 
     kj::Array<byte> message;           // space to allocate
     byte* payloadTarget;               // location into which to read payload (size is payloadLen)
+    kj::Maybe<size_t> originalMaxSize; // maxSize from first `receive()` call
     if (isFin) {
-      // Add space for NUL terminator when allocating text message.
-      size_t amountToAllocate = payloadLen + (opcode == OPCODE_TEXT && isFin);
+      size_t amountToAllocate;
+      if (recvHeader.isCompressed()) {
+        // Add 4 since we append 0x00 0x00 0xFF 0xFF to the tail of the payload.
+        // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
+        amountToAllocate = payloadLen + 4;
+      } else {
+        // Add space for NUL terminator when allocating text message.
+        amountToAllocate = payloadLen + (opcode == OPCODE_TEXT && isFin);
+      }
 
       if (isData && !fragments.empty()) {
         // Final frame of a fragmented message. Gather the fragments.
         size_t offset = 0;
         for (auto& fragment: fragments) offset += fragment.size();
         message = kj::heapArray<byte>(offset + amountToAllocate);
+        originalMaxSize = offset + maxSize; // gives us back the original maximum message size.
 
         offset = 0;
         for (auto& fragment: fragments) {
@@ -2435,6 +2457,7 @@ public:
       } else {
         // Single-frame message.
         message = kj::heapArray<byte>(amountToAllocate);
+        originalMaxSize = maxSize; // gives us back the original maximum message size.
         payloadTarget = message.begin();
       }
     } else {
@@ -2452,7 +2475,7 @@ public:
     Mask mask = recvHeader.getMask();
 
     auto handleMessage = kj::mvCapture(message,
-        [this,opcode,payloadTarget,payloadLen,mask,isFin,maxSize]
+        [this,opcode,payloadTarget,payloadLen,mask,isFin,maxSize,originalMaxSize]
         (kj::Array<byte>&& message) -> kj::Promise<Message> {
       if (!mask.isZero()) {
         mask.apply(kj::arrayPtr(payloadTarget, payloadLen));
@@ -2470,9 +2493,40 @@ public:
           // Shouldn't get here; handled above.
           KJ_UNREACHABLE;
         case OPCODE_TEXT:
+#if KJ_HAS_ZLIB
+          KJ_IF_MAYBE(config, compressionConfig) {
+            auto& decompressor = KJ_ASSERT_NONNULL(decompressionContext);
+            auto tail = message.slice(message.size() - 4, message.size());
+            // Note that we added an additional 4 bytes to `message`s capacity to account for these
+            // extra bytes. See `amountToAllocate` in the if(recvHeader.isCompressed()) block above.
+            const byte tailBytes[] = {0x00, 0x00, 0xFF, 0xFF};
+            memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
+            // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
+            // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
+            bool addNullTerminator = true;
+            // We want to add the null terminator when receiving a TEXT message.
+            auto decompressed = decompressor.processMessage(message, originalMaxSize,
+                addNullTerminator);
+            return Message(kj::String(decompressed.releaseAsChars()));
+          }
+#endif // KJ_HAS_ZLIB
           message.back() = '\0';
           return Message(kj::String(message.releaseAsChars()));
         case OPCODE_BINARY:
+#if KJ_HAS_ZLIB
+          KJ_IF_MAYBE(config, compressionConfig) {
+            auto& decompressor = KJ_ASSERT_NONNULL(decompressionContext);
+            auto tail = message.slice(message.size() - 4, message.size());
+            // Note that we added an additional 4 bytes to `message`s capacity to account for these
+            // extra bytes. See `amountToAllocate` in the if(recvHeader.isCompressed()) block above.
+            const byte tailBytes[] = {0x00, 0x00, 0xFF, 0xFF};
+            memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
+            // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
+            // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
+            auto decompressed = decompressor.processMessage(message, originalMaxSize);
+            return Message(decompressed.releaseAsBytes());
+          }
+#endif // KJ_HAS_ZLIB
           return Message(message.releaseAsBytes());
         case OPCODE_CLOSE:
           if (message.size() < 2) {
@@ -2528,6 +2582,27 @@ public:
         // servers must *not* do so, we can't direct-pump. Sad.
         return nullptr;
       }
+
+      KJ_IF_MAYBE(config, compressionConfig) {
+        KJ_IF_MAYBE(otherConfig, optOther->compressionConfig) {
+          if (config->outboundMaxWindowBits != otherConfig->inboundMaxWindowBits ||
+              config->inboundMaxWindowBits != otherConfig->outboundMaxWindowBits ||
+              config->inboundNoContextTakeover!= otherConfig->outboundNoContextTakeover ||
+              config->outboundNoContextTakeover!= otherConfig->inboundNoContextTakeover) {
+            // Compression configurations differ.
+            return nullptr;
+          }
+        } else {
+          // Only one websocket uses compression.
+          return nullptr;
+        }
+      } else {
+        if (optOther->compressionConfig != nullptr) {
+          // Only one websocket uses compression.
+          return nullptr;
+        }
+      }
+      // Both websockets use compatible compression configurations so we can pump directly.
 
       // Check same error conditions as with sendImpl().
       KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
@@ -2590,8 +2665,10 @@ private:
 
   class Header {
   public:
-    kj::ArrayPtr<const byte> compose(bool fin, byte opcode, uint64_t payloadLen, Mask mask) {
-      bytes[0] = (fin ? FIN_MASK : 0) | opcode;
+    kj::ArrayPtr<const byte> compose(bool fin, bool compressed, byte opcode, uint64_t payloadLen,
+        Mask mask) {
+      bytes[0] = (fin ? FIN_MASK : 0) | (compressed ? RSV1_MASK : 0) | opcode;
+      // Note that we can only set the compressed bit on DATA frames.
       bool hasMask = !mask.isZero();
 
       size_t fill;
@@ -2637,6 +2714,10 @@ private:
 
     bool isFin() const {
       return bytes[0] & FIN_MASK;
+    }
+
+    bool isCompressed() const {
+      return bytes[0] & RSV1_MASK;
     }
 
     bool hasRsv() const {
@@ -2705,11 +2786,190 @@ private:
 
     static constexpr byte FIN_MASK = 0x80;
     static constexpr byte RSV_MASK = 0x70;
+    static constexpr byte RSV1_MASK = 0x40;
     static constexpr byte OPCODE_MASK = 0x0f;
 
     static constexpr byte USE_MASK_MASK = 0x80;
     static constexpr byte PAYLOAD_LEN_MASK = 0x7f;
   };
+
+#if KJ_HAS_ZLIB
+  class ZlibContext {
+    // `ZlibContext` is the WebSocket's interface to Zlib's compression/decompression functions.
+    // Depending on the `mode`, `ZlibContext` will act as a compressor or a decompressor.
+  public:
+    enum class Mode {
+      COMPRESS,
+      DECOMPRESS,
+    };
+
+    struct Result {
+      int processResult = 0;
+      kj::Array<const byte> buffer;
+      size_t size = 0; // Number of bytes used; size <= buffer.size().
+    };
+
+    ZlibContext(Mode mode, const CompressionParameters& config) : mode(mode) {
+      switch (mode) {
+        case Mode::COMPRESS: {
+          int windowBits = -config.outboundMaxWindowBits.orDefault(15);
+          // We use negative values because we want to use raw deflate.
+          if(windowBits == -8) {
+            // Zlib cannot accept `windowBits` of 8 for the deflater. However, due to an
+            // implementation quirk, `windowBits` of 8 and 9 would both use 250 bytes.
+            // Therefore, a decompressor using `windowBits` of 8 could safely inflate a message
+            // that a zlib client compressed using `windowBits` = 9.
+            // https://bugs.chromium.org/p/chromium/issues/detail?id=691074
+            windowBits = -9;
+          }
+          int result = deflateInit2(
+              &ctx,
+              Z_DEFAULT_COMPRESSION,
+              Z_DEFLATED,
+              windowBits,
+              8,  // memLevel = 8 is the default
+              Z_DEFAULT_STRATEGY);
+          KJ_REQUIRE(result == Z_OK, "Failed to initialize compression context (deflate).");
+          break;
+        }
+        case Mode::DECOMPRESS: {
+          int windowBits = -config.inboundMaxWindowBits.orDefault(15);
+          // We use negative values because we want to use raw inflate.
+          int result = inflateInit2(&ctx, windowBits);
+          KJ_REQUIRE(result == Z_OK, "Failed to initialize decompression context (inflate).");
+          break;
+        }
+      }
+    }
+
+    ~ZlibContext() noexcept(false) {
+      switch (mode) {
+        case Mode::COMPRESS:
+          deflateEnd(&ctx);
+          break;
+        case Mode::DECOMPRESS:
+          inflateEnd(&ctx);
+          break;
+      }
+    }
+
+    KJ_DISALLOW_COPY(ZlibContext);
+
+    kj::Array<kj::byte> processMessage(kj::ArrayPtr<const byte> message,
+        kj::Maybe<size_t> maxSize = nullptr,
+        bool addNullTerminator = false) {
+      // If `this` is the compressor, calling `processMessage()` will compress the `message`.
+      // Likewise, if `this` is the decompressor, `processMessage()` will decompress the `message`.
+      //
+      // `maxSize` is only passed in when decompressing, since we want to ensure the decompressed
+      // message is smaller than the `maxSize` passed to `receive()`.
+      //
+      // If (de)compression is successful, the result is returned as a Vector, otherwise,
+      // an Exception is thrown.
+
+      ctx.next_in = const_cast<byte*>(reinterpret_cast<const byte*>(message.begin()));
+      ctx.avail_in = message.size();
+
+      kj::Vector<Result> parts(processLoop(maxSize));
+
+      size_t amountToAllocate = 0;
+      for (const auto& part : parts) {
+        amountToAllocate += part.size;
+      }
+
+      if (addNullTerminator) {
+        // Add space for the null-terminator.
+        amountToAllocate += 1;
+      }
+
+      kj::Array<kj::byte> processedMessage = kj::heapArray<kj::byte>(amountToAllocate);
+      size_t currentIndex = 0; // Current index into processedMessage.
+      for (const auto& part : parts) {
+        memcpy(&processedMessage[currentIndex], part.buffer.begin(), part.size);
+        // We need to use `part.size` to determine the number of useful bytes, since data after
+        // `part.size` is unused (and probably junk).
+        currentIndex += part.size;
+      }
+
+      if (addNullTerminator) {
+        processedMessage[currentIndex++] = '\0';
+      }
+
+      KJ_ASSERT(currentIndex == processedMessage.size());
+
+      return kj::mv(processedMessage);
+    }
+
+  private:
+    Result pumpOnce() {
+      // Prepares Zlib's internal state for a call to deflate/inflate, then calls the relevant
+      // function to process the input buffer. It is assumed that the caller has already set up
+      // Zlib's input buffer.
+      //
+      // Since calls to deflate/inflate will process data until the input is empty, or until the
+      // output is full, multiple calls to `pumpOnce()` may be required to process the entire
+      // message. We're done processing once either `result` is `Z_STREAM_END`, or we get
+      // `Z_BUF_ERROR` and did not write any more output.
+      size_t bufSize = 4096;
+      Array<kj::byte> buffer = kj::heapArray<kj::byte>(bufSize);
+      ctx.next_out = buffer.begin();
+      ctx.avail_out = bufSize;
+
+      int result = Z_OK;
+
+      switch (mode) {
+        case Mode::COMPRESS:
+          result = deflate(&ctx, Z_SYNC_FLUSH);
+          KJ_REQUIRE(result == Z_OK || result == Z_BUF_ERROR || result == Z_STREAM_END,
+                      "Compression failed.");
+          break;
+        case Mode::DECOMPRESS:
+          result = inflate(&ctx, Z_SYNC_FLUSH);
+          KJ_REQUIRE(result == Z_OK || result == Z_BUF_ERROR || result == Z_STREAM_END,
+                      "Decompression failed.");
+          break;
+      }
+
+      return Result {
+        result,
+        kj::mv(buffer),
+        bufSize - ctx.avail_out,
+      };
+    }
+
+    kj::Vector<Result> processLoop(kj::Maybe<size_t> maxSize) {
+      // Since Zlib buffers the writes, we want to continue processing until there's nothing left.
+      kj::Vector<Result> output;
+      size_t totalBytesProcessed = 0;
+      for (;;) {
+        Result result = pumpOnce();
+
+        auto status = result.processResult;
+        auto bytesProcessed = result.size;
+        if (bytesProcessed > 0) {
+          output.add(kj::mv(result));
+          totalBytesProcessed += bytesProcessed;
+          KJ_IF_MAYBE(m, maxSize) {
+            // This is only non-null for `receive` calls, so we must be decompressing. We don't want
+            // the decompressed message to OOM us, so let's make sure it's not too big.
+            KJ_REQUIRE(totalBytesProcessed < *m,
+                "Decompressed WebSocket message is too large");
+          }
+        }
+
+        if ((ctx.avail_in == 0 && ctx.avail_out != 0) || status == Z_STREAM_END) {
+          // If we're out of input to consume, and we have space in the output buffer, then we must
+          // have flushed the remaining message, so we're done pumping. Alternatively, if we found a
+          // BFINAL deflate block, then we know the stream is completely finished.
+          return kj::mv(output);
+        }
+      }
+    }
+
+    Mode mode;
+    z_stream ctx = {};
+  };
+#endif // KJ_HAS_ZLIB
 
   static constexpr byte OPCODE_CONTINUATION = 0;
   static constexpr byte OPCODE_TEXT         = 1;
@@ -2725,6 +2985,10 @@ private:
   kj::Own<kj::AsyncIoStream> stream;
   kj::Maybe<EntropySource&> maskKeyGenerator;
   kj::Maybe<CompressionParameters> compressionConfig;
+#if KJ_HAS_ZLIB
+  kj::Maybe<ZlibContext> compressionContext;
+  kj::Maybe<ZlibContext> decompressionContext;
+#endif // KJ_HAS_ZLIB
 
   bool hasSentClose = false;
   bool disconnected = false;
@@ -2779,6 +3043,24 @@ private:
 
     Mask mask(maskKeyGenerator);
 
+    bool useCompression = false;
+    kj::Maybe<kj::Array<byte>> compressedMessage;
+    if (opcode == OPCODE_BINARY || opcode == OPCODE_TEXT) {
+      // We can only compress data frames.
+#if KJ_HAS_ZLIB
+      KJ_IF_MAYBE(config, compressionConfig) {
+        useCompression = true;
+        // Compress `message` according to `compressionConfig`s outbound parameters.
+        auto& compressor = KJ_ASSERT_NONNULL(compressionContext);
+        auto& innerMessage = compressedMessage.emplace(compressor.processMessage(message));
+        KJ_ASSERT(innerMessage.asPtr().endsWith({0x00, 0x00, 0xFF, 0xFF}));
+        message = innerMessage.slice(0, innerMessage.size() - 4);
+        // Strip 0x00 0x00 0xFF 0xFF off the tail.
+        // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.1
+      }
+#endif // KJ_HAS_ZLIB
+    }
+
     kj::Array<byte> ownMessage;
     if (!mask.isZero()) {
       // Sadness, we have to make a copy to apply the mask.
@@ -2787,10 +3069,10 @@ private:
       message = ownMessage;
     }
 
-    sendParts[0] = sendHeader.compose(true, opcode, message.size(), mask);
+    sendParts[0] = sendHeader.compose(true, useCompression, opcode, message.size(), mask);
     sendParts[1] = message;
 
-    auto promise = stream->write(sendParts);
+    auto promise = stream->write(sendParts).attach(kj::mv(compressedMessage));
     if (!mask.isZero()) {
       promise = promise.attach(kj::mv(ownMessage));
     }
@@ -2831,7 +3113,8 @@ private:
       return kj::READY_NOW;
     }
 
-    sendParts[0] = sendHeader.compose(true, OPCODE_PONG, payload.size(), Mask(maskKeyGenerator));
+    sendParts[0] = sendHeader.compose(true, false, OPCODE_PONG,
+                                      payload.size(), Mask(maskKeyGenerator));
     sendParts[1] = payload;
     return stream->write(sendParts).attach(kj::mv(payload));
   }
@@ -4520,6 +4803,7 @@ public:
             if (settings.webSocketCompressionMode != HttpClientSettings::NO_COMPRESSION) {
               KJ_IF_MAYBE(agreedParameters, responseHeaders.get(
                   HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
+
                 auto parseResult = _::tryParseExtensionAgreement(clientOffer,
                     *agreedParameters);
                 if (parseResult.is<kj::Exception>()) {
