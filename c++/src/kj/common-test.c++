@@ -859,5 +859,34 @@ KJ_TEST("kj::defer()") {
   KJ_EXPECT(executed);
 }
 
+KJ_TEST("kj::ArrayPtr startsWith / endsWith / findFirst / findLast") {
+  // Note: char-/byte- optimized versions are covered by string-test.c++.
+
+  int rawArray[] = {12, 34, 56, 34, 12};
+  ArrayPtr<int> arr(rawArray);
+
+  KJ_EXPECT(arr.startsWith({12, 34}));
+  KJ_EXPECT(arr.startsWith({12, 34, 56}));
+  KJ_EXPECT(!arr.startsWith({12, 34, 56, 78}));
+  KJ_EXPECT(arr.startsWith({12, 34, 56, 34, 12}));
+  KJ_EXPECT(!arr.startsWith({12, 34, 56, 34, 12, 12}));
+
+  KJ_EXPECT(arr.endsWith({34, 12}));
+  KJ_EXPECT(arr.endsWith({56, 34, 12}));
+  KJ_EXPECT(!arr.endsWith({78, 56, 34, 12}));
+  KJ_EXPECT(arr.endsWith({12, 34, 56, 34, 12}));
+  KJ_EXPECT(!arr.endsWith({12, 12, 34, 56, 34, 12}));
+
+  KJ_EXPECT(arr.findFirst(12).orDefault(100) == 0);
+  KJ_EXPECT(arr.findFirst(34).orDefault(100) == 1);
+  KJ_EXPECT(arr.findFirst(56).orDefault(100) == 2);
+  KJ_EXPECT(arr.findFirst(78).orDefault(100) == 100);
+
+  KJ_EXPECT(arr.findLast(12).orDefault(100) == 4);
+  KJ_EXPECT(arr.findLast(34).orDefault(100) == 3);
+  KJ_EXPECT(arr.findLast(56).orDefault(100) == 2);
+  KJ_EXPECT(arr.findLast(78).orDefault(100) == 100);
+}
+
 }  // namespace
 }  // namespace kj
