@@ -4417,6 +4417,7 @@ public:
                   return settings.errorHandler.orDefault(*this).handleWebSocketProtocolError({
                     502, "Bad Gateway", parseResult.get<kj::Exception>().getDescription(), nullptr});
                 }
+                compressionParameters.emplace(kj::mv(parseResult.get<CompressionParameters>()));
               }
             }
 
