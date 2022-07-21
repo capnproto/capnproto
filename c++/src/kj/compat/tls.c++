@@ -100,6 +100,37 @@ inline void ensureOpenSslInitialized() {
 }
 #endif
 
+bool isIpAddress(kj::StringPtr addr) {
+  bool isPossiblyIp6 = true;
+  bool isPossiblyIp4 = true;
+  uint colonCount = 0;
+  uint dotCount = 0;
+  for (auto c: addr) {
+    if (c == ':') {
+      isPossiblyIp4 = false;
+      ++colonCount;
+    } else if (c == '.') {
+      isPossiblyIp6 = false;
+      ++dotCount;
+    } else if ('0' <= c && c <= '9') {
+      // Digit is valid for ipv4 or ipv6.
+    } else if (('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')) {
+      // Hex digit could be ipv6 but not ipv4.
+      isPossiblyIp4 = false;
+    } else {
+      // Nope.
+      return false;
+    }
+  }
+
+  // An IPv4 address has 3 dots. (Yes, I'm aware that technically IPv4 addresses can be formatted
+  // with fewer dots, but it's not clear that we actually want to support TLS authentication of
+  // non-canonical address formats, so for now I'm not. File a bug if you care.) An IPv6 address
+  // has at least 2 and as many as 7 colons.
+  return (isPossiblyIp4 && dotCount == 3)
+      || (isPossiblyIp6 && colonCount >= 2 && colonCount <= 7);
+}
+
 }  // namespace
 
 // =======================================================================================
@@ -146,9 +177,15 @@ public:
       throwOpensslError();
     }
 
-    if (X509_VERIFY_PARAM_set1_host(
-        verify, expectedServerHostname.cStr(), expectedServerHostname.size()) <= 0) {
-      throwOpensslError();
+    if (isIpAddress(expectedServerHostname)) {
+      if (X509_VERIFY_PARAM_set1_ip_asc(verify, expectedServerHostname.cStr()) <= 0) {
+        throwOpensslError();
+      }
+    } else {
+      if (X509_VERIFY_PARAM_set1_host(
+          verify, expectedServerHostname.cStr(), expectedServerHostname.size()) <= 0) {
+        throwOpensslError();
+      }
     }
 
     // As of OpenSSL 1.1.0, X509_V_FLAG_TRUSTED_FIRST is on by default. Turning it on for older
@@ -574,11 +611,51 @@ public:
       : tls(tls), inner(*inner), ownInner(kj::mv(inner)) {}
 
   Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint) override {
+    // We want to parse the hostname or IP address out of `addr`. This is a bit complicated as
+    // KJ's default network implementation has a fairly featureful grammar for these things.
+    // In particular, we cannot just split on ':' because the address might be IPv6.
+
     kj::String hostname;
-    KJ_IF_MAYBE(pos, addr.findFirst(':')) {
-      hostname = kj::heapString(addr.slice(0, *pos));
+
+    if (addr.startsWith("[")) {
+      // IPv6, like "[1234:5678::abcd]:123". Take the part between the brackets.
+      KJ_IF_MAYBE(pos, addr.findFirst(']')) {
+        hostname = kj::str(addr.slice(1, *pos));
+      } else {
+        // Uhh??? Just take the whole thing, cert will fail later.
+        hostname = kj::heapString(addr);
+      }
+    } else if (addr.startsWith("unix:") || addr.startsWith("unix-abstract:")) {
+      // Unfortunately, `unix:123` is ambiguous (maybe there is a host named "unix"?), but the
+      // default KJ network implementation will interpret it as a Unix domain socket address.
+      // We don't want TLS to then try to authenticate that as a host named "unix".
+      KJ_FAIL_REQUIRE("can't authenticate Unix domain socket with TLS", addr);
     } else {
-      hostname = kj::heapString(addr);
+      uint colons = 0;
+      for (auto c: addr) {
+        if (c == ':') {
+          ++colons;
+        }
+      }
+
+      if (colons >= 2) {
+        // Must be an IPv6 address. If it had a port, it would have been wrapped in []. So don't
+        // strip the port.
+        hostname = kj::heapString(addr);
+      } else {
+        // Assume host:port or ipv4:port. This is a shaky assumption, as the above hacks
+        // demonstrate.
+        //
+        // In theory it might make sense to extend the NetworkAddress interface so that it can tell
+        // us what the actual parser decided the hostname is. However, when I tried this it proved
+        // rather cumbersome and actually broke code in the Workers Runtime that does complicated
+        // stacking of kj::Network implementations.
+        KJ_IF_MAYBE(pos, addr.findFirst(':')) {
+          hostname = kj::heapString(addr.slice(0, *pos));
+        } else {
+          hostname = kj::heapString(addr);
+        }
+      }
     }
 
     return inner.parseAddress(addr, portHint)
