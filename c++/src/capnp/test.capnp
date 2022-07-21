@@ -758,6 +758,13 @@ const embeddedStruct :TestAllTypes = embed "testdata/binary";
 
 const nonAsciiText :Text = "♫ é ✓";
 
+const blockText :Text =
+    `foo bar baz
+    `"qux" `corge` 'grault'
+    "regular\"quoted\"line"
+    `garply\nwaldo\tfred\"plugh\"xyzzy\'thud
+    ;
+
 struct TestAnyPointerConstants {
   anyKindAsStruct @0 :AnyPointer;
   anyStructAsStruct @1 :AnyStruct;
