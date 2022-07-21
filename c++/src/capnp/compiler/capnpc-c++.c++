@@ -3055,11 +3055,6 @@ private:
           "#error \"Version mismatch between generated code and library headers.  You must "
               "use the same version of the Cap'n Proto compiler and library.\"\n"
           "#endif\n",
-          omitSchemas ? kj::strTree(
-                  "#if !CAPNP_LITE\n",
-                  "#error \"$Cxx.omitSchemas requires that you compile using CAPNP_LITE\"\n"
-                  "#endif\n"
-          ) : kj::strTree(),
           "\n",
           KJ_MAP(path, includes) {
             if (path.startsWith("/")) {

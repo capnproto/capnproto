@@ -21,9 +21,12 @@
 
 @0xc64a3bf0338a124a;
 
+using Cxx = import "/capnp/c++.capnp";
 using Import1 = import "/capnp/schema.capnp";
 using Import2 = import "test-import.capnp";
 using Import3 = import "test.capnp";
+
+$Cxx.omitSchemas;
 
 struct TestImport2 {
   foo @0 :Import3.TestAllTypes;
