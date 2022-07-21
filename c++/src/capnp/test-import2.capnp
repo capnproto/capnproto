@@ -33,3 +33,24 @@ struct TestImport2 {
   bar @1 :Import1.Node;
   baz @2 :Import2.TestImport;
 }
+
+interface TestInterface {
+  testInterfaceMethod @0 () -> (result :Bool);
+}
+
+interface TestExtendingInterface extends(TestInterface) {
+  testInterfaceMethodTwo @0 () -> (result :Bool);
+}
+
+enum TestEnum {
+  zero @0;
+  one @1;
+  two @2;
+  three @3;
+  four @4;
+}
+
+struct TestStructure {
+  enumValue @0 :TestEnum;
+  anInterface @1 :TestExtendingInterface;
+}
