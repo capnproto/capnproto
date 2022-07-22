@@ -2503,6 +2503,10 @@ public:
             memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
             // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
             // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
+            if (config->inboundNoContextTakeover) {
+              // We must reset context on each message.
+              decompressor.reset();
+            }
             bool addNullTerminator = true;
             // We want to add the null terminator when receiving a TEXT message.
             auto decompressed = decompressor.processMessage(message, originalMaxSize,
@@ -2523,6 +2527,10 @@ public:
             memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
             // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
             // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
+            if (config->inboundNoContextTakeover) {
+              // We must reset context on each message.
+              decompressor.reset();
+            }
             auto decompressed = decompressor.processMessage(message, originalMaxSize);
             return Message(decompressed.releaseAsBytes());
           }
@@ -2900,6 +2908,22 @@ private:
       return kj::mv(processedMessage);
     }
 
+    void reset() {
+      // Resets the (de)compression context. This should only be called when the (de)compressor uses
+      // client/server_no_context_takeover.
+      switch (mode) {
+        case Mode::COMPRESS: {
+          KJ_ASSERT(deflateReset(&ctx) == Z_OK, "deflateReset() failed.");
+          break;
+        }
+        case Mode::DECOMPRESS: {
+          KJ_ASSERT(inflateReset(&ctx) == Z_OK, "inflateReset failed.");
+          break;
+        }
+      }
+
+    }
+
   private:
     Result pumpOnce() {
       // Prepares Zlib's internal state for a call to deflate/inflate, then calls the relevant
@@ -2961,6 +2985,9 @@ private:
           // If we're out of input to consume, and we have space in the output buffer, then we must
           // have flushed the remaining message, so we're done pumping. Alternatively, if we found a
           // BFINAL deflate block, then we know the stream is completely finished.
+          if (status == Z_STREAM_END) {
+            reset();
+          }
           return kj::mv(output);
         }
       }
@@ -3052,6 +3079,10 @@ private:
         useCompression = true;
         // Compress `message` according to `compressionConfig`s outbound parameters.
         auto& compressor = KJ_ASSERT_NONNULL(compressionContext);
+        if (config->outboundNoContextTakeover) {
+          // We must reset context on each message.
+          compressor.reset();
+        }
         auto& innerMessage = compressedMessage.emplace(compressor.processMessage(message));
         KJ_ASSERT(innerMessage.asPtr().endsWith({0x00, 0x00, 0xFF, 0xFF}));
         message = innerMessage.slice(0, innerMessage.size() - 4);
