@@ -2988,11 +2988,11 @@ private:
     kj::String namespacePrefix;
     bool omitSchemas = false;
 
-    for(auto annotation : node.getAnnotations()) {
-        if(annotation.getId() == OMIT_SCHEMAS_ANNOTATION_ID) {
-            omitSchemas = true;
-            break;
-        }
+    for (auto annotation : node.getAnnotations()) {
+      if (annotation.getId() == OMIT_SCHEMAS_ANNOTATION_ID) {
+        omitSchemas = true;
+        break;
+      }
     }
 
     for (auto annotation: node.getAnnotations()) {
@@ -3054,7 +3054,7 @@ private:
           "#if CAPNP_VERSION != ", CAPNP_VERSION, "\n"
           "#error \"Version mismatch between generated code and library headers.  You must "
               "use the same version of the Cap'n Proto compiler and library.\"\n"
-          "#endif\n",
+          "#endif\n"
           "\n",
           KJ_MAP(path, includes) {
             if (path.startsWith("/")) {
