@@ -51,6 +51,6 @@ enum TestImport2Enum {
 }
 
 struct TestImport2Structure {
-  enumValue @0 :TestEnum;
-  anInterface @1 :TestExtendingInterface;
+  enumValue @0 :TestImport2Enum;
+  anInterface @1 :TestImport2ExtendingInterface;
 }
