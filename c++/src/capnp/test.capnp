@@ -999,3 +999,24 @@ struct TestNameAnnotation $Cxx.name("RenamedStruct") {
 interface TestNameAnnotationInterface $Cxx.name("RenamedInterface") {
   badlyNamedMethod @0 (badlyNamedParam :UInt8 $Cxx.name("renamedParam")) $Cxx.name("renamedMethod");
 }
+
+struct TestImpliedFirstField {
+  struct TextStruct {
+    text @0 :Text;
+    i @1 :UInt32 = 321;
+  }
+
+  textStruct @0 :TextStruct = "foo";
+  textStructList @1 :List(TextStruct);
+
+  intGroup :group {
+    i @2 :UInt32;
+    str @3 :Text = "corge";
+  }
+}
+
+const testImpliedFirstField :TestImpliedFirstField = (
+  textStruct = "bar",
+  textStructList = ["baz", (text = "qux", i = 123)],
+  intGroup = 123
+);
