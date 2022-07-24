@@ -45,6 +45,9 @@ class AsyncOutputStream;
 class AsyncIoStream;
 class AncillaryMessage;
 
+class ReadableFile;
+class File;
+
 // =======================================================================================
 // Streaming I/O
 
@@ -997,6 +1000,68 @@ public:
 private:
   kj::Maybe<AsyncIoProvider&> provider;
   AsyncCapabilityStream& inner;
+};
+
+class FileInputStream: public AsyncInputStream {
+  // InputStream that reads from a disk file -- and enables sendfile() optimization.
+  //
+  // Reads are performed synchronously -- no actual attempt is made to use asynchronous file I/O.
+  // True asynchronous file I/O is complicated and is mostly unnecessary in the presence of
+  // caching. Only certain niche programs can expect to benefit from it. For the rest, it's better
+  // to use regular syrchronous disk I/O, so that's what this class does.
+  //
+  // The real purpose of this class, aside from general convenience, is to enable sendfile()
+  // optimization. When you use this class's pumpTo() method, and the destination is a socket,
+  // the system will detect this and optimize to sendfile(), so that the file data never needs to
+  // be read into userspace.
+  //
+  // NOTE: As of this writing, sendfile() optimization is only implemented on Linux.
+
+public:
+  FileInputStream(const ReadableFile& file, uint64_t offset = 0)
+      : file(file), offset(offset) {}
+
+  const ReadableFile& getUnderlyingFile() { return file; }
+  uint64_t getOffset() { return offset; }
+  void seek(uint64_t newOffset) { offset = newOffset; }
+
+  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes);
+  Maybe<uint64_t> tryGetLength();
+
+  // (pumpTo() is not actually overridden here, but AsyncStreamFd's tryPumpFrom() will detect when
+  // the source is a file.)
+
+private:
+  const ReadableFile& file;
+  uint64_t offset;
+};
+
+class FileOutputStream: public AsyncOutputStream {
+  // OutputStream that writes to a disk file.
+  //
+  // As with FileInputStream, calls are not actually async. Async would be even less useful here
+  // because writes should usually land in cache anyway.
+  //
+  // sendfile() optimization does not apply when writing to a file, but on Linux, splice() can
+  // be used to achieve a similar effect.
+  //
+  // NOTE: As of this writing, splice() optimization is not implemented.
+
+public:
+  FileOutputStream(const File& file, uint64_t offset = 0)
+      : file(file), offset(offset) {}
+
+  const File& getUnderlyingFile() { return file; }
+  uint64_t getOffset() { return offset; }
+  void seek(uint64_t newOffset) { offset = newOffset; }
+
+  Promise<void> write(const void* buffer, size_t size);
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces);
+  Promise<void> whenWriteDisconnected();
+
+private:
+  const File& file;
+  uint64_t offset;
 };
 
 // =======================================================================================

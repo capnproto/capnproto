@@ -31,6 +31,7 @@
 #include "io.h"
 #include "one-of.h"
 #include <deque>
+#include <kj/filesystem.h>
 
 #if _WIN32
 #include <winsock2.h>
@@ -2766,6 +2767,40 @@ Own<NetworkAddress> CapabilityStreamNetworkAddress::clone() {
 }
 String CapabilityStreamNetworkAddress::toString() {
   return kj::str("<CapabilityStreamNetworkAddress>");
+}
+
+Promise<size_t> FileInputStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
+  // Note that our contract with `minBytes` is that we should only return fewer than `minBytes` on
+  // EOF. A file read will only produce fewer than the requested number of bytes if EOF was reached.
+  // `minBytes` cannot be greater than `maxBytes`. So, this read satisfies the `minBytes`
+  // requirement.
+  size_t result = file.read(offset, arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes));
+  offset += result;
+  return result;
+}
+
+Maybe<uint64_t> FileInputStream::tryGetLength() {
+  uint64_t size = file.stat().size;
+  return offset < size ? size - offset : 0;
+}
+
+Promise<void> FileOutputStream::write(const void* buffer, size_t size) {
+  file.write(offset, arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+  offset += size;
+  return kj::READY_NOW;
+}
+
+Promise<void> FileOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  // TODO(perf): Extend kj::File with an array-of-arrays write?
+  for (auto piece: pieces) {
+    file.write(offset, piece);
+    offset += piece.size();
+  }
+  return kj::READY_NOW;
+}
+
+Promise<void> FileOutputStream::whenWriteDisconnected() {
+  return kj::NEVER_DONE;
 }
 
 // =======================================================================================

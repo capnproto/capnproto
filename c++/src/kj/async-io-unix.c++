@@ -50,6 +50,11 @@
 #include <poll.h>
 #include <limits.h>
 #include <sys/ioctl.h>
+#include <kj/filesystem.h>
+
+#if __linux__
+#include <sys/sendfile.h>
+#endif
 
 #if !defined(SO_PEERCRED) && defined(LOCAL_PEERCRED)
 #include <sys/ucred.h>
@@ -228,17 +233,77 @@ public:
     return promise.attach(kj::mv(fds), kj::mv(streams));
   }
 
+  Maybe<Promise<uint64_t>> tryPumpFrom(
+      AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
+#if __linux__ && !__ANDROID__
+    KJ_IF_MAYBE(sock, kj::dynamicDowncastIfAvailable<AsyncStreamFd>(input)) {
+      return pumpFromOther(*sock, amount);
+    }
+#endif
+
+#if __linux__
+    KJ_IF_MAYBE(file, kj::dynamicDowncastIfAvailable<FileInputStream>(input)) {
+      KJ_IF_MAYBE(fd, file->getUnderlyingFile().getFd()) {
+        return pumpFromFile(*file, *fd, amount, 0);
+      }
+    }
+#endif
+
+    return nullptr;
+  }
+
+#if __linux__
+  // TODO(someday): Support sendfile on other OS's... unfortunately, it works differently on
+  //   different systems.
+
+private:
+  Promise<uint64_t> pumpFromFile(FileInputStream& input, int fileFd,
+                                 uint64_t amount, uint64_t soFar) {
+    while (soFar < amount) {
+      off_t offset = input.getOffset();
+      ssize_t n;
+
+      // Although sendfile()'s last argument has type size_t, on Linux it seems to cause EINVAL
+      // if we pass an amount that is greater than UINT32_MAX, so make sure to clamp to that. In
+      // practice, of course, we'll be limited to the socket buffer size.
+      size_t requested = kj::min(amount - soFar, (uint32_t)kj::maxValue);
+
+      KJ_SYSCALL_HANDLE_ERRORS(n = sendfile(fd, fileFd, &offset, requested)) {
+        case EINVAL:
+        case ENOSYS:
+          // Fall back to regular pump
+          return unoptimizedPumpTo(input, *this, amount, soFar);
+
+        case EAGAIN:
+          return observer.whenBecomesWritable()
+              .then([this, &input, fileFd, amount, soFar]() {
+            return pumpFromFile(input, fileFd, amount, soFar);
+          });
+
+        default:
+          KJ_FAIL_SYSCALL("sendfile", error);
+      }
+
+      if (n == 0) break;
+
+      input.seek(offset);  // NOTE: sendfile() updated `offset` in-place.
+      soFar += n;
+    }
+
+    return soFar;
+  }
+
+public:
+#endif  // __linux__
+
 #if __linux__ && !__ANDROID__
 // Linux's splice() syscall lets us optimize pumping of bytes between file descriptors.
 //
 // TODO(someday): splice()-based pumping hangs in unit tests on Android for some reason. We should
 //   figure out why, but for now I'm just disabling it...
 
-  Maybe<Promise<uint64_t>> tryPumpFrom(
-      AsyncInputStream& inputParam, uint64_t amount = kj::maxValue) override {
-    AsyncStreamFd& input = KJ_UNWRAP_OR_RETURN(
-        kj::dynamicDowncastIfAvailable<AsyncStreamFd>(inputParam), nullptr);
-
+private:
+  Maybe<Promise<uint64_t>> pumpFromOther(AsyncStreamFd& input, uint64_t amount) {
     // The input is another AsyncStreamFd, so perhaps we can do an optimized pump with splice().
 
     // Before we resort to a bunch of syscalls, let's try to see if the pump is small and able to
@@ -296,7 +361,6 @@ public:
     }
   }
 
-private:
   static constexpr size_t MAX_SPLICE_LEN = 1 << 20;
   // Maximum value we'll pass for the `len` argument of `splice()`. Linux does not like it when we
   // use `kj::maxValue` here so we clamp it. Note that the actual value of this constant is
