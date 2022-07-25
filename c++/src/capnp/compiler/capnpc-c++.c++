@@ -64,6 +64,7 @@ namespace {
 
 static constexpr uint64_t NAMESPACE_ANNOTATION_ID = 0xb9c6f99ebf805f2cull;
 static constexpr uint64_t NAME_ANNOTATION_ID = 0xf264a779fef191ceull;
+static constexpr uint64_t OMIT_SCHEMAS_ANNOTATION_ID = 0xe17e871ab8a5deabull;
 
 bool hasDiscriminantValue(const schema::Field::Reader& reader) {
   return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
@@ -2985,6 +2986,14 @@ private:
 
     kj::Vector<kj::ArrayPtr<const char>> namespaceParts;
     kj::String namespacePrefix;
+    bool omitSchemas = false;
+
+    for (auto annotation : node.getAnnotations()) {
+      if (annotation.getId() == OMIT_SCHEMAS_ANNOTATION_ID) {
+        omitSchemas = true;
+        break;
+      }
+    }
 
     for (auto annotation: node.getAnnotations()) {
       if (annotation.getId() == NAMESPACE_ANNOTATION_ID) {
@@ -3085,7 +3094,8 @@ private:
           "\n"
           "namespace capnp {\n"
           "namespace schemas {\n",
-          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDefs); },
+          omitSchemas ? kj::Array<kj::StringTree>() : KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDefs); },
+          omitSchemas ? "// Schemas omitted due to $Cxx.omitSchemas\n" : "",
           "}  // namespace schemas\n"
           "}  // namespace capnp\n",
           sourceDefs.size() == 0 ? kj::strTree() : kj::strTree(
