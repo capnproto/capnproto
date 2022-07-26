@@ -109,6 +109,19 @@ private:
 #define KJ_EXPECT_THROW_MESSAGE KJ_EXPECT_THROW_RECOVERABLE_MESSAGE
 #endif
 
+#define KJ_EXPECT_EXIT(statusCode, code) \
+  do { \
+    KJ_EXPECT(::kj::_::expectExit(statusCode, [&]() { code; })); \
+  } while (false)
+// Forks the code and expects it to exit with a given code.
+
+#define KJ_EXPECT_SIGNAL(signal, code) \
+  do { \
+    KJ_EXPECT(::kj::_::expectSignal(signal, [&]() { code; })); \
+  } while (false)
+// Forks the code and expects it to trigger a signal.
+// In the child resets all signal handlers as printStackTraceOnCrash sets.
+
 #define KJ_EXPECT_LOG(level, substring) \
   ::kj::_::LogExpectation KJ_UNIQUE_NAME(_kjLogExpectation)(::kj::LogSeverity::level, substring)
 // Expects that a log message with the given level and substring text will be printed within
@@ -127,6 +140,17 @@ bool expectFatalThrow(Maybe<Exception::Type> type, Maybe<StringPtr> message,
 // Since exceptions are disabled, the test will fork() and run in a subprocess. On Windows, where
 // fork() is not available, this always returns true.
 #endif
+
+bool expectExit(Maybe<int> statusCode, FunctionParam<void()> code) noexcept;
+// Expects that the given code will exit with a given statusCode.
+// The test will fork() and run in a subprocess. On Windows, where fork() is not available,
+// this always returns true.
+
+bool expectSignal(Maybe<int> signal, FunctionParam<void()> code) noexcept;
+// Expects that the given code will trigger a signal.
+// The test will fork() and run in a subprocess. On Windows, where fork() is not available,
+// this always returns true.
+// Resets signal handlers to default prior to running the code in the child process.
 
 class LogExpectation: public ExceptionCallback {
 public:
