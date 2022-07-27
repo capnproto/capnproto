@@ -312,23 +312,31 @@ void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
 // =======================================================================================
 // epoll FdObserver implementation
 
-UnixEventPort::UnixEventPort()
+UnixEventPort::SharedSignalFd::SharedSignalFd(const sigset_t& sigset) {
+  int fd_;
+  KJ_SYSCALL(fd_ = signalfd(-1, &sigset, SFD_NONBLOCK | SFD_CLOEXEC));
+  fd = AutoCloseFd(fd_);
+}
+
+UnixEventPort::UnixEventPort(kj::Maybe<SharedSignalFd&> sharedSignalFd)
     : clock(systemPreciseMonotonicClock()),
-      timerImpl(clock.now()),
-      epollFd(-1),
-      signalFd(-1),
-      eventFd(-1) {
+      timerImpl(clock.now()) {
   ignoreSigpipe();
 
   int fd;
   KJ_SYSCALL(fd = epoll_create1(EPOLL_CLOEXEC));
   epollFd = AutoCloseFd(fd);
 
-  memset(&signalFdSigset, 0, sizeof(signalFdSigset));
+  KJ_IF_MAYBE(s, sharedSignalFd) {
+    signalFd = s->fd;
+  } else {
+    memset(&signalFdSigset, 0, sizeof(signalFdSigset));
 
-  KJ_SYSCALL(sigemptyset(&signalFdSigset));
-  KJ_SYSCALL(fd = signalfd(-1, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
-  signalFd = AutoCloseFd(fd);
+    KJ_SYSCALL(sigemptyset(&signalFdSigset));
+    KJ_SYSCALL(fd = signalfd(-1, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
+    ownSignalFd = AutoCloseFd(fd);
+    signalFd = ownSignalFd;
+  }
 
   KJ_SYSCALL(fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
   eventFd = AutoCloseFd(fd);
@@ -570,26 +578,31 @@ static siginfo_t toRegularSiginfo(const struct signalfd_siginfo& siginfo) {
 }
 
 bool UnixEventPort::doEpollWait(int timeout) {
-  sigset_t newMask;
-  memset(&newMask, 0, sizeof(newMask));
-  sigemptyset(&newMask);
+  if (ownSignalFd != nullptr) {
+    // Update our signal FD if needed. (If we're using a shared FD, we can't update it; it's the
+    // app's responsibility to use it correctly.)
 
-  {
-    auto ptr = signalHead;
-    while (ptr != nullptr) {
-      sigaddset(&newMask, ptr->signum);
-      ptr = ptr->next;
-    }
-    if (childSet != nullptr) {
-      sigaddset(&newMask, SIGCHLD);
-    }
-  }
+    sigset_t newMask;
+    memset(&newMask, 0, sizeof(newMask));
+    sigemptyset(&newMask);
 
-  if (memcmp(&newMask, &signalFdSigset, sizeof(newMask)) != 0) {
-    // Apparently we're not waiting on the same signals as last time. Need to update the signal
-    // FD's mask.
-    signalFdSigset = newMask;
-    KJ_SYSCALL(signalfd(signalFd, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
+    {
+      auto ptr = signalHead;
+      while (ptr != nullptr) {
+        sigaddset(&newMask, ptr->signum);
+        ptr = ptr->next;
+      }
+      if (childSet != nullptr) {
+        sigaddset(&newMask, SIGCHLD);
+      }
+    }
+
+    if (memcmp(&newMask, &signalFdSigset, sizeof(newMask)) != 0) {
+      // Apparently we're not waiting on the same signals as last time. Need to update the signal
+      // FD's mask.
+      signalFdSigset = newMask;
+      KJ_SYSCALL(signalfd(signalFd, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
+    }
   }
 
   struct epoll_event events[16];
@@ -621,7 +634,7 @@ bool UnixEventPort::doEpollWait(int timeout) {
         gotSignal(toRegularSiginfo(siginfo));
 
 #ifdef SIGRTMIN
-        if (siginfo.ssi_signo >= SIGRTMIN) {
+        if (siginfo.ssi_signo >= SIGRTMIN && ownSignalFd != nullptr) {
           // This is an RT signal. There could be multiple copies queued. We need to remove it from
           // the signalfd's signal mask before we continue, to avoid accidentally reading and
           // discarding the extra copies.
