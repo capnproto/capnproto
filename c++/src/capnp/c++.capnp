@@ -24,13 +24,3 @@ $namespace("capnp::annotations");
 
 annotation namespace(file): Text;
 annotation name(field, enumerant, struct, enum, interface, method, param, group, union): Text;
-
-annotation omitSchemas(file): Void;
-# Requests that the generated code does not embed the types' schemas.
-# This means you will not be able to use <capnp/schema.h> or <capnp/dynamic.h> APIs with this type.
-# By extension, that means you will not be able to stringify messages nor use the JSON codec.
-# However, the generated code will be somewhat smaller and will not include easily-extractable
-# type information, which may be important in some use cases.
-#
-# All files that import your file will also be required to set this option if they are used to
-# generate C++ code.

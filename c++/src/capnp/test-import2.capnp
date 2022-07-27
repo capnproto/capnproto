@@ -21,36 +21,12 @@
 
 @0xc64a3bf0338a124a;
 
-using Cxx = import "/capnp/c++.capnp";
 using Import1 = import "/capnp/schema.capnp";
 using Import2 = import "test-import.capnp";
 using Import3 = import "test.capnp";
-
-$Cxx.omitSchemas;
 
 struct TestImport2 {
   foo @0 :Import3.TestAllTypes;
   bar @1 :Import1.Node;
   baz @2 :Import2.TestImport;
-}
-
-interface TestImport2Interface {
-  testInterfaceMethod @0 () -> (result :Bool);
-}
-
-interface TestImport2ExtendingInterface extends(TestImport2Interface) {
-  testInterfaceMethodTwo @0 () -> (result :Bool);
-}
-
-enum TestImport2Enum {
-  zero @0;
-  one @1;
-  two @2;
-  three @3;
-  four @4;
-}
-
-struct TestImport2Structure {
-  enumValue @0 :TestImport2Enum;
-  anInterface @1 :TestImport2ExtendingInterface;
 }
