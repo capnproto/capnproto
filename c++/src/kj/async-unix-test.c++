@@ -37,6 +37,7 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <atomic>
 #include "mutex.h"
 
 #if __BIONIC__
@@ -963,10 +964,10 @@ KJ_TEST("UnixEventPort can receive multiple queued instances of an RT signal") {
 #endif
 
 template <typename... Params>
-void doThreadSpecificSignalsTest(Params&&... params) {
+void doThreadSpecificSignalsTest(Params&&... params) noexcept {
   Vector<Own<Thread>> threads;
-  std::atomic<uint> readyCount = 0;
-  std::atomic<uint> doneCount = 0;
+  std::atomic<uint> readyCount(0);
+  std::atomic<uint> doneCount(0);
   for (auto i KJ_UNUSED: kj::zeroTo(16)) {
     threads.add(kj::heap<Thread>([&]() noexcept {
       UnixEventPort port(params...);
@@ -979,21 +980,19 @@ void doThreadSpecificSignalsTest(Params&&... params) {
     }));
   }
 
-  ([&]() noexcept {
-    do {
-      usleep(1000);
-    } while (readyCount.load(std::memory_order_relaxed) < 16);
+  do {
+    usleep(1000);
+  } while (readyCount.load(std::memory_order_relaxed) < 16);
 
-    KJ_ASSERT(doneCount.load(std::memory_order_relaxed) == 0);
+  KJ_ASSERT(doneCount.load(std::memory_order_relaxed) == 0);
 
-    uint count = 0;
-    for (uint i: {5, 14, 4, 6, 7, 11, 1, 3, 8, 0, 12, 9, 10, 15, 2, 13}) {
-      threads[i]->sendSignal(SIGIO);
-      threads[i] = nullptr;  // wait for that one thread to exit
-      usleep(1000);
-      KJ_ASSERT(doneCount.load(std::memory_order_relaxed) == ++count);
-    }
-  })();
+  uint count = 0;
+  for (uint i: {5, 14, 4, 6, 7, 11, 1, 3, 8, 0, 12, 9, 10, 15, 2, 13}) {
+    threads[i]->sendSignal(SIGIO);
+    threads[i] = nullptr;  // wait for that one thread to exit
+    usleep(1000);
+    KJ_ASSERT(doneCount.load(std::memory_order_relaxed) == ++count);
+  }
 }
 
 KJ_TEST("UnixEventPort thread-specific signals") {
@@ -1004,6 +1003,7 @@ KJ_TEST("UnixEventPort thread-specific signals") {
 
   doThreadSpecificSignalsTest();
 
+#if KJ_USE_EPOLL
   {
     sigset_t sigset;
     sigemptyset(&sigset);
@@ -1012,6 +1012,7 @@ KJ_TEST("UnixEventPort thread-specific signals") {
     UnixEventPort::SharedSignalFd sharedSignalFd(sigset);
     doThreadSpecificSignalsTest(sharedSignalFd);
   }
+#endif
 }
 
 }  // namespace

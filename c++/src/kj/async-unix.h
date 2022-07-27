@@ -93,9 +93,12 @@ public:
 
     friend class UnixEventPort;
   };
-#endif
 
   UnixEventPort(kj::Maybe<SharedSignalFd&> sharedSignalFd = nullptr);
+#else
+  UnixEventPort();
+#endif
+
   ~UnixEventPort() noexcept(false);
 
   class FdObserver;
@@ -349,7 +352,7 @@ private:
 };
 
 #if KJ_USE_EPOLL
-class AsyncIoContext;
+struct AsyncIoContext;
 AsyncIoContext setupAsyncIo(UnixEventPort::SharedSignalFd& sharedSignalFd);
 // Alternate version of setupAsyncIo() that accepts a shared signal Fd.
 #endif
