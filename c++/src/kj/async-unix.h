@@ -68,7 +68,37 @@ class UnixEventPort: public EventPort {
   //   until after daemonization to create a UnixEventPort.
 
 public:
+#if KJ_USE_EPOLL
+  class SharedSignalFd {
+    // HACK: On Linux, if you have many threads waiting on the same signals, you may want them to
+    // use the same underlying signalfd. This turns out to work due to the bizarre behavior of
+    // signalfd, in which it always returns signals for the calling thread, rather than whatever
+    // thread created it. Taking advantage of this allows you to expend fewer FDs on signalfd,
+    // and may help avoid surprisingly-expensive creation cost of signalfds.
+    //
+    // To use this, create the object once and pass it to the constructors of many event ports.
+    //
+    // WARNING: This class will probably go away soon as we switch away from signalfd.
+  public:
+    SharedSignalFd(const sigset_t& sigset);
+    // The sigset must include all signals that you will wait on using `onSignal()`. Note that
+    // this has the side effect that the thread will accept any signal in this set regardless of
+    // whether `onSignal()` has been called. If a signal in the set arrives but no one has waited
+    // for it using `onSignal()`, it will be discarded and an error will be logged. Note that
+    // if RT signals are in the set, and multiple signals are delivered at once, you may only
+    // receive notification of the first one.
+
+  private:
+    kj::AutoCloseFd fd;
+
+    friend class UnixEventPort;
+  };
+
+  UnixEventPort(kj::Maybe<SharedSignalFd&> sharedSignalFd = nullptr);
+#else
   UnixEventPort();
+#endif
+
   ~UnixEventPort() noexcept(false);
 
   class FdObserver;
@@ -160,7 +190,8 @@ private:
 
 #if KJ_USE_EPOLL
   AutoCloseFd epollFd;
-  AutoCloseFd signalFd;
+  int signalFd;
+  AutoCloseFd ownSignalFd;
   AutoCloseFd eventFd;   // Used for cross-thread wakeups.
 
   sigset_t signalFdSigset;
@@ -319,6 +350,12 @@ private:
 
   friend class UnixEventPort;
 };
+
+#if KJ_USE_EPOLL
+struct AsyncIoContext;
+AsyncIoContext setupAsyncIo(UnixEventPort::SharedSignalFd& sharedSignalFd);
+// Alternate version of setupAsyncIo() that accepts a shared signal Fd.
+#endif
 
 }  // namespace kj
 
