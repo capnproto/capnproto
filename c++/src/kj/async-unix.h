@@ -216,6 +216,15 @@ private:
 
   struct ChildSet;
   Maybe<Own<ChildSet>> childSet;
+
+#if !KJ_USE_EPOLL
+  static void signalHandler(int, siginfo_t* siginfo, void*);
+#endif
+  static void registerSignalHandler(int signum);
+#if !KJ_USE_EPOLL && !KJ_USE_PIPE_FOR_WAKEUP
+  static void registerReservedSignal();
+#endif
+  static void ignoreSigpipe();
 };
 
 class UnixEventPort::FdObserver: private AsyncObject {

@@ -54,6 +54,12 @@ bool tooLateToSetReserved = false;
 bool capturedChildExit = false;
 bool threadClaimedChildExits = false;
 
+}  // namespace
+
+#if !KJ_USE_EPOLL  // on Linux we'll use signalfd
+
+namespace {
+
 struct SignalCapture {
   sigjmp_buf jumpTo;
   siginfo_t siginfo;
@@ -83,10 +89,11 @@ struct SignalCapture {
 #endif
 };
 
-#if !KJ_USE_EPOLL  // on Linux we'll use signalfd
 KJ_THREADLOCAL_PTR(SignalCapture) threadCapture = nullptr;
 
-void signalHandler(int, siginfo_t* siginfo, void*) {
+}  // namespace
+
+void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) {
   SignalCapture* capture = threadCapture;
   if (capture != nullptr) {
     capture->siginfo = *siginfo;
@@ -104,9 +111,10 @@ void signalHandler(int, siginfo_t* siginfo, void*) {
 #endif
   }
 }
-#endif
 
-void registerSignalHandler(int signum) {
+#endif  // !KJ_USE_EPOLL
+
+void UnixEventPort::registerSignalHandler(int signum) {
   tooLateToSetReserved = true;
 
   sigset_t mask;
@@ -125,12 +133,12 @@ void registerSignalHandler(int signum) {
 }
 
 #if !KJ_USE_EPOLL && !KJ_USE_PIPE_FOR_WAKEUP
-void registerReservedSignal() {
+void UnixEventPort::registerReservedSignal() {
   registerSignalHandler(reservedSignal);
 }
 #endif
 
-void ignoreSigpipe() {
+void UnixEventPort::ignoreSigpipe() {
   // We disable SIGPIPE because users of UnixEventPort almost certainly don't want it.
   while (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
     int error = errno;
@@ -139,8 +147,6 @@ void ignoreSigpipe() {
     }
   }
 }
-
-}  // namespace
 
 struct UnixEventPort::ChildSet {
   std::map<pid_t, ChildExitPromiseAdapter*> waiters;
