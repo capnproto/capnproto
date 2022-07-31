@@ -35,6 +35,7 @@ KJ_BEGIN_HEADER
 
 #if __linux__ && !__BIONIC__ && !defined(KJ_USE_EPOLL)
 // Default to epoll on Linux, except on Bionic (Android) which doesn't have signalfd.h.
+// TODO(soon): Now that we don't use signalfd, can we use epoll on Bionic?
 #define KJ_USE_EPOLL 1
 #endif
 
@@ -46,6 +47,10 @@ KJ_BEGIN_HEADER
 #define KJ_USE_PIPE_FOR_WAKEUP 1
 #endif
 
+#if KJ_USE_EPOLL
+struct epoll_event;
+#endif
+
 namespace kj {
 
 class UnixEventPort: public EventPort {
@@ -55,49 +60,25 @@ class UnixEventPort: public EventPort {
   // The implementation uses `poll()` or possibly a platform-specific API (e.g. epoll, kqueue).
   // To also wait on signals without race conditions, the implementation may block signals until
   // just before `poll()` while using a signal handler which `siglongjmp()`s back to just before
-  // the signal was unblocked, or it may use a nicer platform-specific API like signalfd.
+  // the signal was unblocked, or it may use a nicer platform-specific API.
   //
   // The implementation reserves a signal for internal use.  By default, it uses SIGUSR1.  If you
   // need to use SIGUSR1 for something else, you must offer a different signal by calling
-  // setReservedSignal() at startup.
+  // setReservedSignal() at startup. (On Linux, no signal is reserved; eventfd is used instead.)
   //
   // WARNING: A UnixEventPort can only be used in the thread and process that created it. In
   //   particular, note that after a fork(), a UnixEventPort created in the parent process will
   //   not work correctly in the child, even if the parent ceases to use its copy. In particular
   //   note that this means that server processes which daemonize themselves at startup must wait
   //   until after daemonization to create a UnixEventPort.
+  //
+  // TODO(cleanup): The above warning is no longer accurate -- daemonizing after creating a
+  //   UnixEventPort should now work since we no longer use signalfd. But do we want to commit to
+  //   keeping it that way? Note it's still unsafe to fork() and then use UnixEventPort from both
+  //   processes!
 
 public:
-#if KJ_USE_EPOLL
-  class SharedSignalFd {
-    // HACK: On Linux, if you have many threads waiting on the same signals, you may want them to
-    // use the same underlying signalfd. This turns out to work due to the bizarre behavior of
-    // signalfd, in which it always returns signals for the calling thread, rather than whatever
-    // thread created it. Taking advantage of this allows you to expend fewer FDs on signalfd,
-    // and may help avoid surprisingly-expensive creation cost of signalfds.
-    //
-    // To use this, create the object once and pass it to the constructors of many event ports.
-    //
-    // WARNING: This class will probably go away soon as we switch away from signalfd.
-  public:
-    SharedSignalFd(const sigset_t& sigset);
-    // The sigset must include all signals that you will wait on using `onSignal()`. Note that
-    // this has the side effect that the thread will accept any signal in this set regardless of
-    // whether `onSignal()` has been called. If a signal in the set arrives but no one has waited
-    // for it using `onSignal()`, it will be discarded and an error will be logged. Note that
-    // if RT signals are in the set, and multiple signals are delivered at once, you may only
-    // receive notification of the first one.
-
-  private:
-    kj::AutoCloseFd fd;
-
-    friend class UnixEventPort;
-  };
-
-  UnixEventPort(kj::Maybe<SharedSignalFd&> sharedSignalFd = nullptr);
-#else
   UnixEventPort();
-#endif
 
   ~UnixEventPort() noexcept(false);
 
@@ -190,16 +171,9 @@ private:
 
 #if KJ_USE_EPOLL
   AutoCloseFd epollFd;
-  int signalFd;
-  AutoCloseFd ownSignalFd;
   AutoCloseFd eventFd;   // Used for cross-thread wakeups.
 
-  sigset_t signalFdSigset;
-  // Signal mask as currently set on the signalFd. Tracked so we can detect whether or not it
-  // needs updating.
-
-  bool doEpollWait(int timeout);
-
+  bool processEpollEvents(struct epoll_event events[], int n);
 #else
   class PollContext;
 
@@ -217,9 +191,7 @@ private:
   struct ChildSet;
   Maybe<Own<ChildSet>> childSet;
 
-#if !KJ_USE_EPOLL
-  static void signalHandler(int, siginfo_t* siginfo, void*);
-#endif
+  static void signalHandler(int, siginfo_t* siginfo, void*) noexcept;
   static void registerSignalHandler(int signum);
 #if !KJ_USE_EPOLL && !KJ_USE_PIPE_FOR_WAKEUP
   static void registerReservedSignal();
@@ -359,12 +331,6 @@ private:
 
   friend class UnixEventPort;
 };
-
-#if KJ_USE_EPOLL
-struct AsyncIoContext;
-AsyncIoContext setupAsyncIo(UnixEventPort::SharedSignalFd& sharedSignalFd);
-// Alternate version of setupAsyncIo() that accepts a shared signal Fd.
-#endif
 
 }  // namespace kj
 

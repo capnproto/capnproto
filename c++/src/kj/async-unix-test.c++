@@ -367,6 +367,32 @@ TEST(AsyncUnixTest, ReadObserverMultiReceive) {
   promise2.wait(waitScope);
 }
 
+TEST(AsyncUnixTest, ReadObserverAndSignals) {
+  // Get FD events while also waiting on a signal. This specifically exercises epoll_pwait() for
+  // FD events on Linux.
+
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  auto signalPromise = port.onSignal(SIGIO);
+
+  int pipefds[2];
+  KJ_SYSCALL(pipe(pipefds));
+  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+
+  UnixEventPort::FdObserver observer(port, infd, UnixEventPort::FdObserver::OBSERVE_READ);
+
+  KJ_SYSCALL(write(outfd, "foo", 3));
+
+  observer.whenBecomesReadable().wait(waitScope);
+
+  KJ_EXPECT(!signalPromise.poll(waitScope))
+  raise(SIGIO);
+  KJ_EXPECT(signalPromise.poll(waitScope))
+}
+
 TEST(AsyncUnixTest, ReadObserverAsync) {
   captureSignals();
   UnixEventPort port;
@@ -963,14 +989,18 @@ KJ_TEST("UnixEventPort can receive multiple queued instances of an RT signal") {
 }
 #endif
 
-template <typename... Params>
-void doThreadSpecificSignalsTest(Params&&... params) noexcept {
+KJ_TEST("UnixEventPort thread-specific signals") {
+  // Verify a signal directed to a thread is only received on the intended thread. Amazingly, this
+  // works even though all threads use the same signalfd.
+
+  captureSignals();
+
   Vector<Own<Thread>> threads;
   std::atomic<uint> readyCount(0);
   std::atomic<uint> doneCount(0);
   for (auto i KJ_UNUSED: kj::zeroTo(16)) {
     threads.add(kj::heap<Thread>([&]() noexcept {
-      UnixEventPort port(params...);
+      UnixEventPort port;
       EventLoop loop(port);
       WaitScope waitScope(loop);
 
@@ -993,26 +1023,6 @@ void doThreadSpecificSignalsTest(Params&&... params) noexcept {
     usleep(1000);
     KJ_ASSERT(doneCount.load(std::memory_order_relaxed) == ++count);
   }
-}
-
-KJ_TEST("UnixEventPort thread-specific signals") {
-  // Verify a signal directed to a thread is only received on the intended thread. Amazingly, this
-  // works even though all threads use the same signalfd.
-
-  captureSignals();
-
-  doThreadSpecificSignalsTest();
-
-#if KJ_USE_EPOLL
-  {
-    sigset_t sigset;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGIO);
-    sigaddset(&sigset, SIGURG);
-    UnixEventPort::SharedSignalFd sharedSignalFd(sigset);
-    doThreadSpecificSignalsTest(sharedSignalFd);
-  }
-#endif
 }
 
 }  // namespace
