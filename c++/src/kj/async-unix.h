@@ -170,6 +170,7 @@ private:
   friend class TimerPromiseAdapter;
 
 #if KJ_USE_EPOLL
+  sigset_t originalMask;
   AutoCloseFd epollFd;
   AutoCloseFd eventFd;   // Used for cross-thread wakeups.
 

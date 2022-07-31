@@ -805,9 +805,6 @@ struct TestChild {
 
 TEST(AsyncUnixTest, ChildProcess) {
   captureSignals();
-  UnixEventPort port;
-  EventLoop loop(port);
-  WaitScope waitScope(loop);
 
   // Block SIGTERM so that we can carefully un-block it in children.
   sigset_t sigs, oldsigs;
@@ -815,6 +812,10 @@ TEST(AsyncUnixTest, ChildProcess) {
   KJ_SYSCALL(sigaddset(&sigs, SIGTERM));
   KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &sigs, &oldsigs));
   KJ_DEFER(KJ_SYSCALL(pthread_sigmask(SIG_SETMASK, &oldsigs, nullptr)) { break; });
+
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   TestChild child1(port, 123);
   KJ_EXPECT(!child1.promise.poll(waitScope));

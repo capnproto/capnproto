@@ -379,6 +379,12 @@ UnixEventPort::UnixEventPort()
   event.events = EPOLLIN;
   event.data.u64 = 0;
   KJ_SYSCALL(epoll_ctl(epollFd, EPOLL_CTL_ADD, eventFd, &event));
+
+  // Get the current signal mask, from which we'll compute the appropriate mask to pass to
+  // epoll_pwait() on each loop. (We explicitly memset to 0 first to make sure we can compare
+  // this against another mask with memcmp() for debug purposes.)
+  memset(&originalMask, 0, sizeof(originalMask));
+  KJ_SYSCALL(sigprocmask(0, nullptr, &originalMask));
 }
 
 UnixEventPort::~UnixEventPort() noexcept(false) {
@@ -489,6 +495,33 @@ void UnixEventPort::wake() const {
 }
 
 bool UnixEventPort::wait() {
+#ifdef KJ_DEBUG
+  // In debug mode, verify the current signal mask matches the original.
+  {
+    sigset_t currentMask;
+    memset(&currentMask, 0, sizeof(currentMask));
+    KJ_SYSCALL(sigprocmask(0, nullptr, &currentMask));
+    if (memcmp(&currentMask, &originalMask, sizeof(currentMask)) != 0) {
+      kj::Vector<kj::String> changes;
+      for (int i = 0; i <= SIGRTMAX; i++) {
+        if (sigismember(&currentMask, i) && !sigismember(&originalMask, i)) {
+          changes.add(kj::str("signal #", i, " (", strsignal(i), ") was added"));
+        } else if (!sigismember(&currentMask, i) && sigismember(&originalMask, i)) {
+          changes.add(kj::str("signal #", i, " (", strsignal(i), ") was removed"));
+        }
+      }
+
+      KJ_FAIL_REQUIRE(
+          "Signal mask has changed since UnixEventPort was constructed. You are required to "
+          "ensure that whenever control returns to the event loop, the signal mask is the same "
+          "as it was when UnixEventPort was created. In non-debug builds, this check is skipped, "
+          "and this situation may instead lead to unexpected results. In particular, while the "
+          "system is waiting for I/O events, the signal mask may be reverted to what it was at "
+          "construction time, ignoring your subsequent changes.", changes);
+    }
+  }
+#endif
+
   int timeout = timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
           .map([](uint64_t t) -> int { return t; })
           .orDefault(-1);
@@ -516,14 +549,7 @@ bool UnixEventPort::wait() {
     //   the parent process exit while the child thread lives on. In this case, if a UnixEventPort
     //   had been created before daemonizing, signal handling would be forever broken in the child.
 
-    sigset_t waitMask;
-
-    // Get the current signal mask, so that we can modify it. Unfortunately we cannot pass
-    // something like `SIG_UNBLOCK` to `epoll_pwait` to tell it to modify the current set; we must
-    // give it an exact replacement set.
-    // TODO(perf): Do this once when UnixEventPort is constructed, to avoid a syscall on every
-    //   poll. Needs some thought on whether it's safe?
-    KJ_SYSCALL(sigprocmask(0, nullptr, &waitMask));
+    sigset_t waitMask = originalMask;
 
     // Unblock the signals we care about.
     {
