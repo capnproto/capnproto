@@ -66,6 +66,13 @@ cc_library(
         "win32-api-version.h",
         "windows-sanity.h",
     ],
+    copts = [
+        "-Wall",
+        "-Wextra",
+        "-Wno-sign-compare",
+        "-Wno-unused-parameter",
+        "-Wno-strict-aliasing",
+    ],
     include_prefix = "kj",
     linkopts = ["-lpthread"] + select({
         ":use_libdl": ["-ldl"],
