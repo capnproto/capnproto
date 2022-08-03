@@ -92,8 +92,17 @@ KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
 #undef DECLARE_METHOD
 };
 
+struct HttpConnectMethod {};
+// CONNECT is handled specially and separately from the other HttpMethods.
+
 kj::StringPtr KJ_STRINGIFY(HttpMethod method);
+kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method);
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name);
+kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> tryParseHttpMethodAllowingConnect(
+    kj::StringPtr name);
+// Like tryParseHttpMethod but, as the name suggests, explicitly allows for the CONNECT
+// method. Added as a separate function instead of modifying tryParseHttpMethod to avoid
+// breaking API changes in existing uses of tryParseHttpMethod.
 
 class HttpHeaderTable;
 
@@ -357,6 +366,9 @@ public:
     HttpMethod method;
     kj::StringPtr url;
   };
+  struct ConnectRequest {
+    kj::StringPtr authority;
+  };
   struct Response {
     uint statusCode;
     kj::StringPtr statusText;
@@ -395,9 +407,12 @@ public:
 
   using RequestOrProtocolError = kj::OneOf<Request, ProtocolError>;
   using ResponseOrProtocolError = kj::OneOf<Response, ProtocolError>;
+  using RequestConnectOrProtocolError = kj::OneOf<Request, ConnectRequest, ProtocolError>;
 
   RequestOrProtocolError tryParseRequest(kj::ArrayPtr<char> content);
+  RequestConnectOrProtocolError tryParseRequestOrConnect(kj::ArrayPtr<char> content);
   ResponseOrProtocolError tryParseResponse(kj::ArrayPtr<char> content);
+
   // Parse an HTTP header blob and add all the headers to this object.
   //
   // `content` should be all text from the start of the request to the first occurrence of two
@@ -411,6 +426,8 @@ public:
   // Like tryParseRequest()/tryParseResponse(), but don't expect any request/response line.
 
   kj::String serializeRequest(HttpMethod method, kj::StringPtr url,
+                              kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
+  kj::String serializeConnectRequest(kj::StringPtr authority,
                               kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
   kj::String serializeResponse(uint statusCode, kj::StringPtr statusText,
                                kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
@@ -490,6 +507,17 @@ public:
     kj::Own<kj::AsyncInputStream> body;
   };
   virtual kj::Promise<Request> readRequest() = 0;
+  // Reads one HTTP request from the input stream.
+  //
+  // The returned struct contains pointers directly into a buffer that is invalidated on the next
+  // message read.
+
+  struct Connect {
+    kj::StringPtr authority;
+    const HttpHeaders& headers;
+    kj::Own<kj::AsyncInputStream> body;
+  };
+  virtual kj::Promise<kj::OneOf<Request, Connect>> readRequestAllowingConnect() = 0;
   // Reads one HTTP request from the input stream.
   //
   // The returned struct contains pointers directly into a buffer that is invalidated on the next
@@ -674,9 +702,26 @@ public:
   // `url` and `headers` need only remain valid until `openWebSocket()` returns (they can be
   // stack-allocated).
 
-  virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host);
-  // Handles CONNECT requests. Only relevant for proxy clients. Default implementation throws
-  // UNIMPLEMENTED.
+  struct ConnectResponse {
+    uint statusCode;
+    // Any 2xx response indicates that the CONNECT request was successful without regard to the
+    // standard semantics of the specifix 2xx code.
+    kj::StringPtr statusText;
+    const HttpHeaders* headers;
+    kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<kj::AsyncIoStream>> connectionOrBody;
+    // If the CONNECT request is successful, the connectionOrBody will be a kj::AsyncIoStream
+    // through which both directions of the tunnel are accessible. If the CONNECT request errors,
+    // then the connectionOrBody will be a kj::AsyncInputStream used to provide the payload
+    // (if any) of the error.
+  };
+
+  virtual kj::Promise<ConnectResponse> connect(kj::StringPtr host, const HttpHeaders& headers);
+  // Handles CONNECT requests.
+  //
+  // `host` must specify both the host and port (e.g. "example.org:1234").
+  //
+  // The `host` and `headers` need only remain valid until `connect()` returns (it can be
+  // stack-allocated).
 };
 
 class HttpService {
@@ -734,9 +779,29 @@ public:
   // Request processing can be canceled by dropping the returned promise. HttpServer may do so if
   // the client disconnects prematurely.
 
-  virtual kj::Promise<kj::Own<kj::AsyncIoStream>> connect(kj::StringPtr host);
-  // Handles CONNECT requests. Only relevant for proxy services. Default implementation throws
-  // UNIMPLEMENTED.
+  class ConnectResponse {
+  public:
+    virtual kj::Own<kj::AsyncIoStream> accept(uint statusCode,
+        kj::StringPtr statusText, const HttpHeaders& headers) = 0;
+    // Signals acceptance of the CONNECT tunnel.
+
+    virtual kj::Own<kj::AsyncOutputStream> reject(uint statusCode,
+        kj::StringPtr statusText, const HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize = nullptr) = 0;
+    // Signals rejection of the CONNECT tunnel.
+  };
+
+  virtual kj::Promise<void> connect(kj::StringPtr host, const HttpHeaders& headers,
+                                    ConnectResponse& tunnel);
+  // Handles CONNECT requests.
+  //
+  // The `host` must include host and port.
+  //
+  // `host` and `headers` are invalidated when accept or reject is called on the ConnectResponse
+  // or when the returned promise resolves, whichever comes first.
+  //
+  // Request processing can be canceled by dropping the returned promise. HttpServer may do so if
+  // the client disconnects prematurely.
 };
 
 class HttpClientErrorHandler {
@@ -1012,7 +1077,7 @@ public:
     // Nothing, this is an opaque type.
 
   private:
-    SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>, HttpMethod, kj::StringPtr, HttpHeaders);
+    SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>, kj::OneOf<HttpMethod, HttpConnectMethod>, kj::StringPtr, HttpHeaders);
 
     kj::Array<byte> buffer;
     // A buffer containing at least the request's method, URL, and headers, and possibly content
@@ -1022,7 +1087,7 @@ public:
     // Pointer to the end of the request headers. If this has a non-zero length, then our buffer
     // contains additional content, presumably the head of the request body.
 
-    HttpMethod method;
+    kj::OneOf<HttpMethod, HttpConnectMethod> method;
     kj::StringPtr url;
     HttpHeaders headers;
     // Parsed request front matter. `url` and `headers` both store pointers into `buffer`.
@@ -1082,7 +1147,7 @@ class HttpServer::SuspendableRequest {
   // Interface passed to the SuspendableHttpServiceFactory parameter of listenHttpCleanDrain().
 
 public:
-  HttpMethod method;
+  kj::OneOf<HttpMethod,HttpConnectMethod> method;
   kj::StringPtr url;
   const HttpHeaders& headers;
   // Parsed request front matter, so the implementer can decide whether to suspend the request.
@@ -1095,7 +1160,7 @@ public:
 
 private:
   explicit SuspendableRequest(
-      Connection& connection, HttpMethod method, kj::StringPtr url, const HttpHeaders& headers)
+      Connection& connection, kj::OneOf<HttpMethod, HttpConnectMethod> method, kj::StringPtr url, const HttpHeaders& headers)
       : method(method), url(url), headers(headers), connection(connection) {}
   KJ_DISALLOW_COPY(SuspendableRequest);
 
