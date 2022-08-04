@@ -35,7 +35,6 @@
 
 #if KJ_USE_EPOLL
 #include <sys/epoll.h>
-#include <sys/signalfd.h>
 #include <sys/eventfd.h>
 #else
 #include <poll.h>
@@ -53,6 +52,43 @@ int reservedSignal = SIGUSR1;
 bool tooLateToSetReserved = false;
 bool capturedChildExit = false;
 bool threadClaimedChildExits = false;
+
+}  // namespace
+
+#if KJ_USE_EPOLL
+
+namespace {
+
+KJ_THREADLOCAL_PTR(UnixEventPort) threadEventPort = nullptr;
+// This is set to the current UnixEventPort just before epoll_pwait(), then back to null after it
+// returns.
+
+}  // namespace
+
+void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
+  // Since this signal handler is *only* called during `epoll_pwait()`, we aren't subject to the
+  // usual signal-safety concerns. We can treat this more like a callback. So, we can just call
+  // gotSignal() directly, no biggy.
+
+  // Note that, if somehow the signal hanlder is invoked when *not* running `epoll_pwait()`, then
+  // `threadEventPort` will be null. We silently ignore the signal in this case. This should never
+  // happen in normal execution, so you might argue we should assert-fail instead. However:
+  // - We obviously can't throw from here, so we'd have to crash instead.
+  // - The Cloudflare Workers runtime relies on this no-op behavior for a certain hack. The hack
+  //   in question involves unblocking a signal from the signal mask and relying on it to interrupt
+  //   certain blocking syscalls, causing them to fail with EINTR. The hack does not need the
+  //   handler to do anything except return in this case. The hacky code makes sure to restore the
+  //   signal mask before returning to the event loop.
+
+  UnixEventPort* current = threadEventPort;
+  if (current != nullptr) {
+    current->gotSignal(*siginfo);
+  }
+}
+
+#else
+
+namespace {
 
 struct SignalCapture {
   sigjmp_buf jumpTo;
@@ -83,10 +119,11 @@ struct SignalCapture {
 #endif
 };
 
-#if !KJ_USE_EPOLL  // on Linux we'll use signalfd
 KJ_THREADLOCAL_PTR(SignalCapture) threadCapture = nullptr;
 
-void signalHandler(int, siginfo_t* siginfo, void*) {
+}  // namespace
+
+void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
   SignalCapture* capture = threadCapture;
   if (capture != nullptr) {
     capture->siginfo = *siginfo;
@@ -104,33 +141,48 @@ void signalHandler(int, siginfo_t* siginfo, void*) {
 #endif
   }
 }
-#endif
 
-void registerSignalHandler(int signum) {
+#endif  // !KJ_USE_EPOLL
+
+void UnixEventPort::registerSignalHandler(int signum) {
+  KJ_REQUIRE(signum != SIGBUS && signum != SIGFPE && signum != SIGILL && signum != SIGSEGV,
+      "this signal is raised by erroneous code execution; you cannot capture it into the event "
+      "loop");
+
   tooLateToSetReserved = true;
 
+  // Block the signal from being delivered most of the time. We'll explicitly unblock it when we
+  // want to receive it.
   sigset_t mask;
   KJ_SYSCALL(sigemptyset(&mask));
   KJ_SYSCALL(sigaddset(&mask, signum));
   KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &mask, nullptr));
 
-#if !KJ_USE_EPOLL  // on Linux we'll use signalfd
+  // Register the signal handler which should be invoked when we explicitly unblock the signal.
   struct sigaction action;
   memset(&action, 0, sizeof(action));
   action.sa_sigaction = &signalHandler;
-  KJ_SYSCALL(sigfillset(&action.sa_mask));
   action.sa_flags = SA_SIGINFO;
+
+  // Set up the signal mask applied while the signal handler runs. We want to block all other
+  // signals from being raised during the handler, with the exception of the four "crash" signals,
+  // which realistically can't be blocked.
+  KJ_SYSCALL(sigfillset(&action.sa_mask));
+  KJ_SYSCALL(sigdelset(&action.sa_mask, SIGBUS));
+  KJ_SYSCALL(sigdelset(&action.sa_mask, SIGFPE));
+  KJ_SYSCALL(sigdelset(&action.sa_mask, SIGILL));
+  KJ_SYSCALL(sigdelset(&action.sa_mask, SIGSEGV));
+
   KJ_SYSCALL(sigaction(signum, &action, nullptr));
-#endif
 }
 
 #if !KJ_USE_EPOLL && !KJ_USE_PIPE_FOR_WAKEUP
-void registerReservedSignal() {
+void UnixEventPort::registerReservedSignal() {
   registerSignalHandler(reservedSignal);
 }
 #endif
 
-void ignoreSigpipe() {
+void UnixEventPort::ignoreSigpipe() {
   // We disable SIGPIPE because users of UnixEventPort almost certainly don't want it.
   while (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
     int error = errno;
@@ -139,8 +191,6 @@ void ignoreSigpipe() {
     }
   }
 }
-
-}  // namespace
 
 struct UnixEventPort::ChildSet {
   std::map<pid_t, ChildExitPromiseAdapter*> waiters;
@@ -312,13 +362,7 @@ void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
 // =======================================================================================
 // epoll FdObserver implementation
 
-UnixEventPort::SharedSignalFd::SharedSignalFd(const sigset_t& sigset) {
-  int fd_;
-  KJ_SYSCALL(fd_ = signalfd(-1, &sigset, SFD_NONBLOCK | SFD_CLOEXEC));
-  fd = AutoCloseFd(fd_);
-}
-
-UnixEventPort::UnixEventPort(kj::Maybe<SharedSignalFd&> sharedSignalFd)
+UnixEventPort::UnixEventPort()
     : clock(systemPreciseMonotonicClock()),
       timerImpl(clock.now()) {
   ignoreSigpipe();
@@ -327,28 +371,20 @@ UnixEventPort::UnixEventPort(kj::Maybe<SharedSignalFd&> sharedSignalFd)
   KJ_SYSCALL(fd = epoll_create1(EPOLL_CLOEXEC));
   epollFd = AutoCloseFd(fd);
 
-  KJ_IF_MAYBE(s, sharedSignalFd) {
-    signalFd = s->fd;
-  } else {
-    memset(&signalFdSigset, 0, sizeof(signalFdSigset));
-
-    KJ_SYSCALL(sigemptyset(&signalFdSigset));
-    KJ_SYSCALL(fd = signalfd(-1, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
-    ownSignalFd = AutoCloseFd(fd);
-    signalFd = ownSignalFd;
-  }
-
   KJ_SYSCALL(fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
   eventFd = AutoCloseFd(fd);
-
 
   struct epoll_event event;
   memset(&event, 0, sizeof(event));
   event.events = EPOLLIN;
   event.data.u64 = 0;
-  KJ_SYSCALL(epoll_ctl(epollFd, EPOLL_CTL_ADD, signalFd, &event));
-  event.data.u64 = 1;
   KJ_SYSCALL(epoll_ctl(epollFd, EPOLL_CTL_ADD, eventFd, &event));
+
+  // Get the current signal mask, from which we'll compute the appropriate mask to pass to
+  // epoll_pwait() on each loop. (We explicitly memset to 0 first to make sure we can compare
+  // this against another mask with memcmp() for debug purposes.)
+  memset(&originalMask, 0, sizeof(originalMask));
+  KJ_SYSCALL(sigprocmask(0, nullptr, &originalMask));
 }
 
 UnixEventPort::~UnixEventPort() noexcept(false) {
@@ -451,17 +487,6 @@ Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
   return kj::mv(paf.promise);
 }
 
-bool UnixEventPort::wait() {
-  return doEpollWait(
-      timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
-          .map([](uint64_t t) -> int { return t; })
-          .orDefault(-1));
-}
-
-bool UnixEventPort::poll() {
-  return doEpollWait(0);
-}
-
 void UnixEventPort::wake() const {
   uint64_t one = 1;
   ssize_t n;
@@ -469,184 +494,104 @@ void UnixEventPort::wake() const {
   KJ_ASSERT(n < 0 || n == sizeof(one));
 }
 
-static siginfo_t toRegularSiginfo(const struct signalfd_siginfo& siginfo) {
-  // Unfortunately, siginfo_t is mostly a big union and the correct set of fields to fill in
-  // depends on the type of signal. OTOH, signalfd_siginfo is a flat struct that expands all
-  // siginfo_t's union fields out to be non-overlapping. We can't just copy all the fields over
-  // because of the unions; we have to carefully figure out which fields are appropriate to fill
-  // in for this signal. Ick.
+bool UnixEventPort::wait() {
+#ifdef KJ_DEBUG
+  // In debug mode, verify the current signal mask matches the original.
+  {
+    sigset_t currentMask;
+    memset(&currentMask, 0, sizeof(currentMask));
+    KJ_SYSCALL(sigprocmask(0, nullptr, &currentMask));
+    if (memcmp(&currentMask, &originalMask, sizeof(currentMask)) != 0) {
+      kj::Vector<kj::String> changes;
+      for (int i = 0; i <= SIGRTMAX; i++) {
+        if (sigismember(&currentMask, i) && !sigismember(&originalMask, i)) {
+          changes.add(kj::str("signal #", i, " (", strsignal(i), ") was added"));
+        } else if (!sigismember(&currentMask, i) && sigismember(&originalMask, i)) {
+          changes.add(kj::str("signal #", i, " (", strsignal(i), ") was removed"));
+        }
+      }
 
-  siginfo_t result;
-  memset(&result, 0, sizeof(result));
-
-  result.si_signo = siginfo.ssi_signo;
-  result.si_errno = siginfo.ssi_errno;
-  result.si_code = siginfo.ssi_code;
-
-  if (siginfo.ssi_code > 0) {
-    // Signal originated from the kernel. The structure of the siginfo depends primarily on the
-    // signal number.
-
-    switch (siginfo.ssi_signo) {
-    case SIGCHLD:
-      result.si_pid = siginfo.ssi_pid;
-      result.si_uid = siginfo.ssi_uid;
-      result.si_status = siginfo.ssi_status;
-      result.si_utime = siginfo.ssi_utime;
-      result.si_stime = siginfo.ssi_stime;
-      break;
-
-    case SIGILL:
-    case SIGFPE:
-    case SIGSEGV:
-    case SIGBUS:
-    case SIGTRAP:
-      result.si_addr = reinterpret_cast<void*>(static_cast<uintptr_t>(siginfo.ssi_addr));
-#ifdef si_trapno
-      result.si_trapno = siginfo.ssi_trapno;
-#endif
-#ifdef si_addr_lsb
-      // ssi_addr_lsb is defined as coming immediately after ssi_addr in the kernel headers but
-      // apparently the userspace headers were never updated. So we do a pointer hack. :(
-      result.si_addr_lsb = *reinterpret_cast<const uint16_t*>(&siginfo.ssi_addr + 1);
-#endif
-      break;
-
-    case SIGIO:
-      static_assert(SIGIO == SIGPOLL, "SIGIO != SIGPOLL?");
-
-      // Note: Technically, code can arrange for SIGIO signals to be delivered with a signal number
-      //   other than SIGIO. AFAICT there is no way for us to detect this in the siginfo. Luckily
-      //   SIGIO is totally obsoleted by epoll so it shouldn't come up.
-
-      result.si_band = siginfo.ssi_band;
-      result.si_fd = siginfo.ssi_fd;
-      break;
-
-    case SIGSYS:
-      // Apparently SIGSYS's fields are not available in signalfd_siginfo?
-      break;
-    }
-
-  } else {
-    // Signal originated from userspace. The sender could specify whatever signal number they
-    // wanted. The structure of the signal is determined by the API they used, which is identified
-    // by SI_CODE.
-
-    switch (siginfo.ssi_code) {
-      case SI_USER:
-      case SI_TKILL:
-        // kill(), tkill(), or tgkill().
-        result.si_pid = siginfo.ssi_pid;
-        result.si_uid = siginfo.ssi_uid;
-        break;
-
-      case SI_QUEUE:
-      case SI_MESGQ:
-      case SI_ASYNCIO:
-      default:
-        result.si_pid = siginfo.ssi_pid;
-        result.si_uid = siginfo.ssi_uid;
-
-        // This is awkward. In siginfo_t, si_ptr and si_int are in a union together. In
-        // signalfd_siginfo, they are not. We don't really know whether the app intended to send
-        // an int or a pointer. Presumably since the pointer is always larger than the int, if
-        // we write the pointer, we'll end up with the right value for the int? Presumably the
-        // two fields of signalfd_siginfo are actually extracted from one of these unions
-        // originally, so actually contain redundant data? Better write some tests...
-        //
-        // Making matters even stranger, siginfo.ssi_ptr is 64-bit even on 32-bit systems, and
-        // it appears that instead of doing the obvious thing by casting the pointer value to
-        // 64 bits, the kernel actually memcpy()s the 32-bit value into the 64-bit space. As
-        // a result, on big-endian 32-bit systems, the original pointer value ends up in the
-        // *upper* 32 bits of siginfo.ssi_ptr, which is totally weird. We play along and use
-        // a memcpy() on our end too, to get the right result on all platforms.
-        memcpy(&result.si_ptr, &siginfo.ssi_ptr, sizeof(result.si_ptr));
-        break;
-
-      case SI_TIMER:
-        result.si_timerid = siginfo.ssi_tid;
-        result.si_overrun = siginfo.ssi_overrun;
-
-        // Again with this weirdness...
-        result.si_ptr = reinterpret_cast<void*>(static_cast<uintptr_t>(siginfo.ssi_ptr));
-        break;
+      KJ_FAIL_REQUIRE(
+          "Signal mask has changed since UnixEventPort was constructed. You are required to "
+          "ensure that whenever control returns to the event loop, the signal mask is the same "
+          "as it was when UnixEventPort was created. In non-debug builds, this check is skipped, "
+          "and this situation may instead lead to unexpected results. In particular, while the "
+          "system is waiting for I/O events, the signal mask may be reverted to what it was at "
+          "construction time, ignoring your subsequent changes.", changes);
     }
   }
+#endif
 
-  return result;
-}
+  int timeout = timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
+          .map([](uint64_t t) -> int { return t; })
+          .orDefault(-1);
 
-bool UnixEventPort::doEpollWait(int timeout) {
-  if (ownSignalFd != nullptr) {
-    // Update our signal FD if needed. (If we're using a shared FD, we can't update it; it's the
-    // app's responsibility to use it correctly.)
+  struct epoll_event events[16];
+  int n;
+  if (signalHead != nullptr || childSet != nullptr) {
+    // We are interested in some signals. Use epoll_pwait().
+    //
+    // Note: Once upon a time, we used signalfd for this. However, this turned out to be more
+    // trouble than it was worth. Some problems with signalfd:
+    // - It required opening an additional file descriptor per thread.
+    // - If the set of interesting signals changed, the signalfd would have to be updated before
+    //   calling epoll_wait(), which was an extra syscall.
+    // - When a signal arrives, it requires extra syscalls to read the signal info from the
+    //   signalfd, as well as code to translate from signalfd_siginfo to siginfo_t, which are
+    //   different for some reason.
+    // - signalfd suffers from surprising lock contention during epoll_wait or when the signalfd's
+    //   mask is updated in programs with many threads. Because the lock is a spinlock, this
+    //   could consume exorbitant CPU.
+    // - When a signalfd is in an epoll, it will be flagged readable based on signals which are
+    //   pending in the process/thread which called epoll_ctl_add() to register the signalfd.
+    //   This is mostly fine for our usage, except that it breaks one useful case that otherwise
+    //   works: many servers are designed to "daemonize" themselves by fork()ing and then having
+    //   the parent process exit while the child thread lives on. In this case, if a UnixEventPort
+    //   had been created before daemonizing, signal handling would be forever broken in the child.
 
-    sigset_t newMask;
-    memset(&newMask, 0, sizeof(newMask));
-    sigemptyset(&newMask);
+    sigset_t waitMask = originalMask;
 
+    // Unblock the signals we care about.
     {
       auto ptr = signalHead;
       while (ptr != nullptr) {
-        sigaddset(&newMask, ptr->signum);
+        KJ_SYSCALL(sigdelset(&waitMask, ptr->signum));
         ptr = ptr->next;
       }
       if (childSet != nullptr) {
-        sigaddset(&newMask, SIGCHLD);
+        KJ_SYSCALL(sigdelset(&waitMask, SIGCHLD));
       }
     }
 
-    if (memcmp(&newMask, &signalFdSigset, sizeof(newMask)) != 0) {
-      // Apparently we're not waiting on the same signals as last time. Need to update the signal
-      // FD's mask.
-      signalFdSigset = newMask;
-      KJ_SYSCALL(signalfd(signalFd, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
-    }
+    threadEventPort = this;
+    n = epoll_pwait(epollFd, events, kj::size(events), timeout, &waitMask);
+    threadEventPort = nullptr;
+  } else {
+    // Not waiting on any signals. Regular epoll_wait() will be fine.
+    n = epoll_wait(epollFd, events, kj::size(events), timeout);
   }
 
-  struct epoll_event events[16];
-  int n = epoll_wait(epollFd, events, kj::size(events), timeout);
   if (n < 0) {
     int error = errno;
     if (error == EINTR) {
-      // We can't simply restart the epoll call because we need to recompute the timeout. Instead,
-      // we pretend epoll_wait() returned zero events. This will cause the event loop to spin once,
-      // decide it has nothing to do, recompute timeouts, then return to waiting.
+      // We received a singal. The signal handler may have queued an event to the event loop. Even
+      // if it didn't, we can't simply restart the epoll call because we need to recompute the
+      // timeout. Instead, we pretend epoll_wait() returned zero events. This will cause the event
+      // loop to spin once, decide it has nothing to do, recompute timeouts, then return to waiting.
       n = 0;
     } else {
-      KJ_FAIL_SYSCALL("epoll_wait()", error);
+      KJ_FAIL_SYSCALL("epoll_pwait()", error);
     }
   }
 
+  return processEpollEvents(events, n);
+}
+
+bool UnixEventPort::processEpollEvents(struct epoll_event events[], int n) {
   bool woken = false;
 
   for (int i = 0; i < n; i++) {
     if (events[i].data.u64 == 0) {
-      for (;;) {
-        struct signalfd_siginfo siginfo;
-        ssize_t n;
-        KJ_NONBLOCKING_SYSCALL(n = read(signalFd, &siginfo, sizeof(siginfo)));
-        if (n < 0) break;  // no more signals
-
-        KJ_ASSERT(n == sizeof(siginfo));
-
-        gotSignal(toRegularSiginfo(siginfo));
-
-#ifdef SIGRTMIN
-        if (siginfo.ssi_signo >= SIGRTMIN && ownSignalFd != nullptr) {
-          // This is an RT signal. There could be multiple copies queued. We need to remove it from
-          // the signalfd's signal mask before we continue, to avoid accidentally reading and
-          // discarding the extra copies.
-          // TODO(perf): If high throughput of RT signals is desired then perhaps we should read
-          //   them all into userspace and queue them here. Maybe we even need a better interface
-          //   than onSignal() for receiving high-volume RT signals.
-          KJ_SYSCALL(sigdelset(&signalFdSigset, siginfo.ssi_signo));
-          KJ_SYSCALL(signalfd(signalFd, &signalFdSigset, SFD_NONBLOCK | SFD_CLOEXEC));
-        }
-#endif
-      }
-    } else if (events[i].data.u64 == 1) {
       // Someone called wake() from another thread. Consume the event.
       uint64_t value;
       ssize_t n;
@@ -664,6 +609,60 @@ bool UnixEventPort::doEpollWait(int timeout) {
   timerImpl.advanceTo(clock.now());
 
   return woken;
+}
+
+bool UnixEventPort::poll() {
+  // Unfortunately, epoll_pwait() with a timeout of zero will never deliver actually deliver any
+  // pending signals. Therefore, we need a completely different approach to poll for signals. We
+  // might as well use regular epoll_wait() in this case, too, to save the kernel some effort.
+
+  if (signalHead != nullptr || childSet != nullptr) {
+    // Use sigtimedwait() to poll for signals.
+
+    // Construct a sigset of all signals we are interested in.
+    sigset_t sigset;
+    KJ_SYSCALL(sigemptyset(&sigset));
+    uint count = 0;
+
+    {
+      auto ptr = signalHead;
+      while (ptr != nullptr) {
+        KJ_SYSCALL(sigaddset(&sigset, ptr->signum));
+        ++count;
+        ptr = ptr->next;
+      }
+      if (childSet != nullptr) {
+        KJ_SYSCALL(sigaddset(&sigset, SIGCHLD));
+        ++count;
+      }
+    }
+
+    // While that set is non-empty, poll for signals.
+    while (count > 0) {
+      struct timespec timeout;
+      timeout.tv_sec = 0;
+      timeout.tv_nsec = 0;
+
+      siginfo_t siginfo;
+      int n;
+      KJ_NONBLOCKING_SYSCALL(n = sigtimedwait(&sigset, &siginfo, &timeout));
+      if (n < 0) break;  // EAGAIN: no signals in set are raised
+
+      KJ_ASSERT(n == siginfo.si_signo);
+      gotSignal(siginfo);
+
+      // Remove that signal from the set so we don't receive it again, but keep checking for others
+      // if there are any.
+      KJ_SYSCALL(sigdelset(&sigset, n));
+      --count;
+    }
+  }
+
+  struct epoll_event events[16];
+  int n;
+  KJ_SYSCALL(n = epoll_wait(epollFd, events, kj::size(events), 0));
+
+  return processEpollEvents(events, n);
 }
 
 #else  // KJ_USE_EPOLL

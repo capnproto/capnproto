@@ -1454,10 +1454,8 @@ public:
 
 class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
 public:
-  template <typename... Params>
-  LowLevelAsyncIoProviderImpl(Params&&... params)
-      : eventPort(kj::fwd<Params>(params)...),
-        eventLoop(eventPort), waitScope(eventLoop) {}
+  LowLevelAsyncIoProviderImpl()
+      : eventPort(), eventLoop(eventPort), waitScope(eventLoop) {}
 
   inline WaitScope& getWaitScope() { return waitScope; }
 
@@ -2042,16 +2040,6 @@ AsyncIoContext setupAsyncIo() {
   auto& eventPort = lowLevel->getEventPort();
   return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope, eventPort };
 }
-
-#if KJ_USE_EPOLL
-AsyncIoContext setupAsyncIo(UnixEventPort::SharedSignalFd& sharedSignalFd) {
-  auto lowLevel = heap<LowLevelAsyncIoProviderImpl>(sharedSignalFd);
-  auto ioProvider = kj::heap<AsyncIoProviderImpl>(*lowLevel);
-  auto& waitScope = lowLevel->getWaitScope();
-  auto& eventPort = lowLevel->getEventPort();
-  return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope, eventPort };
-}
-#endif
 
 }  // namespace kj
 
