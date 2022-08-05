@@ -50,6 +50,17 @@ KJ_TEST("basic json encoding") {
   KJ_EXPECT(json.encode(Data::Reader(bytes, 3)) == "[12, 34, 56]");
 }
 
+KJ_TEST("raw encoding") {
+  JsonCodec json;
+
+  auto text = kj::str("{\"field\":\"value\"}");
+  MallocMessageBuilder message;
+  auto value = message.initRoot<JsonValue>();
+  value.setRaw(text);
+
+  KJ_EXPECT(json.encodeRaw(value) == text);
+}
+
 const char ALL_TYPES_JSON[] =
     "{ \"voidField\": null,\n"
     "  \"boolField\": true,\n"

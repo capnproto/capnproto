@@ -93,6 +93,10 @@ struct JsonCodec::Impl {
         return kj::strTree(call.getFunction(), '(', encodeList(
             kj::mv(encodedElements), childMultiline, indent, multiline, true), ')');
       }
+
+      case JsonValue::RAW: {
+        return kj::strTree(value.getRaw());
+      }
     }
 
     KJ_FAIL_ASSERT("unknown JsonValue type", static_cast<uint>(value.which()));
