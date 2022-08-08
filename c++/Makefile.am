@@ -306,11 +306,19 @@ libkj_async_la_SOURCES=                                        \
   src/kj/async-io-win32.c++                                    \
   src/kj/timer.c++
 
+if BUILD_KJ_GZIP
+libkj_http_la_LIBADD = libkj-async.la libkj.la -lz $(ASYNC_LIBS) $(PTHREAD_LIBS)
+libkj_http_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
+libkj_http_la_SOURCES=                                         \
+  src/kj/compat/url.c++                                        \
+  src/kj/compat/http.c++
+else
 libkj_http_la_LIBADD = libkj-async.la libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_http_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_http_la_SOURCES=                                         \
   src/kj/compat/url.c++                                        \
   src/kj/compat/http.c++
+endif
 
 libkj_tls_la_LIBADD = libkj-async.la libkj.la -lssl -lcrypto $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_tls_la_LDFLAGS = -release $(SO_VERSION) -no-undefined

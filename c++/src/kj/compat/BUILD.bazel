@@ -34,7 +34,10 @@ cc_library(
     ],
     include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
-    deps = ["//src/kj:kj-async"],
+    deps = [
+        "//src/kj:kj-async",
+        "@zlib",
+    ],
 )
 
 cc_library(
