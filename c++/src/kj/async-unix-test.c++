@@ -135,6 +135,8 @@ bool checkForQemuEpollPwaitBug() {
 }
 
 const bool BROKEN_QEMU = checkForQemuEpollPwaitBug();
+#else
+const bool BROKEN_QEMU = false;
 #endif
 
 TEST(AsyncUnixTest, Signals) {
