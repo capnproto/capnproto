@@ -79,6 +79,122 @@ Maybe<Own<AsyncInputStream>> AsyncInputStream::tryTee(uint64_t) {
   return nullptr;
 }
 
+AsyncBufferedInputStream::~AsyncBufferedInputStream() noexcept(false) {}
+
+ArrayPtr<const byte> AsyncBufferedInputStream::getReadBuffer() {
+  auto result = tryGetReadBuffer();
+  KJ_REQUIRE(result.size() > 0, "Premature EOF");
+  return result;
+}
+
+AsyncBufferedInputStreamWrapper::AsyncBufferedInputStreamWrapper(AsyncInputStream& inner,
+    ArrayPtr<byte> buffer) : inner(inner),
+    ownedBuffer(buffer == nullptr ? heapArray<byte>(8192) : nullptr),
+    buffer(buffer == nullptr ? ownedBuffer : buffer) {}
+
+AsyncBufferedInputStreamWrapper::AsyncBufferedInputStreamWrapper(
+    AsyncBufferedInputStreamWrapper&& other)
+    : inner(other.inner), ownedBuffer(kj::mv(other.ownedBuffer)),
+      buffer(other.buffer), bufferAvailable(other.bufferAvailable) {}
+
+AsyncBufferedInputStreamWrapper::~AsyncBufferedInputStreamWrapper() noexcept(false) {}
+
+ArrayPtr<const byte> AsyncBufferedInputStreamWrapper::tryGetReadBuffer() {
+  return bufferAvailable;
+}
+
+Promise<size_t> AsyncBufferedInputStreamWrapper::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
+  if (minBytes <= bufferAvailable.size()) {
+    // Serve from current buffer.
+    size_t n = std::min(bufferAvailable.size(), maxBytes);
+    memcpy(dst, bufferAvailable.begin(), n);
+    bufferAvailable = bufferAvailable.slice(n, bufferAvailable.size());
+    return n;
+  } else {
+    // Copy current available into destination.
+    memcpy(dst, bufferAvailable.begin(), bufferAvailable.size());
+    size_t fromFirstBuffer = bufferAvailable.size();
+
+    dst = reinterpret_cast<byte*>(dst) + fromFirstBuffer;
+    minBytes -= fromFirstBuffer;
+    maxBytes -= fromFirstBuffer;
+
+    if (maxBytes <= buffer.size()) {
+      // Read the next buffer-full.
+      return inner.tryRead(buffer.begin(), minBytes, buffer.size()).then(
+          [this, dst, maxBytes, fromFirstBuffer](size_t n) {
+        size_t fromSecondBuffer = std::min(n, maxBytes);
+        memcpy(dst, buffer.begin(), fromSecondBuffer);
+        bufferAvailable = buffer.slice(fromSecondBuffer, n);
+        return fromFirstBuffer + fromSecondBuffer;
+      });
+    } else {
+      // Forward large read to the underlying stream.
+      bufferAvailable = nullptr;
+      return inner.tryRead(dst, minBytes, maxBytes).then(
+          [fromFirstBuffer](size_t n) {
+        return fromFirstBuffer + n;
+      });
+    }
+  }
+}
+
+void AsyncBufferedInputStreamWrapper::registerAncillaryMessageHandler(
+  Function<void(ArrayPtr<AncillaryMessage>)> fn) {
+  inner.registerAncillaryMessageHandler(kj::mv(fn));
+}
+
+AsyncBufferedIoStreamWrapper::AsyncBufferedIoStreamWrapper(AsyncIoStream& inner,
+    ArrayPtr<byte> buffer) : inner(inner), input(inner, buffer) {}
+AsyncBufferedIoStreamWrapper::AsyncBufferedIoStreamWrapper(AsyncBufferedIoStreamWrapper&& other)
+    : inner(other.inner), input(kj::mv(other.input)) {}
+
+Promise<size_t> AsyncBufferedIoStreamWrapper::tryRead(
+    void* buffer, size_t minBytes, size_t maxBytes) {
+  return input.tryRead(buffer, minBytes, maxBytes);
+}
+
+void AsyncBufferedIoStreamWrapper::registerAncillaryMessageHandler(
+  Function<void(ArrayPtr<AncillaryMessage>)> fn) {
+  inner.registerAncillaryMessageHandler(kj::mv(fn));
+}
+
+Promise<void> AsyncBufferedIoStreamWrapper::write(const void* buffer, size_t size) {
+  return inner.write(buffer, size);
+}
+Promise<void> AsyncBufferedIoStreamWrapper::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  return inner.write(pieces);
+}
+Maybe<Promise<uint64_t>> AsyncBufferedIoStreamWrapper::tryPumpFrom(AsyncInputStream& input, uint64_t amount) {
+  return inner.tryPumpFrom(input, amount);
+}
+Promise<void> AsyncBufferedIoStreamWrapper::whenWriteDisconnected() {
+  return inner.whenWriteDisconnected();
+}
+
+// Implements AsyncIoStream
+void AsyncBufferedIoStreamWrapper::shutdownWrite() {
+  inner.shutdownWrite();
+}
+void AsyncBufferedIoStreamWrapper::abortRead() {
+  inner.abortRead();
+}
+void AsyncBufferedIoStreamWrapper::getsockopt(int level, int option, void* value, uint* length) {
+  inner.getsockopt(level, option, value, length);
+}
+void AsyncBufferedIoStreamWrapper::setsockopt(int level, int option, const void* value, uint length) {
+  inner.setsockopt(level, option, value, length);
+}
+void AsyncBufferedIoStreamWrapper::getsockname(struct sockaddr* addr, uint* length) {
+  inner.getsockname(addr, length);
+}
+void AsyncBufferedIoStreamWrapper::getpeername(struct sockaddr* addr, uint* length) {
+  inner.getpeername(addr, length);
+}
+kj::Maybe<int> AsyncBufferedIoStreamWrapper::getFd() const {
+  return inner.getFd();
+}
+
 namespace {
 
 class AsyncPump {

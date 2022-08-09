@@ -136,6 +136,60 @@ public:
   // multiple times without canceling the previous promises.
 };
 
+class AsyncBufferedInputStream {
+  // Does not inherit from InputStream so this can act as a mixin to allow implementing
+  // AsyncBufferedIoStreamWrapper
+
+public:
+  virtual ~AsyncBufferedInputStream() noexcept(false);
+
+  ArrayPtr<const byte> getReadBuffer();
+  // TODO(now): No skip for AsyncInputStream -- I guess we could implement an async form?
+  // Get a direct pointer into the read buffer, which contains the next bytes in the input.  If the
+  // caller consumes any bytes, it should then call skip() to indicate this.  This always returns a
+  // non-empty buffer or throws an exception.  Implemented in terms of tryGetReadBuffer().
+
+  virtual ArrayPtr<const byte> tryGetReadBuffer() = 0;
+  // Like getReadBuffer() but may return an empty buffer on EOF.
+};
+
+class AsyncBufferedInputStreamWrapper: public AsyncBufferedInputStream, public AsyncInputStream {
+  // Implements AsyncBufferedInputStream in terms of AsyncInputStream
+  //
+  // Note that the underlying stream's position is unpredictable once the wrapper is destroyed,
+  // unless the entire stream was consumed.  To read a predictable number of bytes in a buffered
+  // way without going over, you'd need this wrapper to wrap some other wrapper which itself
+  // implements an artificial EOF at the desired point.  Such a stream should be trivial to write
+  // but is not provided by the library at this time.
+
+public:
+  explicit AsyncBufferedInputStreamWrapper(AsyncInputStream& inner, ArrayPtr<byte> buffer = nullptr);
+  // Creates a buffered stream wrapping the given non-buffered stream.  No guarantee is made about
+  // the position of the inner stream after a buffered wrapper has been created unless the entire
+  // input is read.
+  //
+  // If the second parameter is non-null, the stream uses the given buffer instead of allocating
+  // its own.  This may improve performance if the buffer can be reused.
+
+  AsyncBufferedInputStreamWrapper(AsyncBufferedInputStreamWrapper&& other);
+  KJ_DISALLOW_COPY(AsyncBufferedInputStreamWrapper);
+
+  ~AsyncBufferedInputStreamWrapper() noexcept(false);
+
+  // implements AsyncBufferedInputStream ----------------------------------
+  ArrayPtr<const byte> tryGetReadBuffer() override;
+
+  // Implements AsyncInputStream
+  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  void registerAncillaryMessageHandler(Function<void(ArrayPtr<AncillaryMessage>)> fn) override;
+
+private:
+  AsyncInputStream& inner;
+  Array<byte> ownedBuffer;
+  ArrayPtr<byte> buffer;
+  ArrayPtr<byte> bufferAvailable;
+};
+
 class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
   // A combination input and output stream.
 
@@ -166,6 +220,41 @@ public:
   virtual kj::Maybe<int> getFd() const { return nullptr; }
   // Get the underlying Unix file descriptor, if any. Returns nullptr if this object actually
   // isn't wrapping a file descriptor.
+};
+
+class AsyncBufferedIoStreamWrapper: public AsyncBufferedInputStream, public AsyncIoStream {
+  // An AsyncIoStream where the input stream is an AsyncBufferedInputStream
+public:
+  explicit AsyncBufferedIoStreamWrapper(AsyncIoStream& inner, ArrayPtr<byte> buffer = nullptr);
+  AsyncBufferedIoStreamWrapper(AsyncBufferedIoStreamWrapper&& other);
+  KJ_DISALLOW_COPY(AsyncBufferedIoStreamWrapper);
+
+  // Implements AsyncBufferedInputStream
+  inline ArrayPtr<const byte> tryGetReadBuffer() override { return input.tryGetReadBuffer(); }
+
+  // Implements AsyncInputStream
+  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  void registerAncillaryMessageHandler(Function<void(ArrayPtr<AncillaryMessage>)> fn) override;
+
+  // Implements AsyncOutputStream
+  Promise<void> write(const void* buffer, size_t size) override;
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
+  Maybe<Promise<uint64_t>> tryPumpFrom(
+      AsyncInputStream& input, uint64_t amount = kj::maxValue) override;
+  Promise<void> whenWriteDisconnected() override;
+
+  // Implements AsyncIoStream
+  void shutdownWrite() override;
+  void abortRead() override;
+  void getsockopt(int level, int option, void* value, uint* length) override;
+  void setsockopt(int level, int option, const void* value, uint length) override;
+  void getsockname(struct sockaddr* addr, uint* length) override;
+  void getpeername(struct sockaddr* addr, uint* length) override;
+  kj::Maybe<int> getFd() const override;
+
+private:
+  AsyncIoStream& inner;
+  AsyncBufferedInputStreamWrapper input;
 };
 
 Promise<uint64_t> unoptimizedPumpTo(
