@@ -2405,6 +2405,8 @@ public:
     }
 
     auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
+    KJ_REQUIRE(!recvHeader.hasRsv2or3(), "RSV bits 2 and 3 must be 0, as we do not currently "
+        "support an extension that would set these bits");
 
     recvData = recvData.slice(headerSize, recvData.size());
 
@@ -2728,8 +2730,8 @@ private:
       return bytes[0] & RSV1_MASK;
     }
 
-    bool hasRsv() const {
-      return bytes[0] & RSV_MASK;
+    bool hasRsv2or3() const {
+      return bytes[0] & RSV2_3_MASK;
     }
 
     byte getOpcode() const {
@@ -2793,7 +2795,7 @@ private:
     byte bytes[14];
 
     static constexpr byte FIN_MASK = 0x80;
-    static constexpr byte RSV_MASK = 0x70;
+    static constexpr byte RSV2_3_MASK = 0x30;
     static constexpr byte RSV1_MASK = 0x40;
     static constexpr byte OPCODE_MASK = 0x0f;
 
@@ -3102,6 +3104,8 @@ private:
 
     sendParts[0] = sendHeader.compose(true, useCompression, opcode, message.size(), mask);
     sendParts[1] = message;
+    KJ_ASSERT(!sendHeader.hasRsv2or3(), "RSV bits 2 and 3 must be 0, as we do not currently "
+        "support an extension that would set these bits");
 
     auto promise = stream->write(sendParts).attach(kj::mv(compressedMessage));
     if (!mask.isZero()) {
