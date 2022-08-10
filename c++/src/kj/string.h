@@ -136,11 +136,11 @@ public:
   // A string slice is only NUL-terminated if it is a suffix, so slice() has a one-parameter
   // version that assumes end = size().
 
-  inline bool startsWith(const StringPtr& other) const;
-  inline bool endsWith(const StringPtr& other) const;
+  inline bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
+  inline bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
 
-  inline Maybe<size_t> findFirst(char c) const;
-  inline Maybe<size_t> findLast(char c) const;
+  inline Maybe<size_t> findFirst(char c) const { return asArray().findFirst(c); }
+  inline Maybe<size_t> findLast(char c) const { return asArray().findLast(c); }
 
   template <typename T>
   T parseAs() const;
@@ -263,8 +263,8 @@ public:
   // comparisons between two strings are ambiguous. (Clang turns this into a warning,
   // -Wambiguous-reversed-operator, due to the stupidity...)
 
-  inline bool startsWith(const StringPtr& other) const { return StringPtr(*this).startsWith(other);}
-  inline bool endsWith(const StringPtr& other) const { return StringPtr(*this).endsWith(other); }
+  inline bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
+  inline bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
 
   inline StringPtr slice(size_t start) const KJ_LIFETIMEBOUND {
     return StringPtr(*this).slice(start);
@@ -273,8 +273,8 @@ public:
     return StringPtr(*this).slice(start, end);
   }
 
-  inline Maybe<size_t> findFirst(char c) const { return StringPtr(*this).findFirst(c); }
-  inline Maybe<size_t> findLast(char c) const { return StringPtr(*this).findLast(c); }
+  inline Maybe<size_t> findFirst(char c) const { return asArray().findFirst(c); }
+  inline Maybe<size_t> findLast(char c) const { return asArray().findLast(c); }
 
   template <typename T>
   T parseAs() const { return StringPtr(*this).parseAs<T>(); }
@@ -589,33 +589,6 @@ inline StringPtr StringPtr::slice(size_t start) const {
 }
 inline ArrayPtr<const char> StringPtr::slice(size_t start, size_t end) const {
   return content.slice(start, end);
-}
-
-inline bool StringPtr::startsWith(const StringPtr& other) const {
-  return other.content.size() <= content.size() &&
-      memcmp(content.begin(), other.content.begin(), other.size()) == 0;
-}
-inline bool StringPtr::endsWith(const StringPtr& other) const {
-  return other.content.size() <= content.size() &&
-      memcmp(end() - other.size(), other.content.begin(), other.size()) == 0;
-}
-
-inline Maybe<size_t> StringPtr::findFirst(char c) const {
-  const char* pos = reinterpret_cast<const char*>(memchr(content.begin(), c, size()));
-  if (pos == nullptr) {
-    return nullptr;
-  } else {
-    return pos - content.begin();
-  }
-}
-
-inline Maybe<size_t> StringPtr::findLast(char c) const {
-  for (size_t i = size(); i > 0; --i) {
-    if (content[i-1] == c) {
-      return i-1;
-    }
-  }
-  return nullptr;
 }
 
 inline String::operator ArrayPtr<char>() {

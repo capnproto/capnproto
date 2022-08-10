@@ -215,7 +215,8 @@ private:
   Orphanage orphanage;
 
   Orphan<DynamicValue> compileValueInner(Expression::Reader src, Type type);
-  // Helper for compileValue().
+  bool matchesType(Expression::Reader src, Type type, Orphan<DynamicValue>& result);
+  // Helpers for compileValue().
 
   kj::String makeNodeName(Schema node);
   kj::String makeTypeName(Type type);

@@ -1738,6 +1738,14 @@ TEST(Encoding, GlobalConstants) {
     EXPECT_EQ("structlist 2", listReader[1].getTextField());
     EXPECT_EQ("structlist 3", listReader[2].getTextField());
   }
+
+  kj::StringPtr expected =
+    "foo bar baz\n"
+    "\"qux\" `corge` \'grault\'\n"
+    "regular\"quoted\"line"
+    "garply\\nwaldo\\tfred\\\"plugh\\\"xyzzy\\\'thud\n";
+
+  EXPECT_EQ(expected, test::BLOCK_TEXT);
 }
 
 TEST(Encoding, Embeds) {

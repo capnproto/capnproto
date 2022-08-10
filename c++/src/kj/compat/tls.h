@@ -42,9 +42,10 @@ class TlsConnection;
 
 enum class TlsVersion {
   SSL_3,     // avoid; cryptographically broken
-  TLS_1_0,
-  TLS_1_1,
-  TLS_1_2
+  TLS_1_0,   // avoid; cryptographically weak
+  TLS_1_1,   // avoid; cryptographically weak
+  TLS_1_2,
+  TLS_1_3
 };
 
 using TlsErrorHandler = kj::Function<void(kj::Exception&&)>;
@@ -142,6 +143,12 @@ public:
   kj::Own<kj::ConnectionReceiver> wrapPort(kj::Own<kj::ConnectionReceiver> port);
   // Upgrade a ConnectionReceiver to one that automatically upgrades all accepted connections to
   // TLS (acting as the server).
+
+  kj::Own<kj::NetworkAddress> wrapAddress(
+      kj::Own<kj::NetworkAddress> address, kj::StringPtr expectedServerHostname);
+  // Upgrade a NetworkAddress to one that automatically upgrades all connections to TLS, acting
+  // as the client when `connect()` is called or the server if `listen()` is called.
+  // `connect()` will athenticate the server as `expectedServerHostname`.
 
   kj::Own<kj::Network> wrapNetwork(kj::Network& network);
   // Upgrade a Network to one that automatically upgrades all connections to TLS. The network will

@@ -26,6 +26,12 @@
 #define _GNU_SOURCE
 #endif
 
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+// Request 64-bit off_t for sendfile(). (The code will still work if we get 32-bit off_t as long
+// as actual files are under 4GB.)
+#endif
+
 #include "async-io.h"
 #include "async-io-internal.h"
 #include "async-unix.h"
@@ -50,6 +56,11 @@
 #include <poll.h>
 #include <limits.h>
 #include <sys/ioctl.h>
+#include <kj/filesystem.h>
+
+#if __linux__
+#include <sys/sendfile.h>
+#endif
 
 #if !defined(SO_PEERCRED) && defined(LOCAL_PEERCRED)
 #include <sys/ucred.h>
@@ -228,17 +239,77 @@ public:
     return promise.attach(kj::mv(fds), kj::mv(streams));
   }
 
+  Maybe<Promise<uint64_t>> tryPumpFrom(
+      AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
+#if __linux__ && !__ANDROID__
+    KJ_IF_MAYBE(sock, kj::dynamicDowncastIfAvailable<AsyncStreamFd>(input)) {
+      return pumpFromOther(*sock, amount);
+    }
+#endif
+
+#if __linux__
+    KJ_IF_MAYBE(file, kj::dynamicDowncastIfAvailable<FileInputStream>(input)) {
+      KJ_IF_MAYBE(fd, file->getUnderlyingFile().getFd()) {
+        return pumpFromFile(*file, *fd, amount, 0);
+      }
+    }
+#endif
+
+    return nullptr;
+  }
+
+#if __linux__
+  // TODO(someday): Support sendfile on other OS's... unfortunately, it works differently on
+  //   different systems.
+
+private:
+  Promise<uint64_t> pumpFromFile(FileInputStream& input, int fileFd,
+                                 uint64_t amount, uint64_t soFar) {
+    while (soFar < amount) {
+      off_t offset = input.getOffset();
+      ssize_t n;
+
+      // Although sendfile()'s last argument has type size_t, on Linux it seems to cause EINVAL
+      // if we pass an amount that is greater than UINT32_MAX, so make sure to clamp to that. In
+      // practice, of course, we'll be limited to the socket buffer size.
+      size_t requested = kj::min(amount - soFar, (uint32_t)kj::maxValue);
+
+      KJ_SYSCALL_HANDLE_ERRORS(n = sendfile(fd, fileFd, &offset, requested)) {
+        case EINVAL:
+        case ENOSYS:
+          // Fall back to regular pump
+          return unoptimizedPumpTo(input, *this, amount, soFar);
+
+        case EAGAIN:
+          return observer.whenBecomesWritable()
+              .then([this, &input, fileFd, amount, soFar]() {
+            return pumpFromFile(input, fileFd, amount, soFar);
+          });
+
+        default:
+          KJ_FAIL_SYSCALL("sendfile", error);
+      }
+
+      if (n == 0) break;
+
+      input.seek(offset);  // NOTE: sendfile() updated `offset` in-place.
+      soFar += n;
+    }
+
+    return soFar;
+  }
+
+public:
+#endif  // __linux__
+
 #if __linux__ && !__ANDROID__
 // Linux's splice() syscall lets us optimize pumping of bytes between file descriptors.
 //
 // TODO(someday): splice()-based pumping hangs in unit tests on Android for some reason. We should
 //   figure out why, but for now I'm just disabling it...
 
-  Maybe<Promise<uint64_t>> tryPumpFrom(
-      AsyncInputStream& inputParam, uint64_t amount = kj::maxValue) override {
-    AsyncStreamFd& input = KJ_UNWRAP_OR_RETURN(
-        kj::dynamicDowncastIfAvailable<AsyncStreamFd>(inputParam), nullptr);
-
+private:
+  Maybe<Promise<uint64_t>> pumpFromOther(AsyncStreamFd& input, uint64_t amount) {
     // The input is another AsyncStreamFd, so perhaps we can do an optimized pump with splice().
 
     // Before we resort to a bunch of syscalls, let's try to see if the pump is small and able to
@@ -296,7 +367,6 @@ public:
     }
   }
 
-private:
   static constexpr size_t MAX_SPLICE_LEN = 1 << 20;
   // Maximum value we'll pass for the `len` argument of `splice()`. Linux does not like it when we
   // use `kj::maxValue` here so we clamp it. Note that the actual value of this constant is
@@ -1128,58 +1198,6 @@ private:
   } addr;
 
   struct LookupParams;
-  class LookupReader;
-};
-
-class SocketAddress::LookupReader {
-  // Reads SocketAddresses off of a pipe coming from another thread that is performing
-  // getaddrinfo.
-
-public:
-  LookupReader(kj::Own<Thread>&& thread, kj::Own<AsyncInputStream>&& input,
-               _::NetworkFilter& filter)
-      : thread(kj::mv(thread)), input(kj::mv(input)), filter(filter) {}
-
-  ~LookupReader() {
-    if (thread) thread->detach();
-  }
-
-  Promise<Array<SocketAddress>> read() {
-    return input->tryRead(&current, sizeof(current), sizeof(current)).then(
-        [this](size_t n) -> Promise<Array<SocketAddress>> {
-      if (n < sizeof(current)) {
-        thread = nullptr;
-        // getaddrinfo()'s docs seem to say it will never return an empty list, but let's check
-        // anyway.
-        KJ_REQUIRE(addresses.size() > 0, "DNS lookup returned no permitted addresses.") { break; }
-        return addresses.releaseAsArray();
-      } else {
-        // getaddrinfo() can return multiple copies of the same address for several reasons.
-        // A major one is that we don't give it a socket type (SOCK_STREAM vs. SOCK_DGRAM), so
-        // it may return two copies of the same address, one for each type, unless it explicitly
-        // knows that the service name given is specific to one type.  But we can't tell it a type,
-        // because we don't actually know which one the user wants, and if we specify SOCK_STREAM
-        // while the user specified a UDP service name then they'll get a resolution error which
-        // is lame.  (At least, I think that's how it works.)
-        //
-        // So we instead resort to de-duping results.
-        if (alreadySeen.insert(current).second) {
-          if (current.parseAllowedBy(filter)) {
-            addresses.add(current);
-          }
-        }
-        return read();
-      }
-    });
-  }
-
-private:
-  kj::Own<Thread> thread;
-  kj::Own<AsyncInputStream> input;
-  _::NetworkFilter& filter;
-  SocketAddress current;
-  kj::Vector<SocketAddress> addresses;
-  std::set<SocketAddress> alreadySeen;
 };
 
 struct SocketAddress::LookupParams {
@@ -1197,97 +1215,101 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
   //   Maybe use the various platform-specific asynchronous DNS libraries?  Please do not implement
   //   a custom DNS resolver...
 
-  int fds[2];
-#if __linux__ && !__BIONIC__
-  KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
-#else
-  KJ_SYSCALL(pipe(fds));
-#endif
-
-  auto input = lowLevel.wrapInputFd(fds[0], NEW_FD_FLAGS);
-
-  int outFd = fds[1];
-
+  auto paf = newPromiseAndCrossThreadFulfiller<Array<SocketAddress>>();
   LookupParams params = { kj::mv(host), kj::mv(service) };
 
-  auto thread = heap<Thread>(kj::mvCapture(params, [outFd,portHint](LookupParams&& params) {
-    FdOutputStream output((AutoCloseFd(outFd)));
+  auto thread = heap<Thread>(
+      [fulfiller=kj::mv(paf.fulfiller),params=kj::mv(params),portHint]() mutable {
+    // getaddrinfo() can return multiple copies of the same address for several reasons.
+    // A major one is that we don't give it a socket type (SOCK_STREAM vs. SOCK_DGRAM), so
+    // it may return two copies of the same address, one for each type, unless it explicitly
+    // knows that the service name given is specific to one type.  But we can't tell it a type,
+    // because we don't actually know which one the user wants, and if we specify SOCK_STREAM
+    // while the user specified a UDP service name then they'll get a resolution error which
+    // is lame.  (At least, I think that's how it works.)
+    //
+    // So we instead resort to de-duping results.
+    std::set<SocketAddress> result;
 
-    struct addrinfo hints;
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = 0;
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      struct addrinfo hints;
+      hints.ai_family = AF_UNSPEC;
+      hints.ai_socktype = 0;
 #if __BIONIC__
-    // AI_V4MAPPED causes getaddrinfo() to fail on Bionic libc (Android).
-    hints.ai_flags = AI_ADDRCONFIG;
+      // AI_V4MAPPED causes getaddrinfo() to fail on Bionic libc (Android).
+      hints.ai_flags = AI_ADDRCONFIG;
 #else
-    hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+      hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
 #endif
-    hints.ai_protocol = 0;
-    hints.ai_canonname = nullptr;
-    hints.ai_addr = nullptr;
-    hints.ai_next = nullptr;
-    struct addrinfo* list;
-    int status = getaddrinfo(
-        params.host == "*" ? nullptr : params.host.cStr(),
-        params.service == nullptr ? nullptr : params.service.cStr(),
-        &hints, &list);
-    if (status == 0) {
-      KJ_DEFER(freeaddrinfo(list));
+      hints.ai_protocol = 0;
+      hints.ai_canonname = nullptr;
+      hints.ai_addr = nullptr;
+      hints.ai_next = nullptr;
+      struct addrinfo* list;
+      int status = getaddrinfo(
+          params.host == "*" ? nullptr : params.host.cStr(),
+          params.service == nullptr ? nullptr : params.service.cStr(),
+          &hints, &list);
+      if (status == 0) {
+        KJ_DEFER(freeaddrinfo(list));
 
-      struct addrinfo* cur = list;
-      while (cur != nullptr) {
-        if (params.service == nullptr) {
-          switch (cur->ai_addr->sa_family) {
-            case AF_INET:
-              ((struct sockaddr_in*)cur->ai_addr)->sin_port = htons(portHint);
-              break;
-            case AF_INET6:
-              ((struct sockaddr_in6*)cur->ai_addr)->sin6_port = htons(portHint);
-              break;
-            default:
-              break;
+        struct addrinfo* cur = list;
+        while (cur != nullptr) {
+          if (params.service == nullptr) {
+            switch (cur->ai_addr->sa_family) {
+              case AF_INET:
+                ((struct sockaddr_in*)cur->ai_addr)->sin_port = htons(portHint);
+                break;
+              case AF_INET6:
+                ((struct sockaddr_in6*)cur->ai_addr)->sin6_port = htons(portHint);
+                break;
+              default:
+                break;
+            }
           }
-        }
 
-        SocketAddress addr;
-        if (params.host == "*") {
-          // Set up a wildcard SocketAddress.  Only use the port number returned by getaddrinfo().
-          addr.wildcard = true;
-          addr.addrlen = sizeof(addr.addr.inet6);
-          addr.addr.inet6.sin6_family = AF_INET6;
-          switch (cur->ai_addr->sa_family) {
-            case AF_INET:
-              addr.addr.inet6.sin6_port = ((struct sockaddr_in*)cur->ai_addr)->sin_port;
-              break;
-            case AF_INET6:
-              addr.addr.inet6.sin6_port = ((struct sockaddr_in6*)cur->ai_addr)->sin6_port;
-              break;
-            default:
-              addr.addr.inet6.sin6_port = portHint;
-              break;
+          SocketAddress addr;
+          if (params.host == "*") {
+            // Set up a wildcard SocketAddress.  Only use the port number returned by getaddrinfo().
+            addr.wildcard = true;
+            addr.addrlen = sizeof(addr.addr.inet6);
+            addr.addr.inet6.sin6_family = AF_INET6;
+            switch (cur->ai_addr->sa_family) {
+              case AF_INET:
+                addr.addr.inet6.sin6_port = ((struct sockaddr_in*)cur->ai_addr)->sin_port;
+                break;
+              case AF_INET6:
+                addr.addr.inet6.sin6_port = ((struct sockaddr_in6*)cur->ai_addr)->sin6_port;
+                break;
+              default:
+                addr.addr.inet6.sin6_port = portHint;
+                break;
+            }
+          } else {
+            addr.addrlen = cur->ai_addrlen;
+            memcpy(&addr.addr.generic, cur->ai_addr, cur->ai_addrlen);
           }
-        } else {
-          addr.addrlen = cur->ai_addrlen;
-          memcpy(&addr.addr.generic, cur->ai_addr, cur->ai_addrlen);
+          result.insert(addr);
+          cur = cur->ai_next;
         }
-        KJ_ASSERT_CAN_MEMCPY(SocketAddress);
-        output.write(&addr, sizeof(addr));
-        cur = cur->ai_next;
+      } else if (status == EAI_SYSTEM) {
+        KJ_FAIL_SYSCALL("getaddrinfo", errno, params.host, params.service) {
+          return;
+        }
+      } else {
+        KJ_FAIL_REQUIRE("DNS lookup failed.",
+                        params.host, params.service, gai_strerror(status)) {
+          return;
+        }
       }
-    } else if (status == EAI_SYSTEM) {
-      KJ_FAIL_SYSCALL("getaddrinfo", errno, params.host, params.service) {
-        return;
-      }
+    })) {
+      fulfiller->reject(kj::mv(*exception));
     } else {
-      KJ_FAIL_REQUIRE("DNS lookup failed.",
-                      params.host, params.service, gai_strerror(status)) {
-        return;
-      }
+      fulfiller->fulfill(KJ_MAP(addr, result) { return addr; });
     }
-  }));
+  });
 
-  auto reader = heap<LookupReader>(kj::mv(thread), kj::mv(input), filter);
-  return reader->read().attach(kj::mv(reader));
+  return kj::mv(paf.promise);
 }
 
 // =======================================================================================

@@ -1764,11 +1764,22 @@ public:
     return ArrayPtr(ptr + start, end - start);
   }
   inline bool startsWith(const ArrayPtr<const T>& other) const {
-    return other.size_ <= size_ && slice(0, other.size_) == other;
+    return other.size() <= size_ && slice(0, other.size()) == other;
+  }
+  inline bool endsWith(const ArrayPtr<const T>& other) const {
+    return other.size() <= size_ && slice(size_ - other.size(), size_) == other;
   }
 
   inline Maybe<size_t> findFirst(const T& match) const {
     for (size_t i = 0; i < size_; i++) {
+      if (ptr[i] == match) {
+        return i;
+      }
+    }
+    return nullptr;
+  }
+  inline Maybe<size_t> findLast(const T& match) const {
+    for (size_t i = size_; i--;) {
       if (ptr[i] == match) {
         return i;
       }
@@ -1793,7 +1804,7 @@ public:
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
     if (isIntegral<RemoveConst<T>>()) {
-      return std::memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
+      return memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
     }
     for (size_t i = 0; i < size_; i++) {
       if (ptr[i] != other[i]) return false;
@@ -1864,6 +1875,9 @@ inline Maybe<size_t> ArrayPtr<byte>::findFirst(const byte& c) const {
     return pos - ptr;
   }
 }
+
+// glibc has a memrchr() for reverse search but it's non-standard, so we don't bother optimizing
+// findLast(), which isn't used much anyway.
 
 template <typename T>
 inline constexpr ArrayPtr<T> arrayPtr(T* ptr KJ_LIFETIMEBOUND, size_t size) {
