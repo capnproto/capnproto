@@ -381,7 +381,7 @@ kj::Promise<void> MessageStream::writeMessages(kj::ArrayPtr<MessageAndFds> messa
 
       return writeMessage(messages[0].fds, messages[0].segments);
     } else {
-      kj::Vector<kj::ArrayPtr<const kj::ArrayPtr<const word>>> bareMessages;
+      kj::Vector<kj::ArrayPtr<const kj::ArrayPtr<const word>>> bareMessages(messages.size());
       for(auto i : kj::zeroTo(messages.size())) {
         if (messages[i].fds.size() > 0) {
           break;
