@@ -153,5 +153,73 @@ bool expectFatalThrow(kj::Maybe<Exception::Type> type, kj::Maybe<StringPtr> mess
 #endif
 }
 
+bool expectExit(Maybe<int> statusCode, FunctionParam<void()> code)  noexcept {
+#if _WIN32
+  // We don't support death tests on Windows due to lack of efficient fork.
+  return true;
+#else
+  pid_t child;
+  KJ_SYSCALL(child = fork());
+  if (child == 0) {
+    code();
+    _exit(0);
+  }
+
+  int status;
+  KJ_SYSCALL(waitpid(child, &status, 0));
+
+  if (WIFEXITED(status)) {
+    KJ_IF_MAYBE(s, statusCode) {
+      KJ_EXPECT(WEXITSTATUS(status) == *s);
+      return WEXITSTATUS(status) == *s;
+    } else {
+      KJ_EXPECT(WEXITSTATUS(status) != 0);
+      return WEXITSTATUS(status) != 0;
+    }
+  } else {
+    if (WIFSIGNALED(status)) {
+      KJ_FAIL_EXPECT("subprocess didn't exit but triggered a signal", strsignal(WTERMSIG(status)));
+    } else {
+      KJ_FAIL_EXPECT("subprocess didn't exit and didn't trigger a signal", status);
+    }
+    return false;
+  }
+#endif
+}
+
+
+bool expectSignal(Maybe<int> signal, FunctionParam<void()> code) noexcept {
+#if _WIN32
+  // We don't support death tests on Windows due to lack of efficient fork.
+  return true;
+#else
+  pid_t child;
+  KJ_SYSCALL(child = fork());
+  if (child == 0) {
+    resetCrashHandlers();
+    code();
+    _exit(0);
+  }
+
+  int status;
+  KJ_SYSCALL(waitpid(child, &status, 0));
+
+  if (WIFSIGNALED(status)) {
+    KJ_IF_MAYBE(s, signal) {
+      KJ_EXPECT(WTERMSIG(status) == *s);
+      return WTERMSIG(status) == *s;
+    }
+    return true;
+  } else {
+    if (WIFEXITED(status)) {
+      KJ_FAIL_EXPECT("subprocess didn't trigger a signal but exited", WEXITSTATUS(status));
+    } else {
+      KJ_FAIL_EXPECT("subprocess didn't exit and didn't trigger a signal", status);
+    }
+    return false;
+  }
+#endif
+}
+
 }  // namespace _ (private)
 }  // namespace kj

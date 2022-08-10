@@ -390,6 +390,9 @@ void printStackTraceOnCrash();
 // a stack trace. You should call this as early as possible on program startup. Programs using
 // KJ_MAIN get this automatically.
 
+void resetCrashHandlers();
+// Resets all signal handlers set by printStackTraceOnCrash().
+
 kj::StringPtr trimSourceFilename(kj::StringPtr filename);
 // Given a source code file name, trim off noisy prefixes like "src/" or
 // "/ekam-provider/canonical/".

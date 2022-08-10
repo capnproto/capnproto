@@ -21,6 +21,13 @@
 
 #include "common.h"
 #include "test.h"
+#include <cstdlib>
+#include <stdexcept>
+#include <signal.h>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 namespace kj {
 namespace _ {
@@ -76,6 +83,24 @@ KJ_TEST("GlobFilter") {
     KJ_EXPECT(filter.matches("blah/fooxbar"));
     KJ_EXPECT(!filter.matches("blah/xxfooxbar"));
   }
+}
+
+KJ_TEST("expect exit from exit") {
+  KJ_EXPECT_EXIT(42, _exit(42));
+  KJ_EXPECT_EXIT(nullptr, _exit(42));
+}
+
+KJ_TEST("expect exit from thrown exception") {
+  KJ_EXPECT_EXIT(1, throw std::logic_error("test error"));
+}
+
+KJ_TEST("expect signal from abort") {
+  KJ_EXPECT_SIGNAL(SIGABRT, abort());
+}
+
+KJ_TEST("expect signal from sigint") {
+  KJ_EXPECT_SIGNAL(SIGINT, raise(SIGINT));
+  KJ_EXPECT_SIGNAL(nullptr, raise(SIGINT));
 }
 
 }  // namespace

@@ -714,6 +714,29 @@ retry:
   return filename;
 }
 
+void resetCrashHandlers() {
+#ifndef _WIN32
+  struct sigaction action;
+  memset(&action, 0, sizeof(action));
+
+  action.sa_handler = SIG_DFL;
+  KJ_SYSCALL(sigaction(SIGSEGV, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGBUS, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGFPE, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGABRT, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGILL, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGSYS, &action, nullptr));
+
+#ifdef KJ_DEBUG
+  KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
+#endif
+#endif
+
+#if !KJ_NO_EXCEPTIONS
+  std::set_terminate(nullptr);
+#endif
+}
+
 StringPtr KJ_STRINGIFY(Exception::Type type) {
   static const char* TYPE_STRINGS[] = {
     "failed",
