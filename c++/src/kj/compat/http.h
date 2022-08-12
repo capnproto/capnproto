@@ -844,8 +844,12 @@ struct HttpClientSettings {
   // Customize how protocol errors are handled by the HttpClient. If null, HttpClientErrorHandler's
   // default implementation will be used.
 
-  bool enableWebSocketCompression = false;
-  // We won't attempt to parse `Sec-WebSocket-Extensions` by default.
+  enum WebSocketCompressionMode {
+    NO_COMPRESSION,
+    MANUAL_COMPRESSION,    // Lets the application decide the compression configuration (if any).
+    AUTOMATIC_COMPRESSION, // Automatically includes the compression header in the WebSocket request.
+  };
+  WebSocketCompressionMode webSocketCompressionMode = NO_COMPRESSION;
 };
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
@@ -963,8 +967,12 @@ struct HttpServerSettings {
   kj::Maybe<HttpServerCallbacks&> callbacks = nullptr;
   // Additional optional callbacks used to control some server behavior.
 
-  bool enableWebSocketCompression = false;
-  // We won't attempt to parse `Sec-WebSocket-Extensions` by default.
+  enum WebSocketCompressionMode {
+    NO_COMPRESSION,
+    MANUAL_COMPRESSION,    // Gives the application more control when considering whether to compress.
+    AUTOMATIC_COMPRESSION, // Will perform compression parameter negotiation if client requests it.
+  };
+  WebSocketCompressionMode webSocketCompressionMode = NO_COMPRESSION;
 };
 
 class HttpServerErrorHandler {
@@ -1272,6 +1280,12 @@ kj::Vector<CompressionParameters> findValidExtensionOffers(StringPtr offers);
 kj::String generateExtensionRequest(const ArrayPtr<CompressionParameters>& extensions);
 
 kj::Maybe<CompressionParameters> tryParseExtensionOffers(StringPtr offers);
+
+kj::Maybe<CompressionParameters> tryParseAllExtensionOffers(StringPtr offers,
+    CompressionParameters manualConfig);
+
+kj::Maybe<CompressionParameters> compareClientAndServerConfigs(CompressionParameters requestConfig,
+    CompressionParameters manualConfig);
 
 kj::String generateExtensionResponse(const CompressionParameters& parameters);
 

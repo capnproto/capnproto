@@ -2767,6 +2767,86 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionOffers)") {
   KJ_ASSERT(maybeAccepted == nullptr);
 }
 
+KJ_TEST("WebSocket Compression String Parsing (tryParseAllExtensionOffers)") {
+  // We want to test the following:
+  //  1. We reject all if we don't find an offer we can accept.
+  //  2. We accept one after iterating over offers that we have to reject.
+  //  3. We accept an offer with a `server_max_window_bits` parameter if the manual config allows
+  //     it, and choose the smaller "number of bits" (from clients request).
+  //  4. We accept an offer with a `server_no_context_takeover` parameter if the manual config
+  //     allows it, and choose the smaller "number of bits" (from manual config) from
+  //     `server_max_window_bits`.
+  constexpr auto serverOnly = "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits = 14; "
+                                "server_no_context_takeover, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_no_context_takeover, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits = 14"_kj;
+
+  constexpr auto acceptLast = "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits = 14; "
+                                "server_no_context_takeover, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_no_context_takeover, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits = 14, "
+                              "permessage-deflate; " // accept this
+                                "client_no_context_takeover"_kj;
+
+  const auto defaultConfig = CompressionParameters();
+  // Our default config is equivalent to `permessage-deflate` with no parameters.
+
+  auto maybeAccepted = _::tryParseAllExtensionOffers(serverOnly, defaultConfig);
+  KJ_ASSERT(maybeAccepted == nullptr);
+  // Asserts that we rejected all the offers with `server_x` parameters.
+
+  maybeAccepted = _::tryParseAllExtensionOffers(acceptLast, defaultConfig);
+  auto accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == nullptr);
+  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  // Asserts that we accepted the only offer that did not have a `server_x` parameter.
+
+  const auto allowServerBits = CompressionParameters {
+      false,
+      false,
+      15, // server_max_window_bits = 15
+      nullptr
+  };
+  maybeAccepted = _::tryParseAllExtensionOffers(serverOnly, allowServerBits);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == 14); // Note that we chose the lower of (14, 15).
+  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  // Asserts that we accepted an offer that allowed for `server_max_window_bits` AND we chose the
+  // lower number of bits (in this case, the clients offer of 14).
+
+  const auto allowServerTakeoverAndBits = CompressionParameters {
+      true, // server_no_context_takeover = true
+      false,
+      13, // server_max_window_bits = 13
+      nullptr
+  };
+
+  maybeAccepted = _::tryParseAllExtensionOffers(serverOnly, allowServerTakeoverAndBits);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == true);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == 13); // Note that we chose the lower of (14, 15).
+  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  // Asserts that we accepted an offer that allowed for `server_no_context_takeover` AND we chose
+  // the lower number of bits (in this case, the manual config's choice of 13).
+}
+
 KJ_TEST("WebSocket Compression String Parsing (generateExtensionResponse)") {
   // Test that we can extract only the valid extensions from a string of offers.
   constexpr auto extensions = "permessage-deflate; "

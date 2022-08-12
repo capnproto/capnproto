@@ -4066,6 +4066,94 @@ kj::Maybe<CompressionParameters> tryParseExtensionOffers(StringPtr offers) {
   return nullptr;
 }
 
+kj::Maybe<CompressionParameters> tryParseAllExtensionOffers(StringPtr offers,
+    CompressionParameters manualConfig) {
+  // Similar to `tryParseExtensionOffers()`, however, this function is called when parsing in
+  // `MANUAL_COMPRESSION` mode. In some cases, the server's configuration might not support the
+  // `server_no_context_takeover` or `server_max_window_bits` parameters. Essentially, this function
+  // will look at all the client's offers, and accept the first one that it can support.
+  //
+  // We differentiate these functions because in `AUTOMATIC_COMPRESSION` mode, KJ can support these
+  // server restricting compression parameters.
+  auto splitOffers = splitParts(offers, ',');
+
+  for (const auto& offer : splitOffers) {
+    auto splitOffer = splitParts(offer, ';');
+
+    if (splitOffer.front() != "permessage-deflate"_kj) {
+      // Extension token was invalid.
+      continue;
+    }
+    KJ_IF_MAYBE(config, tryExtractParameters(splitOffer, false)) {
+      KJ_IF_MAYBE(finalConfig, compareClientAndServerConfigs(*config, manualConfig)) {
+        // Found a compatible configuration between the server's config and client's offer.
+        return kj::mv(*finalConfig);
+      }
+    }
+  }
+  return nullptr;
+}
+
+kj::Maybe<CompressionParameters> compareClientAndServerConfigs(CompressionParameters requestConfig,
+    CompressionParameters manualConfig) {
+  // We start from the `manualConfig` and go through a series of filters to get a compression
+  // configuration that both the client and the server can agree upon. If no agreement can be made,
+  // we return null.
+
+  CompressionParameters acceptedParameters = manualConfig;
+
+  // We only need to modify `client_no_context_takeover` and `server_no_context_takeover` when
+  // `manualConfig` doesn't include them.
+  if (manualConfig.inboundNoContextTakeover == false) {
+    acceptedParameters.inboundNoContextTakeover = false;
+  }
+
+  if (manualConfig.outboundNoContextTakeover == false) {
+    acceptedParameters.outboundNoContextTakeover = false;
+    if (requestConfig.outboundNoContextTakeover == true) {
+      // The client has told the server to not use context takeover. This is not a "hint",
+      // rather it is a restriction on the server's configuration. If the server does not support
+      // the configuration, it must reject the offer.
+      return nullptr;
+    }
+  }
+
+  // client_max_window_bits
+  if (requestConfig.inboundMaxWindowBits != nullptr &&
+      manualConfig.inboundMaxWindowBits != nullptr)  {
+    // We want `min(requestConfig, manualConfig)` in this case.
+    auto reqBits = KJ_ASSERT_NONNULL(requestConfig.inboundMaxWindowBits);
+    auto manualBits = KJ_ASSERT_NONNULL(manualConfig.inboundMaxWindowBits);
+    if (reqBits < manualBits) {
+      acceptedParameters.inboundMaxWindowBits = reqBits;
+    }
+  } else {
+    // We will not reply with `client_max_window_bits`.
+    acceptedParameters.inboundMaxWindowBits = nullptr;
+  }
+
+  // server_max_window_bits
+  if (manualConfig.outboundMaxWindowBits != nullptr) {
+    auto manualBits = KJ_ASSERT_NONNULL(manualConfig.outboundMaxWindowBits);
+    if (requestConfig.outboundMaxWindowBits != nullptr) {
+      // We want `min(requestConfig, manualConfig)` in this case.
+      auto reqBits = KJ_ASSERT_NONNULL(requestConfig.outboundMaxWindowBits);
+      if (reqBits < manualBits) {
+        acceptedParameters.outboundMaxWindowBits = reqBits;
+      }
+    }
+  } else {
+    acceptedParameters.outboundMaxWindowBits = nullptr;
+    if (requestConfig.outboundMaxWindowBits != nullptr) {
+      // The client has told the server to use `server_max_window_bits`. This is not a "hint",
+      // rather it is a restriction on the server's configuration. If the server does not support
+      // the configuration, it must reject the offer.
+      return nullptr;
+    }
+  }
+  return acceptedParameters;
+}
+
 kj::String generateExtensionResponse(const CompressionParameters& parameters) {
   // Build the `Sec-WebSocket-Extensions` response from the agreed parameters.
   kj::String response = kj::str("permessage-deflate");
@@ -4345,16 +4433,32 @@ public:
 
     kj::Maybe<kj::String> offeredExtensions;
     kj::Maybe<CompressionParameters> clientOffer;
-    if (settings.enableWebSocketCompression) {
+    kj::Vector<CompressionParameters> extensions;
+    auto compressionMode = settings.webSocketCompressionMode;
+
+    if (compressionMode == HttpClientSettings::MANUAL_COMPRESSION) {
       KJ_IF_MAYBE(value, headers.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
         // Strip all `Sec-WebSocket-Extensions` except for `permessage-deflate`.
-        auto extensions = _::findValidExtensionOffers(*value);
-        if (extensions.size() > 0) {
-          clientOffer = extensions.front();
-          connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_EXTENSIONS] =
-              offeredExtensions.emplace(_::generateExtensionRequest(extensions.asPtr()));
-        }
+        extensions = _::findValidExtensionOffers(*value);
       }
+    } else if (compressionMode == HttpClientSettings::AUTOMATIC_COMPRESSION) {
+      // If AUTOMATIC_COMPRESSION is enabled, we send `Sec-WebSocket-Extensions: permessage-deflate`
+      // to the server and ignore the `headers` provided by the caller.
+      extensions.add(CompressionParameters());
+    }
+
+    if (extensions.size() > 0) {
+      clientOffer = extensions.front();
+      // We hold on to a copy of the client's most preferred offer so even if the server
+      // ignores `client_no_context_takeover` or `client_max_window_bits`, we can still refer to
+      // the original offer made by the client (thereby allowing the client to use these parameters).
+      //
+      // It's safe to ignore the remaining offers because:
+      //  1. Offers are ordered by preference.
+      //  2. `client_x` parameters are hints to the server and do not result in rejections, so the
+      //     client is likely to put them in every offer anyways.
+      connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_EXTENSIONS] =
+          offeredExtensions.emplace(_::generateExtensionRequest(extensions.asPtr()));
     }
 
     httpOutput.writeHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
@@ -4408,7 +4512,7 @@ public:
             }
 
             kj::Maybe<CompressionParameters> compressionParameters;
-            if (settings.enableWebSocketCompression) {
+            if (settings.webSocketCompressionMode != HttpClientSettings::NO_COMPRESSION) {
               KJ_IF_MAYBE(agreedParameters, responseHeaders.get(
                   HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
                 auto parseResult = _::tryParseExtensionAgreement(clientOffer,
@@ -6403,10 +6507,33 @@ private:
 
     kj::Maybe<CompressionParameters> acceptedParameters;
     kj::String agreedParameters;
-    if (server.settings.enableWebSocketCompression) {
+    auto compressionMode = server.settings.webSocketCompressionMode;
+    if (compressionMode == HttpServerSettings::AUTOMATIC_COMPRESSION) {
+      // If AUTOMATIC_COMPRESSION is enabled, we ignore the `headers` passed by the application and
+      // strictly refer to the `requestHeaders` from the client.
       KJ_IF_MAYBE(value, requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
+        // Perform compression parameter negotiation.
         KJ_IF_MAYBE(config, _::tryParseExtensionOffers(*value)) {
           acceptedParameters = kj::mv(*config);
+        }
+      }
+    } else if (compressionMode == HttpServerSettings::MANUAL_COMPRESSION) {
+      // If MANUAL_COMPRESSION is enabled, we use the `headers` passed in by the application, and
+      // try to find a configuration that respects both the server's preferred configuration,
+      // as well as the client's requested configuration.
+      //
+      // TODO(now): Manual Mode and terminating in worker
+      //    - `headers` would be empty.
+      //    - This means client would offer x, and the server would always reject.
+      //    - We want a way to explicitly tell `acceptWebSocket()` to use the `requestHeaders` in
+      //      this case.
+      KJ_IF_MAYBE(value, headers.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
+        // First, we get the manual configuration using `headers`.
+        KJ_IF_MAYBE(manualConfig, _::tryParseExtensionOffers(*value)) {
+          KJ_IF_MAYBE(requestOffers, requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
+            // Next, we to find a configuration that both the client and server can accept.
+            acceptedParameters = _::tryParseAllExtensionOffers(*requestOffers, *manualConfig);
+          }
         }
       }
     }
