@@ -184,12 +184,18 @@ void UnixEventPort::registerReservedSignal() {
 
 void UnixEventPort::ignoreSigpipe() {
   // We disable SIGPIPE because users of UnixEventPort almost certainly don't want it.
-  while (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
-    int error = errno;
-    if (error != EINTR) {
-      KJ_FAIL_SYSCALL("signal(SIGPIPE, SIG_IGN)", error);
+  //
+  // We've observed that when starting many threads at the same time, this can cause some
+  // contention on the kernel's signal handler table lock, so we try to run it only once.
+  static bool once KJ_UNUSED = []() {
+    while (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+      int error = errno;
+      if (error != EINTR) {
+        KJ_FAIL_SYSCALL("signal(SIGPIPE, SIG_IGN)", error);
+      }
     }
-  }
+    return true;
+  }();
 }
 
 struct UnixEventPort::ChildSet {
