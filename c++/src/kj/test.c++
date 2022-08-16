@@ -172,7 +172,7 @@ public:
 
     if (severity == LogSeverity::ERROR || severity == LogSeverity::FATAL) {
       sawError = true;
-      context.error(kj::str(text, "\nstack: ", strArray(trace, " "), stringifyStackTrace(trace)));
+      context.error(kj::str(text, "\nstack: ", stringifyStackTraceAddresses(trace), stringifyStackTrace(trace)));
     } else {
       context.warning(text);
     }
