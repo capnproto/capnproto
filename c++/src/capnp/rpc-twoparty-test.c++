@@ -147,6 +147,7 @@ TEST(TwoPartyNetwork, Basic) {
   clock.increment(1 * kj::SECONDS);
 
   KJ_EXPECT(network.getCurrentQueueCount() == 1);
+  KJ_EXPECT(network.getCurrentQueueSize() % sizeof(word) == 0);
   KJ_EXPECT(network.getCurrentQueueSize() > 0);
   KJ_EXPECT(network.getOutgoingMessageWaitTime() == 1 * kj::SECONDS);
   size_t oldSize = network.getCurrentQueueSize();
@@ -158,6 +159,7 @@ TEST(TwoPartyNetwork, Basic) {
   auto promise1 = request1.send();
 
   KJ_EXPECT(network.getCurrentQueueCount() == 2);
+  KJ_EXPECT(network.getCurrentQueueSize() % sizeof(word) == 0);
   KJ_EXPECT(network.getCurrentQueueSize() > oldSize);
   KJ_EXPECT(network.getOutgoingMessageWaitTime() == 1 * kj::SECONDS);
   oldSize = network.getCurrentQueueSize();
@@ -167,6 +169,7 @@ TEST(TwoPartyNetwork, Basic) {
   auto promise2 = request2.send();
 
   KJ_EXPECT(network.getCurrentQueueCount() == 3);
+  KJ_EXPECT(network.getCurrentQueueSize() % sizeof(word) == 0);
   KJ_EXPECT(network.getCurrentQueueSize() > oldSize);
   oldSize = network.getCurrentQueueSize();
 
@@ -184,6 +187,7 @@ TEST(TwoPartyNetwork, Basic) {
   EXPECT_EQ(0, callCount);
 
   KJ_EXPECT(network.getCurrentQueueCount() == 4);
+  KJ_EXPECT(network.getCurrentQueueSize() % sizeof(word) == 0);
   KJ_EXPECT(network.getCurrentQueueSize() > oldSize);
   // Oldest message is now 2 seconds old
   KJ_EXPECT(network.getOutgoingMessageWaitTime() == 2 * kj::SECONDS);

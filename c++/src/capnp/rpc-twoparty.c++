@@ -165,7 +165,7 @@ public:
     // related small messages, reducing the number of syscalls we make.
     auto& previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down");
     bool alreadyPendingSend = !network.queuedMessages.empty();
-    network.currentQueueSize += message.sizeInWords();
+    network.currentQueueSize += message.sizeInWords() * sizeof(word);
     network.queuedMessages.add(kj::addRef(*this));
     if (alreadyPendingSend) {
       // The first send sets up an evalLast that will clear out pendingMessages when it's sent.
