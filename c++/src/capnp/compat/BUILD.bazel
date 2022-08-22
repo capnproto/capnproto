@@ -51,3 +51,33 @@ cc_library(
         "//src/kj/compat:kj-http",
     ],
 )
+
+cc_library(
+    name = "websocket-rpc",
+    srcs = [
+        "websocket-rpc.c++",
+    ],
+    hdrs = [
+        "websocket-rpc.h",
+    ],
+    include_prefix = "capnp/compat",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/capnp",
+        "//src/kj/compat:kj-http",
+    ],
+)
+
+[cc_test(
+    name = f.removesuffix(".c++"),
+    srcs = [f],
+    deps = [
+        ":websocket-rpc",
+        ":http-over-capnp",
+        "//src/capnp:capnp-test"
+    ],
+) for f in [
+    "byte-stream-test.c++",
+    "http-over-capnp-test.c++",
+    "websocket-rpc-test.c++",
+]]

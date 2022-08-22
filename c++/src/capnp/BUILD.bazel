@@ -212,6 +212,7 @@ cc_library(
         ":capnpc",
         "//src/kj:kj-test",
     ],
+    visibility = [":__subpackages__" ]
 )
 
 [cc_test(
@@ -223,6 +224,9 @@ cc_library(
     "blob-test.c++",
     "canonicalize-test.c++",
     "common-test.c++",
+    "capability-test.c++",
+    "compiler/lexer-test.c++",
+    "compiler/type-id-test.c++",
     "dynamic-test.c++",
     "encoding-test.c++",
     "endian-reverse-test.c++",
@@ -235,11 +239,13 @@ cc_library(
     "reconnect-test.c++",
     "rpc-test.c++",
     "rpc-twoparty-test.c++",
+    "schema-test.c++",
     "schema-loader-test.c++",
     "schema-parser-test.c++",
     "serialize-async-test.c++",
     "serialize-packed-test.c++",
     "serialize-test.c++",
+    "serialize-text-test.c++",
     "stringify-test.c++",
 ]]
 
