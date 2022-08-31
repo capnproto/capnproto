@@ -2236,24 +2236,40 @@ const char WEBSOCKET_RESPONSE_HANDSHAKE[] =
     "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
     "My-Header: respond-foo\r\n"
     "\r\n";
+#if KJ_HAS_ZLIB
 const char WEBSOCKET_COMPRESSION_HANDSHAKE[] =
     " HTTP/1.1\r\n"
     "Connection: Upgrade\r\n"
     "Upgrade: websocket\r\n"
     "Sec-WebSocket-Key: DCI4TgwiOE4MIjhODCI4Tg==\r\n"
     "Sec-WebSocket-Version: 13\r\n"
-    "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover; "
-        "client_max_window_bits=15; server_max_window_bits=10, "
-        "permessage-deflate; client_max_window_bits=15\r\n"
+    "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover\r\n"
     "\r\n";
 const char WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE[] =
     "HTTP/1.1 101 Switching Protocols\r\n"
     "Connection: Upgrade\r\n"
     "Upgrade: websocket\r\n"
     "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
-    "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=15; "
-        "server_max_window_bits=10\r\n"
+    "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover\r\n"
     "\r\n";
+const char WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_HANDSHAKE[] =
+    " HTTP/1.1\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Key: DCI4TgwiOE4MIjhODCI4Tg==\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover; "
+        "server_no_context_takeover\r\n"
+    "\r\n";
+const char WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_RESPONSE_HANDSHAKE[] =
+    "HTTP/1.1 101 Switching Protocols\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
+    "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover; "
+        "server_no_context_takeover\r\n"
+    "\r\n";
+#endif // KJ_HAS_ZLIB
 const char WEBSOCKET_RESPONSE_HANDSHAKE_ERROR[] =
     "HTTP/1.1 404 Not Found\r\n"
     "Content-Length: 0\r\n"
@@ -2269,6 +2285,29 @@ const byte WEBSOCKET_SEND_CLOSE[] =
     { 0x88, 0x85, 12, 34, 56, 78, 0x12^12, 0x34^34, 'q'^56, 'u'^78, 'x'^12 };
 const byte WEBSOCKET_REPLY_CLOSE[] =
     { 0x88, 0x11, 0x12, 0x35, 'c','l','o','s','e','-','r','e','p','l','y',':','q','u','x' };
+
+#if KJ_HAS_ZLIB
+const byte WEBSOCKET_FIRST_COMPRESSED_MESSAGE[] =
+    { 0xc1, 0x07, 0xf2, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 };
+// See this example: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.3.2
+const byte WEBSOCKET_SEND_COMPRESSED_MESSAGE[] =
+    { 0xc1, 0x87, 12, 34, 56, 78, 0xf2^12, 0x48^34, 0xcd^56, 0xc9^78, 0xc9^12, 0x07^34, 0x00^56 };
+const byte WEBSOCKET_SEND_COMPRESSED_MESSAGE_REUSE_CTX[] =
+    { 0xc1, 0x85, 12, 34, 56, 78, 0xf2^12, 0x00^34, 0x11^56, 0x00^78, 0x00^12};
+// See same compression example, but where `client_no_context_takeover` is used (saves 2 bytes).
+const byte WEBSOCKET_DEFLATE_NO_COMPRESSION_MESSAGE[] =
+    { 0xc1, 0x0b, 0x00, 0x05, 0x00, 0xfa, 0xff, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x00 };
+// See this example: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.3.3
+// This uses a DEFLATE block with no compression.
+const byte WEBSOCKET_BFINAL_SET_MESSAGE[] =
+    { 0xc1, 0x08, 0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x00 };
+// See this example: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.3.4
+// This uses a DEFLATE block with BFINAL set to 1.
+const byte WEBSOCKET_TWO_DEFLATE_BLOCKS_MESSAGE[] =
+    {  0xc1, 0x0d, 0xf2, 0x48, 0x05, 0x00, 0x00, 0x00, 0xff, 0xff, 0xca, 0xc9, 0xc9, 0x07, 0x00 };
+// See this example: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.3.5
+// This uses two DEFLATE blocks in a single message.
+#endif // KJ_HAS_ZLIB
 
 template <size_t s>
 kj::ArrayPtr<const byte> asBytes(const char (&chars)[s]) {
@@ -2309,23 +2348,82 @@ void testWebSocketClient(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
   }
 }
 
-void testWebSocketCompression(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
-                              kj::HttpHeaderId extHeader, kj::StringPtr extensions,
-                              HttpClient& client) {
+#if KJ_HAS_ZLIB
+void testWebSocketTwoMessageCompression(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
+                                        kj::HttpHeaderId extHeader, kj::StringPtr extensions,
+                                        HttpClient& client) {
+  // In this test, the server will always use `server_no_context_takeover` (since we can just reuse
+  // the message). However, we will modify the client's compressor in different ways to see how the
+  // compressed message changes.
+
   kj::HttpHeaders headers(headerTable);
   headers.set(extHeader, extensions);
   auto response = client.openWebSocket("/websocket", headers).wait(waitScope);
 
   KJ_EXPECT(response.statusCode == 101);
   KJ_EXPECT(response.statusText == "Switching Protocols", response.statusText);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(extHeader)) ==
-      "permessage-deflate; client_max_window_bits=15; server_max_window_bits=10");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(extHeader)).startsWith("permessage-deflate"));
   KJ_ASSERT(response.webSocketOrBody.is<kj::Own<WebSocket>>());
   auto ws = kj::mv(response.webSocketOrBody.get<kj::Own<WebSocket>>());
-  // TODO (now): Once we actually start compressing messages, we need to try sending/receiving
-  // here.
-  // TODO (now): Might also be useful to test that we fail to connect if we get an invalid Response.
+
+  {
+    auto message = ws->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "Hello");
+  }
+  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+
+  {
+    auto message = ws->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "Hello");
+  }
+  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+
+  ws->close(0x1234, "qux").wait(waitScope);
+  {
+    auto message = ws->receive().wait(waitScope);
+    KJ_ASSERT(message.is<WebSocket::Close>());
+    KJ_EXPECT(message.get<WebSocket::Close>().code == 0x1235);
+    KJ_EXPECT(message.get<WebSocket::Close>().reason == "close-reply:qux");
+  }
 }
+#endif // KJ_HAS_ZLIB
+
+#if KJ_HAS_ZLIB
+void testWebSocketFourMessageCompression(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
+                                          kj::HttpHeaderId extHeader, kj::StringPtr extensions,
+                                          HttpClient& client) {
+  // In this test, the server will always use `server_no_context_takeover` (since we can just reuse
+  // the message). We will receive three messages.
+
+  kj::HttpHeaders headers(headerTable);
+  headers.set(extHeader, extensions);
+  auto response = client.openWebSocket("/websocket", headers).wait(waitScope);
+
+  KJ_EXPECT(response.statusCode == 101);
+  KJ_EXPECT(response.statusText == "Switching Protocols", response.statusText);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(extHeader)).startsWith("permessage-deflate"));
+  KJ_ASSERT(response.webSocketOrBody.is<kj::Own<WebSocket>>());
+  auto ws = kj::mv(response.webSocketOrBody.get<kj::Own<WebSocket>>());
+
+  for (size_t i = 0; i < 4; i++) {
+    {
+      auto message = ws->receive().wait(waitScope);
+      KJ_ASSERT(message.is<kj::String>());
+      KJ_EXPECT(message.get<kj::String>() == "Hello");
+    }
+  }
+
+  ws->close(0x1234, "qux").wait(waitScope);
+  {
+    auto message = ws->receive().wait(waitScope);
+    KJ_ASSERT(message.is<WebSocket::Close>());
+    KJ_EXPECT(message.get<WebSocket::Close>().code == 0x1235);
+    KJ_EXPECT(message.get<WebSocket::Close>().reason == "close-reply:qux");
+  }
+}
+#endif // KJ_HAS_ZLIB
 
 inline kj::Promise<void> writeA(kj::AsyncOutputStream& out, kj::ArrayPtr<const byte> data) {
   return out.write(data.begin(), data.size());
@@ -2767,6 +2865,86 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionOffers)") {
   KJ_ASSERT(maybeAccepted == nullptr);
 }
 
+KJ_TEST("WebSocket Compression String Parsing (tryParseAllExtensionOffers)") {
+  // We want to test the following:
+  //  1. We reject all if we don't find an offer we can accept.
+  //  2. We accept one after iterating over offers that we have to reject.
+  //  3. We accept an offer with a `server_max_window_bits` parameter if the manual config allows
+  //     it, and choose the smaller "number of bits" (from clients request).
+  //  4. We accept an offer with a `server_no_context_takeover` parameter if the manual config
+  //     allows it, and choose the smaller "number of bits" (from manual config) from
+  //     `server_max_window_bits`.
+  constexpr auto serverOnly = "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits = 14; "
+                                "server_no_context_takeover, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_no_context_takeover, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits = 14"_kj;
+
+  constexpr auto acceptLast = "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits = 14; "
+                                "server_no_context_takeover, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_no_context_takeover, "
+                              "permessage-deflate; "
+                                "client_no_context_takeover; "
+                                "server_max_window_bits = 14, "
+                              "permessage-deflate; " // accept this
+                                "client_no_context_takeover"_kj;
+
+  const auto defaultConfig = CompressionParameters();
+  // Our default config is equivalent to `permessage-deflate` with no parameters.
+
+  auto maybeAccepted = _::tryParseAllExtensionOffers(serverOnly, defaultConfig);
+  KJ_ASSERT(maybeAccepted == nullptr);
+  // Asserts that we rejected all the offers with `server_x` parameters.
+
+  maybeAccepted = _::tryParseAllExtensionOffers(acceptLast, defaultConfig);
+  auto accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == nullptr);
+  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  // Asserts that we accepted the only offer that did not have a `server_x` parameter.
+
+  const auto allowServerBits = CompressionParameters {
+      false,
+      false,
+      15, // server_max_window_bits = 15
+      nullptr
+  };
+  maybeAccepted = _::tryParseAllExtensionOffers(serverOnly, allowServerBits);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == 14); // Note that we chose the lower of (14, 15).
+  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  // Asserts that we accepted an offer that allowed for `server_max_window_bits` AND we chose the
+  // lower number of bits (in this case, the clients offer of 14).
+
+  const auto allowServerTakeoverAndBits = CompressionParameters {
+      true, // server_no_context_takeover = true
+      false,
+      13, // server_max_window_bits = 13
+      nullptr
+  };
+
+  maybeAccepted = _::tryParseAllExtensionOffers(serverOnly, allowServerTakeoverAndBits);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == true);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == 13); // Note that we chose the lower of (14, 15).
+  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  // Asserts that we accepted an offer that allowed for `server_no_context_takeover` AND we chose
+  // the lower number of bits (in this case, the manual config's choice of 13).
+}
+
 KJ_TEST("WebSocket Compression String Parsing (generateExtensionResponse)") {
   // Test that we can extract only the valid extensions from a string of offers.
   constexpr auto extensions = "permessage-deflate; "
@@ -2850,7 +3028,10 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionAgreement)") {
   KJ_ASSERT(config.inboundMaxWindowBits == 10);
 }
 
-KJ_TEST("HttpClient WebSocket Compression Negotiation") {
+#if KJ_HAS_ZLIB
+KJ_TEST("HttpClient WebSocket Default Compression") {
+  // We'll try to send and receive "Hello" twice. The second time we receive "Hello", the compressed
+  // message will be smaller as a result of the client reusing the lookback window.
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
@@ -2858,6 +3039,12 @@ KJ_TEST("HttpClient WebSocket Compression Negotiation") {
 
   auto serverTask = expectRead(*pipe.ends[1], request)
       .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE_REUSE_CTX); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_CLOSE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE); })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
 
   HttpHeaderTable::Builder tableBuilder;
@@ -2867,20 +3054,98 @@ KJ_TEST("HttpClient WebSocket Compression Negotiation") {
   FakeEntropySource entropySource;
   HttpClientSettings clientSettings;
   clientSettings.entropySource = entropySource;
-  clientSettings.enableWebSocketCompression = true;
+  clientSettings.webSocketCompressionMode = HttpClientSettings::MANUAL_COMPRESSION;
 
   auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
 
-  // To test request/response parsing, we'll try to send:
-  //  - extensions that should get dropped,
-  //  - extra whitespace following extensions/parameters.
-  const auto extensions = "permessage-DROPTHIS,  permessage-deflate;   client_no_context_takeover; "
-      "client_max_window_bits; server_max_window_bits    =  10   , "
-      "permessage-deflate; client_max_window_bits"_kj;
-  testWebSocketCompression(waitScope, *headerTable, extHeader, extensions, *client);
+  constexpr auto extensions = "permessage-deflate; server_no_context_takeover"_kj;
+  testWebSocketTwoMessageCompression(waitScope, *headerTable, extHeader, extensions, *client);
 
   serverTask.wait(waitScope);
 }
+#endif // KJ_HAS_ZLIB
+
+#if KJ_HAS_ZLIB
+KJ_TEST("HttpClient WebSocket Compression (Client Discards Compression Context)") {
+  // We'll try to send and receive "Hello" twice. The second time we receive "Hello", the compressed
+  // message will be the same size as the first time, since the client discards the lookback window.
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_HANDSHAKE);
+
+  auto serverTask = expectRead(*pipe.ends[1], request)
+      .then([&]() { return writeA(*pipe.ends[1],
+          asBytes(WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_CLOSE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  HttpHeaderTable::Builder tableBuilder;
+  HttpHeaderId extHeader = tableBuilder.add("Sec-WebSocket-Extensions");
+  auto headerTable = tableBuilder.build();
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  clientSettings.webSocketCompressionMode = HttpClientSettings::MANUAL_COMPRESSION;
+
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
+
+  constexpr auto extensions =
+      "permessage-deflate; client_no_context_takeover; server_no_context_takeover"_kj;
+  testWebSocketTwoMessageCompression(waitScope, *headerTable, extHeader, extensions, *client);
+
+  serverTask.wait(waitScope);
+}
+#endif // KJ_HAS_ZLIB
+
+#if KJ_HAS_ZLIB
+KJ_TEST("HttpClient WebSocket Compression (Different DEFLATE blocks)") {
+  // In this test, we'll try to use the following DEFLATE blocks:
+  //  - Two DEFLATE blocks in 1 message.
+  //  - A block with no compression.
+  //  - A block with BFINAL set to 1.
+  // Then, we'll try to send a normal compressed message following the BFINAL message to ensure we
+  // can still process messages after receiving BFINAL.
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_HANDSHAKE);
+
+  auto serverTask = expectRead(*pipe.ends[1], request)
+      .then([&]() { return writeA(*pipe.ends[1],
+          asBytes(WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_TWO_DEFLATE_BLOCKS_MESSAGE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_DEFLATE_NO_COMPRESSION_MESSAGE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_BFINAL_SET_MESSAGE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_CLOSE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  HttpHeaderTable::Builder tableBuilder;
+  HttpHeaderId extHeader = tableBuilder.add("Sec-WebSocket-Extensions");
+  auto headerTable = tableBuilder.build();
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  clientSettings.webSocketCompressionMode = HttpClientSettings::MANUAL_COMPRESSION;
+
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
+
+  constexpr auto extensions =
+      "permessage-deflate; client_no_context_takeover; server_no_context_takeover"_kj;
+  testWebSocketFourMessageCompression(waitScope, *headerTable, extHeader, extensions, *client);
+
+  serverTask.wait(waitScope);
+}
+#endif // KJ_HAS_ZLIB
 
 KJ_TEST("HttpClient WebSocket error") {
   KJ_HTTP_TEST_SETUP_IO;
