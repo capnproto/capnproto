@@ -129,7 +129,7 @@ public:
     });
   }
   
-  bool shouldResolveBeforeRedirecting() { return true; }
+  bool shouldResolveBeforeRedirecting() override { return true; }
 
 private:
   kj::Maybe<kj::ForkedPromise<void>> revokePromise;
