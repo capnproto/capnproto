@@ -1573,12 +1573,12 @@ DynamicValue::Builder::Builder(Builder& other) {
       // Unfortunately canMemcpy() doesn't work on these types due to the use of
       // DisallowConstCopy, but __has_trivial_destructor should detect if any of these types
       // become non-trivial.
-      static_assert(__has_trivial_destructor(Text::Builder) &&
-                    __has_trivial_destructor(Data::Builder) &&
-                    __has_trivial_destructor(DynamicList::Builder) &&
-                    __has_trivial_destructor(DynamicEnum) &&
-                    __has_trivial_destructor(DynamicStruct::Builder) &&
-                    __has_trivial_destructor(AnyPointer::Builder),
+      static_assert(KJ_HAS_TRIVIAL_DESTRUCTOR(Text::Builder) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(Data::Builder) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicList::Builder) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicEnum) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicStruct::Builder) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(AnyPointer::Builder),
                     "Assumptions here don't hold.");
       break;
 
@@ -1607,12 +1607,12 @@ DynamicValue::Builder::Builder(Builder&& other) noexcept {
       // Unfortunately __has_trivial_copy doesn't work on these types due to the use of
       // DisallowConstCopy, but __has_trivial_destructor should detect if any of these types
       // become non-trivial.
-      static_assert(__has_trivial_destructor(Text::Builder) &&
-                    __has_trivial_destructor(Data::Builder) &&
-                    __has_trivial_destructor(DynamicList::Builder) &&
-                    __has_trivial_destructor(DynamicEnum) &&
-                    __has_trivial_destructor(DynamicStruct::Builder) &&
-                    __has_trivial_destructor(AnyPointer::Builder),
+      static_assert(KJ_HAS_TRIVIAL_DESTRUCTOR(Text::Builder) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(Data::Builder) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicList::Builder) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicEnum) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicStruct::Builder) &&
+                    KJ_HAS_TRIVIAL_DESTRUCTOR(AnyPointer::Builder),
                     "Assumptions here don't hold.");
       break;
 

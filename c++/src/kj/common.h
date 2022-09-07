@@ -422,6 +422,14 @@ KJ_NORETURN(void unreachable());
 // =======================================================================================
 // Template metaprogramming helpers.
 
+#define KJ_HAS_NOTHROW_CONSTRUCTOR __is_nothrow_constructible
+#define KJ_HAS_TRIVIAL_CONSTRUCTOR __is_trivially_constructible
+#if __GNUC__ && !__clang__
+#define KJ_HAS_TRIVIAL_DESTRUCTOR __has_trivial_destructor
+#else
+#define KJ_HAS_TRIVIAL_DESTRUCTOR __is_trivially_destructible
+#endif
+
 template <typename T> struct NoInfer_ { typedef T Type; };
 template <typename T> using NoInfer = typename NoInfer_<T>::Type;
 // Use NoInfer<T>::Type in place of T for a template function parameter to prevent inference of
