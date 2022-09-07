@@ -423,10 +423,11 @@ KJ_NORETURN(void unreachable());
 // Template metaprogramming helpers.
 
 #define KJ_HAS_NOTHROW_CONSTRUCTOR __is_nothrow_constructible
-#define KJ_HAS_TRIVIAL_CONSTRUCTOR __is_trivially_constructible
 #if __GNUC__ && !__clang__
+#define KJ_HAS_TRIVIAL_CONSTRUCTOR __has_trivial_constructor
 #define KJ_HAS_TRIVIAL_DESTRUCTOR __has_trivial_destructor
 #else
+#define KJ_HAS_TRIVIAL_CONSTRUCTOR __is_trivially_constructible
 #define KJ_HAS_TRIVIAL_DESTRUCTOR __is_trivially_destructible
 #endif
 
