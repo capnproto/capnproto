@@ -128,6 +128,8 @@ public:
       return fork.addBranch();
     });
   }
+  
+  bool shouldResolveBeforeRedirecting() override { return true; }
 
 private:
   kj::Maybe<kj::ForkedPromise<void>> revokePromise;
