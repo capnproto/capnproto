@@ -92,15 +92,20 @@ public:
 #endif
 
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
-  template <typename T, typename = decltype(instance<T>().c_str())>
-  inline StringPtr(const T& t KJ_LIFETIMEBOUND): StringPtr(t.c_str()) {}
-  // Allow implicit conversion from any class that has a c_str() method (namely, std::string).
+  template <
+    typename T,
+    typename = decltype(instance<T>().c_str()),
+    typename = decltype(instance<T>().size())>
+  inline StringPtr(const T& t KJ_LIFETIMEBOUND): StringPtr(t.c_str(), t.size()) {}
+  // Allow implicit conversion from any class that has a c_str() and a size() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
   // those who don't want it.
-
-  template <typename T, typename = decltype(instance<T>().c_str())>
-  inline operator T() const { return cStr(); }
-  // Allow implicit conversion to any class that has a c_str() method (namely, std::string).
+  template <
+    typename T,
+    typename = decltype(instance<T>().c_str()),
+    typename = decltype(instance<T>().size())>
+  inline operator T() const { return {cStr(), size()}; }
+  // Allow implicit conversion to any class that has a c_str() method and a size() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
   // those who don't want it.
 #endif
