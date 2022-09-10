@@ -5527,6 +5527,151 @@ KJ_TEST("HttpServer.listenHttp() doesn't prematurely terminate if an accepted co
   KJ_ASSERT(!promise.poll(waitScope));
 }
 
+KJ_TEST("HttpServer handles disconnected exception for clients disconnecting after headers") {
+  // This test case reproduces a race condition where a client could disconnect after the server
+  // sent response headers but before it sent the response body, resulting in a broken pipe
+  // "disconnected" exception when writing the body.  The default handler for application errors
+  // tells the server to ignore "disconnected" exceptions and close the connection, but code
+  // after the handler exercised the broken connection, causing the server loop to instead fail
+  // with a "failed" exception.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  class SendErrorHttpService final: public HttpService {
+    // HttpService that serves an error page via sendError().
+  public:
+    SendErrorHttpService(HttpHeaderTable& headerTable): headerTable(headerTable) {}
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& responseSender) override {
+      return responseSender.sendError(404, "Not Found", headerTable);
+    }
+
+  private:
+    HttpHeaderTable& headerTable;
+  };
+
+  class DisconnectingAsyncIoStream final: public kj::AsyncIoStream {
+  public:
+    DisconnectingAsyncIoStream(AsyncIoStream& inner): inner(inner) {}
+
+    Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return inner.read(buffer, minBytes, maxBytes);
+    }
+    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return inner.tryRead(buffer, minBytes, maxBytes);
+    }
+
+    Maybe<uint64_t> tryGetLength() override { return inner.tryGetLength(); }
+
+    Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+      return inner.pumpTo(output, amount);
+    }
+
+    Promise<void> write(const void* buffer, size_t size) override {
+      int writeId = writeCount++;
+      if (writeId == 0) {
+        // Allow first write (headers) to succeed.
+        auto promise = inner.write(buffer, size);
+        inner.shutdownWrite();
+        return promise;
+      } else if (writeId == 1) {
+        // Fail subsequent write (body) with a disconnected exception.
+        return KJ_EXCEPTION(DISCONNECTED, "a_disconnected_exception");
+      } else {
+        KJ_FAIL_ASSERT("Unexpected write");
+      }
+    }
+    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      return inner.write(pieces);
+    }
+
+    Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+      return inner.tryPumpFrom(input, amount);
+    }
+
+    Promise<void> whenWriteDisconnected() override {
+      return inner.whenWriteDisconnected();
+    }
+
+    void shutdownWrite() override {
+      return inner.shutdownWrite();
+    }
+
+    void abortRead() override {
+      return inner.abortRead();
+    }
+
+    void getsockopt(int level, int option, void* value, uint* length) override {
+      return inner.getsockopt(level, option, value, length);
+    }
+    void setsockopt(int level, int option, const void* value, uint length) override {
+      return inner.setsockopt(level, option, value, length);
+    }
+
+    void getsockname(struct sockaddr* addr, uint* length) override {
+      return inner.getsockname(addr, length);
+    }
+    void getpeername(struct sockaddr* addr, uint* length) override {
+      return inner.getsockname(addr, length);
+    }
+
+    int writeCount = 0;
+
+  private:
+    kj::AsyncIoStream& inner;
+  };
+
+  class TestErrorHandler: public HttpServerErrorHandler {
+  public:
+    kj::Promise<void> handleApplicationError(
+        kj::Exception exception, kj::Maybe<kj::HttpService::Response&> response) override {
+      applicationErrorCount++;
+      if (exception.getType() == kj::Exception::Type::DISCONNECTED) {
+        // Tell HttpServer to ignore disconnected exceptions (the default behavior).
+        return kj::READY_NOW;
+      }
+      KJ_FAIL_ASSERT("Unexpected application error type", exception.getType());
+    }
+
+    int applicationErrorCount = 0;
+  };
+
+  TestErrorHandler testErrorHandler;
+  HttpServerSettings settings {};
+  settings.errorHandler = testErrorHandler;
+
+  HttpHeaderTable table;
+  SendErrorHttpService service(table);
+  HttpServer server(timer, table, service, settings);
+
+  auto stream = kj::heap<DisconnectingAsyncIoStream>(*pipe.ends[0]);
+  auto listenPromise = server.listenHttpCleanDrain(*stream);
+
+  static constexpr auto request = "GET / HTTP/1.1\r\n\r\n"_kj;
+  pipe.ends[1]->write(request.begin(), request.size()).wait(waitScope);
+  pipe.ends[1]->shutdownWrite();
+
+  // Client races to read headers but not body, then disconnects.  (Note that the following code
+  // doesn't reliably reproduce the race condition by itself -- DisconnectingAsyncIoStream is
+  // needed to ensure the disconnected exception throws on the correct write promise.)
+  expectRead(*pipe.ends[1],
+    "HTTP/1.1 404 Not Found\r\n"
+    "Content-Length: 9\r\n"
+    "\r\n"_kj).wait(waitScope);
+  pipe.ends[1] = nullptr;
+
+  // The race condition failure would manifest as a "previous HTTP message body incomplete"
+  // "FAILED" exception here:
+  bool canReuse = listenPromise.wait(waitScope);
+
+  KJ_ASSERT(!canReuse);
+  KJ_ASSERT(stream->writeCount == 2);
+  KJ_ASSERT(testErrorHandler.applicationErrorCount == 1);
+}
+
 // =======================================================================================
 // CONNECT tests
 

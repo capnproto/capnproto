@@ -6895,9 +6895,7 @@ private:
     // HttpService, meaning no response has been sent and we can provide a Response object.
     auto promise = server.settings.errorHandler.orDefault(*this).handleClientProtocolError(
         kj::mv(protocolError), *this);
-
-    return promise.then([this]() { return httpOutput.flush(); })
-                  .then([]() { return false; });  // loop ends after flush
+    return finishSendingError(kj::mv(promise));
   }
 
   kj::Promise<bool> sendError(kj::Exception&& exception) {
@@ -6906,9 +6904,7 @@ private:
     // We only provide the Response object if we know we haven't already sent a response.
     auto promise = server.settings.errorHandler.orDefault(*this).handleApplicationError(
         kj::mv(exception), currentMethod.map([this](auto&&) -> Response& { return *this; }));
-
-    return promise.then([this]() { return httpOutput.flush(); })
-                  .then([]() { return false; });  // loop ends after flush
+    return finishSendingError(kj::mv(promise));
   }
 
   kj::Promise<bool> sendError() {
@@ -6916,9 +6912,19 @@ private:
 
     // We can provide a Response object, since none has already been sent.
     auto promise = server.settings.errorHandler.orDefault(*this).handleNoResponse(*this);
+    return finishSendingError(kj::mv(promise));
+  }
 
-    return promise.then([this]() { return httpOutput.flush(); })
-                  .then([]() { return false; });  // loop ends after flush
+  kj::Promise<bool> finishSendingError(kj::Promise<void> promise) {
+    return promise.then([this]() -> kj::Promise<void> {
+      if (httpOutput.isBroken()) {
+        // Skip flush for broken streams, since it will throw an exception that may be worse than
+        // the one we just handled.
+        return kj::READY_NOW;
+      } else {
+        return httpOutput.flush();
+      }
+    }).then([]() { return false; });  // loop ends after flush
   }
 
   kj::Own<WebSocket> sendWebSocketError(StringPtr errorMessage) {
