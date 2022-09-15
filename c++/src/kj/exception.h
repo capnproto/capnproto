@@ -225,6 +225,10 @@ public:
     //
     // This is the default in release builds.
 
+    TRY_LLVM_SYMBOLIZER,
+    // Use llvm symbolizer if LLVM_SYMBOLIZER env variable is set.
+    // Behave like ADDRESS_ONLY otherwise.  
+
     NONE
     // Generating a stack trace will always return an empty array.
     //
