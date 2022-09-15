@@ -2637,6 +2637,54 @@ public:
 
   uint64_t receivedByteCount() override { return receivedBytes; }
 
+  kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+     if (maskKeyGenerator == nullptr) {
+      // `this` is the server side of a websocket.
+      if (ctx == ExtensionsContext::REQUEST) {
+        // The other WebSocket is (going to be) the client side of a WebSocket, i.e. this is a
+        // proxying pass-through scenario. Optimization is possible. Confusingly, we have to use
+        // generateExtensionResponse() (even though we're generating headers to be passed in a
+        // request) because this is the function that correctly maps our config's inbound/outbound
+        // to client/server.
+        KJ_IF_MAYBE(c, compressionConfig) {
+          return _::generateExtensionResponse(*c);
+        } else {
+          return kj::String(nullptr);  // recommend no compression
+        }
+      } else {
+        // We're apparently arranging to pump from the server side of one WebSocket to the server
+        // side of another; i.e., we are a server, we have two clients, and we're trying to pump
+        // between them. We cannot optimize this case, because the masking requirements are
+        // different for client->server vs. server->client messages. Since we have to parse out
+        // the messages anyway there's no point in trying to match extensions, so return null.
+        return nullptr;
+      }
+    } else {
+      // `this` is the client side of a websocket.
+      if (ctx == ExtensionsContext::RESPONSE) {
+        // The other WebSocket is (going to be) the server side of a WebSocket, i.e. this is a
+        // proxying pass-through scenario. Optimization is possible. Confusingly, we have to use
+        // generateExtensionRequest() (even though we're generating headers to be passed in a
+        // response) because this is the function that correctly maps our config's inbound/outbound
+        // to server/client.
+        KJ_IF_MAYBE(c, compressionConfig) {
+          CompressionParameters arr[1]{*c};
+          return _::generateExtensionRequest(arr);
+        } else {
+          return kj::String(nullptr);  // recommend no compression
+        }
+      } else {
+        // We're apparently arranging to pump from the client side of one WebSocket to the client
+        // side of another; i.e., we are a client, we are connected to two servers, and we're
+        // trying to pump between them. We cannot optimize this case, because the masking
+        // requirements are different for client->server vs. server->client messages. Since we have
+        // to parse out the messages anyway there's no point in trying to match extensions, so
+        // return null.
+        return nullptr;
+      }
+    }
+  }
+
 private:
   class Mask {
   public:
