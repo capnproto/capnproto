@@ -272,5 +272,27 @@ TEST(SchemaParser, SourceInfo) {
   expectSourceInfo(thud.getSourceInfo(), 0xcca9972702b730b4, "post-comment\n", {});
 }
 
+TEST(SchemaParser, SetFileIdsRequired) {
+  FakeFileReader reader;
+  reader.add("no-file-id.capnp",
+      "const foo :Int32 = 123;\n");
+
+  {
+    SchemaParser parser;
+    parser.setDiskFilesystem(reader);
+
+    KJ_EXPECT_THROW_MESSAGE("File does not declare an ID.",
+        parser.parseDiskFile("no-file-id.capnp", "no-file-id.capnp", nullptr));
+  }
+  {
+    SchemaParser parser;
+    parser.setDiskFilesystem(reader);
+    parser.setFileIdsRequired(false);
+
+    auto fileSchema = parser.parseDiskFile("no-file-id.capnp", "no-file-id.capnp", nullptr);
+    KJ_EXPECT(fileSchema.getNested("foo").asConst().as<int32_t>() == 123);
+  }
+}
+
 }  // namespace
 }  // namespace capnp

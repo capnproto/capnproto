@@ -119,6 +119,9 @@ test_eval 'TestListDefaults.lists.int32ListList[2][0]' 12341234
 
 test "x`$CAPNP eval $SCHEMA -ojson globalPrintableStruct | tr -d '\r'`" = "x{\"someText\": \"foo\"}" || fail eval json "globalPrintableStruct == {someText = \"foo\"}"
 
+$CAPNP eval $TESTDATA/no-file-id.capnp.nobuild foo >/dev/null || fail eval "file without file ID can be parsed"
+test "x`$CAPNP eval $TESTDATA/no-file-id.capnp.nobuild foo | tr -d '\r'`" = 'x"bar"' || fail eval "file without file ID parsed correctly"
+
 $CAPNP compile --no-standard-import --src-prefix="$PREFIX" -ofoo $TESTDATA/errors.capnp.nobuild 2>&1 | sed -e "s,^.*errors[.]capnp[.]nobuild:,file:,g" | tr -d '\r' |
     diff -u $TESTDATA/errors.txt - || fail error output
 
