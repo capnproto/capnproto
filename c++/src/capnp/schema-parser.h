@@ -146,12 +146,27 @@ public:
     return getLoader().getAllLoaded();
   }
 
+  void setFileIdsRequired(bool value) { fileIdsRequired = value; }
+  // By befault, capnp files must declare a file-level type ID (like `@0xbe702824338d3f7f;`).
+  // Use `setFileIdsReqired(false)` to lift this requirement.
+  //
+  // If no ID is specified, a random one will be assigned. This will cause all types declared in
+  // the file to have randomized IDs as well (unless they declare an ID explicitly), which means
+  // that parsing the same file twice will appear to to produce a totally new, incompatible set of
+  // types. In particular, this means that you will not be able to use any interface types in the
+  // file for RPC, since the RPC protocol uses type IDs to identify methods.
+  //
+  // Setting this false is particularly useful when using Cap'n Proto as a config format. Typically
+  // type IDs are irrelevant for config files, and the requirement to specify one is cumbersome.
+  // For this reason, `capnp eval` does not require type ID to be present.
+
 private:
   struct Impl;
   struct DiskFileCompat;
   class ModuleImpl;
   kj::Own<Impl> impl;
   mutable bool hadErrors = false;
+  bool fileIdsRequired = true;
 
   ModuleImpl& getModuleImpl(kj::Own<SchemaFile>&& file) const;
   const SchemaLoader& getLoader() const;

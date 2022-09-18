@@ -33,7 +33,7 @@ namespace capnp {
 namespace compiler {
 
 void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
-               ErrorReporter& errorReporter);
+               ErrorReporter& errorReporter, bool requiresId);
 // Parse a list of statements to build a ParsedFile.
 //
 // If any errors are reported, then the output is not usable.  However, it may be passed on through

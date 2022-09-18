@@ -137,10 +137,14 @@ public:
   kj::Maybe<kj::Array<const byte>> readEmbedFromSearchPath(kj::PathPtr path);
   GlobalErrorReporter& getErrorReporter() { return errorReporter; }
 
+  void setFileIdsRequired(bool value) { fileIdsRequired = value; }
+  bool areFileIdsRequired() { return fileIdsRequired; }
+
 private:
   GlobalErrorReporter& errorReporter;
   kj::Vector<const kj::ReadableDirectory*> searchPath;
   std::unordered_map<FileKey, kj::Own<Module>, FileKeyHash> modules;
+  bool fileIdsRequired = true;
 };
 
 class ModuleLoader::ModuleImpl final: public Module {
@@ -171,7 +175,7 @@ public:
     lex(content, statements, *this);
 
     auto parsed = orphanage.newOrphan<ParsedFile>();
-    parseFile(statements.getStatements(), parsed.get(), *this);
+    parseFile(statements.getStatements(), parsed.get(), *this, loader.areFileIdsRequired());
     return parsed;
   }
 
@@ -280,6 +284,10 @@ void ModuleLoader::addImportPath(const kj::ReadableDirectory& dir) {
 
 kj::Maybe<Module&> ModuleLoader::loadModule(const kj::ReadableDirectory& dir, kj::PathPtr path) {
   return impl->loadModule(dir, path);
+}
+
+void ModuleLoader::setFileIdsRequired(bool value) {
+  return impl->setFileIdsRequired(value);
 }
 
 }  // namespace compiler
