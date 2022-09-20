@@ -458,6 +458,21 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
 
+template <typename E, typename T, typename... Args>
+kj::Promise<T> runInEnvironment(E&& environment, FunctionParam<kj::Promise<T>(Args...)> func);
+// Synchronously calls `func`, arranging so that any calls to `getEnvironment()` from within sync
+// _or_ async user code will return a reference to an object constructed from `environment`.
+//
+// Note that Environments never implicitly cross threads.
+
+template <typename T>
+T& getEnvironment();
+template <typename T>
+kj::Maybe<T&> tryGetEnvironment();
+// If the currently-executing code was called by `runInEnvironment()`, or if the currently-executing
+// code was scheduled asynchronously by code called by `runInEnvironment()`, return the current
+// environment downcast as a value of type T.
+
 ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 kj::String getAsyncTrace();
 // If the event loop is currently running in this thread, get a trace back through the promise

@@ -300,6 +300,77 @@ protected:
 
 // -------------------------------------------------------------------
 
+class Environment: public kj::Refcounted {
+  // Base class of Environment::Holder<T>. This class also houses and provides access to the
+  // thread_local reference to the currently-active Environment.
+
+public:
+  class Scope;
+  template <typename T> class Holder;
+
+  KJ_DISALLOW_COPY(Environment);
+  ~Environment() noexcept(false) = 0;
+
+  static Maybe<Own<Environment>> tryCaptureCurrent();
+  static Maybe<Environment&> tryGetCurrent();
+
+private:
+  Environment() = default;
+
+  static thread_local Maybe<Environment&> current;
+};
+
+class Environment::Scope {
+  // Construct one of these on the stack whenever you need to push an Environment reference onto the
+  // Environment stack.
+
+public:
+  explicit Scope(Maybe<Environment&> environment);
+  ~Scope() noexcept(false);
+  KJ_DISALLOW_COPY(Scope);
+
+private:
+  Maybe<Environment&> previous;
+};
+
+template <typename T>
+class Environment::Holder final: public Environment {
+public:
+  template <typename... Args>
+  Holder(Args&&... args): environment(fwd<Args>(args)...) {}
+
+  T environment;
+};
+
+}  // namespace _
+
+template <typename E, typename T, typename... Args>
+Promise<T> runInEnvironment(E&& environment, FunctionParam<Promise<T>(Args...)> func) {
+  auto holder = refcounted<_::Environment::Holder<Decay<E>>>(fwd<E>(environment));
+  _::Environment::Scope scope(*holder);
+  return evalNow(func).attach(kj::mv(holder));
+}
+
+template <typename T>
+T& getEnvironment() {
+  auto maybeEnvironment = tryGetEnvironment<T>();
+  KJ_IREQUIRE(maybeEnvironment != nullptr, "Currently executing code has no Environment");
+  return *_::readMaybe(maybeEnvironment);
+}
+
+template <typename T>
+kj::Maybe<T&> tryGetEnvironment() {
+  KJ_IF_MAYBE(holder, _::Environment::tryGetCurrent()) {
+    return downcast<_::Environment::Holder<T>>(*holder).environment;
+  } else {
+    return nullptr;
+  }
+}
+
+namespace _ {
+
+// -------------------------------------------------------------------
+
 template <typename T>
 inline NeverDone::operator Promise<T>() const {
   return PromiseNode::to<Promise<T>>(neverDone());
@@ -353,6 +424,7 @@ public:
 
 private:
   Own<PromiseNode> dependency;
+  Maybe<Own<Environment>> environment;
 
   void dropDependency();
 
@@ -374,9 +446,14 @@ public:
     // We need to make sure the dependency is deleted before we delete the attachment because the
     // dependency may be using the attachment.
     dropDependency();
+
+    // HACK: Make sure we have an active Environment scope while we destroy the user callbacks.
+    environmentScope.emplace(environment);
   }
 
-private:
+  Maybe<Environment::Scope> environmentScope;
+  // HACK: Non-null during destruction, so `attachment` gets the environment set.
+
   Attachment attachment;
 };
 
@@ -523,6 +600,7 @@ public:
 private:
   Own<PromiseNode> dependency;
   void* continuationTracePtr;
+  Maybe<Own<Environment>> environment;
 
   void dropDependency();
   void getDepResult(ExceptionOrValue& output);
@@ -549,9 +627,15 @@ public:
     // is a common pattern for the continuations to hold ownership of objects that might be in-use
     // by the dependency.
     dropDependency();
+
+    // HACK: Make sure we have an active Environment scope while we destroy the user callbacks.
+    environmentScope.emplace(environment);
   }
 
 private:
+  Maybe<Environment::Scope> environmentScope;
+  // HACK: Non-null during destruction, so `func` and `errorHandler` get the environment set.
+
   Func func;
   ErrorFunc errorHandler;
 
@@ -1017,6 +1101,8 @@ protected:
   bool isFinished() { return state == FINISHED; }
   void destroy();
 
+  Maybe<Environment&> tryGetStackEnvironment();
+
 private:
   enum { WAITING, RUNNING, CANCELED, FINISHED } state;
 
@@ -1045,7 +1131,11 @@ public:
       : FiberBase(stackSize, result, location), func(kj::fwd<Func>(func)) {}
   explicit Fiber(const FiberPool& pool, Func&& func, SourceLocation location)
       : FiberBase(pool, result, location), func(kj::fwd<Func>(func)) {}
-  ~Fiber() noexcept(false) { destroy(); }
+  ~Fiber() noexcept(false) {
+    destroy();
+    // HACK: Make sure we have an active Environment scope while we destroy the user callbacks.
+    environmentScope.emplace(tryGetStackEnvironment());
+  }
 
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
 
@@ -1055,6 +1145,9 @@ public:
   }
 
 private:
+  Maybe<Environment::Scope> environmentScope;
+  // HACK: Non-null during destruction, so `func` and `result` get the environment set.
+
   Func func;
   ExceptionOr<ResultType> result;
 
@@ -1928,6 +2021,8 @@ private:
   // to point to a DisposalResults on the stack so unhandled_exception() will have some place to
   // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
   // coroutine.destroy() has returned. Our disposer then rethrows as needed.
+
+  Maybe<Own<Environment>> environment;
 };
 
 template <typename Self, typename T>

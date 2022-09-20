@@ -435,6 +435,31 @@ Promise<void> TaskSet::onEmpty() {
 
 // =======================================================================================
 
+namespace _ {
+
+Environment::~Environment() noexcept(false) {}
+
+Maybe<Own<Environment>> Environment::tryCaptureCurrent() {
+  return current.map([](Environment& environment) {
+    return addRef(environment);
+  });
+}
+Maybe<Environment&> Environment::tryGetCurrent() {
+  return current;
+}
+
+Environment::Scope::Scope(Maybe<Environment&> environment): previous(Environment::current) {
+  Environment::current = environment;
+}
+Environment::Scope::~Scope() noexcept(false) {
+  Environment::current = previous;
+}
+thread_local Maybe<Environment&> Environment::current;
+
+}  // namespace _
+
+// =======================================================================================
+
 namespace {
 
 #if _WIN32 || __CYGWIN__
@@ -495,6 +520,8 @@ public:
 private:
   size_t stackSize;
   OneOf<FiberBase*, SynchronousFunc*> main;
+
+  Maybe<Own<Environment>> environment = Environment::tryCaptureCurrent();
 
   friend class FiberBase;
   friend class FiberPool::Impl;
@@ -1632,6 +1659,10 @@ void FiberBase::destroy() {
   }
 }
 
+Maybe<Environment&> FiberBase::tryGetStackEnvironment() {
+  return stack->environment;
+}
+
 Maybe<Own<Event>> FiberBase::fire() {
   KJ_ASSERT(state == WAITING);
   state = RUNNING;
@@ -1643,6 +1674,7 @@ void FiberStack::switchToFiber() {
   // Switch from the main stack to the fiber. Returns once the fiber either calls switchToMain()
   // or returns from its main function.
 #if KJ_USE_FIBERS
+  Environment::Scope scope(environment);
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
 #else
@@ -2325,7 +2357,8 @@ void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
 // -------------------------------------------------------------------
 
 AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependencyParam)
-    : dependency(kj::mv(dependencyParam)) {
+    : dependency(kj::mv(dependencyParam)),
+      environment(Environment::tryCaptureCurrent()) {
   dependency->setSelfPointer(&dependency);
 }
 
@@ -2352,7 +2385,8 @@ void AttachmentPromiseNodeBase::dropDependency() {
 
 TransformPromiseNodeBase::TransformPromiseNodeBase(
     Own<PromiseNode>&& dependencyParam, void* continuationTracePtr)
-    : dependency(kj::mv(dependencyParam)), continuationTracePtr(continuationTracePtr) {
+    : dependency(kj::mv(dependencyParam)), continuationTracePtr(continuationTracePtr),
+      environment(Environment::tryCaptureCurrent()) {
   dependency->setSelfPointer(&dependency);
 }
 
@@ -2362,6 +2396,7 @@ void TransformPromiseNodeBase::onReady(Event* event) noexcept {
 
 void TransformPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    Environment::Scope scope(environment);
     getImpl(output);
     dropDependency();
   })) {
@@ -2875,7 +2910,8 @@ CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrV
                              SourceLocation location)
     : Event(location),
       coroutine(coroutine),
-      resultRef(resultRef) {}
+      resultRef(resultRef),
+      environment(Environment::tryCaptureCurrent()) {}
 CoroutineBase::~CoroutineBase() noexcept(false) {
   readMaybe(maybeDisposalResults)->destructorRan = true;
 }
@@ -2950,7 +2986,10 @@ Maybe<Own<Event>> CoroutineBase::fire() {
 
   promiseNodeForTrace = nullptr;
 
-  coroutine.resume();
+  {
+    Environment::Scope scope(environment);
+    coroutine.resume();
+  }
 
   return nullptr;
 }
@@ -3001,6 +3040,7 @@ void CoroutineBase::destroy() {
     // On Clang, `disposalResults.exception != nullptr` implies `!disposalResults.destructorRan`.
     // We could optimize out the separate `destructorRan` flag if we verify that other compilers
     // behave the same way.
+    Environment::Scope scope(environment);
     coroutine.destroy();
   } while (!disposalResults.destructorRan);
 

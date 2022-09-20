@@ -126,6 +126,7 @@ cc_library(
 ) for f in [
     "arena-test.c++",
     "array-test.c++",
+    "async-environment-test.c++",
     "async-io-test.c++",
     "async-queue-test.c++",
     "async-test.c++",
