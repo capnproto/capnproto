@@ -219,6 +219,9 @@ class PromiseDisposer;
 using OwnPromiseNode = Own<PromiseNode, PromiseDisposer>;
 // PromiseNode uses a static disposer.
 
+class Environment;
+class EnvironmentSet;
+
 class PromiseBase {
 public:
   kj::String trace();

@@ -362,6 +362,25 @@ public:
   // the error handler if you are sure that ignoring errors is fine, or if you know that you'll
   // eventually wait on the promise somewhere.
 
+  Promise<T> adoptEnvironment() KJ_WARN_UNUSED_RESULT;
+  // Create a new promise which drops the existing promise's set of Environments and adopts the set
+  // of Environments that are currently active. This function is required inside of a
+  // `kj::runInEnvironment(env, func)`'s `func()` callback when importing promises from outside of
+  // `func()`'s scope. For example:
+  //
+  //   double environment = 1.23;
+  //   kj::Promise<void> outerPromise = foo();
+  //   kj::runInEnvironment(environment, [&]() {
+  //     return outerPromise.adoptEnvironment()
+  //                        .then([]() {
+  //       kj::getEnvironment<double>();
+  //     });
+  //   });
+  //
+  // In the above code, if the `.adoptEnvironment()` call were missing, the call to `.then()` would
+  // throw an exception in debug mode. (In release mode, that check is omitted, and the call to
+  // `kj::getEnvironment<double>()` would throw instead.)
+
   template <typename ErrorFunc>
   void detach(ErrorFunc&& errorHandler);
   // Allows the promise to continue running in the background until it completes or the
@@ -465,6 +484,21 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // If evalLast() is called multiple times, functions are executed in LIFO order. If the first
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
+
+template <typename E, typename Func>
+PromiseForResult<Func, void> runInEnvironment(E&& environment, Func&& func);
+// Synchronously calls `func`, arranging so that any calls to `getEnvironment()` from within sync
+// _or_ async user code will return a reference to an object constructed from `environment`.
+//
+// Note that Environments never implicitly cross threads.
+
+template <typename T>
+T& getEnvironment();
+template <typename T>
+kj::Maybe<T&> tryGetEnvironment();
+// If the currently-executing code was called by `runInEnvironment()`, or if the currently-executing
+// code was scheduled asynchronously by code called by `runInEnvironment()`, return the current
+// environment downcast as a value of type T.
 
 ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 kj::String getAsyncTrace();
@@ -1272,6 +1306,10 @@ private:
 
   _::Event* currentlyFiring = nullptr;
 
+  Maybe<_::EnvironmentSet&> currentEnvironmentSet;
+  // Non-null during the scope of an _::EnvironmentSet::Scope. Accessed only by our friend, the
+  // _::EnvironmentSet::Scope class.
+
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
@@ -1291,6 +1329,7 @@ private:
   friend class _::XThreadPaf;
   friend class _::FiberBase;
   friend class _::FiberStack;
+  friend class _::EnvironmentSet;
   friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 };
 
