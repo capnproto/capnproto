@@ -165,7 +165,10 @@ cc_test(
         ":use_coroutines": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
-    deps = ["//src/kj/compat:kj-http"],
+    deps = [
+        "//src/kj/compat:kj-http",
+        ":kj-test",
+    ],
 )
 
 cc_library(
