@@ -27,8 +27,8 @@ namespace kj {
 namespace {
 
 struct TestEnvironment {
-  TestEnvironment(bool& finalDestructorRan, String stuff)
-      : finalDestructorRan(finalDestructorRan), stuff(kj::mv(stuff)) {}
+  TestEnvironment(bool& finalDestructorRan, StringPtr stuff)
+      : finalDestructorRan(finalDestructorRan), stuff(kj::heapString(stuff)) {}
   ~TestEnvironment() noexcept(false) {
     // If `stuff` is empty, assume we are moved-from.
     if (stuff.size() != 0) {
@@ -46,24 +46,25 @@ struct TestEnvironment {
   // The simulated user state.
 };
 
-void expectEnvironment() {
+void expectEnvironment(kj::StringPtr expectedStuff = "foobar"_kj) {
   auto maybeEnvironment = tryGetEnvironment<TestEnvironment>();
   KJ_EXPECT(maybeEnvironment != nullptr);
-  if (maybeEnvironment != nullptr) {
-    // We want to test the `getEnvironment()` function, too, so no need for KJ_IF_MAYBE.
+  KJ_IF_MAYBE(environment, maybeEnvironment) {
     auto& env = getEnvironment<TestEnvironment>();
-    KJ_EXPECT(env.stuff == "foobar"_kj);
+    KJ_ASSERT(&env == environment);
+    KJ_EXPECT(env.stuff == expectedStuff);
   }
 }
 
 struct DeferredExpectEnvironment {
   // Helper to ensure lambdas and attachments are destroyed with environments.
 
-  DeferredExpectEnvironment() = default;
+  DeferredExpectEnvironment(kj::StringPtr stuff = "foobar"_kj): expectedStuff(stuff) {};
   ~DeferredExpectEnvironment() noexcept(false) {
-    expectEnvironment();
+    expectEnvironment(expectedStuff);
   }
   KJ_DISALLOW_COPY(DeferredExpectEnvironment);
+  kj::StringPtr expectedStuff;
 };
 
 Own<DeferredExpectEnvironment> dee() {
@@ -80,7 +81,7 @@ void syncTestCase(Func&& func) {
   KJ_EXPECT(tryGetEnvironment<TestEnvironment>() == nullptr);
 
   auto promise = runInEnvironment(
-      TestEnvironment(finalDestructorRan, heapString("foobar"_kj)),
+      TestEnvironment(finalDestructorRan, "foobar"_kj),
       FunctionParam<Promise<void>()>(fwd<Func>(func)));
 
   // Purely synchronous functions don't capture the Environment.
@@ -101,7 +102,7 @@ void asyncTestCase(Func&& func) {
 
   {
     auto promise = runInEnvironment(
-        TestEnvironment(finalDestructorRan, heapString("foobar"_kj)),
+        TestEnvironment(finalDestructorRan, "foobar"_kj),
         FunctionParam<Promise<void>()>(fwd<Func>(func)));
 
     // Asynchronous functions capture the Environment. Eager promises will drop the Environment
@@ -168,7 +169,7 @@ KJ_TEST("Environments are available in ForkedPromise branch callbacks") {
   });
 }
 
-KJ_TEST("Environments are available in .then() callbacks and errorbacks") {
+KJ_TEST("Environments are available in .then() callbacks") {
   asyncTestCase([]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<void>();
 
@@ -183,7 +184,9 @@ KJ_TEST("Environments are available in .then() callbacks and errorbacks") {
 
     return kj::mv(promise);
   });
+}
 
+KJ_TEST("Environments are available in .then() errorbacks") {
   asyncTestCase([]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<void>();
 
@@ -195,6 +198,34 @@ KJ_TEST("Environments are available in .then() callbacks and errorbacks") {
     });
 
     paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "nope"));
+
+    return kj::mv(promise);
+  });
+}
+
+KJ_TEST("Environments are overridable") {
+  bool overrideEnvironmentDestructorRan = false;
+  asyncTestCase([&]() -> Promise<void> {
+    auto paf = newPromiseAndFulfiller<void>();
+
+    auto promise = paf.promise.then([&,d=dee()]() mutable {
+      expectEnvironment();
+      return runInEnvironment(
+          TestEnvironment(overrideEnvironmentDestructorRan, "bazqux"_kj),
+          FunctionParam<Promise<void>()>([]() -> Promise<void> {
+        expectEnvironment("bazqux"_kj);
+        return evalLater([]() {
+          expectEnvironment("bazqux"_kj);
+        });
+      }));
+    }, [d=dee()](kj::Exception&& exception) {
+      expectEnvironment();
+      KJ_FAIL_EXPECT("should not see exception", exception);
+    }).then([]() {
+      expectEnvironment();
+    });
+
+    paf.fulfiller->fulfill();
 
     return kj::mv(promise);
   });
@@ -270,7 +301,6 @@ KJ_TEST("Environments are available in suspended fiber destructors") {
     });
   });
 }
-
 
 #if KJ_HAS_COROUTINE
 
