@@ -148,16 +148,6 @@ KJ_TEST("Environments are available to evalLast() callbacks") {
   });
 }
 
-KJ_TEST("Environments are available in fibers") {
-  asyncTestCase([]() -> Promise<void> {
-    return startFiber(64 * 1024, [d=dee()](WaitScope& ws2) {
-      expectEnvironment();
-      _::yield().wait(ws2);
-      expectEnvironment();
-    });
-  });
-}
-
 KJ_TEST("Environments are available in ForkedPromise branch callbacks") {
   asyncTestCase([]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<void>();
@@ -255,6 +245,32 @@ KJ_TEST("Environments are available in .attach() destructors") {
     return Promise<void>(READY_NOW).attach(heap<DeferredExpectEnvironment>());
   });
 }
+
+KJ_TEST("Environments are available in fibers") {
+  asyncTestCase([]() -> Promise<void> {
+    return startFiber(64 * 1024, [d=dee()](WaitScope& ws2) {
+      expectEnvironment();
+      _::yield().wait(ws2);
+      expectEnvironment();
+    });
+  });
+}
+
+KJ_TEST("Environments are available in suspended fiber destructors") {
+  asyncTestCase([]() -> Promise<void> {
+    return startFiber(64 * 1024, [d=dee()](WaitScope& ws2) {
+      // Explode if we're destroyed outside an Environment.
+      DeferredExpectEnvironment dee;
+
+      expectEnvironment();
+
+      // Make sure we don't run to completion, which is the fiber happy path.
+      Promise<void>(NEVER_DONE).wait(ws2);
+      KJ_UNREACHABLE;
+    });
+  });
+}
+
 
 #if KJ_HAS_COROUTINE
 
