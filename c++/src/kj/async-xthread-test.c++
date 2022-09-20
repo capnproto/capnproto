@@ -49,7 +49,7 @@ inline void delay() { usleep(10000); }
 namespace kj {
 namespace {
 
-KJ_TEST("synchonous simple cross-thread events") {
+KJ_TEST("synchronous simple cross-thread events") {
   MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
   Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
   thread_local bool isChild = false;  // to assert which thread we're in

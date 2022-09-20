@@ -139,6 +139,153 @@ struct alignas(void*) PromiseArena {
   byte bytes[1024];
 };
 
+// -------------------------------------------------------------------
+// Async Environments
+//
+// Rules when implementing a PromiseNode:
+//
+// - When implementing a dependent promise (e.g. one returned from a Promise member function), pass
+//   your dependency's EnvironmentSet (with `getEnvironmentSet()`) to your own PromiseNode base
+//   constructor.
+//
+//   TODO(now): Perform a debug check that the current event loop's EnvironmentSet is the one that
+//   we're inheriting from our dependency.
+//
+// - When implementing an independent promise, accept a `Maybe<EnvironmentSet&>` constructor
+//   parameter and clone it. Constructor call sites should pass whatever `Maybe<EnvironmentSet&` is
+//   appropriate, defaulting to `EnvironmentSet::tryGetCurrent()`, if there is none other handy.
+//
+// - Do not call `EnvironmentSet::tryGetCurrent()` in a PromiseNode constructor, because
+//   `allocPromise()` is noexcept, and `EnvironmentSet::tryGetCurrent()` can fail if there is no
+//   event loop. Creating Promises outside of an event loop is a programming error and will
+//   eventually result in an exception. That exception will have a proper description of what went
+//   wrong, and is more debuggable than a termination.
+//
+// - If your PromiseNode implementation invokes user-written code on the same thread as its
+//   construction thread at any point after the PromiseNode is constructed, it must construct an
+//   `EnvironmentSet::Scope`, initialized with `getEnvironmentSet()`. The scope's lifetime must
+//   encompass the user code invocation.
+//
+// - In particular, construct an `EnvironmentSet::Scope` in your `get()` implementation, unless you
+//   can prove that your implementation will never invoke user code. Most `get()` implementations
+//   will at least call a user-provided move constructor, so most `get()` implementations should
+//   construct a scope.
+//
+// - An `EnvironmentSet::Scope` is not necessary in the implementation of
+//   `PromiseArenaMember::destroy()`. Instead, all call sites of `destroy()` are required to create
+//   their own `EnvironmentSet::Scope`.
+//
+//   TODO(perf): It might be marginally faster to require nodes which contain user objects to handle
+//   their own scopes, but it's a lot of boilerplate.
+//
+// - When creating an `ExceptionOr<T>` value on the stack, always create an `EnvironmentSet::Scope`
+//   directly above it, so that any user-written `T::~T()` will be covered by the EnvironmentSet.
+//
+// - EnvironmentSets must not be allowed to cross threads. When implementing a PromiseNode which
+//   executes user-written code on another thread, do _not_ create an `EnvironmentSet::Scope` for
+//   the execution on the other thread.
+//
+// - All of the above concerns should be considered for any other associated class that exists as an
+//   implementation detail of the PromiseNode. For example, ForkHub<T> is not a PromiseNode, but its
+//   destructor calls a user destructor, so it must arrange to emplace an `EnvironmentSet::Scope`.
+//   (It happens to be a PromiseArenaMember, so it conveniently gets this for free.)
+
+class EnvironmentSetImpl;
+KJ_DECLARE_NON_POLYMORPHIC(EnvironmentSetImpl)
+// EnvironmentSet uses a pimpl idiom, and has a move constructor, meaning we need a complete
+// Own</*impl*/> type. We declare the type out here, instead of making it a nested type, so we can
+// teach Own<T> about it.
+
+class EnvironmentSet {
+  // A collection of Environments.
+  //
+  // This class also provides access to the current EventLoop's reference to the currently-active
+  // EnvironmentSet.
+
+public:
+  class Scope;
+  // Put a `Scope(set)` on the stack to make an environment current. Requires a current EventLoop.
+
+  static EnvironmentSet create(void* typeKey, Own<Environment> environment);
+  // Construct a new EnvironmentSet containing `environment`. If an EnvironmentSet is already
+  // current, all of its environments, save any identified by `typeKey`, are adopted.
+
+  static Maybe<EnvironmentSet&> tryGetCurrent();
+  // Call `EnvironmentSet::tryGetCurrent()` to access the current EnvironmentSet, if any.
+
+  KJ_DISALLOW_COPY(EnvironmentSet);
+  EnvironmentSet(EnvironmentSet&&) = default;
+
+  auto operator==(const EnvironmentSet& other) const { return impl.get() == other.impl.get(); };
+
+  EnvironmentSet clone();
+  // Return a new EnvironmentSet which compares equal to this one.
+
+  Maybe<Environment&> tryGetEnvironment(void* typeKey);
+  // Return the specific Environment associated with `typeKey`.
+
+private:
+  Maybe<EnvironmentSet&>& currentEnvironmentSet;
+  // Reference to EventLoop::currentEnvironmentSet, so we can save some dereferencing during Scope
+  // construction. In KJ_DEBUG builds, this is required to be identical to (that is, has the same
+  // address as) the current event loop's `EventLoop::currentEnvironmentSet`. This guards against
+  // EnvironmentSet::Scopes being created on the wrong thread.
+
+  using Impl = EnvironmentSetImpl;
+  Own<Impl> impl;
+  // This exists just so we don't have to include kj/map.h.
+
+  explicit EnvironmentSet(Maybe<EnvironmentSet&>&currentEnvironmentSet, Own<Impl> impl);
+  // Constructor used by `create()` and `clone()`.
+};
+
+class EnvironmentSet::Scope {
+  // Construct one of these on the stack whenever you need to push an EnvironmentSet reference onto
+  // the EnvironmentSet stack. While one of these is alive, `EnvironmentSet::tryGetCurrent()` will
+  // return the newly-pushed EnvironmentSet reference.
+
+public:
+  explicit Scope(Maybe<EnvironmentSet&> newEnvironmentSet);
+  ~Scope() noexcept(false);
+  KJ_DISALLOW_COPY_AND_MOVE(Scope);
+
+private:
+  struct Impl {
+    Maybe<EnvironmentSet&>& currentEnvironmentSet;
+    Maybe<EnvironmentSet&> previous;
+  };
+  Maybe<Impl> impl;
+};
+
+class Environment: public kj::Refcounted {
+  // Base class of Environment::Holder<T>.
+
+public:
+  template <typename T> class Holder;
+
+  KJ_DISALLOW_COPY(Environment);
+  ~Environment() noexcept(false) = 0;
+
+private:
+  Environment() = default;
+};
+
+template <typename T>
+class Environment::Holder final: public Environment {
+public:
+  template <typename... Args>
+  Holder(Args&&... args): environment(fwd<Args>(args)...) {}
+
+  T environment;
+
+  static void* typeKey() {
+    static bool uniqueAddress;
+    return &uniqueAddress;
+  }
+};
+
+// -------------------------------------------------------------------
+
 class Event: private AsyncObject {
   // An event waiting to be executed.  Not for direct use by applications -- promises use this
   // internally.
@@ -205,9 +352,10 @@ protected:
   // caller.  This is the only way that an event can delete itself as a result of firing, as
   // doing so from within fire() will throw an exception.
 
+  EventLoop& loop;
+
 private:
   friend class kj::EventLoop;
-  EventLoop& loop;
   Event* next;
   Event** prev;
   bool firing = false;
@@ -233,11 +381,20 @@ public:
   // memory, e.g. call `delete this`.
   //
   // We use this instead of a virtual destructor for two reasons:
-  // 1. Coroutine nodes are not indepnedent objects, they have to call destroy() on the coroutine
+  // 1. Coroutine nodes are not independent objects, they have to call destroy() on the coroutine
   //    handle to delete themselves.
   // 2. XThreadEvents sometimes leave it up to a different thread to actually delete the object.
 
+  KJ_DISALLOW_COPY_AND_MOVE(PromiseArenaMember);
+
+  explicit PromiseArenaMember(Maybe<EnvironmentSet&> environmentSetParam)
+      : environmentSet(environmentSetParam.map([](EnvironmentSet& set) { return set.clone(); })) {}
+
+  Maybe<EnvironmentSet&> getEnvironmentSet() { return environmentSet; }
+
 private:
+  Maybe<EnvironmentSet> environmentSet;
+
   PromiseArena* arena = nullptr;
   // If non-null, then this PromiseNode is the last node allocated within the given arena, and
   // therefore owns the arena. After this node is destroyed, the arena should be deleted.
@@ -316,6 +473,8 @@ public:
     return T(false, kj::mv(node));
   }
 
+  using PromiseArenaMember::PromiseArenaMember;
+
 protected:
   class OnReadyEvent {
     // Helper class for implementing onReady().
@@ -341,7 +500,10 @@ class PromiseDisposer {
 public:
   static void dispose(PromiseArenaMember* node) {
     PromiseArena* arena = node->arena;
-    node->destroy();
+    {
+      EnvironmentSet::Scope scope(node->environmentSet);
+      node->destroy();
+    }
     delete arena;  // reminder: `delete` automatically ignores null pointers
   }
 
@@ -352,12 +514,16 @@ public:
     if (sizeof(T) > sizeof(PromiseArena) || alignof(T) != alignof(void*)) {
       // Node too big (or needs weird alignment), fall back to regular heap allocation.
       ptr = new T(kj::fwd<Params>(params)...);
+      // TODO(now): Should PromiseArenaMember's `arena` be a
+      //   OneOf<PromiseArena*, Maybe<EnvironmentSet>>, so standalone promises can capture the
+      //   environment?
     } else {
       // Start a new arena.
       //
       // NOTE: As in append() (below), we don't implement exception-safety because it causes code
       //   bloat and these constructors probably don't throw. Instead this function is noexcept, so
       //   if a constructor does throw, it'll crash rather than leak memory.
+      // TODO(now): Capture the environment in PromiseArena's constructor somehow.
       auto* arena = new PromiseArena;
       ptr = reinterpret_cast<T*>(arena + 1) - 1;
       ctor(*ptr, kj::fwd<Params>(params)...);
@@ -380,6 +546,7 @@ public:
         reinterpret_cast<byte*>(next.get()) - reinterpret_cast<byte*>(arena) < sizeof(T) ||
         alignof(T) != alignof(void*)) {
       // No arena available, or not enough space, or weird alignment needed. Start new arena.
+      // TODO(now): TODO(perf): If we have an existing arena, we could propagate its environmentSet.
       return alloc<T, D>(kj::mv(next), kj::fwd<Params>(params)...);
     } else {
       // Append to arena.
@@ -391,6 +558,14 @@ public:
       //   constructors throw, so we just mark the whole method noexcept in order to avoid the
       //   code bloat to handle this case.
       next->arena = nullptr;
+      // TODO(now): Well, if EnvironmentSet lives in PromiseArena, `next` no longer has access to
+      //   its EnvironmentSet at this point. If PromiseArenaMember's `arena` member were a
+      //   OneOf<PromiseArena*, Maybe<EnvironmentSet&>>, we could replace its arena pointer with a
+      //   reference to the arena's EnvironmentSet, solving the problem.
+      //
+      //   Note that we could also clone the EnvironmentSet, instead of capturing a non-owning
+      //   reference to it. This would allow us to collapse this solution into the solution to the
+      //   "Node too big (or needs weird alignment)" case above.
       T* ptr = reinterpret_cast<T*>(next.get()) - 1;
       ctor(*ptr, kj::mv(next), kj::fwd<Params>(params)...);
       ptr->arena = arena;
@@ -422,6 +597,78 @@ static kj::Own<T, PromiseDisposer> appendPromise(OwnPromiseNode&& next, Params&&
 
 // -------------------------------------------------------------------
 
+class AdoptEnvironmentPromiseNode: public PromiseNode {
+  // A wrapper around another PromiseNode which overrides the EnvironmentSet associated with the
+  // promise chain. Implements `.adoptEnvironment()`.
+  //
+  // TODO(now): Move implementation into async.c++.
+
+public:
+  explicit AdoptEnvironmentPromiseNode(
+      OwnPromiseNode&& dependency, Maybe<EnvironmentSet&> environmentSetOverride, void* tracePtr);
+
+  void onReady(Event* event) noexcept override;
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void destroy() override { dtor(*this); }
+  void get(ExceptionOrValue& output) noexcept override;
+
+private:
+  Own<PromiseNode> dependency;
+  void* tracePtr;
+};
+
+}  // namespace _
+
+template <typename E, typename Func>
+PromiseForResult<Func, void> runInEnvironment(E&& environment, Func&& func) {
+  PromiseForResult<Func, void> intermediate = nullptr;
+
+  KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+    using Holder = _::Environment::Holder<Decay<E>>;
+    auto environmentSet = _::EnvironmentSet::create(
+        Holder::typeKey(), refcounted<Holder>(fwd<E>(environment)));
+    _::EnvironmentSet::Scope scope(environmentSet);
+    using T = _::ReturnType<Func, void>;
+    intermediate = _::MaybeVoidCaller<_::Void, _::FixVoid<T>>::apply(func, {});
+  })) {
+    intermediate = kj::mv(*e);
+  }
+
+  // We could just call `.adoptEnvironment()` here, but it may be more helpful if `tracePtr`
+  // contains the new environment type E in it. (It also may be more confusing, I dunno...) So, we
+  // create a AdoptEnvironmentPromiseNode manually.
+  auto tracePtr = reinterpret_cast<void*>(&kj::runInEnvironment<E, Func>);
+  auto previousEnvironmentSet = _::EnvironmentSet::tryGetCurrent();
+  _::OwnPromiseNode node =
+      appendPromise<_::AdoptEnvironmentPromiseNode>(
+          _::PromiseNode::from(kj::mv(intermediate)), previousEnvironmentSet, tracePtr);
+  return _::PromiseNode::to<PromiseForResult<Func, void>>(kj::mv(node));
+}
+
+template <typename T>
+T& getEnvironment() {
+  auto maybeEnvironment = tryGetEnvironment<T>();
+  KJ_IREQUIRE(maybeEnvironment != nullptr, "Currently executing code has no Environment");
+  return *_::readMaybe(maybeEnvironment);
+}
+
+template <typename T>
+kj::Maybe<T&> tryGetEnvironment() {
+  using Holder = _::Environment::Holder<T>;
+
+  KJ_IF_MAYBE(set, _::EnvironmentSet::tryGetCurrent()) {
+    KJ_IF_MAYBE(holder, set->tryGetEnvironment(Holder::typeKey())) {
+      return downcast<Holder>(*holder).environment;
+    }
+  }
+
+  return nullptr;
+}
+
+namespace _ {
+
+// -------------------------------------------------------------------
+
 inline ReadyNow::operator Promise<void>() const {
   return PromiseNode::to<Promise<void>>(readyNow());
 }
@@ -435,7 +682,7 @@ inline NeverDone::operator Promise<T>() const {
 
 class ImmediatePromiseNodeBase: public PromiseNode {
 public:
-  ImmediatePromiseNodeBase();
+  ImmediatePromiseNodeBase(Maybe<EnvironmentSet&> environmentSet);
   ~ImmediatePromiseNodeBase() noexcept(false);
 
   void onReady(Event* event) noexcept override;
@@ -447,10 +694,13 @@ class ImmediatePromiseNode final: public ImmediatePromiseNodeBase {
   // A promise that has already been resolved to an immediate value or exception.
 
 public:
-  ImmediatePromiseNode(ExceptionOr<T>&& result): result(kj::mv(result)) {}
+  ImmediatePromiseNode(ExceptionOr<T>&& result, Maybe<EnvironmentSet&> environmentSet)
+      : ImmediatePromiseNodeBase(environmentSet),
+        result(kj::mv(result)) {}
   void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
+    EnvironmentSet::Scope scope(getEnvironmentSet());
     output.as<T>() = kj::mv(result);
   }
 
@@ -460,7 +710,7 @@ private:
 
 class ImmediateBrokenPromiseNode final: public ImmediatePromiseNodeBase {
 public:
-  ImmediateBrokenPromiseNode(Exception&& exception);
+  ImmediateBrokenPromiseNode(Exception&& exception, Maybe<EnvironmentSet&> environmentSet);
   void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override;
@@ -470,10 +720,15 @@ private:
 };
 
 template <typename T, T value>
-class ConstPromiseNode: public ImmediatePromiseNodeBase {
+class ConstPromiseNode final: public ImmediatePromiseNodeBase {
 public:
-  void destroy() override {}
+  ConstPromiseNode(Maybe<EnvironmentSet&> environmentSet)
+      : ImmediatePromiseNodeBase(environmentSet) {}
+  void destroy() override { dtor(*this); }
   void get(ExceptionOrValue& output) noexcept override {
+    // We're copy-constructing a user value from the result of a constant expression. User code
+    // could still be invoked, so we need an environment scope.
+    EnvironmentSet::Scope scope(getEnvironmentSet());
     output.as<T>() = value;
   }
 };
@@ -765,6 +1020,8 @@ public:
   void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
+    EnvironmentSet::Scope scope(getEnvironmentSet());
+
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
     KJ_IF_MAYBE(value, hubResult.value) {
       output.as<T>().value = copyOrAddRef(*value);
@@ -788,6 +1045,8 @@ public:
   typedef kj::Decay<decltype(kj::get<index>(kj::instance<T>()))> Element;
 
   void get(ExceptionOrValue& output) noexcept override {
+    EnvironmentSet::Scope scope(getEnvironmentSet());
+
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
     KJ_IF_MAYBE(value, hubResult.value) {
       output.as<Element>().value = kj::mv(kj::get<index>(*value));
@@ -1108,6 +1367,8 @@ OwnPromiseNode spark(OwnPromiseNode&& node, SourceLocation location) {
 
 class AdapterPromiseNodeBase: public PromiseNode {
 public:
+  explicit AdapterPromiseNodeBase();
+
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
@@ -1132,6 +1393,7 @@ public:
   void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
+    EnvironmentSet::Scope scope(getEnvironmentSet());
     KJ_IREQUIRE(!isWaiting());
     output.as<T>() = kj::mv(result);
   }
@@ -1238,11 +1500,13 @@ private:
 
 template <typename T>
 Promise<T>::Promise(_::FixVoid<T> value)
-    : PromiseBase(_::allocPromise<_::ImmediatePromiseNode<_::FixVoid<T>>>(kj::mv(value))) {}
+    : PromiseBase(_::allocPromise<_::ImmediatePromiseNode<_::FixVoid<T>>>(
+        kj::mv(value), _::EnvironmentSet::tryGetCurrent())) {}
 
 template <typename T>
 Promise<T>::Promise(kj::Exception&& exception)
-    : PromiseBase(_::allocPromise<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
+    : PromiseBase(_::allocPromise<_::ImmediateBrokenPromiseNode>(
+          kj::mv(exception), _::EnvironmentSet::tryGetCurrent())) {}
 
 template <typename T>
 template <typename Func, typename ErrorFunc>
@@ -1371,14 +1635,24 @@ Promise<T> Promise<T>::eagerlyEvaluate(decltype(nullptr), SourceLocation locatio
 }
 
 template <typename T>
+Promise<T> Promise<T>::adoptEnvironment() {
+  auto tracePtr = getMethodStartAddress(*this, &kj::Promise<T>::adoptEnvironment);
+  auto environmentSet = _::EnvironmentSet::tryGetCurrent();
+  _::OwnPromiseNode newNode =
+      appendPromise<_::AdoptEnvironmentPromiseNode>(kj::mv(node), environmentSet, tracePtr);
+  return _::PromiseNode::to<Promise<T>>(kj::mv(newNode));
+}
+
+template <typename T>
 kj::String Promise<T>::trace() {
   return PromiseBase::trace();
 }
 
 template <typename T, T value>
 inline Promise<T> constPromise() {
-  static _::ConstPromiseNode<T, value> NODE;
-  return _::PromiseNode::to<Promise<T>>(_::OwnPromiseNode(&NODE));
+  auto environmentSet = _::EnvironmentSet::tryGetCurrent();
+  _::OwnPromiseNode node = allocPromise<_::ConstPromiseNode<T, value>>(environmentSet);
+  return _::PromiseNode::to<Promise<T>>(kj::mv(node));
 }
 
 template <typename Func>
@@ -1637,7 +1911,7 @@ class XThreadEvent: public PromiseNode,    // it's a PromiseNode in the requesti
                     private Event {        // it's an event in the target thread
 public:
   XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor, EventLoop& loop,
-               void* funcTracePtr, SourceLocation location);
+               void* funcTracePtr, SourceLocation location, Maybe<EnvironmentSet&> environmentSet);
 
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
@@ -1738,8 +2012,10 @@ template <typename Func, typename = _::FixVoid<_::ReturnType<Func, void>>>
 class XThreadEventImpl final: public XThreadEvent {
   // Implementation for a function that does not return a Promise.
 public:
-  XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location)
-      : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location),
+  XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location,
+      Maybe<EnvironmentSet&> environmentSet)
+      : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location,
+            environmentSet),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
   void destroy() override { dtor(*this); }
@@ -1766,8 +2042,10 @@ template <typename Func, typename T>
 class XThreadEventImpl<Func, Promise<T>> final: public XThreadEvent {
   // Implementation for a function that DOES return a Promise.
 public:
-  XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location)
-      : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location),
+  XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location,
+      Maybe<EnvironmentSet&> environmentSet)
+      : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location,
+            environmentSet),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
   void destroy() override { dtor(*this); }
@@ -1796,17 +2074,26 @@ private:
 template <typename Func>
 _::UnwrapPromise<PromiseForResult<Func, void>> Executor::executeSync(
     Func&& func, SourceLocation location) const {
-  _::XThreadEventImpl<Func> event(kj::fwd<Func>(func), *this, getLoop(), location);
+  // We can't pass an EnvironmentSet here because the current thread might not have an EventLoop.
+  // Meanwhile, there's no need to: `func` will be destroyed on the current thread synchronously,
+  // so any on-stack EnvironmentSet::Scope will still be on-stack. Since `func` executes on the
+  // target Executor's EventLoop (`getLoop()`) and we decree that KJ async environments do not cross
+  // threads, we don't need to propagate any active EnvironmentSet to the target Executor, either.
+  _::XThreadEventImpl<Func> event(kj::fwd<Func>(func), *this, getLoop(), location, nullptr);
   send(event, true);
   return convertToReturn(kj::mv(event.result));
 }
 
 template <typename Func>
 PromiseForResult<Func, void> Executor::executeAsync(Func&& func, SourceLocation location) const {
-  // HACK: We call getLoop() here, rather than have XThreadEvent's constructor do it, so that if it
-  //   throws we don't crash due to `allocPromise()` being `noexcept`.
+  // HACK: We call getLoop() and _::EnvironmentSet::tryGetCurrent() out here, rather than have
+  //   XThreadEvent's constructor do it, so that if they throw we don't crash due to
+  //   `allocPromise()` being `noexcept`.
+  // Although `func` will execute on the target Executor's EventLoop (`getLoop()`), we still need to
+  // destroy it under the current thread's EnvironmentSet (if any). That destruction will occur
+  // asynchronously, so we must capture the EnvironmentSet.
   auto event = _::allocPromise<_::XThreadEventImpl<Func>>(
-      kj::fwd<Func>(func), *this, getLoop(), location);
+      kj::fwd<Func>(func), *this, getLoop(), location, _::EnvironmentSet::tryGetCurrent());
   send(*event, false);
   return _::PromiseNode::to<PromiseForResult<Func, void>>(kj::mv(event));
 }

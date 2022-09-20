@@ -378,6 +378,9 @@ TEST(Async, SeparateFulfillerVoid) {
 }
 
 TEST(Async, SeparateFulfillerCanceled) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
   auto pair = newPromiseAndFulfiller<void>();
 
   EXPECT_TRUE(pair.fulfiller->isWaiting());
@@ -430,6 +433,9 @@ TEST(Async, SeparateFulfillerDiscardedDuringUnwind) {
 #endif
 
 TEST(Async, SeparateFulfillerMemoryLeak) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
   auto paf = kj::newPromiseAndFulfiller<void>();
   paf.fulfiller->fulfill();
 }

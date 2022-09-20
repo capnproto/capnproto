@@ -975,6 +975,10 @@ As of this writing, KJ supports C++20 coroutines and Coroutines TS coroutines, t
 
 KJ prefers C++20 coroutines when both implementations are available.
 
+### Asynchronous environments
+
+TODO(now)
+
 ### Unit testing tips
 
 When unit-testing promise APIs, two tricky challenges frequently arise:
