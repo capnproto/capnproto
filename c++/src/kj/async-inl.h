@@ -34,6 +34,7 @@
 KJ_BEGIN_HEADER
 
 #include <kj/list.h>
+#include <kj/one-of.h>
 
 namespace kj {
 namespace _ {  // private
@@ -134,10 +135,201 @@ private:
   void** limit;
 };
 
-struct alignas(void*) PromiseArena {
-  // Space in which a chain of promises may be allocated. See PromiseDisposer.
-  byte bytes[1024];
+// -------------------------------------------------------------------
+// Async Environments
+//
+// Rules when implementing a PromiseNode:
+//
+// - When implementing a dependent promise (e.g. one returned from a Promise member function), pass
+//   your dependency's EnvironmentSet (with `getEnvironmentSet()`) to your own PromiseNode base
+//   constructor.
+//
+// - When implementing an independent promise, accept a `Maybe<EnvironmentSet&>` constructor
+//   parameter and clone it. Constructor call sites should pass whatever `Maybe<EnvironmentSet&` is
+//   appropriate, defaulting to `EnvironmentSet::tryGetCurrent()`, if there is none other handy.
+//
+// - Do not call `EnvironmentSet::tryGetCurrent()` in a PromiseNode constructor, because
+//   `allocPromise()` is noexcept, and `EnvironmentSet::tryGetCurrent()` can fail if there is no
+//   event loop. Creating Promises outside of an event loop is a programming error and will
+//   eventually result in an exception. That exception will have a proper description of what went
+//   wrong, and is more debuggable than a termination.
+//
+// - If your PromiseNode implementation invokes user-written code on the same thread as its
+//   construction thread at any point after the PromiseNode is constructed, it must construct an
+//   `EnvironmentSet::Scope`, initialized with `getEnvironmentSet()`. The scope's lifetime must
+//   encompass the user code invocation.
+//
+// - In particular, construct an `EnvironmentSet::Scope` in your `get()` implementation, unless you
+//   can prove that your implementation will never invoke user code. Most `get()` implementations
+//   will at least call a user-provided move constructor, so most `get()` implementations should
+//   construct a scope.
+//
+// - An `EnvironmentSet::Scope` is not necessary in the implementation of
+//   `PromiseArenaMember::destroy()`. Instead, all call sites of `destroy()` are required to create
+//   their own `EnvironmentSet::Scope`.
+//
+//   TODO(perf): It might be marginally faster to require nodes which contain user objects to handle
+//   their own scopes, but it's a lot of boilerplate.
+//
+// - When creating an `ExceptionOr<T>` value on the stack, always create an `EnvironmentSet::Scope`
+//   directly above it, so that any user-written `T::~T()` will be covered by the EnvironmentSet.
+//
+// - EnvironmentSets must not be allowed to cross threads. When implementing a PromiseNode which
+//   executes user-written code on another thread, do _not_ create an `EnvironmentSet::Scope` for
+//   the execution on the other thread.
+//
+// - All of the above concerns should be considered for any other associated class that exists as an
+//   implementation detail of the PromiseNode. For example, ForkHub<T> is not a PromiseNode, but its
+//   destructor calls a user destructor, so it must arrange to emplace an `EnvironmentSet::Scope`.
+//   (It happens to be a PromiseArenaMember, so it conveniently gets this for free.)
+
+class EnvironmentSetImpl;
+KJ_DECLARE_NON_POLYMORPHIC(EnvironmentSetImpl)
+// EnvironmentSet uses a pimpl idiom, and has a move constructor, meaning we need a complete
+// Own</*impl*/> type. We declare the type out here, instead of making it a nested type, so we can
+// teach Own<T> about it.
+
+class EnvironmentSet {
+  // A collection of Environments.
+  //
+  // This class also provides access to the current EventLoop's reference to the currently-active
+  // EnvironmentSet.
+
+public:
+  class Scope;
+  // Put a `Scope(set)` on the stack to make an environment current. Requires a current EventLoop.
+
+  static EnvironmentSet create(void* typeKey, Own<Environment> environment);
+  // Construct a new EnvironmentSet containing `environment`. If an EnvironmentSet is already
+  // current, all of its environments, save any identified by `typeKey`, are adopted.
+
+  static Maybe<EnvironmentSet&> tryGetCurrent();
+  // Call `EnvironmentSet::tryGetCurrent()` to access the current EnvironmentSet, if any.
+
+  KJ_DISALLOW_COPY(EnvironmentSet);
+  EnvironmentSet(EnvironmentSet&&) = default;
+
+  auto operator==(const EnvironmentSet& other) const { return impl.get() == other.impl.get(); };
+
+  EnvironmentSet clone();
+  // Return a new EnvironmentSet which compares equal to this one.
+
+  Maybe<Environment&> tryGetEnvironment(void* typeKey);
+  // Return the specific Environment associated with `typeKey`.
+
+private:
+  Maybe<EnvironmentSet&>& currentEnvironmentSet;
+  // Reference to EventLoop::currentEnvironmentSet, so we can save some dereferencing during Scope
+  // construction. In KJ_DEBUG builds, this is required to be identical to (that is, has the same
+  // address as) the current event loop's `EventLoop::currentEnvironmentSet`. This guards against
+  // EnvironmentSet::Scopes being created on the wrong thread.
+
+  using Impl = EnvironmentSetImpl;
+  Own<Impl> impl;
+  // This exists just so we don't have to include kj/map.h.
+
+  explicit EnvironmentSet(Maybe<EnvironmentSet&>& currentEnvironmentSet, Own<Impl> impl);
+  // Constructor used by `create()` and `clone()`.
 };
+
+class EnvironmentSet::Scope {
+  // Construct one of these on the stack whenever you need to push an EnvironmentSet reference onto
+  // the EnvironmentSet stack. While one of these is alive, `EnvironmentSet::tryGetCurrent()` will
+  // return the newly-pushed EnvironmentSet reference.
+
+public:
+  explicit Scope(Maybe<EnvironmentSet&> newEnvironmentSet);
+  ~Scope() noexcept(false);
+  KJ_DISALLOW_COPY_AND_MOVE(Scope);
+
+private:
+  struct Impl {
+    Maybe<EnvironmentSet&>& currentEnvironmentSet;
+    Maybe<EnvironmentSet&> previous;
+  };
+  Maybe<Impl> impl;
+};
+
+class Environment: public kj::Refcounted {
+  // Base class of Environment::Holder<T>.
+
+public:
+  template <typename T> class Holder;
+
+  KJ_DISALLOW_COPY(Environment);
+  ~Environment() noexcept(false) = 0;
+
+private:
+  Environment() = default;
+};
+
+template <typename T>
+class Environment::Holder final: public Environment {
+public:
+  template <typename... Args>
+  Holder(Args&&... args): environment(fwd<Args>(args)...) {}
+
+  T environment;
+
+  static void* typeKey() {
+    static bool uniqueAddress;
+    return &uniqueAddress;
+  }
+};
+
+#ifdef KJ_DEBUG
+void requireEnvironmentSetEqual(Maybe<EnvironmentSet&> left, Maybe<EnvironmentSet&> right);
+// Used in `PromiseDisposer::append()` to catch failure to call `.adoptPromise()`.
+#endif
+
+// -------------------------------------------------------------------
+
+// We want our PromiseArenas to:
+// - contain a Maybe<EnvironmentSet>
+// - have a nice power-of-2 size
+//
+// To that end, we do some arithmetic to figure out the size of our Maybe<EnvironmentSet> type with
+// any padding it might accrue from alignment, subtract that size from our desired size
+//
+// TODO(now): Using a hack like alignas(1024) could be less verbose, but I don't know what the
+//   downsides to over-alignment are.
+
+constexpr uint PADDED_SIZE_OF_ENVIRONMENT_SET =
+    alignof(Maybe<EnvironmentSet>) *
+        ((sizeof(Maybe<EnvironmentSet>) - 1) / alignof(Maybe<EnvironmentSet>) + 1);
+
+constexpr uint PROMISE_ARENA_SIZE = 1024;
+constexpr uint USABLE_PROMISE_ARENA_SIZE = PROMISE_ARENA_SIZE - PADDED_SIZE_OF_ENVIRONMENT_SET;
+
+static_assert(USABLE_PROMISE_ARENA_SIZE >= 992, "Usable PromiseArena size shrank.");
+// If this assertion fires after modifying the Maybe<T> or EnvironmentSet types, find out the new
+// value (e.g., by logging it from a test), consider whether this is still a reasonable amount of
+// space (it probably will be), and update this magic number.
+//
+// If this assertion fires at any other time, it's probably because we're on an architecture with
+// different sizes / alignments than I wrote this assertion on (please accept my apologies).
+// You should probably just update the magic number.
+
+struct PromiseArena {
+  // Space in which a chain of promises may be allocated. See PromiseDisposer.
+
+  explicit PromiseArena(Maybe<EnvironmentSet>);
+
+  Maybe<EnvironmentSet> environmentSet;
+  // Optimization: Each PromiseArena may contain an EnvironmentSet which its PromiseNodes may refer
+  // to. This saves us from a bunch of redundant refcount mutation as EnvironmentSets propagate from
+  // promise to promise.
+
+  struct alignas(void*) Space {
+    byte bytes[USABLE_PROMISE_ARENA_SIZE];
+  };
+
+  Space space;
+};
+
+static_assert(sizeof(PromiseArena) == PROMISE_ARENA_SIZE);
+
+// -------------------------------------------------------------------
 
 class Event: private AsyncObject {
   // An event waiting to be executed.  Not for direct use by applications -- promises use this
@@ -233,9 +425,22 @@ public:
   // memory, e.g. call `delete this`.
   //
   // We use this instead of a virtual destructor for two reasons:
-  // 1. Coroutine nodes are not indepnedent objects, they have to call destroy() on the coroutine
+  // 1. Coroutine nodes are not independent objects, they have to call destroy() on the coroutine
   //    handle to delete themselves.
   // 2. XThreadEvents sometimes leave it up to a different thread to actually delete the object.
+
+  Maybe<EnvironmentSet&> getEnvironmentSet();
+
+protected:
+  PromiseArenaMember(Maybe<EnvironmentSet> environmentSet)
+      : environmentSet(kj::mv(environmentSet)) {}
+  // Subclasses which are dynamically allocated by something other than `allocPromise()` should
+  // manually capture the environment and use this constructor. In practice, this means Coroutines
+  // should call this constructor.
+
+  PromiseArenaMember() = default;
+  // All other subclasses should use this constructor. If we're being allocated or appended,
+  // PromiseDisposer::alloc/append() will set our `environmentSet` after construction.
 
 private:
   PromiseArena* arena = nullptr;
@@ -244,9 +449,22 @@ private:
   //
   // PromiseNodes are allocated within the arena starting from the end, and `PromiseNode`s
   // allocated this way are required to have `PromiseNode` itself as their leftmost inherited type,
-  // so that the pointers match. Thus, the space in `arena` from its start to the location of the
-  // `PromiseNode` is known to be available for subsequent allocations (which should then take
+  // so that the pointers match. Thus, the space in `arena->space` from its start to the location of
+  // the `PromiseNode` is known to be available for subsequent allocations (which should then take
   // ownership of the arena).
+
+  struct NoEnv {};
+
+  OneOf<NoEnv, Maybe<EnvironmentSet>, Maybe<EnvironmentSet&>> environmentSet = NoEnv();
+  // If this is NoEnv, we are a PromiseArenaMember which cannot itself capture an environment for
+  // some reason, either because there may be no active event loop (such as in `executeSync()`), or
+  // because we are a statically-allocated PromiseNode.
+  //
+  // If this is Maybe<EnvironmentSet>, we are a standalone PromiseArenaMember, probably because we
+  // were too big to fit into a PromiseArena. We own our own EnvironmentSet.
+  //
+  // If this is Maybe<EnvironmentSet&>, we are part of an arena, and possess a reference to the
+  // EnvironmentSet's value as an optimization.
 
   friend class PromiseDisposer;
 };
@@ -317,6 +535,8 @@ public:
   }
 
 protected:
+  using PromiseArenaMember::PromiseArenaMember;
+
   class OnReadyEvent {
     // Helper class for implementing onReady().
 
@@ -341,7 +561,15 @@ class PromiseDisposer {
 public:
   static void dispose(PromiseArenaMember* node) {
     PromiseArena* arena = node->arena;
-    node->destroy();
+    {
+      // HACK: We're putting an environment scope on the stack which refers to an EnvironmentSet
+      //   which may be owned by the `node` being destroyed. This feels sketchy. However, there's no
+      //   possibility of the dangling reference being dereferenced, because the EnvironmentSet
+      //   lives way up in PromiseArenaMember -- it will be destroyed after anything that could
+      //   possibly rely on it. Also, the Scope destructor does not dereference.
+      EnvironmentSet::Scope scope(node->getEnvironmentSet());
+      node->destroy();
+    }
     delete arena;  // reminder: `delete` automatically ignores null pointers
   }
 
@@ -349,19 +577,28 @@ public:
   static kj::Own<T, D> alloc(Params&&... params) noexcept {
     // Implements allocPromise().
     T* ptr;
-    if (sizeof(T) > sizeof(PromiseArena) || alignof(T) != alignof(void*)) {
+
+    // Since we're allocating a new PromiseArena, we need to capture the environment.
+    auto environmentSet = EnvironmentSet::tryGetCurrent().map([](EnvironmentSet& set) {
+      return set.clone();
+    });
+
+    if (sizeof(T) > USABLE_PROMISE_ARENA_SIZE || alignof(T) != alignof(void*)) {
       // Node too big (or needs weird alignment), fall back to regular heap allocation.
       ptr = new T(kj::fwd<Params>(params)...);
+      // This node must itself own the captured environment.
+      ptr->environmentSet.template init<Maybe<EnvironmentSet>>(kj::mv(environmentSet));
     } else {
       // Start a new arena.
       //
       // NOTE: As in append() (below), we don't implement exception-safety because it causes code
       //   bloat and these constructors probably don't throw. Instead this function is noexcept, so
       //   if a constructor does throw, it'll crash rather than leak memory.
-      auto* arena = new PromiseArena;
+      auto* arena = new PromiseArena(kj::mv(environmentSet));
       ptr = reinterpret_cast<T*>(arena + 1) - 1;
       ctor(*ptr, kj::fwd<Params>(params)...);
       ptr->arena = arena;
+      ptr->environmentSet.template init<Maybe<EnvironmentSet&>>(arena->environmentSet);
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
                   reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),
           "PromiseArenaMember must be the leftmost inherited type.");
@@ -377,13 +614,32 @@ public:
     PromiseArena* arena = next->arena;
 
     if (arena == nullptr ||
-        reinterpret_cast<byte*>(next.get()) - reinterpret_cast<byte*>(arena) < sizeof(T) ||
+        reinterpret_cast<byte*>(next.get()) - reinterpret_cast<byte*>(&arena->space) < sizeof(T) ||
         alignof(T) != alignof(void*)) {
       // No arena available, or not enough space, or weird alignment needed. Start new arena.
+      // TODO(perf): If we have an arena, it would be nice to propagate its EnvironmentSet somehow.
+      //   Perhaps a new alloc() overload?
       return alloc<T, D>(kj::mv(next), kj::fwd<Params>(params)...);
     } else {
       // Append to arena.
+
+#ifdef KJ_DEBUG
+      // In debug mode, we check that the `next` node's EnvironmentSet is the same as the current
+      // event loop's current environment set. This will alert the code author to mistakes such as:
       //
+      //   Promise<void> promise1(READY_NOW);
+      //   Promise<void> promise2 = nullptr;
+      //   runInEnvironment([&]() {
+      //     promise1.then([]() {});  // ERROR: should have used .adoptEnvironment()
+      //     promise2 = READY_NOW;
+      //   });
+      //   promise2.then([]() {});  // ERROR: should have returned the promise
+      //
+      // Unfortunately, we alert the code author to these mistakes by crashing, because
+      // `appendPromise()` is noexcept. Oh well.
+      requireEnvironmentSetEqual(next->getEnvironmentSet(), EnvironmentSet::tryGetCurrent());
+#endif  // KJ_DEBUG
+
       // NOTE: When we call ctor(), it takes ownership of `next`, so we shouldn't assume `next`
       //   still exists after it returns. So we have to remove ownership of the arena before that.
       //   In theory if we wanted this to be exception-safe, we'd also have to arrange to delete
@@ -394,6 +650,8 @@ public:
       T* ptr = reinterpret_cast<T*>(next.get()) - 1;
       ctor(*ptr, kj::mv(next), kj::fwd<Params>(params)...);
       ptr->arena = arena;
+      // Inherit the dependency promise's EnvironmentSet.
+      ptr->environmentSet.template init<Maybe<EnvironmentSet&>>(arena->environmentSet);
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
                   reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),
           "PromiseArenaMember must be the leftmost inherited type.");
@@ -419,6 +677,74 @@ static kj::Own<T, PromiseDisposer> appendPromise(OwnPromiseNode&& next, Params&&
   // object must never transfer away ownership of `next`).
   return PromiseDisposer::append<T>(kj::mv(next), kj::fwd<Params>(params)...);
 }
+
+// -------------------------------------------------------------------
+
+class AdoptEnvironmentPromiseNode: public PromiseNode {
+  // A wrapper around another PromiseNode which overrides the EnvironmentSet associated with the
+  // promise chain. Implements `.adoptEnvironment()`.
+
+public:
+  explicit AdoptEnvironmentPromiseNode(OwnPromiseNode&& dependency, void* tracePtr);
+
+  void onReady(Event* event) noexcept override;
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void destroy() override { dtor(*this); }
+  void get(ExceptionOrValue& output) noexcept override;
+
+private:
+  Own<PromiseNode> dependency;
+  void* tracePtr;
+};
+
+}  // namespace _
+
+template <typename E, typename Func>
+PromiseForResult<Func, void> runInEnvironment(E&& environment, Func&& func) {
+  PromiseForResult<Func, void> intermediate = nullptr;
+
+  KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+    using Holder = _::Environment::Holder<Decay<E>>;
+    auto environmentSet = _::EnvironmentSet::create(
+        Holder::typeKey(), refcounted<Holder>(fwd<E>(environment)));
+    _::EnvironmentSet::Scope scope(environmentSet);
+    using T = _::ReturnType<Func, void>;
+    intermediate = _::MaybeVoidCaller<_::Void, _::FixVoid<T>>::apply(func, {});
+  })) {
+    intermediate = kj::mv(*e);
+  }
+
+  // We could just call `.adoptEnvironment()` here, but it may be more helpful if `tracePtr`
+  // contains the new environment type E in it. (It also may be more confusing, I dunno...) So, we
+  // create a AdoptEnvironmentPromiseNode manually.
+  auto tracePtr = reinterpret_cast<void*>(&kj::runInEnvironment<E, Func>);
+  _::OwnPromiseNode node =
+      allocPromise<_::AdoptEnvironmentPromiseNode>(
+          _::PromiseNode::from(kj::mv(intermediate)), tracePtr);
+  return _::PromiseNode::to<PromiseForResult<Func, void>>(kj::mv(node));
+}
+
+template <typename T>
+T& getEnvironment() {
+  auto maybeEnvironment = tryGetEnvironment<T>();
+  KJ_IREQUIRE(maybeEnvironment != nullptr, "Currently executing code has no Environment");
+  return *_::readMaybe(maybeEnvironment);
+}
+
+template <typename T>
+kj::Maybe<T&> tryGetEnvironment() {
+  using Holder = _::Environment::Holder<T>;
+
+  KJ_IF_MAYBE(set, _::EnvironmentSet::tryGetCurrent()) {
+    KJ_IF_MAYBE(holder, set->tryGetEnvironment(Holder::typeKey())) {
+      return downcast<Holder>(*holder).environment;
+    }
+  }
+
+  return nullptr;
+}
+
+namespace _ {
 
 // -------------------------------------------------------------------
 
@@ -451,6 +777,7 @@ public:
   void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
+    EnvironmentSet::Scope scope(getEnvironmentSet());
     output.as<T>() = kj::mv(result);
   }
 
@@ -470,10 +797,13 @@ private:
 };
 
 template <typename T, T value>
-class ConstPromiseNode: public ImmediatePromiseNodeBase {
+class ConstPromiseNode final: public ImmediatePromiseNodeBase {
 public:
   void destroy() override {}
   void get(ExceptionOrValue& output) noexcept override {
+    // TODO(now): We're copy-constructing a user value from the result of a constant expression.
+    // User code could still be invoked, so we need an environment scope. But we're a statically-
+    // allocated node...
     output.as<T>() = value;
   }
 };
@@ -765,6 +1095,8 @@ public:
   void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
+    EnvironmentSet::Scope scope(getEnvironmentSet());
+
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
     KJ_IF_MAYBE(value, hubResult.value) {
       output.as<T>().value = copyOrAddRef(*value);
@@ -788,6 +1120,8 @@ public:
   typedef kj::Decay<decltype(kj::get<index>(kj::instance<T>()))> Element;
 
   void get(ExceptionOrValue& output) noexcept override {
+    EnvironmentSet::Scope scope(getEnvironmentSet());
+
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
     KJ_IF_MAYBE(value, hubResult.value) {
       output.as<Element>().value = kj::mv(kj::get<index>(*value));
@@ -1132,6 +1466,7 @@ public:
   void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
+    EnvironmentSet::Scope scope(getEnvironmentSet());
     KJ_IREQUIRE(!isWaiting());
     output.as<T>() = kj::mv(result);
   }
@@ -1368,6 +1703,15 @@ Promise<T> Promise<T>::eagerlyEvaluate(ErrorFunc&& errorHandler, SourceLocation 
 template <typename T>
 Promise<T> Promise<T>::eagerlyEvaluate(decltype(nullptr), SourceLocation location) {
   return Promise(false, _::spark<_::FixVoid<T>>(kj::mv(node), location));
+}
+
+template <typename T>
+Promise<T> Promise<T>::adoptEnvironment() {
+  auto tracePtr = getMethodStartAddress(*this, &kj::Promise<T>::adoptEnvironment);
+  // The only thing we need to do to adopt the current environment is use `allocPromise()`.
+  _::OwnPromiseNode newNode =
+      allocPromise<_::AdoptEnvironmentPromiseNode>(kj::mv(node), tracePtr);
+  return _::PromiseNode::to<Promise<T>>(kj::mv(newNode));
 }
 
 template <typename T>
