@@ -71,7 +71,27 @@ Own<DeferredExpectEnvironment> dee() {
 }
 
 template <typename Func>
-void testCase(Func&& func) {
+void syncTestCase(Func&& func) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  bool finalDestructorRan = false;
+
+  KJ_EXPECT(tryGetEnvironment<TestEnvironment>() == nullptr);
+
+  auto promise = runInEnvironment(
+      TestEnvironment(finalDestructorRan, heapString("foobar"_kj)),
+      FunctionParam<Promise<void>()>(fwd<Func>(func)));
+
+  // Purely synchronous functions don't capture the Environment.
+  KJ_EXPECT(finalDestructorRan);
+  KJ_EXPECT(tryGetEnvironment<TestEnvironment>() == nullptr);
+  KJ_EXPECT(promise.poll(waitScope));
+  promise.wait(waitScope);
+}
+
+template <typename Func>
+void asyncTestCase(Func&& func) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -84,15 +104,16 @@ void testCase(Func&& func) {
         TestEnvironment(finalDestructorRan, heapString("foobar"_kj)),
         FunctionParam<Promise<void>()>(fwd<Func>(func)));
 
+    // Asynchronous functions capture the Environment. Eager promises will drop the Environment
+    // after .poll(), and non-eager ones after .wait().
+    KJ_EXPECT(!finalDestructorRan);
     KJ_EXPECT(tryGetEnvironment<TestEnvironment>() == nullptr);
     if (promise.poll(waitScope)) {
       KJ_EXPECT(tryGetEnvironment<TestEnvironment>() == nullptr);
-      KJ_EXPECT(!finalDestructorRan);
       promise.wait(waitScope);
 
       // The Environment is destroyed after the promise is done.
       KJ_EXPECT(finalDestructorRan);
-      KJ_EXPECT(tryGetEnvironment<TestEnvironment>() == nullptr);
     } else {
       // Test case suspended forever. Just verify that our environment's destructor runs.
       KJ_EXPECT(!finalDestructorRan);
@@ -100,17 +121,19 @@ void testCase(Func&& func) {
       KJ_EXPECT(finalDestructorRan);
     }
   }
+
+  KJ_EXPECT(tryGetEnvironment<TestEnvironment>() == nullptr);
 }
 
 KJ_TEST("Environments are available to synchronous callbacks") {
-  testCase([]() -> kj::Promise<void> {
+  syncTestCase([]() -> kj::Promise<void> {
     expectEnvironment();
     return READY_NOW;
   });
 }
 
 KJ_TEST("Environments are available to evalLater() callbacks") {
-  testCase([]() -> kj::Promise<void> {
+  asyncTestCase([]() -> kj::Promise<void> {
     return evalLater([d=dee()]() {
       expectEnvironment();
     });
@@ -118,7 +141,7 @@ KJ_TEST("Environments are available to evalLater() callbacks") {
 }
 
 KJ_TEST("Environments are available to evalLast() callbacks") {
-  testCase([]() -> kj::Promise<void> {
+  asyncTestCase([]() -> kj::Promise<void> {
     return evalLast([d=dee()]() {
       expectEnvironment();
     });
@@ -126,7 +149,7 @@ KJ_TEST("Environments are available to evalLast() callbacks") {
 }
 
 KJ_TEST("Environments are available in fibers") {
-  testCase([]() -> Promise<void> {
+  asyncTestCase([]() -> Promise<void> {
     return startFiber(64 * 1024, [d=dee()](WaitScope& ws2) {
       expectEnvironment();
       _::yield().wait(ws2);
@@ -136,7 +159,7 @@ KJ_TEST("Environments are available in fibers") {
 }
 
 KJ_TEST("Environments are available in ForkedPromise branch callbacks") {
-  testCase([]() -> Promise<void> {
+  asyncTestCase([]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<void>();
 
     auto forked = paf.promise.fork();
@@ -156,7 +179,7 @@ KJ_TEST("Environments are available in ForkedPromise branch callbacks") {
 }
 
 KJ_TEST("Environments are available in .then() callbacks and errorbacks") {
-  testCase([]() -> Promise<void> {
+  asyncTestCase([]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<void>();
 
     auto promise = paf.promise.then([d=dee()]() mutable {
@@ -171,7 +194,7 @@ KJ_TEST("Environments are available in .then() callbacks and errorbacks") {
     return kj::mv(promise);
   });
 
-  testCase([]() -> Promise<void> {
+  asyncTestCase([]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<void>();
 
     auto promise = paf.promise.then([d=dee()]() mutable {
@@ -187,8 +210,8 @@ KJ_TEST("Environments are available in .then() callbacks and errorbacks") {
   });
 }
 
-KJ_TEST("Environments are available in .catch_() and eagerlyEvaluate() errorbacks") {
-  testCase([]() -> Promise<void> {
+KJ_TEST("Environments are available in .catch_() errorbacks") {
+  asyncTestCase([]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<void>();
 
     auto promise = paf.promise.catch_([d=dee()](kj::Exception&& exception) {
@@ -199,8 +222,10 @@ KJ_TEST("Environments are available in .catch_() and eagerlyEvaluate() errorback
 
     return kj::mv(promise);
   });
+}
 
-  testCase([]() -> Promise<void> {
+KJ_TEST("Environments are available in .eagerlyEvaluate() errorbacks") {
+  asyncTestCase([]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<void>();
 
     auto promise = paf.promise.eagerlyEvaluate([d=dee()](kj::Exception&& exception) {
@@ -214,7 +239,7 @@ KJ_TEST("Environments are available in .catch_() and eagerlyEvaluate() errorback
 }
 
 KJ_TEST("Environments are available in .ignoreResult() destructors") {
-  testCase([]() -> Promise<void> {
+  asyncTestCase([]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<Own<DeferredExpectEnvironment>>();
 
     auto promise = paf.promise.ignoreResult();
@@ -226,7 +251,7 @@ KJ_TEST("Environments are available in .ignoreResult() destructors") {
 }
 
 KJ_TEST("Environments are available in .attach() destructors") {
-  testCase([]() -> Promise<void> {
+  asyncTestCase([]() -> Promise<void> {
     return Promise<void>(READY_NOW).attach(heap<DeferredExpectEnvironment>());
   });
 }
@@ -234,7 +259,7 @@ KJ_TEST("Environments are available in .attach() destructors") {
 #if KJ_HAS_COROUTINE
 
 KJ_TEST("Environments are available in coroutines") {
-  testCase([]() -> Promise<void> {
+  asyncTestCase([]() -> Promise<void> {
     expectEnvironment();
     co_await Promise<void>(READY_NOW);
     expectEnvironment();
@@ -246,7 +271,7 @@ KJ_TEST("Environments are available in coroutines") {
 }
 
 KJ_TEST("Environments are available in suspended coroutine destructors") {
-  testCase([]() -> Promise<void> {
+  asyncTestCase([]() -> Promise<void> {
     // Explode if we're destroyed outside an Environment.
     DeferredExpectEnvironment dee;
 

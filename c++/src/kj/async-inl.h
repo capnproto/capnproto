@@ -348,7 +348,7 @@ template <typename E, typename T, typename... Args>
 Promise<T> runInEnvironment(E&& environment, FunctionParam<Promise<T>(Args...)> func) {
   auto holder = refcounted<_::Environment::Holder<Decay<E>>>(fwd<E>(environment));
   _::Environment::Scope scope(*holder);
-  return evalNow(func).attach(kj::mv(holder));
+  return evalNow(func);
 }
 
 template <typename T>
