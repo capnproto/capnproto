@@ -244,6 +244,8 @@ if(BUILD_TESTING)
     table-test.c++
     map-test.c++
     exception-test.c++
+    # this test overrides symbolizer and has to be linked separately
+    # exception-override-symbolizer-test.c++
     debug-test.c++
     io-test.c++
     mutex-test.c++

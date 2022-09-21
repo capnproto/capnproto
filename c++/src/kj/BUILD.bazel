@@ -166,8 +166,8 @@ cc_test(
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [
-        "//src/kj/compat:kj-http",
         ":kj-test",
+        "//src/kj/compat:kj-http",
     ],
 )
 
@@ -210,4 +210,14 @@ cc_test(
         ":kj-async",
         ":kj-test",
     ],
+)
+
+cc_test(
+    name = "exception-override-symbolizer-test",
+    srcs = ["exception-override-symbolizer-test.c++"],
+    deps = [
+        ":kj",
+        ":kj-test",
+    ],
+    linkstatic = True,
 )
