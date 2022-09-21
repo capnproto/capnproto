@@ -192,8 +192,8 @@ public:
 
   inline ListIterator& operator++() {
     current = next;
-    next = current.map([](MaybeConstT& obj) -> kj::Maybe<MaybeConstT&> { return (obj.*link).next; })
-        .orDefault(nullptr);
+    next = current.map(
+        [](MaybeConstT& obj) -> kj::Maybe<MaybeConstT&> { return (obj.*link).next; });
     return *this;
   }
   inline ListIterator operator++(int) {
@@ -217,8 +217,8 @@ private:
 
   explicit ListIterator(Maybe<MaybeConstT&> start)
       : current(start),
-        next(start.map([](MaybeConstT& obj) -> kj::Maybe<MaybeConstT&> { return (obj.*link).next; })
-            .orDefault(nullptr)) {}
+        next(start.map(
+            [](MaybeConstT& obj) -> kj::Maybe<MaybeConstT&> { return (obj.*link).next; })) {}
   friend class List<T, link>;
 };
 

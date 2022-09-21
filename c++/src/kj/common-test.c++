@@ -455,6 +455,38 @@ TEST(Common, MaybeConstness) {
   }
 }
 
+TEST(Common, MaybeMap) {
+  {
+    Maybe<int> i;
+    bool called = false;
+    auto identifyFunction = [](int& i_) {
+      called = true;
+      return i_;
+    };
+    i = i.map(identifyFunction);
+    KJ_EXPECT(!called);
+    KJ_EXPECT(i == nullptr);
+    i = 123;
+    i = i.map(identifyFunction);
+    KJ_EXPECT(called);
+    KJ_EXPECT(i != nullptr);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(i) == 123);
+  }
+
+  {
+    Maybe<int> i;
+    auto maybeReturning = [](int& i_) -> Maybe<bool> {
+      return true;
+    };
+    auto b = i.map(maybeReturning);
+    KJ_EXPECT(b == nullptr);
+    i = 123;
+    b = i.map(maybeReturning);
+    KJ_EXPECT(b != nullptr);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(b) == true);
+  }
+}
+
 #if __GNUC__
 TEST(Common, MaybeUnwrapOrReturn) {
   {

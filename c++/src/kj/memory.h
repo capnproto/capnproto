@@ -387,7 +387,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) & -> Maybe<decltype(f(instance<Own<T>&>()))> {
+  auto map(Func&& f) & -> _::ChainMaybes<decltype(f(instance<Own<T>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -396,7 +396,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const & -> Maybe<decltype(f(instance<const Own<T>&>()))> {
+  auto map(Func&& f) const & -> _::ChainMaybes<decltype(f(instance<const Own<T>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -405,7 +405,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) && -> Maybe<decltype(f(instance<Own<T>&&>()))> {
+  auto map(Func&& f) && -> _::ChainMaybes<decltype(f(instance<Own<T>&&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -414,7 +414,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const && -> Maybe<decltype(f(instance<const Own<T>&&>()))> {
+  auto map(Func&& f) const && -> _::ChainMaybes<decltype(f(instance<const Own<T>&&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {

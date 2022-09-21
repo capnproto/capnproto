@@ -1065,6 +1065,8 @@ inline void dtor(T& location) {
 
 template <typename T>
 class Maybe;
+template <typename T>
+class Maybe<T&>;
 
 namespace _ {  // private
 
@@ -1291,6 +1293,12 @@ template <typename T>
 inline T* readMaybe(T* ptr) { return ptr; }
 // Allow KJ_IF_MAYBE to work on regular pointers.
 
+template <typename T> struct ChainMaybes_ { using Type = kj::Maybe<T>; };
+template <typename T> struct ChainMaybes_<kj::Maybe<T>>: ChainMaybes_<T> {};
+template <typename T> using ChainMaybes = typename ChainMaybes_<T>::Type;
+// Constructs a maybe for T, reducing double-maybes. That is, if T is Maybe<U>, resolves to
+// Maybe<U>, otherwise resolves to Maybe<T>.
+
 }  // namespace _ (private)
 
 #define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::_::readMaybe(exp))
@@ -1348,6 +1356,43 @@ inline T* readMaybe(T* ptr) { return ptr; }
     kj::mv(_kj_result); \
   }))
 #endif
+
+#define KJ_TRY_INVOKE(invocable, maybe, ...) \
+  ([&]() { \
+    auto m = ::kj::_::readMaybe(maybe); \
+    using Result = ::kj::_::ChainMaybes<decltype(::std::invoke(invocable, *m, __VA_ARGS__))>; \
+    if (m != nullptr) { \
+      return Result(::std::invoke(invocable, *m, __VA_ARGS__)); \
+    } else { \
+      return Result(nullptr); \
+    } \
+  }())
+// `KJ_TRY_INVOKE(f, t1, t2, ..., tn)` is a conditional wrapper around `std::invoke()`. `t1` must be
+// a `kj::Maybe<T>`. If `t1` is non-null, `std::invoke(f, t1_, t2, ..., tn)` is the result of the
+// macro's expression; otherwise, an empty Maybe is returned.
+//
+// The result of the macro's expression is the result of the underlying `std::invoke()` if that
+// result is a maybe type. Otherwise, the result is `Maybe<U>`, where U is the result of the
+// underlying `std::invoke()` call.
+//
+// Use like so:
+//   struct Foo {
+//     int data;
+//     int func(int, int);
+//   };
+//   int freeFunc(Foo&, int, int);
+//   Maybe<int> freeFunc2(Foo&, int, int);
+//
+//   Maybe<Foo> foo;
+//   Maybe<int> dataResult = KJ_TRY_INVOKE(&Foo::data, foo);
+//   Maybe<int> memFuncResult = KJ_TRY_INVOKE(&Foo::memFunc, foo, 1, 2);
+//   Maybe<int> freeFuncResult = KJ_TRY_INVOKE(freeFunc, foo, 1, 2);
+//   Maybe<int> freeFunc2Result = KJ_TRY_INVOKE(freeFunc2, foo, 1, 2);
+//
+// Note that arguments passed by rvalue reference will not be moved-from if `t1` is null, even if
+// the invocable's parameter types would normally have forced moves to occur.
+//
+// `std::invoke()` requires C++17 or later.
 
 template <typename T>
 class Maybe {
@@ -1513,7 +1558,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) & -> Maybe<decltype(f(instance<T&>()))> {
+  auto map(Func&& f) & -> _::ChainMaybes<decltype(f(instance<T&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -1522,7 +1567,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const & -> Maybe<decltype(f(instance<const T&>()))> {
+  auto map(Func&& f) const & -> _::ChainMaybes<decltype(f(instance<const T&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -1531,7 +1576,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) && -> Maybe<decltype(f(instance<T&&>()))> {
+  auto map(Func&& f) && -> _::ChainMaybes<decltype(f(instance<T&&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -1540,7 +1585,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const && -> Maybe<decltype(f(instance<const T&&>()))> {
+  auto map(Func&& f) const && -> _::ChainMaybes<decltype(f(instance<const T&&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -1627,7 +1672,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
+  auto map(Func&& f) -> _::ChainMaybes<decltype(f(instance<T&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -1636,7 +1681,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
+  auto map(Func&& f) const -> _::ChainMaybes<decltype(f(instance<const T&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
