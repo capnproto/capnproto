@@ -301,8 +301,8 @@ protected:
 // -------------------------------------------------------------------
 
 class Environment: public kj::Refcounted {
-  // Base class of Environment::Holder<T>. This class also houses and provides access to the
-  // thread_local reference to the currently-active Environment.
+  // Base class of Environment::Holder<T>. This class also provides access to the current
+  // EventLoop's reference to the currently-active Environment.
 
 public:
   class Scope;
@@ -316,8 +316,6 @@ public:
 
 private:
   Environment() = default;
-
-  static thread_local Maybe<Environment&> current;
 };
 
 class Environment::Scope {

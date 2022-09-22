@@ -213,6 +213,8 @@ class Event;
 class XThreadEvent;
 class XThreadPaf;
 
+class Environment;
+
 class PromiseBase {
 public:
   kj::String trace();

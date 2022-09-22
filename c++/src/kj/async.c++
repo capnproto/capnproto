@@ -440,21 +440,21 @@ namespace _ {
 Environment::~Environment() noexcept(false) {}
 
 Maybe<Own<Environment>> Environment::tryCaptureCurrent() {
-  return current.map([](Environment& environment) {
+  return currentEventLoop().currentEnvironment.map([](Environment& environment) {
     return addRef(environment);
   });
 }
 Maybe<Environment&> Environment::tryGetCurrent() {
-  return current;
+  return currentEventLoop().currentEnvironment;
 }
 
-Environment::Scope::Scope(Maybe<Environment&> environment): previous(Environment::current) {
-  Environment::current = environment;
+Environment::Scope::Scope(Maybe<Environment&> environment)
+    : previous(currentEventLoop().currentEnvironment) {
+  currentEventLoop().currentEnvironment = environment;
 }
 Environment::Scope::~Scope() noexcept(false) {
-  Environment::current = previous;
+  currentEventLoop().currentEnvironment = previous;
 }
-thread_local Maybe<Environment&> Environment::current;
 
 }  // namespace _
 
