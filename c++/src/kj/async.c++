@@ -1727,11 +1727,11 @@ EventLoop::EventLoop(EventPort& port)
       daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
-  // Destroy all "daemon" tasks, noting that their destructors might register more daemon tasks.
-  while (!daemons->isEmpty()) {
-    auto oldDaemons = kj::mv(daemons);
-    daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
-  }
+  // Destroy all "daemon" tasks, noting that their destructors might register more daemon tasks. For
+  // this reason, we must construct a temporary WaitScope to do the job for us, because if
+  // registering a new daemon task constructs a new Event object, or a new detached promise,
+  // `currentEventLoop()` will be called, which would throw without an active WaitScope.
+  WaitScope(*this).cancelAllDetached();
   daemons = nullptr;
 
   KJ_IF_MAYBE(e, executor) {
