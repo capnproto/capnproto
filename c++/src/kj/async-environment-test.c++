@@ -47,6 +47,10 @@ struct TestEnvironment {
 };
 
 void expectEnvironment(kj::StringPtr expectedStuff = "foobar"_kj) {
+  // We don't crash or anything if we try to get a nonexistent environment.
+  struct NotAnEnvironment {};
+  KJ_EXPECT(tryGetEnvironment<NotAnEnvironment>() == nullptr);
+
   auto maybeEnvironment = tryGetEnvironment<TestEnvironment>();
   KJ_EXPECT(maybeEnvironment != nullptr);
   KJ_IF_MAYBE(environment, maybeEnvironment) {
@@ -203,7 +207,7 @@ KJ_TEST("Environments are available in .then() errorbacks") {
   });
 }
 
-KJ_TEST("Environments are overridable") {
+KJ_TEST("Environments are overridable and overlapping") {
   bool overrideEnvironmentDestructorRan = false;
   asyncTestCase([&]() -> Promise<void> {
     auto paf = newPromiseAndFulfiller<void>();
@@ -216,6 +220,22 @@ KJ_TEST("Environments are overridable") {
         expectEnvironment("bazqux"_kj);
         return evalLater([]() {
           expectEnvironment("bazqux"_kj);
+          return runInEnvironment(double(1.23), []() {
+            // We have the previous environment.
+            expectEnvironment("bazqux"_kj);
+            // And an overlapping environment.
+            KJ_EXPECT(tryGetEnvironment<double>() != nullptr);
+            KJ_EXPECT(getEnvironment<double>() == 1.23);
+            // We can override the double again and the TestEnvironment stays.
+            return runInEnvironment(4.56, []() {
+              return evalLater([]() {
+                expectEnvironment("bazqux"_kj);
+                KJ_EXPECT(tryGetEnvironment<double>() != nullptr);
+                KJ_EXPECT(getEnvironment<double>() == 4.56);
+                return Promise<void>(READY_NOW);
+              });
+            });
+          });
         });
       });
     }, [d=dee()](kj::Exception&& exception) {

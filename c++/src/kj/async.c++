@@ -47,6 +47,7 @@
 #include "one-of.h"
 #include "function.h"
 #include "list.h"
+#include "map.h"
 #include <deque>
 #include <atomic>
 
@@ -437,24 +438,58 @@ Promise<void> TaskSet::onEmpty() {
 
 namespace _ {
 
+struct EnvironmentSet::Impl: public Refcounted {
+  HashMap<void*, Own<Environment>> environments;
+};
+
+EnvironmentSet::EnvironmentSet(Own<Impl> impl): impl(kj::mv(impl)) {}
+
+EnvironmentSet::EnvironmentSet(void* typeKey, Own<Environment> environment)
+    : impl(refcounted<Impl>()) {
+  // Adopt any current environments.
+  KJ_IF_MAYBE(set, EnvironmentSet::tryGetCurrent()) {
+    for (auto& entry: set->impl->environments) {
+      if (entry.key != typeKey) {
+        impl->environments.insert(entry.key, addRef(*entry.value));
+      }
+    }
+  }
+
+  // Then add the new environment.
+  impl->environments.insert(typeKey, kj::mv(environment));
+}
+
+EnvironmentSet::~EnvironmentSet() noexcept(false) {}
+
+Maybe<Environment&> EnvironmentSet::tryGetEnvironment(void* typeKey) {
+  KJ_IF_MAYBE(env, impl->environments.find(typeKey)) {
+    return **env;
+  } else {
+    return nullptr;
+  }
+}
+
+Maybe<EnvironmentSet&> EnvironmentSet::tryGetCurrent() {
+  return currentEventLoop().currentEnvironmentSet;
+}
+
+Maybe<EnvironmentSet> EnvironmentSet::tryCaptureCurrent() {
+  KJ_IF_MAYBE(set, tryGetCurrent()) {
+    return EnvironmentSet(addRef(*set->impl));
+  } else {
+    return nullptr;
+  }
+}
+
+EnvironmentSet::Scope::Scope(Maybe<EnvironmentSet&> set)
+    : previous(currentEventLoop().currentEnvironmentSet) {
+  currentEventLoop().currentEnvironmentSet = set;
+}
+EnvironmentSet::Scope::~Scope() noexcept(false) {
+  currentEventLoop().currentEnvironmentSet = previous;
+}
+
 Environment::~Environment() noexcept(false) {}
-
-Maybe<Own<Environment>> Environment::tryCaptureCurrent() {
-  return currentEventLoop().currentEnvironment.map([](Environment& environment) {
-    return addRef(environment);
-  });
-}
-Maybe<Environment&> Environment::tryGetCurrent() {
-  return currentEventLoop().currentEnvironment;
-}
-
-Environment::Scope::Scope(Maybe<Environment&> environment)
-    : previous(currentEventLoop().currentEnvironment) {
-  currentEventLoop().currentEnvironment = environment;
-}
-Environment::Scope::~Scope() noexcept(false) {
-  currentEventLoop().currentEnvironment = previous;
-}
 
 }  // namespace _
 
@@ -509,7 +544,7 @@ public:
     main = {};
   }
 
-  void switchToFiber(Maybe<Maybe<Environment&>> environment);
+  void switchToFiber(Maybe<Maybe<EnvironmentSet&>> environmentSet);
   // `environment`'s outer Maybe should be non-null in an async environment, null in sync.
   void switchToMain();
 
@@ -1615,7 +1650,7 @@ FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result, SourceLocati
       state(WAITING),
       stack(kj::heap<FiberStack>(stackSize)),
       result(result),
-      environment(Environment::tryCaptureCurrent()) {
+      environmentSet(EnvironmentSet::tryCaptureCurrent()) {
   stack->initialize(*this);
   ensureThreadCanRunFibers();
 }
@@ -1624,7 +1659,7 @@ FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result, SourceL
     : Event(location),
       state(WAITING),
       result(result),
-      environment(Environment::tryCaptureCurrent()) {
+      environmentSet(EnvironmentSet::tryCaptureCurrent()) {
   stack = pool.impl->takeStack();
   stack->initialize(*this);
   ensureThreadCanRunFibers();
@@ -1641,7 +1676,7 @@ void FiberBase::destroy() {
       // We can't just free the stack while the fiber is running. We need to force it to execute
       // until finished, so we cause it to throw an exception.
       state = CANCELED;
-      stack->switchToFiber(Maybe<Environment&>(environment));
+      stack->switchToFiber(Maybe<EnvironmentSet&>(environmentSet));
 
       // The fiber should only switch back to the main stack on completion, because any further
       // calls to wait() would throw before trying to switch.
@@ -1668,18 +1703,18 @@ void FiberBase::destroy() {
 Maybe<Own<Event>> FiberBase::fire() {
   KJ_ASSERT(state == WAITING);
   state = RUNNING;
-  stack->switchToFiber(Maybe<Environment&>(environment));
+  stack->switchToFiber(Maybe<EnvironmentSet&>(environmentSet));
   return nullptr;
 }
 
-void FiberStack::switchToFiber(Maybe<Maybe<Environment&>> environment) {
+void FiberStack::switchToFiber(Maybe<Maybe<EnvironmentSet&>> environmentSet) {
   // Switch from the main stack to the fiber. Returns once the fiber either calls switchToMain()
   // or returns from its main function.
 #if KJ_USE_FIBERS
-  Maybe<Environment::Scope> scope;
-  KJ_IF_MAYBE(maybeEnvironment, environment) {
+  Maybe<EnvironmentSet::Scope> scope;
+  KJ_IF_MAYBE(maybeEnvironmentSet, environmentSet) {
     // This use of fibers is asynchronous, so we should try to enter the async environment.
-    scope.emplace(*maybeEnvironment);
+    scope.emplace(*maybeEnvironmentSet);
   }
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
@@ -2362,7 +2397,7 @@ void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
 
 AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependencyParam)
     : dependency(kj::mv(dependencyParam)),
-      environment(Environment::tryCaptureCurrent()) {
+      environmentSet(EnvironmentSet::tryCaptureCurrent()) {
   dependency->setSelfPointer(&dependency);
 }
 
@@ -2390,7 +2425,7 @@ void AttachmentPromiseNodeBase::dropDependency() {
 TransformPromiseNodeBase::TransformPromiseNodeBase(
     Own<PromiseNode>&& dependencyParam, void* continuationTracePtr)
     : dependency(kj::mv(dependencyParam)), continuationTracePtr(continuationTracePtr),
-      environment(Environment::tryCaptureCurrent()) {
+      environmentSet(EnvironmentSet::tryCaptureCurrent()) {
   dependency->setSelfPointer(&dependency);
 }
 
@@ -2400,7 +2435,7 @@ void TransformPromiseNodeBase::onReady(Event* event) noexcept {
 
 void TransformPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    Environment::Scope scope(environment);
+    EnvironmentSet::Scope scope(environmentSet);
     getImpl(output);
     dropDependency();
   })) {
@@ -2915,7 +2950,7 @@ CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrV
     : Event(location),
       coroutine(coroutine),
       resultRef(resultRef),
-      environment(Environment::tryCaptureCurrent()) {}
+      environmentSet(EnvironmentSet::tryCaptureCurrent()) {}
 CoroutineBase::~CoroutineBase() noexcept(false) {
   readMaybe(maybeDisposalResults)->destructorRan = true;
 }
@@ -2991,7 +3026,7 @@ Maybe<Own<Event>> CoroutineBase::fire() {
   promiseNodeForTrace = nullptr;
 
   {
-    Environment::Scope scope(environment);
+    EnvironmentSet::Scope scope(environmentSet);
     coroutine.resume();
   }
 
@@ -3044,7 +3079,7 @@ void CoroutineBase::destroy() {
     // On Clang, `disposalResults.exception != nullptr` implies `!disposalResults.destructorRan`.
     // We could optimize out the separate `destructorRan` flag if we verify that other compilers
     // behave the same way.
-    Environment::Scope scope(environment);
+    EnvironmentSet::Scope scope(environmentSet);
     coroutine.destroy();
   } while (!disposalResults.destructorRan);
 

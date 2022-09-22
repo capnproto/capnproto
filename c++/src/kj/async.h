@@ -1143,7 +1143,7 @@ private:
 
   _::Event* currentlyFiring = nullptr;
 
-  Maybe<_::Environment&> currentEnvironment;
+  Maybe<_::EnvironmentSet&> currentEnvironmentSet;
   // Non-null during the scope of an _::Environment::Scope.
 
   bool turn();
@@ -1165,7 +1165,7 @@ private:
   friend class _::XThreadPaf;
   friend class _::FiberBase;
   friend class _::FiberStack;
-  friend class _::Environment;
+  friend class _::EnvironmentSet;
   friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 };
 

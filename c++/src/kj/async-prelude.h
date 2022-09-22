@@ -214,6 +214,7 @@ class XThreadEvent;
 class XThreadPaf;
 
 class Environment;
+class EnvironmentSet;
 
 class PromiseBase {
 public:

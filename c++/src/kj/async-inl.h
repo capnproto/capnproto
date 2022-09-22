@@ -300,35 +300,66 @@ protected:
 
 // -------------------------------------------------------------------
 
-class Environment: public kj::Refcounted {
-  // Base class of Environment::Holder<T>. This class also provides access to the current
-  // EventLoop's reference to the currently-active Environment.
+class EnvironmentSet {
+  // A collection of Environments.
+  //
+  // This class also provides access to the current EventLoop's reference to the currently-active
+  // EnvironmentSet.
 
 public:
   class Scope;
+  // Put a `Scope(set)` on the stack to make an environment current. Requires a current EventLoop.
+
+  static Maybe<EnvironmentSet&> tryGetCurrent();
+  // Call `EnvironmentSet::tryGetCurrent()` to access the current EnvironmentSet, if any.
+
+  static Maybe<EnvironmentSet> tryCaptureCurrent();
+  // Return an EnvironmentSet containing the same environments as the current EnvironmentSet, or
+  // null if there is no current EnvironmentSet.
+
+  explicit EnvironmentSet(void* typeKey, Own<Environment> environment);
+  // Clone the current EnvironmentSet, adding `environment` to the set. If an Environment already
+  // exists in the EnvironmentSet for `typeKey`, `environment` takes its place in the newly-
+  // constructed EnvironmentSet.
+
+  EnvironmentSet(EnvironmentSet&&) = default;
+  EnvironmentSet& operator=(EnvironmentSet&&) = default;
+
+  ~EnvironmentSet() noexcept(false);
+
+  Maybe<Environment&> tryGetEnvironment(void* typeKey);
+  // Return the specific Environment associated with `typeKey`.
+
+private:
+  struct Impl;
+  Own<Impl> impl;
+  explicit EnvironmentSet(Own<Impl>);
+};
+
+class EnvironmentSet::Scope {
+  // Construct one of these on the stack whenever you need to push an Environment reference onto the
+  // Environment stack.
+
+public:
+  explicit Scope(Maybe<EnvironmentSet&> environmentSet);
+  ~Scope() noexcept(false);
+  KJ_DISALLOW_COPY(Scope);
+
+private:
+  Maybe<EnvironmentSet&> previous;
+};
+
+class Environment: public kj::Refcounted {
+  // Base class of Environment::Holder<T>.
+
+public:
   template <typename T> class Holder;
 
   KJ_DISALLOW_COPY(Environment);
   ~Environment() noexcept(false) = 0;
 
-  static Maybe<Own<Environment>> tryCaptureCurrent();
-  static Maybe<Environment&> tryGetCurrent();
-
 private:
   Environment() = default;
-};
-
-class Environment::Scope {
-  // Construct one of these on the stack whenever you need to push an Environment reference onto the
-  // Environment stack.
-
-public:
-  explicit Scope(Maybe<Environment&> environment);
-  ~Scope() noexcept(false);
-  KJ_DISALLOW_COPY(Scope);
-
-private:
-  Maybe<Environment&> previous;
 };
 
 template <typename T>
@@ -338,14 +369,20 @@ public:
   Holder(Args&&... args): environment(fwd<Args>(args)...) {}
 
   T environment;
+
+  static void* typeKey() {
+    static bool uniqueAddress;
+    return &uniqueAddress;
+  }
 };
 
 }  // namespace _
 
 template <typename E, typename Func>
 PromiseForResult<Func, void> runInEnvironment(E&& environment, Func&& func) {
-  auto holder = refcounted<_::Environment::Holder<Decay<E>>>(fwd<E>(environment));
-  _::Environment::Scope scope(*holder);
+  using Holder = _::Environment::Holder<Decay<E>>;
+  _::EnvironmentSet set(Holder::typeKey(), refcounted<Holder>(fwd<E>(environment)));
+  _::EnvironmentSet::Scope scope(set);
   return evalNow(fwd<Func>(func));
 }
 
@@ -358,11 +395,15 @@ T& getEnvironment() {
 
 template <typename T>
 kj::Maybe<T&> tryGetEnvironment() {
-  KJ_IF_MAYBE(holder, _::Environment::tryGetCurrent()) {
-    return downcast<_::Environment::Holder<T>>(*holder).environment;
-  } else {
-    return nullptr;
+  using Holder = _::Environment::Holder<T>;
+
+  KJ_IF_MAYBE(set, _::EnvironmentSet::tryGetCurrent()) {
+    KJ_IF_MAYBE(holder, set->tryGetEnvironment(Holder::typeKey())) {
+      return downcast<Holder>(*holder).environment;
+    }
   }
+
+  return nullptr;
 }
 
 namespace _ {
@@ -422,7 +463,7 @@ public:
 
 private:
   Own<PromiseNode> dependency;
-  Maybe<Own<Environment>> environment;
+  Maybe<EnvironmentSet> environmentSet;
 
   void dropDependency();
 
@@ -445,11 +486,11 @@ public:
     // dependency may be using the attachment.
     dropDependency();
 
-    // HACK: Make sure we have an active Environment scope while we destroy the user callbacks.
-    environmentScope.emplace(environment);
+    // HACK: Make sure we have an active EnvironmentSet scope while we destroy the user callbacks.
+    environmentSetScope.emplace(environmentSet);
   }
 
-  Maybe<Environment::Scope> environmentScope;
+  Maybe<EnvironmentSet::Scope> environmentSetScope;
   // HACK: Non-null during destruction, so `attachment` gets the environment set.
 
   Attachment attachment;
@@ -598,7 +639,7 @@ public:
 private:
   Own<PromiseNode> dependency;
   void* continuationTracePtr;
-  Maybe<Own<Environment>> environment;
+  Maybe<EnvironmentSet> environmentSet;
 
   void dropDependency();
   void getDepResult(ExceptionOrValue& output);
@@ -626,12 +667,12 @@ public:
     // by the dependency.
     dropDependency();
 
-    // HACK: Make sure we have an active Environment scope while we destroy the user callbacks.
-    environmentScope.emplace(environment);
+    // HACK: Make sure we have an active EnvironmentSet scope while we destroy the user callbacks.
+    environmentSetScope.emplace(environmentSet);
   }
 
 private:
-  Maybe<Environment::Scope> environmentScope;
+  Maybe<EnvironmentSet::Scope> environmentSetScope;
   // HACK: Non-null during destruction, so `func` and `errorHandler` get the environment set.
 
   Func func;
@@ -1108,7 +1149,7 @@ private:
   _::ExceptionOrValue& result;
 
 protected:
-  Maybe<Own<Environment>> environment;
+  Maybe<EnvironmentSet> environmentSet;
 
 private:
   void run();
@@ -1133,8 +1174,8 @@ public:
       : FiberBase(pool, result, location), func(kj::fwd<Func>(func)) {}
   ~Fiber() noexcept(false) {
     destroy();
-    // HACK: Make sure we have an active Environment scope while we destroy the user callbacks.
-    environmentScope.emplace(environment);
+    // HACK: Make sure we have an active EnvironmentSet scope while we destroy the user callbacks.
+    environmentSetScope.emplace(environmentSet);
   }
 
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
@@ -1145,7 +1186,7 @@ public:
   }
 
 private:
-  Maybe<Environment::Scope> environmentScope;
+  Maybe<EnvironmentSet::Scope> environmentSetScope;
   // HACK: Non-null during destruction, so `func` and `result` get the environment set.
 
   Func func;
@@ -2022,7 +2063,7 @@ private:
   // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
   // coroutine.destroy() has returned. Our disposer then rethrows as needed.
 
-  Maybe<Own<Environment>> environment;
+  Maybe<EnvironmentSet> environmentSet;
 };
 
 template <typename Self, typename T>
