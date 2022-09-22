@@ -1180,7 +1180,7 @@ class WaitScope {
 
 public:
   inline explicit WaitScope(EventLoop& loop): loop(loop) { loop.enterScope(); }
-  inline ~WaitScope() { if (fiber == nullptr) loop.leaveScope(); }
+  inline ~WaitScope() { if (fiber == nullptr) { cancelAllDetached(); loop.leaveScope(); } }
   KJ_DISALLOW_COPY(WaitScope);
 
   uint poll(uint maxTurnCount = maxValue);
