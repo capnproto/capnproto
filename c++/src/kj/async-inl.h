@@ -1099,8 +1099,6 @@ protected:
   bool isFinished() { return state == FINISHED; }
   void destroy();
 
-  Maybe<Environment&> tryGetStackEnvironment();
-
 private:
   enum { WAITING, RUNNING, CANCELED, FINISHED } state;
 
@@ -1109,6 +1107,10 @@ private:
   Own<FiberStack> stack;
   _::ExceptionOrValue& result;
 
+protected:
+  Maybe<Own<Environment>> environment;
+
+private:
   void run();
   virtual void runImpl(WaitScope& waitScope) = 0;
 
@@ -1132,7 +1134,7 @@ public:
   ~Fiber() noexcept(false) {
     destroy();
     // HACK: Make sure we have an active Environment scope while we destroy the user callbacks.
-    environmentScope.emplace(tryGetStackEnvironment());
+    environmentScope.emplace(environment);
   }
 
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;

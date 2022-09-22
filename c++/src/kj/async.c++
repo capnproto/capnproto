@@ -509,7 +509,8 @@ public:
     main = {};
   }
 
-  void switchToFiber();
+  void switchToFiber(Maybe<Maybe<Environment&>> environment);
+  // `environment`'s outer Maybe should be non-null in an async environment, null in sync.
   void switchToMain();
 
   void trace(TraceBuilder& builder) {
@@ -520,8 +521,6 @@ public:
 private:
   size_t stackSize;
   OneOf<FiberBase*, SynchronousFunc*> main;
-
-  Maybe<Own<Environment>> environment = Environment::tryCaptureCurrent();
 
   friend class FiberBase;
   friend class FiberPool::Impl;
@@ -741,7 +740,7 @@ void FiberPool::runSynchronously(kj::FunctionParam<void()> func) const {
   {
     auto stack = impl->takeStack();
     stack->initialize(syncFunc);
-    stack->switchToFiber();
+    stack->switchToFiber(nullptr);
     stack->reset();  // safe to reuse
   }
 
@@ -1612,13 +1611,20 @@ void FiberStack::initialize(SynchronousFunc& func) {
 }
 
 FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result, SourceLocation location)
-    : Event(location),  state(WAITING), stack(kj::heap<FiberStack>(stackSize)), result(result) {
+    : Event(location),
+      state(WAITING),
+      stack(kj::heap<FiberStack>(stackSize)),
+      result(result),
+      environment(Environment::tryCaptureCurrent()) {
   stack->initialize(*this);
   ensureThreadCanRunFibers();
 }
 
 FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result, SourceLocation location)
-    : Event(location), state(WAITING), result(result) {
+    : Event(location),
+      state(WAITING),
+      result(result),
+      environment(Environment::tryCaptureCurrent()) {
   stack = pool.impl->takeStack();
   stack->initialize(*this);
   ensureThreadCanRunFibers();
@@ -1635,7 +1641,7 @@ void FiberBase::destroy() {
       // We can't just free the stack while the fiber is running. We need to force it to execute
       // until finished, so we cause it to throw an exception.
       state = CANCELED;
-      stack->switchToFiber();
+      stack->switchToFiber(Maybe<Environment&>(environment));
 
       // The fiber should only switch back to the main stack on completion, because any further
       // calls to wait() would throw before trying to switch.
@@ -1659,22 +1665,22 @@ void FiberBase::destroy() {
   }
 }
 
-Maybe<Environment&> FiberBase::tryGetStackEnvironment() {
-  return stack->environment;
-}
-
 Maybe<Own<Event>> FiberBase::fire() {
   KJ_ASSERT(state == WAITING);
   state = RUNNING;
-  stack->switchToFiber();
+  stack->switchToFiber(Maybe<Environment&>(environment));
   return nullptr;
 }
 
-void FiberStack::switchToFiber() {
+void FiberStack::switchToFiber(Maybe<Maybe<Environment&>> environment) {
   // Switch from the main stack to the fiber. Returns once the fiber either calls switchToMain()
   // or returns from its main function.
 #if KJ_USE_FIBERS
-  Environment::Scope scope(environment);
+  Maybe<Environment::Scope> scope;
+  KJ_IF_MAYBE(maybeEnvironment, environment) {
+    // This use of fibers is asynchronous, so we should try to enter the async environment.
+    scope.emplace(*maybeEnvironment);
+  }
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
 #else
