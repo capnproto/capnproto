@@ -458,8 +458,8 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
 
-template <typename E, typename T, typename... Args>
-kj::Promise<T> runInEnvironment(E&& environment, FunctionParam<kj::Promise<T>(Args...)> func);
+template <typename E, typename Func>
+PromiseForResult<Func, void> runInEnvironment(E&& environment, Func&& func);
 // Synchronously calls `func`, arranging so that any calls to `getEnvironment()` from within sync
 // _or_ async user code will return a reference to an object constructed from `environment`.
 //

@@ -342,11 +342,11 @@ public:
 
 }  // namespace _
 
-template <typename E, typename T, typename... Args>
-Promise<T> runInEnvironment(E&& environment, FunctionParam<Promise<T>(Args...)> func) {
+template <typename E, typename Func>
+PromiseForResult<Func, void> runInEnvironment(E&& environment, Func&& func) {
   auto holder = refcounted<_::Environment::Holder<Decay<E>>>(fwd<E>(environment));
   _::Environment::Scope scope(*holder);
-  return evalNow(func);
+  return evalNow(fwd<Func>(func));
 }
 
 template <typename T>

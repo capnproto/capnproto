@@ -82,7 +82,7 @@ void syncTestCase(Func&& func) {
 
   auto promise = runInEnvironment(
       TestEnvironment(finalDestructorRan, "foobar"_kj),
-      FunctionParam<Promise<void>()>(fwd<Func>(func)));
+      fwd<Func>(func));
 
   // Purely synchronous functions don't capture the Environment.
   KJ_EXPECT(finalDestructorRan);
@@ -103,7 +103,7 @@ void asyncTestCase(Func&& func) {
   {
     auto promise = runInEnvironment(
         TestEnvironment(finalDestructorRan, "foobar"_kj),
-        FunctionParam<Promise<void>()>(fwd<Func>(func)));
+        fwd<Func>(func));
 
     // Asynchronous functions capture the Environment. Eager promises will drop the Environment
     // after .poll(), and non-eager ones after .wait().
@@ -212,12 +212,12 @@ KJ_TEST("Environments are overridable") {
       expectEnvironment();
       return runInEnvironment(
           TestEnvironment(overrideEnvironmentDestructorRan, "bazqux"_kj),
-          FunctionParam<Promise<void>()>([]() -> Promise<void> {
+          []() -> Promise<void> {
         expectEnvironment("bazqux"_kj);
         return evalLater([]() {
           expectEnvironment("bazqux"_kj);
         });
-      }));
+      });
     }, [d=dee()](kj::Exception&& exception) {
       expectEnvironment();
       KJ_FAIL_EXPECT("should not see exception", exception);
