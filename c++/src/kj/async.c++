@@ -1785,10 +1785,8 @@ EventLoop::EventLoop(EventPort& port)
 
 EventLoop::~EventLoop() noexcept(false) {
   // Destroy all "daemon" tasks, noting that their destructors might register more daemon tasks.
-  while (!daemons->isEmpty()) {
-    auto oldDaemons = kj::mv(daemons);
-    daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
-  }
+  // This is exactly what `WaitScope::cancelAllDetached()` does; let's use that.
+  WaitScope(*this).cancelAllDetached();
   daemons = nullptr;
 
   KJ_IF_MAYBE(e, executor) {
