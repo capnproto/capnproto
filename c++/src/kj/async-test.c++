@@ -995,6 +995,18 @@ TEST(Async, Detach) {
   EXPECT_TRUE(ran3);
 }
 
+TEST(Async, DetachInDetachedDestructor) {
+  // At one time, this crashed due to a bug in EventLoop's destructor.
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto d = defer([]() {
+    evalLater([] {}).detach([](auto&&) {});
+  });
+  evalLater([d=kj::mv(d)] {}).detach([](auto&&) {});
+}
+
 class DummyEventPort: public EventPort {
 public:
   bool runnable = false;
