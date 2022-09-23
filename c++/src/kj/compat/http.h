@@ -655,10 +655,9 @@ public:
   // certain extensions (e.g. compression settings), then this method returns what those extensions
   // are. For example, matching extensions between standard WebSockets allows pumping to be
   // implemented by pumping raw bytes between network connections, without reading individual frames.
-
+  //
   // A null return value indicates that there is no preference. A non-null return value containing
   // an empty string indicates a preference for no extensions to be applied.
-
 };
 
 class HttpClient {
