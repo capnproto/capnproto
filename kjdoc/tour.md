@@ -965,7 +965,12 @@ There are some caveats one should be aware of while writing coroutines:
 - Holding a mutex lock across a `co_await` is almost always a bad idea, with essentially the same problems as holding a lock while calling `promise.wait(waitScope)`. This would cause the coroutine to hold the lock for however many turns of the event loop is required to drive the coroutine to release the lock; if I/O is involved, this could cause significant problems. Additionally, a reentrant call to the coroutine on the same thread would deadlock. Instead, if a coroutine must temporarily hold a lock, always keep the lock in a new lexical scope without any `co_await`.
 - Attempting to define (and use) a variable-length array will cause a compile error, because the size of coroutine frames must be knowable at compile-time. The error message that clang emits for this, "Coroutines cannot handle non static allocas yet", suggests this may be relaxed in the future.
 
-As of this writing, KJ does not support actual C++20 coroutines because no compiler appears to have a fully working implementation. Instead, KJ supports Coroutines TS coroutines, which are the experimental precursor to C++20 coroutines. They are functionally the same thing, but enabled with different compiler/linker flags: clang supports them in C++17 with `-fcoroutines-ts`, and MSVC supports them in C++17 with `/await`.
+As of this writing, KJ supports C++20 coroutines and Coroutines TS coroutines, the latter being an experimental precursor to C++20 coroutines. They are functionally the same thing, but enabled with different compiler/linker flags:
+
+- Enable C++20 coroutines by requesting that language standard from your compiler.
+- Enable Coroutines TS coroutines with `-fcoroutines-ts` in C++17 clang, and `/await` in MSVC.
+
+KJ prefers C++20 coroutines when both implementations are available.
 
 ### Unit testing tips
 
