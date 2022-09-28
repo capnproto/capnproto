@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "array.h"
 #include "common.h"
 #include "test.h"
 #include <inttypes.h>
@@ -576,6 +577,36 @@ TEST(Common, MaybeUnwrapOrReturn) {
 
 }
 #endif
+
+TEST(Common, MaybeMapper) {
+  {
+    // non-null lvalue
+    Maybe<int> i = 123;
+    Maybe<double> newI = KJ_MAP(ref, i) { return ref + 123.0; };
+    KJ_EXPECT(KJ_ASSERT_NONNULL(newI) == 246.0);
+  }
+
+  {
+    // null lvalue
+    Maybe<int> i;
+    Maybe<double> newI = KJ_MAP(ref, i) { return ref + 123.0; };
+    KJ_EXPECT(newI == nullptr);
+  }
+
+  {
+    // non-null rvalue
+    auto newI = KJ_MAP(ref, Maybe<int>(123)) { return ref + 123.0; };
+    KJ_EXPECT(newI == 246.0);
+  }
+
+  {
+    // nested Maybe
+    Maybe<double> newI = (KJ_MAP(ref, Maybe<int>(123)) {
+      return Maybe<double>(ref + 123.0);
+    }).orDefault(nullptr);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(newI) == 246.0);
+  }
+}
 
 class Foo {
 public:

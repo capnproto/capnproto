@@ -590,6 +590,8 @@ namespace _ {  // private
 
 template <typename T>
 struct Mapper {
+  // IF YOU CHANGE THIS CLASS:  Note that there is a specialization of it in common.h.
+
   T array;
   Mapper(T&& array): array(kj::fwd<T>(array)) {}
   template <typename Func>

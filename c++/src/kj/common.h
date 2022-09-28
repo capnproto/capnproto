@@ -1062,6 +1062,16 @@ inline void dtor(T& location) {
 //
 // Note that Maybe<T&> actually just wraps a pointer, whereas Maybe<T> wraps a T and a boolean
 // indicating nullness.
+//
+// Additionally, if you include <kj/array.h>, you may use the KJ_MAP() macro to interact with
+// Maybes. It is essentially a convenience wrapper around the Maybe::map() function. That is, these
+// two lines of code are equivalent:
+//
+//   KJ_MAP(unwrappedValue, maybe) { return f(unwrappedValue); };
+//   maybe.map([&](auto& unwrappedValue) { return f(unwrappedValue); });
+//
+// There are also two other useful macros, KJ_UNWRAP_OR_RETURN and KJ_UNWRAP_OR, which are
+// documented below.
 
 template <typename T>
 class Maybe;
@@ -1700,6 +1710,35 @@ private:
   template <typename U>
   friend U* _::readMaybe(const Maybe<U&>& maybe);
 };
+
+namespace _ {  // private
+
+template <typename T> struct Mapper;
+// Defined in array.h.
+
+template <typename T>
+struct Mapper<Maybe<T>&> {
+  Maybe<T>& maybe;
+  Mapper(Maybe<T>& maybe): maybe(maybe) {}
+  template <typename Func>
+  auto operator*(Func&& func) -> decltype(maybe.map(kj::fwd<Func>(func))) {
+    return maybe.map(kj::fwd<Func>(func));
+  }
+  typedef decltype(*readMaybe(maybe)) Element;
+};
+
+template <typename T>
+struct Mapper<Maybe<T>> {
+  Maybe<T> maybe;
+  Mapper(Maybe<T>&& maybe): maybe(kj::mv(maybe)) {}
+  template <typename Func>
+  auto operator*(Func&& func) -> decltype(kj::mv(maybe).map(kj::fwd<Func>(func))) {
+    return kj::mv(maybe).map(kj::fwd<Func>(func));
+  }
+  typedef decltype(*readMaybe(kj::mv(maybe))) Element;
+};
+
+}  // namespace _
 
 // =======================================================================================
 // ArrayPtr
