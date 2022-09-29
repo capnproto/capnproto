@@ -823,9 +823,9 @@ private:
       if ('0' <= c && c <= '9') {
         codePoint |= c - '0';
       } else if ('a' <= c && c <= 'f') {
-        codePoint |= c - 'a';
+        codePoint |= c - 'a' + 10;
       } else if ('A' <= c && c <= 'F') {
-        codePoint |= c - 'A';
+        codePoint |= c - 'A' + 10;
       } else {
         KJ_FAIL_REQUIRE("Invalid hex digit in unicode escape.", c);
       }

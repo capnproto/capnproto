@@ -617,6 +617,17 @@ KJ_TEST("basic json decoding") {
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("\f{}", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("{\v}", root));
   }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw(R"("\u007f")", root);
+    KJ_EXPECT(root.which() == JsonValue::STRING);
+
+    char utf_buffer[] = {127, 0};
+    KJ_EXPECT(kj::str(utf_buffer) == root.getString());
+  }
 }
 
 KJ_TEST("maximum nesting depth") {
