@@ -2391,6 +2391,51 @@ void testWebSocketTwoMessageCompression(kj::WaitScope& waitScope, HttpHeaderTabl
 #endif // KJ_HAS_ZLIB
 
 #if KJ_HAS_ZLIB
+void testWebSocketOptimizePumpProxy(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
+                                    kj::HttpHeaderId extHeader, kj::StringPtr extensions,
+                                    HttpClient& client) {
+  // Suppose we are proxying a websocket conversation between a client and a server.
+  // This looks something like: CLIENT <--> (proxyServer <==PUMP==> proxyClient) <--> SERVER
+  //
+  // We want to enable optimizedPumping from the proxy's server (which communicates with the client),
+  // to the proxy's client (which communicates with the origin server).
+  //
+  // For this to work, proxyServer's inbound settings must map to proxyClient's outbound settings
+  // (and vice versa). In this case, `ws` is `proxyClient`, so we want to take `ws`'s compression
+  // configuration and pass it to `proxyServer` in a way that would allow for optimizedPumping.
+
+  kj::HttpHeaders headers(headerTable);
+  headers.set(extHeader, extensions);
+  auto response = client.openWebSocket("/websocket", headers).wait(waitScope);
+
+  KJ_EXPECT(response.statusCode == 101);
+  KJ_EXPECT(response.statusText == "Switching Protocols", response.statusText);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(extHeader)).startsWith("permessage-deflate"));
+  KJ_ASSERT(response.webSocketOrBody.is<kj::Own<WebSocket>>());
+  auto ws = kj::mv(response.webSocketOrBody.get<kj::Own<WebSocket>>());
+
+  auto maybeExt = ws->getPreferredExtensions(kj::WebSocket::ExtensionsContext::REQUEST);
+  // Should be nullptr since we are asking `ws` (a client) to give us extensions that we can give to
+  // another client. Since clients cannot `optimizedPumpTo` each other, we must get null.
+  KJ_ASSERT(maybeExt == nullptr);
+
+  maybeExt = ws->getPreferredExtensions(kj::WebSocket::ExtensionsContext::RESPONSE);
+  kj::StringPtr extStr = KJ_ASSERT_NONNULL(maybeExt);
+  KJ_ASSERT(extStr == "permessage-deflate; server_no_context_takeover");
+  // We got back the string the client sent!
+  // We could then pass this string as a header to `acceptWebSocket` and ensure the `proxyServer`s
+  // inbound settings match the `proxyClient`s outbound settings.
+
+  ws->close(0x1234, "qux").wait(waitScope);
+  {
+    auto message = ws->receive().wait(waitScope);
+    KJ_ASSERT(message.is<WebSocket::Close>());
+    KJ_EXPECT(message.get<WebSocket::Close>().code == 0x1235);
+    KJ_EXPECT(message.get<WebSocket::Close>().reason == "close-reply:qux");
+  }
+}
+#endif // KJ_HAS_ZLIB
+#if KJ_HAS_ZLIB
 void testWebSocketFourMessageCompression(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
                                           kj::HttpHeaderId extHeader, kj::StringPtr extensions,
                                           HttpClient& client) {
@@ -3060,6 +3105,37 @@ KJ_TEST("HttpClient WebSocket Default Compression") {
 
   constexpr auto extensions = "permessage-deflate; server_no_context_takeover"_kj;
   testWebSocketTwoMessageCompression(waitScope, *headerTable, extHeader, extensions, *client);
+
+  serverTask.wait(waitScope);
+}
+#endif // KJ_HAS_ZLIB
+
+#if KJ_HAS_ZLIB
+KJ_TEST("HttpClient WebSocket Extract Extensions") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_HANDSHAKE);
+
+  auto serverTask = expectRead(*pipe.ends[1], request)
+      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_CLOSE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  HttpHeaderTable::Builder tableBuilder;
+  HttpHeaderId extHeader = tableBuilder.add("Sec-WebSocket-Extensions");
+  auto headerTable = tableBuilder.build();
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  clientSettings.webSocketCompressionMode = HttpClientSettings::MANUAL_COMPRESSION;
+
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
+
+  constexpr auto extensions = "permessage-deflate; server_no_context_takeover"_kj;
+  testWebSocketOptimizePumpProxy(waitScope, *headerTable, extHeader, extensions, *client);
 
   serverTask.wait(waitScope);
 }

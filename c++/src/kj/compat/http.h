@@ -643,6 +643,21 @@ public:
 
   virtual uint64_t sentByteCount() = 0;
   virtual uint64_t receivedByteCount() = 0;
+
+  enum ExtensionsContext {
+    // Indicate whether a Sec-WebSocket-Extension header should be rendered for use in request
+    // headers or response headers.
+    REQUEST,
+    RESPONSE
+  };
+  virtual kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) { return nullptr; }
+  // If pumpTo() / tryPumpFrom() is able to be optimized only if the other WebSocket is using
+  // certain extensions (e.g. compression settings), then this method returns what those extensions
+  // are. For example, matching extensions between standard WebSockets allows pumping to be
+  // implemented by pumping raw bytes between network connections, without reading individual frames.
+  //
+  // A null return value indicates that there is no preference. A non-null return value containing
+  // an empty string indicates a preference for no extensions to be applied.
 };
 
 class HttpClient {
