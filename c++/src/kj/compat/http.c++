@@ -2638,7 +2638,7 @@ public:
   uint64_t receivedByteCount() override { return receivedBytes; }
 
   kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
-     if (maskKeyGenerator == nullptr) {
+    if (maskKeyGenerator == nullptr) {
       // `this` is the server side of a websocket.
       if (ctx == ExtensionsContext::REQUEST) {
         // The other WebSocket is (going to be) the client side of a WebSocket, i.e. this is a
