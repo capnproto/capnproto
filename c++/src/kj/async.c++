@@ -1398,18 +1398,16 @@ struct FiberStack::Impl {
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif
-#ifndef MAP_STACK
-#define MAP_STACK 0
-#endif
     size_t pageSize = getPageSize();
     size_t allocSize = stackSize + pageSize;  // size plus guard page and impl
 
     // Allocate virtual address space for the stack but make it inaccessible initially.
     // TODO(someday): Does it make sense to use MAP_GROWSDOWN on Linux? It's a kind of bizarre flag
     //   that causes the mapping to automatically allocate extra pages (beyond the range specified)
-    //   until it hits something...
+    //   until it hits something... Note that on FreeBSD, MAP_STACK has the effect that
+    //   MAP_GROWSDOWN has on Linux. (MAP_STACK, meanwhile, has no effect on Linux.)
     void* stackMapping = mmap(nullptr, allocSize, PROT_NONE,
-        MAP_ANONYMOUS | MAP_PRIVATE | MAP_STACK, -1, 0);
+        MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if (stackMapping == MAP_FAILED) {
       KJ_FAIL_SYSCALL("mmap(new stack)", errno);
     }
