@@ -1233,18 +1233,14 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
 
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
       struct addrinfo hints;
+      memset(&hints, 0, sizeof(hints));
       hints.ai_family = AF_UNSPEC;
-      hints.ai_socktype = 0;
 #if __BIONIC__
       // AI_V4MAPPED causes getaddrinfo() to fail on Bionic libc (Android).
       hints.ai_flags = AI_ADDRCONFIG;
 #else
       hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
 #endif
-      hints.ai_protocol = 0;
-      hints.ai_canonname = nullptr;
-      hints.ai_addr = nullptr;
-      hints.ai_next = nullptr;
       struct addrinfo* list;
       int status = getaddrinfo(
           params.host == "*" ? nullptr : params.host.cStr(),
