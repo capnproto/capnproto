@@ -44,6 +44,10 @@
 #include <sys/epoll.h>
 #endif
 
+#if KJ_USE_KQUEUE
+#include <sys/event.h>
+#endif
+
 #if __BIONIC__
 // Android's Bionic defines SIGRTMIN but using it in sigaddset() throws EINVAL, which means we
 // definitely can't actually use RT signals.
@@ -589,8 +593,9 @@ TEST(AsyncUnixTest, WriteObserver) {
   EXPECT_TRUE(writable);
 }
 
-#if !__APPLE__
+#if !__APPLE__ && !(KJ_USE_KQUEUE && !defined(EVFILT_EXCEPT))
 // Disabled on macOS due to https://github.com/capnproto/capnproto/issues/374.
+// Disabled on kqueue systems that lack EVFILT_EXCEPT because it doesn't work there.
 TEST(AsyncUnixTest, UrgentObserver) {
   // Verify that FdObserver correctly detects availability of out-of-band data.
   // Availability of out-of-band data is implementation-specific.
