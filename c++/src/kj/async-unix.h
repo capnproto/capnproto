@@ -33,10 +33,19 @@
 
 KJ_BEGIN_HEADER
 
-#if __linux__ && !__BIONIC__ && !defined(KJ_USE_EPOLL)
+#if !defined(KJ_USE_EPOLL) && !defined(KJ_USE_KQUEUE)
+#if __linux__ && !__BIONIC__
 // Default to epoll on Linux, except on Bionic (Android) which doesn't have signalfd.h.
 // TODO(soon): Now that we don't use signalfd, can we use epoll on Bionic?
 #define KJ_USE_EPOLL 1
+#elif __APPLE__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__
+// MacOS and BSDs prefer kqueue() for event notification.
+#define KJ_USE_KQUEUE 1
+#endif
+#endif
+
+#if KJ_USE_EPOLL && KJ_USE_KQUEUE
+#error "Both KJ_USE_EPOLL and KJ_USE_KQUEUE are set. Please choose only one of these."
 #endif
 
 #if __CYGWIN__ && !defined(KJ_USE_PIPE_FOR_WAKEUP)
@@ -49,6 +58,9 @@ KJ_BEGIN_HEADER
 
 #if KJ_USE_EPOLL
 struct epoll_event;
+#elif KJ_USE_KQUEUE
+struct kevent;
+struct timespec;
 #endif
 
 namespace kj {
@@ -95,6 +107,15 @@ public:
   // process-wide signal by only calling `onSignal()` on that thread's event loop.
   //
   // The result of waiting on the same signal twice at once is undefined.
+  //
+  // WARNING: On MacOS and iOS, `onSignal()` will only see process-level signals, NOT
+  //   thread-specific signals (i.e. not those sent with pthread_kill()). This is a limitation of
+  //   Apple's implemnetation of kqueue() introduced in MacOS 10.14 which Apple says is not a bug.
+  //   See: https://github.com/libevent/libevent/issues/765 Consider using kj::Executor or
+  //   kj::newPromiseAndCrossThreadFulfiller() for cross-thread communications instead of signals.
+  //   If you must have signals, build KJ and your app with `-DKJ_USE_KQUEUE=0`, which will cause
+  //   KJ to fall back to a generic poll()-based implementation that is less efficient but handles
+  //   thread-specific signals.
 
   static void captureSignal(int signum);
   // Arranges for the given signal to be captured and handled via UnixEventPort, so that you may
@@ -130,6 +151,14 @@ public:
   // .then() continuation may not run immediately, we need a more precise way, hence we null out
   // the Maybe.
   //
+  // The caller must NOT null out `pid` on its own unless it cancels the Promise first. If the
+  // caller decides to cancel the Promise, and `pid` is still non-null after this cancellation,
+  // then the caller is expected to `waitpid()` on it BEFORE returning to the event loop again.
+  // Probably, the caller should kill() the child before waiting to avoid a hang. If the caller
+  // fails to do its own waitpid() before returning to the event loop, the child may become a
+  // zombie, or may be reaped automatically, depending on the platform -- since the caller does not
+  // know, the caller cannot try to reap the zombie later.
+  //
   // You must call `kj::UnixEventPort::captureChildExit()` early in your program if you want to use
   // `onChildExit()`.
   //
@@ -162,10 +191,12 @@ private:
   const MonotonicClock& clock;
   TimerImpl timerImpl;
 
+#if !KJ_USE_KQUEUE
   SignalPromiseAdapter* signalHead = nullptr;
   SignalPromiseAdapter** signalTail = &signalHead;
 
   void gotSignal(const siginfo_t& siginfo);
+#endif
 
   friend class TimerPromiseAdapter;
 
@@ -175,6 +206,10 @@ private:
   AutoCloseFd eventFd;   // Used for cross-thread wakeups.
 
   bool processEpollEvents(struct epoll_event events[], int n);
+#elif KJ_USE_KQUEUE
+  AutoCloseFd kqueueFd;
+
+  bool doKqueueWait(struct timespec* timeout);
 #else
   class PollContext;
 
@@ -189,12 +224,14 @@ private:
 #endif
 #endif
 
+#if !KJ_USE_KQUEUE
   struct ChildSet;
   Maybe<Own<ChildSet>> childSet;
+#endif
 
   static void signalHandler(int, siginfo_t* siginfo, void*) noexcept;
   static void registerSignalHandler(int signum);
-#if !KJ_USE_EPOLL && !KJ_USE_PIPE_FOR_WAKEUP
+#if !KJ_USE_EPOLL && !KJ_USE_KQUEUE && !KJ_USE_PIPE_FOR_WAKEUP
   static void registerReservedSignal();
 #endif
   static void ignoreSigpipe();
@@ -319,7 +356,11 @@ private:
 
   Maybe<bool> atEnd;
 
+#if KJ_USE_KQUEUE
+  void fire(struct kevent event);
+#else
   void fire(short events);
+#endif
 
 #if !KJ_USE_EPOLL
   FdObserver* next;

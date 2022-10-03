@@ -148,10 +148,10 @@ private:
 
 class AsyncStreamFd: public OwnedFileDescriptor, public AsyncCapabilityStream {
 public:
-  AsyncStreamFd(UnixEventPort& eventPort, int fd, uint flags)
+  AsyncStreamFd(UnixEventPort& eventPort, int fd, uint flags, uint observerFlags)
       : OwnedFileDescriptor(fd, flags),
         eventPort(eventPort),
-        observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ_WRITE) {}
+        observer(eventPort, fd, observerFlags) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -174,7 +174,8 @@ public:
                         (ReadResult result) mutable {
       for (auto i: kj::zeroTo(result.capCount)) {
         streamBuffer[i] = kj::heap<AsyncStreamFd>(eventPort, fdBuffer[i].release(),
-            LowLevelAsyncIoProvider::TAKE_OWNERSHIP | LowLevelAsyncIoProvider::ALREADY_CLOEXEC);
+            LowLevelAsyncIoProvider::TAKE_OWNERSHIP | LowLevelAsyncIoProvider::ALREADY_CLOEXEC,
+            UnixEventPort::FdObserver::OBSERVE_READ_WRITE);
       }
       return result;
     });
@@ -1233,18 +1234,14 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
 
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
       struct addrinfo hints;
+      memset(&hints, 0, sizeof(hints));
       hints.ai_family = AF_UNSPEC;
-      hints.ai_socktype = 0;
 #if __BIONIC__
       // AI_V4MAPPED causes getaddrinfo() to fail on Bionic libc (Android).
       hints.ai_flags = AI_ADDRCONFIG;
 #else
       hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
 #endif
-      hints.ai_protocol = 0;
-      hints.ai_canonname = nullptr;
-      hints.ai_addr = nullptr;
-      hints.ai_next = nullptr;
       struct addrinfo* list;
       int status = getaddrinfo(
           params.host == "*" ? nullptr : params.host.cStr(),
@@ -1369,7 +1366,8 @@ public:
         }
 
         AuthenticatedStream result;
-        result.stream = heap<AsyncStreamFd>(eventPort, ownFd.release(), NEW_FD_FLAGS);
+        result.stream = heap<AsyncStreamFd>(eventPort, ownFd.release(), NEW_FD_FLAGS,
+                                            UnixEventPort::FdObserver::OBSERVE_READ_WRITE);
         if (authenticated) {
           result.peerIdentity = SocketAddress(reinterpret_cast<struct sockaddr*>(&addr), addrlen)
               .getIdentity(lowLevel, filter, *result.stream);
@@ -1482,22 +1480,23 @@ public:
   inline WaitScope& getWaitScope() { return waitScope; }
 
   Own<AsyncInputStream> wrapInputFd(int fd, uint flags = 0) override {
-    return heap<AsyncStreamFd>(eventPort, fd, flags);
+    return heap<AsyncStreamFd>(eventPort, fd, flags, UnixEventPort::FdObserver::OBSERVE_READ);
   }
   Own<AsyncOutputStream> wrapOutputFd(int fd, uint flags = 0) override {
-    return heap<AsyncStreamFd>(eventPort, fd, flags);
+    return heap<AsyncStreamFd>(eventPort, fd, flags, UnixEventPort::FdObserver::OBSERVE_WRITE);
   }
   Own<AsyncIoStream> wrapSocketFd(int fd, uint flags = 0) override {
-    return heap<AsyncStreamFd>(eventPort, fd, flags);
+    return heap<AsyncStreamFd>(eventPort, fd, flags, UnixEventPort::FdObserver::OBSERVE_READ_WRITE);
   }
   Own<AsyncCapabilityStream> wrapUnixSocketFd(Fd fd, uint flags = 0) override {
-    return heap<AsyncStreamFd>(eventPort, fd, flags);
+    return heap<AsyncStreamFd>(eventPort, fd, flags, UnixEventPort::FdObserver::OBSERVE_READ_WRITE);
   }
   Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(
       int fd, const struct sockaddr* addr, uint addrlen, uint flags = 0) override {
     // It's important that we construct the AsyncStreamFd first, so that `flags` are honored,
     // especially setting nonblocking mode and taking ownership.
-    auto result = heap<AsyncStreamFd>(eventPort, fd, flags);
+    auto result = heap<AsyncStreamFd>(eventPort, fd, flags,
+                                      UnixEventPort::FdObserver::OBSERVE_READ_WRITE);
 
     // Unfortunately connect() doesn't fit the mold of KJ_NONBLOCKING_SYSCALL, since it indicates
     // non-blocking using EINPROGRESS.

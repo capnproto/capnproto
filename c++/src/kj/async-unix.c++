@@ -36,6 +36,14 @@
 #if KJ_USE_EPOLL
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#elif KJ_USE_KQUEUE
+#include <sys/event.h>
+#include <fcntl.h>
+#include <time.h>
+#if !__APPLE__ && !__OpenBSD__
+// MacOS and OpenBSD are missing this, which means we have to do ugly hacks instead on those.
+#define KJ_HAS_SIGTIMEDWAIT 1
+#endif
 #else
 #include <poll.h>
 #include <fcntl.h>
@@ -51,7 +59,10 @@ namespace {
 int reservedSignal = SIGUSR1;
 bool tooLateToSetReserved = false;
 bool capturedChildExit = false;
+
+#if !KJ_USE_KQUEUE
 bool threadClaimedChildExits = false;
+#endif
 
 }  // namespace
 
@@ -84,6 +95,28 @@ void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
   if (current != nullptr) {
     current->gotSignal(*siginfo);
   }
+}
+
+#elif KJ_USE_KQUEUE
+
+#if !KJ_HAS_SIGTIMEDWAIT
+KJ_THREADLOCAL_PTR(siginfo_t) threadCapture = nullptr;
+#endif
+
+void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
+#if KJ_HAS_SIGTIMEDWAIT
+  // This is never called because we use sigtimedwait() to dequeue the signal while it is still
+  // blocked, without running the signal handler. However, if we don't register a handler at all,
+  // and the default behavior is SIG_IGN, then the signal will be discarded before sigtimedwait()
+  // can receive it.
+#else
+  // When sigtimedwait() isn't available, we use sigsuspend() and wait for the siginfo_t to be
+  // delivered to the signal handler.
+  siginfo_t* capture = threadCapture;
+  if (capture !=  nullptr) {
+    *capture = *siginfo;
+  }
+#endif
 }
 
 #else
@@ -142,7 +175,7 @@ void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
   }
 }
 
-#endif  // !KJ_USE_EPOLL
+#endif  // !KJ_USE_EPOLL && !KJ_USE_KQUEUE
 
 void UnixEventPort::registerSignalHandler(int signum) {
   KJ_REQUIRE(signum != SIGBUS && signum != SIGFPE && signum != SIGILL && signum != SIGSEGV,
@@ -176,7 +209,7 @@ void UnixEventPort::registerSignalHandler(int signum) {
   KJ_SYSCALL(sigaction(signum, &action, nullptr));
 }
 
-#if !KJ_USE_EPOLL && !KJ_USE_PIPE_FOR_WAKEUP
+#if !KJ_USE_EPOLL && !KJ_USE_KQUEUE && !KJ_USE_PIPE_FOR_WAKEUP
 void UnixEventPort::registerReservedSignal() {
   registerSignalHandler(reservedSignal);
 }
@@ -197,6 +230,8 @@ void UnixEventPort::ignoreSigpipe() {
     return true;
   }();
 }
+
+#if !KJ_USE_KQUEUE  // kqueue systems handle child processes differently
 
 struct UnixEventPort::ChildSet {
   std::map<pid_t, ChildExitPromiseAdapter*> waiters;
@@ -320,6 +355,8 @@ Promise<siginfo_t> UnixEventPort::onSignal(int signum) {
   return newAdaptedPromise<siginfo_t, SignalPromiseAdapter>(*this, signum);
 }
 
+#endif  // !KJ_USE_KQUEUE
+
 void UnixEventPort::captureSignal(int signum) {
   if (reservedSignal == SIGUSR1) {
     KJ_REQUIRE(signum != SIGUSR1,
@@ -343,6 +380,8 @@ void UnixEventPort::setReservedSignal(int signum) {
   reservedSignal = signum;
 }
 
+#if !KJ_USE_KQUEUE
+
 void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
   // If onChildExit() has been called and this is SIGCHLD, check for child exits.
   KJ_IF_MAYBE(cs, childSet) {
@@ -363,6 +402,8 @@ void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
     }
   }
 }
+
+#endif  // !KJ_USE_KQUEUE
 
 #if KJ_USE_EPOLL
 // =======================================================================================
@@ -671,7 +712,440 @@ bool UnixEventPort::poll() {
   return processEpollEvents(events, n);
 }
 
-#else  // KJ_USE_EPOLL
+#elif KJ_USE_KQUEUE
+// =======================================================================================
+// kqueue FdObserver implementation
+
+UnixEventPort::UnixEventPort()
+    : clock(systemPreciseMonotonicClock()),
+      timerImpl(clock.now()) {
+  ignoreSigpipe();
+
+  int fd;
+  KJ_SYSCALL(fd = kqueue());
+  kqueueFd = AutoCloseFd(fd);
+
+  // NetBSD has kqueue1() which can set CLOEXEC atomically, but FreeBSD, MacOS, and others don't
+  // have this... oh well.
+  KJ_SYSCALL(fcntl(kqueueFd, F_SETFD, FD_CLOEXEC));
+
+  // Register the EVFILT_USER event used by wake().
+  struct kevent event;
+  EV_SET(&event, 0, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, nullptr);
+  KJ_SYSCALL(kevent(kqueueFd, &event, 1, nullptr, 0, nullptr));
+}
+
+UnixEventPort::~UnixEventPort() noexcept(false) {}
+
+UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint flags)
+    : eventPort(eventPort), fd(fd), flags(flags) {
+  struct kevent events[3];
+  int nevents = 0;
+
+  if (flags & OBSERVE_URGENT) {
+#ifdef EVFILT_EXCEPT
+    EV_SET(&events[nevents++], fd, EVFILT_EXCEPT, EV_ADD | EV_CLEAR, NOTE_OOB, 0, this);
+#else
+    // TODO(someday): Can we support this without reverting to poll()?
+    //   Related: https://sandstorm.io/news/2015-04-08-osx-security-bug
+    KJ_FAIL_ASSERT("kqueue() on this system doesn't support EVFILT_EXCEPT (for OBSERVE_URGENT). "
+        "If you really need to observe OOB events, compile KJ (and your application) with "
+        "-DKJ_USE_KQUEUE=0 to disable use of kqueue().");
+#endif
+  }
+  if (flags & OBSERVE_READ) {
+    EV_SET(&events[nevents++], fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, this);
+  }
+  if (flags & OBSERVE_WRITE) {
+    EV_SET(&events[nevents++], fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, this);
+  }
+
+  KJ_SYSCALL(kevent(eventPort.kqueueFd, events, nevents, nullptr, 0, nullptr));
+}
+
+UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
+  struct kevent events[3];
+  int nevents = 0;
+
+  if (flags & OBSERVE_URGENT) {
+#ifdef EVFILT_EXCEPT
+    EV_SET(&events[nevents++], fd, EVFILT_EXCEPT, EV_DELETE, 0, 0, nullptr);
+#endif
+  }
+  if (flags & OBSERVE_READ) {
+    EV_SET(&events[nevents++], fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
+  }
+  if ((flags & OBSERVE_WRITE) || hupFulfiller != nullptr) {
+    EV_SET(&events[nevents++], fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+  }
+
+  // TODO(perf): Should we delay unregistration of events until the next time kqueue() is invoked?
+  //   We can't delay registrations since it could lead to missed events, but we could delay
+  //   unregistration safely. However, we'd have to be very careful about the possibility that
+  //   the same FD is re-registered later.
+  KJ_SYSCALL_HANDLE_ERRORS(kevent(eventPort.kqueueFd, events, nevents, nullptr, 0, nullptr)) {
+    case ENOENT:
+      // In the specific case of unnamed pipes, when read end of the pipe is destroyed, FreeBSD
+      // seems to unregister the events on the write end automatically. Subsequently trying to
+      // remove them then produces ENOENT. Let's ignore this.
+      break;
+    default:
+      KJ_FAIL_SYSCALL("kevent(remove events)", error);
+  }
+}
+
+void UnixEventPort::FdObserver::fire(struct kevent event) {
+  switch (event.filter) {
+    case EVFILT_READ:
+      if (event.flags & EV_EOF) {
+        atEnd = true;
+      } else {
+        atEnd = false;
+      }
+
+      KJ_IF_MAYBE(f, readFulfiller) {
+        f->get()->fulfill();
+        readFulfiller = nullptr;
+      }
+      break;
+
+    case EVFILT_WRITE:
+      if (event.flags & EV_EOF) {
+        // EOF on write indicates disconnect.
+        KJ_IF_MAYBE(f, hupFulfiller) {
+          f->get()->fulfill();
+          hupFulfiller = nullptr;
+          if (!(flags & OBSERVE_WRITE)) {
+            // We were only observing writes to get the disconnect event. Stop observing now.
+            struct kevent rmEvent;
+            EV_SET(&rmEvent, fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+            KJ_SYSCALL_HANDLE_ERRORS(kevent(eventPort.kqueueFd, &rmEvent, 1, nullptr, 0, nullptr)) {
+              case ENOENT:
+                // In the specific case of unnamed pipes, when read end of the pipe is destroyed,
+                // FreeBSD seems to unregister the events on the write end automatically.
+                // Subsequently trying to remove them then produces ENOENT. Let's ignore this.
+                break;
+              default:
+                KJ_FAIL_SYSCALL("kevent(remove events)", error);
+            }
+          }
+        }
+      }
+
+      KJ_IF_MAYBE(f, writeFulfiller) {
+        f->get()->fulfill();
+        writeFulfiller = nullptr;
+      }
+      break;
+
+#ifdef EVFILT_EXCEPT
+    case EVFILT_EXCEPT:
+      KJ_IF_MAYBE(f, urgentFulfiller) {
+        f->get()->fulfill();
+        urgentFulfiller = nullptr;
+      }
+      break;
+#endif
+  }
+}
+
+Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
+  KJ_REQUIRE(flags & OBSERVE_READ, "FdObserver was not set to observe reads.");
+
+  auto paf = newPromiseAndFulfiller<void>();
+  readFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
+  KJ_REQUIRE(flags & OBSERVE_WRITE, "FdObserver was not set to observe writes.");
+
+  auto paf = newPromiseAndFulfiller<void>();
+  writeFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
+  KJ_REQUIRE(flags & OBSERVE_URGENT,
+      "FdObserver was not set to observe availability of urgent data.");
+
+  auto paf = newPromiseAndFulfiller<void>();
+  urgentFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
+  if (!(flags & OBSERVE_WRITE) && hupFulfiller == nullptr) {
+    // We aren't observing writes, but we need to if we want to detect disconnects.
+    struct kevent event;
+    EV_SET(&event, fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, this);
+    KJ_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
+  }
+
+  auto paf = newPromiseAndFulfiller<void>();
+  hupFulfiller = kj::mv(paf.fulfiller);
+  return kj::mv(paf.promise);
+}
+
+class UnixEventPort::SignalPromiseAdapter {
+public:
+  inline SignalPromiseAdapter(PromiseFulfiller<siginfo_t>& fulfiller,
+                              UnixEventPort& eventPort, int signum)
+      : eventPort(eventPort), signum(signum), fulfiller(fulfiller) {
+    struct kevent event;
+    EV_SET(&event, signum, EVFILT_SIGNAL, EV_ADD | EV_CLEAR, 0, 0, this);
+    KJ_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
+
+    // We must check for the signal now in case it was delivered previously and is currently in
+    // the blocked set. See comment in tryConsumeSignal(). (To avoid the race condition, we must
+    // check *after* having registered the kevent!)
+    tryConsumeSignal();
+  }
+
+  ~SignalPromiseAdapter() noexcept(false) {
+    // Unregister the event. This is important because it contains a pointer to this object which
+    // we don't want to see again.
+    struct kevent event;
+    EV_SET(&event, signum, EVFILT_SIGNAL, EV_DELETE, 0, 0, nullptr);
+    KJ_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
+  }
+
+  void tryConsumeSignal() {
+    // Unfortunately KJ's signal semantics are not a great fit for kqueue. In particular, KJ
+    // assumes that if no threads are waiting for a signal, it'll remain blocked until some
+    // thread actually calls `onSignal()` to receive it. kqueue, however, doesn't care if a signal
+    // is blocked -- the kqueue event will still be delivered. So, when `onSignal()` is called
+    // we will need to check if the signal is already queued; it's too late to ask kqueue() to
+    // tell us this.
+    //
+    // Alternatively we could maybe fix this by having every thread's kqueue wait on all captured
+    // signals all the time, but this would result in a thundering herd on any signal even if only
+    // one thread has actually registered interest.
+    //
+    // Another problem is per-thread signals, delivered with pthread_kill(). On FreeBSD, it appears
+    // a pthread_kill will wake up all kqueues in the process waiting on the particular signal,
+    // even if they are not associated with the target thread (kqueues don't really have any
+    // association with threads anyway). Worse, though, on MacOS, pthread_kill() doesn't wake
+    // kqueues at all. In fact, it appears they made it this way in 10.14, which broke stuff:
+    // https://github.com/libevent/libevent/issues/765
+    //
+    // So, we have to:
+    // - Block signals normally.
+    // - Poll for a specific signal using sigtimedwait() or similar.
+    // - Use kqueue only as a hint to tell us when polling might be a good idea.
+    // - On MacOS, live with per-thread signals being broken I guess?
+
+    // Anyway, this method here tries to have the signal delivered to this thread.
+
+    if (fulfiller.isWaiting()) {
+#if KJ_HAS_SIGTIMEDWAIT
+      sigset_t mask;
+      KJ_SYSCALL(sigemptyset(&mask));
+      KJ_SYSCALL(sigaddset(&mask, signum));
+      siginfo_t result;
+      struct timespec timeout;
+      memset(&timeout, 0, sizeof(timeout));
+
+      KJ_SYSCALL_HANDLE_ERRORS(sigtimedwait(&mask, &result, &timeout)) {
+        case EAGAIN:
+          // Signal was not queued.
+          return;
+        default:
+          KJ_FAIL_SYSCALL("sigtimedwait", error);
+      }
+
+      fulfiller.fulfill(kj::mv(result));
+#else
+      // This platform doesn't appear to have sigtimedwait(). Ugh! We are forced to do two separate
+      // syscalls to see if the signal is pending, and then, if so, wait for it. There is an
+      // inherent race condition since the signal could be dequeued in another thread concurrently.
+      // We will try to work around that by locking a global mutex, so at least this code doesn't
+      // race against itself.
+      static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
+      pthread_mutex_lock(&mut);
+      KJ_DEFER(pthread_mutex_unlock(&mut));
+
+      sigset_t mask;
+      KJ_SYSCALL(sigpending(&mask));
+      int isset;
+      KJ_SYSCALL(isset = sigismember(&mask, signum));
+      if (isset) {
+        KJ_SYSCALL(sigfillset(&mask));
+        KJ_SYSCALL(sigdelset(&mask, signum));
+        siginfo_t info;
+        memset(&info, 0, sizeof(info));
+        threadCapture = &info;
+        KJ_DEFER(threadCapture = nullptr);
+        int result = sigsuspend(&mask);
+        KJ_ASSERT(result < 0 && errno == EINTR, "sigsuspend() didn't EINTR?", result, errno);
+        KJ_ASSERT(info.si_signo == signum);
+        fulfiller.fulfill(kj::mv(info));
+      }
+#endif
+    }
+  }
+
+  UnixEventPort& eventPort;
+  int signum;
+  PromiseFulfiller<siginfo_t>& fulfiller;
+};
+
+Promise<siginfo_t> UnixEventPort::onSignal(int signum) {
+  KJ_REQUIRE(signum != SIGCHLD || !capturedChildExit,
+      "can't call onSigal(SIGCHLD) when kj::UnixEventPort::captureChildExit() has been called");
+
+  return newAdaptedPromise<siginfo_t, SignalPromiseAdapter>(*this, signum);
+}
+
+class UnixEventPort::ChildExitPromiseAdapter {
+public:
+  inline ChildExitPromiseAdapter(PromiseFulfiller<int>& fulfiller,
+                                 UnixEventPort& eventPort, Maybe<pid_t>& pid)
+      : eventPort(eventPort), pid(pid), fulfiller(fulfiller) {
+    pid_t p = KJ_ASSERT_NONNULL(pid);
+
+    struct kevent event;
+    EV_SET(&event, p, EVFILT_PROC, EV_ADD | EV_CLEAR, NOTE_EXIT, 0, this);
+    KJ_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
+
+    // Check for race where child had already exited before the event was waiting.
+    tryConsumeChild();
+  }
+
+  ~ChildExitPromiseAdapter() noexcept(false) {
+    KJ_IF_MAYBE(p, pid) {
+      // The process has not been reaped. The promise must have been canceled. So, we're still
+      // registered with the kqueue. We'd better unregister because the kevent points back to this
+      // object.
+      struct kevent event;
+      EV_SET(&event, *p, EVFILT_PROC, EV_DELETE, 0, 0, nullptr);
+      KJ_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
+
+      // We leak the zombie process here. The caller is responsible for doing its own waitpid().
+    }
+  }
+
+  void tryConsumeChild() {
+    // Even though kqueue delivers the exit status to us, we still need to wait on the pid to
+    // clear the zombie. We can't set SIGCHLD to SIG_IGN to ignore this because it creates a race
+    // condition.
+
+    KJ_IF_MAYBE(p, pid) {
+      int status;
+      pid_t result;
+      KJ_SYSCALL(result = waitpid(*p, &status, WNOHANG));
+      if (result != 0) {
+        KJ_ASSERT(result == *p);
+
+        // NOTE: The proc is automatically unregsitered from the kqueue on exit, so we should NOT
+        //   attempt to unregister it here.
+
+        pid = nullptr;
+        fulfiller.fulfill(kj::mv(status));
+      }
+    }
+  }
+
+  UnixEventPort& eventPort;
+  Maybe<pid_t>& pid;
+  PromiseFulfiller<int>& fulfiller;
+};
+
+Promise<int> UnixEventPort::onChildExit(Maybe<pid_t>& pid) {
+  KJ_REQUIRE(capturedChildExit,
+      "must call UnixEventPort::captureChildExit() to use onChildExit().");
+
+  return kj::newAdaptedPromise<int, ChildExitPromiseAdapter>(*this, pid);
+}
+
+void UnixEventPort::captureChildExit() {
+  capturedChildExit = true;
+}
+
+void UnixEventPort::wake() const {
+  // Trigger our user event.
+  struct kevent event;
+  EV_SET(&event, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
+  KJ_SYSCALL(kevent(kqueueFd, &event, 1, nullptr, 0, nullptr));
+}
+
+bool UnixEventPort::doKqueueWait(struct timespec* timeout) {
+  struct kevent events[16];
+  int n = kevent(kqueueFd, nullptr, 0, events, kj::size(events), timeout);
+
+  if (n < 0) {
+    int error = errno;
+    if (error == EINTR) {
+      // We received a singal. The signal handler may have queued an event to the event loop. Even
+      // if it didn't, we can't simply restart the kevent call because we need to recompute the
+      // timeout. Instead, we pretend kevent() returned zero events. This will cause the event
+      // loop to spin once, decide it has nothing to do, recompute timeouts, then return to waiting.
+      n = 0;
+    } else {
+      KJ_FAIL_SYSCALL("kevent()", error);
+    }
+  }
+
+  bool woken = false;
+
+  for (int i = 0; i < n; i++) {
+    switch (events[i].filter) {
+#ifdef EVFILT_EXCEPT
+      case EVFILT_EXCEPT:
+#endif
+      case EVFILT_READ:
+      case EVFILT_WRITE: {
+        FdObserver* observer = reinterpret_cast<FdObserver*>(events[i].udata);
+        observer->fire(events[i]);
+        break;
+      }
+
+      case EVFILT_SIGNAL: {
+        SignalPromiseAdapter* observer = reinterpret_cast<SignalPromiseAdapter*>(events[i].udata);
+        observer->tryConsumeSignal();
+        break;
+      }
+
+      case EVFILT_PROC: {
+        ChildExitPromiseAdapter* observer =
+            reinterpret_cast<ChildExitPromiseAdapter*>(events[i].udata);
+        observer->tryConsumeChild();
+        break;
+      }
+
+      case EVFILT_USER:
+        // Someone called wake() from another thread.
+        woken = true;
+        break;
+
+      default:
+        KJ_FAIL_ASSERT("unexpected EVFILT", events[i].filter);
+    }
+  }
+
+  timerImpl.advanceTo(clock.now());
+
+  return woken;
+}
+
+bool UnixEventPort::wait() {
+  KJ_IF_MAYBE(t, timerImpl.timeoutToNextEvent(clock.now(), NANOSECONDS, int(maxValue))) {
+    struct timespec timeout;
+    timeout.tv_sec = *t / 1'000'000'000;
+    timeout.tv_nsec = *t % 1'000'000'000;
+    return doKqueueWait(&timeout);
+  } else {
+    return doKqueueWait(nullptr);
+  }
+}
+
+bool UnixEventPort::poll() {
+  struct timespec timeout;
+  memset(&timeout, 0, sizeof(timeout));
+  return doKqueueWait(&timeout);
+}
+
+#else  // KJ_USE_EPOLL, else KJ_USE_KQUEUE
 // =======================================================================================
 // Traditional poll() FdObserver implementation.
 
@@ -1107,7 +1581,7 @@ void UnixEventPort::wake() const {
 #endif
 }
 
-#endif  // KJ_USE_EPOLL, else
+#endif  // KJ_USE_EPOLL, else KJ_USE_KQUEUE, else
 
 }  // namespace kj
 
