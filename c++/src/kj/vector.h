@@ -123,7 +123,7 @@ public:
 
   inline void reserve(size_t size) {
     if (size > builder.capacity()) {
-      setCapacity(size);
+      grow(size);
     }
   }
 
