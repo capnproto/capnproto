@@ -121,7 +121,7 @@ bool checkForQemuEpollPwaitBug() {
   KJ_SYSCALL(efd = epoll_create1(EPOLL_CLOEXEC));
   KJ_DEFER(close(efd));
 
-  raise(SIGURG);
+  kill(getpid(), SIGURG);
   KJ_ASSERT(!qemuBugTestSignalHandlerRan);
 
   struct epoll_event event;
@@ -291,10 +291,16 @@ TEST(AsyncUnixTest, SignalsAsync) {
   WaitScope waitScope(loop);
 
   // Arrange for a signal to be sent from another thread.
-  pthread_t mainThread = pthread_self();
+  pthread_t mainThread KJ_UNUSED = pthread_self();
   Thread thread([&]() {
     delay();
+#if __APPLE__ && KJ_USE_KQUEUE
+    // MacOS kqueue only receives process-level signals and there's nothing much we can do about
+    // that.
+    kill(getpid(), SIGURG);
+#else
     pthread_kill(mainThread, SIGURG);
+#endif
   });
 
   siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
@@ -467,7 +473,7 @@ TEST(AsyncUnixTest, ReadObserverAndSignals) {
   observer.whenBecomesReadable().wait(waitScope);
 
   KJ_EXPECT(!signalPromise.poll(waitScope))
-  raise(SIGIO);
+  kill(getpid(), SIGIO);
   KJ_EXPECT(signalPromise.poll(waitScope))
 }
 
@@ -1013,8 +1019,8 @@ KJ_TEST("UnixEventPort poll for signals") {
   KJ_EXPECT(!promise1.poll(waitScope));
   KJ_EXPECT(!promise2.poll(waitScope));
 
-  KJ_SYSCALL(raise(SIGURG));
-  KJ_SYSCALL(raise(SIGIO));
+  KJ_SYSCALL(kill(getpid(), SIGURG));
+  KJ_SYSCALL(kill(getpid(), SIGIO));
   port.wake();
 
   KJ_EXPECT(port.poll());
@@ -1071,9 +1077,12 @@ KJ_TEST("UnixEventPort can receive multiple queued instances of an RT signal") {
 }
 #endif
 
+#if !(__APPLE__ && KJ_USE_KQUEUE)
 KJ_TEST("UnixEventPort thread-specific signals") {
-  // Verify a signal directed to a thread is only received on the intended thread. Amazingly, this
-  // works even though all threads use the same signalfd.
+  // Verify a signal directed to a thread is only received on the intended thread.
+  //
+  // MacOS kqueue only receives process-level signals and there's nothing much we can do about
+  // that, so this test won't work there.
 
   if (BROKEN_QEMU) return;
 
@@ -1108,6 +1117,7 @@ KJ_TEST("UnixEventPort thread-specific signals") {
     KJ_ASSERT(doneCount.load(std::memory_order_relaxed) == ++count);
   }
 }
+#endif
 
 }  // namespace
 }  // namespace kj

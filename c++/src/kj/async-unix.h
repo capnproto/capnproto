@@ -107,6 +107,15 @@ public:
   // process-wide signal by only calling `onSignal()` on that thread's event loop.
   //
   // The result of waiting on the same signal twice at once is undefined.
+  //
+  // WARNING: On MacOS and iOS, `onSignal()` will only see process-level signals, NOT
+  //   thread-specific signals (i.e. not those sent with pthread_kill()). This is a limitation of
+  //   Apple's implemnetation of kqueue() introduced in MacOS 10.14 which Apple says is not a bug.
+  //   See: https://github.com/libevent/libevent/issues/765 Consider using kj::Executor or
+  //   kj::newPromiseAndCrossThreadFulfiller() for cross-thread communications instead of signals.
+  //   If you must have signals, build KJ and your app with `-DKJ_USE_KQUEUE=0`, which will cause
+  //   KJ to fall back to a generic poll()-based implementation that is less efficient but handles
+  //   thread-specific signals.
 
   static void captureSignal(int signum);
   // Arranges for the given signal to be captured and handled via UnixEventPort, so that you may
