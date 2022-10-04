@@ -998,6 +998,8 @@ KJ_ASSERT(promise.poll(waitScope));
 promise.wait(waitScope);
 ```
 
+Sometimes, you may need to ensure that some promise has completed that you don't have a reference to, so you can observe that some side effect has occurred. You can use `waitScope.poll()` to flush the event loop without waiting for a specific promise to complete.
+
 ## System I/O
 
 ### Async I/O
