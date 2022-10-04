@@ -47,7 +47,7 @@ KJ_TEST("_::tryReserveSize() works") {
   {
     Vector<int> vec;
     tryReserveSize(vec, "foo"_kj);
-    KJ_EXPECT(vec.capacity() == 3);
+    KJ_EXPECT(vec.capacity() == 4);  // Vectors always grow by powers of two.
   }
   {
     Vector<int> vec;
