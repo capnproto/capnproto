@@ -172,8 +172,7 @@ set(kj-http_headers
 if(NOT CAPNP_LITE)
   add_library(kj-http ${kj-http_sources})
   add_library(CapnProto::kj-http ALIAS kj-http)
-  find_package(ZLIB)
-  if(ZLIB_FOUND)
+  if(WITH_ZLIB)
     add_definitions(-D KJ_HAS_ZLIB=1)
     target_link_libraries(kj-http PUBLIC kj-async kj ZLIB::ZLIB)
   else()
@@ -210,26 +209,25 @@ endif()
 
 # kj-gzip ======================================================================
 
-set(kj-gzip_sources
-  compat/gzip.c++
-)
-set(kj-gzip_headers
-  compat/gzip.h
-)
-if(NOT CAPNP_LITE)
-  add_library(kj-gzip ${kj-gzip_sources})
-  add_library(CapnProto::kj-gzip ALIAS kj-gzip)
+if(WITH_ZLIB)
+  set(kj-gzip_sources
+    compat/gzip.c++
+  )
+  set(kj-gzip_headers
+    compat/gzip.h
+  )
+  if(NOT CAPNP_LITE)
+    add_library(kj-gzip ${kj-gzip_sources})
+    add_library(CapnProto::kj-gzip ALIAS kj-gzip)
 
-  find_package(ZLIB)
-  if(ZLIB_FOUND)
     add_definitions(-D KJ_HAS_ZLIB=1)
     target_link_libraries(kj-gzip PUBLIC kj-async kj ZLIB::ZLIB)
-  endif()
 
-  # Ensure the library has a version set to match autotools build
-  set_target_properties(kj-gzip PROPERTIES VERSION ${VERSION})
-  install(TARGETS kj-gzip ${INSTALL_TARGETS_DEFAULT_ARGS})
-  install(FILES ${kj-gzip_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
+    # Ensure the library has a version set to match autotools build
+    set_target_properties(kj-gzip PROPERTIES VERSION ${VERSION})
+    install(TARGETS kj-gzip ${INSTALL_TARGETS_DEFAULT_ARGS})
+    install(FILES ${kj-gzip_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/kj/compat")
+  endif()
 endif()
 
 # Tests ========================================================================
