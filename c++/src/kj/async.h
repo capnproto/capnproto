@@ -571,6 +571,10 @@ private:
 };
 
 template <typename Func, typename MovedParam>
+inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func)
+    KJ_DEPRECATED("Use C++14 generalized captures instead.");
+
+template <typename Func, typename MovedParam>
 inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func) {
   // Hack to create a "lambda" which captures a variable by moving it rather than copying or
   // referencing.  C++14 generalized captures should make this obsolete, but for now in C++11 this
