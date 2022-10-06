@@ -227,9 +227,9 @@ TEST(Async, DeepChain) {
 
   // Create a ridiculous chain of promises.
   for (uint i = 0; i < 1000; i++) {
-    promise = evalLater(mvCapture(promise, [](Promise<void> promise) {
+    promise = evalLater([promise=kj::mv(promise)]() mutable {
       return kj::mv(promise);
-    }));
+    });
   }
 
   loop.run();
@@ -264,9 +264,9 @@ TEST(Async, DeepChain2) {
 
   // Create a ridiculous chain of promises.
   for (uint i = 0; i < 1000; i++) {
-    promise = evalLater(mvCapture(promise, [](Promise<void> promise) {
+    promise = evalLater([promise=kj::mv(promise)]() mutable {
       return kj::mv(promise);
-    }));
+    });
   }
 
   promise.wait(waitScope);
@@ -303,9 +303,9 @@ TEST(Async, DeepChain3) {
 
 Promise<void> makeChain2(uint i, Promise<void> promise) {
   if (i > 0) {
-    return evalLater(mvCapture(promise, [i](Promise<void>&& promise) -> Promise<void> {
+    return evalLater([i, promise=kj::mv(promise)]() mutable -> Promise<void> {
       return makeChain2(i - 1, kj::mv(promise));
-    }));
+    });
   } else {
     return kj::mv(promise);
   }

@@ -201,14 +201,14 @@ public:
     auto onRevoked = policy->onRevoked();
 
     bool reverse = this->reverse;  // for capture
-    auto newPromise = promise.then(kj::mvCapture(policy,
-        [reverse](kj::Own<MembranePolicy>&& policy, Response<AnyPointer>&& response) {
+    auto newPromise = promise.then(
+        [reverse,policy=kj::mv(policy)](Response<AnyPointer>&& response) mutable {
       AnyPointer::Reader reader = response;
       auto newRespHook = kj::heap<MembraneResponseHook>(
           ResponseHook::from(kj::mv(response)), policy->addRef(), reverse);
       reader = newRespHook->imbue(reader);
       return Response<AnyPointer>(reader, kj::mv(newRespHook));
-    }));
+    });
 
     KJ_IF_MAYBE(r, kj::mv(onRevoked)) {
       newPromise = newPromise.exclusiveJoin(r->then([]() -> Response<AnyPointer> {

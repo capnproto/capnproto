@@ -2686,9 +2686,9 @@ private:
 
       if (redirectResults) {
         auto resultsPromise = promiseAndPipeline.promise.then(
-            kj::mvCapture(context, [](kj::Own<RpcCallContext>&& context) {
+            [context=kj::mv(context)]() mutable {
               return context->consumeRedirectedResponse();
-            }));
+            });
 
         // If the call that later picks up `redirectedResults` decides to discard it, we need to
         // make sure our call is not itself canceled unless it has called allowCancellation().
@@ -3032,8 +3032,7 @@ private:
 
         // We need to insert an evalLast() here to make sure that any pending calls towards this
         // cap have had time to find their way through the event loop.
-        tasks.add(canceler.wrap(kj::evalLast(kj::mvCapture(
-            target, [this,embargoId](kj::Own<ClientHook>&& target) {
+        tasks.add(canceler.wrap(kj::evalLast([this,embargoId,target=kj::mv(target)]() mutable {
           if (!connection.is<Connected>()) {
             return;
           }
@@ -3062,7 +3061,7 @@ private:
           builder.getContext().setReceiverLoopback(embargoId);
 
           message->send();
-        }))));
+        })));
 
         break;
       }

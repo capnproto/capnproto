@@ -288,8 +288,8 @@ public:
         auto incomingMessage = kj::heap<IncomingRpcMessageImpl>(messageToFlatArray(message));
 
         auto connectionPtr = &connection;
-        connection.tasks->add(kj::evalLater(kj::mvCapture(incomingMessage,
-            [connectionPtr](kj::Own<IncomingRpcMessageImpl>&& message) {
+        connection.tasks->add(kj::evalLater(
+            [connectionPtr,message=kj::mv(incomingMessage)]() mutable {
           KJ_IF_MAYBE(p, connectionPtr->partner) {
             if (p->fulfillers.empty()) {
               p->messages.push(kj::mv(message));
@@ -300,7 +300,7 @@ public:
               p->fulfillers.pop();
             }
           }
-        })));
+        }));
       }
 
       size_t sizeInWords() override {
