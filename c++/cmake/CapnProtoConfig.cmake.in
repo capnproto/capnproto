@@ -49,7 +49,7 @@ if(NOT _IMPORT_PREFIX)
   set(_IMPORT_PREFIX ${PACKAGE_PREFIX_DIR})
 endif()
 
-if (@WITH_OPENSSL@)  # WITH_OPENSSL
+if (@WITH_OPENSSL@) # WITH_OPENSSL
   include(CMakeFindDependencyMacro)
   if (CMAKE_VERSION VERSION_LESS 3.9)
     # find_dependency() did not support COMPONENTS until CMake 3.9
@@ -60,6 +60,11 @@ if (@WITH_OPENSSL@)  # WITH_OPENSSL
   else()
     find_dependency(OpenSSL COMPONENTS Crypto SSL)
   endif()
+endif()
+
+if (@WITH_ZLIB@) # WITH_ZLIB
+  include(CMakeFindDependencyMacro)
+  find_dependency(ZLIB)
 endif()
 
 if (@_WITH_LIBUCONTEXT@) # _WITH_LIBUCONTEXT
