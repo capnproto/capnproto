@@ -596,6 +596,8 @@ inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func
 
 namespace _ {
 
+void throwMultipleCoCaptureInvocations();
+
 template<typename Functor>
 struct CaptureForCoroutine {
   kj::Maybe<Functor> maybeFunctor;
@@ -615,8 +617,9 @@ struct CaptureForCoroutine {
 
   template<typename ...Args>
   auto operator()(Args&&... args) {
-    KJ_IREQUIRE(maybeFunctor != nullptr,
-        "Attempted to invoke CaptureForCoroutine functor multiple times");
+    if (maybeFunctor == nullptr) {
+      throwMultipleCoCaptureInvocations();
+    }
     auto localFunctor = kj::mv(*kj::_::readMaybe(maybeFunctor));
     maybeFunctor = nullptr;
     return coInvoke(kj::mv(localFunctor), kj::fwd<Args>(args)...);

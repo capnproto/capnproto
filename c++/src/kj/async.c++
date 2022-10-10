@@ -3063,6 +3063,13 @@ bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent)
   }
 }
 
+// ---------------------------------------------------------
+// Helpers for coCapture()
+
+void throwMultipleCoCaptureInvocations() {
+  KJ_FAIL_REQUIRE("Attempted to invoke CaptureForCoroutine functor multiple times");
+}
+
 }  // namespace _ (private)
 
 #endif  // KJ_HAS_COROUTINE
