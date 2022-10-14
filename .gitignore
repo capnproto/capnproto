@@ -21,6 +21,7 @@
 # Ekam build artifacts.
 /c++/tmp/
 /c++/bin/
+/c++/deps/
 
 # setup-ekam.sh
 /c++/.ekam

@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !CAPNP_NO_PROTOBUF_BENCHMARK
+
 #include "catrank.pb.h"
 #include "protobuf-common.h"
 
@@ -128,3 +130,5 @@ int main(int argc, char* argv[]) {
       capnp::benchmark::protobuf::BenchmarkTypes,
       capnp::benchmark::protobuf::CatRankTestCase>(argc, argv);
 }
+
+#endif  // !CAPNP_NO_PROTOBUF_BENCHMARK
