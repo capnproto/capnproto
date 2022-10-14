@@ -103,13 +103,15 @@ public:
 
   virtual kj::Promise<void> end() = 0;
   // Cleanly shut down just the write end of the transport, while keeping the read end open.
-
 };
 
 class AsyncIoMessageStream final: public MessageStream {
   // A MessageStream that wraps an AsyncIoStream.
 public:
+  explicit AsyncIoMessageStream(kj::OneOf<kj::AsyncIoStream*, kj::Own<kj::AsyncIoStream>>&& stream);
   explicit AsyncIoMessageStream(kj::AsyncIoStream& stream);
+
+  kj::AsyncIoStream& getStream();
 
   // Implements MessageStream
   kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
@@ -124,13 +126,18 @@ public:
 
   kj::Promise<void> end() override;
 private:
-  kj::AsyncIoStream& stream;
+  kj::OneOf<kj::AsyncIoStream*, kj::Own<kj::AsyncIoStream>> stream;
+  // The underlying stream, which we may or may not own. Get a reference to
+  // this with getStream, rather than reading it directly.
 };
 
 class AsyncCapabilityMessageStream final: public MessageStream {
   // A MessageStream that wraps an AsyncCapabilityStream.
 public:
+  explicit AsyncCapabilityMessageStream(kj::OneOf<kj::AsyncCapabilityStream*, kj::Own<kj::AsyncCapabilityStream>>&& stream);
   explicit AsyncCapabilityMessageStream(kj::AsyncCapabilityStream& stream);
+
+  kj::AsyncCapabilityStream& getStream();
 
   // Implements MessageStream
   kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
@@ -144,7 +151,9 @@ public:
   kj::Maybe<int> getSendBufferSize() override;
   kj::Promise<void> end() override;
 private:
-  kj::AsyncCapabilityStream& stream;
+  kj::OneOf<kj::AsyncCapabilityStream*, kj::Own<kj::AsyncCapabilityStream>> stream;
+  // The underlying stream, which we may or may not own. Get a reference to
+  // this with getStream, rather than reading it directly.
 };
 
 // -----------------------------------------------------------------------------

@@ -413,14 +413,29 @@ kj::Promise<void> MessageStream::writeMessages(kj::ArrayPtr<MessageBuilder*> bui
   return writeMessages(messages);
 }
 
+AsyncIoMessageStream::AsyncIoMessageStream(kj::OneOf<kj::AsyncIoStream*, kj::Own<kj::AsyncIoStream>>&& stream)
+  : stream(kj::mv(stream)) {}
+
 AsyncIoMessageStream::AsyncIoMessageStream(kj::AsyncIoStream& stream)
-  : stream(stream) {};
+  : AsyncIoMessageStream(&stream) {}
+
+kj::AsyncIoStream& AsyncIoMessageStream::getStream() {
+  KJ_SWITCH_ONEOF(stream) {
+    KJ_CASE_ONEOF(s, kj::AsyncIoStream*) {
+      return *s;
+    }
+    KJ_CASE_ONEOF(s, kj::Own<kj::AsyncIoStream>) {
+      return *s;
+    }
+  }
+  KJ_UNREACHABLE;
+}
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncIoMessageStream::tryReadMessage(
     kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
-  return capnp::tryReadMessage(stream, options, scratchSpace)
+  return capnp::tryReadMessage(getStream(), options, scratchSpace)
     .then([](kj::Maybe<kj::Own<MessageReader>> maybeReader) -> kj::Maybe<MessageReaderAndFds> {
       KJ_IF_MAYBE(reader, maybeReader) {
         return MessageReaderAndFds { kj::mv(*reader), nullptr };
@@ -433,12 +448,12 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncIoMessageStream::tryReadMessage
 kj::Promise<void> AsyncIoMessageStream::writeMessage(
     kj::ArrayPtr<const int> fds,
     kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  return capnp::writeMessage(stream, segments);
+  return capnp::writeMessage(getStream(), segments);
 }
 
 kj::Promise<void> AsyncIoMessageStream::writeMessages(
     kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) {
-  return capnp::writeMessages(stream, messages);
+  return capnp::writeMessages(getStream(), messages);
 }
 
 kj::Maybe<int> getSendBufferSize(kj::AsyncIoStream& stream) {
@@ -464,41 +479,55 @@ kj::Maybe<int> getSendBufferSize(kj::AsyncIoStream& stream) {
 }
 
 kj::Promise<void> AsyncIoMessageStream::end() {
-  stream.shutdownWrite();
+  getStream().shutdownWrite();
   return kj::READY_NOW;
 }
 
 kj::Maybe<int> AsyncIoMessageStream::getSendBufferSize() {
-  return capnp::getSendBufferSize(stream);
+  return capnp::getSendBufferSize(getStream());
 }
 
+AsyncCapabilityMessageStream::AsyncCapabilityMessageStream(kj::OneOf<kj::AsyncCapabilityStream*, kj::Own<kj::AsyncCapabilityStream>>&& stream)
+  : stream(kj::mv(stream)) {}
 AsyncCapabilityMessageStream::AsyncCapabilityMessageStream(kj::AsyncCapabilityStream& stream)
-  : stream(stream) {};
+  : stream(&stream) {}
+
+kj::AsyncCapabilityStream& AsyncCapabilityMessageStream::getStream() {
+  KJ_SWITCH_ONEOF(stream) {
+    KJ_CASE_ONEOF(s, kj::AsyncCapabilityStream*) {
+      return *s;
+    }
+    KJ_CASE_ONEOF(s, kj::Own<kj::AsyncCapabilityStream>) {
+      return *s;
+    }
+  }
+  KJ_UNREACHABLE;
+}
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncCapabilityMessageStream::tryReadMessage(
     kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
-  return capnp::tryReadMessage(stream, fdSpace, options, scratchSpace);
+  return capnp::tryReadMessage(getStream(), fdSpace, options, scratchSpace);
 }
 
 kj::Promise<void> AsyncCapabilityMessageStream::writeMessage(
     kj::ArrayPtr<const int> fds,
     kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  return capnp::writeMessage(stream, fds, segments);
+  return capnp::writeMessage(getStream(), fds, segments);
 }
 
 kj::Promise<void> AsyncCapabilityMessageStream::writeMessages(
     kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) {
-  return capnp::writeMessages(stream, messages);
+  return capnp::writeMessages(getStream(), messages);
 }
 
 kj::Maybe<int> AsyncCapabilityMessageStream::getSendBufferSize() {
-  return capnp::getSendBufferSize(stream);
+  return capnp::getSendBufferSize(getStream());
 }
 
 kj::Promise<void> AsyncCapabilityMessageStream::end() {
-  stream.shutdownWrite();
+  getStream().shutdownWrite();
   return kj::READY_NOW;
 }
 
