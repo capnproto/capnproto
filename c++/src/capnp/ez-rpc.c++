@@ -22,6 +22,7 @@
 #include "ez-rpc.h"
 #include "rpc-twoparty.h"
 #include <capnp/rpc.capnp.h>
+#include <capnp/serialize-async.h>
 #include <kj/async-io.h>
 #include <kj/debug.h>
 #include <kj/threadlocal.h>
@@ -80,11 +81,11 @@ struct EzRpcClient::Impl {
   kj::Own<EzRpcContext> context;
 
   struct ClientContext {
-    kj::Own<kj::AsyncIoStream> stream;
+    kj::Own<capnp::MessageStream> stream;
     TwoPartyVatNetwork network;
     RpcSystem<rpc::twoparty::VatId> rpcSystem;
 
-    ClientContext(kj::Own<kj::AsyncIoStream>&& stream, ReaderOptions readerOpts)
+    ClientContext(kj::Own<capnp::MessageStream>&& stream, ReaderOptions readerOpts)
         : stream(kj::mv(stream)),
           network(*this->stream, rpc::twoparty::Side::CLIENT, readerOpts),
           rpcSystem(makeRpcClient(network)) {}
@@ -129,7 +130,7 @@ struct EzRpcClient::Impl {
             .then([](kj::Own<kj::NetworkAddress>&& addr) {
               return connectAttach(kj::mv(addr));
             }).then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
-              clientContext = kj::heap<ClientContext>(kj::mv(stream),
+              clientContext = kj::heap<ClientContext>(kj::heap<AsyncIoMessageStream>(kj::mv(stream)),
                                                       readerOpts);
             }).fork()) {}
 
@@ -140,7 +141,7 @@ struct EzRpcClient::Impl {
             connectAttach(context->getIoProvider().getNetwork()
                 .getSockaddr(serverAddress, addrSize))
             .then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
-              clientContext = kj::heap<ClientContext>(kj::mv(stream),
+              clientContext = kj::heap<ClientContext>(kj::heap<AsyncIoMessageStream>(kj::mv(stream)),
                                                       readerOpts);
             }).fork()) {}
 
@@ -148,7 +149,7 @@ struct EzRpcClient::Impl {
       : context(EzRpcContext::getThreadLocal()),
         setupPromise(kj::Promise<void>(kj::READY_NOW).fork()),
         clientContext(kj::heap<ClientContext>(
-            context->getLowLevelIoProvider().wrapSocketFd(socketFd),
+            kj::heap<AsyncIoMessageStream>(*context->getLowLevelIoProvider().wrapSocketFd(socketFd)),
             readerOpts)) {}
 };
 
@@ -238,13 +239,13 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
   kj::TaskSet tasks;
 
   struct ServerContext {
-    kj::Own<kj::AsyncIoStream> stream;
+    kj::Own<capnp::MessageStream> stream;
     TwoPartyVatNetwork network;
     RpcSystem<rpc::twoparty::VatId> rpcSystem;
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    ServerContext(kj::Own<kj::AsyncIoStream>&& stream, SturdyRefRestorer<AnyPointer>& restorer,
+    ServerContext(kj::Own<capnp::MessageStream>&& stream, SturdyRefRestorer<AnyPointer>& restorer,
                   ReaderOptions readerOpts)
         : stream(kj::mv(stream)),
           network(*this->stream, rpc::twoparty::Side::SERVER, readerOpts),
@@ -291,7 +292,7 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
     tasks.add(ptr->accept().then([this, listener=kj::mv(listener), readerOpts](kj::Own<kj::AsyncIoStream>&& connection) mutable {
       acceptLoop(kj::mv(listener), readerOpts);
 
-      auto server = kj::heap<ServerContext>(kj::mv(connection), *this, readerOpts);
+      auto server = kj::heap<ServerContext>(kj::heap<AsyncIoMessageStream>(kj::mv(connection)), *this, readerOpts);
 
       // Arrange to destroy the server context when all references are gone, or when the
       // EzRpcServer is destroyed (which will destroy the TaskSet).
