@@ -722,7 +722,7 @@ public:
   // you call this from low-level code, then you are preventing higher-level code from injecting an
   // alternative implementation.  Instead, if your code needs to use network functionality, it
   // should ask for a `Network` as a constructor or method parameter, so that higher-level code can
-  // chose what implementation to use.  The system network is essentially a singleton.  See:
+  // choose what implementation to use.  The system network is essentially a singleton.  See:
   //     http://www.object-oriented-security.org/lets-argue/singletons
   //
   // Code that uses the system network should not make any assumptions about what kinds of

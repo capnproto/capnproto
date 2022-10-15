@@ -575,7 +575,7 @@ struct CompressionParameters {
 };
 
 class WebSocket {
-  // Interface representincg an open WebSocket session.
+  // Interface representing an open WebSocket session.
   //
   // Each side can send and receive data and "close" messages.
   //
@@ -720,7 +720,7 @@ public:
   struct ConnectResponse {
     uint statusCode;
     // Any 2xx response indicates that the CONNECT request was successful without regard to the
-    // standard semantics of the specifix 2xx code.
+    // standard semantics of the specific 2xx code.
     kj::StringPtr statusText;
     const HttpHeaders* headers;
     kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<kj::AsyncIoStream>> connectionOrBody;
@@ -942,7 +942,7 @@ kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
 // `maskEntropySource` is used to generate cryptographically-random frame masks. If null, outgoing
 // frames will not be masked. Servers are required NOT to mask their outgoing frames, but clients
 // ARE required to do so. So, on the client side, you MUST specify an entropy source. The mask
-// must be crytographically random if the data being sent on the WebSocket may be malicious. The
+// must be cryptographically random if the data being sent on the WebSocket may be malicious. The
 // purpose of the mask is to prevent badly-written HTTP proxies from interpreting "things that look
 // like HTTP requests" in a message as being actual HTTP requests, which could result in cache
 // poisoning. See RFC6455 section 10.3.
