@@ -23,6 +23,7 @@
 
 #include "rpc.h"
 #include "message.h"
+#include "serialize-async.h"
 
 CAPNP_BEGIN_HEADER
 
@@ -80,9 +81,6 @@ class EzRpcClient {
   //   EzRpcClient / EzRpcServer objects in a single thread; they will make sure to make no more
   //   than one EventLoop.)
   // - These classes only support simple two-party connections, not multilateral VatNetworks.
-  // - These classes only support communication over a raw, unencrypted socket.  If you want to
-  //   build on an abstract stream (perhaps one which supports encryption), you must use the
-  //   lower-level interfaces.
   //
   // Some of these restrictions will probably be lifted in future versions, but some things will
   // always require using the low-level interfaces directly.  If you are interested in working
@@ -119,7 +117,16 @@ public:
   // Create a client on top of an already-connected socket.
   // `readerOpts` acts as in the first constructor.
 
+  explicit EzRpcClient();
+  // Create an "empty" client on top of an already-existing stream. The stream
+  // must be created externally and set with `setStream`.
+
   ~EzRpcClient() noexcept(false);
+
+  void setStream(kj::Own<MessageStream>&& stream, ReaderOptions readerOpts = ReaderOptions());
+  // Set the stream to be used by this client. Must be called exactly once, only in conjunction
+  // with `EzRpcClient()` (and not the other constructors).
+  // `readerOpts` acts as in the `EzRpcClient` constructors.
 
   template <typename Type>
   typename Type::Client getMain();
@@ -193,6 +200,10 @@ public:
   // called).  `port` is returned by `getPort()` -- it serves no other purpose.
   // `readerOpts` acts as in the other two above constructors.
 
+  explicit EzRpcServer(Capability::Client mainInterface);
+  // Create an "empty" server. Streams will have to be created externally and
+  // added with `addStream()`.
+
   explicit EzRpcServer(kj::StringPtr bindAddress, uint defaultPort = 0,
                        ReaderOptions readerOpts = ReaderOptions())
       CAPNP_DEPRECATED("Please specify a main interface for your server.");
@@ -203,6 +214,10 @@ public:
       CAPNP_DEPRECATED("Please specify a main interface for your server.");
 
   ~EzRpcServer() noexcept(false);
+
+  void addStream(kj::Own<MessageStream>&& stream, ReaderOptions readerOpts);
+  // Add an external stream to this server.
+  // `readerOpts` acts as in the constructors.
 
   void exportCap(kj::StringPtr name, Capability::Client cap);
   // Export a capability publicly under the given name, so that clients can import it.

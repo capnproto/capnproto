@@ -22,7 +22,6 @@
 #include "ez-rpc.h"
 #include "rpc-twoparty.h"
 #include <capnp/rpc.capnp.h>
-#include <capnp/serialize-async.h>
 #include <kj/async-io.h>
 #include <kj/debug.h>
 #include <kj/threadlocal.h>
@@ -117,7 +116,7 @@ struct EzRpcClient::Impl {
     }
   };
 
-  kj::ForkedPromise<void> setupPromise;
+  kj::PromiseFulfillerPair<void> setupPromiseAndFulfiller;
 
   kj::Maybe<kj::Own<ClientContext>> clientContext;
   // Filled in before `setupPromise` resolves.
@@ -125,33 +124,62 @@ struct EzRpcClient::Impl {
   Impl(kj::StringPtr serverAddress, uint defaultPort,
        ReaderOptions readerOpts)
       : context(EzRpcContext::getThreadLocal()),
-        setupPromise(context->getIoProvider().getNetwork()
-            .parseAddress(serverAddress, defaultPort)
-            .then([](kj::Own<kj::NetworkAddress>&& addr) {
-              return connectAttach(kj::mv(addr));
-            }).then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
-              clientContext = kj::heap<ClientContext>(kj::heap<AsyncIoMessageStream>(kj::mv(stream)),
-                                                      readerOpts);
-            }).fork()) {}
+        setupPromiseAndFulfiller(kj::newPromiseAndFulfiller<void>()) {
+    context->getIoProvider().getNetwork()
+      .parseAddress(serverAddress, defaultPort)
+      .then([](kj::Own<kj::NetworkAddress>&& addr) {
+        return connectAttach(kj::mv(addr));
+      }).then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
+        clientContext = kj::heap<ClientContext>(kj::heap<AsyncIoMessageStream>(kj::mv(stream)),
+                                                readerOpts);
+      }).then([this]() {
+        setupPromiseAndFulfiller.fulfiller->fulfill();
+      }).detach([this](kj::Exception&& e) {
+        setupPromiseAndFulfiller.fulfiller->reject(kj::mv(e));
+      });
+  }
 
   Impl(const struct sockaddr* serverAddress, uint addrSize,
        ReaderOptions readerOpts)
       : context(EzRpcContext::getThreadLocal()),
-        setupPromise(
-            connectAttach(context->getIoProvider().getNetwork()
-                .getSockaddr(serverAddress, addrSize))
-            .then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
-              clientContext = kj::heap<ClientContext>(kj::heap<AsyncIoMessageStream>(kj::mv(stream)),
-                                                      readerOpts);
-            }).fork()) {}
+        setupPromiseAndFulfiller(kj::newPromiseAndFulfiller<void>()) {
+    connectAttach(context->getIoProvider().getNetwork().getSockaddr(
+                      serverAddress, addrSize))
+      .then([this, readerOpts](kj::Own<kj::AsyncIoStream> &&stream) {
+        clientContext = kj::heap<ClientContext>(
+            kj::heap<AsyncIoMessageStream>(kj::mv(stream)), readerOpts);
+      }).then([this]() {
+        setupPromiseAndFulfiller.fulfiller->fulfill();
+      }).detach([this](kj::Exception&& e) {
+        setupPromiseAndFulfiller.fulfiller->reject(kj::mv(e));
+      });
+  }
 
   Impl(int socketFd, ReaderOptions readerOpts)
       : context(EzRpcContext::getThreadLocal()),
-        setupPromise(kj::Promise<void>(kj::READY_NOW).fork()),
+        setupPromiseAndFulfiller(kj::newPromiseAndFulfiller<void>()),
         clientContext(kj::heap<ClientContext>(
             kj::heap<AsyncIoMessageStream>(*context->getLowLevelIoProvider().wrapSocketFd(socketFd)),
-            readerOpts)) {}
+            readerOpts)) {
+    setupPromiseAndFulfiller.fulfiller->fulfill();
+  }
+
+  Impl()
+      : context(EzRpcContext::getThreadLocal()),
+        setupPromiseAndFulfiller(kj::newPromiseAndFulfiller<void>()) {}
+
+  void setStream(kj::Own<MessageStream>&& stream, ReaderOptions readerOpts) {
+    KJ_IF_MAYBE(_ KJ_UNUSED, clientContext) {
+      KJ_FAIL_REQUIRE("setStream() can only be called once, and only if clientContext was not initialized!");
+    } else {
+      clientContext = kj::heap<ClientContext>(kj::mv(stream), readerOpts);
+      setupPromiseAndFulfiller.fulfiller->fulfill();
+    }
+  }
 };
+
+EzRpcClient::EzRpcClient()
+    : impl(kj::heap<Impl>()) {}
 
 EzRpcClient::EzRpcClient(kj::StringPtr serverAddress, uint defaultPort, ReaderOptions readerOpts)
     : impl(kj::heap<Impl>(serverAddress, defaultPort, readerOpts)) {}
@@ -164,11 +192,16 @@ EzRpcClient::EzRpcClient(int socketFd, ReaderOptions readerOpts)
 
 EzRpcClient::~EzRpcClient() noexcept(false) {}
 
+void EzRpcClient::setStream(kj::Own<MessageStream>&& stream,
+                            ReaderOptions readerOpts) {
+  impl->setStream(kj::mv(stream), readerOpts);
+}
+
 Capability::Client EzRpcClient::getMain() {
   KJ_IF_MAYBE(client, impl->clientContext) {
     return client->get()->getMain();
   } else {
-    return impl->setupPromise.addBranch().then([this]() {
+    return impl->setupPromiseAndFulfiller.promise.then([this]() {
       return KJ_ASSERT_NONNULL(impl->clientContext)->getMain();
     });
   }
@@ -178,7 +211,7 @@ Capability::Client EzRpcClient::importCap(kj::StringPtr name) {
   KJ_IF_MAYBE(client, impl->clientContext) {
     return client->get()->restore(name);
   } else {
-    return impl->setupPromise.addBranch().then(
+    return impl->setupPromiseAndFulfiller.promise.then(
         [this,name=kj::heapString(name)]() {
       return KJ_ASSERT_NONNULL(impl->clientContext)->restore(name);
     });
@@ -287,6 +320,12 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
                readerOpts);
   }
 
+  Impl(Capability::Client mainInterface)
+      : mainInterface(kj::mv(mainInterface)),
+        context(EzRpcContext::getThreadLocal()),
+        portPromise(nullptr),
+        tasks(*this) {}
+
   void acceptLoop(kj::Own<kj::ConnectionReceiver>&& listener, ReaderOptions readerOpts) {
     auto ptr = listener.get();
     tasks.add(ptr->accept().then([this, listener=kj::mv(listener), readerOpts](kj::Own<kj::AsyncIoStream>&& connection) mutable {
@@ -298,6 +337,11 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
       // EzRpcServer is destroyed (which will destroy the TaskSet).
       tasks.add(server->network.onDisconnect().attach(kj::mv(server)));
     }));
+  }
+
+  void addStream(kj::Own<MessageStream>&& stream, ReaderOptions readerOpts) {
+    auto server = kj::heap<ServerContext>(kj::mv(stream), *this, readerOpts);
+    tasks.add(server->network.onDisconnect().attach(kj::mv(server)));
   }
 
   Capability::Client restore(AnyPointer::Reader objectId) override {
@@ -332,6 +376,9 @@ EzRpcServer::EzRpcServer(Capability::Client mainInterface, int socketFd, uint po
                          ReaderOptions readerOpts)
     : impl(kj::heap<Impl>(kj::mv(mainInterface), socketFd, port, readerOpts)) {}
 
+EzRpcServer::EzRpcServer(Capability::Client mainInterface)
+    : impl(kj::heap<Impl>(kj::mv(mainInterface))) {}
+
 EzRpcServer::EzRpcServer(kj::StringPtr bindAddress, uint defaultPort,
                          ReaderOptions readerOpts)
     : EzRpcServer(nullptr, bindAddress, defaultPort, readerOpts) {}
@@ -344,6 +391,10 @@ EzRpcServer::EzRpcServer(int socketFd, uint port, ReaderOptions readerOpts)
     : EzRpcServer(nullptr, socketFd, port, readerOpts) {}
 
 EzRpcServer::~EzRpcServer() noexcept(false) {}
+
+void EzRpcServer::addStream(kj::Own<MessageStream>&& stream, ReaderOptions readerOpts) {
+  impl->addStream(kj::mv(stream), readerOpts);
+}
 
 void EzRpcServer::exportCap(kj::StringPtr name, Capability::Client cap) {
   Impl::ExportedCap entry(kj::heapString(name), cap);
