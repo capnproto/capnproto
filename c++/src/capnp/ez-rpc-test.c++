@@ -70,6 +70,41 @@ TEST(EzRpc, DeprecatedNames) {
       .getCallSequenceRequest().send().wait(server.getWaitScope()).getN());
 }
 
+TEST(EzRpc, ExternalTcpMessageStream) {
+  // Prepare server side (EzRpcServer + server stream)
+  int callCount = 0;
+  EzRpcServer server(kj::heap<TestInterfaceImpl>(callCount));
+  auto& waitScope = server.getWaitScope();
+  auto& serverIoProvider = server.getIoProvider();
+
+  auto serverAddr = serverIoProvider.getNetwork().parseAddress("localhost", 0).wait(waitScope);
+  auto connection = serverAddr->listen();
+  auto serverPort = connection->getPort();
+  auto acceptPromise = connection->accept().then([&server](kj::Own<kj::AsyncIoStream>&& stream) {
+    server.addStream(kj::heap<AsyncIoMessageStream>(kj::mv(stream)), ReaderOptions());
+  }).eagerlyEvaluate([](kj::Exception&& e) {
+    KJ_LOG(ERROR, e.getDescription());
+  });
+
+  // Prepare client side (EzRpcClient + client stream)
+  EzRpcClient client;
+  auto& clientIoProvider = client.getIoProvider();
+
+  auto clientAddr = clientIoProvider.getNetwork().parseAddress("localhost", serverPort).wait(waitScope);
+  auto clientStream = clientAddr->connect().wait(waitScope);
+  client.setStream(kj::heap<AsyncIoMessageStream>(kj::mv(clientStream)));
+
+  auto cap = client.getMain<test::TestInterface>();
+  auto request = cap.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+
+  EXPECT_EQ(0, callCount);
+  auto response = request.send().wait(waitScope);
+  EXPECT_EQ("foo", response.getX());
+  EXPECT_EQ(1, callCount); //auto clientAddr = serverIoProvider.get
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp
