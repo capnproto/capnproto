@@ -39,6 +39,21 @@ public:
 
   virtual void run() = 0;
 
+protected:
+  template <typename Func>
+  void doBenchmark(Func&& func) {
+    // Perform a benchmark with configurable iterations. func() will be called N times, where N
+    // is set by the --benchmark CLI flag. This defaults to 1, so that when --benchmark is not
+    // specified, we only test that the benchmark works.
+    //
+    // In the future, this could adaptively choose iteration count by running a few iterations to
+    // find out how fast the benchmark is, then scaling.
+
+    for (size_t i = iterCount(); i-- > 0;) {
+      func();
+    }
+  }
+
 private:
   const char* file;
   uint line;
@@ -46,6 +61,8 @@ private:
   TestCase* next;
   TestCase** prev;
   bool matchedFilter;
+
+  static size_t iterCount();
 
   friend class TestRunner;
 };
