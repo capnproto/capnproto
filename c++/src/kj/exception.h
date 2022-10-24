@@ -277,6 +277,20 @@ Maybe<Exception> runCatchingExceptions(Func&& func);
 // If exception are disabled (e.g. with -fno-exceptions), this will still detect whether any
 // recoverable exceptions occurred while running the function and will return those.
 
+#if !KJ_NO_EXCEPTIONS
+
+kj::Exception getCaughtExceptionAsKj();
+// Call from the catch block of a try/catch to get a `kj::Exception` representing the exception
+// that was caught, the same way that `kj::runCatchingExceptions` would when catching an exception.
+// This is sometimes useful if `runCatchingExceptions()` doesn't quite fit your use case. You can
+// call this from any catch block, including `catch (...)`.
+//
+// Some exception types will actually be rethrown by this function, rather than returned. The most
+// common example is `CanceledException`, whose purpose is to unwind the stack and is not meant to
+// be caught.
+
+#endif  // !KJ_NO_EXCEPTIONS
+
 class UnwindDetector {
   // Utility for detecting when a destructor is called due to unwind.  Useful for:
   // - Avoiding throwing exceptions in this case, which would terminate the program.
@@ -303,8 +317,12 @@ public:
 private:
   uint uncaughtCount;
 
-  void catchExceptionsAsSecondaryFaults(_::Runnable& runnable) const;
+#if !KJ_NO_EXCEPTIONS
+  void catchThrownExceptionAsSecondaryFault() const;
+#endif
 };
+
+#if KJ_NO_EXCEPTIONS
 
 namespace _ {  // private
 
@@ -328,20 +346,39 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable);
 
 }  // namespace _ (private)
 
+#endif  // KJ_NO_EXCEPTIONS
+
 template <typename Func>
 Maybe<Exception> runCatchingExceptions(Func&& func) {
+#if KJ_NO_EXCEPTIONS
   _::RunnableImpl<Func> runnable(kj::fwd<Func>(func));
   return _::runCatchingExceptions(runnable);
+#else
+  try {
+    func();
+    return nullptr;
+  } catch (...) {
+    return getCaughtExceptionAsKj();
+  }
+#endif
 }
 
 template <typename Func>
 void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
+#if KJ_NO_EXCEPTIONS
+  // Can't possibly be unwinding...
+  func();
+#else
   if (isUnwinding()) {
-    _::RunnableImpl<Decay<Func>> runnable(kj::fwd<Func>(func));
-    catchExceptionsAsSecondaryFaults(runnable);
+    try {
+      func();
+    } catch (...) {
+      catchThrownExceptionAsSecondaryFault();
+    }
   } else {
     func();
   }
+#endif
 }
 
 #define KJ_ON_SCOPE_SUCCESS(code) \

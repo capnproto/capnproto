@@ -259,7 +259,7 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
 // symbol. We prefer weak symbols over some sort of callback registration mechanism becasue this
 // allows an alternate symbolication library to be easily linked into tests without changing the
 // code of the test.
-__attribute__((weak)) 
+__attribute__((weak))
 #endif
 String stringifyStackTrace(ArrayPtr<void* const> trace) {
   if (trace.size() == 0) return nullptr;
@@ -1257,12 +1257,14 @@ bool UnwindDetector::isUnwinding() const {
   return _::uncaughtExceptionCount() > uncaughtCount;
 }
 
-void UnwindDetector::catchExceptionsAsSecondaryFaults(_::Runnable& runnable) const {
+#if !KJ_NO_EXCEPTIONS
+void UnwindDetector::catchThrownExceptionAsSecondaryFault() const {
   // TODO(someday):  Attach the secondary exception to whatever primary exception is causing
   //   the unwind.  For now we just drop it on the floor as this is probably fine most of the
   //   time.
-  runCatchingExceptions(runnable);
+  getCaughtExceptionAsKj();
 }
+#endif
 
 #if __GNUC__ && !KJ_NO_RTTI
 static kj::String demangleTypeName(const char* name) {
@@ -1331,6 +1333,8 @@ kj::ArrayPtr<void* const> computeRelativeTrace(
   return bestMatch;
 }
 
+#if KJ_NO_EXCEPTIONS
+
 namespace _ {  // private
 
 class RecoverableExceptionCatcher: public ExceptionCallback {
@@ -1352,17 +1356,21 @@ public:
 };
 
 Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
-#if KJ_NO_EXCEPTIONS
   RecoverableExceptionCatcher catcher;
   runnable.run();
   KJ_IF_MAYBE(e, catcher.caught) {
     e->truncateCommonTrace();
   }
   return mv(catcher.caught);
-#else
+}
+
+}  // namespace _ (private)
+
+#else  // KJ_NO_EXCEPTIONS
+
+kj::Exception getCaughtExceptionAsKj() {
   try {
-    runnable.run();
-    return nullptr;
+    throw;
   } catch (Exception& e) {
     e.truncateCommonTrace();
     return kj::mv(e);
@@ -1384,9 +1392,7 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
     return Exception(Exception::Type::FAILED, "(unknown)", -1, str("unknown non-KJ exception"));
 #endif
   }
-#endif
 }
-
-}  // namespace _ (private)
+#endif  // !KJ_NO_EXCEPTIONS
 
 }  // namespace kj
