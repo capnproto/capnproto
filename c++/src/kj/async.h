@@ -75,7 +75,10 @@ class AsyncObject {
   // size to the derived class.)
 
 public:
-  ~AsyncObject() noexcept;
+  ~AsyncObject();
+
+private:
+  KJ_NORETURN(static void failed() noexcept);
 };
 
 class DisallowAsyncDestructorsScope {

@@ -120,9 +120,20 @@ KJ_THREADLOCAL_PTR(DisallowAsyncDestructorsScope) disallowAsyncDestructorsScope 
 
 }  // namespace
 
-AsyncObject::~AsyncObject() noexcept {
+AsyncObject::~AsyncObject() {
+  if (disallowAsyncDestructorsScope != nullptr) {
+    // If we try to do the KJ_FAIL_REQUIRE here (declaring `~AsyncObject()` itself to be noexcept),
+    // it seems to have a non-negligible performance impact in the HTTP benchmark. My guess is that
+    // it's because it breaks inlining of `~AsyncObject()` into various subclass destructors that
+    // are defined inside this file, which are some of the biggest ones. By forcing the actual
+    // failure code out into a separate function we get a little performance boost.
+    failed();
+  }
+}
+
+void AsyncObject::failed() noexcept {
   // Since the method is noexcept, this will abort the process.
-  KJ_REQUIRE(disallowAsyncDestructorsScope == nullptr,
+  KJ_FAIL_REQUIRE(
       kj::str("KJ async object being destroyed when not allowed: ",
               disallowAsyncDestructorsScope->reason));
 }
