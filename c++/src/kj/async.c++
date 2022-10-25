@@ -199,7 +199,7 @@ struct DummyFunctor {
 
 class YieldPromiseNode final: public _::PromiseNode {
 public:
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void onReady(_::Event* event) noexcept override {
     if (event) event->armBreadthFirst();
@@ -214,7 +214,7 @@ public:
 
 class YieldHarderPromiseNode final: public _::PromiseNode {
 public:
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void onReady(_::Event* event) noexcept override {
     if (event) event->armLast();
@@ -229,7 +229,7 @@ public:
 
 class NeverDonePromiseNode final: public _::PromiseNode {
 public:
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void onReady(_::Event* event) noexcept override {
     // ignore

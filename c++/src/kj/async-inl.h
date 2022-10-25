@@ -134,6 +134,11 @@ private:
   void** limit;
 };
 
+struct alignas(void*) PromiseArena {
+  // Space in which a chain of promises may be allocated. See PromiseDisposer.
+  byte bytes[1024];
+};
+
 class Event: private AsyncObject {
   // An event waiting to be executed.  Not for direct use by applications -- promises use this
   // internally.
@@ -222,9 +227,12 @@ class PromiseNode: private AsyncObject {
 
 public:
   virtual void destroy() = 0;
-  // Tell the node to delete itself.
+  // Tell the node to run its destructor.
   //
-  // Every concrete subclass must implement this, usually as just `delete this`.
+  // If the node was allocated using allocPromise(), then it should only run the destructor, it
+  // should not free the backing memory; PromiseDisposer will do that. If it was allocated some
+  // other way, then it is `destroy()`'s responsibility to complete any necessary cleanup of
+  // memory, e.g. call `delete this`.
   //
   // We use this instead of a virtual destructor for two reasons:
   // 1. Coroutine nodes are not indepnedent objects, they have to call destroy() on the coroutine
@@ -306,18 +314,97 @@ protected:
   private:
     Event* event = nullptr;
   };
+
+private:
+  PromiseArena* arena = nullptr;
+  // If non-null, then this PromiseNode is the last node allocated within the given arena, and
+  // therefore owns the arena. After this node is destroyed, the arena should be deleted.
+  //
+  // PromiseNodes are allocated within the arena starting from the end, and `PromiseNode`s
+  // allocated this way are required to have `PromiseNode` itself as their leftmost inherited type,
+  // so that the pointers match. Thus, the space in `arena` from its start to the location of the
+  // `PromiseNode` is known to be available for subsequent allocations (which should then take
+  // ownership of the arena).
+
+  friend class PromiseDisposer;
 };
 
 class PromiseDisposer {
 public:
   static void dispose(PromiseNode* node) {
+    PromiseArena* arena = node->arena;
     node->destroy();
+    delete arena;  // reminder: `delete` automatically ignores null pointers
+  }
+
+  template <typename T, typename... Params>
+  static kj::Own<T, PromiseDisposer> alloc(Params&&... params) {
+    // Implements allocPromise().
+    T* ptr;
+    if (sizeof(T) > sizeof(PromiseArena)) {
+      // Node too big, fall back to regular heap allocation.
+      ptr = new T(kj::fwd<Params>(params)...);
+    } else {
+      // Start a new arena.
+      auto* arena = new PromiseArena;
+      ptr = reinterpret_cast<T*>(arena + 1) - 1;
+      ctor(*ptr, kj::fwd<Params>(params)...);
+      ptr->arena = arena;
+      KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
+                  reinterpret_cast<void*>(static_cast<PromiseNode*>(ptr)),
+          "PromiseNode must be the leftmost inherited type.");
+    }
+    return kj::Own<T, PromiseDisposer>(ptr);
+  }
+
+  template <typename T, typename... Params>
+  static kj::Own<T, PromiseDisposer> append(
+      OwnPromiseNode&& next, Params&&... params) noexcept {
+    // Implements appendPromise().
+
+    PromiseArena* arena = next->arena;
+
+    if (arena == nullptr ||
+        reinterpret_cast<byte*>(next.get()) - reinterpret_cast<byte*>(arena) < sizeof(T)) {
+      // No arena available, or not enough space. Start new arena.
+      return alloc<T>(kj::mv(next), kj::fwd<Params>(params)...);
+    } else {
+      // Append to arena.
+      //
+      // NOTE: When we call ctor(), it takes ownership of `next`, so we shouldn't assume `next`
+      //   still exists after it returns. So we have to remove ownership of the arena before that.
+      //   In theory if we wanted this to be exception-safe, we'd also have to arrange to delete
+      //   the arena if the constructor throws. However, in practice none of the PromiseNode
+      //   constructors throw, so we just mark the whole method noexcept in order to avoid the
+      //   code bloat to handle this case.
+      next->arena = nullptr;
+      T* ptr = reinterpret_cast<T*>(next.get()) - 1;
+      ctor(*ptr, kj::mv(next), kj::fwd<Params>(params)...);
+      ptr->arena = arena;
+      KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
+                  reinterpret_cast<void*>(static_cast<PromiseNode*>(ptr)),
+          "PromiseNode must be the leftmost inherited type.");
+      return kj::Own<T, PromiseDisposer>(ptr);
+    }
   }
 };
 
 template <typename T, typename... Params>
 static kj::Own<T, PromiseDisposer> allocPromise(Params&&... params) {
-  return kj::Own<T, PromiseDisposer>(new T(kj::fwd<Params>(params)...));
+  // Allocate a PromiseNode without appending it to any existing promise arena. Space for a new
+  // arena will be allocated.
+  return PromiseDisposer::alloc<T>(kj::fwd<Params>(params)...);
+}
+
+template <typename T, typename... Params>
+static kj::Own<T, PromiseDisposer> appendPromise(OwnPromiseNode&& next, Params&&... params) {
+  // Append a promise to the arena that currently ends with `next`. `next` is also still passed as
+  // the first parameter to the new object's constructor.
+  //
+  // This is semantically the same as `allocPromise()` except that it may avoid the underlying
+  // memory allocation. `next` must end up being destroyed before the new object (i.e. the new
+  // object must never transfer away ownership of `next`).
+  return PromiseDisposer::append<T>(kj::mv(next), kj::fwd<Params>(params)...);
 }
 
 // -------------------------------------------------------------------
@@ -344,7 +431,7 @@ class ImmediatePromiseNode final: public ImmediatePromiseNodeBase {
 
 public:
   ImmediatePromiseNode(ExceptionOr<T>&& result): result(kj::mv(result)) {}
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = kj::mv(result);
@@ -357,7 +444,7 @@ private:
 class ImmediateBrokenPromiseNode final: public ImmediatePromiseNodeBase {
 public:
   ImmediateBrokenPromiseNode(Exception&& exception);
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override;
 
@@ -393,7 +480,7 @@ public:
   AttachmentPromiseNode(OwnPromiseNode&& dependency, Attachment&& attachment)
       : AttachmentPromiseNodeBase(kj::mv(dependency)),
         attachment(kj::mv<Attachment>(attachment)) {}
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   ~AttachmentPromiseNode() noexcept(false) {
     // We need to make sure the dependency is deleted before we delete the attachment because the
@@ -568,7 +655,7 @@ public:
                        void* continuationTracePtr)
       : TransformPromiseNodeBase(kj::mv(dependency), continuationTracePtr),
         func(kj::fwd<Func>(func)), errorHandler(kj::fwd<ErrorFunc>(errorHandler)) {}
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   ~TransformPromiseNode() noexcept(false) {
     // We need to make sure the dependency is deleted before we delete the continuations because it
@@ -648,7 +735,7 @@ class ForkBranch final: public ForkBranchBase {
 
 public:
   ForkBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
@@ -669,7 +756,7 @@ class SplitBranch final: public ForkBranchBase {
 
 public:
   SplitBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   typedef kj::Decay<decltype(kj::get<index>(kj::instance<T>()))> Element;
 
@@ -758,7 +845,7 @@ class ChainPromiseNode final: public PromiseNode, public Event {
 public:
   explicit ChainPromiseNode(OwnPromiseNode inner, SourceLocation location);
   ~ChainPromiseNode() noexcept(false);
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void onReady(Event* event) noexcept override;
   void setSelfPointer(OwnPromiseNode* selfPtr) noexcept override;
@@ -786,7 +873,7 @@ private:
 
 template <typename T>
 OwnPromiseNode maybeChain(OwnPromiseNode&& node, Promise<T>*, SourceLocation location) {
-  return allocPromise<ChainPromiseNode>(kj::mv(node), location);
+  return appendPromise<ChainPromiseNode>(kj::mv(node), location);
 }
 
 template <typename T>
@@ -810,7 +897,7 @@ class ExclusiveJoinPromiseNode final: public PromiseNode {
 public:
   ExclusiveJoinPromiseNode(OwnPromiseNode left, OwnPromiseNode right, SourceLocation location);
   ~ExclusiveJoinPromiseNode() noexcept(false);
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
@@ -894,7 +981,7 @@ public:
       : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<T>),
                                  location),
         resultParts(kj::mv(resultParts)) {}
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
 protected:
   void getNoError(ExceptionOrValue& output) noexcept override {
@@ -918,7 +1005,7 @@ public:
                        Array<ExceptionOr<_::Void>> resultParts,
                        SourceLocation location);
   ~ArrayJoinPromiseNode();
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
 protected:
   void getNoError(ExceptionOrValue& output) noexcept override;
@@ -955,7 +1042,7 @@ class EagerPromiseNode final: public EagerPromiseNodeBase {
 public:
   EagerPromiseNode(OwnPromiseNode&& dependency, SourceLocation location)
       : EagerPromiseNodeBase(kj::mv(dependency), result, location) {}
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = kj::mv(result);
@@ -969,7 +1056,7 @@ template <typename T>
 OwnPromiseNode spark(OwnPromiseNode&& node, SourceLocation location) {
   // Forces evaluation of the given node to begin as soon as possible, even if no one is waiting
   // on it.
-  return allocPromise<EagerPromiseNode<T>>(kj::mv(node), location);
+  return appendPromise<EagerPromiseNode<T>>(kj::mv(node), location);
 }
 
 // -------------------------------------------------------------------
@@ -997,7 +1084,7 @@ public:
   template <typename... Params>
   AdapterPromiseNode(Params&&... params)
       : adapter(static_cast<PromiseFulfiller<UnfixVoid<T>>&>(*this), kj::fwd<Params>(params)...) {}
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
     KJ_IREQUIRE(!isWaiting());
@@ -1081,7 +1168,7 @@ public:
   explicit Fiber(const FiberPool& pool, Func&& func, SourceLocation location)
       : FiberBase(pool, result, location), func(kj::fwd<Func>(func)) {}
   ~Fiber() noexcept(false) { cancel(); }
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
 
@@ -1120,7 +1207,7 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
 
   void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
   _::OwnPromiseNode intermediate =
-      _::allocPromise<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+      _::appendPromise<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
           kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
           continuationTracePtr);
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
@@ -1170,7 +1257,7 @@ Promise<T> Promise<T>::catch_(ErrorFunc&& errorHandler, SourceLocation location)
   // pointer to be based on ErrorFunc rather than Func.
   void* continuationTracePtr = _::GetFunctorStartAddress<kj::Exception&&>::apply(errorHandler);
   _::OwnPromiseNode intermediate =
-      _::allocPromise<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+      _::appendPromise<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
           kj::mv(node), Func(), kj::fwd<ErrorFunc>(errorHandler), continuationTracePtr);
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
@@ -1211,14 +1298,14 @@ _::SplitTuplePromise<T> Promise<T>::split(SourceLocation location) {
 
 template <typename T>
 Promise<T> Promise<T>::exclusiveJoin(Promise<T>&& other, SourceLocation location) {
-  return Promise(false, _::allocPromise<_::ExclusiveJoinPromiseNode>(
+  return Promise(false, _::appendPromise<_::ExclusiveJoinPromiseNode>(
       kj::mv(node), kj::mv(other.node), location));
 }
 
 template <typename T>
 template <typename... Attachments>
 Promise<T> Promise<T>::attach(Attachments&&... attachments) {
-  return Promise(false, _::allocPromise<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
+  return Promise(false, _::appendPromise<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
       kj::mv(node), kj::tuple(kj::fwd<Attachments>(attachments)...)));
 }
 
@@ -1493,8 +1580,8 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller(SourceLocation location) {
 
 namespace _ {  // (private)
 
-class XThreadEvent: private Event,         // it's an event in the target thread
-                    public PromiseNode {   // it's a PromiseNode in the requesting thread
+class XThreadEvent: public PromiseNode,    // it's a PromiseNode in the requesting thread
+                    private Event {        // it's an event in the target thread
 public:
   XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor, void* funcTracePtr,
                SourceLocation location);
@@ -1602,7 +1689,7 @@ public:
       : XThreadEvent(result, target, GetFunctorStartAddress<>::apply(func), location),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   typedef _::FixVoid<_::ReturnType<Func, void>> ResultT;
 
@@ -1630,7 +1717,7 @@ public:
       : XThreadEvent(result, target, GetFunctorStartAddress<>::apply(func), location),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
-  void destroy() override { delete this; }
+  void destroy() override { dtor(*this); }
 
   typedef _::FixVoid<_::UnwrapPromise<PromiseForResult<Func, void>>> ResultT;
 
