@@ -2455,7 +2455,7 @@ private:
         break;
 
       case rpc::Message::BOOTSTRAP:
-        handleBootstrap(kj::mv(message), reader.getBootstrap());
+        handleBootstrap(reader.getBootstrap());
         break;
 
       case rpc::Message::CALL:
@@ -2471,7 +2471,7 @@ private:
         break;
 
       case rpc::Message::RESOLVE:
-        handleResolve(kj::mv(message), reader.getResolve());
+        handleResolve(*message, reader.getResolve());
         break;
 
       case rpc::Message::RELEASE:
@@ -2562,8 +2562,7 @@ private:
     kj::Own<ClientHook> cap;
   };
 
-  void handleBootstrap(kj::Own<IncomingRpcMessage>&& message,
-                       const rpc::Bootstrap::Reader& bootstrap) {
+  void handleBootstrap(const rpc::Bootstrap::Reader& bootstrap) {
     AnswerId answerId = bootstrap.getQuestionId();
 
     if (!connection.is<Connected>()) {
@@ -2611,8 +2610,6 @@ private:
       fromException(*exception, ret.initException());
       capHook = newBrokenCap(kj::mv(*exception));
     }
-
-    message = nullptr;
 
     // Add the answer to the answer table for pipelining and send the response.
     auto& answer = answers[answerId];
@@ -2931,14 +2928,14 @@ private:
   // ---------------------------------------------------------------------------
   // Level 1
 
-  void handleResolve(kj::Own<IncomingRpcMessage>&& message, const rpc::Resolve::Reader& resolve) {
+  void handleResolve(IncomingRpcMessage& message, const rpc::Resolve::Reader& resolve) {
     kj::Own<ClientHook> replacement;
     kj::Maybe<kj::Exception> exception;
 
     // Extract the replacement capability.
     switch (resolve.which()) {
       case rpc::Resolve::CAP:
-        KJ_IF_MAYBE(cap, receiveCap(resolve.getCap(), message->getAttachedFds())) {
+        KJ_IF_MAYBE(cap, receiveCap(resolve.getCap(), message.getAttachedFds())) {
           replacement = kj::mv(*cap);
         } else {
           KJ_FAIL_REQUIRE("'Resolve' contained 'CapDescriptor.none'.") { return; }
