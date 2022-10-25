@@ -221,7 +221,15 @@ class PromiseNode: private AsyncObject {
   // internal implementation details.
 
 public:
-  virtual ~PromiseNode() noexcept(false);
+  virtual void destroy() = 0;
+  // Tell the node to delete itself.
+  //
+  // Every concrete subclass must implement this, usually as just `delete this`.
+  //
+  // We use this instead of a virtual destructor for two reasons:
+  // 1. Coroutine nodes are not indepnedent objects, they have to call destroy() on the coroutine
+  //    handle to delete themselves.
+  // 2. XThreadEvents sometimes leave it up to a different thread to actually delete the object.
 
   virtual void onReady(Event* event) noexcept = 0;
   // Arms the given event when ready.
@@ -303,7 +311,7 @@ protected:
 class PromiseDisposer {
 public:
   static void dispose(PromiseNode* node) {
-    delete node;
+    node->destroy();
   }
 };
 
@@ -311,21 +319,6 @@ template <typename T, typename... Params>
 static kj::Own<T, PromiseDisposer> allocPromise(Params&&... params) {
   return kj::Own<T, PromiseDisposer>(new T(kj::fwd<Params>(params)...));
 }
-
-class DynamicallyDisposedPromiseNode final: public PromiseNode {
-  // Wrapper around kj::Own<PromiseNode>, for when you really need a dynamic disposer.
-
-public:
-  DynamicallyDisposedPromiseNode(kj::Own<PromiseNode> inner): inner(kj::mv(inner)) {}
-
-  void onReady(Event* event) noexcept override;
-  void setSelfPointer(OwnPromiseNode* selfPtr) noexcept override;
-  void get(ExceptionOrValue& output) noexcept override;
-  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
-
-private:
-  kj::Own<PromiseNode> inner;
-};
 
 // -------------------------------------------------------------------
 
@@ -351,6 +344,7 @@ class ImmediatePromiseNode final: public ImmediatePromiseNodeBase {
 
 public:
   ImmediatePromiseNode(ExceptionOr<T>&& result): result(kj::mv(result)) {}
+  void destroy() override { delete this; }
 
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = kj::mv(result);
@@ -363,6 +357,7 @@ private:
 class ImmediateBrokenPromiseNode final: public ImmediatePromiseNodeBase {
 public:
   ImmediateBrokenPromiseNode(Exception&& exception);
+  void destroy() override { delete this; }
 
   void get(ExceptionOrValue& output) noexcept override;
 
@@ -398,6 +393,7 @@ public:
   AttachmentPromiseNode(OwnPromiseNode&& dependency, Attachment&& attachment)
       : AttachmentPromiseNodeBase(kj::mv(dependency)),
         attachment(kj::mv<Attachment>(attachment)) {}
+  void destroy() override { delete this; }
 
   ~AttachmentPromiseNode() noexcept(false) {
     // We need to make sure the dependency is deleted before we delete the attachment because the
@@ -572,6 +568,7 @@ public:
                        void* continuationTracePtr)
       : TransformPromiseNodeBase(kj::mv(dependency), continuationTracePtr),
         func(kj::fwd<Func>(func)), errorHandler(kj::fwd<ErrorFunc>(errorHandler)) {}
+  void destroy() override { delete this; }
 
   ~TransformPromiseNode() noexcept(false) {
     // We need to make sure the dependency is deleted before we delete the continuations because it
@@ -651,6 +648,7 @@ class ForkBranch final: public ForkBranchBase {
 
 public:
   ForkBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
+  void destroy() override { delete this; }
 
   void get(ExceptionOrValue& output) noexcept override {
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
@@ -671,6 +669,7 @@ class SplitBranch final: public ForkBranchBase {
 
 public:
   SplitBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
+  void destroy() override { delete this; }
 
   typedef kj::Decay<decltype(kj::get<index>(kj::instance<T>()))> Element;
 
@@ -759,6 +758,7 @@ class ChainPromiseNode final: public PromiseNode, public Event {
 public:
   explicit ChainPromiseNode(OwnPromiseNode inner, SourceLocation location);
   ~ChainPromiseNode() noexcept(false);
+  void destroy() override { delete this; }
 
   void onReady(Event* event) noexcept override;
   void setSelfPointer(OwnPromiseNode* selfPtr) noexcept override;
@@ -810,6 +810,7 @@ class ExclusiveJoinPromiseNode final: public PromiseNode {
 public:
   ExclusiveJoinPromiseNode(OwnPromiseNode left, OwnPromiseNode right, SourceLocation location);
   ~ExclusiveJoinPromiseNode() noexcept(false);
+  void destroy() override { delete this; }
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
@@ -893,6 +894,7 @@ public:
       : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<T>),
                                  location),
         resultParts(kj::mv(resultParts)) {}
+  void destroy() override { delete this; }
 
 protected:
   void getNoError(ExceptionOrValue& output) noexcept override {
@@ -916,6 +918,7 @@ public:
                        Array<ExceptionOr<_::Void>> resultParts,
                        SourceLocation location);
   ~ArrayJoinPromiseNode();
+  void destroy() override { delete this; }
 
 protected:
   void getNoError(ExceptionOrValue& output) noexcept override;
@@ -952,6 +955,7 @@ class EagerPromiseNode final: public EagerPromiseNodeBase {
 public:
   EagerPromiseNode(OwnPromiseNode&& dependency, SourceLocation location)
       : EagerPromiseNodeBase(kj::mv(dependency), result, location) {}
+  void destroy() override { delete this; }
 
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = kj::mv(result);
@@ -993,6 +997,7 @@ public:
   template <typename... Params>
   AdapterPromiseNode(Params&&... params)
       : adapter(static_cast<PromiseFulfiller<UnfixVoid<T>>&>(*this), kj::fwd<Params>(params)...) {}
+  void destroy() override { delete this; }
 
   void get(ExceptionOrValue& output) noexcept override {
     KJ_IREQUIRE(!isWaiting());
@@ -1045,7 +1050,7 @@ public:
 
 protected:
   bool isFinished() { return state == FINISHED; }
-  void destroy();
+  void cancel();
 
 private:
   enum { WAITING, RUNNING, CANCELED, FINISHED } state;
@@ -1075,7 +1080,8 @@ public:
       : FiberBase(stackSize, result, location), func(kj::fwd<Func>(func)) {}
   explicit Fiber(const FiberPool& pool, Func&& func, SourceLocation location)
       : FiberBase(pool, result, location), func(kj::fwd<Func>(func)) {}
-  ~Fiber() noexcept(false) { destroy(); }
+  ~Fiber() noexcept(false) { cancel(); }
+  void destroy() override { delete this; }
 
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
 
@@ -1596,6 +1602,7 @@ public:
       : XThreadEvent(result, target, GetFunctorStartAddress<>::apply(func), location),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
+  void destroy() override { delete this; }
 
   typedef _::FixVoid<_::ReturnType<Func, void>> ResultT;
 
@@ -1623,6 +1630,7 @@ public:
       : XThreadEvent(result, target, GetFunctorStartAddress<>::apply(func), location),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
+  void destroy() override { delete this; }
 
   typedef _::FixVoid<_::UnwrapPromise<PromiseForResult<Func, void>>> ResultT;
 
@@ -1672,12 +1680,7 @@ class XThreadPaf: public PromiseNode {
 public:
   XThreadPaf();
   virtual ~XThreadPaf() noexcept(false);
-
-  class Disposer: public kj::Disposer {
-  public:
-    void disposeImpl(void* pointer) const override;
-  };
-  static const Disposer DISPOSER;
+  void destroy() override;
 
   // implements PromiseNode ----------------------------------------------------
   void onReady(Event* event) noexcept override;
@@ -1828,10 +1831,9 @@ public:
 
 template <typename T>
 PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
-  kj::Own<_::XThreadPafImpl<T>> node(new _::XThreadPafImpl<T>, _::XThreadPaf::DISPOSER);
+  kj::Own<_::XThreadPafImpl<T>, _::PromiseDisposer> node(new _::XThreadPafImpl<T>);
   auto fulfiller = kj::heap<_::XThreadFulfiller<T>>(node);
-  auto wrapper = _::allocPromise<_::DynamicallyDisposedPromiseNode>(kj::mv(node));
-  return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(wrapper)), kj::mv(fulfiller) };
+  return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(node)), kj::mv(fulfiller) };
 }
 
 }  // namespace kj
@@ -1890,13 +1892,13 @@ namespace kj::_ {
 namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
 class CoroutineBase: public PromiseNode,
-                     public Event,
-                     public Disposer {
+                     public Event {
 public:
   CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
                 SourceLocation location);
   ~CoroutineBase() noexcept(false);
   KJ_DISALLOW_COPY(CoroutineBase);
+  void destroy() override;
 
   auto initial_suspend() { return stdcoro::suspend_never(); }
   auto final_suspend() noexcept { return stdcoro::suspend_always(); }
@@ -1932,12 +1934,6 @@ private:
 
   Maybe<Own<Event>> fire() override;
   void traceEvent(TraceBuilder& builder) override;
-
-  // -------------------------------------------------------
-  // Disposer implementation
-
-  void disposeImpl(void* pointer) const override;
-  void destroy();
 
   stdcoro::coroutine_handle<> coroutine;
   ExceptionOrValue& resultRef;
@@ -1998,8 +1994,7 @@ public:
     // coroutine's return object. `this` itself lives inside the coroutine frame, and we arrange for
     // the returned Promise<T> to own `this` via a custom Disposer and by always leaving the
     // coroutine in a suspended state.
-    return PromiseNode::to<Promise<T>>(
-        allocPromise<DynamicallyDisposedPromiseNode>(Own<PromiseNode>(this, *this)));
+    return PromiseNode::to<Promise<T>>(OwnPromiseNode(this));
   }
 
 public:

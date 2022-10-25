@@ -159,27 +159,6 @@ AllowAsyncDestructorsScope::~AllowAsyncDestructorsScope() {
 
 // =======================================================================================
 
-namespace _ {
-
-PromiseNode::~PromiseNode() noexcept(false) {}
-
-void DynamicallyDisposedPromiseNode::onReady(Event* event) noexcept {
-  inner->onReady(event);
-}
-void DynamicallyDisposedPromiseNode::setSelfPointer(OwnPromiseNode* selfPtr) noexcept {
-  inner->setSelfPointer(selfPtr);
-}
-void DynamicallyDisposedPromiseNode::get(ExceptionOrValue& output) noexcept {
-  inner->get(output);
-}
-void DynamicallyDisposedPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
-  inner->tracePromise(builder, stopAtNextEvent);
-}
-
-}  // namespace _
-
-// =======================================================================================
-
 namespace {
 
 KJ_THREADLOCAL_PTR(EventLoop) threadLocalEventLoop = nullptr;
@@ -220,6 +199,8 @@ struct DummyFunctor {
 
 class YieldPromiseNode final: public _::PromiseNode {
 public:
+  void destroy() override { delete this; }
+
   void onReady(_::Event* event) noexcept override {
     if (event) event->armBreadthFirst();
   }
@@ -233,6 +214,8 @@ public:
 
 class YieldHarderPromiseNode final: public _::PromiseNode {
 public:
+  void destroy() override { delete this; }
+
   void onReady(_::Event* event) noexcept override {
     if (event) event->armLast();
   }
@@ -246,6 +229,8 @@ public:
 
 class NeverDonePromiseNode final: public _::PromiseNode {
 public:
+  void destroy() override { delete this; }
+
   void onReady(_::Event* event) noexcept override {
     // ignore
   }
@@ -1201,35 +1186,32 @@ XThreadPaf::XThreadPaf()
     : state(WAITING), executor(getCurrentThreadExecutor()) {}
 XThreadPaf::~XThreadPaf() noexcept(false) {}
 
-void XThreadPaf::Disposer::disposeImpl(void* pointer) const {
-  XThreadPaf* obj = reinterpret_cast<XThreadPaf*>(pointer);
+void XThreadPaf::destroy() {
   auto oldState = WAITING;
 
-  if (__atomic_load_n(&obj->state, __ATOMIC_ACQUIRE) == DISPATCHED) {
+  if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) == DISPATCHED) {
     // Common case: Promise was fully fulfilled and dispatched, no need for locking.
-    delete obj;
-  } else if (__atomic_compare_exchange_n(&obj->state, &oldState, CANCELED, false,
+    delete this;
+  } else if (__atomic_compare_exchange_n(&state, &oldState, CANCELED, false,
                                          __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
     // State transitioned from WAITING to CANCELED, so now it's the fulfiller's job to destroy the
     // object.
   } else {
     // Whoops, another thread is already in the process of fulfilling this promise. We'll have to
     // wait for it to finish and transition the state to FULFILLED.
-    obj->executor.impl->state.when([&](auto&) {
-      return obj->state == FULFILLED || obj->state == DISPATCHED;
+    executor.impl->state.when([&](auto&) {
+      return state == FULFILLED || state == DISPATCHED;
     }, [&](Executor::Impl::State& exState) {
-      if (obj->state == FULFILLED) {
+      if (state == FULFILLED) {
         // The object is on the queue but was not yet dispatched. Remove it.
-        exState.fulfilled.remove(*obj);
+        exState.fulfilled.remove(*this);
       }
     });
 
     // It's ours now, delete it.
-    delete obj;
+    delete this;
   }
 }
-
-const XThreadPaf::Disposer XThreadPaf::DISPOSER;
 
 void XThreadPaf::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
@@ -1629,7 +1611,7 @@ FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result, SourceL
 
 FiberBase::~FiberBase() noexcept(false) {}
 
-void FiberBase::destroy() {
+void FiberBase::cancel() {
   // Called by `~Fiber()` to begin teardown. We can't do this work in `~FiberBase()` because the
   // `Fiber` subclass contains members that may still be in-use until the fiber stops.
 
@@ -1651,7 +1633,7 @@ void FiberBase::destroy() {
     case RUNNING:
     case CANCELED:
       // Bad news.
-      KJ_LOG(FATAL, "fiber tried to destroy itself");
+      KJ_LOG(FATAL, "fiber tried to cancel itself");
       ::abort();
       break;
 
@@ -2997,16 +2979,8 @@ void CoroutineBase::traceEvent(TraceBuilder& builder) {
   onReadyEvent.traceEvent(builder);
 }
 
-void CoroutineBase::disposeImpl(void* pointer) const {
-  KJ_IASSERT(pointer == this);
-
-  // const_cast okay -- every OwnPromiseNode that we build in get_return_object() uses itself
-  // as the disposer, thus every disposer is unique and there are no thread-safety concerns.
-  const_cast<CoroutineBase&>(*this).destroy();
-}
-
 void CoroutineBase::destroy() {
-  // Mutable helper function for disposeImpl(). Basically a wrapper around coroutine.destroy()
+  // Called by PromiseDisposer to delete the object. Basically a wrapper around coroutine.destroy()
   // with some stuff to propagate exceptions appropriately.
 
   // Objects in the coroutine frame might throw from their destructors, so unhandled_exception()
