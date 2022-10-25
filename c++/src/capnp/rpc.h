@@ -293,6 +293,14 @@ public:
   // Get the total size of the message, for flow control purposes. Although the caller could
   // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
   // implementations can compute the size more cheaply by summing segment sizes.
+
+  virtual void retainLongTerm() { return; }
+  // Signals to the `VatNetwork` implementation that the RPC system wishes to retain the message
+  // long term. The `VatNetwork` may respond by transferring long-term ownership of the underlying
+  // buffer, or performing a copy as applicable for the implementation.
+  //
+  // The default implementation is a no-op, suitable for `VatNetwork`s that always return fully
+  // owned messages from `receiveIncomingMessage`.
 };
 
 class RpcFlowController {
@@ -428,10 +436,12 @@ public:
 
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override = 0;
     // Wait for a message to be received and return it.  If the read stream cleanly terminates,
-    // return null.  If any other problem occurs, throw an exception.
+    // return null.  If any other problem occurs, throw an exception. The RPC system will call
+    // `retainLongTerm()` on the message if it needs to hold the message after a subsequent call to
+    // `receiveIncomingMessage()`.
     //
     // WARNING: The RPC system may keep the `IncomingRpcMessage` object alive past the lifetime of
-    //   the `Connection` itself.
+    //   the `Connection` itself. It will always call `retainLongTerm()` if so.
 
     virtual kj::Promise<void> shutdown() override KJ_WARN_UNUSED_RESULT = 0;
     // Waits until all outgoing messages have been sent, then shuts down the outgoing stream. The

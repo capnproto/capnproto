@@ -248,6 +248,28 @@ public:
           : data(kj::mv(data)),
             message(this->data) {}
 
+      void receiveOnConn(ConnectionImpl& conn) {
+        conn.shortTermMessages++;
+        connection = conn;
+      }
+
+      ~IncomingRpcMessageImpl() {
+        KJ_IF_MAYBE(c, connection) {
+          if (!heldLongTerm) {
+            c->shortTermMessages--;
+          }
+        }
+      }
+
+      void retainLongTerm() override {
+        KJ_ASSERT(!heldLongTerm);
+        heldLongTerm = true;
+        KJ_IF_MAYBE(c, connection) {
+          c->shortTermMessages--;
+        }
+      }
+
+
       AnyPointer::Reader getBody() override {
         return message.getRoot<AnyPointer>();
       }
@@ -256,8 +278,10 @@ public:
         return data.size();
       }
 
+      kj::Maybe<ConnectionImpl&> connection;
       kj::Array<word> data;
       FlatArrayMessageReader message;
+      bool heldLongTerm = false;
     };
 
     class OutgoingRpcMessageImpl final: public OutgoingRpcMessage {
@@ -296,7 +320,7 @@ public:
             } else {
               ++p->network.received;
               p->fulfillers.front()->fulfill(
-                  kj::Own<IncomingRpcMessage>(kj::mv(message)));
+                  kj::Own<IncomingRpcMessageImpl>(kj::mv(message)));
               p->fulfillers.pop();
             }
           }
@@ -321,6 +345,8 @@ public:
       return kj::heap<OutgoingRpcMessageImpl>(*this, firstSegmentWordSize);
     }
     kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override {
+      KJ_ASSERT(shortTermMessages == 0, kj::systemPreciseMonotonicClock().now(), this);
+
       KJ_IF_MAYBE(e, networkException) {
         return kj::cp(*e);
       }
@@ -330,14 +356,20 @@ public:
           f->get()->fulfill();
           return kj::Maybe<kj::Own<IncomingRpcMessage>>(nullptr);
         } else {
-          auto paf = kj::newPromiseAndFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>();
+          auto paf = kj::newPromiseAndFulfiller<kj::Maybe<kj::Own<IncomingRpcMessageImpl>>>();
           fulfillers.push(kj::mv(paf.fulfiller));
-          return kj::mv(paf.promise);
+          return paf.promise.then([this](kj::Maybe<kj::Own<IncomingRpcMessageImpl>> message) {
+            KJ_IF_MAYBE(m, message) {
+              (*m)->receiveOnConn(*this);
+            }
+            return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::mv(message));
+          });
         }
       } else {
         ++network.received;
         auto result = kj::mv(messages.front());
         messages.pop();
+        result->receiveOnConn(*this);
         return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::mv(result));
       }
     }
@@ -362,11 +394,12 @@ public:
 
     kj::Maybe<kj::Exception> networkException;
 
-    std::queue<kj::Own<kj::PromiseFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>>> fulfillers;
-    std::queue<kj::Own<IncomingRpcMessage>> messages;
+    std::queue<kj::Own<kj::PromiseFulfiller<kj::Maybe<kj::Own<IncomingRpcMessageImpl>>>>> fulfillers;
+    std::queue<kj::Own<IncomingRpcMessageImpl>> messages;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfillOnEnd;
 
     kj::Own<kj::TaskSet> tasks;
+    int shortTermMessages = 0;
   };
 
   kj::Maybe<kj::Own<Connection>> connect(test::TestSturdyRefHostId::Reader hostId) override {
@@ -1262,8 +1295,10 @@ TEST(Rpc, Abort) {
     msg->send();
   }
 
-  auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(context.waitScope));
-  EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
+  {
+    auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(context.waitScope));
+    EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
+  }
 
   EXPECT_TRUE(conn->receiveIncomingMessage().wait(context.waitScope) == nullptr);
 }

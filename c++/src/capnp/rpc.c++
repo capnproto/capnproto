@@ -2442,6 +2442,16 @@ private:
     });
   }
 
+  struct IncomingRpcMessageAndCall {
+    kj::Own<IncomingRpcMessage> message;
+    rpc::Call::Reader reader;
+  };
+
+  struct IncomingRpcMessageAndReturn {
+    kj::Own<IncomingRpcMessage> message;
+    rpc::Return::Reader reader;
+  };
+
   void handleMessage(kj::Own<IncomingRpcMessage> message) {
     auto reader = message->getBody().getAs<rpc::Message>();
 
@@ -2459,11 +2469,11 @@ private:
         break;
 
       case rpc::Message::CALL:
-        handleCall(kj::mv(message), reader.getCall());
+        handleCall(IncomingRpcMessageAndCall{kj::mv(message), reader.getCall()});
         break;
 
       case rpc::Message::RETURN:
-        handleReturn(kj::mv(message), reader.getReturn());
+        handleReturn(IncomingRpcMessageAndReturn{kj::mv(message), reader.getReturn()});
         break;
 
       case rpc::Message::FINISH:
@@ -2624,10 +2634,10 @@ private:
     response->send();
   }
 
-  void handleCall(kj::Own<IncomingRpcMessage>&& message, const rpc::Call::Reader& call) {
+  void handleCall(IncomingRpcMessageAndCall call) {
     kj::Own<ClientHook> capability;
 
-    KJ_IF_MAYBE(t, getMessageTarget(call.getTarget())) {
+    KJ_IF_MAYBE(t, getMessageTarget(call.reader.getTarget())) {
       capability = kj::mv(*t);
     } else {
       // Exception already reported.
@@ -2635,7 +2645,7 @@ private:
     }
 
     bool redirectResults;
-    switch (call.getSendResultsTo().which()) {
+    switch (call.reader.getSendResultsTo().which()) {
       case rpc::Call::SendResultsTo::CALLER:
         redirectResults = false;
         break;
@@ -2643,19 +2653,25 @@ private:
         redirectResults = true;
         break;
       default:
-        KJ_FAIL_REQUIRE("Unsupported `Call.sendResultsTo`.") { return; }
+        KJ_FAIL_REQUIRE("Unsupported `call.reader.sendResultsTo`.") { return; }
     }
 
-    auto payload = call.getParams();
-    auto capTableArray = receiveCaps(payload.getCapTable(), message->getAttachedFds());
+    call.message->retainLongTerm();
+    call.reader = call.message->getBody().getAs<rpc::Message>().getCall();
+
+    auto payload = call.reader.getParams();
+    auto capTableArray = receiveCaps(payload.getCapTable(), call.message->getAttachedFds());
     auto cancelPaf = kj::newPromiseAndFulfiller<void>();
 
-    AnswerId answerId = call.getQuestionId();
+    AnswerId answerId = call.reader.getQuestionId();
 
     auto context = kj::refcounted<RpcCallContext>(
-        *this, answerId, kj::mv(message), kj::mv(capTableArray), payload.getContent(),
+        *this, answerId, kj::mv(call.message), kj::mv(capTableArray), payload.getContent(),
         redirectResults, kj::mv(cancelPaf.fulfiller),
-        call.getInterfaceId(), call.getMethodId());
+        call.reader.getInterfaceId(), call.reader.getMethodId());
+
+    // TODO(now): does this comment still make sense? we use call after this line,
+    // and we did at the time the comment was last modified...
 
     // No more using `call` after this point, as it now belongs to the context.
 
@@ -2671,7 +2687,7 @@ private:
     }
 
     auto promiseAndPipeline = startCall(
-        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef());
+        call.reader.getInterfaceId(), call.reader.getMethodId(), kj::mv(capability), context->addRef());
 
     // Things may have changed -- in particular if startCall() immediately called
     // context->directTailCall().
@@ -2768,35 +2784,39 @@ private:
     KJ_UNREACHABLE;
   }
 
-  void handleReturn(kj::Own<IncomingRpcMessage>&& message, const rpc::Return::Reader& ret) {
+  void handleReturn(IncomingRpcMessageAndReturn ret) {
     // Transitive destructors can end up manipulating the question table and invalidating our
     // pointer into it, so make sure these destructors run later.
     kj::Array<ExportId> exportsToRelease;
     KJ_DEFER(releaseExports(exportsToRelease));
     kj::Maybe<kj::Promise<kj::Own<RpcResponse>>> promiseToRelease;
 
-    KJ_IF_MAYBE(question, questions.find(ret.getAnswerId())) {
+    KJ_IF_MAYBE(question, questions.find(ret.reader.getAnswerId())) {
       KJ_REQUIRE(question->isAwaitingReturn, "Duplicate Return.") { return; }
       question->isAwaitingReturn = false;
 
-      if (ret.getReleaseParamCaps()) {
+      if (ret.reader.getReleaseParamCaps()) {
         exportsToRelease = kj::mv(question->paramExports);
       } else {
         question->paramExports = nullptr;
       }
 
       KJ_IF_MAYBE(questionRef, question->selfRef) {
-        switch (ret.which()) {
+        switch (ret.reader.which()) {
           case rpc::Return::RESULTS: {
             KJ_REQUIRE(!question->isTailCall,
                 "Tail call `Return` must set `resultsSentElsewhere`, not `results`.") {
               return;
             }
 
-            auto payload = ret.getResults();
-            auto capTableArray = receiveCaps(payload.getCapTable(), message->getAttachedFds());
+            ret.message->retainLongTerm();
+            ret.reader = ret.message->getBody().getAs<rpc::Message>().getReturn();
+
+            auto payload = ret.reader.getResults();
+            auto capTableArray = receiveCaps(payload.getCapTable(), ret.message->getAttachedFds());
+
             questionRef->fulfill(kj::refcounted<RpcResponseImpl>(
-                *this, kj::addRef(*questionRef), kj::mv(message),
+                *this, kj::addRef(*questionRef), kj::mv(ret.message),
                 kj::mv(capTableArray), payload.getContent()));
             break;
           }
@@ -2807,7 +2827,7 @@ private:
               return;
             }
 
-            questionRef->reject(toException(ret.getException()));
+            questionRef->reject(toException(ret.reader.getException()));
             break;
 
           case rpc::Return::CANCELED:
@@ -2825,7 +2845,7 @@ private:
             break;
 
           case rpc::Return::TAKE_FROM_OTHER_QUESTION:
-            KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherQuestion())) {
+            KJ_IF_MAYBE(answer, answers.find(ret.reader.getTakeFromOtherQuestion())) {
               KJ_IF_MAYBE(response, answer->redirectedResults) {
                 questionRef->fulfill(kj::mv(*response));
                 answer->redirectedResults = nullptr;
@@ -2861,11 +2881,11 @@ private:
       } else {
         // This is a response to a question that we canceled earlier.
 
-        if (ret.isTakeFromOtherQuestion()) {
+        if (ret.reader.isTakeFromOtherQuestion()) {
           // This turned out to be a tail call back to us! We now take ownership of the tail call.
           // Since the caller canceled, we need to cancel out the tail call, if it still exists.
 
-          KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherQuestion())) {
+          KJ_IF_MAYBE(answer, answers.find(ret.reader.getTakeFromOtherQuestion())) {
             // Indeed, it does still exist.
 
             // Throw away the result promise.
@@ -2886,7 +2906,7 @@ private:
         // Looks like this question was canceled earlier, so `Finish` was already sent, with
         // `releaseResultCaps` set true so that we don't have to release them here.  We can go
         // ahead and delete it from the table.
-        questions.erase(ret.getAnswerId(), *question);
+        questions.erase(ret.reader.getAnswerId(), *question);
       }
 
     } else {
