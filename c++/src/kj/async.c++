@@ -328,17 +328,20 @@ void Canceler::AdapterImpl<void>::cancel(kj::Exception&& e) {
 
 TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler, SourceLocation location)
   : errorHandler(errorHandler), location(location) {}
-class TaskSet::Task final: public _::Event {
+
+class TaskSet::Task final: public _::PromiseArenaMember, public _::Event {
 public:
-  Task(TaskSet& taskSet, _::OwnPromiseNode&& nodeParam)
+  Task(_::OwnPromiseNode&& nodeParam, TaskSet& taskSet)
       : Event(taskSet.location), taskSet(taskSet), node(kj::mv(nodeParam)) {
     node->setSelfPointer(&node);
     node->onReady(this);
   }
 
-  Own<Task> pop() {
+  void destroy() override { dtor(*this); }
+
+  OwnTask pop() {
     KJ_IF_MAYBE(n, next) { n->get()->prev = prev; }
-    Own<Task> self = kj::mv(KJ_ASSERT_NONNULL(*prev));
+    OwnTask self = kj::mv(KJ_ASSERT_NONNULL(*prev));
     KJ_ASSERT(self.get() == this);
     *prev = kj::mv(next);
     next = nullptr;
@@ -346,8 +349,8 @@ public:
     return self;
   }
 
-  Maybe<Own<Task>> next;
-  Maybe<Own<Task>>* prev = nullptr;
+  Maybe<OwnTask> next;
+  Maybe<OwnTask>* prev = nullptr;
 
   kj::String trace() {
     void* space[32];
@@ -384,7 +387,7 @@ protected:
       }
     }
 
-    return mv(self);
+    return Own<Event>(mv(self));
   }
 
   void traceEvent(_::TraceBuilder& builder) override {
@@ -409,7 +412,7 @@ TaskSet::~TaskSet() noexcept(false) {
 }
 
 void TaskSet::add(Promise<void>&& promise) {
-  auto task = heap<Task>(*this, _::PromiseNode::from(kj::mv(promise)));
+  auto task = _::appendPromise<Task>(_::PromiseNode::from(kj::mv(promise)), *this);
   KJ_IF_MAYBE(head, tasks) {
     head->get()->prev = &task->next;
     task->next = kj::mv(tasks);
@@ -421,7 +424,7 @@ void TaskSet::add(Promise<void>&& promise) {
 kj::String TaskSet::trace() {
   kj::Vector<kj::String> traces;
 
-  Maybe<Own<Task>>* ptr = &tasks;
+  Maybe<OwnTask>* ptr = &tasks;
   for (;;) {
     KJ_IF_MAYBE(task, *ptr) {
       traces.add(task->get()->trace());

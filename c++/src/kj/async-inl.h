@@ -217,13 +217,10 @@ private:
   SourceLocation location;
 };
 
-class PromiseNode: private AsyncObject {
-  // A Promise<T> contains a chain of PromiseNodes tracking the pending transformations.
-  //
-  // To reduce generated code bloat, PromiseNode is not a template.  Instead, it makes very hacky
-  // use of pointers to ExceptionOrValue which actually point to ExceptionOr<T>, but are only
-  // so down-cast in the few places that really need to be templated.  Luckily this is all
-  // internal implementation details.
+class PromiseArenaMember {
+  // An object that is allocated in a PromiseArena. `PromiseNode` inherits this, and most
+  // arena-allocated objects are `PromiseNode` subclasses, but `TaskSet::Task` and potentially
+  // other objects that commonly live on the end of a promise chain can also leverage this.
 
 public:
   virtual void destroy() = 0;
@@ -239,6 +236,29 @@ public:
   //    handle to delete themselves.
   // 2. XThreadEvents sometimes leave it up to a different thread to actually delete the object.
 
+private:
+  PromiseArena* arena = nullptr;
+  // If non-null, then this PromiseNode is the last node allocated within the given arena, and
+  // therefore owns the arena. After this node is destroyed, the arena should be deleted.
+  //
+  // PromiseNodes are allocated within the arena starting from the end, and `PromiseNode`s
+  // allocated this way are required to have `PromiseNode` itself as their leftmost inherited type,
+  // so that the pointers match. Thus, the space in `arena` from its start to the location of the
+  // `PromiseNode` is known to be available for subsequent allocations (which should then take
+  // ownership of the arena).
+
+  friend class PromiseDisposer;
+};
+
+class PromiseNode: public PromiseArenaMember, private AsyncObject {
+  // A Promise<T> contains a chain of PromiseNodes tracking the pending transformations.
+  //
+  // To reduce generated code bloat, PromiseNode is not a template.  Instead, it makes very hacky
+  // use of pointers to ExceptionOrValue which actually point to ExceptionOr<T>, but are only
+  // so down-cast in the few places that really need to be templated.  Luckily this is all
+  // internal implementation details.
+
+public:
   virtual void onReady(Event* event) noexcept = 0;
   // Arms the given event when ready.
   //
@@ -314,24 +334,11 @@ protected:
   private:
     Event* event = nullptr;
   };
-
-private:
-  PromiseArena* arena = nullptr;
-  // If non-null, then this PromiseNode is the last node allocated within the given arena, and
-  // therefore owns the arena. After this node is destroyed, the arena should be deleted.
-  //
-  // PromiseNodes are allocated within the arena starting from the end, and `PromiseNode`s
-  // allocated this way are required to have `PromiseNode` itself as their leftmost inherited type,
-  // so that the pointers match. Thus, the space in `arena` from its start to the location of the
-  // `PromiseNode` is known to be available for subsequent allocations (which should then take
-  // ownership of the arena).
-
-  friend class PromiseDisposer;
 };
 
 class PromiseDisposer {
 public:
-  static void dispose(PromiseNode* node) {
+  static void dispose(PromiseArenaMember* node) {
     PromiseArena* arena = node->arena;
     node->destroy();
     delete arena;  // reminder: `delete` automatically ignores null pointers
@@ -351,8 +358,8 @@ public:
       ctor(*ptr, kj::fwd<Params>(params)...);
       ptr->arena = arena;
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
-                  reinterpret_cast<void*>(static_cast<PromiseNode*>(ptr)),
-          "PromiseNode must be the leftmost inherited type.");
+                  reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),
+          "PromiseArenaMember must be the leftmost inherited type.");
     }
     return kj::Own<T, PromiseDisposer>(ptr);
   }
@@ -382,8 +389,8 @@ public:
       ctor(*ptr, kj::mv(next), kj::fwd<Params>(params)...);
       ptr->arena = arena;
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
-                  reinterpret_cast<void*>(static_cast<PromiseNode*>(ptr)),
-          "PromiseNode must be the leftmost inherited type.");
+                  reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),
+          "PromiseArenaMember must be the leftmost inherited type.");
       return kj::Own<T, PromiseDisposer>(ptr);
     }
   }

@@ -989,9 +989,10 @@ public:
 
 private:
   class Task;
+  using OwnTask = Own<Task, _::PromiseDisposer>;
 
   TaskSet::ErrorHandler& errorHandler;
-  Maybe<Own<Task>> tasks;
+  Maybe<OwnTask> tasks;
   Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
   SourceLocation location;
 };
