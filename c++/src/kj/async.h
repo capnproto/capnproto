@@ -380,7 +380,7 @@ public:
   // This method does NOT consume the promise as other methods do.
 
 private:
-  Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
+  Promise(bool, _::OwnPromiseNode&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
 
   friend class _::PromiseNode;
@@ -1255,7 +1255,7 @@ private:
   void poll();
 
   friend void _::detach(kj::Promise<void>&& promise);
-  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+  friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
   friend class _::Event;
@@ -1345,7 +1345,7 @@ private:
 
   friend class EventLoop;
   friend class _::FiberBase;
-  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+  friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 };

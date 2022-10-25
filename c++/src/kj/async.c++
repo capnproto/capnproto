@@ -159,6 +159,27 @@ AllowAsyncDestructorsScope::~AllowAsyncDestructorsScope() {
 
 // =======================================================================================
 
+namespace _ {
+
+PromiseNode::~PromiseNode() noexcept(false) {}
+
+void DynamicallyDisposedPromiseNode::onReady(Event* event) noexcept {
+  inner->onReady(event);
+}
+void DynamicallyDisposedPromiseNode::setSelfPointer(OwnPromiseNode* selfPtr) noexcept {
+  inner->setSelfPointer(selfPtr);
+}
+void DynamicallyDisposedPromiseNode::get(ExceptionOrValue& output) noexcept {
+  inner->get(output);
+}
+void DynamicallyDisposedPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  inner->tracePromise(builder, stopAtNextEvent);
+}
+
+}  // namespace _
+
+// =======================================================================================
+
 namespace {
 
 KJ_THREADLOCAL_PTR(EventLoop) threadLocalEventLoop = nullptr;
@@ -324,7 +345,7 @@ TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler, SourceLocation location)
   : errorHandler(errorHandler), location(location) {}
 class TaskSet::Task final: public _::Event {
 public:
-  Task(TaskSet& taskSet, Own<_::PromiseNode>&& nodeParam)
+  Task(TaskSet& taskSet, _::OwnPromiseNode&& nodeParam)
       : Event(taskSet.location), taskSet(taskSet), node(kj::mv(nodeParam)) {
     node->setSelfPointer(&node);
     node->onReady(this);
@@ -389,7 +410,7 @@ protected:
 
 private:
   TaskSet& taskSet;
-  Own<_::PromiseNode> node;
+  _::OwnPromiseNode node;
 };
 
 TaskSet::~TaskSet() noexcept(false) {
@@ -1948,7 +1969,7 @@ static kj::CanceledException fiberCanceledException() {
 };
 #endif
 
-void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
+void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
               SourceLocation location) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
@@ -2065,15 +2086,15 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation locatio
 }
 
 Promise<void> yield() {
-  return _::PromiseNode::to<Promise<void>>(kj::heap<YieldPromiseNode>());
+  return _::PromiseNode::to<Promise<void>>(allocPromise<YieldPromiseNode>());
 }
 
 Promise<void> yieldHarder() {
-  return _::PromiseNode::to<Promise<void>>(kj::heap<YieldHarderPromiseNode>());
+  return _::PromiseNode::to<Promise<void>>(allocPromise<YieldHarderPromiseNode>());
 }
 
-Own<PromiseNode> neverDone() {
-  return kj::heap<NeverDonePromiseNode>();
+OwnPromiseNode neverDone() {
+  return allocPromise<NeverDonePromiseNode>();
 }
 
 void NeverDone::wait(WaitScope& waitScope, SourceLocation location) const {
@@ -2272,7 +2293,7 @@ kj::String PromiseBase::trace() {
   return kj::str(builder);
 }
 
-void PromiseNode::setSelfPointer(Own<PromiseNode>* selfPtr) noexcept {}
+void PromiseNode::setSelfPointer(OwnPromiseNode* selfPtr) noexcept {}
 
 void PromiseNode::OnReadyEvent::init(Event* newEvent) {
   if (event == _kJ_ALREADY_READY) {
@@ -2333,7 +2354,7 @@ void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
 
 // -------------------------------------------------------------------
 
-AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependencyParam)
+AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(OwnPromiseNode&& dependencyParam)
     : dependency(kj::mv(dependencyParam)) {
   dependency->setSelfPointer(&dependency);
 }
@@ -2360,7 +2381,7 @@ void AttachmentPromiseNodeBase::dropDependency() {
 // -------------------------------------------------------------------
 
 TransformPromiseNodeBase::TransformPromiseNodeBase(
-    Own<PromiseNode>&& dependencyParam, void* continuationTracePtr)
+    OwnPromiseNode&& dependencyParam, void* continuationTracePtr)
     : dependency(kj::mv(dependencyParam)), continuationTracePtr(continuationTracePtr) {
   dependency->setSelfPointer(&dependency);
 }
@@ -2457,7 +2478,7 @@ void ForkBranchBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 
 // -------------------------------------------------------------------
 
-ForkHubBase::ForkHubBase(Own<PromiseNode>&& innerParam, ExceptionOrValue& resultRef,
+ForkHubBase::ForkHubBase(OwnPromiseNode&& innerParam, ExceptionOrValue& resultRef,
                          SourceLocation location)
     : Event(location), inner(kj::mv(innerParam)), resultRef(resultRef) {
   inner->setSelfPointer(&inner);
@@ -2499,7 +2520,7 @@ void ForkHubBase::traceEvent(TraceBuilder& builder) {
 
 // -------------------------------------------------------------------
 
-ChainPromiseNode::ChainPromiseNode(Own<PromiseNode> innerParam, SourceLocation location)
+ChainPromiseNode::ChainPromiseNode(OwnPromiseNode innerParam, SourceLocation location)
     : Event(location), state(STEP1), inner(kj::mv(innerParam)) {
   inner->setSelfPointer(&inner);
   inner->onReady(this);
@@ -2519,7 +2540,7 @@ void ChainPromiseNode::onReady(Event* event) noexcept {
   KJ_UNREACHABLE;
 }
 
-void ChainPromiseNode::setSelfPointer(Own<PromiseNode>* selfPtr) noexcept {
+void ChainPromiseNode::setSelfPointer(OwnPromiseNode* selfPtr) noexcept {
   if (state == STEP2) {
     *selfPtr = kj::mv(inner);  // deletes this!
     selfPtr->get()->setSelfPointer(selfPtr);
@@ -2563,7 +2584,7 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
     // There is an exception.  If there is also a value, delete it.
     kj::runCatchingExceptions([&]() { intermediate.value = nullptr; });
     // Now set step2 to a rejected promise.
-    inner = heap<ImmediateBrokenPromiseNode>(kj::mv(*exception));
+    inner = allocPromise<ImmediateBrokenPromiseNode>(kj::mv(*exception));
   } else KJ_IF_MAYBE(value, intermediate.value) {
     // There is a value and no exception.  The value is itself a promise.  Adopt it as our
     // step2.
@@ -2585,7 +2606,7 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
     }
 
     // Return our self-pointer so that the caller takes care of deleting it.
-    return Own<Event>(kj::mv(chain));
+    return Own<Event>(kj::Own<ChainPromiseNode>(kj::mv(chain)));
   } else {
     inner->setSelfPointer(&inner);
     if (onReadyEvent != nullptr) {
@@ -2618,7 +2639,7 @@ void ChainPromiseNode::traceEvent(TraceBuilder& builder) {
 // -------------------------------------------------------------------
 
 ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(
-    Own<PromiseNode> left, Own<PromiseNode> right, SourceLocation location)
+    OwnPromiseNode left, OwnPromiseNode right, SourceLocation location)
     : left(*this, kj::mv(left), location), right(*this, kj::mv(right), location) {}
 
 ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {}
@@ -2646,7 +2667,7 @@ void ExclusiveJoinPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNe
 }
 
 ExclusiveJoinPromiseNode::Branch::Branch(
-    ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependencyParam, SourceLocation location)
+    ExclusiveJoinPromiseNode& joinNode, OwnPromiseNode dependencyParam, SourceLocation location)
     : Event(location), joinNode(joinNode), dependency(kj::mv(dependencyParam)) {
   dependency->setSelfPointer(&dependency);
   dependency->onReady(this);
@@ -2690,7 +2711,7 @@ void ExclusiveJoinPromiseNode::Branch::traceEvent(TraceBuilder& builder) {
 // -------------------------------------------------------------------
 
 ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
-    Array<Own<PromiseNode>> promises, ExceptionOrValue* resultParts, size_t partSize,
+    Array<OwnPromiseNode> promises, ExceptionOrValue* resultParts, size_t partSize,
     SourceLocation location)
     : countLeft(promises.size()) {
   // Make the branches.
@@ -2739,7 +2760,7 @@ void ArrayJoinPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNe
 }
 
 ArrayJoinPromiseNodeBase::Branch::Branch(
-    ArrayJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependencyParam, ExceptionOrValue& output,
+    ArrayJoinPromiseNodeBase& joinNode, OwnPromiseNode dependencyParam, ExceptionOrValue& output,
     SourceLocation location)
     : Event(location), joinNode(joinNode), dependency(kj::mv(dependencyParam)), output(output) {
   dependency->setSelfPointer(&dependency);
@@ -2766,7 +2787,7 @@ Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
 }
 
 ArrayJoinPromiseNode<void>::ArrayJoinPromiseNode(
-    Array<Own<PromiseNode>> promises, Array<ExceptionOr<_::Void>> resultParts,
+    Array<OwnPromiseNode> promises, Array<ExceptionOr<_::Void>> resultParts,
     SourceLocation location)
     : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<_::Void>),
                                location),
@@ -2781,7 +2802,7 @@ void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
 }  // namespace _ (private)
 
 Promise<void> joinPromises(Array<Promise<void>>&& promises, SourceLocation location) {
-  return _::PromiseNode::to<Promise<void>>(kj::heap<_::ArrayJoinPromiseNode<void>>(
+  return _::PromiseNode::to<Promise<void>>(_::allocPromise<_::ArrayJoinPromiseNode<void>>(
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<_::Void>>(promises.size()), location));
 }
@@ -2791,7 +2812,7 @@ namespace _ {  // (private)
 // -------------------------------------------------------------------
 
 EagerPromiseNodeBase::EagerPromiseNodeBase(
-    Own<PromiseNode>&& dependencyParam, ExceptionOrValue& resultRef, SourceLocation location)
+    OwnPromiseNode&& dependencyParam, ExceptionOrValue& resultRef, SourceLocation location)
     : Event(location), dependency(kj::mv(dependencyParam)), resultRef(resultRef) {
   dependency->setSelfPointer(&dependency);
   dependency->onReady(this);
@@ -2979,7 +3000,7 @@ void CoroutineBase::traceEvent(TraceBuilder& builder) {
 void CoroutineBase::disposeImpl(void* pointer) const {
   KJ_IASSERT(pointer == this);
 
-  // const_cast okay -- every Own<PromiseNode> that we build in get_return_object() uses itself
+  // const_cast okay -- every OwnPromiseNode that we build in get_return_object() uses itself
   // as the disposer, thus every disposer is unique and there are no thread-safety concerns.
   const_cast<CoroutineBase&>(*this).destroy();
 }
@@ -3025,7 +3046,7 @@ void CoroutineBase::destroy() {
   }
 }
 
-CoroutineBase::AwaiterBase::AwaiterBase(Own<PromiseNode> node): node(kj::mv(node)) {}
+CoroutineBase::AwaiterBase::AwaiterBase(OwnPromiseNode node): node(kj::mv(node)) {}
 CoroutineBase::AwaiterBase::AwaiterBase(AwaiterBase&&) = default;
 CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   // Make sure it's safe to generate an async stack trace between now and when the Coroutine is

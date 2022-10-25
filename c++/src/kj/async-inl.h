@@ -221,6 +221,8 @@ class PromiseNode: private AsyncObject {
   // internal implementation details.
 
 public:
+  virtual ~PromiseNode() noexcept(false);
+
   virtual void onReady(Event* event) noexcept = 0;
   // Arms the given event when ready.
   //
@@ -228,7 +230,7 @@ public:
   // never be armed, only the new one. If called again after the event was armed, the new event
   // will be armed immediately. Can be called with nullptr to un-register the existing event.
 
-  virtual void setSelfPointer(Own<PromiseNode>* selfPtr) noexcept;
+  virtual void setSelfPointer(OwnPromiseNode* selfPtr) noexcept;
   // Tells the node that `selfPtr` is the pointer that owns this node, and will continue to own
   // this node until it is destroyed or setSelfPointer() is called again.  ChainPromiseNode uses
   // this to shorten redundant chains.  The default implementation does nothing; only
@@ -262,7 +264,7 @@ public:
   // must not allocate nor take locks.
 
   template <typename T>
-  static Own<PromiseNode> from(T&& promise) {
+  static OwnPromiseNode from(T&& promise) {
     // Given a Promise, extract the PromiseNode.
     return kj::mv(promise.node);
   }
@@ -272,7 +274,7 @@ public:
     return *promise.node;
   }
   template <typename T>
-  static T to(Own<PromiseNode>&& node) {
+  static T to(OwnPromiseNode&& node) {
     // Construct a Promise from a PromiseNode. (T should be a Promise type.)
     return T(false, kj::mv(node));
   }
@@ -296,6 +298,33 @@ protected:
   private:
     Event* event = nullptr;
   };
+};
+
+class PromiseDisposer {
+public:
+  static void dispose(PromiseNode* node) {
+    delete node;
+  }
+};
+
+template <typename T, typename... Params>
+static kj::Own<T, PromiseDisposer> allocPromise(Params&&... params) {
+  return kj::Own<T, PromiseDisposer>(new T(kj::fwd<Params>(params)...));
+}
+
+class DynamicallyDisposedPromiseNode final: public PromiseNode {
+  // Wrapper around kj::Own<PromiseNode>, for when you really need a dynamic disposer.
+
+public:
+  DynamicallyDisposedPromiseNode(kj::Own<PromiseNode> inner): inner(kj::mv(inner)) {}
+
+  void onReady(Event* event) noexcept override;
+  void setSelfPointer(OwnPromiseNode* selfPtr) noexcept override;
+  void get(ExceptionOrValue& output) noexcept override;
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+
+private:
+  kj::Own<PromiseNode> inner;
 };
 
 // -------------------------------------------------------------------
@@ -345,14 +374,14 @@ private:
 
 class AttachmentPromiseNodeBase: public PromiseNode {
 public:
-  AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency);
+  AttachmentPromiseNodeBase(OwnPromiseNode&& dependency);
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
 private:
-  Own<PromiseNode> dependency;
+  OwnPromiseNode dependency;
 
   void dropDependency();
 
@@ -366,7 +395,7 @@ class AttachmentPromiseNode final: public AttachmentPromiseNodeBase {
   // object) until the promise resolves.
 
 public:
-  AttachmentPromiseNode(Own<PromiseNode>&& dependency, Attachment&& attachment)
+  AttachmentPromiseNode(OwnPromiseNode&& dependency, Attachment&& attachment)
       : AttachmentPromiseNodeBase(kj::mv(dependency)),
         attachment(kj::mv<Attachment>(attachment)) {}
 
@@ -514,14 +543,14 @@ struct GetFunctorStartAddress<Void&&>: public GetFunctorStartAddress<> {};
 
 class TransformPromiseNodeBase: public PromiseNode {
 public:
-  TransformPromiseNodeBase(Own<PromiseNode>&& dependency, void* continuationTracePtr);
+  TransformPromiseNodeBase(OwnPromiseNode&& dependency, void* continuationTracePtr);
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
 private:
-  Own<PromiseNode> dependency;
+  OwnPromiseNode dependency;
   void* continuationTracePtr;
 
   void dropDependency();
@@ -539,7 +568,7 @@ class TransformPromiseNode final: public TransformPromiseNodeBase {
   // function (implements `then()`).
 
 public:
-  TransformPromiseNode(Own<PromiseNode>&& dependency, Func&& func, ErrorFunc&& errorHandler,
+  TransformPromiseNode(OwnPromiseNode&& dependency, Func&& func, ErrorFunc&& errorHandler,
                        void* continuationTracePtr)
       : TransformPromiseNodeBase(kj::mv(dependency), continuationTracePtr),
         func(kj::fwd<Func>(func)), errorHandler(kj::fwd<ErrorFunc>(errorHandler)) {}
@@ -661,12 +690,12 @@ public:
 
 class ForkHubBase: public Refcounted, protected Event {
 public:
-  ForkHubBase(Own<PromiseNode>&& inner, ExceptionOrValue& resultRef, SourceLocation location);
+  ForkHubBase(OwnPromiseNode&& inner, ExceptionOrValue& resultRef, SourceLocation location);
 
   inline ExceptionOrValue& getResultRef() { return resultRef; }
 
 private:
-  Own<PromiseNode> inner;
+  OwnPromiseNode inner;
   ExceptionOrValue& resultRef;
 
   ForkBranchBase* headBranch = nullptr;
@@ -686,11 +715,12 @@ class ForkHub final: public ForkHubBase {
   // possible).
 
 public:
-  ForkHub(Own<PromiseNode>&& inner, SourceLocation location)
+  ForkHub(OwnPromiseNode&& inner, SourceLocation location)
       : ForkHubBase(kj::mv(inner), result, location) {}
 
   Promise<_::UnfixVoid<T>> addBranch() {
-    return _::PromiseNode::to<Promise<_::UnfixVoid<T>>>(kj::heap<ForkBranch<T>>(addRef(*this)));
+    return _::PromiseNode::to<Promise<_::UnfixVoid<T>>>(
+        allocPromise<ForkBranch<T>>(addRef(*this)));
   }
 
   _::SplitTuplePromise<T> split(SourceLocation location) {
@@ -708,7 +738,7 @@ private:
   template <size_t index>
   ReducePromises<typename SplitBranch<T, index>::Element> addSplit(SourceLocation location) {
     return _::PromiseNode::to<ReducePromises<typename SplitBranch<T, index>::Element>>(
-        maybeChain(kj::heap<SplitBranch<T, index>>(addRef(*this)),
+        maybeChain(allocPromise<SplitBranch<T, index>>(addRef(*this)),
                    implicitCast<typename SplitBranch<T, index>::Element*>(nullptr),
                    location));
   }
@@ -727,11 +757,11 @@ class ChainPromiseNode final: public PromiseNode, public Event {
   // Own<Event>.  Ugh, templates and private...
 
 public:
-  explicit ChainPromiseNode(Own<PromiseNode> inner, SourceLocation location);
+  explicit ChainPromiseNode(OwnPromiseNode inner, SourceLocation location);
   ~ChainPromiseNode() noexcept(false);
 
   void onReady(Event* event) noexcept override;
-  void setSelfPointer(Own<PromiseNode>* selfPtr) noexcept override;
+  void setSelfPointer(OwnPromiseNode* selfPtr) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
@@ -743,24 +773,24 @@ private:
 
   State state;
 
-  Own<PromiseNode> inner;
+  OwnPromiseNode inner;
   // In STEP1, a PromiseNode for a Promise<T>.
   // In STEP2, a PromiseNode for a T.
 
   Event* onReadyEvent = nullptr;
-  Own<PromiseNode>* selfPtr = nullptr;
+  OwnPromiseNode* selfPtr = nullptr;
 
   Maybe<Own<Event>> fire() override;
   void traceEvent(TraceBuilder& builder) override;
 };
 
 template <typename T>
-Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, Promise<T>*, SourceLocation location) {
-  return heap<ChainPromiseNode>(kj::mv(node), location);
+OwnPromiseNode maybeChain(OwnPromiseNode&& node, Promise<T>*, SourceLocation location) {
+  return allocPromise<ChainPromiseNode>(kj::mv(node), location);
 }
 
 template <typename T>
-Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, T*, SourceLocation location) {
+OwnPromiseNode&& maybeChain(OwnPromiseNode&& node, T*, SourceLocation location) {
   return kj::mv(node);
 }
 
@@ -778,7 +808,7 @@ inline Promise<T> maybeReduce(Promise<T>&& promise, ...) {
 
 class ExclusiveJoinPromiseNode final: public PromiseNode {
 public:
-  ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right, SourceLocation location);
+  ExclusiveJoinPromiseNode(OwnPromiseNode left, OwnPromiseNode right, SourceLocation location);
   ~ExclusiveJoinPromiseNode() noexcept(false);
 
   void onReady(Event* event) noexcept override;
@@ -788,7 +818,7 @@ public:
 private:
   class Branch: public Event {
   public:
-    Branch(ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependency,
+    Branch(ExclusiveJoinPromiseNode& joinNode, OwnPromiseNode dependency,
            SourceLocation location);
     ~Branch() noexcept(false);
 
@@ -800,7 +830,7 @@ private:
 
   private:
     ExclusiveJoinPromiseNode& joinNode;
-    Own<PromiseNode> dependency;
+    OwnPromiseNode dependency;
 
     friend class ExclusiveJoinPromiseNode;
   };
@@ -814,7 +844,7 @@ private:
 
 class ArrayJoinPromiseNodeBase: public PromiseNode {
 public:
-  ArrayJoinPromiseNodeBase(Array<Own<PromiseNode>> promises,
+  ArrayJoinPromiseNodeBase(Array<OwnPromiseNode> promises,
                            ExceptionOrValue* resultParts, size_t partSize,
                            SourceLocation location);
   ~ArrayJoinPromiseNodeBase() noexcept(false);
@@ -833,7 +863,7 @@ private:
 
   class Branch final: public Event {
   public:
-    Branch(ArrayJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependency,
+    Branch(ArrayJoinPromiseNodeBase& joinNode, OwnPromiseNode dependency,
            ExceptionOrValue& output, SourceLocation location);
     ~Branch() noexcept(false);
 
@@ -845,7 +875,7 @@ private:
 
   private:
     ArrayJoinPromiseNodeBase& joinNode;
-    Own<PromiseNode> dependency;
+    OwnPromiseNode dependency;
     ExceptionOrValue& output;
 
     friend class ArrayJoinPromiseNodeBase;
@@ -857,7 +887,7 @@ private:
 template <typename T>
 class ArrayJoinPromiseNode final: public ArrayJoinPromiseNodeBase {
 public:
-  ArrayJoinPromiseNode(Array<Own<PromiseNode>> promises,
+  ArrayJoinPromiseNode(Array<OwnPromiseNode> promises,
                        Array<ExceptionOr<T>> resultParts,
                        SourceLocation location)
       : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<T>),
@@ -882,7 +912,7 @@ private:
 template <>
 class ArrayJoinPromiseNode<void> final: public ArrayJoinPromiseNodeBase {
 public:
-  ArrayJoinPromiseNode(Array<Own<PromiseNode>> promises,
+  ArrayJoinPromiseNode(Array<OwnPromiseNode> promises,
                        Array<ExceptionOr<_::Void>> resultParts,
                        SourceLocation location);
   ~ArrayJoinPromiseNode();
@@ -901,14 +931,14 @@ class EagerPromiseNodeBase: public PromiseNode, protected Event {
   // evaluate it.
 
 public:
-  EagerPromiseNodeBase(Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef,
+  EagerPromiseNodeBase(OwnPromiseNode&& dependency, ExceptionOrValue& resultRef,
                        SourceLocation location);
 
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
 private:
-  Own<PromiseNode> dependency;
+  OwnPromiseNode dependency;
   OnReadyEvent onReadyEvent;
 
   ExceptionOrValue& resultRef;
@@ -920,7 +950,7 @@ private:
 template <typename T>
 class EagerPromiseNode final: public EagerPromiseNodeBase {
 public:
-  EagerPromiseNode(Own<PromiseNode>&& dependency, SourceLocation location)
+  EagerPromiseNode(OwnPromiseNode&& dependency, SourceLocation location)
       : EagerPromiseNodeBase(kj::mv(dependency), result, location) {}
 
   void get(ExceptionOrValue& output) noexcept override {
@@ -932,10 +962,10 @@ private:
 };
 
 template <typename T>
-Own<PromiseNode> spark(Own<PromiseNode>&& node, SourceLocation location) {
+OwnPromiseNode spark(OwnPromiseNode&& node, SourceLocation location) {
   // Forces evaluation of the given node to begin as soon as possible, even if no one is waiting
   // on it.
-  return heap<EagerPromiseNode<T>>(kj::mv(node), location);
+  return allocPromise<EagerPromiseNode<T>>(kj::mv(node), location);
 }
 
 // -------------------------------------------------------------------
@@ -1033,7 +1063,7 @@ private:
   // Implements Event. Each time the event is fired, switchToFiber() is called.
 
   friend class FiberStack;
-  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+  friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 };
@@ -1070,11 +1100,11 @@ private:
 
 template <typename T>
 Promise<T>::Promise(_::FixVoid<T> value)
-    : PromiseBase(heap<_::ImmediatePromiseNode<_::FixVoid<T>>>(kj::mv(value))) {}
+    : PromiseBase(_::allocPromise<_::ImmediatePromiseNode<_::FixVoid<T>>>(kj::mv(value))) {}
 
 template <typename T>
 Promise<T>::Promise(kj::Exception&& exception)
-    : PromiseBase(heap<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
+    : PromiseBase(_::allocPromise<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
 
 template <typename T>
 template <typename Func, typename ErrorFunc>
@@ -1083,8 +1113,8 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
   typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
 
   void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
-  Own<_::PromiseNode> intermediate =
-      heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+  _::OwnPromiseNode intermediate =
+      _::allocPromise<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
           kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
           continuationTracePtr);
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
@@ -1133,8 +1163,8 @@ Promise<T> Promise<T>::catch_(ErrorFunc&& errorHandler, SourceLocation location)
   // The reason catch_() isn't simply implemented in terms of then() is because we want the trace
   // pointer to be based on ErrorFunc rather than Func.
   void* continuationTracePtr = _::GetFunctorStartAddress<kj::Exception&&>::apply(errorHandler);
-  Own<_::PromiseNode> intermediate =
-      heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+  _::OwnPromiseNode intermediate =
+      _::allocPromise<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
           kj::mv(node), Func(), kj::fwd<ErrorFunc>(errorHandler), continuationTracePtr);
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
@@ -1175,14 +1205,14 @@ _::SplitTuplePromise<T> Promise<T>::split(SourceLocation location) {
 
 template <typename T>
 Promise<T> Promise<T>::exclusiveJoin(Promise<T>&& other, SourceLocation location) {
-  return Promise(false, heap<_::ExclusiveJoinPromiseNode>(
+  return Promise(false, _::allocPromise<_::ExclusiveJoinPromiseNode>(
       kj::mv(node), kj::mv(other.node), location));
 }
 
 template <typename T>
 template <typename... Attachments>
 Promise<T> Promise<T>::attach(Attachments&&... attachments) {
-  return Promise(false, kj::heap<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
+  return Promise(false, _::allocPromise<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
       kj::mv(node), kj::tuple(kj::fwd<Attachments>(attachments)...)));
 }
 
@@ -1267,7 +1297,7 @@ inline PromiseForResult<Func, WaitScope&> startFiber(
     size_t stackSize, Func&& func, SourceLocation location) {
   typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
 
-  Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(
+  auto intermediate = _::allocPromise<_::Fiber<Func>>(
       stackSize, kj::fwd<Func>(func), location);
   intermediate->start();
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
@@ -1280,7 +1310,8 @@ inline PromiseForResult<Func, WaitScope&> FiberPool::startFiber(
     Func&& func, SourceLocation location) const {
   typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
 
-  Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(*this, kj::fwd<Func>(func), location);
+  auto intermediate = _::allocPromise<_::Fiber<Func>>(
+      *this, kj::fwd<Func>(func), location);
   intermediate->start();
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
@@ -1301,7 +1332,7 @@ void Promise<void>::detach(ErrorFunc&& errorHandler) {
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises, SourceLocation location) {
-  return _::PromiseNode::to<Promise<Array<T>>>(kj::heap<_::ArrayJoinPromiseNode<T>>(
+  return _::PromiseNode::to<Promise<Array<T>>>(_::allocPromise<_::ArrayJoinPromiseNode<T>>(
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<T>>(promises.size()), location));
 }
@@ -1430,8 +1461,8 @@ bool PromiseFulfiller<void>::rejectIfThrows(Func&& func) {
 
 template <typename T, typename Adapter, typename... Params>
 _::ReducePromises<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
-  Own<_::PromiseNode> intermediate(
-      heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
+  _::OwnPromiseNode intermediate(
+      _::allocPromise<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
           kj::fwd<Params>(adapterConstructorParams)...));
   // We can't capture SourceLocation in this function's arguments since it is a vararg template. :(
   return _::PromiseNode::to<_::ReducePromises<T>>(
@@ -1442,8 +1473,9 @@ template <typename T>
 PromiseFulfillerPair<T> newPromiseAndFulfiller(SourceLocation location) {
   auto wrapper = _::WeakFulfiller<T>::make();
 
-  Own<_::PromiseNode> intermediate(
-      heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
+  _::OwnPromiseNode intermediate(
+      _::allocPromise<_::AdapterPromiseNode<
+          _::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
   auto promise = _::PromiseNode::to<_::ReducePromises<T>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr), location));
 
@@ -1469,7 +1501,7 @@ protected:
   // still being accessed by the other thread. (This can't be placed in ~XThreadEvent() because
   // that destructor doesn't run until the subclass has already been destroyed.)
 
-  virtual kj::Maybe<Own<PromiseNode>> execute() = 0;
+  virtual kj::Maybe<OwnPromiseNode> execute() = 0;
   // Run the function. If the function returns a promise, returns the inner PromiseNode, otherwise
   // returns null.
 
@@ -1483,7 +1515,7 @@ private:
   kj::Own<const Executor> targetExecutor;
   Maybe<const Executor&> replyExecutor;  // If executeAsync() was used.
 
-  kj::Maybe<Own<PromiseNode>> promiseNode;
+  kj::Maybe<OwnPromiseNode> promiseNode;
   // Accessed only in target thread.
 
   ListLink<XThreadEvent> targetLink;
@@ -1567,7 +1599,7 @@ public:
 
   typedef _::FixVoid<_::ReturnType<Func, void>> ResultT;
 
-  kj::Maybe<Own<_::PromiseNode>> execute() override {
+  kj::Maybe<_::OwnPromiseNode> execute() override {
     result.value = MaybeVoidCaller<Void, FixVoid<decltype(func())>>::apply(func, Void());
     return nullptr;
   }
@@ -1594,7 +1626,7 @@ public:
 
   typedef _::FixVoid<_::UnwrapPromise<PromiseForResult<Func, void>>> ResultT;
 
-  kj::Maybe<Own<_::PromiseNode>> execute() override {
+  kj::Maybe<_::OwnPromiseNode> execute() override {
     auto result = _::PromiseNode::from(func());
     KJ_IREQUIRE(result.get() != nullptr);
     return kj::mv(result);
@@ -1623,7 +1655,8 @@ _::UnwrapPromise<PromiseForResult<Func, void>> Executor::executeSync(
 
 template <typename Func>
 PromiseForResult<Func, void> Executor::executeAsync(Func&& func, SourceLocation location) const {
-  auto event = kj::heap<_::XThreadEventImpl<Func>>(kj::fwd<Func>(func), *this, location);
+  auto event = _::allocPromise<_::XThreadEventImpl<Func>>(
+      kj::fwd<Func>(func), *this, location);
   send(*event, false);
   return _::PromiseNode::to<PromiseForResult<Func, void>>(kj::mv(event));
 }
@@ -1797,7 +1830,8 @@ template <typename T>
 PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
   kj::Own<_::XThreadPafImpl<T>> node(new _::XThreadPafImpl<T>, _::XThreadPaf::DISPOSER);
   auto fulfiller = kj::heap<_::XThreadFulfiller<T>>(node);
-  return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(node)), kj::mv(fulfiller) };
+  auto wrapper = _::allocPromise<_::DynamicallyDisposedPromiseNode>(kj::mv(node));
+  return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(wrapper)), kj::mv(fulfiller) };
 }
 
 }  // namespace kj
@@ -1964,7 +1998,8 @@ public:
     // coroutine's return object. `this` itself lives inside the coroutine frame, and we arrange for
     // the returned Promise<T> to own `this` via a custom Disposer and by always leaving the
     // coroutine in a suspended state.
-    return PromiseNode::to<Promise<T>>(Own<PromiseNode>(this, *this));
+    return PromiseNode::to<Promise<T>>(
+        allocPromise<DynamicallyDisposedPromiseNode>(Own<PromiseNode>(this, *this)));
   }
 
 public:
@@ -2030,7 +2065,7 @@ public:
 
 class CoroutineBase::AwaiterBase {
 public:
-  explicit AwaiterBase(Own<PromiseNode> node);
+  explicit AwaiterBase(OwnPromiseNode node);
   AwaiterBase(AwaiterBase&&);
   ~AwaiterBase() noexcept(false);
   KJ_DISALLOW_COPY(AwaiterBase);
@@ -2048,7 +2083,7 @@ protected:
 
 private:
   UnwindDetector unwindDetector;
-  Own<PromiseNode> node;
+  OwnPromiseNode node;
 
   Maybe<CoroutineBase&> maybeCoroutineEvent;
   // If we do suspend waiting for our wrapped promise, we store a reference to `node` in our

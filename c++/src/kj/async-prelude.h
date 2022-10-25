@@ -214,16 +214,20 @@ class Event;
 class XThreadEvent;
 class XThreadPaf;
 
+class PromiseDisposer;
+using OwnPromiseNode = Own<PromiseNode, PromiseDisposer>;
+// PromiseNode uses a static disposer.
+
 class PromiseBase {
 public:
   kj::String trace();
   // Dump debug info about this promise.
 
 private:
-  Own<PromiseNode> node;
+  OwnPromiseNode node;
 
   PromiseBase() = default;
-  PromiseBase(Own<PromiseNode>&& node): node(kj::mv(node)) {}
+  PromiseBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
 
   template <typename>
   friend class kj::Promise;
@@ -231,12 +235,12 @@ private:
 };
 
 void detach(kj::Promise<void>&& promise);
-void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
+void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
               SourceLocation location);
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 Promise<void> yield();
 Promise<void> yieldHarder();
-Own<PromiseNode> neverDone();
+OwnPromiseNode neverDone();
 
 class NeverDone {
 public:
