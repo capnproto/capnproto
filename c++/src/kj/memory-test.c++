@@ -395,6 +395,46 @@ KJ_TEST("Own<IncompleteType>") {
   }
 }
 
+KJ_TEST("Own with static disposer") {
+  static int* disposedPtr = nullptr;
+  struct MyDisposer {
+    static void dispose(int* value) {
+      KJ_EXPECT(disposedPtr == nullptr);
+      disposedPtr = value;
+    };
+  };
+
+  int i;
+
+  {
+    Own<int, MyDisposer> ptr(&i);
+    KJ_EXPECT(disposedPtr == nullptr);
+  }
+  KJ_EXPECT(disposedPtr == &i);
+  disposedPtr = nullptr;
+
+  {
+    Own<int, MyDisposer> ptr(&i);
+    KJ_EXPECT(disposedPtr == nullptr);
+    Own<int, MyDisposer> ptr2(kj::mv(ptr));
+    KJ_EXPECT(disposedPtr == nullptr);
+  }
+  KJ_EXPECT(disposedPtr == &i);
+  disposedPtr = nullptr;
+
+  {
+    Own<int, MyDisposer> ptr2;
+    {
+      Own<int, MyDisposer> ptr(&i);
+      KJ_EXPECT(disposedPtr == nullptr);
+      ptr2 = kj::mv(ptr);
+      KJ_EXPECT(disposedPtr == nullptr);
+    }
+    KJ_EXPECT(disposedPtr == nullptr);
+  }
+  KJ_EXPECT(disposedPtr == &i);
+}
+
 // TODO(test):  More tests.
 
 }  // namespace
