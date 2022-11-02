@@ -5418,7 +5418,20 @@ public:
   }
 
   kj::Promise<ConnectResponse> connect(kj::StringPtr host, const HttpHeaders& headers) override {
-    KJ_UNIMPLEMENTED("connect() is not implemented for NetworkHttpClient");
+    // We want to connect directly instead of going through a proxy here.
+    // https://github.com/capnproto/capnproto/pull/1454#discussion_r900414879
+    return network.parseAddress(host)
+        .then([this](auto address) {
+      return address->connect().then([this](auto connection) {
+        auto emptyHeaders = kj::heap<kj::HttpHeaders>(responseHeaderTable);
+        return ConnectResponse {
+          200, // .statusCode
+          "OK", // .statusText
+          emptyHeaders, // .headers
+          connection.attach(kj::mv(emptyHeaders)) // .connectionOrBody
+        };
+      }).attach(kj::mv(address));
+    });
   }
 
 private:
