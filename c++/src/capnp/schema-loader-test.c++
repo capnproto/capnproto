@@ -400,6 +400,27 @@ TEST(SchemaLoader, LoadStreaming) {
   KJ_EXPECT(results.getShortDisplayName() == "StreamResult", results.getShortDisplayName());
 }
 
+TEST(SchemaLoader, SchemaFor) {
+  SchemaLoader loader;
+  
+  #define HANDLE_TYPE(TargetType) { \
+    Schema nativeSchema = Schema::from<TargetType>(); \
+    Schema loaderFromProto = loader.load(nativeSchema.getProto()); \
+    Schema loaderFromSchemaFor = loader.getSchemaFor<TargetType>(); \
+    \
+    EXPECT_FALSE(nativeSchema == loaderFromProto); \
+    EXPECT_TRUE(loaderFromSchemaFor == loaderFromProto); \
+  }
+  
+  // Test up to two levels of brand bindings
+  HANDLE_TYPE(test::TestEnum)
+  HANDLE_TYPE(test::TestAllTypes)
+  HANDLE_TYPE(test::TestGenerics<test::TestAllTypes, test::TestInterface>)
+  HANDLE_TYPE(test::TestGenerics<test::TestAllTypes, test::TestGenerics<test::TestAllTypes, test::TestInterface>>)
+  
+  #undef HANDLE_TYPE
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

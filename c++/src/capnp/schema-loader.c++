@@ -103,6 +103,8 @@ public:
       const _::RawSchema* schema, schema::Brand::Reader proto,
       kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> clientBrand);
 
+  const _::RawBrandedSchema* cloneNative(const _::RawBrandedSchema* loadNative);
+
   struct TryGetResult {
     _::RawSchema* schema;
     kj::Maybe<const LazyLoadCallback&> callback;
@@ -131,6 +133,7 @@ private:
   kj::HashMap<uint64_t, _::RawSchema*> schemas;
   kj::HashMap<SchemaBindingsPair, _::RawBrandedSchema*> brands;
   kj::HashMap<const _::RawSchema*, _::RawBrandedSchema*> unboundBrands;
+  kj::HashMap<const _::RawBrandedSchema*, const _::RawBrandedSchema*> clonedBrands;
 
   struct RequiredSize {
     uint16_t dataWordCount;
@@ -1506,6 +1509,59 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
   return makeBranded(schema, copyDeduped(dstScopes));
 }
 
+const _::RawBrandedSchema* SchemaLoader::Impl::cloneNative(const _::RawBrandedSchema* native) {
+  KJ_IF_MAYBE(existing, clonedBrands.find(native)) {
+    return *existing;
+  }
+  
+  // Perform a deep copy of all acopes and bindings
+  kj::ArrayPtr<const _::RawBrandedSchema::Scope> srcScopes(native->scopes, native->scopeCount);
+  
+  KJ_STACK_ARRAY(_::RawBrandedSchema::Scope, dstScopes, srcScopes.size(), 16, 32);
+  memcpy(dstScopes.begin(), srcScopes.begin(), srcScopes.size() * sizeof(_::RawBrandedSchema::Scope));
+  
+  // All fields are set, but the binding pointers need to be adjusted to deep copies
+  for(auto iScope : kj::indices(srcScopes)) {
+    const auto& srcScope = srcScopes[iScope];
+    auto& dstScope = dstScopes[iScope];
+	
+	kj::ArrayPtr<const _::RawBrandedSchema::Binding> srcBindings(srcScope.bindings,
+	    srcScope.bindingCount);
+		
+    KJ_STACK_ARRAY(_::RawBrandedSchema::Binding, dstBindings, srcBindings.size(), 16, 32);
+    memcpy(dstBindings.begin(), srcBindings.begin(), srcBindings.size() * sizeof(_::RawBrandedSchema::Binding));
+	
+	// Again, we need to adjust node pointers in the bindings
+	for(auto iBinding : kj::indices(srcBindings)) {
+		const auto& srcBinding = srcBindings[iBinding];
+		auto& dstBinding = dstBindings[iBinding];
+		
+		// In case the binding is bound to a node, override to a cloned version
+		// The other cases should be handled by memcpy
+		switch(srcBinding.which) {
+			case schema::Type::STRUCT:
+			case schema::Type::ENUM:
+			case schema::Type::INTERFACE:
+				dstBinding.schema = cloneNative(srcBinding.schema);
+				break;
+			default:
+				break;
+		}
+	}
+	
+	// Copy bindings onto heap
+	auto heapBindings = copyDeduped(dstBindings);
+	dstScope.bindings = heapBindings.begin();
+  }
+  
+  // Copy scopes onto heap
+  auto heapScopes = copyDeduped(dstScopes);
+
+  const _::RawBrandedSchema* result = makeBranded(loadNative(native->generic), heapScopes);
+  clonedBrands.insert(native, result);
+  return result;
+}
+
 const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
     const _::RawSchema* schema, kj::ArrayPtr<const _::RawBrandedSchema::Scope> bindings) {
   if (bindings.size() == 0) {
@@ -2088,6 +2144,10 @@ kj::Array<Schema> SchemaLoader::getAllLoaded() const {
 
 void SchemaLoader::loadNative(const _::RawSchema* nativeSchema) {
   impl.lockExclusive()->get()->loadNative(nativeSchema);
+}
+
+const _::RawBrandedSchema* SchemaLoader::loadNative(const _::RawBrandedSchema* nativeSchema) {
+  return impl.lockExclusive()->get()->cloneNative(nativeSchema);
 }
 
 }  // namespace capnp

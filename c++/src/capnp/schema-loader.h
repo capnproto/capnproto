@@ -143,6 +143,11 @@ public:
   // If you want to be able to cast a DynamicValue built from this SchemaLoader to the compiled-in
   // type using as<T>(), you must call this method before constructing the DynamicValue.  Otherwise,
   // as<T>() will throw an exception complaining about type mismatch.
+  
+  template<typename T>
+  Schema getSchemaFor();
+  // Load the schema for the given compiled-in type (as in loadCompiledTypeAndDependencies) and
+  // return this loader's schema for the given type.
 
   kj::Array<Schema> getAllLoaded() const;
   // Get a complete list of all loaded schema nodes.  It is particularly useful to call this after
@@ -158,11 +163,17 @@ private:
   kj::MutexGuarded<kj::Own<Impl>> impl;
 
   void loadNative(const _::RawSchema* nativeSchema);
+  const _::RawBrandedSchema* loadNative(const _::RawBrandedSchema* native);
 };
 
 template <typename T>
 inline void SchemaLoader::loadCompiledTypeAndDependencies() {
   loadNative(&_::rawSchema<T>());
+}
+
+template<typename T>
+inline Schema SchemaLoader::getSchemaFor() {
+  return Schema(loadNative(&_::rawBrandedSchema<T>()));
 }
 
 }  // namespace capnp
