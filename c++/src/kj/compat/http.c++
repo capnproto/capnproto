@@ -6315,8 +6315,13 @@ public:
         KJ_CASE_ONEOF(io, kj::Own<kj::AsyncIoStream>) {
           auto io2 = tunnel.accept(response.statusCode, response.statusText, *response.headers);
           auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
-          promises.add(io->pumpTo(*io2).ignoreResult());
-          promises.add(io2->pumpTo(*io).ignoreResult());
+
+          promises.add(io->pumpTo(*io2).then([&io2 = *io2](uint64_t size) {
+            io2.shutdownWrite();
+          }).eagerlyEvaluate(nullptr));
+          promises.add(io2->pumpTo(*io).then([&io = *io](uint64_t size) {
+            io.shutdownWrite();
+          }).eagerlyEvaluate(nullptr));
           return kj::joinPromises(promises.finish()).attach(kj::mv(io), kj::mv(io2));
         }
         KJ_CASE_ONEOF(input, kj::Own<kj::AsyncInputStream>) {
