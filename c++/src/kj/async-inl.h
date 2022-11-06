@@ -219,8 +219,9 @@ private:
 
 class PromiseArenaMember {
   // An object that is allocated in a PromiseArena. `PromiseNode` inherits this, and most
-  // arena-allocated objects are `PromiseNode` subclasses, but `TaskSet::Task` and potentially
-  // other objects that commonly live on the end of a promise chain can also leverage this.
+  // arena-allocated objects are `PromiseNode` subclasses, but `TaskSet::Task`, ForkHub, and
+  // potentially other objects that commonly live on the end of a promise chain can also leverage
+  // this.
 
 public:
   virtual void destroy() = 0;
@@ -344,8 +345,8 @@ public:
     delete arena;  // reminder: `delete` automatically ignores null pointers
   }
 
-  template <typename T, typename... Params>
-  static kj::Own<T, PromiseDisposer> alloc(Params&&... params) noexcept {
+  template <typename T, typename D = PromiseDisposer, typename... Params>
+  static kj::Own<T, D> alloc(Params&&... params) noexcept {
     // Implements allocPromise().
     T* ptr;
     if (sizeof(T) > sizeof(PromiseArena) || alignof(T) != alignof(void*)) {
@@ -365,11 +366,11 @@ public:
                   reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),
           "PromiseArenaMember must be the leftmost inherited type.");
     }
-    return kj::Own<T, PromiseDisposer>(ptr);
+    return kj::Own<T, D>(ptr);
   }
 
-  template <typename T, typename... Params>
-  static kj::Own<T, PromiseDisposer> append(
+  template <typename T, typename D = PromiseDisposer, typename... Params>
+  static kj::Own<T, D> append(
       OwnPromiseNode&& next, Params&&... params) noexcept {
     // Implements appendPromise().
 
@@ -379,7 +380,7 @@ public:
         reinterpret_cast<byte*>(next.get()) - reinterpret_cast<byte*>(arena) < sizeof(T) ||
         alignof(T) != alignof(void*)) {
       // No arena available, or not enough space, or weird alignment needed. Start new arena.
-      return alloc<T>(kj::mv(next), kj::fwd<Params>(params)...);
+      return alloc<T, D>(kj::mv(next), kj::fwd<Params>(params)...);
     } else {
       // Append to arena.
       //
@@ -396,7 +397,7 @@ public:
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
                   reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),
           "PromiseArenaMember must be the leftmost inherited type.");
-      return kj::Own<T, PromiseDisposer>(ptr);
+      return kj::Own<T, D>(ptr);
     }
   }
 };
@@ -703,10 +704,11 @@ private:
 // -------------------------------------------------------------------
 
 class ForkHubBase;
+using OwnForkHubBase = Own<ForkHubBase, ForkHubBase>;
 
 class ForkBranchBase: public PromiseNode {
 public:
-  ForkBranchBase(Own<ForkHubBase>&& hub);
+  ForkBranchBase(OwnForkHubBase&& hub);
   ~ForkBranchBase() noexcept(false);
 
   void hubReady() noexcept;
@@ -725,7 +727,7 @@ protected:
 private:
   OnReadyEvent onReadyEvent;
 
-  Own<ForkHubBase> hub;
+  OwnForkHubBase hub;
   ForkBranchBase* next = nullptr;
   ForkBranchBase** prevPtr = nullptr;
 
@@ -746,7 +748,7 @@ class ForkBranch final: public ForkBranchBase {
   // a const reference.
 
 public:
-  ForkBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
+  ForkBranch(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
   void destroy() override { dtor(*this); }
 
   void get(ExceptionOrValue& output) noexcept override {
@@ -767,7 +769,7 @@ class SplitBranch final: public ForkBranchBase {
   // a const reference.
 
 public:
-  SplitBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
+  SplitBranch(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
   void destroy() override { dtor(*this); }
 
   typedef kj::Decay<decltype(kj::get<index>(kj::instance<T>()))> Element;
@@ -786,13 +788,30 @@ public:
 
 // -------------------------------------------------------------------
 
-class ForkHubBase: public Refcounted, protected Event {
+class ForkHubBase: public PromiseArenaMember, protected Event {
 public:
   ForkHubBase(OwnPromiseNode&& inner, ExceptionOrValue& resultRef, SourceLocation location);
 
   inline ExceptionOrValue& getResultRef() { return resultRef; }
 
+  inline bool isShared() const { return refcount > 1; }
+
+  Own<ForkHubBase, ForkHubBase> addRef() {
+    ++refcount;
+    return Own<ForkHubBase, ForkHubBase>(this);
+  }
+
+  static void dispose(ForkHubBase* obj) {
+    if (--obj->refcount == 0) {
+      PromiseDisposer::dispose(obj);
+    }
+  }
+
 private:
+  uint refcount = 1;
+  // We manually implement refcounting for ForkHubBase so that we can use it together with
+  // PromiseDisposer's arena allocation.
+
   OwnPromiseNode inner;
   ExceptionOrValue& resultRef;
 
@@ -815,10 +834,11 @@ class ForkHub final: public ForkHubBase {
 public:
   ForkHub(OwnPromiseNode&& inner, SourceLocation location)
       : ForkHubBase(kj::mv(inner), result, location) {}
+  void destroy() override { dtor(*this); }
 
   Promise<_::UnfixVoid<T>> addBranch() {
     return _::PromiseNode::to<Promise<_::UnfixVoid<T>>>(
-        allocPromise<ForkBranch<T>>(addRef(*this)));
+        allocPromise<ForkBranch<T>>(addRef()));
   }
 
   _::SplitTuplePromise<T> split(SourceLocation location) {
@@ -836,7 +856,7 @@ private:
   template <size_t index>
   ReducePromises<typename SplitBranch<T, index>::Element> addSplit(SourceLocation location) {
     return _::PromiseNode::to<ReducePromises<typename SplitBranch<T, index>::Element>>(
-        maybeChain(allocPromise<SplitBranch<T, index>>(addRef(*this)),
+        maybeChain(allocPromise<SplitBranch<T, index>>(addRef()),
                    implicitCast<typename SplitBranch<T, index>::Element*>(nullptr),
                    location));
   }
@@ -1290,7 +1310,8 @@ bool Promise<T>::poll(WaitScope& waitScope, SourceLocation location) {
 
 template <typename T>
 ForkedPromise<T> Promise<T>::fork(SourceLocation location) {
-  return ForkedPromise<T>(false, refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(node), location));
+  return ForkedPromise<T>(false,
+      _::PromiseDisposer::alloc<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(kj::mv(node), location));
 }
 
 template <typename T>
@@ -1305,7 +1326,8 @@ bool ForkedPromise<T>::hasBranches() {
 
 template <typename T>
 _::SplitTuplePromise<T> Promise<T>::split(SourceLocation location) {
-  return refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(node), location)->split(location);
+  return _::PromiseDisposer::alloc<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(
+      kj::mv(node), location)->split(location);
 }
 
 template <typename T>

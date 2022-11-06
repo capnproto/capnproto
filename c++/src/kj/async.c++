@@ -2414,7 +2414,7 @@ void TransformPromiseNodeBase::getDepResult(ExceptionOrValue& output) {
 
 // -------------------------------------------------------------------
 
-ForkBranchBase::ForkBranchBase(Own<ForkHubBase>&& hubParam): hub(kj::mv(hubParam)) {
+ForkBranchBase::ForkBranchBase(OwnForkHubBase&& hubParam): hub(kj::mv(hubParam)) {
   if (hub->tailBranch == nullptr) {
     onReadyEvent.arm();
   } else {
