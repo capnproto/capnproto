@@ -194,7 +194,6 @@ public:
     tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
     return kj::mv(paf.promise);
   }
-  void allowCancellation() override {}
   kj::Own<CallContextHook> addRef() override {
     return kj::addRef(*this);
   }

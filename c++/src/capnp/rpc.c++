@@ -739,9 +739,6 @@ private:
       request.set(params);
       context->releaseParams();
 
-      // We can and should propagate cancellation.
-      context->allowCancellation();
-
       return context->directTailCall(RequestHook::from(kj::mv(request)));
     }
 
@@ -2318,7 +2315,6 @@ private:
       tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
       return kj::mv(paf.promise);
     }
-    void allowCancellation() override {}
     kj::Own<CallContextHook> addRef() override {
       return kj::addRef(*this);
     }

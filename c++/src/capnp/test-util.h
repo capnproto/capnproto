@@ -338,7 +338,6 @@ public:
   }
 
   kj::Promise<void> doStreamJ(DoStreamJContext context) override {
-    context.allowCancellation();
     jSum += context.getParams().getJ();
 
     if (jShouldThrow) {

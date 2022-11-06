@@ -286,10 +286,6 @@ public:
     return inner->tailCall(MembraneRequestHook::wrap(kj::mv(request), *policy, !reverse));
   }
 
-  void allowCancellation() override {
-    inner->allowCancellation();
-  }
-
   kj::Promise<AnyPointer::Pipeline> onTailCall() override {
     return inner->onTailCall().then([this](AnyPointer::Pipeline&& innerPipeline) {
       return AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(

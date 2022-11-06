@@ -915,7 +915,6 @@ public:
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
 
   kj::Promise<void> doStreamI(DoStreamIContext context) override {
-    context.allowCancellation();
     auto paf = kj::newPromiseAndFulfiller<void>();
     fulfiller = kj::mv(paf.fulfiller);
     return paf.promise.then([this,context]() mutable {

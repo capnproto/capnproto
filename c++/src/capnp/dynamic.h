@@ -584,7 +584,6 @@ public:
   Orphanage getResultsOrphanage(kj::Maybe<MessageSize> sizeHint = nullptr);
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, DynamicStruct>&& tailRequest);
-  void allowCancellation();
 
   StructSchema getParamsType() const { return paramType; }
   StructSchema getResultsType() const { return resultType; }
@@ -1657,9 +1656,6 @@ template <typename SubParams>
 inline kj::Promise<void> CallContext<DynamicStruct, DynamicStruct>::tailCall(
     Request<SubParams, DynamicStruct>&& tailRequest) {
   return hook->tailCall(kj::mv(tailRequest.hook));
-}
-inline void CallContext<DynamicStruct, DynamicStruct>::allowCancellation() {
-  hook->allowCancellation();
 }
 
 template <>

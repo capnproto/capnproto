@@ -280,7 +280,7 @@ TEST(Capability, TailCall) {
 }
 
 TEST(Capability, AsyncCancelation) {
-  // Tests allowCancellation().
+  // Tests cancellation.
 
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
