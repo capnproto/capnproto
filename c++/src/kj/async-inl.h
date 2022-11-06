@@ -348,8 +348,8 @@ public:
   static kj::Own<T, PromiseDisposer> alloc(Params&&... params) noexcept {
     // Implements allocPromise().
     T* ptr;
-    if (sizeof(T) > sizeof(PromiseArena)) {
-      // Node too big, fall back to regular heap allocation.
+    if (sizeof(T) > sizeof(PromiseArena) || alignof(T) != alignof(void*)) {
+      // Node too big (or needs weird alignment), fall back to regular heap allocation.
       ptr = new T(kj::fwd<Params>(params)...);
     } else {
       // Start a new arena.
@@ -376,8 +376,9 @@ public:
     PromiseArena* arena = next->arena;
 
     if (arena == nullptr ||
-        reinterpret_cast<byte*>(next.get()) - reinterpret_cast<byte*>(arena) < sizeof(T)) {
-      // No arena available, or not enough space. Start new arena.
+        reinterpret_cast<byte*>(next.get()) - reinterpret_cast<byte*>(arena) < sizeof(T) ||
+        alignof(T) != alignof(void*)) {
+      // No arena available, or not enough space, or weird alignment needed. Start new arena.
       return alloc<T>(kj::mv(next), kj::fwd<Params>(params)...);
     } else {
       // Append to arena.

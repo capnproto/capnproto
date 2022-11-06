@@ -1044,7 +1044,7 @@ KJ_TEST("Maximum turn count during wait scope poll is enforced") {
   KJ_EXPECT(evaluated1);
   KJ_EXPECT(evaluated2);
   KJ_EXPECT(!evaluated3);
-  
+
   // Get the last remaining event in the queue:
   count = waitScope.poll(1);
   KJ_ASSERT(count == 1);
@@ -1551,6 +1551,28 @@ KJ_TEST("retryOnDisconnect") {
     KJ_EXPECT(promise.wait(waitScope) == 123);
     KJ_EXPECT(func.i == 2);
   }
+}
+
+KJ_TEST("capture weird alignment in continuation") {
+  struct alignas(16) WeirdAlign {
+    ~WeirdAlign() {
+      KJ_EXPECT(reinterpret_cast<uintptr_t>(this) % 16 == 0);
+    }
+    int i;
+  };
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  kj::Promise<void> p = kj::READY_NOW;
+
+  WeirdAlign value = { 123 };
+  WeirdAlign value2 = { 456 };
+  auto p2 = p.then([value, value2]() -> WeirdAlign {
+    return { value.i + value2.i };
+  });
+
+  KJ_EXPECT(p2.wait(waitScope).i == 579);
 }
 
 }  // namespace
