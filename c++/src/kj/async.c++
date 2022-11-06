@@ -912,9 +912,9 @@ struct Executor::Impl {
 namespace _ {  // (private)
 
 XThreadEvent::XThreadEvent(
-    ExceptionOrValue& result, const Executor& targetExecutor, void* funcTracePtr,
-    SourceLocation location)
-    : Event(targetExecutor.getLoop(), location), result(result), funcTracePtr(funcTracePtr),
+    ExceptionOrValue& result, const Executor& targetExecutor, EventLoop& loop,
+    void* funcTracePtr, SourceLocation location)
+    : Event(loop, location), result(result), funcTracePtr(funcTracePtr),
       targetExecutor(targetExecutor.addRef()) {}
 
 void XThreadEvent::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {

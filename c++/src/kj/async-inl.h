@@ -345,7 +345,7 @@ public:
   }
 
   template <typename T, typename... Params>
-  static kj::Own<T, PromiseDisposer> alloc(Params&&... params) {
+  static kj::Own<T, PromiseDisposer> alloc(Params&&... params) noexcept {
     // Implements allocPromise().
     T* ptr;
     if (sizeof(T) > sizeof(PromiseArena)) {
@@ -353,6 +353,10 @@ public:
       ptr = new T(kj::fwd<Params>(params)...);
     } else {
       // Start a new arena.
+      //
+      // NOTE: As in append() (below), we don't implement exception-safety because it causes code
+      //   bloat and these constructors probably don't throw. Instead this function is noexcept, so
+      //   if a constructor does throw, it'll crash rather than leak memory.
       auto* arena = new PromiseArena;
       ptr = reinterpret_cast<T*>(arena + 1) - 1;
       ctor(*ptr, kj::fwd<Params>(params)...);
@@ -1590,8 +1594,8 @@ namespace _ {  // (private)
 class XThreadEvent: public PromiseNode,    // it's a PromiseNode in the requesting thread
                     private Event {        // it's an event in the target thread
 public:
-  XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor, void* funcTracePtr,
-               SourceLocation location);
+  XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor, EventLoop& loop,
+               void* funcTracePtr, SourceLocation location);
 
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
@@ -1692,8 +1696,8 @@ template <typename Func, typename = _::FixVoid<_::ReturnType<Func, void>>>
 class XThreadEventImpl final: public XThreadEvent {
   // Implementation for a function that does not return a Promise.
 public:
-  XThreadEventImpl(Func&& func, const Executor& target, SourceLocation location)
-      : XThreadEvent(result, target, GetFunctorStartAddress<>::apply(func), location),
+  XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location)
+      : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
   void destroy() override { dtor(*this); }
@@ -1720,8 +1724,8 @@ template <typename Func, typename T>
 class XThreadEventImpl<Func, Promise<T>> final: public XThreadEvent {
   // Implementation for a function that DOES return a Promise.
 public:
-  XThreadEventImpl(Func&& func, const Executor& target, SourceLocation location)
-      : XThreadEvent(result, target, GetFunctorStartAddress<>::apply(func), location),
+  XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location)
+      : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
   void destroy() override { dtor(*this); }
@@ -1750,15 +1754,17 @@ private:
 template <typename Func>
 _::UnwrapPromise<PromiseForResult<Func, void>> Executor::executeSync(
     Func&& func, SourceLocation location) const {
-  _::XThreadEventImpl<Func> event(kj::fwd<Func>(func), *this, location);
+  _::XThreadEventImpl<Func> event(kj::fwd<Func>(func), *this, getLoop(), location);
   send(event, true);
   return convertToReturn(kj::mv(event.result));
 }
 
 template <typename Func>
 PromiseForResult<Func, void> Executor::executeAsync(Func&& func, SourceLocation location) const {
+  // HACK: We call getLoop() here, rather than have XThreadEvent's constructor do it, so that if it
+  //   throws we don't crash due to `allocPromise()` being `noexcept`.
   auto event = _::allocPromise<_::XThreadEventImpl<Func>>(
-      kj::fwd<Func>(func), *this, location);
+      kj::fwd<Func>(func), *this, getLoop(), location);
   send(*event, false);
   return _::PromiseNode::to<PromiseForResult<Func, void>>(kj::mv(event));
 }
