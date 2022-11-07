@@ -75,7 +75,10 @@ class AsyncObject {
   // size to the derived class.)
 
 public:
-  ~AsyncObject() noexcept;
+  ~AsyncObject();
+
+private:
+  KJ_NORETURN(static void failed() noexcept);
 };
 
 class DisallowAsyncDestructorsScope {
@@ -377,7 +380,7 @@ public:
   // This method does NOT consume the promise as other methods do.
 
 private:
-  Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
+  Promise(bool, _::OwnPromiseNode&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
 
   friend class _::PromiseNode;
@@ -986,9 +989,10 @@ public:
 
 private:
   class Task;
+  using OwnTask = Own<Task, _::PromiseDisposer>;
 
   TaskSet::ErrorHandler& errorHandler;
-  Maybe<Own<Task>> tasks;
+  Maybe<OwnTask> tasks;
   Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
   SourceLocation location;
 };
@@ -1252,7 +1256,7 @@ private:
   void poll();
 
   friend void _::detach(kj::Promise<void>&& promise);
-  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+  friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
   friend class _::Event;
@@ -1342,7 +1346,7 @@ private:
 
   friend class EventLoop;
   friend class _::FiberBase;
-  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+  friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 };

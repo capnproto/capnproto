@@ -1044,7 +1044,7 @@ KJ_TEST("Maximum turn count during wait scope poll is enforced") {
   KJ_EXPECT(evaluated1);
   KJ_EXPECT(evaluated2);
   KJ_EXPECT(!evaluated3);
-  
+
   // Get the last remaining event in the queue:
   count = waitScope.poll(1);
   KJ_ASSERT(count == 1);
@@ -1552,6 +1552,33 @@ KJ_TEST("retryOnDisconnect") {
     KJ_EXPECT(func.i == 2);
   }
 }
+
+#if !(__GLIBC__ == 2 && __GLIBC_MINOR__ <= 17)
+// manylinux2014-x86 doesn't seem to respect `alignas(16)`. I am guessing this is a glibc issue
+// but I don't really know. It uses glibc 2.17, so testing for that and skipping the test makes
+// CI work.
+KJ_TEST("capture weird alignment in continuation") {
+  struct alignas(16) WeirdAlign {
+    ~WeirdAlign() {
+      KJ_EXPECT(reinterpret_cast<uintptr_t>(this) % 16 == 0);
+    }
+    int i;
+  };
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  kj::Promise<void> p = kj::READY_NOW;
+
+  WeirdAlign value = { 123 };
+  WeirdAlign value2 = { 456 };
+  auto p2 = p.then([value, value2]() -> WeirdAlign {
+    return { value.i + value2.i };
+  });
+
+  KJ_EXPECT(p2.wait(waitScope).i == 579);
+}
+#endif
 
 }  // namespace
 }  // namespace kj
