@@ -415,6 +415,15 @@ struct Call {
   # `acceptFromThirdParty`.  Level 3 implementations should set this true.  Otherwise, the callee
   # will have to proxy the return in the case of a tail call to a third-party vat.
 
+  noPromisePipelining @9 :Bool = false;
+  # If true, the sender promises that it won't make any promise-pipelined calls on the results of
+  # this call. If it breaks this promise, the receiver may throw an arbitrary error from such
+  # calls.
+  #
+  # The receiver may use this as an optimization, by skipping the bookkeeping needed for pipelining
+  # when no pipelined calls are expected. The sender typically sets this to false when the method's
+  # schema does not specify any return capabilities.
+
   params @4 :Payload;
   # The call parameters.  `params.content` is a struct whose fields correspond to the parameters of
   # the method.

@@ -165,6 +165,12 @@ uint exceptionSizeHint(const kj::Exception& exception) {
   return sizeInWords<rpc::Exception>() + exception.getDescription().size() / sizeof(word) + 1;
 }
 
+ClientHook::CallHints callHintsFromReader(rpc::Call::Reader reader) {
+  ClientHook::CallHints hints;
+  hints.noPromisePipelining = reader.getNoPromisePipelining();
+  return hints;
+}
+
 // =======================================================================================
 
 template <typename Id, typename T>
@@ -702,12 +708,14 @@ private:
     // implements ClientHook -----------------------------------------
 
     Request<AnyPointer, AnyPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-      return newCallNoIntercept(interfaceId, methodId, sizeHint);
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+        CallHints hints) override {
+      return newCallNoIntercept(interfaceId, methodId, sizeHint, hints);
     }
 
     Request<AnyPointer, AnyPointer> newCallNoIntercept(
-        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) {
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+        CallHints hints) {
       if (!connectionState->connection.is<Connected>()) {
         return newBrokenRequest(kj::cp(connectionState->connection.get<Disconnected>()), sizeHint);
       }
@@ -719,22 +727,23 @@ private:
 
       callBuilder.setInterfaceId(interfaceId);
       callBuilder.setMethodId(methodId);
+      callBuilder.setNoPromisePipelining(hints.noPromisePipelining);
 
       auto root = request->getRoot();
       return Request<AnyPointer, AnyPointer>(root, kj::mv(request));
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context) override {
-      return callNoIntercept(interfaceId, methodId, kj::mv(context));
+                                kj::Own<CallContextHook>&& context, CallHints hints) override {
+      return callNoIntercept(interfaceId, methodId, kj::mv(context), hints);
     }
 
     VoidPromiseAndPipeline callNoIntercept(uint64_t interfaceId, uint16_t methodId,
-                                           kj::Own<CallContextHook>&& context) {
+                                           kj::Own<CallContextHook>&& context, CallHints hints) {
       // Implement call() by copying params and results messages.
 
       auto params = context->getParams();
-      auto request = newCallNoIntercept(interfaceId, methodId, params.targetSize());
+      auto request = newCallNoIntercept(interfaceId, methodId, params.targetSize(), hints);
 
       request.set(params);
       context->releaseParams();
@@ -959,19 +968,20 @@ private:
     // implements ClientHook -----------------------------------------
 
     Request<AnyPointer, AnyPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+        CallHints hints) override {
       receivedCall = true;
 
       // IMPORTANT: We must call our superclass's version of newCall(), NOT cap->newCall(), because
       //   the Request object we create needs to check at send() time whether the promise has
       //   resolved and, if so, redirect to the new target.
-      return RpcClient::newCall(interfaceId, methodId, sizeHint);
+      return RpcClient::newCall(interfaceId, methodId, sizeHint, hints);
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context) override {
+                                kj::Own<CallContextHook>&& context, CallHints hints) override {
       receivedCall = true;
-      return cap->call(interfaceId, methodId, kj::mv(context));
+      return cap->call(interfaceId, methodId, kj::mv(context), hints);
     }
 
     kj::Maybe<ClientHook&> getResolved() override {
@@ -1452,12 +1462,13 @@ private:
     TribbleRaceBlocker(kj::Own<ClientHook> inner): inner(kj::mv(inner)) {}
 
     Request<AnyPointer, AnyPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-      return inner->newCall(interfaceId, methodId, sizeHint);
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+        CallHints hints) override {
+      return inner->newCall(interfaceId, methodId, sizeHint, hints);
     }
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context) override {
-      return inner->call(interfaceId, methodId, kj::mv(context));
+                                kj::Own<CallContextHook>&& context, CallHints hints) override {
+      return inner->call(interfaceId, methodId, kj::mv(context), hints);
     }
     kj::Maybe<ClientHook&> getResolved() override {
       // We always wrap either PipelineClient or ImportClient, both of which return null for this
@@ -1664,7 +1675,8 @@ private:
         // We'll have to make a new request and do a copy.  Ick.
 
         auto replacement = redirect->get()->newCall(
-            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize());
+            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize(),
+            callHintsFromReader(callBuilder));
         replacement.set(paramsBuilder);
         return replacement.send();
       } else {
@@ -1699,7 +1711,8 @@ private:
         // We'll have to make a new request and do a copy.  Ick.
 
         auto replacement = redirect->get()->newCall(
-            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize());
+            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize(),
+            callHintsFromReader(callBuilder));
         replacement.set(paramsBuilder);
         return RequestHook::from(kj::mv(replacement))->sendStreaming();
       } else {
@@ -2674,7 +2687,8 @@ private:
     }
 
     auto promiseAndPipeline = startCall(
-        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef());
+        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef(),
+        callHintsFromReader(call));
 
     // Things may have changed -- in particular if startCall() immediately called
     // context->directTailCall().
@@ -2709,8 +2723,9 @@ private:
 
   ClientHook::VoidPromiseAndPipeline startCall(
       uint64_t interfaceId, uint64_t methodId,
-      kj::Own<ClientHook>&& capability, kj::Own<CallContextHook>&& context) {
-    return capability->call(interfaceId, methodId, kj::mv(context));
+      kj::Own<ClientHook>&& capability, kj::Own<CallContextHook>&& context,
+      ClientHook::CallHints hints) {
+    return capability->call(interfaceId, methodId, kj::mv(context), hints);
   }
 
   kj::Maybe<kj::Own<ClientHook>> getMessageTarget(const rpc::MessageTarget::Reader& target) {

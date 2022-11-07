@@ -764,6 +764,8 @@ public:
 
   inline bool getAllowThirdPartyTailCall() const;
 
+  inline bool getNoPromisePipelining() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -820,6 +822,9 @@ public:
 
   inline bool getAllowThirdPartyTailCall();
   inline void setAllowThirdPartyTailCall(bool value);
+
+  inline bool getNoPromisePipelining();
+  inline void setNoPromisePipelining(bool value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3402,6 +3407,20 @@ inline bool Call::Builder::getAllowThirdPartyTailCall() {
 inline void Call::Builder::setAllowThirdPartyTailCall(bool value) {
   _builder.setDataField<bool>(
       ::capnp::bounded<128>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool Call::Reader::getNoPromisePipelining() const {
+  return _reader.getDataField<bool>(
+      ::capnp::bounded<129>() * ::capnp::ELEMENTS);
+}
+
+inline bool Call::Builder::getNoPromisePipelining() {
+  return _builder.getDataField<bool>(
+      ::capnp::bounded<129>() * ::capnp::ELEMENTS);
+}
+inline void Call::Builder::setNoPromisePipelining(bool value) {
+  _builder.setDataField<bool>(
+      ::capnp::bounded<129>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::capnp::rpc::Call::SendResultsTo::Which Call::SendResultsTo::Reader::which() const {

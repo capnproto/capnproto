@@ -208,16 +208,17 @@ public:
 class LocalRequest final: public RequestHook {
 public:
   inline LocalRequest(uint64_t interfaceId, uint16_t methodId,
-                      kj::Maybe<MessageSize> sizeHint, kj::Own<ClientHook> client)
+                      kj::Maybe<MessageSize> sizeHint, ClientHook::CallHints hints,
+                      kj::Own<ClientHook> client)
       : message(kj::heap<MallocMessageBuilder>(firstSegmentSize(sizeHint))),
-        interfaceId(interfaceId), methodId(methodId), client(kj::mv(client)) {}
+        interfaceId(interfaceId), methodId(methodId), hints(hints), client(kj::mv(client)) {}
 
   RemotePromise<AnyPointer> send() override {
     KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
 
     auto context = kj::refcounted<LocalCallContext>(
         kj::mv(message), client->addRef());
-    auto promiseAndPipeline = client->call(interfaceId, methodId, kj::addRef(*context));
+    auto promiseAndPipeline = client->call(interfaceId, methodId, kj::addRef(*context), hints);
 
     // Now the other branch returns the response from the context.
     auto promise = promiseAndPipeline.promise.then([context=kj::mv(context)]() mutable {
@@ -260,6 +261,7 @@ public:
 private:
   uint64_t interfaceId;
   uint16_t methodId;
+  ClientHook::CallHints hints;
   kj::Own<ClientHook> client;
 };
 
@@ -365,15 +367,16 @@ public:
         promiseForClientResolution(promise.addBranch().fork()) {}
 
   Request<AnyPointer, AnyPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+      CallHints hints) override {
     auto hook = kj::heap<LocalRequest>(
-        interfaceId, methodId, sizeHint, kj::addRef(*this));
+        interfaceId, methodId, sizeHint, hints, kj::addRef(*this));
     auto root = hook->message->getRoot<AnyPointer>();
     return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context) override {
+                              kj::Own<CallContextHook>&& context, CallHints hints) override {
     // This is a bit complicated.  We need to initiate this call later on.  When we initiate the
     // call, we'll get a void promise for its completion and a pipeline object.  Right now, we have
     // to produce a similar void promise and pipeline that will eventually be chained to those.
@@ -405,7 +408,7 @@ public:
         promiseForCallForwarding.addBranch().then(
         [=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
           return kj::refcounted<CallResultHolder>(
-              client->call(interfaceId, methodId, kj::mv(context)));
+              client->call(interfaceId, methodId, kj::mv(context), hints));
         }).fork();
 
     // Create a promise that extracts the pipeline from the call initiation, and construct our
@@ -539,29 +542,30 @@ public:
   }
 
   Request<AnyPointer, AnyPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+      CallHints hints) override {
     KJ_IF_MAYBE(r, resolved) {
       // We resolved to a shortened path. New calls MUST go directly to the replacement capability
       // so that their ordering is consistent with callers who call getResolved() to get direct
       // access to the new capability. In particular it's important that we don't place these calls
       // in our streaming queue.
-      return r->get()->newCall(interfaceId, methodId, sizeHint);
+      return r->get()->newCall(interfaceId, methodId, sizeHint, hints);
     }
 
     auto hook = kj::heap<LocalRequest>(
-        interfaceId, methodId, sizeHint, kj::addRef(*this));
+        interfaceId, methodId, sizeHint, hints, kj::addRef(*this));
     auto root = hook->message->getRoot<AnyPointer>();
     return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context) override {
+                              kj::Own<CallContextHook>&& context, CallHints hints) override {
     KJ_IF_MAYBE(r, resolved) {
       // We resolved to a shortened path. New calls MUST go directly to the replacement capability
       // so that their ordering is consistent with callers who call getResolved() to get direct
       // access to the new capability. In particular it's important that we don't place these calls
       // in our streaming queue.
-      return r->get()->call(interfaceId, methodId, kj::mv(context));
+      return r->get()->call(interfaceId, methodId, kj::mv(context), hints);
     }
 
     auto contextPtr = context.get();
@@ -914,12 +918,13 @@ public:
         resolved(resolved), brand(brand) {}
 
   Request<AnyPointer, AnyPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+      CallHints hints) override {
     return newBrokenRequest(kj::cp(exception), sizeHint);
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context) override {
+                              kj::Own<CallContextHook>&& context, CallHints hints) override {
     return VoidPromiseAndPipeline { kj::cp(exception), kj::refcounted<BrokenPipeline>(exception) };
   }
 

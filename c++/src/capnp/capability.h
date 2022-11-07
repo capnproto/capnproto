@@ -225,9 +225,13 @@ public:
   // where no calls are being made.  There is no reason to wait for this before making calls; if
   // the capability does not resolve, the call results will propagate the error.
 
+  struct CallHints {
+    bool noPromisePipelining = false;
+  };
+
   Request<AnyPointer, AnyPointer> typelessRequest(
       uint64_t interfaceId, uint16_t methodId,
-      kj::Maybe<MessageSize> sizeHint);
+      kj::Maybe<MessageSize> sizeHint, CallHints hints);
   // Make a request without knowing the types of the params or results. You specify the type ID
   // and method number manually.
 
@@ -251,10 +255,10 @@ protected:
 
   template <typename Params, typename Results>
   Request<Params, Results> newCall(uint64_t interfaceId, uint16_t methodId,
-                                   kj::Maybe<MessageSize> sizeHint);
+                                   kj::Maybe<MessageSize> sizeHint, CallHints hints);
   template <typename Params>
   StreamingRequest<Params> newStreamingCall(uint64_t interfaceId, uint16_t methodId,
-                                            kj::Maybe<MessageSize> sizeHint);
+                                            kj::Maybe<MessageSize> sizeHint, CallHints hints);
 
 private:
   kj::Own<ClientHook> hook;
@@ -685,8 +689,11 @@ class ClientHook {
 public:
   ClientHook();
 
+  using CallHints = Capability::Client::CallHints;
+
   virtual Request<AnyPointer, AnyPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) = 0;
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+      CallHints hints) = 0;
   // Start a new call, allowing the client to allocate request/response objects as it sees fit.
   // This version is used when calls are made from application code in the local process.
 
@@ -696,7 +703,7 @@ public:
   };
 
   virtual VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                      kj::Own<CallContextHook>&& context) = 0;
+                                      kj::Own<CallContextHook>&& context, CallHints hints) = 0;
   // Call the object, but the caller controls allocation of the request/response objects.  If the
   // callee insists on allocating these objects itself, it must make a copy.  This version is used
   // when calls come in over the network via an RPC system.  Note that even if the returned
@@ -990,19 +997,19 @@ inline typename T::Client Capability::Client::castAs() {
 }
 inline Request<AnyPointer, AnyPointer> Capability::Client::typelessRequest(
     uint64_t interfaceId, uint16_t methodId,
-    kj::Maybe<MessageSize> sizeHint) {
-  return newCall<AnyPointer, AnyPointer>(interfaceId, methodId, sizeHint);
+    kj::Maybe<MessageSize> sizeHint, CallHints hints) {
+  return newCall<AnyPointer, AnyPointer>(interfaceId, methodId, sizeHint, hints);
 }
 template <typename Params, typename Results>
 inline Request<Params, Results> Capability::Client::newCall(
-    uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) {
-  auto typeless = hook->newCall(interfaceId, methodId, sizeHint);
+    uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint, CallHints hints) {
+  auto typeless = hook->newCall(interfaceId, methodId, sizeHint, hints);
   return Request<Params, Results>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
 }
 template <typename Params>
 inline StreamingRequest<Params> Capability::Client::newStreamingCall(
-    uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) {
-  auto typeless = hook->newCall(interfaceId, methodId, sizeHint);
+    uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint, CallHints hints) {
+  auto typeless = hook->newCall(interfaceId, methodId, sizeHint, hints);
   return StreamingRequest<Params>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
 }
 

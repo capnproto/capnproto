@@ -2248,7 +2248,7 @@ private:
         isStreaming
             ? kj::strTree("  return newStreamingCall<", paramType, ">(\n")
             : kj::strTree("  return newCall<", paramType, ", ", resultType, ">(\n"),
-        "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
+        "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint, {});\n"
         "}\n");
 
     bool allowCancellation = false;

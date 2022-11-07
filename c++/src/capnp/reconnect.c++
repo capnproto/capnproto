@@ -32,16 +32,17 @@ public:
         current(lazy ? kj::Maybe<kj::Own<ClientHook>>() : ClientHook::from(connect())) {}
 
   Request<AnyPointer, AnyPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-    auto result = getCurrent().newCall(interfaceId, methodId, sizeHint);
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+      CallHints hints) override {
+    auto result = getCurrent().newCall(interfaceId, methodId, sizeHint, hints);
     AnyPointer::Builder builder = result;
     auto hook = kj::heap<RequestImpl>(kj::addRef(*this), RequestHook::from(kj::mv(result)));
     return { builder, kj::mv(hook) };
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context) override {
-    auto result = getCurrent().call(interfaceId, methodId, kj::mv(context));
+                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+    auto result = getCurrent().call(interfaceId, methodId, kj::mv(context), hints);
     wrap(result.promise);
     return result;
   }
