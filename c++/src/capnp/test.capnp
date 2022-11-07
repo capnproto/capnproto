@@ -1020,3 +1020,21 @@ const testImpliedFirstField :TestImpliedFirstField = (
   textStructList = ["baz", (text = "qux", i = 123)],
   intGroup = 123
 );
+
+struct TestCycleANoCaps {
+  foo @0 :TestCycleBNoCaps;
+}
+
+struct TestCycleBNoCaps {
+  foo @0 :List(TestCycleANoCaps);
+  bar @1 :TestAllTypes;
+}
+
+struct TestCycleAWithCaps {
+  foo @0 :TestCycleBWithCaps;
+}
+
+struct TestCycleBWithCaps {
+  foo @0 :List(TestCycleAWithCaps);
+  bar @1 :TestInterface;
+}

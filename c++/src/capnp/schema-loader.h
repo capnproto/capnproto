@@ -149,6 +149,19 @@ public:
   // loadCompiledTypeAndDependencies<T>() in order to get a flat list of all of T's transitive
   // dependencies.
 
+  void computeOptimizationHints();
+  // Call after all interesting schemas have been loaded to compute optimization hints. In
+  // particular, this initializes `hasNoCapabilities` for every struct type. Before this is called,
+  // that value is initialized to false for all types (which ensures correct behavior but does not
+  // allow the optimization).
+  //
+  // If any loaded struct types contain fields of types for which no schema has been loaded, they
+  // will be presumed to possibly contain capabilities. `LazyLoadCallback` will NOT be invoked to
+  // load any types that haven't been loaded yet.
+  //
+  // TODO(someday): Perhaps we could dynamically initialize the hints on-demand, but it would be
+  //   much more work to implement.
+
 private:
   class Validator;
   class CompatibilityChecker;
