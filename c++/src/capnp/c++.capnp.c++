@@ -32,7 +32,7 @@ static const ::capnp::_::AlignedData<21> b_b9c6f99ebf805f2c = {
 #if !CAPNP_LITE
 const ::capnp::_::RawSchema s_b9c6f99ebf805f2c = {
   0xb9c6f99ebf805f2c, b_b9c6f99ebf805f2c.words, 21, nullptr, nullptr,
-  0, 0, nullptr, nullptr, nullptr, { &s_b9c6f99ebf805f2c, nullptr, nullptr, 0, 0, nullptr }
+  0, 0, nullptr, nullptr, nullptr, { &s_b9c6f99ebf805f2c, nullptr, nullptr, 0, 0, nullptr }, false
 };
 #endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<20> b_f264a779fef191ce = {
@@ -61,7 +61,7 @@ static const ::capnp::_::AlignedData<20> b_f264a779fef191ce = {
 #if !CAPNP_LITE
 const ::capnp::_::RawSchema s_f264a779fef191ce = {
   0xf264a779fef191ce, b_f264a779fef191ce.words, 20, nullptr, nullptr,
-  0, 0, nullptr, nullptr, nullptr, { &s_f264a779fef191ce, nullptr, nullptr, 0, 0, nullptr }
+  0, 0, nullptr, nullptr, nullptr, { &s_f264a779fef191ce, nullptr, nullptr, 0, 0, nullptr }, false
 };
 #endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<22> b_ac7096ff8cfc9dce = {
@@ -92,7 +92,7 @@ static const ::capnp::_::AlignedData<22> b_ac7096ff8cfc9dce = {
 #if !CAPNP_LITE
 const ::capnp::_::RawSchema s_ac7096ff8cfc9dce = {
   0xac7096ff8cfc9dce, b_ac7096ff8cfc9dce.words, 22, nullptr, nullptr,
-  0, 0, nullptr, nullptr, nullptr, { &s_ac7096ff8cfc9dce, nullptr, nullptr, 0, 0, nullptr }
+  0, 0, nullptr, nullptr, nullptr, { &s_ac7096ff8cfc9dce, nullptr, nullptr, 0, 0, nullptr }, false
 };
 #endif  // !CAPNP_LITE
 }  // namespace schemas
