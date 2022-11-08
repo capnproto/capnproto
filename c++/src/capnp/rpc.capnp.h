@@ -994,6 +994,8 @@ public:
   inline bool hasAcceptFromThirdParty() const;
   inline ::capnp::AnyPointer::Reader getAcceptFromThirdParty() const;
 
+  inline bool getNoFinishNeeded() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -1061,6 +1063,9 @@ public:
   inline bool hasAcceptFromThirdParty();
   inline ::capnp::AnyPointer::Builder getAcceptFromThirdParty();
   inline ::capnp::AnyPointer::Builder initAcceptFromThirdParty();
+
+  inline bool getNoFinishNeeded();
+  inline void setNoFinishNeeded(bool value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3779,6 +3784,20 @@ inline ::capnp::AnyPointer::Builder Return::Builder::initAcceptFromThirdParty() 
       ::capnp::bounded<0>() * ::capnp::POINTERS));
   result.clear();
   return result;
+}
+
+inline bool Return::Reader::getNoFinishNeeded() const {
+  return _reader.getDataField<bool>(
+      ::capnp::bounded<33>() * ::capnp::ELEMENTS);
+}
+
+inline bool Return::Builder::getNoFinishNeeded() {
+  return _builder.getDataField<bool>(
+      ::capnp::bounded<33>() * ::capnp::ELEMENTS);
+}
+inline void Return::Builder::setNoFinishNeeded(bool value) {
+  _builder.setDataField<bool>(
+      ::capnp::bounded<33>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint32_t Finish::Reader::getQuestionId() const {
