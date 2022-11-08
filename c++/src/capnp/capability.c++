@@ -377,53 +377,16 @@ public:
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context, CallHints hints) override {
-    // This is a bit complicated.  We need to initiate this call later on.  When we initiate the
-    // call, we'll get a void promise for its completion and a pipeline object.  Right now, we have
-    // to produce a similar void promise and pipeline that will eventually be chained to those.
-    // The problem is, these are two independent objects, but they both depend on the result of
-    // one future call.
-    //
-    // So, we need to set up a continuation that will initiate the call later, then we need to
-    // fork the promise for that continuation in order to send the completion promise and the
-    // pipeline to their respective places.
-    //
-    // TODO(perf):  Too much reference counting?  Can we do better?  Maybe a way to fork
-    //   Promise<Tuple<T, U>> into Tuple<Promise<T>, Promise<U>>?
+    auto split = promiseForCallForwarding.addBranch()
+        .then([=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
+      auto vpap = client->call(interfaceId, methodId, kj::mv(context), hints);
+      return kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline));
+    }).split();
 
-    struct CallResultHolder: public kj::Refcounted {
-      // Essentially acts as a refcounted \VoidPromiseAndPipeline, so that we can create a promise
-      // for it and fork that promise.
+    kj::Promise<void> completionPromise = kj::mv(kj::get<0>(split));
+    kj::Promise<kj::Own<PipelineHook>> pipelinePromise = kj::mv(kj::get<1>(split));
 
-      VoidPromiseAndPipeline content;
-      // One branch of the fork will use content.promise, the other branch will use
-      // content.pipeline.  Neither branch will touch the other's piece.
-
-      inline CallResultHolder(VoidPromiseAndPipeline&& content): content(kj::mv(content)) {}
-
-      kj::Own<CallResultHolder> addRef() { return kj::addRef(*this); }
-    };
-
-    // Create a promise for the call initiation.
-    kj::ForkedPromise<kj::Own<CallResultHolder>> callResultPromise =
-        promiseForCallForwarding.addBranch().then(
-        [=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
-          return kj::refcounted<CallResultHolder>(
-              client->call(interfaceId, methodId, kj::mv(context), hints));
-        }).fork();
-
-    // Create a promise that extracts the pipeline from the call initiation, and construct our
-    // QueuedPipeline to chain to it.
-    auto pipelinePromise = callResultPromise.addBranch().then(
-        [](kj::Own<CallResultHolder>&& callResult){
-          return kj::mv(callResult->content.pipeline);
-        });
     auto pipeline = kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise));
-
-    // Create a promise that simply chains to the void promise produced by the call initiation.
-    auto completionPromise = callResultPromise.addBranch().then(
-        [](kj::Own<CallResultHolder>&& callResult){
-          return kj::mv(callResult->content.promise);
-        });
 
     // OK, now we can actually return our thing.
     return VoidPromiseAndPipeline { kj::mv(completionPromise), kj::mv(pipeline) };
