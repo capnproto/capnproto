@@ -40,8 +40,8 @@ Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
   auto paramType = method.getParamType();
   auto resultType = method.getResultType();
 
-  // TODO(now): Fill in hints based on schema.
   CallHints hints;
+  hints.noPromisePipelining = !resultType.mayContainCapabilities();
 
   auto typeless = hook->newCall(
       methodInterface.getProto().getId(), method.getIndex(), sizeHint, hints);

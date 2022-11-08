@@ -377,19 +377,28 @@ public:
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context, CallHints hints) override {
-    auto split = promiseForCallForwarding.addBranch()
-        .then([=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
-      auto vpap = client->call(interfaceId, methodId, kj::mv(context), hints);
-      return kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline));
-    }).split();
+    if (hints.noPromisePipelining) {
+      // Optimize for no pipelining.
+      auto promise = promiseForCallForwarding.addBranch()
+          .then([=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
+        return client->call(interfaceId, methodId, kj::mv(context), hints).promise;
+      });
+      return VoidPromiseAndPipeline { kj::mv(promise), getDisabledPipeline() };
+    } else {
+      auto split = promiseForCallForwarding.addBranch()
+          .then([=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
+        auto vpap = client->call(interfaceId, methodId, kj::mv(context), hints);
+        return kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline));
+      }).split();
 
-    kj::Promise<void> completionPromise = kj::mv(kj::get<0>(split));
-    kj::Promise<kj::Own<PipelineHook>> pipelinePromise = kj::mv(kj::get<1>(split));
+      kj::Promise<void> completionPromise = kj::mv(kj::get<0>(split));
+      kj::Promise<kj::Own<PipelineHook>> pipelinePromise = kj::mv(kj::get<1>(split));
 
-    auto pipeline = kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise));
+      auto pipeline = kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise));
 
-    // OK, now we can actually return our thing.
-    return VoidPromiseAndPipeline { kj::mv(completionPromise), kj::mv(pipeline) };
+      // OK, now we can actually return our thing.
+      return VoidPromiseAndPipeline { kj::mv(completionPromise), kj::mv(pipeline) };
+    }
   }
 
   kj::Maybe<ClientHook&> getResolved() override {
@@ -549,6 +558,24 @@ public:
         return callInternal(interfaceId, methodId, *contextPtr);
       }
     }).attach(kj::addRef(*this));
+
+    if (hints.noPromisePipelining) {
+      // No need to set up pipelining..
+
+      // Make sure we release the params on return, since we would on the normal pipelining path.
+      // TODO(perf): Experiment with whether this is actually useful. It seems likely the params
+      //   will be released soon anyway, so maybe this is a waste?
+      promise = promise.then([context=kj::mv(context)]() mutable {
+        context->releaseParams();
+      });
+
+      // When we do apply pipelining, the use of `.fork()` has the side effect of eagerly
+      // evaluating the promise. To match the behavior here, we use `.eagerlyEvaluate()`.
+      // TODO(perf): Maybe we don't need to match behavior? It did break some tests but arguably
+      //   those tests are weird and not what a real program would do...
+      promise = promise.eagerlyEvaluate(nullptr);
+      return VoidPromiseAndPipeline { kj::mv(promise), getDisabledPipeline() };
+    }
 
     // We have to fork this promise for the pipeline to receive a copy of the answer.
     auto forked = promise.fork();
@@ -950,6 +977,27 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
   auto hook = kj::heap<BrokenRequest>(kj::mv(reason), sizeHint);
   auto root = hook->message.getRoot<AnyPointer>();
   return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
+}
+
+kj::Own<PipelineHook> getDisabledPipeline() {
+  class DisabledPipelineHook final: public PipelineHook {
+  public:
+    kj::Own<PipelineHook> addRef() override {
+      return kj::Own<PipelineHook>(this, kj::NullDisposer::instance);
+    }
+
+    kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+      return newBrokenCap(KJ_EXCEPTION(FAILED,
+          "caller specified noPromisePipelining hint, but then tried to pipeline"));
+    }
+
+    kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override {
+      return newBrokenCap(KJ_EXCEPTION(FAILED,
+          "caller specified noPromisePipelining hint, but then tried to pipeline"));
+    }
+  };
+  static DisabledPipelineHook instance;
+  return instance.addRef();
 }
 
 // =======================================================================================

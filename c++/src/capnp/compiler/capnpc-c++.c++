@@ -2237,6 +2237,8 @@ private:
     // the `CAPNP_AUTO_IF_MSVC()` hackery in the return type declarations below. We're depending on
     // the fact that that this function has an inline implementation for the deduction to work.
 
+    bool noPromisePipelining = !resultSchema.mayContainCapabilities();
+
     auto requestMethodImpl = kj::strTree(
         templateContext.allDecls(),
         implicitParamsTemplateDecl,
@@ -2248,7 +2250,7 @@ private:
         isStreaming
             ? kj::strTree("  return newStreamingCall<", paramType, ">(\n")
             : kj::strTree("  return newCall<", paramType, ", ", resultType, ">(\n"),
-        "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint, {});\n"
+        "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint, {", noPromisePipelining, "});\n"
         "}\n");
 
     bool allowCancellation = false;

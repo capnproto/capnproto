@@ -804,6 +804,11 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
     kj::Exception&& reason, kj::Maybe<MessageSize> sizeHint);
 // Helper function that creates a Request object that simply throws exceptions when sent.
 
+kj::Own<PipelineHook> getDisabledPipeline();
+// Gets a PipelineHook appropriate to use when CallHints::noPromisePipelining is true. This will
+// throw from all calls. This does not actually allocate the object; a static global object is
+// returned with a null disposer.
+
 // =======================================================================================
 // Extend PointerHelpers for interfaces
 

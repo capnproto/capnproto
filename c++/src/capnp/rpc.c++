@@ -1680,15 +1680,24 @@ private:
         replacement.set(paramsBuilder);
         return replacement.send();
       } else {
+        bool noPromisePipelining = callBuilder.getNoPromisePipelining();
+
         auto sendResult = sendInternal(false);
 
-        auto forkedPromise = sendResult.promise.fork();
+        kj::Own<PipelineHook> pipeline;
+        if (noPromisePipelining) {
+          pipeline = getDisabledPipeline();
+        } else {
+          auto forkedPromise = sendResult.promise.fork();
 
-        // The pipeline must get notified of resolution before the app does to maintain ordering.
-        auto pipeline = kj::refcounted<RpcPipeline>(
-            *connectionState, kj::mv(sendResult.questionRef), forkedPromise.addBranch());
+          // The pipeline must get notified of resolution before the app does to maintain ordering.
+          pipeline = kj::refcounted<RpcPipeline>(
+              *connectionState, kj::mv(sendResult.questionRef), forkedPromise.addBranch());
 
-        auto appPromise = forkedPromise.addBranch().then(
+          sendResult.promise = forkedPromise.addBranch();
+        }
+
+        auto appPromise = sendResult.promise.then(
             [=](kj::Own<RpcResponse>&& response) {
               auto reader = response->getResults();
               return Response<AnyPointer>(reader, kj::mv(response));
@@ -1754,7 +1763,13 @@ private:
 
       QuestionId questionId = sendResult.questionRef->getId();
 
-      auto pipeline = kj::refcounted<RpcPipeline>(*connectionState, kj::mv(sendResult.questionRef));
+      kj::Own<PipelineHook> pipeline;
+      bool noPromisePipelining = callBuilder.getNoPromisePipelining();
+      if (noPromisePipelining) {
+        pipeline = getDisabledPipeline();
+      } else {
+        pipeline = kj::refcounted<RpcPipeline>(*connectionState, kj::mv(sendResult.questionRef));
+      }
 
       return TailInfo { questionId, kj::mv(promise), kj::mv(pipeline) };
     }
