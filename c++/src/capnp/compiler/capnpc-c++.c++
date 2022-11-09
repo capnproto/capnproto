@@ -64,6 +64,7 @@ namespace {
 
 static constexpr uint64_t NAMESPACE_ANNOTATION_ID = 0xb9c6f99ebf805f2cull;
 static constexpr uint64_t NAME_ANNOTATION_ID = 0xf264a779fef191ceull;
+static constexpr uint64_t ALLOW_CANCELLATION_ANNOTATION_ID = 0xac7096ff8cfc9dceull;
 
 bool hasDiscriminantValue(const schema::Field::Reader& reader) {
   return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
@@ -2250,6 +2251,21 @@ private:
         "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
         "}\n");
 
+    bool allowCancellation = false;
+    if (annotationValue(proto, ALLOW_CANCELLATION_ANNOTATION_ID) != nullptr) {
+      allowCancellation = true;
+    } else if (annotationValue(interfaceProto, ALLOW_CANCELLATION_ANNOTATION_ID) != nullptr) {
+      allowCancellation = true;
+    } else {
+      schema::Node::Reader node = interfaceProto;
+      while (!node.isFile()) {
+        node = schemaLoader.get(node.getScopeId()).getProto();
+      }
+      if (annotationValue(node, ALLOW_CANCELLATION_ANNOTATION_ID) != nullptr) {
+        allowCancellation = true;
+      }
+    }
+
     return MethodText {
       kj::strTree(
           implicitParamsTemplateDecl.size() == 0 ? "" : "  ", implicitParamsTemplateDecl,
@@ -2297,7 +2313,8 @@ private:
               "          return ", identifierName, "(::capnp::Capability::Server::internalGetTypedStreamingContext<\n"
               "              ", genericParamType, ">(context));\n"
               "        }),\n"
-              "        true\n"
+              "        true,\n"
+              "        ", allowCancellation, "\n"
               "      };\n")
             : kj::strTree(
               // For non-streaming calls we let exceptions just flow through for a little more
@@ -2305,7 +2322,8 @@ private:
               "      return {\n"
               "        ", identifierName, "(::capnp::Capability::Server::internalGetTypedContext<\n"
               "            ", genericParamType, ", ", genericResultType, ">(context)),\n"
-              "        false\n"
+              "        false,\n"
+              "        ", allowCancellation, "\n"
               "      };\n"))
     };
   }

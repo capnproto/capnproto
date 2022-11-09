@@ -380,6 +380,14 @@ public:
   // In general, this should be the last thing a method implementation calls, and the promise
   // returned from `tailCall()` should then be returned by the method implementation.
 
+  void allowCancellation()
+      KJ_UNAVAILABLE(
+          "As of Cap'n Proto 0.11, allowCancellation must be applied statically using an "
+          "annotation in the schema. See annotations defined in /capnp/c++.capnp. For "
+          "DynamicCapability::Server, use the constructor option (the annotation does not apply "
+          "to DynamicCapability). This change was made to gain a significant performance boost -- "
+          "dynamically allowing cancellation required excessive bookkeeping.");
+
 private:
   CallContextHook* hook;
 
@@ -402,6 +410,14 @@ public:
   // - It would significantly complicate the implementation of streaming.
   // - It wouldn't be particularly useful since streaming calls don't return anything, and they
   //   already compensate for latency.
+
+  void allowCancellation()
+      KJ_UNAVAILABLE(
+          "As of Cap'n Proto 0.11, allowCancellation must be applied statically using an "
+          "annotation in the schema. See annotations defined in /capnp/c++.capnp. For "
+          "DynamicCapability::Server, use the constructor option (the annotation does not apply "
+          "to DynamicCapability). This change was made to gain a significant performance boost -- "
+          "dynamically allowing cancellation required excessive bookkeeping.");
 
 private:
   CallContextHook* hook;
@@ -427,6 +443,13 @@ public:
     // If true, this method was declared as `-> stream;`. No other calls should be permitted until
     // this call finishes, and if this call throws an exception, all future calls will throw the
     // same exception.
+
+    bool allowCancellation = false;
+    // If true, the call can be canceled normally. If false, the immediate caller is responsible
+    // for ensuring that cancellation is prevented and that `context` remains valid until the
+    // call completes normally.
+    //
+    // See the `allowCancellation` annotation defined in `c++.capnp`.
   };
 
   virtual DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,

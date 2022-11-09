@@ -567,6 +567,7 @@ template <typename SturdyRef, typename Owner>
       return {
         save(::capnp::Capability::Server::internalGetTypedContext<
             typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults>(context)),
+        false,
         false
       };
     default:

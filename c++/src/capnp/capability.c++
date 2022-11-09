@@ -91,7 +91,7 @@ Capability::Server::DispatchCallResult Capability::Server::internalUnimplemented
   return {
     KJ_EXCEPTION(UNIMPLEMENTED, "Requested interface not implemented.",
                  actualInterfaceName, requestedTypeId),
-    false
+    false, true
   };
 }
 
@@ -99,7 +99,7 @@ Capability::Server::DispatchCallResult Capability::Server::internalUnimplemented
     const char* interfaceName, uint64_t typeId, uint16_t methodId) {
   return {
     KJ_EXCEPTION(UNIMPLEMENTED, "Method not implemented.", interfaceName, typeId, methodId),
-    false
+    false, true
   };
 }
 
@@ -798,6 +798,17 @@ private:
 
     auto result = server->dispatchCall(interfaceId, methodId,
                                        CallContext<AnyPointer, AnyPointer>(context));
+
+    if (!result.allowCancellation) {
+      // Make sure this call cannot be canceled by forking the promise and detaching one branch.
+      auto fork = result.promise.attach(context.addRef()).fork();
+      result.promise = fork.addBranch();
+      fork.addBranch().detach([](kj::Exception&&) {
+        // Exception from canceled call is silently discarded. The caller should have waited for
+        // it if they cared.
+      });
+    }
+
     if (result.isStreaming) {
       return result.promise
           .catch_([this](kj::Exception&& e) {
