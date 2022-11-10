@@ -5905,6 +5905,31 @@ private:
   HttpServer server;
 };
 
+class ConnectCloseService final: public HttpService {
+  // A simple CONNECT server that will accept a connection then immediately
+  // shutdown the write side of the AsyncIoStream to simulate socket disconnection.
+public:
+  ConnectCloseService(HttpHeaderTable& headerTable)
+      : headerTable(headerTable) {}
+
+  kj::Promise<void> request(
+      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
+  }
+
+  kj::Promise<void> connect(
+      kj::StringPtr host, const HttpHeaders& headers, ConnectResponse& tunnel) override {
+    auto io = tunnel.accept(200, "OK", HttpHeaders(headerTable));
+    io->shutdownWrite();
+    return kj::READY_NOW;
+  }
+
+private:
+  HttpHeaderTable& headerTable;
+  kj::Maybe<kj::Own<kj::AsyncIoStream>> stream;
+};
+
 KJ_TEST("Simple CONNECT Server works") {
   KJ_HTTP_TEST_SETUP_IO;
 
@@ -6185,6 +6210,91 @@ KJ_TEST("CONNECT Server cancels read w/client") {
 
   }).wait(waitScope);
 
+  listenTask.wait(waitScope);
+}
+
+class TestConnectResponseImpl final: public kj::HttpService::ConnectResponse, public kj::Refcounted {
+public:
+  TestConnectResponseImpl(kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectResponse>> fulfiller)
+      : fulfiller(kj::mv(fulfiller)) {}
+
+  void setPromise(kj::Promise<void> promise) {
+    task = promise.eagerlyEvaluate([this](kj::Exception&& exception) {
+      if (fulfiller->isWaiting()) {
+        fulfiller->reject(kj::mv(exception));
+      } else {
+        kj::throwRecoverableException(kj::mv(exception));
+      }
+    });
+  }
+
+  kj::Own<kj::AsyncIoStream> accept(
+      uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+    KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
+
+    auto headersCopy = kj::heap(headers.clone());
+
+    auto pipe = kj::newTwoWayPipe();
+
+    fulfiller->fulfill(kj::HttpClient::ConnectResponse {
+      statusCode,
+      statusText,
+      headersCopy.get(),
+      pipe.ends[0].attach(kj::addRef(*this)),
+    });
+    return kj::mv(pipe.ends[1]);
+  }
+
+  kj::Own<kj::AsyncOutputStream> reject(
+      uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
+      kj::Maybe<uint64_t> expectedBodySize) override {
+    KJ_ASSERT(false, "Not testing this branch.");
+    KJ_UNREACHABLE;
+  }
+private:
+  kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectResponse>> fulfiller;
+  kj::Promise<void> task = nullptr;
+};
+
+KJ_TEST("CONNECT Service Adapter handles stream closure correctly") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  HttpHeaderTable table;
+  ConnectCloseService service(table);
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto client = newHttpClient(table, *pipe.ends[1]);
+  auto httpService = newHttpService(*client);
+
+  HttpHeaderTable clientHeaders;
+  auto paf = kj::newPromiseAndFulfiller<kj::HttpClient::ConnectResponse>();
+  auto tunnel = kj::refcounted<TestConnectResponseImpl>(kj::mv(paf.fulfiller));
+  // The below promise is fulfilled when the read below finishes successfully.
+  auto readPaf = kj::newPromiseAndFulfiller<void>();
+  httpService->connect("https://example.org"_kj, HttpHeaders(clientHeaders), *tunnel).detach(
+      [](kj::Exception err) { KJ_DBG(err); KJ_FAIL_ASSERT(false); });
+  paf.promise.then([&](HttpClient::ConnectResponse response) -> kj::Promise<void> {
+    KJ_ASSERT(response.statusCode == 200);
+    KJ_ASSERT(response.statusText == "OK"_kj);
+
+    auto& io = KJ_ASSERT_NONNULL(response.connectionOrBody.tryGet<kj::Own<kj::AsyncIoStream>>());
+    char buffer;
+    // Attempt a read. It should disconnect. We are verifying here that the stream is shutdown
+    // correctly, if it doesn't this will block forever (and KJ will give us a
+    // "this thread would hang forever" error message).
+    return io->tryRead(&buffer, 1, 1).then([&](size_t count) {
+      KJ_ASSERT(count == 0, "Expecting the stream to get disconnected.");
+      readPaf.fulfiller->fulfill();
+    }).attach(kj::mv(io), kj::mv(buffer));
+  }).wait(waitScope);
+
+  KJ_ASSERT(readPaf.promise.poll(waitScope));
   listenTask.wait(waitScope);
 }
 
