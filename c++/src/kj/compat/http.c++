@@ -6200,7 +6200,8 @@ private:
       auto pipe = newTwoWayPipe();
 
       kj::Own<kj::AsyncIoStream> io =
-          kj::heap<DelayedEofIoStream>(kj::mv(pipe.ends[0]), task.attach(kj::addRef(*this)));
+          kj::heap<DelayedEofIoStream>(kj::mv(pipe.ends[0]),
+              task.attach(kj::addRef(*this), kj::mv(headersCopy)));
 
       fulfiller->fulfill(HttpClient::ConnectResponse {
         statusCode,

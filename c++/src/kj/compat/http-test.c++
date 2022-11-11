@@ -5201,6 +5201,36 @@ KJ_TEST("HttpClient concurrency limiting") {
 }
 
 #if KJ_HTTP_TEST_USE_OS_PIPE
+// This test relies on access to the network.
+KJ_TEST("NetworkHttpClient connect impl") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto listener1 = io.provider->getNetwork().parseAddress("localhost", 0)
+      .wait(io.waitScope)->listen();
+
+  auto ignored KJ_UNUSED = listener1->accept().then([](Own<kj::AsyncIoStream> stream) {
+    auto buffer = kj::str("test");
+    return stream->write(buffer.cStr(), buffer.size()).attach(kj::mv(stream), kj::mv(buffer));
+  }).eagerlyEvaluate(nullptr);
+
+  HttpClientSettings clientSettings;
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable headerTable;
+  auto client = newHttpClient(clientTimer, headerTable,
+      io.provider->getNetwork(), nullptr, clientSettings);
+  auto connection = client->connect(
+      kj::str("localhost:", listener1->getPort()), HttpHeaders(headerTable));
+  connection.then([](HttpClient::ConnectResponse response) {
+    auto& conn = KJ_ASSERT_NONNULL(response.connectionOrBody.tryGet<kj::Own<kj::AsyncIoStream>>());
+    auto buf = kj::heapArray<char>(4);
+    return conn->tryRead(buf.begin(), 1, buf.size()).then([buf = kj::mv(buf)](size_t count) {
+      KJ_ASSERT(count == 4);
+      KJ_ASSERT(kj::str(buf.asChars()) == "test");
+    }).attach(kj::mv(conn));
+  }).wait(io.waitScope);
+}
+#endif
+
+#if KJ_HTTP_TEST_USE_OS_PIPE
 // TODO(someday): Implement mock kj::Network for userspace version of this test?
 KJ_TEST("HttpClient multi host") {
   auto io = kj::setupAsyncIo();
@@ -5927,7 +5957,6 @@ public:
 
 private:
   HttpHeaderTable& headerTable;
-  kj::Maybe<kj::Own<kj::AsyncIoStream>> stream;
 };
 
 KJ_TEST("Simple CONNECT Server works") {
@@ -6240,7 +6269,7 @@ public:
       statusCode,
       statusText,
       headersCopy.get(),
-      pipe.ends[0].attach(kj::addRef(*this)),
+      pipe.ends[0].attach(kj::addRef(*this), kj::mv(headersCopy)),
     });
     return kj::mv(pipe.ends[1]);
   }
@@ -6277,8 +6306,8 @@ KJ_TEST("CONNECT Service Adapter handles stream closure correctly") {
   auto tunnel = kj::refcounted<TestConnectResponseImpl>(kj::mv(paf.fulfiller));
   // The below promise is fulfilled when the read below finishes successfully.
   auto readPaf = kj::newPromiseAndFulfiller<void>();
-  httpService->connect("https://example.org"_kj, HttpHeaders(clientHeaders), *tunnel).detach(
-      [](kj::Exception err) { KJ_DBG(err); KJ_FAIL_ASSERT(false); });
+  auto connectPromise = httpService->connect(
+      "https://example.org"_kj, HttpHeaders(clientHeaders), *tunnel);
   paf.promise.then([&](HttpClient::ConnectResponse response) -> kj::Promise<void> {
     KJ_ASSERT(response.statusCode == 200);
     KJ_ASSERT(response.statusText == "OK"_kj);
@@ -6291,10 +6320,12 @@ KJ_TEST("CONNECT Service Adapter handles stream closure correctly") {
     return io->tryRead(&buffer, 1, 1).then([&](size_t count) {
       KJ_ASSERT(count == 0, "Expecting the stream to get disconnected.");
       readPaf.fulfiller->fulfill();
-    }).attach(kj::mv(io), kj::mv(buffer));
+    }).attach(kj::mv(io));
   }).wait(waitScope);
 
+  connectPromise.wait(waitScope);
   KJ_ASSERT(readPaf.promise.poll(waitScope));
+
   listenTask.wait(waitScope);
 }
 
