@@ -213,6 +213,12 @@ public:
     }
   }
 
+  void release() {
+    // Release memory backing the table.
+    { auto drop = kj::mv(slots); }
+    { auto drop = kj::mv(freeIds); }
+  }
+
 private:
   kj::Vector<T> slots;
   std::priority_queue<Id, std::vector<Id>, std::greater<Id>> freeIds;
@@ -371,8 +377,18 @@ public:
         KJ_IF_MAYBE(questionRef, question.selfRef) {
           // QuestionRef still present.
           questionRef->reject(kj::cp(networkException));
+
+          // We need to fully disconnect each QuestionRef otherwise it holds a reference back to
+          // the connection state. Meanwhile `tasks` may hold streaming calls that end up holding
+          // these QuestionRefs. Technically this is a cyclic reference, but as long as the cycle
+          // is broken on disconnect (which happens when the RpcSystem itself is destroyed), then
+          // we're OK.
+          questionRef->disconnect();
         }
       });
+      // Since we've disconnected the QuestionRefs, they won't clean up the questions table for
+      // us, so do that here.
+      questions.release();
 
       answers.forEach([&](AnswerId id, Answer& answer) {
         KJ_IF_MAYBE(p, answer.pipeline) {
@@ -624,6 +640,13 @@ private:
   public:
     RpcClient(RpcConnectionState& connectionState)
         : connectionState(kj::addRef(connectionState)) {}
+
+    ~RpcClient() noexcept(false) {
+      KJ_IF_MAYBE(f, this->flowController) {
+        // Destroying the client should not cancel outstanding streaming calls.
+        connectionState->tasks.add(f->get()->waitAllAcked().attach(kj::mv(*f)));
+      }
+    }
 
     virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
                                                 kj::Vector<int>& fds) = 0;
@@ -1542,36 +1565,40 @@ private:
       // throws (without being caught) we're probably in pretty bad shape and going to be crashing
       // later anyway. Better to abort now.
 
-      auto& question = KJ_ASSERT_NONNULL(
-          connectionState->questions.find(id), "Question ID no longer on table?");
+      KJ_IF_MAYBE(c, connectionState) {
+        auto& connectionState = *c;
 
-      // Send the "Finish" message (if the connection is not already broken).
-      if (connectionState->connection.is<Connected>() && !question.skipFinish) {
-        KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
-          auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
-              messageSizeHint<rpc::Finish>());
-          auto builder = message->getBody().getAs<rpc::Message>().initFinish();
-          builder.setQuestionId(id);
-          // If we're still awaiting a return, then this request is being canceled, and we're going
-          // to ignore any capabilities in the return message, so set releaseResultCaps true. If we
-          // already received the return, then we've already built local proxies for the caps and
-          // will send Release messages when those are destroyed.
-          builder.setReleaseResultCaps(question.isAwaitingReturn);
-          message->send();
-        })) {
-          connectionState->disconnect(kj::mv(*e));
+        auto& question = KJ_ASSERT_NONNULL(
+            connectionState->questions.find(id), "Question ID no longer on table?");
+
+        // Send the "Finish" message (if the connection is not already broken).
+        if (connectionState->connection.is<Connected>() && !question.skipFinish) {
+          KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+            auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+                messageSizeHint<rpc::Finish>());
+            auto builder = message->getBody().getAs<rpc::Message>().initFinish();
+            builder.setQuestionId(id);
+            // If we're still awaiting a return, then this request is being canceled, and we're going
+            // to ignore any capabilities in the return message, so set releaseResultCaps true. If we
+            // already received the return, then we've already built local proxies for the caps and
+            // will send Release messages when those are destroyed.
+            builder.setReleaseResultCaps(question.isAwaitingReturn);
+            message->send();
+          })) {
+            connectionState->disconnect(kj::mv(*e));
+          }
         }
-      }
 
-      // Check if the question has returned and, if so, remove it from the table.
-      // Remove question ID from the table.  Must do this *after* sending `Finish` to ensure that
-      // the ID is not re-allocated before the `Finish` message can be sent.
-      if (question.isAwaitingReturn) {
-        // Still waiting for return, so just remove the QuestionRef pointer from the table.
-        question.selfRef = nullptr;
-      } else {
-        // Call has already returned, so we can now remove it from the table.
-        connectionState->questions.erase(id, question);
+        // Check if the question has returned and, if so, remove it from the table.
+        // Remove question ID from the table.  Must do this *after* sending `Finish` to ensure that
+        // the ID is not re-allocated before the `Finish` message can be sent.
+        if (question.isAwaitingReturn) {
+          // Still waiting for return, so just remove the QuestionRef pointer from the table.
+          question.selfRef = nullptr;
+        } else {
+          // Call has already returned, so we can now remove it from the table.
+          connectionState->questions.erase(id, question);
+        }
       }
     }
 
@@ -1589,8 +1616,12 @@ private:
       fulfiller->reject(kj::mv(exception));
     }
 
+    void disconnect() {
+      connectionState = nullptr;
+    }
+
   private:
-    kj::Own<RpcConnectionState> connectionState;
+    kj::Maybe<kj::Own<RpcConnectionState>> connectionState;
     QuestionId id;
     kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>> fulfiller;
   };
