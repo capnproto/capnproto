@@ -351,9 +351,9 @@ Now people can use your template metafunction without the pesky `::Type` or `::v
         template <typename T>
         Wrapper<T> makeWrapper(T&& inner);
         // Wraps `inner` and returns the wrapper.
-  
+
   Should `inner` be taken by reference or by value here? Both might be useful, depending on the use case. The right answer is actually to support both: if the input is an lvalue, take it by reference, but if it's an rvalue, take it by value (move). And as it turns out, if you write your declaration exactly as shown above, this is exactly what you get, because if the input is an lvalue, `T` will implicitly bind to a reference type, whereas if the input is an rvalue or rvalue reference, T will not be a reference.
-  
+
   In general, you should assume KJ code in this pattern uses this rule, so if you are passing in an lvalue but don't actually want it wrapped by reference, wrap it in `kj::mv()`.
 
 * Never use function or method pointers. Prefer templating across functors (like STL does), or for non-templates use `kj::Function` (which will handle this for you).
