@@ -122,6 +122,7 @@ set(kj-async_sources
   async-io-win32.c++
   async-io.c++
   async-io-unix.c++
+  buffering.c++
   timer.c++
 )
 set(kj-async_headers
@@ -132,6 +133,7 @@ set(kj-async_headers
   async-win32.h
   async-io.h
   async-queue.h
+  buffering.h
   timer.h
 )
 if(NOT CAPNP_LITE)

@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <kj/io.h>
 #include <kj/async-io.h>
 #include "message.h"
 
@@ -146,6 +147,28 @@ public:
 private:
   kj::AsyncCapabilityStream& stream;
 };
+
+class BufferedMessageStream : public MessageStream {
+ // A MessageStream that doesn't attach ownership of the underlying message buffer to read messages.
+
+public:
+  virtual void retainLastMessageLongTerm() = 0;
+  // Request ownership of the last read message's underlying buffer -- the `MessageStream`
+  // implementation may perform a copy of the message or transfer ownership of the existing buffer
+  // in response -- This implies that `Reader`s created before calling `retainLastMessageLongTerm()`
+  // should be re-created, since they may point to the short-term buffer.
+};
+
+struct BufferedStreamOptions {
+  size_t bufferSize = 65536; // 64KiB
+
+  size_t maxFdsPerMessage = 0;
+};
+
+kj::Own<BufferedMessageStream> makeBufferedStream(kj::AsyncIoStream& capStream,
+    BufferedStreamOptions options = BufferedStreamOptions{});
+kj::Own<BufferedMessageStream> makeBufferedStream(kj::AsyncCapabilityStream& capStream,
+    BufferedStreamOptions options = BufferedStreamOptions{});
 
 // -----------------------------------------------------------------------------
 // Stand-alone functions for reading & writing messages on AsyncInput/AsyncOutputStreams.

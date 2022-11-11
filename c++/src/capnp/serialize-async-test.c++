@@ -31,6 +31,7 @@
 #include "serialize.h"
 #include <kj/debug.h>
 #include <kj/thread.h>
+#include <kj/map.h>
 #include <stdlib.h>
 #include <kj/miniposix.h>
 #include "test-util.h"
@@ -46,6 +47,8 @@ namespace kj {
 }
 #else
 #include <sys/socket.h>
+#include <fcntl.h>
+#include <errno.h>
 #endif
 
 namespace capnp {
@@ -105,6 +108,110 @@ public:
 
 private:
   uint desiredSegmentCount;
+};
+
+class AsyncMultiArrayInputStream final : public kj::AsyncCapabilityStream {
+public:
+  struct Batch {
+    kj::Array<kj::byte> bytes;
+    kj::Maybe<kj::AutoCloseFd> fd = nullptr;
+  };
+
+  AsyncMultiArrayInputStream(kj::Array<Batch> batches, uint64_t maxBytesLimit)
+    : batches(kj::mv(batches)), maxBytesLimit(maxBytesLimit) {}
+  // maxBytesLimit allows you to set the maximum read size overriding what is provided as maxBytes to
+  // tryRead, to emulate the buffer of a real socket.
+
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return tryReadWithFds(buffer, minBytes, maxBytes, nullptr, 0).then([](ReadResult result) {
+      return result.byteCount;
+    });
+  }
+
+  kj::Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
+                                         kj::AutoCloseFd* fdBuffer, size_t maxFds) override {
+    KJ_ASSERT(maxBytes >= minBytes);
+
+    size_t bytesRead = 0;
+    size_t fdsRead = 0;
+    // We have to read at least minBytes, otherwise the caller will think they hit EOF
+    maxBytes = kj::max(minBytes, kj::min(maxBytesLimit, maxBytes));
+
+    while (minBytes > 0 && maxBytes > 0 && currentBatch < batches.size()) {
+      // Read bytes from batches until at least minBytes have been read.
+      // If minBytes has been satisfied, the read stops at the next batch boundary or maxBytes,
+      // whichever comes first
+
+      auto& batch = batches[currentBatch];
+
+      auto start = batch.bytes.begin() + positionInCurrentBatch;
+      auto bytesReadThisIteration = kj::min(batch.bytes.size() - positionInCurrentBatch, maxBytes);
+
+      auto boundedSub = [](size_t a, size_t b) -> size_t {
+        // Returns a - b or 0 if a - b < 0;
+
+        if (b > a) {
+          return 0;
+        } else {
+          return a - b;
+        }
+      };
+      minBytes = boundedSub(minBytes, bytesReadThisIteration);
+      maxBytes = boundedSub(maxBytes, bytesReadThisIteration);
+
+      positionInCurrentBatch += bytesReadThisIteration;
+      KJ_ASSERT(positionInCurrentBatch <= batch.bytes.size());
+
+      // Excess FDs are discarded, no need to track position of current FD in the batch
+
+      memcpy(reinterpret_cast<byte*>(buffer) + bytesRead, start, bytesReadThisIteration);
+      bytesRead += bytesReadThisIteration;
+
+      if (maxFds) {
+        KJ_IF_MAYBE(fd, batch.fd) {
+          fdBuffer[fdsRead] = kj::mv(*fd);
+          fdsRead++;
+          maxFds = boundedSub(maxFds, 1);
+        }
+      }
+
+      if (positionInCurrentBatch == batch.bytes.size()) {
+        currentBatch += 1;
+        positionInCurrentBatch = 0;
+      }
+
+      if (minBytes == 0) break;
+    }
+
+    return ReadResult { bytesRead, fdsRead };
+  }
+
+  kj::Promise<ReadResult> tryReadWithStreams(void*, size_t, size_t, kj::Own<AsyncCapabilityStream>*,
+      size_t) override {
+    KJ_UNIMPLEMENTED("unimplemented");
+  }
+  kj::Promise<void> write(const void*, size_t) override { KJ_UNIMPLEMENTED("not writable"); }
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>>) override {
+    KJ_UNIMPLEMENTED("not writable");
+  }
+  kj::Promise<void> writeWithFds(kj::ArrayPtr<const byte>,
+                                 kj::ArrayPtr<const kj::ArrayPtr<const byte>>,
+                                 kj::ArrayPtr<const int>) override {
+    KJ_UNIMPLEMENTED("not writable");
+  }
+  kj::Promise<void> writeWithStreams(kj::ArrayPtr<const byte>,
+                                     kj::ArrayPtr<const kj::ArrayPtr<const byte>>,
+                                     kj::Array<kj::Own<kj::AsyncCapabilityStream>>) override {
+    KJ_UNIMPLEMENTED("not writable");
+  }
+  kj::Promise<void> whenWriteDisconnected() override { KJ_UNIMPLEMENTED("not writable"); }
+  void shutdownWrite() override { KJ_UNIMPLEMENTED("not writable"); }
+
+private:
+  kj::Array<Batch> batches;
+  uint64_t maxBytesLimit;
+  size_t currentBatch = 0;
+  size_t positionInCurrentBatch = 0;
 };
 
 class PipeWithSmallBuffer {
@@ -270,6 +377,513 @@ TEST(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
+
+TEST(SerializeAsyncTest, ParseBufferedAsyncFullBuffer) {
+  PipeWithSmallBuffer fds;
+  auto ioContext = kj::setupAsyncIo();
+  auto rawStream = ioContext.lowLevelProvider->wrapSocketFd(fds[0]);
+  SocketOutputStream rawOutput(fds[1]);
+  kj::BufferedOutputStreamWrapper output(rawOutput);
+
+  TestMessageBuilder message(10);
+  initTestMessage(message.getRoot<TestAllTypes>());
+
+  kj::Thread thread([&]() {
+    for(int i = 0; i < 5; i++) {
+      writeMessage(output, message);
+    };
+    output.flush();
+  });
+
+  [&]() noexcept { // forces test process to abort on exception without waiting for the thread
+
+  auto stream = makeBufferedStream(*rawStream);
+
+  for(int i = 0; i < 5; i++) {
+    auto maybeMessage = stream->tryReadMessage(nullptr).wait(ioContext.waitScope);
+    auto& received = KJ_ASSERT_NONNULL(maybeMessage);
+
+    checkTestMessage(received.reader->getRoot<TestAllTypes>());
+  }
+
+  }(); // noexcept
+}
+
+TEST(SerializeAsyncTest, ParseBufferedAsyncFragmented) {
+  PipeWithSmallBuffer fds;
+  auto ioContext = kj::setupAsyncIo();
+  auto rawStream = ioContext.lowLevelProvider->wrapSocketFd(fds[0]);
+  SocketOutputStream rawOutput(fds[1]);
+  FragmentingOutputStream output(rawOutput);
+
+  TestMessageBuilder message(10);
+  initTestMessage(message.getRoot<TestAllTypes>());
+
+  kj::Thread thread([&]() {
+    for(int i = 0; i < 5; i++) {
+      writeMessage(output, message);
+    };
+  });
+
+  [&]() noexcept { // forces test process to abort on exception without waiting for the thread
+
+  auto scratch = kj::heapArray<word>(8192);
+  auto stream = makeBufferedStream(*rawStream, BufferedStreamOptions{ scratch.asBytes().size() });
+
+  for(int i = 0; i < 5; i++) {
+    auto maybeMessage = stream->tryReadMessage(nullptr, ReaderOptions{}, scratch.asPtr()).wait(ioContext.waitScope);
+    auto& received = KJ_ASSERT_NONNULL(maybeMessage);
+
+    checkTestMessage(received.reader->getRoot<TestAllTypes>());
+  }
+
+  }(); // noexcept
+}
+
+TEST(SerializeAsyncTest, ParseBufferedAsyncBoundaryCases) {
+  auto ioContext = kj::setupAsyncIo();
+
+  auto messageBytes = [](auto numSegments) {
+    TestMessageBuilder builder(numSegments);
+    initTestMessage(builder.getRoot<TestAllTypes>());
+    return messageToFlatArray(builder);
+  };
+
+  auto evenMessage = messageBytes(8);
+  auto oddMessage = messageBytes(7);
+
+  kj::Vector<AsyncMultiArrayInputStream::Batch> batchBuilder;
+  auto numMessages = 0;
+
+  auto batchesFromMessage = [&numMessages, &evenMessage, &oddMessage](
+      std::initializer_list<size_t> splits) {
+    kj::Vector<AsyncMultiArrayInputStream::Batch> batches;
+
+    auto message = ((numMessages++ % 2) ? evenMessage : oddMessage).asBytes();
+    size_t start = 0;
+    for(auto split : splits) {
+      KJ_ASSERT(split < message.size());
+      batches.add(AsyncMultiArrayInputStream::Batch{
+        kj::heapArray(message.slice(start, split))
+      });
+      start = split;
+    }
+
+    if (start < message.size()) {
+      batches.add(AsyncMultiArrayInputStream::Batch{
+        kj::heapArray(message.slice(start, message.size()))
+      });
+    }
+
+    return batches.releaseAsArray();
+  };
+
+  auto completeMessage = [&]() {
+    auto message = ((numMessages++ % 2) ? evenMessage : oddMessage).asBytes();
+    return AsyncMultiArrayInputStream::Batch{ kj::heapArray(message) };
+  };
+
+  auto concatFirstBatch = [](auto batches, AsyncMultiArrayInputStream::Batch msg) {
+    auto& first = batches[0];
+
+    auto builder = kj::heapArrayBuilder<byte>(first.bytes.size() + msg.bytes.size());
+    builder.addAll(msg.bytes);
+    builder.addAll(first.bytes);
+
+    first.bytes = builder.finish();
+    return kj::mv(batches);
+  };
+
+  auto concatLastBatch = [](auto batches, AsyncMultiArrayInputStream::Batch msg) {
+    auto& lastBatch = batches[batches.size()-1];
+
+    auto builder = kj::heapArrayBuilder<byte>(lastBatch.bytes.size() + msg.bytes.size());
+    builder.addAll(lastBatch.bytes);
+    builder.addAll(msg.bytes);
+
+    lastBatch.bytes = builder.finish();
+    return kj::mv(batches);
+  };
+
+  auto addBatches = [&](auto batches) {
+    for(auto& batch : batches) {
+      batchBuilder.add(kj::mv(batch));
+    }
+  };
+
+  // Read one message in byte-chunked batches
+  addBatches(batchesFromMessage({3, 7, 11, 13 }));
+
+  // // Read one message in one batch
+  batchBuilder.add(completeMessage());
+
+  // Read a message in word-chunked batches, then a complete message in a separate batch after
+  addBatches(batchesFromMessage({ sizeof(word), sizeof(word) * 4 }));
+  batchBuilder.add(completeMessage());
+
+  // Read a message in word-chunked batches, then a complete message as part of the same batch as the
+  // last batch of the chunked message
+  addBatches(
+    concatLastBatch(batchesFromMessage({ sizeof(word), sizeof(word) * 4 }), completeMessage())
+  );
+
+  // Read a message in word-chunked batches, then multiple complete messages as part of one separate
+  // batch
+  addBatches(batchesFromMessage({ sizeof(word), sizeof(word) * 4 }));
+  batchBuilder.add(completeMessage());
+  batchBuilder = concatLastBatch(kj::mv(batchBuilder), completeMessage());
+  batchBuilder = concatLastBatch(kj::mv(batchBuilder), completeMessage());
+
+  // Read a message in word-chunked batches, then multiple complete messages as part of the same
+  // batch as the last batch of the chunked message
+  {
+    auto batches = batchesFromMessage({ sizeof(word), sizeof(word) * 4 });
+    batches = concatLastBatch(kj::mv(batches), completeMessage());
+    batches = concatLastBatch(kj::mv(batches), completeMessage());
+    batches = concatLastBatch(kj::mv(batches), completeMessage());
+    addBatches(kj::mv(batches));
+  }
+
+  // Read multiple chunked messages in a row as separate batches
+  addBatches(batchesFromMessage({ sizeof(word), sizeof(word) * 4 }));
+  addBatches(batchesFromMessage({ sizeof(word) * 4, sizeof(word) * 8 }));
+  addBatches(batchesFromMessage({ 3, 7, 11, 13 }));
+  addBatches(batchesFromMessage({ sizeof(word) * 5, sizeof(word) * 7 }));
+
+  // Read a message in byte-chunked batches, then multiple complete messages as part of one separate
+  // batch
+  addBatches(batchesFromMessage({3, 7, 11, 13 }));
+  batchBuilder.add(completeMessage());
+  batchBuilder = concatLastBatch(kj::mv(batchBuilder), completeMessage());
+  batchBuilder = concatLastBatch(kj::mv(batchBuilder), completeMessage());
+
+  // Read a message in byte-chunked batches, then multiple complete messages as part of the same
+  // batch as the last batch of the chunked message
+  {
+    auto batches = batchesFromMessage({3, 7, 11, 13 });
+    batches = concatLastBatch(kj::mv(batches), completeMessage());
+    batches = concatLastBatch(kj::mv(batches), completeMessage());
+    batches = concatLastBatch(kj::mv(batches), completeMessage());
+    addBatches(kj::mv(batches));
+  }
+
+  // Read a complete message and the first chunk of a word-chunked message as one batch,
+  // then the rest of the batches for the chunked message.
+  addBatches(
+    concatFirstBatch(batchesFromMessage({ sizeof(word), sizeof(word) * 4 }), completeMessage())
+  );
+
+  // Read a complete message and the first chunk of a byte-chunked message as one batch,
+  // then the rest of the batches for the chunked message.
+  addBatches(
+    concatFirstBatch(batchesFromMessage({ 3, 7, 11, 13 }), completeMessage())
+  );
+
+  AsyncMultiArrayInputStream rawStream(batchBuilder.releaseAsArray(), 65536);
+  auto stream = makeBufferedStream(static_cast<kj::AsyncIoStream&>(rawStream));
+
+  for(auto i = 0; i < numMessages; i++) {
+    auto maybeMessage = stream->tryReadMessage(nullptr).wait(ioContext.waitScope);
+    auto& received = KJ_ASSERT_NONNULL(maybeMessage);
+
+    checkTestMessage(received.reader->getRoot<TestAllTypes>());
+  }
+}
+
+TEST(SerializeAsyncTest, ParseBufferedSmallSocketBuffer) {
+  auto ioContext = kj::setupAsyncIo();
+
+  auto batches = kj::heapArrayBuilder<AsyncMultiArrayInputStream::Batch>(1);
+  TestMessageBuilder builder(10);
+  initTestMessage(builder.getRoot<TestAllTypes>());
+  batches.add(AsyncMultiArrayInputStream::Batch {
+    kj::heapArray(messageToFlatArray(builder).asBytes())
+  });
+
+  constexpr uint64_t smallBufferSize = 7;
+  KJ_ASSERT(batches[0].bytes.size() > smallBufferSize);
+
+  AsyncMultiArrayInputStream rawStream(batches.finish(), smallBufferSize);
+  auto stream = makeBufferedStream(static_cast<kj::AsyncIoStream&>(rawStream));
+
+  auto maybeMessage = stream->tryReadMessage(nullptr).wait(ioContext.waitScope);
+  auto& received = KJ_ASSERT_NONNULL(maybeMessage);
+
+  checkTestMessage(received.reader->getRoot<TestAllTypes>());
+}
+
+TEST(SerializeAsyncTest, ParseBufferedSmallStreamBuffer) {
+  auto ioContext = kj::setupAsyncIo();
+
+  auto batches = kj::heapArrayBuilder<AsyncMultiArrayInputStream::Batch>(1);
+  TestMessageBuilder builder(10);
+  initTestMessage(builder.getRoot<TestAllTypes>());
+  auto msg =
+    kj::heapArray(messageToFlatArray(builder).asBytes());
+  batches.add(AsyncMultiArrayInputStream::Batch {
+    kj::mv(msg)
+  });
+
+  constexpr uint64_t smallBufferSize = 7;
+  KJ_ASSERT(batches[0].bytes.size() > smallBufferSize);
+
+  AsyncMultiArrayInputStream rawStream(batches.finish(), 65536);
+  auto stream = makeBufferedStream(static_cast<kj::AsyncIoStream&>(rawStream),
+      BufferedStreamOptions{ smallBufferSize });
+
+  auto maybeMessage = stream->tryReadMessage(nullptr).wait(ioContext.waitScope);
+  auto& received = KJ_ASSERT_NONNULL(maybeMessage);
+
+  checkTestMessage(received.reader->getRoot<TestAllTypes>());
+}
+
+#if !_WIN32 && !__CYGWIN__
+TEST(SerializeAsyncTest, ParseBufferedAsyncFullBufferWithCaps) {
+  PipeWithSmallBuffer capFds;
+
+  auto ioContext = kj::setupAsyncIo();
+
+  int pipeFds[2];
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in1(pipeFds[0]);
+  kj::AutoCloseFd out1(pipeFds[1]);
+
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in2(pipeFds[0]);
+  kj::AutoCloseFd out2(pipeFds[1]);
+
+  TestMessageBuilder message(10);
+  initTestMessage(message.getRoot<TestAllTypes>());
+
+  auto thread = kj::heap<kj::Thread>(
+      [&capFds, &message, out1 = kj::mv(out1), out2 = kj::mv(out2)]() mutable noexcept {
+    auto ioContext = kj::setupAsyncIo();
+    auto outputCapStream = ioContext.lowLevelProvider->wrapUnixSocketFd(capFds[1]);
+
+    auto sendFd = [&ioContext, &outputCapStream, &message](kj::AutoCloseFd fd) {
+      for(int i = 0; i < 4; i++) {
+        writeMessage(*outputCapStream, message).wait(ioContext.waitScope);
+      }
+      int sendFds[1] = { fd.get() };
+      writeMessage(*outputCapStream, sendFds, message).wait(ioContext.waitScope);
+    };
+
+    sendFd(kj::mv(out1));
+    sendFd(kj::mv(out2));
+  });
+
+  auto inputCapStream = ioContext.lowLevelProvider->wrapUnixSocketFd(capFds[0]);
+  auto stream = makeBufferedStream(*inputCapStream,
+      BufferedStreamOptions{ BufferedStreamOptions{}.bufferSize, 2 });
+
+  auto receiveFd = [&ioContext, &stream](auto& expectedInFd) noexcept {
+    for(int i = 0; i < 4; i++) {
+      auto result = KJ_ASSERT_NONNULL(stream->tryReadMessage(nullptr).wait(ioContext.waitScope));
+      KJ_EXPECT(result.fds.size() == 0);
+      checkTestMessage(result.reader->getRoot<TestAllTypes>());
+    }
+
+    {
+      kj::Array<kj::AutoCloseFd> fdSpace = kj::heapArray<kj::AutoCloseFd>(1);
+      auto result = KJ_ASSERT_NONNULL(stream->tryReadMessage(fdSpace).wait(ioContext.waitScope));
+      KJ_ASSERT(result.fds.size() == 1);
+      checkTestMessage(result.reader->getRoot<TestAllTypes>());
+
+      kj::FdOutputStream(kj::mv(result.fds[0])).write("bar", 3);
+    }
+
+    // We want to verify that the outFd closed without deadlocking if it wasn't. So, use nonblocking
+    // mode for our read()s.
+    KJ_SYSCALL(fcntl(expectedInFd, F_SETFL, O_NONBLOCK));
+
+    char buffer[4];
+    ssize_t n;
+
+    // First we read "bar" from expectedInFd.
+    KJ_NONBLOCKING_SYSCALL(n = read(expectedInFd, buffer, 4));
+    KJ_ASSERT(n == 3);
+    buffer[3] = '\0';
+    KJ_ASSERT(kj::StringPtr(buffer) == "bar");
+  };
+
+  receiveFd(in1);
+  receiveFd(in2);
+
+  thread = nullptr;
+
+  auto verifyEof = [](auto expectedInFd) noexcept {
+    char buffer[4];
+    ssize_t n;
+
+    // Now it should be EOF.
+    KJ_NONBLOCKING_SYSCALL(n = read(expectedInFd, buffer, 4));
+    if (n < 0) {
+      KJ_FAIL_ASSERT("fd was not closed", n, strerror(errno));
+    }
+    KJ_ASSERT(n == 0);
+  };
+
+  verifyEof(kj::mv(in1));
+  verifyEof(kj::mv(in2));
+}
+
+TEST(SerializeAsyncTest, ParseBufferedAsyncBoundaryCasesWithCaps) {
+  auto ioContext = kj::setupAsyncIo();
+
+  int pipeFds[2];
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in1(pipeFds[0]);
+  kj::AutoCloseFd out1(pipeFds[1]);
+
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in2(pipeFds[0]);
+  kj::AutoCloseFd out2(pipeFds[1]);
+
+  auto messageBytes = [](auto numSegments) {
+    TestMessageBuilder builder(numSegments);
+    initTestMessage(builder.getRoot<TestAllTypes>());
+    return messageToFlatArray(builder);
+  };
+
+  auto evenMessage = messageBytes(8);
+  auto oddMessage = messageBytes(7);
+
+  kj::Vector<AsyncMultiArrayInputStream::Batch> batchBuilder;
+  auto numMessages = 0;
+  kj::HashSet<size_t> messagesWithFds;
+
+  auto batchesFromMessage = [&messagesWithFds, &numMessages, &evenMessage, &oddMessage]
+      (std::initializer_list<size_t> splits, kj::Maybe<kj::AutoCloseFd> fd = nullptr) {
+    kj::Vector<AsyncMultiArrayInputStream::Batch> batches;
+
+    if (fd != nullptr) {
+      messagesWithFds.insert(numMessages);
+    }
+
+    auto message = ((numMessages++ % 2) ? evenMessage : oddMessage).asBytes();
+    size_t start = 0;
+    bool first = true;
+    for(auto split : splits) {
+      KJ_ASSERT(split < message.size());
+      batches.add(AsyncMultiArrayInputStream::Batch{
+        kj::heapArray(message.slice(start, split))
+      });
+      if (first) {
+        batches[0].fd = kj::mv(fd);
+        first = false;
+      }
+
+      start = split;
+    }
+
+    if (start < message.size()) {
+      batches.add(AsyncMultiArrayInputStream::Batch{
+        kj::heapArray(message.slice(start, message.size()))
+      });
+    }
+
+    batches.back().fd = kj::mv(fd);
+
+    return batches.releaseAsArray();
+  };
+
+  auto completeMessage = [&](kj::Maybe<kj::AutoCloseFd> fd = nullptr) {
+    if (fd != nullptr) {
+      messagesWithFds.insert(numMessages);
+    }
+
+    auto message = ((numMessages++ % 2) ? evenMessage : oddMessage).asBytes();
+    return AsyncMultiArrayInputStream::Batch{ kj::heapArray(message), kj::mv(fd) };
+  };
+
+  auto concatFirstBatch = [](auto batches, AsyncMultiArrayInputStream::Batch msg) {
+    auto& first = batches[0];
+
+    // It's not valid to perform this operation of prepending a message to the first batch
+    // if the message has FDs attached.
+    //
+    // See https://gist.github.com/kentonv/bc7592af98c68ba2738f4436920868dc:
+    //   To prevent multiple ancillary messages being delivered at once,
+    //   the recvmsg() call that receives the ancillary data will be artifically limited to read
+    //   no further than the last byte in the range, even if more data is available in the buffer
+    //   after that byte, and even if that later data is not actually associated with any
+    //   ancillary message.
+    //
+    // The byte range of the message batch to prepend would end at the end of that batch if it
+    // contained FDs, so adding it to the beginning of another batch is invalid.
+    KJ_ASSERT(msg.fd == nullptr);
+
+    auto builder = kj::heapArrayBuilder<byte>(first.bytes.size() + msg.bytes.size());
+    builder.addAll(msg.bytes);
+    builder.addAll(first.bytes);
+
+    first.bytes = builder.finish();
+
+    return kj::mv(batches);
+  };
+
+  auto concatLastBatch = [](auto batches, AsyncMultiArrayInputStream::Batch msg) {
+    auto& lastBatch = batches[batches.size()-1];
+
+    auto builder = kj::heapArrayBuilder<byte>(lastBatch.bytes.size() + msg.bytes.size());
+    builder.addAll(lastBatch.bytes);
+    builder.addAll(msg.bytes);
+
+    lastBatch.bytes = builder.finish();
+    if (msg.fd != nullptr) {
+      KJ_ASSERT(lastBatch.fd == nullptr);
+      lastBatch.fd = kj::mv(msg.fd);
+    }
+    return kj::mv(batches);
+  };
+
+  auto addBatches = [&](auto batches) {
+    for(auto& batch : batches) {
+      batchBuilder.add(kj::mv(batch));
+    }
+  };
+
+  {
+    // Test that fds are correctly attributed to split messages after a complete message
+
+    // Make sure we create this before so messagesWithFds is correctly modified
+    auto msg = completeMessage();
+    addBatches(
+      concatFirstBatch(batchesFromMessage({ 3 }, kj::mv(out1)), kj::mv(msg)));
+  }
+
+  {
+    // Test that fds are correctly attributed to the last read message
+
+    auto batches = batchesFromMessage({3});
+    batches = concatFirstBatch(kj::mv(batches), completeMessage());
+
+    // Make sure we create this last so messagesWithFds is correctly modified
+    auto fdMsg = completeMessage(kj::mv(out2));
+    batches = concatLastBatch(kj::mv(batches), kj::mv(fdMsg));
+
+    addBatches(kj::mv(batches));
+  }
+
+  AsyncMultiArrayInputStream rawStream(batchBuilder.releaseAsArray(), 65536);
+  auto stream = makeBufferedStream(rawStream, BufferedStreamOptions{
+      BufferedStreamOptions{}.bufferSize, 1});
+
+  for(auto i = 0; i < numMessages; i++) {
+    kj::Array<kj::AutoCloseFd> fdSpace = kj::heapArray<kj::AutoCloseFd>(1);
+    auto result = KJ_ASSERT_NONNULL(stream->tryReadMessage(fdSpace).wait(ioContext.waitScope));
+
+    checkTestMessage(result.reader->getRoot<TestAllTypes>());
+
+    if (messagesWithFds.contains(i)) {
+      KJ_EXPECT(result.fds.size() == 1);
+    } else {
+      KJ_EXPECT(result.fds.size() == 0);
+    }
+  }
+
+}
+#endif
 
 TEST(SerializeAsyncTest, WriteAsync) {
   PipeWithSmallBuffer fds;

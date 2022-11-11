@@ -169,6 +169,7 @@ includekj_HEADERS =                                            \
   src/kj/async-prelude.h                                       \
   src/kj/async.h                                               \
   src/kj/async-inl.h                                           \
+  src/kj/buffering.h                                           \
   src/kj/time.h                                                \
   src/kj/timer.h                                               \
   src/kj/async-unix.h                                          \
@@ -284,7 +285,7 @@ libkj_la_SOURCES=                                              \
   src/kj/thread.c++                                            \
   src/kj/time.c++                                              \
   src/kj/filesystem.c++                                        \
-  src/kj/filesystem-disk-unix.c++                                   \
+  src/kj/filesystem-disk-unix.c++                              \
   src/kj/filesystem-disk-win32.c++                             \
   src/kj/test-helpers.c++                                      \
   src/kj/main.c++                                              \
@@ -304,6 +305,7 @@ libkj_async_la_SOURCES=                                        \
   src/kj/async-io.c++                                          \
   src/kj/async-io-unix.c++                                     \
   src/kj/async-io-win32.c++                                    \
+  src/kj/buffering.c++                                         \
   src/kj/timer.c++
 
 if BUILD_KJ_GZIP

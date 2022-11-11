@@ -163,6 +163,13 @@ size_t computeSerializedSizeInWords(kj::ArrayPtr<const kj::ArrayPtr<const word>>
   return totalSize;
 }
 
+size_t computeHeaderSizeInWordsFromPrefix(word firstWord) {
+  const auto* table = reinterpret_cast<const _::WireValue<uint32_t>*>(&firstWord);
+
+  uint segmentCount = table[0].get() + 1;
+  return segmentCount / 2u + 1u;
+}
+
 // =======================================================================================
 
 InputStreamMessageReader::InputStreamMessageReader(

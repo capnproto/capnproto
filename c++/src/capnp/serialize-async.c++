@@ -31,8 +31,12 @@
 #endif
 
 #include "serialize-async.h"
+#include "serialize.h"
 #include <kj/debug.h>
 #include <kj/io.h>
+#include <kj/encoding.h>
+#include <kj/buffering.h>
+#include <deque>
 
 namespace capnp {
 
@@ -539,6 +543,155 @@ kj::Promise<MessageReaderAndFds> MessageStream::readMessage(
         KJ_UNREACHABLE;
       }
   });
+}
+
+template<typename Stream>
+class BufferedAsyncMessageStream final : public BufferedMessageStream {
+public:
+  explicit BufferedAsyncMessageStream(Stream& stream,
+      BufferedStreamOptions options)
+      : buffer(stream, kj::FdRangeInputBufferOptions{
+            options.bufferSize,
+            options.maxFdsPerMessage }),
+        stream(stream),
+        options(options) {}
+
+  // Implements MessageStream
+  kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
+  kj::Promise<void> writeMessage(
+      kj::ArrayPtr<const int> fds,
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+  kj::Promise<void> writeMessages(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override;
+  kj::Maybe<int> getSendBufferSize() override;
+  kj::Promise<void> end() override;
+
+  // Implements BufferedMessageStream
+  void retainLastMessageLongTerm() override;
+
+private:
+  kj::FdRangeInputBuffer<Stream> buffer;
+  kj::Maybe<kj::Own<kj::RetainableRange>> lastRead;
+
+  Stream& stream;
+  BufferedStreamOptions options;
+};
+
+kj::Own<BufferedMessageStream> makeBufferedStream(kj::AsyncIoStream& ioStream,
+    BufferedStreamOptions options) {
+  options.bufferSize = kj::max(sizeof(word), options.bufferSize / sizeof(word) * sizeof(word));
+  return kj::heap<BufferedAsyncMessageStream<kj::AsyncIoStream>>(ioStream, options);
+}
+
+kj::Own<BufferedMessageStream> makeBufferedStream(kj::AsyncCapabilityStream& capStream,
+    BufferedStreamOptions options) {
+  options.bufferSize = kj::max(sizeof(word), options.bufferSize / sizeof(word) * sizeof(word));
+  return kj::heap<BufferedAsyncMessageStream<kj::AsyncCapabilityStream>>(capStream, options);
+}
+
+kj::ArrayPtr<const word> asWords(kj::ArrayPtr<const byte> bytes) {
+  return kj::ArrayPtr<const word>(
+      reinterpret_cast<const word*>(bytes.begin()), bytes.size() / sizeof(word));
+}
+
+namespace {
+  template<typename Stream>
+  kj::Promise<kj::Own<kj::RetainableRange>> finishMessage(
+      typename kj::FdRangeInputBuffer<Stream>::Handle handle) {
+    auto bytes = handle.peek();
+    auto words = asWords(bytes);
+
+    auto expectedSize = expectedSizeInWordsFromPrefix(words);
+    auto expectedSizeInBytes = expectedSize * sizeof(word);
+
+    if (expectedSize <= words.size()) {
+      // Complete message, split it off
+      return handle.split(expectedSizeInBytes);
+    } else {
+      // Incomplete message, finish it
+      auto min = expectedSizeInBytes - bytes.size();
+      return handle.append(min).then(
+          [handle, min](size_t n) mutable {
+        if (n < min) {
+          kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF.", n, min));
+          KJ_UNREACHABLE;
+        }
+        return finishMessage<Stream>(handle);
+      });
+    }
+  }
+}
+
+template<typename Stream>
+kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedAsyncMessageStream<Stream>::tryReadMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> passedInFdSpace,
+    ReaderOptions readerOptions, kj::ArrayPtr<word> scratchSpace) {
+  auto status = buffer.tryStartRead();
+  KJ_SWITCH_ONEOF(status) {
+    KJ_CASE_ONEOF(_, kj::EndOfFile) {
+      return nullptr;
+    }
+    KJ_CASE_ONEOF(prom, kj::Promise<void>) {
+      return prom.then([this, passedInFdSpace, readerOptions, scratchSpace]() mutable {
+        return tryReadMessage(passedInFdSpace, readerOptions, scratchSpace);
+      });
+    }
+    KJ_CASE_ONEOF(handle, typename kj::FdRangeInputBuffer<Stream>::Handle) {
+      return finishMessage<Stream>(handle).then(
+            [this, readerOptions](kj::Own<kj::RetainableRange> result)
+            -> kj::Maybe<MessageReaderAndFds> {
+        lastRead = kj::addRef(*result);
+
+        auto fds = result->getFds();
+        auto reader = kj::attachVal(
+            FlatArrayMessageReader(asWords(result->getBytes()), readerOptions),
+            kj::mv(result));
+
+        return MessageReaderAndFds { kj::mv(reader), fds };
+      });
+    }
+  }
+  KJ_UNREACHABLE;
+}
+
+template<>
+kj::Promise<void> BufferedAsyncMessageStream<kj::AsyncIoStream>::writeMessage(
+    kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return capnp::writeMessage(stream, segments);
+}
+
+template<>
+kj::Promise<void> BufferedAsyncMessageStream<kj::AsyncCapabilityStream>::writeMessage(
+    kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return capnp::writeMessage(stream, fds, segments);
+}
+
+template<typename Stream>
+kj::Promise<void> BufferedAsyncMessageStream<Stream>::writeMessages(
+    kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) {
+  return capnp::writeMessages(stream, messages);
+}
+
+template<typename Stream>
+kj::Maybe<int> BufferedAsyncMessageStream<Stream>::getSendBufferSize() {
+  return capnp::getSendBufferSize(stream);
+}
+
+template<typename Stream>
+kj::Promise<void> BufferedAsyncMessageStream<Stream>::end() {
+  stream.shutdownWrite();
+  return kj::READY_NOW;
+}
+
+template<typename Stream>
+void BufferedAsyncMessageStream<Stream>::retainLastMessageLongTerm() {
+  KJ_IF_MAYBE(lr, lastRead) {
+    (*lr)->retainLongTerm();
+  }
 }
 
 }  // namespace capnp

@@ -85,6 +85,7 @@ cc_library(
         "async-io-win32.c++",
         "async-unix.c++",
         "async-win32.c++",
+        "buffering.c++",
         "timer.c++",
     ],
     hdrs = [
@@ -95,6 +96,7 @@ cc_library(
         "async-queue.h",
         "async-unix.h",
         "async-win32.h",
+        "buffering.h",
         "timer.h",
     ],
     include_prefix = "kj",

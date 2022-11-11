@@ -105,6 +105,9 @@ size_t computeSerializedSizeInWords(MessageBuilder& builder);
 size_t computeSerializedSizeInWords(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Version of computeSerializedSizeInWords that takes a raw segment array.
 
+size_t computeHeaderSizeInWordsFromPrefix(word firstWord);
+// Given the first word of a serialized message, determine the total size of the message header,
+
 size_t expectedSizeInWordsFromPrefix(kj::ArrayPtr<const word> messagePrefix);
 // Given a prefix of a serialized message, try to determine the expected total size of the message,
 // in words. The returned size is based on the information known so far; it may be an underestimate
