@@ -31,6 +31,7 @@
 #endif
 
 #include "serialize-async.h"
+#include "serialize.h"
 #include <kj/debug.h>
 #include <kj/io.h>
 
@@ -539,6 +540,303 @@ kj::Promise<MessageReaderAndFds> MessageStream::readMessage(
         KJ_UNREACHABLE;
       }
   });
+}
+
+// =======================================================================================
+
+class BufferedMessageStream::MessageReaderImpl: public FlatArrayMessageReader {
+public:
+  MessageReaderImpl(BufferedMessageStream& parent, kj::ArrayPtr<const word> data,
+                    ReaderOptions options)
+      : FlatArrayMessageReader(data, options), state(&parent) {
+    KJ_DASSERT(!parent.hasOutstandingShortLivedMessage);
+    parent.hasOutstandingShortLivedMessage = true;
+  }
+  MessageReaderImpl(kj::Array<word>&& ownBuffer, ReaderOptions options)
+      : FlatArrayMessageReader(ownBuffer, options), state(kj::mv(ownBuffer)) {}
+  MessageReaderImpl(kj::ArrayPtr<word> scratchBuffer, ReaderOptions options)
+      : FlatArrayMessageReader(scratchBuffer, options) {}
+
+  ~MessageReaderImpl() noexcept(false) {
+    KJ_IF_MAYBE(parent, state.tryGet<BufferedMessageStream*>()) {
+      (*parent)->hasOutstandingShortLivedMessage = false;
+    }
+  }
+
+private:
+  kj::OneOf<BufferedMessageStream*, kj::Array<word>> state;
+  // * BufferedMessageStream* if this reader aliases the original buffer.
+  // * kj::Array<word> if this reader owns its own backing buffer.
+};
+
+BufferedMessageStream::BufferedMessageStream(
+    kj::AsyncIoStream& stream, IsShortLivedCallback isShortLivedCallback,
+    size_t bufferSizeInWords)
+    : stream(stream), isShortLivedCallback(kj::mv(isShortLivedCallback)),
+      buffer(kj::heapArray<word>(bufferSizeInWords)),
+      beginData(buffer.begin()), beginAvailable(buffer.asBytes().begin()) {}
+
+BufferedMessageStream::BufferedMessageStream(
+    kj::AsyncCapabilityStream& stream, IsShortLivedCallback isShortLivedCallback,
+    size_t bufferSizeInWords)
+    : stream(stream), capStream(stream), isShortLivedCallback(kj::mv(isShortLivedCallback)),
+      buffer(kj::heapArray<word>(bufferSizeInWords)),
+      beginData(buffer.begin()), beginAvailable(buffer.asBytes().begin()) {}
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::tryReadMessage(
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace, ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  return tryReadMessageImpl(fdSpace, 0, options, scratchSpace);
+}
+
+kj::Promise<void> BufferedMessageStream::writeMessage(
+    kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  KJ_IF_MAYBE(cs, capStream) {
+    return capnp::writeMessage(*cs, fds, segments);
+  } else {
+    return capnp::writeMessage(stream, segments);
+  }
+}
+
+kj::Promise<void> BufferedMessageStream::writeMessages(
+    kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) {
+  return capnp::writeMessages(stream, messages);
+}
+
+kj::Maybe<int> BufferedMessageStream::getSendBufferSize() {
+  return capnp::getSendBufferSize(stream);
+}
+
+kj::Promise<void> BufferedMessageStream::end() {
+  stream.shutdownWrite();
+  return kj::READY_NOW;
+}
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::tryReadMessageImpl(
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace, size_t fdsSoFar,
+    ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  KJ_REQUIRE(!hasOutstandingShortLivedMessage,
+      "can't read another message while the previous short-lived message still exists");
+
+  kj::byte* beginDataBytes = reinterpret_cast<kj::byte*>(beginData);
+  size_t dataByteSize = beginAvailable - beginDataBytes;
+  kj::ArrayPtr<word> data = kj::arrayPtr(beginData, dataByteSize / sizeof(word));
+
+  size_t expected = expectedSizeInWordsFromPrefix(data);
+
+  if (!leftoverFds.empty() && expected * sizeof(word) == dataByteSize) {
+    // We're about to return a message that consumes the rest of the data in the buffer, and
+    // `leftoverFds` is non-empty. Those FDs are considered attached to whatever message contains
+    // the last byte in the buffer. That's us! Let's consume them.
+
+    // `fdsSoFar` must be empty here because we shouldn't have performed any reads while
+    // `leftoverFds` was non-empty, so there shouldn't have been any other chance to add FDs to
+    // `fdSpace`.
+    KJ_ASSERT(fdsSoFar == 0);
+
+    fdsSoFar = kj::min(leftoverFds.size(), fdSpace.size());
+    for (auto i: kj::zeroTo(fdsSoFar)) {
+      fdSpace[i] = kj::mv(leftoverFds[i]);
+    }
+    leftoverFds.clear();
+  }
+
+  if (expected <= data.size()) {
+    // The buffer contains at least one whole message, which we can just return without reading
+    // any more data.
+
+    auto msgData = kj::arrayPtr(beginData, expected);
+    auto reader = kj::heap<MessageReaderImpl>(*this, msgData, options);
+    if (!isShortLivedCallback(*reader)) {
+      // This message is long-lived, so we must make a copy to get it out of our buffer.
+      if (msgData.size() <= scratchSpace.size()) {
+        // Oh hey, we can use the provided scratch space.
+        memcpy(scratchSpace.begin(), msgData.begin(), msgData.asBytes().size());
+        reader = kj::heap<MessageReaderImpl>(scratchSpace, options);
+      } else {
+        auto ownMsgData = kj::heapArray<word>(msgData.size());
+        memcpy(ownMsgData.begin(), msgData.begin(), msgData.asBytes().size());
+        reader = kj::heap<MessageReaderImpl>(kj::mv(ownMsgData), options);
+      }
+    }
+
+    beginData += expected;
+    if (reinterpret_cast<byte*>(beginData) == beginAvailable) {
+      // The buffer is empty. Let's opportunistically reset the pointers.
+      beginData = buffer.begin();
+      beginAvailable = buffer.asBytes().begin();
+    } else if (fdsSoFar > 0) {
+      // The buffer is NOT empty, and we received FDs when we were filling it. These FDs must
+      // actually belong to the last message in the buffer, because when the OS returns FDs
+      // attached to a read, it will make sure the read does not extend past the last byte to
+      // which those FDs were attached.
+      //
+      // So, we must set these FDs aside for the moment.
+      for (auto i: kj::zeroTo(fdsSoFar)) {
+        leftoverFds.add(kj::mv(fdSpace[i]));
+      }
+      fdsSoFar = 0;
+    }
+
+    return kj::Maybe<MessageReaderAndFds>(MessageReaderAndFds {
+      kj::mv(reader),
+      fdSpace.slice(0, fdsSoFar)
+    });
+  }
+
+  // At this point, the buffer doesn't contain a complete message. We are going to need to perform
+  // a read.
+
+  if (expected > buffer.size() / 2 || fdsSoFar > 0) {
+    // Read this message into its own separately-allocated buffer. We do this for:
+    // - Big messages, because they might not fit in the buffer and because big messages are
+    //   almost certainly going to be long-lived and so would require a copy later anyway.
+    // - Messages where we've already received some FDs, because these are also almost certainly
+    //   long-lived, and we want to avoid accidentally reading into the next message since we
+    //   could end up receiving FDs that were intended for that one.
+    //
+    // Optimization note: You might argue that if the expected size is more than half the buffer,
+    // but still less than the *whole* buffer, then we should still try to read into the buffer
+    // first. However, keep in mind that in the RPC system, all short-lived messages are
+    // relatively small, and hence we can assume that since this is a large message, it will
+    // end up being long-lived. Long-lived messages need to be copied out into their own buffer
+    // at some point anyway. So we might as well go ahead and allocate that separate buffer
+    // now, and read directly into it, rather than try to use the shared buffer. We choose to
+    // use buffer.size() / 2 as the cutoff because that ensures that we won't try to move the
+    // bytes of a known-large message to the beginning of the buffer (see next if() after this
+    // one).
+
+    auto prefix = kj::arrayPtr(beginDataBytes, dataByteSize);
+
+    // We are consuming everything in the buffer here, so we can reset the pointers so the
+    // buffer appears empty on the next message read after this.
+    beginData = buffer.begin();
+    beginAvailable = buffer.asBytes().begin();
+
+    return readEntireMessage(prefix, expected, fdSpace, fdsSoFar, options);
+  }
+
+  // Set minBytes to at least complete the current message.
+  size_t minBytes = expected * sizeof(word) - dataByteSize;
+
+  // minBytes must be less than half the buffer otherwise we would have taken the
+  // readEntireMessage() branch above.
+  KJ_DASSERT(minBytes <= buffer.asBytes().size() / 2);
+
+  // Set maxBytes to the space we have available in the buffer.
+  size_t maxBytes = buffer.asBytes().end() - beginAvailable;
+
+  if (maxBytes < buffer.asBytes().size() / 2) {
+    // We have less than half the buffer remaining to read into. Move the buffered data to the
+    // beginning of the buffer to make more space.
+    memmove(buffer.begin(), beginData, dataByteSize);
+    beginData = buffer.begin();
+    beginDataBytes = buffer.asBytes().begin();
+    beginAvailable = beginDataBytes + dataByteSize;
+
+    maxBytes = buffer.asBytes().end() - beginAvailable;
+  }
+
+  // maxBytes must now be more than half the buffer, because if it weren't we would have moved
+  // the existing data above, and the existing data cannot be more than half the buffer because
+  // if it were we would have taken the readEntireMesage() path earlier.
+  KJ_DASSERT(maxBytes >= buffer.asBytes().size() / 2);
+
+  // Since minBytes is less that half the buffer and maxBytes is more then half, minBytes is
+  // definitely less than maxBytes.
+  KJ_DASSERT(minBytes <= maxBytes);
+
+  // Read from underlying stream.
+  return tryReadWithFds(beginAvailable, minBytes, maxBytes,
+                        fdSpace.begin() + fdsSoFar, fdSpace.size() - fdsSoFar)
+      .then([this,minBytes,fdSpace,fdsSoFar,options,scratchSpace]
+            (kj::AsyncCapabilityStream::ReadResult result) mutable
+            -> kj::Promise<kj::Maybe<MessageReaderAndFds>> {
+    // Account for new data received in the buffer.
+    beginAvailable += result.byteCount;
+
+    if (result.byteCount < minBytes) {
+      // Didn't reach minBytes, so we must have hit EOF. That's legal as long as it happened on
+      // a clean message boundray.
+      if (beginAvailable > reinterpret_cast<kj::byte*>(beginData)) {
+        // We had received a partial message before EOF, so this should be considered an error.
+        kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED,
+            "stream disconnected prematurely"));
+      }
+      return kj::Maybe<MessageReaderAndFds>(nullptr);
+    }
+
+    // Loop!
+    return tryReadMessageImpl(fdSpace, fdsSoFar + result.capCount, options, scratchSpace);
+  });
+}
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::readEntireMessage(
+    kj::ArrayPtr<const byte> prefix, size_t expectedSizeInWords,
+    kj::ArrayPtr<kj::AutoCloseFd> fdSpace, size_t fdsSoFar,
+    ReaderOptions options) {
+  KJ_REQUIRE(expectedSizeInWords <= options.traversalLimitInWords,
+      "incoming RPC message exceeds size limit");
+
+  auto msgBuffer = kj::heapArray<word>(expectedSizeInWords);
+
+  memcpy(msgBuffer.asBytes().begin(), prefix.begin(), prefix.size());
+
+  size_t bytesRemaining = msgBuffer.asBytes().size() - prefix.size();
+
+  // TODO(perf): If we had scatter-read API support, we could optimistically try to read additional
+  //   bytes into the shared buffer, to save syscalls when a big message is immediately followed
+  //   by small messages.
+  auto promise = tryReadWithFds(
+      msgBuffer.asBytes().begin() + prefix.size(), bytesRemaining, bytesRemaining,
+      fdSpace.begin() + fdsSoFar, fdSpace.size() - fdsSoFar);
+  return promise
+      .then([this, msgBuffer = kj::mv(msgBuffer), fdSpace, fdsSoFar, options, bytesRemaining]
+            (kj::AsyncCapabilityStream::ReadResult result) mutable
+            -> kj::Promise<kj::Maybe<MessageReaderAndFds>> {
+    fdsSoFar += result.capCount;
+
+    if (result.byteCount < bytesRemaining) {
+      // Received EOF during message.
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "stream disconnected prematurely"));
+      return kj::Maybe<MessageReaderAndFds>(nullptr);
+    }
+
+    size_t newExpectedSize = expectedSizeInWordsFromPrefix(msgBuffer);
+    if (newExpectedSize > msgBuffer.size()) {
+      // Unfortunately, the predicted size increased. This can happen if the segment table had
+      // not been fully received when we generated the first prediction. This should be rare
+      // (most segment tables are small and should be received all at once), but in this case we
+      // will need to make a whole new copy of the message.
+      //
+      // We recurse here, but this should never recurse more than once, since we should always
+      // have the entire segment table by this point and therefore the expected size is now final.
+      //
+      // TODO(perf): Technically it's guaranteed that the original expectation should have stopped
+      //   at the boundary between two segments, so with a clever MesnsageReader implementation
+      //   we could actually read the rest of the message into a second buffer, avoiding the copy.
+      //   Unclear if it's worth the effort to implement this.
+      return readEntireMessage(msgBuffer.asBytes(), newExpectedSize, fdSpace, fdsSoFar, options);
+    }
+
+    return kj::Maybe<MessageReaderAndFds>(MessageReaderAndFds {
+      kj::heap<MessageReaderImpl>(kj::mv(msgBuffer), options),
+      fdSpace.slice(0, fdsSoFar)
+    });
+  });
+}
+
+kj::Promise<kj::AsyncCapabilityStream::ReadResult> BufferedMessageStream::tryReadWithFds(
+    void* buffer, size_t minBytes, size_t maxBytes, kj::AutoCloseFd* fdBuffer, size_t maxFds) {
+  KJ_IF_MAYBE(cs, capStream) {
+    return cs->tryReadWithFds(buffer, minBytes, maxBytes, fdBuffer, maxFds);
+  } else {
+    // Regular byte stream, no FDs.
+    return stream.tryRead(buffer, minBytes, maxBytes)
+        .then([](size_t amount) mutable -> kj::AsyncCapabilityStream::ReadResult {
+      return { amount, 0 };
+    });
+  }
 }
 
 }  // namespace capnp

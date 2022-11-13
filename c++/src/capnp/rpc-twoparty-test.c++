@@ -406,8 +406,10 @@ TEST(TwoPartyNetwork, Abort) {
     msg->send();
   }
 
-  auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(ioContext.waitScope));
-  EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
+  {
+    auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(ioContext.waitScope));
+    EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
+  }
 
   EXPECT_TRUE(conn->receiveIncomingMessage().wait(ioContext.waitScope) == nullptr);
 }
