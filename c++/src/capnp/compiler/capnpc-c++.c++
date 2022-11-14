@@ -1596,7 +1596,6 @@ private:
       CppTypeName elementReaderType;
       if (typeSchema.isList()) {
         bool primitiveElement = false;
-        bool interface = false;
         auto elementType = typeSchema.asList().getElementType();
         switch (elementType.which()) {
           case schema::Type::VOID:
@@ -1628,29 +1627,24 @@ private:
             shouldIncludeArrayInitializer = elementType.getBrandParameter() != nullptr;
             break;
 
-          case schema::Type::INTERFACE:
-            primitiveElement = false;
-            interface = true;
-            break;
-
           case schema::Type::STRUCT:
+          case schema::Type::INTERFACE:
             primitiveElement = false;
             break;
         }
-        elementReaderType = typeName(elementType, nullptr);
+        auto elementTypeName = typeName(elementType, nullptr);
         if (!primitiveElement) {
-          if (interface) {
-            elementReaderType.addMemberType("Client");
-          } else {
-            elementReaderType.addMemberType("Reader");
-          }
+          elementReaderType = CppTypeName::makeNamespace("capnp");
+          elementReaderType.addMemberTemplate("ReaderFor", kj::heapArray(&elementTypeName, 1));
+        } else {
+          elementReaderType = elementTypeName;
         }
       };
 
       CppTypeName readerType;
       CppTypeName builderType;
       CppTypeName pipelineType;
-      if (kind == FieldKind::BRAND_PARAMETER) {
+      if (kind == FieldKind::BRAND_PARAMETER || kind == FieldKind::LIST) {
         readerType = CppTypeName::makeNamespace("capnp");
         readerType.addMemberTemplate("ReaderFor", kj::heapArray(&type, 1));
         builderType = CppTypeName::makeNamespace("capnp");
@@ -1659,11 +1653,11 @@ private:
         pipelineType.addMemberTemplate("PipelineFor", kj::heapArray(&type, 1));
       } else {
         readerType = type;
-        readerType.addMemberType("Reader");
+        readerType.addMemberType(kind == FieldKind::INTERFACE ? "Client" : "Reader");
         builderType = type;
-        builderType.addMemberType("Builder");
+        builderType.addMemberType(kind == FieldKind::INTERFACE ? "Client" : "Builder");
         pipelineType = type;
-        pipelineType.addMemberType("Pipeline");
+        pipelineType.addMemberType(kind == FieldKind::INTERFACE ? "Client" : "Pipeline");
       }
 
       #define COND(cond, ...) ((cond) ? kj::strTree(__VA_ARGS__) : kj::strTree())

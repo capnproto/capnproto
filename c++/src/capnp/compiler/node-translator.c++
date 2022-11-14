@@ -22,6 +22,7 @@
 #include "node-translator.h"
 #include "parser.h"      // only for generateGroupId() and expressionString()
 #include <capnp/serialize.h>
+#include <capnp/list.h>
 #include <kj/debug.h>
 #include <kj/arena.h>
 #include <kj/encoding.h>
@@ -650,12 +651,15 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
       .check(decl.getNestedDecls(), decl.which());
 
   auto genericParams = decl.getParameters();
+  auto genericParamNames = arena.allocateArray<Text::Reader>(genericParams.size());
   if (genericParams.size() > 0) {
     auto paramsBuilder = builder.initParameters(genericParams.size());
     for (auto i: kj::indices(genericParams)) {
       paramsBuilder[i].setName(genericParams[i].getName());
+      genericParamNames[i] = paramsBuilder[i].getName();
     }
   }
+  KJ_CONTEXT(decl.getName().getValue(), genericParamNames);
 
   builder.setIsGeneric(localBrand->isGeneric());
 
