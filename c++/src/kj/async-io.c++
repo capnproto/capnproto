@@ -3155,6 +3155,15 @@ ArrayPtr<const CidrRange> exampleAddresses() {
   return kj::arrayPtr(result, kj::size(result));
 }
 
+bool hasFilter(ArrayPtr<const StringPtr> list, StringPtr filter) {
+  for (auto rule: list) {
+    if (rule == filter) {
+      return true;
+    }
+  }
+  return false;
+}
+
 NetworkFilter::NetworkFilter()
     : allowUnix(true), allowAbstractUnix(true) {
   allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
@@ -3171,15 +3180,23 @@ NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const Str
     } else if (rule == "network") {
       allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
       allowCidrs.add(CidrRange::inet6({}, {}, 0));
-      denyCidrs.addAll(localCidrs());
+      if (!hasFilter(allow, "local")) {
+        denyCidrs.addAll(localCidrs());
+      }
     } else if (rule == "private") {
       allowCidrs.addAll(privateCidrs());
       allowCidrs.addAll(localCidrs());
     } else if (rule == "public") {
       allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
       allowCidrs.add(CidrRange::inet6({}, {}, 0));
-      denyCidrs.addAll(privateCidrs());
-      denyCidrs.addAll(localCidrs());
+      // If we allow "public" and "private" we don't want to disallow the private IPs.
+      // Similar for "public" and "local".
+      if (!hasFilter(allow, "private")) {
+        denyCidrs.addAll(privateCidrs());
+        if (!hasFilter(allow, "local")) {
+          denyCidrs.addAll(localCidrs());
+        }
+      }
     } else if (rule == "unix") {
       allowUnix = true;
     } else if (rule == "unix-abstract") {
