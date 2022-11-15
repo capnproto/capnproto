@@ -5418,7 +5418,20 @@ public:
   }
 
   kj::Promise<ConnectResponse> connect(kj::StringPtr host, const HttpHeaders& headers) override {
-    KJ_UNIMPLEMENTED("connect() is not implemented for NetworkHttpClient");
+    // We want to connect directly instead of going through a proxy here.
+    // https://github.com/capnproto/capnproto/pull/1454#discussion_r900414879
+    return network.parseAddress(host)
+        .then([this](auto address) {
+      return address->connect().then([this](auto connection) {
+        auto emptyHeaders = kj::heap<kj::HttpHeaders>(responseHeaderTable);
+        return ConnectResponse {
+          200, // .statusCode
+          "OK", // .statusText
+          emptyHeaders, // .headers
+          connection.attach(kj::mv(emptyHeaders)) // .connectionOrBody
+        };
+      }).attach(kj::mv(address));
+    });
   }
 
 private:
@@ -6187,7 +6200,8 @@ private:
       auto pipe = newTwoWayPipe();
 
       kj::Own<kj::AsyncIoStream> io =
-          kj::heap<DelayedEofIoStream>(kj::mv(pipe.ends[0]), task.attach(kj::addRef(*this)));
+          kj::heap<DelayedEofIoStream>(kj::mv(pipe.ends[0]),
+              task.attach(kj::addRef(*this), kj::mv(headersCopy)));
 
       fulfiller->fulfill(HttpClient::ConnectResponse {
         statusCode,
@@ -6302,8 +6316,13 @@ public:
         KJ_CASE_ONEOF(io, kj::Own<kj::AsyncIoStream>) {
           auto io2 = tunnel.accept(response.statusCode, response.statusText, *response.headers);
           auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
-          promises.add(io->pumpTo(*io2).ignoreResult());
-          promises.add(io2->pumpTo(*io).ignoreResult());
+
+          promises.add(io->pumpTo(*io2).then([&io2 = *io2](uint64_t size) {
+            io2.shutdownWrite();
+          }).eagerlyEvaluate(nullptr));
+          promises.add(io2->pumpTo(*io).then([&io = *io](uint64_t size) {
+            io.shutdownWrite();
+          }).eagerlyEvaluate(nullptr));
           return kj::joinPromises(promises.finish()).attach(kj::mv(io), kj::mv(io2));
         }
         KJ_CASE_ONEOF(input, kj::Own<kj::AsyncInputStream>) {
