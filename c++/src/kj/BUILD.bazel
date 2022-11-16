@@ -186,6 +186,9 @@ cc_test(
         ":filesystem-disk-test-base",
         ":kj-test",
     ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 cc_test(
@@ -194,6 +197,9 @@ cc_test(
     deps = [
         ":filesystem-disk-test-base",
         ":kj-test",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
     ],
 )
 

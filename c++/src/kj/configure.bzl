@@ -37,11 +37,6 @@ def kj_configure():
         build_setting_default = False,
     )
 
-    int_flag(
-        name = "contention_warning_threshold",
-        build_setting_default = 100,
-    )
-
     # Settings to use in select() expressions
     native.config_setting(
         name = "use_openssl",
@@ -76,10 +71,7 @@ def kj_configure():
 
     native.cc_library(
         name = "kj-defines",
-        defines = [
-            # todo: take this from flag
-            "KJ_CONTENTION_WARNING_THRESHOLD=100",
-        ] + select({
+        defines = select({
             "//src/kj:use_openssl": ["KJ_HAS_OPENSSL"],
             "//conditions:default": [],
         }) + select({
