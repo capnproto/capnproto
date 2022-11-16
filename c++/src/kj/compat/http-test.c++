@@ -5217,16 +5217,15 @@ KJ_TEST("NetworkHttpClient connect impl") {
   HttpHeaderTable headerTable;
   auto client = newHttpClient(clientTimer, headerTable,
       io.provider->getNetwork(), nullptr, clientSettings);
-  auto connection = client->connect(
+  auto request = client->connect(
       kj::str("localhost:", listener1->getPort()), HttpHeaders(headerTable));
-  connection.then([](HttpClient::ConnectResponse response) {
-    auto& conn = KJ_ASSERT_NONNULL(response.connectionOrBody.tryGet<kj::Own<kj::AsyncIoStream>>());
-    auto buf = kj::heapArray<char>(4);
-    return conn->tryRead(buf.begin(), 1, buf.size()).then([buf = kj::mv(buf)](size_t count) {
-      KJ_ASSERT(count == 4);
-      KJ_ASSERT(kj::str(buf.asChars()) == "test");
-    }).attach(kj::mv(conn));
-  }).wait(io.waitScope);
+
+  auto buf = kj::heapArray<char>(4);
+  return request.connection->tryRead(buf.begin(), 1, buf.size())
+      .then([buf = kj::mv(buf)](size_t count) {
+    KJ_ASSERT(count == 4);
+    KJ_ASSERT(kj::str(buf.asChars()) == "test");
+  }).attach(kj::mv(request.connection)).wait(io.waitScope);
 }
 #endif
 
@@ -5799,11 +5798,13 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host, const HttpHeaders& headers,
-                           ConnectResponse& tunnel) override {
+  kj::Promise<void> connect(kj::StringPtr host,
+                            const HttpHeaders& headers,
+                            kj::AsyncIoStream& connection,
+                            ConnectResponse& response) override {
     connectCount++;
-    auto io = tunnel.accept(statusCodeToSend, "OK", HttpHeaders(headerTable));
-    return io->pumpTo(*io).ignoreResult().attach(kj::mv(io));
+    response.accept(statusCodeToSend, "OK", HttpHeaders(headerTable));
+    return connection.pumpTo(connection).ignoreResult();
   }
 
 private:
@@ -5828,10 +5829,12 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host, const HttpHeaders& headers,
-                            ConnectResponse& tunnel) override {
+  kj::Promise<void> connect(kj::StringPtr host,
+                            const HttpHeaders& headers,
+                            kj::AsyncIoStream& connection,
+                            ConnectResponse& response) override {
     connectCount++;
-    auto out = tunnel.reject(statusCodeToSend, "Failed"_kj, HttpHeaders(headerTable), 4);
+    auto out = response.reject(statusCodeToSend, "Failed"_kj, HttpHeaders(headerTable), 4);
     return out->write("boom", 4).attach(kj::mv(out));
   }
 
@@ -5853,11 +5856,12 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host, const HttpHeaders& headers,
-                           ConnectResponse& tunnel) override {
-    auto io = tunnel.accept(200, "OK", HttpHeaders(headerTable));
-
-    // Return an immediately resolved promise and drop the io
+  kj::Promise<void> connect(kj::StringPtr host,
+                            const HttpHeaders& headers,
+                            kj::AsyncIoStream& connection,
+                            ConnectResponse& response) override {
+    response.accept(200, "OK", HttpHeaders(headerTable));
+    // Return an immediately resolved promise and drop the connection
     return kj::READY_NOW;
   }
 
@@ -5878,12 +5882,14 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host, const HttpHeaders& headers,
-                           ConnectResponse& tunnel) override {
-    auto io = tunnel.accept(200, "OK", HttpHeaders(headerTable));
+  kj::Promise<void> connect(kj::StringPtr host,
+                            const HttpHeaders& headers,
+                            kj::AsyncIoStream& connection,
+                            ConnectResponse& response) override {
+    response.accept(200, "OK", HttpHeaders(headerTable));
 
     auto msg = "hello"_kj;
-    auto promise KJ_UNUSED = io->write(msg.begin(), 5);
+    auto promise KJ_UNUSED = connection.write(msg.begin(), 5);
 
     // Return an immediately resolved promise and drop the io
     return kj::READY_NOW;
@@ -5909,11 +5915,12 @@ private:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host, const HttpHeaders& headers,
-                           ConnectResponse& tunnel) override {
-    auto io = tunnel.accept(200, "OK", HttpHeaders(tunneledService.table));
-
-    return server.listenHttp(kj::mv(io));
+  kj::Promise<void> connect(kj::StringPtr host,
+                            const HttpHeaders& headers,
+                            kj::AsyncIoStream& connection,
+                            ConnectResponse& response) override {
+    response.accept(200, "OK", HttpHeaders(tunneledService.table));
+    return server.listenHttp(kj::Own<kj::AsyncIoStream>(&connection, kj::NullDisposer::instance));
   }
 
   class SimpleHttpService final: public HttpService {
@@ -5948,10 +5955,12 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(
-      kj::StringPtr host, const HttpHeaders& headers, ConnectResponse& tunnel) override {
-    auto io = tunnel.accept(200, "OK", HttpHeaders(headerTable));
-    io->shutdownWrite();
+  kj::Promise<void> connect(kj::StringPtr host,
+                            const HttpHeaders& headers,
+                            kj::AsyncIoStream& connection,
+                            ConnectResponse& response) override {
+    response.accept(200, "OK", HttpHeaders(headerTable));
+    connection.shutdownWrite();
     return kj::READY_NOW;
   }
 
@@ -6009,21 +6018,20 @@ KJ_TEST("Simple CONNECT Client/Server works") {
   HttpHeaderTable clientHeaders;
   // Initiates a CONNECT with the echo server. Once established, sends a bit of data
   // and waits for it to be echoed back.
-  client->connect("https://example.org"_kj, HttpHeaders(clientHeaders))
-      .then([&](HttpClient::ConnectResponse response) {
-    KJ_ASSERT(response.statusCode == 200);
-    KJ_ASSERT(response.statusText == "OK"_kj);
+  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
 
-    auto& io = KJ_ASSERT_NONNULL(response.connectionOrBody.tryGet<kj::Own<kj::AsyncIoStream>>());
+  request.status.then([io=kj::mv(request.connection)](auto status) mutable {
+    KJ_ASSERT(status.statusCode == 200);
+    KJ_ASSERT(status.statusText == "OK"_kj);
 
     auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
     promises.add(io->write("hello", 5));
     promises.add(expectRead(*io, "hello"_kj));
-
-    kj::joinPromises(promises.finish()).wait(waitScope);
-
-    io->shutdownWrite();
-    expectEnd(*io).wait(waitScope);
+    return kj::joinPromises(promises.finish())
+        .then([io=kj::mv(io)]() mutable {
+      io->shutdownWrite();
+      return expectEnd(*io).attach(kj::mv(io));
+    });
   }).wait(waitScope);
 
   listenTask.wait(waitScope);
@@ -6087,22 +6095,21 @@ KJ_TEST("CONNECT Client (204 status)") {
   HttpHeaderTable clientHeaders;
   // Initiates a CONNECT with the echo server. Once established, sends a bit of data
   // and waits for it to be echoed back.
-  client->connect("https://example.org"_kj, HttpHeaders(clientHeaders))
-      .then([&](HttpClient::ConnectResponse response) {
-    KJ_ASSERT(response.statusCode == 204);
-    KJ_ASSERT(response.statusText == "OK"_kj);
+  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
 
-    auto& io = KJ_ASSERT_NONNULL(response.connectionOrBody.tryGet<kj::Own<kj::AsyncIoStream>>());
+  request.status.then([io=kj::mv(request.connection)](auto status) mutable {
+    KJ_ASSERT(status.statusCode == 204);
+    KJ_ASSERT(status.statusText == "OK"_kj);
 
     auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
     promises.add(io->write("hello", 5));
     promises.add(expectRead(*io, "hello"_kj));
 
-    kj::joinPromises(promises.finish()).wait(waitScope);
-
-    io->shutdownWrite();
-    expectEnd(*io).wait(waitScope);
-
+    return kj::joinPromises(promises.finish())
+        .then([io=kj::mv(io)]() mutable {
+      io->shutdownWrite();
+      return expectEnd(*io).attach(kj::mv(io));
+    });
   }).wait(waitScope);
 
   listenTask.wait(waitScope);
@@ -6144,6 +6151,7 @@ KJ_TEST("CONNECT Server rejected") {
   KJ_ASSERT(service.connectCount == 1);
 }
 
+#ifndef KJ_HTTP_TEST_USE_OS_PIPE
 KJ_TEST("CONNECT Client rejected") {
   KJ_HTTP_TEST_SETUP_IO;
 
@@ -6160,22 +6168,24 @@ KJ_TEST("CONNECT Client rejected") {
   auto client = newHttpClient(table, *pipe.ends[1]);
 
   HttpHeaderTable clientHeaders;
-  client->connect("https://example.org"_kj, HttpHeaders(clientHeaders))
-      .then([&](HttpClient::ConnectResponse response) {
-    KJ_ASSERT(response.statusCode == 400);
-    KJ_ASSERT(response.statusText == "Failed"_kj);
+  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
 
-    auto& output = KJ_ASSERT_NONNULL(response.connectionOrBody
-        .tryGet<kj::Own<kj::AsyncInputStream>>());
+  request.status.then([](auto status) mutable {
+    KJ_ASSERT(status.statusCode == 400);
+    KJ_ASSERT(status.statusText == "Failed"_kj);
 
-    expectRead(*output, "boom"_kj).wait(waitScope);
-    expectEnd(*output);
+    auto& errorBody = KJ_ASSERT_NONNULL(status.errorBody);
+
+    return expectRead(*errorBody, "boom"_kj).then([&errorBody=*errorBody]() {
+      return expectEnd(errorBody);
+    }).attach(kj::mv(errorBody));
   }).wait(waitScope);
 
   listenTask.wait(waitScope);
 
   KJ_ASSERT(service.connectCount == 1);
 }
+#endif
 
 KJ_TEST("CONNECT Server cancels read") {
   KJ_HTTP_TEST_SETUP_IO;
@@ -6206,6 +6216,7 @@ KJ_TEST("CONNECT Server cancels read") {
   listenTask.wait(waitScope);
 }
 
+#ifndef KJ_HTTP_TEST_USE_OS_PIPE
 KJ_TEST("CONNECT Server cancels read w/client") {
   KJ_HTTP_TEST_SETUP_IO;
 
@@ -6220,114 +6231,26 @@ KJ_TEST("CONNECT Server cancels read w/client") {
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
   auto client = newHttpClient(table, *pipe.ends[1]);
+  bool failed = false;
 
   HttpHeaderTable clientHeaders;
-  client->connect("https://example.org"_kj, HttpHeaders(clientHeaders))
-      .then([&](HttpClient::ConnectResponse response) {
-    KJ_ASSERT(response.statusCode == 200);
-    KJ_ASSERT(response.statusText == "OK"_kj);
+  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
 
-    auto& io = KJ_ASSERT_NONNULL(response.connectionOrBody.tryGet<kj::Own<kj::AsyncIoStream>>());
+  request.status.then([&failed, io=kj::mv(request.connection)](auto status) mutable {
+    KJ_ASSERT(status.statusCode == 200);
+    KJ_ASSERT(status.statusText == "OK"_kj);
 
-    bool failed = false;
-    io->write("hello", 5).catch_([&failed](kj::Exception&& ex) {
+    return io->write("hello", 5).catch_([&](kj::Exception&& ex) {
       KJ_ASSERT(ex.getType() == kj::Exception::Type::DISCONNECTED);
       failed = true;
-    }).wait(waitScope);
-
-    KJ_ASSERT(failed, "the write promise should have failed");
-
-  }).wait(waitScope);
-
-  listenTask.wait(waitScope);
-}
-
-class TestConnectResponseImpl final: public kj::HttpService::ConnectResponse, public kj::Refcounted {
-public:
-  TestConnectResponseImpl(kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectResponse>> fulfiller)
-      : fulfiller(kj::mv(fulfiller)) {}
-
-  void setPromise(kj::Promise<void> promise) {
-    task = promise.eagerlyEvaluate([this](kj::Exception&& exception) {
-      if (fulfiller->isWaiting()) {
-        fulfiller->reject(kj::mv(exception));
-      } else {
-        kj::throwRecoverableException(kj::mv(exception));
-      }
-    });
-  }
-
-  kj::Own<kj::AsyncIoStream> accept(
-      uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
-    KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
-
-    auto headersCopy = kj::heap(headers.clone());
-
-    auto pipe = kj::newTwoWayPipe();
-
-    fulfiller->fulfill(kj::HttpClient::ConnectResponse {
-      statusCode,
-      statusText,
-      headersCopy.get(),
-      pipe.ends[0].attach(kj::addRef(*this), kj::mv(headersCopy)),
-    });
-    return kj::mv(pipe.ends[1]);
-  }
-
-  kj::Own<kj::AsyncOutputStream> reject(
-      uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
-      kj::Maybe<uint64_t> expectedBodySize) override {
-    KJ_ASSERT(false, "Not testing this branch.");
-    KJ_UNREACHABLE;
-  }
-private:
-  kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectResponse>> fulfiller;
-  kj::Promise<void> task = nullptr;
-};
-
-KJ_TEST("CONNECT Service Adapter handles stream closure correctly") {
-  KJ_HTTP_TEST_SETUP_IO;
-
-  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
-
-  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-
-  HttpHeaderTable table;
-  ConnectCloseService service(table);
-  HttpServer server(timer, table, service);
-
-  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
-
-  auto client = newHttpClient(table, *pipe.ends[1]);
-  auto httpService = newHttpService(*client);
-
-  HttpHeaderTable clientHeaders;
-  auto paf = kj::newPromiseAndFulfiller<kj::HttpClient::ConnectResponse>();
-  auto tunnel = kj::refcounted<TestConnectResponseImpl>(kj::mv(paf.fulfiller));
-  // The below promise is fulfilled when the read below finishes successfully.
-  auto readPaf = kj::newPromiseAndFulfiller<void>();
-  auto connectPromise = httpService->connect(
-      "https://example.org"_kj, HttpHeaders(clientHeaders), *tunnel);
-  paf.promise.then([&](HttpClient::ConnectResponse response) -> kj::Promise<void> {
-    KJ_ASSERT(response.statusCode == 200);
-    KJ_ASSERT(response.statusText == "OK"_kj);
-
-    auto& io = KJ_ASSERT_NONNULL(response.connectionOrBody.tryGet<kj::Own<kj::AsyncIoStream>>());
-    char buffer;
-    // Attempt a read. It should disconnect. We are verifying here that the stream is shutdown
-    // correctly, if it doesn't this will block forever (and KJ will give us a
-    // "this thread would hang forever" error message).
-    return io->tryRead(&buffer, 1, 1).then([&](size_t count) {
-      KJ_ASSERT(count == 0, "Expecting the stream to get disconnected.");
-      readPaf.fulfiller->fulfill();
     }).attach(kj::mv(io));
   }).wait(waitScope);
 
-  connectPromise.wait(waitScope);
-  KJ_ASSERT(readPaf.promise.poll(waitScope));
+  KJ_ASSERT(failed, "the write promise should have failed");
 
   listenTask.wait(waitScope);
 }
+#endif
 
 KJ_TEST("CONNECT Server cancels write") {
   KJ_HTTP_TEST_SETUP_IO;
@@ -6358,6 +6281,7 @@ KJ_TEST("CONNECT Server cancels write") {
   listenTask.wait(waitScope);
 }
 
+#ifndef KJ_HTTP_TEST_USE_OS_PIPE
 KJ_TEST("CONNECT Server cancels write w/client") {
   KJ_HTTP_TEST_SETUP_IO;
 
@@ -6374,25 +6298,24 @@ KJ_TEST("CONNECT Server cancels write w/client") {
   auto client = newHttpClient(table, *pipe.ends[1]);
 
   HttpHeaderTable clientHeaders;
-  client->connect("https://example.org"_kj, HttpHeaders(clientHeaders))
-      .then([&](HttpClient::ConnectResponse response) {
-    KJ_ASSERT(response.statusCode == 200);
-    KJ_ASSERT(response.statusText == "OK"_kj);
+  bool failed = false;
+  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
 
-    auto& io = KJ_ASSERT_NONNULL(response.connectionOrBody.tryGet<kj::Own<kj::AsyncIoStream>>());
+  request.status.then([&failed, io=kj::mv(request.connection)](auto status) mutable {
+    KJ_ASSERT(status.statusCode == 200);
+    KJ_ASSERT(status.statusText == "OK"_kj);
 
-    bool failed = false;
-    io->write("hello", 5).catch_([&failed](kj::Exception&& ex) {
+    return io->write("hello", 5).catch_([&failed](kj::Exception&& ex) mutable {
       KJ_ASSERT(ex.getType() == kj::Exception::Type::DISCONNECTED);
       failed = true;
-    }).wait(waitScope);
-
-    KJ_ASSERT(failed, "the write promise should have failed");
-
+    }).attach(kj::mv(io));
   }).wait(waitScope);
+
+  KJ_ASSERT(failed, "the write promise should have failed");
 
   listenTask.wait(waitScope);
 }
+#endif
 
 KJ_TEST("CONNECT rejects Transfer-Encoding") {
   KJ_HTTP_TEST_SETUP_IO;
@@ -6430,7 +6353,7 @@ KJ_TEST("CONNECT rejects Transfer-Encoding") {
   listenTask.wait(waitScope);
 }
 
-KJ_TEST("CONNECT rejects Transfer-Encoding") {
+KJ_TEST("CONNECT rejects Content-Length") {
   KJ_HTTP_TEST_SETUP_IO;
 
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
@@ -6482,23 +6405,205 @@ KJ_TEST("CONNECT HTTP-tunneled-over-CONNECT") {
   HttpHeaderTable tunneledHeaderTable;
   HttpClientSettings settings;
 
-  auto text = client->connect("https://example.org"_kj, HttpHeaders(connectHeaderTable))
-      .then([&](HttpClient::ConnectResponse response) {
-    KJ_ASSERT(response.statusCode == 200);
-    KJ_ASSERT(response.statusText == "OK"_kj);
+  auto request = client->connect("https://example.org"_kj, HttpHeaders(connectHeaderTable));
 
-    auto& io = KJ_ASSERT_NONNULL(response.connectionOrBody.tryGet<kj::Own<kj::AsyncIoStream>>());
-
+  auto text = request.status.then([
+      &tunneledHeaderTable,
+      &settings,
+      io=kj::mv(request.connection)](auto status) mutable {
+    KJ_ASSERT(status.statusCode == 200);
+    KJ_ASSERT(status.statusText == "OK"_kj);
     auto client = newHttpClient(tunneledHeaderTable, *io, settings)
-        .attach(kj::mv(response.connectionOrBody));
+        .attach(kj::mv(io));
 
-    return client->request(HttpMethod::GET, "http://example.org"_kj, HttpHeaders(tunneledHeaderTable))
+    return client->request(HttpMethod::GET, "http://example.org"_kj,
+                           HttpHeaders(tunneledHeaderTable))
         .response.then([](HttpClient::Response&& response) {
       return response.body->readAllText().attach(kj::mv(response));
     }).attach(kj::mv(client));
   }).wait(waitScope);
 
   KJ_ASSERT(text == "hello there");
+}
+
+KJ_TEST("CONNECT HTTP-tunneled-over-pipelined-CONNECT") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable table;
+  ConnectHttpService service(table);
+  HttpServer server(timer, table, service);
+
+  auto listenTask KJ_UNUSED = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto client = newHttpClient(table, *pipe.ends[1]);
+
+  HttpHeaderTable connectHeaderTable;
+  HttpHeaderTable tunneledHeaderTable;
+  HttpClientSettings settings;
+
+  auto request = client->connect("https://exmaple.org"_kj, HttpHeaders(connectHeaderTable));
+  auto conn = kj::mv(request.connection);
+  auto proxyClient = newHttpClient(tunneledHeaderTable, *conn, settings).attach(kj::mv(conn));
+
+  auto get = proxyClient->request(HttpMethod::GET,
+                                  "http://example.org"_kj,
+                                  HttpHeaders(tunneledHeaderTable));
+  auto text = get.response.then([](HttpClient::Response&& response) mutable {
+    return response.body->readAllText().attach(kj::mv(response));
+  }).attach(kj::mv(proxyClient)).wait(waitScope);
+
+  KJ_ASSERT(text == "hello there");
+}
+
+KJ_TEST("CONNECT pipelined via an adapter") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable table;
+  ConnectHttpService service(table);
+  HttpServer server(timer, table, service);
+
+  auto listenTask KJ_UNUSED = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  bool acceptCalled = false;
+
+  auto client = newHttpClient(table, *pipe.ends[1]);
+  auto adaptedService = kj::newHttpService(*client).attach(kj::mv(client));
+
+  // adaptedService is an HttpService that wraps an HttpClient that sends
+  // a request to server.
+
+  auto clientPipe = newTwoWayPipe();
+
+  struct ResponseImpl final: public HttpService::ConnectResponse {
+    bool& acceptCalled;
+    ResponseImpl(bool& acceptCalled) : acceptCalled(acceptCalled) {}
+    void accept(uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+      acceptCalled = true;
+    }
+
+    kj::Own<kj::AsyncOutputStream> reject(
+        uint statusCode,
+        kj::StringPtr statusText,
+        const HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize) override {
+      KJ_UNREACHABLE;
+    }
+  };
+
+  ResponseImpl response(acceptCalled);
+
+  HttpHeaderTable connectHeaderTable;
+  HttpHeaderTable tunneledHeaderTable;
+  HttpClientSettings settings;
+
+  auto promise = adaptedService->connect("https://example.org"_kj,
+                                         HttpHeaders(connectHeaderTable),
+                                         *clientPipe.ends[0],
+                                         response).attach(kj::mv(clientPipe.ends[0]));
+
+  auto proxyClient = newHttpClient(tunneledHeaderTable, *clientPipe.ends[1], settings)
+      .attach(kj::mv(clientPipe.ends[1]));
+
+  auto text = proxyClient->request(HttpMethod::GET,
+                          "http://example.org"_kj,
+                          HttpHeaders(tunneledHeaderTable))
+      .response.then([](HttpClient::Response&& response) mutable {
+    return response.body->readAllText().attach(kj::mv(response));
+  }).wait(waitScope);
+
+  KJ_ASSERT(acceptCalled);
+  KJ_ASSERT(text == "hello there");
+}
+
+KJ_TEST("CONNECT pipelined via an adapter (reject)") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable table;
+  ConnectRejectService service(table);
+  HttpServer server(timer, table, service);
+
+  auto listenTask KJ_UNUSED = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  bool rejectCalled = false;
+  bool failedAsExpected = false;
+
+  auto client = newHttpClient(table, *pipe.ends[1]);
+  auto adaptedService = kj::newHttpService(*client).attach(kj::mv(client));
+
+  // adaptedService is an HttpService that wraps an HttpClient that sends
+  // a request to server.
+
+  auto clientPipe = newTwoWayPipe();
+
+  struct ResponseImpl final: public HttpService::ConnectResponse {
+    bool& rejectCalled;
+    kj::OneWayPipe pipe;
+    ResponseImpl(bool& rejectCalled)
+        : rejectCalled(rejectCalled),
+          pipe(kj::newOneWayPipe()) {}
+    void accept(uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+      KJ_UNREACHABLE;
+    }
+
+    kj::Own<kj::AsyncOutputStream> reject(
+        uint statusCode,
+        kj::StringPtr statusText,
+        const HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize) override {
+      rejectCalled = true;
+      return kj::mv(pipe.out);
+    }
+
+    kj::Own<kj::AsyncInputStream> getRejectStream() {
+      return kj::mv(pipe.in);
+    }
+  };
+
+  ResponseImpl response(rejectCalled);
+
+  HttpHeaderTable connectHeaderTable;
+  HttpHeaderTable tunneledHeaderTable;
+  HttpClientSettings settings;
+
+  auto promise = adaptedService->connect("https://example.org"_kj,
+                                         HttpHeaders(connectHeaderTable),
+                                         *clientPipe.ends[0],
+                                         response).attach(kj::mv(clientPipe.ends[0]));
+
+  auto proxyClient = newHttpClient(tunneledHeaderTable, *clientPipe.ends[1], settings)
+      .attach(kj::mv(clientPipe.ends[1]));
+
+  auto text = proxyClient->request(HttpMethod::GET,
+                       "http://example.org"_kj,
+                       HttpHeaders(tunneledHeaderTable))
+      .response.then([](HttpClient::Response&& response) mutable {
+    return response.body->readAllText().attach(kj::mv(response));
+  }, [&](kj::Exception&& ex) -> kj::Promise<kj::String> {
+    // We fully expect the stream to fail here.
+    if (ex.getDescription() == "stream disconnected prematurely") {
+      failedAsExpected = true;
+    }
+    return kj::str("ok");
+  }).wait(waitScope);
+
+  auto rejectStream = response.getRejectStream();
+
+#ifndef KJ_HTTP_TEST_USE_OS_PIPE
+  expectRead(*rejectStream, "boom"_kj).wait(waitScope);
+#endif
+
+  KJ_ASSERT(rejectCalled);
+  KJ_ASSERT(failedAsExpected);
+  KJ_ASSERT(text == "ok");
 }
 
 }  // namespace
