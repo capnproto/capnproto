@@ -2995,12 +2995,12 @@ private:
         case Mode::COMPRESS:
           result = deflate(&ctx, Z_SYNC_FLUSH);
           KJ_REQUIRE(result == Z_OK || result == Z_BUF_ERROR || result == Z_STREAM_END,
-                      "Compression failed.");
+                      "Compression failed", result);
           break;
         case Mode::DECOMPRESS:
           result = inflate(&ctx, Z_SYNC_FLUSH);
           KJ_REQUIRE(result == Z_OK || result == Z_BUF_ERROR || result == Z_STREAM_END,
-                      "Decompression failed.");
+                      "Decompression failed", result);
           break;
       }
 
