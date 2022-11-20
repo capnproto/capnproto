@@ -157,6 +157,18 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "capnpc-json",
+    srcs = [
+        "compiler/capnpc-json.c++",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":capnpc",
+        "//src/capnp/compat:json",
+    ],
+)
+
 # capnp files that are implicitly available for import to any .capnp.
 filegroup(
     name = "capnp_system_library",
