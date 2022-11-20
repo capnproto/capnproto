@@ -546,6 +546,8 @@ struct TestGenerics(Foo, Bar) {
     bar @1 :Bar;
   }
 
+  listFoo @5 :List(Foo);
+
   struct Inner2(Baz) {
     bar @0 :Bar;
     baz @1 :Baz;

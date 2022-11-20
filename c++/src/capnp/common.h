@@ -224,6 +224,7 @@ template <typename T, Kind k = CAPNP_KIND(T)> struct ReaderFor_ { typedef typena
 template <typename T> struct ReaderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
 template <typename T> struct ReaderFor_<T, Kind::ENUM> { typedef T Type; };
 template <typename T> struct ReaderFor_<T, Kind::INTERFACE> { typedef typename T::Client Type; };
+template <typename T> struct ReaderFor_<List<T, Kind::OTHER>, Kind::LIST> { typedef typename List<T, CAPNP_KIND(T)>::Reader Type; };
 template <typename T> using ReaderFor = typename ReaderFor_<T>::Type;
 // The type returned by List<T>::Reader::operator[].
 
@@ -231,11 +232,13 @@ template <typename T, Kind k = CAPNP_KIND(T)> struct BuilderFor_ { typedef typen
 template <typename T> struct BuilderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
 template <typename T> struct BuilderFor_<T, Kind::ENUM> { typedef T Type; };
 template <typename T> struct BuilderFor_<T, Kind::INTERFACE> { typedef typename T::Client Type; };
+template <typename T> struct BuilderFor_<List<T, Kind::OTHER>, Kind::LIST> { typedef typename List<T, CAPNP_KIND(T)>::Builder Type; };
 template <typename T> using BuilderFor = typename BuilderFor_<T>::Type;
 // The type returned by List<T>::Builder::operator[].
 
 template <typename T, Kind k = CAPNP_KIND(T)> struct PipelineFor_ { typedef typename T::Pipeline Type;};
 template <typename T> struct PipelineFor_<T, Kind::INTERFACE> { typedef typename T::Client Type; };
+template <typename T> struct PipelineFor_<List<T, Kind::OTHER>, Kind::LIST> { typedef typename List<T, CAPNP_KIND(T)>::Pipeline Type; };
 template <typename T> using PipelineFor = typename PipelineFor_<T>::Type;
 
 template <typename T, Kind k = CAPNP_KIND(T)> struct TypeIfEnum_;
