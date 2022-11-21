@@ -72,6 +72,7 @@
 /c++/m4/ltversion.m4
 /c++/m4/lt~obsolete.m4
 /c++/samples/addressbook
+/c++/.cache/
 
 # editor artefacts
 *~
