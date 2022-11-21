@@ -1200,6 +1200,58 @@ KJ_TEST("NetworkFilter") {
     KJ_EXPECT(allowed4(filter, "1.2.3.1"));
     KJ_EXPECT(!allowed4(filter, "1.2.3.4"));
   }
+
+  // Test combinations of public/private/network/local. At one point these were buggy.
+  {
+    _::NetworkFilter filter({"public", "private"}, {}, base);
+
+    KJ_EXPECT(allowed4(filter, "8.8.8.8"));
+    KJ_EXPECT(!allowed4(filter, "240.1.2.3"));
+
+    KJ_EXPECT(allowed4(filter, "192.168.0.1"));
+    KJ_EXPECT(allowed4(filter, "10.1.2.3"));
+    KJ_EXPECT(allowed4(filter, "127.0.0.1"));
+    KJ_EXPECT(allowed4(filter, "0.0.0.0"));
+
+    KJ_EXPECT(allowed6(filter, "2400:cb00:2048:1::c629:d7a2"));
+    KJ_EXPECT(allowed6(filter, "fc00::1234"));
+    KJ_EXPECT(allowed6(filter, "::1"));
+    KJ_EXPECT(allowed6(filter, "::"));
+  }
+
+  {
+    _::NetworkFilter filter({"network", "local"}, {}, base);
+
+    KJ_EXPECT(allowed4(filter, "8.8.8.8"));
+    KJ_EXPECT(!allowed4(filter, "240.1.2.3"));
+
+    KJ_EXPECT(allowed4(filter, "192.168.0.1"));
+    KJ_EXPECT(allowed4(filter, "10.1.2.3"));
+    KJ_EXPECT(allowed4(filter, "127.0.0.1"));
+    KJ_EXPECT(allowed4(filter, "0.0.0.0"));
+
+    KJ_EXPECT(allowed6(filter, "2400:cb00:2048:1::c629:d7a2"));
+    KJ_EXPECT(allowed6(filter, "fc00::1234"));
+    KJ_EXPECT(allowed6(filter, "::1"));
+    KJ_EXPECT(allowed6(filter, "::"));
+  }
+
+  {
+    _::NetworkFilter filter({"public", "local"}, {}, base);
+
+    KJ_EXPECT(allowed4(filter, "8.8.8.8"));
+    KJ_EXPECT(!allowed4(filter, "240.1.2.3"));
+
+    KJ_EXPECT(!allowed4(filter, "192.168.0.1"));
+    KJ_EXPECT(!allowed4(filter, "10.1.2.3"));
+    KJ_EXPECT(allowed4(filter, "127.0.0.1"));
+    KJ_EXPECT(allowed4(filter, "0.0.0.0"));
+
+    KJ_EXPECT(allowed6(filter, "2400:cb00:2048:1::c629:d7a2"));
+    KJ_EXPECT(!allowed6(filter, "fc00::1234"));
+    KJ_EXPECT(allowed6(filter, "::1"));
+    KJ_EXPECT(allowed6(filter, "::"));
+  }
 }
 
 KJ_TEST("Network::restrictPeers()") {

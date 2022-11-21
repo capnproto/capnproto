@@ -3155,6 +3155,13 @@ ArrayPtr<const CidrRange> exampleAddresses() {
   return kj::arrayPtr(result, kj::size(result));
 }
 
+bool matchesAny(ArrayPtr<const CidrRange> cidrs, const struct sockaddr* addr) {
+  for (auto& cidr: cidrs) {
+    if (cidr.matches(addr)) return true;
+  }
+  return false;
+}
+
 NetworkFilter::NetworkFilter()
     : allowUnix(true), allowAbstractUnix(true) {
   allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
@@ -3169,17 +3176,14 @@ NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const Str
     if (rule == "local") {
       allowCidrs.addAll(localCidrs());
     } else if (rule == "network") {
-      allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
-      allowCidrs.add(CidrRange::inet6({}, {}, 0));
-      denyCidrs.addAll(localCidrs());
+      // Can't be represented as a simple union of CIDRs, so we handle in shouldAllow().
+      allowNetwork = true;
     } else if (rule == "private") {
       allowCidrs.addAll(privateCidrs());
       allowCidrs.addAll(localCidrs());
     } else if (rule == "public") {
-      allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
-      allowCidrs.add(CidrRange::inet6({}, {}, 0));
-      denyCidrs.addAll(privateCidrs());
-      denyCidrs.addAll(localCidrs());
+      // Can't be represented as a simple union of CIDRs, so we handle in shouldAllow().
+      allowPublic = true;
     } else if (rule == "unix") {
       allowUnix = true;
     } else if (rule == "unix-abstract") {
@@ -3225,6 +3229,23 @@ bool NetworkFilter::shouldAllow(const struct sockaddr* addr, uint addrlen) {
 
   bool allowed = false;
   uint allowSpecificity = 0;
+
+  if (allowPublic) {
+    if ((addr->sa_family == AF_INET || addr->sa_family == AF_INET6) &&
+        !matchesAny(privateCidrs(), addr) && !matchesAny(localCidrs(), addr)) {
+      allowed = true;
+      // Don't adjust allowSpecificity as this match has an effective specificity of zero.
+    }
+  }
+
+  if (allowNetwork) {
+    if ((addr->sa_family == AF_INET || addr->sa_family == AF_INET6) &&
+        !matchesAny(localCidrs(), addr)) {
+      allowed = true;
+      // Don't adjust allowSpecificity as this match has an effective specificity of zero.
+    }
+  }
+
   for (auto& cidr: allowCidrs) {
     if (cidr.matches(addr)) {
       allowSpecificity = kj::max(allowSpecificity, cidr.getSpecificity());
@@ -3257,6 +3278,10 @@ bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr, uint addrlen) 
     }
   } else {
 #endif
+    if ((addr->sa_family == AF_INET || addr->sa_family == AF_INET6) &&
+        (allowPublic || allowNetwork)) {
+      matched = true;
+    }
     for (auto& cidr: allowCidrs) {
       if (cidr.matchesFamily(addr->sa_family)) {
         matched = true;
