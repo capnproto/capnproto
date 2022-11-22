@@ -25,11 +25,184 @@
 #include <kj/debug.h>
 #include <capnp/rpc-twoparty.h>
 #include <stdlib.h>
+#if KJ_BENCHMARK_MALLOC
+#include <dlfcn.h>
+#endif
 
 #if KJ_HAS_COROUTINE
 
 namespace capnp {
 namespace {
+
+// =======================================================================================
+// Metrics-gathering
+//
+// TODO(cleanup): Generalize for other benchmarks?
+
+static size_t globalMallocCount = 0;
+static size_t globalMallocBytes = 0;
+
+#if KJ_BENCHMARK_MALLOC
+// If KJ_BENCHMARK_MALLOC is defined then we are instructed to override malloc() in order to
+// measure total allocations. We are careful only to define this when the build is set up in a
+// way that this won't cause build failures (e.g., we must not be statically linking a malloc
+// implementation).
+
+extern "C" {
+
+void* malloc(size_t size) {
+  typedef void* Malloc(size_t);
+  static Malloc* realMalloc = reinterpret_cast<Malloc*>(dlsym(RTLD_NEXT, "malloc"));
+
+  ++globalMallocCount;
+  globalMallocBytes += size;
+  return realMalloc(size);
+}
+
+}  // extern "C"
+
+#endif  // KJ_BENCHMARK_MALLOC
+
+class Metrics {
+public:
+  Metrics()
+      : startMallocCount(globalMallocCount), startMallocBytes(globalMallocBytes),
+        upBandwidth(0), downBandwidth(0),
+        clientReadCount(0), clientWriteCount(0),
+        serverReadCount(0), serverWriteCount(0) {}
+  ~Metrics() noexcept(false) {
+  #if KJ_BENCHMARK_MALLOC
+    size_t mallocCount = globalMallocCount - startMallocCount;
+    size_t mallocBytes = globalMallocBytes - startMallocBytes;
+    KJ_LOG(WARNING, mallocCount, mallocBytes);
+  #endif
+
+    if (hadStreamPair) {
+      KJ_LOG(WARNING, upBandwidth, downBandwidth,
+          clientReadCount, clientWriteCount, serverReadCount, serverWriteCount);
+    }
+  }
+
+  enum Side { CLIENT, SERVER };
+
+  class StreamWrapper final: public kj::AsyncIoStream {
+    // Wrap a stream and count metrics.
+
+  public:
+    StreamWrapper(Metrics& metrics, kj::AsyncIoStream& inner, Side side)
+        : metrics(metrics), inner(inner), side(side) {}
+
+    ~StreamWrapper() noexcept(false) {
+      switch (side) {
+        case CLIENT:
+          metrics.clientReadCount += readCount;
+          metrics.clientWriteCount += writeCount;
+          metrics.upBandwidth += writeBytes;
+          metrics.downBandwidth += readBytes;
+          break;
+        case SERVER:
+          metrics.serverReadCount += readCount;
+          metrics.serverWriteCount += writeCount;
+          break;
+      }
+    }
+
+    kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return inner.read(buffer, minBytes, maxBytes)
+          .then([this](size_t n) {
+        ++readCount;
+        readBytes += n;
+        return n;
+      });
+    }
+    kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return inner.tryRead(buffer, minBytes, maxBytes)
+          .then([this](size_t n) {
+        ++readCount;
+        readBytes += n;
+        return n;
+      });
+    }
+
+    kj::Maybe<uint64_t> tryGetLength() override {
+      return inner.tryGetLength();
+    }
+
+    kj::Promise<void> write(const void* buffer, size_t size)  override {
+      ++writeCount;
+      writeBytes += size;
+      return inner.write(buffer, size);
+    }
+    kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+      ++writeCount;
+      for (auto& piece: pieces) {
+        writeBytes += piece.size();
+      }
+      return inner.write(pieces);
+    }
+
+    kj::Promise<uint64_t> pumpTo(
+        kj::AsyncOutputStream& output, uint64_t amount = kj::maxValue) override {
+      // Our benchmarks don't depend on this currently. If they do we need to think about how to
+      // apply it.
+      KJ_UNIMPLEMENTED("pump metrics");
+    }
+    kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
+        AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
+      // Our benchmarks don't depend on this currently. If they do we need to think about how to
+      // apply it.
+      KJ_UNIMPLEMENTED("pump metrics");
+    }
+
+    kj::Promise<void> whenWriteDisconnected() override {
+      return inner.whenWriteDisconnected();
+    }
+
+    void shutdownWrite() override {
+      inner.shutdownWrite();
+    }
+    void abortRead() override {
+      inner.abortRead();
+    }
+
+  private:
+    Metrics& metrics;
+    kj::AsyncIoStream& inner;
+    Side side;
+
+    size_t readCount = 0;
+    size_t readBytes = 0;
+    size_t writeCount = 0;
+    size_t writeBytes = 0;
+  };
+
+  struct StreamPair {
+    kj::TwoWayPipe pipe;
+    StreamWrapper client;
+    StreamWrapper server;
+
+    StreamPair(Metrics& metrics)
+        : pipe(kj::newTwoWayPipe()),
+          client(metrics, *pipe.ends[0], CLIENT),
+          server(metrics, *pipe.ends[1], SERVER) {
+      metrics.hadStreamPair = true;
+    }
+  };
+
+private:
+  size_t startMallocCount KJ_UNUSED;
+  size_t startMallocBytes KJ_UNUSED;
+  size_t upBandwidth;
+  size_t downBandwidth;
+  size_t clientReadCount;
+  size_t clientWriteCount;
+  size_t serverReadCount;
+  size_t serverWriteCount;
+
+  bool hadStreamPair = false;
+};
+
+// =======================================================================================
 
 static constexpr auto HELLO_WORLD = "Hello, world!"_kj;
 
@@ -157,7 +330,9 @@ private:
 };
 
 KJ_TEST("Benchmark baseline") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  Metrics metrics;
 
   kj::HttpHeaderTable::Builder headerTableBuilder;
   MockService service(headerTableBuilder);
@@ -165,12 +340,14 @@ KJ_TEST("Benchmark baseline") {
   auto headerTable = headerTableBuilder.build();
 
   doBenchmark([&]() {
-    sender.sendRequest(service).wait(io.waitScope);
+    sender.sendRequest(service).wait(waitScope);
   });
 }
 
 KJ_TEST("Benchmark KJ HTTP client wrapper") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  Metrics metrics;
 
   kj::HttpHeaderTable::Builder headerTableBuilder;
   MockService service(headerTableBuilder);
@@ -180,35 +357,36 @@ KJ_TEST("Benchmark KJ HTTP client wrapper") {
   auto client = kj::newHttpClient(service);
 
   doBenchmark([&]() {
-    sender.sendRequest(*client).wait(io.waitScope);
+    sender.sendRequest(*client).wait(waitScope);
   });
 }
 
 KJ_TEST("Benchmark KJ HTTP full protocol") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  Metrics metrics;
+  Metrics::StreamPair pair(metrics);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
 
   kj::HttpHeaderTable::Builder headerTableBuilder;
   MockService service(headerTableBuilder);
   MockSender sender(headerTableBuilder);
   auto headerTable = headerTableBuilder.build();
 
-  kj::HttpServer server(io.provider->getTimer(), *headerTable, service);
-
-  auto pipe = kj::newCapabilityPipe();
-  kj::CapabilityStreamConnectionReceiver receiver(*pipe.ends[0]);
-  kj::CapabilityStreamNetworkAddress addr(nullptr, *pipe.ends[1]);
-
-  auto listenLoop = server.listenHttp(receiver)
+  kj::HttpServer server(timer, *headerTable, service);
+  auto listenLoop = server.listenHttp({&pair.server, kj::NullDisposer::instance})
       .eagerlyEvaluate([](kj::Exception&& e) noexcept { kj::throwFatalException(kj::mv(e)); });
-  auto client = kj::newHttpClient(io.provider->getTimer(), *headerTable, addr);
+  auto client = kj::newHttpClient(*headerTable, pair.client);
 
   doBenchmark([&]() {
-    sender.sendRequest(*client).wait(io.waitScope);
+    sender.sendRequest(*client).wait(waitScope);
   });
 }
 
 KJ_TEST("Benchmark HTTP-over-capnp local call") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  Metrics metrics;
 
   kj::HttpHeaderTable::Builder headerTableBuilder;
   MockService service(headerTableBuilder);
@@ -226,12 +404,15 @@ KJ_TEST("Benchmark HTTP-over-capnp local call") {
   auto roundTrip = hocFactory2.capnpToKj(kj::mv(cap));
 
   doBenchmark([&]() {
-    sender.sendRequest(*roundTrip).wait(io.waitScope);
+    sender.sendRequest(*roundTrip).wait(waitScope);
   });
 }
 
 KJ_TEST("Benchmark HTTP-over-capnp full RPC") {
-  auto io = kj::setupAsyncIo();
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  Metrics metrics;
+  Metrics::StreamPair pair(metrics);
 
   kj::HttpHeaderTable::Builder headerTableBuilder;
   MockService service(headerTableBuilder);
@@ -248,14 +429,14 @@ KJ_TEST("Benchmark HTTP-over-capnp full RPC") {
   TwoPartyServer server(hocFactory.kjToCapnp(kj::attachRef(service)));
 
   auto pipe = kj::newTwoWayPipe();
-  auto listenLoop = server.accept(*pipe.ends[0]);
+  auto listenLoop = server.accept(pair.server);
 
-  TwoPartyClient client(*pipe.ends[1]);
+  TwoPartyClient client(pair.client);
 
   auto roundTrip = hocFactory2.capnpToKj(client.bootstrap().castAs<capnp::HttpService>());
 
   doBenchmark([&]() {
-    sender.sendRequest(*roundTrip).wait(io.waitScope);
+    sender.sendRequest(*roundTrip).wait(waitScope);
   });
 }
 
