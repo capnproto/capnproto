@@ -147,6 +147,80 @@ private:
   kj::AsyncCapabilityStream& stream;
 };
 
+class BufferedMessageStream final: public MessageStream {
+  // A MessageStream that reads into a buffer in the hopes of receiving multiple messages in a
+  // single system call. Compared to the other implementations, this implementation is expected
+  // to be faster when reading from an OS stream (but probably not when reading from an in-memory
+  // async pipe). It has the down sides of using more memory (for the buffer) and requiring extra
+  // copies.
+
+public:
+  using IsShortLivedCallback = kj::Function<bool(MessageReader&)>;
+  // Callback function which decides whether a message will be "short-lived", meaning that it is
+  // guaranteed to be dropped before the next message is read. The stream uses this as an
+  // optimization to decide whether it can return a MessageReader pointing into the buffer, which
+  // will be reused for future reads. For long-lived messages, the stream must copy the content
+  // into a separate buffer.
+
+  explicit BufferedMessageStream(
+      kj::AsyncIoStream& stream, IsShortLivedCallback isShortLivedCallback,
+      size_t bufferSizeInWords = 8192);
+  explicit BufferedMessageStream(
+      kj::AsyncCapabilityStream& stream, IsShortLivedCallback isShortLivedCallback,
+      size_t bufferSizeInWords = 8192);
+
+  // Implements MessageStream
+  kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
+  kj::Promise<void> writeMessage(
+      kj::ArrayPtr<const int> fds,
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+  kj::Promise<void> writeMessages(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override;
+  kj::Maybe<int> getSendBufferSize() override;
+  kj::Promise<void> end() override;
+
+private:
+  kj::AsyncIoStream& stream;
+  kj::Maybe<kj::AsyncCapabilityStream&> capStream;
+  IsShortLivedCallback isShortLivedCallback;
+
+  kj::Array<word> buffer;
+
+  word* beginData;
+  // Pointer to location in `buffer` where the next message starts. This is always on a word
+  // boundray since messages are always a whole number of words.
+
+  kj::byte* beginAvailable;
+  // Pointer to the location in `buffer` where unused buffer space begins, i.e. immediately after
+  // the last byte read.
+
+  kj::Vector<kj::AutoCloseFd> leftoverFds;
+  // FDs which were accidentally read too early. These are always connected to the last message
+  // in the buffer, since the OS would not have allowed us to read past that point.
+
+  bool hasOutstandingShortLivedMessage = false;
+
+  kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessageImpl(
+      kj::ArrayPtr<kj::AutoCloseFd> fdSpace, size_t fdsSoFar,
+      ReaderOptions options, kj::ArrayPtr<word> scratchSpace);
+
+  kj::Promise<kj::Maybe<MessageReaderAndFds>> readEntireMessage(
+      kj::ArrayPtr<const byte> prefix, size_t expectedSizeInWords,
+      kj::ArrayPtr<kj::AutoCloseFd> fdSpace, size_t fdsSoFar,
+      ReaderOptions options);
+  // Given a message prefix and expected size of the whole message, read the entire message into
+  // a single array and return it.
+
+  kj::Promise<kj::AsyncCapabilityStream::ReadResult> tryReadWithFds(
+      void* buffer, size_t minBytes, size_t maxBytes, kj::AutoCloseFd* fdBuffer, size_t maxFds);
+  // Executes AsyncCapabilityStream::tryReadWithFds() on the underlying stream, or falls back to
+  // AsyncIoStream::tryRead() if it's not a capability stream.
+
+  class MessageReaderImpl;
+};
+
 // -----------------------------------------------------------------------------
 // Stand-alone functions for reading & writing messages on AsyncInput/AsyncOutputStreams.
 //
