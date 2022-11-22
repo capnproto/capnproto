@@ -224,6 +224,13 @@ public:
   // The maximum number of FDs that can be sent at a time is usually subject to an OS-imposed
   // limit. On Linux, this is 253. In practice, sending more than a handful of FDs at once is
   // probably a bad idea.
+  //
+  // Additionally, the OS typically imposes a size limit on messages that have FDs attached. Such a
+  // message must be written in a single call to `sendmsg()`; it is not allowed to be broken up
+  // across multiple calls. The size limit varies greatly across systems, and may be even be
+  // user-configurable. On Debian Linux the default is 208KiB, whereas on MacOS it is apparently
+  // 2KiB. It is the caller's responsibility to write messages that do not exceed the limit. When
+  // `fds` is empty, these limits will not apply.
 
   struct ReadResult {
     size_t byteCount;

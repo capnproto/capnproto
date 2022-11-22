@@ -345,6 +345,27 @@ kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<c
                                kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   return writeMessageImpl(segments,
       [&](kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+    if (fds.size() > 0) {
+      size_t total = 0;
+      for (auto& piece: pieces) {
+        total += piece.size();
+      }
+      if (total > 1024 && pieces.size() > 1) {
+        // Per the documentation on AsyncCapabilityStream::writeWithFds(), there may be strict
+        // limits on the size of messages with FDs attached. If our message is larger than 1 KiB
+        // then we will attach the FDs just to the initial segment. This means we have to do an
+        // extra syscall both to send and receive the message, which is lame, but that's better
+        // than an error, and sending FDs is not very common anyway.
+        //
+        // (This code consciously doesn't bother to handle the case where the segment table itself
+        // is too large, since that seems extremely unlikely.)
+        return output.writeWithFds(pieces[0], nullptr, fds)
+            .then([&output,pieces]() {
+          return output.write(pieces.slice(1, pieces.size()));
+        });
+      }
+    }
+
     return output.writeWithFds(pieces[0], pieces.slice(1, pieces.size()), fds);
   });
 }
