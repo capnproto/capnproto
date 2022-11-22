@@ -323,6 +323,56 @@ private:
   // Must check state->assertNotCanceled() before using this.
 };
 
+class HttpOverCapnpFactory::ConnectClientRequestContextImpl final
+    : public capnp::HttpService::ConnectClientRequestContext::Server {
+public:
+  ConnectClientRequestContextImpl(HttpOverCapnpFactory& factory,
+      kj::HttpService::ConnectResponse& connResponse)
+      : factory(factory), connResponse(connResponse) {}
+
+  kj::Promise<void> startConnect(StartConnectContext context) override {
+    KJ_REQUIRE(!sent, "already called startConnect() or startError()");
+    sent = true;
+
+    auto params = context.getParams();
+    auto resp = params.getResponse();
+
+    auto headers = factory.headersToKj(resp.getHeaders());
+    connResponse.accept(resp.getStatusCode(), resp.getStatusText(), headers);
+
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<void> startError(StartErrorContext context) override {
+    KJ_REQUIRE(!sent, "already called startConnect() or startError()");
+    sent = true;
+
+    auto params = context.getParams();
+    auto resp = params.getResponse();
+
+    auto headers = factory.headersToKj(resp.getHeaders());
+
+    auto bodySize = resp.getBodySize();
+    kj::Maybe<uint64_t> expectedSize;
+    if (bodySize.isFixed()) {
+      expectedSize = bodySize.getFixed();
+    }
+
+    auto stream = connResponse.reject(
+        resp.getStatusCode(), resp.getStatusText(), headers, expectedSize);
+
+    context.initResults().setBody(factory.streamFactory.kjToCapnp(kj::mv(stream)));
+
+    return kj::READY_NOW;
+  }
+
+private:
+  HttpOverCapnpFactory& factory;
+  bool sent = false;
+
+  kj::HttpService::ConnectResponse& connResponse;
+};
+
 class HttpOverCapnpFactory::KjToCapnpHttpServiceAdapter final: public kj::HttpService {
 public:
   KjToCapnpHttpServiceAdapter(HttpOverCapnpFactory& factory, capnp::HttpService::Client inner)
@@ -415,6 +465,44 @@ public:
           [](auto& pipeline) { return pipeline.ignoreResult(); });
     }
   }
+
+  kj::Promise<void> connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
+      ConnectResponse& tunnel) override {
+    auto rpcRequest = inner.connectRequest();
+    auto downPipe = kj::newOneWayPipe();
+    rpcRequest.setHost(host);
+    rpcRequest.setDown(factory.streamFactory.kjToCapnp(kj::mv(downPipe.out)));
+
+    auto builder = capnp::Request<
+        capnp::HttpService::ConnectParams,
+        capnp::HttpService::ConnectResults>::Builder(rpcRequest);
+    rpcRequest.adoptHeaders(factory.headersToCapnp(headers,
+        Orphanage::getForMessageContaining(builder)));
+    rpcRequest.setContext(
+        kj::heap<ConnectClientRequestContextImpl>(factory, tunnel));
+    RemotePromise<capnp::HttpService::ConnectResults> pipeline = rpcRequest.send();
+
+    // We read from `downPipe` (the other side writes into it.)
+    auto downPumpTask = downPipe.in->pumpTo(connection)
+        .then([&connection, down = kj::mv(downPipe.in)](uint64_t) -> kj::Promise<void> {
+      connection.shutdownWrite();
+      return kj::NEVER_DONE;
+    });
+    // We write to `up` (the other side reads from it).
+    auto up = pipeline.getUp();
+    kj::Own<kj::AsyncOutputStream> upStream = factory.streamFactory.capnpToKj(up);
+    auto upPumpTask = connection.pumpTo(*upStream)
+        .then([up = kj::mv(up), upStream = kj::mv(upStream)](uint64_t) mutable
+        -> kj::Promise<void> {
+      return kj::NEVER_DONE;
+    });
+
+    return pipeline.ignoreResult()
+        .attach(kj::mv(downPumpTask))
+        .attach(kj::mv(upPumpTask));
+  }
+
 
 private:
   HttpOverCapnpFactory& factory;
@@ -578,6 +666,64 @@ public:
   }
 };
 
+class HttpOverCapnpFactory::HttpOverCapnpConnectResponseImpl final :
+    public kj::HttpService::ConnectResponse {
+public:
+  HttpOverCapnpConnectResponseImpl(
+      HttpOverCapnpFactory& factory,
+      capnp::HttpService::ConnectClientRequestContext::Client context) :
+      context(context), factory(factory) {}
+
+  void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+    KJ_REQUIRE(replyTask == nullptr, "already called accept() or reject()");
+
+    auto req = context.startConnectRequest();
+    auto rpcResponse = req.initResponse();
+    rpcResponse.setStatusCode(statusCode);
+    rpcResponse.setStatusText(statusText);
+    rpcResponse.adoptHeaders(factory.headersToCapnp(
+        headers, Orphanage::getForMessageContaining(rpcResponse)));
+
+    replyTask = req.send().ignoreResult();
+  }
+
+  kj::Own<kj::AsyncOutputStream> reject(
+      uint statusCode,
+      kj::StringPtr statusText,
+      const kj::HttpHeaders& headers,
+      kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
+    KJ_REQUIRE(replyTask == nullptr, "already called accept() or reject()");
+    auto pipe = kj::newOneWayPipe(expectedBodySize);
+
+    auto req = context.startErrorRequest();
+    auto rpcResponse = req.initResponse();
+    rpcResponse.setStatusCode(statusCode);
+    rpcResponse.setStatusText(statusText);
+    rpcResponse.adoptHeaders(factory.headersToCapnp(
+        headers, Orphanage::getForMessageContaining(rpcResponse)));
+
+    auto errorBody = kj::mv(pipe.in);
+    // Set the body size if the error body exists.
+    KJ_IF_MAYBE(size, errorBody->tryGetLength()) {
+      rpcResponse.getBodySize().setFixed(*size);
+    }
+
+    replyTask = req.send().then(
+        [this, errorBody = kj::mv(errorBody)](auto resp) mutable -> kj::Promise<void> {
+      auto body = factory.streamFactory.capnpToKj(resp.getBody());
+      return errorBody->pumpTo(*body).ignoreResult()
+          .attach(kj::mv(errorBody), kj::mv(body));
+    });
+
+    return kj::mv(pipe.out);
+  }
+
+  capnp::HttpService::ConnectClientRequestContext::Client context;
+  capnp::HttpOverCapnpFactory& factory;
+  kj::Maybe<kj::Promise<void>> replyTask;
+};
+
+
 class HttpOverCapnpFactory::ServerRequestContextImpl final
     : public capnp::HttpService::ServerRequestContext::Server,
       public HttpServiceResponseImpl {
@@ -686,6 +832,77 @@ public:
 
       return kj::READY_NOW;
     });
+  }
+
+  kj::Promise<void> connect(ConnectContext context) override {
+    auto params = context.getParams();
+    auto host = params.getHost();
+    auto headers = factory.headersToKj(params.getHeaders());
+    auto pipe = kj::newTwoWayPipe();
+
+    class EofDetector final: public kj::AsyncOutputStream {
+    public:
+      EofDetector(kj::Own<kj::AsyncIoStream> inner) : inner(kj::mv(inner)) {}
+      ~EofDetector() {
+        inner->shutdownWrite();
+      }
+
+      kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
+          kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
+        return inner->tryPumpFrom(input, amount);
+      }
+
+      kj::Promise<void> write(const void* buffer, size_t size) override {
+        return inner->write(buffer, size);
+      }
+
+      kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+        return inner->write(pieces);
+      }
+
+      kj::Promise<void> whenWriteDisconnected() override {
+        return inner->whenWriteDisconnected();
+      }
+    private:
+      kj::Own<kj::AsyncIoStream> inner;
+    };
+
+    kj::Own<kj::AsyncOutputStream> stream = factory.streamFactory.capnpToKj(
+        context.getParams().getDown());
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+
+    // We want to keep the stream alive even after EofDetector is destroyed, so we need to create
+    // a refcounted AsyncIoStream.
+    struct RefcountedWrapper: public kj::Refcounted {
+      kj::Own<kj::AsyncIoStream> stream;
+      RefcountedWrapper(kj::Own<kj::AsyncIoStream> stream) : stream(kj::mv(stream)) {};
+    };
+    auto& pipeRef = *pipe.ends[1];
+    auto refcounted = kj::refcounted<RefcountedWrapper>(kj::mv(pipe.ends[1]));;
+    kj::Own<kj::AsyncIoStream> ref1 = kj::attachRef(pipeRef, kj::addRef(*refcounted));
+    kj::Own<kj::AsyncIoStream> ref2 = kj::attachRef(pipeRef, kj::mv(refcounted));
+
+    // We write to the `down` pipe.
+    auto pumpTask = ref1->pumpTo(*stream)
+        .then([httpProxyStream = kj::mv(ref1), stream = kj::mv(stream)](uint64_t) mutable
+        -> kj::Promise<void> {
+      return kj::NEVER_DONE;
+    });
+
+    PipelineBuilder<ConnectResults> pb;
+    auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
+    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper));
+    pb.setUp(kj::cp(up));
+
+    context.setPipeline(pb.build());
+    context.initResults(capnp::MessageSize { 4, 1 }).setUp(kj::mv(up));
+
+    auto response = kj::heap<HttpOverCapnpConnectResponseImpl>(
+        factory, context.getParams().getContext());
+
+    return inner->connect(host, headers, *pipe.ends[0], *response).attach(
+        kj::mv(host), kj::mv(headers), kj::mv(response), kj::mv(pipe))
+        .exclusiveJoin(kj::mv(pumpTask));
   }
 
 private:

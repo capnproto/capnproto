@@ -648,5 +648,195 @@ KJ_TEST("HttpService isn't destroyed while call outstanding") {
   KJ_EXPECT(!destroyed);
 }
 
+
+class ConnectWriteCloseService final: public kj::HttpService {
+  // A simple CONNECT server that will accept a connection, write some data and close the
+  // connection.
+public:
+  ConnectWriteCloseService(kj::HttpHeaderTable& headerTable)
+      : headerTable(headerTable) {}
+
+  kj::Promise<void> request(
+      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, kj::HttpService::Response& response) override {
+    KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
+  }
+
+  kj::Promise<void> connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
+      kj::HttpService::ConnectResponse& response) override {
+    response.accept(200, "OK", kj::HttpHeaders(headerTable));
+    return io.write("test", 4).then([&io]() mutable {
+      io.shutdownWrite();
+    });
+  }
+
+private:
+  kj::HttpHeaderTable& headerTable;
+};
+
+class ConnectRejectService final: public kj::HttpService {
+  // A simple CONNECT server that will reject a connection.
+public:
+  ConnectRejectService(kj::HttpHeaderTable& headerTable)
+      : headerTable(headerTable) {}
+
+  kj::Promise<void> request(
+      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, kj::HttpService::Response& response) override {
+    KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
+  }
+
+  kj::Promise<void> connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
+      kj::HttpService::ConnectResponse& response) override {
+    auto body = response.reject(500, "Internal Server Error", kj::HttpHeaders(headerTable), 5);
+    return body->write("Error", 5).attach(kj::mv(body));
+  }
+
+private:
+  kj::HttpHeaderTable& headerTable;
+};
+
+KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
+  ConnectWriteCloseService service(*table);
+  kj::HttpServer server(timer, *table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto client = newHttpClient(*table, *pipe.ends[1]);
+
+  capnp::HttpService::Client httpService = factory.kjToCapnp(newHttpService(*client));
+  auto frontCapnpHttpService = factory.capnpToKj(httpService);
+
+  struct ResponseImpl final: public kj::HttpService::ConnectResponse {
+    kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>> fulfiller;
+    ResponseImpl(kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>> fulfiller)
+      : fulfiller(kj::mv(fulfiller)) {}
+    void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+      KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
+      fulfiller->fulfill(
+        kj::HttpClient::ConnectRequest::Status(
+          statusCode,
+          kj::str(statusText),
+          kj::heap(headers.clone()),
+          nullptr
+        )
+      );
+    }
+
+    kj::Own<kj::AsyncOutputStream> reject(
+        uint statusCode,
+        kj::StringPtr statusText,
+        const kj::HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize) override {
+      KJ_UNREACHABLE;
+    }
+  };
+
+  auto clientPipe = kj::newTwoWayPipe();
+  auto paf = kj::newPromiseAndFulfiller<kj::HttpClient::ConnectRequest::Status>();
+  ResponseImpl response(kj::mv(paf.fulfiller));
+
+  auto promise = frontCapnpHttpService->connect(
+      "https://example.org"_kj, kj::HttpHeaders(*table), *clientPipe.ends[0],
+      response).attach(kj::mv(clientPipe.ends[0]));
+
+  paf.promise.then(
+      [io = kj::mv(clientPipe.ends[1])](auto status) mutable {
+    KJ_ASSERT(status.statusCode == 200);
+    KJ_ASSERT(status.statusText == "OK"_kj);
+
+    auto buf = kj::heapArray<char>(4);
+    return io->tryRead(buf.begin(), 4, 4).then(
+        [buf = kj::mv(buf), io = kj::mv(io)](size_t count) mutable {
+      KJ_ASSERT(count == 4, "Expecting the stream to read 4 chars.");
+      return io->tryRead(buf.begin(), 1, 1).then(
+          [buf = kj::mv(buf)](size_t count) mutable {
+        KJ_ASSERT(count == 0, "Expecting the stream to get disconnected.");
+      }).attach(kj::mv(io));
+    });
+  }).wait(waitScope);
+
+  listenTask.wait(waitScope);
+}
+
+
+KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
+  ConnectRejectService service(*table);
+  kj::HttpServer server(timer, *table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto client = newHttpClient(*table, *pipe.ends[1]);
+
+  capnp::HttpService::Client httpService = factory.kjToCapnp(newHttpService(*client));
+  auto frontCapnpHttpService = factory.capnpToKj(httpService);
+
+  struct ResponseImpl final: public kj::HttpService::ConnectResponse {
+    kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncInputStream>>> fulfiller;
+    ResponseImpl(kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncInputStream>>> fulfiller)
+      : fulfiller(kj::mv(fulfiller)) {}
+    void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+      KJ_UNREACHABLE;
+    }
+
+    kj::Own<kj::AsyncOutputStream> reject(
+        uint statusCode,
+        kj::StringPtr statusText,
+        const kj::HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize) override {
+      KJ_ASSERT(statusCode == 500);
+      KJ_ASSERT(statusText == "Internal Server Error");
+      KJ_ASSERT(expectedBodySize.orDefault(5));
+      auto pipe = kj::newOneWayPipe();
+      fulfiller->fulfill(kj::mv(pipe.in));
+      return kj::mv(pipe.out);
+    }
+  };
+
+  auto clientPipe = kj::newTwoWayPipe();
+  auto paf = kj::newPromiseAndFulfiller<kj::Own<kj::AsyncInputStream>>();
+  ResponseImpl response(kj::mv(paf.fulfiller));
+
+  auto promise = frontCapnpHttpService->connect(
+      "https://example.org"_kj, kj::HttpHeaders(*table), *clientPipe.ends[0],
+      response).attach(kj::mv(clientPipe.ends[0]));
+
+  paf.promise.then(
+      [](auto body) mutable {
+    auto buf = kj::heapArray<char>(5);
+    return body->tryRead(buf.begin(), 5, 5).then(
+        [buf = kj::mv(buf), body = kj::mv(body)](size_t count) mutable {
+      KJ_ASSERT(count == 5, "Expecting the stream to read 5 chars.");
+    });
+  }).attach(kj::mv(promise)).wait(waitScope);
+
+  listenTask.wait(waitScope);
+}
+
+
 }  // namespace
 }  // namespace capnp
