@@ -350,6 +350,7 @@ kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<c
       for (auto& piece: pieces) {
         total += piece.size();
       }
+      KJ_DBG("hello???", total, pieces[0].size(), pieces.size(), fds.size());
       if (total > 1024 && pieces.size() > 1) {
         // Per the documentation on AsyncCapabilityStream::writeWithFds(), there may be strict
         // limits on the size of messages with FDs attached. If our message is larger than 1 KiB
