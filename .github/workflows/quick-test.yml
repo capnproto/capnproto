@@ -11,7 +11,7 @@ on:
 
 jobs:
   Linux-musl:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     container: alpine:latest
     steps:
       - uses: actions/checkout@v2
@@ -20,7 +20,7 @@ jobs:
       - name: super-test
         run: ./super-test.sh quick
   Linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -35,7 +35,7 @@ jobs:
         run: |
             ./super-test.sh quick ${{ matrix.compiler }}
   Linux-lock-tracking:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -52,7 +52,7 @@ jobs:
             # librt is used for timer_create in the unit tests for lock tracking (mutex-test.c++).
             ./super-test.sh quick ${{ matrix.compiler }} cpp-features "${{matrix.features}}" extra-libs "-lrt"
   ManyLinux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -165,7 +165,7 @@ jobs:
   #       run: |
   #         C:\tools\cygwin\bin\bash -lc 'export PATH=/usr/local/bin:/usr/bin:/bin; cd /cygdrive/d/a/capnproto/capnproto; ./super-test.sh quick'
   Linux-bazel:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
