@@ -73,6 +73,7 @@ private:
   class ClientRequestContextImpl;
   class KjToCapnpHttpServiceAdapter;
 
+  class HttpServiceResponseImpl;
   class ServerRequestContextImpl;
   class CapnpToKjHttpServiceAdapter;
 

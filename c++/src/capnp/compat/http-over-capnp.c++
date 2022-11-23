@@ -452,38 +452,17 @@ public:
 
 }  // namespace
 
-class HttpOverCapnpFactory::ServerRequestContextImpl final
-    : public capnp::HttpService::ServerRequestContext::Server,
-      public kj::HttpService::Response {
+class HttpOverCapnpFactory::HttpServiceResponseImpl
+    : public kj::HttpService::Response {
 public:
-  ServerRequestContextImpl(HttpOverCapnpFactory& factory,
-                           HttpService::Client serviceCap,
-                           capnp::HttpRequest::Reader request,
-                           capnp::HttpService::ClientRequestContext::Client clientContext,
-                           kj::Own<kj::AsyncInputStream> requestBodyIn,
-                           kj::HttpService& kjService)
-      : factory(factory), serviceCap(kj::mv(serviceCap)),
+  HttpServiceResponseImpl(HttpOverCapnpFactory& factory,
+                          capnp::HttpRequest::Reader request,
+                          capnp::HttpService::ClientRequestContext::Client clientContext)
+      : factory(factory),
         method(validateMethod(request.getMethod())),
         url(kj::str(request.getUrl())),
         headers(factory.headersToKj(request.getHeaders()).clone()),
-        clientContext(kj::mv(clientContext)),
-        // Note we attach `requestBodyIn` to `task` so that we will implicitly cancel reading
-        // the request body as soon as the service returns. This is important in particular when
-        // the request body is not fully consumed, in order to propagate cancellation.
-        task(kjService.request(method, url, headers, *requestBodyIn, *this)
-                      .attach(kj::mv(requestBodyIn))) {}
-
-  KJ_DISALLOW_COPY(ServerRequestContextImpl);
-
-  kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
-    return task.then([]() -> Capability::Client {
-      // If all went well, resolve to a settled capability.
-      // TODO(perf): Could save a message by resolving to a capability hosted by the client, or
-      //     some special "null" capability that isn't an error but is still transmitted by value.
-      //     Otherwise we need a Release message from client -> server just to drop this...
-      return kj::heap<ResolvedServerRequestContext>();
-    });
-  }
+        clientContext(kj::mv(clientContext)) {}
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
@@ -566,20 +545,52 @@ public:
     return result;
   }
 
-private:
   HttpOverCapnpFactory& factory;
-  HttpService::Client serviceCap;  // ensures the inner kj::HttpService isn't destroyed
   kj::HttpMethod method;
   kj::String url;
   kj::HttpHeaders headers;
   capnp::HttpService::ClientRequestContext::Client clientContext;
   kj::Maybe<kj::Promise<void>> replyTask;
-  kj::Promise<void> task;
 
   static kj::HttpMethod validateMethod(capnp::HttpMethod method) {
     KJ_REQUIRE(method <= capnp::HttpMethod::UNSUBSCRIBE, "unknown method", method);
     return static_cast<kj::HttpMethod>(method);
   }
+};
+
+class HttpOverCapnpFactory::ServerRequestContextImpl final
+    : public capnp::HttpService::ServerRequestContext::Server,
+      public HttpServiceResponseImpl {
+public:
+  ServerRequestContextImpl(HttpOverCapnpFactory& factory,
+                           HttpService::Client serviceCap,
+                           capnp::HttpRequest::Reader request,
+                           capnp::HttpService::ClientRequestContext::Client clientContext,
+                           kj::Own<kj::AsyncInputStream> requestBodyIn,
+                           kj::HttpService& kjService)
+      : HttpServiceResponseImpl(factory, request, kj::mv(clientContext)),
+        serviceCap(kj::mv(serviceCap)),
+        // Note we attach `requestBodyIn` to `task` so that we will implicitly cancel reading
+        // the request body as soon as the service returns. This is important in particular when
+        // the request body is not fully consumed, in order to propagate cancellation.
+        task(kjService.request(method, url, headers, *requestBodyIn, *this)
+                      .attach(kj::mv(requestBodyIn))) {}
+
+  kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
+    return task.then([]() -> Capability::Client {
+      // If all went well, resolve to a settled capability.
+      // TODO(perf): Could save a message by resolving to a capability hosted by the client, or
+      //     some special "null" capability that isn't an error but is still transmitted by value.
+      //     Otherwise we need a Release message from client -> server just to drop this...
+      return kj::heap<ResolvedServerRequestContext>();
+    });
+  }
+
+  KJ_DISALLOW_COPY(ServerRequestContextImpl);
+
+private:
+  HttpService::Client serviceCap;  // ensures the inner kj::HttpService isn't destroyed
+  kj::Promise<void> task;
 };
 
 class HttpOverCapnpFactory::CapnpToKjHttpServiceAdapter final: public capnp::HttpService::Server {
