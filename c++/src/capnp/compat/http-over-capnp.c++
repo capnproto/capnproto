@@ -22,6 +22,7 @@
 #include "http-over-capnp.h"
 #include <kj/debug.h>
 #include <capnp/schema.h>
+#include <capnp/message.h>
 
 namespace capnp {
 
@@ -479,8 +480,8 @@ public:
                           capnp::HttpService::ClientRequestContext::Client clientContext)
       : factory(factory),
         method(validateMethod(request.getMethod())),
-        url(kj::str(request.getUrl())),
-        headers(factory.headersToKj(request.getHeaders()).clone()),
+        url(request.getUrl()),
+        headers(factory.headersToKj(request.getHeaders())),
         clientContext(kj::mv(clientContext)) {}
 
   kj::Own<kj::AsyncOutputStream> send(
@@ -566,7 +567,7 @@ public:
 
   HttpOverCapnpFactory& factory;
   kj::HttpMethod method;
-  kj::String url;
+  kj::StringPtr url;
   kj::HttpHeaders headers;
   capnp::HttpService::ClientRequestContext::Client clientContext;
   kj::Maybe<kj::Promise<void>> replyTask;
@@ -583,11 +584,12 @@ class HttpOverCapnpFactory::ServerRequestContextImpl final
 public:
   ServerRequestContextImpl(HttpOverCapnpFactory& factory,
                            HttpService::Client serviceCap,
-                           capnp::HttpRequest::Reader request,
+                           kj::Own<capnp::HttpRequest::Reader> request,
                            capnp::HttpService::ClientRequestContext::Client clientContext,
                            kj::Own<kj::AsyncInputStream> requestBodyIn,
                            kj::HttpService& kjService)
-      : HttpServiceResponseImpl(factory, request, kj::mv(clientContext)),
+      : HttpServiceResponseImpl(factory, *request, kj::mv(clientContext)),
+        request(kj::mv(request)),
         serviceCap(kj::mv(serviceCap)),
         // Note we attach `requestBodyIn` to `task` so that we will implicitly cancel reading
         // the request body as soon as the service returns. This is important in particular when
@@ -608,6 +610,7 @@ public:
   KJ_DISALLOW_COPY(ServerRequestContextImpl);
 
 private:
+  kj::Own<capnp::HttpRequest::Reader> request;
   HttpService::Client serviceCap;  // ensures the inner kj::HttpService isn't destroyed
   kj::Promise<void> task;
 };
@@ -671,12 +674,6 @@ public:
         using HttpServiceResponseImpl::HttpServiceResponseImpl;
       };
       auto impl = kj::heap<FinalHttpServiceResponseImpl>(factory, metadata, params.getContext());
-
-      // TODO(perf): HttpServiceResponseImpl currently clones everything from `metadata`, but we
-      //   should probably change it to not to do that, and not release the params here.
-      //   `startRequest()` will have to make a clone separately in that case.
-      context.releaseParams();
-
       auto promise = inner->request(impl->method, impl->url, impl->headers, *requestBody, *impl);
       return promise.attach(kj::mv(requestBody), kj::mv(impl));
     });
@@ -686,7 +683,8 @@ public:
     return requestImpl(kj::mv(context),
         [&](auto& results, auto& metadata, auto& params, auto& requestBody) {
       results.setContext(kj::heap<ServerRequestContextImpl>(
-          factory, thisCap(), metadata, params.getContext(), kj::mv(requestBody), *inner));
+          factory, thisCap(), capnp::clone(metadata), params.getContext(), kj::mv(requestBody),
+          *inner));
 
       return kj::READY_NOW;
     });
