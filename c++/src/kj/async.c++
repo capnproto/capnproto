@@ -2078,6 +2078,22 @@ Promise<void> yieldHarder() {
   return _::PromiseNode::to<Promise<void>>(allocPromise<YieldHarderPromiseNode>());
 }
 
+OwnPromiseNode readyNow() {
+  class ReadyNowPromiseNode: public ImmediatePromiseNodeBase {
+    // This is like `ConstPromiseNode<Void, Void{}>`, but the compiler won't let me pass a literal
+    // value of type `Void` as a template parameter. (Might require C++20?)
+
+  public:
+    void destroy() override {}
+    void get(ExceptionOrValue& output) noexcept override {
+      output.as<Void>() = Void();
+    }
+  };
+
+  static ReadyNowPromiseNode NODE;
+  return OwnPromiseNode(&NODE);
+}
+
 OwnPromiseNode neverDone() {
   return allocPromise<NeverDonePromiseNode>();
 }

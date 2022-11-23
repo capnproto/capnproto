@@ -422,6 +422,10 @@ static kj::Own<T, PromiseDisposer> appendPromise(OwnPromiseNode&& next, Params&&
 
 // -------------------------------------------------------------------
 
+inline ReadyNow::operator Promise<void>() const {
+  return PromiseNode::to<Promise<void>>(readyNow());
+}
+
 template <typename T>
 inline NeverDone::operator Promise<T>() const {
   return PromiseNode::to<Promise<T>>(neverDone());
@@ -463,6 +467,15 @@ public:
 
 private:
   Exception exception;
+};
+
+template <typename T, T value>
+class ConstPromiseNode: public ImmediatePromiseNodeBase {
+public:
+  void destroy() override {}
+  void get(ExceptionOrValue& output) noexcept override {
+    output.as<T>() = value;
+  }
 };
 
 // -------------------------------------------------------------------
@@ -1360,6 +1373,12 @@ Promise<T> Promise<T>::eagerlyEvaluate(decltype(nullptr), SourceLocation locatio
 template <typename T>
 kj::String Promise<T>::trace() {
   return PromiseBase::trace();
+}
+
+template <typename T, T value>
+inline Promise<T> constPromise() {
+  static _::ConstPromiseNode<T, value> NODE;
+  return _::PromiseNode::to<Promise<T>>(_::OwnPromiseNode(&NODE));
 }
 
 template <typename Func>

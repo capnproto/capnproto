@@ -409,7 +409,7 @@ private:
   friend class EventLoop;
 };
 
-constexpr _::Void READY_NOW = _::Void();
+constexpr _::ReadyNow READY_NOW = _::ReadyNow();
 // Use this when you need a Promise<void> that is already fulfilled -- this value can be implicitly
 // cast to `Promise<void>`.
 
@@ -417,6 +417,11 @@ constexpr _::NeverDone NEVER_DONE = _::NeverDone();
 // The opposite of `READY_NOW`, return this when the promise should never resolve.  This can be
 // implicitly converted to any promise type.  You may also call `NEVER_DONE.wait()` to wait
 // forever (useful for servers).
+
+template <typename T, T value>
+Promise<T> constPromise();
+// Construct a Promise which resolves to the given constant value. This function is equivalent to
+// `Promise<T>(value)` except that it avoids an allocation.
 
 template <typename Func>
 PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
