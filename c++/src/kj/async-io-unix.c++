@@ -815,6 +815,10 @@ private:
       KJ_NONBLOCKING_SYSCALL(n = ::sendmsg(fd, &msg, 0)) {
         // Error.
 
+        if (errno == EMSGSIZE) {
+          KJ_DBG("whattt???", firstPiece.size(), morePieces.size(), fds.size());
+        }
+
         // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
         // a bug that exists in both Clang and GCC:
         //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799

@@ -359,7 +359,6 @@ kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<c
         //
         // (This code consciously doesn't bother to handle the case where the segment table itself
         // is too large, since that seems extremely unlikely.)
-        KJ_DBG("hello???", total, pieces[0].size(), pieces.size(), fds.size());
         return output.writeWithFds(pieces[0], nullptr, fds)
             .then([&output,pieces]() {
           return output.write(pieces.slice(1, pieces.size()));
