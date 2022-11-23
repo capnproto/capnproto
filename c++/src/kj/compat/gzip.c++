@@ -182,7 +182,7 @@ GzipAsyncInputStream::~GzipAsyncInputStream() noexcept(false) {
 }
 
 Promise<size_t> GzipAsyncInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
-  if (maxBytes == 0) return size_t(0);
+  if (maxBytes == 0) return constPromise<size_t, 0>();
 
   return readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
 }

@@ -221,7 +221,7 @@ public:
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     if (minBytes == 0) {
-      return size_t(0);
+      return constPromise<size_t, 0>();
     } else KJ_IF_MAYBE(s, state) {
       return s->tryRead(buffer, minBytes, maxBytes);
     } else {
@@ -260,7 +260,7 @@ public:
 
   Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
     if (amount == 0) {
-      return uint64_t(0);
+      return constPromise<uint64_t, 0>();
     } else KJ_IF_MAYBE(s, state) {
       return s->pumpTo(output, amount);
     } else {
@@ -348,7 +348,7 @@ public:
   Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount) override {
     if (amount == 0) {
-      return Promise<uint64_t>(uint64_t(0));
+      return constPromise<uint64_t, 0>();
     } else KJ_IF_MAYBE(s, state) {
       return s->tryPumpFrom(input, amount);
     } else {
@@ -1416,7 +1416,7 @@ private:
 
       if (input.tryGetLength().orDefault(1) == 0) {
         // Yeah a pump would pump nothing.
-        return Promise<uint64_t>(uint64_t(0));
+        return constPromise<uint64_t, 0>();
       } else {
         // While we *could* just return nullptr here, it would probably then fall back to a normal
         // buffered pump, which would allocate a big old buffer just to find there's nothing to
@@ -1449,7 +1449,7 @@ private:
 
   public:
     Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
-      return size_t(0);
+      return constPromise<size_t, 0>();
     }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
                                        AutoCloseFd* fdBuffer, size_t maxFds) override {
@@ -1461,7 +1461,7 @@ private:
       return ReadResult { 0, 0 };
     }
     Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-      return uint64_t(0);
+      return constPromise<uint64_t, 0>();
     }
     void abortRead() override {
       // ignore
@@ -1626,7 +1626,7 @@ public:
   }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    if (limit == 0) return size_t(0);
+    if (limit == 0) return constPromise<size_t, 0>();
     return inner->tryRead(buffer, kj::min(minBytes, limit), kj::min(maxBytes, limit))
         .then([this,minBytes](size_t actual) {
       decreaseLimit(actual, minBytes);
@@ -1635,7 +1635,7 @@ public:
   }
 
   Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-    if (limit == 0) return uint64_t(0);
+    if (limit == 0) return constPromise<uint64_t, 0>();
     auto requested = kj::min(amount, limit);
     return inner->pumpTo(output, requested)
         .then([this,requested](uint64_t actual) {
@@ -1853,7 +1853,7 @@ public:
     if (branch.buffer.empty()) {
       KJ_IF_MAYBE(reason, stoppage) {
         if (reason->is<Eof>()) {
-          return uint64_t(0);
+          return constPromise<uint64_t, 0>();
         }
         return cp(reason->get<Exception>());
       }

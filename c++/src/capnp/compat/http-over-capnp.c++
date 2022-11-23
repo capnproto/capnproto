@@ -435,7 +435,7 @@ class NullInputStream final: public kj::AsyncInputStream {
 
 public:
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return size_t(0);
+    return kj::constPromise<size_t, 0>();
   }
 
   kj::Maybe<uint64_t> tryGetLength() override {
@@ -443,7 +443,7 @@ public:
   }
 
   kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
-    return uint64_t(0);
+    return kj::constPromise<uint64_t, 0>();
   }
 };
 
