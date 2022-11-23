@@ -9,7 +9,7 @@ on:
 
 jobs:
   Linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -42,7 +42,7 @@ jobs:
         run: |
             ./super-test.sh
   MinGW-Wine:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
     steps:
@@ -71,7 +71,7 @@ jobs:
         run: |
             ./super-test.sh mingw i686-w64-mingw32
   cmake-packaging:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
     steps:
@@ -93,7 +93,7 @@ jobs:
         run: |
             ./super-test.sh cmake-package cmake-static
   Android:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
     steps:
