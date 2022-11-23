@@ -1227,8 +1227,12 @@ inline Void ListReader::getDataElement<Void>(ElementCount index) const {
 }
 
 inline PointerReader ListReader::getPointerElement(ElementCount index) const {
+  // If the list elements have data sections we need to skip those. Note that for pointers to be
+  // present at all (which already must be true if we get here), then `structDataSize` must be a
+  // whole number of words, so we don't have to worry about unaligned reads here.
+  auto offset = structDataSize / BITS_PER_BYTE;
   return PointerReader(segment, capTable, reinterpret_cast<const WirePointer*>(
-      ptr + upgradeBound<uint64_t>(index) * step / BITS_PER_BYTE), nestingLimit);
+      ptr + offset + upgradeBound<uint64_t>(index) * step / BITS_PER_BYTE), nestingLimit);
 }
 
 // -------------------------------------------------------------------
