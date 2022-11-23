@@ -2318,10 +2318,6 @@ struct WireHelpers {
             break;
 
           case ElementSize::POINTER:
-            // We expected a list of pointers but got a list of structs.  Assuming the first field
-            // in the struct is the pointer we were looking for, we want to munge the pointer to
-            // point at the first element's pointer section.
-            ptr += tag->structRef.dataSize.get();
             KJ_REQUIRE(tag->structRef.ptrCount.get() > ZERO * POINTERS,
                        "Expected a pointer list, but got a list of data-only structs.") {
               goto useDefault;
