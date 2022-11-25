@@ -197,51 +197,6 @@ struct DummyFunctor {
   void operator()() {};
 };
 
-class YieldPromiseNode final: public _::PromiseNode {
-public:
-  void destroy() override { dtor(*this); }
-
-  void onReady(_::Event* event) noexcept override {
-    if (event) event->armBreadthFirst();
-  }
-  void get(_::ExceptionOrValue& output) noexcept override {
-    output.as<_::Void>() = _::Void();
-  }
-  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
-    builder.add(reinterpret_cast<void*>(&kj::evalLater<DummyFunctor>));
-  }
-};
-
-class YieldHarderPromiseNode final: public _::PromiseNode {
-public:
-  void destroy() override { dtor(*this); }
-
-  void onReady(_::Event* event) noexcept override {
-    if (event) event->armLast();
-  }
-  void get(_::ExceptionOrValue& output) noexcept override {
-    output.as<_::Void>() = _::Void();
-  }
-  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
-    builder.add(reinterpret_cast<void*>(&kj::evalLast<DummyFunctor>));
-  }
-};
-
-class NeverDonePromiseNode final: public _::PromiseNode {
-public:
-  void destroy() override { dtor(*this); }
-
-  void onReady(_::Event* event) noexcept override {
-    // ignore
-  }
-  void get(_::ExceptionOrValue& output) noexcept override {
-    KJ_FAIL_REQUIRE("Not ready.");
-  }
-  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
-    builder.add(_::getMethodStartAddress(kj::NEVER_DONE, &_::NeverDone::wait));
-  }
-};
-
 }  // namespace
 
 // =======================================================================================
@@ -2071,11 +2026,43 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation locatio
 }
 
 Promise<void> yield() {
-  return _::PromiseNode::to<Promise<void>>(allocPromise<YieldPromiseNode>());
+  class YieldPromiseNode final: public _::PromiseNode {
+  public:
+    void destroy() override {}
+
+    void onReady(_::Event* event) noexcept override {
+      if (event) event->armBreadthFirst();
+    }
+    void get(_::ExceptionOrValue& output) noexcept override {
+      output.as<_::Void>() = _::Void();
+    }
+    void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+      builder.add(reinterpret_cast<void*>(&kj::evalLater<DummyFunctor>));
+    }
+  };
+
+  static YieldPromiseNode NODE;
+  return _::PromiseNode::to<Promise<void>>(OwnPromiseNode(&NODE));
 }
 
 Promise<void> yieldHarder() {
-  return _::PromiseNode::to<Promise<void>>(allocPromise<YieldHarderPromiseNode>());
+  class YieldHarderPromiseNode final: public _::PromiseNode {
+  public:
+    void destroy() override {}
+
+    void onReady(_::Event* event) noexcept override {
+      if (event) event->armLast();
+    }
+    void get(_::ExceptionOrValue& output) noexcept override {
+      output.as<_::Void>() = _::Void();
+    }
+    void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+      builder.add(reinterpret_cast<void*>(&kj::evalLast<DummyFunctor>));
+    }
+  };
+
+  static YieldHarderPromiseNode NODE;
+  return _::PromiseNode::to<Promise<void>>(OwnPromiseNode(&NODE));
 }
 
 OwnPromiseNode readyNow() {
@@ -2095,7 +2082,23 @@ OwnPromiseNode readyNow() {
 }
 
 OwnPromiseNode neverDone() {
-  return allocPromise<NeverDonePromiseNode>();
+  class NeverDonePromiseNode final: public _::PromiseNode {
+  public:
+    void destroy() override {}
+
+    void onReady(_::Event* event) noexcept override {
+      // ignore
+    }
+    void get(_::ExceptionOrValue& output) noexcept override {
+      KJ_FAIL_REQUIRE("Not ready.");
+    }
+    void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+      builder.add(_::getMethodStartAddress(kj::NEVER_DONE, &_::NeverDone::wait));
+    }
+  };
+
+  static NeverDonePromiseNode NODE;
+  return OwnPromiseNode(&NODE);
 }
 
 void NeverDone::wait(WaitScope& waitScope, SourceLocation location) const {
