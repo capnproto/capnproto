@@ -7150,7 +7150,7 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
     }
   }
 
-  KJ_ASSERT_NONNULL(srv.get());
+  KJ_ASSERT(srv.get() != nullptr);
 
   return listenHttpCleanDrain(connection, [srv = kj::mv(srv)](SuspendableRequest&) mutable {
     // This factory function will be owned by the Connection object, meaning the Connection object

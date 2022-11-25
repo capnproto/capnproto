@@ -1248,8 +1248,8 @@ KJ_TEST("fiber pool") {
     }
   };
   run();
-  KJ_ASSERT_NONNULL(i1_local);
-  KJ_ASSERT_NONNULL(i2_local);
+  KJ_ASSERT(i1_local != nullptr);
+  KJ_ASSERT(i2_local != nullptr);
   // run the same thing and reuse the fibers
   run();
 }
@@ -1374,6 +1374,12 @@ KJ_TEST("fiber pool limit") {
   // that the second stack doesn't match the previously-deleted stack, because there's a high
   // likelihood that the new stack would be allocated in the same location.
 }
+
+#if __GNUC__ >= 12 && !__clang__
+// The test below intentionally takes a pointer to a stack variable and stores it past the end
+// of the function. This seems to trigger a warning in newer GCCs.
+#pragma GCC diagnostic ignored "-Wdangling-pointer"
+#endif
 
 KJ_TEST("run event loop on freelisted stacks") {
   if (isLibcContextHandlingKnownBroken()) return;
