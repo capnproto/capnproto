@@ -566,6 +566,42 @@ TEST(Rpc, Pipelining) {
   EXPECT_EQ(1, chainedCallCount);
 }
 
+KJ_TEST("RPC sendForPipeline()") {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_PIPELINE)
+      .castAs<test::TestPipeline>();
+
+  int chainedCallCount = 0;
+
+  auto request = client.getCapRequest();
+  request.setN(234);
+  request.setInCap(kj::heap<TestInterfaceImpl>(chainedCallCount));
+
+  auto pipeline = request.sendForPipeline();
+
+  auto pipelineRequest = pipeline.getOutBox().getCap().fooRequest();
+  pipelineRequest.setI(321);
+  auto pipelinePromise = pipelineRequest.send();
+
+  auto pipelineRequest2 = pipeline.getOutBox().getCap().castAs<test::TestExtends>().graultRequest();
+  auto pipelinePromise2 = pipelineRequest2.send();
+
+  pipeline = nullptr;  // Just to be annoying, drop the original pipeline.
+
+  EXPECT_EQ(0, context.restorer.callCount);
+  EXPECT_EQ(0, chainedCallCount);
+
+  auto response = pipelinePromise.wait(context.waitScope);
+  EXPECT_EQ("bar", response.getX());
+
+  auto response2 = pipelinePromise2.wait(context.waitScope);
+  checkTestMessage(response2);
+
+  EXPECT_EQ(3, context.restorer.callCount);
+  EXPECT_EQ(1, chainedCallCount);
+}
+
 KJ_TEST("RPC context.setPipeline") {
   TestContext context;
 
