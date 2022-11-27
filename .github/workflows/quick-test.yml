@@ -12,7 +12,7 @@ on:
 jobs:
   Linux-musl:
     runs-on: ubuntu-20.04
-    container: alpine:latest
+    container: alpine:3.16.3
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
