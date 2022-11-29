@@ -9,7 +9,7 @@
 #include <capnp/capability.h>
 #endif  // !CAPNP_LITE
 
-#if CAPNP_VERSION != 10002
+#if CAPNP_VERSION != 10003
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
