@@ -56,9 +56,9 @@ package from [Apple](https://developer.apple.com/downloads/) or compiler builds 
 
 You may download and install the release version of Cap'n Proto like so:
 
-<pre><code>curl -O <a href="https://capnproto.org/capnproto-c++-0.9.1.tar.gz">https://capnproto.org/capnproto-c++-0.9.1.tar.gz</a>
-tar zxf capnproto-c++-0.9.1.tar.gz
-cd capnproto-c++-0.9.1
+<pre><code>curl -O <a href="https://capnproto.org/capnproto-c++-0.9.2.tar.gz">https://capnproto.org/capnproto-c++-0.9.2.tar.gz</a>
+tar zxf capnproto-c++-0.9.2.tar.gz
+cd capnproto-c++-0.9.2
 ./configure
 make -j6 check
 sudo make install</code></pre>
@@ -97,15 +97,15 @@ If you download directly from Git, you will need to have the GNU autotools --
 
 1. Download Cap'n Proto Win32 build:
 
-   <pre><a href="https://capnproto.org/capnproto-c++-win32-0.9.1.zip">https://capnproto.org/capnproto-c++-win32-0.9.1.zip</a></pre>
+   <pre><a href="https://capnproto.org/capnproto-c++-win32-0.9.2.zip">https://capnproto.org/capnproto-c++-win32-0.9.2.zip</a></pre>
 
-2. Find `capnp.exe`, `capnpc-c++.exe`, and `capnpc-capnp.exe` under `capnproto-tools-win32-0.9.1` in
+2. Find `capnp.exe`, `capnpc-c++.exe`, and `capnpc-capnp.exe` under `capnproto-tools-win32-0.9.2` in
    the zip and copy them somewhere.
 
 3. If your `.capnp` files will import any of the `.capnp` files provided by the core project, or
    if you use the `stream` keyword (which implicitly imports `capnp/stream.capnp`), then you need
    to put those files somewhere where the capnp compiler can find them. To do this, copy the
-   directory `capnproto-c++-0.9.1/src` to the location of your choice, then make sure to pass the
+   directory `capnproto-c++-0.9.2/src` to the location of your choice, then make sure to pass the
    flag `-I <that location>` to `capnp` when you run it.
 
 If you don't care about C++ support, you can stop here. The compiler exe can be used with plugins
@@ -119,7 +119,7 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 
 2. Install [CMake](http://www.cmake.org/) version 3.1 or later.
 
-3. Use CMake to generate Visual Studio project files under `capnproto-c++-0.9.1` in the zip file.
+3. Use CMake to generate Visual Studio project files under `capnproto-c++-0.9.2` in the zip file.
    You can use the CMake UI for this or run this shell command:
 
        cmake -G "Visual Studio 15 2017"
