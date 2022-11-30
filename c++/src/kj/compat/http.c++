@@ -1668,7 +1668,7 @@ public:
   }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return size_t(0);
+    return constPromise<size_t, 0>();
   }
 
   Maybe<uint64_t> tryGetLength() override {
@@ -1687,7 +1687,7 @@ public:
       : HttpEntityBodyReader(inner) {}
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    if (alreadyDone()) return size_t(0);
+    if (alreadyDone()) return constPromise<size_t, 0>();
 
     return inner.tryRead(buffer, minBytes, maxBytes)
         .then([=](size_t amount) {
@@ -1721,7 +1721,7 @@ private:
 
   Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                   size_t alreadyRead) {
-    if (length == 0) return size_t(0);
+    if (length == 0) return constPromise<size_t, 0>();
 
     // We have to set minBytes to 1 here so that if we read any data at all, we update our
     // counter immediately, so that we still know where we are in case of cancellation.
@@ -2148,7 +2148,7 @@ public:
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-    if (amount == 0) return Promise<uint64_t>(uint64_t(0));
+    if (amount == 0) return constPromise<uint64_t, 0>();
 
     bool overshot = amount > length;
     if (overshot) {
@@ -4609,7 +4609,7 @@ public:
       : expectedLength(expectedLength) {}
 
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return size_t(0);
+    return constPromise<size_t, 0>();
   }
 
   kj::Maybe<uint64_t> tryGetLength() override {
@@ -4617,7 +4617,7 @@ public:
   }
 
   kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-    return uint64_t(0);
+    return constPromise<uint64_t, 0>();
   }
 
 private:
@@ -4654,7 +4654,7 @@ public:
   }
 
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return size_t(0);
+    return constPromise<size_t, 0>();
   }
 
   kj::Maybe<uint64_t> tryGetLength() override {
@@ -4662,7 +4662,7 @@ public:
   }
 
   kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-    return uint64_t(0);
+    return constPromise<uint64_t, 0>();
   }
 };
 
