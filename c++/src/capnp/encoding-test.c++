@@ -2027,6 +2027,81 @@ KJ_TEST("list.setWithCaveats(i, list[i]) doesn't corrupt contents") {
   checkTestMessage(list[1]);
 }
 
+KJ_TEST("Downgrade pointer-list from struct-list") {
+  // Test that downgrading a list-of-structs to a list-of-pointers (where the relevant pointer is
+  // the struct's first pointer) works as advertised.
+
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestAnyPointer>();
+
+  {
+    auto list = root.getAnyPointerField().initAs<List<TestAllTypes>>(2);
+    initTestMessage(list[0]);
+    list[1].setTextField("hello");
+  }
+
+  {
+    auto list = root.asReader().getAnyPointerField().getAs<List<Text>>();
+    KJ_ASSERT(list.size() == 2);
+    KJ_EXPECT(list[0] == "foo");
+    KJ_EXPECT(list[1] == "hello");
+  }
+}
+
+KJ_TEST("Copying ListList downgraded from ListStruct does not get corrupted") {
+  // Test written by David Renshaw to demonstrate CVE-???
+
+  AlignedData<10> data = {{
+    // struct, 1 pointer
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+
+    // list, inline composite. 4 words.
+    0x01, 0x00, 0x00, 0x00, 0x27, 0x00, 0x00, 0x00,
+
+    // one element, 3 data words, 1 pointer.
+    0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00,
+
+    0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, // data section
+    0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, // data section
+    0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, // data section
+
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // null struct pointer
+
+    // bad bytes that shouldn't be visible from the root of the message
+    0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb,
+    0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb,
+
+    // bug can cause this word to be read as the list element struct pointer
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  }};
+
+  kj::ArrayPtr<const word> segments[1] = {
+    // Only take the first 7 words. The last three words above should not be accessible
+    // from these segments.
+    kj::arrayPtr(data.words, 7)
+  };
+
+  SegmentArrayMessageReader reader(kj::arrayPtr(segments, 1));
+  auto readerRoot = reader.getRoot<test::TestAnyPointer>();
+  auto listList = readerRoot.getAnyPointerField().getAs<List<List<uint32_t>>>();
+  EXPECT_EQ(listList.size(), 1);
+
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestAnyPointer>();
+
+  root.getAnyPointerField().setAs<List<List<uint32_t>>>(listList);
+
+  auto outputSegments = builder.getSegmentsForOutput();
+  ASSERT_EQ(outputSegments.size(), 1);
+
+  auto inputBytes = segments[0].asBytes();
+  auto outputBytes = outputSegments[0].asBytes();
+
+  ASSERT_EQ(outputBytes, inputBytes);
+  // Should be equal. Instead, we see that outputBytes includes the (copied)
+  // out-of-bounds 0xbb bytes from `data` above, which should be impossible.
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
