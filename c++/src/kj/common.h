@@ -282,10 +282,14 @@ typedef unsigned char byte;
 #elif __GNUC__
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated))
-#define KJ_UNAVAILABLE(reason)
+#define KJ_UNAVAILABLE(reason) = delete
+// If the `unavailable` attribute is not supproted, just mark the method deleted, which at least
+// makes it a compile-time error to try to call it. Note that on Clang, marking a method deleted
+// *and* unavailable unfortunately defeats the purpose of the unavailable annotation, as the
+// generic "deleted" error is reported instead.
 #else
 #define KJ_DEPRECATED(reason)
-#define KJ_UNAVAILABLE(reason)
+#define KJ_UNAVAILABLE(reason) = delete
 // TODO(msvc): Again, here, MSVC prefers a prefix, __declspec(deprecated).
 #endif
 

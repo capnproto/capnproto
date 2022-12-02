@@ -380,27 +380,13 @@ public:
   // In general, this should be the last thing a method implementation calls, and the promise
   // returned from `tailCall()` should then be returned by the method implementation.
 
-  void allowCancellation();
-  // Indicate that it is OK for the RPC system to discard its Promise for this call's result if
-  // the caller cancels the call, thereby transitively canceling any asynchronous operations the
-  // call implementation was performing.  This is not done by default because it could represent a
-  // security risk:  applications must be carefully written to ensure that they do not end up in
-  // a bad state if an operation is canceled at an arbitrary point.  However, for long-running
-  // method calls that hold significant resources, prompt cancellation is often useful.
-  //
-  // Keep in mind that asynchronous cancellation cannot occur while the method is synchronously
-  // executing on a local thread.  The method must perform an asynchronous operation or call
-  // `EventLoop::current().evalLater()` to yield control.
-  //
-  // Note:  You might think that we should offer `onCancel()` and/or `isCanceled()` methods that
-  // provide notification when the caller cancels the request without forcefully killing off the
-  // promise chain.  Unfortunately, this composes poorly with promise forking:  the canceled
-  // path may be just one branch of a fork of the result promise.  The other branches still want
-  // the call to continue.  Promise forking is used within the Cap'n Proto implementation -- in
-  // particular each pipelined call forks the result promise.  So, if a caller made a pipelined
-  // call and then dropped the original object, the call should not be canceled, but it would be
-  // excessively complicated for the framework to avoid notififying of cancellation as long as
-  // pipelined calls still exist.
+  void allowCancellation()
+      KJ_UNAVAILABLE(
+          "As of Cap'n Proto 0.11, allowCancellation must be applied statically using an "
+          "annotation in the schema. See annotations defined in /capnp/c++.capnp. For "
+          "DynamicCapability::Server, use the constructor option (the annotation does not apply "
+          "to DynamicCapability). This change was made to gain a significant performance boost -- "
+          "dynamically allowing cancellation required excessive bookkeeping.");
 
 private:
   CallContextHook* hook;
@@ -425,7 +411,13 @@ public:
   // - It wouldn't be particularly useful since streaming calls don't return anything, and they
   //   already compensate for latency.
 
-  void allowCancellation();
+  void allowCancellation()
+      KJ_UNAVAILABLE(
+          "As of Cap'n Proto 0.11, allowCancellation must be applied statically using an "
+          "annotation in the schema. See annotations defined in /capnp/c++.capnp. For "
+          "DynamicCapability::Server, use the constructor option (the annotation does not apply "
+          "to DynamicCapability). This change was made to gain a significant performance boost -- "
+          "dynamically allowing cancellation required excessive bookkeeping.");
 
 private:
   CallContextHook* hook;
@@ -451,13 +443,20 @@ public:
     // If true, this method was declared as `-> stream;`. No other calls should be permitted until
     // this call finishes, and if this call throws an exception, all future calls will throw the
     // same exception.
+
+    bool allowCancellation = false;
+    // If true, the call can be canceled normally. If false, the immediate caller is responsible
+    // for ensuring that cancellation is prevented and that `context` remains valid until the
+    // call completes normally.
+    //
+    // See the `allowCancellation` annotation defined in `c++.capnp`.
   };
 
   virtual DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
                                           CallContext<AnyPointer, AnyPointer> context) = 0;
   // Call the given method.  `params` is the input struct, and should be released as soon as it
-  // is no longer needed.  `context` may be used to allocate the output struct and deal with
-  // cancellation.
+  // is no longer needed.  `context` may be used to allocate the output struct and other call
+  // logistics.
 
   virtual kj::Maybe<int> getFd() { return nullptr; }
   // If this capability is backed by a file descriptor that is safe to directly expose to clients,
@@ -704,10 +703,6 @@ public:
   // `Promise<void>` is discarded, the call may continue executing if any pipelined calls are
   // waiting for it.
   //
-  // Since the caller of this method chooses the CallContext implementation, it is the caller's
-  // responsibility to ensure that the returned promise is not canceled unless allowed via
-  // the context's `allowCancellation()`.
-  //
   // The call must not begin synchronously; the callee must arrange for the call to begin in a
   // later turn of the event loop. Otherwise, application code may call back and affect the
   // callee's state in an unexpected way.
@@ -762,7 +757,6 @@ public:
   virtual void releaseParams() = 0;
   virtual AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) = 0;
   virtual kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) = 0;
-  virtual void allowCancellation() = 0;
 
   virtual void setPipeline(kj::Own<PipelineHook>&& pipeline) = 0;
 
@@ -1070,14 +1064,6 @@ template <typename SubParams>
 inline kj::Promise<void> CallContext<Params, Results>::tailCall(
     Request<SubParams, Results>&& tailRequest) {
   return hook->tailCall(kj::mv(tailRequest.hook));
-}
-template <typename Params, typename Results>
-inline void CallContext<Params, Results>::allowCancellation() {
-  hook->allowCancellation();
-}
-template <typename Params>
-inline void StreamingCallContext<Params>::allowCancellation() {
-  hook->allowCancellation();
 }
 
 template <typename Params, typename Results>

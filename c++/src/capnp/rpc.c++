@@ -369,7 +369,7 @@ public:
       // destructors could come back and mess with the tables.
       kj::Vector<kj::Own<PipelineHook>> pipelinesToRelease;
       kj::Vector<kj::Own<ClientHook>> clientsToRelease;
-      kj::Vector<kj::Promise<kj::Own<RpcResponse>>> tailCallsToRelease;
+      kj::Vector<decltype(Answer::task)> tasksToRelease;
       kj::Vector<kj::Promise<void>> resolveOpsToRelease;
 
       // All current questions complete with exceptions.
@@ -395,12 +395,10 @@ public:
           pipelinesToRelease.add(kj::mv(*p));
         }
 
-        KJ_IF_MAYBE(promise, answer.redirectedResults) {
-          tailCallsToRelease.add(kj::mv(*promise));
-        }
+        tasksToRelease.add(kj::mv(answer.task));
 
         KJ_IF_MAYBE(context, answer.callContext) {
-          context->requestCancel();
+          context->finish();
         }
       });
 
@@ -531,7 +529,17 @@ private:
     kj::Maybe<kj::Own<PipelineHook>> pipeline;
     // Send pipelined calls here.  Becomes null as soon as a `Finish` is received.
 
-    kj::Maybe<kj::Promise<kj::Own<RpcResponse>>> redirectedResults;
+    using Running = kj::Promise<void>;
+    struct Finished {};
+    using Redirected = kj::Promise<kj::Own<RpcResponse>>;
+
+    kj::OneOf<Running, Finished, Redirected> task;
+    // While the RPC is running locally, `task` is a `Promise` representing the task to execute
+    // the RPC.
+    //
+    // When `Finish` is received (and results are not redirected), `task` becomes `Finished`, which
+    // cancels it if it's still running.
+    //
     // For locally-redirected calls (Call.sendResultsTo.yourself), this is a promise for the call
     // result, to be picked up by a subsequent `Return`.
 
@@ -730,9 +738,6 @@ private:
 
       request.set(params);
       context->releaseParams();
-
-      // We can and should propagate cancellation.
-      context->allowCancellation();
 
       return context->directTailCall(RequestHook::from(kj::mv(request)));
     }
@@ -2082,8 +2087,7 @@ private:
                    kj::Own<IncomingRpcMessage>&& request,
                    kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTableArray,
                    const AnyPointer::Reader& params,
-                   bool redirectResults, kj::Own<kj::PromiseFulfiller<void>>&& cancelFulfiller,
-                   uint64_t interfaceId, uint16_t methodId)
+                   bool redirectResults, uint64_t interfaceId, uint16_t methodId)
         : connectionState(kj::addRef(connectionState)),
           answerId(answerId),
           interfaceId(interfaceId),
@@ -2093,8 +2097,7 @@ private:
           paramsCapTable(kj::mv(capTableArray)),
           params(paramsCapTable.imbue(params)),
           returnMessage(nullptr),
-          redirectResults(redirectResults),
-          cancelFulfiller(kj::mv(cancelFulfiller)) {
+          redirectResults(redirectResults) {
       connectionState.callWordsInFlight += requestSize;
     }
 
@@ -2146,7 +2149,7 @@ private:
 
       // Avoid sending results if canceled so that we don't have to figure out whether or not
       // `releaseResultCaps` was set in the already-received `Finish`.
-      if (!(cancellationFlags & CANCEL_REQUESTED) && isFirstResponder()) {
+      if (!receivedFinish && isFirstResponder()) {
         KJ_ASSERT(connectionState->connection.is<Connected>(),
                   "Cancellation should have been requested on disconnect.") {
           return;
@@ -2215,21 +2218,10 @@ private:
       }
     }
 
-    void requestCancel() {
-      // Hints that the caller wishes to cancel this call.  At the next time when cancellation is
-      // deemed safe, the RpcCallContext shall send a canceled Return -- or if it never becomes
-      // safe, the RpcCallContext will send a normal return when the call completes.  Either way
-      // the RpcCallContext is now responsible for cleaning up the entry in the answer table, since
-      // a Finish message was already received.
+    void finish() {
+      // Called when a `Finish` message is received while this object still exists.
 
-      bool previouslyAllowedButNotRequested = cancellationFlags == CANCEL_ALLOWED;
-      cancellationFlags |= CANCEL_REQUESTED;
-
-      if (previouslyAllowedButNotRequested) {
-        // We just set CANCEL_REQUESTED, and CANCEL_ALLOWED was already set previously.  Initiate
-        // the cancellation.
-        cancelFulfiller->fulfill();
-      }
+      receivedFinish = true;
     }
 
     // implements CallContextHook ------------------------------------
@@ -2323,16 +2315,6 @@ private:
       tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
       return kj::mv(paf.promise);
     }
-    void allowCancellation() override {
-      bool previouslyRequestedButNotAllowed = cancellationFlags == CANCEL_REQUESTED;
-      cancellationFlags |= CANCEL_ALLOWED;
-
-      if (previouslyRequestedButNotAllowed) {
-        // We just set CANCEL_ALLOWED, and CANCEL_REQUESTED was already set previously.  Initiate
-        // the cancellation.
-        cancelFulfiller->fulfill();
-      }
-    }
     kj::Own<CallContextHook> addRef() override {
       return kj::addRef(*this);
     }
@@ -2362,18 +2344,7 @@ private:
 
     // Cancellation state ----------------------------------
 
-    enum CancellationFlags {
-      CANCEL_REQUESTED = 1,
-      CANCEL_ALLOWED = 2
-    };
-
-    uint8_t cancellationFlags = 0;
-    // When both flags are set, the cancellation process will begin.
-
-    kj::Own<kj::PromiseFulfiller<void>> cancelFulfiller;
-    // Fulfilled when cancellation has been both requested and permitted.  The fulfilled promise is
-    // exclusive-joined with the outermost promise waiting on the call return, so fulfilling it
-    // cancels that promise.
+    bool receivedFinish = false;
 
     kj::UnwindDetector unwindDetector;
 
@@ -2393,7 +2364,7 @@ private:
       // answer table.  Or we might even be responsible for removing the entire answer table
       // entry.
 
-      if (cancellationFlags & CANCEL_REQUESTED) {
+      if (receivedFinish) {
         // Already received `Finish` so it's our job to erase the table entry. We shouldn't have
         // sent results if canceled, so we shouldn't have an export list to deal with.
         KJ_ASSERT(resultExports.size() == 0);
@@ -2682,14 +2653,12 @@ private:
 
     auto payload = call.getParams();
     auto capTableArray = receiveCaps(payload.getCapTable(), message->getAttachedFds());
-    auto cancelPaf = kj::newPromiseAndFulfiller<void>();
 
     AnswerId answerId = call.getQuestionId();
 
     auto context = kj::refcounted<RpcCallContext>(
         *this, answerId, kj::mv(message), kj::mv(capTableArray), payload.getContent(),
-        redirectResults, kj::mv(cancelPaf.fulfiller),
-        call.getInterfaceId(), call.getMethodId());
+        redirectResults, call.getInterfaceId(), call.getMethodId());
 
     // No more using `call` after this point, as it now belongs to the context.
 
@@ -2716,37 +2685,24 @@ private:
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
       if (redirectResults) {
-        auto resultsPromise = promiseAndPipeline.promise.then(
+        answer.task = promiseAndPipeline.promise.then(
             [context=kj::mv(context)]() mutable {
               return context->consumeRedirectedResponse();
             });
-
-        // If the call that later picks up `redirectedResults` decides to discard it, we need to
-        // make sure our call is not itself canceled unless it has called allowCancellation().
-        // So we fork the promise and join one branch with the cancellation promise, in order to
-        // hold on to it.
-        auto forked = resultsPromise.fork();
-        answer.redirectedResults = forked.addBranch();
-
-        cancelPaf.promise
-            .exclusiveJoin(forked.addBranch().then([](kj::Own<RpcResponse>&&){}))
-            .detach([](kj::Exception&&) {});
       } else {
         // Hack:  Both the success and error continuations need to use the context.  We could
         //   refcount, but both will be destroyed at the same time anyway.
-        RpcCallContext* contextPtr = context;
+        RpcCallContext& contextRef = *context;
 
-        promiseAndPipeline.promise.then(
-            [contextPtr]() {
-              contextPtr->sendReturn();
-            }, [contextPtr](kj::Exception&& exception) {
-              contextPtr->sendErrorReturn(kj::mv(exception));
-            }).catch_([&](kj::Exception&& exception) {
+        answer.task = promiseAndPipeline.promise.then(
+            [context = kj::mv(context)]() mutable {
+              context->sendReturn();
+            }, [&contextRef](kj::Exception&& exception) {
+              contextRef.sendErrorReturn(kj::mv(exception));
+            }).eagerlyEvaluate([&](kj::Exception&& exception) {
               // Handle exceptions that occur in sendReturn()/sendErrorReturn().
               taskFailed(kj::mv(exception));
-            }).attach(kj::mv(context))
-            .exclusiveJoin(kj::mv(cancelPaf.promise))
-            .detach([](kj::Exception&&) {});
+            });
       }
     }
   }
@@ -2807,7 +2763,7 @@ private:
     // pointer into it, so make sure these destructors run later.
     kj::Array<ExportId> exportsToRelease;
     KJ_DEFER(releaseExports(exportsToRelease));
-    kj::Maybe<kj::Promise<kj::Own<RpcResponse>>> promiseToRelease;
+    kj::Maybe<decltype(Answer::task)> promiseToRelease;
 
     KJ_IF_MAYBE(question, questions.find(ret.getAnswerId())) {
       KJ_REQUIRE(question->isAwaitingReturn, "Duplicate Return.") { return; }
@@ -2860,24 +2816,14 @@ private:
 
           case rpc::Return::TAKE_FROM_OTHER_QUESTION:
             KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherQuestion())) {
-              KJ_IF_MAYBE(response, answer->redirectedResults) {
+              KJ_IF_MAYBE(response, answer->task.tryGet<Answer::Redirected>()) {
                 questionRef->fulfill(kj::mv(*response));
-                answer->redirectedResults = nullptr;
+                answer->task = Answer::Finished();
 
                 KJ_IF_MAYBE(context, answer->callContext) {
                   // Send the `Return` message  for the call of which we're taking ownership, so
                   // that the peer knows it can now tear down the call state.
                   context->sendRedirectReturn();
-
-                  // There are three conditions, all of which must be true, before a call is
-                  // canceled:
-                  // 1. The RPC opts in by calling context->allowCancellation().
-                  // 2. We request cancellation with context->requestCancel().
-                  // 3. The final response promise -- which we passed to questionRef->fulfill()
-                  //    above -- must be dropped.
-                  //
-                  // We would like #3 to imply #2. So... we can just make #2 be true.
-                  context->requestCancel();
                 }
               } else {
                 KJ_FAIL_REQUIRE("`Return.takeFromOtherQuestion` referenced a call that did not "
@@ -2903,16 +2849,12 @@ private:
             // Indeed, it does still exist.
 
             // Throw away the result promise.
-            promiseToRelease = kj::mv(answer->redirectedResults);
+            promiseToRelease = kj::mv(answer->task);
 
             KJ_IF_MAYBE(context, answer->callContext) {
               // Send the `Return` message  for the call of which we're taking ownership, so
               // that the peer knows it can now tear down the call state.
               context->sendRedirectReturn();
-
-              // Since the caller has been canceled, make sure the callee that we're tailing to
-              // gets canceled.
-              context->requestCancel();
             }
           }
         }
@@ -2935,6 +2877,7 @@ private:
     KJ_DEFER(releaseExports(exportsToRelease));
     Answer answerToRelease;
     kj::Maybe<kj::Own<PipelineHook>> pipelineToRelease;
+    kj::Maybe<decltype(Answer::task)> promiseToRelease;
 
     KJ_IF_MAYBE(answer, answers.find(finish.getQuestionId())) {
       KJ_REQUIRE(answer->active, "'Finish' for invalid question ID.") { return; }
@@ -2947,11 +2890,15 @@ private:
 
       pipelineToRelease = kj::mv(answer->pipeline);
 
-      // If the call isn't actually done yet, cancel it.  Otherwise, we can go ahead and erase the
-      // question from the table.
       KJ_IF_MAYBE(context, answer->callContext) {
-        context->requestCancel();
+        // Destroying answer->task will probably destroy the call context, but we can't prove that
+        // since it's refcounted. Instead, inform the call context that it is now its job to
+        // clean up the answer table. Then, cancel the task.
+        promiseToRelease = kj::mv(answer->task);
+        answer->task = Answer::Finished();
+        context->finish();
       } else {
+        // The call context is already gone so we can tear down the Answer here.
         answerToRelease = answers.erase(finish.getQuestionId());
       }
     } else {

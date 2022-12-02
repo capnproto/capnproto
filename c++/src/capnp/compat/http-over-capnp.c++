@@ -665,8 +665,6 @@ public:
   }
 
   kj::Promise<void> request(RequestContext context) override {
-    context.allowCancellation();
-
     return requestImpl(kj::mv(context),
         [&](auto& results, auto& metadata, auto& params, auto& requestBody) {
       class FinalHttpServiceResponseImpl final: public HttpServiceResponseImpl {

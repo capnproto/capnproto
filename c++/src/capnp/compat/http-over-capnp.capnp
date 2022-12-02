@@ -24,7 +24,9 @@
 
 using import "byte-stream.capnp".ByteStream;
 
-$import "/capnp/c++.capnp".namespace("capnp");
+using Cxx = import "/capnp/c++.capnp";
+$Cxx.namespace("capnp");
+$Cxx.allowCancellation;
 
 interface HttpService {
   request @1 (request :HttpRequest, context :ClientRequestContext)

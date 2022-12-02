@@ -703,7 +703,6 @@ public:
       : callCount(callCount), cancelCount(cancelCount) {}
 
   kj::Promise<void> foo(FooContext context) override {
-    context.allowCancellation();
     ++callCount;
     return kj::Promise<void>(kj::NEVER_DONE)
         .attach(kj::defer([&cancelCount = cancelCount]() { ++cancelCount; }));
@@ -799,7 +798,7 @@ TEST(Rpc, TailCallCancelRace) {
 }
 
 TEST(Rpc, Cancellation) {
-  // Tests allowCancellation().
+  // Tests cancellation.
 
   TestContext context;
 

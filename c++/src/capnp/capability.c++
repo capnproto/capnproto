@@ -91,7 +91,7 @@ Capability::Server::DispatchCallResult Capability::Server::internalUnimplemented
   return {
     KJ_EXCEPTION(UNIMPLEMENTED, "Requested interface not implemented.",
                  actualInterfaceName, requestedTypeId),
-    false
+    false, true
   };
 }
 
@@ -99,7 +99,7 @@ Capability::Server::DispatchCallResult Capability::Server::internalUnimplemented
     const char* interfaceName, uint64_t typeId, uint16_t methodId) {
   return {
     KJ_EXCEPTION(UNIMPLEMENTED, "Method not implemented.", interfaceName, typeId, methodId),
-    false
+    false, true
   };
 }
 
@@ -145,10 +145,8 @@ public:
 
 class LocalCallContext final: public CallContextHook, public ResponseHook, public kj::Refcounted {
 public:
-  LocalCallContext(kj::Own<MallocMessageBuilder>&& request, kj::Own<ClientHook> clientRef,
-                   kj::Own<kj::PromiseFulfiller<void>> cancelAllowedFulfiller)
-      : request(kj::mv(request)), clientRef(kj::mv(clientRef)),
-        cancelAllowedFulfiller(kj::mv(cancelAllowedFulfiller)) {}
+  LocalCallContext(kj::Own<MallocMessageBuilder>&& request, kj::Own<ClientHook> clientRef)
+      : request(kj::mv(request)), clientRef(kj::mv(clientRef)) {}
 
   AnyPointer::Reader getParams() override {
     KJ_IF_MAYBE(r, request) {
@@ -196,9 +194,6 @@ public:
     tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
     return kj::mv(paf.promise);
   }
-  void allowCancellation() override {
-    cancelAllowedFulfiller->fulfill();
-  }
   kj::Own<CallContextHook> addRef() override {
     return kj::addRef(*this);
   }
@@ -208,7 +203,6 @@ public:
   AnyPointer::Builder responseBuilder = nullptr;  // only valid if `response` is non-null
   kj::Own<ClientHook> clientRef;
   kj::Maybe<kj::Own<kj::PromiseFulfiller<AnyPointer::Pipeline>>> tailCallPipelineFulfiller;
-  kj::Own<kj::PromiseFulfiller<void>> cancelAllowedFulfiller;
 };
 
 class LocalRequest final: public RequestHook {
@@ -221,25 +215,12 @@ public:
   RemotePromise<AnyPointer> send() override {
     KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
 
-    auto cancelPaf = kj::newPromiseAndFulfiller<void>();
-
     auto context = kj::refcounted<LocalCallContext>(
-        kj::mv(message), client->addRef(), kj::mv(cancelPaf.fulfiller));
+        kj::mv(message), client->addRef());
     auto promiseAndPipeline = client->call(interfaceId, methodId, kj::addRef(*context));
 
-    // We have to make sure the call is not canceled unless permitted.  We need to fork the promise
-    // so that if the client drops their copy, the promise isn't necessarily canceled.
-    auto forked = promiseAndPipeline.promise.fork();
-
-    // We daemonize one branch, but only after joining it with the promise that fires if
-    // cancellation is allowed.
-    forked.addBranch()
-        .attach(kj::addRef(*context))
-        .exclusiveJoin(kj::mv(cancelPaf.promise))
-        .detach([](kj::Exception&&) {});  // ignore exceptions
-
     // Now the other branch returns the response from the context.
-    auto promise = forked.addBranch().then([context=kj::mv(context)]() mutable {
+    auto promise = promiseAndPipeline.promise.then([context=kj::mv(context)]() mutable {
       // force response allocation
       auto reader = context->getResults(MessageSize { 0, 0 }).asReader();
 
@@ -817,6 +798,17 @@ private:
 
     auto result = server->dispatchCall(interfaceId, methodId,
                                        CallContext<AnyPointer, AnyPointer>(context));
+
+    if (!result.allowCancellation) {
+      // Make sure this call cannot be canceled by forking the promise and detaching one branch.
+      auto fork = result.promise.attach(context.addRef()).fork();
+      result.promise = fork.addBranch();
+      fork.addBranch().detach([](kj::Exception&&) {
+        // Exception from canceled call is silently discarded. The caller should have waited for
+        // it if they cared.
+      });
+    }
+
     if (result.isStreaming) {
       return result.promise
           .catch_([this](kj::Exception&& e) {
