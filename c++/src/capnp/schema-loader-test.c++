@@ -400,6 +400,36 @@ TEST(SchemaLoader, LoadStreaming) {
   KJ_EXPECT(results.getShortDisplayName() == "StreamResult", results.getShortDisplayName());
 }
 
+KJ_TEST("SchemaLoader placeholders are assumed to have caps") {
+  // Load TestCycle*NoCaps, but don't load its dependency TestAllTypes, so the loader has to assume
+  // there may be caps.
+  {
+    SchemaLoader loader;
+    Schema schemaA = loader.load(Schema::from<test::TestCycleANoCaps>().getProto());
+    Schema schemaB = loader.load(Schema::from<test::TestCycleBNoCaps>().getProto());
+    loader.computeOptimizationHints();
+
+    KJ_EXPECT(schemaA.asStruct().mayContainCapabilities());
+    KJ_EXPECT(schemaB.asStruct().mayContainCapabilities());
+  }
+
+  // Try again, but actually load TestAllTypes. Now we recognize there's no caps.
+  {
+    SchemaLoader loader;
+    Schema schemaA = loader.load(Schema::from<test::TestCycleANoCaps>().getProto());
+    Schema schemaB = loader.load(Schema::from<test::TestCycleBNoCaps>().getProto());
+    loader.load(Schema::from<TestAllTypes>().getProto());
+    loader.computeOptimizationHints();
+
+    KJ_EXPECT(!schemaA.asStruct().mayContainCapabilities());
+    KJ_EXPECT(!schemaB.asStruct().mayContainCapabilities());
+  }
+
+  // NOTE: computeOptimizationHints() is also tested in `schema-test.c++` where we test that
+  //   various compiled types have the correct hints, which relies on the code generator having
+  //   computed the hints.
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

@@ -28,7 +28,7 @@ static const ::capnp::_::AlignedData<17> b_995f9a3377c0b16e = {
 #if !CAPNP_LITE
 const ::capnp::_::RawSchema s_995f9a3377c0b16e = {
   0x995f9a3377c0b16e, b_995f9a3377c0b16e.words, 17, nullptr, nullptr,
-  0, 0, nullptr, nullptr, nullptr, { &s_995f9a3377c0b16e, nullptr, nullptr, 0, 0, nullptr }
+  0, 0, nullptr, nullptr, nullptr, { &s_995f9a3377c0b16e, nullptr, nullptr, 0, 0, nullptr }, false
 };
 #endif  // !CAPNP_LITE
 }  // namespace schemas

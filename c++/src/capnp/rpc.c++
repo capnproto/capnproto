@@ -165,6 +165,12 @@ uint exceptionSizeHint(const kj::Exception& exception) {
   return sizeInWords<rpc::Exception>() + exception.getDescription().size() / sizeof(word) + 1;
 }
 
+ClientHook::CallHints callHintsFromReader(rpc::Call::Reader reader) {
+  ClientHook::CallHints hints;
+  hints.noPromisePipelining = reader.getNoPromisePipelining();
+  return hints;
+}
+
 // =======================================================================================
 
 template <typename Id, typename T>
@@ -508,6 +514,11 @@ private:
 
     bool skipFinish = false;
     // If true, don't send a Finish message.
+    //
+    // This is used in two cases:
+    // * The `Return` message had the `noFinishNeeded` hint.
+    // * Our attempt to send the `Call` threw an exception, therefore the peer never even received
+    //   the call in the first place and would not expect a `Finish`.
 
     inline bool operator==(decltype(nullptr)) const {
       return !isAwaitingReturn && selfRef == nullptr;
@@ -702,12 +713,14 @@ private:
     // implements ClientHook -----------------------------------------
 
     Request<AnyPointer, AnyPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-      return newCallNoIntercept(interfaceId, methodId, sizeHint);
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+        CallHints hints) override {
+      return newCallNoIntercept(interfaceId, methodId, sizeHint, hints);
     }
 
     Request<AnyPointer, AnyPointer> newCallNoIntercept(
-        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) {
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+        CallHints hints) {
       if (!connectionState->connection.is<Connected>()) {
         return newBrokenRequest(kj::cp(connectionState->connection.get<Disconnected>()), sizeHint);
       }
@@ -719,22 +732,23 @@ private:
 
       callBuilder.setInterfaceId(interfaceId);
       callBuilder.setMethodId(methodId);
+      callBuilder.setNoPromisePipelining(hints.noPromisePipelining);
 
       auto root = request->getRoot();
       return Request<AnyPointer, AnyPointer>(root, kj::mv(request));
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context) override {
-      return callNoIntercept(interfaceId, methodId, kj::mv(context));
+                                kj::Own<CallContextHook>&& context, CallHints hints) override {
+      return callNoIntercept(interfaceId, methodId, kj::mv(context), hints);
     }
 
     VoidPromiseAndPipeline callNoIntercept(uint64_t interfaceId, uint16_t methodId,
-                                           kj::Own<CallContextHook>&& context) {
+                                           kj::Own<CallContextHook>&& context, CallHints hints) {
       // Implement call() by copying params and results messages.
 
       auto params = context->getParams();
-      auto request = newCallNoIntercept(interfaceId, methodId, params.targetSize());
+      auto request = newCallNoIntercept(interfaceId, methodId, params.targetSize(), hints);
 
       request.set(params);
       context->releaseParams();
@@ -959,19 +973,20 @@ private:
     // implements ClientHook -----------------------------------------
 
     Request<AnyPointer, AnyPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+        CallHints hints) override {
       receivedCall = true;
 
       // IMPORTANT: We must call our superclass's version of newCall(), NOT cap->newCall(), because
       //   the Request object we create needs to check at send() time whether the promise has
       //   resolved and, if so, redirect to the new target.
-      return RpcClient::newCall(interfaceId, methodId, sizeHint);
+      return RpcClient::newCall(interfaceId, methodId, sizeHint, hints);
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context) override {
+                                kj::Own<CallContextHook>&& context, CallHints hints) override {
       receivedCall = true;
-      return cap->call(interfaceId, methodId, kj::mv(context));
+      return cap->call(interfaceId, methodId, kj::mv(context), hints);
     }
 
     kj::Maybe<ClientHook&> getResolved() override {
@@ -1452,12 +1467,13 @@ private:
     TribbleRaceBlocker(kj::Own<ClientHook> inner): inner(kj::mv(inner)) {}
 
     Request<AnyPointer, AnyPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-      return inner->newCall(interfaceId, methodId, sizeHint);
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
+        CallHints hints) override {
+      return inner->newCall(interfaceId, methodId, sizeHint, hints);
     }
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context) override {
-      return inner->call(interfaceId, methodId, kj::mv(context));
+                                kj::Own<CallContextHook>&& context, CallHints hints) override {
+      return inner->call(interfaceId, methodId, kj::mv(context), hints);
     }
     kj::Maybe<ClientHook&> getResolved() override {
       // We always wrap either PipelineClient or ImportClient, both of which return null for this
@@ -1664,19 +1680,29 @@ private:
         // We'll have to make a new request and do a copy.  Ick.
 
         auto replacement = redirect->get()->newCall(
-            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize());
+            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize(),
+            callHintsFromReader(callBuilder));
         replacement.set(paramsBuilder);
         return replacement.send();
       } else {
+        bool noPromisePipelining = callBuilder.getNoPromisePipelining();
+
         auto sendResult = sendInternal(false);
 
-        auto forkedPromise = sendResult.promise.fork();
+        kj::Own<PipelineHook> pipeline;
+        if (noPromisePipelining) {
+          pipeline = getDisabledPipeline();
+        } else {
+          auto forkedPromise = sendResult.promise.fork();
 
-        // The pipeline must get notified of resolution before the app does to maintain ordering.
-        auto pipeline = kj::refcounted<RpcPipeline>(
-            *connectionState, kj::mv(sendResult.questionRef), forkedPromise.addBranch());
+          // The pipeline must get notified of resolution before the app does to maintain ordering.
+          pipeline = kj::refcounted<RpcPipeline>(
+              *connectionState, kj::mv(sendResult.questionRef), forkedPromise.addBranch());
 
-        auto appPromise = forkedPromise.addBranch().then(
+          sendResult.promise = forkedPromise.addBranch();
+        }
+
+        auto appPromise = sendResult.promise.then(
             [=](kj::Own<RpcResponse>&& response) {
               auto reader = response->getResults();
               return Response<AnyPointer>(reader, kj::mv(response));
@@ -1699,7 +1725,8 @@ private:
         // We'll have to make a new request and do a copy.  Ick.
 
         auto replacement = redirect->get()->newCall(
-            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize());
+            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize(),
+            callHintsFromReader(callBuilder));
         replacement.set(paramsBuilder);
         return RequestHook::from(kj::mv(replacement))->sendStreaming();
       } else {
@@ -1741,7 +1768,13 @@ private:
 
       QuestionId questionId = sendResult.questionRef->getId();
 
-      auto pipeline = kj::refcounted<RpcPipeline>(*connectionState, kj::mv(sendResult.questionRef));
+      kj::Own<PipelineHook> pipeline;
+      bool noPromisePipelining = callBuilder.getNoPromisePipelining();
+      if (noPromisePipelining) {
+        pipeline = getDisabledPipeline();
+      } else {
+        pipeline = kj::refcounted<RpcPipeline>(*connectionState, kj::mv(sendResult.questionRef));
+      }
 
       return TailInfo { questionId, kj::mv(promise), kj::mv(pipeline) };
     }
@@ -2022,6 +2055,10 @@ private:
       return capTable.imbue(payload.getContent());
     }
 
+    inline bool hasCapabilities() {
+      return capTable.getTable().size() > 0;
+    }
+
     kj::Maybe<kj::Array<ExportId>> send() {
       // Send the response and return the export list.  Returns nullptr if there were no caps.
       // (Could return a non-null empty array if there were caps but none of them were exports.)
@@ -2160,11 +2197,27 @@ private:
         returnMessage.setAnswerId(answerId);
         returnMessage.setReleaseParamCaps(false);
 
+        auto& responseImpl = kj::downcast<RpcServerResponseImpl>(*KJ_ASSERT_NONNULL(response));
+        if (!responseImpl.hasCapabilities()) {
+          returnMessage.setNoFinishNeeded(true);
+
+          // Tell ourselves that a finsih was already received, so that `cleanupAnswerTable()`
+          // removes the answer table entry.
+          receivedFinish = true;
+
+          // HACK: The answer table's `task` is the thing which is calling `sendReturn()`. We can't
+          //   cancel ourselves. However, we know calling `sendReturn()` is the last thing it does,
+          //   so we can safely detach() it.
+          auto& answer = KJ_ASSERT_NONNULL(connectionState->answers.find(answerId));
+          auto& selfPromise = KJ_ASSERT_NONNULL(answer.task.tryGet<Answer::Running>());
+          selfPromise.detach([](kj::Exception&&) {});
+        }
+
         kj::Maybe<kj::Array<ExportId>> exports;
         KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
           // Debug info in case send() fails due to overside message.
           KJ_CONTEXT("returning from RPC call", interfaceId, methodId);
-          exports = kj::downcast<RpcServerResponseImpl>(*KJ_ASSERT_NONNULL(response)).send();
+          exports = responseImpl.send();
         })) {
           responseSent = false;
           sendErrorReturn(kj::mv(*exception));
@@ -2192,6 +2245,12 @@ private:
           builder.setReleaseParamCaps(false);
           connectionState->fromException(exception, builder.initException());
 
+          // Note that even though the response contains no capabilities, we don't want to set
+          // `noFinishNeeded` here because if any pipelined calls were made, we want them to
+          // fail with the correct exception. (Perhaps if the request had `noPromisePipelining`,
+          // then we could set `noFinishNeeded`, but optimizing the error case doesn't seem that
+          // important.)
+
           message->send();
         }
 
@@ -2211,6 +2270,10 @@ private:
         builder.setAnswerId(answerId);
         builder.setReleaseParamCaps(false);
         builder.setResultsSentElsewhere();
+
+        // TODO(perf): Could `noFinishNeeded` be used here? The `Finish` messages are pretty
+        //   redundant after a redirect, but as this case is less common and more complicated I
+        //   don't want to fully think through the implications right now.
 
         message->send();
 
@@ -2345,6 +2408,8 @@ private:
     // Cancellation state ----------------------------------
 
     bool receivedFinish = false;
+    // True if a `Finish` message has been recevied OR we sent a `Return` with `noFinishNedeed`.
+    // In either case, it is our responsibility to clean up the answer table.
 
     kj::UnwindDetector unwindDetector;
 
@@ -2674,7 +2739,8 @@ private:
     }
 
     auto promiseAndPipeline = startCall(
-        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef());
+        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef(),
+        callHintsFromReader(call));
 
     // Things may have changed -- in particular if startCall() immediately called
     // context->directTailCall().
@@ -2709,8 +2775,9 @@ private:
 
   ClientHook::VoidPromiseAndPipeline startCall(
       uint64_t interfaceId, uint64_t methodId,
-      kj::Own<ClientHook>&& capability, kj::Own<CallContextHook>&& context) {
-    return capability->call(interfaceId, methodId, kj::mv(context));
+      kj::Own<ClientHook>&& capability, kj::Own<CallContextHook>&& context,
+      ClientHook::CallHints hints) {
+    return capability->call(interfaceId, methodId, kj::mv(context), hints);
   }
 
   kj::Maybe<kj::Own<ClientHook>> getMessageTarget(const rpc::MessageTarget::Reader& target) {
@@ -2730,13 +2797,14 @@ private:
         auto promisedAnswer = target.getPromisedAnswer();
         kj::Own<PipelineHook> pipeline;
 
-        auto& base = answers[promisedAnswer.getQuestionId()];
-        KJ_REQUIRE(base.active, "PromisedAnswer.questionId is not a current question.") {
-          return nullptr;
+        KJ_IF_MAYBE(answer, answers.find(promisedAnswer.getQuestionId())) {
+          if (answer->active) {
+            KJ_IF_MAYBE(p, answer->pipeline) {
+              pipeline = p->get()->addRef();
+            }
+          }
         }
-        KJ_IF_MAYBE(p, base.pipeline) {
-          pipeline = p->get()->addRef();
-        } else {
+        if (pipeline.get() == nullptr) {
           pipeline = newBrokenPipeline(KJ_EXCEPTION(FAILED,
               "Pipeline call on a request that returned no capabilities or was already closed."));
         }
@@ -2773,6 +2841,10 @@ private:
         exportsToRelease = kj::mv(question->paramExports);
       } else {
         question->paramExports = nullptr;
+      }
+
+      if (ret.getNoFinishNeeded()) {
+        question->skipFinish = true;
       }
 
       KJ_IF_MAYBE(questionRef, question->selfRef) {
@@ -2880,7 +2952,10 @@ private:
     kj::Maybe<decltype(Answer::task)> promiseToRelease;
 
     KJ_IF_MAYBE(answer, answers.find(finish.getQuestionId())) {
-      KJ_REQUIRE(answer->active, "'Finish' for invalid question ID.") { return; }
+      if (!answer->active) {
+        // Treat the same as if the answer wasn't in the table; see comment below.
+        return;
+      }
 
       if (finish.getReleaseResultCaps()) {
         exportsToRelease = kj::mv(answer->resultExports);
@@ -2902,7 +2977,15 @@ private:
         answerToRelease = answers.erase(finish.getQuestionId());
       }
     } else {
-      KJ_FAIL_REQUIRE("'Finish' for invalid question ID.") { return; }
+      // The `Finish` message targets a qusetion ID that isn't present in our answer table.
+      // Probably, we send a `Return` with `noFinishNeeded = true`, but the other side didn't
+      // recognize this hint and sent a `Finish` anyway, or the `Finish` was already in-flight at
+      // the time we sent the `Return`. We can silently ignore this.
+      //
+      // It would be nice to detect invalid finishes somehow, but to do so we would have to
+      // remember past answer IDs somewhere even when we said `noFinishNeeded`. Assuming the other
+      // side respects the hint and doesn't send a `Finish`, we'd only be able to clean up these
+      // records when the other end reuses the question ID, which might never happen.
     }
   }
 

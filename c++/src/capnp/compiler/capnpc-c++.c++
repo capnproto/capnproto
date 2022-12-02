@@ -2237,6 +2237,8 @@ private:
     // the `CAPNP_AUTO_IF_MSVC()` hackery in the return type declarations below. We're depending on
     // the fact that that this function has an inline implementation for the deduction to work.
 
+    bool noPromisePipelining = !resultSchema.mayContainCapabilities();
+
     auto requestMethodImpl = kj::strTree(
         templateContext.allDecls(),
         implicitParamsTemplateDecl,
@@ -2248,7 +2250,7 @@ private:
         isStreaming
             ? kj::strTree("  return newStreamingCall<", paramType, ">(\n")
             : kj::strTree("  return newCall<", paramType, ", ", resultType, ">(\n"),
-        "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
+        "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint, {", noPromisePipelining, "});\n"
         "}\n");
 
     bool allowCancellation = false;
@@ -2789,6 +2791,8 @@ private:
     auto brandDeps = makeBrandDepInitializers(
         makeBrandDepMap(templateContext, schema.getGeneric()));
 
+    bool mayContainCapabilities = proto.isStruct() && schema.asStruct().mayContainCapabilities();
+
     auto schemaDef = kj::strTree(
         "static const ::capnp::_::AlignedData<", rawSchema.size(), "> b_", hexId, " = {\n"
         "  {", kj::mv(schemaLiteral), " }\n"
@@ -2821,7 +2825,7 @@ private:
         ", nullptr, nullptr, { &s_", hexId, ", nullptr, ",
         brandDeps.size() == 0 ? kj::strTree("nullptr, 0, 0") : kj::strTree(
             "bd_", hexId, ", 0, " "sizeof(bd_", hexId, ") / sizeof(bd_", hexId, "[0])"),
-        ", nullptr }\n"
+        ", nullptr }, ", mayContainCapabilities, "\n"
         "};\n"
         "#endif  // !CAPNP_LITE\n");
 
@@ -3169,6 +3173,8 @@ private:
     for (auto node: request.getNodes()) {
       schemaLoader.load(node);
     }
+
+    schemaLoader.computeOptimizationHints();
 
     for (auto requestedFile: request.getRequestedFiles()) {
       auto schema = schemaLoader.get(requestedFile.getId());
