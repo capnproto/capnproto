@@ -27,7 +27,7 @@
 
 // Include windows.h as lean as possible. (If you need more of the Windows API for your app,
 // #include windows.h yourself before including this header.)
-#include "win32-api-version.h"
+#include <kj/win32-api-version.h>
 
 #include "async.h"
 #include "timer.h"
@@ -36,7 +36,7 @@
 #include <inttypes.h>
 
 #include <windows.h>
-#include "windows-sanity.h"
+#include <kj/windows-sanity.h>
 
 KJ_BEGIN_HEADER
 

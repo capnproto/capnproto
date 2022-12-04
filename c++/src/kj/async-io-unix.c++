@@ -1746,7 +1746,7 @@ public:
       : lowLevel(parent.lowLevel), filter(allow, deny, parent.filter) {}
 
   Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint = 0) override {
-    return evalLater([this,portHint,addr=heapString(addr)]() {
+    return evalNow([&]() {
       return SocketAddress::parse(lowLevel, addr, portHint, filter);
     }).then([this](Array<SocketAddress> addresses) -> Own<NetworkAddress> {
       return heap<NetworkAddressImpl>(lowLevel, filter, kj::mv(addresses));
