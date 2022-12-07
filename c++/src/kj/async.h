@@ -345,6 +345,11 @@ public:
   // pointers into some object and you want to make sure the object still exists when the callback
   // runs -- after calling then(), use attach() to add necessary objects to the result.
 
+  template <typename U, typename... Attachments>
+  Promise<T> attachVal(U&& value, Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
+  // Like attach() but takes ownership of 'value'.
+  // This is equivalent to attach(heap(value), attachments).
+
   template <typename ErrorFunc>
   Promise<T> eagerlyEvaluate(ErrorFunc&& errorHandler, SourceLocation location = {})
       KJ_WARN_UNUSED_RESULT;

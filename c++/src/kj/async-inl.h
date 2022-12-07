@@ -1187,6 +1187,13 @@ Promise<T> Promise<T>::attach(Attachments&&... attachments) {
 }
 
 template <typename T>
+template <typename U, typename... Attachments>
+Promise<T> Promise<T>::attachVal(U&& value, Attachments&&... attachments) {
+  return Promise(false, kj::heap<_::AttachmentPromiseNode<Tuple<U, Attachments...>>>(
+      kj::mv(node), kj::tuple(kj::fwd<U>(value), kj::fwd<Attachments>(attachments)...)));
+}
+
+template <typename T>
 template <typename ErrorFunc>
 Promise<T> Promise<T>::eagerlyEvaluate(ErrorFunc&& errorHandler, SourceLocation location) {
   // See catch_() for commentary.

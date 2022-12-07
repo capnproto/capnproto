@@ -891,7 +891,28 @@ TEST(Async, Attach) {
   Promise<int> promise = evalLater([&]() {
     EXPECT_FALSE(destroyed);
     return 123;
-  }).attach(kj::heap<DestructorDetector>(destroyed));
+  }).attach(DestructorDetector(destroyed));
+
+  promise = promise.then([&](int i) {
+    EXPECT_TRUE(destroyed);
+    return i + 321;
+  });
+
+  EXPECT_FALSE(destroyed);
+  EXPECT_EQ(444, promise.wait(waitScope));
+  EXPECT_TRUE(destroyed);
+}
+
+TEST(Async, AttachVal) {
+  bool destroyed = false;
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<int> promise = evalLater([&]() {
+    EXPECT_FALSE(destroyed);
+    return 123;
+  }).attachVal(DestructorDetector(destroyed));
 
   promise = promise.then([&](int i) {
     EXPECT_TRUE(destroyed);
