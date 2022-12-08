@@ -6385,7 +6385,6 @@ private:
                  kj::StringPtr statusText,
                  const HttpHeaders& headers,
                  kj::Maybe<kj::Own<kj::AsyncInputStream>> errorBody = nullptr) {
-      KJ_REQUIRE(fulfiller->isWaiting(), "the connect request already has a response");
       if (errorBody == nullptr) {
         streamAndFulfiller.fulfiller->fulfill();
       } else {
