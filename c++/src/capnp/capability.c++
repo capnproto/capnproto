@@ -795,7 +795,7 @@ private:
 
     if (!result.allowCancellation) {
       // Make sure this call cannot be canceled by forking the promise and detaching one branch.
-      auto fork = result.promise.attach(context.addRef()).fork();
+      auto fork = result.promise.attach(kj::addRef(*this), context.addRef()).fork();
       result.promise = fork.addBranch();
       fork.addBranch().detach([](kj::Exception&&) {
         // Exception from canceled call is silently discarded. The caller should have waited for
