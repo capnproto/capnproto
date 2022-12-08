@@ -973,6 +973,83 @@ KJ_TEST("Streaming over RPC no premature cancellation when client dropped") {
   KJ_EXPECT(server.iSum == 579);
 }
 
+KJ_TEST("Dropping capability during call doesn't destroy server") {
+  class TestInterfaceImpl final: public test::TestInterface::Server {
+    // An object which increments a count in the constructor and decrements it in the destructor,
+    // to detect when it is destroyed. The object's foo() method also sets a fulfiller to use to
+    // cause the method to complete.
+  public:
+    TestInterfaceImpl(uint& count, kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>>& fulfillerSlot)
+        : count(count), fulfillerSlot(fulfillerSlot) { ++count; }
+    ~TestInterfaceImpl() noexcept(false) { --count; }
+
+    kj::Promise<void> foo(FooContext context) override {
+      auto paf = kj::newPromiseAndFulfiller<void>();
+      fulfillerSlot = kj::mv(paf.fulfiller);
+      return kj::mv(paf.promise);
+    }
+
+  private:
+    uint& count;
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>>& fulfillerSlot;
+  };
+
+  class TestBootstrapImpl final: public test::TestMoreStuff::Server {
+    // Bootstrap object which just vends instances of `TestInterfaceImpl`.
+  public:
+    TestBootstrapImpl(uint& count, kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>>& fulfillerSlot)
+        : count(count), fulfillerSlot(fulfillerSlot) {}
+
+    kj::Promise<void> getHeld(GetHeldContext context) override {
+      context.initResults().setCap(kj::heap<TestInterfaceImpl>(count, fulfillerSlot));
+      return kj::READY_NOW;
+    }
+
+  private:
+    uint& count;
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>>& fulfillerSlot;
+  };
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  auto pipe = kj::newTwoWayPipe();
+
+  uint count = 0;
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfillerSlot;
+  test::TestMoreStuff::Client bootstrap = kj::heap<TestBootstrapImpl>(count, fulfillerSlot);
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], kj::mv(bootstrap), rpc::twoparty::Side::SERVER);
+
+  auto cap = tpClient.bootstrap().castAs<test::TestMoreStuff>().getHeldRequest().send().getCap();
+
+  waitScope.poll();
+  auto promise = cap.fooRequest().send();
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_EXPECT(count == 1);
+  KJ_EXPECT(fulfillerSlot != nullptr);
+
+  // Dropping the capability should not destroy the server as long as the call is still
+  // outstanding.
+  {auto drop = kj::mv(cap);}
+
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_EXPECT(count == 1);
+
+  // Cancelling the call still should not destroy the server because the call is not marked to
+  // allow cancellation. So the call should keep running.
+  {auto drop = kj::mv(promise);}
+
+  waitScope.poll();
+  KJ_EXPECT(count == 1);
+
+  // When the call completes, only then should the server be dropped.
+  KJ_ASSERT_NONNULL(fulfillerSlot)->fulfill();
+
+  waitScope.poll();
+  KJ_EXPECT(count == 0);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp
