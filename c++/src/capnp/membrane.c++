@@ -231,6 +231,11 @@ public:
     return promise;
   }
 
+  AnyPointer::Pipeline sendForPipeline() override {
+    return AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(
+        PipelineHook::from(inner->sendForPipeline()), policy->addRef(), reverse));
+  }
+
   const void* getBrand() override {
     return MEMBRANE_BRAND;
   }
@@ -431,7 +436,10 @@ public:
           kj::refcounted<MembraneCallContextHook>(kj::mv(context), policy->addRef(), !reverse),
           hints);
 
-      KJ_IF_MAYBE(r, policy->onRevoked()) {
+      if (hints.onlyPromisePipeline) {
+        // Just in case the called capability returned a valid promise, replace it here.
+        result.promise = kj::NEVER_DONE;
+      } else KJ_IF_MAYBE(r, policy->onRevoked()) {
         result.promise = result.promise.exclusiveJoin(kj::mv(*r));
       }
 
