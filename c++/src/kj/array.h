@@ -143,7 +143,7 @@ public:
   inline Array(T* firstElement KJ_LIFETIMEBOUND, size_t size, const ArrayDisposer& disposer)
       : ptr(firstElement), size_(size), disposer(&disposer) {}
 
-  KJ_DISALLOW_COPY(Array);
+  KJ_DISALLOW_ONLY_COPY(Array);
   inline ~Array() noexcept { dispose(); }
 
   inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
@@ -340,7 +340,7 @@ public:
     other.ptr = nullptr;
     other.size_ = 0;
   }
-  KJ_DISALLOW_COPY(ArrayBuilder);
+  KJ_DISALLOW_ONLY_COPY(ArrayBuilder);
   inline ~ArrayBuilder() noexcept(false) { dispose(); }
 
   inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {

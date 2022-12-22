@@ -307,7 +307,7 @@ class Orphan<AnyPointer> {
 
 public:
   Orphan() = default;
-  KJ_DISALLOW_COPY(Orphan);
+  KJ_DISALLOW_ONLY_COPY(Orphan);
   Orphan(Orphan&&) = default;
   inline Orphan(_::OrphanBuilder&& builder)
       : builder(kj::mv(builder)) {}

@@ -182,10 +182,25 @@ typedef unsigned char byte;
 #endif
 #endif
 
-#define KJ_DISALLOW_COPY(classname) \
+#define KJ_DISALLOW_ONLY_COPY(classname) \
   classname(const classname&) = delete; \
   classname& operator=(const classname&) = delete
-// Deletes the implicit copy constructor and assignment operator.
+// Deletes the implicit copy constructor and assignment operator. This inhibits the compiler from
+// generating the implicit move constructor and assignment operator for this class, but allows the
+// code author to supply them, if they make sense to implement.
+//
+// This macro should not be your first choice. Instead, prefer using KJ_DISALLOW_COPY, and only use
+// this macro when you have determined that you must implement move semantics for your type.
+
+#define KJ_DISALLOW_COPY(classname) \
+  classname(const classname&) = delete; \
+  classname& operator=(const classname&) = delete; \
+  classname(classname&&) = delete; \
+  classname& operator=(classname&&) = delete
+// Deletes the implicit copy and move constructors and assignment operators. This is useful in cases
+// where the code author wants to provide an additional compile-time guard against subsequent
+// maintainers casually adding move operations. This is particularly useful when implementing RAII
+// classes that are intended to be completely immobile.
 
 #ifdef __GNUC__
 #define KJ_LIKELY(condition) __builtin_expect(condition, true)
@@ -1963,7 +1978,7 @@ class Deferred {
 public:
   inline Deferred(Func&& func): func(kj::fwd<Func>(func)), canceled(false) {}
   inline ~Deferred() noexcept(false) { if (!canceled) func(); }
-  KJ_DISALLOW_COPY(Deferred);
+  KJ_DISALLOW_ONLY_COPY(Deferred);
 
   // This move constructor is usually optimized away by the compiler.
   inline Deferred(Deferred&& other): func(kj::fwd<Func>(other.func)), canceled(other.canceled) {

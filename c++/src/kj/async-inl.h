@@ -44,7 +44,7 @@ class ExceptionOr;
 class ExceptionOrValue {
 public:
   ExceptionOrValue(bool, Exception&& exception): exception(kj::mv(exception)) {}
-  KJ_DISALLOW_COPY(ExceptionOrValue);
+  KJ_DISALLOW_ONLY_COPY(ExceptionOrValue);
 
   void addException(Exception&& exception) {
     if (this->exception == nullptr) {
@@ -2205,7 +2205,7 @@ public:
   explicit AwaiterBase(OwnPromiseNode node);
   AwaiterBase(AwaiterBase&&);
   ~AwaiterBase() noexcept(false);
-  KJ_DISALLOW_COPY(AwaiterBase);
+  KJ_DISALLOW_ONLY_COPY(AwaiterBase);
 
   bool await_ready() const { return false; }
   // This could return "`node->get()` is safe to call" instead, which would make suspension-less

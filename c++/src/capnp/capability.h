@@ -55,7 +55,7 @@ public:
   inline RemotePromise(decltype(nullptr))
       : kj::Promise<Response<T>>(nullptr),
         T::Pipeline(nullptr) {}
-  KJ_DISALLOW_COPY(RemotePromise);
+  KJ_DISALLOW_ONLY_COPY(RemotePromise);
   RemotePromise(RemotePromise&& other) = default;
   RemotePromise& operator=(RemotePromise&& other) = default;
 

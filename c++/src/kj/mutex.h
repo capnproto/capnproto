@@ -331,7 +331,7 @@ class Locked {
   // and unlocks the mutex when it goes out of scope.
 
 public:
-  KJ_DISALLOW_COPY(Locked);
+  KJ_DISALLOW_ONLY_COPY(Locked);
   inline Locked(): mutex(nullptr), ptr(nullptr) {}
   inline Locked(Locked&& other): mutex(other.mutex), ptr(other.ptr) {
     other.mutex = nullptr;

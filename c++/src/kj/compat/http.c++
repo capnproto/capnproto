@@ -5776,7 +5776,7 @@ private:
     ConnectionCounter(ConcurrencyLimitingHttpClient& client) : parent(&client) {
       ++parent->concurrentRequests;
     }
-    KJ_DISALLOW_COPY(ConnectionCounter);
+    KJ_DISALLOW_ONLY_COPY(ConnectionCounter);
     ~ConnectionCounter() noexcept(false) {
       if (parent != nullptr) {
         --parent->concurrentRequests;

@@ -114,7 +114,7 @@ public:
   Cork(Cork&& other) : parent(kj::mv(other.parent)) {
     other.parent = nullptr;
   }
-  KJ_DISALLOW_COPY(Cork);
+  KJ_DISALLOW_ONLY_COPY(Cork);
 
 private:
   Cork(ReadyOutputStreamWrapper& parent) : parent(parent) {}

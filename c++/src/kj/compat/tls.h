@@ -62,7 +62,7 @@ public:
     Options();
     // Initializes all values to reasonable defaults.
 
-    KJ_DISALLOW_COPY(Options);
+    KJ_DISALLOW_ONLY_COPY(Options);
     Options(Options&&) = default;
     Options& operator=(Options&&) = default;
     // Options is a move-only value type.

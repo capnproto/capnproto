@@ -282,7 +282,7 @@ public:
   // `validateHeaderValue` function that returns a special type that set can be confident has
   // already passed through the validation routine.
 
-  KJ_DISALLOW_COPY(HttpHeaders);
+  KJ_DISALLOW_ONLY_COPY(HttpHeaders);
   HttpHeaders(HttpHeaders&&) = default;
   HttpHeaders& operator=(HttpHeaders&&) = default;
 

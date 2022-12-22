@@ -846,7 +846,7 @@ template <>
 class Orphan<DynamicStruct> {
 public:
   Orphan() = default;
-  KJ_DISALLOW_COPY(Orphan);
+  KJ_DISALLOW_ONLY_COPY(Orphan);
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
 
@@ -885,7 +885,7 @@ template <>
 class Orphan<DynamicList> {
 public:
   Orphan() = default;
-  KJ_DISALLOW_COPY(Orphan);
+  KJ_DISALLOW_ONLY_COPY(Orphan);
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
 
@@ -925,7 +925,7 @@ template <>
 class Orphan<DynamicCapability> {
 public:
   Orphan() = default;
-  KJ_DISALLOW_COPY(Orphan);
+  KJ_DISALLOW_ONLY_COPY(Orphan);
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
 
@@ -984,7 +984,7 @@ public:
   Orphan(Orphan<T>&&);
   Orphan(Orphan<AnyPointer>&&);
   Orphan(void*) = delete;  // So Orphan(bool) doesn't accept pointers.
-  KJ_DISALLOW_COPY(Orphan);
+  KJ_DISALLOW_ONLY_COPY(Orphan);
 
   Orphan& operator=(Orphan&&) = default;
 

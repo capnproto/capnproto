@@ -266,7 +266,7 @@ public:
   inline AutoCloseFd(decltype(nullptr)): fd(-1) {}
   inline explicit AutoCloseFd(int fd): fd(fd) {}
   inline AutoCloseFd(AutoCloseFd&& other) noexcept: fd(other.fd) { other.fd = -1; }
-  KJ_DISALLOW_COPY(AutoCloseFd);
+  KJ_DISALLOW_ONLY_COPY(AutoCloseFd);
   ~AutoCloseFd() noexcept(false);
 
   inline AutoCloseFd& operator=(AutoCloseFd&& other) {
@@ -365,7 +365,7 @@ public:
   inline AutoCloseHandle(AutoCloseHandle&& other) noexcept: handle(other.handle) {
     other.handle = (void*)-1;
   }
-  KJ_DISALLOW_COPY(AutoCloseHandle);
+  KJ_DISALLOW_ONLY_COPY(AutoCloseHandle);
   ~AutoCloseHandle() noexcept(false);
 
   inline AutoCloseHandle& operator=(AutoCloseHandle&& other) {

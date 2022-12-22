@@ -1889,7 +1889,7 @@ private:
     kj::ArrayPtr<const char> name;
     kj::Maybe<kj::Path> dir;
 
-    KJ_DISALLOW_COPY(OutputDirective);
+    KJ_DISALLOW_ONLY_COPY(OutputDirective);
     OutputDirective(OutputDirective&&) = default;
     OutputDirective(kj::ArrayPtr<const char> name, kj::Maybe<kj::Path> dir)
         : name(name), dir(kj::mv(dir)) {}
