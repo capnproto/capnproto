@@ -71,7 +71,7 @@ struct Counter {
   size_t& unwind;
   Counter(size_t& wind, size_t& unwind): wind(wind), unwind(unwind) { ++wind; }
   ~Counter() { ++unwind; }
-  KJ_DISALLOW_COPY(Counter);
+  KJ_DISALLOW_COPY_AND_MOVE(Counter);
 };
 
 kj::Promise<void> countAroundAwait(size_t& wind, size_t& unwind, kj::Promise<void> promise) {

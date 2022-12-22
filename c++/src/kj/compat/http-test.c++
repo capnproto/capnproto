@@ -4259,7 +4259,7 @@ KJ_TEST("HttpServer::listenHttpCleanDrain() factory-created services outlive req
     public:
       explicit ServiceImpl(uint& serviceCount): serviceCount(++serviceCount) {}
       ~ServiceImpl() noexcept(false) { --serviceCount; }
-      KJ_DISALLOW_COPY(ServiceImpl);
+      KJ_DISALLOW_COPY_AND_MOVE(ServiceImpl);
 
       kj::Promise<void> request(
           HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,

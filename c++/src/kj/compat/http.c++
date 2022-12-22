@@ -2912,7 +2912,7 @@ private:
       }
     }
 
-    KJ_DISALLOW_COPY(ZlibContext);
+    KJ_DISALLOW_COPY_AND_MOVE(ZlibContext);
 
     kj::Array<kj::byte> processMessage(kj::ArrayPtr<const byte> message,
         kj::Maybe<size_t> maxSize = nullptr,

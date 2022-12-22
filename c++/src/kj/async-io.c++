@@ -1910,7 +1910,7 @@ private:
       KJ_ASSERT(sinkLink == nullptr, "sink initiated with sink already in flight");
       sinkLink = *this;
     }
-    KJ_DISALLOW_COPY(SinkBase);
+    KJ_DISALLOW_COPY_AND_MOVE(SinkBase);
     ~SinkBase() noexcept(false) { detach(); }
 
     void reject(Exception&& exception) override {

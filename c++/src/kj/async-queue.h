@@ -39,7 +39,7 @@ public:
   // A WaiterQueue creates Nodes that blend newAdaptedPromise<T, Adaptor> and List<Node>.
 
   WaiterQueue() = default;
-  KJ_DISALLOW_COPY(WaiterQueue);
+  KJ_DISALLOW_COPY_AND_MOVE(WaiterQueue);
 
   Promise<T> wait() {
     return newAdaptedPromise<T, Node>(queue);

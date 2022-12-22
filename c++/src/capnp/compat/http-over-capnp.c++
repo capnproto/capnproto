@@ -607,7 +607,7 @@ public:
     });
   }
 
-  KJ_DISALLOW_COPY(ServerRequestContextImpl);
+  KJ_DISALLOW_COPY_AND_MOVE(ServerRequestContextImpl);
 
 private:
   kj::Own<capnp::HttpRequest::Reader> request;

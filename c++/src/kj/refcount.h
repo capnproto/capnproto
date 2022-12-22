@@ -67,7 +67,7 @@ class Refcounted: private Disposer {
 public:
   Refcounted() = default;
   virtual ~Refcounted() noexcept(false);
-  KJ_DISALLOW_COPY(Refcounted);
+  KJ_DISALLOW_COPY_AND_MOVE(Refcounted);
 
   inline bool isShared() const { return refcount > 1; }
   // Check if there are multiple references to this object. This is sometimes useful for deciding
@@ -129,7 +129,7 @@ class AtomicRefcounted: private kj::Disposer {
 public:
   AtomicRefcounted() = default;
   virtual ~AtomicRefcounted() noexcept(false);
-  KJ_DISALLOW_COPY(AtomicRefcounted);
+  KJ_DISALLOW_COPY_AND_MOVE(AtomicRefcounted);
 
   inline bool isShared() const {
 #if _MSC_VER && !defined(__clang__)

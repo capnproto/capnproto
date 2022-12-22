@@ -64,7 +64,7 @@ public:
   // that isn't already loaded.
 
   ~SchemaLoader() noexcept(false);
-  KJ_DISALLOW_COPY(SchemaLoader);
+  KJ_DISALLOW_COPY_AND_MOVE(SchemaLoader);
 
   Schema get(uint64_t id, schema::Brand::Reader brand = schema::Brand::Reader(),
              Schema scope = Schema()) const;

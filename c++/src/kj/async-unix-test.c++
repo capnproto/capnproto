@@ -885,7 +885,7 @@ struct TestChild {
     KJ_SYSCALL(::kill(KJ_REQUIRE_NONNULL(pid), signo));
   }
 
-  KJ_DISALLOW_COPY(TestChild);
+  KJ_DISALLOW_COPY_AND_MOVE(TestChild);
 };
 
 TEST(AsyncUnixTest, ChildProcess) {

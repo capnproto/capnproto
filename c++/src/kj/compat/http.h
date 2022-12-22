@@ -230,7 +230,7 @@ public:
     kj::Own<HttpHeaderTable> table;
   };
 
-  KJ_DISALLOW_COPY(HttpHeaderTable);  // Can't copy because HttpHeaderId points to the table.
+  KJ_DISALLOW_COPY_AND_MOVE(HttpHeaderTable);  // Can't copy because HttpHeaderId points to the table.
   ~HttpHeaderTable() noexcept(false);
 
   uint idCount() const;
@@ -1219,7 +1219,7 @@ private:
   explicit SuspendableRequest(
       Connection& connection, kj::OneOf<HttpMethod, HttpConnectMethod> method, kj::StringPtr url, const HttpHeaders& headers)
       : method(method), url(url), headers(headers), connection(connection) {}
-  KJ_DISALLOW_COPY(SuspendableRequest);
+  KJ_DISALLOW_COPY_AND_MOVE(SuspendableRequest);
 
   Connection& connection;
 

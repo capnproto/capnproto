@@ -451,7 +451,7 @@ public:
   class Context: public ExceptionCallback {
   public:
     Context();
-    KJ_DISALLOW_COPY(Context);
+    KJ_DISALLOW_COPY_AND_MOVE(Context);
     virtual ~Context() noexcept(false);
 
     struct Value {
@@ -481,7 +481,7 @@ public:
   class ContextImpl: public Context {
   public:
     inline ContextImpl(Func& func): func(func) {}
-    KJ_DISALLOW_COPY(ContextImpl);
+    KJ_DISALLOW_COPY_AND_MOVE(ContextImpl);
 
     Value evaluate() override {
       return func();

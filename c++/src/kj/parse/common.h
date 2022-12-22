@@ -68,7 +68,7 @@ public:
       parent->best = kj::max(kj::max(pos, best), parent->best);
     }
   }
-  KJ_DISALLOW_COPY(IteratorInput);
+  KJ_DISALLOW_COPY_AND_MOVE(IteratorInput);
 
   void advanceParent() {
     parent->pos = pos;

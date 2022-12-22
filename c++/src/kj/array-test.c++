@@ -386,7 +386,7 @@ KJ_TEST("kj::arr()") {
 
 struct ImmovableInt {
   ImmovableInt(int i): i(i) {}
-  KJ_DISALLOW_COPY(ImmovableInt);
+  KJ_DISALLOW_COPY_AND_MOVE(ImmovableInt);
   int i;
 };
 
