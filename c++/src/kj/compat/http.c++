@@ -2912,7 +2912,7 @@ private:
       }
     }
 
-    KJ_DISALLOW_COPY(ZlibContext);
+    KJ_DISALLOW_COPY_AND_MOVE(ZlibContext);
 
     kj::Array<kj::byte> processMessage(kj::ArrayPtr<const byte> message,
         kj::Maybe<size_t> maxSize = nullptr,
@@ -5776,7 +5776,7 @@ private:
     ConnectionCounter(ConcurrencyLimitingHttpClient& client) : parent(&client) {
       ++parent->concurrentRequests;
     }
-    KJ_DISALLOW_ONLY_COPY(ConnectionCounter);
+    KJ_DISALLOW_COPY(ConnectionCounter);
     ~ConnectionCounter() noexcept(false) {
       if (parent != nullptr) {
         --parent->concurrentRequests;

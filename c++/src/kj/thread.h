@@ -36,7 +36,7 @@ class Thread {
 
 public:
   explicit Thread(Function<void()> func);
-  KJ_DISALLOW_COPY(Thread);
+  KJ_DISALLOW_COPY_AND_MOVE(Thread);
 
   ~Thread() noexcept(false);
 

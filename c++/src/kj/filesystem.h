@@ -86,7 +86,7 @@ public:
   //
   //     Path{"foo", "bar", "baz"}   // equivalent to Path::parse("foo/bar/baz")
 
-  KJ_DISALLOW_ONLY_COPY(Path);
+  KJ_DISALLOW_COPY(Path);
   Path(Path&&) = default;
   Path& operator=(Path&&) = default;
 

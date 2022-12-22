@@ -141,7 +141,7 @@ public:
   // If the second parameter is non-null, the stream uses the given buffer instead of allocating
   // its own.  This may improve performance if the buffer can be reused.
 
-  KJ_DISALLOW_COPY(BufferedInputStreamWrapper);
+  KJ_DISALLOW_COPY_AND_MOVE(BufferedInputStreamWrapper);
   ~BufferedInputStreamWrapper() noexcept(false);
 
   // implements BufferedInputStream ----------------------------------
@@ -167,7 +167,7 @@ public:
   // If the second parameter is non-null, the stream uses the given buffer instead of allocating
   // its own.  This may improve performance if the buffer can be reused.
 
-  KJ_DISALLOW_COPY(BufferedOutputStreamWrapper);
+  KJ_DISALLOW_COPY_AND_MOVE(BufferedOutputStreamWrapper);
   ~BufferedOutputStreamWrapper() noexcept(false);
 
   void flush();
@@ -193,7 +193,7 @@ private:
 class ArrayInputStream: public BufferedInputStream {
 public:
   explicit ArrayInputStream(ArrayPtr<const byte> array);
-  KJ_DISALLOW_COPY(ArrayInputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(ArrayInputStream);
   ~ArrayInputStream() noexcept(false);
 
   // implements BufferedInputStream ----------------------------------
@@ -208,7 +208,7 @@ private:
 class ArrayOutputStream: public BufferedOutputStream {
 public:
   explicit ArrayOutputStream(ArrayPtr<byte> array);
-  KJ_DISALLOW_COPY(ArrayOutputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(ArrayOutputStream);
   ~ArrayOutputStream() noexcept(false);
 
   ArrayPtr<byte> getArray() {
@@ -228,7 +228,7 @@ private:
 class VectorOutputStream: public BufferedOutputStream {
 public:
   explicit VectorOutputStream(size_t initialCapacity = 4096);
-  KJ_DISALLOW_COPY(VectorOutputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(VectorOutputStream);
   ~VectorOutputStream() noexcept(false);
 
   ArrayPtr<byte> getArray() {
@@ -266,7 +266,7 @@ public:
   inline AutoCloseFd(decltype(nullptr)): fd(-1) {}
   inline explicit AutoCloseFd(int fd): fd(fd) {}
   inline AutoCloseFd(AutoCloseFd&& other) noexcept: fd(other.fd) { other.fd = -1; }
-  KJ_DISALLOW_ONLY_COPY(AutoCloseFd);
+  KJ_DISALLOW_COPY(AutoCloseFd);
   ~AutoCloseFd() noexcept(false);
 
   inline AutoCloseFd& operator=(AutoCloseFd&& other) {
@@ -313,7 +313,7 @@ class FdInputStream: public InputStream {
 public:
   explicit FdInputStream(int fd): fd(fd) {}
   explicit FdInputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
-  KJ_DISALLOW_COPY(FdInputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(FdInputStream);
   ~FdInputStream() noexcept(false);
 
   size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
@@ -331,7 +331,7 @@ class FdOutputStream: public OutputStream {
 public:
   explicit FdOutputStream(int fd): fd(fd) {}
   explicit FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
-  KJ_DISALLOW_COPY(FdOutputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(FdOutputStream);
   ~FdOutputStream() noexcept(false);
 
   void write(const void* buffer, size_t size) override;
@@ -365,7 +365,7 @@ public:
   inline AutoCloseHandle(AutoCloseHandle&& other) noexcept: handle(other.handle) {
     other.handle = (void*)-1;
   }
-  KJ_DISALLOW_ONLY_COPY(AutoCloseHandle);
+  KJ_DISALLOW_COPY(AutoCloseHandle);
   ~AutoCloseHandle() noexcept(false);
 
   inline AutoCloseHandle& operator=(AutoCloseHandle&& other) {
@@ -407,7 +407,7 @@ class HandleInputStream: public InputStream {
 public:
   explicit HandleInputStream(void* handle): handle(handle) {}
   explicit HandleInputStream(AutoCloseHandle handle): handle(handle), autoclose(mv(handle)) {}
-  KJ_DISALLOW_COPY(HandleInputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(HandleInputStream);
   ~HandleInputStream() noexcept(false);
 
   size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
@@ -423,7 +423,7 @@ class HandleOutputStream: public OutputStream {
 public:
   explicit HandleOutputStream(void* handle): handle(handle) {}
   explicit HandleOutputStream(AutoCloseHandle handle): handle(handle), autoclose(mv(handle)) {}
-  KJ_DISALLOW_COPY(HandleOutputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(HandleOutputStream);
   ~HandleOutputStream() noexcept(false);
 
   void write(const void* buffer, size_t size) override;

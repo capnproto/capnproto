@@ -105,7 +105,7 @@ public:
 
   // Make sure people don't accidentally end up wrapping a reference when they meant to return
   // a function.
-  KJ_DISALLOW_ONLY_COPY(Function);
+  KJ_DISALLOW_COPY(Function);
   Function(Function&) = delete;
   Function& operator=(Function&) = delete;
   template <typename T> Function(const Function<T>&) = delete;
@@ -158,7 +158,7 @@ public:
 
   // Make sure people don't accidentally end up wrapping a reference when they meant to return
   // a function.
-  KJ_DISALLOW_ONLY_COPY(ConstFunction);
+  KJ_DISALLOW_COPY(ConstFunction);
   ConstFunction(ConstFunction&) = delete;
   ConstFunction& operator=(ConstFunction&) = delete;
   template <typename T> ConstFunction(const ConstFunction<T>&) = delete;

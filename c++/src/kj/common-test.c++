@@ -47,7 +47,7 @@ struct ImplicitToInt {
 
 struct Immovable {
   Immovable() = default;
-  KJ_DISALLOW_COPY(Immovable);
+  KJ_DISALLOW_COPY_AND_MOVE(Immovable);
 };
 
 struct CopyOrMove {
@@ -547,7 +547,7 @@ TEST(Common, MaybeUnwrapOrReturn) {
 
 class Foo {
 public:
-  KJ_DISALLOW_COPY(Foo);
+  KJ_DISALLOW_COPY_AND_MOVE(Foo);
   virtual ~Foo() {}
 protected:
   Foo() = default;
@@ -556,14 +556,14 @@ protected:
 class Bar: public Foo {
 public:
   Bar() = default;
-  KJ_DISALLOW_COPY(Bar);
+  KJ_DISALLOW_COPY_AND_MOVE(Bar);
   virtual ~Bar() {}
 };
 
 class Baz: public Foo {
 public:
   Baz() = delete;
-  KJ_DISALLOW_COPY(Baz);
+  KJ_DISALLOW_COPY_AND_MOVE(Baz);
   virtual ~Baz() {}
 };
 

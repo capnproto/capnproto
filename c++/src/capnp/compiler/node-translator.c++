@@ -217,7 +217,7 @@ public:
     }
 
     Top() = default;
-    KJ_DISALLOW_COPY(Top);
+    KJ_DISALLOW_COPY_AND_MOVE(Top);
   };
 
   struct Union {
@@ -245,7 +245,7 @@ public:
     kj::Vector<uint> pointerLocations;
 
     inline Union(StructOrGroup& parent): parent(parent) {}
-    KJ_DISALLOW_COPY(Union);
+    KJ_DISALLOW_COPY_AND_MOVE(Union);
 
     uint addNewDataLocation(uint lgSize) {
       // Add a whole new data location to the union with the given size.
@@ -452,7 +452,7 @@ public:
     bool hasMembers = false;
 
     inline Group(Union& parent): parent(parent) {}
-    KJ_DISALLOW_COPY(Group);
+    KJ_DISALLOW_COPY_AND_MOVE(Group);
 
     void addMember() {
       if (!hasMembers) {
@@ -955,7 +955,7 @@ public:
   explicit StructTranslator(NodeTranslator& translator, ImplicitParams implicitMethodParams)
       : translator(translator), errorReporter(translator.errorReporter),
         implicitMethodParams(implicitMethodParams) {}
-  KJ_DISALLOW_COPY(StructTranslator);
+  KJ_DISALLOW_COPY_AND_MOVE(StructTranslator);
 
   void translate(Void decl, List<Declaration>::Reader members, schema::Node::Builder builder,
                  schema::Node::SourceInfo::Builder sourceInfo) {

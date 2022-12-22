@@ -55,7 +55,7 @@ public:
   inline RemotePromise(decltype(nullptr))
       : kj::Promise<Response<T>>(nullptr),
         T::Pipeline(nullptr) {}
-  KJ_DISALLOW_ONLY_COPY(RemotePromise);
+  KJ_DISALLOW_COPY(RemotePromise);
   RemotePromise(RemotePromise&& other) = default;
   RemotePromise& operator=(RemotePromise&& other) = default;
 
@@ -593,7 +593,7 @@ class ReaderCapabilityTable: private _::CapTableReader {
 
 public:
   explicit ReaderCapabilityTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> table);
-  KJ_DISALLOW_COPY(ReaderCapabilityTable);
+  KJ_DISALLOW_COPY_AND_MOVE(ReaderCapabilityTable);
 
   template <typename T>
   T imbue(T reader);
@@ -614,7 +614,7 @@ class BuilderCapabilityTable: private _::CapTableBuilder {
 
 public:
   BuilderCapabilityTable();
-  KJ_DISALLOW_COPY(BuilderCapabilityTable);
+  KJ_DISALLOW_COPY_AND_MOVE(BuilderCapabilityTable);
 
   inline kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getTable() { return table; }
 
@@ -659,7 +659,7 @@ class CapabilityServerSet: private _::CapabilityServerSetBase {
 
 public:
   CapabilityServerSet() = default;
-  KJ_DISALLOW_COPY(CapabilityServerSet);
+  KJ_DISALLOW_COPY_AND_MOVE(CapabilityServerSet);
 
   typename T::Client add(kj::Own<typename T::Server>&& server);
   // Create a new capability Client for the given Server and also add this server to the set.

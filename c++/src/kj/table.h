@@ -1087,7 +1087,7 @@ public:
   BTreeImpl();
   ~BTreeImpl() noexcept(false);
 
-  KJ_DISALLOW_ONLY_COPY(BTreeImpl);
+  KJ_DISALLOW_COPY(BTreeImpl);
   BTreeImpl(BTreeImpl&& other);
   BTreeImpl& operator=(BTreeImpl&& other);
 

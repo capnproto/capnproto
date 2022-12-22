@@ -191,7 +191,7 @@ class Own<T, decltype(nullptr)> {
   //   then you've lost any benefit to interoperating with the "standard" unique_ptr.
 
 public:
-  KJ_DISALLOW_ONLY_COPY(Own);
+  KJ_DISALLOW_COPY(Own);
   inline Own(): disposer(nullptr), ptr(nullptr) {}
   inline Own(Own&& other) noexcept
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
@@ -321,7 +321,7 @@ class Own {
   // of power.
 
 public:
-  KJ_DISALLOW_ONLY_COPY(Own);
+  KJ_DISALLOW_COPY(Own);
   inline Own(): ptr(nullptr) {}
   inline Own(Own&& other) noexcept
       : ptr(other.ptr) { other.ptr = nullptr; }

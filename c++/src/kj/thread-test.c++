@@ -53,7 +53,7 @@ KJ_TEST("detaching thread doesn't delete function") {
     ~Functor() {
       if (destroyed != nullptr) *destroyed = true;
     }
-    KJ_DISALLOW_ONLY_COPY(Functor);
+    KJ_DISALLOW_COPY(Functor);
     Functor(Functor&& other): destroyed(other.destroyed), canExit(other.canExit) {
       other.destroyed = nullptr;
     }

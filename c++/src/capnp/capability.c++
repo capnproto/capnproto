@@ -787,7 +787,7 @@ private:
     BlockingScope(LocalClient& client): client(client) { client.blocked = true; }
     BlockingScope(): client(nullptr) {}
     BlockingScope(BlockingScope&& other): client(other.client) { other.client = nullptr; }
-    KJ_DISALLOW_ONLY_COPY(BlockingScope);
+    KJ_DISALLOW_COPY(BlockingScope);
 
     ~BlockingScope() noexcept(false) {
       KJ_IF_MAYBE(c, client) {
