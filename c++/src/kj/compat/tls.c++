@@ -373,6 +373,12 @@ private:
       case BIO_CTRL_POP:
         // Informational?
         return 0;
+#ifdef BIO_CTRL_GET_KTLS_SEND
+      case BIO_CTRL_GET_KTLS_SEND:
+      case BIO_CTRL_GET_KTLS_RECV:
+        // TODO(someday): Support kTLS if the underlying stream is a raw socket.
+        return 0;
+#endif
       default:
         KJ_LOG(WARNING, "unimplemented bio_ctrl", cmd);
         return 0;
