@@ -682,22 +682,29 @@ void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert, kj::StringPt
   KJ_EXPECT_THROW_MESSAGE(message, clientPromise.wait(test.io.waitScope));
 }
 
+// OpenSSL 3.0 changed error messages
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(OPENSSL_IS_BORINGSSL)
+#define SSL_MESSAGE_DIFFERENT_IN_V3(v11, v30) v30
+#else
+#define SSL_MESSAGE_DIFFERENT_IN_V3(v11, v30) v11
+#endif
+
 KJ_TEST("TLS certificate validation") {
   expectInvalidCert("wrong.com", TlsCertificate(kj::str(VALID_CERT, INTERMEDIATE_CERT)),
-                    "Hostname mismatch");
+                    SSL_MESSAGE_DIFFERENT_IN_V3("Hostname mismatch", "hostname mismatch"));
   expectInvalidCert("example.com", TlsCertificate(VALID_CERT),
                     "unable to get local issuer certificate");
   expectInvalidCert("example.com", TlsCertificate(kj::str(EXPIRED_CERT, INTERMEDIATE_CERT)),
                     "certificate has expired");
   expectInvalidCert("example.com", TlsCertificate(SELF_SIGNED_CERT),
-                    "self signed certificate");
+      SSL_MESSAGE_DIFFERENT_IN_V3("self signed certificate", "self-signed certificate"));
 }
 
 // BoringSSL seems to print error messages differently.
 #ifdef OPENSSL_IS_BORINGSSL
-#define SSL_MESSAGE(interesting, boring) boring
+#define SSL_MESSAGE_DIFFERENT_IN_BORINGSSL(interesting, boring) boring
 #else
-#define SSL_MESSAGE(interesting, boring) interesting
+#define SSL_MESSAGE_DIFFERENT_IN_BORINGSSL(interesting, boring) interesting
 #endif
 
 KJ_TEST("TLS client certificate verification") {
@@ -740,14 +747,15 @@ KJ_TEST("TLS client certificate verification") {
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
     KJ_EXPECT_THROW_MESSAGE(
-        SSL_MESSAGE("peer did not return a certificate",
-                    "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
+        SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("peer did not return a certificate",
+                                           "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
         serverPromise.wait(test.io.waitScope));
 #if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
                        // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
-        SSL_MESSAGE("alert",  // "alert handshake failure" or "alert certificate required"
-                    "ALERT"), // "ALERT_HANDSHAKE_FAILURE" or "ALERT_CERTIFICATE_REQUIRED"
+        SSL_MESSAGE_DIFFERENT_IN_BORINGSSL(
+            "alert",  // "alert handshake failure" or "alert certificate required"
+            "ALERT"), // "ALERT_HANDSHAKE_FAILURE" or "ALERT_CERTIFICATE_REQUIRED"
         clientPromise.wait(test.io.waitScope));
 #endif
   }
@@ -770,14 +778,14 @@ KJ_TEST("TLS client certificate verification") {
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
     KJ_EXPECT_THROW_MESSAGE(
-        SSL_MESSAGE("certificate verify failed",
-                    "CERTIFICATE_VERIFY_FAILED"),
+        SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("certificate verify failed",
+                                           "CERTIFICATE_VERIFY_FAILED"),
         serverPromise.wait(test.io.waitScope));
 #if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
                        // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
-        SSL_MESSAGE("alert unknown ca",
-                    "TLSV1_ALERT_UNKNOWN_CA"),
+        SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("alert unknown ca",
+                                           "TLSV1_ALERT_UNKNOWN_CA"),
         clientPromise.wait(test.io.waitScope));
 #endif
   }
