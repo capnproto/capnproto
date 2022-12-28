@@ -403,13 +403,25 @@ if [ $IS_CLANG = yes ]; then
   # Don't fail out on this ridiculous "argument unused during compilation" warning.
   export CXXFLAGS="$CXXFLAGS -Wno-error=unused-command-line-argument"
 
-  # At the moment, only our clang-10 CI run seems to like -fcoroutines-ts. Earlier versions seem to
-  # have a library misconfiguration causing ./configure to result in the following error:
-  #   conftest.cpp:12:12: fatal error: 'initializer_list' file not found
-  #   #include <initializer_list>
-  # Let's use any clang version >= 10 so that if we move to a newer version, we'll get additional
-  # coverage by default.
-  if [ "${CXX#*-}" -ge 10 ] 2>/dev/null; then
+  # Enable coroutines if supported.
+  if [ "${CXX#*-}" -ge 14 ] 2>/dev/null; then
+    # Somewhere between version 10 and 14, Clang started supporting coroutines as a C++20 feature,
+    # and started issuing deprecating warnings for -fcoroutines-ts. (I'm not sure which version it
+    # was exactly since our CI jumped from 10 to 14, so I'm somewhat arbitrarily choosing 14 as the
+    # cutoff.)
+    export CXXFLAGS="$CXXFLAGS -std=c++20 -stdlib=libc++"
+    export LDFLAGS="-stdlib=libc++"
+
+    # TODO(someday): On Ubuntu 22.04, clang-14 with -stdlib=libc++ fails to link with libfuzzer,
+    #   which looks like it might itself be linked against libstdc++? Need to investigate.
+    unset LIB_FUZZING_ENGINE
+  elif [ "${CXX#*-}" -ge 10 ] 2>/dev/null; then
+    # At the moment, only our clang-10 CI run seems to like -fcoroutines-ts. Earlier versions seem
+    # to have a library misconfiguration causing ./configure to result in the following error:
+    #   conftest.cpp:12:12: fatal error: 'initializer_list' file not found
+    #   #include <initializer_list>
+    # Let's use any clang version >= 10 so that if we move to a newer version, we'll get additional
+    # coverage by default.
     export CXXFLAGS="$CXXFLAGS -std=gnu++17 -stdlib=libc++ -fcoroutines-ts"
     export LDFLAGS="-fcoroutines-ts -stdlib=libc++"
   fi
@@ -418,6 +430,8 @@ else
   # uninitialized memory usage later on. GCC 4 also emits strange bogus warnings with
   # -Wstrict-overflow, so we disable it.
   CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized -Wno-strict-overflow"
+
+  # TODO(someday): Enable coroutines in g++ if supported.
 fi
 
 cd c++
