@@ -467,6 +467,24 @@ KJ_TEST("TLS basics") {
   auto server = serverPromise.wait(test.io.waitScope);
 
   test.testConnection(*client, *server);
+
+  // Test clean shutdown.
+  {
+    auto eofPromise = server->readAllText();
+    KJ_EXPECT(!eofPromise.poll(test.io.waitScope));
+    client->shutdownWrite();
+    KJ_ASSERT(eofPromise.poll(test.io.waitScope));
+    KJ_EXPECT(eofPromise.wait(test.io.waitScope) == ""_kj);
+  }
+
+  // Test UNCLEAN shutdown in other direction.
+  {
+    auto eofPromise = client->readAllText();
+    KJ_EXPECT(!eofPromise.poll(test.io.waitScope));
+    { auto drop = kj::mv(server); }
+    KJ_EXPECT(eofPromise.poll(test.io.waitScope));
+    KJ_EXPECT_THROW(DISCONNECTED, eofPromise.wait(test.io.waitScope));
+  }
 }
 
 KJ_TEST("TLS peer identity") {

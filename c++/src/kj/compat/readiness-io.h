@@ -45,6 +45,9 @@ public:
   kj::Promise<void> whenReady();
   // Returns a promise that resolves when read() will return non-null.
 
+  bool isAtEnd() { return eof; }
+  // Returns true if read() would return zero.
+
 private:
   AsyncInputStream& input;
   kj::ForkedPromise<void> pumpTask = nullptr;
