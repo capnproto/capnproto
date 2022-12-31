@@ -581,7 +581,9 @@ struct Foo {
 
 The above imports specify relative paths.  If the path begins with a `/`, it is absolute -- in
 this case, the `capnp` tool searches for the file in each of the search path directories specified
-with `-I`.
+with `-I`, where `/` means the root of each import path. So an import statement like this 
+`import /c/d.capnp` would match a file in `/a/b/c/d.capnp` if the search path directory was 
+specified as `/a/b`
 
 ### Annotations
 
