@@ -6739,8 +6739,10 @@ private:
 
     if (firstRequest) {
       // On the first request, the header timeout starts ticking immediately upon request opening.
+      // NOTE: Since we assume that the client wouldn't have formed a connection if they did not
+      //   intend to send a request, we immediately treat this connection as having an active
+      //   request, i.e. we do NOT cancel it if drain() is called.
       auto timeoutPromise = server.timer.afterDelay(server.settings.headerTimeout)
-          .exclusiveJoin(server.onDrain.addBranch())
           .then([this]() -> HttpHeaders::RequestConnectOrProtocolError {
         timedOut = true;
         return HttpHeaders::ProtocolError {
@@ -7325,11 +7327,6 @@ kj::Promise<void> HttpServer::listenHttp(kj::ConnectionReceiver& port) {
 kj::Promise<void> HttpServer::listenLoop(kj::ConnectionReceiver& port) {
   return port.accept()
       .then([this,&port](kj::Own<kj::AsyncIoStream>&& connection) -> kj::Promise<void> {
-    if (draining) {
-      // Can get here if we *just* started draining.
-      return kj::READY_NOW;
-    }
-
     tasks.add(kj::evalNow([&]() { return listenHttp(kj::mv(connection)); }));
     return listenLoop(port);
   });
