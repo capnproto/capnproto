@@ -2917,8 +2917,10 @@ private:
               return context->consumeRedirectedResponse();
             });
       } else if (hints.onlyPromisePipeline) {
-        // The promise is probably fake anyway, so don't bother adding a .then().
-        answer.task = kj::mv(promiseAndPipeline.promise);
+        // The promise is probably fake anyway, so don't bother adding a .then(). We do, however,
+        // have to attach `context` to this, since we destroy `task` upon receiving a `Finish`
+        // message, and we want `RpcCallContext` to be destroyed no earlier than that.
+        answer.task = promiseAndPipeline.promise.attach(kj::mv(context));
       } else {
         // Hack:  Both the success and error continuations need to use the context.  We could
         //   refcount, but both will be destroyed at the same time anyway.
